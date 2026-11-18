@@ -6,9 +6,12 @@ import { ApprovalCopyHistory } from "@/features/approval-workflow/components/cop
 import { ApprovalRoute } from "@/features/approval-workflow/components/approval-route"
 import { DefinitionBindingCard } from "@/features/approval-workflow/components/definition-binding-card"
 import { useApprovalHistoryInfiniteQuery } from "@/features/approval-workflow/queries"
+import { getErrorPresentation } from "@/lib/api/errors"
 import type { SalesOrderDetailView } from "../api/sales-orders"
 import { SalesOrderApprovalHistory } from "./sales-order-approval-history"
 import { SalesOrderApprovalSummary } from "./sales-order-approval-summary"
+
+const historyImpact = "销售单详情仍可查看。"
 
 /** 销售单只读审批记录：最新轮次优先，决定仍在工作台办理。 */
 export function ApprovalPanel({
@@ -25,6 +28,7 @@ export function ApprovalPanel({
     const history = useApprovalHistoryInfiniteQuery(
         { instanceId: instance?.id ?? "", order: "desc" },
         Boolean(instance),
+        historyImpact,
     )
     if (!approval) {
         return <p className="text-sm text-muted-foreground">暂无审批记录。</p>
@@ -35,6 +39,9 @@ export function ApprovalPanel({
         )
     }
     // 详情中的首屏历史从最早记录开始；只有完整时才能用作倒序列表的回退。
+    const historyFailure = history.isError
+        ? getErrorPresentation(history.error)
+        : undefined
     const items =
         history.data?.pages.flatMap((page) => page.items) ??
         (approval.historyHasMore ? [] : approval.recentHistory)
@@ -62,7 +69,11 @@ export function ApprovalPanel({
             {history.isError ? (
                 <BusinessFailureState
                     id={`${idPrefix}-history-retry`}
-                    title="审批记录加载失败"
+                    title={items.length > 0 ? "审批记录刷新失败" : undefined}
+                    readContext={{
+                        subject: "审批记录",
+                        impact: historyImpact,
+                    }}
                     error={history.error}
                     onRetry={() => void history.refetch()}
                 />
@@ -113,7 +124,7 @@ export function ApprovalPanel({
                         暂无审批记录。
                     </p>
                 ) : null}
-                {history.hasNextPage ? (
+                {history.hasNextPage && !historyFailure?.accessDenied ? (
                     <Button
                         id={`${idPrefix}-history-load-more`}
                         variant="outline"

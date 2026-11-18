@@ -1,4 +1,11 @@
 import { MutationCache, QueryClient } from "@tanstack/react-query"
+import type { ReadProblemContext } from "@/lib/system-feedback"
+
+declare module "@tanstack/react-query" {
+    interface Register {
+        queryMeta: Record<string, unknown> & { feedback?: ReadProblemContext }
+    }
+}
 
 export type MutationErrorHandler = (error: unknown) => void
 

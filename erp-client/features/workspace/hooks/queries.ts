@@ -8,12 +8,22 @@ import { useNotificationFeed } from "@/features/notifications/hooks/queries"
 import { hasPermission } from "@/lib/permissions"
 import type { AccountProfile } from "@/features/auth/api"
 import { fetchWorkspaceDashboard } from "@/features/workspace/api/dashboard"
-import type { TodayWorkspaceQuery } from "@/features/workspace/types"
+import type {
+    TodayWorkspaceQuery,
+    WorkspaceViewFilter,
+} from "@/features/workspace/types"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import {
     fetchWorkspaceApprovalDetail,
     fetchWorkspaceTaskDetail,
 } from "../api/approval-detail"
+
+export const workspaceQueueSubjects = {
+    inbox: "待办列表",
+    managed: "管理范围待办列表",
+    started: "我发起的审批列表",
+    history: "处理记录列表",
+} satisfies Record<WorkspaceViewFilter, string>
 
 const workspaceHomeKeys = {
     all: queryKeyRoots.workspaceHome,
@@ -45,6 +55,7 @@ export function useWorkspaceDashboardQuery(
             return fetchWorkspaceDashboard(query, profile)
         },
         enabled: enabled && Boolean(profile),
+        meta: { feedback: { subject: workspaceQueueSubjects[query.view] } },
         refetchInterval: 60_000,
     })
 }
@@ -78,7 +89,7 @@ export function useWorkspaceApprovalDetailQuery(
         retry: false,
         staleTime: 0,
         refetchOnMount: "always",
-        meta: { roleWorkbench: true },
+        meta: { roleWorkbench: true, feedback: { subject: "审批详情" } },
     })
 }
 
@@ -107,7 +118,7 @@ export function useWorkspaceTaskDetailQuery(
         retry: false,
         staleTime: 0,
         refetchOnMount: "always",
-        meta: { roleWorkbench: true },
+        meta: { roleWorkbench: true, feedback: { subject: "任务详情" } },
     })
 }
 
@@ -131,7 +142,10 @@ export function useWorkspaceNavigationCounts(profile?: AccountProfile) {
         enabled:
             Boolean(profile) &&
             hasPermission(profile?.permissions, "approval_instance:read"),
-        meta: { workspaceNavigation: true },
+        meta: {
+            workspaceNavigation: true,
+            feedback: { subject: "我发起的审批未读数量" },
+        },
     })
     return {
         inbox: {

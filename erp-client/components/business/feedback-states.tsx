@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/tooltip"
 import { fieldErrorMessages } from "@/lib/api/field-errors"
 import { getErrorPresentation } from "@/lib/api/errors"
+import { readProblemCopy, type ReadProblemContext } from "@/lib/system-feedback"
 import { freshnessText, versionText, workspaceLabel } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
@@ -319,6 +320,7 @@ type BusinessFailureStateProps = {
     error?: unknown
     title?: React.ReactNode
     description?: React.ReactNode
+    readContext?: ReadProblemContext
     errorCode?: string
     nextResponsible?: string
     details?: React.ReactNode
@@ -336,6 +338,7 @@ function BusinessFailureState({
     error,
     title,
     description,
+    readContext,
     errorCode,
     nextResponsible,
     details,
@@ -348,6 +351,10 @@ function BusinessFailureState({
 }: BusinessFailureStateProps) {
     const presentation =
         error === undefined ? undefined : getErrorPresentation(error)
+    const readCopy =
+        presentation && readContext
+            ? readProblemCopy(presentation, readContext)
+            : undefined
     const resolvedKind = presentation?.kind ?? kind ?? "system"
     const preset = failureStatePresets[resolvedKind]
     const resolvedErrorCode = errorCode ?? presentation?.code
@@ -383,14 +390,20 @@ function BusinessFailureState({
             )}
         >
             <div className="font-medium">
-                <span>{title ?? presentation?.title ?? preset.title}</span>
+                <span>
+                    {title ??
+                        readCopy?.title ??
+                        presentation?.title ??
+                        preset.title}
+                </span>
             </div>
             <div className="text-muted-foreground">
                 <div className="flex flex-col gap-3">
                     <p>
-                        {(presentation?.kind === "permission"
-                            ? "当前账号无权查看此内容。"
-                            : presentation?.description) ??
+                        {readCopy?.description ??
+                            (presentation?.kind === "permission"
+                                ? "当前账号无权查看此内容。"
+                                : presentation?.description) ??
                             description ??
                             preset.description}
                     </p>

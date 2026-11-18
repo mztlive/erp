@@ -72,15 +72,19 @@ impl AuthorizationService {
         requested.extend(required.iter().cloned());
         requested.sort();
         requested.dedup();
-        self.permissions(actor, &requested, executor)
-            .await?
-            .filter(|qualified| {
-                rules::qualified(permission, qualified)
-                    && (!task
-                        || permission == &internal::WORK_ITEM_RECIPIENT
-                        || qualified.same_role(&required))
-            })
-            .ok_or_else(|| Error::Forbidden("账号或启用角色不具备本操作的完整权限".into()))
+        let generic_denial = || Error::Forbidden("账号或启用角色不具备本操作的完整权限".into());
+        let qualified = self.permissions(actor, &requested, executor).await?.ok_or_else(generic_denial)?;
+        let requires_task_role = task && permission != &internal::WORK_ITEM_RECIPIENT;
+        if rules::qualified(permission, &qualified) && (!requires_task_role || qualified.same_role(&required))
+        {
+            return Ok(qualified);
+        }
+
+        let task_required = if requires_task_role { required.as_slice() } else { &[] };
+        let missing = rules::missing_public_permission(permission, task_required, &qualified);
+        Err(missing.map_or_else(generic_denial, |permission| {
+            Error::Forbidden(format!("当前账号缺少 {permission} 权限"))
+        }))
     }
 
     /// 保存本次精确任务语义，使非事务复验不能退回普通记录规则。

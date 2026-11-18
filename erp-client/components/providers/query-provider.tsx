@@ -59,7 +59,9 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
             const key = `query:${event.query.queryHash}`
             if (
                 event.type === "removed" ||
-                (event.type === "observerRemoved" && !event.query.isActive())
+                ((event.type === "observerRemoved" ||
+                    event.type === "observerOptionsUpdated") &&
+                    !event.query.isActive())
             ) {
                 store.resolve(reportedKeys.get(key) ?? problemKey(key))
                 reportedKeys.delete(key)
@@ -75,25 +77,13 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
                         event.query.state.status === "error")) &&
                 event.query.isActive()
             ) {
-                const stale = event.query.state.data !== undefined
-                const denied =
-                    getErrorPresentation(event.query.state.error).kind ===
-                    "permission"
                 const previousKey = reportedKeys.get(key)
                 if (previousKey && previousKey !== problemKey(key))
                     store.resolve(previousKey)
                 reportedKeys.set(key, problemKey(key))
                 reportProblem(key, event.query.state.error, {
-                    title: denied
-                        ? "部分资料无权查看"
-                        : stale
-                          ? "部分数据刷新失败"
-                          : "部分资料未能加载",
-                    description: denied
-                        ? undefined
-                        : stale
-                          ? "当前显示上次加载的结果，重新加载成功后会自动更新。"
-                          : undefined,
+                    readContext: event.query.meta?.feedback,
+                    refreshFailed: event.query.state.data !== undefined,
                     retry: () => event.query.fetch(),
                 })
             }

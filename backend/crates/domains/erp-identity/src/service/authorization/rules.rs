@@ -2,7 +2,7 @@
 use std::slice;
 
 use erp_permissions::{
-    catalog, fulfillment, internal, receivable, sales_inquiry, supplier, supplier_fulfillment,
+    MODULES, catalog, fulfillment, internal, receivable, sales_inquiry, supplier, supplier_fulfillment,
     supplier_offering,
 };
 
@@ -485,6 +485,30 @@ pub(super) fn qualified(permission: &Permission, qualified: &QualifiedPermission
         && records::qualified(permission, qualified)
 }
 
+/// 只有必需权限在所有启用角色中都缺失且能唯一定位到公共权限时，才报告权限码。
+pub(super) fn missing_public_permission(
+    permission: &Permission,
+    task_required: &[Permission],
+    qualified: &QualifiedPermissions,
+) -> Option<Permission> {
+    if transfers::supports(permission) {
+        return None;
+    }
+    let mut required = same_role_permissions(permission);
+    required.extend(records::independent(permission));
+    required.extend_from_slice(task_required);
+    required.sort();
+    required.dedup();
+    required.retain(|required| !qualified.same_role(slice::from_ref(required)));
+
+    let [missing] = required.as_slice() else { return None };
+    MODULES
+        .iter()
+        .flat_map(|module| module.entries)
+        .any(|(_, entry)| entry.permission == missing)
+        .then(|| missing.clone())
+}
+
 /// 精确任务目标的资格与普通读取分开，不能借读取权限办理任务。
 pub(super) fn task_permissions(permission: &Permission) -> Vec<Permission> {
     let mut permissions = same_role_permissions(permission);
@@ -593,6 +617,27 @@ mod tests {
 
     use super::*;
     use crate::entity::authorization::{FactValue, ObjectFacts};
+
+    #[test]
+    fn reports_a_single_public_permission_missing_from_all_roles() {
+        let roles = QualifiedPermissions::test_grants(&[("sales", &[sales_order::SUBMIT])]);
+
+        assert!(!qualified(&sales_order::SUBMIT, &roles));
+        assert_eq!(missing_public_permission(&sales_order::SUBMIT, &[], &roles), Some(sales_order::CREATE));
+    }
+
+    #[test]
+    fn reports_no_single_permission_for_a_split_role_or_multiple_missing_permissions() {
+        let split = QualifiedPermissions::test_grants(&[
+            ("sales", &[sales_order::SUBMIT]),
+            ("creator", &[sales_order::CREATE]),
+        ]);
+        let empty = QualifiedPermissions::test_grants(&[]);
+
+        assert!(!qualified(&sales_order::SUBMIT, &split));
+        assert_eq!(missing_public_permission(&sales_order::SUBMIT, &[], &split), None);
+        assert_eq!(missing_public_permission(&sales_order::SUBMIT, &[], &empty), None);
+    }
 
     fn scope() -> ResolvedScope {
         ResolvedScope {

@@ -43,6 +43,7 @@ export function SalesOrderCreateAlerts({
         <SystemFeedback
             problemId="sales-order-create"
             operation
+            outcomeUnknown={formalFailure?.unknown}
             error={formalFailure?.error ?? createError}
             title={
                 formalFailure?.unknown ? "处理结果待确认" : "销售单操作未完成"

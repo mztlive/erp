@@ -119,6 +119,7 @@ const invalidateApprovalCaches = async (
 export const useApprovalHistoryInfiniteQuery = (
     params: Omit<ApprovalHistoryParams, "cursor">,
     enabled = true,
+    impact?: string,
 ) => {
     const query = useInfiniteQuery({
         queryKey: approvalKeys.history(params.instanceId, params.order),
@@ -130,6 +131,7 @@ export const useApprovalHistoryInfiniteQuery = (
         initialPageParam: undefined as string | undefined,
         getNextPageParam: (lastPage) => lastPage.nextCursor,
         enabled: enabled && params.instanceId.trim().length > 0,
+        meta: { feedback: { subject: "审批记录", impact } },
     })
     useApprovalProgressRead(
         params.instanceId,

@@ -301,34 +301,43 @@ export interface ErrorPresentation {
     fieldErrors?: Readonly<Record<string, string>>
     requestId?: string
     retryable: boolean
+    accessDenied?: {
+        detail?: string
+        requiredPermission?: string
+        permissionName?: string
+    }
 }
 
 /** 仅使用 403 的明确权限字段；不从 URL 或通用拒绝原因猜测权限。 */
-const missingPermissionMessage = (error: ApiError): string | undefined => {
+const requiredPermissionCode = (error: ApiError): string | undefined => {
     const key = error.requiredPermission
     if (
         error.status !== 403 ||
         error.code !== "PERMISSION_DENIED" ||
         !key ||
-        !/^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$/.test(key)
+        !/^[a-z0-9_-]+(?:\/[a-z0-9_-]+)*:[a-z0-9_-]+$/.test(key) ||
+        key.split(":").some((part) => part.length > 128)
     )
         return undefined
+    return key
+}
+
+const missingPermissionName = (key?: string): string | undefined => {
+    if (!key) return undefined
     const label = permissionLabel(key)
-    if (label !== key) {
-        return `当前账号缺少「${label}」权限，请联系管理员开通后重试。`
-    }
+    if (label !== key) return label
     const permission = PERMISSION_GROUPS.flatMap(
         (group) => group.permissions,
     ).find(
         (item) =>
             `${item.permission.resource}:${item.permission.action}` === key,
     )
-    const fallbackName =
+    return (
         permission?.description
             ?.replace(/（幂等）/g, "")
             .replace(/快照|事实/g, "记录")
-            .trim() || "操作权限"
-    return `当前账号缺少「${fallbackName}」权限，请联系管理员开通后重试。`
+            .trim() || undefined
+    )
 }
 
 const presentationFromApiError = (
@@ -336,12 +345,17 @@ const presentationFromApiError = (
     fallback: string,
 ): ErrorPresentation => {
     const status = error.status
-    const description =
-        missingPermissionMessage(error) ??
-        (asEnvelope(error.responseData)?.success === false && error.code
-            ? nonEmptyString(error.message)
-            : userReadableMessage(error.message)) ??
-        (typeof status === "number" ? fallbackMessage(status) : fallback)
+    const requiredPermission = requiredPermissionCode(error)
+    const permissionName = missingPermissionName(requiredPermission)
+    const missingPermission = requiredPermission
+        ? `当前账号缺少「${permissionName ?? "操作权限"}」权限`
+        : undefined
+    const description = missingPermission
+        ? `${missingPermission}，请联系管理员开通后重试。`
+        : ((asEnvelope(error.responseData)?.success === false && error.code
+              ? nonEmptyString(error.message)
+              : userReadableMessage(error.message)) ??
+          (typeof status === "number" ? fallbackMessage(status) : fallback))
     const retryable =
         error.retryable ??
         (typeof status === "number" ? defaultRetryable(status) : false)
@@ -357,6 +371,18 @@ const presentationFromApiError = (
         }
     }
     if (status === 403) {
+        const reason = userReadableMessage(error.message)
+            ?.replace(/，请联系管理员或有权限的同事[。]?$/u, "")
+            .replace(/。$/u, "")
+        // 通用拒绝保留给排查。正文优先说明明确缺少的权限或具体业务原因。
+        const detail =
+            missingPermission && permissionName
+                ? `${missingPermission}。`
+                : reason &&
+                    reason !== "当前账号没有执行此操作的权限" &&
+                    reason !== "账号或启用角色不具备本操作的完整权限"
+                  ? `${reason}。`
+                  : undefined
         return {
             kind: "permission",
             title: "权限不足",
@@ -365,6 +391,7 @@ const presentationFromApiError = (
             fieldErrors: error.fieldErrors,
             requestId: error.requestId,
             retryable: false,
+            accessDenied: { detail, requiredPermission, permissionName },
         }
     }
     if (status === 409) {

@@ -70,6 +70,7 @@ export function useNotificationFeed(profile?: AccountProfile, connect = false) {
             return latest
         },
         enabled: connect && Boolean(profile),
+        meta: { feedback: { subject: "实时通知和待办数量" } },
         refetchInterval: connect
             ? (query) => (query.state.status === "error" ? 10_000 : 1_000)
             : false,

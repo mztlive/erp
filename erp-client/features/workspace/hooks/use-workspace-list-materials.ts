@@ -4,6 +4,7 @@ import { useMemo } from "react"
 import { useQueries, type UseQueryResult } from "@tanstack/react-query"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { isApiError } from "@/lib/api/errors"
+import { displayName } from "@/lib/display-name"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import { fetchWorkspaceTaskMaterials } from "../api/task-materials"
 import type { WorkspaceDocumentFacts } from "../lib/document-facts"
@@ -48,22 +49,38 @@ export function useWorkspaceListMaterials(items: readonly WorkspaceWorkItem[]) {
     )
     const queries = useQueries({
         combine: combineMaterials,
-        queries: unique.map(([reference, item]) => ({
-            queryKey: [
-                ...queryKeyRoots.workspaceHome,
-                "list-materials",
-                profile?.userid,
-                profile?.policy_version,
-                profile?.organization_version,
-                profile ? [...profile.permissions].sort() : [],
-                reference,
-            ],
-            queryFn: () => fetchWorkspaceTaskMaterials(item),
-            enabled: Boolean(profile),
-            retry: false,
-            staleTime: 0,
-            refetchInterval: 60_000,
-        })),
+        queries: unique.map(([reference, item]) => {
+            const number = displayName(
+                item.stableNumber,
+                item.businessObjectId,
+                item.workItemId,
+            )
+            return {
+                queryKey: [
+                    ...queryKeyRoots.workspaceHome,
+                    "list-materials",
+                    profile?.userid,
+                    profile?.policy_version,
+                    profile?.organization_version,
+                    profile ? [...profile.permissions].sort() : [],
+                    reference,
+                ],
+                queryFn: () => fetchWorkspaceTaskMaterials(item),
+                meta: {
+                    feedback: {
+                        subject:
+                            number && number !== "单号待补全"
+                                ? `「${number}」的业务资料`
+                                : `「${item.workItemTypeLabel}」事项的业务资料`,
+                        impact: "此事项仍会显示在列表中。",
+                    },
+                },
+                enabled: Boolean(profile),
+                retry: false,
+                staleTime: 0,
+                refetchInterval: 60_000,
+            }
+        }),
     })
     return useMemo(() => {
         const byReference = new Map(
@@ -81,7 +98,7 @@ export function useWorkspaceListMaterials(items: readonly WorkspaceWorkItem[]) {
                         !profile || query.isPending
                             ? "资料加载中…"
                             : forbidden
-                              ? "无权限查看业务资料"
+                              ? "无权查看业务资料"
                               : query.isError
                                 ? "资料加载失败"
                                 : "请打开详情查看资料",

@@ -15,12 +15,14 @@ export function SystemFeedback({
     title,
     description,
     operation = false,
+    outcomeUnknown,
 }: {
     problemId: string
     error: unknown
     title: string
     description?: string
     operation?: boolean
+    outcomeUnknown?: boolean
 }) {
     useEffect(() => {
         if (operation) {
@@ -29,6 +31,7 @@ export function SystemFeedback({
                     key: problemId,
                     title,
                     description,
+                    outcomeUnknown,
                 })
             return
         }
@@ -38,6 +41,6 @@ export function SystemFeedback({
             reportProblem(problemId, error, { title, description })
         else store.resolve(key)
         return () => store.resolve(key)
-    }, [problemId, error, title, description, operation])
+    }, [problemId, error, title, description, operation, outcomeUnknown])
     return null
 }

@@ -19,6 +19,7 @@ import { WorkspaceSortMenu } from "./workspace-sort-menu"
 import { ListWorkSurface } from "@/components/business/list-workspace"
 import { WorkspaceTypeNav } from "./workspace-type-nav"
 import { useWorkspaceQueueCounts } from "../hooks/use-workspace-queue-counts"
+import { workspaceQueueSubjects } from "../hooks/queries"
 import { queueQuickTypes, queueTypeLabel } from "../lib/queue-presentation"
 
 export function WorkspaceQueuePanel({
@@ -32,7 +33,13 @@ export function WorkspaceQueuePanel({
     if (accountProfileQuery.isError || (dashboardQuery.isError && !view))
         return (
             <BusinessFailureState
+                idPrefix="workspace-queue-load-failure"
                 error={accountProfileQuery.error ?? dashboardQuery.error}
+                readContext={{
+                    subject: accountProfileQuery.isError
+                        ? "账号资料"
+                        : workspaceQueueSubjects[home.urlState.view],
+                }}
                 onRetry={refresh}
             />
         )
@@ -246,7 +253,7 @@ function WorkspaceQueueContent({
                             )}
                         </div>
                     )}
-                    {counts.failed && (
+                    {counts.retry ? (
                         <Button
                             id="workspace-queue-count-retry"
                             variant="ghost"
@@ -255,7 +262,14 @@ function WorkspaceQueueContent({
                         >
                             数量加载失败，重试
                         </Button>
-                    )}
+                    ) : counts.failure ? (
+                        <p
+                            role="status"
+                            className="text-xs text-muted-foreground"
+                        >
+                            {counts.failure.title}
+                        </p>
+                    ) : null}
                 </div>
             }
             table={
@@ -263,9 +277,14 @@ function WorkspaceQueueContent({
                     {dashboardQuery.isError && (
                         <div className="shrink-0 py-3">
                             <BusinessFailureState
+                                idPrefix="workspace-queue-refresh-failure"
                                 error={dashboardQuery.error}
-                                title="工作台更新失败"
-                                description="当前显示上次加载的结果，请刷新后重试。"
+                                title={`${workspaceQueueSubjects[urlState.view]}刷新失败`}
+                                readContext={{
+                                    subject:
+                                        workspaceQueueSubjects[urlState.view],
+                                    impact: "当前显示上次加载的列表。",
+                                }}
                                 onRetry={refresh}
                             />
                         </div>

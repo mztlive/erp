@@ -2,6 +2,8 @@
 
 import { hashKey, useQueries } from "@tanstack/react-query"
 import type { AccountProfile } from "@/features/auth/api"
+import { getErrorPresentation } from "@/lib/api/errors"
+import { readProblemCopy } from "@/lib/system-feedback"
 import type {
     WorkspaceFilters,
     WorkspaceSearchOption,
@@ -9,6 +11,11 @@ import type {
 import { fetchQueueCount } from "../api/queue-count"
 import type { WorkspaceUrlState } from "../lib/url-state"
 import { workspaceHomeKeys } from "./queries"
+
+const feedback = {
+    subject: "筛选项的事项数量",
+    impact: "筛选和事项列表仍可使用。",
+}
 
 /** 类型数量忽略当前类型；期限数量保留当前类型，二者均保留关键词与其他业务条件。 */
 export function useWorkspaceQueueCounts(
@@ -66,11 +73,21 @@ export function useWorkspaceQueueCounts(
             ],
             queryFn: () =>
                 fetchQueueCount(state.view, state.query, request.filters),
+            meta: { feedback },
             enabled: Boolean(profile),
             staleTime: 60_000,
             refetchInterval: 60_000,
         })),
     })
+    const failures = results
+        .filter((result) => result.isError)
+        .map((result) => ({
+            presentation: getErrorPresentation(result.error),
+            refetch: result.refetch,
+        }))
+    const retryable = failures.filter(
+        ({ presentation }) => presentation.retryable,
+    )
     return {
         counts: Object.fromEntries(
             requests.map((request) => {
@@ -91,9 +108,12 @@ export function useWorkspaceQueueCounts(
                 ]
             }),
         ) as Record<string, number | undefined>,
-        failed: results.some((result) => result.isError),
-        retry: () => {
-            for (const result of results) void result.refetch()
-        },
+        failure:
+            failures[0] && readProblemCopy(failures[0].presentation, feedback),
+        retry: retryable.length
+            ? () => {
+                  for (const failure of retryable) void failure.refetch()
+              }
+            : undefined,
     }
 }

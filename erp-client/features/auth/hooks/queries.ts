@@ -22,6 +22,7 @@ export function useAccountProfileQuery() {
     return useQuery({
         queryKey: accountProfileKeys.current(),
         queryFn: fetchAccountProfile,
+        meta: { feedback: { subject: "账号资料" } },
         enabled: typeof window !== "undefined" && isAuthenticated(),
         staleTime: 30_000,
         refetchOnWindowFocus: "always",

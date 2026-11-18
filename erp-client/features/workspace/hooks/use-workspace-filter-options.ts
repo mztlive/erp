@@ -5,11 +5,14 @@ import { listWorkItems } from "@/features/work-items/api"
 import { listApprovalInstances } from "@/features/approval-workflow/api"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useDebouncedSearch } from "@/features/entity-selectors/hooks/queries"
-import type {
-    WorkspaceFilters,
-    WorkspaceChoiceKey,
-    WorkspaceSearchOptions,
+import {
+    WORKSPACE_FILTER_LABELS,
+    type WorkspaceFilters,
+    type WorkspaceChoiceKey,
+    type WorkspaceSearchOptions,
 } from "@/lib/workspace-search"
+import { getErrorPresentation } from "@/lib/api/errors"
+import { readProblemCopy } from "@/lib/system-feedback"
 import { taskOrderOptions } from "../api/filter-options"
 import type { WorkspaceViewFilter } from "../types"
 
@@ -25,6 +28,12 @@ export function useWorkspaceFilterOptions(
     const orderDirectory =
         view !== "started" &&
         (name === "sales_orders" || name === "purchase_orders")
+    const feedback = {
+        subject: name
+            ? `「${WORKSPACE_FILTER_LABELS[name]}」筛选选项`
+            : "筛选选项",
+        impact: "其他筛选条件仍可使用。",
+    }
     const query = useQuery({
         queryKey: [
             "workspace-filter-options",
@@ -62,6 +71,16 @@ export function useWorkspaceFilterOptions(
             return page.filter_options ?? {}
         },
         enabled: Boolean(profile) && (orderDirectory || Boolean(search.trim())),
+        meta: { feedback },
     })
-    return { ...query, search, setSearch }
+    const failure = query.isError
+        ? getErrorPresentation(query.error)
+        : undefined
+    return {
+        ...query,
+        search,
+        setSearch,
+        failure: failure && readProblemCopy(failure, feedback),
+        canRetry: failure?.retryable === true,
+    }
 }

@@ -85,13 +85,9 @@ function RemoteSearchChoice({
                 filterMode="remote"
                 onSearchChange={remote.setSearch}
                 loading={remote.isFetching}
-                emptyLabel={
-                    remote.isError
-                        ? "候选加载失败，请重试"
-                        : "没有符合条件的选项"
-                }
+                emptyLabel={remote.failure?.title ?? "没有符合条件的选项"}
             />
-            {remote.isError && (
+            {remote.canRetry ? (
                 <button
                     type="button"
                     id={`workspace-filter-${name}-retry`}
@@ -100,7 +96,11 @@ function RemoteSearchChoice({
                 >
                     候选加载失败，点击重试
                 </button>
-            )}
+            ) : remote.failure ? (
+                <p role="status" className="text-xs text-muted-foreground">
+                    {remote.failure.description}
+                </p>
+            ) : null}
         </div>
     )
 }

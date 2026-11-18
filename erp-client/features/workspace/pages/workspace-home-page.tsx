@@ -58,7 +58,9 @@ export function WorkspaceHomeView({
         return (
             <PageScaffold>
                 <BusinessFailureState
+                    idPrefix="workspace-account-profile-failure"
                     error={home.accountProfileQuery.error}
+                    readContext={{ subject: "账号资料" }}
                     onRetry={home.refresh}
                 />
             </PageScaffold>
@@ -78,19 +80,19 @@ export function WorkspaceHomeView({
                 description={
                     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                         <span>{QUEUE_DESCRIPTIONS[home.urlState.view]}</span>
-                        <span role="status" className="text-xs">
-                            {home.dashboardQuery.isError ? (
-                                "更新失败，请重试"
-                            ) : home.refreshing ? (
-                                "正在更新…"
-                            ) : freshness ? (
-                                <time dateTime={freshness.dateTime}>
-                                    更新于 {freshness.updatedAtLabel}
-                                </time>
-                            ) : (
-                                "正在查询"
-                            )}
-                        </span>
+                        {!home.dashboardQuery.isError && (
+                            <span role="status" className="text-xs">
+                                {home.refreshing ? (
+                                    "正在更新…"
+                                ) : freshness ? (
+                                    <time dateTime={freshness.dateTime}>
+                                        更新于 {freshness.updatedAtLabel}
+                                    </time>
+                                ) : (
+                                    "正在查询"
+                                )}
+                            </span>
+                        )}
                     </div>
                 }
             >

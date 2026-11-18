@@ -91,6 +91,21 @@ export const resultText = {
     operationProcessing: "操作正在处理",
 } as const
 
+export const systemFeedbackText = {
+    source: "来源工作页",
+    returnToSource: "返回来源工作页",
+    copy: "复制问题信息",
+    copied: "问题信息已复制",
+    technicalDetails: "技术详情",
+    requiredPermission: "缺少的权限码",
+    errorCode: "错误码",
+    requestId: "请求编号",
+    permissionHelp: "请联系管理员核查访问权限。",
+    verifyOperation: "请返回来源工作页核对最新状态。结果确认前请勿重复提交。",
+    committedResultUnavailable: "操作已提交，暂时无法读取结果",
+    checkCommittedResult: "请返回来源工作页查询处理状态。",
+} as const
+
 export const approvalResultText = {
     approved: "通过",
     rejected: "驳回",
