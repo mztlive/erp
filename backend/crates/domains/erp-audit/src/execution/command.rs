@@ -9,7 +9,7 @@ use persistence_core::Executor;
 
 use crate::{
     AuditExt, AuditLog, AuditLogRepositoryExt, BusinessEventContent, BusinessEventContext,
-    BusinessEventResult, Error, Result as AuditResult, Result, prepare_business_log,
+    BusinessEventResult, Error, Result, prepare_business_log,
 };
 
 /// 一次业务命令的执行结果；回放结果不会再次生成成功事件。
@@ -134,7 +134,7 @@ where
 /// 返回审计写入结果。
 /// # 错误
 /// 未登记动作、身份投影无效或持久化失败时返回原错误并阻止提交。
-pub async fn persist_log(db: &Database, log: &AuditLog, executor: &mut dyn Executor) -> AuditResult<()> {
+pub async fn persist_log(db: &Database, log: &AuditLog, executor: &mut dyn Executor) -> Result<()> {
     let prepared = prepare_business_log(log)?;
     db.audit_logs().create(&prepared, executor).await?;
     Ok(())
@@ -149,8 +149,8 @@ pub async fn persist_log(db: &Database, log: &AuditLog, executor: &mut dyn Execu
 /// 返回原有有序批量写入结果。
 /// # 错误
 /// 任一事件未登记、身份无效或批量持久化失败时返回原错误。
-pub async fn persist_logs(db: &Database, logs: &[AuditLog], executor: &mut dyn Executor) -> AuditResult<()> {
-    let prepared = logs.iter().map(prepare_business_log).collect::<AuditResult<Vec<_>>>()?;
+pub async fn persist_logs(db: &Database, logs: &[AuditLog], executor: &mut dyn Executor) -> Result<()> {
+    let prepared = logs.iter().map(prepare_business_log).collect::<Result<Vec<_>>>()?;
     db.audit_logs().create_many_ordered(&prepared, executor).await?;
     Ok(())
 }

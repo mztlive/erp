@@ -252,34 +252,9 @@ pub(super) struct SalesChangeStartPersistInput {
     pub authorization: Arc<AuthorizationService>,
 }
 
-/// 在同一事务中写入提交快照、单据迁移、快照、BPM 运行事实与入口任务。
-///
-/// # 用途
-/// 提交启动后原子写入变更单、提交快照与运行事实。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `input` - 提交写入集合
-///
-/// # 返回
-/// 成功时无返回值。
-///
-/// # 错误
-/// 仓储写入失败或计划不完整时返回错误，事务回滚。
-///
-/// # 关键业务约束
-/// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
-pub(super) async fn persist_sales_change_start(
-    db: &Database,
-    input: SalesChangeStartPersistInput,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    input.persist(db, executor).await
-}
-
 impl SalesChangeStartPersistInput {
     /// 在入口事务中重验来源授权，并依原顺序写收据、业务事实、运行态和审计。
-    async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
+    pub(super) async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         let PreparedExecution::Apply(writes) = self.prepared else {
             return Err(Error::ConflictError("销售变更历史启动缺少完整请求回执，不能安全回放".into()));
         };

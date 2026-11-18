@@ -5,6 +5,10 @@ use async_trait::async_trait;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::CustomerReceiptId;
+use erp_finance::dto::receivable::{
+    CancelCustomerReceiptApprovalRequest, CommitCustomerReceiptRequest, CreateCustomerReceiptRequest,
+    SubmitCustomerReceiptRequest,
+};
 use erp_finance::entity::receivable::{CustomerReceipt, CustomerReceiptData};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
@@ -12,6 +16,7 @@ use erp_finance::service::receivable::customer_receipt_commit::convert_allocatio
 use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_identity::{AccessTarget, AuthorizationService};
 use erp_permissions::{Permission, receivable};
+use erp_read_models::finance::dto::CustomerReceiptView;
 use erp_read_models::finance::receivable::ReceivableReadService;
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::prepare_cancel;
@@ -40,10 +45,6 @@ pub use super::customer_receipt_posting::{
     reject_customer_receipt_approval_apply,
 };
 use super::customer_receipt_submit::{authorized_receipt, persist_receipt_submit, submit_receipt};
-use super::dto::{
-    CancelCustomerReceiptApprovalRequest, CommitCustomerReceiptRequest, CreateCustomerReceiptRequest,
-    CustomerReceiptView, SubmitCustomerReceiptRequest,
-};
 use crate::{Error, Result};
 
 impl ReceivableProcess {

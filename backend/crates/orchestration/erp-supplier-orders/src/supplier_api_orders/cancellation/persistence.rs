@@ -11,19 +11,16 @@ use persistence_core::{Executor, Transactional};
 use super::SupplierApiOrderProcess;
 use crate::{Error, Result};
 
+pub(super) enum CancellationWrite {
+    SendIntent,
+    Progress,
+}
+
 impl SupplierApiOrderProcess {
-    pub(super) async fn persist_cancellation_state(&self, execution: &mut ApiOrderExecution) -> Result<()> {
-        self.write_cancellation_state(execution, false).await
-    }
-
-    pub(super) async fn persist_cancellation_send(&self, execution: &mut ApiOrderExecution) -> Result<()> {
-        self.write_cancellation_state(execution, true).await
-    }
-
-    async fn write_cancellation_state(
+    pub(super) async fn persist_cancellation(
         &self,
         execution: &mut ApiOrderExecution,
-        before_send: bool,
+        write: CancellationWrite,
     ) -> Result<()> {
         let db = self.db.clone();
         let client = db.client().clone();
@@ -32,7 +29,7 @@ impl SupplierApiOrderProcess {
         *execution = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    if before_send {
+                    if matches!(write, CancellationWrite::SendIntent) {
                         process.ensure_cancel_send(&saved, executor).await?;
                     }
                     let action_id = saved

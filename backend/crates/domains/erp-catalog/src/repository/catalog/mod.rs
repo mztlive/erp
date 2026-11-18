@@ -9,9 +9,6 @@
 //! 树形字典 `product_category` 的 P1 实体未定义 `internal_code` 物化路径字段（P1
 //! 冻结），子树查询以「层序 `$in` 批量展开」实现：每层一次 `$in` 查询，不产生
 //! N+1；`internal_code` 落库后可替换为前缀范围查询（见域报告偏差说明）。
-//!
-//! 筛选/行类型经 `CatalogExt` 的关联类型对外暴露
-//! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
 mod attribute;
 mod auto_match;
@@ -24,7 +21,6 @@ mod parent_chain;
 pub mod procurement_facts;
 mod product;
 mod product_row;
-mod scope;
 mod sellable;
 pub mod sellable_projection;
 mod shared;
@@ -58,7 +54,6 @@ pub use product::{
     ProductFilter, ProductRepositoryExt, ProductRevisionFilter, ProductRevisionMediaRepositoryExt,
     ProductRevisionRepositoryExt, ProductRevisionRow,
 };
-pub use scope::CatalogReadScope;
 pub use sellable::{SellableSkuFilter, SellableSkuRow, SellableSort, SellableSortField};
 pub use sellable_projection::{
     SELLABLE_SKU_PROJECTION_VERSION, SellableSkuProjectionState, SellableSkuProjectionStore,
@@ -69,6 +64,8 @@ pub use voucher::{
     VoucherCategoryProfileRevisionFilter, VoucherCategoryProfileRevisionRepositoryExt,
     VoucherCategoryProfileRevisionRow,
 };
+
+pub use crate::authorization::CompiledScope as CatalogReadScope;
 
 /// D10 域专用仓储：跨集合聚合查询与必须位于事务内的多步骤写入。
 ///

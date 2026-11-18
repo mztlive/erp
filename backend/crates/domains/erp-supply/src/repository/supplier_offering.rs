@@ -37,9 +37,7 @@ pub(crate) mod write;
 
 pub use query::{SupplierOfferingRepositoryQueryExt, SupplierOfferingRevisionRepositoryQueryExt};
 
-const OFFERINGS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
 const OFFERING_REVISIONS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_REVISIONS;
-const OFFERING_AVAILABILITIES: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_AVAILABILITIES;
 const OFFERING_SORT_FIELDS: &[&str] = &["created_at", "status", "supplier_sku_code"];
 
 /// 供给命令仓储的域查询。
@@ -716,14 +714,7 @@ impl<'a> SupplierOfferingDomainRepository<'a> {
         availability: &SupplierOfferingAvailability,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        write::create_triple(
-            &write::MongoOfferingWrite::new(self.db),
-            offering,
-            revision,
-            availability,
-            executor,
-        )
-        .await
+        write::create_triple(self.db, offering, revision, availability, executor).await
     }
 
     /// 追加商业条款修订并乐观锁推进供给当前版本。
@@ -744,7 +735,7 @@ impl<'a> SupplierOfferingDomainRepository<'a> {
         revision: &SupplierOfferingRevision,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        write::append_revision(&write::MongoOfferingWrite::new(self.db), offering, revision, executor).await
+        write::append_revision(self.db, offering, revision, executor).await
     }
 }
 

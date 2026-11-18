@@ -223,31 +223,8 @@ impl FinanceCommandReceipt {
     }
 }
 
-/// 读取当前命令唯一命中的财务回执，禁止任意挑选多个结果。
-///
-/// # 参数
-/// * `command` - 原请求身份与载荷。
-/// * `receipts` - 仓储批量读取结果。
-/// # 返回
-/// 未命中返回 None，命中返回已登记发票 ID。
-/// # 错误
-/// 重复身份、损坏或异载荷返回明确错误。
-pub fn pick_purchase_invoice_id(
-    command: &CommandReceipt,
-    receipts: &[FinanceCommandReceipt],
-) -> Result<Option<InvoiceId>> {
-    let mut matching = receipts.iter().filter(|receipt| receipt.base.id == command.id());
-    let Some(receipt) = matching.next() else {
-        return Ok(None);
-    };
-    if matching.next().is_some() {
-        return Err(corrupted_receipt());
-    }
-    receipt.purchase_invoice_id(command).map(Some)
-}
-
 /// 保留现有通用回执损坏错误口径。
-fn corrupted_receipt() -> Error {
+pub(crate) fn corrupted_receipt() -> Error {
     Error::Internal("业务命令收据格式无效".to_string())
 }
 
@@ -288,8 +265,6 @@ fn resource_for_command(action: &str, resource_type: &str, id: String) -> Result
 
 #[cfg(test)]
 mod tests {
-    use std::slice::from_ref;
-
     use super::*;
 
     fn command(amount: u32) -> CommandReceipt {
@@ -317,11 +292,7 @@ mod tests {
     #[test]
     fn current_result_keeps_invoice_reference_and_same_payload_replays() {
         let receipt = receipt();
-        assert_eq!(pick_purchase_invoice_id(&command(10), &[]).unwrap(), None);
-        assert_eq!(
-            pick_purchase_invoice_id(&command(10), from_ref(&receipt)).unwrap(),
-            Some(InvoiceId::new("invoice-1"))
-        );
+        assert_eq!(receipt.purchase_invoice_id(&command(10)).unwrap(), InvoiceId::new("invoice-1"));
         let encoded = serde_json::to_string(&receipt).unwrap();
         assert_eq!(serde_json::from_str::<FinanceCommandReceipt>(&encoded).unwrap(), receipt);
         assert!(
@@ -330,12 +301,8 @@ mod tests {
     }
 
     #[test]
-    fn corrupted_results_and_duplicate_candidates_are_rejected() {
+    fn corrupted_results_are_rejected() {
         let valid = receipt();
-        assert!(matches!(
-            pick_purchase_invoice_id(&command(10), &[valid.clone(), valid.clone()]),
-            Err(Error::Internal(_))
-        ));
         let mut changed = valid.clone();
         changed.result_schema_version = 2;
         assert!(changed.purchase_invoice_id(&command(10)).is_err());

@@ -10,7 +10,7 @@ use erp_catalog::service::catalog::{ProductDraft, SpecEditPlan};
 use erp_catalog::{CatalogExt, ProductMediaInput};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ProductId, SupplierAccountId};
-use erp_file_assets::{CatalogPendingAttachments, PendingFileAssets};
+use erp_file_assets::PendingFileAssets;
 use erp_permissions::{catalog as catalog_permissions, supplier_offering as supplier_offering_permissions};
 use erp_supplier::entity::supplier::eligibility::OfferingProductKind;
 use erp_supplier::repository::SupplierExt;
@@ -123,9 +123,7 @@ impl ProductImportProcess {
         let unit = self.resolve_unit(cache).await?;
         let brand = self.resolve_brand(&row.brand_name, actor, cache).await?;
         let category = self.resolve_category(&row.category_name, actor, cache).await?;
-        let pending = CatalogPendingAttachments::from_support(
-            PendingFileAssets::prepare(media.pending, actor)?.shared(),
-        );
+        let pending = PendingFileAssets::prepare(media.pending, actor)?.into_catalog_batch();
         let carousel = media
             .carousel
             .into_iter()
@@ -168,14 +166,10 @@ impl ProductImportProcess {
         let revisions = self.db.catalog().current_sku_revisions(&skus, &mut ReadExecutor::default()).await?;
         let same = row.matching_sku(&skus, &revisions)?.is_some();
         if same && (media.pending.is_empty() || self.product_has_images(&product).await?) {
-            let pending = CatalogPendingAttachments::from_support(
-                PendingFileAssets::prepare(Vec::new(), actor)?.shared(),
-            );
+            let pending = PendingFileAssets::prepare(Vec::new(), actor)?.into_catalog_batch();
             return Ok(PreparedProduct { write: ProductWrite::Existing(product.base.id), pending });
         }
-        let pending = CatalogPendingAttachments::from_support(
-            PendingFileAssets::prepare(media.pending.clone(), actor)?.shared(),
-        );
+        let pending = PendingFileAssets::prepare(media.pending.clone(), actor)?.into_catalog_batch();
         let request = if same {
             self.update_request_with_images(&product, media).await?
         } else {

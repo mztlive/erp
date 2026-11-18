@@ -438,44 +438,14 @@ impl SalesOrder {
         Ok(())
     }
 
-    /// 提交进入审核（主状态 `DRAFT → PENDING_REVIEW`）。
-    ///
-    /// 实物及服务与卡券目标路径均进入 `IN_APPROVAL`。旧逐节点复核态不得由本方法写入。
-    ///
-    /// # 参数
-    /// * `updated_by` - 提交人
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 商业主状态不能迁到 `PendingReview`，或审核轨不能迁到 `NotSubmitted` 时返回
-    /// [`Error::InvalidStateTransition`]。已处于目标状态时该次检查幂等成功。
-    pub fn submit_for_review(&mut self, updated_by: impl Into<String>) -> Result<()> {
+    /// 提交后进入 `PENDING_REVIEW` / `IN_APPROVAL`，实物及服务与卡券共用。
+    pub fn start_approval_submission(&mut self, updated_by: impl Into<String>) -> Result<()> {
         ensure_transition(self.commercial_status, CommercialStatus::PendingReview)?;
         ensure_transition(self.review_status, ReviewStatus::NotSubmitted)?;
         self.transition_commercial_status(CommercialStatus::PendingReview)?;
         self.review_status = ReviewStatus::InApproval;
         self.stable.touch(updated_by);
         Ok(())
-    }
-
-    /// 销售单提交并进入统一审批。
-    ///
-    /// 商业主状态变为 `PENDING_REVIEW`，审核轨只允许 `IN_APPROVAL`。
-    /// `GoodsService` 与 `Voucher` 共用本端口，不得再写入卡券两级复核态。
-    ///
-    /// # 参数
-    /// * `updated_by` - 提交人
-    ///
-    /// # 返回
-    /// 迁移成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 与 [`Self::submit_for_review`] 相同：商业主状态不能迁到 `PendingReview`，或审核轨不能迁到
-    /// `NotSubmitted` 时返回 [`Error::InvalidStateTransition`]。
-    pub fn start_approval_submission(&mut self, updated_by: impl Into<String>) -> Result<()> {
-        self.submit_for_review(updated_by)
     }
 
     /// 撤回统一审批提交，回到可修正草稿。

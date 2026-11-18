@@ -40,21 +40,18 @@ where
 {
     let audit = prepare_business_log(&audit)?;
     let context = attempt_context(&audit)?;
-    let attempts_db = db.clone();
-    let db = db.clone();
-    let client = db.client().clone();
-    let result = client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                let write_db = db.clone();
-                execute_prepared(&audit, &MongoAuditEventSink::new(&db), executor, move |executor| {
-                    Box::pin(async move { write(&write_db, executor).await })
-                })
-                .await
+    let audit_db = db.clone();
+    let write_db = audit_db.clone();
+    with_attempt(db, context, move |executor| {
+        Box::pin(async move {
+            let sink = MongoAuditEventSink::new(&audit_db);
+            execute_prepared(&audit, &sink, executor, move |executor| {
+                Box::pin(async move { write(&write_db, executor).await })
             })
+            .await
         })
-        .await;
-    finish_attempt(result, &context, &MongoAuditAttemptSink::new(&attempts_db)).await
+    })
+    .await
 }
 
 /// 为类型化命令建立唯一事务并记录执行后的安全事实。
@@ -81,16 +78,28 @@ where
     C::Output: 'static,
     C::Error: AuditFailure + From<persistence_core::Error> + 'static,
 {
-    let attempt_context = context.clone();
-    let attempts_db = db.clone();
-    let db = db.clone();
-    let client = db.client().clone();
-    let result = client
-        .with_transaction(move |executor| {
-            Box::pin(async move {
-                execute_audited(&context, &MongoAuditEventSink::new(&db), executor, &command).await
-            })
+    let audit_db = db.clone();
+    with_attempt(db, context.clone(), move |executor| {
+        Box::pin(async move {
+            execute_audited(&context, &MongoAuditEventSink::new(&audit_db), executor, &command).await
         })
-        .await;
-    finish_attempt(result, &attempt_context, &MongoAuditAttemptSink::new(&attempts_db)).await
+    })
+    .await
+}
+
+async fn with_attempt<R, E, F>(
+    db: &Database,
+    context: BusinessEventContext,
+    execute: F,
+) -> std::result::Result<R, E>
+where
+    R: Send,
+    E: AuditFailure + From<persistence_core::Error> + Send,
+    F: for<'a> FnOnce(
+            &'a mut dyn Executor,
+        ) -> Pin<Box<dyn Future<Output = std::result::Result<R, E>> + Send + 'a>>
+        + Send,
+{
+    let result = db.client().with_transaction(execute).await;
+    finish_attempt(result, &context, &MongoAuditAttemptSink::new(db)).await
 }

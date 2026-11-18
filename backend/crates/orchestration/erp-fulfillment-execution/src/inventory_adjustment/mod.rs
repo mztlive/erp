@@ -11,7 +11,6 @@ use crate::workflow::FulfillmentWorkflow;
 
 mod adapter;
 pub(crate) mod approval_prepare;
-mod cancel_access;
 pub mod cancel_approval;
 pub(crate) mod cancel_authorization;
 mod cancel_facts;

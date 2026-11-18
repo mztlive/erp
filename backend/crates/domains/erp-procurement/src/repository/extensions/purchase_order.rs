@@ -7,9 +7,7 @@
 
 use mongodb::Database;
 
-use super::super::purchase_order::{
-    PurchaseOrderDomainRepository, PurchaseOrderFilter, PurchaseOrderSubmissionFilter,
-};
+use super::super::purchase_order::PurchaseOrderDomainRepository;
 use crate::repository::owned::{
     PurchaseChangeOrderRepository, PurchaseChangeSubmissionLineRepository,
     PurchaseChangeSubmissionRepository, PurchaseLineSalesAllocationRepository, PurchaseOrderRepository,
@@ -37,12 +35,6 @@ pub trait PurchaseOrderExt: Sized {
     const PURCHASE_CHANGE_SUBMISSIONS: &'static str = "purchase_change_submissions";
     /// `purchase_change_submission_line` 集合名。
     const PURCHASE_CHANGE_SUBMISSION_LINES: &'static str = "purchase_change_submission_lines";
-
-    /// 采购单列表筛选条件类型（定义见 `repository::purchase_order`）。
-    type PurchaseOrderFilter;
-
-    /// 采购提交列表筛选条件类型（定义见 `repository::purchase_order`）。
-    type PurchaseOrderSubmissionFilter;
 
     /// 获取 `purchase_order` 集合的 Repository。
     ///
@@ -166,9 +158,6 @@ pub trait PurchaseOrderExt: Sized {
 }
 
 impl PurchaseOrderExt for Database {
-    type PurchaseOrderFilter = PurchaseOrderFilter;
-    type PurchaseOrderSubmissionFilter = PurchaseOrderSubmissionFilter;
-
     fn purchase_orders(&self) -> PurchaseOrderRepository<'_> {
         PurchaseOrderRepository::new(self, Self::PURCHASE_ORDERS)
     }

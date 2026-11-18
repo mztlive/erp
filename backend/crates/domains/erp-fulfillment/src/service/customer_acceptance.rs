@@ -136,22 +136,21 @@ mod tests {
     use erp_core::ids::{CustomerAcceptanceId, SalesOrderLineId};
     use erp_core::money::Quantity;
 
+    use super::FulfillmentService;
     use crate::dto::AcceptanceLineInput;
-    use crate::entity::fulfillment::CustomerAcceptanceLineBatch;
-    use crate::service::customer_acceptance_lines::acceptance_line_specs;
 
     #[test]
     fn acceptance_lines_are_built_and_validated() {
-        let lines = CustomerAcceptanceLineBatch::build(
+        let lines = FulfillmentService::build_customer_acceptance_lines(
             CustomerAcceptanceId::new("acc-1"),
-            acceptance_line_specs(&[AcceptanceLineInput {
+            &[AcceptanceLineInput {
                 sales_order_line_id: SalesOrderLineId::new("so-line-1"),
                 accepted_quantity: Quantity::from_str("9").unwrap(),
                 short_quantity: Quantity::from_str("1").unwrap(),
                 rejected_quantity: Quantity::from_str("0").unwrap(),
                 reason: None,
                 allocations: vec![],
-            }]),
+            }],
         )
         .unwrap();
         assert_eq!(lines[0].accepted_quantity, Quantity::from_str("9").unwrap());

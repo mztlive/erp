@@ -155,7 +155,7 @@ async fn dispatch_sales(
         ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission
         | ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission => {
             require_transaction(executor)?;
-            order_to_cash::SalesOrderFormalizationProcess::new(
+            order_to_cash::SalesOrderCommandProcess::new(
                 registry.db.clone(),
                 registry.authorization.clone(),
                 sales_services(registry.db.clone(), registry.rbac.clone(), registry.authorization.clone()),

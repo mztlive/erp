@@ -18,7 +18,6 @@ use persistence_core::{Executor, Transactional};
 use super::facts::PartyFacts;
 use super::idempotency::command_view;
 use super::identity::CreationIdentity;
-use super::numbering::business_no;
 use super::{CustomerProfileProcess, field_changes};
 use crate::{Result, command_insert_error};
 
@@ -231,7 +230,7 @@ pub(super) fn create_party(
     let mut party = Party::new(
         party_id.clone(),
         PartyData {
-            party_no: business_no("P"),
+            party_no: format!("P-{}", next_id()),
             party_kind: PartyKind::Enterprise,
             unified_credit_code: req.unified_credit_code.clone(),
             status: PartyStatus::Active,
@@ -263,7 +262,7 @@ fn create_customer(
         customer_id.clone(),
         CustomerAccountData {
             party_id: party_id.clone(),
-            customer_no: business_no("KH"),
+            customer_no: format!("KH-{}", next_id()),
             default_payment_term_id: req.default_payment_term_id.clone(),
             status: req.status.unwrap_or(CustomerAccountStatus::Active),
         },

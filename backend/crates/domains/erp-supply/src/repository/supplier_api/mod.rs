@@ -4,9 +4,6 @@
 //! `update`/`soft_delete`/`restore` 比较 `id + version` 做 CAS，版本不匹配返回
 //! [`persistence_core::Error::OptimisticLockingError`]）；本模块只补充域特有查询与
 //! 跨集合多步骤写入入口。集合名常量统一从 `SupplierApiExt` 关联常量导入。
-//!
-//! 筛选/行类型定义在 `query` 子模块，经 `SupplierApiExt` 的关联类型对外暴露
-//! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
 #![allow(async_fn_in_trait)]
 

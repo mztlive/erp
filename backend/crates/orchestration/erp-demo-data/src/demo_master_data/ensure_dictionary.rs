@@ -6,7 +6,9 @@ use erp_catalog::{
     CatalogExt, CreateProductBrandRequest, CreateProductCategoryRequest, CreateUnitOfMeasureRequest,
 };
 use erp_workflow::ports::WorkflowAuthorizationPort;
-use persistence_core::ReadExecutor;
+use persistence_core::{ReadExecutor, Repository};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use super::lifecycle::{self, DemoKindDictionary};
 use super::plan::DemoStep;
@@ -42,7 +44,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         step: &DemoStep,
         request: &CreateUnitOfMeasureRequest,
     ) -> Result<EnsureOutcome> {
-        if let Some((id, live)) = self.lookup_unit(&step.key).await? {
+        if let Some((id, live)) = lookup_coded(self.db.unit_of_measures(), "unit_code", &step.key).await? {
             return self.adopt_coded(actor, step, DemoKindDictionary::Unit, id, live).await;
         }
         let view = erp_master_data::create_unit_of_measure(
@@ -72,10 +74,10 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         step: &DemoStep,
         request: &CreateProductBrandRequest,
     ) -> Result<EnsureOutcome> {
-        if let Some((id, live)) = self.lookup_brand(&step.key).await? {
+        if let Some((id, live)) = lookup_coded(self.db.product_brands(), "brand_code", &step.key).await? {
             return self.adopt_coded(actor, step, DemoKindDictionary::Brand, id, live).await;
         }
-        let view = self.catalog().product_brand_create(request.clone(), actor).await?;
+        let view = self.ports.catalog.product_brand_create(request.clone(), actor).await?;
         record::save(&self.db, step, view.id, Vec::new()).await?;
         Ok(EnsureOutcome::Created)
     }
@@ -96,13 +98,15 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         step: &DemoStep,
         request: &CreateProductCategoryRequest,
     ) -> Result<EnsureOutcome> {
-        if let Some((id, live)) = self.lookup_category(&step.key).await? {
+        if let Some((id, live)) =
+            lookup_coded(self.db.product_categories(), "category_code", &step.key).await?
+        {
             return self.adopt_coded(actor, step, DemoKindDictionary::Category, id, live).await;
         }
         let view = erp_master_data::create_product_category(
             self.db.clone(),
             self.authorization.clone(),
-            self.catalog(),
+            self.ports.catalog.clone(),
             request.clone(),
             actor.clone(),
         )
@@ -127,54 +131,22 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         record::save(&self.db, step, id, Vec::new()).await?;
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
     }
-
-    /// 按稳定单位编号读取包含软删除的数据。
-    async fn lookup_unit(&self, key: &str) -> Result<Option<(String, bool)>> {
-        Ok(coded_state(
-            self.db
-                .unit_of_measures()
-                .find_one_by_field_including_deleted(
-                    "unit_code",
-                    key.to_string(),
-                    &mut ReadExecutor::default(),
-                )
-                .await?,
-        ))
-    }
-
-    /// 按稳定品牌编号读取包含软删除的数据。
-    async fn lookup_brand(&self, key: &str) -> Result<Option<(String, bool)>> {
-        Ok(coded_state(
-            self.db
-                .product_brands()
-                .find_one_by_field_including_deleted(
-                    "brand_code",
-                    key.to_string(),
-                    &mut ReadExecutor::default(),
-                )
-                .await?,
-        ))
-    }
-
-    /// 按稳定分类编号读取包含软删除的数据。
-    async fn lookup_category(&self, key: &str) -> Result<Option<(String, bool)>> {
-        Ok(coded_state(
-            self.db
-                .product_categories()
-                .find_one_by_field_including_deleted(
-                    "category_code",
-                    key.to_string(),
-                    &mut ReadExecutor::default(),
-                )
-                .await?,
-        ))
-    }
 }
 
-/// 提取字典记录的主键，并标记是否未软删除。
-fn coded_state<T: HasBaseModel>(entity: Option<T>) -> Option<(String, bool)> {
-    entity.map(|item| {
+/// 按稳定编号读取含软删除的字典记录，并返回恢复所需的身份与状态。
+async fn lookup_coded<T>(
+    repository: Repository<'_, T>,
+    field: &str,
+    key: &str,
+) -> Result<Option<(String, bool)>>
+where
+    T: HasBaseModel + Serialize + DeserializeOwned + Send + Sync,
+{
+    let entity = repository
+        .find_one_by_field_including_deleted(field, key.to_string(), &mut ReadExecutor::default())
+        .await?;
+    Ok(entity.map(|item| {
         let base = item.base();
         (base.id.clone(), !base.is_deleted())
-    })
+    }))
 }

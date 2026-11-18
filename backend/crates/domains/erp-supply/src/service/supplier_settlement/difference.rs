@@ -16,9 +16,8 @@ use crate::dto::supplier_settlement::*;
 use crate::entity::supplier_settlement::*;
 use crate::repository::SupplierSettlementExt;
 use crate::repository::prelude::*;
+use crate::repository::supplier_settlement::SupplierSettlementDifferenceFilter;
 use crate::{Error, Result};
-/// 结算差异列表筛选条件类型。
-type DifferenceFilter = <mongodb::Database as SupplierSettlementExt>::SupplierSettlementDifferenceFilter;
 impl SupplierSettlementService {
     /// 分页查询供应商结算差异列表。
     ///
@@ -64,7 +63,7 @@ impl SupplierSettlementService {
         self.access().require_operation(actor, &supplier_settlement::DIFFERENCE_LIST, executor).await?;
         params.validate()?;
         let query = params.normalized()?;
-        let filter = DifferenceFilter {
+        let filter = SupplierSettlementDifferenceFilter {
             statement_item_id: query.statement_item_id,
             status: query.status,
             page: query.paging.page,

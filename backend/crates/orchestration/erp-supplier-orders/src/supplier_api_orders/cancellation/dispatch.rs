@@ -8,6 +8,7 @@ use erp_supply::ports::connector::common::ConnectorResult;
 use erp_supply::ports::connector::order::{ActionAccepted, CancelOrder};
 
 use super::SupplierApiOrderProcess;
+use super::persistence::CancellationWrite;
 use crate::Result;
 
 #[async_trait]
@@ -31,13 +32,13 @@ impl CancellationDispatch for MongoCancellationDispatch<'_> {
         self.connector.cancellations().expect("取消适配器已核实").validate(request).await
     }
     async fn persist_intent(&self, execution: &mut ApiOrderExecution) -> Result<()> {
-        self.process.persist_cancellation_send(execution).await
+        self.process.persist_cancellation(execution, CancellationWrite::SendIntent).await
     }
     async fn cancel(&self, request: &CancelOrder) -> ConnectorResult<ActionAccepted> {
         self.connector.cancellations().expect("取消适配器已在发送意图事务重验").cancel(request).await
     }
     async fn persist_result(&self, execution: &mut ApiOrderExecution) -> Result<()> {
-        self.process.persist_cancellation_state(execution).await
+        self.process.persist_cancellation(execution, CancellationWrite::Progress).await
     }
 }
 

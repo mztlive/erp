@@ -3,7 +3,7 @@
 use mongodb::Database;
 
 use super::super::sku_delivery_coverage::SkuDeliveryCoverageStore;
-use super::super::supplier_offering::{SupplierOfferingDomainRepository, SupplierOfferingFilter};
+use super::super::supplier_offering::SupplierOfferingDomainRepository;
 use crate::repository::owned::{
     SupplierDeliveryTemplateRepository, SupplierOfferingAvailabilityRepository,
     SupplierOfferingCommandRepository, SupplierOfferingRepository, SupplierOfferingRevisionRepository,
@@ -25,9 +25,6 @@ pub trait SupplierOfferingExt: Sized {
     const SKU_DELIVERY_COVERAGES: &'static str = "sku_delivery_coverages";
     /// SKU 配送覆盖刷新进度集合。
     const SKU_DELIVERY_COVERAGE_STATE: &'static str = "sku_delivery_coverage_state";
-
-    /// 供给列表筛选条件类型。
-    type SupplierOfferingFilter;
 
     /// 获取供给稳定身份集合。
     ///
@@ -115,8 +112,6 @@ pub trait SupplierOfferingExt: Sized {
 }
 
 impl SupplierOfferingExt for Database {
-    type SupplierOfferingFilter = SupplierOfferingFilter;
-
     fn supplier_offerings(&self) -> SupplierOfferingRepository<'_> {
         SupplierOfferingRepository::new(self, Self::SUPPLIER_OFFERINGS)
     }

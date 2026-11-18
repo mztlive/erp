@@ -1,23 +1,15 @@
 //! 门户统一申请操作通过精确领域类型分派，协议层不读取业务仓储。
 
 use application_core::AuditActor;
-use erp_catalog::portal::CatalogPortalExt;
 use erp_identity::PortalActor;
-use erp_supplier::portal::CooperationRepository;
-use erp_supply::portal::PortalSupplyExt;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
+use super::request_access::{RequestKind, RequestTarget};
 use super::{PortalReview, PortalTransition, SupplierPortalProcess};
 use crate::{Error, Result};
-
-enum RequestKind {
-    Offering,
-    NewProduct,
-    Cooperation,
-}
 
 impl SupplierPortalProcess {
     /// 按拥有领域修改当前供应商可编辑申请。
@@ -28,8 +20,10 @@ impl SupplierPortalProcess {
     /// # 错误
     /// 不存在、字段非法、范围或版本失效时拒绝。
     pub async fn application_update(&self, id: &str, input: Value, actor: &PortalActor) -> Result<Value> {
-        match self.request_kind_for(id, Some(actor)).await? {
-            RequestKind::Offering => value(self.application_save(Some(id), parse(input)?, actor).await?),
+        match self.request_kind_for(id, actor).await? {
+            RequestKind::OfferingCreate | RequestKind::OfferingUpdate => {
+                value(self.application_save(Some(id), parse(input)?, actor).await?)
+            },
             RequestKind::NewProduct => value(self.new_product_save(Some(id), parse(input)?, actor).await?),
             RequestKind::Cooperation => value(self.cooperation_save(Some(id), parse(input)?, actor).await?),
         }
@@ -43,8 +37,10 @@ impl SupplierPortalProcess {
     /// # 错误
     /// 领域类型、归属、输入或处理资格不符时拒绝。
     pub async fn submit(&self, id: &str, input: &PortalTransition, actor: &PortalActor) -> Result<Value> {
-        match self.request_kind_for(id, Some(actor)).await? {
-            RequestKind::Offering => value(self.application_submit(id, input.clone(), actor).await?),
+        match self.request_kind_for(id, actor).await? {
+            RequestKind::OfferingCreate | RequestKind::OfferingUpdate => {
+                value(self.application_submit(id, input.clone(), actor).await?)
+            },
             RequestKind::NewProduct => value(self.new_product_submit(id, input.clone(), actor).await?),
             RequestKind::Cooperation => value(self.cooperation_submit(id, input.clone(), actor).await?),
         }
@@ -58,8 +54,10 @@ impl SupplierPortalProcess {
     /// # 错误
     /// 越界、已完成或并发变更时拒绝。
     pub async fn withdraw(&self, id: &str, input: &PortalTransition, actor: &PortalActor) -> Result<Value> {
-        match self.request_kind_for(id, Some(actor)).await? {
-            RequestKind::Offering => value(self.application_withdraw(id, input.clone(), actor).await?),
+        match self.request_kind_for(id, actor).await? {
+            RequestKind::OfferingCreate | RequestKind::OfferingUpdate => {
+                value(self.application_withdraw(id, input.clone(), actor).await?)
+            },
             RequestKind::NewProduct => value(self.new_product_withdraw(id, input.clone(), actor).await?),
             RequestKind::Cooperation => value(self.cooperation_withdraw(id, input.clone(), actor).await?),
         }
@@ -74,7 +72,9 @@ impl SupplierPortalProcess {
     /// 任一对象或处理资格失效时拒绝。
     pub async fn review(&self, id: &str, input: &PortalReview, actor: &AuditActor) -> Result<Value> {
         match self.review_kind(id, &input.work_item_id, actor).await? {
-            RequestKind::Offering => value(self.application_review(id, input.clone(), actor).await?),
+            RequestKind::OfferingCreate | RequestKind::OfferingUpdate => {
+                value(self.application_review(id, input.clone(), actor).await?)
+            },
             RequestKind::NewProduct => value(self.new_product_review(id, input.clone(), actor).await?),
             RequestKind::Cooperation => value(self.cooperation_review(id, input.clone(), actor).await?),
         }
@@ -102,33 +102,21 @@ impl SupplierPortalProcess {
         self.load_request_kind(id, None, executor).await
     }
 
-    async fn request_kind_for(&self, id: &str, actor: Option<&PortalActor>) -> Result<RequestKind> {
-        if let Some(actor) = actor {
-            self.session_validate(actor, &mut NoTransaction).await?;
-        }
-        self.load_request_kind(id, actor, &mut NoTransaction).await
+    async fn request_kind_for(&self, id: &str, actor: &PortalActor) -> Result<RequestKind> {
+        self.session_validate(actor, &mut NoTransaction).await?;
+        self.load_request_kind(id, Some(actor.supplier_id.as_str()), &mut NoTransaction).await
     }
 
     async fn load_request_kind(
         &self,
         id: &str,
-        actor: Option<&PortalActor>,
+        supplier_id: Option<&str>,
         executor: &mut dyn Executor,
     ) -> Result<RequestKind> {
-        let found = if let Some(app) = self.db.portal_applications().find_by_id(id, executor).await? {
-            Some((RequestKind::Offering, app.supplier_id))
-        } else if let Some(app) = self.db.new_product_drafts().find_by_id(id, executor).await? {
-            Some((RequestKind::NewProduct, app.supplier_id))
-        } else {
-            CooperationRepository::new(&self.db)
-                .find_any(id, executor)
-                .await?
-                .map(|app| (RequestKind::Cooperation, app.supplier_id))
-        };
-        match found {
-            Some((kind, supplier)) if actor.is_none_or(|a| a.supplier_id == supplier) => Ok(kind),
-            _ => Err(Error::NotFound("申请不存在或无权查看".into())),
-        }
+        RequestTarget::load(&self.db, id, executor)
+            .await?
+            .and_then(|target| target.kind_for_supplier(supplier_id))
+            .ok_or_else(|| Error::NotFound("申请不存在或无权查看".into()))
     }
 }
 

@@ -340,8 +340,7 @@ pub(super) async fn authorize_delivery(
     let mut task = task::load_single_open_task(&process.db, "delivery", id, executor).await?;
     task::ensure_task_matches_frozen_identity(&task, &task::FulfillmentTaskObject::Delivery(&delivery))?;
     super::super::task_access::require_assignee(
-        &process.db,
-        &process.task_identity.clone(),
+        &process.task_identity,
         actor,
         &task,
         super::super::task_access::TaskPurpose::Fulfillment,

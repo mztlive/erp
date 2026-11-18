@@ -19,20 +19,6 @@ use validator::Validate;
 
 use crate::{Error, Result};
 
-/// 返回仓库流程模块名。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回稳定模块名 `warehouse`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn process_name() -> &'static str {
-    "warehouse"
-}
-
 /// 创建仓库 SKU 策略，并在同一事务中写入成功审计。
 ///
 /// # 参数

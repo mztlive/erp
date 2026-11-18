@@ -240,7 +240,7 @@ fn update_keeps_identity_fields_and_touches_auditor() {
 fn effective_order_rejects_direct_update() {
     let mut order = SalesOrder::new(SalesOrderId::new("o-1"), data(), "admin-1").unwrap();
     order
-        .submit_for_review("admin-1")
+        .start_approval_submission("admin-1")
         .and_then(|()| order.transition_review(ReviewStatus::Approved, "reviewer"))
         .and_then(|()| {
             crate::entity::sales_order::attribution::freeze_fixture(&mut order);
@@ -330,7 +330,7 @@ fn voucher_order_enters_unified_in_approval() {
 #[test]
 fn void_rejects_from_non_draft() {
     let mut order = SalesOrder::new(SalesOrderId::new("o-1"), data(), "admin-1").unwrap();
-    order.submit_for_review("admin-1").unwrap();
+    order.start_approval_submission("admin-1").unwrap();
     assert!(order.void("admin-2").is_err(), "审核中不可作废");
     order.return_to_draft("admin-2").unwrap();
     order.void("admin-2").unwrap();

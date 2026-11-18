@@ -42,7 +42,8 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             return Ok(EnsureOutcome::Notice("没有可用的采购账号，未生成供应商".to_string()));
         };
         let view = match self
-            .suppliers()
+            .ports
+            .suppliers
             .create(supplier_request(request, maintainer.id(), company_party_id), actor)
             .await
             .map_err(Error::from)
@@ -128,7 +129,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             reason: "演示供应商交给采购账号".to_string(),
             idempotency_key: format!("demo-handover-{}", step.key),
         };
-        if let Err(error) = self.suppliers().handover_supplier(supplier_id, request, actor).await {
+        if let Err(error) = self.ports.suppliers.handover_supplier(supplier_id, request, actor).await {
             push_supplier_notice(notices, &format!("演示供应商未能交给采购账号：{error}"));
         }
         Ok(())

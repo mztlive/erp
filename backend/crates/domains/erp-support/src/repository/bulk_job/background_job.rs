@@ -374,8 +374,7 @@ impl BackgroundJobRepositoryExt for persistence_core::Repository<'_, BackgroundJ
             .limit(filter.limit())
             .projection(background_job_projection())
             .build();
-        let collection = self.collection().clone_with_type::<BackgroundJobRow>();
-        search_projected_page(&self.collection(), &collection, filter, options, executor).await
+        search_projected_page(&self.collection(), filter, options, executor).await
     }
 
     async fn find_by_job_no(

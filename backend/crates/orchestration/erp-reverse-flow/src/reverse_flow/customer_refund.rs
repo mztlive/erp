@@ -264,7 +264,6 @@ impl ReturnsProcess {
 /// # 参数
 /// * `db` - 数据库。
 /// * `refund_id` - 退款单主键。
-/// * `actor_id` - 过账操作人 ID。
 /// * `actor` - 审计操作人。
 /// * `executor` - 最终通过事务的执行器；本函数不再开启事务。
 ///
@@ -276,7 +275,6 @@ impl ReturnsProcess {
 pub(super) async fn apply_customer_refund_final_post(
     db: &Database,
     refund_id: &str,
-    actor_id: &str,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
@@ -286,9 +284,7 @@ pub(super) async fn apply_customer_refund_final_post(
         &mut refund,
         erp_workflow::service::approval::policy::ApprovalDomainAction::CustomerRefundPost,
     )?;
-    execute_refund_posting(&mut MongoRefundPosting { db, refund: &mut refund, actor_id, actor }, executor)
-        .await?;
-    Ok(())
+    execute_refund_posting(&mut MongoRefundPosting { db, refund: &mut refund, actor }, executor).await
 }
 
 /// 客户退款最终通过后各域实际写入的固定顺序。
@@ -320,7 +316,6 @@ async fn execute_refund_posting(
 struct MongoRefundPosting<'a> {
     db: &'a Database,
     refund: &'a mut CustomerRefund,
-    actor_id: &'a str,
     actor: &'a AuditActor,
 }
 #[async_trait::async_trait]
@@ -328,8 +323,8 @@ impl RefundPostingSteps for MongoRefundPosting<'_> {
     async fn apply(&mut self, step: RefundPostingStep, executor: &mut dyn Executor) -> Result<()> {
         let db = self.db;
         let refund = &mut *self.refund;
-        let actor_id = self.actor_id;
         let actor = self.actor;
+        let actor_id = actor.id();
         match step {
             RefundPostingStep::Finance => {
                 apply_customer_refund_posting(db, refund, actor_id, executor).await?;

@@ -16,6 +16,7 @@ use erp_supply::service::supplier_fulfillment::place::persist_place_facts;
 use persistence_core::Executor;
 
 use super::super::follow_up::resolve_follow_up;
+use super::super::legacy;
 use super::{SupplierFulfillmentProcess, build_action_message};
 use crate::Result;
 
@@ -62,7 +63,7 @@ impl SupplierFulfillmentProcess {
                     executor,
                 )
                 .await?;
-            self.ensure_legacy_order(&order.base.id, executor).await?;
+            legacy::ensure(&self.db, &order.base.id, executor).await?;
             return Ok(PlaceIntent::Existing(Box::new(order)));
         }
         let (connection, offerings) = self.domain().ensure_placeable(req, executor).await?;

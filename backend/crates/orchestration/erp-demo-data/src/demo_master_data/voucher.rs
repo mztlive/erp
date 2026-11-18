@@ -21,13 +21,13 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         actor: &AuditActor,
     ) -> Result<String> {
         if request.product_kind != ProductKind::Voucher {
-            return Ok(self.catalog().product_create(request, actor).await?.id);
+            return Ok(self.ports.catalog.product_create(request, actor).await?.id);
         }
         let owner = self
             .role_actor(&spec::foundation_spec().product_maintainer_account)
             .await?
             .ok_or_else(|| Error::NotFound("卡券维护账号不可用".into()))?;
-        let view = self.catalog().voucher_category_create(voucher_request(&request)?, &owner).await?;
+        let view = self.ports.catalog.voucher_category_create(voucher_request(&request)?, &owner).await?;
         view.product_id.ok_or_else(|| Error::Internal("卡券创建后未返回商品 ID".into()))
     }
 }

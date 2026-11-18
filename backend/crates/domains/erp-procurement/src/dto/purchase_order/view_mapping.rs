@@ -2,196 +2,49 @@
 
 use super::{InquiryQuoteSourceView, PurchaseOrderLineView, TotalsView};
 use crate::entity::purchase_order::{
-    PurchaseDeliveryAllocation, PurchaseExpenseDetail, PurchaseLineType, PurchaseOrderRevision,
-    PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine,
+    PurchaseOrderRevision, PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine,
 };
 
-/// 采购行视图的统一数据源（版本行与提交行共用字段）。
-///
-/// 两类行实体除提交行多 `sales_order_submission_line_id` 外字段同形；
-/// 本 trait 收敛公共字段读取，单个泛型函数承载视图组装。
-trait PurchaseLineViewSource {
-    fn view_inquiry_quote_source(&self) -> Option<InquiryQuoteSourceView>;
-    fn view_delivery_allocations(&self) -> Vec<PurchaseDeliveryAllocation>;
-    /// 行实体主键。
-    fn view_line_id(&self) -> String;
-    /// 版本内行号。
-    fn view_line_no(&self) -> u32;
-    /// 行类型。
-    fn view_line_type(&self) -> PurchaseLineType;
-    /// 采购二次确认分行。
-    fn view_procurement_confirmation_line_id(&self) -> Option<String>;
-    /// 商品行引用的 SKU。
-    fn view_sku_id(&self) -> Option<String>;
-    /// 商品行引用的 SKU 版本。
-    fn view_sku_revision_id(&self) -> Option<String>;
-    /// 商品名称快照。
-    fn view_product_name(&self) -> Option<String>;
-    /// 规格快照。
-    fn view_specification(&self) -> Option<String>;
-    /// 基础单位数量。
-    fn view_quantity(&self) -> Option<String>;
-    /// 单位代码。
-    fn view_base_unit_code(&self) -> Option<String>;
-    /// 含税采购单价。
-    fn view_unit_cost_gross(&self) -> Option<String>;
-    /// 进项税率。
-    fn view_input_tax_rate(&self) -> Option<String>;
-    /// 含税行金额。
-    fn view_gross_amount(&self) -> String;
-    /// 不含税行金额。
-    fn view_net_amount(&self) -> String;
-    /// 税额。
-    fn view_tax_amount(&self) -> String;
-    /// 预计交期。
-    fn view_expected_delivery_date(&self) -> Option<String>;
-    /// 商品行对应的销售稳定行。
-    fn view_sales_order_line_id(&self) -> Option<String>;
-    /// 商品行对应的销售当前版本行。
-    fn view_sales_order_revision_line_id(&self) -> Option<String>;
-    /// 商品行正式分配数量。
-    fn view_allocated_quantity(&self) -> Option<String>;
-    /// 商品行对应的历史销售提交行；版本行恒为空。
-    fn view_sales_order_submission_line_id(&self) -> Option<String> {
-        None
-    }
-    fn view_expense(&self) -> Option<PurchaseExpenseDetail>;
-}
-
-/// 为同形行实体生成视图字段读取。
-macro_rules! common_view_methods {
-    () => {
-        fn view_inquiry_quote_source(&self) -> Option<InquiryQuoteSourceView> {
-            self.supplier_offering_source
+// 提交行与版本行共用字段映射；历史销售提交行只存在于提交行。
+macro_rules! purchase_line_view {
+    ($line:ident, $sales_submission_line_id:expr) => {
+        PurchaseOrderLineView {
+            inquiry_quote_source: $line
+                .supplier_offering_source
                 .as_ref()
                 .and_then(|source| source.inquiry_quote.as_ref())
-                .map(|source| InquiryQuoteSourceView::from_source(source, self.quantity))
-        }
-        fn view_delivery_allocations(&self) -> Vec<PurchaseDeliveryAllocation> {
-            self.delivery_allocations.clone()
-        }
-        fn view_line_id(&self) -> String {
-            self.base.id.clone()
-        }
-
-        fn view_line_no(&self) -> u32 {
-            self.line_no
-        }
-
-        fn view_line_type(&self) -> PurchaseLineType {
-            self.line_type
-        }
-
-        fn view_procurement_confirmation_line_id(&self) -> Option<String> {
-            self.procurement_confirmation_line_id.as_ref().map(ToString::to_string)
-        }
-
-        fn view_sku_id(&self) -> Option<String> {
-            self.sku_id.as_ref().map(ToString::to_string)
-        }
-
-        fn view_sku_revision_id(&self) -> Option<String> {
-            self.sku_revision_id.as_ref().map(ToString::to_string)
-        }
-
-        fn view_product_name(&self) -> Option<String> {
-            self.product_name_snapshot.clone()
-        }
-
-        fn view_specification(&self) -> Option<String> {
-            self.specification_snapshot.clone()
-        }
-
-        fn view_quantity(&self) -> Option<String> {
-            self.quantity.map(|q| q.to_string())
-        }
-
-        fn view_base_unit_code(&self) -> Option<String> {
-            self.base_unit_code.clone()
-        }
-
-        fn view_unit_cost_gross(&self) -> Option<String> {
-            self.unit_cost_gross.map(|v| v.to_string())
-        }
-
-        fn view_input_tax_rate(&self) -> Option<String> {
-            self.input_tax_rate.map(|v| v.to_string())
-        }
-
-        fn view_gross_amount(&self) -> String {
-            self.gross_amount.to_string()
-        }
-
-        fn view_net_amount(&self) -> String {
-            self.net_amount.to_string()
-        }
-
-        fn view_tax_amount(&self) -> String {
-            self.tax_amount.to_string()
-        }
-
-        fn view_expected_delivery_date(&self) -> Option<String> {
-            self.expected_delivery_date.map(|d| d.to_string())
-        }
-
-        fn view_sales_order_line_id(&self) -> Option<String> {
-            self.sales_order_line_id.as_ref().map(ToString::to_string)
-        }
-
-        fn view_sales_order_revision_line_id(&self) -> Option<String> {
-            self.sales_order_revision_line_id.as_ref().map(ToString::to_string)
-        }
-
-        fn view_allocated_quantity(&self) -> Option<String> {
-            self.allocated_quantity.map(|q| q.to_string())
-        }
-
-        fn view_expense(&self) -> Option<PurchaseExpenseDetail> {
-            self.expense.clone()
+                .map(|source| InquiryQuoteSourceView::from_source(source, $line.quantity)),
+            delivery_allocations: $line.delivery_allocations.clone(),
+            line_id: $line.base.id.clone(),
+            line_no: $line.line_no,
+            line_type: $line.line_type,
+            procurement_confirmation_line_id: $line
+                .procurement_confirmation_line_id
+                .as_ref()
+                .map(ToString::to_string),
+            sku_id: $line.sku_id.as_ref().map(ToString::to_string),
+            sku_revision_id: $line.sku_revision_id.as_ref().map(ToString::to_string),
+            product_name: $line.product_name_snapshot.clone(),
+            specification: $line.specification_snapshot.clone(),
+            quantity: $line.quantity.map(|q| q.to_string()),
+            base_unit_code: $line.base_unit_code.clone(),
+            unit_cost_gross: $line.unit_cost_gross.map(|v| v.to_string()),
+            input_tax_rate: $line.input_tax_rate.map(|v| v.to_string()),
+            gross_amount: $line.gross_amount.to_string(),
+            net_amount: $line.net_amount.to_string(),
+            tax_amount: $line.tax_amount.to_string(),
+            expected_delivery_date: $line.expected_delivery_date.map(|d| d.to_string()),
+            sales_order_line_id: $line.sales_order_line_id.as_ref().map(ToString::to_string),
+            sales_order_revision_line_id: $line
+                .sales_order_revision_line_id
+                .as_ref()
+                .map(ToString::to_string),
+            sales_order_submission_line_id: $sales_submission_line_id,
+            allocated_quantity: $line.allocated_quantity.map(|q| q.to_string()),
+            expense: $line.expense.clone(),
+            expense_occurrence: None,
         }
     };
-}
-
-impl PurchaseLineViewSource for PurchaseOrderRevisionLine {
-    common_view_methods!();
-}
-
-impl PurchaseLineViewSource for PurchaseOrderSubmissionLine {
-    common_view_methods!();
-
-    fn view_sales_order_submission_line_id(&self) -> Option<String> {
-        self.sales_order_submission_line_id.as_ref().map(ToString::to_string)
-    }
-}
-
-/// 由统一行数据源组装采购行视图。
-fn line_to_view(line: &impl PurchaseLineViewSource) -> PurchaseOrderLineView {
-    PurchaseOrderLineView {
-        inquiry_quote_source: line.view_inquiry_quote_source(),
-        delivery_allocations: line.view_delivery_allocations(),
-        line_id: line.view_line_id(),
-        line_no: line.view_line_no(),
-        line_type: line.view_line_type(),
-        procurement_confirmation_line_id: line.view_procurement_confirmation_line_id(),
-        sku_id: line.view_sku_id(),
-        sku_revision_id: line.view_sku_revision_id(),
-        product_name: line.view_product_name(),
-        specification: line.view_specification(),
-        quantity: line.view_quantity(),
-        base_unit_code: line.view_base_unit_code(),
-        unit_cost_gross: line.view_unit_cost_gross(),
-        input_tax_rate: line.view_input_tax_rate(),
-        gross_amount: line.view_gross_amount(),
-        net_amount: line.view_net_amount(),
-        tax_amount: line.view_tax_amount(),
-        expected_delivery_date: line.view_expected_delivery_date(),
-        sales_order_line_id: line.view_sales_order_line_id(),
-        sales_order_revision_line_id: line.view_sales_order_revision_line_id(),
-        sales_order_submission_line_id: line.view_sales_order_submission_line_id(),
-        allocated_quantity: line.view_allocated_quantity(),
-        expense: line.view_expense(),
-        expense_occurrence: None,
-    }
 }
 
 impl PurchaseOrderLineView {
@@ -206,7 +59,7 @@ impl PurchaseOrderLineView {
     /// # 错误
     /// 无；只投影已类型化实体，不读取当前主数据。
     pub fn from_revision(line: &PurchaseOrderRevisionLine) -> Self {
-        line_to_view(line)
+        purchase_line_view!(line, None)
     }
 
     /// 从采购冻结提交行生成展示视图。
@@ -220,7 +73,7 @@ impl PurchaseOrderLineView {
     /// # 错误
     /// 无；只投影已类型化实体，不读取当前主数据。
     pub fn from_submission(line: &PurchaseOrderSubmissionLine) -> Self {
-        line_to_view(line)
+        purchase_line_view!(line, line.sales_order_submission_line_id.as_ref().map(ToString::to_string))
     }
 }
 

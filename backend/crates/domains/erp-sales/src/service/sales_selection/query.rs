@@ -194,25 +194,6 @@ impl SalesSelectionService {
         booklet_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionSessionView> {
-        self.session_view(booklet_id, executor).await
-    }
-
-    /// 组装内部会话视图。
-    ///
-    /// # 参数
-    /// * `booklet_id` - 选品册
-    /// * `executor` - 执行器
-    ///
-    /// # 返回
-    /// 返回当前会话选择。
-    ///
-    /// # 错误
-    /// 无会话时返回未找到。
-    async fn session_view(
-        &self,
-        booklet_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<SalesSelectionSessionView> {
         let booklet = self.load_booklet(booklet_id, executor).await?;
         let session = self
             .db

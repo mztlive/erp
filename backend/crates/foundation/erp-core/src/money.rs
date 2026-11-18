@@ -259,18 +259,15 @@ pub fn round_to_cent(value: Decimal) -> Decimal {
 /// 单价乘数量、含税金额乘税率或相减超出 `Decimal` 范围时，运算符会 panic。
 /// debug 构建下，若舍入后任一金额的有效小数位超过 2 位，`debug_assert` 也会 panic；release 不检查该断言。
 pub fn line_amounts(unit_price: UnitPrice, quantity: Quantity, tax_rate: Rate) -> (Amount, Amount, Amount) {
-    let gross = round_to_cent(unit_price.to_decimal() * quantity.to_decimal());
-    let tax = round_to_cent(gross * tax_rate.to_decimal());
-    let net = gross - tax;
+    let gross = Amount(round_to_cent(unit_price.to_decimal() * quantity.to_decimal()));
+    let amounts = fee_amounts(gross, tax_rate);
 
     // round_to_cent 保证小数位 ≤ 2，直接构造并以 debug 断言显式化不变式。
     debug_assert!(
-        gross.normalize().scale() <= AMOUNT_SCALE
-            && tax.normalize().scale() <= AMOUNT_SCALE
-            && net.normalize().scale() <= AMOUNT_SCALE,
+        [amounts.0, amounts.1, amounts.2].iter().all(|amount| amount.0.normalize().scale() <= AMOUNT_SCALE),
         "round_to_cent 后小数位必须不超过 2 位"
     );
-    (Amount(gross), Amount(net), Amount(tax))
+    amounts
 }
 
 /// 由含税总额拆分不带数量的费用金额三元组。

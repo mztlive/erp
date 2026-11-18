@@ -12,7 +12,7 @@ use erp_supply::repository::{
 use erp_supply::service::supplier_fulfillment::FulfillmentOrderAccess;
 use erp_supply::service::supplier_fulfillment::mapping::action_line_view;
 use mongodb::Database;
-use persistence_core::Executor;
+use persistence_core::{Executor, Transactional};
 
 use crate::{Error, Result};
 
@@ -32,13 +32,13 @@ impl ActionResult {
     }
 }
 
-pub(crate) struct MongoActionResultRead {
-    pub db: Database,
-    pub access: FulfillmentOrderAccess,
+struct MongoActionResultRead {
+    db: Database,
+    access: FulfillmentOrderAccess,
 }
 
 #[async_trait]
-pub(crate) trait ActionResultRead: Sync {
+trait ActionResultRead: Sync {
     type Scope: Send + Sync;
     type View: Send;
 
@@ -158,6 +158,24 @@ impl MongoActionResultRead {
     }
 }
 
+/// 原写事务结束后，在新快照中按原动作授权并复验完整结果。
+pub(crate) async fn read_action_result(
+    db: &Database,
+    access: &FulfillmentOrderAccess,
+    actor: &AuditActor,
+    order_id: &str,
+    target: ActionResult,
+) -> Result<SubmitActionResultView> {
+    let port = MongoActionResultRead { db: db.clone(), access: access.clone() };
+    let actor = actor.clone();
+    let order_id = order_id.to_owned();
+    db.client()
+        .with_transaction(move |executor| {
+            Box::pin(async move { read_result(&port, &actor, &order_id, &target, executor).await })
+        })
+        .await
+}
+
 /// 原命令结束后重新授权完整回包；交付失败时丢弃已经读取的数据。
 /// # 参数
 /// port 为原命令结果读取设施；actor/order_id/target 为真实身份及目标；executor 为新读取快照。
@@ -165,7 +183,7 @@ impl MongoActionResultRead {
 /// 原动作完整授权及交付检查均通过后的结果。
 /// # 错误
 /// 授权、读取或交付检查任一失败时返回原错误。
-pub(crate) async fn read_result<P: ActionResultRead>(
+async fn read_result<P: ActionResultRead>(
     port: &P,
     actor: &AuditActor,
     order_id: &str,

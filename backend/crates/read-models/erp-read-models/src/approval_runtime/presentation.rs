@@ -1,5 +1,6 @@
 //! 单据详情共用的审批展示容器、定义摘要与历史分页合同。
 
+use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use serde::Serialize;
 
 use super::{DocumentApprovalHistoryItemView, DocumentApprovalInstanceView, DocumentApprovalNodeView};
@@ -35,6 +36,17 @@ pub struct DocumentApprovalDefinitionView {
     pub version: u32,
     /// 节点摘要。单据详情不展开审批人。
     pub nodes: Vec<DocumentApprovalNodeView>,
+}
+
+impl From<&ApprovalDefinitionBinding> for DocumentApprovalDefinitionView {
+    fn from(binding: &ApprovalDefinitionBinding) -> Self {
+        Self {
+            id: binding.approval_process_definition_id.as_ref().to_string(),
+            name: String::new(),
+            version: binding.approval_definition_version,
+            nodes: Vec::new(),
+        }
+    }
 }
 
 impl DocumentApprovalDefinitionView {

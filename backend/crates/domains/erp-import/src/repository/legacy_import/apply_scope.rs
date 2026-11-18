@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{LegacyImportBatchId, LegacyImportRowId};
-use mongodb::bson::doc;
+use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{Executor, Result, mongo_ops};
 
 use crate::entity::legacy_import::{ImportStatus, LegacyImportRow};
@@ -65,78 +65,24 @@ impl LegacyImportRowApplyScopeExt for persistence_core::Repository<'_, LegacyImp
         if unique_ids.is_empty() {
             return Ok(LegacyImportApplyScope::default());
         }
-        let found = load_apply_rows(self, batch_id, &unique_ids, executor).await?;
-        let missing_row_ids = missing_row_ids(&unique_ids, &found);
+        let keys: Vec<Bson> = unique_ids.iter().map(|id| id.to_string().into()).collect();
+        let found = self
+            .find_many_sorted(
+                doc! { "id": { "$in": keys.clone() }, "batch_id": batch_id.to_string() },
+                doc! { "id": 1 },
+                executor,
+            )
+            .await?;
+        let rows: HashMap<_, _> = found.into_iter().map(|row| (row.base.id.clone(), row)).collect();
+        let missing_row_ids = missing_row_ids(unique_ids, &rows);
         let pending_outside_request =
-            count_pending_outside_request(self, batch_id, &unique_ids, executor).await?;
-        Ok(LegacyImportApplyScope { rows: index_rows(found), missing_row_ids, pending_outside_request })
+            mongo_ops::count_documents(&self.collection(), pending_outside_filter(batch_id, keys), executor)
+                .await?;
+        Ok(LegacyImportApplyScope { rows, missing_row_ids, pending_outside_request })
     }
 }
 
-/// 按 ID 集合与批次约束装载未删除导入行。
-///
-/// # 参数
-/// * `batch_id` - 目标批次
-/// * `row_ids` - 已去重的行 ID
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回稳定按 `id` 升序排列的命中行。
-///
-/// # 错误
-/// MongoDB 查询失败时返回错误。
-async fn load_apply_rows(
-    repo: &persistence_core::Repository<'_, LegacyImportRow>,
-    batch_id: &LegacyImportBatchId,
-    row_ids: &[LegacyImportRowId],
-    executor: &mut dyn Executor,
-) -> Result<Vec<LegacyImportRow>> {
-    let keys: Vec<mongodb::bson::Bson> = row_ids.iter().map(|id| id.to_string().into()).collect();
-    repo.find_many_sorted(
-        doc! {
-            "id": { "$in": keys },
-            "batch_id": batch_id.to_string(),
-        },
-        doc! { "id": 1 },
-        executor,
-    )
-    .await
-}
-
-/// 统计目标批次中未包含在请求内的待导入行。
-///
-/// # 参数
-/// * `batch_id` - 目标批次
-/// * `row_ids` - 已去重的请求行 ID
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 返回请求外仍为 `pending_import` 且未软删除的行数。
-///
-/// # 错误
-/// MongoDB 计数失败时返回错误。
-async fn count_pending_outside_request(
-    repo: &persistence_core::Repository<'_, LegacyImportRow>,
-    batch_id: &LegacyImportBatchId,
-    row_ids: &[LegacyImportRowId],
-    executor: &mut dyn Executor,
-) -> Result<u64> {
-    let excluded: Vec<mongodb::bson::Bson> = row_ids.iter().map(|id| id.to_string().into()).collect();
-    mongo_ops::count_documents(&repo.collection(), pending_outside_filter(batch_id, excluded), executor).await
-}
-
-/// 构造请求外待导入行的精确计数条件。
-///
-/// # 参数
-/// * `batch_id` - 目标批次
-/// * `excluded_ids` - 已去重请求行 ID 的 BSON 列表
-///
-/// # 返回
-/// 返回含批次、待导入状态、请求 ID `$nin` 与未软删除过滤的文档。
-fn pending_outside_filter(
-    batch_id: &LegacyImportBatchId,
-    excluded_ids: Vec<mongodb::bson::Bson>,
-) -> mongodb::bson::Document {
+fn pending_outside_filter(batch_id: &LegacyImportBatchId, excluded_ids: Vec<Bson>) -> Document {
     doc! {
         "batch_id": batch_id.to_string(),
         "import_status": ImportStatus::PendingImport.as_str(),
@@ -157,28 +103,11 @@ fn unique_row_ids(row_ids: &[LegacyImportRowId]) -> Vec<LegacyImportRowId> {
     row_ids.iter().filter(|id| seen.insert(*id)).cloned().collect()
 }
 
-/// 按请求顺序报告未命中的行 ID。
-///
-/// # 参数
-/// * `requested` - 已去重的请求 ID
-/// * `found` - 批次约束下命中的行
-///
-/// # 返回
-/// 返回缺失 ID 列表；空命中时请求全部视为缺失。
-fn missing_row_ids(requested: &[LegacyImportRowId], found: &[LegacyImportRow]) -> Vec<LegacyImportRowId> {
-    let found_ids: HashSet<&str> = found.iter().map(|row| row.base.id.as_str()).collect();
-    requested.iter().filter(|id| !found_ids.contains(id.as_ref())).cloned().collect()
-}
-
-/// 将命中行按 ID 建索引。
-///
-/// # 参数
-/// * `rows` - 命中的导入行
-///
-/// # 返回
-/// 返回以实体主键为键的映射。
-fn index_rows(rows: Vec<LegacyImportRow>) -> HashMap<String, LegacyImportRow> {
-    rows.into_iter().map(|row| (row.base.id.clone(), row)).collect()
+fn missing_row_ids(
+    requested: Vec<LegacyImportRowId>,
+    rows: &HashMap<String, LegacyImportRow>,
+) -> Vec<LegacyImportRowId> {
+    requested.into_iter().filter(|id| !rows.contains_key(id.as_ref())).collect()
 }
 
 #[cfg(test)]
@@ -221,13 +150,13 @@ mod tests {
             LegacyImportRowId::new("row-2"),
             LegacyImportRowId::new("row-other-batch"),
         ];
-        let found = vec![row("row-1"), row("row-2")];
-        let missing = missing_row_ids(&requested, &found);
+        let found = [("row-1".into(), row("row-1")), ("row-2".into(), row("row-2"))].into();
+        let missing = missing_row_ids(requested.clone(), &found);
         assert_eq!(
             missing,
             vec![LegacyImportRowId::new("row-missing"), LegacyImportRowId::new("row-other-batch"),]
         );
-        assert!(missing_row_ids(&requested, &[]).len() == 4);
+        assert_eq!(missing_row_ids(requested.clone(), &Default::default()), requested);
     }
 
     #[test]

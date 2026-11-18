@@ -2,44 +2,14 @@ use chrono::Local;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::WarehouseId;
 use erp_core::money::Quantity;
+use mongodb::Collection;
 use mongodb::bson::{Decimal128, Document, doc};
 use mongodb::options::FindOptions;
-use mongodb::{Collection, Database};
 use persistence_core::{Executor, PageResult, Result, aggregate, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use crate::ports::InventoryQuery;
 use crate::{Error, Result as InventoryResult};
-
-/// 按主键读取未删除实体。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `collection_name` - 集合名
-/// * `id` - 实体主键
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回匹配实体；不存在时返回 `None`。
-///
-/// # 错误
-/// MongoDB 查询失败时返回错误。
-pub(super) async fn active_entity_by_id<T>(
-    db: &Database,
-    collection_name: &str,
-    id: &str,
-    executor: &mut dyn Executor,
-) -> Result<Option<T>>
-where
-    T: for<'de> Deserialize<'de> + Serialize + Send + Sync,
-{
-    mongo_ops::find_one(
-        &db.collection::<T>(collection_name),
-        doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
-        executor,
-    )
-    .await
-}
 
 /// 把已证明可读的仓库范围写入查询过滤（`None` 为公司级不限，空集合保持空 `$in`）。
 ///

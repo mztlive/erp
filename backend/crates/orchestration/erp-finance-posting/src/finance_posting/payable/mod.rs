@@ -19,9 +19,7 @@ mod account;
 mod invoice;
 pub use invoice::PurchaseInvoiceWithAssetsResult;
 mod payment;
-mod payment_merge;
 pub mod payment_request;
-pub mod payment_task;
 mod posting;
 
 pub use payment_request::PurchasePaymentRequestProcess;
@@ -69,23 +67,6 @@ impl PayableProcess {
         Self { db, authorization_rbac: rbac }
     }
 
-    /// 注入应用共享授权与事实读取实例。
-    ///
-    /// # 参数
-    /// * `rbac` - 组合根已经装配的共享 RBAC 授权读取实例
-    ///
-    /// # 返回
-    /// 返回复用统一身份与来源授权入口的流程。
-    ///
-    /// # 错误
-    /// 本方法不执行 I/O，不返回错误。
-    pub fn with_rbac(mut self, rbac: FinancePostingPorts) -> Self {
-        self.authorization_rbac = rbac;
-        self
-    }
-}
-
-impl PayableProcess {
     /// 取得应付跨领域读模型，命令回读复用相同装配实现。
     fn read(&self) -> PayableReadService {
         PayableReadService::new(self.db.clone())

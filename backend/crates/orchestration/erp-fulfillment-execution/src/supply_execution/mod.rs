@@ -27,7 +27,6 @@ mod investigate;
 mod legacy;
 mod place;
 pub mod receipt;
-mod refund;
 mod refund_result;
 mod refund_writes;
 mod reject;
@@ -62,10 +61,6 @@ pub struct SupplierFulfillmentProcess {
     handlers: Arc<dyn FulfillmentExceptionHandlerPort>,
 }
 impl SupplierFulfillmentProcess {
-    /// 新采购 API 执行对象禁止进入旧动作网关，避免两套状态同时写同一订单。
-    async fn ensure_legacy_order(&self, id: &str, executor: &mut dyn Executor) -> Result<()> {
-        legacy::ensure(&self.db, id, executor).await
-    }
     /// 创建供应商履约流程实例。
     ///
     /// # 参数
@@ -114,26 +109,16 @@ impl SupplierFulfillmentProcess {
         }
     }
 
-    /// 按动作重验普通订单范围；任务专用入口单独证明任务、责任与版本。
-    ///
-    /// # 参数
-    /// * `id` - 供应商履约订单 ID。
-    /// * `actor` - 当前操作人。
-    /// * `permission` - 内置操作权限。
-    /// * `executor` - 调用方执行器。
-    ///
-    /// # 返回
-    /// 返回当前动作可见的订单。
-    ///
-    /// # 错误
-    /// 订单不在该动作范围内或授权查询失败时返回对应错误。
-    pub async fn require_scoped_order(
+    /// 先重验订单范围，再排除由采购 API 流程执行的订单。
+    async fn require_legacy_order(
         &self,
         id: &str,
         actor: &AuditActor,
         permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<SupplierFulfillmentOrder> {
-        Ok(self.domain().access().require_order(actor, permission, id, executor).await?)
+        let order = self.data_scope.require_order(actor, permission, id, executor).await?;
+        legacy::ensure(&self.db, id, executor).await?;
+        Ok(order)
     }
 }

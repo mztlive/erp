@@ -6,6 +6,9 @@ use application_core::{AuditActor, CommandReceipt};
 use erp_audit::AuditActorLogs;
 use erp_audit::execution::persist_log;
 use erp_core::ids::{FileAssetId, InvoiceId};
+use erp_finance::dto::receivable::{
+    CommitInvoiceRequest, CreateInvoiceRequest, InvoiceView, PostInvoiceRequest,
+};
 use erp_finance::entity::receivable::{Invoice, InvoiceData, InvoiceStatus};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::InvoiceRepositoryExt;
@@ -30,7 +33,6 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::ReceivableProcess;
-use super::dto::{CommitInvoiceRequest, CreateInvoiceRequest, InvoiceView, PostInvoiceRequest};
 use super::invoice_commit::InvoiceCommitTransaction;
 use super::invoice_posting::InvoicePostingAllocations;
 use crate::finance_posting::command_recovery::{recovered_resource, recovered_view};

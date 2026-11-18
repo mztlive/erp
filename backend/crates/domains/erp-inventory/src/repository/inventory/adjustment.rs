@@ -10,8 +10,8 @@ use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Repository
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    active_entity_by_id, authorized_projection_search, ids_to_strings, scoped_base_filter, sort_doc,
-    to_decimal128, with_id_tie_breaker,
+    authorized_projection_search, ids_to_strings, scoped_base_filter, sort_doc, to_decimal128,
+    with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_ADJUSTMENT_LINES, STOCK_ADJUSTMENTS};
 use crate::Result as InventoryResult;
@@ -302,7 +302,7 @@ impl<'a> InventoryRepository<'a> {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<StockAdjustment>> {
-        active_entity_by_id(self.db, STOCK_ADJUSTMENTS, id, executor).await
+        self.db.stock_adjustments().find_by_id(id, executor).await
     }
 
     /// 读取指定仓库尚未过账的库存调整单。

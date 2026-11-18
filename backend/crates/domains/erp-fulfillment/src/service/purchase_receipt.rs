@@ -1,17 +1,17 @@
 //! 采购入库单的查询、草稿准备与调用方事务内本域写入。
-use erp_core::ids::PurchaseReceiptId;
+use erp_core::ids::{PurchaseReceiptId, PurchaseReceiptLineId};
 use id_generator::next_id;
 use persistence_core::Executor;
 use validator::Validate;
 
 use super::FulfillmentService;
-use super::purchase_receipt_lines::receipt_line_specs;
 use crate::dto::{
-    CreatePurchaseReceiptRequest, PurchaseReceiptDetailView, PurchaseReceiptLineView,
-    PurchaseReceiptListParams, PurchaseReceiptView, UpdatePurchaseReceiptRequest,
+    CreatePurchaseReceiptRequest, PurchaseReceiptDetailView, PurchaseReceiptLineInput,
+    PurchaseReceiptLineView, PurchaseReceiptListParams, PurchaseReceiptView, UpdatePurchaseReceiptRequest,
 };
 use crate::entity::fulfillment::{
     PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineBatch,
+    PurchaseReceiptLineSpec,
 };
 use crate::repository::FulfillmentExt;
 use crate::repository::prelude::*;
@@ -244,6 +244,19 @@ impl From<PurchaseReceiptLine> for PurchaseReceiptLineView {
             quality_result: line.quality_result,
         }
     }
+}
+
+fn receipt_line_specs(inputs: &[PurchaseReceiptLineInput]) -> Vec<PurchaseReceiptLineSpec> {
+    inputs
+        .iter()
+        .map(|input| PurchaseReceiptLineSpec {
+            line_id: PurchaseReceiptLineId::new(next_id()),
+            purchase_order_revision_line_id: input.purchase_order_revision_line_id.clone(),
+            received_quantity: input.received_quantity,
+            qualified_quantity: input.qualified_quantity,
+            rejected_quantity: input.rejected_quantity,
+        })
+        .collect()
 }
 
 #[cfg(test)]

@@ -88,22 +88,9 @@ impl SaveCustomerProfileRequest {
     /// 根请求或任一嵌套输入违反 DTO 注解时返回校验错误。
     pub fn validate_protocol(&self) -> Result<()> {
         self.validate()?;
-        for (index, contact) in self.contacts.as_deref().unwrap_or_default().iter().enumerate() {
-            contact
-                .validate()
-                .map_err(|errors| ValidationIssues::from(errors).at(&format!("contacts[{index}]")))?;
-        }
-        for (index, address) in self.addresses.as_deref().unwrap_or_default().iter().enumerate() {
-            address
-                .validate()
-                .map_err(|errors| ValidationIssues::from(errors).at(&format!("addresses[{index}]")))?;
-        }
-        for (index, account) in self.bank_accounts.as_deref().unwrap_or_default().iter().enumerate() {
-            account
-                .validate()
-                .map_err(|errors| ValidationIssues::from(errors).at(&format!("bank_accounts[{index}]")))?;
-        }
-        Ok(())
+        validate_rows("contacts", self.contacts.as_deref())?;
+        validate_rows("addresses", self.addresses.as_deref())?;
+        validate_rows("bank_accounts", self.bank_accounts.as_deref())
     }
 
     /// 将 DTO 字段适配为 entities 客户资料结构值对象并执行领域校验。
@@ -135,12 +122,39 @@ impl SaveCustomerProfileRequest {
     }
 }
 
+fn validate_rows<T: Validate>(field: &str, rows: Option<&[T]>) -> Result<()> {
+    for (index, row) in rows.unwrap_or_default().iter().enumerate() {
+        row.validate().map_err(|errors| ValidationIssues::from(errors).at(&format!("{field}[{index}]")))?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
     use super::SaveCustomerProfileRequest;
     use crate::entity::customer::CustomerProfileOperation;
+    use crate::error::Error;
+
+    #[test]
+    fn protocol_validation_keeps_first_invalid_row_and_field_path() {
+        let mut input = base_request("13800000000");
+        input["contacts"].as_array_mut().unwrap().push(json!({"contact_name": " ", "is_default": false}));
+        input["bank_accounts"] = json!([{"account_name": "客户", "bank_name": " ", "is_default": false}]);
+        let mut request: SaveCustomerProfileRequest = serde_json::from_value(input).unwrap();
+        let Error::InvalidInput(issues) = request.validate_protocol().unwrap_err() else {
+            panic!("应返回字段校验错误");
+        };
+        assert_eq!(issues.fields()["contacts[1].contact_name"], "联系人姓名不能为空");
+        assert_eq!(issues.fields().len(), 1);
+
+        request.contacts.as_mut().unwrap()[1].contact_name = "李四".into();
+        let Error::InvalidInput(issues) = request.validate_protocol().unwrap_err() else {
+            panic!("应返回字段校验错误");
+        };
+        assert_eq!(issues.fields()["bank_accounts[0].bank_name"], "银行名称不能为空");
+    }
 
     #[test]
     fn reuse_consent_changes_fingerprint_and_is_create_only() {

@@ -107,7 +107,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             handover_product(
                 self.db.clone(),
                 self.authorization.clone(),
-                CatalogHandoverPorts::new(access, self.catalog()),
+                CatalogHandoverPorts::new(access, self.ports.catalog.clone()),
                 id,
                 request,
                 actor,

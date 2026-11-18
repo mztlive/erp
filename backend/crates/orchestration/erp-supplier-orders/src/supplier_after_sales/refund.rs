@@ -19,7 +19,7 @@ use erp_supply::service::supplier_fulfillment::{FulfillmentOrderAccess, Supplier
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use super::action_result::{ActionResult, MongoActionResultRead, read_result};
+use super::action_result::{ActionResult, read_action_result};
 use super::refund_dispatch::RefundStore;
 use super::refund_store::{MongoRefundStore, project};
 use super::{SupplierAfterSalesProcess, refund_dispatch};
@@ -76,7 +76,11 @@ impl SupplierAfterSalesProcess {
             })
             .await?;
         match action_id {
-            Some(action_id) => Ok(Some(self.refund_view(id, &action_id, actor, access).await?)),
+            Some(action_id) => {
+                read_action_result(&self.db, access, actor, id, ActionResult::Refund(action_id))
+                    .await
+                    .map(Some)
+            },
             None => Ok(None),
         }
     }
@@ -203,26 +207,6 @@ impl SupplierAfterSalesProcess {
             self.db.supplier_order_action_lines().create(&line, executor).await?;
         }
         Ok(())
-    }
-
-    /// 原写事务结束后，以当前退款资格在新快照中读取完整结果。
-    async fn refund_view(
-        &self,
-        order_id: &str,
-        action_id: &str,
-        actor: &AuditActor,
-        access: &FulfillmentOrderAccess,
-    ) -> Result<SubmitActionResultView> {
-        let port = MongoActionResultRead { db: self.db.clone(), access: access.clone() };
-        let order_id = order_id.to_owned();
-        let target = ActionResult::Refund(action_id.to_owned());
-        let actor = actor.clone();
-        self.db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move { read_result(&port, &actor, &order_id, &target, executor).await })
-            })
-            .await
     }
 
     /// 有界恢复退款动作；失败不重放已发送请求。

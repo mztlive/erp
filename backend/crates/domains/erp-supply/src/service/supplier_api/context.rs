@@ -9,8 +9,8 @@ use crate::entity::supplier_api::{
     SupplierGovernanceBlocker,
 };
 use crate::repository::SupplierApiExt;
+use crate::repository::supplier_api::SupplierConnectionImpact;
 use crate::{Error, Result};
-type SupplierConnectionImpact = <mongodb::Database as SupplierApiExt>::SupplierConnectionImpact;
 impl SupplierApiService {
     /// 使用调用方事务读取连接；不存在时保留连接命令的固定错误。
     ///

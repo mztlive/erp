@@ -9,7 +9,6 @@ use crate::entity::supplier_catalog::SupplierCatalogItem;
 use crate::entity::supplier_offering::{OfferingSourceType, SupplierOffering, SupplierOfferingRevision};
 use crate::repository::SupplierOfferingExt;
 use crate::repository::supplier_catalog::SupplierCatalogExt;
-use crate::repository::supplier_offering::write::{MongoOfferingWrite, append_revision};
 use crate::{Error, Result};
 
 impl SupplierOfferingService {
@@ -114,7 +113,7 @@ impl SupplierOfferingService {
         };
         offering.stable.current_revision_id = Some(next.base.id.clone());
         offering.stable.updated_by = actor.id().into();
-        append_revision(&MongoOfferingWrite::new(&self.db), offering, &next, executor).await?;
+        self.db.supplier_offering_repository().append_revision(offering, &next, executor).await?;
         Ok(())
     }
 }

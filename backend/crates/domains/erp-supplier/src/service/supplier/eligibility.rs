@@ -45,7 +45,7 @@ pub async fn ensure_offering_capability_qualified(
     on_date: BusinessDate,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    ensure_offering_with_port(&MongoQualificationFacts { db }, supplier_id, kind, on_date, executor).await
+    ensure_offering_with_port(db, supplier_id, kind, on_date, executor).await
 }
 #[async_trait]
 trait QualificationFactsPort: Sync {
@@ -72,33 +72,29 @@ trait QualificationFactsPort: Sync {
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierCapability>>;
 }
-struct MongoQualificationFacts<'a> {
-    db: &'a Database,
-}
 #[async_trait]
-impl QualificationFactsPort for MongoQualificationFacts<'_> {
+impl QualificationFactsPort for Database {
     async fn linked_contracts(
         &self,
         supplier_id: &SupplierAccountId,
         capability_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<crate::SupplierQualification>> {
-        Ok(self.db.supplier_qualifications().linked_contracts(supplier_id, capability_id, executor).await?)
+        Ok(self.supplier_qualifications().linked_contracts(supplier_id, capability_id, executor).await?)
     }
     async fn supplier(
         &self,
         id: &SupplierAccountId,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierAccount>> {
-        self.db.supplier_accounts().find_by_id(id, executor).await.map_err(Into::into)
+        self.supplier_accounts().find_by_id(id, executor).await.map_err(Into::into)
     }
     async fn revision(
         &self,
         id: &SupplierCapabilityRevisionId,
         executor: &mut dyn Executor,
     ) -> Result<SupplierCapabilityRevision> {
-        self.db
-            .supplier_capability_revisions()
+        self.supplier_capability_revisions()
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::BusinessLogicError("供应商能力版本不存在".to_string()))
@@ -109,11 +105,7 @@ impl QualificationFactsPort for MongoQualificationFacts<'_> {
         code: CapabilityCode,
         executor: &mut dyn Executor,
     ) -> Result<Option<SupplierCapability>> {
-        self.db
-            .supplier_capabilities()
-            .find_by_supplier_and_code(id, code, executor)
-            .await
-            .map_err(Into::into)
+        self.supplier_capabilities().find_by_supplier_and_code(id, code, executor).await.map_err(Into::into)
     }
 }
 /// 首次能力读取先于供应商/修订读取，保留原供给入口首错。

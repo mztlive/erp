@@ -10,15 +10,14 @@ use erp_core::money::Quantity;
 use id_generator::next_id;
 use mongodb::Database;
 
-use super::customer_acceptance_lines::acceptance_line_specs;
 use crate::dto::{
-    AcceptanceAllocationInput, CommitCustomerAcceptanceRequest, PostAcceptanceLineInput,
+    AcceptanceAllocationInput, AcceptanceLineInput, CommitCustomerAcceptanceRequest, PostAcceptanceLineInput,
     PostCustomerAcceptanceRequest, ReverseCustomerAcceptanceRequest,
 };
 use crate::entity::fulfillment::{
     AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AcceptanceResult, AllocationAction,
-    CustomerAcceptance, CustomerAcceptanceData, CustomerAcceptanceLine, CustomerAcceptanceLineData,
-    CustomerAcceptanceUpdate, FulfillmentFactType,
+    CustomerAcceptance, CustomerAcceptanceData, CustomerAcceptanceLine, CustomerAcceptanceLineBatch,
+    CustomerAcceptanceLineData, CustomerAcceptanceLineSpec, CustomerAcceptanceUpdate, FulfillmentFactType,
 };
 use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
@@ -38,7 +37,10 @@ impl super::FulfillmentService {
         work_item_id: Option<&str>,
         expected_task_version: Option<u64>,
     ) -> Result<()> {
-        ensure_task_context_pair(work_item_id, expected_task_version)
+        if work_item_id.is_some() == expected_task_version.is_some() {
+            return Ok(());
+        }
+        Err(Error::ValidationError("客户验收任务主键和期望版本必须同时提供".to_string()))
     }
 
     /// 在根事务前按原顺序构建验收行与行 ID；正式命令和原草稿共用领域规则。
@@ -54,10 +56,20 @@ impl super::FulfillmentService {
     /// 行批量构造失败时返回 `Logic`。
     pub fn build_customer_acceptance_lines(
         id: CustomerAcceptanceId,
-        lines: &[crate::dto::AcceptanceLineInput],
+        lines: &[AcceptanceLineInput],
     ) -> Result<Vec<CustomerAcceptanceLine>> {
-        crate::entity::fulfillment::CustomerAcceptanceLineBatch::build(id, acceptance_line_specs(lines))
-            .map_err(Error::Logic)
+        let specs = lines
+            .iter()
+            .map(|input| CustomerAcceptanceLineSpec {
+                line_id: CustomerAcceptanceLineId::new(next_id()),
+                sales_order_line_id: input.sales_order_line_id.clone(),
+                accepted_quantity: input.accepted_quantity,
+                short_quantity: input.short_quantity,
+                rejected_quantity: input.rejected_quantity,
+                reason: input.reason.clone(),
+            })
+            .collect();
+        CustomerAcceptanceLineBatch::build(id, specs).map_err(Error::Logic)
     }
 
     /// 加载可继续登记的草稿；新登记返回 `None`，不提前读取销售或任务。
@@ -513,14 +525,6 @@ fn ensure_existing_acceptance_draft(
     Ok(())
 }
 
-/// 校验统一工作台任务身份和乐观锁版本必须成对出现。
-fn ensure_task_context_pair(work_item_id: Option<&str>, expected_task_version: Option<u64>) -> Result<()> {
-    if work_item_id.is_some() == expected_task_version.is_some() {
-        return Ok(());
-    }
-    Err(Error::ValidationError("客户验收任务主键和期望版本必须同时提供".to_string()))
-}
-
 /// 校验过账分配与草稿验收行一一对应且数量一致（§8.2 第 5 条「锁定验收行」）。
 ///
 /// # 参数
@@ -675,7 +679,21 @@ mod tests {
     use erp_core::ids::{CustomerAcceptanceId, SalesOrderId};
 
     use super::ensure_existing_acceptance_draft;
+    use crate::Error;
     use crate::entity::fulfillment::{AcceptanceResult, CustomerAcceptance, CustomerAcceptanceData};
+    use crate::service::FulfillmentService;
+
+    #[test]
+    fn acceptance_task_requires_both_id_and_version_or_neither() {
+        let validate = FulfillmentService::validate_customer_acceptance_task_context;
+        assert!(validate(None, None).is_ok());
+        assert!(validate(Some("task-1"), Some(1)).is_ok());
+        for (id, version) in [(Some("task-1"), None), (None, Some(1))] {
+            assert!(
+                matches!(validate(id, version), Err(Error::ValidationError(message)) if message == "客户验收任务主键和期望版本必须同时提供")
+            );
+        }
+    }
 
     /// 构造最小客户验收草稿用于提交状态分流测试。
     fn draft_acceptance(id: &str, acceptance_no: &str) -> CustomerAcceptance {

@@ -8,12 +8,7 @@
 use mongodb::Database;
 
 use crate::entity::catalog::SkuRevisionAttributeValue;
-use crate::repository::catalog::{
-    CatalogRepository, CategoryParentChainFact, ProductBrandFilter, ProductCategoryAttributeFilter,
-    ProductCategoryFilter, ProductFilter, ProductListingSummary, ProductRevisionFilter, SellableSkuFilter,
-    SellableSkuProjectionStore, SkuAttributeFilter, SkuAttributeValueFilter, SkuFilter, SkuRevisionFilter,
-    UnitOfMeasureFilter, VoucherCategoryProfileRevisionFilter,
-};
+use crate::repository::catalog::{CatalogRepository, SellableSkuProjectionStore};
 use crate::repository::owned::{
     ProductBrandRepository, ProductCategoryAttributeRepository, ProductCategoryRepository, ProductRepository,
     ProductRevisionMediaRepository, ProductRevisionRepository, SkuAttributeRepository,
@@ -55,48 +50,6 @@ pub trait CatalogExt {
     const SELLABLE_SKU_PROJECTIONS: &'static str = "sellable_sku_projections";
     /// 公司商品池预算投影刷新进度集合名。
     const SELLABLE_SKU_PROJECTION_STATE: &'static str = "sellable_sku_projection_state";
-
-    /// 商品分类列表筛选条件类型（定义见 `repository::catalog`）。
-    type ProductCategoryFilter;
-
-    /// 商品品牌列表筛选条件类型（定义见 `repository::catalog`）。
-    type ProductBrandFilter;
-
-    /// 计量单位列表筛选条件类型（定义见 `repository::catalog`）。
-    type UnitOfMeasureFilter;
-
-    /// 规格属性列表筛选条件类型（定义见 `repository::catalog`）。
-    type SkuAttributeFilter;
-
-    /// 规格属性值列表筛选条件类型（定义见 `repository::catalog`）。
-    type SkuAttributeValueFilter;
-
-    /// 分类-属性适用关系列表筛选条件类型（定义见 `repository::catalog`）。
-    type ProductCategoryAttributeFilter;
-
-    /// 商品列表筛选条件类型（定义见 `repository::catalog`）。
-    type ProductFilter;
-
-    /// 公司商品池列表筛选条件类型（定义见 `repository::catalog`）。
-    type SellableSkuFilter;
-
-    /// 商品修订列表筛选条件类型（定义见 `repository::catalog`）。
-    type ProductRevisionFilter;
-
-    /// SKU 列表筛选条件类型（定义见 `repository::catalog`）。
-    type SkuFilter;
-
-    /// SKU 修订列表筛选条件类型（定义见 `repository::catalog`）。
-    type SkuRevisionFilter;
-
-    /// 卡券类目扩展修订列表筛选条件类型（定义见 `repository::catalog`）。
-    type VoucherCategoryProfileRevisionFilter;
-
-    /// 分类祖先链投影事实类型（定义见 `repository::catalog`）。
-    type CategoryParentChainFact;
-
-    /// 商品上架汇总投影类型（定义见 `repository::catalog`）。
-    type ProductListingSummary;
 
     /// 获取 `product_category` 集合的 Repository。
     ///
@@ -289,21 +242,6 @@ pub trait CatalogExt {
 }
 
 impl CatalogExt for Database {
-    type ProductCategoryFilter = ProductCategoryFilter;
-    type ProductBrandFilter = ProductBrandFilter;
-    type UnitOfMeasureFilter = UnitOfMeasureFilter;
-    type SkuAttributeFilter = SkuAttributeFilter;
-    type SkuAttributeValueFilter = SkuAttributeValueFilter;
-    type ProductCategoryAttributeFilter = ProductCategoryAttributeFilter;
-    type ProductFilter = ProductFilter;
-    type SellableSkuFilter = SellableSkuFilter;
-    type ProductRevisionFilter = ProductRevisionFilter;
-    type SkuFilter = SkuFilter;
-    type SkuRevisionFilter = SkuRevisionFilter;
-    type VoucherCategoryProfileRevisionFilter = VoucherCategoryProfileRevisionFilter;
-    type CategoryParentChainFact = CategoryParentChainFact;
-    type ProductListingSummary = ProductListingSummary;
-
     /// 获取 `product_category` 集合的 Repository。
     ///
     /// 以当前数据库和集合常量 `PRODUCT_CATEGORIES` 构造，不在此访问集合。

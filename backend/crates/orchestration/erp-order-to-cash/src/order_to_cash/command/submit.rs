@@ -1,6 +1,7 @@
 use application_core::{AuditActor, CommandFingerprint};
 use bpm::model::SubjectRef;
 use erp_approval_runtime::approver_directory::resolve_start_approvers;
+use erp_audit::execution::recover_command;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
     BusinessDocumentId, SalesOrderId, SalesOrderSubmissionId, SalesOrderWorkingCopyId, WorkflowActionId,
@@ -41,9 +42,7 @@ use super::super::start_approval::{
     build_sales_order_start_input, load_bound_definition_graph_with_executor, load_start_receipt,
     persist_sales_order_start,
 };
-use crate::order_to_cash::command_event::{
-    SalesCommandEvent, finish_receipt_recovery, replay_submission_with_executor,
-};
+use crate::order_to_cash::command_event::{SalesCommandEvent, replay_submission_with_executor};
 use crate::order_to_cash::subject_ref_for_sales_business;
 use crate::{Error, Result};
 
@@ -587,7 +586,7 @@ impl SalesOrderCommandProcess {
                 Ok(Some(view)) => return Ok(view),
                 Ok(None) => {},
                 Err(error) if error.command_may_have_committed() => {},
-                Err(error) => return finish_receipt_recovery(original_error, Err(error)),
+                Err(error) => return recover_command(original_error, Err(error)),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
                 tokio::time::sleep(command_recovery_delay(attempt)).await;

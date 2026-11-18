@@ -224,10 +224,11 @@ async fn guard_quantities(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    super::super::inquiry_supply::resize_revision_quotes(
+    super::super::inquiry_supply::resize_quotes(
         db,
         &purchase.order,
         &purchase.revision_lines,
+        super::super::inquiry_supply::QuoteResize::Replace,
         executor,
     )
     .await?;

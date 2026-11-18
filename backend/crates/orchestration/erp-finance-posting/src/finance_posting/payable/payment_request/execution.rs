@@ -129,7 +129,7 @@ pub(crate) async fn authorize_payment_result(
     if !matches_payment_result_task(&task, request_id) {
         return Err(Error::Forbidden("原付款任务责任资格已变化".into()));
     }
-    require_task(db, rbac, actor, &task, TaskPurpose::Payment, executor).await?;
+    require_task(rbac, actor, &task, TaskPurpose::Payment, executor).await?;
     let version = task
         .subject_version
         .parse::<u32>()
@@ -243,7 +243,7 @@ pub(super) async fn authorize_task(
         .await?
         .ok_or_else(|| Error::NotFound("申请付款任务不存在".into()))?;
     authorize_loaded_task(rbac.tasks.as_ref(), request, &task, version, actor, executor).await?;
-    require_task(db, rbac, actor, &task, TaskPurpose::Payment, executor).await?;
+    require_task(rbac, actor, &task, TaskPurpose::Payment, executor).await?;
     Ok(task)
 }
 

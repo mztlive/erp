@@ -21,11 +21,9 @@ use rust_decimal::Decimal;
 use crate::{Error, Result};
 
 mod change;
-pub(super) use change::{
-    resize_change_quotes, resize_draft_quotes, resize_revision_quotes, restore_current_quotes,
-};
+pub(super) use change::{QuoteResize, resize_quotes, restore_current_quotes};
 
-trait InquiryPurchaseLine {
+pub(super) trait InquiryPurchaseLine {
     fn stable_line(&self) -> Option<&SalesOrderLineId>;
     fn sku(&self) -> Option<&SkuId>;
     fn quantity(&self) -> Option<Quantity>;

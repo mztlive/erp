@@ -32,7 +32,6 @@ pub use draft_save::ReceiptDraftWithAssets;
 mod draft_update;
 mod receipt_access;
 
-mod dto;
 mod invoice;
 pub(crate) mod invoice_attachments;
 mod invoice_commit;

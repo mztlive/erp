@@ -18,12 +18,9 @@ use crate::dto::{
 };
 use crate::entity::catalog::{ListingStatus, Product, ProductListingStatus, Sku};
 use crate::error::{Error, Result};
-use crate::repository::CatalogExt;
 use crate::repository::prelude::*;
+use crate::repository::{CatalogExt, ProductListingSummary};
 use crate::source_sync::repository::ProductSourceExt;
-
-/// 商品上架汇总投影类型（经 `CatalogExt` 关联类型跨 crate 可达）。
-type ProductListingSummary = <mongodb::Database as CatalogExt>::ProductListingSummary;
 
 /// 整组上/下架在原授权事务内完成校验后形成的待写集合。
 struct ProductListingChange {

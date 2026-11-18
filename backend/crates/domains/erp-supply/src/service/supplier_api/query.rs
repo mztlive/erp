@@ -7,7 +7,7 @@ use crate::Result;
 use crate::dto::supplier_api::*;
 use crate::repository::SupplierApiExt;
 use crate::repository::prelude::*;
-type SupplierApiConnectionFilter = <mongodb::Database as SupplierApiExt>::SupplierApiConnectionFilter;
+use crate::repository::supplier_api::SupplierApiConnectionFilter;
 impl SupplierApiService {
     /// 在调用方已授权的事务内分页读取连接列表。
     ///

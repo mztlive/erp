@@ -5,9 +5,9 @@ use erp_core::ids::InvoiceId;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::entity::command_receipt::{FinanceCommandReceipt, pick_purchase_invoice_id};
+use crate::Result;
+use crate::entity::command_receipt::{FinanceCommandReceipt, corrupted_receipt};
 use crate::repository::{FinanceCommandExt, FinanceCommandReceiptRepositoryExt};
-use crate::{Error, Result};
 
 /// 财务命令成功结果恢复服务。
 pub struct FinanceCommandReceiptService {
@@ -41,12 +41,10 @@ impl FinanceCommandReceiptService {
         command: &CommandReceipt,
         executor: &mut dyn Executor,
     ) -> Result<Option<InvoiceId>> {
-        let receipts = self
-            .db
-            .finance_command_receipts()
-            .find_by_candidates(&[command.id().to_string()], executor)
-            .await?;
-        pick_purchase_invoice_id(command, &receipts)
+        self.committed_receipt(command, executor)
+            .await?
+            .map(|receipt| receipt.purchase_invoice_id(command))
+            .transpose()
     }
 
     /// 保存新鲜执行结果，业务写入、审计和本回执必须复用同一事务。
@@ -86,16 +84,19 @@ impl FinanceCommandReceiptService {
         command: &CommandReceipt,
         executor: &mut dyn Executor,
     ) -> Result<Option<String>> {
-        let receipts = self
-            .db
-            .finance_command_receipts()
-            .find_by_candidates(&[command.id().to_string()], executor)
-            .await?;
-        match receipts.as_slice() {
-            [] => Ok(None),
-            [receipt] => receipt.resource_id(command).map(Some),
-            _ => Err(Error::Internal("业务命令收据格式无效".to_string())),
-        }
+        self.committed_receipt(command, executor)
+            .await?
+            .map(|receipt| receipt.resource_id(command))
+            .transpose()
+    }
+
+    async fn committed_receipt(
+        &self,
+        command: &CommandReceipt,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<FinanceCommandReceipt>> {
+        let receipts = self.db.finance_command_receipts().find_by_command_id(command.id(), executor).await?;
+        unique_receipt(receipts)
     }
 
     /// 保存显式目录内资金命令的强类型结果，与业务及成功审计同 Executor。
@@ -119,5 +120,40 @@ impl FinanceCommandReceiptService {
         let receipt = FinanceCommandReceipt::resource(command, resource_id, audit_event_id)?;
         self.db.finance_command_receipts().create(&receipt, executor).await?;
         Ok(())
+    }
+}
+
+fn unique_receipt(mut receipts: Vec<FinanceCommandReceipt>) -> Result<Option<FinanceCommandReceipt>> {
+    if receipts.len() > 1 {
+        return Err(corrupted_receipt());
+    }
+    Ok(receipts.pop())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Error;
+    use crate::entity::command_receipt::{PURCHASE_INVOICE_ACTION, PURCHASE_INVOICE_RESOURCE};
+
+    #[test]
+    fn selects_only_a_unique_committed_receipt() {
+        let command = CommandReceipt::from_payload(
+            "finance-",
+            "actor",
+            PURCHASE_INVOICE_ACTION,
+            PURCHASE_INVOICE_RESOURCE,
+            "key",
+            &10,
+        )
+        .unwrap();
+        let receipt =
+            FinanceCommandReceipt::purchase_invoice(&command, InvoiceId::new("invoice-1"), "audit-1".into())
+                .unwrap();
+        assert_eq!(unique_receipt(vec![]).unwrap(), None);
+        assert_eq!(unique_receipt(vec![receipt.clone()]).unwrap(), Some(receipt.clone()));
+        assert!(
+            matches!(unique_receipt(vec![receipt.clone(), receipt]), Err(Error::Internal(message)) if message == "业务命令收据格式无效")
+        );
     }
 }

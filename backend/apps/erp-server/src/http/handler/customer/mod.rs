@@ -215,7 +215,6 @@ pub async fn customer_delete(
 ) -> Result<()> {
     delete_customer(
         state.application().db(),
-        state.application().customer_service(),
         customer_access(state.application().db(), state.application().authorization()),
         id,
         actor,

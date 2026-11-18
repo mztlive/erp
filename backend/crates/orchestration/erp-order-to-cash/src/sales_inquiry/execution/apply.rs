@@ -58,12 +58,7 @@ impl SalesInquiryProcess {
             },
             InquiryCommand::Submit(req) => {
                 self.access()
-                    .ensure_selection(
-                        actor,
-                        &sales_inquiry_permissions::COMMANDS_SALES_SUBMIT,
-                        inquiry,
-                        executor,
-                    )
+                    .require(actor, &sales_inquiry_permissions::COMMANDS_SALES_SUBMIT, inquiry, executor)
                     .await?;
                 self.require_customer(actor, &inquiry.customer_id, executor).await?;
                 normalize_requirement(&self.db, self.services.catalog.as_ref(), &mut inquiry.draft, executor)
@@ -78,7 +73,7 @@ impl SalesInquiryProcess {
                 let mut data = req.data.clone();
                 if let Some(requirement) = &mut data.requirement {
                     self.access()
-                        .ensure_selection(
+                        .require(
                             actor,
                             &internal_permissions::SALES_INQUIRY_REINQUIRE_DRAFT,
                             inquiry,
@@ -109,7 +104,7 @@ impl SalesInquiryProcess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.access()
-            .ensure_selection(actor, &sales_inquiry_permissions::COMMANDS_SALES_SAVE, inquiry, executor)
+            .require(actor, &sales_inquiry_permissions::COMMANDS_SALES_SAVE, inquiry, executor)
             .await?;
         let mut data = request.data.clone();
         normalize_requirement(&self.db, self.services.catalog.as_ref(), &mut data, executor).await?;

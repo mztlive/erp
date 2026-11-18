@@ -29,8 +29,12 @@ impl Facts {
     /// 经关联校验的完整来源结果。
     /// # 错误
     /// 读取失败、缺失或关联错配时拒绝。
-    pub(crate) async fn compute(&self, event: &GrantEvent, ex: &mut dyn Executor) -> Result<SourceUpdate> {
-        let (target, version) = self.target(event, ex).await?;
+    pub(crate) async fn compute(
+        db: &Database,
+        event: &GrantEvent,
+        ex: &mut dyn Executor,
+    ) -> Result<SourceUpdate> {
+        let (target, version) = Self::target(db, event, ex).await?;
         if event.source != event.evidence.payload.source(&event.evidence.recipient)?
             || version < event.evidence.fact_version
         {
@@ -45,13 +49,13 @@ impl Facts {
         })
     }
 
-    async fn target(&self, event: &GrantEvent, ex: &mut dyn Executor) -> Result<(GrantTarget, u64)> {
+    async fn target(db: &Database, event: &GrantEvent, ex: &mut dyn Executor) -> Result<(GrantTarget, u64)> {
         Ok(match &event.evidence.payload {
             GrantEventPayload::InvoiceTaskReassigned { work_item_id, command_receipt_id } => {
-                self.reassignment(event, work_item_id, command_receipt_id, ex).await?
+                Self::reassignment(db, event, work_item_id, command_receipt_id, ex).await?
             },
             GrantEventPayload::InvoiceApproved { invoice_request_id, approval_instance_id, work_item_id } => {
-                self.invoice(event, invoice_request_id, approval_instance_id, work_item_id, ex).await?
+                Self::invoice(db, event, invoice_request_id, approval_instance_id, work_item_id, ex).await?
             },
             GrantEventPayload::SalesOrderApprovalAssigned {
                 sales_order_id,
@@ -59,7 +63,8 @@ impl Facts {
                 node_id,
                 assignment_id,
             } => {
-                self.approval(
+                Self::approval(
+                    db,
                     event,
                     GrantTarget { resource: ResourceKind::SalesOrder, id: sales_order_id.clone() },
                     approval_instance_id,
@@ -75,7 +80,8 @@ impl Facts {
                 node_id,
                 assignment_id,
             } => {
-                self.approval(
+                Self::approval(
+                    db,
                     event,
                     GrantTarget { resource: ResourceKind::PurchaseOrder, id: purchase_order_id.clone() },
                     approval_instance_id,
@@ -89,48 +95,45 @@ impl Facts {
     }
 
     async fn reassignment(
-        &self,
+        db: &Database,
         event: &GrantEvent,
         task_id: &str,
         receipt_id: &str,
         ex: &mut dyn Executor,
     ) -> Result<(GrantTarget, u64)> {
-        let task = self.db.work_items().find_by_id(task_id, ex).await?.ok_or_else(conflict)?;
+        let task = db.work_items().find_by_id(task_id, ex).await?.ok_or_else(conflict)?;
         let receipt =
-            self.db.work_item_command_receipts().find_by_id(receipt_id, ex).await?.ok_or_else(conflict)?;
+            db.work_item_command_receipts().find_by_id(receipt_id, ex).await?.ok_or_else(conflict)?;
         let expected = receipt.invoice_grant(&task).map_err(|_| conflict())?.ok_or_else(conflict)?;
         if expected != event.evidence {
             return Err(conflict());
         }
-        let request =
-            self.db.sales_invoice_requests().find_for_task(task_id, ex).await?.ok_or_else(conflict)?;
+        let request = db.sales_invoice_requests().find_for_task(task_id, ex).await?.ok_or_else(conflict)?;
         let subject = SubjectRef::new("sales_invoice_request", &request.base.id).map_err(|_| conflict())?;
-        let approval = BpmWorkflowRepository::new(&self.db)
+        let approval = BpmWorkflowRepository::new(db)
             .find_latest_by_subject(&subject, ex)
             .await?
             .ok_or_else(conflict)?;
-        let (target, _) = self.invoice(event, &request.base.id, &approval.base.id, task_id, ex).await?;
+        let (target, _) = Self::invoice(db, event, &request.base.id, &approval.base.id, task_id, ex).await?;
         Ok((target, task.base.version))
     }
 
     async fn invoice(
-        &self,
+        db: &Database,
         event: &GrantEvent,
         request_id: &str,
         approval_id: &str,
         task_id: &str,
         ex: &mut dyn Executor,
     ) -> Result<(GrantTarget, u64)> {
-        let request =
-            self.db.sales_invoice_requests().find_by_id(request_id, ex).await?.ok_or_else(conflict)?;
+        let request = db.sales_invoice_requests().find_by_id(request_id, ex).await?.ok_or_else(conflict)?;
 
         let approval =
-            self.db.approval_process_instances().find_by_id(approval_id, ex).await?.ok_or_else(conflict)?;
+            db.approval_process_instances().find_by_id(approval_id, ex).await?.ok_or_else(conflict)?;
 
-        let task = self.db.work_items().find_by_id(task_id, ex).await?.ok_or_else(conflict)?;
+        let task = db.work_items().find_by_id(task_id, ex).await?.ok_or_else(conflict)?;
 
-        let account = self
-            .db
+        let account = db
             .receivable_accounts()
             .find_by_id(request.receivable_account_id.as_ref(), ex)
             .await?
@@ -166,7 +169,7 @@ impl Facts {
         ))
     }
     async fn approval(
-        &self,
+        db: &Database,
         event: &GrantEvent,
         target: GrantTarget,
         instance_id: &str,
@@ -175,9 +178,9 @@ impl Facts {
         ex: &mut dyn Executor,
     ) -> Result<(GrantTarget, u64)> {
         let instance =
-            self.db.approval_process_instances().find_by_id(instance_id, ex).await?.ok_or_else(conflict)?;
+            db.approval_process_instances().find_by_id(instance_id, ex).await?.ok_or_else(conflict)?;
         let execution =
-            self.db.approval_node_executions().find_by_id(assignment, ex).await?.ok_or_else(conflict)?;
+            db.approval_node_executions().find_by_id(assignment, ex).await?.ok_or_else(conflict)?;
         AssignmentEvidence {
             subject_kind: instance.subject.subject_kind(),
             subject_id: instance.subject.subject_id(),
@@ -188,11 +191,7 @@ impl Facts {
             node,
             execution_node: &execution.node_key,
             blocked: execution.status == ApprovalNodeExecutionStatus::Blocked,
-            participant: execution.assignee_participant_id.as_str() == event.evidence.recipient
-                || execution
-                    .additional_assignees
-                    .iter()
-                    .any(|p| p.participant_id.as_str() == event.evidence.recipient),
+            participant: execution.has_participant(&event.evidence.recipient),
         }
         .validate()?;
         Ok((target, instance.base.version))
@@ -204,23 +203,10 @@ fn conflict() -> Error {
 #[async_trait]
 impl ResourceGrantFacts for Facts {
     async fn validate_targets(&self, targets: &[GrantTarget], ex: &mut dyn Executor) -> Result<()> {
-        for target in targets {
-            let exists = match target.resource {
-                ResourceKind::SalesOrder => {
-                    self.db.sales_orders().find_by_id(&target.id, ex).await?.is_some()
-                },
-                ResourceKind::PurchaseOrder => {
-                    self.db.purchase_orders().find_by_id(&target.id, ex).await?.is_some()
-                },
-            };
-            if !exists {
-                return Err(conflict());
-            }
-        }
-        Ok(())
+        validate_targets(&self.db, targets, ex).await
     }
     async fn validate_source(&self, update: &SourceUpdate, ex: &mut dyn Executor) -> Result<()> {
-        let expected = self.compute(self.event.as_ref().ok_or_else(conflict)?, ex).await?;
+        let expected = Self::compute(&self.db, self.event.as_ref().ok_or_else(conflict)?, ex).await?;
         if expected.key != update.key
             || expected.rule_version != update.rule_version
             || expected.fact_version != update.fact_version
@@ -230,4 +216,21 @@ impl ResourceGrantFacts for Facts {
         }
         Ok(())
     }
+}
+
+pub(crate) async fn validate_targets(
+    db: &Database,
+    targets: &[GrantTarget],
+    ex: &mut dyn Executor,
+) -> Result<()> {
+    for target in targets {
+        let exists = match target.resource {
+            ResourceKind::SalesOrder => db.sales_orders().find_by_id(&target.id, ex).await?.is_some(),
+            ResourceKind::PurchaseOrder => db.purchase_orders().find_by_id(&target.id, ex).await?.is_some(),
+        };
+        if !exists {
+            return Err(conflict());
+        }
+    }
+    Ok(())
 }

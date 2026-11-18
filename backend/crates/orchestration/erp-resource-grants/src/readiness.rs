@@ -67,15 +67,14 @@ impl ResourceGrantProcess {
         source: &SourceKey,
         executor: &mut dyn Executor,
     ) -> Result<GrantReadiness> {
-        let queue = self.queue();
-        let Some(expected) = queue.source_event(source, executor).await? else {
+        let Some(expected) = self.queue.source_event(source, executor).await? else {
             return Ok(GrantReadiness::Absent);
         };
-        let Some(event) = queue.event(&expected, executor).await? else {
+        let Some(event) = self.queue.event(&expected, executor).await? else {
             return Ok(GrantReadiness::Absent);
         };
-        let update = Facts { db: self.db.clone(), event: None }.compute(&event, executor).await?;
-        let source = queue.source(&event.source, executor).await?;
+        let update = Facts::compute(&self.db, &event, executor).await?;
+        let source = self.queue.source(&event.source, executor).await?;
         Ok(match source {
             Some(s) if s.terminated => GrantReadiness::Terminated,
             Some(s)

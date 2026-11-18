@@ -29,7 +29,7 @@ use super::customer_receipt_command::{
 };
 use super::customer_receipt_posting::prepare_dispatch_start;
 use super::draft_read::receipt_view_with_actions;
-use super::draft_update::ensure_receipt_edit_authorized;
+use super::receipt_access::ensure_receipt_edit_authorized;
 use super::start_approval::{CustomerReceiptStartPersistInput, persist_customer_receipt_start_apply};
 use crate::{Error, FinancePostingPorts, Result};
 
@@ -327,7 +327,7 @@ pub(super) async fn authorized_receipt(
     id: &str,
     executor: &mut dyn Executor,
 ) -> Result<CustomerReceipt> {
-    ensure_receipt_edit_authorized(db, rbac, actor, id, executor).await?;
+    ensure_receipt_edit_authorized(rbac, actor, id, executor).await?;
     let receipt = db
         .customer_receipts()
         .find_by_id(id, executor)

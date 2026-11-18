@@ -13,13 +13,8 @@ use crate::dto::{
 use crate::entity::catalog::ProductCategoryId;
 use crate::entity::catalog::product_category::ProductCategoryUpdate;
 use crate::error::{Error, Result};
-use crate::repository::CatalogExt;
 use crate::repository::prelude::*;
-
-/// 商品分类列表筛选条件类型（经 `CatalogExt` 关联类型跨 crate 可达）。
-type ProductCategoryFilter = <mongodb::Database as CatalogExt>::ProductCategoryFilter;
-/// 分类祖先链投影事实类型（经 `CatalogExt` 关联类型跨 crate 可达）。
-type CategoryParentChainFact = <mongodb::Database as CatalogExt>::CategoryParentChainFact;
+use crate::repository::{CatalogExt, CategoryParentChainFact, ProductCategoryFilter};
 
 impl CatalogService {
     // ---------- 商品分类（树形字典） ----------

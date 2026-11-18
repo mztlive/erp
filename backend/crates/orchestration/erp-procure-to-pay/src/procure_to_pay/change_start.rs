@@ -259,13 +259,6 @@ pub(super) struct PurchaseChangeStartPersistInput {
 /// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
 pub(super) async fn persist_purchase_change_start(
     db: &Database,
-    input: PurchaseChangeStartPersistInput,
-    executor: &mut dyn Executor,
-) -> Result<PurchaseChangeSubmitResult> {
-    apply_change_start(db, input, executor).await
-}
-async fn apply_change_start(
-    db: &Database,
     mut input: PurchaseChangeStartPersistInput,
     executor: &mut dyn Executor,
 ) -> Result<PurchaseChangeSubmitResult> {
@@ -326,7 +319,14 @@ async fn persist_change_target(
         .find_by_id(&change.purchase_order_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("原采购单不存在".into()))?;
-    super::inquiry_supply::resize_change_quotes(db, &order, lines, executor).await?;
+    super::inquiry_supply::resize_quotes(
+        db,
+        &order,
+        lines,
+        super::inquiry_supply::QuoteResize::KeepExisting,
+        executor,
+    )
+    .await?;
     db.purchase_order().create_change_submission(change, submission, lines, executor).await?;
     Ok(())
 }

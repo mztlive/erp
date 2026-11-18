@@ -22,7 +22,6 @@ use crate::http::errors::Result;
 use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-use crate::wiring::MongoSupplierRole;
 
 /// 查询主体列表。
 ///
@@ -110,14 +109,7 @@ pub async fn party_delete(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<()> {
-    delete_party(
-        state.application().db(),
-        state.application().party_service(),
-        MongoSupplierRole::shared(state.application().db()),
-        id,
-        actor,
-    )
-    .await?;
+    delete_party(state.application().db(), state.application().party_service(), id, actor).await?;
     Ok(ApiResponse::ok())
 }
 

@@ -19,7 +19,7 @@ pub(crate) async fn receive(
 ) -> Result<()> {
     let repo = notifications(db);
     let message = Notification::new(content);
-    match mongo_ops::insert_one(&repo.collection(), &message, executor).await {
+    match repo.create(&message, executor).await {
         Ok(()) => Ok(()),
         Err(persistence_core::Error::DuplicateKey(_)) => {
             let existing = repo
@@ -71,8 +71,9 @@ pub(crate) async fn mark_read(
     at: i64,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    let repo = notifications(db);
     let result = mongo_ops::update_one(
-        &notifications(db).collection(),
+        &repo.collection(),
         doc! { "id": id, "recipient_id": recipient, "read_at": null },
         doc! { "$set": { "read_at": at } },
         false,
@@ -80,7 +81,7 @@ pub(crate) async fn mark_read(
     )
     .await?;
     if result.matched_count == 0
-        && notifications(db).find_one(doc! { "id": id, "recipient_id": recipient }, executor).await?.is_none()
+        && repo.find_one(doc! { "id": id, "recipient_id": recipient }, executor).await?.is_none()
     {
         return Err(Error::NotFound);
     }

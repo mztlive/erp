@@ -1,11 +1,13 @@
 //! 在同一业务事务中登记上传文件的目录命令。
 
+use std::sync::Arc;
+
 use application_core::AuditActor;
 use erp_catalog::{
-    CatalogService, CreateProductBrandRequest, CreateProductRequest, ProductBrandView, ProductView,
-    UpdateProductBrandRequest, UpdateProductRequest,
+    CatalogService, CreateProductBrandRequest, CreateProductRequest, PendingAttachmentBatch,
+    ProductBrandView, ProductView, UpdateProductBrandRequest, UpdateProductRequest,
 };
-use erp_file_assets::{CatalogPendingAttachments, PendingFileAssets};
+use erp_file_assets::PendingFileAssets;
 use erp_support::PendingFileAssetRequest;
 
 use crate::Result;
@@ -29,8 +31,7 @@ pub async fn product_brand_create_with_assets(
     asset_requests: Vec<PendingFileAssetRequest>,
     actor: AuditActor,
 ) -> Result<ProductBrandView> {
-    let pending =
-        CatalogPendingAttachments::from_support(PendingFileAssets::prepare(asset_requests, &actor)?.shared());
+    let pending = prepare_attachments(asset_requests, &actor)?;
     service.product_brand_create_with_assets(req, pending, &actor).await.map_err(Into::into)
 }
 
@@ -55,8 +56,7 @@ pub async fn product_brand_update_with_assets(
     asset_requests: Vec<PendingFileAssetRequest>,
     actor: AuditActor,
 ) -> Result<ProductBrandView> {
-    let pending =
-        CatalogPendingAttachments::from_support(PendingFileAssets::prepare(asset_requests, &actor)?.shared());
+    let pending = prepare_attachments(asset_requests, &actor)?;
     service.product_brand_update_with_assets(&id, req, pending, &actor).await.map_err(Into::into)
 }
 
@@ -79,8 +79,7 @@ pub async fn product_create_with_assets(
     asset_requests: Vec<PendingFileAssetRequest>,
     actor: AuditActor,
 ) -> Result<ProductView> {
-    let pending =
-        CatalogPendingAttachments::from_support(PendingFileAssets::prepare(asset_requests, &actor)?.shared());
+    let pending = prepare_attachments(asset_requests, &actor)?;
     service.product_create_with_assets(req, pending, &actor).await.map_err(Into::into)
 }
 
@@ -105,7 +104,13 @@ pub async fn product_update_with_assets(
     asset_requests: Vec<PendingFileAssetRequest>,
     actor: AuditActor,
 ) -> Result<ProductView> {
-    let pending =
-        CatalogPendingAttachments::from_support(PendingFileAssets::prepare(asset_requests, &actor)?.shared());
+    let pending = prepare_attachments(asset_requests, &actor)?;
     service.product_update_with_assets(&id, req, pending, &actor).await.map_err(Into::into)
+}
+
+fn prepare_attachments(
+    asset_requests: Vec<PendingFileAssetRequest>,
+    actor: &AuditActor,
+) -> Result<Arc<dyn PendingAttachmentBatch>> {
+    Ok(PendingFileAssets::prepare(asset_requests, actor)?.into_catalog_batch())
 }

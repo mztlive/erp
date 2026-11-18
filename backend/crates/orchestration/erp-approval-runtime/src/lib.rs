@@ -4,7 +4,6 @@ pub mod approval_recovery;
 pub mod approval_start;
 pub mod approver_directory;
 mod errors;
-pub mod material_writes;
 pub use errors::{Error, Result};
 pub mod runtime_port;
 pub use runtime_port::{ApprovalRuntime, ApprovalRuntimePort};

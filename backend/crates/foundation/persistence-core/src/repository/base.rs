@@ -127,35 +127,18 @@ fn write_metadata_at(base: &BaseModel, updated_at_bson: i64) -> Result<WriteMeta
 
 /// 构建 CAS 写入的乐观锁过滤条件。
 ///
-/// `active_scope` 为 `true` 时限定活跃实体，为 `false` 时限定已删除实体；
-/// 两分支仅 `deleted_at` 子句不同，组装收敛一处避免过滤条件漂移。
-fn cas_filter(base: &BaseModel, metadata: WriteMetadata, active_scope: bool) -> Document {
+/// `expected_deleted` 决定条件匹配活跃实体还是已删除实体。
+fn cas_filter(base: &BaseModel, metadata: WriteMetadata, expected_deleted: bool) -> Document {
     let mut filter = doc! {
         "id": &base.id,
         "version": metadata.expected_version,
     };
-    if active_scope {
-        filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
-    } else {
+    if expected_deleted {
         filter.insert("deleted_at", doc! { "$ne": NOT_DELETED_TIMESTAMP_BSON });
+    } else {
+        filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
     }
     filter
-}
-
-/// 拒绝已删除实体的 CAS 写入（更新与软删除仅接受活跃实体）。
-fn ensure_active_for_cas(base: &BaseModel) -> Result<()> {
-    if base.is_deleted() {
-        return Err(Error::OptimisticLockingError);
-    }
-    Ok(())
-}
-
-/// 拒绝活跃实体的恢复（恢复仅接受已删除实体）。
-fn ensure_deleted_for_restore(base: &BaseModel) -> Result<()> {
-    if !base.is_deleted() {
-        return Err(Error::OptimisticLockingError);
-    }
-    Ok(())
 }
 
 /// 为查询附加软删除活跃约束，新增查询统一经此入口，避免遗漏 `deleted_at` 域。
@@ -183,10 +166,13 @@ fn apply_write_result(
     Ok(())
 }
 
-/// 组装一次 CAS 写入所需的元数据与乐观锁过滤器。
-fn cas_metadata_and_filter(base: &BaseModel, active_scope: bool) -> Result<(WriteMetadata, Document)> {
+/// 校验实体状态并组装 CAS 元数据和过滤器。
+fn cas_metadata_and_filter(base: &BaseModel, expected_deleted: bool) -> Result<(WriteMetadata, Document)> {
+    if base.is_deleted() != expected_deleted {
+        return Err(Error::OptimisticLockingError);
+    }
     let metadata = write_metadata(base)?;
-    Ok((metadata, cas_filter(base, metadata, active_scope)))
+    Ok((metadata, cas_filter(base, metadata, expected_deleted)))
 }
 
 /// 执行 CAS 更新并同步内存元数据。
@@ -370,9 +356,7 @@ where
         T: HasBaseModel,
     {
         executor.next_read();
-        ensure_active_for_cas(entity.base())?;
-
-        let (metadata, filter) = cas_metadata_and_filter(entity.base(), true)?;
+        let (metadata, filter) = cas_metadata_and_filter(entity.base(), false)?;
         let mut document = persisted_document(&*entity)?;
         document.insert("version", metadata.next_version_bson);
         document.insert("updated_at", metadata.updated_at_bson);
@@ -405,21 +389,7 @@ where
     where
         T: HasBaseModel,
     {
-        executor.next_read();
-        ensure_active_for_cas(entity.base())?;
-
-        let (metadata, filter) = cas_metadata_and_filter(entity.base(), true)?;
-        let deleted_at = metadata.updated_at;
-        let update = doc! {
-            "$set": {
-                "version": metadata.next_version_bson,
-                "updated_at": metadata.updated_at_bson,
-                "deleted_at": metadata.updated_at_bson,
-            }
-        };
-
-        exec_cas(&self.collection(), entity.base_mut(), metadata, filter, update, Some(deleted_at), executor)
-            .await
+        self.set_deleted(entity, true, executor).await
     }
 
     /// 恢复已软删除实体。
@@ -438,28 +408,29 @@ where
     where
         T: HasBaseModel,
     {
-        executor.next_read();
-        ensure_deleted_for_restore(entity.base())?;
+        self.set_deleted(entity, false, executor).await
+    }
 
-        let (metadata, filter) = cas_metadata_and_filter(entity.base(), false)?;
+    async fn set_deleted(&self, entity: &mut T, deleted: bool, executor: &mut dyn Executor) -> Result<()>
+    where
+        T: HasBaseModel,
+    {
+        executor.next_read();
+        let (metadata, filter) = cas_metadata_and_filter(entity.base(), !deleted)?;
+        let (deleted_at, deleted_at_bson) = if deleted {
+            (metadata.updated_at, metadata.updated_at_bson)
+        } else {
+            (NOT_DELETED_TIMESTAMP, NOT_DELETED_TIMESTAMP_BSON)
+        };
         let update = doc! {
             "$set": {
                 "version": metadata.next_version_bson,
                 "updated_at": metadata.updated_at_bson,
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                "deleted_at": deleted_at_bson,
             }
         };
-
-        exec_cas(
-            &self.collection(),
-            entity.base_mut(),
-            metadata,
-            filter,
-            update,
-            Some(NOT_DELETED_TIMESTAMP),
-            executor,
-        )
-        .await
+        exec_cas(&self.collection(), entity.base_mut(), metadata, filter, update, Some(deleted_at), executor)
+            .await
     }
 
     /// 查找所有未删除的实体。
@@ -681,8 +652,7 @@ mod tests {
     use serde::{Deserialize, Serialize, Serializer};
 
     use super::{
-        Pagination, Repository, apply_write_result, cas_filter, ensure_active_for_cas,
-        ensure_deleted_for_restore, persisted_document, write_metadata_at,
+        Pagination, Repository, apply_write_result, cas_filter, persisted_document, write_metadata_at,
     };
     use crate::errors::Error;
     use crate::{Executor, ReadExecutor};
@@ -727,6 +697,7 @@ mod tests {
             (Write::Update, 1, 1),
             (Write::SoftDelete, 1, 1),
             (Write::Restore, 0, 1),
+            (Write::Restore, 0, u64::MAX),
             (Write::Update, 0, u64::MAX),
             (Write::SoftDelete, 0, u64::MAX),
             (Write::Restore, 1, u64::MAX),
@@ -744,12 +715,12 @@ mod tests {
                 Write::Restore => repository.restore(&mut entity, &mut executor).await,
             };
             let error = result.unwrap_err();
-            if version == u64::MAX {
-                assert!(matches!(error, Error::EntityMetadataOutOfRange("version")));
-            } else if matches!(write, Write::Update) && deleted_at == 0 {
-                assert!(matches!(error, Error::BsonError(_)));
-            } else {
+            if (deleted_at != 0) != matches!(write, Write::Restore) {
                 assert!(matches!(error, Error::OptimisticLockingError));
+            } else if version == u64::MAX {
+                assert!(matches!(error, Error::EntityMetadataOutOfRange("version")));
+            } else {
+                assert!(matches!(error, Error::BsonError(_)));
             }
             assert!(!before.is_current(&executor));
             assert!(executor.boundary().unwrap().is_current(&executor));
@@ -873,7 +844,7 @@ mod tests {
         let base = BaseModel::fake();
         let metadata = write_metadata_at(&base, 1_700_000_000).expect("metadata should be valid");
 
-        let active = cas_filter(&base, metadata, true);
+        let active = cas_filter(&base, metadata, false);
         assert_eq!(active.get_str("id").expect("id should be present"), "fake");
         assert_eq!(active.get_i64("version").expect("version should be present"), 1);
         assert_eq!(
@@ -881,23 +852,10 @@ mod tests {
             NOT_DELETED_TIMESTAMP_BSON
         );
 
-        let deleted = cas_filter(&base, metadata, false);
+        let deleted = cas_filter(&base, metadata, true);
         assert_eq!(
             deleted.get_document("deleted_at").expect("deleted scope should be present"),
             &doc! { "$ne": NOT_DELETED_TIMESTAMP_BSON }
         );
-    }
-
-    #[test]
-    fn cas_guards_accept_only_matching_lifecycle_state() {
-        let active = BaseModel::fake();
-
-        ensure_active_for_cas(&active).expect("active entity should be writable");
-        assert!(matches!(ensure_deleted_for_restore(&active), Err(Error::OptimisticLockingError)));
-
-        let deleted = BaseModel { deleted_at: 1_700_000_001, ..BaseModel::fake() };
-
-        ensure_deleted_for_restore(&deleted).expect("deleted entity should be restorable");
-        assert!(matches!(ensure_active_for_cas(&deleted), Err(Error::OptimisticLockingError)));
     }
 }

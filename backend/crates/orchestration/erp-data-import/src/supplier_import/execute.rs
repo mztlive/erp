@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
+use background_runtime::{BackgroundTaskAdapter, TaskResult};
 use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_master_data::SupplierProfileProcess;
@@ -14,34 +15,20 @@ use erp_support::{BackgroundJob, BackgroundJobId, BackgroundJobItem, BulkJobExt,
 use persistence_core::{ReadExecutor, Transactional};
 
 use super::{SUPPLIER_IMPORT_DOMAIN, SupplierImportProcess};
-use crate::background::import_budget::{IMPORT_JOBS_PER_POLL, import_budget};
+use crate::background::import_budget::import_budget;
 use crate::{Error, Result};
 
 mod rows;
 use rows::{SupplierRowExecution, execute_rows};
 
-impl SupplierImportProcess {
-    /// 每轮至多处理四个任务，每任务至多十行或一秒软时限；恢复两分钟未推进的任务。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回本次扫描到的任务数。版本冲突的任务跳过；其他单任务失败只记脱敏日志，留待下轮恢复。
-    ///
-    /// # 错误
-    /// 查询未完成任务失败时返回仓储错误。
-    pub async fn run_due_jobs(&self) -> Result<usize> {
-        let jobs = self
-            .db
-            .background_jobs()
-            .list_open_by_domain_job_type(
-                SUPPLIER_IMPORT_DOMAIN,
-                IMPORT_JOBS_PER_POLL,
-                &mut ReadExecutor::default(),
-            )
-            .await?;
-        self.sources.retain_jobs(&jobs).await;
+#[async_trait]
+impl BackgroundTaskAdapter for SupplierImportProcess {
+    fn name(&self) -> &'static str {
+        "supplier_import"
+    }
+
+    async fn run_due(&self) -> TaskResult<usize> {
+        let jobs = self.sources.poll_jobs(&self.db, SUPPLIER_IMPORT_DOMAIN).await?;
         let count = jobs.len();
         for mut job in jobs {
             if let Err(error) = self.execute(&mut job).await {
@@ -53,7 +40,9 @@ impl SupplierImportProcess {
         }
         Ok(count)
     }
+}
 
+impl SupplierImportProcess {
     /// 通过版本竞争认领任务，执行前加载密文；读取失败终止任务并提示重新提交。
     async fn execute(&self, job: &mut BackgroundJob) -> Result<()> {
         if !claimable(job, Instant::now()) {

@@ -28,9 +28,17 @@ impl CommandFingerprint {
     /// # 错误
     /// 无。
     pub fn from_parts(parts: impl IntoIterator<Item = String>) -> Self {
+        Self::hash_parts(parts)
+    }
+
+    fn hash_parts(parts: impl IntoIterator<Item = impl AsRef<[u8]>>) -> Self {
         let mut hasher = Sha256::new();
         hasher.update(b"command-fingerprint-v1");
-        feed_length_prefixed(&mut hasher, parts);
+        for part in parts {
+            let bytes = part.as_ref();
+            hasher.update((bytes.len() as u64).to_be_bytes());
+            hasher.update(bytes);
+        }
         Self(format!("{V1_PREFIX}{}", hex::encode(hasher.finalize())))
     }
 
@@ -90,15 +98,6 @@ impl CommandFingerprint {
     }
 }
 
-/// 以长度前缀 feeding 给定哈希器，用于版本化稳定摘要。
-fn feed_length_prefixed(hasher: &mut Sha256, parts: impl IntoIterator<Item = impl AsRef<[u8]>>) {
-    for part in parts {
-        let bytes = part.as_ref();
-        hasher.update((bytes.len() as u64).to_be_bytes());
-        hasher.update(bytes);
-    }
-}
-
 impl<'de> Deserialize<'de> for CommandFingerprint {
     /// 将持久化字符串反序列化为 v1 指纹。
     ///
@@ -137,10 +136,14 @@ impl CommandIdentity {
     /// # 错误
     /// `prefix` 去空白后为空时返回错误。
     pub fn new(prefix: &str, parts: impl IntoIterator<Item = String>) -> Result<Self> {
+        Self::from_parts(prefix, parts)
+    }
+
+    fn from_parts(prefix: &str, parts: impl IntoIterator<Item = impl AsRef<[u8]>>) -> Result<Self> {
         if prefix.trim().is_empty() {
             return Err(Error::from("命令身份前缀不能为空"));
         }
-        let fingerprint = CommandFingerprint::from_parts(parts);
+        let fingerprint = CommandFingerprint::hash_parts(parts);
         let current_id = format!("{prefix}{}", fingerprint.digest_hex());
         Ok(Self { current_id })
     }
@@ -186,7 +189,6 @@ fn payload_serialize_error(error: impl Display) -> Error {
     Error::from(format!("业务命令请求序列化失败: {error}"))
 }
 
-/// 收据身份三元组，组装入口共用，避免长参数列。
 struct ReceiptHeader<'a> {
     actor_id: &'a str,
     action: &'a str,
@@ -198,11 +200,14 @@ struct ReceiptHeader<'a> {
 /// 组装收据主体，两构造入口共用身份去重与字段填充。
 fn assemble(
     prefix: &str,
-    identity_parts: impl IntoIterator<Item = String>,
     header: ReceiptHeader<'_>,
     fingerprint: CommandFingerprint,
 ) -> Result<CommandReceipt> {
-    let identity = CommandIdentity::new(prefix, identity_parts)?;
+    let identity_parts = [header.actor_id, header.action, header.resource_type]
+        .into_iter()
+        .chain(header.scope_id)
+        .chain([header.idempotency_key]);
+    let identity = CommandIdentity::from_parts(prefix, identity_parts)?;
     Ok(CommandReceipt {
         identity,
         actor_id: header.actor_id.to_string(),
@@ -210,7 +215,7 @@ fn assemble(
         resource_type: header.resource_type.to_string(),
         fingerprint,
         scope_id: header.scope_id.map(str::to_string),
-        idempotency_key_hash: CommandFingerprint::from_parts([header.idempotency_key.to_string()]),
+        idempotency_key_hash: CommandFingerprint::hash_parts([header.idempotency_key]),
     })
 }
 
@@ -240,14 +245,9 @@ impl CommandReceipt {
     ) -> Result<Self> {
         let key = require_non_blank(idempotency_key, "操作号不能为空")?;
         let canonical_payload = canonical_json(payload)?;
-        let fingerprint = CommandFingerprint::from_parts([
-            action.to_string(),
-            resource_type.to_string(),
-            canonical_payload,
-        ]);
+        let fingerprint = CommandFingerprint::hash_parts([action, resource_type, &canonical_payload]);
         assemble(
             prefix,
-            [actor_id, action, resource_type, key].into_iter().map(str::to_string),
             ReceiptHeader { actor_id, action, resource_type, scope_id: None, idempotency_key: key },
             fingerprint,
         )
@@ -284,7 +284,6 @@ impl CommandReceipt {
         require_non_blank(resource_id, "命令资源 ID 不能为空")?;
         assemble(
             prefix,
-            [actor_id, action, resource_type, resource_id, key].into_iter().map(str::to_string),
             ReceiptHeader {
                 actor_id,
                 action,
@@ -513,6 +512,41 @@ mod tests {
         }
         assert!(CommandReceipt::from_resource_parts("c-", "actor", "a", "r", " ", "key", []).is_err());
         assert!(CommandReceipt::from_payload("c-", "actor", "a", "r", " ", &1).is_err());
+    }
+
+    #[test]
+    fn v1_receipts_preserve_persisted_ids_and_normalization() {
+        let created = CommandReceipt::from_payload(
+            "c-",
+            "actor",
+            "update",
+            "object",
+            " 操作号 ",
+            &json!({"b":2,"a":1}),
+        )
+        .unwrap();
+        let resource = CommandReceipt::from_resource_parts(
+            "c-",
+            "actor",
+            "update",
+            "object",
+            " target ",
+            " 操作号 ",
+            [],
+        )
+        .unwrap();
+        assert_eq!(created.id(), "c-df6c7183067dda8b7faa5210f5251b87985910a02357af149a2547f4eadad6d3");
+        assert_eq!(resource.id(), "c-222a373cb9efe4ee3ec7afbeba9311a6955b4ccfd741fbd67adc59252866913c");
+        assert_eq!(resource.scope_id(), Some(" target "));
+        assert_eq!(
+            created.fingerprint().digest_hex(),
+            "123e70809840e65313a5aff730d1d8d7ac65940805b5f018e39af98c2e37dfb1"
+        );
+        assert_eq!(
+            created.idempotency_key_hash().digest_hex(),
+            "71187bbc6643d4da9e634287512267583de25642adf6156808e2e0edc00fc19b"
+        );
+        assert_eq!(created.idempotency_key_hash(), resource.idempotency_key_hash());
     }
 
     #[test]

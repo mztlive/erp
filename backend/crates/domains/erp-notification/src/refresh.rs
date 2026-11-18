@@ -1,8 +1,10 @@
 //! 无正文刷新通道；业务计数始终通过原有授权查询重新计算。
 use std::collections::BTreeSet;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::{Deserialize, Serialize};
-use tokio::sync::{broadcast, watch};
+use tokio::sync::broadcast;
 
 /// 跨进程协议使用稳定主题；不得携带业务内容或对象标识。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -81,13 +83,12 @@ impl RefreshSignal {
 #[derive(Clone)]
 pub struct RefreshHub {
     sender: broadcast::Sender<RefreshSignal>,
-    available: watch::Sender<bool>,
+    available: Arc<AtomicBool>,
 }
 impl Default for RefreshHub {
     fn default() -> Self {
         let (sender, _) = broadcast::channel(256);
-        let (available, _) = watch::channel(false);
-        Self { sender, available }
+        Self { sender, available: Arc::new(AtomicBool::new(false)) }
     }
 }
 impl RefreshHub {
@@ -110,7 +111,7 @@ impl RefreshHub {
     /// # 错误
     /// 无。
     pub fn is_available(&self) -> bool {
-        *self.available.borrow()
+        self.available.load(Ordering::Acquire)
     }
 
     /// 发布内部刷新信号；没有在线页面时无需保留。
@@ -132,7 +133,7 @@ impl RefreshHub {
     /// # 错误
     /// 无。
     pub fn set_available(&self, ready: bool) {
-        self.available.send_replace(ready);
+        self.available.store(ready, Ordering::Release);
         self.publish(if ready { RefreshSignal::Resync } else { RefreshSignal::Unavailable });
     }
 }
@@ -161,7 +162,9 @@ mod tests {
         let mut first = hub.subscribe();
         let mut second = hub.subscribe();
         assert!(!hub.is_available());
-        hub.set_available(true);
+        let publisher = hub.clone();
+        publisher.set_available(true);
+        assert!(hub.is_available());
         assert!(matches!(first.recv().await.unwrap(), RefreshSignal::Resync));
         assert!(matches!(second.recv().await.unwrap(), RefreshSignal::Resync));
         for _ in 0..300 {
@@ -171,8 +174,9 @@ mod tests {
         let mut topics = BTreeSet::new();
         RefreshSignal::Resync.collect("alice", &mut topics);
         assert_eq!(topics, RefreshTopic::all());
-        hub.set_available(false);
+        let mut current = hub.subscribe();
+        publisher.set_available(false);
         assert!(!hub.is_available());
-        assert!(!RefreshSignal::Unavailable.collect("alice", &mut topics));
+        assert!(!current.recv().await.unwrap().collect("alice", &mut topics));
     }
 }

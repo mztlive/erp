@@ -135,25 +135,6 @@ impl<'a> BpmWorkflowRepository<'a> {
         Ok(rows.pop())
     }
 
-    /// 读取取消用例所需的当前活动或受阻执行。
-    ///
-    /// # 参数
-    /// * `instance_id` - 可取消实例主键
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回该实例当前 `ACTIVE|BLOCKED` 执行；缺失时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn current_execution_for_cancellation(
-        &self,
-        instance_id: &ApprovalProcessInstanceId,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ApprovalNodeExecution>> {
-        self.executions().find_one(current_execution_filter(instance_id), executor).await
-    }
-
     /// 按执行序号稳定游标读取实例历史，单次不超过上限。
     ///
     /// # 参数

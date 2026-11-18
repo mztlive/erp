@@ -201,7 +201,7 @@ mod tests {
     use serde_json::json;
 
     use super::super::tests::{capture, event};
-    use super::super::{Result as ExtractResult, invalid_output, provider_error};
+    use super::super::{Result as ExtractResult, invalid_output, provider_failure};
     use super::*;
     #[test]
     fn rejects_chunked_overflow_before_appending() {
@@ -229,8 +229,9 @@ mod tests {
             let error = receive::<Bytes>(response.into(), diagnostics.clone()).await.err().unwrap();
             let error = ProviderError::from(*error);
             diagnostics.error(&error);
-            let result: Result<(), _> = Err(provider_error(&error));
-            diagnostics.finish(Instant::now(), &result, None);
+            let (error, source) = provider_failure(&error);
+            let result: Result<(), _> = Err(error);
+            diagnostics.finish(Instant::now(), &result, source);
             result
         })
         .await;

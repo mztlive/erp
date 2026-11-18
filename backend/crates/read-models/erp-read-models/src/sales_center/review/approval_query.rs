@@ -13,7 +13,7 @@ use persistence_core::Executor;
 
 use super::dto::{DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView, DocumentApprovalView};
 use super::projection::document_approval_view;
-use crate::approval_runtime::{has_document_permission, load_document_runtime};
+use crate::approval_runtime::load_document_runtime;
 use crate::sales_center::access::SalesAccess;
 use crate::{Error, Result};
 
@@ -69,9 +69,7 @@ async fn change_actions(
         SalesChangeOrderStatus::InApproval if cancellable => &sales_order_permissions::CANCEL_APPROVAL,
         _ => return Ok(Vec::new()),
     };
-    if !has_document_permission(db, rbac, actor, &sales_review_permissions::SALES_CHANGE_DRAFT, executor)
-        .await?
-    {
+    if !rbac.has_permission(actor, &sales_review_permissions::SALES_CHANGE_DRAFT, executor).await? {
         return Ok(Vec::new());
     }
     match SalesAccess::new(db.clone(), rbac.clone())

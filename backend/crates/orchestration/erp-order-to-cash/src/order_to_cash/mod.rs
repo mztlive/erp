@@ -13,7 +13,6 @@ mod cancel_approval;
 mod command;
 mod draft_working_copy;
 mod formalization_posting;
-mod formalization_root;
 mod formalize;
 mod handover;
 mod inquiry;
@@ -26,8 +25,6 @@ use erp_read_models::sales_center::order::SalesOrderReadService;
 use erp_sales::entity::sales_order::BusinessType;
 use erp_sales::service::sales_order::SalesOrderService;
 use erp_workflow::entity::document_registry::DocumentType;
-pub use formalization_root::SalesOrderFormalizationProcess;
-use formalize::FormalizedSubmissionWrite;
 use mongodb::Database;
 
 use crate::{Error, Result};

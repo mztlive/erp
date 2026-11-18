@@ -10,7 +10,7 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::ReceivableProcess;
-use super::draft_update::ensure_receipt_edit_authorized;
+use super::receipt_access::ensure_receipt_edit_authorized;
 use crate::{Error, FinancePostingPorts, Result};
 
 impl ReceivableProcess {
@@ -34,7 +34,7 @@ impl ReceivableProcess {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    ensure_receipt_edit_authorized(&db, &rbac, &actor, &id, executor).await?;
+                    ensure_receipt_edit_authorized(&rbac, &actor, &id, executor).await?;
                     let receipt = db
                         .customer_receipts()
                         .find_by_id(&id, executor)
@@ -66,7 +66,7 @@ impl ReceivableProcess {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    ensure_receipt_edit_authorized(&db, &rbac, &actor, &id, executor).await?;
+                    ensure_receipt_edit_authorized(&rbac, &actor, &id, executor).await?;
                     receipt_view_with_actions(&db, &rbac, &actor, &id, executor).await
                 })
             })

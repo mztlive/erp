@@ -21,9 +21,7 @@ const FIXTURE_COLLECTION: &str = "_fixture";
 /// 避免在异步运行时内 `block_on` 恐慌）。测试结束即随 `TestDb` 析构清理，
 /// 禁止跨测试共享固定库名（conventions 7.2）。
 pub struct TestDb {
-    client: Client,
     db: Database,
-    name: String,
 }
 
 impl TestDb {
@@ -40,10 +38,9 @@ impl TestDb {
     pub async fn new(prefix: &str) -> Result<Self> {
         let uri = test_mongo_uri().ok_or(Error::EnvMissing(TEST_MONGO_URI_ENV))?;
         let client = Client::with_uri_str(&uri).await?;
-        let name = random_db_name(prefix);
-        let db = client.database(&name);
+        let db = client.database(&random_db_name(prefix));
         db.create_collection(FIXTURE_COLLECTION).await?;
-        Ok(Self { client, db, name })
+        Ok(Self { db })
     }
 
     /// 返回数据库实例引用。
@@ -71,7 +68,7 @@ impl TestDb {
     /// # 错误
     /// 不返回错误。
     pub fn client(&self) -> &Client {
-        &self.client
+        self.db.client()
     }
 
     /// 返回随机数据库名。
@@ -85,7 +82,7 @@ impl TestDb {
     /// # 错误
     /// 不返回错误。
     pub fn name(&self) -> &str {
-        &self.name
+        self.db.name()
     }
 
     /// 显式清理测试数据库并传播错误。
@@ -115,12 +112,11 @@ impl Drop for TestDb {
     /// `drop` 错误均被丢弃，且不保证在进程退出前完成——需要确定性清理
     /// 的用例应显式调用 [`TestDb::cleanup`] 并传播错误。
     fn drop(&mut self) {
-        let client = self.client.clone();
-        let name = self.name.clone();
+        let db = self.db.clone();
         std::thread::spawn(move || {
             let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
             let Ok(runtime) = runtime else { return };
-            let _ = runtime.block_on(async move { client.database(&name).drop().await });
+            let _ = runtime.block_on(async move { db.drop().await });
         });
     }
 }

@@ -11,7 +11,6 @@ use crate::reverse_flow::return_settlement::{create_credit, validate_settlement}
 /// # 参数
 /// * `db` - 数据库。
 /// * `refund_id` - 退款单主键。
-/// * `actor_id` - 过账操作人 ID。
 /// * `actor` - 审计操作人。
 /// * `executor` - 最终通过事务的执行器；本函数不再开启事务。
 ///
@@ -24,7 +23,6 @@ pub(in crate::reverse_flow) async fn apply_supplier_refund_final_post(
     db: &Database,
     rbac: &ReverseFlowPorts,
     refund_id: &str,
-    actor_id: &str,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
@@ -34,7 +32,7 @@ pub(in crate::reverse_flow) async fn apply_supplier_refund_final_post(
         &mut refund,
         erp_workflow::service::approval::policy::ApprovalDomainAction::SupplierRefundPost,
     )?;
-    apply_supplier_refund_posting(db, rbac, &refund, actor_id, executor).await?;
+    apply_supplier_refund_posting(db, rbac, &refund, actor.id(), executor).await?;
     ReturnsService::new(db.clone()).persist_supplier_refund_post(&mut refund, executor).await?;
     let audit =
         actor.clone().resource_log("supplier_refund.post", "supplier_refund", refund.base.id.clone())?;

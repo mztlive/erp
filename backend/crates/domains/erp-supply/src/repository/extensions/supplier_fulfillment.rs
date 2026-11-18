@@ -7,7 +7,7 @@
 
 use mongodb::Database;
 
-use super::super::supplier_fulfillment::{SupplierFulfillmentOrderFilter, SupplierFulfillmentRepository};
+use super::super::supplier_fulfillment::SupplierFulfillmentRepository;
 use crate::repository::owned::{
     SupplierFulfillmentItemRepository, SupplierFulfillmentOrderRepository, SupplierOrderActionLineRepository,
     SupplierOrderActionRepository, SupplierOrderStatusHistoryRepository, SupplierRefundAllocationRepository,
@@ -30,9 +30,6 @@ pub trait SupplierFulfillmentExt {
     const SUPPLIER_REFUND_FACTS: &'static str = "supplier_refund_facts";
     /// `supplier_refund_allocation` 集合名。
     const SUPPLIER_REFUND_ALLOCATIONS: &'static str = "supplier_refund_allocations";
-
-    /// 供应商履约订单列表筛选条件类型（定义见 `repository::supplier_fulfillment`）。
-    type SupplierFulfillmentOrderFilter;
 
     /// 获取 `supplier_fulfillment_order` 集合的 Repository。
     ///
@@ -132,8 +129,6 @@ pub trait SupplierFulfillmentExt {
 }
 
 impl SupplierFulfillmentExt for Database {
-    type SupplierFulfillmentOrderFilter = SupplierFulfillmentOrderFilter;
-
     fn supplier_fulfillment_orders(&self) -> SupplierFulfillmentOrderRepository<'_> {
         SupplierFulfillmentOrderRepository::new(self, Self::SUPPLIER_FULFILLMENT_ORDERS)
     }

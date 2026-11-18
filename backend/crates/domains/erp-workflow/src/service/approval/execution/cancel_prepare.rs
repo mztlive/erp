@@ -158,7 +158,7 @@ impl CancelRuntimeStore for Database {
         instance_id: &ApprovalProcessInstanceId,
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalNodeExecution>> {
-        Ok(self.bpm_workflow().current_execution_for_cancellation(instance_id, executor).await?)
+        Ok(self.bpm_workflow().find_current_execution(instance_id, executor).await?)
     }
 
     async fn open_tasks(

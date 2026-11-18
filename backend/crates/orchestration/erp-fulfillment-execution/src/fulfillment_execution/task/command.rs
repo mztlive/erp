@@ -59,7 +59,7 @@ impl TaskCommandPort for MongoTaskCommand<'_> {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        require_assignee(self.db, identity, actor, task, TaskPurpose::Fulfillment, executor).await
+        require_assignee(identity, actor, task, TaskPurpose::Fulfillment, executor).await
     }
     async fn update(&self, task: &mut WorkItem, executor: &mut dyn Executor) -> Result<()> {
         if task.status == WorkItemStatus::Open {

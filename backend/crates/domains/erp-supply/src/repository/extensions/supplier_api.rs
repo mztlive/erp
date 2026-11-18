@@ -7,9 +7,7 @@
 
 use mongodb::Database;
 
-use super::super::supplier_api::{
-    SupplierApiCapabilityFilter, SupplierApiConnectionFilter, SupplierApiRepository,
-};
+use super::super::supplier_api::SupplierApiRepository;
 use crate::repository::owned::{
     BusinessCapabilityConfirmationRepository, SupplierApiCapabilityRepository,
     SupplierApiConnectionRepository, SupplierConnectionCommandReceiptRepository,
@@ -29,15 +27,6 @@ pub trait SupplierApiExt {
     const SUPPLIER_API_HEALTH_CHECK_RUNS: &'static str = "supplier_api_health_check_runs";
     /// 连接治理命令幂等回执集合名。
     const SUPPLIER_API_COMMAND_RECEIPTS: &'static str = "supplier_api_connection_command_receipts";
-
-    /// 连接列表筛选条件类型（定义见 `repository::supplier_api`）。
-    type SupplierApiConnectionFilter;
-
-    /// 连接能力列表筛选条件类型（定义见 `repository::supplier_api`）。
-    type SupplierApiCapabilityFilter;
-
-    /// 停用连接前由服务端重验的关联业务影响类型。
-    type SupplierConnectionImpact;
 
     /// 获取 `supplier_api_connection` 集合的 Repository。
     ///
@@ -113,10 +102,6 @@ pub trait SupplierApiExt {
 }
 
 impl SupplierApiExt for Database {
-    type SupplierApiConnectionFilter = SupplierApiConnectionFilter;
-    type SupplierApiCapabilityFilter = SupplierApiCapabilityFilter;
-    type SupplierConnectionImpact = super::super::supplier_api::SupplierConnectionImpact;
-
     fn supplier_api_connections(&self) -> SupplierApiConnectionRepository<'_> {
         SupplierApiConnectionRepository::new(self, Self::SUPPLIER_API_CONNECTIONS)
     }

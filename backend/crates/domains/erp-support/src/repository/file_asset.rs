@@ -269,8 +269,7 @@ impl FileAssetRepositoryExt for persistence_core::Repository<'_, FileAsset> {
             .limit(filter.limit())
             .projection(file_asset_projection())
             .build();
-        let collection = self.collection().clone_with_type::<FileAssetRow>();
-        search_projected_page(&self.collection(), &collection, filter, options, executor).await
+        search_projected_page(&self.collection(), filter, options, executor).await
     }
 }
 

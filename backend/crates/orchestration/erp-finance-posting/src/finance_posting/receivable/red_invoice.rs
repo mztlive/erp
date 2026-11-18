@@ -6,6 +6,7 @@ use erp_audit::execution::persist_log;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{InvoiceId, PayableAccountId, ReceivableAccountId, SalesOrderId};
 use erp_core::money::Amount;
+use erp_finance::dto::receivable::{CommitRedInvoiceRequest, InvoiceView};
 use erp_finance::entity::payable::{AllocationAction as PayableAllocationAction, PurchaseInvoiceAllocation};
 use erp_finance::entity::receivable::{
     AllocationAction, Invoice, InvoiceData, InvoiceDirection, InvoiceKind, RedInvoiceAllocationPlan,
@@ -31,7 +32,6 @@ use persistence_core::{Executor, Transactional};
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
-use super::dto::{CommitRedInvoiceRequest, InvoiceView};
 use super::invoice::register_created_invoice_document;
 use super::{ReceivableProcess, invoice_task};
 use crate::{Error, FinancePostingPorts, Result};

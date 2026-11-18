@@ -9,7 +9,7 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_catalog::{EmptyPendingAttachments, PendingAttachmentBatch, ProductMediaInput};
 use erp_core::ids::FileAssetId;
-use erp_file_assets::{CatalogPendingAttachments, PendingFileAssets};
+use erp_file_assets::PendingFileAssets;
 use erp_supply::entity::supplier_catalog::{CatalogImage, SupplierCatalogItem};
 use erp_support::{
     PendingFileAssetRequest, RegisterFileAssetRequest, RetentionClass, SensitivityClass, content_fingerprint,
@@ -355,9 +355,9 @@ impl SourceMediaPreparer {
             self.prepare_group(item.images.as_deref(), "轮播图", preparation).await?;
         let (detail_images, detail_media) =
             self.prepare_group(item.detail_images.as_deref(), "详情图", preparation).await?;
-        let pending_assets = CatalogPendingAttachments::from_support(
-            PendingFileAssets::prepare_content_checked(take(&mut preparation.requests), actor)?.shared(),
-        );
+        let pending_assets =
+            PendingFileAssets::prepare_content_checked(take(&mut preparation.requests), actor)?
+                .into_catalog_batch();
         let mut prepared = PreparedSourceMedia {
             pending_assets,
             images,

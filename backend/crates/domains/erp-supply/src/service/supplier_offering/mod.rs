@@ -197,12 +197,7 @@ impl SupplierOfferingService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.ensure_api_create_price(&prepared.offering, &prepared.revision, executor).await?;
-        write::created(
-            &crate::repository::supplier_offering::write::MongoOfferingWrite::new(&self.db),
-            prepared,
-            executor,
-        )
-        .await
+        write::created(&self.db, prepared, executor).await
     }
     /// 加载最大修订并构造新版本；仅Active目标状态读取资格。
     ///
@@ -285,12 +280,7 @@ impl SupplierOfferingService {
         prepared: &mut PreparedRevision,
         executor: &mut dyn Executor,
     ) -> Result<ReviseSupplierOfferingResult> {
-        write::revised(
-            &crate::repository::supplier_offering::write::MongoOfferingWrite::new(&self.db),
-            prepared,
-            executor,
-        )
-        .await
+        write::revised(&self.db, prepared, executor).await
     }
     /// 按原投影版本、来源时间和数量顺序准备可供更新。
     ///
@@ -370,12 +360,7 @@ impl SupplierOfferingService {
         prepared: &mut PreparedAvailability,
         executor: &mut dyn Executor,
     ) -> Result<UpdateSupplierOfferingAvailabilityResult> {
-        write::availability(
-            &crate::repository::supplier_offering::write::MongoOfferingWrite::new(&self.db),
-            prepared,
-            executor,
-        )
-        .await
+        write::availability(&self.db, prepared, executor).await
     }
     /// 同一供应商 SKU 已有供给时拒绝创建。
     async fn ensure_identity_available(

@@ -7,6 +7,8 @@ use mongodb::Database;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{Executor, Result};
 
+use crate::support::dedup_sorted;
+
 mod list_filter;
 pub use list_filter::{SupplierOfferingListBundle, SupplierOfferingListQuery};
 const SUPPLIER_ACCOUNTS: &str = <Database as SupplierExt>::SUPPLIER_ACCOUNTS;
@@ -49,24 +51,24 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         rows: &[SupplierOfferingRow],
         executor: &mut dyn Executor,
     ) -> Result<SupplierOfferingDisplayEntities> {
-        let sku_ids = unique_strings(rows.iter().map(|row| row.sku_id.to_string()));
+        let sku_ids = dedup_sorted(rows.iter().map(|row| row.sku_id.to_string()));
         let skus = self.db.skus().find_many(in_filter("id", sku_ids), executor).await?;
         let sku_revision_ids =
-            unique_strings(skus.iter().filter_map(|sku| sku.stable.current_revision_id.clone()));
-        let product_ids = unique_strings(skus.iter().map(|sku| sku.product_id.to_string()));
+            dedup_sorted(skus.iter().filter_map(|sku| sku.stable.current_revision_id.clone()));
+        let product_ids = dedup_sorted(skus.iter().map(|sku| sku.product_id.to_string()));
         let sku_revisions =
             self.db.sku_revisions().find_many(in_filter("id", sku_revision_ids), executor).await?;
         let products = self.db.products().find_many(in_filter("id", product_ids), executor).await?;
 
-        let supplier_ids = unique_strings(rows.iter().map(|row| row.supplier_id.to_string()));
+        let supplier_ids = dedup_sorted(rows.iter().map(|row| row.supplier_id.to_string()));
         let suppliers = SupplierAccountRepository::new(self.db, SUPPLIER_ACCOUNTS)
             .find_many(in_filter("id", supplier_ids), executor)
             .await?;
-        let party_ids = unique_strings(suppliers.iter().map(|supplier| supplier.party_id.to_string()));
+        let party_ids = dedup_sorted(suppliers.iter().map(|supplier| supplier.party_id.to_string()));
         let parties =
             PartyRepository::new(self.db, PARTIES).find_many(in_filter("id", party_ids), executor).await?;
         let party_revision_ids =
-            unique_strings(parties.iter().filter_map(|party| party.stable.current_revision_id.clone()));
+            dedup_sorted(parties.iter().filter_map(|party| party.stable.current_revision_id.clone()));
         let party_revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
             .find_many(in_filter("id", party_revision_ids), executor)
             .await?;
@@ -95,10 +97,6 @@ pub struct SupplierOfferingDisplayEntities {
     pub parties: Vec<Party>,
     /// 主体当前修订。
     pub party_revisions: Vec<PartyRevision>,
-}
-/// 对字符串集合排序去重，供跨域批量查询稳定生成 `$in` 候选。
-fn unique_strings(values: impl IntoIterator<Item = String>) -> Vec<String> {
-    crate::support::dedup_sorted(values)
 }
 fn in_filter(field: &str, values: impl IntoIterator<Item = String>) -> Document {
     let values = values.into_iter().map(Bson::String).collect::<Vec<_>>();

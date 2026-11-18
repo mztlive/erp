@@ -269,21 +269,6 @@ fn validate_command_replay(
     })
 }
 
-/// 只读查证命中才返回原结果；查证失败不得覆盖首次提交未知分类。
-///
-/// # 参数
-/// * `original` - 首次失败或未知提交错误。
-/// * `recovered` - 只读查证结果；`Ok(None)` 表示未命中。
-///
-/// # 返回
-/// 查证命中时返回原结果。
-///
-/// # 错误
-/// 未命中时保留 `original`；`original` 为未知提交且查证失败时仍保留 `original`；其他查证错误原样返回。
-pub(super) fn finish_receipt_recovery<T>(original: Error, recovered: Result<Option<T>>) -> Result<T> {
-    erp_audit::execution::recover_command(original, recovered)
-}
-
 /// 独立销售回执的唯一竞争进入原只读恢复路径，其他写入错误按原口径返回。
 fn receipt_write_error(error: persistence_core::Error) -> Error {
     if error.duplicate_index_name() == Some("uk_sales_command_receipts_id") {
@@ -295,6 +280,7 @@ fn receipt_write_error(error: persistence_core::Error) -> Error {
 
 #[cfg(test)]
 mod tests {
+    use erp_audit::execution::recover_command;
     use erp_core::AccountKind;
     use erp_core::ids::{SalesOrderId, SalesOrderSubmissionId};
     use mongodb::error::Error as MongoError;
@@ -436,20 +422,16 @@ mod tests {
         let unknown = || {
             Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(MongoError::custom("first commit")))
         };
-        assert_eq!(finish_receipt_recovery(unknown(), Ok(Some("original"))).unwrap(), "original");
-        assert!(matches!(
-            finish_receipt_recovery::<String>(unknown(), Ok(None)),
-            Err(Error::OutcomeUnknown(_))
-        ));
+        assert_eq!(recover_command(unknown(), Ok(Some("original"))).unwrap(), "original");
+        assert!(matches!(recover_command::<String, _>(unknown(), Ok(None)), Err(Error::OutcomeUnknown(_))));
         let recovered =
-            finish_receipt_recovery::<String>(unknown(), Err(Error::Internal("secondary".into())))
-                .unwrap_err();
+            recover_command::<String, _>(unknown(), Err(Error::Internal("secondary".into()))).unwrap_err();
         let Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(source)) = recovered else {
             panic!("不得覆盖首次未知提交错误");
         };
         assert_eq!(source.get_custom::<&str>(), Some(&"first commit"));
         assert!(
-            matches!(finish_receipt_recovery::<String>(Error::ConflictError("first".into()), Err(Error::Forbidden("current access".into()))), Err(Error::Forbidden(message)) if message == "current access")
+            matches!(recover_command::<String, _>(Error::ConflictError("first".into()), Err(Error::Forbidden("current access".into()))), Err(Error::Forbidden(message)) if message == "current access")
         );
     }
 

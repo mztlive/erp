@@ -223,7 +223,8 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             }
             expected.push(sku.base.id.clone());
         }
-        self.catalog()
+        self.ports
+            .catalog
             .product_listing_update(
                 &product_id,
                 UpdateProductListingRequest { listing_status: ListingStatus::Listed },

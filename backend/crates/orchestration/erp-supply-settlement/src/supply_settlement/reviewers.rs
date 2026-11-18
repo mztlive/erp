@@ -109,23 +109,6 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         options.sort_by(|a, b| a.display_name.cmp(&b.display_name).then_with(|| a.account.cmp(&b.account)));
         Ok(options)
     }
-
-    /// 提交前预检复核人资格；实际提交事务仍独立重验。
-    /// # 参数
-    /// reviewer_id 为复核人，preparer_id 为经办人。
-    /// # 返回
-    /// 当前资格与岗位分离满足时成功。
-    /// # 错误
-    /// 人员或资格失效时拒绝。
-    pub(super) async fn authorize_reviewer(
-        &self,
-        reviewer_id: &str,
-        preparer_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        ensure_reviewer(&self.authorization, &self.work_items.identity, reviewer_id, preparer_id, executor)
-            .await
-    }
 }
 
 /// 在调用方事务内重验岗位分离、真实账号及固定结算复核执行资格。

@@ -7,10 +7,7 @@
 
 use mongodb::Database;
 
-use super::super::party::{
-    PartyAddressFilter, PartyBankAccountFilter, PartyContactFilter, PartyDomainRepository, PartyFilter,
-    PartyRevisionFilter, PartyTaxProfileFilter,
-};
+use super::super::party::PartyDomainRepository;
 use crate::repository::owned::{
     PartyAddressRepository, PartyBankAccountRepository, PartyContactRepository, PartyRepository,
     PartyRevisionRepository, PartyTaxProfileRepository,
@@ -32,19 +29,6 @@ pub trait PartyExt {
     const PARTY_TAX_PROFILES: &'static str = "party_tax_profiles";
     /// `party_bank_account` 集合名。
     const PARTY_BANK_ACCOUNTS: &'static str = "party_bank_accounts";
-
-    /// 主体列表筛选条件类型（定义见 `repository::party`）。
-    type PartyFilter;
-    /// 主体修订列表筛选条件类型（定义见 `repository::party`）。
-    type PartyRevisionFilter;
-    /// 联系人列表筛选条件类型（定义见 `repository::party`）。
-    type PartyContactFilter;
-    /// 地址列表筛选条件类型（定义见 `repository::party`）。
-    type PartyAddressFilter;
-    /// 税务资料列表筛选条件类型（定义见 `repository::party`）。
-    type PartyTaxProfileFilter;
-    /// 银行账户列表筛选条件类型（定义见 `repository::party`）。
-    type PartyBankAccountFilter;
 
     /// 获取 `party` 集合的 Repository。
     ///
@@ -132,13 +116,6 @@ pub trait PartyExt {
 }
 
 impl PartyExt for Database {
-    type PartyFilter = PartyFilter;
-    type PartyRevisionFilter = PartyRevisionFilter;
-    type PartyContactFilter = PartyContactFilter;
-    type PartyAddressFilter = PartyAddressFilter;
-    type PartyTaxProfileFilter = PartyTaxProfileFilter;
-    type PartyBankAccountFilter = PartyBankAccountFilter;
-
     fn parties(&self) -> PartyRepository<'_> {
         PartyRepository::new(self, Self::PARTIES)
     }

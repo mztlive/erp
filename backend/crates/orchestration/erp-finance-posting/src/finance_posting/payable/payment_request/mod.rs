@@ -48,17 +48,6 @@ impl PurchasePaymentRequestProcess {
     pub fn new(db: Database, rbac: FinancePostingPorts) -> Self {
         Self { rbac, db }
     }
-    /// 注入共享授权实例。
-    /// # 参数
-    /// * `rbac` - 应用共享 RBAC。
-    /// # 返回
-    /// 返回装配后的流程。
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_rbac(mut self, rbac: FinancePostingPorts) -> Self {
-        self.rbac = rbac;
-        self
-    }
 }
 
 /// 重放和写入均先证明原动作资格，再读取完整来源与当前结果。

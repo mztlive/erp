@@ -55,7 +55,8 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             return Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored });
         }
         let view = match self
-            .warehouses()
+            .ports
+            .warehouse
             .warehouse_create(warehouse_request(template, handler_user_id), actor)
             .await
         {

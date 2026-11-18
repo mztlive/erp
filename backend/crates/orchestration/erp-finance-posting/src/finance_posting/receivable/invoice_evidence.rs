@@ -17,8 +17,7 @@ use validator::Validate;
 use super::invoice::register_created_invoice_document;
 use super::invoice_posting::{InvoicePostingAllocations, InvoicePostingInput, post_invoice_apply};
 use super::{InvoiceWithAssetsResult, ReceivableProcess, invoice_attachments};
-use crate::finance_posting::task_access::TaskPurpose;
-use crate::finance_posting::task_entry::require_entry;
+use crate::finance_posting::task_access::{TaskPurpose, require_entry};
 use crate::{Error, FinancePostingPorts, Result};
 
 impl ReceivableProcess {

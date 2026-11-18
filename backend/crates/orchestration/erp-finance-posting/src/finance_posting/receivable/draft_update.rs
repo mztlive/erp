@@ -9,14 +9,14 @@ use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_identity::AccessTarget;
 use erp_permissions::receivable;
 use erp_read_models::finance::dto::CustomerReceiptView;
-use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
 use persistence_core::Executor;
 use validator::Validate;
 
 use super::ReceivableProcess;
 use super::customer_receipt::receipt_command_result;
-use crate::{Error, FinancePostingPorts, Result};
+use super::receipt_access::ensure_receipt_edit_authorized;
+use crate::{Error, Result};
 
 impl ReceivableProcess {
     /// 保存原回款草稿的到账字段，保留单号、来源与原登记人。
@@ -45,7 +45,7 @@ impl ReceivableProcess {
         let receipt_id = id.to_owned();
         run_audited(&self.db, audit, move |db, executor| {
             Box::pin(async move {
-                ensure_receipt_edit_authorized(db, &rbac, &actor, &receipt_id, executor).await?;
+                ensure_receipt_edit_authorized(&rbac, &actor, &receipt_id, executor).await?;
                 persist_receipt_draft(db, &receipt_id, req, executor).await?;
                 receipt_command_result(
                     db,
@@ -61,34 +61,6 @@ impl ReceivableProcess {
         })
         .await
     }
-}
-
-/// 先重验账号与提交操作资格，再读取完整回款来源；全程使用同一执行器。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `rbac` - 授权源。
-/// * `actor` - 当前已认证操作人。
-/// * `id` - 回款单 ID。
-/// * `executor` - 调用方执行器。
-///
-/// # 返回
-/// 账号、提交权限和完整资金来源资格都通过时无返回值。
-///
-/// # 错误
-/// 账号不可用、缺少提交权限、无权读取完整资金来源，或授权读取失败时返回错误。
-pub(super) async fn ensure_receipt_edit_authorized(
-    _db: &Database,
-    rbac: &FinancePostingPorts,
-    actor: &AuditActor,
-    id: &str,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    super::receipt_access::require_receipt_owner(&rbac.authorization, actor, id, executor).await?;
-    if !rbac.runtime.source_readable(actor, DocumentType::CustomerReceipt, id, executor).await? {
-        return Err(Error::Forbidden("无权读取该回款的完整资金来源".into()));
-    }
-    Ok(())
 }
 
 /// 在当前事务重读原单，执行资格、版本和字段校验，再保存原单 CAS。

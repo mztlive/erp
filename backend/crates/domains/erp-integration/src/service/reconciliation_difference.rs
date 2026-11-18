@@ -12,10 +12,10 @@ use super::scope::{ScopedIntegrationList, ensure_page, resolve_list_scope};
 use crate::dto::{self, *};
 use crate::entity::integration_ops::*;
 use crate::repository::IntegrationOpsExt;
+use crate::repository::integration_ops::ReconciliationDifferenceFilter;
 use crate::repository::prelude::*;
 use crate::{Error, Result};
-/// 对账差异列表筛选条件类型。
-type DifferenceFilter = <Database as IntegrationOpsExt>::ReconciliationDifferenceFilter;
+
 impl IntegrationOpsService {
     /// 分页查询对账差异，并按最新决定派生状态与版本。
     ///
@@ -43,7 +43,7 @@ impl IntegrationOpsService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (view, access) = this.difference_list_read(&params, &actor, executor).await?;
-                    this.access().validate(&access, executor).await?;
+                    this.data_scope.validate(&access, executor).await?;
                     Ok(view)
                 })
             })
@@ -69,19 +69,8 @@ impl IntegrationOpsService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, query.scope_version.as_deref())?;
-        self.difference_page(query, actor, executor).await
-    }
-
-    /// 无有效范围时不查库，直接返回空页。
-    async fn difference_page(
-        &self,
-        query: dto::DifferenceListQuery,
-        actor: &AuditActor,
-        executor: &mut dyn Executor,
-    ) -> Result<(DifferenceListView, CompiledAccess)> {
-        let access = self.access();
         let scope = resolve_list_scope(
-            &access,
+            &self.data_scope,
             actor,
             &integration_ops::DIFFERENCE_LIST,
             &query.org_unit_ids,
@@ -167,8 +156,8 @@ fn difference_filter(
     query: dto::DifferenceListQuery,
     owner_org_unit_ids: Vec<String>,
     operator_difference_ids: Option<Vec<String>>,
-) -> DifferenceFilter {
-    DifferenceFilter {
+) -> ReconciliationDifferenceFilter {
+    ReconciliationDifferenceFilter {
         q: query.q,
         business_object_type: query.business_object_type,
         business_object_id: query.business_object_id,
@@ -189,7 +178,7 @@ fn difference_filter(
 fn difference_list_view(
     total: i64,
     items: Vec<DifferenceView>,
-    filter: &DifferenceFilter,
+    filter: &ReconciliationDifferenceFilter,
     meta: ScopedIntegrationList,
 ) -> DifferenceListView {
     DifferenceListView {

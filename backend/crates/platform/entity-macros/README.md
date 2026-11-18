@@ -21,7 +21,7 @@ id_type!(ExampleId) 生成字符串包装类型及转换代码；真正的 ID �
 ## 使用与边界要求
 
 1. Entity 要求目标类型含有名为 base、类型为 entity_core::BaseModel 的字段；消费 crate 必须声明 entity-core 依赖。
-2. id_type! 接受单个类型标识符，消费 crate 必须声明 serde 依赖；生成类型不负责 ID 分配或格式校验。
+2. id_type! 接受单个类型标识符，消费 crate 必须声明启用 `derive` feature 的 serde 依赖；生成类型不负责 ID 分配或格式校验。
 3. 宏不生成 Repository、不校验业务字段，也不自动插入 serde(flatten)；这些合同由消费方显式声明。
 4. 修改展开代码后须检查实际消费 crate；只编译过程宏本身不能验证生成代码的类型约束。
 

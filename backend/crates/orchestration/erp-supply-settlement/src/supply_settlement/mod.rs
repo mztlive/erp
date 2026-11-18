@@ -30,7 +30,6 @@ mod source;
 mod void;
 use std::sync::Arc;
 
-use application_core::AuditActor;
 use erp_identity::{AuthorizationService, SharedRbacService};
 use erp_read_models::supplier_center::settlement::dto::SettlementReviewDecisionResult;
 use erp_supply::SettlementAccess;
@@ -50,12 +49,6 @@ pub struct SupplierSettlementProcess<A: WorkflowAuthorizationPort> {
     authorization: Arc<AuthorizationService>,
     work_items: WorkItemService<A>,
 }
-struct SettlementWriteContext {
-    db: Database,
-    data_scope: SettlementAccess,
-    actor: AuditActor,
-}
-
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     /// 绑定原数据库、已装配的结算范围及必需授权源。
     ///
@@ -79,14 +72,6 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         work_items: WorkItemService<A>,
     ) -> Self {
         Self { db, data_scope, rbac, authorization, work_items }
-    }
-
-    fn write_context(&self, actor: &AuditActor) -> SettlementWriteContext {
-        SettlementWriteContext {
-            db: self.db.clone(),
-            data_scope: self.data_scope.clone(),
-            actor: actor.clone(),
-        }
     }
 
     fn domain(&self) -> SupplierSettlementService {

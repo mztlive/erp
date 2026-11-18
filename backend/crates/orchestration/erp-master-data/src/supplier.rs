@@ -10,20 +10,6 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 返回供应商流程模块名。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回稳定模块名 `supplier`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn process_name() -> &'static str {
-    "supplier"
-}
-
 /// 软删除供应商角色，并在同一事务中写入成功审计。
 ///
 /// # 参数
@@ -47,8 +33,7 @@ pub async fn delete_supplier(
     run_audited(&db, audit, move |db, executor| {
         Box::pin(async move { delete_stage(db, &access, &id, &actor, executor).await })
     })
-    .await?;
-    Ok(())
+    .await
 }
 
 /// 在成功审计所属事务中先授权，再读取当前供应商版本并软删除。

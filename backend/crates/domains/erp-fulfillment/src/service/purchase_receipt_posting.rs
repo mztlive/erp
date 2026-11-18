@@ -2,14 +2,15 @@
 use std::collections::HashSet;
 
 use erp_core::common::time::Instant;
-use erp_core::ids::{DeliveryId, PurchaseReceiptId, SalesOrderId, WarehouseId};
+use erp_core::ids::{DeliveryId, DeliveryLineId, PurchaseReceiptId, SalesOrderId, WarehouseId};
 use id_generator::next_id;
 use persistence_core::Executor;
 
 use super::FulfillmentService;
 use crate::entity::facts::ReceiptReservationLineFact;
 use crate::entity::fulfillment::{
-    Delivery, DeliveryData, DeliveryLineBatch, DeliveryType, PurchaseReceipt, PurchaseReceiptLine,
+    Delivery, DeliveryData, DeliveryLineBatch, DeliveryLineSpec, DeliveryType, PurchaseReceipt,
+    PurchaseReceiptLine,
 };
 use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
@@ -140,7 +141,7 @@ impl FulfillmentService {
             delivery_id,
             DeliveryType::WarehouseShip,
             1,
-            super::delivery_lines::receipt_reservation_specs(reservations),
+            receipt_reservation_specs(reservations),
         )
         .map_err(Error::Logic)?;
         self.db.fulfillment().create_delivery_with_lines(&delivery, &lines, session).await?;
@@ -184,7 +185,7 @@ impl FulfillmentService {
             delivery_id,
             DeliveryType::WarehouseShip,
             next_line_no,
-            super::delivery_lines::receipt_reservation_specs(&pending),
+            receipt_reservation_specs(&pending),
         )
         .map_err(Error::Logic)?
         {
@@ -192,4 +193,17 @@ impl FulfillmentService {
         }
         Ok(())
     }
+}
+
+fn receipt_reservation_specs(reservations: &[ReceiptReservationLineFact]) -> Vec<DeliveryLineSpec> {
+    reservations
+        .iter()
+        .map(|reservation| DeliveryLineSpec {
+            line_id: DeliveryLineId::new(next_id()),
+            sales_order_line_id: reservation.sales_order_line_id.clone(),
+            quantity: reservation.reserved_quantity,
+            stock_reservation_id: Some(reservation.reservation_id.clone()),
+            purchase_line_sales_allocation_id: None,
+        })
+        .collect()
 }

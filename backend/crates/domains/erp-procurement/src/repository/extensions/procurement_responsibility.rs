@@ -2,16 +2,12 @@
 
 use mongodb::Database;
 
-use super::super::procurement_responsibility::ProcurementResponsibilityRuleFilter;
 use crate::repository::owned::ProcurementResponsibilityRuleRepository;
 
 /// 采购责任规则仓储访问入口。
 pub trait ProcurementResponsibilityExt {
     /// 采购责任规则集合名。
     const PROCUREMENT_RESPONSIBILITY_RULES: &'static str = "procurement_responsibility_rules";
-
-    /// 规则列表筛选条件类型。
-    type ProcurementResponsibilityRuleFilter;
 
     /// 获取采购责任规则 Repository。
     ///
@@ -27,8 +23,6 @@ pub trait ProcurementResponsibilityExt {
 }
 
 impl ProcurementResponsibilityExt for Database {
-    type ProcurementResponsibilityRuleFilter = ProcurementResponsibilityRuleFilter;
-
     /// 获取采购责任规则 Repository。
     ///
     /// # 参数

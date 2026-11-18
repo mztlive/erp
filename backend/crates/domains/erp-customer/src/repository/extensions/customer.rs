@@ -7,7 +7,6 @@
 
 use mongodb::Database;
 
-use super::super::customer::{CustomerAccountFilter, CustomerAssignmentFilter};
 use super::super::owned::{
     CustomerAccountRepository, CustomerAssignmentRepository, CustomerProfileCommandRepository,
 };
@@ -20,11 +19,6 @@ pub trait CustomerExt {
     const CUSTOMER_ASSIGNMENTS: &'static str = "customer_assignments";
     /// `customer_profile_command` 根级命令去重结果集合名。
     const CUSTOMER_PROFILE_COMMANDS: &'static str = "customer_profile_commands";
-
-    /// 客户角色列表筛选条件类型（定义见 `repository::customer`）。
-    type CustomerAccountFilter;
-    /// 客户归属列表筛选条件类型（定义见 `repository::customer`）。
-    type CustomerAssignmentFilter;
 
     /// 获取 `customer_account` 集合的 Repository。
     ///
@@ -64,9 +58,6 @@ pub trait CustomerExt {
 }
 
 impl CustomerExt for Database {
-    type CustomerAccountFilter = CustomerAccountFilter;
-    type CustomerAssignmentFilter = CustomerAssignmentFilter;
-
     fn customer_accounts(&self) -> CustomerAccountRepository<'_> {
         CustomerAccountRepository::new(self, Self::CUSTOMER_ACCOUNTS)
     }

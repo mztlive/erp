@@ -110,7 +110,8 @@ pub fn id_type(input: TokenStream) -> TokenStream {
 fn expand_id_type(name: &Ident) -> TokenStream2 {
     quote! {
         /// 主键 ID（透明字符串值对象；由调用方生成并传入，不承载业务含义）。
-        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, ::serde::Serialize, ::serde::Deserialize)]
+        #[serde(transparent, crate = "::serde")]
         pub struct #name(::std::string::String);
 
         impl #name {
@@ -152,43 +153,6 @@ fn expand_id_type(name: &Ident) -> TokenStream2 {
         impl ::std::fmt::Display for #name {
             fn fmt(&self, formatter: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 formatter.write_str(&self.0)
-            }
-        }
-
-        impl ::serde::Serialize for #name {
-            /// 将 ID 序列化为透明字符串。
-            ///
-            /// # 参数
-            /// * `serializer` - 调用方提供的序列化器。
-            ///
-            /// # 返回
-            /// 成功时返回序列化器的完成值。
-            ///
-            /// # 错误
-            /// 序列化器拒绝写入字符串时返回 `S::Error`。
-            fn serialize<S: ::serde::ser::Serializer>(
-                &self,
-                serializer: S,
-            ) -> ::std::result::Result<S::Ok, S::Error> {
-                serializer.serialize_str(&self.0)
-            }
-        }
-
-        impl<'de> ::serde::Deserialize<'de> for #name {
-            /// 从透明字符串反序列化 ID，不校验格式。
-            ///
-            /// # 参数
-            /// * `deserializer` - 调用方提供的反序列化器。
-            ///
-            /// # 返回
-            /// 成功时返回包装该字符串的 ID。
-            ///
-            /// # 错误
-            /// 输入不能按字符串读取时，经 `?` 返回 `D::Error`。
-            fn deserialize<D: ::serde::de::Deserializer<'de>>(
-                deserializer: D,
-            ) -> ::std::result::Result<Self, D::Error> {
-                Ok(Self(::std::string::String::deserialize(deserializer)?))
             }
         }
     }
@@ -233,11 +197,12 @@ mod tests {
     }
 
     #[test]
-    fn id_type_uses_single_construction() {
+    fn id_type_uses_transparent_string_and_single_construction() {
         let name: Ident = syn::parse_str("ExampleId").expect("标识符必须可解析");
         let expanded = expand_id_type(&name).to_string();
 
         assert!(expanded.contains("ExampleId"));
+        assert!(expanded.contains("serde (transparent"));
         assert!(expanded.contains("Self :: new"));
     }
 }

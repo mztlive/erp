@@ -13,13 +13,8 @@ use crate::dto::{
 use crate::entity::catalog::sku_attribute::{SkuAttribute, SkuAttributeUpdate};
 use crate::entity::catalog::sku_attribute_value::{SkuAttributeValue, SkuAttributeValueUpdate};
 use crate::error::{Error, Result};
-use crate::repository::CatalogExt;
 use crate::repository::prelude::*;
-
-/// 规格属性列表筛选条件类型。
-type SkuAttributeFilter = <mongodb::Database as CatalogExt>::SkuAttributeFilter;
-/// 规格属性值列表筛选条件类型。
-type SkuAttributeValueFilter = <mongodb::Database as CatalogExt>::SkuAttributeValueFilter;
+use crate::repository::{CatalogExt, SkuAttributeFilter, SkuAttributeValueFilter};
 
 impl CatalogService {
     // ---------- 规格属性 ----------

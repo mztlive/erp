@@ -21,7 +21,7 @@ use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
 use super::dto::{SettlementDifferenceDecisionRequest, SettlementDifferenceDecisionResult};
-use super::{SettlementWriteContext, SupplierSettlementProcess, command_audit_id, dto, ensure_same_id};
+use super::{SupplierSettlementProcess, command_audit_id, dto, ensure_same_id};
 use crate::{Error, Result};
 
 impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
@@ -126,16 +126,31 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         {
             return Ok(result);
         }
-        let (statement, difference) =
+        let (mut statement, mut difference) =
             self.domain().prepare_difference_decision(id, &req, &conclusion, actor, executor).await?;
-        let operation_id = req.operation_id.clone();
-        let input =
-            DifferenceCommit::new(self, req, actor, (statement, difference), (&audit_id, &fingerprint));
-        let (statement, difference) = input.persist(executor).await?;
+        self.data_scope
+            .require_action(actor, SettlementAction::ResolveDifference, &req.statement_id, executor)
+            .await?;
+        SupplierSettlementService::new(self.db.clone())
+            .persist_difference_decision(&mut statement, &mut difference, executor)
+            .await?;
+        persist_difference_result(
+            DifferenceWrite {
+                db: &self.db,
+                actor,
+                statement: &statement,
+                difference: &difference,
+                command_id: &audit_id,
+                fingerprint: &fingerprint,
+                request: &req,
+            },
+            executor,
+        )
+        .await?;
         Ok(SettlementDifferenceDecisionResult {
             result_status: dto::SettlementDifferenceDecisionStatus::Resolved,
             message: "结算差异正式结论已登记".to_string(),
-            operation_id,
+            operation_id: req.operation_id,
             statement_id: statement.base.id,
             statement_lock_version: statement.base.version,
             difference: settlement_difference_view(difference),
@@ -222,68 +237,6 @@ fn ensure_difference_statement(receipt: &DifferenceDecisionReceipt, statement_id
         return Err(Error::ConflictError("差异决定幂等收据与当前结算单不一致".into()));
     }
     Ok(())
-}
-
-struct DifferenceCommit {
-    context: SettlementWriteContext,
-    request: SettlementDifferenceDecisionRequest,
-    statement: SupplierSettlementStatement,
-    difference: SupplierSettlementDifference,
-    command_id: String,
-    fingerprint: String,
-}
-
-impl DifferenceCommit {
-    fn new<A: WorkflowAuthorizationPort>(
-        process: &SupplierSettlementProcess<A>,
-        request: SettlementDifferenceDecisionRequest,
-        actor: &AuditActor,
-        prepared: (SupplierSettlementStatement, SupplierSettlementDifference),
-        identity: (&str, &str),
-    ) -> Self {
-        Self {
-            context: process.write_context(actor),
-            request,
-            statement: prepared.0,
-            difference: prepared.1,
-            command_id: identity.0.to_string(),
-            fingerprint: identity.1.to_string(),
-        }
-    }
-
-    /// 在入口执行器上重验范围后保存结算主题、差异、回执和审计。
-    async fn persist(
-        mut self,
-        executor: &mut dyn Executor,
-    ) -> Result<(SupplierSettlementStatement, SupplierSettlementDifference)> {
-        let context = self.context;
-        context
-            .data_scope
-            .require_action(
-                &context.actor,
-                SettlementAction::ResolveDifference,
-                &self.request.statement_id,
-                executor,
-            )
-            .await?;
-        SupplierSettlementService::new(context.db.clone())
-            .persist_difference_decision(&mut self.statement, &mut self.difference, executor)
-            .await?;
-        persist_difference_result(
-            DifferenceWrite {
-                db: &context.db,
-                actor: &context.actor,
-                statement: &self.statement,
-                difference: &self.difference,
-                command_id: &self.command_id,
-                fingerprint: &self.fingerprint,
-                request: &self.request,
-            },
-            executor,
-        )
-        .await?;
-        Ok((self.statement, self.difference))
-    }
 }
 
 /// 差异收据只恢复同一已解决差异和同一结算归属。

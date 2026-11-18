@@ -157,8 +157,7 @@ impl BulkSelectionSnapshotRepositoryExt for persistence_core::Repository<'_, Bul
             .limit(filter.limit())
             .projection(snapshot_projection())
             .build();
-        let collection = self.collection().clone_with_type::<BulkSelectionSnapshotRow>();
-        search_projected_page(&self.collection(), &collection, filter, options, executor).await
+        search_projected_page(&self.collection(), filter, options, executor).await
     }
 }
 

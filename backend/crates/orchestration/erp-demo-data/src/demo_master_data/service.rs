@@ -4,14 +4,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use erp_catalog::CatalogService;
 use erp_identity::{
     AccessControlExt, AccessTarget, AccountCoreRepositoryExt, AuthorizationService, SharedRbacService,
 };
-use erp_master_data::{CustomerProfileProcess, SupplierProfileProcess};
 use erp_party::PartyStatus;
 use erp_permissions::demo_master_data;
-use erp_warehouse::WarehouseService;
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use persistence_core::{Executor, ReadExecutor, Transactional};
 use storage::S3Storage;
@@ -276,62 +273,6 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let login = super::spec::foundation_spec().warehouse_handler_account.as_str();
         let account = self.db.accounts().find_by_account(login, &mut ReadExecutor::default()).await?;
         Ok(account.map(|account| account.base.id))
-    }
-
-    /// 装配带权限策略的商品服务。
-    ///
-    /// # 参数
-    /// 无；复用当前数据库与权限服务。
-    ///
-    /// # 返回
-    /// 返回商品领域服务。
-    ///
-    /// # 错误
-    /// 无。
-    pub(super) fn catalog(&self) -> CatalogService {
-        self.ports.catalog.clone()
-    }
-
-    /// 装配带权限策略的仓库服务。
-    ///
-    /// # 参数
-    /// 无；复用当前数据库与权限服务。
-    ///
-    /// # 返回
-    /// 返回仓库领域服务。
-    ///
-    /// # 错误
-    /// 无。
-    pub(super) fn warehouses(&self) -> &WarehouseService {
-        &self.ports.warehouse
-    }
-
-    /// 装配客户资料写入流程。
-    ///
-    /// # 参数
-    /// 无；复用当前数据库、密文编解码器与权限服务。
-    ///
-    /// # 返回
-    /// 返回客户资料流程。
-    ///
-    /// # 错误
-    /// 无。
-    pub(super) fn customers(&self) -> &CustomerProfileProcess {
-        &self.ports.customers
-    }
-
-    /// 装配供应商资料写入流程。
-    ///
-    /// # 参数
-    /// 无；复用当前数据库、密文编解码器与权限服务。
-    ///
-    /// # 返回
-    /// 返回供应商资料流程。
-    ///
-    /// # 错误
-    /// 无。
-    pub(super) fn suppliers(&self) -> &SupplierProfileProcess {
-        &self.ports.suppliers
     }
 }
 

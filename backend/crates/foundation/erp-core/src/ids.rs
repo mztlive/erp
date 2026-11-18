@@ -422,6 +422,15 @@ mod tests {
         assert_eq!(back, id);
     }
 
+    #[test]
+    fn ids_use_the_same_string_representation_in_bson() {
+        let id = SalesOrderId::new("not-validated");
+        let serialized = bson::serialize_to_bson(&id).unwrap();
+        assert_eq!(serialized, bson::Bson::String("not-validated".to_string()));
+        assert_eq!(bson::deserialize_from_bson::<SalesOrderId>(serialized).unwrap(), id);
+        assert!(bson::deserialize_from_bson::<SalesOrderId>(bson::Bson::Int64(17)).is_err());
+    }
+
     /// 代表性 ID 集（跨域引用面）的构造、Deref、Display 与比较。
     #[test]
     fn representative_ids_construct_display_compare() {

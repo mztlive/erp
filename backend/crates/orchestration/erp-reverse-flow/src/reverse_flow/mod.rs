@@ -57,22 +57,6 @@ impl ReturnsProcess {
     pub fn new(db: Database, rbac: ReverseFlowPorts) -> Self {
         Self { db, rbac }
     }
-    /// 注入组合根持有的共享 RBAC，保持所有命令使用同一授权提供方。
-    ///
-    /// 消耗 `self`。
-    ///
-    /// # 参数
-    /// * `rbac` - 组合根持有的共享 RBAC。
-    ///
-    /// # 返回
-    /// 返回换入该 RBAC 后的命令入口。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn with_rbac(mut self, rbac: ReverseFlowPorts) -> Self {
-        self.rbac = rbac;
-        self
-    }
     /// 用当前数据库构造退货退款领域服务。
     ///
     /// # 参数
@@ -112,28 +96,13 @@ pub async fn finalize_approved_return(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let actor_id = actor.id();
     match document_type {
         DocumentType::CustomerRefund => {
-            customer_refund::apply_customer_refund_final_post(
-                db,
-                business_object_id,
-                actor_id,
-                actor,
-                executor,
-            )
-            .await
+            customer_refund::apply_customer_refund_final_post(db, business_object_id, actor, executor).await
         },
         DocumentType::SupplierRefund => {
-            supplier_refund::apply_supplier_refund_final_post(
-                db,
-                rbac,
-                business_object_id,
-                actor_id,
-                actor,
-                executor,
-            )
-            .await
+            supplier_refund::apply_supplier_refund_final_post(db, rbac, business_object_id, actor, executor)
+                .await
         },
         other => Err(Error::BusinessLogicError(format!("单据类型 {} 不属于退款冲正最终动作", other.label()))),
     }

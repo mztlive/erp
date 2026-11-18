@@ -7,9 +7,7 @@
 
 use mongodb::Database;
 
-use super::integration_ops::{
-    InboxMessageFilter, IntegrationErrorTaskFilter, IntegrationOpsRepository, ReconciliationDifferenceFilter,
-};
+use super::integration_ops::IntegrationOpsRepository;
 use crate::repository::owned::{
     InboxMessageRepository, IntegrationErrorTaskRepository, ReconciliationDifferenceRepository,
     ReconciliationDifferenceResolutionRepository,
@@ -25,15 +23,6 @@ pub trait IntegrationOpsExt {
     const RECONCILIATION_DIFFERENCES: &'static str = "reconciliation_differences";
     /// `reconciliation_difference_resolution` 集合名。
     const RECONCILIATION_DIFFERENCE_RESOLUTIONS: &'static str = "reconciliation_difference_resolutions";
-
-    /// 入站消息列表筛选条件类型（定义见 `repository::integration_ops`）。
-    type InboxMessageFilter;
-
-    /// 错误任务列表筛选条件类型（定义见 `repository::integration_ops`）。
-    type IntegrationErrorTaskFilter;
-
-    /// 对账差异列表筛选条件类型（定义见 `repository::integration_ops`）。
-    type ReconciliationDifferenceFilter;
 
     /// 获取 `inbox_message` 集合的 Repository。
     ///
@@ -97,10 +86,6 @@ pub trait IntegrationOpsExt {
 }
 
 impl IntegrationOpsExt for Database {
-    type InboxMessageFilter = InboxMessageFilter;
-    type IntegrationErrorTaskFilter = IntegrationErrorTaskFilter;
-    type ReconciliationDifferenceFilter = ReconciliationDifferenceFilter;
-
     fn inbox_messages(&self) -> InboxMessageRepository<'_> {
         InboxMessageRepository::new(self, Self::INBOX_MESSAGES)
     }

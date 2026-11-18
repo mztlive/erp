@@ -102,8 +102,8 @@ async fn post_adjustment_line(
     db.stock_movements().create(&movement, executor).await?;
 
     let balance = db
-        .inventory()
-        .balance_for_dimensions(&adjustment.warehouse_id, &line.sku_id, executor)
+        .stock_balances()
+        .find_by_dimensions(&adjustment.warehouse_id, &line.sku_id, executor)
         .await?
         .ok_or_else(|| {
             Error::BusinessLogicError(format!(

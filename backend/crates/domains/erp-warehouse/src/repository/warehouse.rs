@@ -516,26 +516,7 @@ impl<'a> WarehouseDomainRepository<'a> {
     /// # 错误
     /// MongoDB 查询失败时返回错误。
     pub async fn warehouse(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<Warehouse>> {
-        active_entity_by_id(self.db, WAREHOUSES, id, executor).await
-    }
-
-    /// 按主键读取未删除仓库-SKU 策略。
-    ///
-    /// # 参数
-    /// * `id` - 策略主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配策略；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    pub async fn sku_policy(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<WarehouseSkuPolicy>> {
-        active_entity_by_id(self.db, WAREHOUSE_SKU_POLICIES, id, executor).await
+        self.db.warehouses().find_by_id(id, executor).await
     }
 
     /// 计算仓库下一个修订序号。
@@ -630,36 +611,6 @@ impl<'a> WarehouseDomainRepository<'a> {
         .await?;
         Ok(())
     }
-}
-
-/// 按主键读取未删除实体。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `collection_name` - 集合名
-/// * `id` - 实体主键
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 返回匹配实体；不存在时返回 `None`。
-///
-/// # 错误
-/// MongoDB 查询失败时返回错误。
-async fn active_entity_by_id<T>(
-    db: &Database,
-    collection_name: &str,
-    id: &str,
-    executor: &mut dyn Executor,
-) -> Result<Option<T>>
-where
-    T: for<'de> Deserialize<'de> + Serialize + Send + Sync,
-{
-    mongo_ops::find_one(
-        &db.collection::<T>(collection_name),
-        doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
-        executor,
-    )
-    .await
 }
 
 /// 关键词查询单次允许装入 `$in` 的修订 ID 上限（约束单次读取规模）。

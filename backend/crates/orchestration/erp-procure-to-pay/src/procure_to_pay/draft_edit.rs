@@ -240,7 +240,14 @@ async fn replace_current_draft(
     let replacement =
         build_draft_replacement(order, &old_draft, &old_lines, &requested_lines, payment_subject)?;
     validate_submission_delivery(db, order, &replacement.lines, &old_lines, executor).await?;
-    super::inquiry_supply::resize_draft_quotes(db, order, &replacement.lines, executor).await?;
+    super::inquiry_supply::resize_quotes(
+        db,
+        order,
+        &replacement.lines,
+        super::inquiry_supply::QuoteResize::Replace,
+        executor,
+    )
+    .await?;
     order.update(Default::default(), command.actor.id(), super::adapters::payment_term::parse)?;
     old_draft.mark_superseded()?;
     order.current_submission_id = Some(replacement.submission.base.id.clone());

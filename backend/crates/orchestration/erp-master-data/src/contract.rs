@@ -13,20 +13,6 @@ use validator::Validate;
 
 use crate::Result;
 
-/// 返回合同流程模块名。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回稳定模块名 `contract`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn process_name() -> &'static str {
-    "contract"
-}
-
 /// 登记合同 PDF，并在同一事务中写入合同身份、首个修订和成功审计。
 ///
 /// 对象存储已由 HTTP 适配器写完。本流程持有根事务：文件资产元数据、合同与修订、
@@ -56,7 +42,7 @@ pub async fn upload_contract(
     let file_name = asset_req.file_name.clone();
     let asset = FileAsset::new(FileAssetId::new(next_id()), asset_req.into_data(actor.id())?)?;
     let file_asset_id = FileAssetId::new(asset.base.id.clone());
-    let planned = service.plan_upload(req, file_asset_id, actor.id()).await?;
+    let planned = service.plan_upload(req, file_asset_id, actor.id())?;
     let (asset_audit, contract_audit) =
         upload_audits(&actor, &asset.base.id, &planned.contract.base.id, &planned.contract.contract_no)?;
 

@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesOrderId, WorkItemId};
 use erp_identity::AuthorizationService;
@@ -39,7 +40,7 @@ pub(super) struct ProcurementFormalizationPlan {
 }
 
 /// 销售形式化事务需要一次性消费的完整写入上下文。
-pub struct FormalizedSubmissionWrite {
+pub(super) struct FormalizedSubmissionWrite {
     pub(super) finance_responsibility: Arc<dyn FinanceResponsibilityPort>,
     pub(super) db: Database,
     pub(super) authorization: Arc<AuthorizationService>,
@@ -53,6 +54,32 @@ pub struct FormalizedSubmissionWrite {
 }
 
 impl SalesOrderCommandProcess {
+    /// 在审批运行时持有的事务内形式化最终通过的销售单。
+    ///
+    /// # 参数
+    /// * `id` - 销售单主键
+    /// * `actor` - 已认证操作人
+    /// * `executor` - 审批运行时持有的执行器
+    ///
+    /// # 返回
+    /// 正式版本、应收、供给任务和成功审计全部写入时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 单据状态、提交、采购责任或持久化不变量失败时返回错误。
+    pub async fn formalize_approved_submission_apply(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if let Some(write) = self.prepare_approved_submission(id, actor, executor).await? {
+            let audit =
+                actor.clone().resource_log("sales_order.formalize", "sales_order", write.order_id.clone())?;
+            super::formalization_posting::post(write, &audit, executor).await?;
+        }
+        Ok(())
+    }
+
     /// 准备最终通过的销售事实；重复形式化返回 `None`，由外层流程复用原回执。
     ///
     /// # 参数
@@ -65,7 +92,7 @@ impl SalesOrderCommandProcess {
     ///
     /// # 错误
     /// 销售单不存在、状态或提交不满足、采购责任授权失败或仓储失败时返回错误。
-    pub async fn prepare_approved_submission(
+    async fn prepare_approved_submission(
         &self,
         id: &str,
         actor: &AuditActor,
@@ -265,22 +292,6 @@ pub(super) async fn persist_procurement_work_items(
         }
     }
     Ok(())
-}
-
-impl FormalizedSubmissionWrite {
-    /// 待形式化销售单标识，供组合层在入事务前创建原审计记录。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回待形式化销售单标识。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn order_id(&self) -> &str {
-        &self.order_id
-    }
 }
 
 /// 验证销售形式化事务的状态、仓储与供给任务合同。

@@ -20,8 +20,9 @@ use erp_supply::service::supplier_fulfillment::FulfillmentOrderAccess;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
+use self::persistence::CancellationWrite;
 use super::{SupplierApiOrderProcess, missing_capability};
-use crate::supplier_after_sales::action_result::{ActionResult, MongoActionResultRead, read_result};
+use crate::supplier_after_sales::action_result::{ActionResult, read_action_result};
 use crate::{Error, Result};
 
 impl SupplierApiOrderProcess {
@@ -66,7 +67,7 @@ impl SupplierApiOrderProcess {
             self.cancellation_connector(&execution).await?;
             self.persist_cancel_intent(execution, &canonical, actor, access).await?;
         }
-        self.cancellation_view(id, actor, access).await.map(Some)
+        read_action_result(&self.db, access, actor, id, ActionResult::Cancellation).await.map(Some)
     }
 
     /// 调度一组原取消动作，每次至多发送一个尚未发送的叶子。
@@ -79,7 +80,7 @@ impl SupplierApiOrderProcess {
     pub(super) async fn process_cancellations(&self, mut execution: ApiOrderExecution) -> Result<()> {
         if let Err(error) = self.refresh_cancellation_tree(&mut execution).await {
             execution.defer(error.to_string());
-            return self.persist_cancellation_state(&mut execution).await;
+            return self.persist_cancellation(&mut execution, CancellationWrite::Progress).await;
         }
         let next = execution
             .cancellation_actions
@@ -89,13 +90,13 @@ impl SupplierApiOrderProcess {
         let Some(target) = next else {
             execution.refresh_cancellation_stage();
             execution.next_run_at = Instant::from_unix_secs(Instant::now().unix_secs().saturating_add(60));
-            return self.persist_cancellation_state(&mut execution).await;
+            return self.persist_cancellation(&mut execution, CancellationWrite::Progress).await;
         };
         let connector = match self.cancellation_connector(&execution).await {
             Ok(connector) => connector,
             Err(error) => {
                 execution.defer(error.to_string());
-                return self.persist_cancellation_state(&mut execution).await;
+                return self.persist_cancellation(&mut execution, CancellationWrite::Progress).await;
             },
         };
         dispatch::send_once(
@@ -187,25 +188,5 @@ impl SupplierApiOrderProcess {
             ));
         }
         Ok(())
-    }
-
-    /// 首次登记与幂等回放都以当前取消资格在新快照中读取完整结果。
-    async fn cancellation_view(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-        access: &FulfillmentOrderAccess,
-    ) -> Result<SubmitActionResultView> {
-        let port = MongoActionResultRead { db: self.db.clone(), access: access.clone() };
-        let id = id.to_owned();
-        let actor = actor.clone();
-        self.db
-            .client()
-            .with_transaction(move |executor| {
-                Box::pin(async move {
-                    read_result(&port, &actor, &id, &ActionResult::Cancellation, executor).await
-                })
-            })
-            .await
     }
 }

@@ -20,8 +20,15 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::CustomerProfileProcess;
-use super::numbering::business_no;
 use crate::{Error, Result};
+
+fn party_address_type(address_type: erp_customer::AddressType) -> erp_party::AddressType {
+    match address_type {
+        erp_customer::AddressType::Registered => erp_party::AddressType::Registered,
+        erp_customer::AddressType::Operating => erp_party::AddressType::Operating,
+        erp_customer::AddressType::Fulfillment => erp_party::AddressType::Fulfillment,
+    }
+}
 
 impl CustomerProfileProcess {
     /// 构造创建场景的全部从属事实并完成敏感值加密。未提交的集合按空处理。
@@ -148,7 +155,7 @@ impl CustomerProfileProcess {
             PartyAddressId::new(next_id()),
             PartyAddressData {
                 party_id: party_id.clone(),
-                address_type: super::views::party_address_type(input.address_type),
+                address_type: party_address_type(input.address_type),
                 contact_name: input.contact_name.clone(),
                 address: address.clone(),
                 valid_from,
@@ -175,7 +182,7 @@ impl CustomerProfileProcess {
         let mut entity = PartyBankAccount::new(
             PartyBankAccountId::new(next_id()),
             PartyBankAccountData {
-                bank_account_no: business_no("BA"),
+                bank_account_no: format!("BA-{}", next_id()),
                 party_id: party_id.clone(),
                 account_name: input.account_name.clone(),
                 bank_name: input.bank_name.clone(),
@@ -290,7 +297,7 @@ impl CustomerProfileProcess {
     /// 返回不含密钥与明文的比较值对象。
     fn address_content_match(&self, input: &CustomerProfileAddressInput) -> PartyAddressContentMatch {
         PartyAddressContentMatch::new(
-            super::views::party_address_type(input.address_type),
+            party_address_type(input.address_type),
             input.contact_name.clone(),
             self.address_reuse(input.address.as_deref()),
         )

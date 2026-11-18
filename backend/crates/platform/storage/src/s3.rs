@@ -318,7 +318,12 @@ impl S3Storage {
     /// 对象不存在时返回 `Error::NotFound`。路径无效时返回 `Error::PathError`；
     /// `GetObject` 或响应体读取失败时返回 `Error::S3`。
     pub async fn read<P: AsRef<Path>>(&self, path: P) -> Result<Vec<u8>> {
-        let stream = self.read_stream(path).await?;
+        let key = self.object_key(path.as_ref())?;
+        self.read_key(key).await
+    }
+
+    async fn read_key(&self, key: String) -> Result<Vec<u8>> {
+        let stream = self.read_key_stream(key).await?;
         let started = Instant::now();
         let body = stream.collect().await.map_err(s3_error);
         record_operation("get_object_body", started, body.is_ok());
@@ -355,7 +360,7 @@ impl S3Storage {
             tracing::info!(operation = "immutable_content", cache_hit = true, "storage content read");
             return Ok(bytes);
         }
-        let bytes = self.read(path).await?;
+        let bytes = self.read_key(key.clone()).await?;
         // 缓存锁中毒不改变原对象读取的成功结果。
         if let Ok(mut cache) = self.content_cache.lock() {
             cache.insert_if_current(generation, key, fingerprint.to_string(), &bytes, Instant::now());
@@ -376,6 +381,10 @@ impl S3Storage {
     /// 对象不存在时返回 `Error::NotFound`。路径无效时返回 `Error::PathError`；`GetObject` 失败时返回 `Error::S3`。
     pub async fn read_stream<P: AsRef<Path>>(&self, path: P) -> Result<ByteStream> {
         let key = self.object_key(path.as_ref())?;
+        self.read_key_stream(key).await
+    }
+
+    async fn read_key_stream(&self, key: String) -> Result<ByteStream> {
         let started = Instant::now();
         let response = self
             .client

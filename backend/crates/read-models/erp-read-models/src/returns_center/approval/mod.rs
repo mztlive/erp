@@ -15,15 +15,6 @@ use super::dto::{
 /// 详情最近审批历史条数上限。完整历史走分页端点。
 pub const RECENT_HISTORY_LIMIT: usize = 8;
 
-/// 由冻结绑定投影定义摘要。节点详情不在单据详情展开。
-fn definition_view_from_binding(binding: &ApprovalDefinitionBinding) -> DocumentApprovalDefinitionView {
-    DocumentApprovalDefinitionView::new(
-        binding.approval_process_definition_id.as_ref().to_string(),
-        String::new(),
-    )
-    .with_version(binding.approval_definition_version)
-}
-
 /// 逆向资金单据只读审批：requirement 固定，动作只由草稿/审批中决定。
 fn process_required_view(
     binding: Option<&ApprovalDefinitionBinding>,
@@ -33,7 +24,7 @@ fn process_required_view(
 ) -> DocumentApprovalView {
     DocumentApprovalView {
         requirement: "PROCESS_REQUIRED".to_string(),
-        definition: binding.map(definition_view_from_binding),
+        definition: binding.map(DocumentApprovalDefinitionView::from),
         instance,
         recent_history: Vec::new(),
         history_page: DocumentApprovalHistoryPageView::default(),

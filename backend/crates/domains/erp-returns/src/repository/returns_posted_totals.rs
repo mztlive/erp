@@ -19,110 +19,50 @@ struct PostedAmountTotalRow {
     total: Amount,
 }
 
-/// 在调用方执行器上运行单值金额聚合管道。
-///
-/// # 参数
-/// * `collection` - 目标集合句柄
-/// * `pipeline` - `$match` + `$group` + `$project` 管道
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 无匹配时返回精确零，否则返回聚合合计。
-///
-/// # 错误
-/// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
-///
-/// # 关键业务约束
-/// 事务视图与写入共享同一执行器；失败时不得产生部分提交。
 async fn posted_total<T>(
     collection: &mongodb::Collection<T>,
-    pipeline: Vec<Document>,
+    filter: Document,
     executor: &mut dyn Executor,
 ) -> Result<Amount>
 where
     T: Send + Sync,
 {
-    let rows =
-        aggregate::rows(&collection.clone_with_type::<PostedAmountTotalRow>(), pipeline, executor).await?;
-
+    let rows = aggregate::rows(
+        &collection.clone_with_type::<PostedAmountTotalRow>(),
+        posted_total_pipeline(filter),
+        executor,
+    )
+    .await?;
     Ok(rows.into_iter().next().map_or_else(Amount::zero, |row| row.total))
 }
 
-/// 构造已过账金额聚合管道。
-///
-/// # 参数
-/// * `original_field` - 原单外键字段名
-/// * `original_id` - 原单 ID 字符串
-/// * `exclude_id` - 本次过账单据 ID，聚合中排除
-///
-/// # 返回
-/// 返回 `$match` + `$group` + `$project` 三段管道。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// `$match` 只统计 `posted`，限定原单等值、排除当前单并排除软删除；
-/// 前缀命中既有原单追溯索引，不得新增索引或迁移。
-fn posted_total_pipeline(original_field: &str, original_id: &str, exclude_id: &str) -> Vec<Document> {
+fn posted_total_pipeline(filter: Document) -> Vec<Document> {
     vec![
-        doc! {
-            "$match": {
-                original_field: original_id,
-                "status": "posted",
-                "id": { "$ne": exclude_id },
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            }
-        },
-        doc! {
-            "$group": {
-                "_id": mongodb::bson::Bson::Null,
-                "total": { "$sum": "$amount" },
-            }
-        },
+        doc! { "$match": filter },
+        doc! { "$group": { "_id": null, "total": { "$sum": "$amount" } } },
         doc! { "$project": { "_id": 0 } },
     ]
 }
 
-/// 以原单字段名为参数的单一已过账聚合入口（四单据共用）。
-///
-/// 四公开聚合（退款按回款/付款、冲正按回款/付款）除集合句柄与原单字段名外
-/// 完全相同，统一经本入口组装管道并求和；各公开名保留作薄转发，文档只写一份。
-///
-/// # 参数
-/// * `collection` - 目标集合句柄
-/// * `original_field` - 原单外键字段名
-/// * `original_id` - 原单 ID 字符串
-/// * `exclude_id` - 本次过账单据 ID，聚合中排除
-/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-///
-/// # 返回
-/// 返回已过账合计；无匹配时返回精确零。
-///
-/// # 错误
-/// MongoDB 聚合、游标读取或 Decimal128 反序列化失败时返回错误。
-///
-/// # 关键业务约束
-/// 只统计 `posted`，草稿、审批中与已冲正不占额度；使用 Decimal128 `$sum`；
-/// 命中既有原单追溯索引前缀，无新增索引与迁移。
-async fn posted_total_by_original<T>(
-    collection: &mongodb::Collection<T>,
-    original_field: &str,
-    original_id: &str,
-    exclude_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<Amount>
-where
-    T: Send + Sync,
-{
-    let pipeline = posted_total_pipeline(original_field, original_id, exclude_id);
-    posted_total(collection, pipeline, executor).await
+fn posted_total_filter(original_field: &str, original_id: &str, exclude_id: &str) -> Document {
+    doc! {
+        original_field: original_id,
+        "status": "posted",
+        "id": { "$ne": exclude_id },
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+fn supplier_refund_total_filter(payment_id: &str, exclude_id: &str) -> Document {
+    let mut filter = posted_total_filter("original_payment_id", payment_id, exclude_id);
+    filter.insert("settlement_method", doc! { "$ne": "SUPPLIER_CREDIT" });
+    filter
 }
 
 /// 客户退款已过账累计聚合。
 #[allow(async_fn_in_trait)]
 pub trait CustomerRefundPostedTotalsExt {
-    /// 按原回款聚合已过账客户退款合计（经共享入口，约束见该处）。
+    /// 按原回款聚合已过账客户退款合计。
     ///
     /// # 参数
     /// * `receipt_id` - 原客户回款
@@ -149,11 +89,9 @@ impl CustomerRefundPostedTotalsExt for persistence_core::Repository<'_, Customer
         exclude_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Amount> {
-        posted_total_by_original(
+        posted_total(
             &self.collection(),
-            "original_receipt_id",
-            receipt_id.as_ref(),
-            exclude_id,
+            posted_total_filter("original_receipt_id", receipt_id.as_ref(), exclude_id),
             executor,
         )
         .await
@@ -163,7 +101,7 @@ impl CustomerRefundPostedTotalsExt for persistence_core::Repository<'_, Customer
 /// 供应商退款已过账累计聚合。
 #[allow(async_fn_in_trait)]
 pub trait SupplierRefundPostedTotalsExt {
-    /// 按原付款聚合已过账供应商退款合计（经共享入口，约束见该处）。
+    /// 按原付款聚合已过账供应商退款合计。
     ///
     /// # 参数
     /// * `payment_id` - 原供应商付款
@@ -190,17 +128,19 @@ impl SupplierRefundPostedTotalsExt for persistence_core::Repository<'_, Supplier
         exclude_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Amount> {
-        posted_total(&self.collection(), vec![
-            doc! {"$match": {"original_payment_id": payment_id.as_ref(), "status": "posted", "id": {"$ne": exclude_id}, "settlement_method": {"$ne": "SUPPLIER_CREDIT"}, "deleted_at": NOT_DELETED_TIMESTAMP_BSON}},
-            doc! {"$group": {"_id": null, "total": {"$sum": "$amount"}}},
-        ], executor).await
+        posted_total(
+            &self.collection(),
+            supplier_refund_total_filter(payment_id.as_ref(), exclude_id),
+            executor,
+        )
+        .await
     }
 }
 
 /// 回款冲正已过账累计聚合。
 #[allow(async_fn_in_trait)]
 pub trait ReceiptReversalPostedTotalsExt {
-    /// 按原回款聚合已过账回款冲正合计（经共享入口，约束见该处）。
+    /// 按原回款聚合已过账回款冲正合计。
     ///
     /// # 参数
     /// * `receipt_id` - 原客户回款
@@ -227,11 +167,9 @@ impl ReceiptReversalPostedTotalsExt for persistence_core::Repository<'_, Receipt
         exclude_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Amount> {
-        posted_total_by_original(
+        posted_total(
             &self.collection(),
-            "original_customer_receipt_id",
-            receipt_id.as_ref(),
-            exclude_id,
+            posted_total_filter("original_customer_receipt_id", receipt_id.as_ref(), exclude_id),
             executor,
         )
         .await
@@ -241,7 +179,7 @@ impl ReceiptReversalPostedTotalsExt for persistence_core::Repository<'_, Receipt
 /// 付款冲正已过账累计聚合。
 #[allow(async_fn_in_trait)]
 pub trait PaymentReversalPostedTotalsExt {
-    /// 按原付款聚合已过账付款冲正合计（经共享入口，约束见该处）。
+    /// 按原付款聚合已过账付款冲正合计。
     ///
     /// # 参数
     /// * `payment_id` - 原供应商付款
@@ -268,11 +206,9 @@ impl PaymentReversalPostedTotalsExt for persistence_core::Repository<'_, Payment
         exclude_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Amount> {
-        posted_total_by_original(
+        posted_total(
             &self.collection(),
-            "original_supplier_payment_id",
-            payment_id.as_ref(),
-            exclude_id,
+            posted_total_filter("original_supplier_payment_id", payment_id.as_ref(), exclude_id),
             executor,
         )
         .await
@@ -281,12 +217,13 @@ impl PaymentReversalPostedTotalsExt for persistence_core::Repository<'_, Payment
 
 #[cfg(test)]
 mod tests {
-    use super::posted_total_pipeline;
+    use super::{posted_total_filter, posted_total_pipeline, supplier_refund_total_filter};
 
     /// 管道限定原单、已过账、排除当前单与未删除。
     #[test]
     fn pipeline_matches_original_and_posted_only() {
-        let pipeline = posted_total_pipeline("original_receipt_id", "rcpt-1", "refund-9");
+        let pipeline =
+            posted_total_pipeline(posted_total_filter("original_receipt_id", "rcpt-1", "refund-9"));
         let matched = pipeline[0].get_document("$match").expect("过滤阶段");
 
         assert_eq!(matched.get_str("original_receipt_id").unwrap(), "rcpt-1");
@@ -299,7 +236,6 @@ mod tests {
         assert_eq!(group.get_document("total").unwrap().get_str("$sum").unwrap(), "$amount");
     }
 
-    /// 四类原单字段名不同但管道形态一致。
     #[test]
     fn pipeline_covers_all_original_fields() {
         for field in [
@@ -308,12 +244,25 @@ mod tests {
             "original_customer_receipt_id",
             "original_supplier_payment_id",
         ] {
-            let pipeline = posted_total_pipeline(field, "orig-1", "cur-1");
-            let matched = pipeline[0].get_document("$match").expect("过滤阶段");
+            let matched = posted_total_filter(field, "orig-1", "cur-1");
 
             assert_eq!(matched.get_str(field).unwrap(), "orig-1");
             assert_eq!(matched.get_str("status").unwrap(), "posted");
         }
+    }
+
+    #[test]
+    fn supplier_refunds_exclude_supplier_credit_from_the_posted_cash_total() {
+        let filter = supplier_refund_total_filter("payment-1", "refund-1");
+        assert_eq!(filter.get_str("original_payment_id").unwrap(), "payment-1");
+        assert_eq!(
+            filter.get_document("settlement_method").unwrap().get_str("$ne").unwrap(),
+            "SUPPLIER_CREDIT"
+        );
+        assert!(
+            !posted_total_filter("original_receipt_id", "receipt-1", "refund-1")
+                .contains_key("settlement_method")
+        );
     }
 
     /// MongoDB $sum 结果必须按 Decimal128 反序列化，不经过浮点或整数金额。

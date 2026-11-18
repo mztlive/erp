@@ -271,10 +271,7 @@ pub(super) async fn load_cancel_runtime(
         .ok_or_else(|| Error::ConflictError("没有可撤回的审批实例".to_string()))?;
     let current = db
         .bpm_workflow()
-        .current_execution_for_cancellation(
-            &ApprovalProcessInstanceId::new(instance.base.id.clone()),
-            executor,
-        )
+        .find_current_execution(&ApprovalProcessInstanceId::new(instance.base.id.clone()), executor)
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例缺少当前执行".to_string()))?;
     let open_tasks = db

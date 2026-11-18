@@ -9,9 +9,7 @@ use crate::Result;
 use crate::dto::supplier_fulfillment::SortDir;
 use crate::repository::SupplierSettlementExt;
 use crate::repository::prelude::*;
-
-/// 结算明细列表筛选条件类型。
-type ItemFilter = <mongodb::Database as SupplierSettlementExt>::SupplierSettlementItemFilter;
+use crate::repository::supplier_settlement::SupplierSettlementItemFilter;
 
 impl SupplierSettlementService {
     /// 分页查询供应商结算明细列表。
@@ -52,7 +50,7 @@ impl SupplierSettlementService {
         self.access().require_operation(actor, &supplier_settlement::ITEM_LIST, executor).await?;
         params.validate()?;
         let query = params.normalized()?;
-        let filter = ItemFilter {
+        let filter = SupplierSettlementItemFilter {
             statement_id: query.statement_id,
             page: query.paging.page,
             page_size: query.paging.page_size,

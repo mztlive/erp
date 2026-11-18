@@ -292,7 +292,6 @@ async fn ensure_current_owner_execution_access(
         .require_object(&actor, &sales_order_permissions::DETAIL, &task.business_object_id, executor)
         .await?;
     super::super::task_access::require_assignee(
-        db,
         &rbac,
         &actor,
         task,

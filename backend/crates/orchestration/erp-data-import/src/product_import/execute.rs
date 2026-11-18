@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
+use background_runtime::{BackgroundTaskAdapter, TaskResult};
 use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_core::ids::BackgroundJobId;
@@ -23,37 +24,20 @@ use super::row_manifest::{
     ROW_MANIFEST_INPUT_FORMAT, RowManifest, RowManifestRow, decode_row_manifest, read_row_manifest,
     row_entries_by_number, row_media_from_entry,
 };
-use crate::background::import_budget::{IMPORT_JOBS_PER_POLL, import_budget};
+use crate::background::import_budget::import_budget;
 use crate::{Error, Result};
 
 mod rows;
 use rows::{ImportRowExecution, execute_rows};
 
-impl ProductImportProcess {
-    /// 每轮至多处理四个商品导入任务，每任务至多十行或一秒软时限。
-    ///
-    /// 仅由统一后台执行器调用；前台提交只投递任务，不直接执行。
-    /// 并发认领冲突视为已被其他执行器接管，记 info 后跳过，不记为任务失败。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回本轮认领的任务数。
-    ///
-    /// # 错误
-    /// 查询失败时返回错误；单个任务失败记日志后继续。
-    pub async fn run_due_jobs(&self) -> Result<usize> {
-        let jobs = self
-            .db
-            .background_jobs()
-            .list_open_by_domain_job_type(
-                PRODUCT_IMPORT_DOMAIN_JOB_TYPE,
-                IMPORT_JOBS_PER_POLL,
-                &mut ReadExecutor::default(),
-            )
-            .await?;
-        self.sources.retain_jobs(&jobs).await;
+#[async_trait]
+impl BackgroundTaskAdapter for ProductImportProcess {
+    fn name(&self) -> &'static str {
+        "product_import"
+    }
+
+    async fn run_due(&self) -> TaskResult<usize> {
+        let jobs = self.sources.poll_jobs(&self.db, PRODUCT_IMPORT_DOMAIN_JOB_TYPE).await?;
         let count = jobs.len();
         for job in jobs {
             if let Err(error) = self.execute_job(&job.base.id).await {
@@ -66,7 +50,9 @@ impl ProductImportProcess {
         }
         Ok(count)
     }
+}
 
+impl ProductImportProcess {
     /// 执行单个导入任务的一个切片，剩余行留待后续轮询。
     ///
     /// 认领阶段通过乐观锁保证单执行器推进；`Pending` 转 `Running` 冲突时返回 `Ok` 表示已被接管。

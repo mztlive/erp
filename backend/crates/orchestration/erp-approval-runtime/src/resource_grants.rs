@@ -46,10 +46,7 @@ fn assignment_evidence(
     execution: &ApprovalNodeExecution,
     recipient: &str,
 ) -> Result<GrantEventEvidence> {
-    if execution.process_instance_id.as_ref() != instance.base.id
-        || !(execution.assignee_participant_id.as_str() == recipient
-            || execution.additional_assignees.iter().any(|p| p.participant_id.as_str() == recipient))
-    {
+    if execution.process_instance_id.as_ref() != instance.base.id || !execution.has_participant(recipient) {
         return Err(Error::ConflictError("审批授权事件与正式分配不一致".into()));
     }
     let payload = match instance.subject.subject_kind() {
@@ -80,7 +77,8 @@ mod tests {
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::types::ApprovalExecutionAssignmentSource;
     use bpm::model::{
-        NewNodeExecution, NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
+        ApprovalParticipant, NewNodeExecution, NewProcessInstance, ParticipantId, ProcessKind, SubjectRef,
+        Timestamp,
     };
 
     use super::*;
@@ -122,7 +120,15 @@ mod tests {
         ] {
             let mut subject = instance(kind, process);
             subject.base.version = 7;
-            let node = execution("instance");
+            let mut node = execution("instance");
+            node.additional_assignees.push(ApprovalParticipant {
+                participant_id: ParticipantId::new("additional-reviewer").unwrap(),
+                name: "另一位复核人".into(),
+            });
+            assert_eq!(
+                assignment_evidence(&subject, &node, "additional-reviewer").unwrap().recipient,
+                "additional-reviewer"
+            );
             let event = assignment_evidence(&subject, &node, "reviewer").unwrap();
             assert_eq!(event.fact_version, 7);
             assert_eq!(event.occurred_at, node.base.created_at);

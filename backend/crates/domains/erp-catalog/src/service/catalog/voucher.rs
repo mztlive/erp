@@ -24,11 +24,7 @@ use crate::entity::catalog::{
     VoucherCategoryProfileRevisionId, VoucherCategorySelection, next_revision_no,
 };
 use crate::error::{Error, Result};
-use crate::repository::CatalogExt;
-
-/// 卡券类目扩展修订仓储筛选条件类型。
-type VoucherCategoryProfileRevisionFilter =
-    <mongodb::Database as CatalogExt>::VoucherCategoryProfileRevisionFilter;
+use crate::repository::{CatalogExt, VoucherCategoryProfileRevisionFilter};
 
 /// 卡券类目原子创建草稿。
 struct VoucherCategoryDraft {

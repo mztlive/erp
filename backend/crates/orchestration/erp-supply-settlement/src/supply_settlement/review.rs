@@ -6,7 +6,7 @@ use erp_audit::execution::{persist_log, recover_command};
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use erp_fulfillment_execution::supply_execution::receipt::persist_supply_receipt;
-use erp_identity::{AuthorizationService, SharedRbacService};
+use erp_identity::AuthorizationService;
 use erp_read_models::supplier_center::settlement::require_reviewer;
 use erp_supply::command_receipt::repository::{SupplyCommandReceiptExt, SupplyCommandReceiptReadExt};
 use erp_supply::command_receipt::{ReviewDecisionReceipt, ReviewSubmissionReceipt, SupplyCommandResult};
@@ -33,8 +33,8 @@ use super::review_posting::{self, Posting};
 use super::review_preparation::{self, PreparedReview, ReviewInput};
 use super::{
     SETTLEMENT_REVIEW_OWNER_ROLE, SettlementReviewCommand, SettlementReviewDecisionResult,
-    SettlementWriteContext, SubmitSettlementReviewRequest, SubmitSettlementReviewResult,
-    SupplierSettlementProcess, command_audit_id, digest_parts, dto, ensure_same_id, reviewers,
+    SubmitSettlementReviewRequest, SubmitSettlementReviewResult, SupplierSettlementProcess, command_audit_id,
+    digest_parts, dto, ensure_same_id, reviewers,
 };
 use crate::{Error, Result};
 
@@ -143,20 +143,78 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         }
         let statement = self.domain().load_statement(id, executor).await?;
         validate_submission_command(&statement, &req)?;
-        self.authorize_reviewer(&req.reviewer_user_id, actor.id(), executor).await?;
+        reviewers::ensure_reviewer(
+            &self.authorization,
+            &self.work_items.identity,
+            &req.reviewer_user_id,
+            actor.id(),
+            executor,
+        )
+        .await?;
         let work_item =
             create_review_work_item(WorkItemId::new(next_id()), &statement, &req.reviewer_user_id)?;
-        let operation_id = req.operation_id.clone();
-        let prepared = PreparedSubmission { statement, work_item };
-        let input = SubmissionCommit::new(self, req, actor, prepared, (&audit_id, &fingerprint));
-        let (statement, work_item) = input.persist(executor).await?;
+        let (statement, work_item) = self
+            .apply_review_submission(
+                PreparedSubmission { statement, work_item },
+                &req,
+                actor,
+                (&audit_id, &fingerprint),
+                executor,
+            )
+            .await?;
         Ok(SubmitSettlementReviewResult {
             result_status: dto::SettlementReviewSubmissionStatus::Submitted,
             message: "结算主题已冻结并提交财务复核".to_string(),
-            operation_id,
+            operation_id: req.operation_id,
             statement: statement.into(),
             work_item_id: work_item.base.id,
         })
+    }
+
+    /// 写入前用原执行器重验主题、差异和复核人资格。
+    async fn apply_review_submission(
+        &self,
+        prepared: PreparedSubmission,
+        request: &SubmitSettlementReviewRequest,
+        actor: &AuditActor,
+        (command_id, fingerprint): (&str, &str),
+        executor: &mut dyn Executor,
+    ) -> Result<(SupplierSettlementStatement, WorkItem)> {
+        let statement_id = &prepared.statement.base.id;
+        self.data_scope.require_action(actor, SettlementAction::Submit, statement_id, executor).await?;
+        let domain = SupplierSettlementService::new(self.db.clone());
+        let mut current = domain.load_statement(statement_id, executor).await?;
+        if current.base.version != prepared.statement.base.version
+            || current.subject_hash != prepared.statement.subject_hash
+        {
+            return Err(Error::ConflictError("结算单版本或主题已变化，请刷新后重试".to_string()));
+        }
+        ensure_review_submission_ready(&self.db, &current, executor).await?;
+        reviewers::ensure_reviewer(
+            &self.authorization,
+            &self.work_items.identity,
+            &request.reviewer_user_id,
+            &current.prepared_by,
+            executor,
+        )
+        .await?;
+        current.submit_review()?;
+        domain.persist_statement(&mut current, executor).await?;
+        self.db.work_items().create(&prepared.work_item, executor).await?;
+        persist_review_submission(
+            ReviewSubmissionWrite {
+                db: &self.db,
+                actor,
+                statement: &current,
+                work_item: &prepared.work_item,
+                command_id,
+                fingerprint,
+                request,
+            },
+            executor,
+        )
+        .await?;
+        Ok((current, prepared.work_item))
     }
 
     /// 使用当前正式任务完成供应商结算复核决定。
@@ -399,84 +457,6 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         require_reviewer(&self.db, &self.authorization, actor, &work_item, executor).await?;
         ensure_decision_replay(&statement, &work_item, &receipt)?;
         Ok(Some(review_decision_result(statement, work_item, receipt.operation_id.clone(), receipt)))
-    }
-}
-
-struct SubmissionCommit {
-    identity: SharedRbacService,
-    authorization: Arc<AuthorizationService>,
-    context: SettlementWriteContext,
-    request: SubmitSettlementReviewRequest,
-    prepared: PreparedSubmission,
-    command_id: String,
-    fingerprint: String,
-}
-
-impl SubmissionCommit {
-    fn new<A: WorkflowAuthorizationPort>(
-        process: &SupplierSettlementProcess<A>,
-        request: SubmitSettlementReviewRequest,
-        actor: &AuditActor,
-        prepared: PreparedSubmission,
-        identity: (&str, &str),
-    ) -> Self {
-        Self {
-            identity: process.work_items.identity.clone(),
-            authorization: process.authorization.clone(),
-            context: process.write_context(actor),
-            request,
-            prepared,
-            command_id: identity.0.to_string(),
-            fingerprint: identity.1.to_string(),
-        }
-    }
-
-    /// 主题、复核人、结算单、任务与收据按原顺序使用入口授权事务的执行器。
-    async fn persist(self, executor: &mut dyn Executor) -> Result<(SupplierSettlementStatement, WorkItem)> {
-        let context = self.context;
-        context
-            .data_scope
-            .require_action(
-                &context.actor,
-                SettlementAction::Submit,
-                &self.prepared.statement.base.id,
-                executor,
-            )
-            .await?;
-        let mut current = SupplierSettlementService::new(context.db.clone())
-            .load_statement(&self.prepared.statement.base.id, executor)
-            .await?;
-        if current.base.version != self.prepared.statement.base.version
-            || current.subject_hash != self.prepared.statement.subject_hash
-        {
-            return Err(Error::ConflictError("结算单版本或主题已变化，请刷新后重试".to_string()));
-        }
-        ensure_review_submission_ready(&context.db, &current, executor).await?;
-        reviewers::ensure_reviewer(
-            &self.authorization,
-            &self.identity,
-            &self.request.reviewer_user_id,
-            &current.prepared_by,
-            executor,
-        )
-        .await?;
-        current.submit_review()?;
-        SupplierSettlementService::new(context.db.clone()).persist_statement(&mut current, executor).await?;
-        context.db.work_items().create(&self.prepared.work_item, executor).await?;
-        persist_review_submission(
-            ReviewSubmissionWrite {
-                db: &context.db,
-                actor: &context.actor,
-                statement: &current,
-                work_item: &self.prepared.work_item,
-                command_id: &self.command_id,
-                fingerprint: &self.fingerprint,
-                request: &self.request,
-            },
-            executor,
-        )
-        .await?;
-        Ok((current, self.prepared.work_item))
     }
 }
 

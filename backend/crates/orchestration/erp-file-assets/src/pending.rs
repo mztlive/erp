@@ -43,7 +43,7 @@ impl PendingFileAssets {
     /// # 错误
     /// 临时引用无法解析、登记校验失败、正式资产或审计构造失败，或临时引用与正式资产 ID 重复时返回错误。
     pub fn prepare(requests: Vec<PendingFileAssetRequest>, actor: &AuditActor) -> Result<Self> {
-        let mut manifest = Vec::new();
+        let mut manifest = Vec::with_capacity(requests.len());
         let mut assets = Vec::with_capacity(requests.len());
         let mut audits = Vec::with_capacity(requests.len());
         let mut references = Vec::with_capacity(requests.len());
@@ -100,6 +100,11 @@ impl PendingFileAssets {
     /// # 错误
     /// 不返回错误。
     pub fn shared(self) -> Arc<dyn PendingAttachmentBatch> {
+        Arc::new(self)
+    }
+
+    /// 消耗本批次，作为商品命令的事务内附件端口。
+    pub fn into_catalog_batch(self) -> Arc<dyn erp_catalog::PendingAttachmentBatch> {
         Arc::new(self)
     }
 }
@@ -209,6 +214,23 @@ mod tests {
         pending.ensure_all_used(&used).unwrap();
         let mut replay = FileAssetId::new("pending-file:one");
         assert!(pending.resolve_id(&mut replay, &mut used).is_err());
+    }
+
+    #[test]
+    fn catalog_batch_keeps_exact_reference_consumption() {
+        let pending =
+            PendingFileAssets::prepare(vec![request("pending-file:one", &"a".repeat(64))], &actor())
+                .unwrap()
+                .into_catalog_batch();
+        let mut used = HashSet::new();
+        assert!(!pending.is_empty());
+        assert!(pending.ensure_all_used(&used).is_err());
+        let mut id = FileAssetId::new("pending-file:one");
+        assert!(pending.resolve_id(&mut id, &mut used).unwrap());
+        assert!(pending.contains_id(&id));
+        pending.ensure_all_used(&used).unwrap();
+        let mut repeated = FileAssetId::new("pending-file:one");
+        assert!(pending.resolve_id(&mut repeated, &mut used).is_err());
     }
 
     #[test]

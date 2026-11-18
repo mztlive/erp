@@ -27,20 +27,6 @@ use validator::Validate;
 
 use crate::{Error, Result};
 
-/// 返回目录流程模块名。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回稳定模块名 `catalog`。
-///
-/// # 错误
-/// 不返回错误。
-pub fn process_name() -> &'static str {
-    "catalog"
-}
-
 /// 创建计量单位，并在同一事务中写入成功审计。
 ///
 /// # 参数

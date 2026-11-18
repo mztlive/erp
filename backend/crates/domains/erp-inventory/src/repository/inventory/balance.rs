@@ -11,12 +11,13 @@ use persistence_core::{
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
-    active_entity_by_id, authorized_projection_search, both_dec, both_inc, cross_inc, ids_to_strings,
-    scoped_base_filter, sort_doc, to_decimal128, with_id_tie_breaker,
+    authorized_projection_search, both_dec, both_inc, cross_inc, ids_to_strings, scoped_base_filter,
+    sort_doc, to_decimal128, with_id_tie_breaker,
 };
 use super::{InventoryRepository, STOCK_BALANCES};
 use crate::entity::inventory::StockBalance;
 use crate::ports::InventoryQuery;
+use crate::repository::InventoryExt;
 use crate::{Error as InventoryError, Result as InventoryResult};
 
 /// 库存余额列表投影行。
@@ -514,7 +515,7 @@ impl<'a> InventoryRepository<'a> {
     /// # 错误
     /// MongoDB 查询失败时返回错误。
     pub async fn stock_balance(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<StockBalance>> {
-        active_entity_by_id(self.db, STOCK_BALANCES, id, executor).await
+        self.db.stock_balances().find_by_id(id, executor).await
     }
 
     /// 按详情凭证读取完整余额，缺资格不访问业务集合。
@@ -543,36 +544,6 @@ impl<'a> InventoryRepository<'a> {
         let mut rows = aggregate::rows(&collection, stages, executor).await?;
         access.ensure_current(executor)?;
         Ok(rows.pop())
-    }
-
-    /// 按库存维度读取唯一余额。
-    ///
-    /// # 参数
-    /// * `warehouse_id` - 仓库主键
-    /// * `sku_id` - SKU 主键
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回匹配余额；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    pub async fn balance_for_dimensions(
-        &self,
-        warehouse_id: &WarehouseId,
-        sku_id: &SkuId,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<StockBalance>> {
-        mongo_ops::find_one(
-            &self.db.collection::<StockBalance>(STOCK_BALANCES),
-            doc! {
-                "warehouse_id": warehouse_id.to_string(),
-                "sku_id": sku_id.to_string(),
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            executor,
-        )
-        .await
     }
 
     /// 按 SKU 集合批量读取存在可用量的库存余额。

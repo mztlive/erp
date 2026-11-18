@@ -5,7 +5,10 @@ use std::future::Future;
 use std::sync::Arc;
 
 use application_core::command::CommandFingerprint;
-use erp_support::BackgroundJob;
+use erp_support::repository::prelude::*;
+use erp_support::{BackgroundJob, BulkJobExt};
+use mongodb::Database;
+use persistence_core::ReadExecutor;
 use tokio::sync::Mutex;
 
 use super::import_budget::IMPORT_JOBS_PER_POLL;
@@ -97,14 +100,16 @@ impl<T> ImportSourceCache<T> {
         Ok(value)
     }
 
-    /// 每轮查询后只保留本轮待执行任务，取消或已终结任务在此释放。
-    ///
-    /// # 参数
-    /// * `jobs` - 本轮查询到的待执行任务。
-    /// # 返回
-    /// 无返回值；移除不再匹配的缓存引用。
-    /// # 错误
-    /// 不返回错误。
+    /// 查询本轮候选任务，并释放已不在本轮候选中的缓存来源。
+    pub(crate) async fn poll_jobs(&self, db: &Database, domain_job_type: &str) -> Result<Vec<BackgroundJob>> {
+        let jobs = db
+            .background_jobs()
+            .list_open_by_domain_job_type(domain_job_type, IMPORT_JOBS_PER_POLL, &mut ReadExecutor::default())
+            .await?;
+        self.retain_jobs(&jobs).await;
+        Ok(jobs)
+    }
+
     pub(crate) async fn retain_jobs(&self, jobs: &[BackgroundJob]) {
         let keys = jobs.iter().map(SourceKey::new).collect::<Vec<_>>();
         self.entries.lock().await.retain(|entry| keys.contains(&entry.key));

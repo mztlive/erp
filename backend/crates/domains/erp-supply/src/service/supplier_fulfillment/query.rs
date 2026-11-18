@@ -5,10 +5,7 @@ use crate::dto::supplier_fulfillment::{
 };
 use crate::repository::SupplierFulfillmentExt;
 use crate::repository::prelude::*;
-
-/// 履约订单列表筛选条件类型（经 `SupplierFulfillmentExt` 关联类型跨 crate 可达）。
-pub type FulfillmentOrderFilter =
-    <mongodb::Database as SupplierFulfillmentExt>::SupplierFulfillmentOrderFilter;
+pub use crate::repository::supplier_fulfillment::SupplierFulfillmentOrderFilter as FulfillmentOrderFilter;
 
 impl SupplierFulfillmentService {
     /// 按已组装筛选条件分页检索履约订单。

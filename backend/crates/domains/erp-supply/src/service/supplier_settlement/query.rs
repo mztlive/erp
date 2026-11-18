@@ -19,12 +19,9 @@ use crate::entity::supplier_settlement::{
 use crate::repository::SupplierSettlementExt;
 use crate::repository::prelude::*;
 use crate::repository::supplier_settlement::{
-    SupplierSettlementStatementRow, SupplierSettlementStatementStatsRow,
+    SupplierSettlementStatementFilter, SupplierSettlementStatementRow, SupplierSettlementStatementStatsRow,
 };
 use crate::{Error, Result};
-
-/// 结算单列表筛选条件类型（经 `SupplierSettlementExt` 关联类型跨 crate 可达）。
-type StatementFilter = <mongodb::Database as SupplierSettlementExt>::SupplierSettlementStatementFilter;
 
 impl SupplierSettlementService {
     /// 使用原执行器已解析的列表动作凭证分页查询结算单。
@@ -102,7 +99,7 @@ async fn expand_org_filter(
 impl SupplierSettlementService {
     async fn load_statement_page(
         &self,
-        filter: &StatementFilter,
+        filter: &SupplierSettlementStatementFilter,
         context: &CompiledScope,
         executor: &mut dyn Executor,
     ) -> Result<SupplierSettlementStatementListView> {
@@ -167,7 +164,7 @@ fn statement_row_view(row: SupplierSettlementStatementRow) -> SupplierSettlement
 fn list_view(
     items: Vec<SupplierSettlementStatementView>,
     total: i64,
-    filter: &StatementFilter,
+    filter: &SupplierSettlementStatementFilter,
     stats: Option<SupplierSettlementStatementStatsRow>,
     context: &CompiledScope,
 ) -> SupplierSettlementStatementListView {
@@ -203,8 +200,8 @@ fn list_view(
 }
 
 /// 构建结算单列表筛选条件。
-fn statement_filter(query: &StatementListQuery) -> StatementFilter {
-    StatementFilter {
+fn statement_filter(query: &StatementListQuery) -> SupplierSettlementStatementFilter {
+    SupplierSettlementStatementFilter {
         q: query.q.clone(),
         keyword_supplier_ids: Vec::new(),
         statement_no: query.statement_no.clone(),

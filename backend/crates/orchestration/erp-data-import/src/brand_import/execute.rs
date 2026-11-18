@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use background_runtime::{BackgroundTaskAdapter, TaskResult};
 use erp_catalog::dto::BrandImportJobRequest;
 use erp_core::common::time::Instant;
 use erp_support::repository::prelude::*;
@@ -11,28 +12,17 @@ use persistence_core::{Executor, ReadExecutor, Transactional};
 
 use super::rows::{BrandRowExecution, execute_rows, record};
 use super::{BRAND_IMPORT_DOMAIN, BrandImportProcess, authorize, job_actor};
-use crate::background::import_budget::{IMPORT_JOBS_PER_POLL, import_budget};
+use crate::background::import_budget::import_budget;
 use crate::{Error, Result};
 
-impl BrandImportProcess {
-    /// 扫描有界待处理任务，恢复两分钟未推进的任务。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 本轮扫描到的任务数。
-    /// # 错误
-    /// 查询失败；单任务错误留待下一轮恢复并写脱敏日志。
-    pub async fn run_due_jobs(&self) -> Result<usize> {
-        let jobs = self
-            .db
-            .background_jobs()
-            .list_open_by_domain_job_type(
-                BRAND_IMPORT_DOMAIN,
-                IMPORT_JOBS_PER_POLL,
-                &mut ReadExecutor::default(),
-            )
-            .await?;
-        self.sources.retain_jobs(&jobs).await;
+#[async_trait]
+impl BackgroundTaskAdapter for BrandImportProcess {
+    fn name(&self) -> &'static str {
+        "brand_import"
+    }
+
+    async fn run_due(&self) -> TaskResult<usize> {
+        let jobs = self.sources.poll_jobs(&self.db, BRAND_IMPORT_DOMAIN).await?;
         let count = jobs.len();
         for mut job in jobs {
             if let Err(error) = self.execute(&mut job).await
@@ -43,7 +33,9 @@ impl BrandImportProcess {
         }
         Ok(count)
     }
+}
 
+impl BrandImportProcess {
     /// 用 CAS 认领；每行执行前重新验证取消、提交人权限和输入。
     async fn execute(&self, job: &mut BackgroundJob) -> Result<()> {
         if !job.can_resume_import(Instant::now(), 120) {

@@ -24,23 +24,6 @@ pub struct SalesInquiryAccess {
 }
 
 impl SalesInquiryAccess {
-    /// 按当前询价事实核验动作及同角色商品选择资格。
-    /// # 参数
-    /// actor、action 为当前身份与动作，inquiry 为原事务可信事实，executor 为原执行器。
-    /// # 返回
-    /// 完整资格与对象范围满足时成功。
-    /// # 错误
-    /// 无权或事实失效时拒绝。
-    pub async fn ensure_selection(
-        &self,
-        actor: &AuditActor,
-        permission: &AccessPermission,
-        inquiry: &SalesInquiry,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        self.require(actor, permission, inquiry, executor).await
-    }
-
     /// 按可信候选对象和额外功能资格执行统一授权。
     /// # 参数
     /// actor、action 为服务端入口，inquiry 为业务事实，executor 为原事务。

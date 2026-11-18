@@ -3,16 +3,13 @@
 pub mod acceptance_eligibility;
 pub mod command_receipt;
 pub mod customer_acceptance;
-pub mod customer_acceptance_lines;
 pub mod customer_acceptance_posting;
 pub mod delivery;
-pub mod delivery_lines;
 pub mod delivery_posting;
 pub mod document_number;
 pub mod electronic_delivery;
 pub mod electronic_delivery_crypto;
 pub mod purchase_receipt;
-pub mod purchase_receipt_lines;
 pub mod purchase_receipt_posting;
 mod read;
 pub use read::FulfillmentReadService;

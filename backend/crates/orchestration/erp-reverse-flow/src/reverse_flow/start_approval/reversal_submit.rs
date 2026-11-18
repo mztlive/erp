@@ -18,7 +18,7 @@ use super::super::ReturnsProcess;
 use super::super::customer_refund::authorized_customer_refund;
 use super::super::supplier_refund::authorized_supplier_refund;
 use super::ensure_return_start_replay_authorized;
-use crate::{Error, Result, ReverseFlowPorts};
+use crate::{Error, Result};
 
 /// 退款及冲正提交回读使用的完整命令身份和授权上下文。
 #[derive(Clone)]
@@ -44,13 +44,12 @@ impl ReturnsProcess {
         &self,
         input: &ReversalSubmitReplayInput,
     ) -> Result<Option<String>> {
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
+        let process = self.clone();
         let input = input.clone();
         self.db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move { replay_submit_apply(&db, &rbac, &input, executor).await })
+                Box::pin(async move { process.replay_reversal_submit_stage(&input, executor).await })
             })
             .await
     }
@@ -67,7 +66,26 @@ impl ReturnsProcess {
         input: &ReversalSubmitReplayInput,
         executor: &mut dyn Executor,
     ) -> Result<Option<String>> {
-        replay_submit_apply(&self.db, &self.rbac, input, executor).await
+        match input.document_type {
+            DocumentType::CustomerRefund => {
+                authorized_customer_refund(&self.db, &self.rbac, &input.actor, &input.id, executor).await?;
+            },
+            DocumentType::SupplierRefund => {
+                authorized_supplier_refund(&self.db, &self.rbac, &input.actor, &input.id, executor).await?;
+            },
+            _ => {
+                ensure_return_start_replay_authorized(
+                    &self.db,
+                    &self.rbac,
+                    &input.actor,
+                    input.document_type,
+                    &input.id,
+                    executor,
+                )
+                .await?
+            },
+        }
+        committed_reversal_submit(&self.db, &input.id, &input.command_receipt, executor).await
     }
 
     /// 结果未知或收据竞争后只回读已提交命令，不自动执行第二次写事务。
@@ -108,35 +126,6 @@ impl ReturnsProcess {
         }
         Err(original_error)
     }
-}
-
-/// 账号、静态权限、精确资金来源与原经办职责先于任何收据读取。
-async fn replay_submit_apply(
-    db: &Database,
-    rbac: &ReverseFlowPorts,
-    input: &ReversalSubmitReplayInput,
-    executor: &mut dyn Executor,
-) -> Result<Option<String>> {
-    match input.document_type {
-        DocumentType::CustomerRefund => {
-            authorized_customer_refund(db, rbac, &input.actor, &input.id, executor).await?;
-        },
-        DocumentType::SupplierRefund => {
-            authorized_supplier_refund(db, rbac, &input.actor, &input.id, executor).await?;
-        },
-        _ => {
-            ensure_return_start_replay_authorized(
-                db,
-                rbac,
-                &input.actor,
-                input.document_type,
-                &input.id,
-                executor,
-            )
-            .await?
-        },
-    }
-    committed_reversal_submit(db, &input.id, &input.command_receipt, executor).await
 }
 
 /// 在已有执行器内匹配精确请求收据，BPM 收据不能替代原请求版本指纹。

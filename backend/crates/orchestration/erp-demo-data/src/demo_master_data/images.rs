@@ -50,8 +50,14 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             request.change_reason = Some("补齐演示商品价格及展示资料".into());
         }
         let pending = self.fill_images(step, record, &mut request).await?;
-        product_update_with_assets(self.catalog(), record.entity_id.clone(), request, pending, actor.clone())
-            .await?;
+        product_update_with_assets(
+            self.ports.catalog.clone(),
+            record.entity_id.clone(),
+            request,
+            pending,
+            actor.clone(),
+        )
+        .await?;
         Ok(())
     }
 

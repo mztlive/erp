@@ -1,5 +1,5 @@
 //! 商品、供应商和合同导入的跨域任务与执行切片。
-pub mod background;
+mod background;
 pub mod brand_import;
 pub use brand_import::BrandImportProcess;
 pub mod contract_import;

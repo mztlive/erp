@@ -24,7 +24,7 @@ assert_eq!(*permission, configured);
 1. 新资源标识加入 `src/resources.rs`。
 2. 在所属模块定义 `const Permission`。相同权限编码通过常量引用复用，不重复调用构造函数定义相同编码。
 3. 独立权限加入该模块的 `ENTRIES`，填写公共分组及可复用说明。纯复用符号不重复登记独立权限。
-4. 新模块在 `src/lib.rs` 导出并登记 `MODULES`。公共目录不包含 HTTP 方法、路径或处理器。
+4. 在 `src/lib.rs` 的 `catalog_modules!` 列表添加公共目录模块，同时导出并登记到 `MODULES`。公共目录不包含 HTTP 方法、路径或处理器。
 5. HTTP 路由通过 `permission_route(route, &permission)` 引用公共 `ENTRIES` 登记的权限主常量。同一权限的接口复用该主常量，名称、分组及默认说明从公共目录读取；只有说明不同才在 server 的 `route_descriptions.rs` 登记差异。新增路由模块同步登记 server 的扫描清单。
 6. 修改后运行下列检查并 review 生成结果。
 

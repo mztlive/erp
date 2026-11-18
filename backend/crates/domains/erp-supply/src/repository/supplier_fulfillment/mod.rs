@@ -10,9 +10,6 @@
 //! 不可变正式事实（`supplier_order_status_history`、`supplier_refund_fact` 与
 //! `supplier_refund_allocation`）只 `new` 不 `update`，本域不为它们提供软删除方法
 //! （§4.5.1、§6.19）；履约订单是正式单据，仍走基类软删除/恢复语义。
-//!
-//! 筛选/行类型定义在本文件，经 `SupplierFulfillmentExt` 的关联类型对外暴露
-//! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
 use std::collections::HashMap;
 use std::str::FromStr;

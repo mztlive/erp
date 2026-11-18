@@ -39,7 +39,7 @@ impl RequestAction {
     }
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum RequestKind {
+pub(super) enum RequestKind {
     OfferingCreate,
     OfferingUpdate,
     NewProduct,
@@ -98,6 +98,10 @@ impl RequestTarget {
             offering: None,
             kind: RequestKind::Cooperation,
         }
+    }
+
+    pub(super) fn kind_for_supplier(&self, supplier_id: Option<&str>) -> Option<RequestKind> {
+        supplier_id.is_none_or(|id| id == self.supplier.as_str()).then_some(self.kind)
     }
 
     /// 按拥有领域加载精确申请，不由客户端选择来源类型。
@@ -288,6 +292,20 @@ fn identity_error(error: crate::Error) -> IdentityError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dispatch_kind_respects_portal_supplier_scope_and_retains_offering_subtype() {
+        let target = RequestTarget {
+            id: "request".into(),
+            version: "1".into(),
+            supplier: "supplier".into(),
+            offering: Some("offering".into()),
+            kind: RequestKind::OfferingUpdate,
+        };
+        assert!(target.kind_for_supplier(Some("other")).is_none());
+        assert!(target.kind_for_supplier(Some("supplier")) == Some(RequestKind::OfferingUpdate));
+        assert!(target.kind_for_supplier(None) == Some(RequestKind::OfferingUpdate));
+    }
+
     #[test]
     fn weaker_material_actions_cannot_access_another_persisted_request_kind() {
         for kind in [

@@ -24,7 +24,7 @@ use validator::Validate;
 
 use super::customer_receipt_posting::create_new_commit_records;
 use super::draft_read::receipt_view_with_actions;
-use super::draft_update::ensure_receipt_edit_authorized;
+use super::receipt_access::ensure_receipt_edit_authorized;
 use super::{ReceivableProcess, receipt_files};
 use crate::{Error, Result};
 
@@ -96,7 +96,7 @@ impl ReceivableProcess {
     ) -> Result<ReceiptDraftWithAssets> {
         let receipts = FinanceCommandReceiptService::new(self.db.clone());
         if let Some(id) = receipts.committed_resource_id(command, executor).await? {
-            ensure_receipt_edit_authorized(&self.db, &self.rbac, actor, &id, executor).await?;
+            ensure_receipt_edit_authorized(&self.rbac, actor, &id, executor).await?;
             return Ok(ReceiptDraftWithAssets {
                 view: receipt_view_with_actions(&self.db, &self.rbac, actor, &id, executor).await?,
                 assets_committed: false,
@@ -106,7 +106,7 @@ impl ReceivableProcess {
         receipt.save_allocations(convert_allocations(&req.allocations)?)?;
         self.validate_draft_sources(&receipt, executor).await?;
         self.db.customer_receipts().update(&mut receipt, executor).await?;
-        ensure_receipt_edit_authorized(&self.db, &self.rbac, actor, &receipt.base.id, executor).await?;
+        ensure_receipt_edit_authorized(&self.rbac, actor, &receipt.base.id, executor).await?;
         receipt_files::persist(
             &self.db,
             &receipt.base.id,
@@ -133,7 +133,7 @@ impl ReceivableProcess {
     ) -> Result<CustomerReceipt> {
         let data = &req.receipt;
         if let Some(id) = &req.receipt_id {
-            ensure_receipt_edit_authorized(&self.db, &self.rbac, actor, id, executor).await?;
+            ensure_receipt_edit_authorized(&self.rbac, actor, id, executor).await?;
             let mut receipt = self.draft_receipt(id, executor).await?;
             receipt.ensure_draft_editable()?;
             ensure_expected_version(receipt.base.version, req.expected_version.unwrap_or_default())?;

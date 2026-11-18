@@ -5,8 +5,7 @@ use super::transition_plan::{CommitRequired, TaskIntent, TransitionPlan};
 use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
 use crate::ids::ApprovalNodeExecutionId;
 use crate::model::types::{
-    ApprovalBlockerCode, ApprovalExecutionAssignmentSource, ApprovalProcessInstanceStatus,
-    ApprovalTransitionEvent,
+    ApprovalExecutionAssignmentSource, ApprovalProcessInstanceStatus, ApprovalTransitionEvent,
 };
 use crate::model::{
     ApprovalNodeDefinition, ApprovalNodeExecution, ApprovalProcessInstance, ApprovalTransitionDefinition,
@@ -57,12 +56,11 @@ pub(crate) struct EnterNodeInput<'a> {
 /// 启动、通过与恢复必须复用本函数。
 pub(crate) fn plan_enter_node(mut input: EnterNodeInput<'_>) -> EngineResult<TransitionPlan> {
     let Some(node) = input.graph.node(input.node_key) else {
-        let message = if input.node_key.trim().is_empty() {
+        return Err(EngineError::Uncommittable(if input.node_key.trim().is_empty() {
             "缺失节点键，无法形成合法阻塞快照"
         } else {
             "定义图缺少目标节点，无法形成合法阻塞快照"
-        };
-        return Err(EngineError::Uncommittable(message));
+        }));
     };
     let assignee = node.assignee()?;
     if input.participant != *assignee || input.eligibility.participant_ref() != assignee {
@@ -78,21 +76,35 @@ pub(crate) fn plan_enter_node(mut input: EnterNodeInput<'_>) -> EngineResult<Tra
         execution_no: input.execution_no,
         assignment_source: input.assignment_source,
         replaces_execution_id: input.replaces_execution_id,
-        assignee_participant_id: input.participant.clone(),
+        assignee_participant_id: input.participant,
         assignee_name_snapshot: input.eligibility.name_snapshot().to_string(),
         at: input.now,
     };
-    if let Some(code) = input.eligibility.blocked_code() {
-        return blocked_enter(input.instance, execution_input, input.execution_id, node, code, input.now);
+    let blocker = input.eligibility.blocked_code();
+    let execution = match blocker {
+        Some(code) => ApprovalNodeExecution::new_blocked(execution_input, code)?,
+        None => ApprovalNodeExecution::new_active(execution_input)?,
     }
-    let execution = ApprovalNodeExecution::new_active(execution_input)?
-        .with_additional_assignees(node.additional_assignees.clone())?;
+    .with_additional_assignees(node.additional_assignees.clone())?;
     input.instance.set_current_execution(input.execution_id.clone(), input.now)?;
-    if input.instance.status == ApprovalProcessInstanceStatus::Blocked {
-        input.instance.exit_blocked(input.now)?;
-    }
-    let mut plan = TransitionPlan::for_instance(input.instance, CommitRequired::Proceed);
-    add_enter_intents(&mut plan, &input.eligibility, &execution, node);
+    let mut plan = if let Some(code) = blocker {
+        input.instance.enter_blocked(code, input.now)?;
+        let mut plan = TransitionPlan::for_instance(input.instance, CommitRequired::Blocked);
+        plan.events.push(
+            BpmEvent::new(BpmEventKind::InstanceBlocked, plan.instance.typed_id(), execution.round_no)
+                .with_execution(input.execution_id)
+                .with_node_key(node.node_key.clone())
+                .with_blocker(code),
+        );
+        plan
+    } else {
+        if input.instance.status == ApprovalProcessInstanceStatus::Blocked {
+            input.instance.exit_blocked(input.now)?;
+        }
+        let mut plan = TransitionPlan::for_instance(input.instance, CommitRequired::Proceed);
+        add_enter_intents(&mut plan, &input.eligibility, &execution, node);
+        plan
+    };
     plan.created_executions.push(execution);
     Ok(plan)
 }
@@ -118,30 +130,6 @@ fn add_enter_intents(
             round_no: execution.round_no,
         });
     }
-}
-
-/// 人员或结构资格无效时创建受阻执行。
-fn blocked_enter(
-    mut instance: ApprovalProcessInstance,
-    input: NewNodeExecution,
-    execution_id: ApprovalNodeExecutionId,
-    node: &ApprovalNodeDefinition,
-    code: ApprovalBlockerCode,
-    now: Timestamp,
-) -> EngineResult<TransitionPlan> {
-    let execution = ApprovalNodeExecution::new_blocked(input, code)?
-        .with_additional_assignees(node.additional_assignees.clone())?;
-    instance.set_current_execution(execution_id.clone(), now)?;
-    instance.enter_blocked(code, now)?;
-    let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Blocked);
-    plan.events.push(
-        BpmEvent::new(BpmEventKind::InstanceBlocked, plan.instance.typed_id(), execution.round_no)
-            .with_execution(execution_id)
-            .with_node_key(node.node_key.clone())
-            .with_blocker(code),
-    );
-    plan.created_executions.push(execution);
-    Ok(plan)
 }
 
 /// 读取当前节点的通过与驳回连线，必须各恰好一条。

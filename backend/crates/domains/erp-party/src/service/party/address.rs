@@ -26,11 +26,8 @@ use crate::entity::party::{
 };
 use crate::error::{Error, Result};
 use crate::ports::{PartyAuditPort, SupplierRolePort};
-use crate::repository::PartyExt;
 use crate::repository::prelude::*;
-
-/// 地址列表筛选条件类型（经 `PartyExt` 关联类型跨 crate 可达）。
-type PartyAddressFilter = <mongodb::Database as PartyExt>::PartyAddressFilter;
+use crate::repository::{PartyAddressFilter, PartyExt};
 
 /// 地址服务。
 #[derive(Clone)]

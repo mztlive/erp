@@ -15,11 +15,7 @@ use crate::repository::owned::{
     SupplierProfileCommandRepository, SupplierQualificationCapabilityRepository,
     SupplierQualificationRepository,
 };
-use crate::repository::supplier::{
-    SupplierAccountFilter, SupplierCapabilityFilter, SupplierCommercialProfileFilter, SupplierDetailBundle,
-    SupplierListBundle, SupplierListSearchInput, SupplierQualificationFilter,
-    SupplierQualificationHealthFilter, SupplierRepository,
-};
+use crate::repository::supplier::SupplierRepository;
 
 /// 域 D09 仓储访问器。
 pub trait SupplierExt {
@@ -41,23 +37,6 @@ pub trait SupplierExt {
     const SUPPLIER_RATING_REVISIONS: &'static str = "supplier_rating_revisions";
     /// `supplier_profile_command` 根级命令去重结果集合名。
     const SUPPLIER_PROFILE_COMMANDS: &'static str = "supplier_profile_commands";
-
-    /// 供应商角色列表筛选条件类型（定义见 `repository::supplier`）。
-    type SupplierAccountFilter;
-    /// 商务结算版本列表筛选条件类型（定义见 `repository::supplier`）。
-    type SupplierCommercialProfileFilter;
-    /// 能力列表筛选条件类型（定义见 `repository::supplier`）。
-    type SupplierCapabilityFilter;
-    /// 资质列表筛选条件类型（定义见 `repository::supplier`）。
-    type SupplierQualificationFilter;
-    /// 供应商列表事实束搜索输入类型（定义见 `repository::supplier`）。
-    type SupplierListSearchInput;
-    /// 供应商列表事实束类型（定义见 `repository::supplier`）。
-    type SupplierListBundle;
-    /// 供应商详情事实束类型（定义见 `repository::supplier`）。
-    type SupplierDetailBundle;
-    /// 供应商列表资质健康筛选类型（定义见 `repository::supplier`）。
-    type SupplierQualificationHealthFilter;
 
     /// 获取 `supplier_account` 集合的 Repository。
     ///
@@ -183,15 +162,6 @@ pub trait SupplierExt {
 }
 
 impl SupplierExt for Database {
-    type SupplierAccountFilter = SupplierAccountFilter;
-    type SupplierCommercialProfileFilter = SupplierCommercialProfileFilter;
-    type SupplierCapabilityFilter = SupplierCapabilityFilter;
-    type SupplierQualificationFilter = SupplierQualificationFilter;
-    type SupplierListSearchInput = SupplierListSearchInput;
-    type SupplierListBundle = SupplierListBundle;
-    type SupplierDetailBundle = SupplierDetailBundle;
-    type SupplierQualificationHealthFilter = SupplierQualificationHealthFilter;
-
     fn supplier_accounts(&self) -> SupplierAccountRepository<'_> {
         SupplierAccountRepository::new(self, Self::SUPPLIER_ACCOUNTS)
     }

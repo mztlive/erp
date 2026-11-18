@@ -9,11 +9,8 @@ use super::support::ensure_version;
 use crate::dto::{PageView, SortDir, UnitOfMeasureListParams, UnitOfMeasureView, UpdateUnitOfMeasureRequest};
 use crate::entity::catalog::unit_of_measure::UnitOfMeasureUpdate;
 use crate::error::Result;
-use crate::repository::CatalogExt;
 use crate::repository::prelude::*;
-
-/// 计量单位列表筛选条件类型。
-type UnitOfMeasureFilter = <mongodb::Database as CatalogExt>::UnitOfMeasureFilter;
+use crate::repository::{CatalogExt, UnitOfMeasureFilter};
 
 impl CatalogService {
     // ---------- 计量单位 ----------

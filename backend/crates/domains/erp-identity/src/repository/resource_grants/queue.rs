@@ -10,11 +10,18 @@ use crate::entity::resource_access::{GrantSource, ResourceKind, SourceKey};
 use crate::repository::resource_grants;
 use crate::{Error, Result};
 
-pub(crate) struct GrantQueue {
-    pub(crate) db: Database,
+/// 授权事件队列；不承担读取授权判定。
+#[derive(Clone)]
+pub struct GrantEventRepository {
+    db: Database,
 }
 
-impl GrantQueue {
+impl GrantEventRepository {
+    /// 绑定身份数据库，不启动后台循环。
+    pub fn new(db: Database) -> Self {
+        Self { db }
+    }
+
     /// 原子领取到期事件或回收过期租约。
     /// # 参数
     /// owner 为每次领取唯一令牌，now 为秒级时间。
@@ -22,7 +29,7 @@ impl GrantQueue {
     /// 最多一个事件。
     /// # 错误
     /// 数据库失败或令牌为空时拒绝。
-    pub(crate) async fn claim_event(&self, owner: &str, now: u64) -> Result<Option<GrantEvent>> {
+    pub async fn claim_event(&self, owner: &str, now: u64) -> Result<Option<GrantEvent>> {
         if owner.is_empty() {
             return Err(Error::ValidationError("领取令牌不能为空".into()));
         }
@@ -50,11 +57,7 @@ impl GrantQueue {
     /// 最新事件；已经提交的事件允许幂等返回。
     /// # 错误
     /// 租约被其他 worker 接管或事件缺失时拒绝。
-    pub(crate) async fn claimed_event(
-        &self,
-        claim: &GrantEvent,
-        executor: &mut dyn Executor,
-    ) -> Result<GrantEvent> {
+    pub async fn claimed_event(&self, claim: &GrantEvent, executor: &mut dyn Executor) -> Result<GrantEvent> {
         let current = resource_grants::events(&self.db)
             .find_by_id(&claim.base.id, executor)
             .await?
@@ -69,11 +72,7 @@ impl GrantQueue {
     /// 成功无返回值。
     /// # 错误
     /// 无事务、并发版本冲突或持久化失败时拒绝。
-    pub(crate) async fn complete_event(
-        &self,
-        mut event: GrantEvent,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
+    pub async fn complete_event(&self, mut event: GrantEvent, executor: &mut dyn Executor) -> Result<()> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::Internal("事件完成必须使用事务".into()));
         }
@@ -94,7 +93,7 @@ impl GrantQueue {
     /// 成功无返回值；丢失领取权不写入。
     /// # 错误
     /// 数据库失败时返回错误，过期租约仍可恢复。
-    pub(crate) async fn fail_event(&self, event: &GrantEvent, now: u64, reason: &str) -> Result<()> {
+    pub async fn fail_event(&self, event: &GrantEvent, now: u64, reason: &str) -> Result<()> {
         let delay = event.retry_delay();
         let next = i64::try_from(now.saturating_add(delay))
             .map_err(|_| Error::ValidationError("时间溢出".into()))?;
@@ -115,11 +114,7 @@ impl GrantQueue {
     /// 已存在的来源。
     /// # 错误
     /// 身份非法或读取失败时拒绝。
-    pub(crate) async fn source(
-        &self,
-        key: &SourceKey,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<GrantSource>> {
+    pub async fn source(&self, key: &SourceKey, executor: &mut dyn Executor) -> Result<Option<GrantSource>> {
         Ok(resource_grants::sources(&self.db).find_by_id(&key.id()?, executor).await?)
     }
 }
@@ -132,7 +127,7 @@ pub struct GrantQueueHealth {
     pub failures: u64,
     pub latest_fact_version: Option<u64>,
 }
-impl GrantQueue {
+impl GrantEventRepository {
     /// 读取待处理量、最老未完成时长及失败量。
     /// # 参数
     /// now 为当前秒级时间。
@@ -140,7 +135,7 @@ impl GrantQueue {
     /// 当前队列快照。
     /// # 错误
     /// 数据库失败时返回错误。
-    pub(crate) async fn grant_health(&self, now: u64) -> Result<GrantQueueHealth> {
+    pub async fn grant_health(&self, now: u64) -> Result<GrantQueueHealth> {
         let collection = self.db.collection::<GrantEvent>("resource_grant_events");
         let filter = doc! { "status": { "$in": ["pending", "processing", "failed"] }, "deleted_at": 0 };
         let backlog = collection.count_documents(filter.clone()).await?;
@@ -167,7 +162,7 @@ impl GrantQueue {
     /// 本页末尾游标；空页表示一轮结束。每次最多 100 条。
     /// # 错误
     /// 查询或更新失败返回错误；已重新排队事件可安全重放。
-    pub(crate) async fn requeue(
+    pub(crate) async fn requeue_with_executor(
         &self,
         filter: &GrantRecompute,
         after: Option<&str>,
@@ -243,7 +238,7 @@ impl GrantRecompute {
     }
 }
 
-impl GrantQueue {
+impl GrantEventRepository {
     /// 读取同事务正式事件，校验完整证据。
     /// # 参数
     /// expected 为业务侧提供的正式事件，executor 为调用方执行器。
@@ -251,7 +246,7 @@ impl GrantQueue {
     /// 当前事件状态，缺失返回空值。
     /// # 错误
     /// 同键异载荷或读取失败返回错误。
-    pub(crate) async fn event(
+    pub async fn event(
         &self,
         expected: &GrantEvent,
         executor: &mut dyn Executor,
@@ -264,9 +259,9 @@ impl GrantQueue {
     }
 }
 
-impl GrantQueue {
+impl GrantEventRepository {
     /// 按精确来源身份读取正式事件，使用来源索引而不扫描账号事件。
-    pub(crate) async fn source_event(
+    pub async fn source_event(
         &self,
         source: &SourceKey,
         executor: &mut dyn Executor,

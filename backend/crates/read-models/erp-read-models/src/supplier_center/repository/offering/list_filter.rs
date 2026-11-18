@@ -194,7 +194,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
     /// # 约束
     /// 只沿当前修订指针读取；不返回 Service DTO、HTTP View 或授权结论；
     /// 不开启或提交事务。
-    pub async fn load_offering_list_bundle(
+    pub async fn load_offering_list_page(
         &self,
         query: &SupplierOfferingListQuery,
         executor: &mut dyn Executor,
@@ -233,12 +233,8 @@ impl<'a> SupplierOfferingReadRepository<'a> {
             .map(|value| (value.supplier_offering_id.to_string(), value))
             .collect::<HashMap<_, _>>();
         let display = self.load_display_entities(&page.items, executor).await?;
-        let mut supplier_ids = Vec::<SupplierAccountId>::new();
-        for row in &page.items {
-            if !supplier_ids.contains(&row.supplier_id) {
-                supplier_ids.push(row.supplier_id.clone());
-            }
-        }
+        let supplier_ids =
+            crate::support::dedup_ordered(page.items.iter().map(|row| row.supplier_id.clone()));
         let delivery_templates =
             self.db.supplier_delivery_templates().list_by_suppliers(&supplier_ids, executor).await?;
         Ok(SupplierOfferingListBundle {
@@ -253,32 +249,6 @@ impl<'a> SupplierOfferingReadRepository<'a> {
             parties: display.parties,
             party_revisions: display.party_revisions,
         })
-    }
-
-    /// 一次装载供给列表页的全部最小展示事实（Service 直接调用入口）。
-    ///
-    /// 查询类型经 `SupplierOfferingExt::OfferingListQuery` 对 Service 可命名；
-    /// 本方法只委托 [`Self::load_offering_list_bundle`]，过滤、总数与排序语义恒等。
-    ///
-    /// # 参数
-    /// * `query` - 高层查询条件，关键字与编号应已由 Service 规整
-    /// * `executor` - 数据访问执行器，由调用方决定事务边界
-    ///
-    /// # 返回
-    /// 返回分页行、当前修订、可供投影与跨域展示实体的事实束。
-    ///
-    /// # 错误
-    /// 任一批量查询失败时返回错误且不返回部分事实束。
-    ///
-    /// # 约束
-    /// 只沿当前修订指针读取；不返回 Service DTO、HTTP View 或授权结论；
-    /// 不开启或提交事务。
-    pub async fn load_offering_list_page(
-        &self,
-        query: &SupplierOfferingListQuery,
-        executor: &mut dyn Executor,
-    ) -> erp_supply::Result<SupplierOfferingListBundle> {
-        self.load_offering_list_bundle(query, executor).await
     }
 }
 

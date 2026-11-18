@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use async_trait::async_trait;
+use erp_core::ids::WorkItemId;
 use erp_identity::entity::authorization::{AccessContext, ObjectFacts, RelatedObjects, RelationKey};
 use erp_identity::{
     AccessFactsPort, AccessTarget, Error as IdentityError, ResourceTargets, Result as IdentityResult,
@@ -48,6 +49,31 @@ impl TaskPurpose {
     }
 }
 
+/// 在当前命令事务内核验真实任务的当前版本，允许已提交命令沿原任务重放。
+/// # 参数
+/// db 为业务数据库，ports 为共享授权设施，actor 为当前认证操作人，
+/// task_id 为原任务主键，purpose 为固定动作，executor 为原命令事务执行器。
+/// # 返回
+/// 当前账号仍具备同一任务办理资格时成功。
+/// # 错误
+/// 任务缺失时返回 `NotFound`；资格、任务版本或指派失效时拒绝。
+/// 授权及仓储读取错误按原分类传播。
+pub(crate) async fn require_entry(
+    db: &Database,
+    ports: &FinancePostingPorts,
+    actor: &AuditActor,
+    task_id: &WorkItemId,
+    purpose: TaskPurpose,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let task = db
+        .work_items()
+        .find_by_id(task_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("财务办理任务不存在".into()))?;
+    require_task(ports, actor, &task, purpose, executor).await
+}
+
 /// 在原事务检查固定动作；付款和开票同时核对精确任务。
 /// # 参数
 /// ports 为共享授权能力；task 为同执行器已读任务，purpose 为本次固定动作。
@@ -56,7 +82,6 @@ impl TaskPurpose {
 /// # 错误
 /// 资格、任务版本、指派或事实读取失败时拒绝。
 pub(crate) async fn require_task(
-    _: &Database,
     ports: &FinancePostingPorts,
     actor: &AuditActor,
     task: &WorkItem,

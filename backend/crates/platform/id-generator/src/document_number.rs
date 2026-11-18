@@ -36,66 +36,76 @@ pub enum Error {
 /// 编号生成结果类型.
 pub type Result<T> = StdResult<T, Error>;
 
-/// 可展示业务编号（`*_no`）的单据种类。
-///
-/// 每个变体包含业务前缀（见 `prefix`），serde 序列化为 snake_case 字符串
-/// （如 `sales_order`），同时作为计数器集合 [`COUNTER_COLLECTION`] 的 `_id`，
-/// 保证持久化标识与应用层一致。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DocumentNumberKind {
+macro_rules! document_number_kinds {
+    ($($(#[$doc:meta])* $variant:ident => ($prefix:literal, $counter:literal)),+ $(,)?) => {
+        /// 可展示业务编号（`*_no`）的单据种类。
+        ///
+        /// 每个变体包含业务前缀（见 `prefix`），serde 序列化为 snake_case 字符串
+        /// （如 `sales_order`），同时作为计数器集合 [`COUNTER_COLLECTION`] 的 `_id`，
+        /// 保证持久化标识与应用层一致。
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        pub enum DocumentNumberKind {
+            $(
+                $(#[$doc])*
+                #[serde(rename = $counter)]
+                $variant,
+            )+
+        }
+
+        impl DocumentNumberKind {
+            /// 返回该单据种类固定的大写业务前缀（如 `SO`）。
+            pub fn prefix(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $prefix,)+
+                }
+            }
+
+            fn counter_id_str(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $counter,)+
+                }
+            }
+        }
+    };
+}
+
+document_number_kinds! {
     /// 销售单（一期），对应 `sales_order.order_no`。
-    SalesOrder,
-
+    SalesOrder => ("SO", "sales_order"),
     /// 采购单（一期），对应 `purchase_order.purchase_no`。
-    PurchaseOrder,
-
+    PurchaseOrder => ("PO", "purchase_order"),
     /// 采购入库单（一期），对应 `purchase_receipt.receipt_no`。
-    PurchaseReceipt,
-
+    PurchaseReceipt => ("GRN", "purchase_receipt"),
     /// 履约发货单（一期），对应 `delivery.delivery_no`。
-    Delivery,
-
+    Delivery => ("DN", "delivery"),
     /// 客户验收单（一期），对应 `customer_acceptance.acceptance_no`。
-    CustomerAcceptance,
-
+    CustomerAcceptance => ("CA", "customer_acceptance"),
     /// 库存调整单（一期），对应 `stock_adjustment.adjustment_no`。
-    StockAdjustment,
-
+    StockAdjustment => ("SA", "stock_adjustment"),
     /// 客户回款单（一期），对应 `customer_receipt.receipt_no`。
-    CustomerReceipt,
-
+    CustomerReceipt => ("CR", "customer_receipt"),
     /// 供应商付款单（一期），对应 `supplier_payment.payment_no`。
-    SupplierPayment,
-
+    SupplierPayment => ("PM", "supplier_payment"),
     /// 发票（一期），对应 `invoice`，销项与进项共用同一序号空间。
-    Invoice,
-
+    Invoice => ("INV", "invoice"),
     /// 销售退货/拒收单（一期），对应 `sales_return_case.return_no`。
-    SalesReturn,
-
+    SalesReturn => ("SR", "sales_return"),
     /// 采购退货单（一期），对应 `purchase_return_order.purchase_return_no`。
-    PurchaseReturn,
-
+    PurchaseReturn => ("PR", "purchase_return"),
     /// 供应商履约单（二期预声明），对应 `supplier_fulfillment_order`。
-    SupplierFulfillment,
-
+    SupplierFulfillment => ("SF", "supplier_fulfillment"),
     /// 供应商结算单（二期预声明），对应 `supplier_settlement_statement`。
-    SupplierSettlement,
-
+    SupplierSettlement => ("SS", "supplier_settlement"),
     /// 公司商品（SPU），对应内部建档未指定编号时的 `product.product_no`。
-    Product,
-
+    Product => ("SPU", "product"),
     /// 商品品牌，对应自动生成的 `product_brand.brand_code`。
-    ProductBrand,
-
+    ProductBrand => ("BR", "product_brand"),
     /// 商品分类，对应自动生成的 `product_category.category_code`。
-    ProductCategory,
-
+    ProductCategory => ("CAT", "product_category"),
     /// API 供应商批量入库作业，对应 `supplier_catalog_adoption_batches.batch_no`。
-    SupplierCatalogAdoption,
+    SupplierCatalogAdoption => ("SCA", "supplier_catalog_adoption"),
     /// 供应商预存款充值申请。
-    SupplierDepositRecharge,
+    SupplierDepositRecharge => ("DR", "supplier_deposit_recharge"),
 }
 
 impl Display for DocumentNumberKind {
@@ -111,60 +121,6 @@ impl Display for DocumentNumberKind {
     /// 写入失败时返回格式化错误。
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str(self.counter_id_str())
-    }
-}
-
-impl DocumentNumberKind {
-    /// 返回单据种类的业务前缀。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 前缀为固定大写业务缩写（如 `SO`），编号格式串的一部分，一经启用不得变更。
-    ///
-    /// # 错误
-    /// 无。
-    pub fn prefix(self) -> &'static str {
-        self.metadata().0
-    }
-
-    /// 返回计数器文档 `_id` 静态名。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回与 serde snake_case 一致的静态计数器名。
-    ///
-    /// # 错误
-    /// 无。
-    pub(crate) fn counter_id_str(self) -> &'static str {
-        self.metadata().1
-    }
-
-    /// 单据种类的前缀与计数器标识，保持一一对应。
-    fn metadata(self) -> (&'static str, &'static str) {
-        match self {
-            Self::SalesOrder => ("SO", "sales_order"),
-            Self::PurchaseOrder => ("PO", "purchase_order"),
-            Self::PurchaseReceipt => ("GRN", "purchase_receipt"),
-            Self::Delivery => ("DN", "delivery"),
-            Self::CustomerAcceptance => ("CA", "customer_acceptance"),
-            Self::StockAdjustment => ("SA", "stock_adjustment"),
-            Self::CustomerReceipt => ("CR", "customer_receipt"),
-            Self::SupplierPayment => ("PM", "supplier_payment"),
-            Self::Invoice => ("INV", "invoice"),
-            Self::SalesReturn => ("SR", "sales_return"),
-            Self::PurchaseReturn => ("PR", "purchase_return"),
-            Self::SupplierFulfillment => ("SF", "supplier_fulfillment"),
-            Self::SupplierSettlement => ("SS", "supplier_settlement"),
-            Self::Product => ("SPU", "product"),
-            Self::ProductBrand => ("BR", "product_brand"),
-            Self::ProductCategory => ("CAT", "product_category"),
-            Self::SupplierCatalogAdoption => ("SCA", "supplier_catalog_adoption"),
-            Self::SupplierDepositRecharge => ("DR", "supplier_deposit_recharge"),
-        }
     }
 }
 
@@ -289,59 +245,35 @@ mod tests {
 
     use super::{COUNTER_COLLECTION, DocumentNumberKind, SEQ_WIDTH, format_number};
 
-    const KIND_TABLE: [(DocumentNumberKind, &str); 17] = [
-        (DocumentNumberKind::SalesOrder, "SO"),
-        (DocumentNumberKind::PurchaseOrder, "PO"),
-        (DocumentNumberKind::PurchaseReceipt, "GRN"),
-        (DocumentNumberKind::Delivery, "DN"),
-        (DocumentNumberKind::CustomerAcceptance, "CA"),
-        (DocumentNumberKind::StockAdjustment, "SA"),
-        (DocumentNumberKind::CustomerReceipt, "CR"),
-        (DocumentNumberKind::SupplierPayment, "PM"),
-        (DocumentNumberKind::Invoice, "INV"),
-        (DocumentNumberKind::SalesReturn, "SR"),
-        (DocumentNumberKind::PurchaseReturn, "PR"),
-        (DocumentNumberKind::SupplierFulfillment, "SF"),
-        (DocumentNumberKind::SupplierSettlement, "SS"),
-        (DocumentNumberKind::Product, "SPU"),
-        (DocumentNumberKind::ProductBrand, "BR"),
-        (DocumentNumberKind::ProductCategory, "CAT"),
-        (DocumentNumberKind::SupplierCatalogAdoption, "SCA"),
-    ];
-
     #[test]
-    fn kind_metadata_matches_design_table() {
-        for (kind, prefix) in KIND_TABLE {
+    fn number_prefixes_and_persisted_names_remain_stable() {
+        use DocumentNumberKind::*;
+        for (kind, prefix, name) in [
+            (SalesOrder, "SO", "sales_order"),
+            (PurchaseOrder, "PO", "purchase_order"),
+            (PurchaseReceipt, "GRN", "purchase_receipt"),
+            (Delivery, "DN", "delivery"),
+            (CustomerAcceptance, "CA", "customer_acceptance"),
+            (StockAdjustment, "SA", "stock_adjustment"),
+            (CustomerReceipt, "CR", "customer_receipt"),
+            (SupplierPayment, "PM", "supplier_payment"),
+            (Invoice, "INV", "invoice"),
+            (SalesReturn, "SR", "sales_return"),
+            (PurchaseReturn, "PR", "purchase_return"),
+            (SupplierFulfillment, "SF", "supplier_fulfillment"),
+            (SupplierSettlement, "SS", "supplier_settlement"),
+            (Product, "SPU", "product"),
+            (ProductBrand, "BR", "product_brand"),
+            (ProductCategory, "CAT", "product_category"),
+            (SupplierCatalogAdoption, "SCA", "supplier_catalog_adoption"),
+            (SupplierDepositRecharge, "DR", "supplier_deposit_recharge"),
+        ] {
             assert_eq!(kind.prefix(), prefix);
-        }
-    }
-
-    #[test]
-    fn kind_serializes_to_stable_snake_case_names() {
-        let cases = [
-            (DocumentNumberKind::SalesOrder, "sales_order"),
-            (DocumentNumberKind::CustomerReceipt, "customer_receipt"),
-            (DocumentNumberKind::SupplierSettlement, "supplier_settlement"),
-            (DocumentNumberKind::Invoice, "invoice"),
-            (DocumentNumberKind::SupplierCatalogAdoption, "supplier_catalog_adoption"),
-        ];
-        for (kind, expected) in cases {
-            let serialized = serialize_to_bson(&kind).expect("kind should serialize");
-            assert_eq!(serialized, Bson::String(expected.to_string()));
-            let deserialized =
-                deserialize_from_bson::<DocumentNumberKind>(serialized).expect("kind should deserialize");
-            assert_eq!(deserialized, kind);
-        }
-    }
-
-    #[test]
-    fn counter_id_matches_serialized_kind_name() {
-        for (kind, _) in KIND_TABLE {
-            let Bson::String(name) = serialize_to_bson(&kind).expect("kind should serialize") else {
-                panic!("kind must serialize to a string");
-            };
-            assert_eq!(kind.counter_id_str(), name.as_str());
-            assert_eq!(kind.to_string(), name.as_str());
+            assert_eq!(kind.counter_id_str(), name);
+            assert_eq!(kind.to_string(), name);
+            let stored = Bson::String(name.to_owned());
+            assert_eq!(serialize_to_bson(&kind).unwrap(), stored);
+            assert_eq!(deserialize_from_bson::<DocumentNumberKind>(stored).unwrap(), kind);
         }
     }
 

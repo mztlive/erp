@@ -94,7 +94,7 @@ impl DangaoshushuRuntime {
                 "请先开启该供应商的自动下单",
             ));
         }
-        let connector = self.bound_connector(connection)?;
+        let connector = self.tracking_connector(connection)?;
         if !connection.current_technical_config_is_healthy() {
             return Err(error(
                 SupplierFailureClass::BusinessRejected,
@@ -116,16 +116,13 @@ impl DangaoshushuRuntime {
         &self,
         connection: &SupplierApiConnection,
     ) -> ConnectorResult<DangaoshushuConnector> {
-        self.bound_connector(connection)
-    }
-
-    fn bound_connector(&self, connection: &SupplierApiConnection) -> ConnectorResult<DangaoshushuConnector> {
-        self.validate_binding(connection, true)?;
-        DangaoshushuConnector::bind(
-            self.settings.clone(),
-            &SupplierReferenceTarget::from(connection),
-            Arc::clone(&self.transport),
-        )
+        let target = self.connection_target(connection)?;
+        Ok(DangaoshushuConnector {
+            binding: self.bound_fingerprint(connection, &target)?,
+            connection_id: target.connection_id,
+            settings: self.settings.clone(),
+            transport: self.transport.clone(),
+        })
     }
 
     /// 按已登记订单原身份只读补查，连接停用不停止既有订单跟踪。
@@ -140,7 +137,7 @@ impl DangaoshushuRuntime {
         connection: &SupplierApiConnection,
         key: &OrderKey,
     ) -> ConnectorResult<Lookup<Snapshot<OrderSnapshot>>> {
-        self.bound_connector(connection)?.order(key).await
+        self.tracking_connector(connection)?.order(key).await
     }
 
     /// 按当前后台连接读取协议目录；停用连接仍允许显式诊断查询。
@@ -155,7 +152,7 @@ impl DangaoshushuRuntime {
         connection: &SupplierApiConnection,
         query: &DangaoshushuReadQuery,
     ) -> ConnectorResult<Value> {
-        self.bound_connector(connection)?.read(query).await
+        self.tracking_connector(connection)?.read(query).await
     }
 
     /// 核对后台记录及其技术引用；不要求配置文件重复登记 ERP 身份。
@@ -170,19 +167,42 @@ impl DangaoshushuRuntime {
         connection: &SupplierApiConnection,
         references_required: bool,
     ) -> ConnectorResult<()> {
-        let target = SupplierReferenceTarget::from(connection);
-        self.validate_target(&target)?;
-        if connection.base.is_deleted()
-            || (references_required
-                && (!connection.endpoint_reference_bound
-                    || !connection.credential_reference_bound
-                    || connection.endpoint_reference != self.internal_reference("endpoint", &target)?
-                    || connection.credential_reference.as_deref()
-                        != Some(self.internal_reference("credential", &target)?.as_str())))
+        let target = self.connection_target(connection)?;
+        if !references_required {
+            return Ok(());
+        }
+        self.bound_fingerprint(connection, &target)?;
+        Ok(())
+    }
+
+    fn bound_fingerprint(
+        &self,
+        connection: &SupplierApiConnection,
+        target: &SupplierReferenceTarget,
+    ) -> ConnectorResult<String> {
+        if !connection.endpoint_reference_bound || !connection.credential_reference_bound {
+            return Err(binding_error());
+        }
+        let fingerprint = proof::binding_hash(&self.settings, target)?;
+        if connection.endpoint_reference != internal_reference("endpoint", &fingerprint)
+            || connection.credential_reference.as_deref()
+                != Some(internal_reference("credential", &fingerprint).as_str())
         {
             return Err(binding_error());
         }
-        Ok(())
+        Ok(fingerprint)
+    }
+
+    fn connection_target(
+        &self,
+        connection: &SupplierApiConnection,
+    ) -> ConnectorResult<SupplierReferenceTarget> {
+        let target = SupplierReferenceTarget::from(connection);
+        self.validate_target(&target)?;
+        if connection.base.is_deleted() {
+            return Err(binding_error());
+        }
+        Ok(target)
     }
 
     fn validate_target(&self, target: &SupplierReferenceTarget) -> ConnectorResult<()> {
@@ -211,8 +231,7 @@ impl DangaoshushuRuntime {
         connection: &SupplierApiConnection,
         now: Instant,
     ) -> ConnectorResult<SupplierReferenceTickets> {
-        self.validate_binding(connection, false)?;
-        self.tickets(&SupplierReferenceTarget::from(connection), now)
+        self.tickets(&self.connection_target(connection)?, now)
     }
 
     fn tickets(
@@ -242,10 +261,6 @@ impl DangaoshushuRuntime {
         })
     }
 
-    fn internal_reference(&self, kind: &str, target: &SupplierReferenceTarget) -> ConnectorResult<String> {
-        Ok(format!("config://dangaoshushu/{}/{kind}", proof::binding_hash(&self.settings, target)?))
-    }
-
     fn resolve_ticket(
         &self,
         kind: SupplierReferenceKind,
@@ -270,7 +285,9 @@ impl DangaoshushuRuntime {
             ));
         }
         self.validate_target(target)?;
-        Ok(ResolvedSupplierReference { internal_reference: self.internal_reference(expected, target)? })
+        Ok(ResolvedSupplierReference {
+            internal_reference: internal_reference(expected, &ticket.fingerprint),
+        })
     }
 
     fn reference_options(
@@ -297,6 +314,10 @@ impl DangaoshushuRuntime {
             expires_at: tickets.expires_at,
         }])
     }
+}
+
+fn internal_reference(kind: &str, fingerprint: &str) -> String {
+    format!("config://dangaoshushu/{fingerprint}/{kind}")
 }
 
 fn validate_settings(settings: &DangaoshushuConfig) -> ConnectorResult<()> {
@@ -373,7 +394,7 @@ impl SupplierRuntime for DangaoshushuRuntime {
         check_type: SupplierHealthCheckType,
     ) -> Pin<Box<dyn Future<Output = Result<(), ClassifiedError>> + Send + 'a>> {
         Box::pin(async move {
-            let connector = self.bound_connector(connection).map_err(classified)?;
+            let connector = self.tracking_connector(connection).map_err(classified)?;
             if check_type == SupplierHealthCheckType::CapabilityMetadata {
                 return Err(ClassifiedError {
                     class: SupplierFailureClass::CapabilityGap,
@@ -399,9 +420,10 @@ impl SupplierReferenceRegistry for DangaoshushuRuntime {
         target: &SupplierReferenceTarget,
     ) -> Result<SupplierDeploymentConfig, ClassifiedError> {
         self.validate_target(target).map_err(classified)?;
+        let fingerprint = proof::binding_hash(&self.settings, target).map_err(classified)?;
         Ok(SupplierDeploymentConfig {
-            endpoint: self.internal_reference("endpoint", target).map_err(classified)?,
-            credential: self.internal_reference("credential", target).map_err(classified)?,
+            endpoint: internal_reference("endpoint", &fingerprint),
+            credential: internal_reference("credential", &fingerprint),
         })
     }
 
@@ -615,7 +637,10 @@ mod tests {
             let resolved = runtime.resolve_ticket(kind, &options[0].reference_id, &target, now).unwrap();
             assert_eq!(
                 resolved.internal_reference,
-                runtime.internal_reference(reference_kind(kind).unwrap(), &target).unwrap()
+                internal_reference(
+                    reference_kind(kind).unwrap(),
+                    &proof::binding_hash(&runtime.settings, &target).unwrap()
+                )
             );
         }
         for boundary in ["missing_type", "other_type", "connection", "supplier", "deleted"] {
@@ -659,20 +684,9 @@ mod tests {
         let (connector, transport) = recording_connector(vec![Ok(json!([])), Ok(json!([]))]);
         let runtime = DangaoshushuRuntime { settings: connector.settings, transport: transport.clone() };
         let mut connection = connection();
-        connection
-            .bind_endpoint_reference(
-                runtime.internal_reference("endpoint", &SupplierReferenceTarget::from(&connection)).unwrap(),
-                "actor",
-            )
-            .unwrap();
-        connection
-            .bind_credential_reference(
-                runtime
-                    .internal_reference("credential", &SupplierReferenceTarget::from(&connection))
-                    .unwrap(),
-                "actor",
-            )
-            .unwrap();
+        let config = runtime.deployment_config(&SupplierReferenceTarget::from(&connection)).unwrap();
+        connection.bind_endpoint_reference(config.endpoint, "actor").unwrap();
+        connection.bind_credential_reference(config.credential, "actor").unwrap();
         let error =
             runtime.health_check(&connection, SupplierHealthCheckType::CapabilityMetadata).await.unwrap_err();
         assert_eq!(error.class, SupplierFailureClass::CapabilityGap);
@@ -717,13 +731,13 @@ mod tests {
             runtime.health_check(value, SupplierHealthCheckType::Authentication).await.unwrap();
         }
         assert_eq!(transport.requests.lock().unwrap().len(), 2);
-        let first_client = runtime.bound_connector(&first).unwrap();
-        let second_client = runtime.bound_connector(&second).unwrap();
+        let first_client = runtime.tracking_connector(&first).unwrap();
+        let second_client = runtime.tracking_connector(&second).unwrap();
         assert_eq!(second_client.connection_id.as_ref(), "created-in-backend-2");
         assert_ne!(first_client.binding, second_client.binding);
         assert!(Arc::ptr_eq(&first_client.transport, &second_client.transport));
         second.endpoint_reference = first.endpoint_reference;
-        assert!(runtime.bound_connector(&second).is_err());
+        assert!(runtime.tracking_connector(&second).is_err());
     }
 
     #[tokio::test]
@@ -769,11 +783,11 @@ mod tests {
         let mut changed_settings = settings();
         changed_settings.private_key = "rotated-secret".into();
         let changed = DangaoshushuRuntime::new(changed_settings).unwrap();
-        assert!(changed.bound_connector(&connection).is_err());
+        assert!(changed.tracking_connector(&connection).is_err());
         bind_from_options(&changed, &mut connection).await;
-        assert!(changed.bound_connector(&connection).is_ok());
+        assert!(changed.tracking_connector(&connection).is_ok());
         connection.supplier_id = SupplierAccountId::new("other-supplier");
-        assert!(changed.bound_connector(&connection).is_err());
+        assert!(changed.tracking_connector(&connection).is_err());
     }
 
     /// 专用入口也检查接口类型；旧连接即使持有正确引用也不得绕过类型分派。
@@ -819,7 +833,7 @@ mod tests {
             let runtime = DangaoshushuRuntime::new(config).unwrap();
             let mut connection = connection();
             bind_from_options(&runtime, &mut connection).await;
-            assert!(runtime.bound_connector(&connection).is_ok());
+            assert!(runtime.tracking_connector(&connection).is_ok());
         }
     }
 

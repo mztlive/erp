@@ -1,9 +1,8 @@
 //! 同域供给写入的实际Mongo provider与顺序合同；不开启事务。
 use async_trait::async_trait;
 use mongodb::Database;
-use persistence_core::{Executor, Result, mongo_ops};
+use persistence_core::{Executor, Result};
 
-use super::{OFFERING_AVAILABILITIES, OFFERING_REVISIONS, OFFERINGS};
 use crate::entity::supplier_offering::{
     SupplierOffering, SupplierOfferingAvailability, SupplierOfferingCommand, SupplierOfferingRevision,
 };
@@ -93,61 +92,34 @@ pub(crate) trait OfferingWritePort: Sync {
     /// 写入失败时返回对应错误。
     async fn command(&self, value: &SupplierOfferingCommand, executor: &mut dyn Executor) -> Result<()>;
 }
-pub(crate) struct MongoOfferingWrite<'a> {
-    db: &'a Database,
-}
-impl<'a> MongoOfferingWrite<'a> {
-    /// 绑定目标数据库的供给写入端口。
-    ///
-    /// # 参数
-    /// * `db` - 目标数据库
-    ///
-    /// # 返回
-    /// 返回写入端口。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub(crate) fn new(db: &'a Database) -> Self {
-        Self { db }
-    }
-}
+
 #[async_trait]
-impl OfferingWritePort for MongoOfferingWrite<'_> {
+impl OfferingWritePort for Database {
     async fn offering(&self, value: &SupplierOffering, executor: &mut dyn Executor) -> Result<()> {
-        mongo_ops::insert_one(&self.db.collection::<SupplierOffering>(OFFERINGS), value, executor).await
+        self.supplier_offerings().create(value, executor).await
     }
     async fn revision(&self, value: &SupplierOfferingRevision, executor: &mut dyn Executor) -> Result<()> {
-        mongo_ops::insert_one(
-            &self.db.collection::<SupplierOfferingRevision>(OFFERING_REVISIONS),
-            value,
-            executor,
-        )
-        .await
+        self.supplier_offering_revisions().create(value, executor).await
     }
     async fn availability(
         &self,
         value: &SupplierOfferingAvailability,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        mongo_ops::insert_one(
-            &self.db.collection::<SupplierOfferingAvailability>(OFFERING_AVAILABILITIES),
-            value,
-            executor,
-        )
-        .await
+        self.supplier_offering_availabilities().create(value, executor).await
     }
     async fn update_offering(&self, value: &mut SupplierOffering, executor: &mut dyn Executor) -> Result<()> {
-        self.db.supplier_offerings().update(value, executor).await
+        self.supplier_offerings().update(value, executor).await
     }
     async fn update_availability(
         &self,
         value: &mut SupplierOfferingAvailability,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db.supplier_offering_availabilities().update(value, executor).await
+        self.supplier_offering_availabilities().update(value, executor).await
     }
     async fn command(&self, value: &SupplierOfferingCommand, executor: &mut dyn Executor) -> Result<()> {
-        self.db.supplier_offering_commands().create(value, executor).await
+        self.supplier_offering_commands().create(value, executor).await
     }
 }
 /// 按供给、修订、可供投影的顺序写入；任一步失败则不再写后续集合。

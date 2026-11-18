@@ -4,7 +4,7 @@
 //! 本模块只做字段搬运与序号规则，不触碰数据库或外部端口。
 
 use erp_core::common::time::BusinessDate;
-use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, FileAssetId, PartyId};
+use erp_core::ids::{ContractId, ContractRevisionId, FileAssetId, PartyId};
 use id_generator::next_id;
 
 use crate::dto::contract::{ArchiveContractRevisionRequest, CreateContractRequest, UploadContractRequest};
@@ -92,32 +92,6 @@ impl From<ArchiveContractRevisionRequest> for ArchiveSnapshotFields {
     }
 }
 
-/// 创建合同稳定身份（三处规划函数共用 ID 分配与实体校验）。
-///
-/// # 参数
-/// * `contract_no` - 合同编号
-/// * `customer_id` - 客户稳定身份
-/// * `settlement_party_id` - 结算主体
-/// * `actor_id` - 创建人
-///
-/// # 返回
-/// 返回新建的合同实体。
-///
-/// # 错误
-/// 编号为空、超长时返回错误。
-fn new_contract(
-    contract_no: String,
-    customer_id: CustomerAccountId,
-    settlement_party_id: PartyId,
-    actor_id: String,
-) -> Result<Contract> {
-    Ok(Contract::new(
-        ContractId::new(next_id()),
-        ContractData { contract_no, customer_id, settlement_party_id },
-        actor_id,
-    )?)
-}
-
 /// 组装指定序号的不可变修订（三处规划函数共用版本落盘形状）。
 ///
 /// # 参数
@@ -178,22 +152,17 @@ pub fn plan_first_archive(
     req: CreateContractRequest,
     actor_id: impl Into<String>,
 ) -> Result<PlannedContractArchive> {
-    let actor_id = actor_id.into();
-    let contract = new_contract(
-        req.contract_no.clone(),
-        req.customer_id.clone(),
-        req.settlement_party_id.clone(),
-        actor_id,
-    )?;
-    let revision = build_revision(
-        &contract,
+    plan_initial_archive(
+        ContractData {
+            contract_no: req.contract_no.clone(),
+            customer_id: req.customer_id.clone(),
+            settlement_party_id: req.settlement_party_id.clone(),
+        },
         req.contract_pdf_file_id.clone(),
         req.archive_source.unwrap_or(ArchiveSource::ContractCenter),
-        contract.settlement_party_id.clone(),
         req.into(),
-        1,
-    )?;
-    Ok(PlannedContractArchive { contract, revision })
+        actor_id.into(),
+    )
 }
 
 /// 由一次上传命令构造合同身份与首个不可变修订。
@@ -215,21 +184,29 @@ pub fn plan_upload_archive(
     settlement_party_id: PartyId,
     actor_id: impl Into<String>,
 ) -> Result<PlannedContractArchive> {
-    let actor_id = actor_id.into();
-    let contract = new_contract(
-        req.contract_no.clone(),
-        req.customer_id.clone(),
-        settlement_party_id.clone(),
-        actor_id,
-    )?;
-    let revision = build_revision(
-        &contract,
+    plan_initial_archive(
+        ContractData {
+            contract_no: req.contract_no.clone(),
+            customer_id: req.customer_id.clone(),
+            settlement_party_id,
+        },
         file_asset_id,
         ArchiveSource::ContractCenter,
-        settlement_party_id,
         req.into(),
-        1,
-    )?;
+        actor_id.into(),
+    )
+}
+
+fn plan_initial_archive(
+    data: ContractData,
+    file_asset_id: FileAssetId,
+    source: ArchiveSource,
+    snapshot: ArchiveSnapshotFields,
+    actor_id: String,
+) -> Result<PlannedContractArchive> {
+    let contract = Contract::new(ContractId::new(next_id()), data, actor_id)?;
+    let revision =
+        build_revision(&contract, file_asset_id, source, contract.settlement_party_id.clone(), snapshot, 1)?;
     Ok(PlannedContractArchive { contract, revision })
 }
 
@@ -369,6 +346,8 @@ mod tests {
         assert_eq!(planned.revision.contract_pdf_file_id, FileAssetId::new("asset-9"));
         assert_eq!(planned.revision.archive_source, ArchiveSource::ContractCenter);
         assert_eq!(planned.revision.revision.revision_no, 1);
+        assert_eq!(planned.revision.contract_id.as_ref(), planned.contract.base.id);
+        assert_eq!(planned.revision.settlement_party_id, planned.contract.settlement_party_id);
     }
 
     #[test]

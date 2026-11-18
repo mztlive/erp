@@ -12,16 +12,14 @@ use super::IntegrationOpsService;
 use crate::dto::*;
 use crate::entity::integration_ops::*;
 use crate::repository::IntegrationOpsExt;
+use crate::repository::integration_ops::InboxMessageFilter;
 use crate::repository::prelude::*;
 use crate::{Error, Result};
-/// 入站消息列表筛选条件类型（经 `IntegrationOpsExt` 关联类型跨 crate 可达）。
-type InboxMessageFilter = <Database as IntegrationOpsExt>::InboxMessageFilter;
+
 impl IntegrationOpsService {
     /// 分页查询入站消息列表。
     ///
-    /// 排序字段白名单在 Service 层校验（api-contract §4），禁止任意字段透传；
-    /// 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结，无法命名），
-    /// 此处按字段映射为响应视图。
+    /// 排序字段必须经过白名单校验。
     ///
     /// # 参数
     /// * `params` - 查询参数

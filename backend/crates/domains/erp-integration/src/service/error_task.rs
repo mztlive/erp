@@ -12,10 +12,10 @@ use super::scope::{ScopedIntegrationList, ensure_page, resolve_list_scope};
 use crate::dto::{self, *};
 use crate::entity::integration_ops::*;
 use crate::repository::IntegrationOpsExt;
+use crate::repository::integration_ops::IntegrationErrorTaskFilter;
 use crate::repository::prelude::*;
 use crate::{Error, Result};
-/// 错误任务列表筛选条件类型。
-type ErrorTaskFilter = <Database as IntegrationOpsExt>::IntegrationErrorTaskFilter;
+
 impl IntegrationOpsService {
     /// 分页查询集成错误任务列表。
     ///
@@ -42,7 +42,7 @@ impl IntegrationOpsService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (view, access) = this.error_task_list_read(&params, &actor, executor).await?;
-                    this.access().validate(&access, executor).await?;
+                    this.data_scope.validate(&access, executor).await?;
                     Ok(view)
                 })
             })
@@ -68,19 +68,8 @@ impl IntegrationOpsService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, query.scope_version.as_deref())?;
-        self.error_task_page(query, actor, executor).await
-    }
-
-    /// 无有效范围时不查库，直接返回空页。
-    async fn error_task_page(
-        &self,
-        query: dto::ErrorTaskListQuery,
-        actor: &AuditActor,
-        executor: &mut dyn Executor,
-    ) -> Result<(ErrorTaskListView, CompiledAccess)> {
-        let access = self.access();
         let scope = resolve_list_scope(
-            &access,
+            &self.data_scope,
             actor,
             &integration_ops::ERROR_TASK_LIST,
             &query.org_unit_ids,
@@ -144,8 +133,11 @@ pub fn prepare_error_task(
 }
 
 /// 把已规范化查询与授权条件装配为仓储筛选。
-fn error_task_filter(query: dto::ErrorTaskListQuery, owner_org_unit_ids: Vec<String>) -> ErrorTaskFilter {
-    ErrorTaskFilter {
+fn error_task_filter(
+    query: dto::ErrorTaskListQuery,
+    owner_org_unit_ids: Vec<String>,
+) -> IntegrationErrorTaskFilter {
+    IntegrationErrorTaskFilter {
         q: query.q,
         message_id: query.message_id,
         business_object_id: query.business_object_id,
@@ -165,7 +157,7 @@ fn error_task_filter(query: dto::ErrorTaskListQuery, owner_org_unit_ids: Vec<Str
 /// 装配带范围元数据的错误任务列表响应。
 fn error_task_list_view(
     page: persistence_core::PageResult<crate::repository::integration_ops::IntegrationErrorTaskRow>,
-    filter: &ErrorTaskFilter,
+    filter: &IntegrationErrorTaskFilter,
     meta: ScopedIntegrationList,
 ) -> ErrorTaskListView {
     ErrorTaskListView {

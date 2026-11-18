@@ -27,9 +27,7 @@ use crate::dto::contract::{
 };
 use crate::entity::contract::{Contract, ContractRevision};
 use crate::error::{Error, Result};
-use crate::ports::{
-    ContractAuditPort, CustomerAccountFact, CustomerFactsPort, PreparedContractAudit, SigningCompanyPort,
-};
+use crate::ports::{ContractAuditPort, CustomerAccountFact, CustomerFactsPort, SigningCompanyPort};
 use crate::repository::ContractExt;
 use crate::repository::prelude::*;
 
@@ -120,7 +118,7 @@ impl ContractService {
     ) -> Result<ContractView> {
         req.validate()?;
         let customer_id = req.customer_id.to_string();
-        let planned = plan_first_archive(req, actor.id())?;
+        let mut planned = plan_first_archive(req, actor.id())?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "contract.create",
@@ -128,26 +126,16 @@ impl ContractService {
             planned.contract.base.id.clone(),
         )?;
 
-        self.execute_authorized_transaction(planned, audit, customer_id, actor.clone()).await
-    }
-
-    async fn execute_authorized_transaction(
-        &self,
-        mut planned: PlannedContractArchive,
-        audit: PreparedContractAudit,
-        customer_id: String,
-        actor: AuditActor,
-    ) -> Result<ContractView> {
         let service = self.clone();
-        let audit_port = self.audit.clone();
+        let actor = actor.clone();
         self.db
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    service.data_scope.require_create(&actor, &customer_id, executor).await?;
+                    service.require_create(&actor, &customer_id, executor).await?;
                     service.apply_create(&mut planned.contract, &planned.revision, executor).await?;
                     let view = ContractView::from(planned.contract);
-                    audit_port.persist(&audit, executor).await?;
+                    service.audit.persist(&audit, executor).await?;
                     Ok(view)
                 })
             })
@@ -168,7 +156,7 @@ impl ContractService {
     ///
     /// # 错误
     /// 字段非法时返回错误；客户及公司资格在原写事务由 apply_create 核验。
-    pub async fn plan_upload(
+    pub fn plan_upload(
         &self,
         req: UploadContractRequest,
         file_asset_id: FileAssetId,
@@ -314,8 +302,7 @@ impl ContractService {
         customer_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.data_scope.clone().require_create(actor, customer_id, executor).await?;
-        Ok(())
+        self.data_scope.require_create(actor, customer_id, executor).await
     }
 
     /// 校验客户存在且未停用。

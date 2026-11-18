@@ -42,7 +42,7 @@ impl SalesInquiryProcess {
         let id = next_id();
         let inquiry = SalesInquiry::create(id.clone(), format!("IQ{id}"), data.clone())?;
         self.access()
-            .ensure_selection(actor, &sales_inquiry_permissions::COMMANDS_SALES_CREATE, &inquiry, executor)
+            .require(actor, &sales_inquiry_permissions::COMMANDS_SALES_CREATE, &inquiry, executor)
             .await?;
         Ok(SalesInquiryService::new(self.db.clone())
             .create(id.clone(), format!("IQ{id}"), data, executor)

@@ -604,17 +604,15 @@
       "boundaries": [
         "attempt_context",
         "execute_prepared",
-        "finish_attempt",
         "prepare_business_log"
       ],
       "call_counts": {
         "attempt_context": 1,
         "execute_prepared": 1,
-        "finish_attempt": 1,
         "prepare_business_log": 1
       },
       "location_count": 1,
-      "reason": "用例 run_audited 在自身事务或已声明 run_audited 边界通过 attempt_context、execute_prepared、finish_attempt、prepare_business_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "事务前校验准备记录并取得尝试上下文；在 with_attempt 开启的事务中通过 execute_prepared 使用同一 Executor 执行业务写入和成功审计。"
     },
     {
       "path": "crates/domains/erp-audit/src/execution/transaction.rs",
@@ -622,15 +620,27 @@
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
-        "execute_audited",
+        "execute_audited"
+      ],
+      "call_counts": {
+        "execute_audited": 1
+      },
+      "location_count": 1,
+      "reason": "在 with_attempt 开启的事务中通过 execute_audited 使用同一 Executor 执行命令并保存首次成功事件；回放不追加事件，独立尝试使用执行前的上下文。"
+    },
+    {
+      "path": "crates/domains/erp-audit/src/execution/transaction.rs",
+      "function": "with_attempt",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
         "finish_attempt"
       ],
       "call_counts": {
-        "execute_audited": 1,
         "finish_attempt": 1
       },
       "location_count": 1,
-      "reason": "用例 run_audited_event 在自身事务或已声明 run_audited 边界通过 execute_audited、finish_attempt 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "直接等待原数据库的一次业务事务，事务返回后调用 finish_attempt；成功不记尝试，失败、拒绝和未知提交沿独立 NoTransaction 记录，尝试写入失败不覆盖原错误。"
     },
     {
       "path": "crates/domains/erp-audit/src/service.rs",
@@ -1170,29 +1180,17 @@
       "path": "crates/domains/erp-contract/src/service/contract/mod.rs",
       "function": "create_contract",
       "policy": "Audited",
-      "stage": "MetadataFactory",
-      "boundaries": [
-        ".resource_log"
-      ],
-      "call_counts": {
-        ".resource_log": 1
-      },
-      "location_count": 1,
-      "reason": "元数据工厂/准备步骤 create_contract 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
-    },
-    {
-      "path": "crates/domains/erp-contract/src/service/contract/mod.rs",
-      "function": "execute_authorized_transaction",
-      "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
-        "audit_port.persist"
+        ".resource_log",
+        "audit.persist"
       ],
       "call_counts": {
-        "audit_port.persist": 1
+        ".resource_log": 1,
+        "audit.persist": 1
       },
       "location_count": 1,
-      "reason": "用例 execute_authorized_transaction 在自身事务或已声明 run_audited 边界通过 audit_port.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "事务前以新合同 ID 准备 contract.create；事务内沿同一 Executor 检查客户来源和创建资格，写入合同及首个修订后由原审计 Port 保存成功事件，审计失败时不提交。"
     },
     {
       "path": "crates/domains/erp-contract/src/service/contract/commands.rs",
@@ -3249,22 +3247,6 @@
       "reason": "用例 create_payable_account 在自身事务或已声明 run_audited 边界通过 .resource_log、persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
     },
     {
-      "path": "crates/orchestration/erp-finance-posting/src/finance_posting/payable/account.rs",
-      "function": "reveal_payment_recipient",
-      "policy": "Audited",
-      "stage": "SpecialLifecycle",
-      "boundaries": [
-        ".resource_log",
-        "persist_log"
-      ],
-      "call_counts": {
-        ".resource_log": 1,
-        "persist_log": 1
-      },
-      "location_count": 1,
-      "reason": "敏感内容读取或文件预览以 .resource_log、persist_log 记录授权读取动作；复用现行单次 NoTransaction 留痕，审计失败按原读取合同返回错误。该边界不套用普通正式业务写事务，不保存解密明文或文件正文。"
-    },
-    {
       "path": "crates/orchestration/erp-finance-posting/src/finance_posting/payable/invoice.rs",
       "function": "register",
       "policy": "Audited",
@@ -4845,7 +4827,7 @@
       "reason": "用例或步骤 apply 通过 persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
     },
     {
-      "path": "crates/orchestration/erp-order-to-cash/src/order_to_cash/formalization_root.rs",
+      "path": "crates/orchestration/erp-order-to-cash/src/order_to_cash/formalize.rs",
       "function": "formalize_approved_submission_apply",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -4856,7 +4838,7 @@
         ".resource_log": 1
       },
       "location_count": 1,
-      "reason": "元数据工厂/准备步骤 formalize_approved_submission_apply 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+      "reason": "普通销售单和卡券销售单共用审批事务；仅首次形式化以原销售单 ID 准备 sales_order.formalize，并委托过账步骤沿同一 Executor 写入，重复形式化不追加事件。"
     },
     {
       "path": "crates/orchestration/erp-order-to-cash/src/order_to_cash/handover.rs",
@@ -5296,10 +5278,10 @@
     },
     {
       "path": "crates/orchestration/erp-procure-to-pay/src/procure_to_pay/change_start.rs",
-      "function": "apply_change_start",
+      "function": "persist_purchase_change_start",
       "policy": "Audited",
       "stage": "Transaction",
-      "reason": "采购变更启动在原事务内完成来源及专项采用校验、冻结变更提交、单据和审批绑定以及成功审计；源码拆分不改变授权、写入顺序或原执行器。",
+      "reason": "沿采购变更启动事务的 Executor 复验来源资格；同一命令回放直接返回，首次执行写入回执、变更与审批事实后保存成功审计，再保存首次命令结果。",
       "boundaries": [
         "persist_log"
       ],
@@ -7052,6 +7034,20 @@
     },
     {
       "path": "crates/orchestration/erp-supply-settlement/src/supply_settlement/draft.rs",
+      "function": "create_statement_apply",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        "persist_log"
+      ],
+      "call_counts": {
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "结算草稿创建沿用公开命令的 Executor；回放直接返回，首次执行沿原命令键准备审计，重验创建范围并写入单头、明细和差异后保存一次成功事件。"
+    },
+    {
+      "path": "crates/orchestration/erp-supply-settlement/src/supply_settlement/draft.rs",
       "function": "create_statement_audit",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -7063,20 +7059,6 @@
       },
       "location_count": 1,
       "reason": "元数据工厂/准备步骤 create_statement_audit 通过 .resource_log_with_id 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
-    },
-    {
-      "path": "crates/orchestration/erp-supply-settlement/src/supply_settlement/draft.rs",
-      "function": "persist",
-      "policy": "Audited",
-      "stage": "Command",
-      "boundaries": [
-        "persist_log"
-      ],
-      "call_counts": {
-        "persist_log": 1
-      },
-      "location_count": 2,
-      "reason": "结算单创建步骤 CreateWrite::persist 沿用公开命令的 Executor，依次重验授权、保存结算单及明细和 persist_log；同文件另一个 RefreshPersistence::persist 无直接审计调用，按精确路径和函数名合计两个位置、一次 persist_log。"
     },
     {
       "path": "crates/orchestration/erp-supply-settlement/src/supply_settlement/draft.rs",
@@ -7094,20 +7076,6 @@
     },
     {
       "path": "crates/orchestration/erp-supply-settlement/src/supply_settlement/draft.rs",
-      "function": "persist_refreshed_result",
-      "policy": "Audited",
-      "stage": "Command",
-      "boundaries": [
-        "persist_log"
-      ],
-      "call_counts": {
-        "persist_log": 1
-      },
-      "location_count": 1,
-      "reason": "用例或步骤 persist_refreshed_result 通过 persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
-    },
-    {
-      "path": "crates/orchestration/erp-supply-settlement/src/supply_settlement/draft.rs",
       "function": "refresh_audit",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -7119,6 +7087,20 @@
       },
       "location_count": 1,
       "reason": "元数据工厂/准备步骤 refresh_audit 通过 .resource_log_with_id 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+    },
+    {
+      "path": "crates/orchestration/erp-supply-settlement/src/supply_settlement/draft.rs",
+      "function": "refresh_statement_apply",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        "persist_log"
+      ],
+      "call_counts": {
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "来源变化时沿原 Executor 重验刷新权限、替换快照、保存原命令回执，再写一次成功事件；来源未变沿既有审计分支，命令回放不追加事件。"
     },
     {
       "path": "crates/orchestration/erp-supply-settlement/src/supply_settlement/evidence.rs",

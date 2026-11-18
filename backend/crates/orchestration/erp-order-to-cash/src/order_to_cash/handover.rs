@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use application_core::{AuditActor, CommandFingerprint};
+use erp_audit::execution::recover_command;
 use erp_core::AccountKind;
 use erp_core::common::time::Instant;
 use erp_core::ids::SalesOrderId;
@@ -36,7 +37,7 @@ use validator::Validate;
 
 use super::SalesOrderCommandProcess;
 use super::authorization::SalesCommandAccess;
-use super::command_event::{SalesCommandEvent, finish_receipt_recovery, load_command_receipt};
+use super::command_event::{SalesCommandEvent, load_command_receipt};
 use crate::{Error, Result};
 
 /// 客户验收完整执行权限的固定对象类型。
@@ -108,7 +109,7 @@ impl SalesOrderCommandProcess {
                 .replay_sales_handover(&audit_id, &fingerprint, &expected_key_hash, id, actor)
                 .await?
                 .ok_or_else(|| Error::Internal("销售交接幂等收据缺失".to_string())),
-            Err(error) => finish_receipt_recovery(
+            Err(error) => recover_command(
                 error,
                 self.replay_sales_handover(&audit_id, &fingerprint, &expected_key_hash, id, actor).await,
             ),

@@ -16,11 +16,8 @@ use super::PageView;
 use crate::dto::validate_sales_price_range;
 use crate::entity::catalog::{ProductKind, SellablePriceKind};
 use crate::error::{Error, Result};
-use crate::repository::CatalogExt;
+use crate::repository::SellableSkuFilter;
 use crate::repository::catalog::{SellableSort, SellableSortField};
-
-/// 公司商品池列表筛选条件类型。
-type SellableSkuFilter = <mongodb::Database as CatalogExt>::SellableSkuFilter;
 
 /// 公司商品池列表查询参数。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]

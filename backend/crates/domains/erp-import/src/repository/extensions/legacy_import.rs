@@ -7,9 +7,7 @@
 
 use mongodb::Database;
 
-use super::super::legacy_import::{
-    LegacyImportBatchFilter, LegacyImportConfirmationFilter, LegacyImportRepository, LegacyImportRowFilter,
-};
+use super::super::legacy_import::LegacyImportRepository;
 use crate::repository::owned::{
     LegacyImportBatchRepository, LegacyImportConfirmationRepository, LegacyImportRowRepository,
 };
@@ -22,15 +20,6 @@ pub trait LegacyImportExt {
     const LEGACY_IMPORT_ROWS: &'static str = "legacy_import_rows";
     /// `legacy_import_confirmation` 集合名。
     const LEGACY_IMPORT_CONFIRMATIONS: &'static str = "legacy_import_confirmations";
-
-    /// 导入批次列表筛选条件类型（定义见 `repository::legacy_import`）。
-    type LegacyImportBatchFilter;
-
-    /// 导入行列表筛选条件类型（定义见 `repository::legacy_import`）。
-    type LegacyImportRowFilter;
-
-    /// 导入确认列表筛选条件类型（定义见 `repository::legacy_import`）。
-    type LegacyImportConfirmationFilter;
 
     /// 获取 `legacy_import_batch` 集合的 Repository。
     ///
@@ -82,10 +71,6 @@ pub trait LegacyImportExt {
 }
 
 impl LegacyImportExt for Database {
-    type LegacyImportBatchFilter = LegacyImportBatchFilter;
-    type LegacyImportRowFilter = LegacyImportRowFilter;
-    type LegacyImportConfirmationFilter = LegacyImportConfirmationFilter;
-
     fn legacy_import_batches(&self) -> LegacyImportBatchRepository<'_> {
         LegacyImportBatchRepository::new(self, Self::LEGACY_IMPORT_BATCHES)
     }

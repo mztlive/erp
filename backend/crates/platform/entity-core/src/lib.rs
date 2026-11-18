@@ -9,7 +9,7 @@ pub const NOT_DELETED_TIMESTAMP: u64 = 0;
 pub const NOT_DELETED_TIMESTAMP_BSON: i64 = NOT_DELETED_TIMESTAMP as i64;
 
 /// 测试伪造实例使用的固定非零时间戳。
-const FAKE_TIMESTAMP: u64 = 1_700_000_000;
+const FAKE_TIMESTAMP: i64 = 1_700_000_000;
 
 /// 新建实体的起始版本号。
 const INITIAL_VERSION: u64 = 1;
@@ -45,7 +45,7 @@ impl BaseModel {
     /// # 错误
     /// 不返回错误。
     pub fn new(id: String) -> Self {
-        Self::active(id, clamp_unix_timestamp(Utc::now().timestamp()))
+        Self::active_at(id, Utc::now().timestamp())
     }
 
     /// 判断对象是否已被软删除。
@@ -73,11 +73,12 @@ impl BaseModel {
     /// # 错误
     /// 不返回错误。
     pub fn fake() -> Self {
-        Self::active("fake".to_string(), FAKE_TIMESTAMP)
+        Self::active_at("fake".to_string(), FAKE_TIMESTAMP)
     }
 
     /// 以共享不变式组装活动实例：起始版本、创建与更新时间相同、未删除。
-    fn active(id: String, timestamp: u64) -> Self {
+    fn active_at(id: String, unix_secs: i64) -> Self {
+        let timestamp = u64::try_from(unix_secs).unwrap_or(NOT_DELETED_TIMESTAMP);
         Self {
             id,
             version: INITIAL_VERSION,
@@ -86,11 +87,6 @@ impl BaseModel {
             deleted_at: NOT_DELETED_TIMESTAMP,
         }
     }
-}
-
-/// Unix 秒转存储时间戳，负值钳制为零值。
-fn clamp_unix_timestamp(value: i64) -> u64 {
-    u64::try_from(value).unwrap_or(NOT_DELETED_TIMESTAMP)
 }
 
 /// 提供实体持久化元数据的读写访问。
@@ -164,10 +160,7 @@ pub trait HasBaseModel {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        BaseModel, FAKE_TIMESTAMP, HasBaseModel, NOT_DELETED_TIMESTAMP, NOT_DELETED_TIMESTAMP_BSON,
-        clamp_unix_timestamp,
-    };
+    use super::{BaseModel, HasBaseModel, NOT_DELETED_TIMESTAMP, NOT_DELETED_TIMESTAMP_BSON};
 
     #[test]
     fn new_builds_active_model_with_shared_invariants() {
@@ -186,22 +179,19 @@ mod tests {
 
         assert_eq!(model.id, "fake");
         assert_eq!(model.version, 1);
-        assert_eq!(model.created_at, FAKE_TIMESTAMP);
-        assert_eq!(model.updated_at, FAKE_TIMESTAMP);
+        assert_eq!(model.created_at, 1_700_000_000);
+        assert_eq!(model.updated_at, model.created_at);
         assert_eq!(model.deleted_at, NOT_DELETED_TIMESTAMP);
         assert!(!model.is_deleted());
     }
 
     #[test]
-    fn clamp_unix_timestamp_passes_through_non_negative() {
-        assert_eq!(clamp_unix_timestamp(0), 0);
-        assert_eq!(clamp_unix_timestamp(1_700_000_000), 1_700_000_000);
-    }
-
-    #[test]
-    fn clamp_unix_timestamp_clamps_negative_to_not_deleted() {
-        assert_eq!(clamp_unix_timestamp(-1), NOT_DELETED_TIMESTAMP);
-        assert_eq!(clamp_unix_timestamp(i64::MIN), NOT_DELETED_TIMESTAMP);
+    fn active_model_clamps_pre_epoch_timestamps_without_marking_deleted() {
+        for (unix_secs, expected) in [(i64::MIN, 0), (-1, 0), (0, 0), (1_700_000_000, 1_700_000_000)] {
+            let model = BaseModel::active_at("id_1".to_string(), unix_secs);
+            assert_eq!((model.created_at, model.updated_at), (expected, expected));
+            assert!(!model.is_deleted());
+        }
     }
 
     #[test]

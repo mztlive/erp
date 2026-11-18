@@ -9,8 +9,7 @@
 //! 四个 `*_revision` 集合是不可变修订（追加式、**不提供**软删除）；
 //! `supplier_qualification_capability` 是资质 ↔ 能力的纯关联行。
 //!
-//! 集合名常量统一从 `SupplierExt` 关联常量导入（唯一权威来源）；筛选/行类型
-//! 定义在职责子模块，经本模块重新导出并由 `SupplierExt` 的关联类型对外暴露。
+//! 集合名由 `SupplierExt` 定义。
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::SupplierAccountId;

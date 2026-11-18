@@ -1,17 +1,18 @@
 //! 发货单查询、草稿构造、领域视图与调用方事务内持久化。
 
-use erp_core::ids::DeliveryId;
+use erp_core::ids::{DeliveryId, DeliveryLineId};
 use id_generator::next_id;
 use persistence_core::Executor;
 use validator::Validate;
 
 use super::FulfillmentService;
-use super::delivery_lines::delivery_line_specs;
 use crate::dto::{
-    CreateDeliveryRequest, DeliveryDetailView, DeliveryLineView, DeliveryListParams, DeliveryView,
-    UpdateDeliveryRequest,
+    CreateDeliveryRequest, DeliveryDetailView, DeliveryLineInput, DeliveryLineView, DeliveryListParams,
+    DeliveryView, UpdateDeliveryRequest,
 };
-use crate::entity::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineBatch, DeliveryUpdate};
+use crate::entity::fulfillment::{
+    Delivery, DeliveryData, DeliveryLine, DeliveryLineBatch, DeliveryLineSpec, DeliveryUpdate,
+};
 use crate::repository::FulfillmentExt;
 use crate::repository::prelude::*;
 use crate::{Error, Result};
@@ -142,7 +143,7 @@ impl FulfillmentService {
             },
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
-        let lines = DeliveryLineBatch::build(id, delivery.delivery_type, 1, delivery_line_specs(&req.lines)?)
+        let lines = DeliveryLineBatch::build(id, delivery.delivery_type, 1, delivery_line_specs(&req.lines))
             .map_err(Error::Logic)?;
         delivery.ensure_tracking_lines(&lines).map_err(|error| Error::ValidationError(error.to_string()))?;
         Ok((delivery, lines))
@@ -267,6 +268,19 @@ impl From<DeliveryLine> for DeliveryLineView {
     }
 }
 
+fn delivery_line_specs(inputs: &[DeliveryLineInput]) -> Vec<DeliveryLineSpec> {
+    inputs
+        .iter()
+        .map(|input| DeliveryLineSpec {
+            line_id: DeliveryLineId::new(next_id()),
+            sales_order_line_id: input.sales_order_line_id.clone(),
+            quantity: input.quantity,
+            stock_reservation_id: input.stock_reservation_id.clone(),
+            purchase_line_sales_allocation_id: input.purchase_line_sales_allocation_id.clone(),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -289,8 +303,7 @@ mod tests {
                 quantity: Quantity::from_str("2").unwrap(),
                 stock_reservation_id: Some(StockReservationId::new("rsv-1")),
                 purchase_line_sales_allocation_id: None,
-            }])
-            .unwrap(),
+            }]),
         )
         .unwrap();
         assert_eq!(ok.len(), 1);
@@ -303,8 +316,7 @@ mod tests {
                 quantity: Quantity::from_str("2").unwrap(),
                 stock_reservation_id: None,
                 purchase_line_sales_allocation_id: Some(PurchaseLineSalesAllocationId::new("a-1")),
-            }])
-            .unwrap(),
+            }]),
         );
         assert!(wrong.is_err(), "仓发不得携带直发分配");
     }

@@ -215,7 +215,7 @@ impl DepositExecutionWrite<'_> {
         if !execution::matches_payment_result_task(&task, self.request_id) {
             return Err(Error::Forbidden("原余额执行任务不属于当前出纳".into()));
         }
-        require_task(self.db, &self.process.rbac, self.actor, &task, TaskPurpose::Payment, executor).await?;
+        require_task(&self.process.rbac, self.actor, &task, TaskPurpose::Payment, executor).await?;
         let request = load(self.db, self.request_id, executor).await?;
         let PaymentRequestExecutionMethod::SupplierDeposit { account_id } = &request.data.execution_method
         else {

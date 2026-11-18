@@ -34,8 +34,8 @@ use crate::entity::party::{
 };
 use crate::error::{Error, Result};
 use crate::ports::{PartyAuditPort, SupplierRolePort};
-use crate::repository::PartyExt;
 use crate::repository::prelude::*;
+use crate::repository::{PartyExt, PartyFilter, PartyRevisionFilter};
 
 pub mod address;
 pub mod bank_account;
@@ -58,11 +58,6 @@ pub use crate::dto::party::{
     PartyTaxProfileView, PartyView, UpdatePartyAddressRequest, UpdatePartyBankAccountRequest,
     UpdatePartyContactRequest, UpdatePartyRequest, UpdatePartyTaxProfileRequest,
 };
-
-/// 主体列表筛选条件类型（经 `PartyExt` 关联类型跨 crate 可达）。
-type PartyFilter = <mongodb::Database as PartyExt>::PartyFilter;
-/// 主体修订列表筛选条件类型。
-type PartyRevisionFilter = <mongodb::Database as PartyExt>::PartyRevisionFilter;
 
 /// 主体详情视图：主体 + 当前生效修订快照。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -345,7 +340,7 @@ impl PartyService {
             .client()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    service.update_party_record(&id, req, None, &actor, &party::UPDATE, executor).await
+                    service.update_stage(&id, req, None, &actor, &party::UPDATE, executor).await
                 })
             })
             .await
@@ -379,20 +374,6 @@ impl PartyService {
         Ok(())
     }
 
-    /// 公司和名称修订在同一主体事务中更新。
-    async fn update_party_record(
-        &self,
-        id: &str,
-        req: UpdatePartyRequest,
-        company: Option<CompanyProfile>,
-        actor: &AuditActor,
-        permission: &Permission,
-        executor: &mut dyn Executor,
-    ) -> Result<PartyView> {
-        req.validate()?;
-        self.update_stage(id, req, company.as_ref(), actor, permission, executor).await
-    }
-
     /// 在同一授权事务中读取原主体、版本和修订号，完成状态更新与审计。
     async fn update_stage(
         &self,
@@ -403,6 +384,7 @@ impl PartyService {
         permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<PartyView> {
+        req.validate()?;
         self.authorization.require(actor, permission, AccessTarget::Operation, executor).await?;
         let prepared = self.load_party_for_update(id, req, company, actor, executor).await?;
         let next_no = self.db.party_revisions().next_revision_no(&PartyId::new(id), executor).await?;

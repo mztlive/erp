@@ -6,8 +6,7 @@
 //! （可软删除，身份类字段全局唯一），`customer_assignment` 是按有效期保存的
 //! 归属事实行（追加维护，**不提供**软删除）。
 //!
-//! 集合名常量统一从 `CustomerExt` 关联常量导入（唯一权威来源）；筛选条件
-//! 定义在本文件，经 `CustomerExt` 的关联类型对外暴露。
+//! 集合名由 `CustomerExt` 定义。
 
 #![allow(async_fn_in_trait)]
 

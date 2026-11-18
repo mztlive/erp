@@ -111,8 +111,8 @@ async fn adjustment_for_update(
         }
     })?;
     let adjustment = db
-        .inventory()
-        .stock_adjustment(id.as_ref(), executor)
+        .stock_adjustments()
+        .find_by_id(id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("库存调整单不存在".into()))?;
     if !adjustment.matches_version(version) {

@@ -103,15 +103,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         subject_version: u32,
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalProcessInstance>> {
-        let mut rows = find_limited(
-            &self.db.collection(INSTANCES),
-            cancellation_subject_filter(subject, subject_version),
-            doc! { "started_at": -1, "id": -1 },
-            1,
-            executor,
-        )
-        .await?;
-        Ok(rows.pop())
+        self.latest_instance(cancellation_subject_filter(subject, subject_version), executor).await
     }
 
     /// 按主体读取最近一条审批实例，含已终态，供单据详情投影。
@@ -133,15 +125,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         subject: &SubjectRef,
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalProcessInstance>> {
-        let mut rows = find_limited(
-            &self.db.collection(INSTANCES),
-            latest_subject_filter(subject),
-            doc! { "started_at": -1, "id": -1 },
-            1,
-            executor,
-        )
-        .await?;
-        Ok(rows.pop())
+        self.latest_instance(latest_subject_filter(subject), executor).await
     }
 
     /// 读取新提交之外的最近审批实例，含终态。
@@ -162,6 +146,14 @@ impl<'a> BpmWorkflowRepository<'a> {
     ) -> Result<Option<ApprovalProcessInstance>> {
         let mut filter = latest_subject_filter(subject);
         filter.insert("id", doc! { "$ne": excluded_id.as_ref() });
+        self.latest_instance(filter, executor).await
+    }
+
+    async fn latest_instance(
+        &self,
+        filter: Document,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApprovalProcessInstance>> {
         let mut rows = find_limited(
             &self.db.collection(INSTANCES),
             filter,

@@ -17,6 +17,7 @@ use erp_workflow::service::approval::binding::{
     BindPublishedDefinitionCommand, bind_published_definition_on_document_create, revalidate_binding_graph,
 };
 use erp_workflow::service::approval::business_adapter::BindingRevalidationContext;
+use erp_workflow::service::approval::copies::persist_copies;
 use erp_workflow::service::approval::execution::PlannedWrites;
 use erp_workflow::service::approval::policy::ProcessRequiredApprovalPolicy;
 use mongodb::Database;
@@ -25,7 +26,6 @@ use persistence_core::Executor;
 use crate::Result;
 use crate::approval_materials::authorize_attachment;
 use crate::approval_start::persist_start_snapshot;
-use crate::material_writes::persist_cancel_copies;
 
 /// 业务命令消费的审批运行合同，所有事务步骤复用原执行器。
 #[async_trait]
@@ -171,7 +171,8 @@ impl<A: WorkflowAuthorizationPort + Send + Sync> ApprovalRuntimePort for Approva
         writes: &PlannedWrites,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        persist_cancel_copies(&self.rbac, db, writes, executor).await
+        persist_copies(&self.rbac, db, &writes.instance, &writes.events, executor).await?;
+        Ok(())
     }
 
     async fn bind_document(

@@ -7,10 +7,7 @@
 
 use mongodb::Database;
 
-use super::super::supplier_settlement::{
-    SupplierSettlementDifferenceFilter, SupplierSettlementItemFilter, SupplierSettlementRepository,
-    SupplierSettlementStatementFilter,
-};
+use super::super::supplier_settlement::SupplierSettlementRepository;
 use crate::repository::owned::{
     SupplierSettlementDifferenceEvidenceRepository, SupplierSettlementDifferenceRepository,
     SupplierSettlementItemRepository, SupplierSettlementSourceEvidenceRepository,
@@ -29,15 +26,6 @@ pub trait SupplierSettlementExt {
     const SUPPLIER_SETTLEMENT_SOURCE_EVIDENCE: &'static str = "supplier_settlement_source_evidence";
     /// `supplier_settlement_difference_evidence` 集合名。
     const SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE: &'static str = "supplier_settlement_difference_evidence";
-
-    /// 供应商结算单列表筛选条件类型（定义见 `repository::supplier_settlement`）。
-    type SupplierSettlementStatementFilter;
-
-    /// 供应商结算明细列表筛选条件类型（定义见 `repository::supplier_settlement`）。
-    type SupplierSettlementItemFilter;
-
-    /// 供应商结算差异列表筛选条件类型（定义见 `repository::supplier_settlement`）。
-    type SupplierSettlementDifferenceFilter;
 
     /// 获取 `supplier_settlement_statement` 集合的 Repository。
     ///
@@ -113,10 +101,6 @@ pub trait SupplierSettlementExt {
 }
 
 impl SupplierSettlementExt for Database {
-    type SupplierSettlementStatementFilter = SupplierSettlementStatementFilter;
-    type SupplierSettlementItemFilter = SupplierSettlementItemFilter;
-    type SupplierSettlementDifferenceFilter = SupplierSettlementDifferenceFilter;
-
     fn supplier_settlement_statements(&self) -> SupplierSettlementStatementRepository<'_> {
         SupplierSettlementStatementRepository::new(self, Self::SUPPLIER_SETTLEMENT_STATEMENTS)
     }

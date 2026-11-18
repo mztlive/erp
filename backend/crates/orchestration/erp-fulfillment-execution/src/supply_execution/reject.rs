@@ -58,8 +58,7 @@ impl SupplierFulfillmentProcess {
         executor: &mut dyn Executor,
     ) -> Result<SupplierOrderStatusHistoryView> {
         let mut order =
-            self.require_scoped_order(id, actor, &supplier_fulfillment::ORDER_REJECT, executor).await?;
-        self.ensure_legacy_order(id, executor).await?;
+            self.require_legacy_order(id, actor, &supplier_fulfillment::ORDER_REJECT, executor).await?;
         if let Some(existing) = self
             .db
             .supplier_order_status_histories()

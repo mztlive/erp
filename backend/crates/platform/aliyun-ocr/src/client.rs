@@ -48,13 +48,13 @@ impl Client {
     pub async fn recognize_image(&self, image: &[u8]) -> Result<Page> {
         let request = self.request(image)?;
         let response = self.http.execute(request).await.map_err(transport_error)?;
-        let status = response.status().as_u16();
+        let status = response.status();
         // 错误正文可能包含输入或身份；不读取、不记录。
-        if !(200..300).contains(&status) {
-            return response::decode(status, &[]);
+        if !status.is_success() {
+            return Err(response::classify_http_error(status.as_u16()));
         }
         let bytes = read_response(response).await?;
-        response::decode(status, &bytes)
+        response::decode(&bytes)
     }
 
     fn request(&self, image: &[u8]) -> Result<Request> {

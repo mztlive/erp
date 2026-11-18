@@ -11,13 +11,15 @@ use bpm::model::ApprovalNodeExecution;
 use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_identity::{AuthorizationService, SharedRbacService};
+use erp_read_models::workbench::freeze_approval_materials;
 use erp_workflow::entity::approval_integration::{
     ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload, resolve_runtime_document_type,
 };
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
+use erp_workflow::repository::ApprovalSubjectSnapshotRepositoryExt;
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
-use erp_workflow::repository::prelude::*;
+use erp_workflow::service::approval::copies::persist_started_copy;
 use erp_workflow::service::approval::execution::PlannedWrites;
 use erp_workflow::{ApprovalIntegrationExt, BpmExt, WorkItemExt, WorkflowAuthorizationPort};
 use id_generator::next_id;
@@ -26,7 +28,6 @@ use persistence_core::Executor;
 pub use replay::{StartReplayErrors, replay_start};
 
 use crate::approver_directory::revalidate_approvers;
-use crate::material_writes::{freeze_approval_materials, persist_approval_snapshot};
 use crate::{Error, Result};
 
 /// 入口任务沿用业务提交时确定的责任和时间。
@@ -140,8 +141,11 @@ pub async fn persist_start_snapshot<A: WorkflowAuthorizationPort>(
     auth: &A,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let snapshot = freeze_approval_materials(identity_service, db, snapshot, auth, executor).await?;
-    persist_approval_snapshot(rbac, db, &snapshot, executor).await
+    let mut snapshot = freeze_approval_materials(identity_service, db, auth, snapshot, executor).await?;
+    snapshot.freeze_resubmission_display()?;
+    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
+    persist_started_copy(rbac, db, &snapshot, executor).await?;
+    Ok(())
 }
 
 /// 依计划顺序创建入口人工任务，并返回首个任务回执。

@@ -73,19 +73,24 @@ impl BackgroundRunner {
     /// # 错误
     /// 无；单个适配器的轮询失败只记日志，不中断其余适配器。
     pub async fn run_once(&self) -> Vec<(&'static str, usize)> {
-        self.run_round(None).await
+        let mut counts = Vec::with_capacity(self.adapters.len());
+        self.run_round(None, |name, count| counts.push((name, count))).await;
+        counts
     }
 
     /// 顺序执行适配器，在停止通知后不进入下一个适配器。
-    async fn run_round(&self, stop: Option<&watch::Receiver<bool>>) -> Vec<(&'static str, usize)> {
-        let mut counts = Vec::with_capacity(self.adapters.len());
+    async fn run_round(
+        &self,
+        stop: Option<&watch::Receiver<bool>>,
+        mut report: impl FnMut(&'static str, usize) + Send,
+    ) {
         for adapter in &self.adapters {
             if stop.is_some_and(should_stop) {
                 break;
             }
             let started = std::time::Instant::now();
             let name = adapter.name();
-            match adapter.run_due().await {
+            let count = match adapter.run_due().await {
                 Ok(count) => {
                     tracing::info!(
                         task_name = name,
@@ -93,7 +98,7 @@ impl BackgroundRunner {
                         success_count = count,
                         "background task finished"
                     );
-                    counts.push((name, count));
+                    count
                 },
                 Err(error) => {
                     tracing::error!(
@@ -102,11 +107,11 @@ impl BackgroundRunner {
                         error = %error,
                         "background task failed"
                     );
-                    counts.push((name, 0));
+                    0
                 },
-            }
+            };
+            report(name, count);
         }
-        counts
     }
 
     /// 运行可停止的轮询并排空适配器派生任务。
@@ -118,7 +123,7 @@ impl BackgroundRunner {
     /// 单轮失败记录日志；总退出预算由进程监督器负责。
     pub async fn run(&self, stop: watch::Receiver<bool>) {
         super::periodic(stop.clone(), self.interval, || async {
-            self.run_round(Some(&stop)).await;
+            self.run_round(Some(&stop), |_, _| {}).await;
         })
         .await;
         for adapter in &self.adapters {

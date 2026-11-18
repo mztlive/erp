@@ -171,8 +171,8 @@ impl InventoryService {
         executor: &mut dyn Executor,
     ) -> Result<StockAdjustment> {
         self.db
-            .inventory()
-            .stock_adjustment(id, executor)
+            .stock_adjustments()
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))
     }

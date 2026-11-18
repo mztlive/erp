@@ -53,7 +53,7 @@ use super::cancel_approval::{
 };
 use super::start_approval::{
     SalesChangeStartInput, SalesChangeStartPersistInput, build_sales_change_start_input,
-    load_bound_definition_graph, load_start_receipt, persist_sales_change_start,
+    load_bound_definition_graph, load_start_receipt,
 };
 use super::submission_receipt::replay_submission;
 use crate::{Error, Result};
@@ -362,7 +362,7 @@ impl SalesChangeProcess {
             .await?;
         input.workflow_action.comment = request.resubmission_reason;
         input.workflow_action.from_status = from_status.to_string();
-        persist_sales_change_start(&self.db, input, executor).await
+        input.persist(&self.db, executor).await
     }
 
     /// 在原读取位置准备领域提交与冻结快照，不执行写入。

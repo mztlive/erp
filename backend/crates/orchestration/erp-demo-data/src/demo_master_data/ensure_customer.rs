@@ -40,7 +40,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let Some(owner) = self.role_actor(&spec::foundation_spec().customer_owner_account).await? else {
             return Ok(EnsureOutcome::Notice("没有可用的销售账号，未生成客户".to_string()));
         };
-        let view = match self.customers().create(request.clone(), &owner).await.map_err(Error::from) {
+        let view = match self.ports.customers.create(request.clone(), &owner).await.map_err(Error::from) {
             Ok(view) => view,
             Err(Error::ValidationError(message) | Error::Forbidden(message)) => {
                 return Ok(EnsureOutcome::Notice(format!("未生成客户：{message}")));

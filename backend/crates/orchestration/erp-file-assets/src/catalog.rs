@@ -1,57 +1,35 @@
-//! 支持域附件批次到商品附件 Port 的类型化转换。
+//! 同一份准备批次直接实现商品附件 Port。
 
 use std::collections::HashSet;
-use std::sync::Arc;
 
 use async_trait::async_trait;
-use erp_catalog::PendingAttachmentBatch;
 use erp_core::ids::FileAssetId;
+use erp_support::PendingAttachmentBatch as SupportBatch;
 use mongodb::Database;
 use persistence_core::Executor;
 
-/// 把已准备的支持域附件批次暴露为商品端口。
-pub struct CatalogPendingAttachments {
-    inner: Arc<dyn erp_support::PendingAttachmentBatch>,
-}
-
-impl CatalogPendingAttachments {
-    /// 把支持域待提交批次包装为商品域事务内待提交端口。
-    ///
-    /// # 参数
-    /// * `inner` - 支持域已准备的待提交附件批次。
-    ///
-    /// # 返回
-    /// 返回商品域 `PendingAttachmentBatch`。
-    ///
-    /// # 错误
-    /// 不返回错误。
-    pub fn from_support(
-        inner: Arc<dyn erp_support::PendingAttachmentBatch>,
-    ) -> Arc<dyn PendingAttachmentBatch> {
-        Arc::new(Self { inner })
-    }
-}
+use crate::PendingFileAssets;
 
 #[async_trait]
-impl PendingAttachmentBatch for CatalogPendingAttachments {
+impl erp_catalog::PendingAttachmentBatch for PendingFileAssets {
     fn resolve_id(&self, id: &mut FileAssetId, used: &mut HashSet<String>) -> erp_core::Result<bool> {
-        self.inner.resolve_id(id, used)
+        SupportBatch::resolve_id(self, id, used)
     }
 
     fn ensure_all_used(&self, used: &HashSet<String>) -> erp_core::Result<()> {
-        self.inner.ensure_all_used(used)
+        SupportBatch::ensure_all_used(self, used)
     }
 
     fn contains_id(&self, id: &FileAssetId) -> bool {
-        self.inner.contains_id(id)
+        SupportBatch::contains_id(self, id)
     }
 
     async fn persist(&self, db: &Database, executor: &mut dyn Executor) -> erp_catalog::Result<()> {
-        self.inner.persist(db, executor).await.map_err(map_support_to_catalog)
+        SupportBatch::persist(self, db, executor).await.map_err(map_support_to_catalog)
     }
 
     fn is_empty(&self) -> bool {
-        self.inner.is_empty()
+        SupportBatch::is_empty(self)
     }
 }
 

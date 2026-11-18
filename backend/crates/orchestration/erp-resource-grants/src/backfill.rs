@@ -6,7 +6,6 @@ use bpm::model::types::ApprovalNodeExecutionStatus;
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use erp_finance::repository::extensions::ReceivableExt;
 use erp_identity::entity::resource_access::event::{GrantEvent, GrantEventEvidence, GrantEventPayload};
-use erp_identity::ports::ResourceGrantFacts;
 use erp_identity::service::resource_access::append_event;
 use erp_identity::{Error, Result};
 use erp_workflow::entity::work_item_command::WorkItemCommandResult;
@@ -17,7 +16,7 @@ use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 
 use crate::ResourceGrantProcess;
-use crate::facts::Facts;
+use crate::facts::{Facts, validate_targets};
 use crate::management::validate_cursor;
 
 #[derive(Debug, Deserialize)]
@@ -66,7 +65,7 @@ impl ResourceGrantProcess {
             .clone()
             .with_transaction(move |ex| {
                 Box::pin(async move {
-                    this.access(None).authorize_manager(&actor, ex).await?;
+                    this.management().authorize_manager(&actor, ex).await?;
                     this.backfill_page(request, ex).await
                 })
             })
@@ -114,15 +113,14 @@ impl ResourceGrantProcess {
         let mut prepared = PreparedHistory::default();
         for evidence in events {
             let event = GrantEvent::new(evidence)?;
-            if self.queue().source(&event.source, ex).await?.is_some_and(|source| source.terminated) {
+            if self.queue.source(&event.source, ex).await?.is_some_and(|source| source.terminated) {
                 prepared.terminated += 1;
                 continue;
             }
-            let facts = Facts { db: self.db.clone(), event: None };
-            let update = facts.compute(&event, ex).await?;
-            facts.validate_targets(&update.targets, ex).await?;
+            let update = Facts::compute(&self.db, &event, ex).await?;
+            validate_targets(&self.db, &update.targets, ex).await?;
             if planned.contains(&event.source.id()?)
-                || self.queue().source_event(&event.source, ex).await?.is_some()
+                || self.queue.source_event(&event.source, ex).await?.is_some()
             {
                 prepared.existing += 1;
                 continue;

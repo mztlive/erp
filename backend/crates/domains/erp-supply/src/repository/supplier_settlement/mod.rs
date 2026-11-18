@@ -8,9 +8,6 @@
 //!
 //! 结算明细是不可变正式结算事实行（只 `new` 不 `update`，§6.20），本域不为它提供
 //! 软删除方法；结算单是正式单据，仍走基类软删除/恢复语义。
-//!
-//! 筛选/行类型定义在本文件，经 `SupplierSettlementExt` 的关联类型对外暴露
-//! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
 use super::extensions::{SupplierFulfillmentExt, SupplierSettlementExt};
 

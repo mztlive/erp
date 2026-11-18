@@ -7,7 +7,8 @@ use application_core::{AuditActor, CommandReceipt};
 use erp_audit::execution::persist_log;
 use erp_audit::{AuditAction, AuditActorLogs, AuditField, AuditFieldKind, BusinessEventContext};
 use erp_core::ids::{PartyBankAccountId, SupplierPaymentId, WorkItemId};
-use erp_finance::dto::payable::SupplierPaymentView;
+use erp_finance::dto::payable::{CommitSupplierPaymentRequest, SupplierPaymentView};
+use erp_finance::dto::payment_merge::{PaymentMergeCandidatesParams, PaymentMergeCandidatesView};
 use erp_finance::entity::payable::{PendingPaymentAllocation, SupplierPayment, SupplierPaymentData};
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
@@ -25,14 +26,12 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use super::dto::CommitSupplierPaymentRequest;
 use super::posting::post_supplier_payment;
 use super::{
     PayableProcess, SupplierPaymentBankReceiptSnapshot, SupplierPaymentWithAssetsResult, payment_request,
 };
 use crate::finance_posting::command_recovery::{recovered_resource, recovered_view};
-use crate::finance_posting::task_access::TaskPurpose;
-use crate::finance_posting::task_entry::require_entry;
+use crate::finance_posting::task_access::{TaskPurpose, require_entry};
 use crate::{Error, FinancePostingPorts, Result};
 
 mod receipt;
@@ -57,6 +56,22 @@ impl PayableProcess {
     /// 恒返回冲突；付款只能从已批准付款申请办理。
     pub fn reject_client_payment() -> Result<SupplierPaymentView> {
         Err(Error::ConflictError("旧采购应付直付入口已停止，请从已批准付款申请登记付款".into()))
+    }
+
+    /// 停止旧应付任务合并入口。
+    /// # 参数
+    /// * `params` - 旧任务筛选。
+    /// * `actor` - 当前用户。
+    /// # 返回
+    /// 不返回可付款候选。
+    /// # 错误
+    /// 固定拒绝并要求走采购付款申请。
+    pub async fn payment_merge_candidates(
+        &self,
+        _params: PaymentMergeCandidatesParams,
+        _actor: &AuditActor,
+    ) -> Result<PaymentMergeCandidatesView> {
+        Err(Error::ConflictError("旧采购应付合并直付入口已停止，请从已批准付款申请登记付款".into()))
     }
 
     /// 读取付款单归属的银行回单元数据，并记录受控预览审计。

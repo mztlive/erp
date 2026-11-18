@@ -64,6 +64,32 @@ impl SupplierFulfillmentProcess {
         self.submit_after_sales_action(id, req, SupplierOrderActionType::Cancel, actor).await
     }
 
+    /// 提交供应商退款（幂等键：「订单号 + REFUND」，§6.19）。
+    ///
+    /// 同事务创建 `REFUND` 动作头/行并把 `refund_status` 推进到 `REFUND_PENDING`；
+    /// 事务外派发供应商 API。重复提交（同一幂等键）返回原动作结果，不再次调用。
+    ///
+    /// # 参数
+    /// * `id` - 供应商子订单 ID
+    /// * `req` - 退款动作提交请求
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回动作与动作后订单视图。
+    ///
+    /// # 错误
+    /// * `NotFound` - 订单不存在
+    /// * `BusinessLogicError` - 动作范围非法或连接缺少退款能力
+    /// * `ConflictError` - 唯一键冲突（并发重复提交）
+    pub async fn submit_refund(
+        &self,
+        id: &str,
+        req: SubmitAfterSalesActionRequest,
+        actor: &AuditActor,
+    ) -> Result<SubmitActionResultView> {
+        self.submit_after_sales_action(id, req, SupplierOrderActionType::Refund, actor).await
+    }
+
     /// 提交供应商取消/退款动作的公共编排。
     ///
     /// 完成幂等命中、售后申请存在性、连接能力、动作行净余额校验后，同事务写入
@@ -80,7 +106,7 @@ impl SupplierFulfillmentProcess {
     ///
     /// # 错误
     /// 同 [`Self::submit_cancel`]。
-    pub(super) async fn submit_after_sales_action(
+    async fn submit_after_sales_action(
         &self,
         id: &str,
         req: SubmitAfterSalesActionRequest,
@@ -132,8 +158,7 @@ impl SupplierFulfillmentProcess {
             SupplierOrderActionType::Refund => &supplier_fulfillment::ORDER_REFUND,
             _ => return Err(Error::ValidationError("不支持的售后动作类型".into())),
         };
-        let order = self.require_scoped_order(id, actor, permission, executor).await?;
-        self.ensure_legacy_order(id, executor).await?;
+        let order = self.require_legacy_order(id, actor, permission, executor).await?;
         let idempotency_key = format!("{}+{}", order.fulfillment_order_no, action_type.as_str());
         if let Some(existing) =
             self.db.supplier_order_actions().find_by_idempotency_key(&idempotency_key, executor).await?

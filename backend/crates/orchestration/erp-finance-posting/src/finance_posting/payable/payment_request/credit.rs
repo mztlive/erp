@@ -212,7 +212,7 @@ async fn authorize_replay(
     if task.business_object_id != id {
         return Err(Error::Forbidden("不能读取其他任务的抵扣结果".into()));
     }
-    require_task(db, rbac, actor, &task, TaskPurpose::Payment, executor).await?;
+    require_task(rbac, actor, &task, TaskPurpose::Payment, executor).await?;
     rbac.tasks.ensure_domain_decision_access(actor, &task, executor).await?;
     Ok(())
 }

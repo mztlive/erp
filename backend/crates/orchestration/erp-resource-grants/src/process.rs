@@ -13,7 +13,8 @@ use super::facts::Facts;
 #[derive(Clone)]
 pub struct ResourceGrantProcess {
     pub(crate) db: Database,
-    pub(crate) authorization: Arc<AuthorizationService>,
+    authorization: Arc<AuthorizationService>,
+    pub(crate) queue: GrantEventService,
 }
 
 impl ResourceGrantProcess {
@@ -25,18 +26,7 @@ impl ResourceGrantProcess {
     /// # 错误
     /// 无。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
-        Self { db, authorization }
-    }
-
-    /// 装配独立队列能力。
-    /// # 参数
-    /// 无。
-    /// # 返回
-    /// 绑定当前数据库的事件服务。
-    /// # 错误
-    /// 不执行 I/O。
-    pub(crate) fn queue(&self) -> GrantEventService {
-        GrantEventService::new(self.db.clone())
+        Self { queue: GrantEventService::new(db.clone()), db, authorization }
     }
 
     /// 装配可信来源发布能力。
@@ -62,8 +52,7 @@ impl ResourceGrantProcess {
     /// # 错误
     /// 读取或发布失败返回错误，业务事务不会重放。
     pub async fn tick(&self, token: &str, now: u64) -> Result<bool> {
-        let queue = self.queue();
-        let Some(event) = queue.claim_event(token, now).await? else {
+        let Some(event) = self.queue.claim_event(token, now).await? else {
             return Ok(false);
         };
 
@@ -78,7 +67,7 @@ impl ResourceGrantProcess {
 
         if let Err(error) = result {
             if !matches!(error, Error::OutcomeUnknown(_)) {
-                queue.fail_event(&event, now, &error.to_string()).await?;
+                self.queue.fail_event(&event, now, &error.to_string()).await?;
             }
             return Err(error);
         }
@@ -87,21 +76,20 @@ impl ResourceGrantProcess {
     }
 
     async fn publish(&self, claim: GrantEvent, ex: &mut dyn Executor) -> Result<()> {
-        let queue = self.queue();
-        let current = queue.claimed_event(&claim, ex).await?;
+        let current = self.queue.claimed_event(&claim, ex).await?;
         if current.status == GrantEventStatus::Applied {
             return Ok(());
         }
 
-        let old = queue.source(&current.source, ex).await?;
+        let old = self.queue.source(&current.source, ex).await?;
         if !old.as_ref().is_some_and(|s| s.terminated) {
-            let update = Facts { db: self.db.clone(), event: None }.compute(&current, ex).await?;
+            let update = Facts::compute(&self.db, &current, ex).await?;
             if !old.as_ref().is_some_and(|s| s.fact_version > update.fact_version) {
                 self.access(Some(claim)).apply_source(update, ex).await?;
             }
         }
 
-        queue.complete_event(current, ex).await
+        self.queue.complete_event(current, ex).await
     }
 }
 
@@ -114,7 +102,7 @@ impl ResourceGrantProcess {
     /// # 错误
     /// 持久化失败返回错误。
     pub async fn reconcile(&self, after: Option<&str>, now: u64) -> Result<Option<String>> {
-        self.queue().requeue(&GrantRecompute::All, after, now).await
+        self.queue.requeue(&GrantRecompute::All, after, now).await
     }
     /// 查询授权积压与故障统计。
     /// # 参数
@@ -124,6 +112,6 @@ impl ResourceGrantProcess {
     /// # 错误
     /// 查询失败时返回错误。
     pub async fn health(&self, now: u64) -> Result<GrantQueueHealth> {
-        self.queue().grant_health(now).await
+        self.queue.grant_health(now).await
     }
 }

@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
 use erp_core::ids::WorkItemId;
+use erp_finance::dto::receivable::CommitInvoiceRequest;
 use erp_finance::entity::receivable::Invoice;
 use erp_finance::entity::receivable::sales_invoice_allocation_plan::SalesInvoiceAllocationLine;
 use erp_finance::repository::ReceivableExt;
@@ -14,11 +15,9 @@ use mongodb::Database;
 use persistence_core::Executor;
 use validator::Validate;
 
-use super::dto::CommitInvoiceRequest;
 use super::invoice::{ensure_postable_draft, new_invoice, register_created_invoice_document};
 use super::invoice_posting::{InvoicePostingAllocations, InvoicePostingInput, post_invoice_apply};
-use crate::finance_posting::task_access::TaskPurpose;
-use crate::finance_posting::task_entry::require_entry;
+use crate::finance_posting::task_access::{TaskPurpose, require_entry};
 use crate::{Error, FinancePostingPorts, Result};
 
 /// 本次发票原始命令；授权及回执检查后才解析上传，不保存 S3 字节。

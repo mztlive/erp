@@ -84,15 +84,16 @@ impl WarehouseService {
         executor: &mut dyn Executor,
     ) -> Result<WarehouseView> {
         req.validate()?;
-        self.authorization.require(actor, &warehouse::UPDATE, AccessTarget::Operation, executor).await?;
-        self.ensure_handlers(&req.inbound_handler_user_id, &req.outbound_handler_user_id, executor).await?;
         let mut warehouse = self
-            .db
-            .warehouse()
-            .warehouse(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("仓库不存在".into()))?;
-        ensure_expected_version(warehouse.base.version, req.version)?;
+            .load_warehouse_for_update(
+                actor,
+                id,
+                req.version,
+                &req.inbound_handler_user_id,
+                &req.outbound_handler_user_id,
+                executor,
+            )
+            .await?;
         let revision_no = self.db.warehouse().next_revision_no(id, executor).await?;
         warehouse.update(
             WarehouseUpdate {
@@ -143,15 +144,16 @@ impl WarehouseService {
         executor: &mut dyn Executor,
     ) -> Result<WarehouseView> {
         req.validate()?;
-        self.authorization.require(actor, &warehouse::UPDATE, AccessTarget::Operation, executor).await?;
-        self.ensure_handlers(&req.inbound_handler_user_id, &req.outbound_handler_user_id, executor).await?;
         let mut warehouse = self
-            .db
-            .warehouse()
-            .warehouse(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("仓库不存在".into()))?;
-        ensure_expected_version(warehouse.base.version, req.version)?;
+            .load_warehouse_for_update(
+                actor,
+                id,
+                req.version,
+                &req.inbound_handler_user_id,
+                &req.outbound_handler_user_id,
+                executor,
+            )
+            .await?;
         let audit_message = format!(
             "inbound:{}->{};outbound:{}->{}",
             warehouse.inbound_handler_user_id.as_deref().unwrap_or("未配置"),
@@ -199,8 +201,8 @@ impl WarehouseService {
             .await?;
         let mut policy = self
             .db
-            .warehouse()
-            .sku_policy(id, executor)
+            .warehouse_sku_policies()
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("预警策略不存在".into()))?;
         ensure_expected_version(policy.base.version, req.version)?;
@@ -243,8 +245,8 @@ impl WarehouseService {
             .await?;
         let mut policy = self
             .db
-            .warehouse()
-            .sku_policy(id, executor)
+            .warehouse_sku_policies()
+            .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("预警策略不存在".into()))?;
         let audit = self.audit.resource_log(
@@ -258,7 +260,28 @@ impl WarehouseService {
         Ok(())
     }
 
-    /// 两项履约资格使用同一原事务读取。
+    /// 按既定顺序校验操作资格、经办人及仓库版本。
+    async fn load_warehouse_for_update(
+        &self,
+        actor: &AuditActor,
+        id: &str,
+        expected_version: u64,
+        inbound: &str,
+        outbound: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Warehouse> {
+        self.authorization.require(actor, &warehouse::UPDATE, AccessTarget::Operation, executor).await?;
+        self.ensure_handlers(inbound, outbound, executor).await?;
+        let warehouse = self
+            .db
+            .warehouses()
+            .find_by_id(id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("仓库不存在".into()))?;
+        ensure_expected_version(warehouse.base.version, expected_version)?;
+        Ok(warehouse)
+    }
+
     async fn ensure_handlers(
         &self,
         inbound: &str,

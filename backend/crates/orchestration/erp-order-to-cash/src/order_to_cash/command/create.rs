@@ -1,4 +1,5 @@
 use application_core::{AuditActor, CommandFingerprint};
+use erp_audit::execution::recover_command;
 use erp_contract::{Contract, ContractExt, ContractRevision, ContractStatus};
 use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, PartyId};
 use erp_permissions::{internal, sales_order as sales_order_permissions};
@@ -18,7 +19,7 @@ use validator::Validate;
 
 use super::super::SalesOrderCommandProcess;
 use super::super::authorization::SalesCommandAccess;
-use crate::order_to_cash::command_event::{SalesCommandEvent, finish_receipt_recovery, load_command_receipt};
+use crate::order_to_cash::command_event::{SalesCommandEvent, load_command_receipt};
 use crate::{Error, Result};
 
 mod persist;
@@ -289,7 +290,7 @@ impl SalesOrderCommandProcess {
         actor_id: &str,
         access: &SalesCommandAccess,
     ) -> Result<String> {
-        finish_receipt_recovery(
+        recover_command(
             error,
             self.replay_sales_order_creation(identity.0, identity.1, identity.2, actor_id, access).await,
         )

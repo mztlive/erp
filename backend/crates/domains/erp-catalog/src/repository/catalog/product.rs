@@ -32,7 +32,7 @@ pub struct ProductFilter {
     /// 稳定主键集合（`$in` 精确匹配）；`None` 表示不筛选。
     pub ids: Option<Vec<String>>,
     /// 已证明的维护人授权条件；`None` 表示调用方尚未注入范围。
-    pub scope: Option<super::scope::CatalogReadScope>,
+    pub scope: Option<super::CatalogReadScope>,
     /// 维护人筛选，只收窄授权结果。
     pub maintainer_user_ids: Option<Vec<String>>,
     /// 业务组织筛选，只收窄授权结果。
@@ -195,7 +195,7 @@ pub trait ProductRepositoryExt {
     /// 仓储不得按登录用户自行推断权限；公司范围应由调用方跳过本方法。
     async fn list_authorized_ids(
         &self,
-        scope: &super::scope::CatalogReadScope,
+        scope: &super::CatalogReadScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<String>>;
 
@@ -225,7 +225,7 @@ impl ProductRepositoryExt for persistence_core::Repository<'_, Product> {
 
     async fn list_authorized_ids(
         &self,
-        scope: &super::scope::CatalogReadScope,
+        scope: &super::CatalogReadScope,
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<String>> {
         scope.ensure_current(executor)?;

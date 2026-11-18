@@ -30,28 +30,6 @@ impl FileAssetService {
     ) -> Result<FileAssetView> {
         self.register_file_asset_command(req, None, AssetRegistrationOrigin::Metadata, actor).await
     }
-    /// 登记管理元数据并原子建立指定单据附件关系。
-    /// # 参数
-    /// req、document_id、usage为已核验业务输入，actor为当前账号。
-    /// # 返回
-    /// 新文件视图。
-    /// # 错误
-    /// 无登记资格、单据缺失、唯一冲突或审计失败时拒绝。
-    pub async fn register_file_asset_with_attachment(
-        &self,
-        req: RegisterFileAssetRequest,
-        document_id: BusinessDocumentId,
-        usage: AttachmentUsage,
-        actor: &AuditActor,
-    ) -> Result<FileAssetView> {
-        self.register_file_asset_command(
-            req,
-            Some((document_id, usage)),
-            AssetRegistrationOrigin::Metadata,
-            actor,
-        )
-        .await
-    }
     /// 登记已经过真实大小、MIME及内容检查的受控上传。
     /// # 参数
     /// req为服务器检查后的元数据，actor为真实上传账号。

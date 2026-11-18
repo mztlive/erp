@@ -8,11 +8,9 @@ mod facts;
 mod field_changes;
 mod idempotency;
 mod identity;
-mod numbering;
 mod query;
 mod sensitive;
 mod update;
-mod views;
 use std::sync::Arc;
 
 use erp_customer::CustomerAccess;

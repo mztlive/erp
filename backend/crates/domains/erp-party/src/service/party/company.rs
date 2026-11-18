@@ -225,7 +225,7 @@ impl PartyService {
             short_name: profile.short_name.clone(),
             change_reason: "维护公司主体".into(),
         };
-        self.update_party_record(id, command, Some(profile), actor, &party::COMPANY_COMPANY_UPDATE, executor)
+        self.update_stage(id, command, Some(&profile), actor, &party::COMPANY_COMPANY_UPDATE, executor)
             .await?;
         self.company_result(actor, &party::COMPANY_COMPANY_UPDATE, id, executor).await
     }

@@ -10,16 +10,7 @@ use crate::dto::{
     SkuRevisionListParams, SkuRevisionView, SkuView, SortDir,
 };
 use crate::error::Result;
-use crate::repository::CatalogExt;
-
-/// 商品列表仓储筛选条件类型。
-type ProductFilter = <mongodb::Database as CatalogExt>::ProductFilter;
-/// 商品修订列表仓储筛选条件类型。
-type ProductRevisionFilter = <mongodb::Database as CatalogExt>::ProductRevisionFilter;
-/// SKU 列表仓储筛选条件类型。
-type SkuFilter = <mongodb::Database as CatalogExt>::SkuFilter;
-/// SKU 修订列表仓储筛选条件类型。
-type SkuRevisionFilter = <mongodb::Database as CatalogExt>::SkuRevisionFilter;
+use crate::repository::{CatalogExt, ProductFilter, ProductRevisionFilter, SkuFilter, SkuRevisionFilter};
 
 impl CatalogService {
     /// 分页查询商品修订列表。

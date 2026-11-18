@@ -1,7 +1,6 @@
 //! 草稿、待审变更及生效变更共用专项条款复验与采用余额调整。
 use erp_procurement::entity::purchase_order::{
-    PurchaseChangeSubmissionLine, PurchaseInquiryAddress, PurchaseOrder, PurchaseOrderRevisionLine,
-    PurchaseOrderSubmissionLine,
+    PurchaseInquiryAddress, PurchaseOrder, PurchaseOrderRevisionLine,
 };
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_supplier_catalog::supply_governance::offering::MongoOfferingQualification;
@@ -17,40 +16,21 @@ use super::{
 };
 use crate::{Error, Result};
 
-/// 草稿保存调整采用，当前仍在审批或可重提时继续占用新目标。
-pub(in crate::procure_to_pay) async fn resize_draft_quotes(
-    db: &Database,
-    order: &PurchaseOrder,
-    lines: &[PurchaseOrderSubmissionLine],
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    resize(db, order, lines, false, executor).await
+pub(in crate::procure_to_pay) enum QuoteResize {
+    /// 草稿或生效版本使用新的完整数量和地址，释放不再引用的采用。
+    Replace,
+    /// 待审变更只占增加部分，不提前释放现有采用。
+    KeepExisting,
 }
-/// 变更提交先占增加部分，保留原正式数量与地址；减少不提前释放。
-pub(in crate::procure_to_pay) async fn resize_change_quotes(
-    db: &Database,
-    order: &PurchaseOrder,
-    lines: &[PurchaseChangeSubmissionLine],
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    resize(db, order, lines, true, executor).await
-}
-/// 正式变更生效时才将采用切换至新完整数量及地址，原历史保留。
-pub(in crate::procure_to_pay) async fn resize_revision_quotes(
-    db: &Database,
-    order: &PurchaseOrder,
-    lines: &[PurchaseOrderRevisionLine],
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    resize(db, order, lines, false, executor).await
-}
-async fn resize<L: InquiryPurchaseLine>(
+
+pub(in crate::procure_to_pay) async fn resize_quotes<L: InquiryPurchaseLine>(
     db: &Database,
     order: &PurchaseOrder,
     lines: &[L],
-    keep_existing: bool,
+    mode: QuoteResize,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    let keep_existing = matches!(mode, QuoteResize::KeepExisting);
     let service = InquirySupplyService::new(db.clone());
     let qualification = MongoOfferingQualification::new(db.clone());
     let mut kept = Vec::new();
@@ -65,12 +45,7 @@ async fn resize<L: InquiryPurchaseLine>(
         ensure_exact_quote(source, &quote)?;
     }
     if !keep_existing {
-        let reservations = service.reservations(&order.base.id, executor).await?;
-        for reservation in reservations {
-            if !kept.contains(&reservation.base.id) {
-                service.release_reservation(&reservation.base.id, executor).await?;
-            }
-        }
+        release_unused_quotes(&service, order, &kept, executor).await?;
     }
     Ok(())
 }
@@ -98,6 +73,15 @@ pub(in crate::procure_to_pay) async fn restore_current_quotes(
             kept.push(id);
         }
     }
+    release_unused_quotes(&service, &order, &kept, executor).await
+}
+
+async fn release_unused_quotes(
+    service: &InquirySupplyService,
+    order: &PurchaseOrder,
+    kept: &[String],
+    executor: &mut dyn Executor,
+) -> Result<()> {
     for reservation in service.reservations(&order.base.id, executor).await? {
         if !kept.contains(&reservation.base.id) {
             service.release_reservation(&reservation.base.id, executor).await?;

@@ -79,7 +79,7 @@ impl AccessFactsPort for WarehouseFacts {
     ) -> erp_identity::Result<Vec<ObjectFacts>> {
         let mut objects = Vec::new();
         for id in ids.ids() {
-            if let Some(row) = self.0.warehouse().warehouse(id, executor).await? {
+            if let Some(row) = self.0.warehouses().find_by_id(id, executor).await? {
                 objects.push(Self::object(context, row));
             }
         }

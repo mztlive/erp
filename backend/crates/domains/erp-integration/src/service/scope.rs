@@ -126,35 +126,14 @@ pub async fn resolve_list_scope(
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<ResolvedListScope> {
     let read_scope = access.resolve(actor, permission, executor).await?;
-    let owner_org_unit_ids = expand_org_filter(access, org_unit_ids, include_descendants, executor).await?;
+    let owner_org_unit_ids = if org_unit_ids.is_empty() {
+        Vec::new()
+    } else {
+        access.expand_org_units(org_unit_ids, include_descendants, executor).await?.into_iter().collect()
+    };
     let meta = ScopedIntegrationList::from_access(&read_scope);
     ensure_scope_version(scope_version, &meta.scope_version)?;
     Ok(ResolvedListScope { read_scope, owner_org_unit_ids, meta })
-}
-
-/// 展开请求组织筛选；空列表表示不按组织收窄。
-///
-/// # 参数
-/// * `access` - 当前动作访问器
-/// * `org_unit_ids` - 请求组织 ID
-/// * `include_descendants` - 是否包含有效下级
-/// * `executor` - 与授权相同的执行器
-///
-/// # 返回
-/// 返回展开后的组织 ID；请求为空时返回空列表。
-///
-/// # 错误
-/// 未知组织时拒绝。
-pub async fn expand_org_filter(
-    access: &super::IntegrationAccess,
-    org_unit_ids: &[String],
-    include_descendants: bool,
-    executor: &mut dyn persistence_core::Executor,
-) -> Result<Vec<String>> {
-    if org_unit_ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    Ok(access.expand_org_units(org_unit_ids, include_descendants, executor).await?.into_iter().collect())
 }
 
 #[cfg(test)]

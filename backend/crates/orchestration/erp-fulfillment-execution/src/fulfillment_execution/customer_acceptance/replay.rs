@@ -100,15 +100,7 @@ impl AcceptanceReplay for ReplayReader {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let task = self.result_task(sales, task_id, executor).await?;
-        require_assignee(
-            &self.db,
-            &self.authorization,
-            actor,
-            &task,
-            TaskPurpose::CustomerAcceptance,
-            executor,
-        )
-        .await
+        require_assignee(&self.authorization, actor, &task, TaskPurpose::CustomerAcceptance, executor).await
     }
 }
 

@@ -210,8 +210,7 @@ impl SourceSystemRepositoryExt for persistence_core::Repository<'_, SourceSystem
             .limit(filter.limit())
             .projection(source_system_projection())
             .build();
-        let collection = self.collection().clone_with_type::<SourceSystemRow>();
-        search_projected_page(&self.collection(), &collection, filter, options, executor).await
+        search_projected_page(&self.collection(), filter, options, executor).await
     }
 
     async fn find_systems_by_ids(
@@ -391,8 +390,7 @@ impl ExternalIdentityMapRepositoryExt for persistence_core::Repository<'_, Exter
             .limit(filter.limit())
             .projection(external_identity_map_projection())
             .build();
-        let collection = self.collection().clone_with_type::<ExternalIdentityMapRow>();
-        search_projected_page(&self.collection(), &collection, filter, options, executor).await
+        search_projected_page(&self.collection(), filter, options, executor).await
     }
 
     async fn find_by_identity(

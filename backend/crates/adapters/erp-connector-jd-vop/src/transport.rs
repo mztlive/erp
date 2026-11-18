@@ -1,4 +1,5 @@
 //! 只读请求白名单；认证实现必须独立取得账号协议证据后注入。
+use std::future::Future;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::Duration;
@@ -7,7 +8,7 @@ use async_trait::async_trait;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::ports::connector::common::{ConnectorError, ConnectorResult};
 use serde::de::DeserializeOwned;
-use tokio::sync::{Mutex, Semaphore, SemaphorePermit};
+use tokio::sync::{Mutex, Semaphore};
 use tokio::time::{Instant, sleep_until, timeout};
 
 use super::error;
@@ -209,15 +210,16 @@ impl WriteClient {
     }
 
     pub(super) async fn send<T: DeserializeOwned>(&self, request: JdVopWriteRequest) -> ConnectorResult<T> {
-        let body = timeout(self.reader.timeout, self.once(&request)).await.map_err(|_| write_unknown())??;
-        let rpc = request.response_key();
+        let body = self
+            .reader
+            .with_slot(
+                async { self.transport.write(&request).await.map_err(unknown_after_write) },
+                write_unknown,
+                write_unknown,
+            )
+            .await?;
         // 业务码或 success=false 不证明副作用未发生，未核验的失败不能释放原写意图。
-        decode(&body, request.method(), rpc).map_err(unknown_after_write)
-    }
-
-    async fn once(&self, request: &JdVopWriteRequest) -> ConnectorResult<Vec<u8>> {
-        let _permit = self.reader.acquire_slot().await.ok_or_else(write_unknown)?;
-        self.transport.write(request).await.map_err(unknown_after_write)
+        decode(&body, request.method(), request.response_key()).map_err(unknown_after_write)
     }
 }
 
@@ -278,28 +280,85 @@ impl ReadClient {
     }
 
     pub(super) async fn read<T: DeserializeOwned>(&self, request: JdVopReadRequest) -> ConnectorResult<T> {
-        let body = timeout(self.timeout, self.once(&request)).await.map_err(|_| {
-            error(SupplierFailureClass::TransientFailure, "JD_VOP_READ_TIMEOUT", "京东读取超时，请稍后重试")
-        })??;
+        let body = self
+            .with_slot(
+                self.transport.read(&request),
+                || {
+                    error(
+                        SupplierFailureClass::TransientFailure,
+                        "JD_VOP_READ_CLOSED",
+                        "京东读取服务暂不可用",
+                    )
+                },
+                || {
+                    error(
+                        SupplierFailureClass::TransientFailure,
+                        "JD_VOP_READ_TIMEOUT",
+                        "京东读取超时，请稍后重试",
+                    )
+                },
+            )
+            .await?;
         decode(&body, request.method(), "openRpcResult")
     }
 
-    async fn once(&self, request: &JdVopReadRequest) -> ConnectorResult<Vec<u8>> {
-        let _permit = self.acquire_slot().await.ok_or_else(|| {
-            error(SupplierFailureClass::TransientFailure, "JD_VOP_READ_CLOSED", "京东读取服务暂不可用")
-        })?;
-        self.transport.read(request).await
+    async fn with_slot(
+        &self,
+        request: impl Future<Output = ConnectorResult<Vec<u8>>>,
+        slot_unavailable: fn() -> ConnectorError,
+        deadline_elapsed: fn() -> ConnectorError,
+    ) -> ConnectorResult<Vec<u8>> {
+        timeout(self.timeout, async {
+            let _permit = self.semaphore.acquire().await.map_err(|_| slot_unavailable())?;
+            let scheduled = {
+                let mut next = self.next_request.lock().await;
+                let scheduled = (*next).max(Instant::now());
+                *next = scheduled + self.interval;
+                scheduled
+            };
+            sleep_until(scheduled).await;
+            request.await
+        })
+        .await
+        .map_err(|_| deadline_elapsed())?
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct UnreachableTransport;
+
+    #[async_trait]
+    impl JdVopReadTransport for UnreachableTransport {
+        async fn read(&self, _: &JdVopReadRequest) -> ConnectorResult<Vec<u8>> {
+            panic!("closed admission must not send a read");
+        }
     }
 
-    async fn acquire_slot(&self) -> Option<SemaphorePermit<'_>> {
-        let permit = self.semaphore.acquire().await.ok()?;
-        let scheduled = {
-            let mut next = self.next_request.lock().await;
-            let scheduled = (*next).max(Instant::now());
-            *next = scheduled + self.interval;
-            scheduled
-        };
-        sleep_until(scheduled).await;
-        Some(permit)
+    #[async_trait]
+    impl JdVopWriteTransport for UnreachableTransport {
+        async fn write(&self, _: &JdVopWriteRequest) -> ConnectorResult<Vec<u8>> {
+            panic!("closed admission must not send a write");
+        }
+    }
+
+    #[tokio::test]
+    async fn closed_shared_admission_preserves_read_and_write_error_classes() {
+        let transport = Arc::new(UnreachableTransport);
+        let reader = Arc::new(ReadClient::new(transport.clone(), 1, 1, 1));
+        reader.semaphore.close();
+        let error = reader.read::<WireText>(JdVopReadRequest::Balance).await.err().unwrap();
+        assert_eq!(error.class, SupplierFailureClass::TransientFailure);
+        assert_eq!(error.code, "JD_VOP_READ_CLOSED");
+
+        let writer = WriteClient { transport, reader };
+        let error = writer
+            .send_true(JdVopWriteRequest::DeleteMessages { ids: vec!["123".into()], source_type: 1 })
+            .await
+            .unwrap_err();
+        assert_eq!(error.class, SupplierFailureClass::ResultUnknown);
+        assert_eq!(error.code, "JD_VOP_WRITE_RESULT_UNKNOWN");
     }
 }
