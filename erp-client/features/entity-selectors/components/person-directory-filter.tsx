@@ -24,6 +24,8 @@ type PersonDirectoryFilterProps = {
     onChange: (value: string) => void
     label?: string
     hideLabel?: boolean
+    /** 外层表单提供关联标签，人员选择仍使用固定高度的摘要。 */
+    externalLabel?: boolean
     selectionMode?: "single" | "multiple"
     /** 仅当用户在控件上选择了组织筛选时传入。 */
     orgUnitIds?: readonly string[]
@@ -65,6 +67,7 @@ export function PersonDirectoryFilter({
     onChange,
     label = "负责人",
     hideLabel = false,
+    externalLabel = false,
     selectionMode = "multiple",
     orgUnitIds = [],
     includeDescendants = false,
@@ -143,14 +146,16 @@ export function PersonDirectoryFilter({
 
     return (
         <div className={hideLabel ? "min-w-0" : "min-w-0 space-y-1.5"}>
-            <label
-                className={
-                    hideLabel ? "sr-only" : "text-xs text-muted-foreground"
-                }
-                htmlFor={id}
-            >
-                {label}
-            </label>
+            {!externalLabel && (
+                <label
+                    className={
+                        hideLabel ? "sr-only" : "text-xs text-muted-foreground"
+                    }
+                    htmlFor={id}
+                >
+                    {label}
+                </label>
+            )}
             {selectionMode === "single" ? (
                 <>
                     <OptionCombobox
@@ -193,7 +198,8 @@ export function PersonDirectoryFilter({
                 <MultiOptionCombobox
                     id={id}
                     aria-label={label}
-                    filterLabel={hideLabel ? label : undefined}
+                    filterLabel={hideLabel || externalLabel ? label : undefined}
+                    hideFilterLabel={externalLabel}
                     value={ids}
                     options={uniqueOptions}
                     filterMode="remote"

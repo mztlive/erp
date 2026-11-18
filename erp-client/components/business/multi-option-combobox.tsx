@@ -46,6 +46,8 @@ export type MultiOptionComboboxProps = ComboboxRefreshProps & {
     placeholder?: string
     /** 查询栏使用固定高度的名称与选择摘要，避免多选标签撑高控件。 */
     filterLabel?: string
+    /** 外层已显示字段标签时，触发器只显示选择摘要，保留弹层搜索。 */
+    hideFilterLabel?: boolean
     emptyLabel?: string
     disabled?: boolean
     required?: boolean
@@ -76,6 +78,7 @@ export function MultiOptionCombobox({
     onValueChange,
     placeholder = "请选择",
     filterLabel,
+    hideFilterLabel = false,
     emptyLabel = "没有符合条件的选项",
     disabled = false,
     required = false,
@@ -159,9 +162,11 @@ export function MultiOptionCombobox({
                             />
                         }
                     >
-                        <span className="shrink-0 text-muted-foreground">
-                            {filterLabel}：
-                        </span>
+                        {!hideFilterLabel && (
+                            <span className="shrink-0 text-muted-foreground">
+                                {filterLabel}：
+                            </span>
+                        )}
                         <span className="min-w-0 flex-1 truncate text-left">
                             {selected.length === 0
                                 ? "全部"

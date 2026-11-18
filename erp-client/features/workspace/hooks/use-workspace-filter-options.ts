@@ -81,6 +81,7 @@ export function useWorkspaceFilterOptions(
         search,
         setSearch,
         failure: failure && readProblemCopy(failure, feedback),
+        accessDenied: failure?.accessDenied,
         canRetry: failure?.retryable === true,
     }
 }

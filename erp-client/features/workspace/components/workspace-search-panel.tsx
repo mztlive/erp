@@ -44,6 +44,7 @@ function RemoteSearchChoice({
     options,
     view,
     label,
+    externalLabel = false,
 }: {
     name: WorkspaceChoiceKey
     value: string[]
@@ -51,8 +52,14 @@ function RemoteSearchChoice({
     options: WorkspaceSearchOptions
     view: WorkspaceViewFilter
     label?: string
+    externalLabel?: boolean
 }) {
     const remote = useWorkspaceFilterOptions(view, undefined, name)
+    const id = `workspace-filter-${name}`
+    const failureText =
+        externalLabel && remote.accessDenied
+            ? (remote.accessDenied.detail ?? "无权查看筛选选项，请联系管理员。")
+            : remote.failure?.description
     const labels = useRef(new Map<string, WorkspaceSearchOption>())
     const initial = options[name] ?? []
     for (const option of [...initial, ...(remote.data?.[name] ?? [])])
@@ -74,14 +81,18 @@ function RemoteSearchChoice({
                 },
         )
     return (
-        <div className="min-w-40">
+        <div className={externalLabel ? "min-w-0" : "min-w-40"}>
             <MultiOptionCombobox
-                id={`workspace-filter-${name}`}
+                id={id}
                 aria-label={WORKSPACE_FILTER_LABELS[name]}
+                aria-describedby={
+                    failureText && !remote.canRetry ? `${id}-status` : undefined
+                }
                 options={[...selected, ...choices]}
                 value={value}
                 onValueChange={onChange}
                 filterLabel={label ?? WORKSPACE_FILTER_LABELS[name]}
+                hideFilterLabel={externalLabel}
                 filterMode="remote"
                 onSearchChange={remote.setSearch}
                 loading={remote.isFetching}
@@ -90,15 +101,19 @@ function RemoteSearchChoice({
             {remote.canRetry ? (
                 <button
                     type="button"
-                    id={`workspace-filter-${name}-retry`}
-                    className="text-xs text-destructive"
+                    id={`${id}-retry`}
+                    className="mt-1.5 text-xs text-destructive"
                     onClick={() => void remote.refetch()}
                 >
                     候选加载失败，点击重试
                 </button>
-            ) : remote.failure ? (
-                <p role="status" className="text-xs text-muted-foreground">
-                    {remote.failure.description}
+            ) : failureText ? (
+                <p
+                    id={`${id}-status`}
+                    role="status"
+                    className="mt-1.5 text-xs leading-relaxed wrap-anywhere text-muted-foreground"
+                >
+                    {failureText}
                 </p>
             ) : null}
         </div>
@@ -119,6 +134,7 @@ export function WorkspaceSearchChoice(
                     props.onChange(value ? value.split(",") : [])
                 }
                 label="处理人"
+                externalLabel={props.externalLabel}
             />
         )
     }
@@ -216,7 +232,7 @@ export function WorkspaceSearchPanel({
             label: "处理受阻",
             onClear: () => clear("blocked"),
         })
-    const choice = (key: WorkspaceChoiceKey) => (
+    const choice = (key: WorkspaceChoiceKey, externalLabel = false) => (
         <form.Field key={key} name="filters">
             {(field) => (
                 <WorkspaceSearchChoice
@@ -230,6 +246,7 @@ export function WorkspaceSearchPanel({
                     }
                     options={options}
                     view={state.view}
+                    externalLabel={externalLabel}
                 />
             )}
         </form.Field>
@@ -363,21 +380,30 @@ export function WorkspaceSearchPanel({
                         })
                     }
                     morePanel={
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            {MORE_KEYS.filter(
-                                (key) =>
+                        <div className="grid min-w-0 items-start gap-x-4 gap-y-3 sm:grid-cols-2">
+                            {MORE_KEYS.filter((key) => {
+                                if (
+                                    key === "handlers" &&
+                                    state.view !== "started"
+                                )
+                                    return hasPermission(
+                                        profile?.permissions,
+                                        "business_person:list",
+                                    )
+                                return (
                                     !["warehouses", "business_types"].includes(
                                         key,
                                     ) ||
                                     options[key]?.length ||
-                                    applied.filters[key]?.length,
-                            ).map((key) => (
+                                    applied.filters[key]?.length
+                                )
+                            }).map((key) => (
                                 <ListWorkspaceFilterField
                                     key={key}
                                     label={WORKSPACE_FILTER_LABELS[key]}
                                     htmlFor={`workspace-filter-${key}`}
                                 >
-                                    {choice(key)}
+                                    {choice(key, true)}
                                 </ListWorkspaceFilterField>
                             ))}
                             <form.Field name="filters">
@@ -392,14 +418,11 @@ export function WorkspaceSearchPanel({
                                             ...patch,
                                         })
                                     return (
-                                        <div className="space-y-3 sm:col-span-2">
-                                            <div className="space-y-2">
-                                                <label
-                                                    htmlFor="workspace-filter-date-field"
-                                                    className="text-xs"
-                                                >
-                                                    时间条件
-                                                </label>
+                                        <div className="min-w-0 space-y-3 sm:col-span-2">
+                                            <ListWorkspaceFilterField
+                                                htmlFor="workspace-filter-date-field"
+                                                label="时间条件"
+                                            >
                                                 <div className="grid gap-2 sm:grid-cols-[8rem_minmax(0,1fr)]">
                                                     <OptionCombobox
                                                         id="workspace-filter-date-field"
@@ -526,7 +549,7 @@ export function WorkspaceSearchPanel({
                                                         />
                                                     </div>
                                                 </div>
-                                            </div>
+                                            </ListWorkspaceFilterField>
                                             <div className="flex flex-wrap gap-4 text-xs">
                                                 <label
                                                     htmlFor="workspace-filter-undated"
