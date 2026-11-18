@@ -18,7 +18,7 @@ pub const SAVE_ACTION: &str = "purchase_order.update";
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SavePurchaseOrderDraftRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_lock_version: u64,
     /// 付款条件；缺省表示不修改。
     pub payment_term_code: Option<String>,
@@ -29,8 +29,8 @@ pub struct SavePurchaseOrderDraftRequest {
     #[serde(default)]
     pub line_patches: Vec<SavePurchaseOrderLinePatch>,
     /// 幂等键（同内容重复保存返回同一结果）。
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
-    #[validate(length(max = 128, message = "幂等键过长"))]
+    #[validate(custom(function = "non_blank", message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
+    #[validate(length(max = 128, message = "本次操作标识无效，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 

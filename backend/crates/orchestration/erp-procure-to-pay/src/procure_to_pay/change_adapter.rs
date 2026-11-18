@@ -177,7 +177,7 @@ pub fn execute_purchase_change_domain_action(
         ApprovalDomainAction::PurchaseChangeOrderCancelApproval => {
             Ok(cancel_purchase_change_to_draft(order, updated_by)?)
         },
-        other => Err(Error::ValidationError(format!("动作 {} 不属于采购变更单", other.as_str()))),
+        _ => Err(Error::ValidationError("该采购变更单不支持此审批操作，请从对应审批待办办理".into())),
     }
 }
 
@@ -267,7 +267,7 @@ pub fn build_purchase_change_snapshot(
         total_amount: Some(submission.gross_amount),
         total_quantity: Some(sum_line_quantity(lines)?),
         line_count: u32::try_from(lines.len())
-            .map_err(|_| Error::ValidationError("采购变更明细行数溢出".to_string()))?,
+            .map_err(|_| Error::ValidationError("采购变更明细行数过多，请减少明细后再办理".to_string()))?,
     })
 }
 

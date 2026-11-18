@@ -54,6 +54,7 @@ pub use runtime_service::{
     ApprovalRuntimeService, RuntimeAssigneeCandidate, RuntimeInstanceListCursor, RuntimeInstanceListItem,
     RuntimeInstanceListPage, RuntimeInstanceListQuery, RuntimeRecoveryOptionsView, UpgradeBindingCommand,
 };
+pub(crate) use start::bpm_model_message;
 pub use start::{StartExecutionInput, map_engine_error, prepare_start, prepare_start_with_identity};
 #[cfg(test)]
 pub use store::{MemoryRuntimeStore, TaskApplyContext, commit_writes, replay_after_duplicate};

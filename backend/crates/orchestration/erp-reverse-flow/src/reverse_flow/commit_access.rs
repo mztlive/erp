@@ -29,7 +29,11 @@ impl ReturnsProcess {
         let relation = match kind {
             DocumentType::CustomerRefund | DocumentType::ReceiptReversal => "receipt_source",
             DocumentType::SupplierRefund | DocumentType::PaymentReversal => "payment_source",
-            _ => return Err(Error::ValidationError("未登记退款或冲正提交入口".into())),
+            _ => {
+                return Err(Error::ValidationError(
+                    "当前单据不支持此项退款或冲正操作，请核对单据类型".into(),
+                ));
+            },
         };
         let permission = submit_permission(kind)?;
         let mut candidate = ObjectFacts {

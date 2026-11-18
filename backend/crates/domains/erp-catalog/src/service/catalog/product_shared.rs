@@ -63,7 +63,7 @@ impl CatalogService {
             .cloned()
             .collect::<Vec<_>>();
         if !self.file_assets.missing_ids(&asset_ids, executor).await?.is_empty() {
-            return Err(Error::NotFound("SKU 主图文件不存在".to_string()));
+            return Err(Error::NotFound("未找到该商品规格的主图，请重新上传或选择文件".to_string()));
         }
         Ok(())
     }

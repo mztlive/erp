@@ -47,7 +47,7 @@ pub struct CustomerAssignmentRequest {
     #[validate(custom(function = "non_blank", message = "调整原因不能为空"))]
     pub change_reason: String,
     /// 期望的乐观锁版本（`End` 必填）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: Option<u64>,
 }
 

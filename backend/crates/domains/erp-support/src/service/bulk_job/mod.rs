@@ -185,7 +185,7 @@ impl BulkJobService {
         let cutoff = i64::try_from(req.data_cutoff_at)
             .map_err(|_| Error::ValidationError("数据截止时间超出支持范围".into()))?;
         let expires = i64::try_from(req.expires_at)
-            .map_err(|_| Error::ValidationError("快照过期时间超出支持范围".into()))?;
+            .map_err(|_| Error::ValidationError("批量选择的有效期超出允许范围，请重新设置".into()))?;
         let aggregate = BulkSelectionSnapshotAggregate::new(
             snapshot_id,
             BulkSelectionSnapshotAggregateData {
@@ -608,10 +608,11 @@ impl BulkJobService {
         match self.db.bulk_job().registration_by_request_id(job, executor).await? {
             Some(BackgroundJobRegistration::ReplaySame(existing)) => Ok(existing.into()),
             Some(BackgroundJobRegistration::ConflictDifferentPayload(_)) => Err(Error::ConflictError(
-                "同一请求身份已用于不同后台任务载荷；历史无指纹任务须使用新的请求身份".to_string(),
+                "本次提交编号已被其他后台任务使用，或原任务无法核对提交内容；请先查看已有任务，再发起新任务"
+                    .to_string(),
             )),
             Some(BackgroundJobRegistration::Created) | None => {
-                Err(Error::ConflictError("后台任务唯一竞争结果已变化，请刷新后重试".to_string()))
+                Err(Error::ConflictError("其他操作刚刚提交了后台任务，请刷新任务列表后重试".to_string()))
             },
         }
     }
@@ -776,7 +777,7 @@ impl BulkJobService {
             .bulk_selection_snapshots()
             .find_by_id(id, executor)
             .await?
-            .ok_or_else(|| Error::NotFound("选择快照不存在".into()))?;
+            .ok_or_else(|| Error::NotFound("找不到此前保存的批量选择结果，请重新选择".into()))?;
         check_expected_version(snapshot.base.version, version)?;
         match permission.action() {
             "confirm" => snapshot.confirm()?,

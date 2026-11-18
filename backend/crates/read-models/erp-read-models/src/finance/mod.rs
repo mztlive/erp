@@ -26,7 +26,9 @@ fn command_snapshot(executor: &mut dyn Executor) -> Result<()> {
     if executor.boundary().is_some_and(|boundary| boundary.is_snapshot() && boundary.is_current(executor)) {
         Ok(())
     } else {
-        Err(Error::ValidationError("财务命令结果读取必须使用原授权快照".into()))
+        Err(Error::ValidationError(
+            "暂时无法查看本次财务处理结果，请打开原单据核对当前状态，勿重复操作".into(),
+        ))
     }
 }
 
@@ -57,7 +59,7 @@ mod command_tests {
             receivable.invoice_request_detail_with_executor("request", &mut executor).await.map(|_| ()),
         ] {
             assert!(
-                matches!(result, Err(Error::ValidationError(message)) if message == "财务命令结果读取必须使用原授权快照")
+                matches!(result, Err(Error::ValidationError(message)) if message == "暂时无法查看本次财务处理结果，请打开原单据核对当前状态，勿重复操作")
             );
         }
     }

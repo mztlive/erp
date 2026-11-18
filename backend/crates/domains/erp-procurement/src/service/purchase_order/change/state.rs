@@ -115,7 +115,7 @@ mod tests {
         let mut change = order();
         assert!(matches!(
             ensure_final_approve_effective(&change),
-            Err(Error::ConflictError(message)) if message == "只有审批中的采购变更单可以由最终通过动作生效"
+            Err(Error::ConflictError(message)) if message == "只有审批中的采购变更单可以在审批通过后生效，请核对变更单状态"
         ));
 
         change.stable.status = PurchaseChangeOrderStatus::InApproval;

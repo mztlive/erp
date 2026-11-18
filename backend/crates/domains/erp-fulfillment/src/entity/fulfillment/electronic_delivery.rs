@@ -601,9 +601,9 @@ pub(super) fn normalize_recipient_snapshot(
 ) -> Result<(String, String)> {
     let snapshot = normalize_required_text(
         snapshot,
-        "交付对象加密快照不能为空",
+        "缺少交付对象信息，请核对后重新提交",
         RECIPIENT_SNAPSHOT_MAX_LEN,
-        "交付对象加密快照过长",
+        "交付对象信息过长，请精简后重新提交",
     )?;
     let fingerprint =
         normalize_precomputed_fingerprint("交付对象查询指纹不能为空", "交付对象查询指纹过长", fingerprint)?;

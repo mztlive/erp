@@ -48,14 +48,19 @@ impl<'a> Archive<'a> {
     /// # 错误
     /// 缺项、CRC/解压失败、编码错误或超过 16 MiB 时拒绝。
     pub(crate) fn xml(&mut self, name: &str) -> Result<String> {
-        let file = self.archive.by_name(name).map_err(|_| invalid(format!("工作簿缺少必要内容：{name}")))?;
+        let file = self
+            .archive
+            .by_name(name)
+            .map_err(|_| invalid("工作簿缺少必要内容，请用原模板重新另存为 .xlsx 后上传"))?;
         let mut bytes = Vec::new();
-        file.take(MAX_XML_BYTES + 1).read_to_end(&mut bytes).map_err(|_| invalid("工作簿解压失败"))?;
+        file.take(MAX_XML_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| invalid("工作簿无法读取，请用表格软件重新另存为 .xlsx 后上传"))?;
         if u64::try_from(bytes.len()).map_err(|_| invalid("工作簿过大"))? > MAX_XML_BYTES {
-            return Err(invalid("XML 解压大小超过 16 MiB"));
+            return Err(invalid("工作簿单个工作表或内嵌资料过大，请拆分文件后上传"));
         }
 
-        String::from_utf8(bytes).map_err(|_| invalid("工作簿编码无效"))
+        String::from_utf8(bytes).map_err(|_| invalid("工作簿无法读取，请用表格软件重新另存为 .xlsx 后上传"))
     }
 
     /// 检查包内条目是否存在，不读取内容。
@@ -97,7 +102,7 @@ impl<'a> Archive<'a> {
 
         let doc = document(&xml)?;
         if doc.root_element().tag_name().name() != "sst" {
-            return Err(invalid("共享文本表结构无效"));
+            return Err(invalid("工作簿中的文字无法读取，请用原模板重新另存为 .xlsx 后上传"));
         }
 
         Ok(doc
@@ -111,16 +116,19 @@ impl<'a> Archive<'a> {
 
 fn check_archive(archive: &mut ZipArchive<Cursor<&[u8]>>, limits: ArchiveLimits) -> Result<()> {
     if archive.len() > 4096 {
-        return Err(invalid("工作簿压缩条目超过 4096 个"));
+        return Err(invalid("工作簿包含过多工作表或内嵌资料，请精简或拆分后上传"));
     }
     let mut expanded = 0_u64;
     let mut names = HashSet::new();
     for index in 0..archive.len() {
-        let file = archive.by_index(index).map_err(|_| invalid("压缩条目无效"))?;
-        expanded = expanded.checked_add(file.size()).ok_or_else(|| invalid("解压大小越限"))?;
+        let file = archive
+            .by_index(index)
+            .map_err(|_| invalid("工作簿包含无法读取的内容，请用原模板重新另存后上传"))?;
+        expanded =
+            expanded.checked_add(file.size()).ok_or_else(|| invalid("工作簿内容过多，请拆分后上传"))?;
         let name = file.name();
         if file.size() > limits.entry_bytes || expanded > limits.expanded_bytes {
-            return Err(invalid("工作簿解压大小超过限制"));
+            return Err(invalid("工作簿内容过多，请删减图片或拆分后上传"));
         }
 
         if file.enclosed_name().is_none()
@@ -128,11 +136,11 @@ fn check_archive(archive: &mut ZipArchive<Cursor<&[u8]>>, limits: ArchiveLimits)
             || name.split('/').any(|part| part == ".." || part == ".")
             || !names.insert(name.to_string())
         {
-            return Err(invalid("工作簿路径重复或不安全"));
+            return Err(invalid("工作簿结构异常，请将数据复制到新的导入模板后上传"));
         }
 
         if name.contains("vbaProject") || name.starts_with("xl/externalLinks/") {
-            return Err(invalid("工作簿不得包含宏或外部链接"));
+            return Err(invalid("工作簿不得包含宏或外部链接，请移除后重新上传"));
         }
     }
     Ok(())

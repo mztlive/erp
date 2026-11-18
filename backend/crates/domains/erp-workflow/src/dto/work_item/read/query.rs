@@ -44,7 +44,7 @@ pub struct WorkItemListParams {
     /// 服务端返回的队列上下文；当前实现只接受同查询重算值。
     pub queue_context_id: Option<String>,
     /// 首次查询返回的范围版本；后续页必须原样回传。
-    #[validate(length(max = 128))]
+    #[validate(length(max = 128, message = "任务列表查询信息无效，请从第一页重新查询"))]
     pub scope_version: Option<String>,
     /// 希望聚焦的任务；不可见时服务端失败关闭。
     #[validate(length(max = 128, message = "焦点任务ID不能超过128个字符"))]
@@ -345,7 +345,7 @@ fn parse_id_list(value: Option<&str>, label: &str) -> Result<Vec<String>> {
 fn ensure_supported_query(params: &WorkItemListParams) -> Result<()> {
     let timezone = params.timezone.as_deref().unwrap_or(DEFAULT_TIMEZONE).trim();
     if timezone != DEFAULT_TIMEZONE {
-        return Err(Error::ValidationError("当前任务队列只支持 Asia/Shanghai 时区".to_string()));
+        return Err(Error::ValidationError("当前任务队列仅支持北京时间，请调整时区后重新查询".to_string()));
     }
     Ok(())
 }

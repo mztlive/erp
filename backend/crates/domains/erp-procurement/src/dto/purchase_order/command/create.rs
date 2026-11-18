@@ -55,7 +55,7 @@ pub struct CreatePurchaseOrderFromBasisRequest {
     #[validate(length(min = 1, max = 200, message = "本次采购明细必须在1-200行之间"), nested)]
     pub lines: Vec<CreatePurchaseOrderLineRequest>,
     /// 幂等键（同一命令重复创建返回同一采购单）。
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(custom(function = "non_blank", message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -304,7 +304,7 @@ pub struct CreatePurchaseOrdersFromSourcingRequest {
     #[validate(length(min = 1, max = 200, message = "本次供给分配明细必须在1-200行之间"), nested)]
     pub lines: Vec<SourcingLineAssignment>,
     /// 幂等键（同一命令重复提交时返回原库存预占与采购单）。
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(custom(function = "non_blank", message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 

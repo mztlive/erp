@@ -256,7 +256,9 @@ pub fn sales_approval_ports(business_type: BusinessType) -> Result<SalesApproval
 pub fn require_frozen_binding(
     binding: Option<&ApprovalDefinitionBinding>,
 ) -> Result<&ApprovalDefinitionBinding> {
-    binding.ok_or_else(|| Error::ConflictError("无有效审批绑定的销售单不得提交".to_string()))
+    binding.ok_or_else(|| {
+        Error::ConflictError("该销售单没有可用的审批流程，请联系管理员核对流程后再提交".to_string())
+    })
 }
 
 /// 销售单调用统一 `start_approval` 的目标命令。
@@ -334,7 +336,10 @@ pub fn execute_sales_order_domain_action(
     if action == ports.cancel_action {
         return Ok(cancel_sales_order_to_draft(order, updated_by)?);
     }
-    Err(Error::ValidationError(format!("动作 {} 不属于 {}", action.as_str(), ports.document_type.label())))
+    Err(Error::ValidationError(format!(
+        "该{}不支持此审批操作，请从对应审批待办办理",
+        ports.document_type.label()
+    )))
 }
 
 /// 卡券专用决定路径新写立即失败关闭。
@@ -348,7 +353,7 @@ pub fn execute_sales_order_domain_action(
 /// # 错误
 /// 恒返回冲突，不得回退 `CARD_SALES_APPROVAL` 或专用决定端口。
 pub fn reject_legacy_card_sales_decision() -> Result<()> {
-    Err(Error::ConflictError("卡券销售单必须走统一审批，禁止写入卡券专用决定路径".to_string()))
+    Err(Error::ConflictError("卡券销售单请从统一审批待办办理".to_string()))
 }
 
 /// `CardSalesManagerApproval` / `CardSalesOperationApproval` 新写立即失败关闭。
@@ -364,7 +369,7 @@ pub fn reject_legacy_card_sales_decision() -> Result<()> {
 pub fn reject_legacy_card_sales_work_item(work_item_type: &str) -> Result<()> {
     match work_item_type {
         "CARD_SALES_MANAGER_APPROVAL" | "CARD_SALES_OPERATION_APPROVAL" => {
-            Err(Error::ConflictError("禁止新建卡券专用审批工作项".to_string()))
+            Err(Error::ConflictError("卡券销售单不支持单独创建审批待办，请从销售单提交审批".to_string()))
         },
         _ => Ok(()),
     }
@@ -400,7 +405,7 @@ pub fn sales_order_object_readable(organization_id: &str, assignee_user_id: &str
 pub fn sales_order_responsible_org_id(order: &SalesOrder) -> Result<String> {
     let org = order.settlement_party_id.to_string();
     if org.trim().is_empty() {
-        return Err(Error::ValidationError("销售单缺少结算主体，无法冻结责任组织".to_string()));
+        return Err(Error::ValidationError("销售单缺少结算主体，请补全后再提交审批".to_string()));
     }
     Ok(org)
 }
@@ -442,7 +447,7 @@ pub fn build_sales_order_snapshot(
         total_amount: Some(submission.gross_amount),
         total_quantity: Some(submission.approval_total_quantity(lines)?),
         line_count: u32::try_from(lines.len())
-            .map_err(|_| Error::ValidationError("销售明细行数溢出".to_string()))?,
+            .map_err(|_| Error::ValidationError("销售明细行数过多，请分单处理".to_string()))?,
     })
 }
 

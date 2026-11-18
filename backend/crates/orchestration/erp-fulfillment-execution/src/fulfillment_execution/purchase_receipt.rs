@@ -188,7 +188,7 @@ fn ensure_purchase_receipt_has_no_adapter() -> Result<()> {
 fn purchase_receipt_binding_organization_id(receipt: &PurchaseReceipt) -> Result<String> {
     let org = receipt.warehouse_id.to_string();
     if org.trim().is_empty() {
-        return Err(Error::ValidationError("采购收货缺少入库仓，无法构造绑定上下文".to_string()));
+        return Err(Error::ValidationError("采购收货未填写入库仓库，请补全后再提交".to_string()));
     }
     Ok(org)
 }

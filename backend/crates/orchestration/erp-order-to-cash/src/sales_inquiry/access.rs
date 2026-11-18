@@ -226,7 +226,7 @@ impl SalesInquiryAccess {
             .await
             .map_err(|error| match error {
                 erp_procure_to_pay::Error::Forbidden(_) => {
-                    Error::Forbidden("当前账号缺少完整询价操作权限".into())
+                    Error::Forbidden("当前账号不具备此次询价操作所需的全部权限，请联系管理员".into())
                 },
                 other => other.into(),
             })

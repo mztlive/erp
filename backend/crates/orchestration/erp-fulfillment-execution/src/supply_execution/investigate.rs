@@ -282,7 +282,7 @@ pub(super) fn validate_w26_task(
 ) -> Result<()> {
     ensure_version(item.base.version, expected_task_version, "供应商履约任务")?;
     if item.status != WorkItemStatus::Open {
-        return Err(Error::ConflictError("供应商履约任务已不是开放状态".to_string()));
+        return Err(Error::ConflictError("该供应商履约待办已不可办理，请刷新查看状态".to_string()));
     }
     if !matches!(
         item.work_item_type,
@@ -331,7 +331,7 @@ async fn ensure_no_active_w26_task(db: &Database, order_id: &str, executor: &mut
         .next()
         .is_some();
     if has_active_task {
-        return Err(Error::ConflictError("当前订单存在正式异常任务，必须使用任务调查命令".to_string()));
+        return Err(Error::ConflictError("该订单已有异常处理待办，请从待办发起调查".to_string()));
     }
     Ok(())
 }

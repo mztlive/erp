@@ -155,7 +155,7 @@ pub fn execute_supplier_refund_domain_action(
         ApprovalDomainAction::SupplierRefundCancelApproval => {
             cancel_supplier_refund_to_draft(refund).map_err(Error::from)
         },
-        other => Err(Error::ValidationError(format!("动作 {} 不属于供应商退款单", other.as_str()))),
+        _ => Err(Error::ValidationError("该供应商退款单不支持此审批操作，请从对应审批待办办理".into())),
     }
 }
 

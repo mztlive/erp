@@ -322,7 +322,7 @@ fn normalize_payment_term_id(value: Option<String>) -> Result<Option<String>> {
         return Ok(None);
     }
     if value.chars().count() > PAYMENT_TERM_ID_MAX_LEN {
-        return Err(erp_core::Error::from("付款条件引用过长"));
+        return Err(erp_core::Error::from("付款条件标识过长，请重新选择付款条件"));
     }
     Ok(Some(value))
 }

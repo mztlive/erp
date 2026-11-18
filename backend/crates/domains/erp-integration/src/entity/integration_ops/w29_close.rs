@@ -167,16 +167,16 @@ impl W29CloseDecision {
             },
             "MISROUTED" => {
                 if replacement_work_item_id.is_some() {
-                    return Err(Error::from("MISROUTED 不得提供替代任务"));
+                    return Err(Error::from("以分派错误为由关闭时，不要填写替代任务"));
                 }
-                let comment = comment.ok_or_else(|| Error::from("MISROUTED 必须填写原因说明"))?;
+                let comment = comment.ok_or_else(|| Error::from("请说明任务分派错误的原因"))?;
                 Ok(Self {
                     resolution_action: ResolutionAction::CloseMisrouted,
                     replacement_work_item_id: None,
                     close_reason: format!("MISROUTED: {comment}"),
                 })
             },
-            _ => Err(Error::from("关闭原因只允许 DUPLICATE 或 MISROUTED")),
+            _ => Err(Error::from("关闭原因只能选择任务重复或分派错误，请重新选择")),
         }
     }
 

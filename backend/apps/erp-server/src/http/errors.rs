@@ -46,6 +46,8 @@ const TECHNICAL_MESSAGE_TERMS: &[&str] = &[
     "rbac",
 ];
 
+const CONCURRENT_OPERATION_MESSAGE: &str = "相关资料正在被其他操作更新，请刷新并核对后再试";
+
 const USER_ACTION_MARKERS: &[&str] = &["请", "可以", "可在", "重新", "刷新", "稍后", "联系", "返回"];
 
 #[derive(Debug, thiserror::Error)]
@@ -108,7 +110,7 @@ impl From<persistence_core::Error> for Error {
                 Self::Conflict("数据已被其他请求修改，请刷新后重试".to_string())
             },
             persistence_core::Error::TransientTransactionConflict(_) => {
-                Self::Conflict("并发事务冲突，请重试".to_string())
+                Self::Conflict(CONCURRENT_OPERATION_MESSAGE.to_string())
             },
             error @ persistence_core::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
             other => Self::Internal(format!("数据库错误：{other}")),
@@ -164,7 +166,7 @@ macro_rules! boundary_error {
             $provider::Error::NotFound(msg) => Error::NotFound(msg),
             $provider::Error::ConflictError(msg) => Error::Conflict(msg),
             $provider::Error::ReceiptDuplicate(_) => Error::Conflict("数据已存在，请勿重复提交".to_string()),
-            $provider::Error::TransientTransaction(_) => Error::Conflict("并发事务冲突，请重试".to_string()),
+            $provider::Error::TransientTransaction(_) => Error::Conflict($crate::http::errors::CONCURRENT_OPERATION_MESSAGE.to_string()),
             $provider::Error::BusinessLogicError(msg) => Error::Unprocessable(msg),
             $provider::Error::Forbidden(msg) => Error::Forbidden(msg),
             $provider::Error::Unauthenticated(msg) => Error::Unauthorized(msg),
@@ -326,7 +328,7 @@ impl From<erp_fulfillment::Error> for Error {
             erp_fulfillment::Error::NotFound(msg) => Error::NotFound(msg),
             erp_fulfillment::Error::ConflictError(msg) => Error::Conflict(msg),
             erp_fulfillment::Error::TransientTransaction(_) => {
-                Error::Conflict("并发事务冲突，请重试".to_string())
+                Error::Conflict(CONCURRENT_OPERATION_MESSAGE.to_string())
             },
             erp_fulfillment::Error::BusinessLogicError(msg) => Error::Unprocessable(msg),
             erp_fulfillment::Error::Forbidden(msg) => Error::Forbidden(msg),
@@ -526,11 +528,20 @@ impl Error {
                 "当前业务条件不允许继续操作，请核对相关资料后重试",
                 "请核对相关业务条件后再操作",
             ),
+            Error::Logic(erp_core::Error::InvalidStateTransition { .. }) => {
+                "当前状态无法执行此操作，请刷新详情并确认下一步操作".to_string()
+            },
+            Error::Logic(erp_core::Error::Validation { message, .. }) => {
+                user_message_or(message, "填写内容有误，请核对后重试", "请修改后重试")
+            },
             Error::Logic(error) => user_message_or(
                 &error.to_string(),
                 "当前业务条件不允许继续操作，请核对相关资料后重试",
                 "请核对相关业务条件后再操作",
             ),
+            Error::Forbidden(_) if self.required_permission().is_some() => {
+                "当前账号没有这项操作权限，请联系管理员开通".to_string()
+            },
             Error::Forbidden(message) => user_message_or(
                 message,
                 "当前账号没有执行此操作的权限，请联系管理员或有权限的同事",
@@ -538,7 +549,7 @@ impl Error {
             ),
             Error::Unauthorized(_) => "登录状态已失效，请重新登录".to_string(),
             Error::RateLimited(error) if error.retry_after_secs().is_some() => {
-                "请求过于频繁，请稍后重试".to_string()
+                "操作过于频繁，请稍等片刻再试".to_string()
             },
             Error::RateLimited(_) => "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string(),
             Error::Coded(code) => approval_message(*code).to_string(),
@@ -686,7 +697,7 @@ mod tests {
     use axum::response::IntoResponse;
     use serde_json::Value;
 
-    use super::{Error, duplicate_index_conflict_message, wiring_errors};
+    use super::{CONCURRENT_OPERATION_MESSAGE, Error, duplicate_index_conflict_message, wiring_errors};
 
     #[test]
     fn nested_permission_diagnostic_requires_explicit_valid_permission() {
@@ -733,7 +744,7 @@ mod tests {
         assert!(
             matches!(receipt_duplicate, Error::Conflict(message) if message == "数据已存在，请勿重复提交")
         );
-        assert!(matches!(transient, Error::Conflict(message) if message == "并发事务冲突，请重试"));
+        assert!(matches!(transient, Error::Conflict(message) if message == CONCURRENT_OPERATION_MESSAGE));
     }
 
     #[test]
@@ -892,6 +903,41 @@ mod tests {
             assert!(!message.contains("DATA_SCOPE_CHANGED"));
             assert_eq!(body["retryable"], false);
         }
+    }
+
+    #[tokio::test]
+    async fn structured_domain_error_does_not_show_internal_fields_or_states() {
+        let cases = [
+            (
+                erp_core::Error::validation("bank_routing_number", "联行号必须为 12 位数字"),
+                "联行号必须为 12 位数字，请修改后重试",
+            ),
+            (
+                erp_core::Error::InvalidStateTransition { from: "Draft".into(), to: "Effective".into() },
+                "当前状态无法执行此操作，请刷新详情并确认下一步操作",
+            ),
+        ];
+        for (source, message) in cases {
+            let response = Error::from(source).into_response();
+            assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+            let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body: Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(body["errorMessage"], message);
+            assert_eq!(body["code"], "BUSINESS_RULE_BLOCKED");
+            assert_eq!(body["retryable"], false);
+        }
+    }
+
+    #[tokio::test]
+    async fn missing_permission_keeps_code_separate_from_user_message() {
+        let error = Error::Forbidden("当前账号缺少 purchase_order:submit 权限".into());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["errorMessage"], "当前账号没有这项操作权限，请联系管理员开通");
+        assert_eq!(body["requiredPermission"], "purchase_order:submit");
+        assert_eq!(body["code"], "PERMISSION_DENIED");
     }
 
     #[tokio::test]

@@ -132,7 +132,7 @@ fn classify_upgrade_subject(document_type: DocumentType) -> Result<UpgradeSubjec
 /// 恒返回冲突：开票申请创建即提交，不支持升级已提交申请的审批绑定。
 fn reject_invoice_request_upgrade(document_type: DocumentType) -> Error {
     Error::ConflictError(format!(
-        "{}提交时冻结审批绑定，不支持升级已提交申请的审批绑定",
+        "{}提交时已确定审批流程，提交后不能更换，请查看原审批记录",
         document_type.label()
     ))
 }
@@ -204,7 +204,7 @@ impl ApprovalUpgradeSubjectFacts {
     /// 版本不一致时返回冲突，调用方不得继续升级注册投影。
     pub fn ensure_expected_business_object_version(&self, expected: u64) -> Result<()> {
         if self.business_object_version != expected {
-            return Err(Error::ConflictError("强业务对象版本已变化，请刷新后重试".to_string()));
+            return Err(Error::ConflictError("单据已发生变更，请刷新后核对再调整审批流程".to_string()));
         }
         Ok(())
     }

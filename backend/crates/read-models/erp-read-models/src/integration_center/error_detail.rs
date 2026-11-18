@@ -2,6 +2,7 @@
 use erp_audit::entity::AuditLog;
 use erp_audit::repository::{AuditExt, AuditTimelineRepositoryExt, TimelineTarget};
 use erp_integration::dto::{ErrorTaskDetailView, ErrorTaskView};
+use erp_integration::entity::integration_ops::ErrorClass;
 use erp_supply::service::supplier_api::context::digest;
 use erp_support::repository::prelude::*;
 use erp_support::{
@@ -13,6 +14,7 @@ use serde::Serialize;
 use super::IntegrationCenterReadService;
 use super::error_labels::connection_task_identity;
 use crate::Result;
+use crate::supplier_center::supplier_api::connection_failure_note;
 
 /// 已授权错误详情及其关联责任、来源与处理历史。
 #[derive(Debug, Clone, Serialize)]
@@ -57,7 +59,7 @@ impl IntegrationCenterReadService {
                 .connection_failure_candidates(connection_id, kind, task.created_at, executor)
                 .await?;
             if let Some(job) = candidates.iter().find(|job| matches_failure(task, job)) {
-                return Ok(Some(ConnectionFailureView::from_job(connection_id, job)));
+                return Ok(Some(ConnectionFailureView::from_job(connection_id, job, task.error_class)));
             }
         }
         Ok(Some(ConnectionFailureView {
@@ -88,13 +90,44 @@ impl IntegrationCenterReadService {
     }
 }
 
+pub(crate) fn integration_attempt_note(class: ErrorClass, summary: &str) -> String {
+    if let Some(action) = summary.strip_prefix("w29_action=") {
+        let outcome = action.split(';').find_map(|field| field.strip_prefix("outcome="));
+        return match outcome {
+            Some("TERMINAL_EVIDENCE_FOUND") => "已查到最终处理结果，请核对凭据后继续处理",
+            Some("NO_RESULT_CONFIRMED") => "已核实原操作未产生结果，请从原异常待办处理",
+            Some("RESULT_UNKNOWN") => "尚未确认对方是否已处理，请先核对原操作结果，勿重复发起",
+            Some("REPLAY_ACCEPTED") => "对方已受理重新处理，请查看原操作进度，勿重复发起",
+            Some("REATTRIBUTED") => "已调整业务归属，请核对当前归属",
+            Some("EVIDENCE_LINKED") => "已关联补办记录，请核对相关凭据",
+            Some("EVIDENCE_ADDED") => "已补充凭据，请在原异常待办中查看",
+            Some("CONFIRMED_NO_ERROR") => "已核实原操作无误",
+            Some("CONFIRMED_VALID_DIFFERENCE") => "已核实该差异属实，请查看核对记录",
+            _ => "已记录本次处理，请查看原异常待办",
+        }
+        .into();
+    }
+    let fallback = match class {
+        ErrorClass::CapabilityGap => "对方系统不支持这项操作，请联系管理员核对业务设置",
+        ErrorClass::MappingError => "两边的业务资料无法对应，请核对相关单据或商品资料",
+        ErrorClass::BusinessRejected => "对方未受理这项操作，请核对单据和业务条件",
+        ErrorClass::TransientFailure => "本次处理暂未完成，请稍后查看处理进度",
+        ErrorClass::ResultUnknown => "尚未确认对方是否已处理，请先核对原操作结果，勿重复发起",
+        ErrorClass::AuthSignature => "对方未通过连接身份验证，请联系管理员核对授权设置",
+        ErrorClass::RateLimited => "对方处理请求过多，请稍后查看处理进度",
+        ErrorClass::OutOfOrder => "收到的业务更新顺序有误，请核对原单据的最新状态",
+    };
+    let code = summary.split_once(':').map(|(code, _)| code.trim());
+    connection_failure_note(code, fallback).into()
+}
+
 fn matches_failure(task: &ErrorTaskView, job: &BackgroundJob) -> bool {
     task.id == format!("w20-error-{}", digest(&[&job.base.id]))
         && task.business_object_id.as_deref() == job.domain_job_id.as_deref()
 }
 
 impl ConnectionFailureView {
-    fn from_job(connection_id: &str, job: &BackgroundJob) -> Self {
+    fn from_job(connection_id: &str, job: &BackgroundJob, class: ErrorClass) -> Self {
         Self {
             connection_id: connection_id.to_string(),
             operation_label: if job.domain_job_type.as_deref() == Some(SUPPLIER_HEALTH_CHECK_JOB_TYPE) {
@@ -104,7 +137,10 @@ impl ConnectionFailureView {
             },
             job_number: Some(job.job_no.clone()),
             failed_at: job.finished_at.map(|at| at.unix_secs()),
-            error_summary: job.error_summary.clone(),
+            error_summary: job
+                .error_summary
+                .as_deref()
+                .map(|summary| integration_attempt_note(class, summary)),
         }
     }
 }
@@ -132,7 +168,7 @@ mod tests {
     use erp_core::AccountKind;
     use erp_core::common::time::Instant;
     use erp_core::ids::BackgroundJobId;
-    use erp_integration::entity::integration_ops::{ErrorClass, IntegrationErrorTask};
+    use erp_integration::entity::integration_ops::IntegrationErrorTask;
     use erp_support::{SupplierGovernanceJobKind, SupplierGovernanceJobSpec};
 
     use super::*;
@@ -172,18 +208,28 @@ mod tests {
     }
 
     #[test]
-    fn failure_view_keeps_original_summary_and_human_job_number() {
+    fn failure_view_keeps_job_number_but_not_the_original_diagnostic() {
         let mut job = job();
         job.base = BaseModel::fake();
         job.start(Instant::from_unix_secs(10)).unwrap();
         job.mark_failed(Some("JD_VOP_TOKEN_UNAVAILABLE: 授权令牌已过期".into()), Instant::from_unix_secs(12))
             .unwrap();
 
-        let view = ConnectionFailureView::from_job("conn-1", &job);
+        let view = ConnectionFailureView::from_job("conn-1", &job, ErrorClass::AuthSignature);
         assert_eq!(view.operation_label, "接口健康检查");
         assert_eq!(view.job_number.as_deref(), Some(job.job_no.as_str()));
         assert_eq!(view.failed_at, Some(12));
-        assert_eq!(view.error_summary, job.error_summary);
+        assert_eq!(view.error_summary.as_deref(), Some("无法使用供应商连接的授权，请联系管理员核对当前授权"));
+        assert!(!serde_json::to_string(&view).unwrap().contains("JD_VOP_TOKEN_UNAVAILABLE"));
+    }
+
+    #[test]
+    fn latest_attempt_exposes_known_outcome_without_operation_or_evidence_ids() {
+        let note = integration_attempt_note(
+            ErrorClass::ResultUnknown,
+            "w29_action=replay;operation=PRIVATE_ID;outcome=REPLAY_ACCEPTED;evidence=PRIVATE_EVIDENCE",
+        );
+        assert_eq!(note, "对方已受理重新处理，请查看原操作进度，勿重复发起");
     }
 
     #[test]

@@ -17,10 +17,10 @@ pub struct HandoverSupplierOfferingRequest {
     #[validate(length(min = 1, max = 512, message = "交接原因不能为空"))]
     pub reason: String,
     /// 期望的供给乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_version: u64,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 

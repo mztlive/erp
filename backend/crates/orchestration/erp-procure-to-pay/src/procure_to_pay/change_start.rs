@@ -168,8 +168,8 @@ pub(super) fn build_purchase_change_start_input(
         now,
     } = input;
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
-    let actor =
-        ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
+    let actor = ParticipantId::new(actor_id)
+        .map_err(|_| Error::ValidationError("无法确认提交人账号，请重新登录后再提交".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
     let plan = plan_purchase_approval_start(&graph, binding.approval_definition_version, organization_id)?;
     Ok(StartExecutionInput {
@@ -279,7 +279,9 @@ pub(super) async fn persist_purchase_change_start(
     }
 
     let PreparedExecution::Apply(ref writes) = input.prepared else {
-        return Err(Error::ConflictError("缺少完整采购变更提交回执，无法安全回放".into()));
+        return Err(Error::ConflictError(
+            "原采购变更的审批提交记录不完整，请先查看审批状态，不要重复提交".into(),
+        ));
     };
     db.bpm_workflow()
         .insert_command_receipt(&writes.receipt, executor)
@@ -382,7 +384,7 @@ async fn guard_change_start(
         )
         .await?;
     if guarded.is_none() {
-        return Err(Error::ConflictError("采购变更单审批启动守卫冲突，请刷新后重试".into()));
+        return Err(Error::ConflictError("采购变更单的审批状态已变化，未能提交审批，请刷新后核对".into()));
     }
     Ok(())
 }

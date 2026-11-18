@@ -190,7 +190,9 @@ async fn load_open_decision_instance(
             instance.subject.subject_id(),
             instance.subject_version,
         )
-        .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
+        .map_err(|_| {
+            Error::ConflictError("审批记录与提交时的单据资料不一致，请联系审批管理员核对".to_string())
+        })?;
     Ok(OpenDecisionSubject {
         instance_id,
         instance,
@@ -254,7 +256,9 @@ fn ensure_decision_binding(
     binding: &ApprovalInstanceAssignee,
     actor_id: &str,
 ) -> Result<()> {
-    binding.ensure_unchanged_from_definition().map_err(|error| Error::ConflictError(error.to_string()))?;
+    binding.ensure_unchanged_from_definition().map_err(|error| {
+        Error::ConflictError(crate::service::approval::execution::bpm_model_message(&error).into())
+    })?;
     if binding.current_assignee_participant_id != execution.assignee_participant_id
         || binding.additional_assignees != execution.additional_assignees
         || !binding.has_participant(actor_id)
@@ -404,7 +408,10 @@ async fn revalidate_node_eligibility(
             .await?,
         );
     }
-    Eligibility::any_of(members).map_err(|error| Error::ValidationError(error.to_string()))
+    Eligibility::any_of(members).map_err(|error| {
+        tracing::debug!(%error, "审批人资格配置校验失败");
+        Error::ValidationError("当前审批节点的审批人配置无效，请联系审批管理员核对".into())
+    })
 }
 
 async fn load_frozen_definition_graph(
@@ -415,7 +422,7 @@ async fn load_frozen_definition_graph(
     db.bpm_workflow()
         .load_instance_graph(&loaded.instance, executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))
+        .ok_or_else(|| Error::ConflictError("找不到该审批使用的流程，请联系审批管理员核对".to_string()))
 }
 
 /// 调用决定规划器；新命令落入回放分支时按内部错误失败。
@@ -450,7 +457,7 @@ fn plan_open_decision(
         reason: command.reason.clone(),
         expected_task_version: command.expected_task_version,
         actor: ParticipantId::new(actor.id())
-            .map_err(|_| Error::ValidationError("决定人引用无效".to_string()))?,
+            .map_err(|_| Error::ValidationError("无法确认审批账号，请重新登录后再操作".to_string()))?,
         next_execution_id: ApprovalNodeExecutionId::new(next_id()),
         next_execution_no: loaded
             .execution

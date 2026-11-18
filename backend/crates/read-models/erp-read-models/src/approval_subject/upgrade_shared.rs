@@ -33,7 +33,7 @@ pub(crate) fn ensure_fresh_subject_identity(
         return Err(Error::Internal("Fresh 强业务对象主键不一致".to_string()));
     }
     if facts.business_object_version != actual_version {
-        return Err(Error::ConflictError("强业务对象版本已变化，请刷新后重试".to_string()));
+        return Err(Error::ConflictError("单据已发生变更，请刷新后核对再调整审批流程".to_string()));
     }
     Ok(())
 }
@@ -51,10 +51,9 @@ pub(crate) fn ensure_fresh_subject_identity(
 /// 主键为空、含首尾空白，或主体引用构造失败时返回校验错误。
 pub(crate) fn ensure_exact_document_id(document_type: DocumentType, document_id: &str) -> Result<()> {
     if document_id.is_empty() || document_id.trim() != document_id {
-        return Err(Error::ValidationError("单据 ID 必须是非空精确主键".to_string()));
+        return Err(Error::ValidationError("未选中有效单据，请从单据列表重新打开".to_string()));
     }
-    erp_workflow::entity::approval_integration::subject_ref_for(document_type, document_id)
-        .map_err(|error| Error::ValidationError(error.to_string()))?;
+    crate::approval_runtime::read_subject_ref(document_type, document_id)?;
     Ok(())
 }
 
@@ -73,9 +72,9 @@ pub(crate) fn ensure_sales_document_type(requested: DocumentType, actual: Busine
     let actual = document_type_of_sales_business(actual);
     if actual != requested {
         return Err(Error::ValidationError(format!(
-            "请求单据类型 {} 与销售单业务性质对应类型 {} 不一致",
-            requested.as_str(),
-            actual.as_str()
+            "当前打开的是{}入口，这张单据属于{}，请从对应的销售单列表重新打开",
+            requested.label(),
+            actual.label()
         )));
     }
     Ok(())
@@ -290,5 +289,8 @@ pub(crate) fn ensure_exact_nonempty_fact(value: &str, message: &str) -> Result<(
 /// # 错误
 /// 不返回错误。
 pub(crate) fn already_submitted(document_type: DocumentType) -> Error {
-    Error::ConflictError(format!("{}不是从未提交审批的初始草稿，不能升级绑定", document_type.label()))
+    Error::ConflictError(format!(
+        "{}不是尚未提交过的草稿，不能更换审批流程，请查看原审批记录",
+        document_type.label()
+    ))
 }

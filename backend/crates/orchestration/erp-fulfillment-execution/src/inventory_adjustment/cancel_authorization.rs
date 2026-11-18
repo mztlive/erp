@@ -106,13 +106,15 @@ async fn cancel_authorization_snapshot(
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("审批实例缺少冻结业务快照".to_string()))?;
+        .ok_or_else(|| {
+            Error::ConflictError("找不到本次审批提交时的单据资料，请联系管理员核对".to_string())
+        })?;
     snapshot
         .ensure_matches_runtime_subject(
             DocumentType::StockAdjustment,
             instance.subject.subject_id(),
             instance.subject_version,
         )
-        .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
+        .map_err(|_| Error::ConflictError("审批记录与提交时的单据资料不符，请联系管理员核对".to_string()))?;
     Ok(snapshot)
 }

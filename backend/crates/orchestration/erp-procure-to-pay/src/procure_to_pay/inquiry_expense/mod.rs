@@ -118,7 +118,7 @@ fn validate_target_bindings(
     let mut ids = HashSet::new();
     for target in targets {
         if !ids.insert(&target.detail.expense_line_id) {
-            return Err(Error::ValidationError("采购费用行身份重复".into()));
+            return Err(Error::ValidationError("采购费用明细重复，请核对后再提交".into()));
         }
 
         let Some(source) = &target.detail.inquiry_source else { continue };
@@ -137,7 +137,7 @@ fn validate_target_bindings(
             .count();
         if matches != 1 {
             return Err(Error::ValidationError(
-                "新增或伪造的询价费用来源不能通过采购修改采用，请另建费用采购".into(),
+                "采购变更不能添加原单以外的询价费用来源，请另建费用采购".into(),
             ));
         }
     }
@@ -200,7 +200,9 @@ fn validate_target_identity(
         || source.allocation_id != row.allocation_id
         || row.sales_order_id != order.sales_order_id.as_ref()
     {
-        return Err(Error::ValidationError("询价费用的稳定来源及销售归属不能更换".into()));
+        return Err(Error::ValidationError(
+            "询价费用的原询价来源和所属销售单不能更换，请核对费用明细".into(),
+        ));
     }
     Ok(())
 }

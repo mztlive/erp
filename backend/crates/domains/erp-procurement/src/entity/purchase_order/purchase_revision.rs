@@ -771,9 +771,9 @@ mod tests {
         };
         assert_error(data.clone(), "行号必须从 1 开始");
         data.line_no = 1;
-        assert_error(data.clone(), "商品名称快照长度不符合要求");
+        assert_error(data.clone(), "商品名称长度不符合要求");
         data.product_name_snapshot = Some(" \t ".into());
-        assert_error(data.clone(), "商品/服务行必须保存商品名称快照");
+        assert_error(data.clone(), "请填写商品或服务明细的名称");
         data.product_name_snapshot = Some("礼包".into());
         assert_error(data, "商品/服务版本行必须引用销售稳定行与当前版本行");
 

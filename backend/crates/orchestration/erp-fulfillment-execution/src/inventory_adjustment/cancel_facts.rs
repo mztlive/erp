@@ -50,7 +50,7 @@ pub(super) async fn cancellation_fact(
         .stock_adjustment_cancellations()
         .find_by_id(&instance.base.id, executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("库存调整撤回缺少结构化操作事实".into()))?;
+        .ok_or_else(|| Error::ConflictError("找不到原库存调整撤回的办理记录，请联系管理员核对".into()))?;
     fact.validate()?;
 
     let execution_id = ApprovalNodeExecutionId::new(&fact.data.execution_id);
@@ -182,7 +182,7 @@ pub(super) fn ensure_receipt(
 
 /// 回执或取消终态不一致的稳定冲突。
 fn invalid_terminal() -> Error {
-    Error::ConflictError("库存调整撤回收据与终态事实不一致".into())
+    Error::ConflictError("原撤回记录与库存调整单当前的审批状态不符，请核对撤回结果".into())
 }
 
 #[cfg(test)]
@@ -373,7 +373,7 @@ mod tests {
             assert!(matches!(
                 ensure_terminal(&fact, &instance, &execution, &[original.clone(), wrong]),
                 Err(Error::ConflictError(message))
-                    if message == "库存调整撤回收据与终态事实不一致"
+                    if message == "原撤回记录与库存调整单当前的审批状态不符，请核对撤回结果"
             ));
         }
     }

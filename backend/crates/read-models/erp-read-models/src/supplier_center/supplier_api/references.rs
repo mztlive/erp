@@ -1,6 +1,7 @@
 use application_core::AuditActor;
 use erp_identity::AccessTarget;
 use erp_supply::entity::supplier_api::SupplierConnectionAction;
+use erp_supply::ports::supplier_api_gateway::ClassifiedError;
 use erp_supply::ports::supplier_reference_registry::{
     SupplierReferenceKind, SupplierReferenceOption, SupplierReferenceTarget,
 };
@@ -63,22 +64,33 @@ impl SupplierApiReadService {
             .ok_or_else(|| Error::NotFound("连接不存在".into()))?;
 
         if let Some(registry) = self.reference_registry.as_ref() {
-            registry.options(kind, &SupplierReferenceTarget::from(&connection)).await.map_err(|failure| {
-                Error::BusinessLogicError(format!("{}: {}", failure.code, failure.summary))
-            })
+            registry
+                .options(kind, &SupplierReferenceTarget::from(&connection))
+                .await
+                .map_err(|failure| reference_options_error(kind, &failure))
         } else {
             Ok(Vec::new())
         }
     }
 }
 
+fn reference_options_error(kind: SupplierReferenceKind, failure: &ClassifiedError) -> Error {
+    tracing::warn!(code = %failure.code, class = ?failure.class, "供应商连接配置选项不可读取");
+    let message = match kind {
+        SupplierReferenceKind::Endpoint => "暂时无法获取连接地址选项，请联系管理员核对供应商连接设置",
+        SupplierReferenceKind::Credential => "暂时无法获取授权凭据选项，请联系管理员核对供应商授权设置",
+        SupplierReferenceKind::BusinessProfile => "暂时无法获取商务配置选项，请联系管理员核对供应商设置",
+    };
+    Error::BusinessLogicError(message.into())
+}
+
 fn reference_action(kind: SupplierReferenceKind) -> Result<SupplierConnectionAction> {
     match kind {
         SupplierReferenceKind::Endpoint => Ok(SupplierConnectionAction::BindEndpointReference),
         SupplierReferenceKind::Credential => Ok(SupplierConnectionAction::BindCredentialReference),
-        SupplierReferenceKind::BusinessProfile => {
-            Err(Error::ValidationError("此入口仅提供地址和密钥配置".into()))
-        },
+        SupplierReferenceKind::BusinessProfile => Err(Error::ValidationError(
+            "此处只能选择连接地址或授权凭据，请返回供应商连接设置选择配置类型".into(),
+        )),
     }
 }
 

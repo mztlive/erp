@@ -63,9 +63,9 @@ pub fn cancel_sales_order_to_draft(order: &mut SalesOrder, updated_by: &str) -> 
 /// # 错误
 /// 状态不是审批中时返回冲突。
 pub fn ensure_final_approve_formalize(order: &SalesOrder) -> Result<()> {
-    order
-        .ensure_can_formalize()
-        .map_err(|_| Error::ConflictError("只有审批中的销售单可以由最终通过动作形式化".to_string()))
+    order.ensure_can_formalize().map_err(|_| {
+        Error::ConflictError("只有审批中的销售单可以在审批通过后生效，请核对销售单状态".to_string())
+    })
 }
 
 /// 销售提交的工作副本写入方案；调用方必须明确选择替换或新建。
@@ -566,7 +566,7 @@ mod tests {
         order.base = BaseModel::fake();
         match ensure_final_approve_formalize(&order).unwrap_err() {
             Error::ConflictError(message) => {
-                assert_eq!(message, "只有审批中的销售单可以由最终通过动作形式化");
+                assert_eq!(message, "只有审批中的销售单可以在审批通过后生效，请核对销售单状态");
             },
             error => panic!("unexpected error class: {error}"),
         }

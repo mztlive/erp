@@ -309,7 +309,7 @@ fn validate_manifest_request_id(request_id: &str) -> Result<()> {
         || request_id.len() > 64
         || !request_id.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
     {
-        return Err(Error::ValidationError("请求身份非法，请重新选择文件".to_string()));
+        return Err(Error::ValidationError("本次上传已失效，请重新选择商品报价表".to_string()));
     }
     Ok(())
 }
@@ -411,7 +411,11 @@ async fn upload_manifest_row(
     Ok(reader)
 }
 
-/// 记录成功对象以供失败补偿；失败时写入原行级错误文案。
+pub(super) fn media_failure_message(row_number: u32) -> String {
+    format!("第 {row_number} 行图片未能保存，请检查图片后重新上传；如仍失败，请联系管理员")
+}
+
+/// 记录成功对象以供失败补偿；失败时只保存可公开的说明。
 fn record_manifest_upload(
     entry: &mut RowManifestRow,
     result: Result<(String, RegisterFileAssetRequest, String)>,
@@ -429,7 +433,8 @@ fn record_manifest_upload(
             true
         },
         Err(error) => {
-            entry.media_error = Some(format!("第{}行图片预提失败: {error}", entry.row_number));
+            tracing::warn!(row_number = entry.row_number, error_kind = ?std::mem::discriminant(&error), "商品导入图片保存失败");
+            entry.media_error = Some(media_failure_message(entry.row_number));
             false
         },
     }
@@ -785,7 +790,10 @@ mod tests {
         assert_eq!(keys, ["2-carousel-0"]);
         assert_eq!(entry.carousel.len(), 1);
         assert!(entry.main_image.is_none());
-        assert!(entry.media_error.as_ref().unwrap().contains("第2行图片预提失败"));
+        assert_eq!(
+            entry.media_error.as_deref(),
+            Some("第 2 行图片未能保存，请检查图片后重新上传；如仍失败，请联系管理员")
+        );
         let mut next = RowManifestRow { row_number: 3, ..Default::default() };
         let _ = upload_manifest_row(&writer, &mut next, reader, prepared_targets(), &mut keys).await.unwrap();
         assert!(next.media_error.is_none());

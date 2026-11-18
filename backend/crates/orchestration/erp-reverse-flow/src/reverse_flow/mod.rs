@@ -104,7 +104,10 @@ pub async fn finalize_approved_return(
             supplier_refund::apply_supplier_refund_final_post(db, rbac, business_object_id, actor, executor)
                 .await
         },
-        other => Err(Error::BusinessLogicError(format!("单据类型 {} 不属于退款冲正最终动作", other.label()))),
+        other => Err(Error::BusinessLogicError(format!(
+            "{}不能办理此项退款或冲正终审操作，请核对当前单据",
+            other.label()
+        ))),
     }
 }
 

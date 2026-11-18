@@ -92,7 +92,7 @@ impl SupplierSettlementReadService {
         executor: &mut dyn Executor,
     ) -> Result<SettlementStatementDisplayDetail> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-            return Err(Error::ValidationError("供应商结算详情读取必须使用快照事务".into()));
+            return Err(Error::ValidationError("暂时无法查看供应商结算详情，请从结算列表重新打开".into()));
         }
 
         let prepared = self.authorized_snapshot(id, actor, executor).await?;
@@ -361,7 +361,7 @@ mod tests {
             .await
             .expect_err("详情及动作补齐只允许活动快照");
         assert!(
-            matches!(error, Error::ValidationError(reason) if reason == "供应商结算详情读取必须使用快照事务")
+            matches!(error, Error::ValidationError(reason) if reason == "暂时无法查看供应商结算详情，请从结算列表重新打开")
         );
 
         let error = service

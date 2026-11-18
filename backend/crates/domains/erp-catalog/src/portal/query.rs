@@ -416,23 +416,20 @@ impl CatalogPortalService {
         sku: Sku,
         executor: &mut dyn Executor,
     ) -> Result<DuplicateSkuCandidate> {
-        let revision_id = sku
-            .stable
-            .current_revision_id
-            .as_ref()
-            .ok_or_else(|| Error::ConflictError("候选SKU当前资料缺失".into()))?;
-        let revision = self
-            .db
-            .sku_revisions()
-            .find_by_id(revision_id.as_ref(), executor)
-            .await?
-            .ok_or_else(|| Error::ConflictError("候选SKU当前资料缺失".into()))?;
+        let revision_id =
+            sku.stable.current_revision_id.as_ref().ok_or_else(|| {
+                Error::ConflictError("所选商品规格资料不完整，请核对商品档案后再匹配".into())
+            })?;
+        let revision =
+            self.db.sku_revisions().find_by_id(revision_id.as_ref(), executor).await?.ok_or_else(|| {
+                Error::ConflictError("所选商品规格资料不完整，请核对商品档案后再匹配".into())
+            })?;
         let unit = self
             .db
             .unit_of_measures()
             .find_by_id(sku.base_unit_id.as_ref(), executor)
             .await?
-            .ok_or_else(|| Error::ConflictError("候选SKU基础单位缺失".into()))?;
+            .ok_or_else(|| Error::ConflictError("所选商品规格缺少基础计量单位，请补充后再匹配".into()))?;
 
         let specification = revision.specification.or_else(|| {
             (!sku.specification_signature.is_empty()).then(|| sku.specification_signature.clone())

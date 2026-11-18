@@ -143,7 +143,9 @@ impl ProductImportProcess {
         if let Some(existing) = self.db.product_categories().find_enabled_by_exact_name(name, &mut tx).await?
         {
             if existing.product_kind != ProductKind::Physical {
-                return Err(Error::BusinessLogicError(format!("分类「{name}」不允许实物商品")));
+                return Err(Error::BusinessLogicError(
+                    "该分类不允许录入实物商品，请在报价表中改用可登记实物商品的分类".into(),
+                ));
             }
             let id = ProductCategoryId::new(existing.base.id);
             cache.categories.insert(name.to_string(), id.clone());

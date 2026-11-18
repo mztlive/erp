@@ -63,7 +63,7 @@ async fn authorized_request(
         "submit" => purchase_payment_request::SUBMIT,
         "withdraw" => purchase_payment_request::WITHDRAW,
         "close" => purchase_payment_request::CLOSE,
-        _ => return Err(Error::ValidationError("未知付款申请命令".into())),
+        _ => return Err(Error::ValidationError("付款申请不支持此操作，请从申请详情重新选择".into())),
     };
     authorization.require(actor, &permission, AccessTarget::record(id)?, executor).await?;
     load(db, id, executor).await
@@ -92,7 +92,7 @@ fn business_org(request: &PurchasePaymentRequest) -> Result<&str> {
         .org_unit_id
         .as_deref()
         .filter(|id| !id.trim().is_empty())
-        .ok_or_else(|| Error::ConflictError("付款申请缺少真实业务归属部门".into()))
+        .ok_or_else(|| Error::ConflictError("该付款申请没有归属部门，请先补全申请资料".into()))
 }
 
 async fn release_remaining(
@@ -162,7 +162,7 @@ fn request_target(
         "submit" => purchase_payment_request::SUBMIT,
         "withdraw" => purchase_payment_request::WITHDRAW,
         "close" => purchase_payment_request::CLOSE,
-        _ => return Err(Error::ValidationError("未知付款申请动作".into())),
+        _ => return Err(Error::ValidationError("付款申请不支持此操作，请从申请详情重新选择".into())),
     };
     let candidate = ObjectFacts {
         resource: "purchase_payment_request".into(),
@@ -244,6 +244,8 @@ mod command_access_tests {
         )
         .await
         .unwrap_err();
-        assert!(matches!(error, Error::ValidationError(message) if message == "未知付款申请命令"));
+        assert!(
+            matches!(error, Error::ValidationError(message) if message == "付款申请不支持此操作，请从申请详情重新选择")
+        );
     }
 }

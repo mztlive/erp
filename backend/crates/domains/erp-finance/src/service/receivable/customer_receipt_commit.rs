@@ -102,7 +102,7 @@ impl CommitCustomerReceiptRequest {
                 })
             },
             _ => Err(Error::ValidationError(
-                "新回款必须提交 receipt；已有草稿必须提交 receipt_id 与 expected_version".to_string(),
+                "登记新回款时请填写回款信息；登记已有草稿时，请打开该草稿并刷新后再提交".to_string(),
             )),
         }
     }
@@ -288,7 +288,7 @@ mod tests {
         let err = req.prepare().unwrap_err();
         assert!(
             err.to_string()
-                .contains("新回款必须提交 receipt；已有草稿必须提交 receipt_id 与 expected_version")
+                .contains("登记新回款时请填写回款信息；登记已有草稿时，请打开该草稿并刷新后再提交")
         );
     }
 

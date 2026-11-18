@@ -17,7 +17,7 @@ const STRICT_RELATIONSHIP_NS: &str = "http://purl.oclc.org/ooxml/officeDocument/
 /// XML 损坏或声明 DTD 时拒绝。
 pub(crate) fn document(xml: &str) -> Result<XmlDocument<'_>> {
     XmlDocument::parse_with_options(xml, ParsingOptions { allow_dtd: false, ..Default::default() })
-        .map_err(|_| invalid("工作簿 XML 内容损坏或包含不允许的实体声明"))
+        .map_err(|_| invalid("工作簿内容损坏或包含不支持的内容，请用原模板重新另存为 .xlsx 后上传"))
 }
 
 /// 读取工作簿日期系统。
@@ -52,7 +52,9 @@ pub(crate) fn relationships(xml: &str, source: &str) -> Result<HashMap<String, S
             return Err(invalid("工作簿不得使用外部引用"));
         }
         let id = node.attribute("Id").ok_or_else(|| invalid("工作簿关系标识缺失"))?;
-        let target = node.attribute("Target").ok_or_else(|| invalid("工作簿关系路径缺失"))?;
+        let target = node
+            .attribute("Target")
+            .ok_or_else(|| invalid("工作簿缺少关联的工作表或图片，请使用原模板重新保存"))?;
         let path = resolve_target(source, target)?;
         if paths.insert(id.to_string(), path).is_some() {
             return Err(invalid("工作簿关系标识重复"));
@@ -81,7 +83,7 @@ pub(crate) fn sheet_paths(archive: &mut Archive<'_>) -> Result<Vec<(String, Stri
             .attribute((RELATIONSHIP_NS, "id"))
             .or_else(|| node.attribute((STRICT_RELATIONSHIP_NS, "id")))
             .ok_or_else(|| invalid("工作表引用无效"))?;
-        let path = paths.get(id).ok_or_else(|| invalid("工作表路径缺失"))?;
+        let path = paths.get(id).ok_or_else(|| invalid("工作簿缺少工作表内容，请使用原模板重新保存"))?;
         if sheets.iter().any(|(existing, _)| existing == name) {
             return Err(invalid("工作表名称重复"));
         }
@@ -92,7 +94,7 @@ pub(crate) fn sheet_paths(archive: &mut Archive<'_>) -> Result<Vec<(String, Stri
 
 fn resolve_target(source: &str, target: &str) -> Result<String> {
     if target.is_empty() || target.contains(['\\', ':', '\0', '?', '#']) {
-        return Err(invalid("工作簿关系路径不安全"));
+        return Err(invalid("工作簿引用了不安全的内容，请将数据复制到新的导入模板"));
     }
 
     let mut parts = if target.starts_with('/') || target.starts_with("xl/") {
@@ -104,14 +106,14 @@ fn resolve_target(source: &str, target: &str) -> Result<String> {
         match part {
             "" | "." => {},
             ".." => {
-                parts.pop().ok_or_else(|| invalid("工作簿关系路径越界"))?;
+                parts.pop().ok_or_else(|| invalid("工作簿引用了文件外的内容，请将数据复制到新的导入模板"))?;
             },
             _ => parts.push(part),
         }
     }
 
     if parts.is_empty() {
-        return Err(invalid("工作簿关系路径缺失"));
+        return Err(invalid("工作簿缺少关联的工作表或图片，请使用原模板重新保存"));
     }
     Ok(parts.join("/"))
 }

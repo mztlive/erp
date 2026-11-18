@@ -64,8 +64,9 @@ impl CustomerAccess {
         valid_until: Option<Instant>,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let organization =
-            organization.ok_or_else(|| Error::ValidationError("请先维护负责人的有效主属组织".into()))?;
+        let organization = organization.ok_or_else(|| {
+            Error::ValidationError("所选负责人没有有效的主属组织，请先在组织与人员中补充".into())
+        })?;
         let candidate = ObjectFacts {
             resource: "customer".into(),
             id: id.into(),
@@ -137,8 +138,9 @@ impl CustomerAccess {
         let mut valid_until: Option<Instant> = None;
         for owner in owners {
             let (org, boundary) = self.organization().own_org_with_validity(owner, at, executor).await?;
-            organizations
-                .insert(org.ok_or_else(|| Error::ValidationError("请先维护负责人的有效主属组织".into()))?);
+            organizations.insert(org.ok_or_else(|| {
+                Error::ValidationError("所选负责人没有有效的主属组织，请先在组织与人员中补充".into())
+            })?);
             if let Some(boundary) = boundary {
                 valid_until = Some(valid_until.map_or(boundary, |current| current.min(boundary)));
             }
@@ -451,7 +453,7 @@ mod tests {
             .await
             .unwrap_err();
         assert!(
-            matches!(missing, Error::ValidationError(message) if message == "请先维护负责人的有效主属组织")
+            matches!(missing, Error::ValidationError(message) if message == "所选负责人没有有效的主属组织，请先在组织与人员中补充")
         );
 
         let expired = access

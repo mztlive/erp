@@ -97,7 +97,7 @@ impl QualificationFactsPort for Database {
         self.supplier_capability_revisions()
             .find_by_id(id, executor)
             .await?
-            .ok_or_else(|| Error::BusinessLogicError("供应商能力版本不存在".to_string()))
+            .ok_or_else(|| Error::BusinessLogicError("找不到该供给能力的版本，请核对供应商档案".to_string()))
     }
     async fn capability(
         &self,
@@ -119,13 +119,15 @@ async fn ensure_offering_with_port<P: QualificationFactsPort>(
     let capability = port
         .capability(supplier_id, required_offering_capability(kind), executor)
         .await?
-        .ok_or_else(|| Error::BusinessLogicError("供应商未启用该商品类型所需能力".to_string()))?;
-    let revision_id = capability
-        .stable
-        .current_revision_id
-        .as_deref()
-        .map(SupplierCapabilityRevisionId::new)
-        .ok_or_else(|| Error::BusinessLogicError("供应商能力缺少当前版本".to_string()))?;
+        .ok_or_else(|| {
+            Error::BusinessLogicError(
+                "该供应商未启用此类商品所需的供给能力，请调整供应商能力或另选供应商".to_string(),
+            )
+        })?;
+    let revision_id =
+        capability.stable.current_revision_id.as_deref().map(SupplierCapabilityRevisionId::new).ok_or_else(
+            || Error::BusinessLogicError("该供给能力缺少当前资料，请先维护供应商档案".to_string()),
+        )?;
     ensure_qualified_with_port(port, supplier_id, &revision_id, on_date, executor).await
 }
 /// 原资格加载与纯规则委派；供应商状态仍在三次读取之后判定。
@@ -297,7 +299,9 @@ mod provider_tests {
     #[tokio::test]
     async fn missing_pointer_stops_and_second_capability_is_not_cached() {
         let (result, calls) = invoke(None, false, true, false).await;
-        assert!(matches!(result,Err(Error::BusinessLogicError(ref e)) if e=="供应商能力缺少当前版本"));
+        assert!(
+            matches!(result,Err(Error::BusinessLogicError(ref e)) if e=="该供给能力缺少当前资料，请先维护供应商档案")
+        );
         assert_eq!(calls, ["capability"]);
 
         let (result, calls) = invoke(None, false, false, true).await;

@@ -5,6 +5,7 @@ mod dto;
 mod presentation;
 mod summary;
 mod summary_query;
+pub(crate) use definition::invalid_approval_steps;
 pub use definition::{DocumentApprovalNodeView, binding_route};
 mod query;
 
@@ -13,7 +14,7 @@ use erp_workflow::service::approval::execution::RuntimeHistoryPage;
 pub use presentation::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalView,
 };
-pub(crate) use query::{load_document_runtime, load_document_runtime_for_instance};
+pub(crate) use query::{load_document_runtime, load_document_runtime_for_instance, read_subject_ref};
 pub use summary::{DocumentApprovalHistorySummaryItemView, DocumentApprovalInstanceSummaryView};
 pub(crate) use summary_query::load_approval_summary;
 

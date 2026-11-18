@@ -93,7 +93,7 @@ impl InvestigationReplay {
             return Err(Error::Internal("W26 调查幂等证据对象不一致".into()));
         }
         if record.operation_id() != self.operation_id {
-            return Err(Error::ConflictError("请求标识已用于不同的调查命令".into()));
+            return Err(Error::ConflictError("本次操作编号已用于其他供应商调查，请核对原调查记录".into()));
         }
         Ok(Some(investigation_result(
             order,
@@ -158,7 +158,7 @@ impl InvestigationReplay {
             &self.scope_id,
             &stable_digest(self.idempotency_key.trim()),
         )?;
-        stored.verify(&self.fingerprint, None, "请求标识已用于不同的调查命令")?;
+        stored.verify(&self.fingerprint, None, "本次操作编号已用于其他供应商调查，请核对原调查记录")?;
         if stored.resource_id != order_id {
             return Err(Error::Internal("W26 调查幂等收据对象不一致".into()));
         }
@@ -166,7 +166,7 @@ impl InvestigationReplay {
             return Err(Error::Internal("W26 调查幂等收据身份非法".into()));
         };
         if self.task.is_some() != receipt.task_version.is_some() {
-            return Err(Error::ConflictError("请求标识已用于不同的调查入口".into()));
+            return Err(Error::ConflictError("本次操作编号已用于其他调查办理方式，请从原待办核对".into()));
         }
         Ok(receipt)
     }

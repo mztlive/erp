@@ -122,7 +122,7 @@ impl SupplierCatalogAdoptionProcess {
                         .await
                     {
                         row.status = BatchItemStatus::Draft;
-                        row.messages = vec![error.to_string()];
+                        row.messages = vec![error.row_message()];
                         row.preview_version = None;
                         row.frozen_row = None;
                     }

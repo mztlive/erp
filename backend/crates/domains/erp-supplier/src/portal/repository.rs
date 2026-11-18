@@ -301,7 +301,7 @@ fn ensure_confirmed_plan(before: &SupplierAccount, plan: &ConfirmedCooperation) 
         || plan.supplier.current_commercial_profile_revision_id.as_ref().map(ToString::to_string).as_deref()
             != Some(plan.profile.base.id.as_str())
     {
-        return Err(Error::ValidationError("合作条款正式写入计划不一致".into()));
+        return Err(Error::ValidationError("待确认条款与本次申请内容不一致，请返回核对申请后再确认".into()));
     }
     Ok(())
 }
@@ -313,7 +313,7 @@ fn scoped_filter(supplier_id: &str) -> Document {
 /// 空供应商绑定拒绝；有状态时写入序列化后的状态条件。
 fn list_filter(supplier_id: &str, status: Option<CooperationStatus>) -> Result<Document> {
     if supplier_id.trim().is_empty() {
-        return Err(Error::Forbidden("供应商绑定无效".into()));
+        return Err(Error::Forbidden("所选供应商与当前登录账号的合作关系不符，请重新选择".into()));
     }
     let mut filter = scoped_filter(supplier_id);
     if let Some(status) = status {

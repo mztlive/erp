@@ -29,7 +29,7 @@ pub fn build_settlement_cost_delta(delta: &SettlementCostDeltaFact) -> Result<Ve
         return Ok(Vec::new());
     }
     Err(Error::BusinessLogicError(
-        "ERP_ACCEPTED 成本差额暂缺权威原成本、税率与消费分配链，禁止伪造 CostEntry".to_string(),
+        "结算单上我方接受的差额暂不能计入成本，请先核对原成本、税率及该笔成本的分摊记录".to_string(),
     ))
 }
 
@@ -93,7 +93,7 @@ mod tests {
             })
             .unwrap_err();
             assert!(
-                matches!(error,Error::BusinessLogicError(ref value) if value=="ERP_ACCEPTED 成本差额暂缺权威原成本、税率与消费分配链，禁止伪造 CostEntry")
+                matches!(error,Error::BusinessLogicError(ref value) if value=="结算单上我方接受的差额暂不能计入成本，请先核对原成本、税率及该笔成本的分摊记录")
             );
         }
     }

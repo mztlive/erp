@@ -333,8 +333,10 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             &stable_digest(command.key.trim()),
         )?;
         let conflict_message = match command.change {
-            ResponsibilityChange::Handover => "同一幂等键已用于不同的结算交接",
-            ResponsibilityChange::ReassignDifferenceHandler => "同一幂等键已用于不同的差异处理人改派",
+            ResponsibilityChange::Handover => "本次操作编号已用于其他结算交接，请核对原交接记录",
+            ResponsibilityChange::ReassignDifferenceHandler => {
+                "本次操作编号已用于其他差异改派，请核对原改派记录"
+            },
         };
         stored.verify(&command.fingerprint, Some(&command.statement_id), conflict_message)?;
         command.change.verify_result(&stored.result)?;

@@ -139,7 +139,9 @@ impl IntegrationCommandReceipt {
             &value.resource_type,
             Some(&value.resource_id),
         ) {
-            return Err(Error::ConflictError("幂等键已用于不同命令".to_string()));
+            return Err(Error::ConflictError(
+                "本次处理内容与之前提交的不一致，请先查询原处理结果".to_string(),
+            ));
         }
         Ok(value)
     }
@@ -207,14 +209,18 @@ impl IntegrationCommandReceipt {
                 Some(&self.resource_id),
             )
         {
-            return Err(Error::ConflictError("幂等键已用于不同命令".to_string()));
+            return Err(Error::ConflictError(
+                "本次处理内容与之前提交的不一致，请先查询原处理结果".to_string(),
+            ));
         }
 
         self.validate()?;
         if self.fingerprint != identity.fingerprint()
             || self.idempotency_key_hash != identity.idempotency_key_hash()
         {
-            return Err(Error::ConflictError("幂等键已用于不同命令".to_string()));
+            return Err(Error::ConflictError(
+                "本次处理内容与之前提交的不一致，请先查询原处理结果".to_string(),
+            ));
         }
 
         T::from_result(self.result.clone())

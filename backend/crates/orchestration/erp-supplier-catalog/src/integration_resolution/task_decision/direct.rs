@@ -170,7 +170,7 @@ pub(super) async fn ensure_no_work_item(
     if items.is_empty() {
         return Ok(());
     }
-    Err(Error::ConflictError("差异已关联正式任务，必须通过 W29 任务强命令处理".to_string()))
+    Err(Error::ConflictError("此差异已有处理任务，请打开关联任务继续处理".to_string()))
 }
 
 fn direct_result(

@@ -41,7 +41,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     ) -> Result<SettlementDifferenceEvidenceResult> {
         req.validate()?;
         if difference_id != req.difference_id {
-            return Err(Error::ValidationError("差异路径ID与命令载荷不一致".into()));
+            return Err(Error::ValidationError("本次补证与当前打开的差异不符，请重新选择差异记录".into()));
         }
 
         let process = self.clone();

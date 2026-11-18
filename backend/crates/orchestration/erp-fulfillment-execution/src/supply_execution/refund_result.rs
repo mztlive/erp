@@ -116,7 +116,9 @@ impl SupplierFulfillmentProcess {
                 Instant::from_unix_secs(req.refunded_at),
                 &req.source_event_id,
             ) {
-                return Err(Error::ConflictError("外部退款身份已用于不同订单或退款结果".into()));
+                return Err(Error::ConflictError(
+                    "该供应商退款编号已用于其他订单或退款结果，请核对原退款记录".into(),
+                ));
             }
 
             tracing::info!(account = %actor.id(), order_id = %id, "退款结果幂等命中");

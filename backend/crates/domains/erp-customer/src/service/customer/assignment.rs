@@ -358,7 +358,7 @@ async fn persist_end(
         .customer_assignments()
         .find_assignment(command.assignment_id(), executor)
         .await?
-        .ok_or_else(|| Error::NotFound("归属不存在".into()))?;
+        .ok_or_else(|| Error::NotFound("找不到这条客户归属记录，请刷新后重新选择".into()))?;
     assignment
         .ensure_customer(&CustomerAccountId::new(customer_id))
         .map_err(|error| Error::NotFound(error.to_string()))?;

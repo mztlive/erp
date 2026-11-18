@@ -153,7 +153,7 @@ pub fn document_type_from_subject_kind(kind: &str) -> Result<DocumentType> {
 pub fn resolve_runtime_document_type(subject_kind: &str, process_kind: ProcessKind) -> Result<DocumentType> {
     let document_type = document_type_from_subject_kind(subject_kind)?;
     if process_kind_of(document_type) != process_kind {
-        return Err(Error::from("审批实例与冻结业务快照不一致"));
+        return Err(Error::from("审批记录与提交时的单据资料不一致，请联系审批管理员核对"));
     }
     Ok(document_type)
 }

@@ -49,7 +49,7 @@ pub struct CreateExpensePurchaseRequest {
     #[validate(length(min = 1, max = 50, message = "费用行须为 1–50 行"))]
     pub lines: Vec<CreateExpenseLineRequest>,
     /// 幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 

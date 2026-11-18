@@ -179,7 +179,7 @@ pub fn execute_stock_adjustment_domain_action(
         ApprovalDomainAction::StockAdjustmentCancelApproval => {
             adjustment.cancel_approval().map_err(|error| Error::ConflictError(error.to_string()))
         },
-        other => Err(Error::ValidationError(format!("动作 {} 不属于库存调整单", other.as_str()))),
+        _ => Err(Error::ValidationError("该库存调整单不支持此审批操作，请从对应审批待办办理".into())),
     }
 }
 

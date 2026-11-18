@@ -296,9 +296,10 @@ impl PersonScopeGrant {
                     .iter()
                     .any(|dimension| !self.terms.iter().any(|term| term.target_dimension == *dimension))
             {
-                return Err(Error::ValidationError(format!(
-                    "每项附加授权均须配置 {resource}:{action} 全部必需维度"
-                )));
+                tracing::debug!(resource, action, "附加授权缺少必需维度");
+                return Err(Error::ValidationError(
+                    "附加授权的范围设置不完整，请补齐所选操作要求的范围".into(),
+                ));
             }
         }
         Ok(())

@@ -18,7 +18,9 @@ use crate::{Error, Result};
 /// 非审批中时返回 `ConflictError`。
 fn ensure_in_approval(in_approval: bool, document_label: &str) -> Result<()> {
     if !in_approval {
-        return Err(Error::ConflictError(format!("只有审批中的{document_label}可以由最终通过动作过账")));
+        return Err(Error::ConflictError(format!(
+            "只有审批中的{document_label}可以在审批通过后过账，请刷新单据并核对状态"
+        )));
     }
     Ok(())
 }

@@ -155,7 +155,7 @@ pub fn execute_payment_reversal_domain_action(
         ApprovalDomainAction::PaymentReversalCancelApproval => {
             cancel_payment_reversal_to_draft(reversal).map_err(Error::from)
         },
-        other => Err(Error::ValidationError(format!("动作 {} 不属于付款冲正单", other.as_str()))),
+        _ => Err(Error::ValidationError("该付款冲正单不支持此审批操作，请从对应审批待办办理".into())),
     }
 }
 

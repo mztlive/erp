@@ -139,7 +139,9 @@ impl SupplierPortalReadService {
         executor: &mut dyn Executor,
     ) -> Result<Value> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-            return Err(Error::ValidationError("内部门户读取必须使用快照事务".into()));
+            return Err(Error::ValidationError(
+                "暂时无法查看供应商门户管理资料，请刷新页面后重新打开".into(),
+            ));
         }
         if !self.internal_authorization()?.request_readable(actor, id, executor).await? {
             return Err(hidden_target());
@@ -168,7 +170,9 @@ impl SupplierPortalReadService {
     /// # 错误
     /// 未装配授权时返回 `Forbidden`。
     pub(super) fn internal_authorization(&self) -> Result<&dyn PortalReadAuthorizationPort> {
-        self.authorization.as_deref().ok_or_else(|| Error::Forbidden("申请读取授权未装配".into()))
+        self.authorization
+            .as_deref()
+            .ok_or_else(|| Error::Forbidden("暂时无法确认当前账号可查看的供应商申请，请联系管理员".into()))
     }
 }
 
@@ -227,11 +231,11 @@ mod tests {
         let mut executor = NoTransaction;
         assert!(matches!(
             service.admin_application_page(&actor, &params, &mut executor).await,
-            Err(Error::ValidationError(message)) if message == "内部门户读取必须使用快照事务"
+            Err(Error::ValidationError(message)) if message == "暂时无法查看供应商门户管理资料，请刷新页面后重新打开"
         ));
         assert!(matches!(
             service.admin_application_detail(&actor, "application", &mut executor).await,
-            Err(Error::ValidationError(message)) if message == "内部门户读取必须使用快照事务"
+            Err(Error::ValidationError(message)) if message == "暂时无法查看供应商门户管理资料，请刷新页面后重新打开"
         ));
         assert!(authorization.calls.lock().unwrap().is_empty());
     }

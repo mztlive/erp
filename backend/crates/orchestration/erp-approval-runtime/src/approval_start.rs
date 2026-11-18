@@ -174,7 +174,7 @@ pub async fn persist_start_tasks(
         .approval_subject_snapshots()
         .find_by_process_instance_id(&writes.instance.base.id, executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("审批任务缺少冻结业务快照".into()))?;
+        .ok_or_else(|| Error::ConflictError("找不到该审批任务提交时的单据资料，请联系管理员核对".into()))?;
 
     let mut first_task = None;
     for intent in &writes.create_tasks {

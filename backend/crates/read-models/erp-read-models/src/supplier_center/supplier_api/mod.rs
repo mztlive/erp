@@ -10,6 +10,7 @@ mod catalog;
 mod connector_types;
 mod context;
 pub use catalog::{CatalogQuery, CatalogView};
+pub(crate) use jobs::connection_failure_note;
 pub mod dto;
 mod jobs;
 mod protocol;
@@ -191,14 +192,14 @@ mod tests {
         let detail =
             service.connection_detail_snapshot("connection", &actor(), &mut ReadExecutor::default()).await;
         assert!(
-            matches!(detail, Err(Error::ValidationError(reason)) if reason == "供应连接详情读取必须使用快照事务")
+            matches!(detail, Err(Error::ValidationError(reason)) if reason == "暂时无法查看供应商连接详情，请从供应商连接列表重新打开")
         );
 
         let query = serde_json::from_value::<CatalogQuery>(serde_json::json!({})).unwrap();
         let catalog =
             service.catalog_snapshot("connection", &query, &actor(), &mut ReadExecutor::default()).await;
         assert!(
-            matches!(catalog, Err(Error::ValidationError(reason)) if reason == "供应连接目录读取必须使用快照事务")
+            matches!(catalog, Err(Error::ValidationError(reason)) if reason == "暂时无法查看供应商商品目录，请从供应商连接详情重新打开")
         );
     }
 

@@ -64,7 +64,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         actor: AuditActor,
     ) -> Result<CloseCommand> {
         req.validate()?;
-        let key = required_text(&req.idempotency_key, "幂等键不能为空")?;
+        let key = required_text(&req.idempotency_key, "缺少本次操作的提交编号，请重新发起操作")?;
         let reason = required_text(&req.reason_code, "关闭原因代码不能为空")?;
         let replacement = req
             .replacement_work_item_id

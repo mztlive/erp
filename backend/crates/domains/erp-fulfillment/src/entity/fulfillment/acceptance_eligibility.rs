@@ -167,10 +167,14 @@ impl AcceptanceLineEligibility {
                 .ok_or_else(|| Error::from("剩余可验收数量汇总溢出"))?;
         }
 
-        let net_accepted_quantity = Quantity::try_from(net_accepted)
-            .map_err(|error| Error::from(format!("净验收数量超出统一精度：{error}")))?;
-        let remaining_eligible_quantity = Quantity::try_from(remaining_eligible)
-            .map_err(|error| Error::from(format!("剩余可验收数量超出统一精度：{error}")))?;
+        let net_accepted_quantity = Quantity::try_from(net_accepted).map_err(|error| {
+            tracing::warn!(%error, "净验收数量超出统一精度");
+            Error::from("净验收数量超出允许范围或精度，请核对验收明细")
+        })?;
+        let remaining_eligible_quantity = Quantity::try_from(remaining_eligible).map_err(|error| {
+            tracing::warn!(%error, "剩余可验收数量超出统一精度");
+            Error::from("剩余可验收数量超出允许范围或精度，请核对履约及验收明细")
+        })?;
         Ok(Self {
             sales_order_line_id,
             required_quantity,

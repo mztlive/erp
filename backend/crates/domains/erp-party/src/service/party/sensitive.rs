@@ -211,11 +211,11 @@ impl SensitiveDataCodec {
         let cipher = Aes256Gcm::new_from_slice(&self.encryption_key)
             .map_err(|_| Error::Internal("敏感数据解密初始化失败".to_string()))?;
         let nonce = Nonce::<Aes256Gcm>::try_from(nonce.as_slice())
-            .map_err(|_| Error::ValidationError("敏感数据格式非法".to_string()))?;
+            .map_err(|_| sensitive_content_unavailable("敏感数据格式非法"))?;
         let plaintext = cipher
             .decrypt(&nonce, ciphertext.as_ref())
-            .map_err(|_| Error::ValidationError("敏感数据不可用或密钥不匹配".to_string()))?;
-        String::from_utf8(plaintext).map_err(|_| Error::ValidationError("敏感数据编码非法".to_string()))
+            .map_err(|_| sensitive_content_unavailable("敏感数据不可用或密钥不匹配"))?;
+        String::from_utf8(plaintext).map_err(|_| sensitive_content_unavailable("敏感数据编码非法"))
     }
 
     /// 签发限定字段、事实行和供应商的短时揭示令牌。
@@ -262,21 +262,24 @@ impl SensitiveDataCodec {
     /// 令牌缺少分隔、编码非法、签名不匹配或声明无法反序列化时返回 `ValidationError`。
     /// 验签密钥初始化失败时返回 `Internal`。`expires_at < now` 时返回 `ValidationError`。
     pub fn verify_reveal_token(&self, token: &str, now: u64) -> Result<SensitiveRevealScope> {
-        let (payload, signature) = token
-            .split_once('.')
-            .ok_or_else(|| Error::ValidationError("敏感字段令牌格式非法".to_string()))?;
-        let payload = URL_SAFE_NO_PAD
-            .decode(payload)
-            .map_err(|_| Error::ValidationError("敏感字段令牌格式非法".to_string()))?;
-        let signature = URL_SAFE_NO_PAD
-            .decode(signature)
-            .map_err(|_| Error::ValidationError("敏感字段令牌格式非法".to_string()))?;
+        let (payload, signature) = token.split_once('.').ok_or_else(|| {
+            Error::ValidationError("查看敏感资料的凭证无效，请重新打开该资料页面".to_string())
+        })?;
+        let payload = URL_SAFE_NO_PAD.decode(payload).map_err(|_| {
+            Error::ValidationError("查看敏感资料的凭证无效，请重新打开该资料页面".to_string())
+        })?;
+        let signature = URL_SAFE_NO_PAD.decode(signature).map_err(|_| {
+            Error::ValidationError("查看敏感资料的凭证无效，请重新打开该资料页面".to_string())
+        })?;
 
         verify_signature(&self.token_key, &payload, &signature)?;
-        let claims: RevealClaims = serde_json::from_slice(&payload)
-            .map_err(|_| Error::ValidationError("敏感字段令牌格式非法".to_string()))?;
+        let claims: RevealClaims = serde_json::from_slice(&payload).map_err(|_| {
+            Error::ValidationError("查看敏感资料的凭证无效，请重新打开该资料页面".to_string())
+        })?;
         if claims.expires_at < now {
-            return Err(Error::ValidationError("敏感字段查看权限已失效".to_string()));
+            return Err(Error::ValidationError(
+                "查看敏感资料的授权已失效，请刷新页面后重新申请查看".to_string(),
+            ));
         }
 
         Ok(SensitiveRevealScope {
@@ -297,22 +300,27 @@ fn derive_key(secret: &[u8], context: &[u8]) -> [u8; 32] {
     digest.finalize().into()
 }
 
+fn sensitive_content_unavailable(detail: &str) -> Error {
+    tracing::debug!(detail, "敏感资料读取校验失败");
+    Error::ValidationError("无法读取这项敏感资料，请联系管理员核对资料".into())
+}
+
 /// 解析版本化密文并校验 nonce 长度。
 fn parse_ciphertext(encoded: &str) -> Result<([u8; NONCE_LEN], Vec<u8>)> {
     let mut segments = encoded.split('.');
     if segments.next() != Some(CIPHERTEXT_VERSION) {
-        return Err(Error::ValidationError("敏感数据版本不受支持".to_string()));
+        return Err(sensitive_content_unavailable("敏感数据版本不受支持"));
     }
     let nonce = segments
         .next()
         .and_then(|value| URL_SAFE_NO_PAD.decode(value).ok())
-        .ok_or_else(|| Error::ValidationError("敏感数据格式非法".to_string()))?;
+        .ok_or_else(|| sensitive_content_unavailable("敏感数据格式非法"))?;
     let ciphertext = segments
         .next()
         .and_then(|value| URL_SAFE_NO_PAD.decode(value).ok())
-        .ok_or_else(|| Error::ValidationError("敏感数据格式非法".to_string()))?;
+        .ok_or_else(|| sensitive_content_unavailable("敏感数据格式非法"))?;
     if segments.next().is_some() || nonce.len() != NONCE_LEN {
-        return Err(Error::ValidationError("敏感数据格式非法".to_string()));
+        return Err(sensitive_content_unavailable("敏感数据格式非法"));
     }
 
     let mut nonce_bytes = [0_u8; NONCE_LEN];
@@ -333,7 +341,8 @@ fn verify_signature(key: &[u8], payload: &[u8], signature: &[u8]) -> Result<()> 
     let mut mac = <HmacSha256 as KeyInit>::new_from_slice(key)
         .map_err(|_| Error::Internal("敏感字段令牌验签初始化失败".to_string()))?;
     mac.update(payload);
-    mac.verify_slice(signature).map_err(|_| Error::ValidationError("敏感字段令牌签名非法".to_string()))
+    mac.verify_slice(signature)
+        .map_err(|_| Error::ValidationError("查看敏感资料的凭证无效，请重新打开该资料页面".to_string()))
 }
 
 #[cfg(test)]

@@ -24,10 +24,10 @@ const copy = {
 export function LoginStage({ mode }: { mode: "admin" | "supplier" }) {
     const content = copy[mode]
     return (
-        <aside className="relative isolate flex min-h-40 flex-col overflow-hidden bg-foreground text-background lg:min-h-svh">
+        <aside className="relative isolate flex min-h-40 flex-col overflow-hidden bg-stage text-stage-foreground lg:min-h-svh">
             <LoginStageArt className="pointer-events-none absolute inset-0 size-full" />
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-linear-to-b from-foreground via-foreground/80 to-transparent" />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-foreground to-transparent lg:h-64" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-linear-to-b from-stage via-stage/80 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-stage to-transparent lg:h-64" />
 
             <div className="relative z-10 flex flex-1 flex-col justify-between gap-8 p-6 lg:p-12">
                 <div className="flex items-center gap-3">
@@ -36,7 +36,7 @@ export function LoginStage({ mode }: { mode: "admin" | "supplier" }) {
                         <span className="text-sm font-semibold tracking-wide">
                             福尚云 ERP
                         </span>
-                        <span className="text-xs text-background/65">
+                        <span className="text-xs text-stage-foreground/65">
                             员工福利经营协同
                         </span>
                     </div>
@@ -46,14 +46,14 @@ export function LoginStage({ mode }: { mode: "admin" | "supplier" }) {
                     <h1 className="font-heading text-3xl font-medium tracking-tight text-balance">
                         {content.title}
                     </h1>
-                    <p className="text-sm leading-6 text-background/70">
+                    <p className="text-sm leading-6 text-stage-foreground/70">
                         {content.description}
                     </p>
                     <ul className="flex flex-wrap gap-2">
                         {content.tracks.map((track) => (
                             <li
                                 key={track}
-                                className="rounded-full border border-background/15 bg-background/8 px-3 py-1 text-xs text-background/80"
+                                className="rounded-full border border-stage-foreground/15 bg-stage-foreground/8 px-3 py-1 text-xs text-stage-foreground/80"
                             >
                                 {track}
                             </li>

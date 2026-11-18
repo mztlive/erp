@@ -135,7 +135,9 @@ mod tests {
                 return Err(Error::ValidationError("读取阶段已变化".into()));
             }
             if self.expired.load(Ordering::SeqCst) {
-                return Err(Error::ConflictError("DATA_SCOPE_CHANGED：选品读取依赖已到期".into()));
+                return Err(Error::ConflictError(
+                    "DATA_SCOPE_CHANGED：选品资料的查看范围需要重新确认，请从第一页刷新".into(),
+                ));
             }
             Ok(())
         }

@@ -39,7 +39,7 @@ pub struct RegisterExtraCostRequest {
     /// 凭证文件；本次上传时为 `pending-file:` 临时引用。
     pub evidence_attachment_id: FileAssetId,
     /// 幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -82,7 +82,7 @@ pub struct ReduceExtraCostRequest {
     /// 凭证文件；本次上传时为 `pending-file:` 临时引用。
     pub evidence_attachment_id: FileAssetId,
     /// 幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 

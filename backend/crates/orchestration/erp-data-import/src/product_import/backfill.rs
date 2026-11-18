@@ -161,7 +161,9 @@ pub(super) fn sku_inputs_with_main_image(
             continue;
         };
         let spec_entries = parse_specification_signature(&sku.specification_signature)
-            .map_err(|error| Error::BusinessLogicError(error.to_string()))?
+            .map_err(|_| {
+                Error::BusinessLogicError("已有商品的规格资料无法读取，请先在商品档案中核对规格".into())
+            })?
             .into_iter()
             .map(|entry| SpecEntryInput {
                 attribute_code: entry.attribute_code,

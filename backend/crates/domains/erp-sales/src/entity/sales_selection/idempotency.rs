@@ -190,7 +190,7 @@ impl SalesSelectionIdempotency {
         if self.is_same_request(request_hash) {
             return Ok(());
         }
-        Err(Error::from("相同幂等键的请求载荷不一致"))
+        Err(Error::from("本次选品操作与之前提交的内容不一致，请先查询原操作结果"))
     }
 }
 

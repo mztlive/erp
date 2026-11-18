@@ -16,7 +16,7 @@ pub(crate) const SUPPLIER_SORT_FIELDS: &[&str] = &["created_at", "supplier_no", 
 #[serde(deny_unknown_fields)]
 pub struct SupplierListParams {
     /// 跨页与导出必须使用前一页的当前授权和业务版本。
-    #[validate(length(min = 1, max = 256))]
+    #[validate(length(min = 1, max = 256, message = "列表查询信息无效，请从第一页重新查询"))]
     pub scope_version: Option<String>,
     /// 当前整体维护人 ID，逗号分隔，最多 100 项。
     pub owner_user_ids: Option<application_core::QueryIds>,

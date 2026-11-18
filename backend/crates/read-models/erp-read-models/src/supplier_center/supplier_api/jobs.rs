@@ -60,7 +60,31 @@ impl SupplierApiReadService {
             .await
     }
 }
+pub(crate) fn connection_failure_note(code: Option<&str>, fallback: &'static str) -> &'static str {
+    match code {
+        Some("JD_VOP_TOKEN_UNAVAILABLE") => "无法使用供应商连接的授权，请联系管理员核对当前授权",
+        Some("TOKEN_EXPIRED") => "供应商连接的授权已失效，请联系管理员检查并更新授权",
+        Some("TECHNICAL_CONFIG_CHANGED" | "CATALOG_CONTEXT_CHANGED") => {
+            "供应商连接设置在处理期间发生变更，请核对当前设置和任务进度后再决定是否重新发起"
+        },
+        Some("CATALOG_SYNC_ADAPTER_UNAVAILABLE") => "当前供应商连接不支持商品同步，请联系管理员核对连接设置",
+        Some("SUPPLIER_CONNECTOR_UNAVAILABLE") => "当前供应商连接不可用，请联系管理员核对连接设置",
+        Some("CATALOG_DATA_INVALID" | "DGSS_MAPPING" | "JD_VOP_MAPPING_INVALID") => {
+            "供应商商品资料不完整或不匹配，请核对商品及规格资料"
+        },
+        Some("CATALOG_SCOPE_PROOF_REQUIRED") => "无法确认供应商授权的商品范围，请核对授权；未按缺项撤回商品",
+        Some("OUTCOME_UNKNOWN") => "本次处理结果尚未确认，请先查询任务状态，勿重复发起",
+        _ => fallback,
+    }
+}
+
+pub(super) fn connection_job_failure_note(summary: &str) -> String {
+    let code = summary.split_once(':').map(|(code, _)| code.trim());
+    connection_failure_note(code, "供应商连接任务未完成，请查看任务进度；如仍失败，请联系管理员").into()
+}
+
 fn job_view(job: BackgroundJob) -> SupplierConnectionJobView {
+    let error_summary = job.error_summary.as_deref().map(connection_job_failure_note);
     SupplierConnectionJobView {
         job_id: job.base.id,
         job_no: job.job_no,
@@ -70,7 +94,7 @@ fn job_view(job: BackgroundJob) -> SupplierConnectionJobView {
         processed: job.processed_count,
         succeeded: job.success_count,
         failed: job.failed_count,
-        error_summary: job.error_summary,
+        error_summary,
         created_at: job.base.created_at,
         finished_at: job.finished_at.map(|at| at.unix_secs() as u64),
     }

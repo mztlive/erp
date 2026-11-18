@@ -465,7 +465,7 @@ impl SalesOrderWorkingCopy {
         let receivable_due_date =
             self.receivable_due_date.ok_or_else(|| Error::from("卡券销售提交前必须填写应收到期日"))?;
         if receivable_due_date < today {
-            return Err(Error::from("应收到期日不得早于服务端提交日"));
+            return Err(Error::from("应收到期日不得早于提交当天，请修改到期日"));
         }
         let voucher_category_id = self
             .voucher_category_sku_id

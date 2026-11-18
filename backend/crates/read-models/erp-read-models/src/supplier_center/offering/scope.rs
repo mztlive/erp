@@ -66,7 +66,7 @@ impl SupplierOfferingReadService {
         executor: &mut dyn Executor,
     ) -> Result<SupplierOfferingListView> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-            return Err(Error::ValidationError("供给列表读取必须使用快照事务".into()));
+            return Err(Error::ValidationError("暂时无法查看供给列表，请从第一页重新查询".into()));
         }
         crate::support::ensure_deep_page(params.page.unwrap_or(1), params.scope_version.as_deref())?;
 
@@ -223,7 +223,7 @@ mod tests {
 
         let result = service.list_with(&params, &actor, &mut ReadExecutor::default()).await;
         assert!(
-            matches!(result, Err(Error::ValidationError(reason)) if reason == "供给列表读取必须使用快照事务")
+            matches!(result, Err(Error::ValidationError(reason)) if reason == "暂时无法查看供给列表，请从第一页重新查询")
         );
 
         let result = service.list_with(&params, &actor, &mut SnapshotExecutor::default()).await;

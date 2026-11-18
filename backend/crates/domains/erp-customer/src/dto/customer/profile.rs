@@ -113,7 +113,7 @@ pub struct CustomerProfileBankAccountInput {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SaveCustomerProfileRequest {
     /// 客户端幂等键。
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(custom(function = "non_blank", message = "缺少本次操作的提交编号，请重新发起操作"))]
     pub idempotency_key: String,
     /// 创建时明确确认复用尚无客户角色的主体，保留其全部既有基础资料。
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

@@ -85,7 +85,7 @@ impl RuntimeInstanceListQuery {
         }
         if !(1..=MAX_RUNTIME_INSTANCE_LIST_LIMIT).contains(&self.limit) {
             return Err(Error::ValidationError(format!(
-                "limit 必须在 1 到 {MAX_RUNTIME_INSTANCE_LIST_LIMIT} 之间"
+                "每页显示条数须为 1 至 {MAX_RUNTIME_INSTANCE_LIST_LIMIT}"
             )));
         }
         self.validate_cursor()?;
@@ -104,12 +104,12 @@ impl RuntimeInstanceListQuery {
             (RuntimeInstanceListView::Mine, None | Some(RuntimeInstanceStatusFilter::Running))
             | (RuntimeInstanceListView::Blocked, None | Some(RuntimeInstanceStatusFilter::Blocked))
             | (RuntimeInstanceListView::Started | RuntimeInstanceListView::Managed, _) => Ok(()),
-            (RuntimeInstanceListView::Mine, _) => {
-                Err(Error::ValidationError("mine 只接受省略 status 或 status=RUNNING".to_string()))
-            },
-            (RuntimeInstanceListView::Blocked, _) => {
-                Err(Error::ValidationError("blocked 只接受省略 status 或 status=BLOCKED".to_string()))
-            },
+            (RuntimeInstanceListView::Mine, _) => Err(Error::ValidationError(
+                "我的待审批列表只能筛选审批中的单据，请清空或调整状态筛选".to_string(),
+            )),
+            (RuntimeInstanceListView::Blocked, _) => Err(Error::ValidationError(
+                "受阻审批列表只能筛选受阻的单据，请清空或调整状态筛选".to_string(),
+            )),
         }
     }
 
@@ -120,12 +120,10 @@ impl RuntimeInstanceListQuery {
         };
         let id = cursor.id.as_str();
         if id.is_empty() || id != id.trim() {
-            return Err(Error::ValidationError("cursor id 不能为空".to_string()));
+            return Err(Error::ValidationError("审批列表翻页信息无效，请返回第一页重新查询".to_string()));
         }
         if id.chars().count() > RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN {
-            return Err(Error::ValidationError(format!(
-                "cursor id 不能超过 {RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN} 个字符"
-            )));
+            return Err(Error::ValidationError("审批列表翻页信息过长，请返回第一页重新查询".into()));
         }
         Ok(())
     }
@@ -136,11 +134,11 @@ impl RuntimeInstanceListQuery {
             return Ok(());
         };
         if query.is_empty() || query != query.trim() {
-            return Err(Error::ValidationError("q 必须是非空规范化文本".to_string()));
+            return Err(Error::ValidationError("搜索关键词不能为空，首尾请勿留空格".to_string()));
         }
         if query.chars().count() > RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN {
             return Err(Error::ValidationError(format!(
-                "q 不能超过 {RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN} 个字符"
+                "搜索关键词不能超过 {RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN} 个字符"
             )));
         }
         Ok(())

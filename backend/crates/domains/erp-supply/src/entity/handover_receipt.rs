@@ -95,7 +95,7 @@ impl OfferingHandoverReceipt {
         match command.match_structured(&self.command) {
             StructuredReceiptMatch::SamePayload => Ok(()),
             StructuredReceiptMatch::DifferentPayload => {
-                Err(Error::ConflictError("同一幂等键已用于不同的供给交接".into()))
+                Err(Error::ConflictError("本次供给交接与之前提交的内容不一致，请先查询原交接结果".into()))
             },
             StructuredReceiptMatch::Corrupted => Err(corrupted()),
         }

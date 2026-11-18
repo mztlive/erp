@@ -335,7 +335,7 @@ impl CooperationApplication {
             CooperationStatus::Effective => self == before,
         };
         if !allowed || (self.result.is_some() != (self.status == CooperationStatus::Effective)) {
-            return Err(Error::ConflictError("合作条款申请状态与历史不一致".into()));
+            return Err(Error::ConflictError("当前申请状态与处理记录不一致，请联系管理员核对".into()));
         }
 
         if self.status == CooperationStatus::Submitted {

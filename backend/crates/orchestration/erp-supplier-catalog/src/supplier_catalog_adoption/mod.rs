@@ -81,14 +81,17 @@ impl SupplierCatalogAdoptionProcess {
     /// 校验选品来源配置与商品读取能力，不发送网络请求。
     fn ensure_source(&self, connection: &SupplierApiConnection) -> Result<()> {
         connection.ensure_catalog_available()?;
-        let registry =
-            self.registry.as_ref().ok_or_else(|| Error::BusinessLogicError("供应商接口尚未配置".into()))?;
+        let registry = self.registry.as_ref().ok_or_else(|| {
+            Error::BusinessLogicError("当前供应商尚未配置商品同步，请联系管理员完成连接设置".into())
+        })?;
         let target = SupplierReferenceTarget::from(connection);
         registry.deployment_config(&target).map_err(|error| Error::BusinessLogicError(error.summary))?;
         let capabilities =
             registry.capabilities(&target).map_err(|error| Error::BusinessLogicError(error.summary))?;
         if !capabilities.contains(&SupplierApiCapabilityCode::Product) {
-            return Err(Error::BusinessLogicError("供应商接口不支持商品同步".into()));
+            return Err(Error::BusinessLogicError(
+                "当前供应商不支持自动同步商品，请联系管理员核对可用的导入方式".into(),
+            ));
         }
         Ok(())
     }

@@ -179,7 +179,11 @@ fn failed_row(row: &SupplierImportRow, error: Error) -> SupplierImportResult {
         | Error::BusinessLogicError(message)
         | Error::ConflictError(message)
         | Error::NotFound(message) => ("failed", message),
-        Error::Logic(error) => ("failed", error.to_string()),
+        Error::Logic(erp_core::Error::LogicError(message)) => ("failed", message),
+        Error::Logic(erp_core::Error::Validation { message, .. }) => ("failed", message),
+        Error::Logic(erp_core::Error::InvalidStateTransition { .. }) => {
+            ("failed", "当前供应商状态不允许导入，请核对供应商档案".into())
+        },
         Error::OutcomeUnknown(_) => {
             ("uncertain", "提交结果暂无法确认，请使用同一文件重试核对，系统会检查已导入记录".into())
         },

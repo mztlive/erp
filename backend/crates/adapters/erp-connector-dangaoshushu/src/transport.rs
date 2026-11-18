@@ -83,7 +83,11 @@ impl HttpTransport {
             .retry(retry::never())
             .build()
             .map_err(|_| {
-                error(SupplierFailureClass::MappingError, "DGSS_HTTP_CONFIG", "供应商 HTTP 客户端配置无效")
+                error(
+                    SupplierFailureClass::MappingError,
+                    "DGSS_HTTP_CONFIG",
+                    "蛋糕叔叔连接设置不完整，请联系管理员核对接入配置",
+                )
             })?;
         Ok(Self { settings: settings.clone(), client, quota: Mutex::new((Clock::now(), 0)) })
     }
@@ -94,7 +98,7 @@ impl HttpTransport {
                 let mut failure = error(
                     SupplierFailureClass::RateLimited,
                     "DGSS_LOCAL_RATE_LIMIT",
-                    "供应商连接请求等待配额超时",
+                    "蛋糕叔叔连接当前处理量已满，请稍后再试",
                 );
                 failure.retry_after = Some(Duration::from_secs(1));
                 failure
@@ -191,14 +195,22 @@ fn transport_failure(write: bool) -> ConnectorError {
     error(
         if write { SupplierFailureClass::ResultUnknown } else { SupplierFailureClass::TransientFailure },
         "DGSS_TRANSPORT",
-        "供应商调用未取得可核实结果；写入须调查原动作",
+        if write {
+            "蛋糕叔叔未返回操作结果，请先查询原订单或原操作，不要重复提交"
+        } else {
+            "暂时无法连接蛋糕叔叔，请稍后重新查询"
+        },
     )
 }
 fn invalid_response(write: bool) -> ConnectorError {
     error(
         if write { SupplierFailureClass::ResultUnknown } else { SupplierFailureClass::MappingError },
         "DGSS_RESPONSE_INVALID",
-        "供应商响应格式或大小不符合合同",
+        if write {
+            "蛋糕叔叔返回的信息无法确认操作结果，请查询原操作，不要重复提交"
+        } else {
+            "蛋糕叔叔返回的资料不完整或无法读取，请联系管理员核对供应商资料"
+        },
     )
 }
 fn http_failure(status: u16, write: bool) -> ConnectorError {
@@ -208,7 +220,13 @@ fn http_failure(status: u16, write: bool) -> ConnectorError {
         429 => SupplierFailureClass::RateLimited,
         _ => SupplierFailureClass::TransientFailure,
     };
-    error(class, &format!("DGSS_HTTP_{status}"), "供应商返回 HTTP 失败")
+    let summary = match class {
+        SupplierFailureClass::AuthSignature => "蛋糕叔叔未授权当前账号，请联系管理员核对连接授权",
+        SupplierFailureClass::ResultUnknown => "蛋糕叔叔未确认操作结果，请查询原操作，不要重复提交",
+        SupplierFailureClass::RateLimited => "蛋糕叔叔当前查询较多，请稍后重新查询",
+        _ => "暂时无法从蛋糕叔叔读取资料，请稍后重新查询",
+    };
+    error(class, &format!("DGSS_HTTP_{status}"), summary)
 }
 
 pub(super) fn decode(body: &[u8], write: bool) -> ConnectorResult<Value> {
@@ -223,7 +241,12 @@ pub(super) fn decode(body: &[u8], write: bool) -> ConnectorResult<Value> {
             _ => SupplierFailureClass::BusinessRejected,
         };
         // msg 可能含地址、手机号或供应商回显的请求，不向日志/错误转发。
-        return Err(error(class, &format!("DGSS_{code}"), "供应商明确拒绝请求"));
+        let summary = if class == SupplierFailureClass::AuthSignature {
+            "蛋糕叔叔拒绝当前账号访问，请联系管理员核对授权"
+        } else {
+            "蛋糕叔叔未接受本次业务操作，请核对商品、订单或配送资料后再处理"
+        };
+        return Err(error(class, &format!("DGSS_{code}"), summary));
     }
     envelope.get_mut("data").map(Value::take).ok_or_else(|| invalid_response(write))
 }

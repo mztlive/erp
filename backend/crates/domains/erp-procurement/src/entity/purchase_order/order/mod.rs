@@ -293,7 +293,7 @@ impl PurchaseOrder {
     /// 本守卫只检查生命周期状态，不检查冻结提交指针，也不修改聚合。
     pub fn ensure_can_formalize(&self) -> Result<()> {
         if self.stable.status != PurchaseOrderStatus::InApproval {
-            return Err(Error::from("只有审批中的采购单可以由最终通过动作生效"));
+            return Err(Error::from("只有审批中的采购单可以在审批通过后生效，请核对采购单状态"));
         }
         Ok(())
     }
@@ -1061,7 +1061,7 @@ mod tests {
     #[test]
     fn ensure_can_formalize_rejects_non_approval_states() {
         let draft_error = new_order().ensure_can_formalize().unwrap_err();
-        assert_eq!(draft_error.to_string(), "只有审批中的采购单可以由最终通过动作生效");
+        assert_eq!(draft_error.to_string(), "只有审批中的采购单可以在审批通过后生效，请核对采购单状态");
 
         let mut effective = new_order();
         effective.start_approval("sub-1", "admin-1").unwrap();

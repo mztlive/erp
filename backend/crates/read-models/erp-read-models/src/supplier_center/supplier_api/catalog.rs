@@ -13,6 +13,7 @@ use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 
 use super::SupplierApiReadService;
+use super::jobs::connection_job_failure_note;
 use crate::{Error, Result};
 
 #[derive(Deserialize)]
@@ -76,7 +77,7 @@ impl SupplierApiReadService {
     /// 连接不存在、分页非法或数据库失败时拒绝。
     pub async fn catalog(&self, id: &str, query: CatalogQuery, actor: &AuditActor) -> Result<CatalogView> {
         if query.page == 0 || !(1..=100).contains(&query.page_size) {
-            return Err(Error::ValidationError("商品分页参数无效".into()));
+            return Err(Error::ValidationError("请从第 1 页查询商品，每页可显示 1 至 100 条".into()));
         }
         query.filter.validate()?;
 
@@ -119,7 +120,10 @@ impl SupplierApiReadService {
             .as_ref()
             .map(|gateway| gateway.catalog_policy(&connection))
             .transpose()
-            .map_err(|error| Error::BusinessLogicError(error.summary))?
+            .map_err(|error| {
+                tracing::warn!(code = %error.code, class = ?error.class, "供应商商品同步设置不可读取");
+                Error::BusinessLogicError("暂时无法读取供应商商品同步设置，请联系管理员核对供应商连接".into())
+            })?
             .flatten()
             .map_or(IncrementalSupport::Unsupported, |policy| policy.incremental);
 
@@ -154,7 +158,9 @@ impl SupplierApiReadService {
         executor: &mut dyn Executor,
     ) -> Result<(CompiledAccess, bool)> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-            return Err(Error::ValidationError("供应连接目录读取必须使用快照事务".into()));
+            return Err(Error::ValidationError(
+                "暂时无法查看供应商商品目录，请从供应商连接详情重新打开".into(),
+            ));
         }
         let can_read_cost = self
             .authorization
@@ -214,22 +220,71 @@ impl SupplierApiReadService {
                 status: job.status,
                 observed_count: run.as_ref().map_or(0, |v| v.observed_count),
                 skipped_count: run.as_ref().map_or(0, |v| v.skipped_count),
-                skipped_samples: run.as_ref().map_or_else(Vec::new, |v| v.skipped_samples.clone()),
+                skipped_samples: run.as_ref().map_or_else(Vec::new, |v| {
+                    v.skipped_samples.iter().map(|sample| skipped_item_note(sample)).collect()
+                }),
                 pages: run.as_ref().map_or(0, |v| v.pages),
                 created_at: job.base.created_at,
                 finished_at: job.finished_at.map(|at| at.unix_secs()),
-                error_summary: job.error_summary,
+                error_summary: job.error_summary.as_deref().map(connection_job_failure_note),
             });
         }
         Ok(jobs)
     }
 }
 
+fn skipped_item_note(sample: &str) -> String {
+    let fallback = "供应商有一项商品资料未能同步，请核对供应商商品及规格资料";
+    if sample == "商品池授权范围需要核实；已保留本次观察，未按缺项撤回商品" {
+        return "无法确认供应商授权的商品范围，请核对授权；未按缺项撤回商品".into();
+    }
+    let Some((position, details)) = sample.split_once('：') else { return fallback.into() };
+    let code = details.split_once('：').map(|(code, _)| code);
+    let note = super::connection_failure_note(code, fallback);
+    if let Some(sku) = position
+        .strip_prefix("京东 SKU ")
+        .filter(|sku| !sku.is_empty() && sku.len() <= 32 && sku.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        return format!("京东商品规格 {sku}：{note}");
+    }
+    if let Some((page, product)) = position.strip_prefix("第 ").and_then(|value| value.split_once(" 页第 "))
+        && let Some((product, suffix)) = product.split_once(" 个商品")
+        && let (Ok(page), Ok(product)) = (page.parse::<u32>(), product.parse::<u32>())
+    {
+        let item = format!("第 {page} 页第 {product} 个商品");
+        let spec = suffix
+            .strip_prefix("第 ")
+            .and_then(|value| value.split_once(" 个规格"))
+            .and_then(|(spec, _)| spec.parse::<u32>().ok());
+        return match spec {
+            Some(spec) => format!("{item}第 {spec} 个规格：{note}"),
+            None => format!("{item}：{note}"),
+        };
+    }
+    note.into()
+}
+
 #[cfg(test)]
 mod tests {
     use erp_supply::dto::supplier_catalog::CatalogSelectionStatus;
 
-    use super::CatalogQuery;
+    use super::{CatalogQuery, skipped_item_note};
+
+    #[test]
+    fn skipped_item_note_uses_known_reason_not_raw_supplier_text() {
+        assert_eq!(
+            skipped_item_note("京东 SKU 123：JD_VOP_MAPPING_INVALID：private payload"),
+            "京东商品规格 123：供应商商品资料不完整或不匹配，请核对商品及规格资料"
+        );
+        assert_eq!(
+            skipped_item_note("第 2 页第 3 个商品第 4 个规格（商品列表）：DGSS_MAPPING：private payload"),
+            "第 2 页第 3 个商品第 4 个规格：供应商商品资料不完整或不匹配，请核对商品及规格资料"
+        );
+        assert_eq!(
+            skipped_item_note("private payload"),
+            "供应商有一项商品资料未能同步，请核对供应商商品及规格资料"
+        );
+    }
 
     #[test]
     fn catalog_query_preserves_exact_filter_values_and_rejects_invalid_range() {

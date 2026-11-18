@@ -45,7 +45,7 @@ impl SupplierApiOrderProcess {
         };
 
         let source_error =
-            self.receipt_source_evidence(&execution).await.err().map(|error| error.to_string());
+            self.receipt_source_evidence(&execution).await.err().map(|error| error.supplier_order_message());
         if let Some(action) = execution
             .receipt_actions
             .values()

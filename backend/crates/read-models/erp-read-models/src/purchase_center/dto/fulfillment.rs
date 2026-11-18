@@ -72,7 +72,9 @@ impl PurchaseApiExecutionView {
                     || root.supplier_id != purchase.supplier_id
             })
         {
-            return Err(Error::Forbidden("接口执行与当前采购、供应商或版本归属不一致".into()));
+            return Err(Error::Forbidden(
+                "自动下单记录不属于这张采购单的当前版本或供应商，请从采购单详情重新打开".into(),
+            ));
         }
         match root {
             Some(root) => Ok(Self::from_execution(execution, &root.fulfillment_order_no)),
@@ -132,7 +134,9 @@ impl PurchaseApiExecutionView {
             || execution.cancellation_payload_hash.is_some()
             || execution.superseded_by_purchase_revision_id.is_some()
         {
-            return Err(Error::NotFound("采购接口执行缺少原履约单，请核对原执行记录".into()));
+            return Err(Error::NotFound(
+                "找不到本次自动下单生成的履约单，请联系采购经办人核对原下单结果，勿重复下单".into(),
+            ));
         }
         let mut view = Self::from_execution(execution, "");
         view.detail_available = false;
@@ -163,7 +167,9 @@ impl PurchaseFulfillmentQuantityView {
             || (inbound.is_some() && responsibility != FulfillmentResponsibility::Warehouse)
             || (shipped.is_some() && responsibility != FulfillmentResponsibility::SupplierDirect)
         {
-            return Err(Error::BusinessLogicError("采购履约数量或责任轨道不一致".into()));
+            return Err(Error::BusinessLogicError(
+                "履约数量或交付方式与采购单不一致，请核对收货和发货记录".into(),
+            ));
         }
 
         let completed = match responsibility {
@@ -172,9 +178,9 @@ impl PurchaseFulfillmentQuantityView {
             _ => None,
         };
         let mut blocker = if ambiguous {
-            Some("当前采购行的历史履约归属需核对，未分摊数量".into())
+            Some("历史收货或发货记录无法确认归属，暂不计入本行；请核对原履约记录".into())
         } else if line.quantity.is_none() || completed.is_none() {
-            Some("采购履约数量依据不完整，请核对原记录".into())
+            Some("缺少采购数量、收货或发货记录，暂无法计算剩余数量，请核对原记录".into())
         } else {
             None
         };
@@ -188,7 +194,7 @@ impl PurchaseFulfillmentQuantityView {
                 Some(Quantity::try_from(remaining).map_err(Error::Logic)?)
             },
             (Some(ordered), Some(completed)) if completed > ordered => {
-                blocker = Some("已应用履约数量超过当前采购数量，请核对变更和退回记录".into());
+                blocker = Some("已收货或发货的数量超过当前采购数量，请核对采购变更及退回记录".into());
                 None
             },
             _ => None,

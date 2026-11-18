@@ -148,7 +148,9 @@ impl SalesChangeSubmissionReceipt {
             || self.submission.submission_id.trim().is_empty()
             || self.submission.submission_no == 0
         {
-            return Err(Error::ConflictError("销售变更提交回执无效".into()));
+            return Err(Error::ConflictError(
+                "无法核对销售变更的提交结果，请先查看销售变更单；如仍有疑问，请联系支持人员".into(),
+            ));
         }
 
         if &self.command != expected {
@@ -160,7 +162,9 @@ impl SalesChangeSubmissionReceipt {
             || persisted.source_version != Some(expected.source_version)
             || persisted.submitted_by != expected.actor_id
         {
-            return Err(Error::ConflictError("销售变更提交回执与原请求版本或冻结提交不一致".into()));
+            return Err(Error::ConflictError(
+                "原提交结果与本次销售变更的版本或内容不一致，请先查看原提交结果".into(),
+            ));
         }
         Ok(())
     }

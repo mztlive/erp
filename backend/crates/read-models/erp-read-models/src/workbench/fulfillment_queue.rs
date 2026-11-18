@@ -129,19 +129,19 @@ impl FulfillmentQueueGateState {
 #[serde(deny_unknown_fields)]
 pub struct FulfillmentQueueListParams {
     /// 逗号分隔的稳定作业类型；缺省表示全部已授权类型。
-    #[validate(length(max = 128, message = "作业类型筛选不能超过128个字符"))]
+    #[validate(length(max = 128, message = "所选作业类型过多，请减少筛选条件后重试"))]
     pub operation_types: Option<String>,
     /// 精确履约对象 ID。
-    #[validate(length(max = 128, message = "履约对象ID不能超过128个字符"))]
+    #[validate(length(max = 128, message = "履约作业选择无效，请从履约队列重新选择"))]
     pub operation_id: Option<String>,
     /// 来源销售单 ID。
-    #[validate(length(max = 128, message = "销售单ID不能超过128个字符"))]
+    #[validate(length(max = 128, message = "销售单选择无效，请从销售单列表重新选择"))]
     pub sales_order_id: Option<String>,
     /// 来源采购单 ID。
-    #[validate(length(max = 128, message = "采购单ID不能超过128个字符"))]
+    #[validate(length(max = 128, message = "采购单选择无效，请从采购单列表重新选择"))]
     pub purchase_order_id: Option<String>,
     /// 作业仓库 ID。
-    #[validate(length(max = 128, message = "仓库ID不能超过128个字符"))]
+    #[validate(length(max = 128, message = "仓库选择无效，请重新选择仓库"))]
     pub warehouse_id: Option<String>,
     /// 在授权结果内按作业号或来源单号检索。
     #[validate(length(max = 128, message = "检索词不能超过128个字符"))]
@@ -151,10 +151,10 @@ pub struct FulfillmentQueueListParams {
     /// 作业先决条件筛选。
     pub gate: Option<FulfillmentQueueGateFilter>,
     /// 服务端返回的稳定队列上下文。
-    #[validate(length(max = 128, message = "队列上下文不能超过128个字符"))]
+    #[validate(length(max = 128, message = "当前履约队列查询已失效，请从第一页重新查询"))]
     pub queue_context_id: Option<String>,
     /// 首次查询返回的范围版本；后续页必须原样回传。
-    #[validate(length(max = 128))]
+    #[validate(length(max = 128, message = "无法继续查看履约队列，请从第一页刷新后再翻页"))]
     pub scope_version: Option<String>,
     /// IANA 时区；当前固定为 Asia/Shanghai。
     pub timezone: Option<String>,
@@ -162,7 +162,7 @@ pub struct FulfillmentQueueListParams {
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
     /// 单页条数（1 至 100）。
-    #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
+    #[validate(range(min = 1, max = 100, message = "每页可显示 1 至 100 条，请调整每页条数"))]
     pub page_size: Option<u32>,
 }
 
@@ -414,11 +414,10 @@ fn fulfillment_repository_filter(
     actor_id: &str,
     visible_types: &[FulfillmentQueueOperationType],
 ) -> Result<RepositoryFilter> {
-    let offset = query
-        .page
-        .checked_sub(1)
-        .and_then(|page| page.checked_mul(u64::from(query.page_size)))
-        .ok_or_else(|| Error::ValidationError("履约队列分页偏移超出支持范围".to_string()))?;
+    let offset =
+        query.page.checked_sub(1).and_then(|page| page.checked_mul(u64::from(query.page_size))).ok_or_else(
+            || Error::ValidationError("履约队列页码过大，请缩小筛选范围后从第一页查询".to_string()),
+        )?;
     let (due_from, due_before) = due_bounds(query.due)?;
     Ok(RepositoryFilter::new(actor_id.to_string())
         .with_operation_types(
@@ -448,12 +447,15 @@ fn parse_operation_types(value: Option<&str>) -> Result<Vec<FulfillmentQueueOper
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(|value| {
-            FulfillmentQueueOperationType::parse(value)
-                .ok_or_else(|| Error::ValidationError(format!("不支持的履约作业类型: {value}")))
+            FulfillmentQueueOperationType::parse(value).ok_or_else(|| {
+                Error::ValidationError(
+                    "请选择采购到货入库、仓库发货、供应商直发、电子交付或线下服务履约".into(),
+                )
+            })
         })
         .collect::<Result<Vec<_>>>()?;
     if requested.is_empty() {
-        return Err(Error::ValidationError("履约作业类型不能为空".to_string()));
+        return Err(Error::ValidationError("请选择至少一种履约作业类型，或清空筛选查看全部".to_string()));
     }
     Ok(ALL_OPERATION_TYPES.into_iter().filter(|operation_type| requested.contains(operation_type)).collect())
 }
@@ -466,7 +468,7 @@ fn ensure_timezone(timezone: Option<&str>) -> Result<()> {
     {
         return Ok(());
     }
-    Err(Error::ValidationError("履约队列时区只支持 Asia/Shanghai".to_string()))
+    Err(Error::ValidationError("履约到期按北京时间计算，请切换为北京时间后重新查询".to_string()))
 }
 
 fn due_bounds(due: Option<WorkItemDueFilter>) -> Result<(Option<i64>, Option<i64>)> {
@@ -613,7 +615,22 @@ mod tests {
 
     #[test]
     fn unknown_operation_type_fails_closed() {
-        assert!(parse_operation_types(Some("RECEIPT,UNKNOWN")).is_err());
+        assert!(matches!(
+            parse_operation_types(Some("RECEIPT,UNKNOWN")),
+            Err(Error::ValidationError(note)) if note.contains("请选择采购到货入库") && !note.contains("UNKNOWN")
+        ));
+    }
+
+    #[test]
+    fn long_sales_filter_keeps_its_structured_field_path() {
+        let params: FulfillmentQueueListParams =
+            serde_json::from_value(json!({"sales_order_id": "x".repeat(129)})).unwrap();
+        assert!(matches!(
+            params.validate().map_err(Error::from),
+            Err(Error::InvalidInput(issues))
+                if issues.fields().get("sales_order_id").map(String::as_str)
+                    == Some("销售单选择无效，请从销售单列表重新选择")
+        ));
     }
 
     #[test]

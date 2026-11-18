@@ -49,7 +49,8 @@ impl PendingFileAssets {
         let mut references = Vec::with_capacity(requests.len());
 
         for request in requests {
-            let reference = PendingFileReference::parse(&request.reference)?;
+            let reference = PendingFileReference::parse(&request.reference)
+                .map_err(|_| erp_core::Error::from("无法识别本次上传的附件，请移除后重新上传"))?;
             manifest.push(PendingFileContent {
                 reference: reference.as_str().to_string(),
                 file_name: request.registration.file_name.clone(),
@@ -71,7 +72,9 @@ impl PendingFileAssets {
         }
 
         manifest.sort_by(|a, b| a.reference.cmp(&b.reference));
-        Ok(Self { assets, references: PendingFileReferenceSet::new(references)?, audits, manifest })
+        let references = PendingFileReferenceSet::new(references)
+            .map_err(|_| erp_core::Error::from("本次上传的附件登记重复，请移除重复附件后重新提交"))?;
+        Ok(Self { assets, references, audits, manifest })
     }
 
     /// 为已完成真实内容核验的服务端文件准备资产，不登记恶意内容扫描通过。
@@ -115,11 +118,15 @@ impl PendingFileAssets {
 #[async_trait]
 impl PendingAttachmentBatch for PendingFileAssets {
     fn resolve_id(&self, id: &mut FileAssetId, used: &mut HashSet<String>) -> erp_core::Result<bool> {
-        self.references.resolve_id(id, used)
+        self.references
+            .resolve_id(id, used)
+            .map_err(|_| erp_core::Error::from("附件未随本次操作上传或被重复使用，请核对附件后重新提交"))
     }
 
     fn ensure_all_used(&self, used: &HashSet<String>) -> erp_core::Result<()> {
-        self.references.ensure_all_used(used)
+        self.references.ensure_all_used(used).map_err(|_| {
+            erp_core::Error::from("有上传的文件未关联到单据，请补齐附件关联或移除多余文件后重新提交")
+        })
     }
 
     fn contains_id(&self, id: &FileAssetId) -> bool {
@@ -203,7 +210,8 @@ mod tests {
             &actor(),
         )
         .unwrap_err();
-        assert!(err.to_string().contains("临时文件引用不能重复") || err.to_string().contains("重复"));
+        assert!(matches!(err, crate::Error::Logic(erp_core::Error::LogicError(message))
+            if message == "本次上传的附件登记重复，请移除重复附件后重新提交"));
     }
 
     #[test]

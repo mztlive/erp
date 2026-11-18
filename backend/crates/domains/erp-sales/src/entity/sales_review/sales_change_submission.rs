@@ -362,7 +362,7 @@ impl SalesChangeSubmission {
     /// 同一幂等身份对应不同版本时返回冲突。
     pub fn ensure_source_version(&self, expected_version: u64) -> Result<()> {
         if self.source_version.is_some_and(|version| version != expected_version) {
-            return Err(Error::from("幂等键已用于不同的销售变更提交请求"));
+            return Err(Error::from("本次销售变更与之前提交的内容不一致，请先查询原提交结果"));
         }
         Ok(())
     }

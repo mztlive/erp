@@ -16,15 +16,15 @@ pub const PURCHASE_CHANGE_SAVE_ACTION: &str = "purchase_change_order.save_draft"
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SavePurchaseChangeDraftRequest {
-    #[validate(range(min = 1, message = "乐观锁版本必须大于0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_lock_version: u64,
     pub payment_term_code: Option<String>,
     #[validate(length(max = 500, message = "变更原因最多500个字符"))]
     pub reason: Option<String>,
     #[validate(length(min = 1, message = "采购变更必须包含目标明细"))]
     pub lines: Vec<SavePurchaseOrderLine>,
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
-    #[validate(length(max = 128, message = "幂等键过长"))]
+    #[validate(custom(function = "non_blank", message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
+    #[validate(length(max = 128, message = "本次操作标识无效，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 

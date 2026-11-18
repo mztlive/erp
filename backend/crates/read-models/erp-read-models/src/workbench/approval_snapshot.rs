@@ -32,7 +32,7 @@ pub async fn capture_approval_display(
     executor: &mut dyn Executor,
 ) -> Result<ApprovalDisplaySnapshot> {
     let policy = object_policy(WorkItemType::DocumentApproval, document_type.as_str())
-        .ok_or_else(|| Error::ValidationError("单据未注册审批摘要".into()))?;
+        .ok_or_else(|| Error::ValidationError("此类单据不支持查看审批摘要，请从原单据查看处理进度".into()))?;
     let key = (policy.object_kind, id.to_owned());
     let reader = WorkbenchReadService::new(db.clone());
     let mut facts = reader.load_live_object_facts(&HashSet::from([key.clone()]), executor).await?;

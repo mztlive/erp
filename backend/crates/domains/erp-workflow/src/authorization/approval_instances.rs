@@ -180,7 +180,7 @@ impl InstanceFacts {
             .approval_subject_snapshots()
             .find_by_process_instance_id(&instance.base.id, executor)
             .await?
-            .ok_or_else(|| Error::ValidationError("审批实例缺少冻结业务快照".into()))?;
+            .ok_or_else(|| Error::ValidationError("缺少提交审批时的单据资料，请联系审批管理员核对".into()))?;
 
         let expected_subject = subject_ref_for(snapshot.document_type, &snapshot.business_object_id)
             .map_err(|error| Error::ValidationError(error.to_string()))?;

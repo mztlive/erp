@@ -93,7 +93,9 @@ impl FulfillmentProcess {
         actor: &AuditActor,
     ) -> Result<DeliveryView> {
         if req.packing.is_some() && req.tracking_entries.is_some() {
-            return Err(Error::ValidationError("地址包裹与旧物流字段不能同时提交".into()));
+            return Err(Error::ValidationError(
+                "请按地址和包裹填写发货信息，不要同时填写整单物流信息".into(),
+            ));
         }
 
         let packing_context = PackingContext {

@@ -104,9 +104,9 @@ impl InventoryAdjustmentReadService {
         let movements = inventory.load_movements_for_source_document(id, executor).await?;
 
         let binding = load_approval_binding(&self.db, id, executor).await?;
-        let binding = binding
-            .as_ref()
-            .ok_or_else(|| Error::ConflictError("无有效审批绑定的库存调整单不得提交".into()))?;
+        let binding = binding.as_ref().ok_or_else(|| {
+            Error::ConflictError("这张库存调整单没有可用的审批流程，请联系管理员核对流程设置后再提交".into())
+        })?;
         let approval = self.approval_view(&adjustment, binding, actor, approval_instance, executor).await?;
 
         let mut adjustment_view = StockAdjustmentView::from(adjustment);

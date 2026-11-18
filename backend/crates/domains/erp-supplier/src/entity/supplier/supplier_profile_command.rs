@@ -84,7 +84,7 @@ impl SupplierProfileCommand {
     pub fn new(id: impl Into<String>, data: SupplierProfileCommandData) -> Result<Self> {
         let idempotency_key = normalize_required_text(
             data.idempotency_key,
-            "幂等键不能为空",
+            "缺少本次操作的提交编号，请重新发起操作",
             IDEMPOTENCY_KEY_MAX_LEN,
             "幂等键过长",
         )?;

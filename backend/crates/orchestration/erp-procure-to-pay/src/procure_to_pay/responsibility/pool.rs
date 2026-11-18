@@ -45,7 +45,7 @@ impl ProcurementResponsibilityProcess {
                     })?;
                 if !qualified.same_role(std::slice::from_ref(&permission)) {
                     return Err(Error::BusinessLogicError(format!(
-                        "采购负责人 {owner} 缺少 purchase_order:create 权限"
+                        "采购负责人 {owner} 无权创建采购单，请调整负责人或联系管理员配置权限"
                     )));
                 }
             }

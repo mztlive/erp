@@ -64,7 +64,9 @@ impl SupplierCatalogItem {
             return Err(Error::ValidationError("供应商采购限制或报价上下文已变化，请刷新后再入库".into()));
         }
         if revision.bulk_supply_price_gross.is_some() || revision.bulk_minimum_order_quantity.is_some() {
-            return Err(Error::ValidationError("供应商接口未提供集采报价和起订量，不允许手工补写".into()));
+            return Err(Error::ValidationError(
+                "供应商尚未提供集采报价和起订量，不能手工补填，请等待供应商更新报价".into(),
+            ));
         }
         Ok(())
     }
@@ -78,9 +80,7 @@ impl SupplierCatalogItem {
     /// 来源缺报价或请求改价时拒绝。
     pub fn ensure_purchase_price(&self, price: UnitPrice) -> Result<()> {
         if self.purchase_quote()? != price {
-            return Err(Error::ValidationError(
-                "采购供给价由供应商接口提供，不允许手工修改，请刷新报价".into(),
-            ));
+            return Err(Error::ValidationError("采购供给价由供应商同步，不可手工修改，请刷新报价".into()));
         }
         Ok(())
     }

@@ -125,7 +125,7 @@ impl SupplierConnectionExecutionProcess {
                         let error = ClassifiedError {
                             class: SupplierFailureClass::ResultUnknown,
                             code: "TECHNICAL_CONFIG_CHANGED".to_string(),
-                            summary: "检查期间技术配置已变化，本次结果不能作为启用依据".to_string(),
+                            summary: "检查期间连接设置已变化，请按当前设置重新检查后再启用连接".to_string(),
                         };
                         settle_health_failure(&mut job, &mut run, at, latency_ms, &error)?;
                         persist_health_failure_task(&db, &connection, &job, &error, &actor, executor).await?;

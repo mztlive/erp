@@ -67,7 +67,7 @@ impl PartyRevision {
     /// 修订属于其他 Party 或修订号已达到上限时返回错误。
     pub fn next_revision_no(party_id: &PartyId, revisions: &[Self]) -> Result<u32> {
         if revisions.iter().any(|revision| &revision.party_id != party_id) {
-            return Err(erp_core::Error::from("主体修订归属不一致"));
+            return Err(erp_core::Error::from("所选资料版本不属于该往来主体，请刷新后重新选择"));
         }
         revisions
             .iter()

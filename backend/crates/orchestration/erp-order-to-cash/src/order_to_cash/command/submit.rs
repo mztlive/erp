@@ -59,7 +59,7 @@ impl SubmissionIdentity {
     fn new(id: &str, req: &SubmitSalesOrderRequest, actor: &AuditActor) -> Result<Self> {
         let idempotency_key = req.idempotency_key.trim().to_string();
         if idempotency_key.is_empty() {
-            return Err(Error::ValidationError("幂等键不能为空".to_string()));
+            return Err(Error::ValidationError("缺少本次操作编号，请重新打开当前页面后再办理".to_string()));
         }
         Ok(Self {
             audit_id: sales_submission_audit_id(actor.id(), id, &idempotency_key),

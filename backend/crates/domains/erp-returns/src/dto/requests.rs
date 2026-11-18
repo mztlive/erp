@@ -94,7 +94,7 @@ pub struct CommitReturnFactRequest {
     #[validate(custom(function = "non_blank", message = "原因说明不能为空"))]
     pub reason: String,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -169,10 +169,10 @@ pub struct SubmitCustomerRefundRequest {
     #[validate(length(max = 1000, message = "重新提交说明不能超过1000个字符"))]
     pub resubmission_reason: Option<String>,
     /// 期望的单据乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_version: u64,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -181,13 +181,13 @@ pub struct SubmitCustomerRefundRequest {
 #[serde(deny_unknown_fields)]
 pub struct CancelCustomerRefundApprovalRequest {
     /// 期望的单据乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_version: u64,
     /// 非空撤回原因。
     #[validate(length(min = 1, max = 512, message = "撤回原因不能为空"))]
     pub reason: String,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -237,10 +237,10 @@ pub struct SubmitSupplierRefundRequest {
     #[validate(length(max = 1000, message = "重新提交说明不能超过1000个字符"))]
     pub resubmission_reason: Option<String>,
     /// 期望的单据乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_version: u64,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -249,13 +249,13 @@ pub struct SubmitSupplierRefundRequest {
 #[serde(deny_unknown_fields)]
 pub struct CancelSupplierRefundApprovalRequest {
     /// 期望的单据乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_version: u64,
     /// 非空撤回原因。
     #[validate(length(min = 1, max = 512, message = "撤回原因不能为空"))]
     pub reason: String,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -299,10 +299,10 @@ pub struct SubmitReceiptReversalRequest {
     #[validate(length(max = 1000, message = "重新提交说明不能超过1000个字符"))]
     pub resubmission_reason: Option<String>,
     /// 期望的单据乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_version: u64,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -311,13 +311,13 @@ pub struct SubmitReceiptReversalRequest {
 #[serde(deny_unknown_fields)]
 pub struct CancelReceiptReversalApprovalRequest {
     /// 期望的单据乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_version: u64,
     /// 非空撤回原因。
     #[validate(length(min = 1, max = 512, message = "撤回原因不能为空"))]
     pub reason: String,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -359,10 +359,10 @@ pub struct SubmitPaymentReversalRequest {
     #[validate(length(max = 1000, message = "重新提交说明不能超过1000个字符"))]
     pub resubmission_reason: Option<String>,
     /// 期望的单据乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_version: u64,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -371,12 +371,12 @@ pub struct SubmitPaymentReversalRequest {
 #[serde(deny_unknown_fields)]
 pub struct CancelPaymentReversalApprovalRequest {
     /// 期望的单据乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_version: u64,
     /// 非空撤回原因。
     #[validate(length(min = 1, max = 512, message = "撤回原因不能为空"))]
     pub reason: String,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }

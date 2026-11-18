@@ -353,7 +353,7 @@ pub(super) fn ensure_cancel_blocked_instance_preconditions(
     ensure_expected_version("审批实例", command.expected_instance_version, instance.base.version)?;
     let blocked = instance.status == ApprovalProcessInstanceStatus::Blocked;
     if !recovery_options_for(blocked, instance.blocker_code).contains(&RuntimeRecoveryAction::CancelBlocked) {
-        return Err(Error::ConflictError("当前 blocker 不允许该恢复动作".to_string()));
+        return Err(Error::ConflictError("当前受阻原因不支持此恢复操作，请查看可选处理办法".to_string()));
     }
     Ok(())
 }
@@ -439,8 +439,9 @@ async fn load_cancel_execution(
     command: &ApprovalCancelBlockedCommand,
     executor: &mut dyn Executor,
 ) -> Result<(ApprovalNodeExecution, Vec<WorkItem>)> {
-    let policy =
-        instance.cancellation_task_policy().map_err(|error| Error::ConflictError(error.to_string()))?;
+    let policy = instance.cancellation_task_policy().map_err(|error| {
+        Error::ConflictError(crate::service::approval::execution::bpm_model_message(&error).into())
+    })?;
     if policy.closes_open_task() {
         return Err(Error::ConflictError("受阻取消不得处理运行中审批实例".into()));
     }
@@ -462,9 +463,9 @@ async fn load_cancel_execution(
 
     let execution_id = ApprovalNodeExecutionId::new(&current.base.id);
     let open_tasks = db.work_items().open_approval_tasks_for_execution(&execution_id, executor).await?;
-    policy
-        .ensure_open_task_count(open_tasks.len())
-        .map_err(|error| Error::ConflictError(error.to_string()))?;
+    policy.ensure_open_task_count(open_tasks.len()).map_err(|error| {
+        Error::ConflictError(crate::service::approval::execution::bpm_model_message(&error).into())
+    })?;
     validate_cancel_task_version_with_executor(db, &execution_id, command.expected_task_version, executor)
         .await?;
     let tasks = db.work_items().approval_tasks_for_execution(&execution_id, executor).await?;
@@ -485,10 +486,15 @@ async fn prepare_blocked_cancel(
         .bpm_workflow()
         .load_instance_graph(&source.instance, executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".into()))?;
+        .ok_or_else(|| Error::ConflictError("找不到该审批使用的流程，请联系审批管理员核对".into()))?;
     match (source.instance.blocker_code, source.current.blocker_code) {
         (Some(instance), Some(execution)) if instance == execution => {},
-        _ => return Err(Error::ConflictError("受阻实例与当前执行 blocker 不一致".into())),
+        _ => {
+            tracing::debug!(instance_reason = ?source.instance.blocker_code, node_reason = ?source.current.blocker_code, "受阻原因不一致");
+            return Err(Error::ConflictError(
+                "审批记录与当前环节的受阻原因不一致，请联系审批管理员核对".into(),
+            ));
+        },
     }
 
     let now = Instant::now();
@@ -549,7 +555,8 @@ fn cancel_input(
         expected_execution_version: command.expected_execution_version,
         expected_task_version: command.expected_task_version,
         reason: command.reason.clone(),
-        actor: ParticipantId::new(actor.id()).map_err(|_| Error::ValidationError("取消人引用无效".into()))?,
+        actor: ParticipantId::new(actor.id())
+            .map_err(|_| Error::ValidationError("无法确认取消账号，请重新登录后再操作".into()))?,
         close_open_task: false,
         blocked_port: true,
         receipt_id: ApprovalCommandReceiptId::new(next_id()),

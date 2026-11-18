@@ -47,16 +47,21 @@ impl DirectoryQuery {
         self.scope_version = normalized_text(self.scope_version.as_deref());
 
         let page = self.page.unwrap_or(1);
-        if self.q.as_ref().is_some_and(|q| q.chars().count() > 200)
-            || page == 0
-            || !(1..=100).contains(&self.page_size.unwrap_or(20))
-            || self.scope_version.as_ref().is_some_and(|v| v.len() > 256)
+        if self.q.as_ref().is_some_and(|q| q.chars().count() > 200) {
+            return Err(Error::ValidationError("搜索关键词最多 200 个字符，请缩短后再查".into()));
+        }
+        if page == 0 || !(1..=100).contains(&self.page_size.unwrap_or(20)) {
+            return Err(Error::ValidationError(
+                "页码须从 1 开始，每页可显示 1 至 100 条，请调整后再查".into(),
+            ));
+        }
+        if self.scope_version.as_ref().is_some_and(|v| v.len() > 256)
             || (page > 1 && self.scope_version.is_none())
         {
-            return Err(Error::ValidationError("目录搜索、分页或范围版本不合法".into()));
+            return Err(Error::ValidationError("请返回第一页刷新列表后继续查询".into()));
         }
         if self.ids.is_some() && (self.q.is_some() || page != 1) {
-            return Err(Error::ValidationError("已选回显不能混用搜索和后续页".into()));
+            return Err(Error::ValidationError("请清除搜索条件并返回第一页，再查看已选项目".into()));
         }
         Ok(self)
     }
@@ -236,7 +241,7 @@ mod tests {
         let invalid = DirectoryQuery { ids: Some(ids), page: Some(0), ..query }.normalized();
         assert!(matches!(
             invalid,
-            Err(Error::ValidationError(message)) if message == "目录搜索、分页或范围版本不合法"
+            Err(Error::ValidationError(message)) if message == "页码须从 1 开始，每页可显示 1 至 100 条，请调整后再查"
         ));
     }
 

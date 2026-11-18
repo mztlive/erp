@@ -130,8 +130,8 @@ pub fn build_purchase_change_cancel_input(
 ) -> Result<CancelExecutionInput> {
     let reason = normalize_document_cancel_reason(reason)?;
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
-    let actor =
-        ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("撤回人引用无效".to_string()))?;
+    let actor = ParticipantId::new(actor_id)
+        .map_err(|_| Error::ValidationError("无法确认撤回人账号，请重新登录后再办理".to_string()))?;
     let eligibility = converge_eligibility(
         runtime.current.assignee_participant_id.as_str(),
         &runtime.current.assignee_name_snapshot,

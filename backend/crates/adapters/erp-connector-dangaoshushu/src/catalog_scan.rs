@@ -81,10 +81,10 @@ impl DangaoshushuConnector {
 
     fn detail_observation(&self, offer: Offer, root: &Value) -> ConnectorResult<Snapshot<OfferChange>> {
         let spec = spec_value(root, &offer.sku)?
-            .ok_or_else(|| context(mapping(), "商品详情 specs 中找不到列表对应的规格"))?;
+            .ok_or_else(|| context(mapping(), "供应商商品详情中缺少列表对应的规格"))?;
         let offer = self.transform(DangaoshushuOffer::Detail { root, spec })?;
-        let updated_at = source_time(&spec["updated_at"])
-            .map_err(|e| context(e, "规格更新时间 updated_at 格式无效，应为 YYYY-MM-DD HH:MM:SS"))?;
+        let updated_at =
+            source_time(&spec["updated_at"]).map_err(|e| context(e, "供应商提供的规格更新时间无法读取"))?;
         Ok(snapshot(OfferChange::Upsert(Box::new(offer)), updated_at))
     }
 }
@@ -164,8 +164,8 @@ mod tests {
         let page = connector.scan_with_details(&scan(5)).await.unwrap();
         assert_eq!(page.skipped.len(), 2);
         assert!(page.skipped[0].contains("商品详情）"));
-        assert!(page.skipped[0].contains("clearing_price"));
-        assert!(page.skipped[1].contains("找不到列表对应的规格"));
+        assert!(page.skipped[0].contains("规格结算价"));
+        assert!(page.skipped[1].contains("缺少列表对应的规格"));
         assert_eq!(page.page.items.len(), 1);
         let OfferChange::Upsert(offer) = &page.page.items[0].value else { panic!("expected offer") };
         assert_eq!(offer.sku.spec_id, "s2");

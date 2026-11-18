@@ -66,9 +66,11 @@ impl PriceRule {
 }
 
 fn quote(source: Option<UnitPrice>) -> Result<Decimal> {
-    let value = source.ok_or_else(|| Error::ValidationError("暂无接口采购报价，不能计算售价".into()))?;
+    let value = source.ok_or_else(|| {
+        Error::ValidationError("供应商尚未提供采购报价，暂不能计算售价，请补齐报价后再试".into())
+    })?;
     if value.to_decimal().is_sign_negative() {
-        return Err(Error::ValidationError("接口采购报价不能为负数".into()));
+        return Err(Error::ValidationError("供应商采购报价不能为负数，请核实报价".into()));
     }
     Ok(value.to_decimal())
 }

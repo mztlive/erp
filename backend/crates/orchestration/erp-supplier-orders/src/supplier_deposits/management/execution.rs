@@ -350,7 +350,7 @@ async fn apply_bind_connection(
         .await?
         .ok_or_else(|| Error::NotFound("供应商连接不存在".into()))?;
     if connection.supplier_id.as_ref() != source.identity.supplier_id {
-        return Err(Error::Forbidden("资金账户与接口连接不属于同一供应商".into()));
+        return Err(Error::Forbidden("资金账户与所选连接不属于同一供应商，请重新核对账户和连接".into()));
     }
 
     connection.bind_supplier_deposit(account.clone(), source.identity.external_account_ref, actor.id())?;

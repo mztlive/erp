@@ -67,7 +67,7 @@ pub struct CompleteImportBusinessConfirmationCommand {
     #[validate(nested)]
     pub decision: ImportBusinessConfirmationDecision,
     /// 正式操作幂等键；只以服务端不可逆摘要进入审计。
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(custom(function = "non_blank", message = "缺少本次操作的提交编号，请重新发起操作"))]
     pub idempotency_key: String,
 }
 
@@ -144,10 +144,10 @@ impl TryFrom<CompleteImportBusinessConfirmationCommand> for PreparedConfirmation
 
         let reason_code = optional_text(decision.reason_code);
         if decision.action == ConfirmationDecision::ReturnForFix && reason_code.is_none() {
-            return Err(Error::ValidationError("退回修复必须提供原因代码".to_string()));
+            return Err(Error::ValidationError("请选择退回修复的原因".to_string()));
         }
         if decision.action == ConfirmationDecision::ConfirmScope && reason_code.is_some() {
-            return Err(Error::ValidationError("确认责任范围不得携带退回原因".to_string()));
+            return Err(Error::ValidationError("确认责任范围时无需填写退回原因，请清空后提交".to_string()));
         }
 
         Ok(Self {
@@ -164,7 +164,10 @@ impl TryFrom<CompleteImportBusinessConfirmationCommand> for PreparedConfirmation
             decision: decision.action,
             reason_code,
             comment: optional_text(decision.comment),
-            idempotency_key: required_text(&command.idempotency_key, "幂等键不能为空")?,
+            idempotency_key: required_text(
+                &command.idempotency_key,
+                "缺少本次操作的提交编号，请重新发起操作",
+            )?,
         })
     }
 }

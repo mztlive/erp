@@ -175,7 +175,7 @@ fn ensure_replay(
         || existing.stable.created_by != actor.id()
         || existing.direct_return.as_ref().map(|e| &e.request) != Some(req)
     {
-        return Err(Error::ConflictError("该退货提交标识已用于其他内容，请核对原登记".into()));
+        return Err(Error::ConflictError("本次操作编号已用于其他退货内容，请核对原退货记录".into()));
     }
     Ok(())
 }
@@ -341,7 +341,7 @@ async fn save_settlement_decision(
                 .iter()
                 .any(|row| row.idempotency_key == decision.idempotency_key)
         {
-            return Err(Error::ConflictError("提交标识已用于其他方案，请刷新后重新提交".into()));
+            return Err(Error::ConflictError("本次操作编号已用于其他款项处理方案，请刷新后重新核对".into()));
         }
         if purchase_settlements(db, &order.base.id, executor)
             .await?

@@ -191,7 +191,7 @@ impl PayableProcess {
         actor: &AuditActor,
     ) -> Result<SupplierPaymentWithAssetsResult> {
         if req.payment_request_id != id {
-            return Err(Error::ValidationError("付款申请身份与路径不一致".into()));
+            return Err(Error::ValidationError("本次提交与当前打开的付款申请不符，请重新选择申请".into()));
         }
         if !req.additional_work_items.is_empty() {
             return Err(Error::ValidationError("本次付款只允许一份已批准申请".into()));
@@ -453,7 +453,7 @@ impl SupplierPaymentTransaction {
         if recipient.account_id != self.prepared.expected_payee_bank_account_id.as_ref()
             || recipient.version != self.prepared.expected_payee_bank_account_version
         {
-            return Err(Error::ConflictError("实际付款账户与申请冻结账户不一致".into()));
+            return Err(Error::ConflictError("实际收款账户与申请获批时的账户不符，请核对后再登记".into()));
         }
 
         let supplier = self.load_supplier(executor).await?;

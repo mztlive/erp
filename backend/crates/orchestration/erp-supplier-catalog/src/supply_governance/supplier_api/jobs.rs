@@ -149,7 +149,11 @@ impl SupplierApiGovernanceProcess {
                     let policy = gateway
                         .catalog_policy(&connection)
                         .map_err(|error| Error::BusinessLogicError(error.summary))?
-                        .ok_or_else(|| Error::BusinessLogicError("当前接口尚不支持商品同步".into()))?;
+                        .ok_or_else(|| {
+                            Error::BusinessLogicError(
+                                "当前供应商尚未开通商品同步，请联系管理员核对连接功能".into(),
+                            )
+                        })?;
                     let run =
                         next_run(&db, &job.base.id, &connection, policy.mapping_version, executor).await?;
 

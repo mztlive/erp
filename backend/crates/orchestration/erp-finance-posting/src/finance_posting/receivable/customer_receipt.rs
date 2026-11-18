@@ -327,7 +327,7 @@ impl ReceivableProcess {
     /// # 错误
     /// 恒返回 `ConflictError`。
     pub fn reject_client_post() -> Result<CustomerReceiptView> {
-        Err(Error::ConflictError("客户回款过账只能由审批最终通过动作执行，客户端不得直接过账".to_string()))
+        Err(Error::ConflictError("客户回款须在审批最终通过后自动过账，请先完成审批".to_string()))
     }
 
     /// 加载撤回运行事实并写回草稿。

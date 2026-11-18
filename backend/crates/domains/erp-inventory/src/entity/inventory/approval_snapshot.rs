@@ -58,7 +58,7 @@ impl StockAdjustmentApprovalSnapshot {
             return Err(Error::from("库存调整单没有明细，无法启动审批"));
         };
         if adjustment.warehouse_id.as_ref().trim().is_empty() {
-            return Err(Error::from("库存调整单缺少仓库，无法冻结快照"));
+            return Err(Error::from("请为库存调整单选择仓库后再提交审批"));
         }
         if submitted_by.trim().is_empty() {
             return Err(Error::from("提交人不能为空"));
@@ -169,7 +169,7 @@ mod tests {
         missing_warehouse.warehouse_id = WarehouseId::new("");
         for (adjustment, lines, expected) in [
             (&missing_warehouse, vec![], "库存调整单没有明细，无法启动审批"),
-            (&missing_warehouse, vec![line("one", "1")], "库存调整单缺少仓库，无法冻结快照"),
+            (&missing_warehouse, vec![line("one", "1")], "请为库存调整单选择仓库后再提交审批"),
             (&adjustment(), vec![line("one", "1")], "提交人不能为空"),
         ] {
             let error =

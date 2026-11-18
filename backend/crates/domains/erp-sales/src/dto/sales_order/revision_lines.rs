@@ -36,7 +36,7 @@ impl SalesOrderWorkingCopyLineView {
             },
             _ => {
                 return Err(Error::ValidationError(format!(
-                    "销售版本第 {} 行的成交快照不完整或不匹配",
+                    "销售单第 {} 行的成交资料缺失或与该版本不一致，请核对销售单",
                     line.line_no
                 )));
             },

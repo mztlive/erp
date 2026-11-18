@@ -42,7 +42,7 @@ pub struct CreatePartyBankAccountRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdatePartyBankAccountRequest {
     /// 期望的乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
     /// 启停状态；`None` 表示不修改。
     pub status: Option<EffectiveRecordStatus>,

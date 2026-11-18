@@ -402,7 +402,7 @@ impl SupplierSettlementStatement {
                 | SettlementStatus::PendingReconciliation
                 | SettlementStatus::HasDifference
         ) {
-            return Err(Error::from("当前结算状态禁止刷新来源快照"));
+            return Err(Error::from("供应商结算单当前状态不允许更新来源明细，请先核对单据状态"));
         }
 
         let external_bill_no = normalize_required_text(

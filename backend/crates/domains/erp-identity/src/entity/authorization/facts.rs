@@ -104,7 +104,21 @@ impl ObjectFacts {
                 FactKind::Completed => self.completed.loaded(),
             };
             if !loaded {
-                return Err(Error::ValidationError(format!("缺少必要授权事实：{kind:?}")));
+                tracing::debug!(?kind, "缺少必要授权事实");
+                let fact = match kind {
+                    FactKind::Owner => "负责人",
+                    FactKind::Collaborators => "协作人员",
+                    FactKind::Organization => "所属组织",
+                    FactKind::SettlementParty => "结算主体",
+                    FactKind::Warehouse => "所属仓库",
+                    FactKind::HistoryParticipants => "历史参与人",
+                    FactKind::Assignee => "处理人",
+                    FactKind::Participants => "参与人",
+                    FactKind::Completed => "完成状态",
+                };
+                return Err(Error::ValidationError(format!(
+                    "缺少判断访问权限所需的{fact}信息，请联系管理员核对该记录"
+                )));
             }
         }
         Ok(())

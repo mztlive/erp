@@ -482,7 +482,7 @@ async fn replay(
         return Err(Error::Internal("财务登记缺少完整命令回执，请核对原办理结果".into()));
     }
     if !expected.matches(&entry) {
-        return Err(Error::ConflictError("幂等键已用于不同的附加费用命令".into()));
+        return Err(Error::ConflictError("本次操作编号已用于另一笔附加费用登记，请核对原登记".into()));
     }
 
     if expected.fact_type == SALES_EXTRA_COST_FACT {

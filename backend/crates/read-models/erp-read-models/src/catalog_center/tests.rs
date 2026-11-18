@@ -215,7 +215,9 @@ async fn sellable_snapshot_rejects_non_snapshot_before_authorization_or_business
     let result = service
         .sellable_sku_list_with(&SellableSkuListParams::default(), &actor, &mut ReadExecutor::default())
         .await;
-    assert!(matches!(result, Err(Error::ValidationError(reason)) if reason == "商品读取必须使用快照事务"));
+    assert!(
+        matches!(result, Err(Error::ValidationError(reason)) if reason == "暂时无法查询可售商品，请从商品列表重新查询")
+    );
     assert!(query.calls.lock().unwrap().is_empty());
 }
 

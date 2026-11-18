@@ -39,14 +39,18 @@ impl ApproverDirectory for OrganizationApprovers<'_> {
             AssigneeSource::ApplicantTeamLeader => OrgUnitKind::Team,
             AssigneeSource::ApplicantDepartmentLeader => OrgUnitKind::Department,
             AssigneeSource::Specified => {
-                return Err(WorkflowError::ValidationError("指定人员不使用组织负责人解析".into()));
+                return Err(WorkflowError::ValidationError(
+                    "该审批步骤已指定人员，不能改由组织负责人审批".into(),
+                ));
             },
         };
 
         let unit = applicant_leader(self.db, applicant, kind, at, ex)
             .await
             .map_err(|e| map_service(Error::from(e)))?;
-        let leader = unit.leader.ok_or_else(|| WorkflowError::ValidationError("组织未配置负责人".into()))?;
+        let leader = unit.leader.ok_or_else(|| {
+            WorkflowError::ValidationError("该组织尚未指定负责人，请联系管理员设置审批负责人".into())
+        })?;
 
         let actor = AuditActor::new(leader.user_id.clone(), leader.user_id, AccountKind::Admin);
         let required = [approval_instance::INSTANCE_LIST, approval_instance::SUBMIT_DECISION];
@@ -72,7 +76,9 @@ impl ApproverDirectory for OrganizationApprovers<'_> {
             AssigneeResolution {
                 rule: source
                     .rule()
-                    .ok_or_else(|| WorkflowError::ValidationError("审批来源缺失".into()))?
+                    .ok_or_else(|| {
+                        WorkflowError::ValidationError("找不到审批关联的业务单据，请联系管理员核对".into())
+                    })?
                     .into(),
                 subject_id: applicant.into(),
                 source_id: unit.base.id,
@@ -147,12 +153,12 @@ pub async fn resolve_start_approvers(
         .bpm_workflow()
         .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), ex)
         .await?
-        .ok_or_else(|| Error::ConflictError("审批提交结果缺失，请刷新后重试".into()))?;
+        .ok_or_else(|| Error::ConflictError("找不到原审批提交结果，请先刷新单据确认审批状态".into()))?;
     if instance.started_by.as_str() != applicant
         || instance.process_definition_id.as_ref() != graph.definition.base.id
         || instance.definition_version != graph.definition.definition_version
     {
-        return Err(Error::ConflictError("审批提交结果与本次请求不匹配".into()));
+        return Err(Error::ConflictError("原审批结果与本次提交不符，请核对单据的审批记录".into()));
     }
 
     db.bpm_workflow()

@@ -9,7 +9,6 @@ use erp_inventory::{
     DocumentApprovalInstanceView, DocumentApprovalNodeView, DocumentApprovalView, StockAdjustment,
     StockAdjustmentState, SubmitStockAdjustmentApprovalTokenView,
 };
-use erp_workflow::entity::approval_integration::subject_ref_for;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
@@ -25,6 +24,7 @@ use persistence_core::Executor;
 
 use super::InventoryAdjustmentReadService;
 use super::projection::{RECENT_HISTORY_LIMIT, document_approval_view_with_history};
+use crate::approval_runtime::{invalid_approval_steps, read_subject_ref};
 use crate::{Error, Result};
 
 /// 加载库存调整详情的审批实例、历史与当前调用人撤回令牌。
@@ -48,8 +48,7 @@ pub(super) async fn load_document_approval(
     executor: &mut dyn Executor,
 ) -> Result<DocumentApprovalView> {
     let submit_command = submit_token(service, adjustment, binding, actor, executor).await?;
-    let subject = subject_ref_for(DocumentType::StockAdjustment, &adjustment.base.id)
-        .map_err(|error| Error::ValidationError(error.to_string()))?;
+    let subject = read_subject_ref(DocumentType::StockAdjustment, &adjustment.base.id)?;
 
     let mut view = match service.db.bpm_workflow().find_latest_by_subject(&subject, executor).await? {
         None => document_approval_view_with_history(
@@ -91,11 +90,13 @@ async fn enrich_bound_definition(
             .load_definition_graph(&binding.approval_process_definition_id, executor)
             .await?
             .filter(|graph| graph.definition.definition_version == binding.approval_definition_version)
-            .ok_or_else(|| Error::ConflictError("库存调整单绑定的审批定义不存在".into()))?;
+            .ok_or_else(|| {
+                Error::ConflictError("找不到库存调整单所用的审批流程，请联系管理员核对流程设置".into())
+            })?;
         definition.name = graph.definition.name.clone();
         definition.nodes = graph
             .ordered_nodes()
-            .map_err(|e| Error::ValidationError(e.to_string()))?
+            .map_err(invalid_approval_steps)?
             .iter()
             .map(|node| DocumentApprovalNodeView {
                 key: node.node_key.clone(),
@@ -144,7 +145,11 @@ pub(super) async fn load_document_approval_for_instance(
         .bpm_workflow()
         .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("库存调整签署结果引用的审批实例不存在".to_string()))?;
+        .ok_or_else(|| {
+            Error::ConflictError(
+                "找不到本次库存调整签署对应的审批记录，请联系管理员核对，勿重复签署".to_string(),
+            )
+        })?;
     ensure_result_instance(&instance, &adjustment.base.id, instance_id, expected_subject_version)?;
     service.policy.ensure_instance_binding(&instance, require_frozen_binding(binding)?)?;
     project_runtime(service, adjustment, binding, instance, None, ApprovalRead { actor, executor }).await
@@ -162,7 +167,9 @@ fn ensure_result_instance(
         || instance.subject.subject_id() != adjustment_id
         || instance.subject_version != expected_subject_version
     {
-        return Err(Error::ConflictError("库存调整签署结果与审批实例身份不一致".to_string()));
+        return Err(Error::ConflictError(
+            "库存调整签署结果与本次审批记录不一致，请先核对审批进度，勿重复签署".to_string(),
+        ));
     }
     Ok(())
 }
@@ -238,10 +245,9 @@ async fn submit_token(
         return Ok(None);
     }
 
-    let expected_subject_version = adjustment
-        .approval_subject_version
-        .checked_add(1)
-        .ok_or_else(|| Error::ConflictError("库存调整审批主题版本已达上限".to_string()))?;
+    let expected_subject_version = adjustment.approval_subject_version.checked_add(1).ok_or_else(|| {
+        Error::ConflictError("这张库存调整单无法再次提交审批，请联系管理员核对历史提交记录".to_string())
+    })?;
     Ok(Some(SubmitStockAdjustmentApprovalTokenView {
         expected_version: adjustment.base.version.to_string(),
         expected_subject_version: expected_subject_version.to_string(),
@@ -320,7 +326,9 @@ fn cancel_task_version(
         || current.round_no != instance.current_round_no
         || instance.current_node_execution_id.as_ref().map(AsRef::as_ref) != Some(current.base.id.as_str())
     {
-        return Err(Error::ConflictError("库存调整审批当前执行与实例不一致".to_string()));
+        return Err(Error::ConflictError(
+            "库存调整单的审批进度与当前待办不一致，请从待办列表重新打开".to_string(),
+        ));
     }
     let version = match instance.status {
         ApprovalProcessInstanceStatus::Running
@@ -354,14 +362,18 @@ async fn cancel_snapshot_org(
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("审批实例缺少冻结业务快照".to_string()))?;
+        .ok_or_else(|| {
+            Error::ConflictError("本次库存调整审批缺少提交时的单据资料，请联系管理员核对".to_string())
+        })?;
     snapshot
         .ensure_matches_runtime_subject(
             DocumentType::StockAdjustment,
             &adjustment.base.id,
             instance.subject_version,
         )
-        .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
+        .map_err(|_| {
+            Error::ConflictError("本次库存调整的审批记录与提交资料不一致，请联系管理员核对".to_string())
+        })?;
     Ok(snapshot.payload.responsible_org_id)
 }
 
@@ -429,16 +441,16 @@ pub async fn load_approval_binding(
     document_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<Option<ApprovalDefinitionBinding>> {
-    let document = db
-        .business_documents()
-        .find_by_id(document_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))?;
+    let document = db.business_documents().find_by_id(document_id, executor).await?.ok_or_else(|| {
+        Error::NotFound("没有找到库存调整单可用的审批流程，请联系管理员核对流程设置".to_string())
+    })?;
     Ok(document.approval_binding)
 }
 
 fn require_frozen_binding(binding: Option<&ApprovalDefinitionBinding>) -> Result<&ApprovalDefinitionBinding> {
-    binding.ok_or_else(|| Error::ConflictError("无有效审批绑定的库存调整单不得提交".into()))
+    binding.ok_or_else(|| {
+        Error::ConflictError("这张库存调整单没有可用的审批流程，请联系管理员核对流程设置后再提交".into())
+    })
 }
 
 #[cfg(test)]
@@ -490,7 +502,7 @@ mod tests {
             ("adjustment", "original-instance", 3),
         ] {
             assert!(
-                matches!(ensure_result_instance(&instance, adjustment, id, version), Err(Error::ConflictError(message)) if message == "库存调整签署结果与审批实例身份不一致")
+                matches!(ensure_result_instance(&instance, adjustment, id, version), Err(Error::ConflictError(message)) if message == "库存调整签署结果与本次审批记录不一致，请先核对审批进度，勿重复签署")
             );
         }
     }

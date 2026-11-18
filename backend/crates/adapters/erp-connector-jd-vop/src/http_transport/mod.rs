@@ -62,13 +62,13 @@ impl JdVopHttpTransport {
     /// # 错误
     /// 配置、渠道或 HTTP 客户端构造无效时拒绝。
     pub fn new(settings: JdVopConfig, tokens: Arc<dyn JdVopTokenProvider>) -> ConnectorResult<Self> {
-        settings.validate().map_err(|_| mapping("京东 HTTP 技术配置无效"))?;
+        settings.validate().map_err(|_| mapping("京东连接设置不完整，请联系管理员核对接入配置"))?;
         if !settings.enabled {
-            return Err(mapping("京东 HTTP 尚未启用"));
+            return Err(mapping("京东连接尚未启用，请联系管理员开通"));
         }
         let context = JdVopRequestContext::new(settings.source_type)?;
-        let sender =
-            ReqwestSender::new(settings.timeout_seconds).map_err(|_| mapping("京东 HTTP 客户端无法创建"))?;
+        let sender = ReqwestSender::new(settings.timeout_seconds)
+            .map_err(|_| mapping("京东连接无法建立，请联系管理员核对接入配置"))?;
         Ok(Self { settings, context, tokens, sender: Arc::new(sender), clock: Arc::new(SystemClock) })
     }
 
@@ -103,12 +103,12 @@ impl JdVopHttpTransport {
             HttpFailure::Transport => error(
                 SupplierFailureClass::TransientFailure,
                 "JD_VOP_HTTP_TRANSPORT_FAILED",
-                "京东网络请求失败，请稍后核对原结果",
+                "暂时无法连接京东，请稍后重新查询",
             ),
-            HttpFailure::Oversized => mapping("京东响应超过允许大小"),
+            HttpFailure::Oversized => mapping("京东返回的资料过多，无法读取，请缩小查询范围或联系管理员核对"),
         })?;
         if reply.body.len() > RESPONSE_LIMIT {
-            return Err(mapping("京东响应超过允许大小"));
+            return Err(mapping("京东返回的资料过多，无法读取，请缩小查询范围或联系管理员核对"));
         }
 
         let status = reply.status;
@@ -127,12 +127,22 @@ impl JdVopHttpTransport {
         } else {
             format!("JD_VOP_HTTP_{status}")
         };
-        Err(error(class, &code, "京东 HTTP 请求未成功，请核对授权、配额或原请求结果"))
+        let summary = match class {
+            SupplierFailureClass::AuthSignature => "京东未授权当前账号，请联系管理员核对连接授权",
+            SupplierFailureClass::RateLimited => "京东当前查询较多，请稍后重新查询",
+            SupplierFailureClass::TransientFailure => "暂时无法从京东读取资料，请稍后重新查询",
+            _ => "京东未返回可读取的资料，请联系管理员核对连接配置",
+        };
+        Err(error(class, &code, summary))
     }
 }
 
 fn unknown_write(failure: ConnectorError) -> ConnectorError {
-    error(SupplierFailureClass::ResultUnknown, &failure.code, "京东原写请求结果待核实，请查询原结果")
+    error(
+        SupplierFailureClass::ResultUnknown,
+        &failure.code,
+        "京东尚未确认原操作结果，请查询原订单或原操作，不要重复提交",
+    )
 }
 
 #[async_trait]

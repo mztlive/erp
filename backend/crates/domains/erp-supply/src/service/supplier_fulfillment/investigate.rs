@@ -285,7 +285,7 @@ pub fn validate_investigation_intent(
     )
     .map_err(|_| Error::Internal("调查意图摘要格式无效".to_string()))?;
     if intent != investigation_intent_record(context) {
-        return Err(Error::ConflictError("调查意图已用于不同的命令载荷".to_string()));
+        return Err(Error::ConflictError("本次调查内容与之前提交的不一致，请先查看原调查结果".to_string()));
     }
     Ok(())
 }

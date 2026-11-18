@@ -181,14 +181,14 @@ async fn reconcile<P: MembershipReconciliationPort>(
             return Err(ClassifiedError {
                 class: SupplierFailureClass::TransientFailure,
                 code: "CATALOG_SHUTDOWN".into(),
-                summary: "服务发布交接，将从已保存的目录池核对进度继续".into(),
+                summary: "商品范围核对已暂停，系统将从已保存的位置继续，请稍后查看进度".into(),
             });
         }
 
         let scope = port.scope().await?.ok_or_else(|| ClassifiedError {
             class: SupplierFailureClass::CapabilityGap,
             code: "CATALOG_SCOPE_PROOF_REQUIRED".into(),
-            summary: "来源尚未提供完整商品池范围证明，不能按缺项撤回".into(),
+            summary: "供应商尚未确认完整商品范围，暂不下架未查到的商品，请核对供应商目录".into(),
         })?;
         if &scope != expected {
             port.invalidate().await?;

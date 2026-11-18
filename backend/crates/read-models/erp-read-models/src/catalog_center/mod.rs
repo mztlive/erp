@@ -107,7 +107,7 @@ impl CatalogCenterReadService {
         supplier_codes::apply_supplier_codes(&mut view.items, &supplier_ids, &numbers);
 
         if !boundary.is_current(executor) {
-            return Err(Error::ValidationError("商品读取跨越授权快照".into()));
+            return Err(Error::ValidationError("本次商品查询已失效，请刷新商品列表后重新查询".into()));
         }
         Ok(view)
     }
@@ -120,15 +120,14 @@ async fn require_sellable_read(
     executor: &mut dyn Executor,
 ) -> Result<ExecutionBoundary> {
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-        return Err(Error::ValidationError("商品读取必须使用快照事务".into()));
+        return Err(Error::ValidationError("暂时无法查询可售商品，请从商品列表重新查询".into()));
     }
     authorization
         .require(actor, &catalog::PRODUCT_SELLABLE_SKU_LIST, AccessTarget::Operation, executor)
         .await?;
-    executor
-        .boundary()
-        .filter(|boundary| boundary.is_snapshot())
-        .ok_or_else(|| Error::ValidationError("商品读取缺少授权快照".into()))
+    executor.boundary().filter(|boundary| boundary.is_snapshot()).ok_or_else(|| {
+        Error::ValidationError("暂时无法确认当前账号可查看的商品，请刷新商品列表后重新查询".into())
+    })
 }
 
 /// 按商品领域筛选查询并投影当前可售页，保留同序供应商身份供编号补齐。

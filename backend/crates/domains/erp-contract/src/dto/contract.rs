@@ -171,7 +171,7 @@ pub struct UploadContractView {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ArchiveContractRevisionRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 本版本已签署合同 PDF 的文件资产 ID（D05 上传产物）。
     pub contract_pdf_file_id: FileAssetId,
@@ -208,7 +208,7 @@ pub struct ArchiveContractRevisionRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct TerminateContractRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
 }
 

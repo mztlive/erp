@@ -80,8 +80,8 @@ pub(crate) async fn replay_purchase_order_start_with_executor(
         },
         idempotency_key,
         StartReplayErrors {
-            missing_instance: "采购启动收据引用的审批实例不存在",
-            identity_mismatch: "采购启动收据与冻结运行事实不一致",
+            missing_instance: "找不到采购单原提交对应的审批记录，请联系管理员核对",
+            identity_mismatch: "采购单原提交记录与实际审批进度不符，请核对审批记录",
         },
         executor,
     )

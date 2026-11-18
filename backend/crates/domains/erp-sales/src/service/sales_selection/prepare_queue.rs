@@ -170,7 +170,7 @@ impl SalesSelectionService {
         images: &dyn SelectionImagePort,
     ) -> Result<bool> {
         if task.is_deadline_passed(Instant::now()) {
-            self.fail_task(&task, "准备任务已超过时限").await?;
+            self.fail_task(&task, "准备任务已超过时限，请重新准备选品册").await?;
             return Ok(true);
         }
         if task.status != PrepareTaskStatus::Queued {
@@ -209,8 +209,11 @@ impl SalesSelectionService {
                     self.fail_task(&task, "准备结果未能保存，请重新准备").await?;
                 }
             },
-            Ok(Err(error)) => self.fail_task(&task, &error.to_string()).await?,
-            Err(_) => self.fail_task(&task, "准备任务已超过时限").await?,
+            Ok(Err(error)) => {
+                tracing::warn!(task_id = %task.base.id, error_kind = ?std::mem::discriminant(&error), "准备选品册失败");
+                self.fail_task(&task, prepare_failure_message(&error)).await?;
+            },
+            Err(_) => self.fail_task(&task, "准备任务已超过时限，请重新准备选品册").await?,
         }
         Ok(())
     }
@@ -356,6 +359,15 @@ impl SalesSelectionService {
     }
 }
 
+fn prepare_failure_message(error: &Error) -> &str {
+    match error {
+        Error::SelectionPrepareFailed(message)
+        | Error::SelectionLimitExceeded(message)
+        | Error::ValidationError(message) => message,
+        _ => "暂未能准备好选品册，请刷新后重新准备；如仍失败，请联系支持人员",
+    }
+}
+
 /// 创建前校验任务类型、档位范围与新规则；失败不占用册。
 fn validate_prepare_request(book: &SalesSelectionBooklet, req: &PrepareSalesSelectionRequest) -> Result<()> {
     if req.kind == PrepareKind::RegeneratedTiers
@@ -437,6 +449,18 @@ mod tests {
     use crate::entity::sales_selection::{
         PoolFilterSnapshot, PoolSource, PoolSourceKind, SalesSelectionBookletData, SelectionForm, SubmitMode,
     };
+
+    #[test]
+    fn prepare_failure_keeps_business_guidance_without_exposing_internal_details() {
+        let business = Error::selection_prepare_failed("请调整档位金额后重新准备");
+        assert_eq!(prepare_failure_message(&business), "请调整档位金额后重新准备");
+
+        let internal = Error::Internal("storage endpoint unavailable".into());
+        assert_eq!(
+            prepare_failure_message(&internal),
+            "暂未能准备好选品册，请刷新后重新准备；如仍失败，请联系支持人员"
+        );
+    }
 
     /// 构造无外部依赖的有效单品册。
     fn book() -> SalesSelectionBooklet {

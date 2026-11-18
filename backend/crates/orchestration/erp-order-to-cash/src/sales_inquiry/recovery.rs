@@ -83,7 +83,7 @@ fn recovery_result(
 ) -> Result<InquiryMutationView> {
     receipt.validate()?;
     if receipt.base.is_deleted() || receipt.actor_id != actor.id() || receipt.action != action {
-        return Err(Error::ConflictError("询价命令回执身份不一致".into()));
+        return Err(Error::ConflictError("无法确认原办理记录与本次询价操作相符，请先核对询价进度".into()));
     }
 
     let InquiryCommandResult::Mutation {
@@ -98,7 +98,7 @@ fn recovery_result(
         return Err(Error::Internal("询价命令回执缺少冻结结果".into()));
     };
     if id != inquiry_id && !(action == "create" && id.is_empty()) {
-        return Err(Error::ConflictError("询价命令回执不属于当前询价".into()));
+        return Err(Error::ConflictError("原办理记录不属于当前询价，请核对所选询价单".into()));
     }
 
     Ok(InquiryMutationView {

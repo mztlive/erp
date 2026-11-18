@@ -71,7 +71,7 @@ impl SupplierProfileProcess {
                 .iter()
                 .find(|item| item.capability_code == code && !item.owner_user_id.trim().is_empty())
                 .map(|item| item.owner_user_id.trim().to_string())
-                .ok_or_else(|| Error::ValidationError("供给能力负责人必须显式指定".to_string()))?;
+                .ok_or_else(|| Error::ValidationError("请选择供给能力负责人".to_string()))?;
             let (capability, revision) = profile_change::new_capability(
                 supplier_id,
                 code,

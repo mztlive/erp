@@ -200,7 +200,9 @@ async fn validate_revisions(
             })
         })
     {
-        return Err(Error::ConflictError("采购来源销售版本与冻结资料不一致".into()));
+        return Err(Error::ConflictError(
+            "采购关联的销售资料与审批提交时不一致，请核对原销售单和提交资料".into(),
+        ));
     }
     Ok(())
 }

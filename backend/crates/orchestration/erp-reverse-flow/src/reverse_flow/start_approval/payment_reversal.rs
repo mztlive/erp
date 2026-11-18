@@ -75,8 +75,8 @@ pub fn build_payment_reversal_start_input(input: ReverseStartInput<'_>) -> Resul
         &ReverseStartContracts {
             document_type: DocumentType::PaymentReversal,
             readable: payment_reversal_object_readable,
-            version_mismatch: "付款冲正单绑定定义版本与已加载定义不一致",
-            empty_definition: "审批定义没有节点，无法启动付款冲正审批",
+            version_mismatch: "付款冲正单的审批流程版本不一致，请联系管理员核对",
+            empty_definition: "付款冲正审批流程没有配置审批步骤，请联系管理员补全",
         },
     )
 }
@@ -223,9 +223,9 @@ async fn replay_persisted_payment_reversal(
     command_receipt: &CommandReceipt,
     executor: &mut dyn Executor,
 ) -> Result<PaymentReversal> {
-    committed_reversal_submit(db, id, command_receipt, executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("缺少匹配原请求版本的冲正提交收据".into()))?;
+    committed_reversal_submit(db, id, command_receipt, executor).await?.ok_or_else(|| {
+        Error::ConflictError("找不到与原单据版本相符的冲正提交记录，请先核对当前审批状态".into())
+    })?;
     db.payment_reversals()
         .find_by_id(id, executor)
         .await?

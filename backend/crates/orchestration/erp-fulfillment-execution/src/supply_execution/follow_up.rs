@@ -75,7 +75,7 @@ pub fn pick_follow_up_user(capability_owner: Option<&str>, maintainer: Option<&s
         (Some(owner), _) => Ok(owner.to_string()),
         (None, Some(owner)) => Ok(owner.to_string()),
         (None, None) => {
-            Err(Error::ValidationError("无法解析供应商订单内部跟进人：固定供应关系缺少合格映射".into()))
+            Err(Error::ValidationError("该固定供应关系没有可用的内部跟进人，请先维护跟进人设置".into()))
         },
     }
 }
@@ -92,7 +92,9 @@ pub fn pick_follow_up_user(capability_owner: Option<&str>, maintainer: Option<&s
 /// 组织为空或等于 `company`（忽略大小写）时返回 `ValidationError`。
 pub fn reject_company_org(org: &str) -> Result<()> {
     if org.trim().is_empty() || org.eq_ignore_ascii_case("company") {
-        return Err(Error::ValidationError("跟进人缺少有效内部组织，禁止写入公司根".into()));
+        return Err(Error::ValidationError(
+            "所选跟进人不属于有效的内部组织，请调整人员所属组织后再办理".into(),
+        ));
     }
     Ok(())
 }
@@ -124,7 +126,7 @@ mod tests {
     #[test]
     fn missing_mapping_fail_closed() {
         match pick_follow_up_user(None, Some("  ")) {
-            Err(Error::ValidationError(message)) => assert!(message.contains("缺少合格映射")),
+            Err(Error::ValidationError(message)) => assert!(message.contains("没有可用的内部跟进人")),
             other => panic!("expected mapping error, got {other:?}"),
         }
         assert_eq!(pick_follow_up_user(Some("cap-1"), Some("maint-1")).unwrap(), "cap-1");

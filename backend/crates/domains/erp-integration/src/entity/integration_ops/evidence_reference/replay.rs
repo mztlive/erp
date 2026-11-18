@@ -54,7 +54,7 @@ impl ReplayOriginalReference {
         let value = value.trim();
         let (inbox, business_fact_key) = value
             .split_once(";business_fact_key:")
-            .ok_or_else(|| Error::from("重放引用必须包含 business_fact_key 字段"))?;
+            .ok_or_else(|| Error::from("缺少原业务记录，无法重新处理，请补充对应的业务凭据"))?;
         Self::from_parts(CanonicalEvidenceReference::parse_stored(inbox)?, business_fact_key)
     }
 

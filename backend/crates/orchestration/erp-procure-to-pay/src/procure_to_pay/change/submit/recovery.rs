@@ -23,18 +23,17 @@ pub(in crate::procure_to_pay) async fn replay_change_command(
         return Ok(None);
     };
     let receipt = PurchaseCommandReceipt::decode(record, identity, fingerprint)
-        .map_err(|_| Error::ConflictError("幂等键已用于不同的采购变更提交请求或回执无效".into()))?
+        .map_err(|_| Error::ConflictError("无法将本次提交与原采购变更记录对应，请先核对审批状态".into()))?
         .into_payload();
 
-    let submission = db
-        .purchase_change_submissions()
-        .find_by_id(&receipt.submission_id, executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("采购变更提交回执引用的冻结提交不存在".into()))?;
+    let submission =
+        db.purchase_change_submissions().find_by_id(&receipt.submission_id, executor).await?.ok_or_else(
+            || Error::ConflictError("找不到采购变更原先提交审批的单据内容，请联系管理员核对".into()),
+        )?;
     if submission.purchase_change_order_id.as_ref() != receipt.change_id
         || submission.submission_no != receipt.submission_no
     {
-        return Err(Error::ConflictError("采购变更提交回执与冻结提交不一致".into()));
+        return Err(Error::ConflictError("采购变更的原提交记录与送审单据内容不符，请联系管理员核对".into()));
     }
     Ok(Some(receipt))
 }

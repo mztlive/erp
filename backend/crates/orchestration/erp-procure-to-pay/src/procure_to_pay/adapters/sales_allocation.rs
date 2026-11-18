@@ -60,9 +60,9 @@ pub(crate) async fn current_revision_lines(
     lines
         .into_iter()
         .map(|line| {
-            let goods = goods
-                .get(&line.base.id)
-                .ok_or_else(|| Error::BusinessLogicError("来源销售商品版本行缺少SKU事实".into()))?;
+            let goods = goods.get(&line.base.id).ok_or_else(|| {
+                Error::BusinessLogicError("来源销售单的商品明细缺少规格资料，请核对销售单后再采购".into())
+            })?;
             Ok(CurrentSalesAllocationLine {
                 sales_order_line_id: line.sales_order_line_id,
                 sales_order_revision_line_id: SalesOrderRevisionLineId::new(line.base.id),

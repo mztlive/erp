@@ -31,7 +31,9 @@ impl ReturnsReadService {
         if executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             Ok(())
         } else {
-            Err(Error::ValidationError("退款冲正结果读取必须使用原授权快照".into()))
+            Err(Error::ValidationError(
+                "暂时无法查看本次退款、退货或冲正结果，请打开原单据核对当前状态，勿重复操作".into(),
+            ))
         }
     }
 
@@ -111,7 +113,7 @@ mod command_snapshot_tests {
         ];
         for error in errors {
             assert!(
-                matches!(error, Error::ValidationError(reason) if reason == "退款冲正结果读取必须使用原授权快照")
+                matches!(error, Error::ValidationError(reason) if reason == "暂时无法查看本次退款、退货或冲正结果，请打开原单据核对当前状态，勿重复操作")
             );
         }
     }

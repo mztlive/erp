@@ -25,9 +25,9 @@ pub(super) async fn revalidate(
         .purchase_payment_request_snapshots()
         .find_for_version(&request.base.id, request.submission_version, executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("原付款缺少冻结申请依据".into()))?;
+        .ok_or_else(|| Error::ConflictError("原付款没有获批申请记录，请联系财务核对".into()))?;
     if request.approval_instance_id.as_deref() != Some(snapshot.approval_instance_id.as_str()) {
-        return Err(Error::ConflictError("原付款与申请审批实例不一致".into()));
+        return Err(Error::ConflictError("原付款与对应申请的审批记录不符，请联系财务核对".into()));
     }
 
     validate_snapshot(payment, &snapshot)?;
@@ -84,7 +84,9 @@ pub(super) fn validate_snapshot(
             })
         })
     {
-        return Err(Error::ConflictError("原付款与冻结申请主体、账户或逐采购金额不一致".into()));
+        return Err(Error::ConflictError(
+            "原付款与申请获批时的付款主体、收款账户或各采购单的付款金额不符，请联系财务核对".into(),
+        ));
     }
     Ok(())
 }

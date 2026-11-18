@@ -105,7 +105,7 @@ pub(super) async fn confirm_current_order(
     mut execution: ApiOrderExecution,
 ) -> Result<()> {
     if let Err(error) = application.refresh(&mut execution).await {
-        execution.defer(error.to_string());
+        execution.defer(error.supplier_order_message());
         return application.persist(&mut execution).await;
     }
     if execution.stage != ApiOrderStage::ConfirmOrder {

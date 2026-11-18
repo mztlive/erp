@@ -41,7 +41,7 @@ fn subject_from_revision(
     revision: &SalesOrderRevision,
 ) -> Result<PaymentSubjectSnapshot> {
     if revision.sales_order_id != *sales_order_id || revision.base.is_deleted() {
-        return Err(Error::ConflictError("采购引用的正式销售版本与来源销售单不一致".into()));
+        return Err(Error::ConflictError("采购依据中的生效版本不属于所选销售单，请核对来源销售单".into()));
     }
 
     let name = revision
@@ -76,7 +76,9 @@ pub(super) async fn revalidate_payment_subject(
     let proven =
         load_payment_subject(db, &frozen.sales_order_id, &frozen.sales_order_revision_id, executor).await?;
     if proven != *frozen {
-        return Err(Error::ConflictError("采购付款主体与冻结正式销售依据不一致".into()));
+        return Err(Error::ConflictError(
+            "采购付款主体与采购依据中的销售结算主体不符，请核对来源销售单".into(),
+        ));
     }
     Ok(())
 }

@@ -148,7 +148,7 @@ async fn read_list(
     executor: &mut dyn Executor,
 ) -> Result<SalesListView> {
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-        return Err(Error::ValidationError("销售列表必须使用快照事务".into()));
+        return Err(Error::ValidationError("暂时无法查看销售单列表，请从第一页重新查询".into()));
     }
 
     let snapshot = reader.load(params, actor, executor).await?;

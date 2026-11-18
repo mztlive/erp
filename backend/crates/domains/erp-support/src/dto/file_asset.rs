@@ -193,7 +193,7 @@ impl FileAssetListParams {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct RegisterFileAssetRequest {
     /// 加密受控对象存储中的不可猜测对象键。
-    #[validate(custom(function = "non_blank", message = "对象键不能为空"))]
+    #[validate(custom(function = "non_blank", message = "缺少已上传文件的信息，请重新上传文件"))]
     pub storage_object_key: String,
     /// 展示文件名。
     #[validate(custom(function = "non_blank", message = "文件名不能为空"))]
@@ -204,7 +204,7 @@ pub struct RegisterFileAssetRequest {
     /// 字节大小。
     pub byte_size: u64,
     /// 内容指纹（带密钥 HMAC-SHA256 十六进制，64 字符）。
-    #[validate(custom(function = "non_blank", message = "内容指纹不能为空"))]
+    #[validate(custom(function = "non_blank", message = "缺少文件完整性信息，请重新上传文件"))]
     pub content_hmac: String,
     /// 敏感级别。
     pub sensitivity_class: SensitivityClass,
@@ -323,7 +323,7 @@ impl From<DocumentAttachment> for DocumentAttachmentView {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct MarkScanResultRequest {
     /// 期望的乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
     /// 检查结果（通过/拒绝/隔离；隔离后经人工复核可放行或拒绝）。
     pub security_scan_status: SecurityScanStatus,
@@ -333,7 +333,7 @@ pub struct MarkScanResultRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct DestroyFileAssetRequest {
     /// 期望的乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
 }
 

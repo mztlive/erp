@@ -72,7 +72,7 @@ impl SupplierConnectionExecutionProcess {
                 return Err(ClassifiedError {
                     class: SupplierFailureClass::TransientFailure,
                     code: "CATALOG_SHUTDOWN".into(),
-                    summary: "服务发布交接，将从已保存页面继续".into(),
+                    summary: "商品同步已暂停，系统将从已处理的位置继续，请稍后查看进度".into(),
                 });
             }
 
@@ -301,7 +301,7 @@ pub(super) fn verify_connection(connection: &SupplierApiConnection, run: &Suppli
     if connection.base.id != run.connection_id
         || connection.technical_config_version != run.technical_config_version
     {
-        return Err(Error::ConflictError("同步期间接口配置已变化，请重新同步".into()));
+        return Err(Error::ConflictError("同步期间供应商连接设置已变化，请刷新设置后重新同步商品".into()));
     }
     Ok(())
 }
@@ -394,7 +394,7 @@ pub(super) fn classify(error: Error) -> ClassifiedError {
         Error::ConflictError(_) => ClassifiedError {
             class: SupplierFailureClass::BusinessRejected,
             code: "CATALOG_CONTEXT_CHANGED".into(),
-            summary: "同步任务、来源版本或接口配置已变化，请刷新后重新同步".into(),
+            summary: "同步任务、供应商商品或连接设置已变化，请刷新后重新同步商品".into(),
         },
         Error::BusinessLogicError(message) | Error::ValidationError(message) => ClassifiedError {
             class: SupplierFailureClass::MappingError,

@@ -166,7 +166,7 @@ async fn validate_stock_adjustment_start(
     let persisted_binding = load_approval_binding(db, &input.id, executor).await?;
     let persisted_binding = require_frozen_binding(persisted_binding.as_ref())?;
     if persisted_binding != &input.binding {
-        return Err(Error::ConflictError("库存调整审批定义绑定已变化，请刷新后重试".to_string()));
+        return Err(Error::ConflictError("库存调整适用的审批流程已变化，请刷新后重试".to_string()));
     }
     let graph = load_bound_definition_graph_with_executor(db, persisted_binding, executor)
         .await?
@@ -219,7 +219,9 @@ async fn persist_start_document(
         )
         .await?;
     if guarded.is_none() {
-        return Err(Error::ConflictError("库存调整单审批启动守卫冲突，请刷新后重试".to_string()));
+        return Err(Error::ConflictError(
+            "库存调整单的审批状态已变化，未能提交审批，请刷新后核对".to_string(),
+        ));
     }
 
     for line in &input.lines {
@@ -256,7 +258,7 @@ fn ensure_fresh_start_document(
         || current.warehouse_id != target.warehouse_id
         || current.prepared_by != target.prepared_by
     {
-        return Err(Error::ConflictError("库存调整单事务内版本、状态或审批主题已变化".to_string()));
+        return Err(Error::ConflictError("库存调整单内容或审批状态已变化，请刷新后核对".to_string()));
     }
     Ok(())
 }
@@ -351,7 +353,9 @@ fn validate_start_execution(
         || Some(&first.assignee_participant_id) != entry.assignee_participant_id.as_ref()
         || first.assignee_name_snapshot != entry.assignee_label_snapshot
     {
-        return Err(Error::ConflictError("库存调整启动入口执行与事务内定义事实不一致".to_string()));
+        return Err(Error::ConflictError(
+            "库存调整审批的首个步骤与当前流程设置不符，请联系管理员核对".to_string(),
+        ));
     }
 
     ensure_start_tasks(writes, first)?;

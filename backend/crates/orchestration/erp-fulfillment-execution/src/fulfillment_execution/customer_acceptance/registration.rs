@@ -72,7 +72,7 @@ fn ensure_customer_acceptance_has_no_adapter() -> Result<()> {
 fn customer_acceptance_binding_organization_id(acceptance: &CustomerAcceptance) -> Result<String> {
     let org = acceptance.sales_order_id.to_string();
     if org.trim().is_empty() {
-        return Err(Error::ValidationError("客户验收单缺少销售单，无法构造绑定上下文".to_string()));
+        return Err(Error::ValidationError("验收单未关联销售单，请先核对所验收的订单".to_string()));
     }
     Ok(org)
 }

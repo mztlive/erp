@@ -86,7 +86,7 @@ impl CancellationIntent {
             .await?
             .ok_or_else(|| Error::NotFound("原接口执行不存在".into()))?;
         if current.base.version != execution.base.version {
-            return Err(Error::ConflictError("接口执行已变化，请刷新后重新取消".into()));
+            return Err(Error::ConflictError("供应商订单状态已变化，请刷新并确认仍可取消后再操作".into()));
         }
         execution.ensure_cancellation_order(&order)?;
         if order.cancel_status == CancelStatus::None {

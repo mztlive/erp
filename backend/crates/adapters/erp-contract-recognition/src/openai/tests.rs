@@ -730,15 +730,15 @@ fn diagnostic_read_deadline_preserves_known_http_rejections() {
     assert_eq!(source, Some("application_deadline"));
 
     for (status, code, message, source) in [
-        (400, "AI_REJECTED", "字段提取请求被拒绝，请检查模型、上下文容量及结构化输出支持", None),
+        (400, "AI_REJECTED", "合同要素识别服务未接受本次处理，请联系管理员核对识别服务", None),
         (401, "AI_UNAUTHORIZED", "字段提取服务凭据无效或未授权，请联系管理员", None),
-        (429, "AI_THROTTLED", "字段提取服务限流，请稍后重试", None),
+        (429, "AI_THROTTLED", "当前等待识别的合同较多，请稍后重新识别", None),
         (500, "AI_UNAVAILABLE", "字段提取服务暂不可用，请稍后重试", None),
         (408, "AI_TIMEOUT", "合同字段提取超时，请稍后重试", Some("upstream_http")),
         (504, "AI_TIMEOUT", "合同字段提取超时，请稍后重试", Some("upstream_http")),
         (200, "AI_TIMEOUT", "合同字段提取超时，请稍后重试", Some("application_deadline")),
         (299, "AI_TIMEOUT", "合同字段提取超时，请稍后重试", Some("application_deadline")),
-        (300, "AI_REJECTED", "字段提取请求被拒绝，请检查模型、上下文容量及结构化输出支持", None),
+        (300, "AI_REJECTED", "合同要素识别服务未接受本次处理，请联系管理员核对识别服务", None),
     ] {
         let diagnostics = Diagnostics::default();
         diagnostics.response(status, &HeaderMap::new());

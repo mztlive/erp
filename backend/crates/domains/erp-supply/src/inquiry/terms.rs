@@ -173,7 +173,9 @@ fn validate_addresses(rows: &[QuoteAddressLimit], quantity: Quantity, exact: boo
             || row.quantity.to_decimal() <= Decimal::ZERO
             || !seen.insert(&row.allocation_id)
         {
-            return Err(Error::ValidationError("专项报价地址身份、指纹或数量非法".into()));
+            return Err(Error::ValidationError(
+                "专项报价的适用地址或数量无法核对，请重新选择收货地址并检查数量".into(),
+            ));
         }
         total = total
             .checked_add(row.quantity.to_decimal())

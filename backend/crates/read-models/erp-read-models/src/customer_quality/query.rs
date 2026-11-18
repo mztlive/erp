@@ -29,9 +29,9 @@ impl CurrentQualityQuery {
         validate_sort(&self.sort, &["orderCount", "grossTotal", "customerNo", "label", "customerCount"])?;
         validate_text([&self.q, &self.customer_id])?;
         if !["customer", "owner_user", "owner_org"].contains(&self.dimension.as_str()) {
-            return invalid("不支持该经营分组");
+            return invalid("经营分析仅支持按客户、当前负责人或当前负责组织分组，请重新选择");
         }
-        validate_group(self.owner_group.as_deref(), "owner_group", &["user", "org"])?;
+        validate_group(self.owner_group.as_deref(), "当前负责人员或组织", &["user", "org"])?;
         validate_period(&self.from, &self.to)
     }
 }
@@ -53,11 +53,11 @@ impl HistoryQualityQuery {
         validate_sort(&self.sort, &["orderCount", "grossTotal", "label"])?;
         validate_text([&self.q, &self.customer_id])?;
         if !["attribution_user", "attribution_org"].contains(&self.dimension.as_str()) {
-            return invalid("不支持该贡献分组");
+            return invalid("贡献分析仅支持按历史归属人员或组织分组，请重新选择");
         }
         validate_group(
             self.attribution_group.as_deref(),
-            "attribution_group",
+            "历史归属人员或组织",
             &["attribution_user", "attribution_org"],
         )?;
         validate_period(&self.from, &self.to)
@@ -67,13 +67,13 @@ impl HistoryQualityQuery {
 /// 分页与跨页版本在读取事实前验证。
 fn validate_paging(page: usize, page_size: usize, scope_version: Option<&str>) -> Result<()> {
     if page == 0 || page > 1_000_000 || ![20, 50, 100].contains(&page_size) {
-        return invalid("分页参数无效");
+        return invalid("页码超出范围，或每页条数不是 20、50、100，请从第一页重新查询");
     }
     if page > 1 && scope_version.is_none_or(str::is_empty) {
-        return invalid("跨页查询必须携带范围版本，请从第一页刷新");
+        return invalid("无法继续查看后续页，请从第一页刷新后再翻页");
     }
     if scope_version.is_some_and(|version| version.len() > 512) {
-        return invalid("范围版本无效");
+        return invalid("当前查询已失效，请从第一页重新查询");
     }
     Ok(())
 }
@@ -81,10 +81,10 @@ fn validate_paging(page: usize, page_size: usize, scope_version: Option<&str>) -
 /// 使用界面列排序白名单，空值统一排最后。
 fn validate_sort(sort: &str, fields: &[&str]) -> Result<()> {
     let Some((field, direction)) = sort.split_once(':') else {
-        return invalid("排序参数无效");
+        return invalid("无法应用当前排序，请重新选择排序列和升降顺序");
     };
     if !["asc", "desc"].contains(&direction) || !fields.contains(&field) {
-        return invalid("不支持该排序字段");
+        return invalid("客户质量报表不支持当前排序方式，请选择报表中可排序的列");
     }
     Ok(())
 }
@@ -105,13 +105,13 @@ fn validate_group(group: Option<&str>, name: &str, dimensions: &[&str]) -> Resul
         return Ok(());
     };
     let Some((dimension, id)) = group.split_once(':') else {
-        return invalid(&format!("{name}条件无效"));
+        return invalid(&format!("未选中有效的{name}，请返回报表重新选择分组"));
     };
     if !dimensions.contains(&dimension)
         || id.len() > 128
         || (!id.is_empty() && !id.bytes().all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c)))
     {
-        return invalid(&format!("{name}必须使用有效的人员或组织身份"));
+        return invalid(&format!("未选中有效的{name}，请返回报表重新选择分组"));
     }
     Ok(())
 }
@@ -121,7 +121,7 @@ fn validate_period(from: &str, to: &str) -> Result<PeriodBounds> {
     let from = parse_date(from)?;
     let to = parse_date(to)?;
     if to < from || (to - from).num_days() > 366 {
-        return invalid("查询期间必须按先后排列且不超过 367 天");
+        return invalid("结束日期不得早于开始日期，且查询期间最多 367 天，请重新选择日期");
     }
     let next =
         to.checked_add_days(Days::new(1)).ok_or_else(|| Error::ValidationError("结束日期无效".into()))?;
@@ -131,9 +131,9 @@ fn validate_period(from: &str, to: &str) -> Result<PeriodBounds> {
 /// 严格校验零填充日期。
 fn parse_date(text: &str) -> Result<NaiveDate> {
     let date = NaiveDate::parse_from_str(text, "%Y-%m-%d")
-        .map_err(|_| Error::ValidationError("日期格式必须为 YYYY-MM-DD".into()))?;
+        .map_err(|_| Error::ValidationError("请选择有效日期，或按「2026-01-31」的格式填写".into()))?;
     if date.format("%Y-%m-%d").to_string() != text {
-        return invalid("日期格式必须为 YYYY-MM-DD");
+        return invalid("请选择有效日期，或按「2026-01-31」的格式填写");
     }
     Ok(date)
 }
@@ -169,6 +169,20 @@ mod tests {
             ..Default::default()
         };
         assert!(history.validate().is_err());
+    }
+
+    #[test]
+    fn invalid_group_identifies_the_business_filter_without_echoing_the_input() {
+        let query: CurrentQualityQuery = serde_json::from_value(serde_json::json!({
+            "from": "2026-09-01",
+            "to": "2026-09-30",
+            "owner_group": "PRIVATE_GROUP"
+        }))
+        .unwrap();
+        assert!(matches!(
+            query.validate(),
+            Err(Error::ValidationError(note)) if note == "未选中有效的当前负责人员或组织，请返回报表重新选择分组"
+        ));
     }
 
     #[test]

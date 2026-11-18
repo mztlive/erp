@@ -14,7 +14,7 @@ use crate::{Error, Result};
 /// 存在 API 执行记录或仓储读取失败时拒绝旧入口。
 pub(super) async fn ensure(db: &Database, id: &str, executor: &mut dyn Executor) -> Result<()> {
     if db.supplier_api_order_executions().find_by_id(id, executor).await?.is_some() {
-        return Err(Error::BusinessLogicError("此订单由采购 API 流程自动执行和跟踪，请使用接口配送资料及来源采购处理；不能通过旧发单、重放或人工回执入口修改".into()));
+        return Err(Error::BusinessLogicError("此订单由来源采购自动向供应商发单并跟踪，请从来源采购核对配送资料和办理进度，不要手工发单或补录结果".into()));
     }
     Ok(())
 }

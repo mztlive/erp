@@ -104,7 +104,7 @@ impl SupplierOfferingAvailability {
     /// 来源时间倒退、所属供给变化或字段非法时返回错误。
     pub fn apply(&mut self, data: SupplierOfferingAvailabilityData) -> Result<()> {
         if data.supplier_offering_id != self.supplier_offering_id {
-            return Err(Error::from("可供投影不得更换所属供给"));
+            return Err(Error::from("可供状态只能更新到原供给记录，请核对所选供给"));
         }
         if matches!((data.source_updated_at, self.source_updated_at), (Some(incoming), Some(previous)) if incoming < previous)
         {
@@ -141,7 +141,7 @@ impl SupplierOfferingAvailability {
     /// 版本不一致时返回领域错误。
     pub fn ensure_version(&self, expected: u64) -> Result<()> {
         if self.base.version != expected {
-            return Err(Error::from("可供投影版本不一致"));
+            return Err(Error::from("可供状态版本不一致，请刷新供给资料后重试"));
         }
         Ok(())
     }
@@ -157,7 +157,10 @@ impl SupplierOfferingAvailability {
     /// # 错误
     /// 当前版本已达到 `u64` 上限时返回领域错误。
     pub fn next_persisted_version(&self) -> Result<u64> {
-        self.base.version.checked_add(1).ok_or_else(|| Error::from("可供投影版本已达到上限"))
+        self.base
+            .version
+            .checked_add(1)
+            .ok_or_else(|| Error::from("此供给的可供状态无法继续更新，请联系支持人员"))
     }
 
     /// 返回当前可供事实对应的销售安全中断原因。

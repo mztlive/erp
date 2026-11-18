@@ -11,11 +11,11 @@ use crate::entity::portal::{PortalBinding, PortalRole};
 #[derive(Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct PortalAccountCreate {
-    #[validate(length(min = 3, max = 32))]
+    #[validate(length(min = 3, max = 32, message = "账号长度须为 3 至 32 个字符"))]
     pub account: String,
-    #[validate(length(min = 1, max = 64))]
+    #[validate(length(min = 1, max = 64, message = "名称长度须为 1 至 64 个字符"))]
     pub name: String,
-    #[validate(length(min = 6, max = 32))]
+    #[validate(length(min = 6, max = 32, message = "密码长度须为 6 至 32 个字符"))]
     pub password: String,
     pub role: PortalRole,
 }
@@ -34,9 +34,9 @@ pub struct PortalAccountUpdate {
 #[derive(Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct PortalLoginPayload {
-    #[validate(length(min = 3, max = 32))]
+    #[validate(length(min = 3, max = 32, message = "账号长度须为 3 至 32 个字符"))]
     pub account: String,
-    #[validate(length(min = 6, max = 32))]
+    #[validate(length(min = 6, max = 32, message = "密码长度须为 6 至 32 个字符"))]
     pub password: String,
 }
 
@@ -44,9 +44,9 @@ pub struct PortalLoginPayload {
 #[derive(Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct PortalPasswordUpdate {
-    #[validate(length(min = 6, max = 32))]
+    #[validate(length(min = 6, max = 32, message = "原密码长度须为 6 至 32 个字符"))]
     pub old_password: String,
-    #[validate(length(min = 6, max = 32))]
+    #[validate(length(min = 6, max = 32, message = "新密码长度须为 6 至 32 个字符"))]
     pub new_password: String,
 }
 

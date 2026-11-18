@@ -99,7 +99,7 @@ pub struct PurchaseReturnOrderView {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct PurchaseReturnOrderListParams {
     /// 跨页必须使用前一页的当前授权和业务版本。
-    #[validate(length(min = 1, max = 256))]
+    #[validate(length(min = 1, max = 256, message = "无法继续查看采购退货单列表，请从第一页刷新后再翻页"))]
     pub scope_version: Option<String>,
     /// 采购退货单号模糊筛选。
     pub purchase_return_no: Option<String>,

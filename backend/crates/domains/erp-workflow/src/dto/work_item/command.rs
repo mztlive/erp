@@ -127,7 +127,7 @@ pub struct ReassignWorkItemRequest {
     pub target_user_id: String,
     #[validate(length(min = 1, max = 150, message = "原因长度必须在1-150之间"))]
     pub reason: String,
-    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作的提交编号无效，请重新发起操作"))]
     pub idempotency_key: String,
 }
 
@@ -143,6 +143,6 @@ pub struct CloseWorkItemRequest {
     /// `DUPLICATE` 时必填的有效替代正式任务。
     #[validate(length(min = 1, max = 128, message = "替代任务ID不能为空或过长"))]
     pub replacement_work_item_id: Option<String>,
-    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作的提交编号无效，请重新发起操作"))]
     pub idempotency_key: String,
 }

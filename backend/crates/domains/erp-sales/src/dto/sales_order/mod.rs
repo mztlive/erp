@@ -193,7 +193,7 @@ pub struct SalesOrderNoContractTerms {
 #[serde(deny_unknown_fields)]
 pub struct BindSalesOrderContractRequest {
     /// 销售单稳定对象的期望版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 所选合同稳定身份。
     pub contract_id: ContractId,
@@ -222,7 +222,7 @@ pub struct CreateSalesOrderRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub customer_id: Option<CustomerAccountId>,
     /// 幂等键；同一操作人、同一键和同一完整载荷返回原销售单，异载荷返回冲突。
-    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作标识无效，请刷新页面后重新操作"))]
     pub idempotency_key: String,
     /// 建单意图。
     pub intent: SalesOrderCreateIntent,
@@ -239,7 +239,7 @@ pub struct CreateSalesOrderRequest {
 #[serde(deny_unknown_fields)]
 pub struct SaveWorkingCopyRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 所选合同稳定身份；无合同时为空。
     pub contract_id: Option<ContractId>,
@@ -262,10 +262,10 @@ pub struct SubmitSalesOrderRequest {
     #[validate(length(max = 1000, message = "重新提交说明不得超过1000字"))]
     pub resubmission_reason: Option<String>,
     /// 期望的乐观锁版本；与当前版本不一致时拒绝提交（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 幂等键（重复提交按「同一草稿已提交」去重，返回既有提交）。
-    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作标识无效，请刷新页面后重新操作"))]
     pub idempotency_key: String,
     /// 所选合同稳定身份；无合同时为空。
     pub contract_id: Option<ContractId>,
@@ -281,7 +281,7 @@ pub struct SubmitSalesOrderRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct VoidSalesOrderRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝作废（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
 }
 
@@ -290,13 +290,13 @@ pub struct VoidSalesOrderRequest {
 #[serde(deny_unknown_fields)]
 pub struct CancelSalesOrderApprovalRequest {
     /// 期望的单据乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_version: u64,
     /// 非空撤回原因。
     #[validate(length(min = 1, max = 512, message = "撤回原因不能为空"))]
     pub reason: String,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -305,7 +305,7 @@ pub struct CancelSalesOrderApprovalRequest {
 #[serde(deny_unknown_fields)]
 pub struct HandoverSalesOrderRequest {
     /// 期望的单据乐观锁版本；与当前版本不一致时拒绝（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_version: u64,
     /// 目标负责销售；必须为有效后台账号。
     #[validate(custom(function = "non_blank", message = "目标负责销售不能为空"))]
@@ -316,7 +316,7 @@ pub struct HandoverSalesOrderRequest {
     #[validate(length(min = 1, max = 512, message = "交接原因不能为空"))]
     pub reason: String,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 

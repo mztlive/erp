@@ -175,12 +175,11 @@ impl SupplierApiOrderProcess {
 fn ensure_total(request: &CreateOrder) -> Result<()> {
     let total = request.lines.iter().try_fold(request.delivery.shipping_fee.to_decimal(), |sum, line| {
         sum.checked_add(round_to_cent(
-            line.quantity
-                .to_decimal()
-                .checked_mul(line.approved_unit_price.to_decimal())
-                .ok_or_else(|| Error::ValidationError("接口采购金额超限".into()))?,
+            line.quantity.to_decimal().checked_mul(line.approved_unit_price.to_decimal()).ok_or_else(
+                || Error::ValidationError("自动下单金额超出支持范围，请核对采购数量和单价".into()),
+            )?,
         ))
-        .ok_or_else(|| Error::ValidationError("接口采购金额超限".into()))
+        .ok_or_else(|| Error::ValidationError("自动下单金额超出支持范围，请核对采购数量和单价".into()))
     })?;
     if total > request.approved_total.to_decimal() {
         return Err(Error::BusinessLogicError("商品及配送费用合计超出采购已批准金额，尚未发单".into()));

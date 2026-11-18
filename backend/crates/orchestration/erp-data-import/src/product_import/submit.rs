@@ -168,7 +168,7 @@ impl ProductImportProcess {
             Ok(BackgroundJobRegistration::Created) => Ok(job_view(&job, Some(file_name))),
             Ok(BackgroundJobRegistration::ReplaySame(existing)) => Ok(job_view(&existing, Some(file_name))),
             Ok(BackgroundJobRegistration::ConflictDifferentPayload(_)) => {
-                Err(Error::ConflictError("同一请求身份已用于不同导入任务".into()))
+                Err(Error::ConflictError("本次提交已用于另一份导入，请刷新任务列表并核对原任务".into()))
             },
             Err(Error::RepositoryError(PersistenceError::DuplicateKey(_))) => {
                 self.replay_existing_job(&job.request_id, actor).await
@@ -204,7 +204,9 @@ impl ProductImportProcess {
                 Box::pin(async move {
                     authorize(&authorization, &operator, executor).await?;
                     db.background_jobs().find_by_request_id(&request_id, executor).await?.ok_or_else(|| {
-                        Error::ConflictError("导入任务唯一竞争结果已变化，请刷新后重试".into())
+                        Error::ConflictError(
+                            "导入任务正在由另一请求登记，请刷新任务列表并核对是否已提交".into(),
+                        )
                     })
                 })
             })

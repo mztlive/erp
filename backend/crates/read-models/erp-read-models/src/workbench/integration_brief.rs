@@ -17,6 +17,7 @@ use super::{
 use crate::errors::Result;
 use crate::integration_center::display::object_labels;
 use crate::integration_center::error_labels::{IntegrationTaskLabels, integration_error_labels};
+use crate::integration_center::integration_attempt_note;
 
 /// 组装集成错误任务的结构化简报。
 ///
@@ -39,6 +40,10 @@ fn integration_error_brief_source(
     let resolution_type = task.resolution_type.map(|value| value.label().to_string());
     let reference = labels.business_object_label.clone().or_else(|| labels.message_label.clone());
 
+    let attempt_note = task
+        .last_attempt_summary
+        .as_deref()
+        .map(|summary| integration_attempt_note(task.error_class, summary));
     let mut sections = Vec::new();
     brief::push_section(&mut sections, "错误分类", Some(task.error_class.label()), false);
     brief::push_section(&mut sections, "状态", Some(task.status.label()), false);
@@ -54,7 +59,7 @@ fn integration_error_brief_source(
     brief::push_section(&mut sections, "发生时间", occurred_at.as_deref(), false);
     brief::push_section(&mut sections, "重试记录", Some(attempt_count.as_str()), false);
     brief::push_section(&mut sections, "最近尝试", last_attempt_at.as_deref(), false);
-    brief::push_section(&mut sections, "错误摘要", task.last_attempt_summary.as_deref(), false);
+    brief::push_section(&mut sections, "最近处理结果", attempt_note.as_deref(), false);
 
     let owner_role = task.owner_role.as_deref().map(role_label);
     brief::push_section(&mut sections, "责任角色", owner_role.as_deref(), false);
@@ -81,7 +86,7 @@ fn integration_error_brief_source(
             Some(task.error_class.label().to_string()),
             reference,
             Some(format!("重试 {attempt_count}")),
-            task.last_attempt_summary.as_deref().and_then(brief::non_empty),
+            attempt_note,
         ]),
         extra_sections: sections,
     }
@@ -99,13 +104,15 @@ fn integration_error_brief_source(
 /// 无。
 fn integration_error_next_step(error_class: ErrorClass) -> &'static str {
     match error_class {
-        ErrorClass::CapabilityGap => "确认目标系统能力后转人工补偿或补齐能力",
-        ErrorClass::MappingError => "修复映射并验证业务键后再重放",
-        ErrorClass::BusinessRejected => "核对拒绝原因并修正业务输入后重新提交",
-        ErrorClass::TransientFailure | ErrorClass::RateLimited => "核对最近尝试摘要，按原幂等业务键重试",
-        ErrorClass::ResultUnknown => "先查询原请求结果，确认无结果后才允许重放",
-        ErrorClass::AuthSignature => "修复鉴权或签名配置，验证通过后再重试",
-        ErrorClass::OutOfOrder => "补齐前置事实并确认顺序后再重放",
+        ErrorClass::CapabilityGap => "请确认对方是否支持这项操作；如不支持，请联系经办人转人工处理",
+        ErrorClass::MappingError => "请核对并修正两边的单据或商品对应关系，再重新处理原记录",
+        ErrorClass::BusinessRejected => "请核对拒绝原因并修正业务资料，再重新提交",
+        ErrorClass::TransientFailure | ErrorClass::RateLimited => {
+            "请核对最近处理结果，再从原异常待办重试，不要新建单据"
+        },
+        ErrorClass::ResultUnknown => "请先查询原操作结果，确认未处理后再重新发起",
+        ErrorClass::AuthSignature => "请联系管理员核对连接授权，验证通过后再重试",
+        ErrorClass::OutOfOrder => "请补齐此前缺少的业务记录并确认先后顺序，再重新处理",
     }
 }
 
@@ -272,7 +279,7 @@ mod integration_brief_tests {
         .unwrap();
         task.attempt_count = 2;
         task.last_attempt_at = Some(Instant::from_unix_secs(1_787_457_600));
-        task.last_attempt_summary = Some("目标系统超时，未取得业务结果".to_string());
+        task.last_attempt_summary = Some("PRIVATE_ERROR: diagnostic payload".to_string());
 
         let brief = integration_error_brief_source(
             &task,
@@ -287,7 +294,8 @@ mod integration_brief_tests {
         assert!(
             brief.extra_sections.iter().any(|section| section.label == "重试记录" && section.value == "2 次")
         );
-        assert!(brief.list_summary.contains("目标系统超时"));
+        assert!(brief.list_summary.contains("请先核对原操作结果，勿重复发起"));
+        assert!(!brief.list_summary.contains("diagnostic payload"));
 
         let missing_names = integration_error_brief_source(&task, &IntegrationTaskLabels::default());
         assert!(

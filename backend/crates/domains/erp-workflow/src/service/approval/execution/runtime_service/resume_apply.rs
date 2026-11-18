@@ -188,7 +188,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         if recovery_options_for(blocked, instance.blocker_code).contains(&wanted) {
             return Ok(());
         }
-        Err(Error::ConflictError("当前 blocker 不允许该恢复动作".to_string()))
+        Err(Error::ConflictError("当前受阻原因不支持此恢复操作，请查看可选处理办法".to_string()))
     }
 }
 

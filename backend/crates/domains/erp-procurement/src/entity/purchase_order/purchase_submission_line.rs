@@ -569,16 +569,16 @@ mod tests {
         };
         assert_error(data.clone(), "行号必须从 1 开始");
         data.line_no = 1;
-        assert_error(data.clone(), "商品名称快照长度不符合要求");
+        assert_error(data.clone(), "商品名称长度不符合要求");
         data.product_name_snapshot = None;
-        assert_error(data.clone(), "规格快照长度不符合要求");
+        assert_error(data.clone(), "商品规格长度不符合要求");
         data.specification_snapshot = None;
         assert_error(data.clone(), "单位长度不符合要求");
         data.base_unit_code = Some("件".into());
 
         assert_error(data.clone(), "商品/服务行必须引用 SKU");
         data.sku_id = Some(SkuId::new("sku-1"));
-        assert_error(data.clone(), "商品/服务行必须保存商品名称快照");
+        assert_error(data.clone(), "请填写商品或服务明细的名称");
         data.product_name_snapshot = Some("礼包".into());
         assert_error(data, "商品/服务行必须引用销售稳定行与当前版本行");
     }
@@ -652,8 +652,8 @@ mod tests {
 
         for (mut data, expected) in [
             (missing_sku, "商品/服务行必须引用 SKU"),
-            (missing_name, "商品/服务行必须保存商品名称快照"),
-            (missing_unit, "商品/服务行必须保存单位快照"),
+            (missing_name, "请填写商品或服务明细的名称"),
+            (missing_unit, "请填写商品或服务明细的计量单位"),
         ] {
             data.specification_snapshot = None;
             let error = PurchaseOrderSubmissionLine::new("invalid".to_string().into(), data).unwrap_err();

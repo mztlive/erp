@@ -153,6 +153,15 @@ fn success_preview(
 
 /// 将单行解析错误转换为失败预览。
 fn failed_preview(line_key: String, error: Error) -> ProcurementResponsibilityResolveLineView {
+    let message = match error {
+        Error::ValidationError(message)
+        | Error::BusinessLogicError(message)
+        | Error::ConflictError(message)
+        | Error::NotFound(message) => message,
+        Error::InvalidInput(_) => "该行商品资料不符合要求，请核对后重新预览".into(),
+        Error::Forbidden(_) => "当前账号无权为该商品预览采购负责人，请联系管理员".into(),
+        _ => "暂时无法确定该商品的采购负责人，请稍后重新预览".into(),
+    };
     ProcurementResponsibilityResolveLineView {
         line_key,
         resolved: false,
@@ -160,7 +169,7 @@ fn failed_preview(line_key: String, error: Error) -> ProcurementResponsibilityRe
         owner_name: None,
         rule_id: None,
         rule_type: None,
-        error: Some(error.to_string()),
+        error: Some(message),
     }
 }
 
@@ -259,6 +268,15 @@ mod tests {
         }
     }
 
+    #[test]
+    fn failed_preview_does_not_expose_internal_diagnostics() {
+        let line = failed_preview("first".into(), Error::Internal("private repository diagnostic".into()));
+
+        assert_eq!(line.line_key, "first");
+        assert!(!line.resolved);
+        assert_eq!(line.error.as_deref(), Some("暂时无法确定该商品的采购负责人，请稍后重新预览"));
+    }
+
     #[tokio::test]
     async fn preview_authorizes_before_one_batch_and_preserves_the_original_snapshot() {
         let source = Fixture::new();
@@ -309,7 +327,7 @@ mod tests {
 
         assert!(view.lines[0].resolved);
         assert!(!view.lines[1].resolved);
-        assert_eq!(view.lines[1].error.as_deref(), Some("业务逻辑错误: 商品未配置责任规则"));
+        assert_eq!(view.lines[1].error.as_deref(), Some("商品未配置责任规则"));
 
         assert_eq!(
             *source.calls.lock().unwrap(),

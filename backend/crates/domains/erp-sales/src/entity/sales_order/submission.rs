@@ -351,7 +351,7 @@ impl SalesOrderSubmission {
     /// # 错误
     /// 恒返回「提交快照不可更新」错误。
     pub fn update(&mut self, _data: SalesOrderSubmissionData) -> Result<()> {
-        Err(Error::from("提交快照形成后不可修改"))
+        Err(Error::from("已提交的销售内容不能直接修改，请返回销售单查看可用操作"))
     }
 
     /// 由当前最大提交序号计算下一次提交序号。

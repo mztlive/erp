@@ -182,10 +182,15 @@ impl RequestedLine {
     /// 不做重复检查与排序，集合级规则由 [`normalize_requested_lines`] 承担。
     pub fn parse(sales_order_line_id: &str, quantity: &str, expected_delivery_date: &str) -> Result<Self> {
         let sales_order_line_id = sales_order_line_id.trim().to_string();
-        let quantity = Quantity::from_str(quantity.trim())
-            .map_err(|error| Error::from(format!("本次数量非法: {error}")))?;
-        let expected_delivery_date = BusinessDate::from_str(expected_delivery_date.trim())
-            .map_err(|error| Error::from(format!("预计交付日非法: {error}")))?;
+        let quantity = Quantity::from_str(quantity.trim()).map_err(|error| {
+            tracing::warn!(%error, "本次数量非法");
+            Error::from("本次采购数量格式无效或超出允许范围，请检查数量")
+        })?;
+        let expected_delivery_date =
+            BusinessDate::from_str(expected_delivery_date.trim()).map_err(|error| {
+                tracing::warn!(%error, "预计交付日非法");
+                Error::from("预计交付日期无效，请选择有效日期")
+            })?;
         if quantity <= zero_quantity() {
             return Err(Error::from("本次数量必须大于 0"));
         }

@@ -31,7 +31,7 @@ impl BackgroundJobInput {
     pub fn new(format: impl Into<String>, bytes: Vec<u8>) -> Result<Self> {
         let format = format.into();
         if format.is_empty() || format.len() > 128 || bytes.len() >= BACKGROUND_JOB_INPUT_LIMIT {
-            return Err(Error::ValidationError("后台任务私有输入格式或大小非法".into()));
+            return Err(Error::ValidationError("任务所需资料格式不正确或内容过大，请检查后重新提交".into()));
         }
         Ok(Self { format, bytes })
     }
@@ -59,8 +59,9 @@ impl BulkJobRepository<'_> {
         .await?;
         record
             .map(|record| {
-                input_bytes(record, format)
-                    .ok_or_else(|| Error::ValidationError("后台任务私有上下文格式或内容损坏".into()))
+                input_bytes(record, format).ok_or_else(|| {
+                    Error::ValidationError("无法读取任务提交时的资料，请核对任务详情并联系管理员".into())
+                })
             })
             .transpose()
     }

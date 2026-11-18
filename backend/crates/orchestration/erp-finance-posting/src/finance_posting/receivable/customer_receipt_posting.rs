@@ -525,9 +525,9 @@ async fn load_existing_commit_records(
         .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
     ensure_expected_version(receipt.base.version, expected_version)?;
 
-    let binding = find_approval_binding(db, receipt_id, executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("客户回款单缺少审批绑定".to_string()))?;
+    let binding = find_approval_binding(db, receipt_id, executor).await?.ok_or_else(|| {
+        Error::ConflictError("该客户回款单没有可用的审批流程，请联系管理员核对".to_string())
+    })?;
     Ok((receipt, binding))
 }
 

@@ -153,5 +153,7 @@ fn original_formal_addresses(
         .rev()
         .find(|history| history.quantity == quantity)
         .map(|history| history.addresses.clone())
-        .ok_or_else(|| Error::ConflictError("原正式专项采用范围历史缺失，禁止猜测恢复".into()))
+        .ok_or_else(|| {
+            Error::ConflictError("找不到原采购采用专项报价时的有效范围，请联系采购经办人核对".into())
+        })
 }

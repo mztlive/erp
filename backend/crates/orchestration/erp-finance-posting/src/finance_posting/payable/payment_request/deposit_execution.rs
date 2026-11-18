@@ -37,7 +37,7 @@ fn execution_budget(
     let encrypted = execution
         .request_encrypted
         .as_ref()
-        .ok_or_else(|| Error::BusinessLogicError("执行组尚未冻结批准预算".into()))?;
+        .ok_or_else(|| Error::BusinessLogicError("这批供应商履约尚无已批准的预算，请核对付款申请".into()))?;
     Ok(read_execution_budget(execution, &codec.decrypt(encrypted)?)?)
 }
 
@@ -210,7 +210,9 @@ impl DepositExecutionWrite<'_> {
             return Ok(None);
         };
         if id != self.request_id {
-            return Err(Error::ConflictError("原余额执行回执不属于本付款申请".into()));
+            return Err(Error::ConflictError(
+                "原预存款支付记录不属于这份付款申请，请核对申请和支付记录".into(),
+            ));
         }
 
         let task = self
@@ -320,7 +322,9 @@ impl DepositExecutionWrite<'_> {
             || connection.supplier_deposit_external_account_ref.as_deref()
                 != Some(snapshot.identity.external_account_ref.as_str())
         {
-            return Err(Error::ConflictError("供应商执行连接与批准余额账户归属不一致".into()));
+            return Err(Error::ConflictError(
+                "供应商履约使用的对接账号与获批的预存款账户归属不符，请核对账户".into(),
+            ));
         }
         Ok(true)
     }
@@ -362,7 +366,9 @@ impl DepositExecutionWrite<'_> {
                 line.purchase_order_id == group.purchase_order_id
                     && line.purchase_revision_id == group.purchase_order_revision_id
             })
-            .ok_or_else(|| Error::ConflictError("执行组不属于原逐采购批准".into()))?;
+            .ok_or_else(|| {
+                Error::ConflictError("这批供应商履约不在原申请获批的采购范围内，请核对申请".into())
+            })?;
         let basis = DepositReservationBasis {
             payment_request_id: request.base.id.clone(),
             payment_request_version: request.submission_version,
@@ -376,7 +382,7 @@ impl DepositExecutionWrite<'_> {
             authorization_version: grant.grant_version,
         };
         if basis.total()? != budget.approved_total {
-            return Err(Error::ConflictError("执行组商品及运费预算不守恒".into()));
+            return Err(Error::ConflictError("本批商品金额与运费合计不等于批准预算，请核对金额".into()));
         }
         Ok(basis)
     }

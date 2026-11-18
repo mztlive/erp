@@ -70,7 +70,7 @@ impl SalesOrderCommandProcess {
         req.validate()?;
         let idempotency_key = req.idempotency_key.trim().to_string();
         if idempotency_key.is_empty() {
-            return Err(Error::ValidationError("幂等键不能为空".to_string()));
+            return Err(Error::ValidationError("缺少本次操作编号，请重新打开当前页面后再办理".to_string()));
         }
         let reason = req.reason.trim().to_string();
         if reason.is_empty() {
@@ -496,8 +496,9 @@ async fn ensure_handover_separation(
 ) -> Result<()> {
     let approvers = open_approval_assignees(db, sales_order_id, executor).await?;
     let policy = require_process_required(DocumentType::SalesOrder)?;
-    ensure_separation_of_duties(policy.separation_of_duties_policy, target, &approvers)
-        .map_err(|error| Error::Forbidden(format!("目标交接人违反销售审批岗位分离约束: {error}")))?;
+    ensure_separation_of_duties(policy.separation_of_duties_policy, target, &approvers).map_err(|_| {
+        Error::Forbidden("拟交接的负责人是当前审批人，不能同时负责提交和审批，请另选负责人".into())
+    })?;
     Ok(())
 }
 

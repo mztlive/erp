@@ -197,7 +197,7 @@ pub struct ProductImportDirectUploadInitRequest {
     #[validate(range(min = 1, message = "文件大小必须大于 0"))]
     pub byte_size: u64,
     /// 幂等请求身份（与导入任务编号绑定）。
-    #[validate(length(min = 1, max = 64, message = "请求身份不能为空或过长"))]
+    #[validate(length(min = 1, max = 64, message = "本次上传的提交编号无效，请重新上传文件"))]
     pub request_id: String,
 }
 
@@ -229,10 +229,10 @@ pub struct ProductImportDirectUploadPartView {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq, Eq)]
 pub struct ProductImportDirectUploadedPart {
     /// 分片序号（1 起）。
-    #[validate(range(min = 1, max = 10000, message = "分片序号必须在 1-10000 之间"))]
+    #[validate(range(min = 1, max = 10000, message = "文件上传进度无效，请重新上传文件"))]
     pub part_number: i32,
     /// 分片 PUT 响应 `ETag` 头。
-    #[validate(length(min = 1, message = "分片 ETag 不能为空"))]
+    #[validate(length(min = 1, message = "文件上传不完整，请重新上传文件"))]
     pub etag: String,
 }
 
@@ -240,7 +240,7 @@ pub struct ProductImportDirectUploadedPart {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ProductImportDirectUploadCompleteRequest {
     /// 相对对象键（须与请求身份绑定）。
-    #[validate(length(min = 1, message = "对象键不能为空"))]
+    #[validate(length(min = 1, message = "缺少已上传文件的信息，请重新上传文件"))]
     pub object_key: String,
     /// 展示文件名（须为 `.xlsx`）。
     #[validate(length(min = 1, max = 256, message = "文件名不能为空或过长"))]
@@ -249,10 +249,10 @@ pub struct ProductImportDirectUploadCompleteRequest {
     #[validate(range(min = 1, message = "文件大小必须大于 0"))]
     pub byte_size: u64,
     /// 幂等请求身份（与导入任务编号绑定）。
-    #[validate(length(min = 1, max = 64, message = "请求身份不能为空或过长"))]
+    #[validate(length(min = 1, max = 64, message = "本次上传的提交编号无效，请重新上传文件"))]
     pub request_id: String,
     /// 已直传分片列表。
-    #[validate(length(min = 1, max = 10000, message = "分片列表不能为空或过多"))]
+    #[validate(length(min = 1, max = 10000, message = "文件未完整上传或超出上传限制，请重新上传文件"))]
     #[validate(nested)]
     pub parts: Vec<ProductImportDirectUploadedPart>,
 }

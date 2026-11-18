@@ -43,7 +43,9 @@ impl InvoiceEvidence<'_> {
             || self.request_sales != self.account_sales
             || !self.historical_recipient
         {
-            return Err(Error::ConflictError("开票审批通过与正式分配证据不一致".into()));
+            return Err(Error::ConflictError(
+                "开票申请的审批、待办或人员分派记录不一致，请核对开票申请".into(),
+            ));
         }
         Ok(())
     }
@@ -76,7 +78,7 @@ impl AssignmentEvidence<'_> {
             || self.blocked
             || !self.participant
         {
-            return Err(Error::ConflictError("审批节点正式分配证据不一致".into()));
+            return Err(Error::ConflictError("审批记录与该步骤的人员分派不一致，请核对审批待办".into()));
         }
         Ok(())
     }

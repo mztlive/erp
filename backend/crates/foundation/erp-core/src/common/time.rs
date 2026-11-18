@@ -142,7 +142,7 @@ impl FromStr for BusinessDate {
     /// 格式非法或日期不存在（如 2 月 30 日）时返回 `LogicError`。
     fn from_str(value: &str) -> Result<Self> {
         let date = NaiveDate::parse_from_str(value, "%Y-%m-%d")
-            .map_err(|_| Error::from(format!("{value} 不是合法业务日期（期望 YYYY-MM-DD）")))?;
+            .map_err(|_| Error::from("请填写有效日期，例如 2026-08-05"))?;
         Ok(Self(date))
     }
 }

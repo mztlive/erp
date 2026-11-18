@@ -131,7 +131,7 @@ pub struct CreateSupplierApiConnectionRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateSupplierApiConnectionRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 地址配置引用；缺省表示不修改。
     pub endpoint_reference: Option<String>,
@@ -151,7 +151,7 @@ pub struct UpdateSupplierApiConnectionRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ReplaceCapabilitiesRequest {
     /// 期望的连接乐观锁版本；与当前版本不一致时拒绝（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_connection_version: u64,
     /// 替换后的能力声明清单。
     pub capabilities: Vec<CapabilityItemRequest>,
@@ -252,7 +252,7 @@ pub struct SupplierApiCapabilityListParams {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct HealthCheckRequest {
     /// 调用方幂等键（与连接 ID 组合成消息身份；重复提交不产生第二笔外部调用）。
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(custom(function = "non_blank", message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -271,7 +271,7 @@ pub struct SupplierConnectionCommand {
     /// 健康检查白名单类型；仅 `RUN_HEALTH_CHECK` 使用。
     pub check_type: Option<SupplierHealthCheckType>,
     /// 客户端幂等键；只保存不可逆摘要。
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(custom(function = "non_blank", message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -291,7 +291,7 @@ pub struct ConfirmBusinessCapabilityRequirementCommand {
     pub expected_capability_version: u64,
     #[validate(custom(function = "non_blank", message = "操作ID不能为空"))]
     pub operation_id: String,
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(custom(function = "non_blank", message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -316,7 +316,7 @@ pub struct UpdateSupplierCapabilitiesCommand {
     pub reason_code: String,
     #[validate(custom(function = "non_blank", message = "操作ID不能为空"))]
     pub operation_id: String,
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(custom(function = "non_blank", message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 

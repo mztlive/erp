@@ -57,6 +57,27 @@ pub enum Error {
     Coded(WorkflowErrorCode),
 }
 
+impl Error {
+    pub(crate) fn supplier_order_message(&self) -> String {
+        match self {
+            Self::NotFound(message)
+            | Self::ValidationError(message)
+            | Self::BusinessLogicError(message)
+            | Self::ConflictError(message) => message.clone(),
+            Self::Forbidden(_) | Self::Unauthenticated(_) | Self::Rbac(_) => {
+                "当前账号不能处理该供应商订单，请联系有权限的采购经办人".into()
+            },
+            Self::OutcomeUnknown(_) | Self::ReceiptDuplicate(_) => {
+                "供应商订单的原操作结果尚未确认，请查询原订单，不要重复提交".into()
+            },
+            Self::Logic(_) | Self::InvalidInput(_) => {
+                "供应商订单资料不符合当前处理条件，请核对采购明细、收货和配送资料".into()
+            },
+            _ => "供应商订单暂时无法继续处理，请先查询原订单状态；如仍无法确认，请联系管理员".into(),
+        }
+    }
+}
+
 impl From<application_core::Error> for Error {
     /// 将应用合同错误映射为应用错误。
     fn from(error: application_core::Error) -> Self {

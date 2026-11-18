@@ -44,7 +44,7 @@ impl SupplierOfferingReadService {
         executor: &mut dyn Executor,
     ) -> Result<SupplierOfferingView> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-            return Err(Error::ValidationError("供给详情读取必须使用快照事务".into()));
+            return Err(Error::ValidationError("暂时无法查看供给详情，请从供给列表重新打开".into()));
         }
 
         let context = self.access.resolve(actor, &supplier_offering_permissions::DETAIL, executor).await?;
@@ -92,7 +92,9 @@ mod tests {
         let actor = AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin);
         let error =
             service.detail_snapshot("offering", &actor, &mut ReadExecutor::default()).await.unwrap_err();
-        assert!(matches!(error, Error::ValidationError(reason) if reason == "供给详情读取必须使用快照事务"));
+        assert!(
+            matches!(error, Error::ValidationError(reason) if reason == "暂时无法查看供给详情，请从供给列表重新打开")
+        );
     }
 
     #[tokio::test]

@@ -47,7 +47,7 @@ fn assignment_evidence(
     recipient: &str,
 ) -> Result<GrantEventEvidence> {
     if execution.process_instance_id.as_ref() != instance.base.id || !execution.has_participant(recipient) {
-        return Err(Error::ConflictError("审批授权事件与正式分配不一致".into()));
+        return Err(Error::ConflictError("审批查看权限与实际分派人员不符，请联系管理员核对".into()));
     }
 
     let payload = match instance.subject.subject_kind() {

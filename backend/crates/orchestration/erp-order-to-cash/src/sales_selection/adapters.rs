@@ -38,11 +38,13 @@ impl SelectionCustomerPort for CustomerAdapter {
     /// # 错误
     /// 不存在。
     async fn customer_fact(&self, customer_id: &str) -> SalesResult<SelectionCustomerFact> {
-        let detail = self
-            .service
-            .load_customer_detail(customer_id, &mut ReadExecutor::default())
-            .await
-            .map_err(|error| erp_sales::Error::NotFound(error.to_string()))?;
+        let detail =
+            self.service.load_customer_detail(customer_id, &mut ReadExecutor::default()).await.map_err(
+                |error| {
+                    tracing::debug!(error_kind = ?std::mem::discriminant(&error), "选品客户资料读取失败");
+                    erp_sales::Error::NotFound("未能读取所选客户资料，请刷新后重新选择客户".into())
+                },
+            )?;
         Ok(SelectionCustomerFact {
             id: detail.account.id,
             customer_no: detail.account.customer_no.clone(),
@@ -196,7 +198,7 @@ impl SelectionImagePort for ImageAdapter {
 
         let new_key = format!("sales-selection/{booklet_id}/{batch_id}/{source_asset_id}");
         if self.storage.save_with_content_type(&new_key, &bytes, Some(&view.content_type)).await.is_err() {
-            return Err(erp_sales::Error::selection_prepare_failed("图片快照保存失败，请重新准备"));
+            return Err(erp_sales::Error::selection_prepare_failed("未能保存选品图片，请重新准备选品资料"));
         }
 
         Ok(Some(ImageAssetSnapshot {
@@ -217,11 +219,10 @@ impl SelectionImagePort for ImageAdapter {
     /// # 错误
     /// 对象不存在。
     async fn load_bytes(&self, storage_object_key: &str) -> SalesResult<(Vec<u8>, String)> {
-        let bytes = self
-            .storage
-            .read(storage_object_key)
-            .await
-            .map_err(|error| erp_sales::Error::NotFound(format!("图片不存在: {error}")))?;
+        let bytes = self.storage.read(storage_object_key).await.map_err(|error| {
+            tracing::debug!(error_kind = ?std::mem::discriminant(&error), "选品图片读取失败");
+            erp_sales::Error::NotFound("选品图片暂无法打开，请刷新后重新查看".into())
+        })?;
         Ok((bytes, "image/jpeg".into()))
     }
 }

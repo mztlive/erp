@@ -439,7 +439,7 @@ fn ensure_upgrade_changes_definition(
     if previous.approval_process_definition_id.as_ref() == published.definition.base.id
         || published.definition.definition_version <= previous.approval_definition_version
     {
-        return Err(Error::ConflictError("当前绑定已是最新发布定义，禁止空升级或降级".to_string()));
+        return Err(Error::ConflictError("该单据已使用最新发布的审批流程，无需升级".to_string()));
     }
     Ok(())
 }

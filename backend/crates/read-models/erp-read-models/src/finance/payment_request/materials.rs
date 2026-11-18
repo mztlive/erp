@@ -287,7 +287,9 @@ impl PurchasePaymentRequestReadService {
                         && snapshot.business_object_id == request.base.id
                         && snapshot.subject_version == request.submission_version
                 })
-                .ok_or_else(|| Error::ConflictError("付款申请冻结材料与当前提交不一致".into()))?;
+                .ok_or_else(|| {
+                    Error::ConflictError("付款申请的审批资料与本次提交内容不一致，请核对提交资料".into())
+                })?;
             return Ok(snapshot
                 .material_files
                 .into_iter()

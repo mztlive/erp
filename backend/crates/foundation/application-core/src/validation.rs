@@ -87,6 +87,7 @@ fn rule_message(error: &ValidationError) -> String {
             let number = |key: &str| error.params.get(key).filter(|v| v.is_number()).map(ToString::to_string);
             match (number("min"), number("max"), number("equal")) {
                 (_, _, Some(value)) => format!("{unit}必须为 {value}"),
+                (Some(min), None, _) if error.code == "length" && min == "1" => "不能为空".into(),
                 (Some(min), Some(max), _) => format!("{unit}必须在 {min} 至 {max} 之间"),
                 (Some(min), None, _) => format!("{unit}不能小于 {min}"),
                 (None, Some(max), _) => format!("{unit}不能大于 {max}"),
@@ -110,7 +111,7 @@ mod tests {
         errors.add("bank_name", error);
 
         let issues = ValidationIssues::from(errors).at("bank_accounts[1]");
-        assert_eq!(issues.fields()["bank_accounts[1].bank_name"], "长度或数量不能小于 1");
+        assert_eq!(issues.fields()["bank_accounts[1].bank_name"], "不能为空");
         assert!(!format!("{issues:?}").contains("secret-input"));
     }
 

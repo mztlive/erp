@@ -159,7 +159,13 @@ impl ExecutionSetupView {
             recipient_masked: true,
             execution_version: execution.base.version,
             stage: execution.stage,
-            blocker: execution.blocker.clone().or_else(|| execution.receipt_blocker.clone()),
+            blocker: execution.blocker.as_deref().or(execution.receipt_blocker.as_deref()).map(|reason| {
+                if execution_outcome_unknown(execution.stage) {
+                    public_execution_blocker(reason, execution.stage).into()
+                } else {
+                    reason.into()
+                }
+            }),
             geocode: None,
             choices: snapshot.map(choice_views).unwrap_or_default(),
             selected_choice: snapshot.and_then(|value| value.selected_choice),
@@ -321,14 +327,19 @@ fn choice_views(snapshot: &ExecutionSnapshot) -> Vec<ExecutionChoiceView> {
         .collect()
 }
 
-fn public_execution_blocker(reason: &str, stage: ApiOrderStage) -> &'static str {
-    if matches!(
+fn execution_outcome_unknown(stage: ApiOrderStage) -> bool {
+    matches!(
         stage,
-        ApiOrderStage::CreationUnknown
+        ApiOrderStage::AddressUnknown
+            | ApiOrderStage::CreationUnknown
             | ApiOrderStage::ConfirmationUnknown
             | ApiOrderStage::PaymentUnknown
             | ApiOrderStage::CancellationUnknown
-    ) {
+    )
+}
+
+fn public_execution_blocker(reason: &str, stage: ApiOrderStage) -> &'static str {
+    if execution_outcome_unknown(stage) {
         return "原执行结果待核实，请查询原结果；系统不会重复发送原请求";
     }
     if reason.contains("运费") {
@@ -355,6 +366,13 @@ fn public_execution_blocker(reason: &str, stage: ApiOrderStage) -> &'static str 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unknown_order_uses_recovery_guidance_even_when_supplier_suggests_retry() {
+        let reason = public_execution_blocker("京东当前查询较多，请稍后再试", ApiOrderStage::CreationUnknown);
+        assert!(reason.contains("请查询原结果"));
+        assert!(reason.contains("不会重复发送"));
+    }
     #[test]
     fn geocode_rejects_unproven_coordinate_system_and_range() {
         let mut value = ExecutionGeocode {

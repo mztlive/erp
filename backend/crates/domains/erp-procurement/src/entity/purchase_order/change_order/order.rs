@@ -499,7 +499,7 @@ impl PurchaseChangeOrder {
     /// 非审批中状态返回最终生效的领域错误。
     pub fn ensure_can_take_effect(&self) -> Result<()> {
         if self.stable.status != PurchaseChangeOrderStatus::InApproval {
-            return Err(Error::from("只有审批中的采购变更单可以由最终通过动作生效"));
+            return Err(Error::from("只有审批中的采购变更单可以在审批通过后生效，请核对变更单状态"));
         }
         Ok(())
     }
@@ -719,7 +719,10 @@ mod tests {
                 result.unwrap();
                 assert!(order.current_submission_id.is_none());
             } else {
-                assert_eq!(result.unwrap_err().to_string(), "只有审批中的采购变更单可以由最终通过动作生效");
+                assert_eq!(
+                    result.unwrap_err().to_string(),
+                    "只有审批中的采购变更单可以在审批通过后生效，请核对变更单状态"
+                );
             }
             assert_eq!(order, before);
         }

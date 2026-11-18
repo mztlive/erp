@@ -20,7 +20,7 @@ use crate::{Error, Result};
 impl SupplierApiOrderProcess {
     pub(super) async fn discover_orders(&self, mut execution: ApiOrderExecution) -> Result<()> {
         if let Err(error) = self.refresh_order_tree(&mut execution).await {
-            execution.defer(error.to_string());
+            execution.defer(error.supplier_order_message());
         }
         self.persist(&mut execution).await
     }
@@ -40,7 +40,7 @@ impl SupplierApiOrderProcess {
 
     pub(super) async fn recover_confirmation(&self, mut execution: ApiOrderExecution) -> Result<()> {
         if let Err(error) = self.refresh_order_tree(&mut execution).await {
-            execution.defer(error.to_string());
+            execution.defer(error.supplier_order_message());
         } else if execution.stage == ApiOrderStage::ConfirmationUnknown {
             execution.defer("原订单确认结果尚未查明；未确认或暂不可见均不代表可以重发");
         }

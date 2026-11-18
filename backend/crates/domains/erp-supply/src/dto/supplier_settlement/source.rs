@@ -51,7 +51,7 @@ pub struct RecordSettlementSourceEvidenceRequest {
     #[validate(custom(function = "safe_command_id", message = "请求ID格式非法"))]
     pub request_id: String,
     /// 幂等键；与请求 ID 一起纳入命令摘要。
-    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作标识无效，请刷新页面后重新操作"))]
     pub idempotency_key: String,
     /// 结算供应商。
     pub supplier_id: SupplierAccountId,

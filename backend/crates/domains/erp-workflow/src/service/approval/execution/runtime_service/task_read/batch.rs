@@ -316,14 +316,14 @@ mod tests {
             let mut loaded = facts(subject);
             change(loaded.snapshots.get_mut("instance-1").unwrap());
             assert!(
-                matches!(subject_for_task(&task, &loaded), Err(Error::ConflictError(message)) if message == "审批实例与冻结业务快照不一致")
+                matches!(subject_for_task(&task, &loaded), Err(Error::ConflictError(message)) if message == "审批记录与提交时的单据资料不一致，请联系审批管理员核对")
             );
         }
         let (subject, task) = fixture();
         let mut loaded = facts(subject);
         loaded.snapshots.clear();
         assert!(
-            matches!(subject_for_task(&task, &loaded), Err(Error::ConflictError(message)) if message == "审批实例与冻结业务快照不一致")
+            matches!(subject_for_task(&task, &loaded), Err(Error::ConflictError(message)) if message == "审批记录与提交时的单据资料不一致，请联系审批管理员核对")
         );
     }
 

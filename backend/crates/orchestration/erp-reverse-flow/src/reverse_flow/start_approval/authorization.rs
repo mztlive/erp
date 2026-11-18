@@ -52,7 +52,7 @@ async fn ensure_financial_separation(
         DocumentType::PaymentReversal => {
             service.load_payment_reversal(id, executor).await?.ensure_separation()?;
         },
-        _ => return Err(Error::ValidationError("未登记退款或冲正提交入口".into())),
+        _ => return Err(Error::ValidationError("当前单据不支持此项退款或冲正操作，请核对单据类型".into())),
     }
     Ok(())
 }
@@ -136,6 +136,6 @@ mod tests {
         .await
         .unwrap_err();
         assert!(matches!(error, Error::ValidationError(message)
-            if message == "未登记退款或冲正提交入口"));
+            if message == "当前单据不支持此项退款或冲正操作，请核对单据类型"));
     }
 }

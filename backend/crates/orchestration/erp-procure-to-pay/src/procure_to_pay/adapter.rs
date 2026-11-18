@@ -143,7 +143,9 @@ pub fn purchase_order_subject_ref(business_object_id: &str) -> Result<SubjectRef
 pub fn require_frozen_binding(
     binding: Option<&ApprovalDefinitionBinding>,
 ) -> Result<&ApprovalDefinitionBinding> {
-    binding.ok_or_else(|| Error::ConflictError("无有效审批绑定的采购单不得提交".to_string()))
+    binding.ok_or_else(|| {
+        Error::ConflictError("该采购单没有可用的审批流程，请联系管理员核对流程后再提交".to_string())
+    })
 }
 
 /// 执行签署的采购单领域动作。
@@ -179,7 +181,7 @@ pub fn execute_purchase_order_domain_action(
         ApprovalDomainAction::PurchaseOrderCancelApproval => {
             Ok(cancel_purchase_order_to_draft(order, updated_by)?)
         },
-        other => Err(Error::ValidationError(format!("动作 {} 不属于采购单", other.as_str()))),
+        _ => Err(Error::ValidationError("该采购单不支持此审批操作，请从对应审批待办办理".into())),
     }
 }
 
@@ -270,7 +272,7 @@ pub fn build_purchase_order_snapshot(
         total_amount: Some(submission.gross_amount),
         total_quantity: Some(sum_line_quantity(lines)?),
         line_count: u32::try_from(lines.len())
-            .map_err(|_| Error::ValidationError("采购明细行数溢出".to_string()))?,
+            .map_err(|_| Error::ValidationError("采购明细行数过多，请分单处理".to_string()))?,
     })
 }
 

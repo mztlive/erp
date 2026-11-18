@@ -112,7 +112,9 @@ impl ImportCommandReceipt {
             || self.audit_event_id.trim().is_empty()
             || !self.valid_result()
         {
-            return Err(Error::ConflictError("导入命令结构化回执损坏".into()));
+            return Err(Error::ConflictError(
+                "无法读取这次导入操作的结果，请先核对批次状态，不要重复提交".into(),
+            ));
         }
         Ok(())
     }
@@ -127,7 +129,9 @@ impl ImportCommandReceipt {
     pub fn ensure_identity(&self, expected: &StructuredCommandReceipt) -> Result<()> {
         self.validate()?;
         if &self.identity != expected {
-            return Err(Error::ConflictError("幂等键已用于不同的导入命令".into()));
+            return Err(Error::ConflictError(
+                "本次提交编号已用于另一项导入操作，请核对批次状态后重新发起操作".into(),
+            ));
         }
         Ok(())
     }

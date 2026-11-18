@@ -230,7 +230,7 @@ pub(crate) async fn validate_targets(
             ResourceKind::PurchaseOrder => db.purchase_orders().find_by_id(&target.id, ex).await?.is_some(),
         };
         if !exists {
-            return Err(conflict());
+            return Err(Error::ConflictError("找不到要授权查看的销售单或采购单，请核对所选单据".into()));
         }
     }
     Ok(())

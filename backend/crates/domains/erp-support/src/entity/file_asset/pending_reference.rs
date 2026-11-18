@@ -28,10 +28,10 @@ impl PendingFileReference {
     pub fn parse(value: impl AsRef<str>) -> Result<Self> {
         let value = value.as_ref().trim();
         let Some(token) = value.strip_prefix(PENDING_FILE_REFERENCE_PREFIX) else {
-            return Err(Error::from("临时文件引用格式无效"));
+            return Err(Error::from("所选附件的上传信息无效，请重新上传文件"));
         };
         if token.trim().is_empty() {
-            return Err(Error::from("临时文件引用 token 不能为空"));
+            return Err(Error::from("缺少上传文件的信息，请重新选择并上传文件"));
         }
         Ok(Self(value.to_string()))
     }
@@ -95,7 +95,7 @@ impl PendingFileReferenceSet {
                 return Err(Error::from("临时文件引用不能重复"));
             }
             if sensitivity_by_id.insert(id.to_string(), sensitivity).is_some() {
-                return Err(Error::from("正式文件资产 ID 不能重复"));
+                return Err(Error::from("附件中有重复文件，请删除重复项后提交"));
             }
             targets.insert(reference, id);
         }
@@ -118,9 +118,10 @@ impl PendingFileReferenceSet {
             return Ok(false);
         };
 
-        let target = self.targets.get(&reference).ok_or_else(|| Error::from("业务命令引用了未上传的文件"))?;
+        let target =
+            self.targets.get(&reference).ok_or_else(|| Error::from("所选附件尚未上传，请上传后再提交"))?;
         if !used.insert(reference.as_str().to_string()) {
-            return Err(Error::from("同一临时文件不能重复消费"));
+            return Err(Error::from("同一个已上传文件不能重复添加，请删除重复附件后提交"));
         }
         *id = target.clone();
         Ok(true)
@@ -140,7 +141,7 @@ impl PendingFileReferenceSet {
         if used.len() != self.targets.len()
             || self.targets.keys().any(|reference| !used.contains(reference.as_str()))
         {
-            return Err(Error::from("存在未被业务命令引用的上传文件"));
+            return Err(Error::from("有已上传文件未关联到本次操作，请核对附件后再提交"));
         }
         Ok(())
     }

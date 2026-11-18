@@ -55,7 +55,7 @@ pub(crate) fn rows(xml: &str, shared: &[String], limits: SheetLimits) -> Result<
     let doc = document(xml)?;
     let root = doc.root_element();
     if root.tag_name().name() != "worksheet" && root.tag_name().name() != "sheetData" {
-        return Err(invalid("工作表 XML 结构无效"));
+        return Err(invalid("工作表无法读取，请用原模板重新另存为 .xlsx 后上传"));
     }
 
     let namespace = root.tag_name().namespace();
@@ -69,10 +69,12 @@ pub(crate) fn rows(xml: &str, shared: &[String], limits: SheetLimits) -> Result<
                     && parent.tag_name().namespace() == namespace
             })
     }) {
-        let address = node.attribute("r").ok_or_else(|| invalid("单元格缺少坐标"))?;
+        let address = node
+            .attribute("r")
+            .ok_or_else(|| invalid("工作表包含无法定位的单元格，请将数据复制到新的导入模板"))?;
         let (column, row) = coordinate(address, limits)?;
         if rows.entry(row).or_default().insert(column, read_cell(node, shared)?).is_some() {
-            return Err(invalid("工作表存在重复单元格坐标"));
+            return Err(invalid("工作表中同一位置包含多份数据，请将数据复制到新的导入模板"));
         }
     }
 
@@ -108,8 +110,11 @@ fn read_cell(node: Node<'_, '_>, shared: &[String]) -> Result<Cell> {
                 .as_deref()
                 .unwrap_or_default()
                 .parse::<usize>()
-                .map_err(|_| invalid("共享文本索引无效"))?;
-            shared.get(index).cloned().ok_or_else(|| invalid("共享文本索引越界"))?
+                .map_err(|_| invalid("工作表中的文字无法读取，请用原模板重新另存后上传"))?;
+            shared
+                .get(index)
+                .cloned()
+                .ok_or_else(|| invalid("工作表中的文字无法读取，请用原模板重新另存后上传"))?
         },
         _ => raw.unwrap_or_default(),
     };
@@ -119,7 +124,9 @@ fn read_cell(node: Node<'_, '_>, shared: &[String]) -> Result<Cell> {
 }
 
 fn coordinate(address: &str, limits: SheetLimits) -> Result<(usize, u32)> {
-    let split = address.find(|ch: char| ch.is_ascii_digit()).ok_or_else(|| invalid("单元格坐标无效"))?;
+    let split = address
+        .find(|ch: char| ch.is_ascii_digit())
+        .ok_or_else(|| invalid("工作表包含无法定位的单元格，请将数据复制到新的导入模板"))?;
     let column = address[..split]
         .bytes()
         .try_fold(0_usize, |value, byte| {
@@ -127,8 +134,10 @@ fn coordinate(address: &str, limits: SheetLimits) -> Result<(usize, u32)> {
             value.checked_mul(26)?.checked_add(usize::from(byte - b'A' + 1))
         })
         .and_then(|column| column.checked_sub(1))
-        .ok_or_else(|| invalid("单元格列号无效"))?;
-    let row = address[split..].parse::<u32>().map_err(|_| invalid("单元格行号无效"))?;
+        .ok_or_else(|| invalid("工作表包含无法定位的列，请将数据复制到新的导入模板"))?;
+    let row = address[split..]
+        .parse::<u32>()
+        .map_err(|_| invalid("工作表包含无法定位的行，请将数据复制到新的导入模板"))?;
     if row == 0 || row > limits.rows || column >= limits.columns {
         return Err(invalid("工作表行列范围超过模板限制"));
     }
@@ -136,12 +145,15 @@ fn coordinate(address: &str, limits: SheetLimits) -> Result<(usize, u32)> {
 }
 
 fn merge_range(node: Node<'_, '_>, limits: SheetLimits) -> Result<MergeRange> {
-    let reference = node.attribute("ref").ok_or_else(|| invalid("合并单元格范围缺失"))?;
-    let (start, end) = reference.split_once(':').ok_or_else(|| invalid("合并单元格范围无效"))?;
+    let reference =
+        node.attribute("ref").ok_or_else(|| invalid("工作表中的合并单元格无法识别，请取消合并后重新上传"))?;
+    let (start, end) = reference
+        .split_once(':')
+        .ok_or_else(|| invalid("工作表中的合并单元格无法识别，请取消合并后重新上传"))?;
     let (start_column, start_row) = coordinate(start, limits)?;
     let (end_column, end_row) = coordinate(end, limits)?;
     if start_column > end_column || start_row > end_row {
-        return Err(invalid("合并单元格范围无效"));
+        return Err(invalid("工作表中的合并单元格无法识别，请取消合并后重新上传"));
     }
     Ok(MergeRange { start_column, start_row, end_column, end_row })
 }

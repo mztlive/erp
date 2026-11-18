@@ -274,7 +274,7 @@ impl StartPosting<'_> {
             )
             .await?;
         if !guarded {
-            return Err(Error::ConflictError("采购单审批启动守卫冲突，请刷新后重试".into()));
+            return Err(Error::ConflictError("采购单的审批状态已变化，未能提交审批，请刷新后核对".into()));
         }
         Ok(())
     }

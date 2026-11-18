@@ -23,15 +23,14 @@ impl OfferTransform<DangaoshushuOffer<'_>> for DangaoshushuConnector {
             DangaoshushuOffer::List { product, spec } => (product, spec, "spec_id", None),
             DangaoshushuOffer::Detail { root, spec } => (&root["product"], spec, "id", Some(root)),
         };
-        let spec_id = id(&spec[spec_id_field])
-            .map_err(|e| context(e, &format!("规格编号 {spec_id_field} 缺失或格式无效")))?;
+        let spec_id = id(&spec[spec_id_field]).map_err(|e| context(e, "供应商提供的规格编号缺失或无效"))?;
         let unit = self.settings.spec_units.get(&spec_id).cloned();
 
         let quote = if !spec["clearing_price"].is_null() {
             let unit_price: UnitPrice = fixed(&spec["clearing_price"])
-                .map_err(|e| context(e, "规格结算价 clearing_price 格式或精度无效"))?;
+                .map_err(|e| context(e, "供应商提供的规格结算价不是有效金额"))?;
             if unit_price.to_decimal() < Decimal::ZERO {
-                return Err(context(mapping(), "规格结算价 clearing_price 不能为负数"));
+                return Err(context(mapping(), "供应商提供的规格结算价不能为负数"));
             }
             Some(SupplyQuote {
                 dropship: Some(PriceTier {
@@ -48,7 +47,7 @@ impl OfferTransform<DangaoshushuOffer<'_>> for DangaoshushuConnector {
 
         Ok(Offer {
             sku: SupplierSku {
-                product_id: Some(id(&product["id"]).map_err(|e| context(e, "商品编号 id 缺失或格式无效"))?),
+                product_id: Some(id(&product["id"]).map_err(|e| context(e, "供应商商品编号缺失或无效"))?),
                 spec_id,
             },
             name: display_field(product, "title")?,
@@ -67,7 +66,7 @@ fn display_field(value: &Value, key: &str) -> ConnectorResult<String> {
         _ => field(value, key),
     };
     result.map_err(|mut failure| {
-        failure.summary = format!("供应商名称字段 {key} 缺失、为空或类型无效");
+        failure.summary = "供应商未提供可读取的商品或规格名称，请核对蛋糕叔叔的商品资料".into();
         failure
     })
 }
@@ -124,7 +123,7 @@ mod tests {
 
         let spec = json!({"id":"s1","name":" "});
         let error = connector.transform(DangaoshushuOffer::Detail { root: &root, spec: &spec }).unwrap_err();
-        assert_eq!(error.summary, "供应商名称字段 name 缺失、为空或类型无效");
+        assert_eq!(error.summary, "供应商未提供可读取的商品或规格名称，请核对蛋糕叔叔的商品资料");
         assert!(transport.requests.lock().unwrap().is_empty());
     }
 }

@@ -168,7 +168,7 @@ fn completion_preserves_version_snapshot_scope_identity_matrix_and_status_error_
     command.expected_task_version = task.base.version;
     assert!(matches!(
         validate_confirmation_completion(&command, &task, &fact, &batch),
-        Err(Error::ConflictError(message)) if message == "导入确认的批次或试算快照已变化"
+        Err(Error::ConflictError(message)) if message == "导入批次或试算结果已更新，请刷新后按最新结果确认"
     ));
 
     command.expected_subject_version = task.subject_version.clone();
@@ -185,7 +185,7 @@ fn completion_preserves_version_snapshot_scope_identity_matrix_and_status_error_
     task.owner_role = "role-sales".into();
     assert!(matches!(
         validate_confirmation_completion(&command, &task, &fact, &batch),
-        Err(Error::BusinessLogicError(message)) if message == "当前确认范围已不属于批次必要矩阵"
+        Err(Error::BusinessLogicError(message)) if message == "本批次已不需要确认当前范围，请刷新查看仍需确认的事项"
     ));
 
     batch.source_object_set = "CUSTOMER".into();

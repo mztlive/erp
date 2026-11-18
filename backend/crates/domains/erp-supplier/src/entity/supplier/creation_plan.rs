@@ -505,7 +505,7 @@ fn capability_owner(owners: &[(CapabilityCode, String)], code: CapabilityCode) -
         .iter()
         .find(|(item, owner)| *item == code && !owner.trim().is_empty())
         .map(|(_, owner)| owner.as_str())
-        .ok_or_else(|| erp_core::Error::from("供给能力负责人必须显式指定"))
+        .ok_or_else(|| erp_core::Error::from("请为该供给能力选择负责人"))
 }
 
 #[cfg(test)]

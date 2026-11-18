@@ -164,7 +164,7 @@ pub(super) fn execute_sales_change_domain_action(
         ApprovalDomainAction::SalesChangeOrderCancelApproval => {
             Ok(cancel_sales_change_to_draft(order, updated_by)?)
         },
-        other => Err(Error::ValidationError(format!("动作 {} 不属于销售变更单", other.as_str()))),
+        _ => Err(Error::ValidationError("该销售变更单不支持此审批操作，请从对应审批待办办理".into())),
     }
 }
 
@@ -254,7 +254,7 @@ pub(super) fn build_sales_change_snapshot(
         total_amount: Some(submission.gross_amount),
         total_quantity: Some(sum_line_quantity(lines)?),
         line_count: u32::try_from(lines.len())
-            .map_err(|_| Error::ValidationError("销售变更明细行数溢出".to_string()))?,
+            .map_err(|_| Error::ValidationError("销售变更明细行数过多，请减少明细后再保存".to_string()))?,
     })
 }
 

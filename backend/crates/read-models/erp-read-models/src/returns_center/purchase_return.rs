@@ -531,7 +531,9 @@ mod tests {
             .purchase_return_created_result("return", "purchase", &actor, &mut ReadExecutor::default())
             .await
             .unwrap_err();
-        assert!(matches!(error, Error::ValidationError(reason) if reason.contains("原授权快照")));
+        assert!(
+            matches!(error, Error::ValidationError(reason) if reason.contains("请打开原单据核对当前状态，勿重复操作"))
+        );
 
         let error = service
             .purchase_return_created_result("return", "purchase", &actor, &mut SnapshotExecutor::default())

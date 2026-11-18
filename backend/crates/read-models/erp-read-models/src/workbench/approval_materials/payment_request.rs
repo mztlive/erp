@@ -85,7 +85,7 @@ async fn frozen_request(
                     == Some(snapshot.approval_process_instance_id.as_ref())
         })
         .map(|frozen| frozen.request)
-        .ok_or_else(|| Error::ConflictError("付款申请原提交材料与审批实例不一致".into()))
+        .ok_or_else(|| Error::ConflictError("付款申请提交资料与本次审批记录不一致，请联系经办人核对".into()))
 }
 
 fn sales_display(source: &PaymentRequestSalesSource) -> Result<ApprovalRelatedSalesSnapshot> {

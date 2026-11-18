@@ -65,7 +65,8 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
         .ok_or_else(|| invalid("未找到「对内」工作表，请使用原产品报价表模板"))?;
     let rows = parse_sheet_rows(&archive.xml(&sheet_path)?, &shared)?;
 
-    let headers = rows.first().ok_or_else(|| invalid("模板没有可导入的数据行"))?;
+    let headers =
+        rows.first().ok_or_else(|| invalid("模板没有可导入的数据行，请按列填写商品资料后重新上传"))?;
     let width = template_width(&headers.cells)?;
     let legacy_layout = width == legacy::HEADERS.len();
 
@@ -83,10 +84,10 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
         })
         .collect::<Vec<_>>();
     if data_rows.is_empty() {
-        return Err(invalid("模板没有可导入的数据行"));
+        return Err(invalid("模板没有可导入的数据行，请按列填写商品资料后重新上传"));
     }
     if data_rows.len() > 1000 {
-        return Err(invalid("每次导入最多 1000 行"));
+        return Err(invalid("每次导入最多 1000 行，请将商品分成多个文件后上传"));
     }
 
     let image_targets = parse_image_targets(&mut archive)?;
@@ -498,7 +499,7 @@ mod tests {
     fn workbook_bytes_reject_damaged_shared_strings() {
         let bytes = product_workbook(Some(b"<sst><si><t>broken</si></sst>"));
         assert!(
-            matches!(super::parse_product_quote_xlsx(&bytes), Err(crate::Error::ValidationError(message)) if message.contains("XML"))
+            matches!(super::parse_product_quote_xlsx(&bytes), Err(crate::Error::ValidationError(message)) if message.contains("请用原模板重新另存"))
         );
     }
 

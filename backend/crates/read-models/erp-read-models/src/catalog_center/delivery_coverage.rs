@@ -136,7 +136,9 @@ async fn delivery_snapshot(
     if req.lines.len() > MAX_LINES
         || req.lines.iter().any(|line| line.region_codes.len() > MAX_REGIONS_PER_LINE)
     {
-        return Err(Error::ValidationError("配送提示的商品或地址数量超出上限".into()));
+        return Err(Error::ValidationError(
+            "每次最多查询 100 个商品，每个商品最多核对 100 个配送地区，请减少后重试".into(),
+        ));
     }
 
     let sku_ids = req.lines.iter().map(|line| SkuId::new(line.sku_id.trim())).collect::<Vec<_>>();
@@ -144,7 +146,7 @@ async fn delivery_snapshot(
     let view = delivery_view(&req, &facts)?;
 
     if !boundary.is_current(executor) {
-        return Err(Error::ValidationError("配送提示跨越授权快照".into()));
+        return Err(Error::ValidationError("当前查询已失效，请刷新商品及配送地址后重新查询".into()));
     }
     Ok(view)
 }
@@ -158,8 +160,10 @@ fn delivery_view(req: &DeliveryCoverageRequest, facts: &CreationBasisFacts) -> R
         let line_policies = supplies.get(sku_id).map(|supply| supply.policies.as_slice()).unwrap_or_default();
         let mut seen = Vec::new();
         for code in &line.region_codes {
-            let region =
-                RegionCode::parse(code).map_err(|error| Error::ValidationError(error.to_string()))?;
+            let region = RegionCode::parse(code).map_err(|error| {
+                tracing::debug!(%error, "配送地区校验失败");
+                Error::ValidationError("找不到所选配送地区，请重新选择省、市或区县".into())
+            })?;
             if seen.contains(&region) {
                 continue;
             }
@@ -350,7 +354,7 @@ mod tests {
         let result =
             delivery_snapshot(&db, req.clone(), &authorization, &actor, &mut ReadExecutor::default()).await;
         assert!(
-            matches!(result, Err(Error::ValidationError(reason)) if reason == "商品读取必须使用快照事务")
+            matches!(result, Err(Error::ValidationError(reason)) if reason == "暂时无法查询可售商品，请从商品列表重新查询")
         );
 
         let result =

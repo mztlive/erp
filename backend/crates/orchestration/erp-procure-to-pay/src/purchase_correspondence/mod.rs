@@ -221,7 +221,7 @@ fn replay_intent(command: &EmailIntent, record: &PurchaseEmail) -> Result<Purcha
         || record.actor_id != command.actor.id()
         || record.purchase_order_id != command.purchase_order_id
     {
-        return Err(Error::ConflictError("发件记录与原命令不匹配".into()));
+        return Err(Error::ConflictError("已有采购邮件记录与本次发送内容不符，请先核对发件记录".into()));
     }
     replay(record, &command.fingerprint)
 }

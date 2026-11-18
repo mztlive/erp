@@ -32,7 +32,7 @@ use crate::{Error, Result};
 pub(crate) fn trimmed_idempotency_key(raw: &str) -> Result<String> {
     let key = raw.trim().to_string();
     if key.is_empty() {
-        return Err(Error::ValidationError("幂等键不能为空".into()));
+        return Err(Error::ValidationError("缺少本次交接的操作编号，请重新打开交接页面".into()));
     }
     Ok(key)
 }

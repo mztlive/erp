@@ -60,7 +60,7 @@ impl CreateProcurementResponsibilityRuleRequest {
 #[serde(deny_unknown_fields)]
 pub struct UpdateProcurementResponsibilityRuleRequest {
     /// 期望乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 规则类型。
     pub rule_type: ProcurementResponsibilityRuleType,

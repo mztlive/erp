@@ -661,10 +661,10 @@ impl SupplierApiConnection {
     /// 已删除、未选择协议或故障连接拒绝选品。
     pub fn ensure_catalog_available(&self) -> Result<()> {
         if self.base.is_deleted() || self.connector_type.is_none() {
-            return Err(Error::LogicError("供应商接口不可用，请检查连接配置".into()));
+            return Err(Error::LogicError("暂时无法连接供应商，请检查供应商连接配置".into()));
         }
         if self.stable.status == SupplierApiConnectionStatus::Fault {
-            return Err(Error::LogicError("供应商接口处于故障状态，请检查连接配置".into()));
+            return Err(Error::LogicError("供应商连接异常，请检查连接配置".into()));
         }
         Ok(())
     }

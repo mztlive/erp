@@ -119,7 +119,7 @@ pub struct CreateSupplierOfferingRequest {
     #[validate(custom(function = "non_blank", message = "登记原因不能为空"))]
     pub change_reason: String,
     /// 幂等键。
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(custom(function = "non_blank", message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -174,7 +174,7 @@ pub struct ReviseSupplierOfferingRequest {
     #[validate(custom(function = "non_blank", message = "变更原因不能为空"))]
     pub change_reason: String,
     /// 幂等键。
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(custom(function = "non_blank", message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -235,7 +235,7 @@ pub struct UpdateSupplierOfferingAvailabilityRequest {
     #[validate(custom(function = "non_blank", message = "变更原因不能为空"))]
     pub change_reason: String,
     /// 幂等键。
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(custom(function = "non_blank", message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 

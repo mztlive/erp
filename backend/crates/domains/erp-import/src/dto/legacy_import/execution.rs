@@ -171,15 +171,17 @@ impl TryFrom<ImportExecutionCommand> for PreparedImportExecution {
         if matches!(command.action, ImportExecutionAction::StartApply | ImportExecutionAction::RetryFailed)
             && expected_trial_version.is_none()
         {
-            return Err(Error::ValidationError("提交应用或重试失败项必须携带试算版本".to_string()));
+            return Err(Error::ValidationError(
+                "请先打开本批次的试算结果，再提交导入或重试失败行".to_string(),
+            ));
         }
 
         let reason_code = optional_text(command.reason_code);
         if command.action == ImportExecutionAction::CancelPending && reason_code.is_none() {
-            return Err(Error::ValidationError("取消尚未应用项必须提供原因码".to_string()));
+            return Err(Error::ValidationError("请选择取消未导入行的原因".to_string()));
         }
         if command.action == ImportExecutionAction::StartApply && reason_code.is_some() {
-            return Err(Error::ValidationError("提交应用不得携带取消或重试原因码".to_string()));
+            return Err(Error::ValidationError("提交导入时无需填写取消或重试原因，请清空后提交".to_string()));
         }
 
         Ok(Self {

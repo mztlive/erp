@@ -24,7 +24,7 @@ pub struct SettlementDifferenceEvidenceRequest {
     #[validate(length(min = 1, max = 128, message = "请求ID长度必须在1-128之间"))]
     #[validate(custom(function = "safe_command_id", message = "请求ID格式非法"))]
     pub request_id: String,
-    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作标识无效，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 
@@ -98,7 +98,7 @@ pub struct SettlementDifferenceDecisionRequest {
     #[validate(length(min = 1, max = 128, message = "差异ID长度必须在1-128之间"))]
     pub difference_id: String,
     /// 查询所得结算单版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_lock_version: u64,
     /// 查询所得差异版本。
     #[validate(range(min = 1, message = "差异版本必须大于 0"))]
@@ -115,7 +115,7 @@ pub struct SettlementDifferenceDecisionRequest {
     #[validate(custom(function = "safe_command_id", message = "操作ID格式非法"))]
     pub operation_id: String,
     /// 正式命令幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作标识无效，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 

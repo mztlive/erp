@@ -69,11 +69,17 @@ fn validate(rows: &[CreateSupplierOfferingRequest], steps: &[DemoStep]) -> Resul
     let mut keys = HashSet::new();
     for row in rows {
         let revision = validate_request(row)?;
-        let kind = skus
-            .get(row.sku_id.as_str())
-            .ok_or_else(|| Error::ValidationError(format!("演示供给 SKU 引用未定义：{}", row.sku_id)))?;
+        let kind = skus.get(row.sku_id.as_str()).ok_or_else(|| {
+            Error::ValidationError(format!(
+                "演示供给找不到对应商品规格：{}，请联系支持人员核对清单",
+                row.sku_id
+            ))
+        })?;
         let supplier = suppliers.get(row.supplier_id.as_str()).ok_or_else(|| {
-            Error::ValidationError(format!("演示供给供应商引用未定义：{}", row.supplier_id))
+            Error::ValidationError(format!(
+                "演示供给找不到对应供应商：{}，请联系支持人员核对清单",
+                row.supplier_id
+            ))
         })?;
 
         if !relationships.insert((row.sku_id.as_str(), row.supplier_id.as_str())) {
@@ -83,7 +89,7 @@ fn validate(rows: &[CreateSupplierOfferingRequest], steps: &[DemoStep]) -> Resul
             )));
         }
         if !keys.insert(row.idempotency_key.as_str()) {
-            return Err(Error::ValidationError(format!("演示供给幂等键重复：{}", row.idempotency_key)));
+            return Err(Error::ValidationError("演示供给清单中有重复的登记项，请联系支持人员核对".into()));
         }
 
         validate_qualification(*kind, supplier, revision.valid_from)?;
@@ -363,13 +369,13 @@ mod tests {
         let mut invalid = rows.clone();
         invalid[0].supplier_id = "missing".into();
         assert!(
-            matches!(validate(&invalid, &steps), Err(Error::ValidationError(message)) if message.contains("供应商引用未定义"))
+            matches!(validate(&invalid, &steps), Err(Error::ValidationError(message)) if message.contains("找不到对应供应商"))
         );
 
         invalid = rows.clone();
         invalid[0].sku_id = "missing".into();
         assert!(
-            matches!(validate(&invalid, &steps), Err(Error::ValidationError(message)) if message.contains("SKU 引用未定义"))
+            matches!(validate(&invalid, &steps), Err(Error::ValidationError(message)) if message.contains("找不到对应商品规格"))
         );
 
         invalid = rows.clone();
@@ -417,7 +423,7 @@ mod tests {
         last.supplier_id = "demo-master-supplier-02".into();
         last.idempotency_key = reused_key;
         assert!(
-            matches!(validate(&rows, &steps), Err(Error::ValidationError(message)) if message.contains("幂等键重复"))
+            matches!(validate(&rows, &steps), Err(Error::ValidationError(message)) if message.contains("重复的登记项"))
         );
     }
 

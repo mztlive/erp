@@ -68,9 +68,9 @@ impl PurchaseLineFields {
         }
 
         self.product_name_snapshot =
-            normalize_optional_text(self.product_name_snapshot.take(), "商品名称快照", PRODUCT_NAME_MAX_LEN)?;
+            normalize_optional_text(self.product_name_snapshot.take(), "商品名称", PRODUCT_NAME_MAX_LEN)?;
         self.specification_snapshot =
-            normalize_optional_text(self.specification_snapshot.take(), "规格快照", SPECIFICATION_MAX_LEN)?;
+            normalize_optional_text(self.specification_snapshot.take(), "商品规格", SPECIFICATION_MAX_LEN)?;
         self.base_unit_code = normalize_optional_text(self.base_unit_code.take(), "单位", BASE_UNIT_MAX_LEN)?;
 
         match self.line_type {
@@ -116,10 +116,10 @@ fn validate_item_service_line(fields: &PurchaseLineFields, allow_zero_quantity: 
     }
     let sku_id = fields.sku_id.as_ref().ok_or("商品/服务行必须引用 SKU")?;
     if fields.product_name_snapshot.is_none() {
-        return Err(Error::from("商品/服务行必须保存商品名称快照"));
+        return Err(Error::from("请填写商品或服务明细的名称"));
     }
     if fields.base_unit_code.is_none() {
-        return Err(Error::from("商品/服务行必须保存单位快照"));
+        return Err(Error::from("请填写商品或服务明细的计量单位"));
     }
 
     let quantity = fields.quantity.ok_or("商品/服务行数量不能为空")?;
@@ -162,7 +162,7 @@ fn validate_logistics_fee_line(fields: &PurchaseLineFields) -> Result<()> {
         return Err(Error::from("物流费用行不得引用 SKU"));
     }
     if fields.product_name_snapshot.is_some() {
-        return Err(Error::from("物流费用行不得保存商品名称快照"));
+        return Err(Error::from("物流费用明细无需填写商品名称，请清除后再提交"));
     }
     if fields.quantity.is_some() {
         return Err(Error::from("物流费用行数量必须为空"));

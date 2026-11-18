@@ -33,7 +33,7 @@ pub struct CreateSkuAttributeRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateSkuAttributeRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
     /// 属性名称；缺省表示不修改。
     pub name: Option<String>,
@@ -195,7 +195,7 @@ pub struct CreateSkuAttributeValueRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateSkuAttributeValueRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
     /// 展示值；缺省表示不修改。
     pub display_value: Option<String>,

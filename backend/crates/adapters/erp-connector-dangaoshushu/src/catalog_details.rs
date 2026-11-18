@@ -42,8 +42,7 @@ pub(super) fn details(product: &Value, spec: &Value, root: Option<&Value>) -> Co
             && !root["product"]["can_buy"].is_null()
             && !spec["deleted"].is_null()
             && !spec["can_buy"].is_null();
-        let quantity =
-            stock(&spec["stock"]).map_err(|e| context(e, "规格库存 stock 格式无效或为不支持的负数"))?;
+        let quantity = stock(&spec["stock"]).map_err(|e| context(e, "供应商提供的规格库存无效"))?;
         details.availability = if complete_state {
             match availability_state(root, spec, &quantity)? {
                 AvailabilityState::Available => CatalogAvailability::Available,
@@ -65,7 +64,10 @@ fn optional_id(value: &Value, key: &str) -> ConnectorResult<Option<String>> {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(value)) if value.is_empty() || value == "0" => Ok(None),
         Some(Value::Number(value)) if value.as_u64() == Some(0) => Ok(None),
-        Some(value) => id(value).map(Some).map_err(|e| context(e, &format!("字段 {key} 编号格式无效"))),
+        Some(value) => id(value).map(Some).map_err(|e| {
+            let label = if key == "brand_id" { "品牌编号" } else { "商品分类编号" };
+            context(e, &format!("供应商提供的{label}无效"))
+        }),
     }
 }
 
@@ -73,7 +75,14 @@ fn optional_text(value: &Value, key: &str) -> ConnectorResult<Option<String>> {
     match value.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(value)) => Ok(Some(value.trim().to_owned())),
-        _ => Err(context(mapping(), &format!("字段 {key} 必须为文本"))),
+        _ => {
+            let label = match key {
+                "barcode" => "条码",
+                "brand_name" | "name" => "品牌名称",
+                _ => "商品说明",
+            };
+            Err(context(mapping(), &format!("供应商提供的{label}无法读取")))
+        },
     }
 }
 
@@ -107,9 +116,9 @@ fn market_price(spec: &Value) -> ConnectorResult<Option<Amount>> {
         return Ok(None);
     }
     let price: Amount =
-        fixed(&spec["market_price"]).map_err(|e| context(e, "规格市场价 market_price 格式或精度无效"))?;
+        fixed(&spec["market_price"]).map_err(|e| context(e, "供应商提供的规格市场价不是有效金额"))?;
     if price.to_decimal().is_sign_negative() {
-        return Err(context(mapping(), "规格市场价 market_price 不能为负数"));
+        return Err(context(mapping(), "供应商提供的规格市场价不能为负数"));
     }
     Ok(Some(price))
 }
@@ -179,12 +188,12 @@ mod tests {
         let mut root = json!({"product":{"status":"1", "can_buy":"1"},
             "brand":{"status":"invalid"}});
         let mut spec = json!({"deleted":"0", "can_buy":"1", "stock":"-1"});
-        let stock_error = context(mapping(), "规格库存 stock 格式无效或为不支持的负数");
+        let stock_error = context(mapping(), "供应商提供的规格库存无效");
         assert_eq!(details(&json!({}), &spec, Some(&root)).unwrap_err(), stock_error);
         spec["stock"] = json!("2.500000");
         assert_eq!(
             details(&json!({}), &spec, Some(&root)).unwrap_err(),
-            context(mapping(), "状态字段 brand.status 必须为 0 或 1")
+            context(mapping(), "供应商品牌的启用状态无法识别")
         );
 
         root["product"]["can_buy"] = Value::Null;

@@ -197,7 +197,9 @@ fn initial_review_status(
         && sales_order.stable.current_revision_id.as_deref()
             != Some(req.source_sales_order_revision_id.as_str())
     {
-        return Err(Error::ConflictError("卡券应收必须绑定来源销售单的当前正式版本".to_string()));
+        return Err(Error::ConflictError(
+            "卡券应收必须按来源销售单当前生效的内容登记，请刷新后核对".to_string(),
+        ));
     }
     Ok(review_status)
 }
@@ -236,7 +238,7 @@ async fn authorized_source(
         .find_by_id(&req.source_sales_order_revision_id, executor)
         .await?
         .filter(|revision| revision.sales_order_id.as_ref() == req.sales_order_id)
-        .ok_or_else(|| Error::ConflictError("应收绑定版本与来源销售单不一致".into()))?;
+        .ok_or_else(|| Error::ConflictError("应收记录引用的销售版本不属于该销售单，请联系财务核对".into()))?;
     Ok(sales_order)
 }
 

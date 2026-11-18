@@ -104,7 +104,7 @@ impl SupplierCatalogAdoptionProcess {
                     product_id: None,
                     sku_id: None,
                     offering_id: None,
-                    message: Some(error.to_string()),
+                    message: Some(error.row_message()),
                 },
             });
         }

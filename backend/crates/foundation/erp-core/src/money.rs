@@ -37,7 +37,7 @@ const AMOUNT_SCALE: u32 = 2;
 /// `Display`/`Debug`/`Copy`/`Clone`/`PartialEq`/`Eq`/`PartialOrd`/`Ord`/`Hash`，
 /// 以及 human-readable 字符串 / Decimal128 双形态 serde。
 macro_rules! decimal_newtype {
-    ($name:ident, $scale:literal) => {
+    ($name:ident, $label:literal, $scale:literal) => {
         /// 定点数值（小数位上限 `$scale` 位）。
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub struct $name(Decimal);
@@ -74,7 +74,7 @@ macro_rules! decimal_newtype {
             /// 需要舍入请显式使用 [`round_to_cent`]）。
             fn try_from(value: Decimal) -> Result<Self> {
                 if value.normalize().scale() > $scale {
-                    return Err(Error::from(format!("{} 有效小数位最多 {} 位", stringify!($name), $scale)));
+                    return Err(Error::from(format!("{}最多保留 {} 位小数，请修改后重试", $label, $scale)));
                 }
                 Ok(Self(value))
             }
@@ -95,7 +95,7 @@ macro_rules! decimal_newtype {
             /// 字符串不是合法数字或有效小数位超过 `$scale` 时返回 `LogicError`。
             fn from_str(value: &str) -> Result<Self> {
                 let decimal =
-                    Decimal::from_str(value).map_err(|_| Error::from(format!("{value} 不是合法定点数值")))?;
+                    Decimal::from_str(value).map_err(|_| Error::from(concat!("请填写有效的", $label)))?;
                 Self::try_from(decimal)
             }
         }
@@ -149,10 +149,10 @@ macro_rules! decimal_newtype {
     };
 }
 
-decimal_newtype!(Amount, 2);
-decimal_newtype!(UnitPrice, 4);
-decimal_newtype!(Quantity, 6);
-decimal_newtype!(Rate, 6);
+decimal_newtype!(Amount, "金额", 2);
+decimal_newtype!(UnitPrice, "单价", 4);
+decimal_newtype!(Quantity, "数量", 6);
+decimal_newtype!(Rate, "比率", 6);
 
 impl Amount {
     /// 零金额（`0.00`，构造期即满足两位小数约束）。

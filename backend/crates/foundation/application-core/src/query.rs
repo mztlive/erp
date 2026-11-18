@@ -129,7 +129,7 @@ fn resolve_sort_field(
             .iter()
             .find(|allowed| **allowed == field)
             .copied()
-            .ok_or_else(|| Error::ValidationError(format!("不支持的排序字段: {field}"))),
+            .ok_or_else(|| Error::ValidationError("列表不支持按此项排序，请重新选择排序项".into())),
         None => Ok(DEFAULT_SORT_FIELD),
     }
 }
@@ -139,7 +139,7 @@ fn resolve_sort_dir(sort_dir: Option<&str>) -> Result<SortDir> {
     match trimmed_query(sort_dir) {
         Some("asc") => Ok(SortDir::Asc),
         Some("desc") | None => Ok(DEFAULT_SORT_DIR),
-        Some(other) => Err(Error::ValidationError(format!("非法排序方向: {other}"))),
+        Some(_) => Err(Error::ValidationError("排序方向无效，请重新选择升序或降序".into())),
     }
 }
 
@@ -332,8 +332,8 @@ mod tests {
     #[test]
     fn paging_rejects_sort_errors_before_applying_defaults() {
         let field = normalize_paging(&Some("bad".into()), &Some("up".into()), None, None, &[]).unwrap_err();
-        assert_eq!(field.to_string(), "参数验证失败: 不支持的排序字段: bad");
+        assert_eq!(field.to_string(), "参数验证失败: 列表不支持按此项排序，请重新选择排序项");
         let direction = normalize_paging(&None, &Some("up".into()), None, None, &[]).unwrap_err();
-        assert_eq!(direction.to_string(), "参数验证失败: 非法排序方向: up");
+        assert_eq!(direction.to_string(), "参数验证失败: 排序方向无效，请重新选择升序或降序");
     }
 }

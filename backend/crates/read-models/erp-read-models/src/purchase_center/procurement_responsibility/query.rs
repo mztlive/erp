@@ -83,14 +83,15 @@ async fn rule_list_page(
     executor: &mut dyn Executor,
 ) -> Result<ProcurementResponsibilityRulePageView> {
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-        return Err(Error::ValidationError("采购责任列表读取必须使用快照事务".into()));
+        return Err(Error::ValidationError(
+            "暂时无法查看采购责任规则，请刷新列表；如仍有问题，请联系管理员".into(),
+        ));
     }
 
     source.require(actor, executor).await?;
-    let boundary = executor
-        .boundary()
-        .filter(|boundary| boundary.is_snapshot())
-        .ok_or_else(|| Error::ValidationError("采购责任列表缺少授权快照".into()))?;
+    let boundary = executor.boundary().filter(|boundary| boundary.is_snapshot()).ok_or_else(|| {
+        Error::ValidationError("暂时无法确认可查看的采购责任规则，请从第一页重新查询".into())
+    })?;
 
     let filter = ProcurementResponsibilityRuleFilter {
         rule_type: params.rule_type,
@@ -103,7 +104,7 @@ async fn rule_list_page(
     let items = to_rule_list_views(page.items, &page.facts);
 
     if !boundary.is_current(executor) {
-        return Err(Error::ValidationError("采购责任列表读取跨越授权快照".into()));
+        return Err(Error::ValidationError("本次采购责任规则查询已失效，请从第一页重新查询".into()));
     }
     Ok(ProcurementResponsibilityRulePageView {
         items,
@@ -268,7 +269,7 @@ mod tests {
         let source = Source::default();
         let result = rule_list_page(&source, params(), &actor(), &mut ReadExecutor::default()).await;
         assert!(
-            matches!(result, Err(Error::ValidationError(message)) if message == "采购责任列表读取必须使用快照事务")
+            matches!(result, Err(Error::ValidationError(message)) if message == "暂时无法查看采购责任规则，请刷新列表；如仍有问题，请联系管理员")
         );
         assert!(source.calls.lock().unwrap().is_empty());
     }
@@ -280,7 +281,7 @@ mod tests {
         let mut executor = SnapshotExecutor::default();
         let result = rule_list_page(&source, params(), &actor(), &mut executor).await;
         assert!(
-            matches!(result, Err(Error::ValidationError(message)) if message == "采购责任列表读取跨越授权快照")
+            matches!(result, Err(Error::ValidationError(message)) if message == "本次采购责任规则查询已失效，请从第一页重新查询")
         );
     }
 }

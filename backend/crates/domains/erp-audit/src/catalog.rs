@@ -488,7 +488,7 @@ pub fn registered_action(action: &str, resource_type: &str) -> Result<AuditActio
     let action = REGISTERED_ACTIONS
         .iter()
         .find(|metadata| metadata.code == action && metadata.resource_type == resource_type)
-        .ok_or_else(|| Error::ValidationError("业务审计动作与资源类型未登记".to_string()))?;
+        .ok_or_else(|| Error::ValidationError("此业务操作尚未配置审计记录，请联系管理员".to_string()))?;
     action.validate()?;
     Ok(*action)
 }

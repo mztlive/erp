@@ -19,6 +19,7 @@ use erp_supply::entity::supplier_fulfillment::{
     SupplierFulfillmentItem, SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierOrderAction,
     SupplierOrderActionType, SupplierOrderStatusHistory,
 };
+use erp_supply::order_tracking::TrackingState;
 use erp_supply::order_tracking::repository::OrderTrackingExt;
 use erp_supply::repository::prelude::*;
 use erp_supply::repository::{SupplierApiExt, SupplierFulfillmentExt};
@@ -59,7 +60,7 @@ impl OrderActionProjection {
         block_supplier_order_domain_actions(
             blockers,
             "AUTOMATIC_API_EXECUTION",
-            "此订单由采购 API 流程自动执行和补查，请使用接口配送资料或来源采购处理",
+            "此订单由系统自动向供应商下单和查询，请在来源采购单或供应商配送资料中处理",
         );
         Self { target_supplier_action_id: None, last_investigation: None, allowed_actions: Vec::new() }
     }
@@ -161,7 +162,9 @@ impl SupplierFulfillmentDetailReadService {
         executor: &mut dyn Executor,
     ) -> Result<SupplierFulfillmentOrderDetailView> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-            return Err(Error::ValidationError("供应商履约详情读取必须使用快照事务".into()));
+            return Err(Error::ValidationError(
+                "暂时无法查看供应商履约详情，请从供应商履约列表重新打开".into(),
+            ));
         }
 
         let (order, formal, access) =
@@ -191,7 +194,9 @@ impl SupplierFulfillmentDetailReadService {
                 .await?
                 .ok_or_else(|| Error::NotFound("供应商履约订单不存在或无权查看".into()))?;
             if formal.subject_version != order.base.version.to_string() {
-                return Err(Error::BusinessLogicError("正式任务与当前供应商履约订单不匹配".into()));
+                return Err(Error::BusinessLogicError(
+                    "这条待办不属于当前供应商订单，请从工作台打开对应待办".into(),
+                ));
             }
             return Ok((order, Some(formal), DetailReadAccess::Task(Box::new(access))));
         }
@@ -256,7 +261,7 @@ impl SupplierFulfillmentDetailReadService {
                 masked: None,
                 can_reveal: false,
                 blocker_code: Some("ADDRESS_REVEAL_NOT_REGISTERED".to_string()),
-                blocker_message: Some("当前 W26 尚未注册可审计的短时地址揭示入口".to_string()),
+                blocker_message: Some("此处不能查看完整收货地址，请联系采购经办人核对".to_string()),
             },
             work_item: None,
             target_supplier_action_id: projection.target_supplier_action_id,
@@ -274,12 +279,10 @@ impl SupplierFulfillmentDetailReadService {
         id: &str,
         executor: &mut dyn Executor,
     ) -> Result<(Option<String>, Option<String>, Option<String>)> {
-        let tracking_error = self
-            .db
-            .supplier_order_tracking()
-            .find_by_id(id, executor)
-            .await?
-            .and_then(|tracking| tracking.last_error);
+        let tracking_error =
+            self.db.supplier_order_tracking().find_by_id(id, executor).await?.and_then(|tracking| {
+                tracking.last_error.map(|_| tracking_error_note(tracking.state).to_owned())
+            });
         let purchase_order = if let Some(execution) =
             self.db.supplier_api_order_executions().find_by_id(id, executor).await?
         {
@@ -381,7 +384,7 @@ impl SupplierFulfillmentDetailReadService {
                 block_supplier_order_domain_actions(
                     blockers,
                     "CURRENT_RESPONSIBILITY_REQUIRED",
-                    "当前账号不是开放任务的当前责任人",
+                    "当前账号不是这条待办的负责人，请联系待办负责人处理",
                 );
                 false
             } else {
@@ -391,7 +394,7 @@ impl SupplierFulfillmentDetailReadService {
             block_supplier_order_domain_actions(
                 blockers,
                 "FORMAL_WORK_ITEM_REQUIRED",
-                "当前订单存在正式异常任务，必须从该待办携带明确任务身份进入",
+                "当前订单有待处理的异常，请从工作台打开对应待办",
             );
             false
         } else {
@@ -428,7 +431,7 @@ impl SupplierFulfillmentDetailReadService {
             action_blockers.push(supplier_order_blocker(
                 SupplierOrderAllowedAction::Replay.as_str(),
                 "VERIFIED_NO_RESULT_REQUIRED",
-                "只有最新调查证据明确证明原下单未形成结果，且原能力仍启用时才能重放",
+                "请先核实原操作未产生结果，并确认仍可向供应商办理，再重新发起",
             ));
         }
 
@@ -449,9 +452,9 @@ impl SupplierFulfillmentDetailReadService {
                     "FORMAL_WORK_ITEM_REQUIRED"
                 },
                 if formal_entry {
-                    "必须先取得与当前业务事实一致的最新已验证终态证据"
+                    "请先核实供应商的最终处理结果，并补齐与当前订单一致的凭据"
                 } else {
-                    "确认终态并完成任务只允许从明确的 W26 正式待办入口执行"
+                    "请从工作台打开对应的异常待办，再确认最终结果并完成待办"
                 },
             ));
         }
@@ -488,9 +491,9 @@ impl SupplierFulfillmentDetailReadService {
                     "SUPPLIER_CONNECTION_UNAVAILABLE"
                 },
                 if connection_active {
-                    "供应商接口不支持结果查询"
+                    "无法自动查询这项操作的结果，请联系供应商核对"
                 } else {
-                    "供应商接口未配置，且当前业务事实尚不能证明终态"
+                    "供应商连接不可用，且尚未确认最终结果，请联系供应商核对，勿重复发起"
                 },
             ));
         }
@@ -529,9 +532,17 @@ fn ensure_task_target(task: &AuthorizedTaskFact, id: &str) -> Result<()> {
     ) || task.business_object_type != W26_BUSINESS_OBJECT_TYPE
         || task.business_object_id != id
     {
-        return Err(Error::BusinessLogicError("正式任务与当前供应商履约订单不匹配".into()));
+        return Err(Error::BusinessLogicError("这条待办不属于当前供应商订单，请从工作台打开对应待办".into()));
     }
     Ok(())
+}
+
+fn tracking_error_note(state: TrackingState) -> &'static str {
+    match state {
+        TrackingState::Complete => "原订单已停止跟踪，请在来源采购单核对最新履约安排",
+        TrackingState::Manual => "供应商履约进度需要人工核对，请联系采购经办人确认",
+        TrackingState::Polling => "暂时无法确认供应商履约进度，请稍后查看或联系采购经办人",
+    }
 }
 
 fn display_blockers(has_supplier_name: bool) -> Vec<SupplierOrderActionBlockerView> {
@@ -540,13 +551,13 @@ fn display_blockers(has_supplier_name: bool) -> Vec<SupplierOrderActionBlockerVi
         blockers.push(supplier_order_blocker(
             "VIEW_SUPPLIER_NAME",
             "SUPPLIER_NAME_MISSING",
-            "供应商主体或当前名称修订缺失，禁止以供应商 ID 伪装名称",
+            "供应商名称资料不完整，请联系供应商资料维护人员核对",
         ));
     }
     blockers.push(supplier_order_blocker(
         "REVEAL_ADDRESS",
         "ADDRESS_REVEAL_NOT_REGISTERED",
-        "当前 W26 尚未注册可审计的短时地址揭示入口",
+        "此处不能查看完整收货地址，请联系采购经办人核对",
     ));
     blockers
 }
@@ -649,7 +660,7 @@ mod authorization_tests {
             .detail_snapshot("order", &params, &actor, &DeniedTask, &mut ReadExecutor::default())
             .await;
         assert!(
-            matches!(result, Err(Error::ValidationError(reason)) if reason == "供应商履约详情读取必须使用快照事务")
+            matches!(result, Err(Error::ValidationError(reason)) if reason == "暂时无法查看供应商履约详情，请从供应商履约列表重新打开")
         );
 
         let result = service

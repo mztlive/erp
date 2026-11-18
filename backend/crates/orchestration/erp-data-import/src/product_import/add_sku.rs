@@ -186,7 +186,8 @@ pub(super) fn sku_signature(row: &NormalizedImportRow) -> Result<String> {
             value_code: entry.attribute_value_code.clone(),
         })
         .collect::<Vec<_>>();
-    compute_specification_signature(&entries).map_err(|error| Error::BusinessLogicError(error.to_string()))
+    compute_specification_signature(&entries)
+        .map_err(|_| Error::BusinessLogicError("无法识别这行商品规格，请核对报价表中的规格名称和选项".into()))
 }
 
 /// 继承公司计量单位并维护独立三价；新编号留空，由商品服务按全部历史 SKU 统一取号。

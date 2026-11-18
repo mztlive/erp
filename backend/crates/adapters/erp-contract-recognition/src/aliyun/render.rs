@@ -50,9 +50,12 @@ impl PdfFile {
     /// # 错误
     /// 超时返回 `OCR_RENDER_TIMEOUT`；程序不可用返回 `OCR_RENDER_UNAVAILABLE`；空图、超限、非 PNG 或进程失败返回渲染失败或 `OCR_IMAGE_SIZE`。
     pub(super) async fn page(&self, number: u32) -> Result<Vec<u8>> {
-        timeout(Duration::from_secs(20), self.render(number))
-            .await
-            .map_err(|_| ImportFailure::new("OCR_RENDER_TIMEOUT", "合同页面转图超时，请检查 PDF 后重试"))?
+        timeout(Duration::from_secs(20), self.render(number)).await.map_err(|_| {
+            ImportFailure::new(
+                "OCR_RENDER_TIMEOUT",
+                "合同页面无法及时读取，请用清晰、体积较小的 PDF 重新上传",
+            )
+        })?
     }
 
     async fn render(&self, number: u32) -> Result<Vec<u8>> {
@@ -75,10 +78,7 @@ impl PdfFile {
             .kill_on_drop(true)
             .spawn()
             .map_err(|_| {
-                ImportFailure::new(
-                    "OCR_RENDER_UNAVAILABLE",
-                    "PDF 转图服务不可用，请联系管理员检查 Poppler 配置",
-                )
+                ImportFailure::new("OCR_RENDER_UNAVAILABLE", "合同页面读取服务暂不可用，请联系管理员")
             })?;
 
         let output = child.stdout.take().ok_or_else(render_error)?;
@@ -100,13 +100,13 @@ async fn bounded_image(reader: impl AsyncRead + Unpin) -> Result<Vec<u8>> {
     if bytes.is_empty() || bytes.len() > MAX_IMAGE_BYTES {
         return Err(ImportFailure::new(
             "OCR_IMAGE_SIZE",
-            "合同页面转图为空或超过 10 MB，请调整扫描文件后重试",
+            "合同页面为空或图片过大，请检查扫描件并压缩后重新上传",
         ));
     }
     Ok(bytes)
 }
 fn render_error() -> ImportFailure {
-    ImportFailure::new("OCR_RENDER_FAILED", "合同页面无法转为图片，请检查 PDF 后重试")
+    ImportFailure::new("OCR_RENDER_FAILED", "合同页面无法读取，请确认 PDF 可正常打开后重新上传")
 }
 
 #[cfg(test)]

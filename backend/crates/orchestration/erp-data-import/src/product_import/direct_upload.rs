@@ -90,7 +90,7 @@ impl ProductImportProcess {
         self.prepare_attachment_upload(actor).await?;
         require_bound_object_key(object_key, request_id)?;
         if !(1..=10_000).contains(&part_number) {
-            return Err(Error::ValidationError("分片序号必须在 1-10000 之间".to_string()));
+            return Err(Error::ValidationError("本次文件上传进度无法继续，请重新选择报价表上传".to_string()));
         }
         self.storage
             .presign_upload_part(
@@ -128,7 +128,7 @@ impl ProductImportProcess {
         validate_byte_size(req.byte_size)?;
         require_bound_object_key(&req.object_key, &req.request_id)?;
         if upload_id.trim().is_empty() {
-            return Err(Error::ValidationError("分片上传标识不能为空".to_string()));
+            return Err(Error::ValidationError("本次上传会话已失效，请重新选择报价表上传".to_string()));
         }
 
         let parts = req
@@ -233,7 +233,9 @@ impl ProductImportProcess {
         }
         if bytes.len() < 4 || &bytes[..2] != b"PK" {
             let _ = self.storage.delete(&req.object_key).await;
-            return Err(Error::ValidationError("文件不是有效的 Excel 工作簿".to_string()));
+            return Err(Error::ValidationError(
+                "无法读取此工作簿，请用报价表模板重新另存为 .xlsx 后上传".to_string(),
+            ));
         }
         Ok(Arc::new(bytes))
     }
@@ -269,7 +271,7 @@ fn direct_object_key(request_id: &str) -> Result<String> {
         || request_id.len() > 64
         || !request_id.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
     {
-        return Err(Error::ValidationError("请求身份非法，请重新选择文件".to_string()));
+        return Err(Error::ValidationError("本次上传已失效，请重新选择商品报价表".to_string()));
     }
     Ok(format!("{DIRECT_OBJECT_KEY_PREFIX}/{request_id}.xlsx"))
 }
@@ -277,7 +279,7 @@ fn direct_object_key(request_id: &str) -> Result<String> {
 /// 校验对象键确由请求身份推导，防止操作他人直传对象。
 fn require_bound_object_key(object_key: &str, request_id: &str) -> Result<()> {
     if object_key != direct_object_key(request_id)? {
-        return Err(Error::ValidationError("对象键与请求身份不一致，请重新上传".to_string()));
+        return Err(Error::ValidationError("当前文件不属于本次导入，请重新上传商品报价表".to_string()));
     }
     Ok(())
 }

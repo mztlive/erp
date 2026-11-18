@@ -104,7 +104,9 @@ impl IntegrationCenterReadService {
         let mut items =
             self.db.work_items().find_unique_for_integration_error_task(task_id, executor).await?;
         if items.len() > 1 {
-            return Err(Error::ConflictError("错误任务存在多个正式责任关联".to_string()));
+            return Err(Error::ConflictError(
+                "这条异常关联了多个处理待办，请联系管理员核对负责的待办".to_string(),
+            ));
         }
         Ok(items.pop())
     }

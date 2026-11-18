@@ -540,7 +540,7 @@ pub(super) fn required_maintainer(req: &SaveSupplierProfileRequest) -> Result<St
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
-        .ok_or_else(|| Error::ValidationError("供应商维护人不能为空".into()))
+        .ok_or_else(|| Error::ValidationError("请选择供应商维护人".into()))
 }
 
 /// 读取新建能力的显式负责人。每个能力代码都必须有非空负责人。
@@ -562,7 +562,7 @@ pub(super) fn capability_owners_of(
             .capability_owners
             .iter()
             .find(|item| item.capability_code == *code && !item.owner_user_id.trim().is_empty())
-            .ok_or_else(|| Error::ValidationError("供给能力负责人必须显式指定".into()))?;
+            .ok_or_else(|| Error::ValidationError("请选择供给能力负责人".into()))?;
         owners.push((*code, owner.owner_user_id.trim().to_string()));
     }
     Ok(owners)

@@ -138,21 +138,23 @@ impl AccessFactsPort for FinancialTaskFacts {
         .contains(&context.permission)
             || context.resource != context.permission.resource()
         {
-            return Err(IdentityError::ValidationError("财务任务事实与权限资源错配".into()));
+            return Err(IdentityError::ValidationError(
+                "当前待办不支持此项财务操作，请从对应待办办理".into(),
+            ));
         }
 
         let task_context = AccessContext { resource: "work_item".into(), ..context.clone() };
         let mut facts = self.tasks.load(&task_context, targets, executor).await?;
         if facts.iter().any(|fact| fact.resource != "work_item") {
-            return Err(IdentityError::ValidationError("任务 Facts 资源错配".into()));
+            return Err(IdentityError::ValidationError("当前待办与所办财务事项不符，请重新选择待办".into()));
         }
 
         let mut sources = self.sources.load(context, targets, executor).await?;
         for object in &mut facts {
             object.resource = context.resource.clone();
-            object.relations = sources
-                .remove(&object.id)
-                .ok_or_else(|| IdentityError::ValidationError("缺少财务任务的真实业务来源".into()))?;
+            object.relations = sources.remove(&object.id).ok_or_else(|| {
+                IdentityError::ValidationError("找不到财务待办关联的业务单据，请联系管理员核对".into())
+            })?;
         }
         Ok(facts)
     }
@@ -209,9 +211,9 @@ async fn source_relations(
     context: &AccessContext,
     executor: &mut dyn Executor,
 ) -> IdentityResult<BTreeMap<RelationKey, RelatedObjects>> {
-    let port = financial_facts
-        .get(&context.resource)
-        .ok_or_else(|| IdentityError::ValidationError("缺少财务任务来源 Facts 绑定".into()))?;
+    let port = financial_facts.get(&context.resource).ok_or_else(|| {
+        IdentityError::ValidationError("无法核对财务待办关联的单据，请联系管理员检查待办设置".into())
+    })?;
     let ids = ResourceTargets::new(&[&task.business_object_id])?;
     let mut objects = port.load(context, &ids, executor).await?;
     if objects.len() != 1

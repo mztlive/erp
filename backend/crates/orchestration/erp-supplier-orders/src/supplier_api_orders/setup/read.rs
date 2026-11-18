@@ -54,7 +54,7 @@ impl SupplierApiOrderProcess {
             .supplier_api_order_executions()
             .find_by_id(id, executor)
             .await?
-            .ok_or_else(|| Error::NotFound("此订单没有 API 自动执行记录".into()))
+            .ok_or_else(|| Error::NotFound("此订单未登记供应商自动处理记录，请从采购单核对下单方式".into()))
     }
 
     pub(in super::super) async fn setup_view(
@@ -86,12 +86,10 @@ impl SupplierApiOrderProcess {
             .await?
             .ok_or_else(|| Error::NotFound("对象不存在或无权访问".into()))?;
 
-        let execution = self
-            .db
-            .supplier_api_order_executions()
-            .find_by_id(id, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("此订单没有 API 自动执行记录".into()))?;
+        let execution =
+            self.db.supplier_api_order_executions().find_by_id(id, executor).await?.ok_or_else(|| {
+                Error::NotFound("此订单未登记供应商自动处理记录，请从采购单核对下单方式".into())
+            })?;
         Ok((access, execution))
     }
 
@@ -104,7 +102,7 @@ impl SupplierApiOrderProcess {
         let snapshot = execution.request_encrypted.as_ref().map(|_| self.decode(execution)).transpose()?;
         let (requirement, unavailable) = match self.setup_connector(execution, executor).await {
             Ok(connector) => (Some(connector.address_requirement()), None),
-            Err(error) => (None, Some(error.to_string())),
+            Err(error) => (None, Some(error.supplier_order_message())),
         };
 
         let (tree, shipments) = self.execution_progress(execution, executor).await?;

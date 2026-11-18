@@ -278,10 +278,10 @@ pub struct PlaceFulfillmentOrderRequest {
     #[validate(range(min = 1, message = "拆单序号必须大于 0"))]
     pub split_no: u32,
     /// 履约地址快照加密值（调用方已加密，本接口按不透明值保存）。
-    #[validate(custom(function = "non_blank", message = "履约地址快照不能为空"))]
+    #[validate(custom(function = "non_blank", message = "缺少履约地址，请核对地址后重试"))]
     pub address_snapshot_encrypted: String,
     /// 履约地址快照 HMAC 查询指纹。
-    #[validate(custom(function = "non_blank", message = "履约地址查询指纹不能为空"))]
+    #[validate(custom(function = "non_blank", message = "无法核对履约地址，请重新选择或确认地址"))]
     pub address_snapshot_fingerprint: String,
     /// 履约明细（至少一行）。
     #[validate(length(min = 1, message = "履约明细至少一行"))]

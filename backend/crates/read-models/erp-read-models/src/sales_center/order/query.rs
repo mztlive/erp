@@ -142,7 +142,9 @@ impl SalesOrderReadService {
             return Ok(blocked_purchase_creation_access(message));
         }
         let Some(actor) = actor else {
-            return Ok(blocked_purchase_creation_access("当前调用缺少供给分配责任上下文"));
+            return Ok(blocked_purchase_creation_access(
+                "此处无法办理供给分配，请从工作台打开对应的供给分配待办",
+            ));
         };
 
         let task_count = match query_tasks(
@@ -157,13 +159,15 @@ impl SalesOrderReadService {
             Ok(tasks) => tasks.len(),
             Err(Error::Forbidden(_) | Error::Unauthenticated(_)) => {
                 return Ok(blocked_purchase_creation_access(
-                    "当前账号不能执行供给分配，请检查账号状态和 purchase_order:create 权限",
+                    "当前账号不能办理供给分配，请联系管理员核对账号状态和创建采购单的权限",
                 ));
             },
             Err(error) => return Err(error),
         };
         if task_count == 0 {
-            return Ok(blocked_purchase_creation_access("当前账号不是该销售单供给分配任务负责人"));
+            return Ok(blocked_purchase_creation_access(
+                "当前账号不是这张销售单的供给分配负责人，请联系对应待办的负责人处理",
+            ));
         }
         Ok(PurchaseCreationAccessView { allowed: true, task_count, blocker: None })
     }
@@ -533,11 +537,11 @@ mod tests {
     /// 未授权账号不能从销售详情推断其名下或他人的采购任务数量。
     #[test]
     fn blocked_purchase_creation_access_is_explicit_and_hides_tasks() {
-        let view = blocked_purchase_creation_access("当前账号缺少 purchase_order:create 权限");
+        let view = blocked_purchase_creation_access("当前账号缺少创建采购单的权限，请联系管理员");
 
         assert!(!view.allowed);
         assert_eq!(view.task_count, 0);
-        assert_eq!(view.blocker.as_deref(), Some("当前账号缺少 purchase_order:create 权限"));
+        assert_eq!(view.blocker.as_deref(), Some("当前账号缺少创建采购单的权限，请联系管理员"));
     }
 
     #[test]

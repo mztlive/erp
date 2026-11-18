@@ -23,7 +23,7 @@ use crate::entity::payable::AllocationAction;
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct RegisterPurchaseInvoiceRequest {
     /// 业务命令幂等键；同键同载荷回放首次登记结果。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
     pub idempotency_key: String,
     /// 发票代码（无代码数电票为空）。
     pub invoice_code: Option<String>,

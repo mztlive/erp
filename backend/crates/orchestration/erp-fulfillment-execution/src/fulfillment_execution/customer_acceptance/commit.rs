@@ -206,7 +206,7 @@ impl PreparedAcceptanceCommit {
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
         if order.base.version != self.req.expected_sales_order_version {
-            return Err(Error::ConflictError("销售单已变化，请刷新履约事实后重试".to_string()));
+            return Err(Error::ConflictError("销售单已变化，请刷新后重新核对履约记录".to_string()));
         }
 
         self.persist(existing, executor).await

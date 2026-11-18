@@ -41,7 +41,7 @@ pub fn cooperation_command<T: Serialize>(
     payload: &T,
 ) -> Result<CommandReceipt> {
     if supplier_id.trim().is_empty() {
-        return Err(Error::Forbidden("供应商绑定无效".into()));
+        return Err(Error::Forbidden("所选供应商与当前登录账号的合作关系不符，请重新选择".into()));
     }
 
     let canonical = CommandReceipt::from_payload(
@@ -75,7 +75,7 @@ impl CooperationReceipt {
     /// 命令范围与申请不一致时拒绝。
     pub fn new(command: &CommandReceipt, application: &CooperationApplication) -> Result<Self> {
         if command.scope_id() != Some(application.base.id.as_str()) {
-            return Err(Error::ValidationError("合作条款命令目标不一致".into()));
+            return Err(Error::ValidationError("本次操作与所选合作条款申请不一致，请刷新后重新选择".into()));
         }
         Ok(Self {
             base: BaseModel::new(command.id().into()),
@@ -106,7 +106,9 @@ impl CooperationReceipt {
             || (self.result.is_some() != (self.status == CooperationStatus::Effective))
             || command.match_structured(&self.command) != StructuredReceiptMatch::SamePayload
         {
-            return Err(Error::ConflictError("幂等键已用于不同合作条款命令".into()));
+            return Err(Error::ConflictError(
+                "本次提交编号已用于另一项合作条款操作，请核对申请状态后再操作".into(),
+            ));
         }
         Ok(())
     }

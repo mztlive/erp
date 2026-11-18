@@ -62,12 +62,12 @@ impl JdVopRuntime {
     /// # 错误
     /// 配置无效或尚未开启技术登记时返回分类错误。
     pub fn new(settings: JdVopConfig) -> ConnectorResult<Self> {
-        settings.validate().map_err(|_| mapping("京东 VOP 技术配置无效"))?;
+        settings.validate().map_err(|_| mapping("京东接入设置不完整，请联系管理员核对连接配置"))?;
         if !settings.enabled {
             return Err(error(
                 SupplierFailureClass::CapabilityGap,
                 "JD_VOP_DISABLED",
-                "京东 VOP 技术配置未登记",
+                "尚未登记京东接入设置，请联系管理员完成配置",
             ));
         }
         Ok(Self {
@@ -345,7 +345,7 @@ impl SupplierReferenceRegistry for JdVopRuntime {
             Err(classified(error(
                 SupplierFailureClass::CapabilityGap,
                 "JD_VOP_MANUAL_REFERENCE_UNSUPPORTED",
-                "京东技术配置由服务端部署绑定，请联系管理员",
+                "京东接入设置由管理员维护，请联系管理员核对连接配置",
             )))
         })
     }

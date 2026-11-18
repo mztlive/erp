@@ -94,7 +94,7 @@ async fn authorize(
             && !policy.enforce_owner(candidate.owner_user_id.as_str(), executor).await?
         {
             return Err(Error::ValidationError(format!(
-                "采购负责人 {} 缺少 purchase_order:create 权限",
+                "采购负责人 {} 无权创建采购单，请调整负责人或联系管理员配置权限",
                 candidate.owner_user_id
             )));
         }
@@ -120,7 +120,7 @@ async fn revalidate(
     let actual = plan_identities(candidates)?;
     let expected_identity = expected.identities();
     if actual != expected_identity {
-        return Err(Error::ConflictError("采购责任规则或目录事实已变化，请重新提交审批".to_string()));
+        return Err(Error::ConflictError("采购责任规则或相关基础资料已变化，请重新提交审批".to_string()));
     }
 
     let revision = policy.revision(executor).await?;
@@ -227,7 +227,7 @@ mod tests {
         .unwrap_err();
 
         assert!(
-            matches!(error, Error::ValidationError(message) if message == "采购负责人 owner-1 缺少 purchase_order:create 权限")
+            matches!(error, Error::ValidationError(message) if message == "采购负责人 owner-1 无权创建采购单，请调整负责人或联系管理员配置权限")
         );
         assert_eq!(*fixture.events.lock().unwrap(), ["revision", "enforce:owner-1"]);
     }
@@ -277,7 +277,7 @@ mod tests {
         .unwrap_err();
 
         assert!(
-            matches!(error, Error::ConflictError(message) if message == "采购责任规则或目录事实已变化，请重新提交审批")
+            matches!(error, Error::ConflictError(message) if message == "采购责任规则或相关基础资料已变化，请重新提交审批")
         );
         assert!(fixture.events.lock().unwrap().is_empty());
     }

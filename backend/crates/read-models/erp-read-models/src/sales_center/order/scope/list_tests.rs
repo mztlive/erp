@@ -215,7 +215,9 @@ async fn a_stale_page_version_stops_before_enrichment_and_unscoped_execution_sto
 
     let reader = ListReader::default();
     let result = read_list(&reader, &params(None), &actor(), &mut ReadExecutor::default()).await;
-    assert!(matches!(result, Err(Error::ValidationError(reason)) if reason == "销售列表必须使用快照事务"));
+    assert!(
+        matches!(result, Err(Error::ValidationError(reason)) if reason == "暂时无法查看销售单列表，请从第一页重新查询")
+    );
     assert!(reader.stages().is_empty());
 }
 

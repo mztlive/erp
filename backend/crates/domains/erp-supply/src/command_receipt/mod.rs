@@ -141,7 +141,7 @@ impl SupplyCommandReceipt {
     pub fn verify(&self, fingerprint: &str, resource_id: Option<&str>, conflict_message: &str) -> Result<()> {
         self.validate()?;
         if resource_id.is_some_and(|id| self.resource_id != id) {
-            return Err(Error::ConflictError("幂等收据与当前业务资源不一致".to_string()));
+            return Err(Error::ConflictError("同一次提交已用于其他业务单据，请先查看原操作结果".to_string()));
         }
         if self.fingerprint != fingerprint {
             return Err(Error::ConflictError(conflict_message.to_string()));

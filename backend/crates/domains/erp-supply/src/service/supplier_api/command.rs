@@ -31,7 +31,7 @@ impl CommandIdentity {
     /// # 错误
     /// 幂等键经 trim 后为空时返回 `ValidationError`。
     pub fn new(id: &str, actor_id: &str, command: &SupplierConnectionCommand) -> Result<Self> {
-        required(Some(command.idempotency_key.as_str()), "幂等键不能为空")?;
+        required(Some(command.idempotency_key.as_str()), "本次操作缺少提交标识，请刷新页面后重新操作")?;
         let idempotency_hash =
             digest(&[actor_id, id, command.action.as_str(), command.idempotency_key.trim()]);
         let fingerprint = command_fingerprint(id, command);
@@ -159,7 +159,9 @@ pub fn replay_confirmation(
     fingerprint: &str,
 ) -> Result<ConfirmBusinessCapabilityRequirementResult> {
     if confirmation.request_fingerprint != fingerprint {
-        return Err(Error::ConflictError("同一幂等键不能提交不同参数".to_string()));
+        return Err(Error::ConflictError(
+            "本次供应商操作与之前提交的内容不一致，请先查询原操作结果".to_string(),
+        ));
     }
     let audit_event_id = format!("w20-audit-{}", digest(&[&confirmation.base.id]));
     Ok(ConfirmBusinessCapabilityRequirementResult {

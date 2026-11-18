@@ -69,12 +69,10 @@ impl CatalogPortalService {
 
         let mut skus = Vec::with_capacity(input.skus.len());
         for row in &input.skus {
-            let mapped = command
-                .normalized
-                .sku_mappings
-                .iter()
-                .find(|sku| sku.row_id == row.row_id)
-                .ok_or_else(|| Error::ValidationError("SKU映射缺失".into()))?;
+            let mapped =
+                command.normalized.sku_mappings.iter().find(|sku| sku.row_id == row.row_id).ok_or_else(
+                    || Error::ValidationError("供应商规格尚未匹配公司商品规格，请先完成匹配".into()),
+                )?;
             skus.push(self.resolve_sku(&product, row, mapped, &command.actor, executor).await?);
         }
         Ok(CatalogDraftResult { product_id: product.base.id, product_created, skus })
@@ -203,15 +201,15 @@ impl CatalogPortalService {
                 || sku.specification_signature != signature
                 || sku.stable.current_revision_id.as_deref() != Some(target.revision_id.as_str())
             {
-                return Err(Error::ConflictError("匹配SKU身份、单位、规格或修订已变化".into()));
+                return Err(Error::ConflictError(
+                    "所选商品规格或计量单位已更新，请刷新后重新核对匹配".into(),
+                ));
             }
 
-            let revision = self
-                .db
-                .sku_revisions()
-                .find_by_id(&target.revision_id, executor)
-                .await?
-                .ok_or_else(|| Error::ConflictError("匹配SKU修订不存在".into()))?;
+            let revision =
+                self.db.sku_revisions().find_by_id(&target.revision_id, executor).await?.ok_or_else(
+                    || Error::ConflictError("找不到所选商品规格的版本，请刷新后重新匹配".into()),
+                )?;
             if row
                 .barcode
                 .as_deref()

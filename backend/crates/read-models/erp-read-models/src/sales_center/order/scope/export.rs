@@ -113,7 +113,7 @@ async fn export_page(
     executor: &mut dyn Executor,
 ) -> Result<Value> {
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-        return Err(Error::ValidationError("销售导出必须使用快照事务".into()));
+        return Err(Error::ValidationError("暂时无法导出销售单，请返回销售单列表重新查询后导出".into()));
     }
 
     let initial = reader.page(params, actor, executor).await?;

@@ -9,7 +9,7 @@ use validator::Validate;
 #[serde(deny_unknown_fields)]
 pub struct HandoverSupplierRequest {
     /// 期望的供应商乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub expected_version: u64,
     /// 目标整体维护人。
     #[validate(custom(function = "non_blank", message = "目标维护人不能为空"))]
@@ -20,7 +20,7 @@ pub struct HandoverSupplierRequest {
     #[validate(length(min = 1, max = 512, message = "交接原因不能为空"))]
     pub reason: String,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "缺少本次操作的提交编号，请重新发起操作"))]
     pub idempotency_key: String,
 }
 
@@ -29,7 +29,7 @@ pub struct HandoverSupplierRequest {
 #[serde(deny_unknown_fields)]
 pub struct HandoverSupplierCapabilityRequest {
     /// 期望的能力乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub expected_version: u64,
     /// 目标能力负责人。
     #[validate(custom(function = "non_blank", message = "目标能力负责人不能为空"))]
@@ -38,7 +38,7 @@ pub struct HandoverSupplierCapabilityRequest {
     #[validate(length(min = 1, max = 512, message = "交接原因不能为空"))]
     pub reason: String,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "缺少本次操作的提交编号，请重新发起操作"))]
     pub idempotency_key: String,
 }
 

@@ -165,7 +165,7 @@ pub struct CreateBulkSelectionSnapshotRequest {
     /// 选择类型。
     pub selection_type: SelectionType,
     /// 数据截止水位（秒级时间戳）。
-    #[validate(range(min = 1, message = "数据截止水位必须大于 0"))]
+    #[validate(range(min = 1, message = "数据统计截止时间无效，请重新选择"))]
     pub data_cutoff_at: u64,
     /// 有效期截止时间（秒级时间戳）。
     #[validate(range(min = 1, message = "有效期截止时间必须大于 0"))]
@@ -216,7 +216,7 @@ impl From<crate::repository::BulkSelectionItemRow> for BulkSelectionItemView {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ConfirmBulkSelectionSnapshotRequest {
     /// 期望的乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
 }
 
@@ -224,7 +224,7 @@ pub struct ConfirmBulkSelectionSnapshotRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ExpireBulkSelectionSnapshotRequest {
     /// 期望的乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
 }
 
@@ -528,7 +528,7 @@ impl From<crate::repository::BackgroundJobItemRow> for BackgroundJobItemView {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CancelBackgroundJobRequest {
     /// 期望的乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
 }
 
@@ -560,7 +560,7 @@ pub struct CancelBackgroundJobFailure {
     pub job_id: String,
     /// 错误分类（`class()` 的稳定分类名，如 `Conflict`/`Internal`）。
     pub error_class: String,
-    /// 面向排查的错误摘要（不含敏感原值）。
+    /// 面向操作人员的失败说明。
     pub message: String,
 }
 
@@ -577,7 +577,25 @@ impl CancelBackgroundJobFailure {
     /// # 错误
     /// 不返回错误。
     pub fn from_error(job_id: String, error: &crate::error::Error) -> Self {
-        Self { job_id, error_class: format!("{:?}", error.class()), message: error.to_string() }
+        use crate::error::Error;
+
+        let message = match error {
+            Error::NotFound(_) => "该后台任务已不存在，请刷新任务列表",
+            Error::Forbidden(_) => "当前账号无权取消该任务，请联系管理员",
+            Error::Unauthenticated(_) => "登录状态已失效，请重新登录后查看任务状态",
+            Error::ConflictError(_) | Error::ReceiptDuplicate(_) | Error::TransientTransaction(_) => {
+                "任务状态可能已变化，请刷新任务列表并核对后再取消"
+            },
+            Error::OutcomeUnknown(_) => "暂时无法确认任务是否已取消，请先查看当前状态，勿重复提交",
+            Error::ValidationError(_)
+            | Error::InvalidInput(_)
+            | Error::BusinessLogicError(_)
+            | Error::Logic(_) => "当前任务无法取消，请核对任务状态；如仍无法取消，请联系管理员",
+            Error::Internal(_) | Error::RepositoryError(_) => {
+                "暂时无法取消该任务，请稍后查看任务状态；如仍无法取消，请联系管理员"
+            },
+        };
+        Self { job_id, error_class: format!("{:?}", error.class()), message: message.into() }
     }
 }
 
@@ -588,6 +606,17 @@ mod tests {
     use super::{BackgroundJobListParams, BulkSelectionSnapshotListParams, SortDir};
     use crate::dto::normalize_sort;
     use crate::entity::bulk_job::{JobStatus, JobType, SelectionStatus, SelectionType};
+
+    #[test]
+    fn cancellation_failure_keeps_classification_without_exposing_diagnostics() {
+        let error = crate::Error::Internal("后台存储读取失败：private diagnostic".into());
+        let failure = super::CancelBackgroundJobFailure::from_error("job-1".into(), &error);
+
+        assert_eq!(failure.job_id, "job-1");
+        assert_eq!(failure.error_class, "Internal");
+        assert!(failure.message.contains("请稍后查看任务状态"));
+        assert!(!failure.message.contains("private diagnostic"));
+    }
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields() {

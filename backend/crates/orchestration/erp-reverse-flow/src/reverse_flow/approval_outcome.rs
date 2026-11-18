@@ -53,7 +53,10 @@ pub(super) async fn persist_approval_outcome(
             persist_payment_reversal(db, id, action, expected_subject_version, executor).await?;
         },
         other => {
-            return Err(Error::ValidationError(format!("{} 不属于退货退款审批动作端口", other.label())));
+            return Err(Error::ValidationError(format!(
+                "{}不适用此退货或退款审批操作，请从对应审批待办办理",
+                other.label()
+            )));
         },
     }
 

@@ -56,7 +56,7 @@ impl SalesAttribution {
             || self.attribution_version != 1
             || self.organization_version == 0
         {
-            return Err(Error::from("销售首次生效必须具备完整且匹配的人员和业务组织归属快照"));
+            return Err(Error::from("销售单首次生效前，请核对人员和业务组织归属是否完整且与销售单一致"));
         }
         Ok(())
     }

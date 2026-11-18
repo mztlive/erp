@@ -88,8 +88,9 @@ pub(super) fn parse_files(files: &[Value], source: &Value, prior: &Value) -> Res
     let mut total = 0;
     for file in files {
         let name = required(file, "file_name")?;
-        let bytes =
-            STANDARD.decode(required(file, "content_base64")?).map_err(|_| invalid("报价文件编码无效"))?;
+        let bytes = STANDARD
+            .decode(required(file, "content_base64")?)
+            .map_err(|_| invalid("报价文件无法读取，请重新选择原报价表上传"))?;
         total += bytes.len();
         if total > 50 * 1024 * 1024 {
             return Err(invalid("报价文件合计不得超过 50 MiB"));
@@ -97,7 +98,8 @@ pub(super) fn parse_files(files: &[Value], source: &Value, prior: &Value) -> Res
 
         match parse_file(name, &bytes, source, prior) {
             Ok(file) => preview.extend(file),
-            Err(error) => preview.issues.push(format!("{name}：{error}")),
+            Err(Error::ValidationError(message)) => preview.issues.push(format!("{name}：{message}")),
+            Err(_) => preview.issues.push(format!("{name}：报价表无法读取，请检查文件后重新上传")),
         }
     }
 
@@ -113,7 +115,9 @@ fn parse_file(name: &str, bytes: &[u8], source: &Value, prior: &Value) -> Result
     }
     let sheets = quote_sheets(bytes)?;
     let metadata = metadata(&sheets, &source["inquiry"])?;
-    let sheet = sheets.get("报价表").ok_or_else(|| invalid("缺少报价表"))?;
+    let sheet = sheets
+        .get("报价表")
+        .ok_or_else(|| invalid("文件缺少「报价表」工作表，请使用当前询价导出的原报价表"))?;
     metadata.layout.check_headers(sheet)?;
 
     let rows = sheet
@@ -126,7 +130,12 @@ fn parse_file(name: &str, bytes: &[u8], source: &Value, prior: &Value) -> Result
                     ParsedFileRow::Reply(Box::new(LocatedQuote { source: source_label, preview }))
                 },
                 Ok(None) => ParsedFileRow::Blank,
-                Err(error) => ParsedFileRow::Invalid(format!("{source_label}：{error}")),
+                Err(Error::ValidationError(message)) => {
+                    ParsedFileRow::Invalid(format!("{source_label}：{message}"))
+                },
+                Err(_) => ParsedFileRow::Invalid(format!(
+                    "{source_label}：无法核对本行报价，请检查报价内容或联系管理员"
+                )),
             }
         })
         .collect();
@@ -475,16 +484,13 @@ mod tests {
         assert_eq!(result["rows"][0]["source"], "valid.xlsx 第 5 行");
         let issues = result["issues"].as_array().unwrap();
         assert_eq!(issues.len(), 4);
-        assert_eq!(issues[0], format!("wrong.csv：{}", invalid("请选择 XLSX 文件")));
-        assert_eq!(
-            issues[1],
-            format!("valid.xlsx 第 6 行：{}", invalid("可供数量须为非负数，最多 6 位小数"))
-        );
+        assert_eq!(issues[0], "wrong.csv：请选择 XLSX 文件");
+        assert_eq!(issues[1], "valid.xlsx 第 6 行：可供数量须为非负数，最多 6 位小数");
         assert_eq!(issues[2], "valid.xlsx 第 7 行：同一供应商商品有多份回复，请保留一份");
         assert_eq!(issues[3], "again.xlsx 第 5 行：同一供应商商品有多份回复，请保留一份");
         assert!(
             matches!(parse_files(&[json!({"file_name":"bad.xlsx","content_base64":"!"})], &source(), &json!([])),
-            Err(Error::ValidationError(message)) if message == "报价文件编码无效")
+            Err(Error::ValidationError(message)) if message == "报价文件无法读取，请重新选择原报价表上传")
         );
     }
 }

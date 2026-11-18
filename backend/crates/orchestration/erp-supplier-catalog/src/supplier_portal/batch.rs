@@ -192,7 +192,12 @@ impl SupplierPortalProcess {
             let parsed = match parsed {
                 Ok(parsed) => parsed,
                 Err(error) => {
-                    results.push(row_result(&row.row_id, "validation_failed", Some(error.to_string()), None));
+                    results.push(row_result(
+                        &row.row_id,
+                        "validation_failed",
+                        Some(error.row_message()),
+                        None,
+                    ));
                     continue;
                 },
             };
@@ -204,7 +209,16 @@ impl SupplierPortalProcess {
                 Ok(plan) => plan,
                 Err(error) => {
                     let status = if input.recovery_only { "unknown" } else { "validation_failed" };
-                    results.push(row_result(&row.row_id, status, Some(error.to_string()), None));
+                    results.push(row_result(
+                        &row.row_id,
+                        status,
+                        Some(if input.recovery_only {
+                            "尚未确认原操作结果，请保留原内容和操作号，稍后再次核对".into()
+                        } else {
+                            error.row_message()
+                        }),
+                        None,
+                    ));
                     continue;
                 },
             };
@@ -494,7 +508,9 @@ fn parse_row(
     row: &PortalBatchRow,
 ) -> Result<PreparedInput> {
     let mut input = row.input.clone();
-    let map = input.as_object_mut().ok_or_else(|| Error::ValidationError("批量行必须是对象".into()))?;
+    let map = input
+        .as_object_mut()
+        .ok_or_else(|| Error::ValidationError("这行申请资料无法读取，请按表格列重新填写".into()))?;
     map.insert("idempotency_key".into(), Value::String(row.idempotency_key.clone()));
     match mode {
         PortalBatchMode::Availability => {
@@ -570,8 +586,8 @@ fn duplicate_business_units(parsed: &[ParsedRow<'_>]) -> HashMap<String, String>
     for ParsedRow { row, input } in parsed {
         let Ok(input) = input else { continue };
         for unit in business_units(input) {
-            if let Some(previous) = units.insert(unit.clone(), row.row_id.clone()) {
-                let message = format!("行{previous}与行{}重复业务单元{unit}，必须合并后再提交", row.row_id);
+            if let Some(previous) = units.insert(unit, row.row_id.clone()) {
+                let message = "此行与另一行处理的是同一商品或供给，请合并后再提交".to_string();
                 errors.insert(previous, message.clone());
                 errors.insert(row.row_id.clone(), message);
             }
@@ -612,8 +628,7 @@ fn validate_prepared_rows(prepared: &[PreparedRow], results: &mut [PortalBatchRo
         let PreparedRowState::Ready { business_units, .. } = &plan.state else { continue };
         for unit in business_units {
             if let Some(previous) = units.insert(unit.clone(), plan.row.row_id.clone()) {
-                let message =
-                    format!("行{previous}与行{}重复业务单元{unit}，必须合并后再提交", plan.row.row_id);
+                let message = "此行与另一行处理的是同一商品或供给，请合并后再提交".to_string();
                 errors.insert(previous, message.clone());
                 errors.insert(plan.row.row_id.clone(), message);
             }
@@ -637,7 +652,8 @@ fn validate_prepared_rows(prepared: &[PreparedRow], results: &mut [PortalBatchRo
     }
 }
 fn deserialize<T: for<'de> Deserialize<'de>>(value: Value) -> Result<T> {
-    serde_json::from_value(value).map_err(|e| Error::ValidationError(e.to_string()))
+    serde_json::from_value(value)
+        .map_err(|_| Error::ValidationError("这行申请资料不完整或填写有误，请按表格列核对后重新提交".into()))
 }
 fn serialize<T: Serialize>(result: T) -> Result<Value> {
     serde_json::to_value(result).map_err(|e| Error::Internal(e.to_string()))
@@ -665,7 +681,7 @@ fn rejected_row_result(id: &str, rejection: &CommandRejection) -> PortalBatchRow
     row_result(
         id,
         "failed",
-        Some(rejection.clone().into_error().to_string()),
+        Some(rejection.clone().into_error().row_message()),
         Some(json!({"command_outcome":"rejected"})),
     )
 }
@@ -673,12 +689,13 @@ fn rejected_row_result(id: &str, rejection: &CommandRejection) -> PortalBatchRow
 fn execution_row_result(id: &str, recovery_only: bool, result: Result<Value>) -> PortalBatchRowResult {
     match result {
         Ok(value) => row_result(id, "succeeded", None, Some(external_result(value))),
-        Err(error) => row_result(
+        Err(error) if recovery_only || error.command_may_have_committed() => row_result(
             id,
-            if recovery_only || error.command_may_have_committed() { "unknown" } else { "failed" },
-            Some(error.to_string()),
+            "unknown",
+            Some("尚未确认原操作结果，请保留原内容和操作号，稍后再次核对".into()),
             None,
         ),
+        Err(error) => row_result(id, "failed", Some(error.row_message()), None),
     }
 }
 fn batch_rows_valid(rows: &[PortalBatchRowResult]) -> bool {
@@ -807,12 +824,12 @@ mod tests {
             ["first", "invalid", "last"]
         );
         assert!(
-            matches!(&parsed[1].input, Err(Error::ValidationError(message)) if message == "批量行必须是对象")
+            matches!(&parsed[1].input, Err(Error::ValidationError(message)) if message == "这行申请资料无法读取，请按表格列重新填写")
         );
 
         let duplicates = duplicate_business_units(&parsed);
         assert_eq!(duplicates.len(), 2);
-        assert_eq!(duplicates["first"], "行first与行last重复业务单元offering:offering-1，必须合并后再提交");
+        assert_eq!(duplicates["first"], "此行与另一行处理的是同一商品或供给，请合并后再提交");
         assert_eq!(duplicates["first"], duplicates["last"]);
 
         let Ok(PreparedInput::Availability(id, request)) = &parsed[0].input else {
@@ -867,10 +884,7 @@ mod tests {
             Some(json!({"id":"offering-1","version":2,"status":"AVAILABLE","result":null}))
         );
         assert_eq!(results[2].result, Some(json!({"command_outcome":"rejected"})));
-        assert_eq!(
-            results[2].error.as_deref(),
-            Some(Error::ConflictError("原版本已变化".into()).to_string().as_str())
-        );
+        assert_eq!(results[2].error.as_deref(), Some("原版本已变化"));
         assert_eq!(plans.iter().map(PreparedRow::sku_count).collect::<Vec<_>>(), [1, 2, 0]);
         assert!(!batch_rows_valid(&results));
     }
@@ -1161,7 +1175,10 @@ mod tests {
             let result = execution_row_result("original-row", true, Err(error));
             assert_eq!(result.status, "unknown");
             assert_eq!(result.row_id, "original-row");
-            assert!(result.error.is_some());
+            assert_eq!(
+                result.error.as_deref(),
+                Some("尚未确认原操作结果，请保留原内容和操作号，稍后再次核对")
+            );
             assert!(result.result.is_none());
         }
 

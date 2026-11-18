@@ -39,7 +39,7 @@ impl SupplierApiOrderProcess {
         }
 
         if let Err(error) = self.ensure_eligible(&execution).await {
-            execution.defer(error.to_string());
+            execution.defer(error.supplier_order_message());
             return self.persist(&mut execution).await;
         }
 
@@ -103,12 +103,12 @@ impl SupplierApiOrderProcess {
                 let ready = self.address_ready(execution, &snapshot).await;
                 execution.stage =
                     if ready.is_ok() { ApiOrderStage::PrepareAddress } else { ApiOrderStage::AwaitingSetup };
-                execution.blocker = ready.err().map(|error| error.to_string());
+                execution.blocker = ready.err().map(|error| error.supplier_order_message());
                 self.encode(execution, &snapshot)?;
             },
             Err(error) => {
                 execution.stage = ApiOrderStage::AwaitingSetup;
-                execution.blocker = Some(error.to_string());
+                execution.blocker = Some(error.supplier_order_message());
             },
         }
 

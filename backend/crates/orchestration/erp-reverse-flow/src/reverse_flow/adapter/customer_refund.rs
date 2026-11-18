@@ -151,7 +151,7 @@ pub fn execute_customer_refund_domain_action(
         ApprovalDomainAction::CustomerRefundCancelApproval => {
             cancel_customer_refund_to_draft(refund).map_err(Error::from)
         },
-        other => Err(Error::ValidationError(format!("动作 {} 不属于客户退款单", other.as_str()))),
+        _ => Err(Error::ValidationError("该客户退款单不支持此审批操作，请从对应审批待办办理".into())),
     }
 }
 

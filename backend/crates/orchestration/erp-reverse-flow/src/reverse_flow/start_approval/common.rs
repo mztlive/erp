@@ -93,8 +93,8 @@ pub fn build_reverse_start_input(
     }
 
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
-    let actor =
-        ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
+    let actor = ParticipantId::new(actor_id)
+        .map_err(|_| Error::ValidationError("无法确认提交人账号，请重新登录后再提交".into()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
     let bindings =
         reverse_start_bindings(&graph, organization_id, contracts.readable, contracts.empty_definition)?;
@@ -164,26 +164,26 @@ mod tests {
             (
                 DocumentType::CustomerRefund,
                 build_customer_refund_start_input,
-                "客户退款单绑定定义版本与已加载定义不一致",
-                "审批定义没有节点，无法启动客户退款审批",
+                "客户退款单的审批流程版本不一致，请联系管理员核对",
+                "客户退款审批流程没有配置审批步骤，请联系管理员补全",
             ),
             (
                 DocumentType::SupplierRefund,
                 build_supplier_refund_start_input,
-                "供应商退款单绑定定义版本与已加载定义不一致",
-                "审批定义没有节点，无法启动供应商退款审批",
+                "供应商退款单的审批流程版本不一致，请联系管理员核对",
+                "供应商退款审批流程没有配置审批步骤，请联系管理员补全",
             ),
             (
                 DocumentType::PaymentReversal,
                 build_payment_reversal_start_input,
-                "付款冲正单绑定定义版本与已加载定义不一致",
-                "审批定义没有节点，无法启动付款冲正审批",
+                "付款冲正单的审批流程版本不一致，请联系管理员核对",
+                "付款冲正审批流程没有配置审批步骤，请联系管理员补全",
             ),
             (
                 DocumentType::ReceiptReversal,
                 build_receipt_reversal_start_input,
-                "回款冲正单绑定定义版本与已加载定义不一致",
-                "审批定义没有节点，无法启动回款冲正审批",
+                "回款冲正单的审批流程版本不一致，请联系管理员核对",
+                "回款冲正审批流程没有配置审批步骤，请联系管理员补全",
             ),
         ]
     }

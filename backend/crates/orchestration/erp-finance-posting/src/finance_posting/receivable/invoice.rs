@@ -367,7 +367,7 @@ fn ensure_invoice_has_no_adapter() -> Result<()> {
 fn invoice_binding_organization_id(invoice: &Invoice) -> Result<String> {
     let org = invoice.party_id.to_string();
     if org.trim().is_empty() {
-        return Err(Error::ValidationError("发票缺少往来主体，无法构造绑定上下文".to_string()));
+        return Err(Error::ValidationError("发票缺少往来单位，请先补全发票资料".to_string()));
     }
     Ok(org)
 }

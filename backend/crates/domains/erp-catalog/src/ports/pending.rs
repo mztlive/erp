@@ -93,16 +93,16 @@ impl PendingAttachmentBatch for EmptyPendingAttachments {
         }
         let token = value.strip_prefix("pending-file:").unwrap_or("");
         if token.trim().is_empty() {
-            return Err(erp_core::Error::from("临时文件引用 token 不能为空"));
+            return Err(erp_core::Error::from("缺少上传文件的信息，请重新选择并上传文件"));
         }
-        Err(erp_core::Error::from("业务命令引用了未上传的文件"))
+        Err(erp_core::Error::from("所选附件尚未上传，请上传后再提交"))
     }
 
     fn ensure_all_used(&self, used: &HashSet<String>) -> erp_core::Result<()> {
         if used.is_empty() {
             Ok(())
         } else {
-            Err(erp_core::Error::from("存在未被业务命令引用的上传文件"))
+            Err(erp_core::Error::from("有已上传文件未关联到本次操作，请核对附件后再提交"))
         }
     }
 

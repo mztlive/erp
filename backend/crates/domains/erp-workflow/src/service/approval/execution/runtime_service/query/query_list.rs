@@ -122,7 +122,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .as_ref()
             .map(|cursor| {
                 if cursor.sort_time < 0 {
-                    return Err(Error::ValidationError("mine cursor sort_time 不能为负数".to_string()));
+                    return Err(Error::ValidationError(
+                        "我的待审批列表的翻页位置无效，请返回第一页重新查询".to_string(),
+                    ));
                 }
                 Ok((cursor.sort_time, cursor.id.as_str()))
             })

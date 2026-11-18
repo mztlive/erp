@@ -78,7 +78,7 @@ impl ContentHmac {
     pub fn parse(value: impl AsRef<str>) -> Result<Self> {
         let value = value.as_ref().trim().to_ascii_lowercase();
         if value.len() != HMAC_HEX_LEN || !value.chars().all(|ch| ch.is_ascii_hexdigit()) {
-            return Err(Error::from("内容指纹必须是 64 位十六进制字符"));
+            return Err(Error::from("无法确认文件完整性，请重新上传文件"));
         }
         Ok(Self(value))
     }
@@ -332,7 +332,7 @@ impl FileAsset {
     pub fn new(id: FileAssetId, data: FileAssetData) -> Result<Self> {
         let storage_object_key = normalize_required_text(
             data.storage_object_key,
-            "对象键不能为空",
+            "缺少已上传文件的信息，请重新上传文件",
             OBJECT_KEY_MAX_LEN,
             "对象键过长",
         )?;

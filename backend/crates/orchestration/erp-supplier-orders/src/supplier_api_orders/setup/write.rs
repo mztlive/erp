@@ -46,7 +46,9 @@ impl SupplierApiOrderProcess {
         if execution.base.version != request.expected_version
             || execution.stage != ApiOrderStage::AwaitingSetup
         {
-            return Err(Error::ConflictError("接口执行资料已变化，请刷新后核对".into()));
+            return Err(Error::ConflictError(
+                "供应商订单的准备资料已更新，请刷新并核对收货和配送资料".into(),
+            ));
         }
 
         self.apply_setup_request(&mut execution, &request, connector.as_ref()).await?;

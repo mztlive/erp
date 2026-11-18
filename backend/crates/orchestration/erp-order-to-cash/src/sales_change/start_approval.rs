@@ -163,12 +163,12 @@ pub(super) fn build_sales_change_start_input(
         now,
     } = input;
     if graph.definition.definition_version != binding.approval_definition_version {
-        return Err(Error::ConflictError("销售变更单绑定定义版本与已加载定义不一致".to_string()));
+        return Err(Error::ConflictError("销售变更单的审批流程版本不一致，请联系管理员核对".to_string()));
     }
 
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
-    let actor =
-        ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
+    let actor = ParticipantId::new(actor_id)
+        .map_err(|_| Error::ValidationError("无法确认提交人账号，请重新登录后再提交".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
     let bindings = start_bindings_from_graph(&graph, organization_id)?;
     Ok(assemble_start_input(
@@ -257,7 +257,9 @@ impl SalesChangeStartPersistInput {
     /// 在入口事务中重验来源授权，并依原顺序写收据、业务事实、运行态和审计。
     pub(super) async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         let PreparedExecution::Apply(writes) = self.prepared else {
-            return Err(Error::ConflictError("销售变更历史启动缺少完整请求回执，不能安全回放".into()));
+            return Err(Error::ConflictError(
+                "原销售变更的审批提交记录不完整，请先查看审批状态，不要重复提交".into(),
+            ));
         };
 
         let receipt = SalesChangeSubmissionReceipt::new(
@@ -287,7 +289,9 @@ impl SalesChangeStartPersistInput {
             )
             .await?;
         if guarded.is_none() {
-            return Err(Error::ConflictError("销售变更单审批启动守卫冲突，请刷新后重试".to_string()));
+            return Err(Error::ConflictError(
+                "销售变更单的审批状态已变化，未能提交审批，请刷新后核对".to_string(),
+            ));
         }
 
         self.sales_write.persist(db, executor).await?;

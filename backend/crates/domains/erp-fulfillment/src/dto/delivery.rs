@@ -54,7 +54,7 @@ pub struct CreateDeliveryRequest {
 #[serde(deny_unknown_fields)]
 pub struct UpdateDeliveryRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 完整包裹明细关联；缺省不修改，空数组清空。
     pub tracking_entries: Option<Vec<DeliveryTrackingEntry>>,
@@ -67,7 +67,7 @@ pub struct UpdateDeliveryRequest {
 #[serde(deny_unknown_fields)]
 pub struct PostDeliveryRequest {
     /// 期望的发货单版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 最终完整包裹明细关联；缺省保持原值，空数组清空。
     pub tracking_entries: Option<Vec<DeliveryTrackingEntry>>,

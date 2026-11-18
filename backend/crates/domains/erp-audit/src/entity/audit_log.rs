@@ -263,7 +263,9 @@ fn normalized_snapshot(value: Option<String>, field: &str) -> AuditResult<Option
 }
 
 fn structured_event_mut(log: &mut AuditLog) -> AuditResult<&mut BusinessAuditEvent> {
-    log.structured_event.as_mut().ok_or_else(|| AuditError::ValidationError("审计缺少结构化事件".into()))
+    log.structured_event
+        .as_mut()
+        .ok_or_else(|| AuditError::ValidationError("缺少本次操作的审计记录，请联系管理员".into()))
 }
 
 #[cfg(test)]
@@ -540,7 +542,7 @@ mod tests {
             for value in [None, Some(String::new()), Some(" \t\n ".into()), Some("valid".into())] {
                 assert!(matches!(
                     setter(raw.clone(), value),
-                    Err(AuditError::ValidationError(message)) if message == "审计缺少结构化事件"
+                    Err(AuditError::ValidationError(message)) if message == "缺少本次操作的审计记录，请联系管理员"
                 ));
             }
         }
@@ -561,7 +563,7 @@ mod tests {
         ));
         assert!(matches!(
             raw.with_event_sequence(u32::MAX),
-            Err(AuditError::ValidationError(message)) if message == "审计缺少结构化事件"
+            Err(AuditError::ValidationError(message)) if message == "缺少本次操作的审计记录，请联系管理员"
         ));
     }
 }

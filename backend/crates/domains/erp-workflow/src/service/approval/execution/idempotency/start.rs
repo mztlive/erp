@@ -35,7 +35,7 @@ pub fn start_scope_candidates(
         START_DOMAIN,
         &start_scope_payload(process_kind, subject_kind, subject_id, subject_version),
     )
-    .map_err(|error| Error::ValidationError(error.to_string()))?;
+    .map_err(super::identity::map_submission_error)?;
     let legacy = legacy_start_scope(process_kind, subject_kind, subject_id, subject_version);
     Ok(vec![current.as_str().to_string(), legacy])
 }

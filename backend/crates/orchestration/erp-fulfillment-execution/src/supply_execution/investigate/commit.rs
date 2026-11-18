@@ -173,7 +173,7 @@ impl InvestigationCommit {
         )?;
         let durable = parse_prepared_investigation(&evidence, &self.context.subject())?;
         if durable != self.prepared {
-            return Err(Error::ConflictError("供应商调查结果已由同一命令的另一执行确定".to_string()));
+            return Err(Error::ConflictError("本次供应商调查已有处理结果，请刷新查看".to_string()));
         }
 
         finish_evidence(&mut evidence, record.outcome(), response_summary)?;

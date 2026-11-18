@@ -84,10 +84,11 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
         executor: &'a mut dyn Executor,
     ) -> EvidenceFuture<'a, String> {
         Box::pin(async move {
-            let message_id = subject
-                .message_id
-                .as_deref()
-                .ok_or_else(|| Error::BusinessLogicError("当前业务项没有可重放的原入站消息".to_string()))?;
+            let message_id = subject.message_id.as_deref().ok_or_else(|| {
+                Error::BusinessLogicError(
+                    "未找到可重新处理的原供应商消息，请核对差异记录和原消息".to_string(),
+                )
+            })?;
             let mut message = self
                 .db
                 .inbox_messages()
@@ -99,7 +100,9 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                 || message.processed_at.is_some()
                 || known_result_exists(&self.db, message_id, executor).await?
             {
-                return Err(Error::BusinessLogicError("原动作当前不满足无结果且可安全重放条件".to_string()));
+                return Err(Error::BusinessLogicError(
+                    "尚不能确认原操作未完成，请先核对原业务结果，不要重复提交".to_string(),
+                ));
             }
 
             message.update(InboxMessageUpdate {
@@ -124,7 +127,9 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
     ) -> EvidenceFuture<'a, String> {
         Box::pin(async move {
             // 商城事实已移除，当前无已注册的重新归集事实。
-            Err(Error::BusinessLogicError("当前对象类型没有已注册的重新归集事实".to_string()))
+            Err(Error::BusinessLogicError(
+                "此类业务暂不支持重新采集资料，请联系管理员核对可用的处理方式".to_string(),
+            ))
         })
     }
 
@@ -228,7 +233,9 @@ impl MongoIntegrationEvidenceAuthority {
             "reconciliation_difference_resolution" => {
                 self.verify_difference_resolution(subject, record.id(), kind, actor_id, executor).await
             },
-            _ => Err(Error::BusinessLogicError(format!("证据对象类型 {} 尚未注册权威验证器", record.kind()))),
+            _ => Err(Error::BusinessLogicError(
+                "无法核验此类处理凭证，请重新选择与本次异常对应的核验记录".into(),
+            )),
         }
     }
 
@@ -250,7 +257,9 @@ impl MongoIntegrationEvidenceAuthority {
             .await?
             .ok_or_else(|| Error::NotFound("证据引用的入站消息不存在".to_string()))?;
         if message.status != InboxMessageStatus::Processed || message.processed_at.is_none() {
-            return Err(Error::BusinessLogicError("证据引用的入站消息尚未形成已处理终态".to_string()));
+            return Err(Error::BusinessLogicError(
+                "所选凭证对应的供应商消息尚未处理完毕，请待处理完成后再核验".to_string(),
+            ));
         }
 
         ensure_association(subject, std::slice::from_ref(&message.base.id))?;

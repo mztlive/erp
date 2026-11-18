@@ -114,9 +114,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let decision = match decision {
             "APPROVE" => ApprovalDecision::Approve,
             "REJECT" => ApprovalDecision::Reject,
-            other => {
-                return Err(Error::ValidationError(format!("决定必须是 APPROVE 或 REJECT，收到 {other}")));
-            },
+            _ => return Err(Error::ValidationError("请选择通过或驳回".into())),
         };
         let reason = reason.map(str::trim).filter(|value| !value.is_empty()).map(ToOwned::to_owned);
         let key = normalize_idempotency_key(idempotency_key)?;
@@ -791,7 +789,8 @@ pub(super) fn map_approval_task_error(error: ApprovalDecisionTaskError) -> Error
 /// # 关键业务约束
 /// 持久化图缺失或重复决定连线时不得继续推导下一审批人。
 pub(super) fn map_runtime_graph_error(error: ModelError) -> Error {
-    Error::ConflictError(error.to_string())
+    tracing::debug!(%error, "无法读取后续审批节点");
+    Error::ConflictError("审批流程设置不完整，无法确定下一环节，请联系审批管理员".into())
 }
 
 #[cfg(test)]

@@ -172,7 +172,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 
         Ok(SubmitSettlementReviewResult {
             result_status: dto::SettlementReviewSubmissionStatus::Submitted,
-            message: "结算主题已冻结并提交财务复核".to_string(),
+            message: "结算单已提交财务复核，复核期间不可编辑".to_string(),
             operation_id: req.operation_id,
             statement: statement.into(),
             work_item_id: work_item.base.id,
@@ -304,7 +304,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let replay_key = req.idempotency_key.clone();
         ensure_same_id(id, &req.decision.statement_id, "结算单")?;
         let reject_reason = req.decision.parsed_reject_reason()?;
-        let expected_task_version = parse_expected_version(&req.expected_task_version, "待办版本")?;
+        let expected_task_version = parse_expected_task_version(&req.expected_task_version)?;
 
         let action = review_action(req.decision.action);
         let fingerprint = review_decision_fingerprint(&req);
@@ -411,7 +411,11 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             statement_id,
             &stable_digest(identity.1.trim()),
         )?;
-        stored.verify(expected_fingerprint, Some(statement_id), "幂等键已用于不同的提交复核命令")?;
+        stored.verify(
+            expected_fingerprint,
+            Some(statement_id),
+            "本次操作编号已用于其他结算复核提交，请核对原提交记录",
+        )?;
         let SupplyCommandResult::ReviewSubmission(receipt) = stored.result else {
             return Err(Error::Internal("提交复核回执类型非法".to_string()));
         };
@@ -428,7 +432,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 
         Ok(Some(SubmitSettlementReviewResult {
             result_status: dto::SettlementReviewSubmissionStatus::Submitted,
-            message: "结算主题已冻结并提交财务复核".to_string(),
+            message: "结算单已提交财务复核，复核期间不可编辑".to_string(),
             operation_id: receipt.operation_id,
             statement: statement.into(),
             work_item_id: receipt.work_item_id,
@@ -457,7 +461,11 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             statement_id,
             &stable_digest(request.0.trim()),
         )?;
-        stored.verify(expected_fingerprint, Some(statement_id), "幂等键已用于不同的结算复核决定命令")?;
+        stored.verify(
+            expected_fingerprint,
+            Some(statement_id),
+            "本次操作编号已用于其他结算复核，请核对原复核结果",
+        )?;
         let SupplyCommandResult::ReviewDecision(receipt) = stored.result else {
             return Err(Error::Internal("结算复核决定回执类型非法".to_string()));
         };
@@ -617,11 +625,11 @@ pub fn validate_settlement_review_work_item(
 }
 
 /// 解析跨端字符串版本并拒绝零版本。
-fn parse_expected_version(value: &str, field: &str) -> Result<u64> {
-    let version =
-        value.trim().parse::<u64>().map_err(|_| Error::ValidationError(format!("{field}必须是正整数")))?;
+fn parse_expected_task_version(value: &str) -> Result<u64> {
+    let invalid = || Error::ValidationError("复核待办版本无效，请刷新后重新打开待办".into());
+    let version = value.trim().parse::<u64>().map_err(|_| invalid())?;
     if version == 0 {
-        return Err(Error::ValidationError(format!("{field}必须大于0")));
+        return Err(invalid());
     }
     Ok(version)
 }
@@ -694,7 +702,7 @@ fn ensure_submission_statement(
     receipt: &ReviewSubmissionReceipt,
 ) -> Result<()> {
     if statement.base.version < receipt.statement_version {
-        return Err(Error::ConflictError("提交复核幂等收据与当前结算事实不一致".to_string()));
+        return Err(Error::ConflictError("原复核提交记录与当前结算资料不符，请核对结算单详情".to_string()));
     }
     Ok(())
 }
@@ -707,7 +715,7 @@ fn ensure_submission_task(
     if work_item.base.version < receipt.task_version
         || !review_work_item_binds_statement(work_item, statement)
     {
-        return Err(Error::ConflictError("提交复核幂等收据与当前正式任务不一致".to_string()));
+        return Err(Error::ConflictError("原复核提交记录与当前复核待办不符，请刷新后核对待办".to_string()));
     }
     Ok(())
 }
@@ -740,7 +748,7 @@ fn ensure_decision_replay(
         || work_item.subject_version != statement.subject_hash
         || !business_result_matches
     {
-        return Err(Error::ConflictError("复核决定幂等收据与当前正式事实不一致".to_string()));
+        return Err(Error::ConflictError("原复核结果与当前结算资料不符，请核对结算单详情".to_string()));
     }
     Ok(())
 }
@@ -775,7 +783,7 @@ async fn persist_review_submission(
             "supplier_settlement.submit_review",
             "supplier_settlement_statement",
             input.statement.base.id.clone(),
-            Some("结算主题已冻结并提交财务复核".to_string()),
+            Some("结算单已提交财务复核，复核期间不可编辑".to_string()),
         )?
         .with_command_id(Some(input.command_id.to_string()))?
         .with_resource_number(Some(input.statement.statement_no.clone()))?;

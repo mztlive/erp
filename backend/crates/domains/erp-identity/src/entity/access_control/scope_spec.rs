@@ -149,7 +149,7 @@ pub(crate) fn require_action(resource: &str, action: &str) -> Result<&'static Sc
             action_description(resource, action)?
         )));
     }
-    Err(Error::ValidationError(format!("{resource}:{action} 尚未接入 DataScope v2")))
+    Err(scope_unavailable(resource, action))
 }
 
 /// 运行时直接解析的来源：本权限配置或公司范围。来源复用必须先跳到 `Current`。
@@ -272,12 +272,15 @@ pub(crate) fn configurable_dimensions(resource: &str, actions: &[String]) -> Vec
 }
 
 pub(crate) fn validate_scope_type(resource: &str, scope_type: DataScopeType) -> Result<()> {
-    let spec = raw_specs()
-        .iter()
-        .find(|spec| spec.permission.resource() == resource)
-        .ok_or_else(|| Error::ValidationError(format!("{resource} 未登记授权策略")))?;
+    let spec = raw_specs().iter().find(|spec| spec.permission.resource() == resource).ok_or_else(|| {
+        tracing::debug!(resource, "未登记授权策略");
+        Error::ValidationError("该业务模块尚未开放数据范围设置，请联系权限管理员".into())
+    })?;
     if !spec.scope_types().contains(&scope_type) {
-        return Err(Error::ValidationError(format!("{resource} 不接受 {scope_type:?} 范围")));
+        return Err(Error::ValidationError(format!(
+            "此业务不支持「{}」范围，请选择其他范围类型",
+            scope_type.label()
+        )));
     }
     Ok(())
 }
@@ -286,9 +289,13 @@ pub(crate) fn validate_binding(binding: &ScopeBinding) -> Result<()> {
     for action in &binding.actions {
         let spec = require_action(&binding.resource, action)?;
         if !spec.supported_dimensions.contains(&binding.target_dimension) {
+            let dimension = match binding.target_dimension {
+                ScopeDimension::InternalOrg => "内部组织",
+                ScopeDimension::SettlementParty => "结算主体",
+                ScopeDimension::Warehouse => "仓库",
+            };
             return Err(Error::ValidationError(format!(
-                "{}:{} 不支持 {:?} 范围维度",
-                binding.resource, action, binding.target_dimension
+                "所选操作不支持按{dimension}设置数据范围，请调整授权范围"
             )));
         }
     }
@@ -308,8 +315,7 @@ pub(crate) fn organization_load(spec: &ScopeSpec) -> OrganizationLoad {
 }
 
 pub(crate) fn action_description(resource: &str, action: &str) -> Result<&'static str> {
-    let kind = action_kind(resource, action)
-        .ok_or_else(|| Error::ValidationError(format!("{resource}:{action} 尚未接入 DataScope v2")))?;
+    let kind = action_kind(resource, action).ok_or_else(|| scope_unavailable(resource, action))?;
     Ok(describe(resource, find_action(resource, action), kind))
 }
 
@@ -413,7 +419,12 @@ fn kind_of(permission: &Permission) -> Option<ActionKind> {
 }
 
 fn unwired(permission: &Permission) -> Error {
-    Error::ValidationError(format!("{permission} 尚未接入 DataScope v2"))
+    scope_unavailable(permission.resource(), permission.action())
+}
+
+fn scope_unavailable(resource: &str, action: &str) -> Error {
+    tracing::debug!(resource, action, "操作未开放数据范围配置");
+    Error::ValidationError("所选操作尚未开放数据范围配置，请核对授权设置".into())
 }
 
 fn independent_scope_rejected(permission: &Permission) -> Error {

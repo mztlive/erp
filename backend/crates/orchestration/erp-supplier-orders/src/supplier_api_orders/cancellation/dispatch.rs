@@ -60,7 +60,7 @@ pub(super) async fn send_once<P: CancellationDispatch>(
     match port.cancel(&request).await {
         Ok(accepted) => {
             if let Err(error) = execution.accept_cancellation(target, accepted) {
-                execution.defer(error.to_string());
+                execution.defer(crate::Error::from(error).supplier_order_message());
             }
         },
         Err(error) => execution.defer(error.summary),

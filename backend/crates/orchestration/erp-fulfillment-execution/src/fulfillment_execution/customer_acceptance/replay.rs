@@ -121,13 +121,13 @@ impl ReplayReader {
                 .await?
         };
         let [task] = tasks.as_slice() else {
-            return Err(Error::ConflictError("无法确定原验收命令的唯一真实任务".into()));
+            return Err(Error::ConflictError("无法确认原验收登记对应的待办，请先核对验收记录".into()));
         };
         if task.work_item_type != WorkItemType::CustomerAcceptanceRegistration
             || !task.matches_business_object("sales_order", sales)
             || task.responsibility_key() != Some(responsibility_key(sales).as_str())
         {
-            return Err(Error::ConflictError("验收命令结果与真实任务不一致".into()));
+            return Err(Error::ConflictError("原验收结果与验收待办不符，请核对待办中的验收记录".into()));
         }
         Ok(task.clone())
     }
@@ -151,7 +151,7 @@ pub(super) async fn committed(
         || acceptance.reversal_of_acceptance_id.is_some()
         || !matches!(acceptance.status, CustomerAcceptanceState::Posted | CustomerAcceptanceState::Reversed)
     {
-        return Err(Error::ConflictError("验收命令结果与销售单不一致".into()));
+        return Err(Error::ConflictError("原验收记录与当前销售单不符，请核对所验收的订单".into()));
     }
 
     reader.sales(actor, acceptance.sales_order_id.as_ref(), executor).await?;
@@ -179,7 +179,7 @@ pub(super) async fn reversed(
         || result.reversal_of_acceptance_id.as_ref().map(|id| id.as_ref()) != Some(id)
         || result.sales_order_id != original.sales_order_id
     {
-        return Err(Error::ConflictError("验收冲正命令结果与原单或销售来源不一致".into()));
+        return Err(Error::ConflictError("原验收冲正记录与验收单或销售单不符，请核对原单".into()));
     }
     Ok(Some(result))
 }

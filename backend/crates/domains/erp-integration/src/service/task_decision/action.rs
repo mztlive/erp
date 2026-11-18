@@ -170,7 +170,8 @@ async fn error_action_fact(
         IntegrationTaskActionKind::ReplayOriginal => {
             if !task.can_replay_original() {
                 return Err(Error::BusinessLogicError(
-                    "必须先由服务端查询并确认原动作无结果，且错误分类允许重放".to_string(),
+                    "只有确认原操作没有产生结果，且此类失败允许重新处理时才能继续，请先查询原操作结果"
+                        .to_string(),
                 ));
             }
             let reference = authority.replay_original(&subject, executor).await?;

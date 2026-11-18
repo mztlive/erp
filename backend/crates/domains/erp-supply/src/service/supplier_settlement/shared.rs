@@ -72,7 +72,9 @@ pub async fn load_statement_differences(
 /// 身份不同时返回 `ValidationError`。
 pub fn ensure_same_id(path_id: &str, command_id: &str, object_name: &str) -> Result<()> {
     if path_id != command_id {
-        return Err(Error::ValidationError(format!("{object_name}路径ID与命令载荷不一致")));
+        return Err(Error::ValidationError(format!(
+            "当前选择的{object_name}与提交的单据不一致，请返回列表重新选择"
+        )));
     }
     Ok(())
 }

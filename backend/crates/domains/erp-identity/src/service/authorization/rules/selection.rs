@@ -105,7 +105,8 @@ fn require_qualification(qualified: &QualifiedPermissions, permission: &Permissi
     if qualified.same_role(slice::from_ref(permission)) {
         Ok(())
     } else {
-        Err(Error::Forbidden(format!("缺少选品入口所需的独立读取资格：{permission}")))
+        tracing::debug!(%permission, "缺少选品入口所需的独立读取资格");
+        Err(Error::Forbidden("当前账号没有查看选品所需资料的权限，请联系权限管理员".into()))
     }
 }
 
@@ -117,7 +118,10 @@ fn find_scope<'a>(
         .iter()
         .find(|(entry, source, _)| entry == permission && source == permission)
         .map(|(_, _, scope)| scope)
-        .ok_or_else(|| Error::ValidationError(format!("选品缺少独立范围：{permission}")))
+        .ok_or_else(|| {
+            tracing::debug!(%permission, "选品缺少独立范围");
+            Error::ValidationError("当前账号尚未配置选品所需的数据范围，请联系权限管理员".into())
+        })
 }
 
 fn customer_condition(scope: &ResolvedScope, ownership: AccessRule) -> Result<AccessRule> {

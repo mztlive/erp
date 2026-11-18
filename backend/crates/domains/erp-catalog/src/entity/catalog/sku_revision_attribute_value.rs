@@ -68,7 +68,7 @@ impl SkuRevisionAttributeValue {
             normalize_optional_text(data.normalized_text_value, "规范文本值", TEXT_VALUE_MAX_LEN)?;
         match (&data.sku_attribute_value_id, &normalized_text_value) {
             (Some(_), Some(_)) => return Err(Error::from("枚举值与文本值只能使用一种")),
-            (None, None) => return Err(Error::from("枚举值与文本值必须提供一种")),
+            (None, None) => return Err(Error::from("请为该规格选择预设值或填写文字")),
             _ => {},
         }
 

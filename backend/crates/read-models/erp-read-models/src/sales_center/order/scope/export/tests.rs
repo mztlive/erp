@@ -127,6 +127,8 @@ async fn final_authorization_or_changed_root_binding_discards_contract_numbers_a
 async fn export_refuses_non_snapshot_before_any_reads() {
     let reader = Reader::default();
     let result = export_page(&reader, &params(), &actor(), &mut ReadExecutor::default()).await;
-    assert!(matches!(result, Err(Error::ValidationError(message)) if message == "销售导出必须使用快照事务"));
+    assert!(
+        matches!(result, Err(Error::ValidationError(message)) if message == "暂时无法导出销售单，请返回销售单列表重新查询后导出")
+    );
     assert!(reader.stages().is_empty());
 }

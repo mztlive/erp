@@ -101,7 +101,7 @@ impl InquiryCommand {
             Self::Accept(_) => sales_inquiry_permissions::COMMANDS_SALES_ACCEPT,
             Self::Reinquire(_) => sales_inquiry_permissions::COMMANDS_SALES_REINQUIRE,
             Self::Close(_) => sales_inquiry_permissions::COMMANDS_SALES_CLOSE,
-            _ => return Err(Error::ValidationError("采购命令不能使用销售授权入口".into())),
+            _ => return Err(Error::ValidationError("请从采购询价页面办理此操作".into())),
         })
     }
     /// 由精确采购命令选择固定任务入口，销售命令不能借用采购资格。
@@ -114,7 +114,7 @@ impl InquiryCommand {
             Self::InternalQuote(_) | Self::ImportQuotes(_) | Self::FeeBasis(_) => {
                 sales_inquiry_permissions::INTERNAL_FEE_BASES
             },
-            _ => return Err(Error::ValidationError("销售命令不能使用采购授权入口".into())),
+            _ => return Err(Error::ValidationError("请从销售询价页面办理此操作".into())),
         })
     }
 }
@@ -328,7 +328,7 @@ async fn replay_receipt(
         receipt.fingerprint().digest_hex(),
     )?)?;
     if view.inquiry_id != id && !(matches!(command, InquiryCommand::Create(_)) && id.is_empty()) {
-        return Err(Error::ConflictError("询价命令回执不属于当前询价".into()));
+        return Err(Error::ConflictError("原办理记录不属于当前询价，请核对所选询价单".into()));
     }
 
     if command.task().is_some() {
@@ -590,7 +590,9 @@ mod tests {
             replay(&mismatched, &actor(), "inquiry", &command, &receipt, &mut SnapshotExecutor::default())
                 .await
                 .unwrap_err();
-        assert!(matches!(error, Error::ConflictError(message) if message == "询价命令回执不属于当前询价"));
+        assert!(
+            matches!(error, Error::ConflictError(message) if message == "原办理记录不属于当前询价，请核对所选询价单")
+        );
         assert_eq!(mismatched.calls.lock().unwrap().len(), 1);
     }
 

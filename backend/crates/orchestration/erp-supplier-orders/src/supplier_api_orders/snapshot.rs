@@ -87,7 +87,11 @@ impl SupplierApiOrderProcess {
                         .as_ref()
                         .is_some_and(|id| id.as_ref() == execution.connection_id)
             })
-            .ok_or_else(|| Error::BusinessLogicError("采购供给与接口连接不一致".into()))?;
+            .ok_or_else(|| {
+                Error::BusinessLogicError(
+                    "采购明细对应的供给与所选供应商不符，请核对采购单和供应商连接".into(),
+                )
+            })?;
 
         Ok((
             OrderLine {
@@ -138,10 +142,9 @@ impl SupplierApiOrderProcess {
     }
 
     pub(super) fn decode(&self, execution: &ApiOrderExecution) -> Result<ExecutionSnapshot> {
-        let encrypted = execution
-            .request_encrypted
-            .as_ref()
-            .ok_or_else(|| Error::BusinessLogicError("接口配送资料尚未建立".into()))?;
+        let encrypted = execution.request_encrypted.as_ref().ok_or_else(|| {
+            Error::BusinessLogicError("当前供应商订单还未取得配送选项，请重新查询可用配送方式".into())
+        })?;
         serde_json::from_str(&self.codec.decrypt(encrypted)?)
             .map_err(|_| Error::Internal("接口请求快照无法读取".into()))
     }
@@ -185,7 +188,7 @@ impl SupplierApiOrderProcess {
 fn recipient_for(line: &PurchaseOrderRevisionLine, index: u32) -> Result<Recipient> {
     let index = usize::try_from(index).map_err(|_| Error::ValidationError("采购地址序号无效".into()))?;
     let row = line.delivery_allocations.get(index).ok_or_else(|| {
-        Error::BusinessLogicError("采购未冻结接口收货地址，请通过正式采购变更补齐交付安排".into())
+        Error::BusinessLogicError("采购单尚未确认收货地址，请通过采购变更补齐交付安排".into())
     })?;
     Ok(Recipient {
         name: row.recipient.clone(),

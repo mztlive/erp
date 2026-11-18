@@ -19,7 +19,10 @@ pub struct SupplierSensitiveFieldView {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct RevealSupplierSensitiveRequest {
     /// 详情接口签发的短时令牌。
-    #[validate(custom(function = "non_blank", message = "揭示令牌不能为空"))]
+    #[validate(custom(
+        function = "non_blank",
+        message = "缺少查看敏感资料的凭证，请重新打开供应商资料页面"
+    ))]
     pub reveal_token: String,
 }
 

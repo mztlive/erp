@@ -110,7 +110,9 @@ impl SupplierPortalReadService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-            return Err(Error::ValidationError("内部门户读取必须使用快照事务".into()));
+            return Err(Error::ValidationError(
+                "暂时无法查看供应商门户管理资料，请刷新页面后重新打开".into(),
+            ));
         }
 
         if supplier_id.trim().is_empty()
@@ -141,7 +143,7 @@ fn management_query(params: &PortalAdminListParams) -> Result<(PortalQuery, Opti
         None => None,
         Some("ACTIVE") => Some(true),
         Some("INACTIVE") => Some(false),
-        Some(_) => return Err(Error::ValidationError("启停状态须为 ACTIVE 或 INACTIVE".into())),
+        Some(_) => return Err(Error::ValidationError("请选择「启用」或「停用」作为状态筛选条件".into())),
     };
     Ok((query, active))
 }
@@ -200,11 +202,11 @@ mod tests {
         let mut unscoped = ReadExecutor::default();
         assert!(matches!(
             service.account_page(&actor, &params, &mut unscoped).await,
-            Err(Error::ValidationError(message)) if message == "内部门户读取必须使用快照事务"
+            Err(Error::ValidationError(message)) if message == "暂时无法查看供应商门户管理资料，请刷新页面后重新打开"
         ));
         assert!(matches!(
             service.grant_page(&actor, &params, &mut unscoped).await,
-            Err(Error::ValidationError(message)) if message == "内部门户读取必须使用快照事务"
+            Err(Error::ValidationError(message)) if message == "暂时无法查看供应商门户管理资料，请刷新页面后重新打开"
         ));
         assert_eq!(authorization.calls.lock().unwrap().len(), 2);
     }
@@ -222,6 +224,9 @@ mod tests {
         assert_eq!((query.page, query.skip, query.q.as_deref(), active), (2, 20, Some("名称"), Some(false)));
 
         params.status = Some("SUSPENDED".into());
-        assert!(management_query(&params).is_err());
+        assert!(matches!(
+            management_query(&params),
+            Err(Error::ValidationError(message)) if message == "请选择「启用」或「停用」作为状态筛选条件"
+        ));
     }
 }

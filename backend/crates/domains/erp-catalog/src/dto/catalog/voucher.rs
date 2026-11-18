@@ -167,7 +167,7 @@ pub struct CreateVoucherCategoryRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateVoucherCategoryRequest {
     /// 期望的商品乐观锁版本；与当前不一致时拒绝（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
     /// 卡券类目名称（写入商品修订与 SKU 修订名称快照）。
     #[validate(custom(function = "non_blank", message = "卡券类目名称不能为空"))]

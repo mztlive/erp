@@ -5,6 +5,7 @@ pub(crate) mod error_labels;
 mod error_task;
 mod list;
 pub use error_detail::IntegrationErrorDetailView;
+pub(crate) use error_detail::integration_attempt_note;
 mod reconciliation_difference;
 mod repository;
 use std::sync::Arc;

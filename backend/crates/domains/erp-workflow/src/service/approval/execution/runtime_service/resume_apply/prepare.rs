@@ -106,16 +106,16 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 .await?,
             );
         }
-        let eligibility =
-            Eligibility::any_of(members).map_err(|error| Error::ValidationError(error.to_string()))?;
+        let eligibility = Eligibility::any_of(members).map_err(|error| {
+            tracing::debug!(%error, "审批人资格配置校验失败");
+            Error::ValidationError("当前审批节点的审批人配置无效，请联系审批管理员核对".into())
+        })?;
         ensure_resume_approver_recovered(&eligibility)?;
 
-        let graph = self
-            .db
-            .bpm_workflow()
-            .load_instance_graph(&runtime.instance, executor)
-            .await?
-            .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))?;
+        let graph =
+            self.db.bpm_workflow().load_instance_graph(&runtime.instance, executor).await?.ok_or_else(
+                || Error::ConflictError("找不到该审批使用的流程，请联系审批管理员核对".to_string()),
+            )?;
         let now = Instant::now();
         let prepared = plan_resume(actor, command, &runtime, graph, eligibility, idempotency_key, now)?;
         let PreparedExecution::Apply(writes) = prepared else {
@@ -197,7 +197,9 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .approval_subject_snapshots()
             .find_by_process_instance_id(instance_id, executor)
             .await?
-            .ok_or_else(|| Error::ConflictError("审批实例缺少冻结业务快照".to_string()))?;
+            .ok_or_else(|| {
+                Error::ConflictError("缺少提交审批时的单据资料，请联系审批管理员核对".to_string())
+            })?;
         let document_type = document_type_from_subject_kind(instance.subject.subject_kind())
             .map_err(|error| Error::ValidationError(error.to_string()))?;
         snapshot
@@ -206,7 +208,9 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 instance.subject.subject_id(),
                 instance.subject_version,
             )
-            .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
+            .map_err(|_| {
+                Error::ConflictError("审批记录与提交时的单据资料不一致，请联系审批管理员核对".to_string())
+            })?;
         Ok((snapshot, document_type))
     }
 

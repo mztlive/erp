@@ -59,8 +59,8 @@ impl DocumentCancelRuntime {
         now: Instant,
     ) -> Result<CancelExecutionInput> {
         let reason = normalize_document_cancel_reason(reason)?;
-        let actor =
-            ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("撤回人引用无效".to_string()))?;
+        let actor = ParticipantId::new(actor_id)
+            .map_err(|_| Error::ValidationError("无法确认撤回账号，请重新登录后再操作".to_string()))?;
         let eligibility = converge_eligibility(
             self.current.assignee_participant_id.as_str(),
             &self.current.assignee_name_snapshot,
@@ -191,8 +191,9 @@ async fn runtime_from_store(
         .instance(subject, subject_version, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("没有可撤回的审批实例".to_string()))?;
-    let task_policy =
-        instance.cancellation_task_policy().map_err(|error| Error::ConflictError(error.to_string()))?;
+    let task_policy = instance.cancellation_task_policy().map_err(|error| {
+        Error::ConflictError(crate::service::approval::execution::bpm_model_message(&error).into())
+    })?;
 
     let current = store
         .current(&ApprovalProcessInstanceId::new(instance.base.id.clone()), executor)
@@ -200,9 +201,9 @@ async fn runtime_from_store(
         .ok_or_else(|| Error::ConflictError("审批实例缺少当前执行".to_string()))?;
     let open_tasks =
         store.open_tasks(&ApprovalNodeExecutionId::new(current.base.id.clone()), executor).await?;
-    current
-        .ensure_cancellation_tasks(task_policy, open_tasks.len())
-        .map_err(|error| Error::ConflictError(error.to_string()))?;
+    current.ensure_cancellation_tasks(task_policy, open_tasks.len()).map_err(|error| {
+        Error::ConflictError(crate::service::approval::execution::bpm_model_message(&error).into())
+    })?;
 
     let graph = store.graph(binding, missing_definition, executor).await?;
     Ok(DocumentCancelRuntime { graph, instance, current, task_policy, open_tasks })
@@ -422,7 +423,7 @@ mod tests {
         loaded.current.assignee_name_snapshot = "  ".into();
         for (reason, actor, expected) in [
             ("  ", "", "撤回原因不能为空"),
-            ("撤回", "", "撤回人引用无效"),
+            ("撤回", "", "无法确认撤回账号，请重新登录后再操作"),
             ("撤回", "submitter", "审批人显示名不能为空"),
         ] {
             let error =

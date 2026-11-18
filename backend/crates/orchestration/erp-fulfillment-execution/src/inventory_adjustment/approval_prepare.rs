@@ -92,7 +92,9 @@ pub fn prepare_stock_adjustment_start(
         || input.subject.subject_id().trim().is_empty()
         || input.subject_version != req.expected_subject_version
     {
-        return Err(Error::ValidationError("库存调整启动输入与提交载荷不一致".to_string()));
+        return Err(Error::ValidationError(
+            "本次审批提交与当前库存调整单或其版本不符，请刷新后核对单据".to_string(),
+        ));
     }
     let identity = stock_adjustment_start_identity(
         input.subject.subject_id(),
@@ -217,14 +219,16 @@ async fn load_start_receipt_facts(
         .bpm_workflow()
         .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("库存调整启动收据引用的实例不存在".to_string()))?;
+        .ok_or_else(|| {
+            Error::ConflictError("找不到原库存调整提交对应的审批记录，请联系管理员核对".to_string())
+        })?;
     if instance.process_kind != process_kind_of(DocumentType::StockAdjustment)
         || instance.subject.subject_kind() != DocumentType::StockAdjustment.as_str()
         || instance.subject.subject_id() != adjustment_id
         || instance.subject_version != req.expected_subject_version
         || instance.base.id != receipt.result_ref
     {
-        return Err(Error::ConflictError("库存调整启动收据与实例事实不一致".to_string()));
+        return Err(Error::ConflictError("原库存调整提交与对应审批记录不符，请联系管理员核对".to_string()));
     }
     if instance.started_by.as_str() != actor.id() {
         return Err(Error::Forbidden(STOCK_ADJUSTMENT_SUBMIT_FORBIDDEN.to_string()));
@@ -234,14 +238,18 @@ async fn load_start_receipt_facts(
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("库存调整启动实例缺少冻结快照".to_string()))?;
+        .ok_or_else(|| {
+            Error::ConflictError("找不到库存调整送审时的单据资料，请联系管理员核对".to_string())
+        })?;
     snapshot
         .ensure_matches_runtime_subject(
             DocumentType::StockAdjustment,
             adjustment_id,
             req.expected_subject_version,
         )
-        .map_err(|_| Error::ConflictError("库存调整启动实例与冻结快照不一致".to_string()))?;
+        .map_err(|_| {
+            Error::ConflictError("库存调整审批记录与送审时的单据资料不符，请联系管理员核对".to_string())
+        })?;
     if snapshot.payload.submitted_by != instance.started_by.as_str() {
         return Err(Error::ConflictError("库存调整启动实例与冻结提交人不一致".to_string()));
     }
@@ -251,7 +259,9 @@ async fn load_start_receipt_facts(
     if instance.process_definition_id != binding.approval_process_definition_id
         || instance.definition_version != binding.approval_definition_version
     {
-        return Err(Error::ConflictError("库存调整启动实例与冻结定义绑定不一致".to_string()));
+        return Err(Error::ConflictError(
+            "库存调整审批未使用提交时的审批流程版本，请联系管理员核对".to_string(),
+        ));
     }
     Ok((instance, snapshot, binding.clone()))
 }
@@ -292,21 +302,23 @@ pub async fn find_stock_adjustment_start_result(
     if receipt.command_kind != ApprovalCommandKind::StartApproval
         || !is_supported_start_receipt_identity(&receipt.scope_id, &receipt.payload_digest, &scopes)
     {
-        return Err(Error::ConflictError("库存调整提交结果收据身份不一致".to_string()));
+        return Err(Error::ConflictError("原库存调整提交记录与本次操作不符，请核对原提交记录".to_string()));
     }
 
     let instance = db
         .bpm_workflow()
         .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("库存调整提交结果引用的审批实例不存在".to_string()))?;
+        .ok_or_else(|| {
+            Error::ConflictError("找不到原库存调整提交对应的审批记录，请联系管理员核对".to_string())
+        })?;
     if instance.base.id != receipt.result_ref
         || instance.process_kind != process_kind_of(DocumentType::StockAdjustment)
         || instance.subject.subject_kind() != DocumentType::StockAdjustment.as_str()
         || instance.subject.subject_id() != adjustment_id
         || instance.subject_version != expected_subject_version
     {
-        return Err(Error::ConflictError("库存调整提交结果与审批实例事实不一致".to_string()));
+        return Err(Error::ConflictError("库存调整的原提交结果与审批记录不符，请联系管理员核对".to_string()));
     }
     if instance.started_by.as_str() != actor.id() {
         return Err(Error::NotFound("库存调整提交结果不存在".to_string()));
@@ -319,7 +331,7 @@ pub async fn find_stock_adjustment_start_result(
         .await?
         .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
     if adjustment.approval_subject_version < expected_subject_version {
-        return Err(Error::ConflictError("库存调整提交结果早于当前业务事实".to_string()));
+        return Err(Error::ConflictError("库存调整单已有后续变更，请查看最新单据详情".to_string()));
     }
     rbac.authorize_stock_adjustment_submit(&adjustment, actor, executor).await?;
     Ok(Some(instance.base.id))
@@ -337,16 +349,22 @@ async fn validate_start_result_snapshot(
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("库存调整提交结果缺少冻结快照".to_string()))?;
+        .ok_or_else(|| {
+            Error::ConflictError("找不到库存调整送审时的单据资料，请联系管理员核对".to_string())
+        })?;
     snapshot
         .ensure_matches_runtime_subject(
             DocumentType::StockAdjustment,
             adjustment_id,
             expected_subject_version,
         )
-        .map_err(|_| Error::ConflictError("库存调整提交结果与冻结快照不一致".to_string()))?;
+        .map_err(|_| {
+            Error::ConflictError("库存调整提交结果与送审时的单据资料不符，请联系管理员核对".to_string())
+        })?;
     if snapshot.payload.submitted_by != instance.started_by.as_str() {
-        return Err(Error::ConflictError("库存调整提交结果与冻结提交人不一致".to_string()));
+        return Err(Error::ConflictError(
+            "库存调整提交记录中的提交人与送审资料不符，请联系管理员核对".to_string(),
+        ));
     }
 
     let binding = load_approval_binding(db, adjustment_id, executor).await?;
@@ -354,7 +372,9 @@ async fn validate_start_result_snapshot(
     if instance.process_definition_id != binding.approval_process_definition_id
         || instance.definition_version != binding.approval_definition_version
     {
-        return Err(Error::ConflictError("库存调整提交结果与冻结定义绑定不一致".to_string()));
+        return Err(Error::ConflictError(
+            "库存调整提交结果与送审时的审批流程版本不符，请联系管理员核对".to_string(),
+        ));
     }
     Ok(())
 }
@@ -530,12 +550,12 @@ pub async fn build_stock_adjustment_start_input(
         now,
     } = input;
     if graph.definition.definition_version != binding.approval_definition_version {
-        return Err(Error::ConflictError("库存调整单绑定定义版本与已加载定义不一致".to_string()));
+        return Err(Error::ConflictError("库存调整单的审批流程版本不一致，请联系管理员核对".to_string()));
     }
 
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
-    let actor =
-        ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
+    let actor = ParticipantId::new(actor_id)
+        .map_err(|_| Error::ValidationError("无法确认提交人账号，请重新登录后再提交".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
     let bindings = start_bindings_from_graph(db, rbac, &graph, actor_id, organization_id, executor).await?;
     Ok(assemble_start_input(
@@ -652,7 +672,9 @@ pub(crate) async fn revalidate_candidates_with(
             .await?
             .is_some_and(|qualified| qualified.same_role(&required))
         {
-            return Err(Error::ValidationError("指定审批人缺少审批读取和决定权限".to_string()));
+            return Err(Error::ValidationError(
+                "所选人员无权查看并办理该审批，请重新选择审批人或联系管理员".to_string(),
+            ));
         }
     }
 

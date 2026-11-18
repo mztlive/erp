@@ -276,11 +276,11 @@ impl ProductImportProcess {
                 object_id: None,
             };
         };
-        if let Some(media_error) = &entry.media_error {
+        if entry.media_error.is_some() {
             return RecordedOutcome {
                 status: ItemStatus::Failed,
                 code: Some("media_unavailable".to_string()),
-                summary: Some(media_error.clone()),
+                summary: Some(super::row_manifest::media_failure_message(row_number)),
                 object_type: None,
                 object_id: None,
             };
@@ -416,7 +416,25 @@ fn record_row_outcome(outcome: Result<super::row::RowImportOutcome>) -> Recorded
             recorded(ItemStatus::Skipped, None, result.message, result.product_id)
         },
         Ok(result) => recorded(ItemStatus::Success, None, result.message, result.product_id),
-        Err(error) => recorded(ItemStatus::Failed, Some("import_failed"), error.to_string(), None),
+        Err(error) => {
+            let message = match error {
+                Error::ValidationError(message)
+                | Error::ConflictError(message)
+                | Error::BusinessLogicError(message)
+                | Error::NotFound(message) => message,
+                Error::Forbidden(_) | Error::Unauthenticated(_) => {
+                    "当前账号不能导入这行商品，请由有权限的同事核对".into()
+                },
+                Error::InvalidInput(_) | Error::Logic(_) => {
+                    "这行商品资料不符合导入要求，请核对商品、规格和供应商资料".into()
+                },
+                Error::OutcomeUnknown(_) | Error::CommittedResultUnavailable(_) => {
+                    "这行商品的处理结果暂时无法读取，请先核对商品列表，不要重复导入".into()
+                },
+                _ => "这行商品未能完成处理，请先核对商品列表；如仍无法确认，请联系管理员".into(),
+            };
+            recorded(ItemStatus::Failed, Some("import_failed"), message, None)
+        },
     }
 }
 

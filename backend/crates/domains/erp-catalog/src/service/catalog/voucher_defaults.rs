@@ -129,9 +129,7 @@ impl CatalogService {
 /// 默认稳定代码被错误用于其他商品类型时返回业务逻辑错误。
 fn ensure_voucher_root_compatible(category: &crate::entity::catalog::ProductCategory) -> Result<()> {
     VoucherCatalogDefaults::ensure_root_category_compatible(category).map_err(|_| {
-        Error::BusinessLogicError(
-            "系统卡券根分类（代码 VOUCHER）的商品类型不是卡券，请修正后再创建卡券类目".to_string(),
-        )
+        Error::BusinessLogicError("系统的卡券根分类未设为卡券类型，请调整分类后再创建卡券类目".to_string())
     })
 }
 

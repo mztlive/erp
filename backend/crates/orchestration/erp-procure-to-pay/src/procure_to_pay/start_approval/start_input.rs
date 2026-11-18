@@ -102,8 +102,8 @@ pub(crate) fn build_purchase_order_start_input(
     } = input;
 
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
-    let actor =
-        ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
+    let actor = ParticipantId::new(actor_id)
+        .map_err(|_| Error::ValidationError("无法确认提交人账号，请重新登录后再提交".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
 
     let plan = plan_purchase_approval_start(&graph, binding.approval_definition_version, organization_id)?;

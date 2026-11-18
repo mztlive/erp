@@ -275,7 +275,7 @@ impl ConfirmationScope {
         }
 
         if scopes.is_empty() {
-            return Err(Error::from("批次对象集无法解析必要确认责任"));
+            return Err(Error::from("无法确定这批导入资料需要哪些岗位确认，请核对批次中的业务对象"));
         }
         Ok(scopes)
     }
@@ -537,7 +537,7 @@ impl LegacyImportConfirmation {
         let mut rejected = false;
         for item in confirmations.iter().filter(|item| item.trial_version == trial_version) {
             if item.batch_version != batch_version || item.import_rule_version != rule_version {
-                return Err(Error::from("同一试算矩阵的批次或规则版本不一致"));
+                return Err(Error::from("试算所用的导入批次或规则版本已变化，请重新试算"));
             }
             rejected |= item.status == ConfirmationStatus::Rejected;
         }
@@ -1026,7 +1026,7 @@ mod tests {
             {
                 assert!(matches!(
                     LegacyImportConfirmation::ensure_trial_snapshot(&items, 1, 2, "v1"),
-                    Err(Error::LogicError(message)) if message == "同一试算矩阵的批次或规则版本不一致"
+                    Err(Error::LogicError(message)) if message == "试算所用的导入批次或规则版本已变化，请重新试算"
                 ));
             }
         }

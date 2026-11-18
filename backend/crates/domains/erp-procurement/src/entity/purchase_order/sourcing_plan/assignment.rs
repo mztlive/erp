@@ -77,10 +77,15 @@ impl SourcingAssignment {
             return Err(Error::from("履约方案不能为空"));
         }
 
-        let quantity = Quantity::from_str(quantity.trim())
-            .map_err(|error| Error::from(format!("本次分配数量非法: {error}")))?;
-        let expected_delivery_date = BusinessDate::from_str(expected_delivery_date.trim())
-            .map_err(|error| Error::from(format!("预计交付日非法: {error}")))?;
+        let quantity = Quantity::from_str(quantity.trim()).map_err(|error| {
+            tracing::warn!(%error, "本次分配数量非法");
+            Error::from("本次分配数量格式无效或超出允许范围，请检查数量")
+        })?;
+        let expected_delivery_date =
+            BusinessDate::from_str(expected_delivery_date.trim()).map_err(|error| {
+                tracing::warn!(%error, "预计交付日非法");
+                Error::from("预计交付日期无效，请选择有效日期")
+            })?;
 
         let target_warehouse_id =
             target_warehouse_id.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string);

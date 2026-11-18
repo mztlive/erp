@@ -97,7 +97,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 
         Ok(SettlementDraftCommandResult {
             result_status: "CREATED".to_string(),
-            message: "结算草稿已从服务端权威来源快照创建".to_string(),
+            message: "已按当前结算来源资料创建草稿".to_string(),
             request_id: req.request_id,
             statement: statement.into(),
             item_count,
@@ -240,7 +240,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         .await
         .map_err(Error::from)?;
         persist_log(&self.db, &audit, executor).await?;
-        Ok(refresh_result(statement, receipt, "REFRESHED", "结算试算已刷新为最新权威来源快照"))
+        Ok(refresh_result(statement, receipt, "REFRESHED", "已按最新结算来源资料更新试算"))
     }
 
     /// 相同来源仍保存原版本、明细计数及同事务审计结果。
@@ -258,7 +258,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .with_counts(statement.base.version, counts.0, counts.1);
         self.persist_refresh_audit(identity, &statement, &receipt, actor, &request.idempotency_key, executor)
             .await?;
-        Ok(refresh_result(statement, receipt, "UNCHANGED", "当前已是最新权威来源快照"))
+        Ok(refresh_result(statement, receipt, "UNCHANGED", "结算试算已使用最新来源资料，无需更新"))
     }
 
     /// 来源未变化时仍以同一事务登记不可变回执和单次业务事件。
@@ -316,14 +316,18 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             statement_id,
             &stable_digest(key.trim()),
         )?;
-        stored.verify(expected_fingerprint, Some(statement_id), "幂等键已用于不同的刷新结算试算命令")?;
+        stored.verify(
+            expected_fingerprint,
+            Some(statement_id),
+            "本次操作编号已用于其他结算试算刷新，请核对原办理记录",
+        )?;
         let SupplyCommandResult::Refresh(receipt) = stored.result else {
             return Err(Error::Internal("结算刷新回执类型非法".to_string()));
         };
 
         let statement = self.domain().load_statement(statement_id, executor).await?;
         ensure_refresh_replay(&statement, &receipt)?;
-        Ok(Some(refresh_result(statement, receipt, "REPLAYED", "结算试算刷新结果已恢复")))
+        Ok(Some(refresh_result(statement, receipt, "REPLAYED", "已查询到上次刷新试算的结果")))
     }
 }
 
@@ -376,7 +380,7 @@ fn ensure_refresh_replay(statement: &SupplierSettlementStatement, receipt: &Refr
     if statement.base.version != receipt.statement_version
         || statement.source_snapshot_hash != receipt.source_snapshot_hash
     {
-        return Err(Error::ConflictError("刷新幂等结果已被后续来源快照替代，请读取当前详情".to_string()));
+        return Err(Error::ConflictError("结算来源资料已再次更新，请查看当前结算单详情".to_string()));
     }
     Ok(())
 }
@@ -404,10 +408,10 @@ fn create_statement_audit(
 /// 验证刷新动作与路径身份，错误顺序与命令入口一致。
 fn validate_refresh_identity(id: &str, req: &RefreshSettlementStatementRequest) -> Result<()> {
     if req.action != SettlementDraftAction::Refresh {
-        return Err(Error::ValidationError("刷新结算草稿必须使用 REFRESH 动作".to_string()));
+        return Err(Error::ValidationError("请在结算草稿详情中选择刷新试算".to_string()));
     }
     if id != req.statement_id {
-        return Err(Error::ValidationError("结算单路径ID与命令载荷不一致".to_string()));
+        return Err(Error::ValidationError("本次操作与当前打开的结算单不符，请重新选择结算单".to_string()));
     }
     Ok(())
 }

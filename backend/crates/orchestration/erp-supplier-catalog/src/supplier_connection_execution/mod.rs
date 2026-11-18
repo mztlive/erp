@@ -97,7 +97,7 @@ impl SupplierConnectionExecutionProcess {
         self.gateway.catalog_policy(connection)?.ok_or_else(|| ClassifiedError {
             class: SupplierFailureClass::CapabilityGap,
             code: "CATALOG_SYNC_ADAPTER_UNAVAILABLE".into(),
-            summary: "当前接口尚不支持商品同步".into(),
+            summary: "当前供应商尚未开通商品同步，请联系管理员核对连接功能".into(),
         })
     }
 
@@ -148,7 +148,9 @@ impl SupplierConnectionExecutionProcess {
         match job.domain_job_type.as_deref() {
             Some(SUPPLIER_HEALTH_CHECK_JOB_TYPE) => self.process_health_job(job, actor).await,
             Some(SUPPLIER_CATALOG_SYNC_JOB_TYPE) => self.process_catalog_job(job, actor).await,
-            _ => Err(Error::BusinessLogicError("任务不属于 W20 连接治理".to_string())),
+            _ => Err(Error::BusinessLogicError(
+                "此任务不是供应商连接检查或商品同步任务，请从对应连接重新选择任务".to_string(),
+            )),
         }
     }
 }

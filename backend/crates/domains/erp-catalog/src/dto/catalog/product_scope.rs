@@ -43,10 +43,10 @@ pub struct HandoverProductRequest {
     #[validate(length(min = 1, max = 512, message = "交接原因不能为空"))]
     pub reason: String,
     /// 期望的商品乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub expected_version: u64,
     /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    #[validate(length(min = 1, max = 128, message = "缺少本次操作的提交编号，请重新发起操作"))]
     pub idempotency_key: String,
 }
 
@@ -79,7 +79,7 @@ pub struct HandoverCandidateView {
 #[serde(deny_unknown_fields)]
 pub struct ProductListParams {
     /// 跨页与导出必须使用前一页的当前授权和业务版本。
-    #[validate(length(min = 1, max = 256))]
+    #[validate(length(min = 1, max = 256, message = "列表查询信息无效，请从第一页重新查询"))]
     pub scope_version: Option<String>,
     /// 当前维护人 ID，逗号分隔，最多 100 项；只收窄授权结果。
     pub owner_user_ids: Option<application_core::QueryIds>,

@@ -7,9 +7,9 @@ use validator::Validate;
 /// 用于接收客户端发送的登录认证请求。
 #[derive(Debug, Deserialize, Validate)]
 pub struct AuthRequest {
-    #[validate(length(min = 3, max = 32))]
+    #[validate(length(min = 3, max = 32, message = "账号长度须为 3 至 32 个字符"))]
     pub account: String,
-    #[validate(length(min = 6, max = 32))]
+    #[validate(length(min = 6, max = 32, message = "密码长度须为 6 至 32 个字符"))]
     pub password: String,
     pub account_kind: AccountKind,
 }

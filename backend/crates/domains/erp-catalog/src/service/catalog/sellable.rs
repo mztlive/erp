@@ -170,8 +170,8 @@ fn specification_attribute_views(signature: &str) -> Vec<SellableSkuSpecificatio
 /// 不返回错误。
 pub fn sellable_sku_invalid_error(sku_ids: &[String]) -> Error {
     Error::BusinessLogicError(format!(
-        "销售商品已失效或修订已变化，请刷新公司商品池后重试: {}",
-        sku_ids.join(", ")
+        "所选商品规格已不可售或资料已更新，请刷新公司商品池后重新选择（涉及 {} 项）",
+        sku_ids.len()
     ))
 }
 
@@ -256,7 +256,7 @@ fn sort_descending(raw: Option<&str>) -> Result<bool> {
     match raw.map(str::trim).filter(|value| !value.is_empty()) {
         None | Some("asc") => Ok(false),
         Some("desc") => Ok(true),
-        Some(other) => Err(Error::ValidationError(format!("非法排序方向: {other}"))),
+        Some(_) => Err(Error::ValidationError("请选择升序或降序".into())),
     }
 }
 

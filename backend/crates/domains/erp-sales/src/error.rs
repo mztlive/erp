@@ -230,7 +230,9 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     match index_name {
         Some("uk_sales_selection_proposals_book") => "一本选品册只能关联一份销售方案".to_string(),
         Some("uk_sales_selection_proposals_no") => "销售方案编号已存在".to_string(),
-        Some("uk_sales_selection_idempotency_key") => "相同幂等键的请求载荷不一致".to_string(),
+        Some("uk_sales_selection_idempotency_key") => {
+            "本次选品操作与之前提交的内容不一致，请先查询原操作结果".to_string()
+        },
         Some("uk_sales_selection_display_book_combo") => "同一组合已存在，不得重复陈列".to_string(),
         _ => "数据已存在，请勿重复提交".to_string(),
     }
@@ -308,7 +310,7 @@ mod tests {
         );
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_sales_selection_idempotency_key")),
-            "相同幂等键的请求载荷不一致"
+            "本次选品操作与之前提交的内容不一致，请先查询原操作结果"
         );
     }
 

@@ -26,7 +26,7 @@ pub struct SubmitSettlementReviewRequest {
     #[validate(length(min = 1, max = 128, message = "结算单ID长度必须在1-128之间"))]
     pub statement_id: String,
     /// 查询所得结算单乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_lock_version: u64,
     /// 查询所得服务端主题摘要。
     #[validate(length(equal = 64, message = "主题摘要必须为64位"))]
@@ -48,7 +48,7 @@ pub struct SubmitSettlementReviewRequest {
     #[validate(custom(function = "safe_command_id", message = "操作ID格式非法"))]
     pub operation_id: String,
     /// 正式命令幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作标识无效，请刷新页面后重新操作"))]
     pub idempotency_key: String,
     /// 提交说明。
     #[validate(length(max = 512, message = "提交说明长度不能超过512"))]
@@ -95,7 +95,7 @@ pub struct SettlementReviewDecisionData {
     #[validate(length(min = 1, max = 128, message = "结算单ID长度必须在1-128之间"))]
     pub statement_id: String,
     /// 查询所得结算单乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_lock_version: u64,
     /// 固定强类型决定。
     pub action: SettlementReviewAction,
@@ -161,7 +161,7 @@ pub struct SettlementReviewCommand {
     #[validate(nested)]
     pub decision: SettlementReviewDecisionData,
     /// 正式命令幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+    #[validate(length(min = 1, max = 128, message = "本次操作标识无效，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 

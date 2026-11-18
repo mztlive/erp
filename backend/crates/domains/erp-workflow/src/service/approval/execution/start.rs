@@ -2,7 +2,7 @@
 
 use bpm::engine::{StartAssigneeBinding, StartCommand, TransitionPlan, start};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
-use bpm::model::{ApprovalCommandReceipt, ParticipantId, ProcessKind, SubjectRef, Timestamp};
+use bpm::model::{ApprovalCommandReceipt, ModelError, ParticipantId, ProcessKind, SubjectRef, Timestamp};
 
 use super::apply_plan::{DomainActionKind, apply_plan};
 use super::idempotency::{
@@ -98,7 +98,7 @@ pub fn prepare_start_with_identity(
     .next()
     .ok_or_else(|| Error::Internal("启动命令缺少 V3 scope".to_string()))?;
     if identity.current().scope().as_str() != expected_scope {
-        return Err(Error::ValidationError("启动命令 scope 与业务主体不一致".to_string()));
+        return Err(Error::ValidationError("本次审批与所选单据不一致，请刷新后重新选择单据".to_string()));
     }
 
     match identity.classify(input.command.receipt.as_ref()) {
@@ -135,7 +135,7 @@ fn build_receipt(
     now: Timestamp,
 ) -> Result<ApprovalCommandReceipt> {
     ApprovalCommandReceipt::new(id, identity, plan.instance.base.id.clone(), now)
-        .map_err(|error| Error::ValidationError(error.to_string()))
+        .map_err(approval_receipt_error)
 }
 
 /// 将引擎错误映射为服务错误。不可提交错误为内部错误。
@@ -151,10 +151,75 @@ fn build_receipt(
 pub fn map_engine_error(error: bpm::engine::EngineError) -> Error {
     match error {
         bpm::engine::EngineError::Uncommittable(message) => Error::Internal(message.to_string()),
-        bpm::engine::EngineError::InvalidCommand(message) => Error::ValidationError(message.to_string()),
+        bpm::engine::EngineError::InvalidCommand(detail) => {
+            tracing::debug!(detail, "审批引擎拒绝操作");
+            let message = match detail {
+                "取消原因不能为空" => "请填写取消原因",
+                "驳回原因不能为空" => "请填写驳回原因",
+                "原审批人资格尚未恢复" => "原审批人仍不具备审批资格，请先恢复其资格",
+                "当前或签审批人资格已失效" => "当前审批人已不具备审批资格，请联系审批管理员",
+                "启动时全部审批人必须有效，不得创建受阻实例" => {
+                    "部分审批人不可用，请检查流程中的审批人设置后再提交"
+                },
+                "节点审批人数必须为 1 至 50" => "每个审批节点须配置 1 至 50 名审批人",
+                "或签资格不能重复或嵌套" => "或签节点不可重复选择审批人，也不可再包含或签组",
+                "审批定义没有节点，无法启动" | "审批定义缺少入口节点" => {
+                    "审批流程没有可用的起始节点，请联系审批管理员检查流程配置"
+                },
+                "节点审批人绑定缺失或重复" | "入口节点缺少审批人绑定" => {
+                    "审批节点未正确设置审批人，请检查流程配置后再提交"
+                },
+                "终态实例不得取消" => "该审批已结束，不能取消，请刷新后查看结果",
+                "终态实例不得提交决定" => "该审批已结束，不能再审批，请刷新后查看结果",
+                "执行不是实例当前令牌" | "只有活动执行可以接受决定" => {
+                    "该审批已不在此处理环节，请刷新后核对当前待办"
+                },
+                _ => "当前审批资料或流程设置不符合此操作要求，请刷新核对；如仍失败，请联系审批管理员",
+            };
+            Error::ValidationError(message.into())
+        },
         bpm::engine::EngineError::GraphCorrupted => {
             Error::from_approval_code(ErrorCode::ApprovalInstanceBlocked)
         },
-        bpm::engine::EngineError::Model(error) => Error::BusinessLogicError(error.to_string()),
+        bpm::engine::EngineError::Model(error) => Error::BusinessLogicError(bpm_model_message(&error).into()),
+    }
+}
+
+pub(super) fn approval_receipt_error(error: ModelError) -> Error {
+    tracing::debug!(%error, "无法生成审批操作结果记录");
+    Error::ValidationError("无法记录本次审批操作，请刷新核对审批状态；如仍失败，请联系审批管理员".into())
+}
+
+pub(crate) fn bpm_model_message(error: &ModelError) -> &'static str {
+    tracing::debug!(%error, "审批模型拒绝操作");
+    match error {
+        ModelError::InvalidField(_) => "审批资料不完整或格式不正确，请核对后再操作",
+        ModelError::InvalidStatus("已最终通过的审批实例不得撤回") => "审批已通过，不能再撤回",
+        ModelError::InvalidStatus("已最终驳回的审批实例不得撤回") => "审批已驳回，不能再撤回",
+        ModelError::InvalidStatus("已取消的审批实例不得重复撤回") => "审批已取消，不能重复撤回",
+        ModelError::InvalidStatus(_) => "当前审批状态不允许此操作，请刷新后核对",
+        ModelError::InvalidTransition(_) => "当前审批流程无法进入下一环节，请联系审批管理员检查流程设置",
+        ModelError::ExecutionAlreadyEnded => "该审批环节已经结束，请刷新后查看审批结果",
+        ModelError::Overflow(_) => "审批轮次或版本已达到上限，请联系审批管理员",
+        ModelError::CommandReceiptConflict => "本次提交编号与原审批操作不一致，请先核对审批状态",
+        ModelError::InvalidTimestamp => "本次审批操作时间无效，请联系管理员",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bpm::engine::EngineError;
+
+    use super::{Error, ModelError, map_engine_error};
+
+    #[test]
+    fn engine_rejections_preserve_classification_and_hide_model_terms() {
+        let command_error = map_engine_error(EngineError::InvalidCommand("执行不是实例当前令牌"));
+        let model_error = map_engine_error(EngineError::Model(ModelError::Overflow("execution_no")));
+
+        assert!(matches!(command_error, Error::ValidationError(message) if message.contains("当前待办")));
+        assert!(
+            matches!(model_error, Error::BusinessLogicError(message) if message.contains("达到上限") && !message.contains("execution_no"))
+        );
     }
 }

@@ -527,7 +527,7 @@ impl SalesOrder {
         if self.commercial_status != CommercialStatus::PendingReview
             || self.review_status != ReviewStatus::InApproval
         {
-            return Err(Error::from("只有审批中的销售单可以由最终通过动作形式化"));
+            return Err(Error::from("只有审批中的销售单可以在审批通过后生效，请核对销售单状态"));
         }
         Ok(())
     }
@@ -554,7 +554,7 @@ impl SalesOrder {
         }
         self.attribution
             .as_ref()
-            .ok_or_else(|| Error::from("首次生效归属快照缺失"))?
+            .ok_or_else(|| Error::from("销售单缺少首次生效时的业务归属，请联系支持人员核对"))?
             .validate(&self.sales_owner_user_id, &self.business_org_unit_id)?;
 
         ensure_transition(self.commercial_status, CommercialStatus::Effective)?;

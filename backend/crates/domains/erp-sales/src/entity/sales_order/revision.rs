@@ -310,7 +310,7 @@ impl SalesOrderRevision {
     pub fn required_voucher_expiry(&self) -> Result<Instant> {
         match (&self.voucher_category_sku_id, self.voucher_expiry_at) {
             (Some(_), Some(expiry)) => Ok(expiry),
-            _ => Err(Error::from("非卡券销售单无法建立执行投影")),
+            _ => Err(Error::from("只有卡券销售单可以办理卡券交付，请核对订单类型")),
         }
     }
 }
@@ -438,7 +438,10 @@ impl SalesOrderRevisionLine {
             return Err(Error::from(format!("销售单当前版本第 {} 行不是实物服务行", self.line_no)));
         }
         if goods.revision_line_id.as_ref() != self.base.id {
-            return Err(Error::from(format!("销售单当前版本第 {} 行与实物服务快照不匹配", self.line_no)));
+            return Err(Error::from(format!(
+                "销售单当前版本第 {} 行与已确认的实物或服务资料不一致，请刷新后核对",
+                self.line_no
+            )));
         }
 
         Ok(SalesOrderWorkingCopyLineData {
@@ -761,20 +764,20 @@ mod tests {
         missing_expiry.voucher_expiry_at = None;
         assert_eq!(
             missing_expiry.required_voucher_expiry().unwrap_err().to_string(),
-            "非卡券销售单无法建立执行投影"
+            "只有卡券销售单可以办理卡券交付，请核对订单类型"
         );
 
         let mut missing_category = both.clone();
         missing_category.voucher_category_sku_id = None;
         assert_eq!(
             missing_category.required_voucher_expiry().unwrap_err().to_string(),
-            "非卡券销售单无法建立执行投影"
+            "只有卡券销售单可以办理卡券交付，请核对订单类型"
         );
 
         let neither = SalesOrderRevision::new(SalesOrderRevisionId::new("rev-g"), header_data()).unwrap();
         assert_eq!(
             neither.required_voucher_expiry().unwrap_err().to_string(),
-            "非卡券销售单无法建立执行投影"
+            "只有卡券销售单可以办理卡券交付，请核对订单类型"
         );
     }
 

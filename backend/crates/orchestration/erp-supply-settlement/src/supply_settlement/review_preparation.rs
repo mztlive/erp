@@ -48,9 +48,18 @@ impl FinancePreparation for Finance {
         Ok(build_settlement_payable(source, amount, actor_id, at)?)
     }
     fn cost(&mut self, delta: &SettlementCostDeltaFact) -> Result<Vec<CostEntry>> {
-        Ok(build_settlement_cost_delta(delta)?)
+        prepare_cost_delta(delta)
     }
 }
+fn prepare_cost_delta(delta: &SettlementCostDeltaFact) -> Result<Vec<CostEntry>> {
+    build_settlement_cost_delta(delta).map_err(|error| match error {
+        erp_finance::Error::BusinessLogicError(_) => Error::BusinessLogicError(
+            "目前无法确认结算差额所需的原成本、税率及费用分摊，暂不能完成复核，请联系财务核对".into(),
+        ),
+        other => other.into(),
+    })
+}
+
 fn execute(
     finance: &mut impl FinancePreparation,
     statement: &mut SupplierSettlementStatement,
@@ -70,7 +79,7 @@ fn execute(
                 SettlementStatus::HasDifference
             };
             let Some(reason) = input.reject_reason else {
-                return Err(Error::ValidationError("驳回必须携带原因代码".to_string()));
+                return Err(Error::ValidationError("驳回结算单前请选择驳回原因".to_string()));
             };
             statement.record_review(
                 SettlementReviewDecision::Reject {
@@ -264,7 +273,7 @@ mod tests {
         }
         fn cost(&mut self, delta: &SettlementCostDeltaFact) -> Result<Vec<CostEntry>> {
             self.calls.push("cost");
-            Ok(build_settlement_cost_delta(delta)?)
+            prepare_cost_delta(delta)
         }
     }
     #[test]
@@ -290,7 +299,7 @@ mod tests {
         );
 
         assert!(
-            matches!(result, Err(Error::BusinessLogicError(ref value)) if value == "ERP_ACCEPTED 成本差额暂缺权威原成本、税率与消费分配链，禁止伪造 CostEntry")
+            matches!(result, Err(Error::BusinessLogicError(ref value)) if value == "目前无法确认结算差额所需的原成本、税率及费用分摊，暂不能完成复核，请联系财务核对")
         );
         assert_eq!(finance.calls, ["payable", "cost"]);
         assert!(finance.account_id.is_some());

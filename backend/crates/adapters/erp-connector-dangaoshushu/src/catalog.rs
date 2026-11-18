@@ -75,10 +75,10 @@ impl DangaoshushuConnector {
             .send(Request::Read { path: "/dsapi/product/get_product_details", parameters })
             .await?;
 
-        if id(&product["product"]["id"]).map_err(|e| context(e, "商品详情 product.id 缺失或格式无效"))?
+        if id(&product["product"]["id"]).map_err(|e| context(e, "供应商商品详情缺少有效的商品编号"))?
             != product_id
         {
-            return Err(context(mapping(), "商品详情 product.id 与请求商品编号不一致"));
+            return Err(context(mapping(), "供应商返回了不同商品的详情"));
         }
         Ok(product)
     }
@@ -163,18 +163,18 @@ pub(super) fn next_page(page: u32, products: usize, limit: NonZeroU32) -> Connec
 pub(super) fn spec_value<'a>(product: &'a Value, sku: &SupplierSku) -> ConnectorResult<Option<&'a Value>> {
     let mut found = None;
     for spec in
-        product["specs"].as_array().ok_or_else(|| context(mapping(), "商品详情 specs 缺失或不是数组"))?
+        product["specs"].as_array().ok_or_else(|| context(mapping(), "供应商商品详情缺少可读取的规格清单"))?
     {
-        if id(&spec["id"]).map_err(|e| context(e, "商品详情中规格 id 缺失或格式无效"))? == sku.spec_id
+        if id(&spec["id"]).map_err(|e| context(e, "供应商商品详情缺少有效的规格编号"))? == sku.spec_id
         {
             if found.is_some() {
-                return Err(context(mapping(), "商品详情中规格 id 重复"));
+                return Err(context(mapping(), "供应商商品详情有重复的规格编号"));
             }
             if !spec["product_id"].is_null()
-                && Some(id(&spec["product_id"]).map_err(|e| context(e, "规格 product_id 格式无效"))?)
+                && Some(id(&spec["product_id"]).map_err(|e| context(e, "供应商规格关联的商品编号无效"))?)
                     != sku.product_id
             {
-                return Err(context(mapping(), "规格 product_id 与商品编号不一致"));
+                return Err(context(mapping(), "供应商规格不属于当前商品"));
             }
             found = Some(spec);
         }
@@ -196,14 +196,15 @@ pub(super) fn availability_state(
 ) -> ConnectorResult<AvailabilityState> {
     let mut reasons = Vec::new();
     for (enabled, reason) in [
-        (status_flag(&product["brand"]["status"], "brand.status")?, AvailabilityBlock::Brand),
+        (status_flag(&product["brand"]["status"], "品牌的启用状态")?, AvailabilityBlock::Brand),
         (
-            status_flag(&product["product"]["status"], "product.status")?
-                && status_flag(&product["product"]["can_buy"], "product.can_buy")?,
+            status_flag(&product["product"]["status"], "商品的上架状态")?
+                && status_flag(&product["product"]["can_buy"], "商品的可订购状态")?,
             AvailabilityBlock::Product,
         ),
         (
-            !status_flag(&spec["deleted"], "spec.deleted")? && status_flag(&spec["can_buy"], "spec.can_buy")?,
+            !status_flag(&spec["deleted"], "规格的停用状态")?
+                && status_flag(&spec["can_buy"], "规格的可订购状态")?,
             AvailabilityBlock::Specification,
         ),
     ] {
@@ -222,7 +223,7 @@ pub(super) fn availability_state(
 }
 
 fn status_flag(value: &Value, field: &str) -> ConnectorResult<bool> {
-    flag(value).map_err(|e| context(e, &format!("状态字段 {field} 必须为 0 或 1")))
+    flag(value).map_err(|e| context(e, &format!("供应商{field}无法识别")))
 }
 
 #[async_trait]
@@ -434,7 +435,7 @@ mod tests {
             assert_eq!(failure.code, "DGSS_MAPPING");
             assert_eq!(
                 failure.summary,
-                format!("第 3 页第 1 个商品第 1 个规格：供应商名称字段 {field_name} 缺失、为空或类型无效")
+                "第 3 页第 1 个商品第 1 个规格：供应商未提供可读取的商品或规格名称，请核对蛋糕叔叔的商品资料"
             );
         }
     }
@@ -465,7 +466,10 @@ mod tests {
         assert_eq!(failure.class, SupplierFailureClass::MappingError);
         assert_eq!(
             failure.summary,
-            format!("第 {} 页第 1 个商品第 1 个规格：供应商名称字段 title 缺失、为空或类型无效", u32::MAX)
+            format!(
+                "第 {} 页第 1 个商品第 1 个规格：供应商未提供可读取的商品或规格名称，请核对蛋糕叔叔的商品资料",
+                u32::MAX
+            )
         );
         assert_eq!(connector.scan_with_details(&scan).await.unwrap_err(), mapping());
         assert_eq!(calls.requests.lock().unwrap().len(), 2);

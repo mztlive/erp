@@ -189,7 +189,7 @@ mod tests {
         for (action, reference, error) in [
             (AllocationAction::Apply, false, None),
             (AllocationAction::Apply, true, Some("APPLY 分配不得引用原分配")),
-            (AllocationAction::Reverse, false, Some("REVERSE 分配必须引用原 APPLY 分配")),
+            (AllocationAction::Reverse, false, Some("办理冲正时必须关联原分配记录，请核对原单据")),
             (AllocationAction::Reverse, true, None),
         ] {
             let result = PurchaseInvoiceAllocation::new(

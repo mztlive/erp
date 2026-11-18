@@ -347,7 +347,7 @@ fn split_payment_term_fields(
     let parts = split_encoded_payment_term_snapshot(&payment_term_snapshot);
     let payment_term_snapshot = normalize_required_text(
         parts.payment_term_code,
-        "付款条件快照不能为空",
+        "请选择付款条件",
         PAYMENT_TERM_SNAPSHOT_MAX_LEN,
         "付款条件快照过长",
     )?;

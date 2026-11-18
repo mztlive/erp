@@ -67,8 +67,9 @@ impl SupplierFulfillmentService {
     /// # 错误
     /// 适配器未装配或身份不符时拒绝。
     pub fn capabilities(&self, connection: &SupplierApiConnection) -> Result<Vec<SupplierApiCapabilityCode>> {
-        let registry =
-            self.registry.as_ref().ok_or_else(|| Error::BusinessLogicError("供应商接口未配置".into()))?;
+        let registry = self.registry.as_ref().ok_or_else(|| {
+            Error::BusinessLogicError("尚未配置供应商连接，请联系管理员完成配置后再试".into())
+        })?;
         registry
             .capabilities(&SupplierReferenceTarget::from(connection))
             .map_err(|error| Error::BusinessLogicError(error.summary))

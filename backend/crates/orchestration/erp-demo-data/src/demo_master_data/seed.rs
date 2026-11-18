@@ -89,7 +89,9 @@ impl SeedRequest {
         match self {
             Self::Product(row) => validate_product(row, previous)?,
             Self::Category(row) if row.parent_category_id.is_some() => {
-                return Err(Error::ValidationError("演示分类必须为根分类".into()));
+                return Err(Error::ValidationError(
+                    "演示分类须建在最上一级，请联系支持人员核对分类设置".into(),
+                ));
             },
             Self::Supplier(row) => validate_supplier(row)?,
             Self::Warehouse(row) => {
@@ -124,7 +126,9 @@ pub(super) fn load(json: &str) -> Result<Vec<DemoStep>> {
         let (kind, key) = request.identity();
         let key = key.to_string();
         if key.trim().is_empty() || known.insert(key.clone(), kind).is_some() {
-            return Err(Error::ValidationError(format!("演示种子身份为空或重复：{key}")));
+            return Err(Error::ValidationError(
+                "演示资料清单有缺少编号或编号重复的项目，请联系支持人员核对".into(),
+            ));
         }
 
         if let SeedRequest::Product(product) = &request {
@@ -150,7 +154,9 @@ fn validate_product(row: &CreateProductRequest, previous: &HashMap<String, DemoK
         super::prices::validate(sku)?;
         reference(previous, sku.base_unit_id.as_ref(), DemoKind::Unit)?;
         if sku.sku_id.is_some() || sku.expected_sku_revision_id.is_some() || sku.reenable {
-            return Err(Error::ValidationError("演示种子不能引用已有 SKU ID".into()));
+            return Err(Error::ValidationError(
+                "演示商品需使用清单中为它准备的规格，请联系支持人员核对商品设置".into(),
+            ));
         }
     }
     Ok(())

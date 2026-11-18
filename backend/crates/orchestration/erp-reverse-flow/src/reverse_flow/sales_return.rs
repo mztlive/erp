@@ -115,7 +115,7 @@ fn ensure_sales_return_case_has_no_adapter() -> Result<()> {
 fn sales_return_case_binding_organization_id(case: &SalesReturnCase) -> Result<String> {
     let org = case.sales_order_id.to_string();
     if org.trim().is_empty() {
-        return Err(Error::ValidationError("销售退货缺少原销售单，无法构造绑定上下文".to_string()));
+        return Err(Error::ValidationError("销售退货未关联原销售单，请先核对原单".to_string()));
     }
     Ok(org)
 }

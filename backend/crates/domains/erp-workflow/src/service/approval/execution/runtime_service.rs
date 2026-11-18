@@ -214,7 +214,7 @@ fn runtime_snapshot_mismatch(hide_mismatch: bool) -> Error {
     if hide_mismatch {
         hidden_not_found()
     } else {
-        Error::ConflictError("审批实例与冻结业务快照不一致".to_string())
+        Error::ConflictError("审批记录与提交时的单据资料不一致，请联系审批管理员核对".to_string())
     }
 }
 

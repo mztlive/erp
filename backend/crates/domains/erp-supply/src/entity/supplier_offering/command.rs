@@ -58,9 +58,9 @@ impl SupplierOfferingCommand {
     pub fn new(id: impl Into<String>, data: SupplierOfferingCommandData) -> Result<Self> {
         let idempotency_key = normalize_required_text(
             data.idempotency_key,
-            "幂等键不能为空",
+            "本次操作缺少提交标识，请刷新页面后重新操作",
             IDEMPOTENCY_KEY_MAX_LEN,
-            "幂等键过长",
+            "本次操作标识无效，请刷新页面后重新操作",
         )?;
         let operation =
             normalize_required_text(data.operation, "命令操作不能为空", OPERATION_MAX_LEN, "命令操作过长")?;
@@ -138,7 +138,7 @@ impl SupplierOfferingCommand {
     pub fn ensure_replayable(&self, operation: &str, request_fingerprint: &str) -> Result<()> {
         if self.operation != operation || !fingerprints_match(&self.request_fingerprint, request_fingerprint)
         {
-            return Err(Error::from("幂等键已用于不同的供给命令"));
+            return Err(Error::from("本次供给操作与之前提交的内容不一致，请先查询原操作结果"));
         }
         Ok(())
     }

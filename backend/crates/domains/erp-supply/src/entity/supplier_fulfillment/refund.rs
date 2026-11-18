@@ -347,7 +347,7 @@ impl SupplierRefundAllocation {
 
         let is_reverse = data.allocation_action == AllocationAction::Reverse;
         if is_reverse && data.reverses_allocation_id.is_none() {
-            return Err(Error::from("REVERSE 分配必须引用原 APPLY 分配"));
+            return Err(Error::from("办理冲正时必须关联原分配记录，请核对原单据"));
         }
         if !is_reverse && data.reverses_allocation_id.is_some() {
             return Err(Error::from("APPLY 分配不得引用原分配"));

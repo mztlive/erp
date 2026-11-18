@@ -71,7 +71,7 @@ fn exact_quote_accepts_original_terms_without_mutating_history() {
 fn applicability_revalidates_stored_terms_before_checking_usage() {
     for (invalid_price, expected) in [
         (true, "参数验证失败: 专项报价价格、税率或数量非法"),
-        (false, "参数验证失败: 专项报价地址身份、指纹或数量非法"),
+        (false, "参数验证失败: 专项报价的适用地址或数量无法核对，请重新选择收货地址并检查数量"),
     ] {
         let mut terms = terms();
         if invalid_price {

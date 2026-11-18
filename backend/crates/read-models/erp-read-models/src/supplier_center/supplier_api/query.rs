@@ -31,6 +31,7 @@ use persistence_core::{Executor, Transactional};
 
 use super::SupplierApiReadService;
 use super::context::GovernanceContext;
+use super::jobs::connection_failure_note;
 use crate::supplier_center::keyword_supplier_ids;
 use crate::{Error, Result};
 
@@ -218,7 +219,9 @@ impl SupplierApiReadService {
         executor: &mut dyn Executor,
     ) -> Result<(CompiledAccess, PermissionSet)> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-            return Err(Error::ValidationError("供应连接详情读取必须使用快照事务".into()));
+            return Err(Error::ValidationError(
+                "暂时无法查看供应商连接详情，请从供应商连接列表重新打开".into(),
+            ));
         }
         let permissions = self.connection_permissions(actor, executor).await?;
         let access = self.authorization.query(actor, &supplier_api::CONNECTION_DETAIL, executor).await?;
@@ -359,7 +362,12 @@ impl SupplierApiReadService {
             return if configured && supported {
                 Vec::new()
             } else {
-                vec![blocker(action.as_str(), "ORDER_UNAVAILABLE", "接口尚未配置或不支持自动下单", None)]
+                vec![blocker(
+                    action.as_str(),
+                    "ORDER_UNAVAILABLE",
+                    "供应商连接尚未配置或不支持自动下单，请联系管理员核对连接设置",
+                    None,
+                )]
             };
         }
         SupplierConnectionGovernance { connection, capabilities: &[], confirmations: &[], health_runs: &[] }
@@ -382,7 +390,13 @@ fn health_run_view(run: &SupplierHealthCheckRun) -> SupplierHealthCheckRunView {
         finished_at: run.finished_at.map(|at| at.unix_secs() as u64),
         latency_ms: run.latency_ms,
         error_code: run.error_code.clone(),
-        error_summary: run.error_summary.clone(),
+        error_summary: run.error_summary.as_deref().map(|_| {
+            connection_failure_note(
+                run.error_code.as_deref(),
+                "供应商连接检查未通过，请核对连接设置；如仍失败，请联系管理员",
+            )
+            .into()
+        }),
     }
 }
 

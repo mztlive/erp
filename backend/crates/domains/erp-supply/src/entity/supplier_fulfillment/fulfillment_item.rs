@@ -70,7 +70,7 @@ impl SupplierFulfillmentItemData {
     ) -> Result<Self> {
         let cost_snapshot_total_gross =
             Amount::try_from(round_to_cent(unit_cost_snapshot_gross.to_decimal() * quantity.to_decimal()))
-                .map_err(|_| Error::from("明细成本快照金额无效"))?;
+                .map_err(|_| Error::from("供应商履约明细的成本金额无效，请核对下单单价和数量"))?;
         Ok(Self {
             supplier_fulfillment_order_id,
             supplier_offering_revision_id,
@@ -134,9 +134,9 @@ impl SupplierFulfillmentItem {
 
         let supplier_sku_code_snapshot = normalize_required_text(
             data.supplier_sku_code_snapshot,
-            "供应商 SKU 编码快照不能为空",
+            "缺少供应商商品规格编码，请核对供给资料",
             SUPPLIER_ITEM_CODE_MAX_LEN,
-            "供应商 SKU 编码快照过长",
+            "供应商商品规格编码过长，请核对供给资料",
         )?;
         let supplier_product_code_snapshot = normalize_optional_text(
             data.supplier_product_code_snapshot,
@@ -198,9 +198,9 @@ fn ensure_positive_quantity(value: Quantity, message: &str) -> Result<()> {
 /// 恒等式不成立或舍入结果无法表示为 `Amount` 时返回错误。
 fn ensure_snapshot_consistent(quantity: Quantity, unit_cost: UnitPrice, total_gross: Amount) -> Result<()> {
     let expected = Amount::try_from(round_to_cent(unit_cost.to_decimal() * quantity.to_decimal()))
-        .map_err(|_| Error::from("明细成本快照金额无效"))?;
+        .map_err(|_| Error::from("供应商履约明细的成本金额无效，请核对下单单价和数量"))?;
     if expected != total_gross {
-        return Err(Error::from("明细成本快照必须等于下单单位成本 × 数量并舍入到分"));
+        return Err(Error::from("履约明细成本须等于下单单位成本乘以数量，并四舍五入到分，请核对后重试"));
     }
     Ok(())
 }

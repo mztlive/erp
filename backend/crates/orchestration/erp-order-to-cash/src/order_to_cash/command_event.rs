@@ -262,10 +262,10 @@ fn validate_command_replay(
     receipt.matches(command_id, actor_id, action, scope_id, fingerprint, expected_key_hash).map_err(|error| {
         if matches!(error, erp_sales::Error::ConflictError(_)) {
             let message = match action {
-                "sales_order.create" => "同一幂等键已用于不同的销售建单命令",
-                "sales_order.submit" => "同一幂等键已用于不同的销售提交",
-                "sales_order.handover" => "同一幂等键已用于不同的销售交接",
-                _ => "同一操作号已用于不同的销售命令",
+                "sales_order.create" => "本次操作编号已用于另一张销售单的创建，请核对原建单记录",
+                "sales_order.submit" => "本次操作编号已用于另一项销售提交，请核对原提交记录",
+                "sales_order.handover" => "本次操作编号已用于另一项销售交接，请核对原交接记录",
+                _ => "本次操作编号已用于另一项销售操作，请核对原办理记录",
             };
             Error::ConflictError(message.to_string())
         } else {

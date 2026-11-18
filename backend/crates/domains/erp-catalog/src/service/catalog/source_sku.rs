@@ -90,7 +90,9 @@ fn ensure_source_input(input: &ProductSkuInput) -> Result<()> {
         || input.reenable
         || !input.sku_no.trim().is_empty()
     {
-        return Err(Error::ValidationError("API 选品只允许新增未上架规格，编号由系统分配".into()));
+        return Err(Error::ValidationError(
+            "从供应商商品库选品时，只能新增未上架的规格，规格编号由系统分配".into(),
+        ));
     }
     Ok(())
 }

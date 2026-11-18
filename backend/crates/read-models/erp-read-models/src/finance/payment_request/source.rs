@@ -16,7 +16,8 @@ use crate::purchase_center::source_sales::source_sales;
 use crate::{Error, Result};
 
 /// 销售减量或移除商品导致采购暂停付款时的提示。
-const SOURCE_PAUSED: &str = "来源销售已减量或移除本采购的商品，采购依据处理完成前暂停付款申请";
+const SOURCE_PAUSED: &str =
+    "来源销售已减少本采购的商品数量或移除商品，请先让采购经办人处理采购变更，再提交付款申请";
 
 /// 冻结已证明的采购生效版本；后续草稿和当前合同不会覆盖审批材料。
 ///

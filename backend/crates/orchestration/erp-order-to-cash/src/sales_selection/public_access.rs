@@ -88,7 +88,7 @@ impl SalesSelectionProcess {
         .await
         .map_err(|_| Error::Internal("密码验证失败".into()))?;
         if !accepted {
-            return Err(Error::Forbidden("密码或提货码不正确".into()));
+            return Err(Error::Forbidden("访问密码或提货码有误，请核对后重新输入".into()));
         }
 
         Ok(service

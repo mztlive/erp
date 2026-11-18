@@ -89,7 +89,7 @@ pub struct CommitCustomerAcceptanceRequest {
     /// 销售单。
     pub sales_order_id: SalesOrderId,
     /// 销售单期望乐观锁版本，防止基于过期履约事实提交。
-    #[validate(range(min = 1, message = "销售单乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "销售单版本无效，请刷新销售单后再试"))]
     pub expected_sales_order_version: u64,
     /// 验收时间（秒级时间戳）。
     pub accepted_at: i64,
@@ -117,7 +117,7 @@ pub struct PostAcceptanceLineInput {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ReverseCustomerAcceptanceRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝冲正（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_version: u64,
     /// 冲正原因说明。
     #[validate(custom(function = "non_blank", message = "冲正原因不能为空"))]

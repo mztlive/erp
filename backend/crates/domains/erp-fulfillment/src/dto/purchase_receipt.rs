@@ -43,7 +43,7 @@ pub struct CreatePurchaseReceiptRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdatePurchaseReceiptRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 入库仓；缺省表示不修改。
     pub warehouse_id: Option<WarehouseId>,
@@ -54,7 +54,7 @@ pub struct UpdatePurchaseReceiptRequest {
 #[serde(deny_unknown_fields)]
 pub struct PostPurchaseReceiptRequest {
     /// 期望的采购入库单版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 最终入库仓；缺省表示保持草稿值。
     pub warehouse_id: Option<WarehouseId>,

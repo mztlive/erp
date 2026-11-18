@@ -43,8 +43,7 @@ pub(super) async fn load_document_approval(
     review: ReviewStatus,
     executor: &mut dyn Executor,
 ) -> Result<DocumentApprovalView> {
-    let subject = super::subject_ref_for_sales_business(business_type, sales_order_id)
-        .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
+    let subject = super::subject_ref_for_sales_business(business_type, sales_order_id)?;
     let runtime = load_approval_summary(
         db,
         &subject,

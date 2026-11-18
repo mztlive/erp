@@ -63,7 +63,7 @@ impl CreateFinanceResponsibilityRuleRequest {
 #[serde(deny_unknown_fields)]
 pub struct UpdateFinanceResponsibilityRuleRequest {
     /// 期望乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
     /// 供应商付款或销项开票；旧复核操作值仅用于历史数据解码。
     pub operation: FinanceResponsibilityOperation,

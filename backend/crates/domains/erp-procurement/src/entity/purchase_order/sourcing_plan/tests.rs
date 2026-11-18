@@ -339,7 +339,7 @@ fn parse_rejects_invalid_quantity() {
     let error =
         SourcingAssignment::parse("sol-1", "basis-1", SupplySourceType::Purchase, None, "abc", "2026-09-01")
             .expect_err("非法数量必须失败");
-    assert!(error.to_string().starts_with("本次分配数量非法"));
+    assert!(error.to_string().contains("本次分配数量格式无效"));
 }
 
 /// 非法预计交付日必须拒绝。
@@ -348,7 +348,7 @@ fn parse_rejects_invalid_delivery_date() {
     let error =
         SourcingAssignment::parse("sol-1", "basis-1", SupplySourceType::Purchase, None, "10", "not-a-date")
             .expect_err("非法日期必须失败");
-    assert!(error.to_string().starts_with("预计交付日非法"));
+    assert!(error.to_string().contains("预计交付日期无效"));
 }
 
 /// 零数量与负数量必须拒绝。

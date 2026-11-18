@@ -8,9 +8,9 @@ use bpm::model::{
 
 use super::apply_plan::apply_plan;
 use super::idempotency::{ReceiptBranch, resume_identity};
-use super::start::map_engine_error;
+use super::start::{approval_receipt_error, map_engine_error};
 use super::{ExecutionCommandInput, PreparedExecution};
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 /// 恢复编排输入。
 #[derive(Debug, Clone)]
@@ -89,6 +89,6 @@ pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> 
         plan.instance.base.id.clone(),
         input.command.now,
     )
-    .map_err(|error| Error::ValidationError(error.to_string()))?;
+    .map_err(approval_receipt_error)?;
     Ok(PreparedExecution::Apply(Box::new(apply_plan(plan, receipt, None))))
 }

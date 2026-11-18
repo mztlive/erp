@@ -140,7 +140,7 @@ pub(super) async fn create_open_tasks(
         .approval_subject_snapshots()
         .find_by_process_instance_id(&input.writes.instance.base.id, executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("审批任务缺少冻结业务快照".into()))?;
+        .ok_or_else(|| Error::ConflictError("缺少该任务对应的提交资料，请联系审批管理员核对".into()))?;
     let due_at = due::inherited_due_at(db, input.writes, executor).await?;
 
     for (index, intent) in input.writes.create_tasks.iter().enumerate() {

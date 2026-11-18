@@ -34,7 +34,7 @@ pub struct CreateProductCategoryRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateProductCategoryRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
     /// 分类名称；缺省表示不修改。
     pub name: Option<String>,
@@ -57,7 +57,7 @@ pub struct ProductCategoryParentChange {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct MoveProductCategoryRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
     /// 新父分类；空表示提升为根分类。
     pub parent_category_id: Option<ProductCategoryId>,
@@ -133,7 +133,7 @@ impl From<ProductCategoryRow> for ProductCategoryView {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ProductCategoryListParams {
     /// 多业务字段字面量关键词，空白不筛选。
-    #[validate(length(max = 200))]
+    #[validate(length(max = 200, message = "搜索关键词不能超过 200 个字符"))]
     pub q: Option<String>,
     /// 分类代码精确筛选。
     pub category_code: Option<String>,

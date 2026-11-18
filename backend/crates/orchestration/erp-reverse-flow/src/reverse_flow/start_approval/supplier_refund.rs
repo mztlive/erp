@@ -75,8 +75,8 @@ pub fn build_supplier_refund_start_input(input: ReverseStartInput<'_>) -> Result
         &ReverseStartContracts {
             document_type: DocumentType::SupplierRefund,
             readable: supplier_refund_object_readable,
-            version_mismatch: "供应商退款单绑定定义版本与已加载定义不一致",
-            empty_definition: "审批定义没有节点，无法启动供应商退款审批",
+            version_mismatch: "供应商退款单的审批流程版本不一致，请联系管理员核对",
+            empty_definition: "供应商退款审批流程没有配置审批步骤，请联系管理员补全",
         },
     )
 }
@@ -161,7 +161,7 @@ pub async fn persist_supplier_refund_start(
         now,
     } = input;
     let PreparedExecution::Apply(writes) = prepared else {
-        return Err(Error::ConflictError("提交收据未包含原请求版本，请刷新后重试".into()));
+        return Err(Error::ConflictError("原提交记录缺少当时的单据版本，请刷新后先核对审批状态".into()));
     };
 
     super::super::return_settlement::validate_settlement(db, &refund, executor).await?;

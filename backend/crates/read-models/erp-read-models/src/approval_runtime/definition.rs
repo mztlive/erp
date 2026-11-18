@@ -1,5 +1,5 @@
 //! 已授权单据的绑定路线摘要，不暴露定义管理字段。
-use bpm::model::ApprovalNodeDefinition;
+use bpm::model::{ApprovalNodeDefinition, ModelError};
 use erp_workflow::BpmExt;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use mongodb::Database;
@@ -7,6 +7,11 @@ use persistence_core::Executor;
 use serde::Serialize;
 
 use crate::{Error, Result};
+
+pub(crate) fn invalid_approval_steps(error: ModelError) -> Error {
+    tracing::warn!(%error, "审批环节数量或顺序异常");
+    Error::ValidationError("审批流程的环节数量或顺序有误，请联系管理员核对流程设置".into())
+}
 
 /// 提交确认和绑定卡共用的节点摘要。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -56,11 +61,13 @@ pub async fn binding_route(
         .load_definition_graph(&binding.approval_process_definition_id, ex)
         .await?
         .filter(|graph| graph.definition.definition_version == binding.approval_definition_version)
-        .ok_or_else(|| Error::ConflictError("单据绑定的审批流程版本不存在，请联系管理员".into()))?;
+        .ok_or_else(|| {
+            Error::ConflictError("找不到这张单据提交时所用的审批流程，请联系管理员核对流程设置".into())
+        })?;
 
     let nodes = graph
         .ordered_nodes()
-        .map_err(|e| Error::ValidationError(e.to_string()))?
+        .map_err(invalid_approval_steps)?
         .into_iter()
         .map(DocumentApprovalNodeView::from_node)
         .collect();

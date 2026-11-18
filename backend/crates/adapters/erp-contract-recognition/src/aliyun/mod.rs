@@ -36,7 +36,10 @@ impl AliyunContractOcr {
 impl ContractOcr for AliyunContractOcr {
     async fn recognize(&self, pdf: &[u8], page_count: u32) -> Result<OcrDocument> {
         if pdf.len() > 20 * 1024 * 1024 {
-            return Err(ImportFailure::new("OCR_PDF_SIZE", "合同 PDF 超过识别大小限制"));
+            return Err(ImportFailure::new(
+                "OCR_PDF_SIZE",
+                "合同 PDF 不能超过 20 MB，请压缩后重新上传完整合同",
+            ));
         }
         // 独立验证，防止适配器被其他调用方传入截断页数。
         if pdf_page_count(pdf)? != page_count {
@@ -75,7 +78,7 @@ impl PageSource for LivePages {
 
 async fn collect_pages(source: &impl PageSource, page_count: u32) -> Result<OcrDocument> {
     if !(1..=200).contains(&page_count) {
-        return Err(ImportFailure::new("PAGE_COVERAGE", "合同须包含 1 至 200 页"));
+        return Err(ImportFailure::new("PAGE_COVERAGE", "合同识别支持 1 至 200 页，请调整页数后重新上传"));
     }
 
     let mut document =
@@ -107,7 +110,7 @@ async fn collect_pages(source: &impl PageSource, page_count: u32) -> Result<OcrD
             } else if document.version != version {
                 return Err(ImportFailure::new(
                     "OCR_VERSION_CHANGED",
-                    "识别服务版本发生变化，请重新识别整份合同",
+                    "本次未能用同一方式识别整份合同，请重新识别完整文件",
                 ));
             }
         }
@@ -123,15 +126,21 @@ async fn collect_pages(source: &impl PageSource, page_count: u32) -> Result<OcrD
 
 fn provider_error(error: OcrError) -> ImportFailure {
     let (code, message) = match error {
-        OcrError::Configuration => ("OCR_CONFIG_INVALID", "阿里云 OCR 配置无效，请联系管理员"),
-        OcrError::Authorization => ("OCR_UNAUTHORIZED", "阿里云 OCR 凭据无效或未授权，请联系管理员"),
-        OcrError::Throttled => ("OCR_THROTTLED", "阿里云 OCR 请求限流，请稍后重试"),
-        OcrError::Timeout => ("OCR_TIMEOUT", "阿里云 OCR 请求超时，请稍后重试"),
-        OcrError::Transport | OcrError::Unavailable => ("OCR_UNAVAILABLE", "阿里云 OCR 暂不可用，请稍后重试"),
+        OcrError::Configuration => {
+            ("OCR_CONFIG_INVALID", "合同文字识别尚未配置完成，请联系管理员核对服务设置")
+        },
+        OcrError::Authorization => ("OCR_UNAUTHORIZED", "合同文字识别服务未授权，请联系管理员核对授权"),
+        OcrError::Throttled => ("OCR_THROTTLED", "当前等待识别的合同较多，请稍后重新识别"),
+        OcrError::Timeout => ("OCR_TIMEOUT", "未能在规定时间内识别合同文字，请稍后重新识别"),
+        OcrError::Transport | OcrError::Unavailable => {
+            ("OCR_UNAVAILABLE", "合同文字识别服务暂不可用，请稍后重新识别")
+        },
         OcrError::ImageSize => ("OCR_IMAGE_SIZE", "合同页面图片超过 10 MB，请调整扫描文件"),
-        OcrError::Rejected => ("OCR_REJECTED", "阿里云 OCR 拒绝识别，请检查文件及服务开通状态"),
+        OcrError::Rejected => {
+            ("OCR_REJECTED", "合同文字识别服务未接受该文件，请确认文件清晰完整；如仍失败，请联系管理员")
+        },
         OcrError::InvalidResponse | OcrError::ResponseSize => {
-            ("OCR_INVALID_RESPONSE", "阿里云 OCR 返回结果无效，请联系管理员")
+            ("OCR_INVALID_RESPONSE", "未取得可用的合同文字识别结果，请联系管理员核对识别服务")
         },
     };
     ImportFailure::new(code, message)
@@ -156,7 +165,7 @@ mod tests {
         for (size, code, message) in [
             (0, "INVALID_PDF", "PDF 无法解析，请上传完整文件"),
             (20 * 1024 * 1024, "INVALID_PDF", "PDF 无法解析，请上传完整文件"),
-            (20 * 1024 * 1024 + 1, "OCR_PDF_SIZE", "合同 PDF 超过识别大小限制"),
+            (20 * 1024 * 1024 + 1, "OCR_PDF_SIZE", "合同 PDF 不能超过 20 MB，请压缩后重新上传完整合同"),
         ] {
             let failure = ocr.recognize(&vec![0; size], 0).await.unwrap_err();
             assert_eq!(failure, ImportFailure::new(code, message));

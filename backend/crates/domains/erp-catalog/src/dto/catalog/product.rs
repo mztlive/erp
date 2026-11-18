@@ -191,7 +191,7 @@ impl CreateProductRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateProductRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
     /// 重新启用历史停用 SKU 时的变更原因。
     pub change_reason: Option<String>,
@@ -230,7 +230,7 @@ pub struct UpdateProductRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct DisableProductRequest {
     /// 用户打开页面时看到的商品乐观锁版本；冲突时拒绝覆盖。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
     /// 本次停用原因，写入同一事务内的审计日志。
     #[validate(length(max = 256, message = "停用原因过长"))]
@@ -333,7 +333,7 @@ pub struct UpdateProductListingRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateSkuListingRequest {
     /// SKU 期望乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
     /// 目标上架状态。
     pub listing_status: ListingStatus,

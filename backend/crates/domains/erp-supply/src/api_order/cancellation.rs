@@ -80,7 +80,7 @@ impl CancellationScope {
             || request.lines.len() != frozen.len()
         {
             return Err(Error::ValidationError(
-                "请填写有效取消原因，并完整选择本次接口执行的原商品范围".into(),
+                "请填写有效的取消原因，并选齐本次向供应商下单的原商品".into(),
             ));
         }
 

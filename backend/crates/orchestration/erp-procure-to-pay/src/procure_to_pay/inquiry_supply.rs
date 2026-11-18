@@ -96,11 +96,9 @@ pub(super) async fn revalidate_quote(
 ) -> Result<()> {
     ensure_line_terms(line, source)?;
     let id = reservation_id(order_id, line)?;
-    let reservation = db
-        .inquiry_quote_reservations()
-        .find_by_id(&id, executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("专项采购采用记录缺失，禁止重提".into()))?;
+    let reservation = db.inquiry_quote_reservations().find_by_id(&id, executor).await?.ok_or_else(|| {
+        Error::ConflictError("找不到该采购采用专项报价的记录，请先核对原采购单再提交".into())
+    })?;
     if reservation.released
         || reservation.quote_revision_id != source.quote_revision_id
         || reservation.quantity != line.quantity.ok_or_else(changed)?
@@ -143,7 +141,7 @@ fn ensure_exact_quote(source: &PurchaseInquiryQuoteSource, quote: &InquiryQuote)
 }
 fn ensure_line_terms<L: InquiryPurchaseLine>(line: &L, source: &PurchaseInquiryQuoteSource) -> Result<()> {
     if line.cost() != Some(source.unit_cost_gross) || line.tax() != Some(source.input_tax_rate) {
-        return Err(Error::ConflictError("专项采购单价或税率与原始报价不符，禁止任意覆盖".into()));
+        return Err(Error::ConflictError("专项采购的单价或税率与原报价不符，请按已采用的报价填写".into()));
     }
     Ok(())
 }

@@ -795,14 +795,16 @@ pub(in crate::procure_to_pay) async fn replay_creation(
     ) {
         Ok(receipt) => receipt,
         Err(PurchaseCommandReceiptError::IdentityMismatch | PurchaseCommandReceiptError::PayloadConflict) => {
-            return Err(Error::ConflictError("幂等键已用于不同采购创建命令".to_string()));
+            return Err(Error::ConflictError(
+                "本次操作编号已用于其他采购单创建，请核对原建单记录".to_string(),
+            ));
         },
         Err(PurchaseCommandReceiptError::Corrupted(message)) => {
             return Err(Error::Internal(message));
         },
     };
     if receipt_identity.actor_id != actor.id() {
-        return Err(Error::ConflictError("采购创建回执与操作人不一致".into()));
+        return Err(Error::ConflictError("原采购建单记录不属于当前经办人，请核对建单记录".into()));
     }
 
     let order = db
@@ -811,7 +813,7 @@ pub(in crate::procure_to_pay) async fn replay_creation(
         .await?
         .ok_or_else(|| Error::Internal("采购创建幂等收据引用的采购单不存在".to_string()))?;
     if order.base.id != receipt.payload().purchase_order_id {
-        return Err(Error::ConflictError("采购创建幂等收据与当前采购单不一致".to_string()));
+        return Err(Error::ConflictError("原建单记录与当前采购单不符，请核对采购单详情".to_string()));
     }
 
     authorization

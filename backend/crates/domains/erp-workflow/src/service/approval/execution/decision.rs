@@ -11,7 +11,7 @@ use bpm::model::{
 use super::apply_plan::{DomainActionKind, apply_plan};
 use super::authorization::ensure_triple_responsibility;
 use super::idempotency::{ReceiptBranch, decision_identity};
-use super::start::map_engine_error;
+use super::start::{approval_receipt_error, map_engine_error};
 use super::{ExecutionCommandInput, PreparedExecution};
 use crate::error::{Error, Result};
 
@@ -131,7 +131,7 @@ fn receipt_from_plan(
     now: bpm::model::Timestamp,
 ) -> Result<ApprovalCommandReceipt> {
     ApprovalCommandReceipt::new(id, identity, plan.instance.base.id.clone(), now)
-        .map_err(|error| Error::ValidationError(error.to_string()))
+        .map_err(approval_receipt_error)
 }
 
 /// 同一执行存在多个 OPEN 任务时规划标准结构阻塞。

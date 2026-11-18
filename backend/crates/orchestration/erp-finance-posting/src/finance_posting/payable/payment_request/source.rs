@@ -98,7 +98,7 @@ fn authorized_source<'a>(sources: &'a [PurchaseOrder], id: &str) -> Result<&'a P
     sources
         .iter()
         .find(|order| order.base.id == id)
-        .ok_or_else(|| Error::Forbidden("采购应付来源未通过付款申请授权".into()))
+        .ok_or_else(|| Error::Forbidden("当前账号无权为该采购应付款发起申请，请联系有权限的同事".into()))
 }
 
 async fn sync_reserved_arrangements(
@@ -178,7 +178,7 @@ async fn current_revision(
         .stable
         .current_revision_id
         .as_ref()
-        .ok_or_else(|| Error::ConflictError("采购缺少可证明的生效版本".into()))?;
+        .ok_or_else(|| Error::ConflictError("找不到该采购单生效时的记录，请联系采购经办人核对".into()))?;
     db.purchase_order()
         .find_revisions_by_ids(&[PurchaseOrderRevisionId::new(revision_id)], executor)
         .await?

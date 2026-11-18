@@ -105,7 +105,9 @@ impl SalesOrderReadService {
         if permission.resource() != "sales_order"
             || !executor.boundary().is_some_and(|boundary| boundary.is_snapshot())
         {
-            return Err(Error::ValidationError("销售结果读取必须使用对应权限和快照事务".into()));
+            return Err(Error::ValidationError(
+                "暂时无法从此处查看销售处理结果，请打开原销售单核对当前状态，勿重复操作".into(),
+            ));
         }
         self.authorization.require(actor, permission, AccessTarget::record(id)?, executor).await?;
 

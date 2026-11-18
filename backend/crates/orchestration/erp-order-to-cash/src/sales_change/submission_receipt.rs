@@ -128,10 +128,10 @@ async fn replay(
     let Some(receipt) = source.receipt(&command.id, executor).await? else {
         return Ok(None);
     };
-    let persisted = source
-        .submission(&receipt.submission.submission_id, executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("销售变更提交回执引用的冻结提交不存在".into()))?;
+    let persisted =
+        source.submission(&receipt.submission.submission_id, executor).await?.ok_or_else(|| {
+            Error::ConflictError("找不到销售变更原先提交审批的单据内容，请联系管理员核对".into())
+        })?;
     receipt.validate(command, &persisted)?;
     Ok(Some(receipt.approval_process_instance_id))
 }

@@ -482,8 +482,10 @@ where
 /// # 错误
 /// 序列化失败时返回错误。
 pub fn payload_fingerprint<T: Serialize>(action: &str, target_id: &str, payload: &T) -> Result<String> {
-    let payload = serde_json::to_string(payload)
-        .map_err(|e| Error::from(format!("采购命令请求指纹序列化失败: {e}")))?;
+    let payload = serde_json::to_string(payload).map_err(|error| {
+        tracing::warn!(%action, %target_id, %error, "采购命令请求指纹序列化失败");
+        Error::from("暂时无法核对本次采购操作，请重新提交；如仍失败，请联系支持人员")
+    })?;
     Ok(digest_parts([action, target_id, payload.as_str()]))
 }
 

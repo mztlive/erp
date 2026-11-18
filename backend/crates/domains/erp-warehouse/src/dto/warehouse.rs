@@ -93,7 +93,7 @@ pub struct CreateWarehouseRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateWarehouseRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 仓库名称（结构化快照）。
     #[validate(custom(function = "non_blank", message = "仓库名称不能为空"))]
@@ -128,7 +128,7 @@ pub struct UpdateWarehouseRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateWarehouseFulfillmentHandlersRequest {
     /// 期望的仓库乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 入库经办人账号。
     #[validate(custom(function = "non_blank", message = "请选择入库经办人"))]
@@ -377,7 +377,7 @@ pub struct CreateWarehouseSkuPolicyRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateWarehouseSkuPolicyRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 最低可用量预警阈值；缺省表示不修改。
     pub minimum_available_quantity: Option<Quantity>,

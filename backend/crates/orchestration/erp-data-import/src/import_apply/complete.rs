@@ -445,7 +445,7 @@ pub(super) fn validate_confirmation_completion(
         || work_item.subject_version != expected_subject
         || confirmation.trial_version != command.expected_trial_version
     {
-        return Err(Error::ConflictError("导入确认的批次或试算快照已变化".to_string()));
+        return Err(Error::ConflictError("导入批次或试算结果已更新，请刷新后按最新结果确认".to_string()));
     }
 
     let command_scope = ConfirmationScope::parse(&command.confirmation_scope)?;
@@ -465,7 +465,9 @@ pub(super) fn validate_confirmation_completion(
     }
 
     if !batch.required_confirmation_scopes()?.contains(&command_scope) {
-        return Err(Error::BusinessLogicError("当前确认范围已不属于批次必要矩阵".to_string()));
+        return Err(Error::BusinessLogicError(
+            "本批次已不需要确认当前范围，请刷新查看仍需确认的事项".to_string(),
+        ));
     }
     if work_item.status != WorkItemStatus::Open {
         return Err(Error::ConflictError("导入确认任务已不再开放".to_string()));

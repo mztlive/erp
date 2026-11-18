@@ -342,7 +342,7 @@ struct CollectedDraftInputs {
 /// 动作非创建、日期非法或期间倒置时返回错误。
 fn collect_draft_inputs(req: &CreateSettlementStatementRequest) -> Result<CollectedDraftInputs> {
     if req.action != SettlementDraftAction::Create {
-        return Err(Error::ValidationError("创建结算草稿必须使用 CREATE 动作".to_string()));
+        return Err(Error::ValidationError("请通过新建供应商结算单办理草稿登记".to_string()));
     }
     let period_start = parse_settlement_business_date(&req.period_start, "结算期间开始")?;
     let period_end = parse_settlement_business_date(&req.period_end, "结算期间结束")?;
@@ -475,7 +475,9 @@ fn validate_create_replay(
         || statement.period_start != period_start
         || statement.period_end != period_end
     {
-        return Err(Error::ConflictError("创建幂等键已用于不同的供应商结算命令".to_string()));
+        return Err(Error::ConflictError(
+            "本次结算单创建内容与之前提交的不一致，请先查看原创建结果".to_string(),
+        ));
     }
     Ok(())
 }

@@ -50,7 +50,7 @@ impl SupplierFulfillmentProcess {
         req.validate()?;
         let key = req.idempotency_key.trim().to_string();
         if key.is_empty() {
-            return Err(Error::ValidationError("幂等键不能为空".into()));
+            return Err(Error::ValidationError("缺少本次交接的操作编号，请重新打开交接页面".into()));
         }
         if let Some(org) = req.target_org_unit_id.as_deref().map(str::trim).filter(|value| !value.is_empty())
         {
@@ -298,7 +298,7 @@ async fn replay(
         order_id,
         &stable_digest(key.trim()),
     )?;
-    stored.verify(fingerprint, Some(order_id), "同一幂等键已用于不同的供应商订单交接")?;
+    stored.verify(fingerprint, Some(order_id), "本次操作编号已用于其他供应商订单交接，请核对原交接记录")?;
     if !matches!(stored.result, SupplyCommandResult::FulfillmentHandover) {
         return Err(Error::Internal("供应商订单交接回执类型非法".to_string()));
     }

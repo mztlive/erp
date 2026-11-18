@@ -122,7 +122,7 @@ pub(crate) async fn authorize_payment_result(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     if payment.payment_request_id.as_deref() != Some(request_id) || payment.created_by != actor.id() {
-        return Err(Error::Forbidden("付款命令结果不属于当前操作人或申请".into()));
+        return Err(Error::Forbidden("不能查看其他经办人或付款申请的付款登记结果".into()));
     }
 
     let task = db
@@ -138,12 +138,12 @@ pub(crate) async fn authorize_payment_result(
     let version = task
         .subject_version
         .parse::<u32>()
-        .map_err(|_| Error::ConflictError("原付款任务提交版本无效".into()))?;
+        .map_err(|_| Error::ConflictError("找不到原付款待办对应的申请版本，请联系财务核对".into()))?;
     let snapshot = db
         .purchase_payment_request_snapshots()
         .find_for_version(request_id, version, executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("原付款缺少冻结来源依据".into()))?;
+        .ok_or_else(|| Error::ConflictError("找不到原付款对应的获批申请资料，请联系财务核对".into()))?;
     basis::validate_snapshot(payment, &snapshot)
 }
 
@@ -307,7 +307,7 @@ fn allocations_by_account(
             total
                 .to_decimal()
                 .checked_add(allocation.allocated_amount.to_decimal())
-                .ok_or_else(|| Error::Logic("付款分配汇总溢出".into()))?,
+                .ok_or_else(|| Error::Logic("付款分配合计超出可处理金额，请核对各笔金额".into()))?,
         )?;
     }
 

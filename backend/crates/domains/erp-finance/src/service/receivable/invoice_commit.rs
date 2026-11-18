@@ -133,7 +133,7 @@ impl CommitInvoiceRequest {
                 allocations,
             }),
             _ => Err(Error::ValidationError(
-                "新发票必须提交 invoice；已有草稿必须提交 invoice_id 与 expected_version".to_string(),
+                "登记新发票时请填写发票信息；登记已有草稿时，请打开该草稿并刷新后再提交".to_string(),
             )),
         }
     }
@@ -255,7 +255,7 @@ mod tests {
         assert!(matches!(err, Error::ValidationError(_)));
         assert!(
             err.to_string()
-                .contains("新发票必须提交 invoice；已有草稿必须提交 invoice_id 与 expected_version")
+                .contains("登记新发票时请填写发票信息；登记已有草稿时，请打开该草稿并刷新后再提交")
         );
     }
 
@@ -283,7 +283,7 @@ mod tests {
         assert!(matches!(err, Error::ValidationError(_)));
         assert!(
             err.to_string()
-                .contains("新发票必须提交 invoice；已有草稿必须提交 invoice_id 与 expected_version")
+                .contains("登记新发票时请填写发票信息；登记已有草稿时，请打开该草稿并刷新后再提交")
         );
     }
 
@@ -330,7 +330,7 @@ mod tests {
         let err = req.prepare().unwrap_err();
         assert!(
             err.to_string()
-                .contains("新发票必须提交 invoice；已有草稿必须提交 invoice_id 与 expected_version")
+                .contains("登记新发票时请填写发票信息；登记已有草稿时，请打开该草稿并刷新后再提交")
         );
     }
 

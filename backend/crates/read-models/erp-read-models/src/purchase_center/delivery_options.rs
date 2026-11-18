@@ -69,7 +69,7 @@ async fn delivery_snapshot(
     executor: &mut dyn Executor,
 ) -> Result<PurchaseDeliveryOptionsView> {
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-        return Err(Error::ValidationError("采购交付安排读取必须使用快照事务".into()));
+        return Err(Error::ValidationError("暂时无法查看采购交付安排，请从采购单详情重新打开".into()));
     }
 
     let access =
@@ -278,7 +278,7 @@ mod tests {
             delivery_snapshot(&db, authorization.clone(), &actor, "purchase", &mut ReadExecutor::default())
                 .await;
         assert!(
-            matches!(result, Err(Error::ValidationError(reason)) if reason == "采购交付安排读取必须使用快照事务")
+            matches!(result, Err(Error::ValidationError(reason)) if reason == "暂时无法查看采购交付安排，请从采购单详情重新打开")
         );
 
         let result =

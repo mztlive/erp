@@ -111,7 +111,7 @@ pub(super) fn receipt(
 ) -> Result<CommandReceipt> {
     let manifest = pending.content_manifest();
     if manifest.is_empty() && !pending.is_empty() {
-        return Err(Error::ValidationError("发票上传缺少真实文件内容清单".into()));
+        return Err(Error::ValidationError("无法核对本次上传的发票文件，请重新上传".into()));
     }
     if manifest.is_empty() {
         Ok(CommandReceipt::from_payload(

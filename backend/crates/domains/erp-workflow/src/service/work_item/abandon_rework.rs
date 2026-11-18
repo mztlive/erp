@@ -39,7 +39,12 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     ) -> Result<WorkItemMutationOutcome> {
         let version = expected_task_version(&req.expected_task_version)?;
         let reason = normalize_required_text(req.reason, "放弃说明不能为空", 512, "放弃说明过长")?;
-        let key = normalize_required_text(req.idempotency_key, "幂等键不能为空", 128, "幂等键过长")?;
+        let key = normalize_required_text(
+            req.idempotency_key,
+            "缺少本次操作的提交编号，请重新发起操作",
+            128,
+            "本次操作的提交编号无效，请重新发起操作",
+        )?;
         let receipt = CommandReceipt::from_resource_parts(
             "work-item-command-",
             actor.id(),

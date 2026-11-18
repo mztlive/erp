@@ -101,7 +101,7 @@ impl RegionCode {
     pub fn parse(value: &str) -> Result<Self> {
         let code = Self::try_from(value.trim().to_string())?;
         if !REGIONS.by_code.contains_key(code.as_str()) {
-            return Err(Error::from(format!("地区代码 {code} 不存在")));
+            return Err(Error::from("找不到该地区，请重新选择"));
         }
         Ok(code)
     }
@@ -230,7 +230,7 @@ impl TryFrom<String> for RegionCode {
 
     fn try_from(value: String) -> Result<Self> {
         if value.len() != 6 || !value.bytes().all(|byte| byte.is_ascii_digit()) || value.starts_with("00") {
-            return Err(Error::from(format!("地区代码 {value} 格式非法")));
+            return Err(Error::from("所选地区无效，请重新选择"));
         }
         Ok(Self(value))
     }

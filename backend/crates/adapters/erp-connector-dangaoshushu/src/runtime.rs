@@ -283,7 +283,7 @@ impl DangaoshushuRuntime {
             return Err(error(
                 SupplierFailureClass::AuthSignature,
                 "DGSS_REFERENCE_TICKET_INVALID",
-                "供应商技术引用票据无效或过期",
+                "本次选择的供应商资料已经失效，请刷新后重新选择",
             ));
         }
 
@@ -326,10 +326,18 @@ fn internal_reference(kind: &str, fingerprint: &str) -> String {
 
 fn validate_settings(settings: &DangaoshushuConfig) -> ConnectorResult<()> {
     settings.validate().map_err(|_| {
-        error(SupplierFailureClass::MappingError, "DGSS_CONFIG_INVALID", "蛋糕叔叔技术配置无效")
+        error(
+            SupplierFailureClass::MappingError,
+            "DGSS_CONFIG_INVALID",
+            "蛋糕叔叔接入配置不完整，请联系管理员核对",
+        )
     })?;
     if !settings.enabled {
-        return Err(error(SupplierFailureClass::CapabilityGap, "DGSS_DISABLED", "蛋糕叔叔技术配置未登记"));
+        return Err(error(
+            SupplierFailureClass::CapabilityGap,
+            "DGSS_DISABLED",
+            "尚未登记蛋糕叔叔接入配置，请联系管理员完成配置",
+        ));
     }
     Ok(())
 }

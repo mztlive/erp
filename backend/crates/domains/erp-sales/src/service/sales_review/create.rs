@@ -300,10 +300,15 @@ fn build_change_working_copy_lines_from_revision(
     }
     let mut datas = Vec::with_capacity(revision_lines.len());
     for line in revision_lines {
-        let goods =
-            goods_lines.iter().find(|goods| goods.revision_line_id.as_ref() == line.base.id).ok_or_else(
-                || Error::ConflictError(format!("销售单当前版本第 {} 行缺少实物服务快照", line.line_no)),
-            )?;
+        let goods = goods_lines
+            .iter()
+            .find(|goods| goods.revision_line_id.as_ref() == line.base.id)
+            .ok_or_else(|| {
+                Error::ConflictError(format!(
+                    "销售单当前版本第 {} 行缺少实物或服务资料，请核对原单后再办理变更",
+                    line.line_no
+                ))
+            })?;
         datas.push(line.to_goods_working_copy_data(goods)?);
     }
 

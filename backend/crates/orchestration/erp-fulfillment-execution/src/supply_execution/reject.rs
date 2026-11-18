@@ -70,7 +70,9 @@ impl SupplierFulfillmentProcess {
                 &req.supplier_status_version,
                 Instant::from_unix_secs(req.occurred_at),
             ) {
-                return Err(Error::ConflictError("外部事件已用于不同订单或拒单结果".into()));
+                return Err(Error::ConflictError(
+                    "该供应商拒单通知已用于其他订单或结果，请核对供应商的原通知".into(),
+                ));
             }
             return Ok(existing.into());
         }

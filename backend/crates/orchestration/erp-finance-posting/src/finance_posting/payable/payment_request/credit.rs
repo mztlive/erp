@@ -211,7 +211,7 @@ async fn authorize_replay(
         || previous.payable_entry_id != req.payable_entry_id
         || previous.amount != req.amount
     {
-        return Err(Error::ConflictError("抵扣提交标识已用于其他内容".into()));
+        return Err(Error::ConflictError("本次操作编号已用于其他抵扣内容，请核对原抵扣记录".into()));
     }
 
     let task = db

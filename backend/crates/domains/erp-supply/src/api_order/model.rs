@@ -250,7 +250,9 @@ impl ApiOrderExecution {
         }
         if let Some(previous) = &self.superseded_by_purchase_revision_id {
             if previous != replacement_revision {
-                return Err(Error::ConflictError("原接口执行已经由其他采购版本替代".into()));
+                return Err(Error::ConflictError(
+                    "原供应商下单记录已被新的采购版本替代，请查看当前采购单".into(),
+                ));
             }
             return Ok(());
         }

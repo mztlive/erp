@@ -17,12 +17,16 @@ pub(super) fn delivery_expired() -> ConnectorError {
 }
 
 pub(super) fn mapping() -> ConnectorError {
-    error(SupplierFailureClass::MappingError, "DGSS_MAPPING", "供应商字段缺失或语义无法核实")
+    error(
+        SupplierFailureClass::MappingError,
+        "DGSS_MAPPING",
+        "蛋糕叔叔提供的业务资料不完整或无法核实，请联系管理员核对供应商资料",
+    )
 }
 /// 为映射失败补充固定字段说明，不暴露供应商原始值。
 pub(super) fn context(mut failure: ConnectorError, message: &str) -> ConnectorError {
     if failure.class == SupplierFailureClass::MappingError {
-        failure.summary = message.into();
+        failure.summary = format!("{message}，请核对蛋糕叔叔的商品资料");
     }
     failure
 }

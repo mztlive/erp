@@ -127,7 +127,7 @@ pub struct CreateCustomerRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateCustomerRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
     /// 默认付款条件；`None` 表示不修改，空字符串表示清除。
     pub default_payment_term_id: Option<String>,
@@ -269,7 +269,7 @@ pub struct CustomerDetailView {
 #[serde(deny_unknown_fields)]
 pub struct CustomerListParams {
     /// 跨页与导出必须使用前一页的当前授权和业务版本。
-    #[validate(length(min = 1, max = 256))]
+    #[validate(length(min = 1, max = 256, message = "列表查询信息无效，请从第一页重新查询"))]
     pub scope_version: Option<String>,
     /// 当前业务负责人 ID，逗号分隔，最多 100 项；只收窄授权结果。
     pub owner_user_ids: Option<application_core::QueryIds>,
@@ -314,7 +314,7 @@ impl CustomerListParams {
     pub(crate) fn normalized(&self) -> Result<CustomerListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, CUSTOMER_SORT_FIELDS)?;
         if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
-            return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
+            return Err(Error::ValidationError("请选择一个组织后再勾选包含下级组织".into()));
         }
         Ok(CustomerListQuery {
             owner_user_ids: self.owner_user_ids.clone(),

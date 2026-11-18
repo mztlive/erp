@@ -111,7 +111,9 @@ pub(crate) async fn record_invoice_execution(
         return Err(Error::BusinessLogicError("发票往来主体与当前任务的应收子账不一致".to_string()));
     }
     if account_ids.iter().any(|account_id| account_id.as_ref() != task.business_object_id) {
-        return Err(Error::BusinessLogicError("一次销项开票只能分配到当前任务绑定的应收子账".to_string()));
+        return Err(Error::BusinessLogicError(
+            "本次销项开票只能关联当前待办对应的应收账款，请核对所选账款".to_string(),
+        ));
     }
 
     let request_id = super::invoice_request::consume_authorization(

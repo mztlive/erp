@@ -41,10 +41,9 @@ pub async fn build_draft_submission(
         .supplier_role(&scope.supplier_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-    let revision_id = supplier
-        .current_commercial_profile_revision_id
-        .clone()
-        .ok_or_else(|| Error::BusinessLogicError("供应商缺少商务结算版本".to_string()))?;
+    let revision_id = supplier.current_commercial_profile_revision_id.clone().ok_or_else(|| {
+        Error::BusinessLogicError("供应商尚未配置商务结算资料，请补齐后再创建采购单".to_string())
+    })?;
     let payment_term = port.payment_term(&scope.payment_term_code)?;
 
     PurchaseOrderSubmission::new(
@@ -128,7 +127,7 @@ mod tests {
         fn payment_term(&self, code: &str) -> erp_core::Result<PaymentTermFact> {
             self.calls.lock().unwrap().push(format!("payment:{code}"));
             if code == "INVALID" {
-                return Err(erp_core::Error::from("invalid supplier payment term"));
+                return Err(erp_core::Error::from("供应商付款条件无效，请核对采购单选用的付款条件"));
             }
             Ok(PaymentTermFact::new("POSTPAY_NET30").with_days_after_delivery(30))
         }
@@ -194,7 +193,7 @@ mod tests {
     async fn missing_commercial_pointer_stops_before_payment_parse() {
         let (result, calls) = invoke(SupplierOutcome::NoRevision, "INVALID").await;
         assert!(
-            matches!(result,Err(Error::BusinessLogicError(message)) if message=="供应商缺少商务结算版本")
+            matches!(result,Err(Error::BusinessLogicError(message)) if message=="供应商尚未配置商务结算资料，请补齐后再创建采购单")
         );
         assert_eq!(calls, vec!["supplier:supplier-1"]);
     }

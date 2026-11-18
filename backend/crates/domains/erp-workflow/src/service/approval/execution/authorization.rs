@@ -57,8 +57,8 @@ pub fn converge_eligibility(
     name_snapshot: &str,
     failure: Option<AuthorizationFailure>,
 ) -> Result<Eligibility> {
-    let participant =
-        ParticipantId::new(participant).map_err(|_| Error::ValidationError("处理人引用无效".to_string()))?;
+    let participant = ParticipantId::new(participant)
+        .map_err(|_| Error::ValidationError("所选处理人无效，请重新选择".to_string()))?;
     let name = name_snapshot.trim();
     if name.is_empty() {
         return Err(Error::ValidationError("审批人显示名不能为空".to_string()));
@@ -148,7 +148,10 @@ pub fn converge_node_eligibility(
             )
         })
         .collect::<Result<Vec<_>>>()?;
-    Eligibility::any_of(members).map_err(|error| Error::ValidationError(error.to_string()))
+    Eligibility::any_of(members).map_err(|error| {
+        tracing::debug!(%error, "审批人资格配置校验失败");
+        Error::ValidationError("当前审批节点的审批人配置无效，请联系审批管理员核对".into())
+    })
 }
 
 #[cfg(test)]

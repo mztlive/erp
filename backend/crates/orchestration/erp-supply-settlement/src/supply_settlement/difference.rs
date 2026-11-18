@@ -190,7 +190,11 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             difference_id,
             &stable_digest(key.trim()),
         )?;
-        stored.verify(expected_fingerprint, Some(difference_id), "幂等键已用于不同的结算差异决定命令")?;
+        stored.verify(
+            expected_fingerprint,
+            Some(difference_id),
+            "本次操作编号已用于其他结算差异处理，请核对原处理记录",
+        )?;
         let SupplyCommandResult::DifferenceDecision(receipt) = stored.result else {
             return Err(Error::Internal("结算差异决定回执类型非法".to_string()));
         };
@@ -243,7 +247,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
 /// 原回执必须属于本次真实操作人已获授权的结算单。
 fn ensure_difference_statement(receipt: &DifferenceDecisionReceipt, statement_id: &str) -> Result<()> {
     if receipt.statement_id != statement_id {
-        return Err(Error::ConflictError("差异决定幂等收据与当前结算单不一致".into()));
+        return Err(Error::ConflictError("原差异处理记录不属于这张结算单，请核对结算单详情".into()));
     }
     Ok(())
 }
@@ -256,7 +260,7 @@ fn ensure_difference_replay(
     pending: bool,
 ) -> Result<()> {
     if receipt.statement_id != statement_id || difference_version != receipt.difference_version || pending {
-        return Err(Error::ConflictError("差异决定幂等收据与当前正式事实不一致".to_string()));
+        return Err(Error::ConflictError("原差异处理结果与当前结算资料不符，请核对差异处理记录".to_string()));
     }
     Ok(())
 }
@@ -266,7 +270,7 @@ fn ensure_difference_statement_version(
     current_version: u64,
 ) -> Result<()> {
     if current_version < receipt.statement_version {
-        return Err(Error::ConflictError("差异决定幂等收据的结算单版本非法".to_string()));
+        return Err(Error::ConflictError("原差异处理记录中的结算单版本无效，请联系管理员核对".to_string()));
     }
     Ok(())
 }
@@ -386,7 +390,7 @@ mod replay_tests {
         ensure_difference_statement(&receipt, "statement-1").unwrap();
         assert!(matches!(
             ensure_difference_statement(&receipt, "statement-2"),
-            Err(Error::ConflictError(message)) if message == "差异决定幂等收据与当前结算单不一致"
+            Err(Error::ConflictError(message)) if message == "原差异处理记录不属于这张结算单，请核对结算单详情"
         ));
 
         for version in [1, 2, 3] {

@@ -50,7 +50,7 @@ pub struct RegisterInboxMessageRequest {
 #[serde(deny_unknown_fields)]
 pub struct WriteBackInboxResultRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 回写结果：`processed` 标记已处理；`failed` 标记失败并登记错误任务。
     pub outcome: WriteBackOutcome,

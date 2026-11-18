@@ -666,7 +666,7 @@ impl InquiryImportPreview {
             return Err(Error::NotFound("导入预览不存在或不可用".into()));
         }
         if self.expected_version != version || self.input_fingerprint != fingerprint {
-            return Err(Error::ConflictError("需求版本或原始文件指纹已变化，请重新预览".into()));
+            return Err(Error::ConflictError("询价需求版本或导入文件已变化，请重新预览后再提交".into()));
         }
         if self.expires_at <= now {
             return Err(Error::ConflictError("导入预览已过期，请重新预览".into()));

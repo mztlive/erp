@@ -74,7 +74,7 @@ impl From<crate::repository::AuditEventRow> for AuditEventView {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct AuditEventListParams {
     /// 操作者、动作、对象或追踪号字面量关键词。
-    #[validate(length(max = 200))]
+    #[validate(length(max = 200, message = "搜索关键词不能超过 200 个字符"))]
     pub q: Option<String>,
     /// 界面动作标签匹配的动作代码（逗号分隔），只作为关键词 OR 条件。
     pub keyword_actions: Option<String>,

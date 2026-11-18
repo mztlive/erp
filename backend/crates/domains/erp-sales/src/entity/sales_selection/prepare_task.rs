@@ -137,7 +137,7 @@ impl SalesSelectionPrepareTask {
             return Err(Error::from("准备任务已被新运行替代"));
         }
         if now >= self.deadline_at {
-            return Err(Error::from("准备任务已超过时限"));
+            return Err(Error::from("选品册准备超时，请重新准备"));
         }
         Ok(())
     }

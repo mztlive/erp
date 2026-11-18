@@ -159,7 +159,10 @@ fn extraction_failure(
 }
 
 fn invalid_output() -> ImportFailure {
-    ImportFailure::new("AI_INVALID_OUTPUT", "字段提取结果不完整或格式无效，请重试或联系管理员")
+    ImportFailure::new(
+        "AI_INVALID_OUTPUT",
+        "未能识别完整的合同要素，请确认文件清晰后重新识别；如仍失败，请联系管理员",
+    )
 }
 
 fn unavailable() -> ImportFailure {
@@ -187,10 +190,10 @@ fn provider_failure(error: &ProviderError) -> (ImportFailure, Option<&'static st
 fn status_failure(status: u16) -> (ImportFailure, Option<&'static str>) {
     let error = match status {
         401 | 403 => ImportFailure::new("AI_UNAUTHORIZED", "字段提取服务凭据无效或未授权，请联系管理员"),
-        429 => ImportFailure::new("AI_THROTTLED", "字段提取服务限流，请稍后重试"),
+        429 => ImportFailure::new("AI_THROTTLED", "当前等待识别的合同较多，请稍后重新识别"),
         408 | 504 => return (timeout_error(), Some("upstream_http")),
         500..=599 => unavailable(),
-        _ => ImportFailure::new("AI_REJECTED", "字段提取请求被拒绝，请检查模型、上下文容量及结构化输出支持"),
+        _ => ImportFailure::new("AI_REJECTED", "合同要素识别服务未接受本次处理，请联系管理员核对识别服务"),
     };
     (error, None)
 }

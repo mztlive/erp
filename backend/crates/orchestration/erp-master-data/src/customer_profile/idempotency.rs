@@ -105,7 +105,7 @@ impl CustomerProfileProcess {
                 .access
                 .require_with(actor.clone(), &customer::UPDATE, &command.customer_id, executor)
                 .await?),
-            _ => Err(Error::ValidationError("未知客户资料命令类型".into())),
+            _ => Err(Error::ValidationError("客户资料不支持此操作，请从客户详情重新选择".into())),
         }
     }
 
@@ -138,7 +138,9 @@ impl CustomerProfileProcess {
                                             actor.clone(),
                                             &customer::UPDATE,
                                             context.customer_id().ok_or_else(|| {
-                                                Error::ValidationError("修订命令缺少客户".into())
+                                                Error::ValidationError(
+                                                    "未选择要修订的客户，请返回客户列表重新选择".into(),
+                                                )
                                             })?,
                                             executor,
                                         )
@@ -173,9 +175,9 @@ pub(super) fn checked_command_view(
     command: CustomerProfileCommand,
     context: &CustomerProfileReplayContext,
 ) -> Result<CustomerProfileMutationView> {
-    command
-        .ensure_replay_matches(context)
-        .map_err(|_| Error::ConflictError("幂等键已用于另一项客户资料请求".to_string()))?;
+    command.ensure_replay_matches(context).map_err(|_| {
+        Error::ConflictError("本次操作编号已用于另一项客户资料办理，请核对原操作记录".to_string())
+    })?;
     Ok(command_view(command))
 }
 

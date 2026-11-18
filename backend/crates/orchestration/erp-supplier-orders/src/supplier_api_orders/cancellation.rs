@@ -82,7 +82,7 @@ impl SupplierApiOrderProcess {
     /// 数据库失败或持久化竞争时拒绝；供应商异常按原动作保存。
     pub(super) async fn process_cancellations(&self, mut execution: ApiOrderExecution) -> Result<()> {
         if let Err(error) = self.refresh_cancellation_tree(&mut execution).await {
-            execution.defer(error.to_string());
+            execution.defer(error.supplier_order_message());
             return self.persist_cancellation(&mut execution, CancellationWrite::Progress).await;
         }
 
@@ -100,7 +100,7 @@ impl SupplierApiOrderProcess {
         let connector = match self.cancellation_connector(&execution).await {
             Ok(connector) => connector,
             Err(error) => {
-                execution.defer(error.to_string());
+                execution.defer(error.supplier_order_message());
                 return self.persist_cancellation(&mut execution, CancellationWrite::Progress).await;
             },
         };

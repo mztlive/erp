@@ -156,7 +156,9 @@ impl PurchasePaymentRequestProcess {
                         .await?;
                     match committed {
                         Some(committed_id) if committed_id == id => Ok(Some(request)),
-                        Some(_) => Err(Error::ConflictError("付款申请命令回执目标不一致".into())),
+                        Some(_) => Err(Error::ConflictError(
+                            "原操作记录不属于这份付款申请，请核对申请和办理记录".into(),
+                        )),
                         None => Ok(None),
                     }
                 })
@@ -182,7 +184,7 @@ async fn bind(
     if let Some(document) = find_registered_document(db, &request.base.id, executor).await? {
         return document
             .approval_binding
-            .ok_or_else(|| Error::ConflictError("付款申请缺少发布的审批定义".into()));
+            .ok_or_else(|| Error::ConflictError("尚未发布付款申请审批流程，请联系管理员设置".into()));
     }
 
     let command = BindPublishedDefinitionCommand {
@@ -277,7 +279,7 @@ async fn assign_approval_due(
         .open_approval_tasks_for_execution(&ApprovalNodeExecutionId::new(&execution.base.id), executor)
         .await?;
     if tasks.is_empty() || tasks.len() > 1 + execution.additional_assignees.len() {
-        return Err(Error::ConflictError("申请入口审批任务不唯一".into()));
+        return Err(Error::ConflictError("无法确定付款申请的首位审批待办，请联系管理员检查审批流程".into()));
     }
 
     for mut task in tasks {

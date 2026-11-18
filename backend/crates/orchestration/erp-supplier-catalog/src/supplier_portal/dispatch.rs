@@ -121,7 +121,8 @@ impl SupplierPortalProcess {
 }
 
 fn parse<T: DeserializeOwned>(input: Value) -> Result<T> {
-    serde_json::from_value(input).map_err(|error| Error::ValidationError(format!("申请字段无效: {error}")))
+    serde_json::from_value(input)
+        .map_err(|_| Error::ValidationError("申请内容不符合要求，请核对表单中填写的资料后重新提交".into()))
 }
 fn value<T: Serialize>(result: T) -> Result<Value> {
     serde_json::to_value(result).map_err(|error| Error::Internal(error.to_string()))

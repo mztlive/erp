@@ -30,7 +30,7 @@ impl ProfitLossQuery {
             return invalid("请选择销售单生效日口径");
         }
         if !["covered", "uncovered", "all"].contains(&self.coverage.as_str()) {
-            return invalid("成本覆盖筛选无效");
+            return invalid("请在成本筛选中选择「已覆盖」「未覆盖」或「全部」");
         }
         if !["sales_order", "customer", "scenario", "attribution_user", "attribution_org"]
             .contains(&self.dimension.as_str())
@@ -42,10 +42,12 @@ impl ProfitLossQuery {
             return invalid("分页参数无效");
         }
         if self.page > 1 && self.scope_version.as_deref().is_none_or(str::is_empty) {
-            return Err(crate::support::data_scope_changed("跨页查询必须携带范围版本，请从第一页刷新"));
+            return Err(crate::support::data_scope_changed(
+                "无法继续查看盈亏报表的后续页，请从第一页刷新后再翻页",
+            ));
         }
         if self.scope_version.as_ref().is_some_and(|version| version.len() > 128) {
-            return invalid("范围版本无效");
+            return invalid("当前盈亏报表查询已失效，请从第一页重新查询");
         }
 
         self.validate_sort()?;
@@ -55,7 +57,7 @@ impl ProfitLossQuery {
         let from = parse_date(&self.from)?;
         let to = parse_date(&self.to)?;
         if to < from || (to - from).num_days() > 366 {
-            return invalid("查询期间必须按先后排列且不超过 367 天");
+            return invalid("结束日期不得早于开始日期，且查询期间最多 367 天，请重新选择日期");
         }
         let next =
             to.checked_add_days(Days::new(1)).ok_or_else(|| Error::ValidationError("结束日期无效".into()))?;
@@ -67,13 +69,13 @@ impl ProfitLossQuery {
             return Ok(());
         };
         let Some((dimension, id)) = group.split_once(':') else {
-            return invalid("历史分组下钻条件无效");
+            return invalid("未选中有效的历史归属分组，请返回盈亏报表重新选择");
         };
         if !["attribution_user", "attribution_org"].contains(&dimension)
             || id.len() > 128
             || !id.bytes().all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c))
         {
-            return invalid("历史分组下钻必须使用有效的人员或组织身份");
+            return invalid("未选中有效的历史归属人员或组织，请返回盈亏报表重新选择");
         }
         Ok(())
     }
@@ -113,7 +115,7 @@ impl ProfitLossQuery {
 
         for code in self.cost_codes() {
             if !cost_types().iter().any(|t| t.as_str() == code) {
-                return invalid("成本类型无效");
+                return invalid("当前成本类型不在可选范围内，请重新选择费用类别");
             }
         }
         Ok(())
@@ -158,9 +160,9 @@ pub fn cost_types() -> [CostType; 9] {
 /// 严格校验零填充日期。
 fn parse_date(text: &str) -> Result<NaiveDate> {
     let date = NaiveDate::parse_from_str(text, "%Y-%m-%d")
-        .map_err(|_| Error::ValidationError("日期格式必须为 YYYY-MM-DD".into()))?;
+        .map_err(|_| Error::ValidationError("请选择有效日期，或按「2026-01-31」的格式填写".into()))?;
     if date.format("%Y-%m-%d").to_string() != text {
-        return invalid("日期格式必须为 YYYY-MM-DD");
+        return invalid("请选择有效日期，或按「2026-01-31」的格式填写");
     }
     Ok(date)
 }
@@ -222,7 +224,10 @@ mod tests {
 
         match q.validate() {
             Err(crate::Error::ConflictError(message)) => {
-                assert!(message.starts_with("DATA_SCOPE_CHANGED"));
+                assert_eq!(
+                    message,
+                    "DATA_SCOPE_CHANGED：无法继续查看盈亏报表的后续页，请从第一页刷新后再翻页"
+                );
             },
             Err(_) | Ok(_) => panic!("expected DATA_SCOPE_CHANGED conflict"),
         }

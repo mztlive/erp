@@ -111,7 +111,7 @@ pub struct SupplierProfileRatingInput {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SaveSupplierProfileRequest {
     /// 客户端幂等键。
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(custom(function = "non_blank", message = "缺少本次操作的提交编号，请重新发起操作"))]
     pub idempotency_key: String,
     /// 创建时必填的主体编号；修订时忽略。
     pub party_no: Option<String>,
@@ -156,7 +156,7 @@ pub struct SaveSupplierProfileRequest {
     /// 对账周期。
     pub reconciliation_cycle: ReconciliationCycle,
     /// 付款条件结构化快照（不得再编码经营类目）。
-    #[validate(custom(function = "non_blank", message = "付款条件快照不能为空"))]
+    #[validate(custom(function = "non_blank", message = "请选择付款条件"))]
     pub payment_term_snapshot: String,
     /// 经营类目；空白表示未登记。旧客户端可能把类目编码进付款条件快照，实体构造时会拆出。
     #[serde(default)]
@@ -542,7 +542,7 @@ mod tests {
         match error {
             Error::InvalidInput(issues) => {
                 assert_eq!(issues.fields().len(), 1);
-                assert_eq!(issues.fields()["idempotency_key"], "幂等键不能为空");
+                assert_eq!(issues.fields()["idempotency_key"], "缺少本次操作的提交编号，请重新发起操作");
             },
             other => panic!("unexpected error: {other:?}"),
         }

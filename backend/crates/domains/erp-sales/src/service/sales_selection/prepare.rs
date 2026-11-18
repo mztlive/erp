@@ -483,7 +483,9 @@ async fn package_items(
             search_packages(&pool, &[tier], &occupied_run, generator.as_ref(), seed)
         })
         .await
-        .map_err(|_| Error::selection_prepare_failed("套餐搜索执行异常"))?
+        .map_err(|_| {
+            Error::selection_prepare_failed("暂未能为选品册生成套餐，请重新准备；如仍失败，请联系支持人员")
+        })?
         .map_err(|error| Error::selection_prepare_failed(error.to_string()))?;
 
         occupied.extend(generated.iter().map(|package| package.combination_key()));

@@ -118,7 +118,7 @@ where
 {
     let prepared = prepare_business_log(audit)?;
     if !prepared.success {
-        return Err(Error::ValidationError("成功业务边界不能提交失败审计".into()).into());
+        return Err(Error::ValidationError("操作结果与审计记录不一致，请联系管理员".into()).into());
     }
 
     let result = write(executor).await?;
@@ -186,7 +186,7 @@ where
         AuditedWrite::Fresh { result, content } => {
             if content.result != BusinessEventResult::Succeeded {
                 return Err(
-                    Error::ValidationError("成功业务事件不能记录拒绝或未知执行结果".to_string()).into()
+                    Error::ValidationError("操作结果与审计记录不一致，请联系管理员".to_string()).into()
                 );
             }
 

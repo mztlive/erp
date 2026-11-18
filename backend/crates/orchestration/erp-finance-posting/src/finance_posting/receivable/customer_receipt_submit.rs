@@ -304,7 +304,9 @@ async fn apply_receipt_submit(
     executor: &mut dyn Executor,
 ) -> Result<CustomerReceipt> {
     if !matches!(&input.prepared, PreparedExecution::Apply(_)) {
-        return Err(Error::ConflictError("历史回款启动缺少完整提交收据，不能确认本次载荷".into()));
+        return Err(Error::ConflictError(
+            "原回款审批记录不完整，无法核对是否为同一次提交，请先查看回款单审批状态".into(),
+        ));
     }
     current.ensure_draft_editable()?;
     ensure_expected_version(current.base.version, input.receipt.base.version)?;

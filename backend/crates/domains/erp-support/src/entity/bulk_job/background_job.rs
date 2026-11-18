@@ -383,7 +383,7 @@ impl BackgroundJob {
     /// 当任务状态不允许完成，或仍有目标未处理时返回错误。
     pub fn mark_succeeded(&mut self, at: Instant) -> Result<()> {
         if !self.can_record_progress() {
-            return Err(Error::from(format!("状态 {:?} 不允许完成", self.status)));
+            return Err(Error::from(format!("任务当前为「{}」，不能标记为完成", self.status.label())));
         }
         if self.processed_count != self.total_count {
             return Err(Error::from("仍有目标未处理，不能标记成功"));
@@ -408,7 +408,7 @@ impl BackgroundJob {
     /// 当任务状态不允许失败时返回错误。
     pub fn mark_failed(&mut self, error_summary: Option<String>, at: Instant) -> Result<()> {
         if !self.can_record_progress() {
-            return Err(Error::from(format!("状态 {:?} 不允许失败", self.status)));
+            return Err(Error::from(format!("任务当前为「{}」，不能标记为失败", self.status.label())));
         }
         self.status = JobStatus::Failed;
         self.finished_at = Some(at);
@@ -668,11 +668,11 @@ mod tests {
                 } else {
                     assert_eq!(
                         success_result.unwrap_err().to_string(),
-                        format!("状态 {status:?} 不允许完成")
+                        format!("任务当前为「{}」，不能标记为完成", status.label())
                     );
                     assert_eq!(
                         failure_result.unwrap_err().to_string(),
-                        format!("状态 {status:?} 不允许失败")
+                        format!("任务当前为「{}」，不能标记为失败", status.label())
                     );
                     assert_eq!(succeeded, original);
                     assert_eq!(failed, original);

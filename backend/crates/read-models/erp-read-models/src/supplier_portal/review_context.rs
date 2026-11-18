@@ -353,7 +353,7 @@ fn hidden_target() -> Error {
 /// 原稿、当前事实与核对候选必须来自同一可核验快照。
 fn review_snapshot(executor: &mut dyn Executor) -> Result<()> {
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-        return Err(Error::ValidationError("内部门户读取必须使用快照事务".into()));
+        return Err(Error::ValidationError("暂时无法查看供应商门户管理资料，请刷新页面后重新打开".into()));
     }
     Ok(())
 }

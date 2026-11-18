@@ -465,7 +465,10 @@ pub(super) fn node_summary(nodes: &[ApprovalNodeDefinition]) -> String {
 /// 字段非法时返回校验错误；其它模型错误返回内部错误。
 pub(super) fn parse_idempotency_key(raw: &str) -> Result<IdempotencyKey> {
     IdempotencyKey::parse(raw.to_string()).map_err(|error| match error {
-        ModelError::InvalidField(message) => Error::ValidationError(message.to_string()),
+        ModelError::InvalidField(detail) => {
+            tracing::debug!(detail, "审批流程设置的提交编号无效");
+            Error::ValidationError("本次流程设置的提交编号无效，请刷新后重新操作".into())
+        },
         other => Error::Internal(format!("审批命令幂等键构造失败: {other}")),
     })
 }
@@ -723,7 +726,10 @@ pub(super) fn map_model_error(error: ModelError) -> Error {
             Error::from_approval_code(ErrorCode::ApprovalDefinitionInvalid)
         },
         ModelError::InvalidStatus(message) => Error::ConflictError(message.to_string()),
-        ModelError::Overflow(message) => Error::BusinessLogicError(format!("计数溢出: {message}")),
+        ModelError::Overflow(detail) => {
+            tracing::debug!(detail, "审批定义版本达到上限");
+            Error::BusinessLogicError("审批流程版本已达到上限，请联系审批管理员".into())
+        },
         other => Error::BusinessLogicError(other.to_string()),
     }
 }

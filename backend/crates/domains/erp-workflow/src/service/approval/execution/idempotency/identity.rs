@@ -198,7 +198,10 @@ fn is_v3_hash(value: &str) -> bool {
 /// # 错误
 /// 空值、超长值或其他 BPM 值对象约束不满足时返回校验错误。
 pub fn normalize_idempotency_key(raw: &str) -> Result<IdempotencyKey> {
-    IdempotencyKey::parse(raw).map_err(|error| Error::ValidationError(error.to_string()))
+    IdempotencyKey::parse(raw).map_err(|error| {
+        tracing::debug!(%error, "审批提交编号校验失败");
+        Error::ValidationError("本次审批的提交编号无效，请刷新后重新发起操作".into())
+    })
 }
 
 /// 构造当前 writer 唯一允许写入的 V3 命令身份。
@@ -223,7 +226,7 @@ pub(super) fn current_identity(
     digest_payload: CanonicalCommandPayload,
 ) -> Result<ApprovalCommandIdentity> {
     ApprovalCommandIdentity::new(kind, domain, key, scope_payload, digest_payload)
-        .map_err(|error| Error::ValidationError(error.to_string()))
+        .map_err(map_submission_error)
 }
 
 /// 幂等冲突的稳定错误。
@@ -290,4 +293,9 @@ pub fn command_may_have_committed(error: &Error) -> bool {
 pub fn command_recovery_delay(attempt: usize) -> Duration {
     let shift = u32::try_from(attempt).unwrap_or(u32::MAX).min(5);
     Duration::from_millis(5_u64 << shift)
+}
+
+pub(super) fn map_submission_error(error: bpm::model::ModelError) -> Error {
+    tracing::debug!(%error, "审批提交内容校验失败");
+    Error::ValidationError("本次审批提交信息无效，请核对所选单据后重新提交".into())
 }

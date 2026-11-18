@@ -311,10 +311,9 @@ impl CatalogService {
         if pending_assets.contains_id(asset_id) {
             return Ok(());
         }
-        self.file_assets
-            .find_by_id(asset_id, executor)
-            .await?
-            .ok_or_else(|| crate::error::Error::NotFound("品牌 Logo 文件不存在".to_string()))?;
+        self.file_assets.find_by_id(asset_id, executor).await?.ok_or_else(|| {
+            crate::error::Error::NotFound("未找到品牌标志文件，请重新上传或选择文件".to_string())
+        })?;
         Ok(())
     }
 

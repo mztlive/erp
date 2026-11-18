@@ -51,18 +51,26 @@ impl FulfillmentReadService {
         let boundary = executor
             .boundary()
             .filter(|boundary| boundary.is_snapshot() && boundary.is_current(executor))
-            .ok_or_else(|| Error::ValidationError("验收命令结果读取必须使用原授权快照".into()))?;
+            .ok_or_else(|| {
+                Error::ValidationError(
+                    "暂时无法查看本次验收结果，请在销售单中核对验收进度，勿重复提交".into(),
+                )
+            })?;
 
         let acceptance = self.domain.load_customer_acceptance(acceptance_id, executor).await?.acceptance;
         if acceptance.sales_order_id != sales_order_id.as_ref() {
-            return Err(Error::ConflictError("验收命令结果与销售单不一致".into()));
+            return Err(Error::ConflictError(
+                "验收结果与当前销售单不一致，请在原销售单中核对验收记录".into(),
+            ));
         }
 
         let remaining_eligibility =
             self.load_acceptance_eligibility(sales_order_id.as_ref(), executor).await?;
 
         if !boundary.is_current(executor) {
-            return Err(Error::ValidationError("验收命令结果读取跨越授权快照".into()));
+            return Err(Error::ValidationError(
+                "本次验收结果查询已失效，请刷新销售单后核对验收进度，勿重复提交".into(),
+            ));
         }
         Ok(CommitCustomerAcceptanceView { acceptance, remaining_eligibility })
     }

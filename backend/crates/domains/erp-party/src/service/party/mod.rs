@@ -667,7 +667,7 @@ pub(crate) fn map_version_conflict(version_check: CoreResult<()>) -> Result<()> 
 /// 将仓储查询结果转换为稳定的供应商资料边界错误。
 fn ensure_supplier_profile_boundary(has_supplier_role: bool) -> Result<()> {
     if has_supplier_role {
-        return Err(Error::BusinessLogicError("供应商主体资料只能通过供应商资料根级接口维护".to_string()));
+        return Err(Error::BusinessLogicError("请在供应商资料页面修改该供应商的主体资料".to_string()));
     }
     Ok(())
 }
@@ -787,7 +787,7 @@ mod tests {
             .await
             .expect_err("供应商主体必须由根级资料接口维护");
         assert!(
-            matches!(error, Error::BusinessLogicError(message) if message == "供应商主体资料只能通过供应商资料根级接口维护")
+            matches!(error, Error::BusinessLogicError(message) if message == "请在供应商资料页面修改该供应商的主体资料")
         );
     }
 

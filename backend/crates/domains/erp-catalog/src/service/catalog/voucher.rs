@@ -358,7 +358,9 @@ impl CatalogService {
             VoucherCategorySelection::Existing(category_id) => {
                 let category = self.load_category(category_id.as_ref(), executor).await?;
                 if category.product_kind != ProductKind::Voucher {
-                    return Err(Error::BusinessLogicError("所选分类不允许 VOUCHER 类型".to_string()));
+                    return Err(Error::BusinessLogicError(
+                        "所选分类不支持卡券商品，请重新选择分类".to_string(),
+                    ));
                 }
                 Ok((category_id, None))
             },
@@ -647,7 +649,7 @@ impl CatalogService {
             .catalog()
             .current_sku_revision(sku, executor)
             .await?
-            .ok_or_else(|| Error::NotFound("SKU 修订不存在".to_string()))?;
+            .ok_or_else(|| Error::NotFound("找不到所选商品规格的版本，请刷新后重新选择".to_string()))?;
         let voucher_revision = self
             .db
             .catalog()

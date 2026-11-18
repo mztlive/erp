@@ -48,7 +48,7 @@ pub fn cancel_purchase_order_to_draft(order: &mut PurchaseOrder, updated_by: &st
 /// # 关键约束
 /// 仅调用实体的状态专用守卫，不附加冻结提交指针等更严格校验。
 pub fn ensure_final_approve_formalize(order: &PurchaseOrder) -> Result<()> {
-    order
-        .ensure_can_formalize()
-        .map_err(|_| Error::ConflictError("只有审批中的采购单可以由最终通过动作生效".to_string()))
+    order.ensure_can_formalize().map_err(|_| {
+        Error::ConflictError("只有审批中的采购单可以在审批通过后生效，请核对采购单状态".to_string())
+    })
 }

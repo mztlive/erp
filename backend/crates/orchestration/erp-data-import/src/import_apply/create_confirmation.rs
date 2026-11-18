@@ -292,7 +292,9 @@ fn validate_confirmation_creation_batch(
     }
     let scope = ConfirmationScope::parse(scope)?;
     if !batch.required_confirmation_scopes()?.contains(&scope) {
-        return Err(Error::BusinessLogicError("该责任范围不属于当前批次的必要确认矩阵".to_string()));
+        return Err(Error::BusinessLogicError(
+            "当前批次不需要确认此范围，请重新选择需要确认的事项".to_string(),
+        ));
     }
     Ok(())
 }

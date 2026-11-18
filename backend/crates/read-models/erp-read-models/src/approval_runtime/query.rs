@@ -4,8 +4,8 @@ use std::collections::HashSet;
 
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
-use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
-use erp_workflow::entity::approval_integration::subject_ref_for;
+use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, SubjectRef};
+use erp_workflow::entity::approval_integration::subject_ref_for as workflow_subject_ref_for;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::WorkItem;
@@ -19,6 +19,28 @@ use persistence_core::Executor;
 
 use super::{DocumentApprovalInstanceView, DocumentRuntime};
 use crate::{Error, Result};
+
+pub(crate) fn read_subject_ref(kind: DocumentType, id: &str) -> Result<SubjectRef> {
+    workflow_subject_ref_for(kind, id).map_err(|error| {
+        tracing::debug!(document_type = kind.as_str(), %error, "无法识别审批单据");
+        Error::ValidationError(format!("未选中有效的{}，请从单据列表重新打开", kind.label()))
+    })
+}
+
+#[cfg(test)]
+mod subject_tests {
+    use super::*;
+
+    #[test]
+    fn invalid_approval_document_uses_business_label() {
+        for id in [" ".to_owned(), "x".repeat(4096)] {
+            assert!(matches!(
+                read_subject_ref(DocumentType::PurchaseOrder, &id),
+                Err(Error::ValidationError(message)) if message == "未选中有效的采购单，请从单据列表重新打开"
+            ));
+        }
+    }
+}
 
 /// 在已授权业务快照内取得最新实例；缺失事实不补造审批对象。
 ///
@@ -43,7 +65,7 @@ pub(crate) async fn load_document_runtime(
     binding: Option<&ApprovalDefinitionBinding>,
     executor: &mut dyn Executor,
 ) -> Result<Option<DocumentRuntime>> {
-    let subject = subject_ref_for(kind, id).map_err(|error| Error::ValidationError(error.to_string()))?;
+    let subject = read_subject_ref(kind, id)?;
     let Some(instance) = db.bpm_workflow().find_latest_by_subject(&subject, executor).await? else {
         return Ok(None);
     };
@@ -75,7 +97,7 @@ pub(crate) async fn load_document_runtime_for_instance(
         .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), executor)
         .await?
         .filter(|instance| instance.base.id == instance_id)
-        .ok_or_else(|| Error::ConflictError("单据冻结的审批实例不存在".into()))?;
+        .ok_or_else(|| Error::ConflictError("找不到这张单据本次提交的审批记录，请联系管理员核对".into()))?;
     ensure_instance_binding(&instance, kind, id, binding, Some((instance_id, subject_version)))?;
     load_runtime_facts(db, instance, executor).await
 }
@@ -87,7 +109,7 @@ fn ensure_instance_binding(
     binding: Option<&ApprovalDefinitionBinding>,
     reference: Option<(&str, u32)>,
 ) -> Result<()> {
-    let subject = subject_ref_for(kind, id).map_err(|error| Error::ValidationError(error.to_string()))?;
+    let subject = read_subject_ref(kind, id)?;
     if instance.subject != subject
         || instance.process_kind != process_kind_of(kind)
         || reference
@@ -97,7 +119,9 @@ fn ensure_instance_binding(
                 || instance.definition_version != binding.approval_definition_version
         })
     {
-        return Err(Error::ConflictError("单据审批实例与冻结绑定不一致".into()));
+        return Err(Error::ConflictError(
+            "审批记录与这张单据提交时的流程或版本不一致，请刷新后核对；如仍有问题，请联系管理员".into(),
+        ));
     }
     Ok(())
 }
@@ -164,7 +188,9 @@ fn ensure_current_execution(
         {
             Ok(())
         },
-        _ => Err(Error::ConflictError("审批当前执行与实例令牌不一致".into())),
+        _ => Err(Error::ConflictError(
+            "审批记录与当前审批环节不一致，请刷新后查看；如仍有问题，请联系管理员".into(),
+        )),
     }
 }
 
@@ -177,7 +203,7 @@ fn ensure_runtime_tasks(
     if tasks.len() > current.map_or(0, |execution| 1 + execution.additional_assignees.len())
         || tasks.iter().map(|task| &task.owner_user_id).collect::<HashSet<_>>().len() != tasks.len()
     {
-        return Err(Error::ConflictError("当前审批执行存在多个开放任务".into()));
+        return Err(Error::ConflictError("当前审批环节的待办数量异常，请联系管理员核对审批待办".into()));
     }
     for task in tasks {
         if current.is_none_or(|execution| {
@@ -186,7 +212,9 @@ fn ensure_runtime_tasks(
         }) || !task.matches_business_object(instance.subject.subject_kind(), instance.subject.subject_id())
             || !task.matches_subject_version(&instance.subject_version.to_string())
         {
-            return Err(Error::ConflictError("审批开放任务与当前单据、版本或责任人不一致".into()));
+            return Err(Error::ConflictError(
+                "审批待办与当前单据、提交版本或审批人不一致，请从待办列表重新打开".into(),
+            ));
         }
     }
     Ok(())

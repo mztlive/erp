@@ -163,12 +163,12 @@ pub(super) fn build_sales_order_start_input(input: SalesOrderStartInput<'_>) -> 
         now,
     } = input;
     if graph.definition.definition_version != binding.approval_definition_version {
-        return Err(Error::ConflictError("销售单绑定定义版本与已加载定义不一致".to_string()));
+        return Err(Error::ConflictError("销售单的审批流程版本不一致，请联系管理员核对".to_string()));
     }
 
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
-    let actor =
-        ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
+    let actor = ParticipantId::new(actor_id)
+        .map_err(|_| Error::ValidationError("无法确认提交人账号，请重新登录后再提交".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
     let bindings = start_bindings_from_graph(&graph, organization_id)?;
     Ok(assemble_start_input(
@@ -421,7 +421,7 @@ async fn guard_sales_approval_start(
         )
         .await?;
     if guarded.is_none() {
-        return Err(Error::ConflictError("销售单审批启动守卫冲突，请刷新后重试".to_string()));
+        return Err(Error::ConflictError("销售单的审批状态已变化，未能提交审批，请刷新后核对".to_string()));
     }
     Ok(())
 }

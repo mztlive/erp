@@ -462,12 +462,12 @@ async fn apply_org_unit_filter(
 ) -> Result<Option<Vec<String>>> {
     let Some(org_ids) = &query.org_unit_ids else {
         if query.include_descendants == Some(true) {
-            return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
+            return Err(Error::ValidationError("请选择一个组织后再勾选包含下级组织".into()));
         }
         return Ok(ids);
     };
     if query.include_descendants == Some(true) && org_ids.as_slice().is_empty() {
-        return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
+        return Err(Error::ValidationError("请选择一个组织后再勾选包含下级组织".into()));
     }
 
     let expanded = data_scope

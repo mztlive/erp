@@ -289,7 +289,7 @@ impl LegacyImportRow {
         )?;
         let normalized_payload_reference = normalize_required_text(
             data.normalized_payload_reference,
-            "规范化载荷不能为空",
+            "缺少整理后的导入行内容，请核对导入文件后重新解析",
             PAYLOAD_MAX_LEN,
             "规范化载荷过长",
         )?;
@@ -544,8 +544,8 @@ impl LegacyImportRow {
         Self::ensure_parseable(self)?;
 
         if self.mapping_status == MappingStatus::PendingMapping {
-            let identity =
-                external_identity_map_id.ok_or_else(|| Error::from("待映射行必须提供来源稳定身份"))?;
+            let identity = external_identity_map_id
+                .ok_or_else(|| Error::from("待匹配的导入行缺少来源记录标识，请补齐后再处理"))?;
             self.mark_mapped(identity)?;
         }
         Self::ensure_mapped(self)

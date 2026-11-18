@@ -20,7 +20,7 @@ pub(in crate::reverse_flow) fn submit_permission(kind: DocumentType) -> Result<P
         DocumentType::SupplierRefund => Ok(returns::SUPPLIER_REFUND_SUPPLIER_REFUND_SUBMIT),
         DocumentType::ReceiptReversal => Ok(returns::RECEIPT_REVERSAL_RECEIPT_REVERSAL_SUBMIT),
         DocumentType::PaymentReversal => Ok(returns::PAYMENT_REVERSAL_PAYMENT_REVERSAL_SUBMIT),
-        _ => Err(Error::ValidationError("未登记退款或冲正提交入口".into())),
+        _ => Err(Error::ValidationError("当前单据不支持此项退款或冲正操作，请核对单据类型".into())),
     }
 }
 

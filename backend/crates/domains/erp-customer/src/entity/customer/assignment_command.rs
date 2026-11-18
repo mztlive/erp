@@ -203,7 +203,7 @@ impl EndCustomerAssignment {
         change_reason: String,
     ) -> Result<Self> {
         if version < 1 {
-            return Err(erp_core::Error::from("乐观锁版本必须大于 0"));
+            return Err(erp_core::Error::from("资料版本无效，请刷新页面后重试"));
         }
         let assignment_id = normalize_assignment_id(assignment_id)?;
         let change_reason = normalize_change_reason(change_reason)?;
@@ -342,7 +342,7 @@ mod tests {
 
         assert!(matches!(
             EndCustomerAssignment::new("asg-9".to_string(), date(2026, 9, 1), 0, "结束".to_string()),
-            Err(Error::LogicError(message)) if message.contains("乐观锁版本必须大于 0")
+            Err(Error::LogicError(message)) if message.contains("资料版本无效，请刷新页面后重试")
         ));
         assert!(
             EndCustomerAssignment::new("  ".to_string(), date(2026, 9, 1), 1, "结束".to_string(),).is_err()

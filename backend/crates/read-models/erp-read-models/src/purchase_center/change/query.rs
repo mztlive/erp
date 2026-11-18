@@ -113,7 +113,9 @@ impl PurchaseOrderReadService {
             .contains(permission)
             || !executor.boundary().is_some_and(|boundary| boundary.is_snapshot())
         {
-            return Err(Error::ValidationError("采购变更回包必须使用固定入口和新快照".into()));
+            return Err(Error::ValidationError(
+                "暂时无法从此处查看采购变更结果，请打开采购变更单核对当前状态，勿重复操作".into(),
+            ));
         }
 
         let entry = if *permission == internal::PURCHASE_CHANGE_SUBMITTED_RESULT_READ {

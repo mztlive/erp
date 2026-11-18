@@ -187,7 +187,7 @@ impl CompletionReplay {
             &self.work_item_id,
             &stable_digest(self.idempotency_key.trim()),
         )?;
-        stored.verify(&self.fingerprint, None, "请求标识已用于不同的任务完成命令")?;
+        stored.verify(&self.fingerprint, None, "本次操作编号已用于其他履约待办，请核对原办理记录")?;
         let resource_id = stored.resource_id;
         let SupplyCommandResult::Completion(receipt) = stored.result else {
             return Err(Error::Internal("W26 任务完成幂等收据身份非法".to_string()));
@@ -290,14 +290,14 @@ async fn load_completion_evidence(
         .supplier_order_actions()
         .find_by_id(command.decision.verified_supplier_action_result_id.as_ref(), executor)
         .await?
-        .ok_or_else(|| Error::NotFound("供应商结果证据不存在".to_string()))?;
+        .ok_or_else(|| Error::NotFound("没有找到供应商返回的处理结果，请核对履约记录".to_string()))?;
     let evidence_record = verified_terminal_evidence(&evidence, &order, command.decision.resolution)?;
 
     let target_action = db
         .supplier_order_actions()
         .find_by_id(evidence_record.target_supplier_action_id(), executor)
         .await?
-        .ok_or_else(|| Error::NotFound("结果证据引用的原供应商动作不存在".to_string()))?;
+        .ok_or_else(|| Error::NotFound("没有找到供应商回复所对应的原操作，请核对履约记录".to_string()))?;
     ensure_current_resolution(&order, &target_action, command.decision.resolution)?;
     Ok((order, evidence))
 }

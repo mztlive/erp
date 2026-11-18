@@ -154,7 +154,7 @@ pub(super) async fn committed_reversal_submit(
         .committed_resource_id(command_receipt, executor)
         .await?;
     if replayed.as_deref().is_some_and(|resource_id| resource_id != id) {
-        return Err(Error::ConflictError("退款或冲正提交收据与原单不一致".into()));
+        return Err(Error::ConflictError("原审批提交记录与当前退款或冲正单不符，请核对办理记录".into()));
     }
     Ok(replayed)
 }
@@ -184,7 +184,10 @@ pub(super) async fn persist_start_guard(
         )
         .await?;
     if guarded.is_none() {
-        return Err(Error::ConflictError(format!("{}审批启动守卫冲突，请刷新后重试", kind.label())));
+        return Err(Error::ConflictError(format!(
+            "{}的审批状态已变化，未能提交审批，请刷新后核对",
+            kind.label()
+        )));
     }
     Ok(())
 }

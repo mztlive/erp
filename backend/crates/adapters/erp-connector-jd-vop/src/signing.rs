@@ -97,14 +97,14 @@ fn validate(parameters: &BTreeMap<String, String>, app_secret: &str) -> Connecto
             .any(|key| parameters.get(*key).is_none_or(|value| value.trim().is_empty()))
         || parameters.get("format").map(String::as_str) != Some("json")
     {
-        return Err(mapping("京东签名公共参数或应用密钥不完整，请核对接入资料"));
+        return Err(mapping("京东接入资料不完整，请联系管理员核对账号授权和连接配置"));
     }
     if parameters.keys().any(|key| {
         key.eq_ignore_ascii_case("app_secret")
             || key.eq_ignore_ascii_case("appSecret")
             || key == BUSINESS_PARAMETER
     }) {
-        return Err(mapping("京东应用密钥须单独提供，业务参数须通过类型化载荷编码"));
+        return Err(mapping("京东连接配置不符合接入要求，请联系管理员核对账号授权"));
     }
     Ok(())
 }

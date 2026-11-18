@@ -57,6 +57,28 @@ pub enum Error {
     Coded(WorkflowErrorCode),
 }
 
+impl Error {
+    pub(crate) fn row_message(&self) -> String {
+        match self {
+            Self::NotFound(message) | Self::ValidationError(message) | Self::BusinessLogicError(message) => {
+                message.clone()
+            },
+            Self::ConflictError(message) => message
+                .strip_prefix("DATA_SCOPE_CHANGED：")
+                .or_else(|| message.strip_prefix("DATA_SCOPE_CHANGED:"))
+                .unwrap_or(message)
+                .to_string(),
+            Self::Forbidden(_) | Self::Unauthenticated(_) | Self::Rbac(_) => {
+                "当前账号不能处理这一行，请联系有权限的同事核对".into()
+            },
+            Self::InvalidInput(_) | Self::Logic(_) => "这一行资料不符合要求，请核对商品及供给资料".into(),
+            Self::OutcomeUnknown(_) => "本次处理结果尚未确认，请查询原操作，不要重复提交".into(),
+            Self::ReceiptDuplicate(_) => "该操作已有处理记录，请查询原结果，不要重复提交".into(),
+            _ => "这一行暂时无法处理，请先核对原操作状态；如仍无法确认，请联系管理员".into(),
+        }
+    }
+}
+
 impl From<application_core::Error> for Error {
     /// 将应用合同错误映射为应用错误。
     fn from(error: application_core::Error) -> Self {
@@ -247,6 +269,17 @@ mod tests {
     use mongodb::error::Error as MongoError;
 
     use super::{Error, WorkflowErrorCode, duplicate_index_conflict_message};
+
+    #[test]
+    fn public_row_message_hides_internal_details_without_mutating_scope_error() {
+        let internal = Error::Internal("private-storage-key".into());
+        assert!(!internal.row_message().contains("private-storage-key"));
+        let scope = Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请刷新后重新查看".into());
+        assert_eq!(scope.row_message(), "数据范围已变化，请刷新后重新查看");
+        assert!(
+            matches!(scope, Error::ConflictError(message) if message.starts_with("DATA_SCOPE_CHANGED："))
+        );
+    }
 
     fn named_duplicate(index: &str) -> persistence_core::Error {
         use mongodb::error::{ErrorKind, WriteError, WriteFailure};

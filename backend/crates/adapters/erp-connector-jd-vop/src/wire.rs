@@ -55,10 +55,10 @@ struct RpcResult {
 /// 按官方方法键及该方法的 RPC 键解码，网关错误与业务错误独立处理。
 pub(super) fn decode<T: DeserializeOwned>(body: &[u8], method: &str, rpc: &str) -> ConnectorResult<T> {
     if body.len() > 8 * 1024 * 1024 {
-        return Err(mapping("京东响应超过允许大小"));
+        return Err(mapping("京东返回的资料过多，无法读取，请缩小查询范围或联系管理员核对"));
     }
-    let mut root: BTreeMap<String, Box<RawValue>> =
-        serde_json::from_slice(body).map_err(|_| mapping("京东响应不是有效 JSON"))?;
+    let mut root: BTreeMap<String, Box<RawValue>> = serde_json::from_slice(body)
+        .map_err(|_| mapping("京东返回的资料无法读取，请联系管理员核对京东连接"))?;
     if let Some(failure) = root.remove("error_response") {
         return Err(gateway_error(failure.get())?);
     }
@@ -68,21 +68,23 @@ pub(super) fn decode<T: DeserializeOwned>(body: &[u8], method: &str, rpc: &str) 
     let wrapped = root
         .remove(&format!("{key}_responce"))
         .or_else(|| root.remove(&format!("{key}_response")))
-        .ok_or_else(|| mapping("京东方法响应键缺失"))?;
-    let mut method_result: BTreeMap<String, Box<RawValue>> =
-        serde_json::from_str(wrapped.get()).map_err(|_| mapping("京东方法响应格式无效"))?;
+        .ok_or_else(|| mapping("京东未返回所查询的业务资料，请联系管理员核对京东连接"))?;
+    let mut method_result: BTreeMap<String, Box<RawValue>> = serde_json::from_str(wrapped.get())
+        .map_err(|_| mapping("京东返回的查询资料无法读取，请联系管理员核对京东连接"))?;
     validate_gateway_code(&method_result)?;
 
-    let result = method_result.remove(rpc).ok_or_else(|| mapping("京东方法 RPC 响应键缺失"))?;
-    let envelope: RpcResult =
-        serde_json::from_str(result.get()).map_err(|_| mapping("京东业务响应格式无效"))?;
+    let result = method_result
+        .remove(rpc)
+        .ok_or_else(|| mapping("京东未返回所需的业务结果，请联系管理员核对京东连接"))?;
+    let envelope: RpcResult = serde_json::from_str(result.get())
+        .map_err(|_| mapping("京东返回的业务结果无法读取，请联系管理员核对京东连接"))?;
     decode_result(envelope, method)
 }
 
 fn validate_gateway_code(fields: &BTreeMap<String, Box<RawValue>>) -> ConnectorResult<()> {
     if let Some(code) = fields.get("code") {
-        let code: WireText =
-            serde_json::from_str(code.get()).map_err(|_| mapping("京东网关错误码格式无效"))?;
+        let code: WireText = serde_json::from_str(code.get())
+            .map_err(|_| mapping("京东未提供可识别的失败原因，请联系管理员核对京东连接"))?;
         if code.0 != "0" {
             return Err(classify_code(&code.0));
         }
@@ -101,9 +103,10 @@ fn decode_result<T: DeserializeOwned>(envelope: RpcResult, method: &str) -> Conn
     let result = match envelope.result.as_deref() {
         Some(result) => result.get(),
         None if method == "jingdong.vop.message.queryTransByVopNormal" => "[]",
-        None => return Err(mapping("京东成功响应缺少业务结果")),
+        None => return Err(mapping("京东未返回必要的业务结果，请联系管理员核对查询范围")),
     };
-    serde_json::from_str(result).map_err(|_| mapping("京东业务结果字段无效"))
+    serde_json::from_str(result)
+        .map_err(|_| mapping("京东返回的业务资料不符合要求，请联系管理员核对京东资料"))
 }
 
 fn gateway_error(body: &str) -> ConnectorResult<ConnectorError> {
@@ -111,7 +114,8 @@ fn gateway_error(body: &str) -> ConnectorResult<ConnectorError> {
     struct GatewayError {
         code: WireText,
     }
-    let response: GatewayError = serde_json::from_str(body).map_err(|_| mapping("京东网关错误格式无效"))?;
+    let response: GatewayError = serde_json::from_str(body)
+        .map_err(|_| mapping("京东未提供可识别的失败原因，请联系管理员核对京东连接"))?;
     Ok(classify_code(&response.code.0))
 }
 
@@ -127,7 +131,15 @@ fn classify_code(code: &str) -> ConnectorError {
     } else {
         "JD_VOP_UNKNOWN_BUSINESS_CODE".into()
     };
-    error(class, &code, "京东接口拒绝请求，请核对授权或联系管理员核实")
+    let summary = match class {
+        SupplierFailureClass::AuthSignature => "京东未授权当前账号处理此业务，请联系管理员核对京东授权",
+        SupplierFailureClass::RateLimited => "京东当前处理的请求较多，请稍后再试",
+        SupplierFailureClass::BusinessRejected => {
+            "京东未接受本次业务操作，请核对商品、订单或配送资料后再处理"
+        },
+        _ => "京东未确认支持本次业务，请联系管理员核对账号已开通的功能",
+    };
+    error(class, &code, summary)
 }
 
 #[derive(Debug, Deserialize)]
@@ -334,7 +346,7 @@ mod tests {
             (json!("2010"), classify_code("2010")),
             (json!("FUTURE_99"), classify_code("FUTURE_99")),
             (Value::Null, classify_code("null")),
-            (json!(" "), mapping("京东网关错误码格式无效")),
+            (json!(" "), mapping("京东未提供可识别的失败原因，请联系管理员核对京东连接")),
         ] {
             let outer = json!({"code":code});
             assert_eq!(

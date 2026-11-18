@@ -511,8 +511,10 @@ fn add_covered(
     quantity: Quantity,
 ) -> Result<()> {
     let current = covered.get(sales_order_line_id).copied().unwrap_or_else(zero_quantity);
-    let value = Quantity::try_from(current.to_decimal() + quantity.to_decimal())
-        .map_err(|error| Error::from(format!("采购覆盖数量精度非法: {error}")))?;
+    let value = Quantity::try_from(current.to_decimal() + quantity.to_decimal()).map_err(|error| {
+        tracing::warn!(%error, "采购覆盖数量精度非法");
+        Error::from("已安排采购的数量合计超出允许范围或精度，请核对采购数量")
+    })?;
     covered.insert(sales_order_line_id.to_string(), value);
     Ok(())
 }
@@ -560,8 +562,11 @@ fn build_coverage(
         });
     }
 
-    let summary = ProcurementCoverageSummary::aggregate(lines.iter().map(|line| &line.summary))
-        .map_err(|error| Error::from(format!("采购数量一致性错误: {error}")))?;
+    let summary =
+        ProcurementCoverageSummary::aggregate(lines.iter().map(|line| &line.summary)).map_err(|error| {
+            tracing::warn!(%error, "采购数量一致性错误");
+            Error::from("无法核对采购数量与销售需求，请核对已安排采购的数量")
+        })?;
     Ok(SalesProcurementCoverage { revision, lines, summary })
 }
 
@@ -580,8 +585,10 @@ fn build_coverage(
 /// # 关键业务约束
 /// 所有查询入口共享同一错误语义。
 fn coverage_summary(total: Quantity, covered: Quantity) -> Result<ProcurementCoverageSummary> {
-    ProcurementCoverageSummary::new(total, covered)
-        .map_err(|error| Error::from(format!("采购数量一致性错误: {error}")))
+    ProcurementCoverageSummary::new(total, covered).map_err(|error| {
+        tracing::warn!(%error, "采购数量一致性错误");
+        Error::from("无法核对采购数量与销售需求，请核对已安排采购的数量")
+    })
 }
 
 /// 从十进制构造数量并统一映射错误。
@@ -598,7 +605,10 @@ fn coverage_summary(total: Quantity, covered: Quantity) -> Result<ProcurementCov
 /// # 关键业务约束
 /// 不做隐式舍入。
 fn quantity_of(value: Decimal) -> Result<Quantity> {
-    Quantity::try_from(value).map_err(|error| Error::from(format!("采购数量精度非法: {error}")))
+    Quantity::try_from(value).map_err(|error| {
+        tracing::warn!(%error, "采购数量精度非法");
+        Error::from("采购数量超出允许范围或精度，请核对采购数量")
+    })
 }
 
 /// 返回采购数量零值。

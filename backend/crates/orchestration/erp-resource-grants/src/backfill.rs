@@ -86,8 +86,15 @@ impl ResourceGrantProcess {
         for entry in entries {
             let prepared = match self.prepare_history(&entry, &planned, ex).await {
                 Ok(value) => value,
-                Err(Error::ConflictError(reason) | Error::ValidationError(reason)) => {
+                Err(Error::ConflictError(reason)) => {
                     report.invalid.push(BackfillProblem { record_id: entry.id().into(), reason });
+                    continue;
+                },
+                Err(Error::ValidationError(_)) => {
+                    report.invalid.push(BackfillProblem {
+                        record_id: entry.id().into(),
+                        reason: "原审批或人员分派资料不符合补齐查看权限的要求，请核对该笔记录".into(),
+                    });
                     continue;
                 },
                 Err(error) => return Err(error),
@@ -201,7 +208,7 @@ struct PreparedHistory {
 }
 
 fn invalid() -> Error {
-    Error::ConflictError("历史审批、任务或正式分配证据缺失或错配".into())
+    Error::ConflictError("原审批、待办或人员分派记录缺失或不一致，无法补齐查看权限，请核对该笔记录".into())
 }
 
 fn assignment_events(

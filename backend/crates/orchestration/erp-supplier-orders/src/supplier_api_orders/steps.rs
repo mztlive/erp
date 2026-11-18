@@ -77,7 +77,9 @@ impl SupplierApiOrderProcess {
             .ok_or_else(|| Error::NotFound("来源采购不存在".into()))?;
         ensure_po_fulfillable(&order)?;
         if order.stable.current_revision_id.as_deref() != Some(claimed.purchase_order_revision_id.as_str()) {
-            return Err(Error::ConflictError("采购版本已变化，接口执行已阻断".into()));
+            return Err(Error::ConflictError(
+                "采购单已更新，原订单操作已停止，请刷新采购单并核对供应商订单".into(),
+            ));
         }
 
         self.ensure_execution_funds(claimed, &order, executor).await?;
@@ -223,21 +225,21 @@ impl SupplierApiOrderProcess {
         let mut request = match create_request(&execution, &snapshot) {
             Ok(request) => request,
             Err(error) => {
-                execution.defer(error.to_string());
+                execution.defer(error.supplier_order_message());
                 return self.persist(&mut execution).await;
             },
         };
 
         if let Err(error) = self.preflight(&execution, connector.as_ref(), &request).await {
             execution.stage = ApiOrderStage::PlanDelivery;
-            execution.defer(error.to_string());
+            execution.defer(error.supplier_order_message());
             return self.persist(&mut execution).await;
         }
 
         if connector.funding_requirement() == OrderFundingRequirement::VerifiedSupplierDeposit
             && let Err(error) = prepare_automatic_execution_funds(&self.db, &execution, &self.codec).await
         {
-            execution.defer(error.to_string());
+            execution.defer(error.supplier_order_message());
             return self.persist(&mut execution).await;
         }
 
@@ -315,7 +317,7 @@ impl SupplierApiOrderProcess {
             if tree.root_order_no != snapshot.reference.external_order_no {
                 discovery_blocker = Some("供应商订单关系与原根单不一致，继续调查原订单".to_owned());
             } else if let Err(error) = execution.apply_observed_tree(tree, &request.lines) {
-                discovery_blocker = Some(error.to_string());
+                discovery_blocker = Some(Error::from(error).supplier_order_message());
             }
         }
 
@@ -417,7 +419,9 @@ pub(super) fn freeze_action(
         serde_json::to_vec(payload).map_err(|_| Error::Internal("接口独立步骤载荷无法编码".into()))?;
     let hash = hex::encode(Sha256::digest(&canonical));
     if execution.action_hashes.get(kind).is_some_and(|old| old != &hash) {
-        return Err(Error::ConflictError("原接口动作载荷已变化，必须先核查原请求".into()));
+        return Err(Error::ConflictError(
+            "原操作的订单资料已变化，请核对原供应商订单状态，不要重复提交".into(),
+        ));
     }
     execution.action_hashes.insert(kind.into(), hash.clone());
     Ok(ActionKey { id: format!("{}-{kind}", execution.base.id), payload_hash: hash })

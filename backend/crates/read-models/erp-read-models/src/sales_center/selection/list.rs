@@ -205,7 +205,7 @@ async fn named_owner_page<T, R>(
 fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
     ScopeVersion::new(version, EmptyScopeVersion::Missing)
         .require_for_page(page)
-        .map_err(|error| Error::ConflictError(format!("DATA_SCOPE_CHANGED：{}", error.detail())))
+        .map_err(|error| crate::support::data_scope_changed(error.detail()))
 }
 
 /// 回传版本必须与当前快照一致。
@@ -222,5 +222,5 @@ fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
 fn ensure_version(expected: Option<&str>, actual: &str) -> Result<()> {
     ScopeVersion::new(expected, EmptyScopeVersion::Provided)
         .verify(actual)
-        .map_err(|error| Error::ConflictError(format!("DATA_SCOPE_CHANGED：{}", error.detail())))
+        .map_err(|error| crate::support::data_scope_changed(error.detail()))
 }

@@ -73,7 +73,7 @@ async fn reveal(
     let RevealInput { id, req, task_version, actor, codec } = input;
     let authorization = &rbac.authorization;
     if !authorization.has_permission(actor, &payable::PAYMENT_RECIPIENT_REVEAL, executor).await? {
-        return Err(Error::Forbidden("没有完整银行账号揭示权限".into()));
+        return Err(Error::Forbidden("当前账号无权查看完整收款账号，请联系有权限的同事".into()));
     }
     let request = load(db, id, executor).await?;
     authorize_reveal_task(db, rbac, &request, req, task_version, actor, executor).await?;
@@ -82,11 +82,11 @@ async fn reveal(
     let frozen = request
         .payee_account
         .as_ref()
-        .ok_or_else(|| Error::ConflictError("申请缺少收款账户审核快照".into()))?;
+        .ok_or_else(|| Error::ConflictError("该申请没有送审时的收款账户记录，请联系财务核对".into()))?;
     if frozen.account_id != req.expected_bank_account_id
         || frozen.version != req.expected_bank_account_version
     {
-        return Err(Error::ConflictError("页面账户与申请审核快照不一致".into()));
+        return Err(Error::ConflictError("所选账户与申请送审时的收款账户不符，请刷新后核对".into()));
     }
 
     let account = db
@@ -150,12 +150,14 @@ async fn authorize_reveal_task(
         },
         WorkItemType::DocumentApproval => {
             if request.status != PurchasePaymentRequestStatus::InApproval {
-                return Err(Error::Forbidden("申请已结束财务审批，旧任务不得揭示账号".into()));
+                return Err(Error::Forbidden(
+                    "该申请的财务审批已结束，不能再从原待办查看完整收款账号".into(),
+                ));
             }
             let service = rbac.tasks.as_ref();
             service.ensure_item_access(actor, &task, executor).await?;
         },
-        _ => return Err(Error::Forbidden("当前任务不具备付款申请账户资格".into())),
+        _ => return Err(Error::Forbidden("不能从当前待办查看此付款申请的完整收款账号".into())),
     }
     Ok(())
 }

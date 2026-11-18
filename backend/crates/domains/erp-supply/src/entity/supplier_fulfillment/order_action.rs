@@ -358,9 +358,9 @@ impl SupplierOrderAction {
     pub fn new(id: SupplierOrderActionId, data: SupplierOrderActionData) -> Result<Self> {
         let idempotency_key = normalize_required_text(
             data.idempotency_key,
-            "幂等键不能为空",
+            "本次操作缺少提交标识，请刷新页面后重新操作",
             IDEMPOTENCY_KEY_MAX_LEN,
-            "幂等键过长",
+            "本次操作标识无效，请刷新页面后重新操作",
         )?;
         let external_request_id =
             normalize_optional_text(data.external_request_id, "供应商请求号", EXTERNAL_REQUEST_ID_MAX_LEN)?;

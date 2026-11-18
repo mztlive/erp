@@ -80,8 +80,9 @@ pub async fn ensure_attribution(
     order: &SalesOrder,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let frozen =
-        order.attribution.as_ref().ok_or_else(|| Error::BusinessLogicError("销售生效归属快照缺失".into()))?;
+    let frozen = order.attribution.as_ref().ok_or_else(|| {
+        Error::BusinessLogicError("这张销售单缺少生效时的归属记录，请联系销售经办人核对".into())
+    })?;
     let current = sales_attribution(db, order, frozen.attributed_at, executor).await?;
     if current != *frozen {
         return Err(Error::ConflictError("销售归属事实已变化，请重新提交生效".into()));

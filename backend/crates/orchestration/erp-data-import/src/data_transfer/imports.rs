@@ -15,13 +15,23 @@ use crate::sales_inquiry_import::SalesInquiryImportProcess;
 use crate::{Error, Result};
 
 pub(super) fn decode<T: DeserializeOwned>(input: &Value) -> Result<T> {
-    serde_json::from_value(input.clone()).map_err(|_| Error::ValidationError("任务参数格式无效".into()))
+    serde_json::from_value(input.clone()).map_err(|_| {
+        Error::ValidationError("文件处理任务缺少必要资料或填写有误，请返回原业务页面检查后重新提交".into())
+    })
 }
 pub(super) fn required<'a>(input: &'a Value, key: &str) -> Result<&'a str> {
-    input[key]
-        .as_str()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| Error::ValidationError(format!("缺少参数 {key}")))
+    input[key].as_str().filter(|s| !s.trim().is_empty()).ok_or_else(|| {
+        let field = match key {
+            "file_name" => "文件名",
+            "content_base64" => "上传文件",
+            "customer_id" => "客户",
+            "inquiry_id" => "询价单",
+            "task_id" => "采购任务",
+            "preview_id" => "导入预览",
+            _ => "必要资料",
+        };
+        Error::ValidationError(format!("缺少{field}，请返回原业务页面补齐后重新提交"))
+    })
 }
 pub(super) fn version(input: &Value) -> Result<u64> {
     input["expected_version"]
@@ -40,7 +50,7 @@ impl BusinessTransfers {
             let file = required(&input, "file_name")?;
             let bytes = STANDARD
                 .decode(required(&input, "content_base64")?)
-                .map_err(|_| Error::ValidationError("文件编码无效".into()))?;
+                .map_err(|_| Error::ValidationError("无法读取上传文件，请重新选择导入文件".into()))?;
             if bytes.is_empty()
                 || bytes.len() > 5 * 1024 * 1024
                 || !file.to_ascii_lowercase().ends_with(".xlsx")
@@ -96,7 +106,7 @@ impl BusinessTransfers {
             TransferKind::InquiryPreview | TransferKind::InquiryCreationPreview => {
                 let bytes = STANDARD
                     .decode(required(input, "content_base64")?)
-                    .map_err(|_| Error::ValidationError("文件编码无效".into()))?;
+                    .map_err(|_| Error::ValidationError("无法读取上传文件，请重新选择导入文件".into()))?;
                 let file = required(input, "file_name")?;
                 let preview = if kind == TransferKind::InquiryPreview {
                     service

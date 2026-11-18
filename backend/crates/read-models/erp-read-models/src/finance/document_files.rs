@@ -178,7 +178,7 @@ impl BusinessFinanceFiles {
         executor: &mut dyn Executor,
     ) -> Result<Vec<FinancialFileView>> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-            return Err(Error::ValidationError("履约回单读取必须使用快照事务".into()));
+            return Err(Error::ValidationError("暂时无法查看履约回单，请从原履约单据重新打开".into()));
         }
 
         let (task, access) = auth.authorize(task_id, actor, executor).await?;
@@ -350,7 +350,7 @@ mod tests {
             service.fulfillment_files_read(&actor, "task", &auth, &mut ReadExecutor::default()).await;
         assert!(matches!(
             result,
-            Err(Error::ValidationError(reason)) if reason == "履约回单读取必须使用快照事务"
+            Err(Error::ValidationError(reason)) if reason == "暂时无法查看履约回单，请从原履约单据重新打开"
         ));
         assert!(auth.executors.lock().unwrap().is_empty());
 

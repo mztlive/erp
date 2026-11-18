@@ -146,7 +146,7 @@ pub fn prepare_business_log(log: &AuditLog) -> Result<AuditLog> {
             || event.actor_type != log.actor_type
             || log.success != (event.result == BusinessEventResult::Succeeded)
         {
-            return Err(Error::ValidationError("结构化审计与业务身份不一致".to_string()));
+            return Err(Error::ValidationError("审计记录与本次操作不一致，请联系管理员".to_string()));
         }
         let mut prepared = log.clone();
         prepared.message = Some(event.message());

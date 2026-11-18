@@ -322,7 +322,7 @@ async fn catalog_protocol_and_orchestration_reject_incomplete_or_mismatched_obse
                 matches!(error, CatalogError::BusinessLogicError(message) if message == "商品补查未取得明确可售状态或采购报价")
             ),
             2 => assert!(
-                matches!(error, CatalogError::BusinessLogicError(message) if message == "商品详情 product.id 与请求商品编号不一致")
+                matches!(error, CatalogError::BusinessLogicError(message) if message == "供应商返回了不同商品的详情，请核对蛋糕叔叔的商品资料")
             ),
             3 => assert!(
                 matches!(error, CatalogError::BusinessLogicError(message) if message == "商品或规格暂不可见，请核实原来源；不按缺项下架")

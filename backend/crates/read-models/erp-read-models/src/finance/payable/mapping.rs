@@ -85,9 +85,11 @@ pub async fn resolve_current_party_payment_recipient(
     party_id: &PartyId,
     executor: &mut dyn Executor,
 ) -> Result<PartyBankAccount> {
-    resolve_optional_party_payment_recipient(db, party_id, executor)
-        .await?
-        .ok_or_else(|| Error::BusinessLogicError("供应商未配置当前默认收款账户，无法付款".to_string()))
+    resolve_optional_party_payment_recipient(db, party_id, executor).await?.ok_or_else(|| {
+        Error::BusinessLogicError(
+            "供应商尚未设置默认收款账户，请联系供应商资料维护人员补齐后再付款".to_string(),
+        )
+    })
 }
 
 /// 为只读任务/详情投影解析供应商当前默认收款账户。
@@ -131,9 +133,11 @@ async fn resolve_optional_party_payment_recipient(
 ) -> Result<Option<PartyBankAccount>> {
     let accounts =
         db.party_bank_accounts().list_current_on(party_id, BusinessDate::today(), executor).await?;
-    PartyBankAccount::resolve_current_default(&accounts)
-        .map(|account| account.cloned())
-        .map_err(|_| Error::BusinessLogicError("供应商存在多个当前默认收款账户，请先修复主数据".to_string()))
+    PartyBankAccount::resolve_current_default(&accounts).map(|account| account.cloned()).map_err(|_| {
+        Error::BusinessLogicError(
+            "供应商有多个默认收款账户，无法确定收款账户，请先在供应商资料中保留一个默认账户".to_string(),
+        )
+    })
 }
 
 /// 构造不含敏感明文的收款账户摘要。

@@ -223,7 +223,7 @@ async fn replay_cancel_step(
         || receipt.command_kind != ApprovalCommandKind::CancelApproval
         || receipt.result_ref != instance.base.id
     {
-        return Err(Error::ConflictError("库存调整撤回收据与终态事实不一致".into()));
+        return Err(Error::ConflictError("原撤回记录与库存调整单当前的审批状态不符，请核对撤回结果".into()));
     }
     if !matches!(input.identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)) {
         return Err(payload_conflict_error().into());
@@ -308,7 +308,7 @@ pub(crate) async fn find_cancel_receipt(
 pub(crate) fn cancel_replay_actor_mismatch(instance: &ApprovalProcessInstance) -> Error {
     match instance.cancellation_task_policy() {
         Err(error) => Error::ConflictError(error.to_string()),
-        Ok(_) => Error::ConflictError("库存调整撤回收据与终态事实不一致".to_string()),
+        Ok(_) => Error::ConflictError("原撤回记录与库存调整单当前的审批状态不符，请核对撤回结果".to_string()),
     }
 }
 
@@ -368,7 +368,7 @@ pub(crate) fn ensure_cancel_instance_subject(
         || instance.subject.subject_id() != adjustment_id
         || instance.subject_version != expected_subject_version
     {
-        return Err(Error::ConflictError("审批实例与库存调整撤回命令不一致".to_string()));
+        return Err(Error::ConflictError("当前审批记录与要撤回的库存调整单不符，请重新核对单据".to_string()));
     }
     Ok(())
 }
@@ -392,7 +392,9 @@ pub(crate) fn ensure_cancel_instance_binding(
         || instance.process_definition_id != binding.approval_process_definition_id
         || instance.definition_version != binding.approval_definition_version
     {
-        return Err(Error::ConflictError("库存调整审批实例与冻结定义绑定不一致".to_string()));
+        return Err(Error::ConflictError(
+            "库存调整审批记录与送审时的审批流程版本不符，请联系管理员核对".to_string(),
+        ));
     }
     Ok(())
 }
@@ -563,7 +565,7 @@ pub(crate) fn ensure_stock_adjustment_open_task_identity(
         || task.owner_role != adapter.owner_role
         || task.owner_organization_id != responsible_org_id
     {
-        return Err(Error::ConflictError("库存调整开放审批任务与当前运行事实不一致".to_string()));
+        return Err(Error::ConflictError("库存调整待办与当前审批进度不符，请刷新后核对待办".to_string()));
     }
     Ok(())
 }
@@ -633,8 +635,8 @@ pub(crate) fn build_stock_adjustment_cancel_input(
     receipt: Option<bpm::model::ApprovalCommandReceipt>,
     now: Instant,
 ) -> Result<CancelExecutionInput> {
-    let actor =
-        ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("撤回人引用无效".to_string()))?;
+    let actor = ParticipantId::new(actor_id)
+        .map_err(|_| Error::ValidationError("无法确认撤回人账号，请重新登录后再办理".to_string()))?;
     let eligibility = converge_eligibility(
         runtime.current.assignee_participant_id.as_str(),
         &runtime.current.assignee_name_snapshot,

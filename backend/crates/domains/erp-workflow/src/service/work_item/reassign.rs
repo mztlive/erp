@@ -209,7 +209,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         actor: AuditActor,
     ) -> Result<ReassignCommand> {
         req.validate()?;
-        let key = required_text(&req.idempotency_key, "幂等键不能为空")?;
+        let key = required_text(&req.idempotency_key, "缺少本次操作的提交编号，请重新发起操作")?;
         let target_user_id = required_text(&req.target_user_id, "目标用户不能为空")?;
         let reason = required_text(&req.reason, "转交原因不能为空")?;
         let expected_version = expected_task_version(&req.expected_task_version)?;

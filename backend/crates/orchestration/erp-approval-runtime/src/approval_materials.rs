@@ -34,7 +34,7 @@ impl ApprovalMaterialTarget<'_> {
     ) -> Result<ApprovalMaterialFile> {
         if let Some(id) = self.copy_receipt_id {
             if self.source_revision_id.is_some() {
-                return Err(Error::Forbidden("抄送仅允许本次提交附件".into()));
+                return Err(Error::Forbidden("抄送人员只能查看本次提交所附的文件，请向提交人核对".into()));
             }
             return Ok(runtime.copy_material_reference(actor, id, self.file_id).await?);
         }
@@ -83,7 +83,7 @@ pub async fn authorize_attachment(
                     .file_assets()
                     .find_by_id(&file_id, executor)
                     .await?
-                    .ok_or_else(|| Error::NotFound("文件资产不存在".into()))?;
+                    .ok_or_else(|| Error::NotFound("审批附件不存在，请刷新后重新打开".into()))?;
                 authorize_material_transfer(&identity_service, &db, &actor, &[file], executor).await?;
                 Ok(())
             })

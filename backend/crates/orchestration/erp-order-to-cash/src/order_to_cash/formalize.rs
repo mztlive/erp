@@ -171,7 +171,9 @@ fn prepare_formalized_submission_write(
     let now = order
         .attribution
         .as_ref()
-        .ok_or_else(|| Error::BusinessLogicError("销售归属快照缺失".into()))?
+        .ok_or_else(|| {
+            Error::BusinessLogicError("找不到销售单提交时的归属信息，请联系销售经办人核对".into())
+        })?
         .attributed_at;
     let aggregate = build_revision_for_order(order, &submission, &lines, now)?;
 

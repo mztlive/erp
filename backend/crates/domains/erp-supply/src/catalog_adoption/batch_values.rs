@@ -296,10 +296,11 @@ impl BatchSalesValues {
     /// # 错误
     /// 缺来源报价、负报价、非法售价或公司集采价及门槛不成对时拒绝。
     pub fn validate(&self, source: Option<UnitPrice>, existing_sku: bool) -> Result<Vec<BatchPriceWarning>> {
-        let source = source
-            .ok_or_else(|| Error::ValidationError("暂无接口采购报价，请等待来源补齐后重新核对".into()))?;
+        let source = source.ok_or_else(|| {
+            Error::ValidationError("供应商尚未提供采购报价，请等待报价补齐后重新核对".into())
+        })?;
         if source.to_decimal().is_sign_negative() {
-            return Err(Error::ValidationError("接口采购报价不能为负数，请核实来源报价".into()));
+            return Err(Error::ValidationError("供应商采购报价不能为负数，请核实报价后再继续".into()));
         }
 
         if existing_sku {

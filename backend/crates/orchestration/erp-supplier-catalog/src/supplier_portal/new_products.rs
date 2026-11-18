@@ -35,8 +35,9 @@ pub(super) struct SupplyTerms;
 #[async_trait]
 impl PortalSupplyTermsPort for SupplyTerms {
     async fn validate(&self, value: &Value, _: &mut dyn Executor) -> CatalogResult<()> {
-        let terms: SupplierOfferingTermsWrite = serde_json::from_value(value.clone())
-            .map_err(|error| CatalogError::ValidationError(format!("供货条款无效: {error}")))?;
+        let terms: SupplierOfferingTermsWrite = serde_json::from_value(value.clone()).map_err(|_| {
+            CatalogError::ValidationError("供货条款填写不完整或格式有误，请核对价格、税率和起订量".into())
+        })?;
         validate_portal_terms(&terms, BusinessDate::today())
             .map_err(|error| CatalogError::ValidationError(error.to_string()))
     }
@@ -479,8 +480,10 @@ impl SupplierPortalProcess {
         sku_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<(OfferingApplicationSnapshot, String, String)> {
-        let terms: SupplierOfferingTermsWrite = serde_json::from_value(row.supply_terms.clone())
-            .map_err(|e| Error::ValidationError(e.to_string()))?;
+        let terms: SupplierOfferingTermsWrite =
+            serde_json::from_value(row.supply_terms.clone()).map_err(|_| {
+                Error::ValidationError("供货条款填写不完整或格式有误，请核对价格、税率和起订量".into())
+            })?;
         let quantity = row.available_quantity.map(|q| q.to_string());
         self.validate_supply_quantity(sku_id, &terms, quantity.as_deref(), executor).await?;
 

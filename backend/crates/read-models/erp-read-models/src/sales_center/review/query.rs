@@ -129,7 +129,9 @@ impl SalesChangeReadService {
         ]
         .contains(permission)
         {
-            return Err(Error::ValidationError("不支持的销售变更回包入口".into()));
+            return Err(Error::ValidationError(
+                "此处无法查看销售变更处理结果，请打开销售变更单核对当前状态".into(),
+            ));
         }
         Ok(load_authorized_change(&self.db, &self.rbac, actor, id, permission).await?.0)
     }

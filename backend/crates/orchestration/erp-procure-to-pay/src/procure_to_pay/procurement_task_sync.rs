@@ -88,7 +88,9 @@ fn validate_procurement_task_access(item: &WorkItem, sales_order_id: &SalesOrder
         return Err(procurement_task_not_found());
     }
     if !item.is_open_procurement_task() {
-        return Err(Error::ConflictError("供给分配任务缺少冻结责任范围".to_string()));
+        return Err(Error::ConflictError(
+            "找不到该供给分配待办原先负责的采购范围，请联系管理员核对".to_string(),
+        ));
     }
     Ok(())
 }
@@ -238,12 +240,16 @@ async fn synchronize_tasks(
     for mut task in tasks {
         let key = task
             .responsibility_key()
-            .ok_or_else(|| Error::ConflictError("供给分配任务缺少责任键".to_string()))?
+            .ok_or_else(|| {
+                Error::ConflictError("该供给分配待办没有对应的责任范围，请联系管理员核对".to_string())
+            })?
             .to_string();
         let remaining = remaining_for_scope(task.responsibility_scope_ids(), remaining_by_line)?;
         if task.status == WorkItemStatus::Open {
             if !open_keys.insert(key) {
-                return Err(Error::ConflictError("同一责任范围存在多条开放供给分配任务".to_string()));
+                return Err(Error::ConflictError(
+                    "同一责任范围存在多条待办的供给分配任务，请联系管理员核对".to_string(),
+                ));
             }
             if remaining.to_decimal().is_zero() {
                 task.complete_when_requirement_satisfied(Instant::now()).map_err(Error::Logic)?;

@@ -308,12 +308,15 @@ impl Party {
     /// # 错误
     /// 当前修订指针缺失、目标修订不存在或修订属于其他 Party 时返回错误。
     pub fn current_revision<'a>(&self, revisions: &'a [PartyRevision]) -> Result<&'a PartyRevision> {
-        let revision_id =
-            self.stable.current_revision_id.as_deref().ok_or_else(|| Error::from("主体缺少当前名称修订"))?;
+        let revision_id = self
+            .stable
+            .current_revision_id
+            .as_deref()
+            .ok_or_else(|| Error::from("该往来主体缺少当前名称资料，请联系管理员核对档案"))?;
         let revision = revisions
             .iter()
             .find(|revision| revision.base.id == revision_id)
-            .ok_or_else(|| Error::from("主体当前名称修订不存在"))?;
+            .ok_or_else(|| Error::from("找不到该往来主体的当前名称资料，请联系管理员核对档案"))?;
         revision.ensure_party(&PartyId::new(self.base.id.clone()))?;
         Ok(revision)
     }

@@ -20,7 +20,10 @@ pub struct ImportRowRequest {
     #[validate(custom(function = "non_blank", message = "来源行键不能为空"))]
     pub source_row_key: String,
     /// 仅含白名单字段的规范化行。
-    #[validate(custom(function = "non_blank", message = "规范化载荷不能为空"))]
+    #[validate(custom(
+        function = "non_blank",
+        message = "缺少整理后的导入行内容，请核对导入文件后重新解析"
+    ))]
     pub normalized_payload_reference: String,
 }
 

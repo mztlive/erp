@@ -7,15 +7,12 @@
 import type { WorkspaceFamilyFilter, WorkspaceWorkItem } from "../types"
 import { normalizeObjectType } from "../lib/object-type"
 
-/** 单据类型徽章色。不用 warning / destructive，避免和受阻、超期状态抢语义。 */
+/** 单据类型徽章色。避免复用 info / success / warning / destructive / rose，防止和状态徽章抢语义。 */
 export type WorkspaceDocumentBadgeVariant =
-    | "info"
-    | "success"
     | "orange"
     | "teal"
     | "violet"
     | "lime"
-    | "rose"
     | "indigo"
     | "cyan"
     | "neutral"
@@ -60,7 +57,7 @@ export const TYPE_META: Record<string, TypeMeta> = {
         label: "单据审批",
         family: "approval",
         badgeLabel: "单据",
-        badgeVariant: "info",
+        badgeVariant: "indigo",
     },
     PROCUREMENT_ORDER_CREATION: {
         label: "待安排采购",
@@ -93,7 +90,7 @@ export const TYPE_META: Record<string, TypeMeta> = {
         label: "客户验收登记",
         family: "fulfillment",
         badgeLabel: "待客户验收",
-        badgeVariant: "success",
+        badgeVariant: "teal",
         openActionLabel: "去登记客户验收",
     },
     PURCHASE_RETURN_REFUND: {
@@ -149,7 +146,7 @@ export const TYPE_META: Record<string, TypeMeta> = {
         label: "业务异常",
         family: "exception",
         badgeLabel: "业务异常",
-        badgeVariant: "rose",
+        badgeVariant: "neutral",
         openActionLabel: "去处理业务异常",
     },
 }
@@ -166,7 +163,7 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
     sales_order: {
         approvalLabel: "销售单审批",
         badgeLabel: "销售单",
-        badgeVariant: "info",
+        badgeVariant: "indigo",
     },
     voucher_sales_order: {
         approvalLabel: "卡券销售单审批",
@@ -205,7 +202,7 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
         approvalLabel: "回款复核",
         badgeLabel: "回款",
         documentName: "回款单",
-        badgeVariant: "success",
+        badgeVariant: "cyan",
     },
     payable_account: {
         approvalLabel: "供应商付款处理",
@@ -228,7 +225,7 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
     customer_refund: {
         approvalLabel: "客户退款审批",
         badgeLabel: "客户退款",
-        badgeVariant: "rose",
+        badgeVariant: "cyan",
     },
     supplier_refund: {
         approvalLabel: "供应商退款审批",
@@ -266,18 +263,18 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
         approvalLabel: "服务履约单审批",
         badgeLabel: "服务履约",
         documentName: "服务履约单",
-        badgeVariant: "success",
+        badgeVariant: "teal",
     },
     customer_acceptance: {
         approvalLabel: "客户验收单审批",
         badgeLabel: "客户验收",
         documentName: "客户验收单",
-        badgeVariant: "info",
+        badgeVariant: "teal",
     },
     invoice: {
         approvalLabel: "发票审批",
         badgeLabel: "发票",
-        badgeVariant: "rose",
+        badgeVariant: "violet",
     },
     sales_return_case: {
         approvalLabel: "销售退货单审批",

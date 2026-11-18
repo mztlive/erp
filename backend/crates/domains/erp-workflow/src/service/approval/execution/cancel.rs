@@ -17,7 +17,7 @@ use super::idempotency::{
     ReceiptBranch, cancel_blocked_identity, cancel_identity, document_cancel_identity,
     map_receipt_first_write_error, normalize_idempotency_key, payload_conflict_error,
 };
-use super::start::map_engine_error;
+use super::start::{approval_receipt_error, map_engine_error};
 use super::{ExecutionCommandInput, PlannedWrites, PreparedExecution};
 use crate::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use crate::error::{Error, Result};
@@ -69,8 +69,8 @@ impl DocumentCancelCommand {
             return Err(Error::ValidationError("业务单据版本必须从 1 开始".to_string()));
         }
         let reason = normalize_document_cancel_reason(reason)?;
-        let actor =
-            ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("撤回人引用无效".to_string()))?;
+        let actor = ParticipantId::new(actor_id)
+            .map_err(|_| Error::ValidationError("无法确认撤回账号，请重新登录后再操作".to_string()))?;
         let idempotency_key = normalize_idempotency_key(idempotency_key)?;
         Ok(Self { subject, subject_version, expected_document_version, reason, actor, idempotency_key })
     }
@@ -617,6 +617,6 @@ fn prepare_cancel_with_document_version(
         plan.instance.base.id.clone(),
         input.command.now,
     )
-    .map_err(|error| Error::ValidationError(error.to_string()))?;
+    .map_err(approval_receipt_error)?;
     Ok(PreparedExecution::Apply(Box::new(apply_plan(plan, receipt, Some(DomainActionKind::Cancel)))))
 }

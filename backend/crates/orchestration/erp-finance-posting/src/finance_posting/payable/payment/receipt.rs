@@ -18,7 +18,7 @@ pub(super) fn resolve_payment_receipt(
     let mut used = HashSet::new();
     let resolved = pending_assets.resolve_id(&mut req.payment.bank_receipt_asset_id, &mut used)?;
     if !resolved || !pending_assets.contains_id(&req.payment.bank_receipt_asset_id) {
-        return Err(Error::ValidationError("新付款必须上传本次银行回单，不得引用既有文件资产".into()));
+        return Err(Error::ValidationError("请随本次付款登记上传银行回单，不得引用既有附件".into()));
     }
     pending_assets.ensure_all_used(&used)?;
     Ok(())
@@ -32,13 +32,13 @@ pub(super) async fn ensure_bank_receipt_asset(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     if !pending_assets.contains_id(asset_id) {
-        return Err(Error::ValidationError("银行回单不属于本次上传批次".into()));
+        return Err(Error::ValidationError("所选银行回单并非本次上传，请重新上传".into()));
     }
     let asset = db
         .file_assets()
         .find_by_id(asset_id.as_ref(), executor)
         .await?
-        .ok_or_else(|| Error::NotFound("本次银行回单尚未登记".into()))?;
+        .ok_or_else(|| Error::NotFound("本次银行回单尚未登记，请核对付款附件".into()))?;
     BankReceiptEvidencePolicy::validate(
         &asset.content_type,
         asset.sensitivity_class,
@@ -149,14 +149,14 @@ mod tests {
         let pending = batch(&["pending-file:receipt"]);
         let mut req = command("pending-file:missing");
         let error = resolve_payment_receipt(&mut req, &pending).unwrap_err();
-        assert!(error.to_string().contains("业务命令引用了未上传的文件"));
+        assert!(error.to_string().contains("附件未随本次操作上传或被重复使用"));
     }
 
     #[test]
     fn new_payment_without_upload_cannot_reuse_a_temporary_reference() {
         let mut req = command("pending-file:receipt");
         let error = resolve_payment_receipt(&mut req, &EmptyPendingAttachments).unwrap_err();
-        assert!(error.to_string().contains("业务命令引用了未上传的文件"));
+        assert!(error.to_string().contains("所选附件尚未上传"));
     }
 
     #[test]
@@ -164,7 +164,7 @@ mod tests {
         let pending = batch(&["pending-file:receipt", "pending-file:extra"]);
         let mut req = command("pending-file:receipt");
         let error = resolve_payment_receipt(&mut req, &pending).unwrap_err();
-        assert!(error.to_string().contains("存在未被业务命令引用的上传文件"));
+        assert!(error.to_string().contains("有上传的文件未关联到单据"));
     }
 
     #[test]

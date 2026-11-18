@@ -274,7 +274,9 @@ fn fee_candidate(
 
 fn candidate_reason(balance: &SalesResult<Amount>) -> Option<String> {
     match balance {
-        Err(error) => Some(error.to_string()),
+        Err(erp_sales::Error::BusinessLogicError(message)) => Some(message.clone()),
+        Err(erp_sales::Error::NotFound(_)) => Some("找不到已确认的询价费用，请刷新后核对询价结果".into()),
+        Err(_) => Some("暂时无法确定费用可用金额，请核对报价和销售分摊".into()),
         Ok(amount) if *amount <= Amount::zero() => Some("本费用分摊已无可转额度".into()),
         Ok(_) => None,
     }
@@ -327,7 +329,14 @@ mod tests {
     fn candidate_rejects_used_and_unavailable_balances() {
         assert!(candidate_reason(&Ok("10".parse().unwrap())).is_none());
         assert!(candidate_reason(&Ok(Amount::zero())).is_some());
-        assert!(candidate_reason(&Err(SalesError::BusinessLogicError("已占用".into()))).is_some());
+        assert_eq!(
+            candidate_reason(&Err(SalesError::BusinessLogicError("已占用".into()))).as_deref(),
+            Some("已占用")
+        );
+        assert_eq!(
+            candidate_reason(&Err(SalesError::ValidationError("费用余额计算溢出".into()))).as_deref(),
+            Some("暂时无法确定费用可用金额，请核对报价和销售分摊")
+        );
     }
     #[test]
     fn financial_response_does_not_serialize_internal_payment_basis() {

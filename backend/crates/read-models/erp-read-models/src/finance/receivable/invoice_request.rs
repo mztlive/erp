@@ -97,17 +97,20 @@ impl ReceivableReadService {
         executor: &mut dyn Executor,
     ) -> Result<InvoiceRequestAmounts> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
-            return Err(Error::ValidationError("开票额度读取必须使用快照事务".into()));
+            return Err(Error::ValidationError(
+                "暂时无法查询可开票金额，请从销售单详情重新打开开票申请".into(),
+            ));
         }
         authorization
             .require(actor, &internal::INVOICE_REQUEST_AMOUNTS_READ, AccessTarget::Operation, executor)
             .await?;
 
-        let boundary =
-            executor.boundary().ok_or_else(|| Error::ValidationError("开票额度读取缺少授权快照".into()))?;
+        let boundary = executor.boundary().ok_or_else(|| {
+            Error::ValidationError("暂时无法确认可查看的开票金额，请从销售单详情重新打开开票申请".into())
+        })?;
         let view = self.amounts_view(account_id, executor).await?;
         if !boundary.is_current(executor) {
-            return Err(Error::ValidationError("开票额度读取跨越授权快照".into()));
+            return Err(Error::ValidationError("本次开票金额查询已失效，请刷新销售单后重新查看".into()));
         }
         Ok(view)
     }
@@ -246,7 +249,7 @@ mod authorization_tests {
         let result =
             service.amounts_snapshot("account", &actor, &authorization, &mut ReadExecutor::default()).await;
         assert!(
-            matches!(result, Err(Error::ValidationError(reason)) if reason == "开票额度读取必须使用快照事务")
+            matches!(result, Err(Error::ValidationError(reason)) if reason == "暂时无法查询可开票金额，请从销售单详情重新打开开票申请")
         );
 
         let result = service

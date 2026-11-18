@@ -515,7 +515,7 @@ async fn replay_sourcing(
     ) {
         Ok(receipt) => receipt,
         Err(PurchaseCommandReceiptError::IdentityMismatch | PurchaseCommandReceiptError::PayloadConflict) => {
-            return Err(Error::ConflictError("幂等键已用于不同采购命令".to_string()));
+            return Err(Error::ConflictError("本次操作编号已用于其他采购操作，请核对原办理记录".to_string()));
         },
         Err(PurchaseCommandReceiptError::Corrupted(message)) => {
             return Err(Error::Internal(message));

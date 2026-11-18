@@ -160,7 +160,8 @@ async fn replay_save(
     else {
         return Ok(None);
     };
-    let result = PurchaseCommandReceipt::decode(receipt, identity, fingerprint)
-        .map_err(|_| Error::ConflictError("幂等键已用于不同的采购变更保存请求或回执无效".into()))?;
+    let result = PurchaseCommandReceipt::decode(receipt, identity, fingerprint).map_err(|_| {
+        Error::ConflictError("无法将本次保存与原采购变更记录对应，请刷新后核对保存结果".into())
+    })?;
     Ok(Some(result.into_payload()))
 }

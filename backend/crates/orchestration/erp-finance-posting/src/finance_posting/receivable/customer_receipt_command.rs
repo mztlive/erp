@@ -113,7 +113,7 @@ pub(super) fn recover_receipt_command<T>(probe: Result<Option<T>>, original_erro
 /// 关联其他原单时返回冲突。
 pub(super) fn ensure_committed_resource(id: &str, expected_resource: Option<&str>) -> Result<()> {
     if expected_resource.is_some_and(|expected| expected != id) {
-        return Err(Error::ConflictError("回款提交收据与原单不一致".into()));
+        return Err(Error::ConflictError("原回款提交记录与当前回款单不符，请核对办理记录".into()));
     }
     Ok(())
 }

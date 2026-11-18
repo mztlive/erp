@@ -101,10 +101,10 @@ impl SupplierSettlementStatement {
         let mut item_by_id = HashMap::with_capacity(items.len());
         for item in items {
             if !item.belongs_to_statement(&statement_id) {
-                return Err(Error::from("结算快照包含其他结算单明细"));
+                return Err(Error::from("待复核的明细中有不属于本结算单的项目，请核对明细归属"));
             }
             if item_by_id.insert(item.base.id.as_str(), item).is_some() {
-                return Err(Error::from("结算快照包含重复明细"));
+                return Err(Error::from("待复核的结算明细有重复项目，请核对后去除重复项"));
             }
         }
 
@@ -115,7 +115,7 @@ impl SupplierSettlementStatement {
         {
             let item_id = difference.statement_item_id.as_ref();
             if !item_by_id.contains_key(item_id) {
-                return Err(Error::from("ERP接受差异未指向当前结算快照明细"));
+                return Err(Error::from("选择接受的差异不属于本次结算明细，请重新核对"));
             }
             accepted_gross_by_item
                 .entry(item_id)
@@ -127,7 +127,9 @@ impl SupplierSettlementStatement {
         for (item_id, accepted_gross) in accepted_gross_by_item {
             let delta = item_by_id[item_id].supplier_minus_erp_delta()?;
             if accepted_gross != delta.gross {
-                return Err(Error::from(format!("结算明细 {item_id} 的 ERP 接受差异与冻结双方金额不一致")));
+                return Err(Error::from(format!(
+                    "结算明细 {item_id} 的已接受差异与确认时的双方金额不一致，请重新核对金额"
+                )));
             }
             total.add_assign(delta);
         }

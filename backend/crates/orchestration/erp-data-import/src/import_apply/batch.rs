@@ -123,7 +123,7 @@ impl ImportApplyProcess {
             return self.batch_view_of(batch, executor).await;
         }
         if !batch.is_importing() {
-            return Err(Error::BusinessLogicError("批次尚未进入导入阶段，禁止应用".to_string()));
+            return Err(Error::BusinessLogicError("当前批次未到导入阶段，请先完成试算与确认".to_string()));
         }
         let job = self.load_running_import_job(&batch, executor).await?;
 
@@ -169,7 +169,7 @@ impl ImportApplyProcess {
             .await?
             .ok_or_else(|| Error::Internal("导入批次后台任务缺失".to_string()))?;
         if !matches!(job.status, JobStatus::Running | JobStatus::PartiallySucceeded) {
-            return Err(Error::BusinessLogicError("后台应用尚未由 START_APPLY 启动".to_string()));
+            return Err(Error::BusinessLogicError("后台导入尚未开始，请先在批次页面启动导入".to_string()));
         }
         Ok(job)
     }
@@ -357,10 +357,10 @@ fn apply_result_set_from_request(req: ApplyLegacyImportBatchRequest) -> Result<A
 /// # 错误
 /// 存在缺失 ID 时返回 `ValidationError`。
 fn ensure_no_missing_apply_rows(missing: &[LegacyImportRowId]) -> Result<()> {
-    let Some(first) = missing.first() else {
+    if missing.is_empty() {
         return Ok(());
-    };
-    Err(Error::ValidationError(format!("导入行不属于当前批次或不存在: {first}")))
+    }
+    Err(Error::ValidationError("选中的导入行不属于当前批次或已不存在，请刷新批次后重新选择".into()))
 }
 
 /// 按本批 delta 更新批次计数并派生应用状态。
@@ -659,7 +659,8 @@ mod tests {
     fn unknown_ids_fail_closed() {
         let missing = vec![LegacyImportRowId::new("row-unknown")];
         let error = ensure_no_missing_apply_rows(&missing).unwrap_err();
-        assert!(error.to_string().contains("row-unknown"));
+        assert!(matches!(error, crate::Error::ValidationError(message)
+            if message == "选中的导入行不属于当前批次或已不存在，请刷新批次后重新选择"));
         assert!(ensure_no_missing_apply_rows(&[]).is_ok());
     }
 

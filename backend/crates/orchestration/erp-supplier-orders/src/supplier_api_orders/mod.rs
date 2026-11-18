@@ -92,7 +92,7 @@ impl SupplierApiOrderProcess {
             if matches!(current.stage, ApiOrderStage::Observe | ApiOrderStage::Stopped) {
                 return;
             }
-            current.defer(error.to_string());
+            current.defer(error.supplier_order_message());
             if let Err(error) = self.persist(&mut current).await {
                 tracing::warn!(error = %error, "供应商订单阻断原因待持久化，下轮仍查询原状态");
             }
@@ -109,10 +109,12 @@ impl SupplierApiOrderProcess {
             .supplier_api_order_executions()
             .find_by_id(id, &mut NoTransaction)
             .await?
-            .ok_or_else(|| Error::NotFound("此订单没有 API 自动执行记录".into()))
+            .ok_or_else(|| Error::NotFound("此订单未登记供应商自动处理记录，请从采购单核对下单方式".into()))
     }
 }
 
 fn missing_capability(label: &str) -> Error {
-    Error::BusinessLogicError(format!("当前供应商接口尚不支持{label}，请联系管理员核实；系统未发送请求"))
+    Error::BusinessLogicError(format!(
+        "当前供应商尚不支持自动{label}，请联系管理员核实处理方式；系统未发送请求"
+    ))
 }

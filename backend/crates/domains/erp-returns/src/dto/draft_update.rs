@@ -15,7 +15,7 @@ use crate::entity::returns::{
 #[serde(deny_unknown_fields)]
 pub struct UpdateFinancialReturnRequest {
     /// 当前原单的乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub version: u64,
     /// 退款或冲正金额；省略保持原值。
     pub amount: Option<Amount>,

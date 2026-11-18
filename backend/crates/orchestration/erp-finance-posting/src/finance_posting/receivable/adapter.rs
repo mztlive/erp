@@ -202,7 +202,7 @@ pub fn execute_customer_receipt_domain_action(
     match action {
         ApprovalDomainAction::CustomerReceiptPost => ensure_final_approve_posting(receipt),
         ApprovalDomainAction::CustomerReceiptCancelApproval => cancel_customer_receipt_to_draft(receipt),
-        other => Err(Error::ValidationError(format!("动作 {} 不属于客户回款单", other.as_str()))),
+        _ => Err(Error::ValidationError("该客户回款单不支持此审批操作，请从对应审批待办办理".into())),
     }
 }
 

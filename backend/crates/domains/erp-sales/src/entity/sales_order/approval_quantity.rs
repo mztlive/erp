@@ -102,7 +102,7 @@ fn sum_goods_quantities(lines: &[SalesOrderSubmissionLine]) -> Result<Quantity> 
 /// # 关键业务约束
 /// 不得用零值或空值代替缺失数量。
 fn goods_line_quantity(line: &SalesOrderSubmissionLine) -> Result<Quantity> {
-    line.quantity.ok_or_else(|| Error::from(format!("第 {} 行缺少数量，无法冻结审批快照", line.line_no)))
+    line.quantity.ok_or_else(|| Error::from(format!("请填写第 {} 行的数量后再提交审批", line.line_no)))
 }
 
 /// 将唯一卡券行的卡张数换算为审批数量。
@@ -121,7 +121,7 @@ fn goods_line_quantity(line: &SalesOrderSubmissionLine) -> Result<Quantity> {
 fn voucher_line_quantity(line: &SalesOrderSubmissionLine) -> Result<Quantity> {
     let card_count = line
         .card_count
-        .ok_or_else(|| Error::from(format!("第 {} 行缺少卡张数，无法冻结审批快照", line.line_no)))?;
+        .ok_or_else(|| Error::from(format!("请填写第 {} 行的卡张数后再提交审批", line.line_no)))?;
     if card_count == 0 {
         return Err(Error::from(format!("第 {} 行卡张数必须为正整数", line.line_no)));
     }
@@ -142,7 +142,10 @@ fn voucher_line_quantity(line: &SalesOrderSubmissionLine) -> Result<Quantity> {
 /// # 关键业务约束
 /// 禁止静默舍入。
 fn quantity_from_total(total: Decimal) -> Result<Quantity> {
-    Quantity::try_from(total).map_err(|error| Error::from(format!("审批总数量超出精度：{error}")))
+    Quantity::try_from(total).map_err(|error| {
+        tracing::warn!(%error, "审批总数量超出精度");
+        Error::from("审批总数量超出允许范围或精度，请核对各行数量")
+    })
 }
 
 #[cfg(test)]
@@ -357,7 +360,13 @@ mod tests {
         assert!(goods.approval_total_quantity(&[]).is_err());
 
         goods_lines[0].quantity = None;
-        assert!(goods.approval_total_quantity(&goods_lines).unwrap_err().to_string().contains("缺少数量"));
+        assert!(
+            goods
+                .approval_total_quantity(&goods_lines)
+                .unwrap_err()
+                .to_string()
+                .contains("请填写第 1 行的数量")
+        );
 
         let (voucher, mut voucher_line) = voucher_submission(voucher_line_data(1, 3));
         voucher_line.card_count = None;
@@ -366,7 +375,7 @@ mod tests {
                 .approval_total_quantity(&[voucher_line.clone()])
                 .unwrap_err()
                 .to_string()
-                .contains("缺少卡张数")
+                .contains("请填写第 1 行的卡张数")
         );
 
         voucher_line.card_count = Some(0);
@@ -396,7 +405,7 @@ mod tests {
     #[test]
     fn quantity_from_total_rejects_excess_scale() {
         let too_precise = Decimal::new(1, 7);
-        assert!(quantity_from_total(too_precise).unwrap_err().to_string().contains("超出精度"));
+        assert!(quantity_from_total(too_precise).unwrap_err().to_string().contains("超出允许范围或精度"));
     }
 
     #[test]

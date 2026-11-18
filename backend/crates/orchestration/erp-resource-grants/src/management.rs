@@ -65,7 +65,7 @@ impl SourcesQuery {
         if normalize_required_text_ref(&self.recipient, "接收账号不能为空", 128, "接收账号过长")?
             != self.recipient
         {
-            return Err(Error::ValidationError("账号不能带首尾空白".into()));
+            return Err(Error::ValidationError("请去掉账号开头和结尾的空格".into()));
         }
         validate_cursor(self.after.as_deref())
     }
@@ -100,9 +100,14 @@ impl RecomputeRequest {
 /// 空白或超过 4096 字符时拒绝。
 pub(crate) fn validate_cursor(after: Option<&str>) -> Result<()> {
     if let Some(value) = after
-        && normalize_required_text_ref(value, "游标不能为空", 4096, "游标过长")? != value
+        && normalize_required_text_ref(
+            value,
+            "缺少分页位置，请回到第一页重新查询",
+            4096,
+            "分页位置无效，请回到第一页重新查询",
+        )? != value
     {
-        return Err(Error::ValidationError("游标不能带首尾空白".into()));
+        return Err(Error::ValidationError("分页位置无效，请回到第一页重新查询".into()));
     }
     Ok(())
 }

@@ -185,12 +185,10 @@ impl CatalogService {
             result.sku_numbers.insert(sku.base.id.clone(), sku.sku_no.clone());
 
             let Some(revision_id) = sku.stable.current_revision_id else { continue };
-            let revision = self
-                .db
-                .sku_revisions()
-                .find_by_id(&revision_id, executor)
-                .await?
-                .ok_or_else(|| Error::BusinessLogicError("SKU当前修订不存在".into()))?;
+            let revision =
+                self.db.sku_revisions().find_by_id(&revision_id, executor).await?.ok_or_else(|| {
+                    Error::BusinessLogicError("找不到该商品规格的当前版本，请核对商品档案".into())
+                })?;
 
             result.values.push((
                 SourceField::SkuName,
@@ -357,13 +355,13 @@ impl CatalogService {
             .stable
             .current_revision_id
             .as_ref()
-            .ok_or_else(|| Error::BusinessLogicError("SKU当前修订缺失".into()))?;
+            .ok_or_else(|| Error::BusinessLogicError("该商品规格没有当前版本，请核对商品档案".into()))?;
         let old = self
             .db
             .sku_revisions()
             .find_by_id(current, executor)
             .await?
-            .ok_or_else(|| Error::NotFound("SKU当前修订不存在".into()))?;
+            .ok_or_else(|| Error::NotFound("找不到该商品规格的当前版本，请核对商品档案".into()))?;
         Ok((sku, old))
     }
 
@@ -580,7 +578,8 @@ fn source_sku_ids(changes: &[(SourceField, Option<String>, SourceValue)]) -> Res
         .iter()
         .filter(|(field, _, _)| matches!(field, SourceField::MainImage | SourceField::SkuName))
         .map(|(_, sku, _)| {
-            sku.clone().ok_or_else(|| Error::ValidationError("规格展示字段必须指定SKU".into()))
+            sku.clone()
+                .ok_or_else(|| Error::ValidationError("确认规格展示资料时，请指定对应的商品规格".into()))
         })
         .collect()
 }

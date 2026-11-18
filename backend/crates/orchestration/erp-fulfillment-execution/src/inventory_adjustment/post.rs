@@ -174,14 +174,16 @@ async fn load_post_runtime_snapshot(
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("库存调整审批实例缺少冻结快照".to_string()))?;
+        .ok_or_else(|| {
+            Error::ConflictError("找不到库存调整送审时的单据资料，请联系管理员核对".to_string())
+        })?;
     snapshot
         .ensure_matches_runtime_subject(
             DocumentType::StockAdjustment,
             adjustment.base.id.as_str(),
             subject_version,
         )
-        .map_err(|_| Error::ConflictError("库存调整审批冻结快照已变化".to_string()))?;
+        .map_err(|_| Error::ConflictError("库存调整送审资料已变化，请核对审批记录".to_string()))?;
 
     let current_execution = instance.current_node_execution_id.as_ref().map(ToString::to_string);
     if instance.status != ApprovalProcessInstanceStatus::Running

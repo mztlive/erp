@@ -45,7 +45,10 @@ impl ApprovalManagementMapping {
             let mapping = roots
                 .get(resource)
                 .filter(|mapping| mapping.model().resource == resource)
-                .ok_or_else(|| Error::ValidationError(format!("审批管理缺少来源映射：{resource}")))?;
+                .ok_or_else(|| {
+                    tracing::warn!(resource, "审批管理缺少来源映射");
+                    Error::ValidationError("暂时无法查看关联的审批单据，请联系管理员核对审批管理设置".into())
+                })?;
             if !complete.contains_key(resource) {
                 complete.insert(resource.to_owned(), complete_source(resource, mapping.clone())?);
             }

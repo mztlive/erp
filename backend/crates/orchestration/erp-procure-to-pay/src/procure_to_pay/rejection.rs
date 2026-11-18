@@ -125,7 +125,7 @@ async fn verify_snapshot(
         .approval_subject_snapshots()
         .find_by_process_instance_id(approval_process_instance_id, executor)
         .await?
-        .ok_or_else(|| Error::NotFound("采购审批冻结快照不存在".into()))?;
+        .ok_or_else(|| Error::NotFound("找不到采购单送审时的资料，请联系管理员核对".into()))?;
     snapshot.ensure_matches_runtime_subject(document_type, id, expected_subject_version)?;
     Ok(())
 }

@@ -531,7 +531,7 @@ fn ensure_existing_acceptance_draft(
         return Err(Error::ConflictError("客户验收草稿不属于当前销售单".to_string()));
     }
     let expected_version =
-        expected_version.ok_or_else(|| Error::ValidationError("已有草稿缺少期望版本".to_string()))?;
+        expected_version.ok_or_else(|| Error::ValidationError("请打开已有草稿并刷新后再提交".to_string()))?;
     existing
         .ensure_draft_version(expected_version)
         .map_err(|error| Error::ConflictError(error.to_string()))?;

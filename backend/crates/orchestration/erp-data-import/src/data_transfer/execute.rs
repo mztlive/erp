@@ -66,14 +66,14 @@ impl DataTransferProcess {
         loop {
             tokio::select! {
                 result = &mut work => {
-                    if !owned { return Err(Error::ConflictError("任务已取消或由其他执行器接管".into())); }
+                    if !owned { return Err(Error::ConflictError("本次任务已取消或正在由系统继续处理，请刷新任务列表查看状态".into())); }
                     return result;
                 }
                 _ = heartbeat.tick(), if owned => {
                     owned = self.heartbeat(job).await.is_ok();
                     // 写命令必须等待原事务与回执收尾，不以取消 future 方式重放。
                     if !owned && source.kind.is_export() {
-                        return Err(Error::ConflictError("任务已取消或由其他执行器接管".into()));
+                        return Err(Error::ConflictError("本次任务已取消或正在由系统继续处理，请刷新任务列表查看状态".into()));
                     }
                 }
             }
@@ -122,7 +122,8 @@ impl DataTransferProcess {
 fn safe_failure(error: &Error) -> String {
     match error {
         Error::Forbidden(_) | Error::Unauthenticated(_) => {
-            "TRANSFER_FORBIDDEN：当前权限或业务范围已变化，请重新查询后提交".into()
+            "TRANSFER_FORBIDDEN：当前账号权限或可处理范围已变化，请联系管理员核对权限，再返回业务页提交"
+                .into()
         },
         Error::ValidationError(message)
         | Error::BusinessLogicError(message)

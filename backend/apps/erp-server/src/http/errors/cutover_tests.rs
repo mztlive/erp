@@ -12,7 +12,7 @@ use super::{Error, wiring_errors};
 
 const INTERNAL_MESSAGE: &str = "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员";
 const UNKNOWN_MESSAGE: &str = "操作结果暂无法确认，请先查询当前状态，确认未处理后再决定是否重试";
-const CONFLICT_MESSAGE: &str = "当前资料状态不允许继续操作，请刷新后核对";
+const CONCURRENT_MESSAGE: &str = "相关资料正在被其他操作更新，请刷新并核对后再试";
 const DUPLICATE_MESSAGE: &str = "数据已存在，请勿重复提交";
 
 struct Expected {
@@ -147,11 +147,10 @@ macro_rules! common_cases {
                 Error::from(Source::ConflictError("资料已更新，请刷新后重试".into())),
                 Expected::conflict("资料已更新，请刷新后重试"),
             ),
-            // 原瞬态冲突文案含技术术语“事务”，实际 HTTP 使用既有安全 fallback。
             (
                 "TransientTransaction",
                 Error::from(Source::TransientTransaction(transient())),
-                Expected::conflict(CONFLICT_MESSAGE),
+                Expected::conflict(CONCURRENT_MESSAGE),
             ),
             (
                 "Forbidden",
@@ -514,7 +513,7 @@ async fn direct_persistence_non_duplicate_errors_keep_http_contract() {
             Error::from(persistence_core::Error::OptimisticLockingError),
             Expected::conflict("数据已被其他请求修改，请刷新后重试"),
         ),
-        ("transient", Error::from(transient()), Expected::conflict(CONFLICT_MESSAGE)),
+        ("transient", Error::from(transient()), Expected::conflict(CONCURRENT_MESSAGE)),
         ("unknown", Error::from(unknown()), Expected::new(500, "OUTCOME_UNKNOWN", UNKNOWN_MESSAGE, false)),
         ("database", Error::from(database_error()), Expected::internal()),
     ] {
@@ -584,15 +583,21 @@ async fn ordinary_file_formats_and_specific_approval_reason_are_preserved() {
 async fn rate_limit_variants_keep_body_status_and_retry_after() {
     use crate::http::rate_limit::Error as RateError;
     for (label, source, status, message, retry_after) in [
-        ("key", RateError::KeyExceeded { retry_after_secs: 12 }, 429, "请求过于频繁，请稍后重试", Some("12")),
+        (
+            "key",
+            RateError::KeyExceeded { retry_after_secs: 12 },
+            429,
+            "操作过于频繁，请稍等片刻再试",
+            Some("12"),
+        ),
         (
             "global",
             RateError::GlobalExceeded { retry_after_secs: 29 },
             429,
-            "请求过于频繁，请稍后重试",
+            "操作过于频繁，请稍等片刻再试",
             Some("29"),
         ),
-        ("concurrency", RateError::ConcurrencyExceeded, 429, "请求过于频繁，请稍后重试", Some("1")),
+        ("concurrency", RateError::ConcurrencyExceeded, 429, "操作过于频繁，请稍等片刻再试", Some("1")),
         ("unavailable", RateError::Unavailable, 500, INTERNAL_MESSAGE, None),
     ] {
         let mut expected = Expected::new(status, "RATE_LIMITED", message, true);

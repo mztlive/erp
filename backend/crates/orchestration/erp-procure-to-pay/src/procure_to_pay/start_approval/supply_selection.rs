@@ -122,5 +122,5 @@ async fn load_selected_facts(
 
 /// 同一稳定冲突要求重新核对；不泄露外域当前版本或静默替换旧事实。
 fn changed() -> Error {
-    Error::ConflictError("采购供给、条款或可供事实已变化，请重新核对选源后提交".into())
+    Error::ConflictError("供货选项、供货条件或可供数量已变化，请核对选源后再提交".into())
 }

@@ -13,15 +13,15 @@ pub const VOID_ACTION: &str = "purchase_order.void";
 #[serde(deny_unknown_fields)]
 pub struct VoidPurchaseOrderRequest {
     /// 期望的采购单乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "单据或资料版本无效，请刷新当前页面后再试"))]
     pub expected_lock_version: u64,
     /// 作废原因。
     #[validate(custom(function = "non_blank", message = "作废原因不能为空"))]
     #[validate(length(max = 512, message = "作废原因过长"))]
     pub reason: String,
     /// 业务请求幂等键。
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
-    #[validate(length(max = 128, message = "幂等键过长"))]
+    #[validate(custom(function = "non_blank", message = "本次操作缺少提交标识，请刷新页面后重新操作"))]
+    #[validate(length(max = 128, message = "本次操作标识无效，请刷新页面后重新操作"))]
     pub idempotency_key: String,
 }
 

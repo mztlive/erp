@@ -65,7 +65,9 @@ impl SupplierApiGovernanceProcess {
             .capabilities(&SupplierReferenceTarget::from(&connection))
             .map_err(|error| Error::BusinessLogicError(error.summary))?;
         if !capabilities.contains(&SupplierApiCapabilityCode::Order) {
-            return Err(Error::BusinessLogicError("该供应商接口不支持自动下单".into()));
+            return Err(Error::BusinessLogicError(
+                "当前供应商不支持自动下单，请联系管理员核对已开通的订货方式".into(),
+            ));
         }
 
         let deployment = self.deployment(&connection)?;

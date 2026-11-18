@@ -20,14 +20,14 @@ fn is_valid_query_id(id: &str) -> bool {
 fn parse_query_ids(raw: &str) -> Result<Vec<String>, &'static str> {
     let parts = raw.split(',');
     if parts.clone().nth(MAX_QUERY_IDS).is_some() {
-        return Err("单次人员条件最多 100 个 ID");
+        return Err("一次最多选择 100 人，请减少选择人数");
     }
 
     let mut ids = BTreeSet::new();
     for part in parts {
         let id = part.trim();
         if !is_valid_query_id(id) {
-            return Err("人员筛选必须为非空的稳定 ID");
+            return Err("人员筛选中有无效选项，请重新选择人员");
         }
         ids.insert(id);
     }
@@ -135,8 +135,8 @@ mod tests {
     fn segment_limit_is_checked_before_individual_ids() {
         let mut parts = vec!["u"; 100];
         parts[0] = "";
-        assert_eq!(parse_query_ids(&parts.join(",")), Err("人员筛选必须为非空的稳定 ID"));
+        assert_eq!(parse_query_ids(&parts.join(",")), Err("人员筛选中有无效选项，请重新选择人员"));
         parts.push("u");
-        assert_eq!(parse_query_ids(&parts.join(",")), Err("单次人员条件最多 100 个 ID"));
+        assert_eq!(parse_query_ids(&parts.join(",")), Err("一次最多选择 100 人，请减少选择人数"));
     }
 }

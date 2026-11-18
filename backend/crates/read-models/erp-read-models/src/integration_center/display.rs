@@ -33,6 +33,10 @@ impl IntegrationCenterReadService {
         let mut labels = integration_error_labels(&self.db, items, executor).await?;
 
         for item in items {
+            item.last_attempt_summary = item
+                .last_attempt_summary
+                .as_deref()
+                .map(|summary| super::integration_attempt_note(item.error_class, summary));
             item.owner_user_name = item.owner_user_id.as_ref().and_then(|id| names.get(id).cloned());
             if let Some(labels) = labels.remove(&item.id) {
                 item.message_label = labels.message_label;

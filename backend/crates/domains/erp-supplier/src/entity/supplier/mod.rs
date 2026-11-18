@@ -158,7 +158,7 @@ pub fn validate_profile_selection(
             return Err(erp_core::Error::from("同类资质编号不能重复"));
         }
         if qualification.capability_codes.iter().any(|code| !capability_set.contains(code)) {
-            return Err(erp_core::Error::from("资质引用了未启用的供应商能力"));
+            return Err(erp_core::Error::from("资质关联的供给能力尚未启用，请先启用或重新选择"));
         }
     }
     Ok(())

@@ -81,7 +81,7 @@ impl ApiOrderExecution {
             return if previous.request == *request {
                 Ok(false)
             } else {
-                Err(Error::ConflictError("原订单确认目标或载荷已变化，请先查询原结果".into()))
+                Err(Error::ConflictError("待确认的订单或确认内容已变化，请先查询原确认结果".into()))
             };
         }
         if self.confirmations.values().any(|previous| previous.request.action.id == request.action.id) {

@@ -79,7 +79,7 @@ impl CreateProductBrandRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateProductBrandRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
     /// 品牌名称；缺省表示不修改。
     pub name: Option<String>,
@@ -154,7 +154,7 @@ impl From<ProductBrandRow> for ProductBrandView {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ProductBrandListParams {
     /// 多业务字段字面量关键词，空白不筛选。
-    #[validate(length(max = 200))]
+    #[validate(length(max = 200, message = "搜索关键词不能超过 200 个字符"))]
     pub q: Option<String>,
     /// 品牌代码精确筛选。
     pub brand_code: Option<String>,
@@ -243,7 +243,7 @@ pub struct CreateUnitOfMeasureRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdateUnitOfMeasureRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
     /// 单位名称；缺省表示不修改。
     pub name: Option<String>,

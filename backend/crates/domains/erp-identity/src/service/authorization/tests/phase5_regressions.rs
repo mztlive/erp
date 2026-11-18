@@ -305,7 +305,7 @@ async fn stock_adjustment_update_checks_the_persisted_record_and_complete_wareho
     facts.objects.lock().unwrap()[0].warehouse_id = FactValue::Missing;
     assert!(matches!(
         service.require(&actor(), permission, target(), &mut executor).await,
-        Err(Error::ValidationError(message)) if message.contains("Warehouse")
+        Err(Error::ValidationError(message)) if message.contains("所属仓库")
     ));
 
     assert!(matches!(

@@ -144,11 +144,10 @@ impl CatalogPortalService {
         ensure_frozen_hierarchy(&mapped.category_hierarchy, &actual_hierarchy)?;
 
         for sku in &input.skus {
-            let mapped_sku = mapped
-                .sku_mappings
-                .iter()
-                .find(|mapping| mapping.row_id == sku.row_id)
-                .ok_or_else(|| Error::ValidationError("SKU映射缺失".into()))?;
+            let mapped_sku =
+                mapped.sku_mappings.iter().find(|mapping| mapping.row_id == sku.row_id).ok_or_else(|| {
+                    Error::ValidationError("供应商规格尚未匹配公司商品规格，请先完成匹配".into())
+                })?;
             self.ensure_unit(sku, mapped_sku, executor).await?;
         }
         Ok(())

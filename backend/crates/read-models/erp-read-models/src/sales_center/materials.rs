@@ -412,7 +412,9 @@ fn validate_inheritance(
         || visited.len() >= 100
         || !visited.insert(base.base.id.clone())
     {
-        return Err(Error::ConflictError("销售凭证继承版本关系无效".into()));
+        return Err(Error::ConflictError(
+            "无法确定应沿用哪次销售单的凭证，请联系销售经办人核对历史凭证".into(),
+        ));
     }
     Ok(())
 }
@@ -476,7 +478,7 @@ fn selected_materials(
         .filter(|snapshot| snapshot.ensure_matches_runtime_subject(kind, id, version).is_ok());
     let Some(snapshot) = selected.next() else { return Ok(Vec::new()) };
     if selected.next().is_some() {
-        return Err(Error::ConflictError("销售提交存在重复审批材料快照".into()));
+        return Err(Error::ConflictError("本次销售提交关联了多份审批材料，请联系管理员核对后再处理".into()));
     }
     Ok(snapshot.material_files.clone())
 }

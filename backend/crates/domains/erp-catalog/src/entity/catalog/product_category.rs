@@ -108,7 +108,7 @@ impl ProductCategory {
             normalize_required_text(data.category_code, "分类代码不能为空", CODE_MAX_LEN, "分类代码过长")?;
         let name = normalize_required_text(data.name, "分类名称不能为空", NAME_MAX_LEN, "分类名称过长")?;
         if data.parent_category_id.as_ref() == Some(&id) {
-            return Err(Error::from("父分类不能是自身"));
+            return Err(Error::from("商品分类不能选自己作为上级分类，请另选上级分类"));
         }
 
         Ok(Self {
@@ -164,7 +164,7 @@ impl ProductCategory {
         updated_by: impl Into<String>,
     ) -> Result<()> {
         if parent.as_ref().is_some_and(|parent_id| parent_id.as_ref() == self.base.id.as_str()) {
-            return Err(Error::from("父分类不能是自身"));
+            return Err(Error::from("商品分类不能选自己作为上级分类，请另选上级分类"));
         }
         self.parent_category_id = parent;
         self.stable.touch(updated_by);

@@ -106,7 +106,7 @@ impl SalesSelectionService {
         } else {
             domain.session_by_participant(&book.base.id, "", executor).await?
         };
-        found.ok_or_else(|| Error::Forbidden("密码或提货码不正确".into()))
+        found.ok_or_else(|| Error::Forbidden("访问密码或提货码有误，请核对后重新输入".into()))
     }
 
     /// 在调用方授权事务内更新访问密码并保存幂等结果。

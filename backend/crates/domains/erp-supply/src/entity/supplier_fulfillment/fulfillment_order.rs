@@ -219,15 +219,15 @@ impl SupplierFulfillmentOrder {
 
         let address_snapshot_encrypted = normalize_required_text(
             data.address_snapshot_encrypted,
-            "履约地址快照不能为空",
+            "缺少履约地址，请核对地址后重试",
             ADDRESS_ENCRYPTED_MAX_LEN,
-            "履约地址快照过长",
+            "履约地址信息过长，请精简后重试",
         )?;
         let address_snapshot_fingerprint = normalize_required_text(
             data.address_snapshot_fingerprint,
-            "履约地址查询指纹不能为空",
+            "无法核对履约地址，请重新选择或确认地址",
             ADDRESS_FINGERPRINT_MAX_LEN,
-            "履约地址查询指纹过长",
+            "无法核对履约地址，请重新选择或确认地址",
         )?;
 
         ensure_timestamp_consistency(
@@ -624,14 +624,14 @@ fn ensure_timestamp_consistency(
     completed_at: Option<Instant>,
 ) -> Result<()> {
     if status != FulfillmentStatus::Received && submitted_at.is_none() {
-        return Err(Error::from("进入提交中后 submitted_at 必填"));
+        return Err(Error::from("提交供应商履约订单时必须有提交时间，请核对订单记录"));
     }
     if !matches!(status, FulfillmentStatus::Received | FulfillmentStatus::Submitting) && accepted_at.is_none()
     {
-        return Err(Error::from("进入已接单后 accepted_at 必填"));
+        return Err(Error::from("供应商已接单的订单必须有接单时间，请核对订单记录"));
     }
     if status == FulfillmentStatus::Completed && completed_at.is_none() {
-        return Err(Error::from("已完成状态 completed_at 必填"));
+        return Err(Error::from("已完成的供应商履约订单必须有完成时间，请核对订单记录"));
     }
     Ok(())
 }

@@ -129,7 +129,7 @@ fn ensure_purchase_return_has_no_adapter() -> Result<()> {
 fn purchase_return_binding_organization_id(order: &PurchaseReturnOrder) -> Result<String> {
     let org = order.purchase_order_id.to_string();
     if org.trim().is_empty() {
-        return Err(Error::ValidationError("采购退货缺少原采购单，无法构造绑定上下文".to_string()));
+        return Err(Error::ValidationError("采购退货未关联原采购单，请先核对原单".to_string()));
     }
     Ok(org)
 }

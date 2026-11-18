@@ -119,7 +119,7 @@ async fn revalidate_cancel_source(
         || adjustment.approval_subject_version != input.authorization_instance.subject_version
         || adjustment.status != StockAdjustmentState::InApproval
     {
-        return Err(Error::ConflictError("库存调整单事务内版本或审批状态已变化".into()));
+        return Err(Error::ConflictError("库存调整单内容或审批状态已变化，请刷新后核对".into()));
     }
 
     let instance = db
@@ -136,7 +136,7 @@ async fn revalidate_cancel_source(
     let binding = require_frozen_binding(binding.as_ref())?;
     ensure_cancel_instance_binding(&instance, binding)?;
     if binding != &input.binding || instance != input.authorization_instance {
-        return Err(Error::ConflictError("库存调整撤回事务内运行事实已变化".into()));
+        return Err(Error::ConflictError("库存调整审批进度已变化，请刷新后核对是否仍可撤回".into()));
     }
 
     input.workflow.as_ref().authorize_stock_adjustment_cancel(&instance, &input.actor, executor).await
@@ -480,14 +480,18 @@ pub(crate) async fn validate_blocked_cancel_runtime_context(
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, executor)
         .await?
-        .ok_or_else(|| Error::ConflictError("库存调整受阻实例缺少冻结快照".to_string()))?;
+        .ok_or_else(|| {
+            Error::ConflictError("找不到该受阻审批送审时的库存调整资料，请联系管理员核对".to_string())
+        })?;
     snapshot
         .ensure_matches_runtime_subject(
             DocumentType::StockAdjustment,
             context.business_object_id(),
             subject_version,
         )
-        .map_err(|_| Error::ConflictError("库存调整受阻实例冻结快照已变化".to_string()))?;
+        .map_err(|_| {
+            Error::ConflictError("库存调整受阻审批的送审资料已变化，请联系管理员核对".to_string())
+        })?;
 
     if instance.status != ApprovalProcessInstanceStatus::Blocked
         || instance.process_kind != process_kind_of(DocumentType::StockAdjustment)

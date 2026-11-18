@@ -57,7 +57,7 @@ impl SupplierCatalogAdoptionProcess {
             && let Err(error) = self.prepare_batch_operation(&batch, &command).await
         {
             if preparation_failed(&error) {
-                self.abort_unpublished_operation(&batch, &command, &error.to_string()).await?;
+                self.abort_unpublished_operation(&batch, &command, &error.row_message()).await?;
             }
             return Err(error);
         }
@@ -313,8 +313,12 @@ impl SupplierCatalogAdoptionProcess {
                 && let Err(error) = self.prepare_batch_operation(&batch, &confirmation.operation_id).await
             {
                 if preparation_failed(&error) {
-                    self.abort_unpublished_operation(&batch, &confirmation.operation_id, &error.to_string())
-                        .await?;
+                    self.abort_unpublished_operation(
+                        &batch,
+                        &confirmation.operation_id,
+                        &error.row_message(),
+                    )
+                    .await?;
                 }
                 return Err(error);
             }
@@ -445,7 +449,7 @@ impl SupplierCatalogAdoptionProcess {
                     Ok(None) => {
                         row.messages = vec!["尚未查得原操作结果，请稍后继续查询；当前不能重新提交".into()]
                     },
-                    Err(error) => row.messages = vec![error.to_string()],
+                    Err(error) => row.messages = vec![error.row_message()],
                 }
                 self.db.catalog_adoption_batch_items().update(&mut row, &mut NoTransaction).await?;
             }
@@ -517,7 +521,7 @@ fn record_execution_result(row: &mut CatalogAdoptionBatchItem, result: Result<Ad
         Err(error) if unknown_outcome(&error) => {
             row.mark_unknown("操作结果暂无法确认，正在查询原入库结果，请勿重复提交".into())?
         },
-        Err(error) => row.mark_failed(error.to_string())?,
+        Err(error) => row.mark_failed(error.row_message())?,
     }
     Ok(())
 }

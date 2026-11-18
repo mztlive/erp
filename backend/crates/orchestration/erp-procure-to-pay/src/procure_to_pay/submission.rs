@@ -381,7 +381,7 @@ fn decode_submit_receipt(
                 Error::Internal("采购提交幂等收据与业务对象不一致".to_string())
             },
             PurchaseCommandReceiptError::PayloadConflict => {
-                Error::ConflictError("幂等键已用于不同的采购提交命令".to_string())
+                Error::ConflictError("本次操作编号已用于其他采购提交，请核对原提交记录".to_string())
             },
             PurchaseCommandReceiptError::Corrupted(message) => Error::Internal(message),
         })
@@ -443,7 +443,7 @@ mod tests {
 
         let payload_error = decode_submit_receipt(record, &identity, &"b".repeat(64)).unwrap_err();
         assert!(
-            matches!(payload_error, Error::ConflictError(message) if message == "幂等键已用于不同的采购提交命令")
+            matches!(payload_error, Error::ConflictError(message) if message == "本次操作编号已用于其他采购提交，请核对原提交记录")
         );
     }
 

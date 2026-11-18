@@ -17,7 +17,8 @@ use erp_sales::entity::sales_order::BusinessType;
 use erp_workflow::entity::document_registry::DocumentType;
 use mongodb::Database;
 
-use crate::{Error, Result};
+use crate::Result;
+use crate::approval_runtime::read_subject_ref;
 
 /// 销售单列表与详情的跨域只读组合服务。
 pub struct SalesOrderReadService {
@@ -52,9 +53,5 @@ fn document_type_of_sales_business(business_type: BusinessType) -> DocumentType 
 }
 /// 由销售身份构造审批读取主体；非法身份按原销售校验错误传播。
 fn subject_ref_for_sales_business(business_type: BusinessType, id: &str) -> Result<bpm::SubjectRef> {
-    erp_workflow::entity::approval_integration::subject_ref_for(
-        document_type_of_sales_business(business_type),
-        id,
-    )
-    .map_err(|error| Error::ValidationError(error.to_string()))
+    read_subject_ref(document_type_of_sales_business(business_type), id)
 }

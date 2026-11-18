@@ -21,7 +21,7 @@ pub struct CreateElectronicDeliveryRequest {
     /// 对应采购行到销售行的明确分配。
     pub purchase_line_sales_allocation_id: PurchaseLineSalesAllocationId,
     /// 必要交付对象的加密/脱敏快照（不透明值，由边界生成）。
-    #[validate(custom(function = "non_blank", message = "交付对象快照不能为空"))]
+    #[validate(custom(function = "non_blank", message = "请填写交付对象信息"))]
     pub recipient_snapshot: String,
     /// 交付数量。
     pub quantity: Quantity,

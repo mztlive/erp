@@ -196,7 +196,9 @@ pub(super) fn resolve_supplier_file_references(
 /// 主体不一致时返回校验错误。
 pub(super) fn ensure_sensitive_party(actual: &PartyId, expected: &PartyId) -> Result<()> {
     if actual != expected {
-        return Err(Error::ValidationError("敏感字段令牌与供应商不匹配".to_string()));
+        return Err(Error::ValidationError(
+            "当前填写的敏感资料不属于这家供应商，请重新打开资料后编辑".to_string(),
+        ));
     }
     Ok(())
 }
