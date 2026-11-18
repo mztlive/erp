@@ -29,6 +29,7 @@ impl SalesInquiry {
             if !ids.insert(&fee.fee_id) {
                 return Err(Error::ValidationError("费用来源身份重复".into()));
             }
+
             let previous = self
                 .feedback_work
                 .iter()
@@ -70,6 +71,7 @@ impl SalesInquiry {
             if expected.len() != lines.len() || lines.iter().any(|id| !covered.insert(id.as_str())) {
                 return Err(Error::BusinessLogicError("当前采购责任行重复".into()));
             }
+
             let work = self
                 .feedback_work
                 .iter()
@@ -86,6 +88,7 @@ impl SalesInquiry {
             {
                 return Err(Error::BusinessLogicError("采购工作尚未覆盖全部责任需求".into()));
             }
+
             for fee in &work.data.fees {
                 if !fee_ids.insert(fee.fee_id.as_str()) || fee.line_ids.iter().any(|id| !lines.contains(id)) {
                     return Err(Error::BusinessLogicError("费用重复或超出当前采购责任".into()));
@@ -95,9 +98,11 @@ impl SalesInquiry {
                     return Err(Error::BusinessLogicError("整单费用必须由明确指定的费用责任采购维护".into()));
                 }
             }
+
             result.lines.extend_from_slice(&work.data.lines);
             result.fees.extend_from_slice(&work.data.fees);
         }
+
         if covered
             != self
                 .current_requirement()?
@@ -162,6 +167,7 @@ impl SalesInquiry {
         if previous_owner == target_owner || line_ids.is_empty() {
             return Err(Error::ValidationError("改派责任未发生变化".into()));
         }
+
         for work in &mut self.feedback_work {
             if work.actor_id == previous_owner && work.line_ids.iter().any(|id| line_ids.contains(id)) {
                 work.frozen = true;

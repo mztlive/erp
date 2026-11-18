@@ -49,20 +49,24 @@ impl ApiOrderExecution {
         {
             return Err(Error::BusinessLogicError("资金风险核实的原执行与供应商订单归属不一致".into()));
         }
+
         if self.ensure_unsent_for_purchase_change().is_ok() && order.external_order_no.is_none() {
             let time = i64::try_from(self.base.created_at)
                 .map_err(|_| Error::ValidationError("原执行时间越界".into()))?;
             return Ok((ExecutionFundsFinality::NeverSubmitted, Instant::try_from_unix_secs(time)?));
         }
+
         self.ensure_no_pending_funds_action()?;
         let (Some(tracking), Some(observation)) = (tracking, observation) else {
             return Err(Error::BusinessLogicError("原供应商订单终态尚未取得可靠查询证据".into()));
         };
         self.ensure_funds_observation(order, tracking, observation)?;
+
         if observation.cancellation == Some(CancelStatus::Canceled) {
             observation.ensure_safe_cancellation(order)?;
             return Ok((ExecutionFundsFinality::Cancelled, observation.observed_at));
         }
+
         let tree = self
             .order_tree
             .as_ref()
@@ -267,6 +271,7 @@ mod tests {
                 )
                 .is_err()
         );
+
         execution.stage = ApiOrderStage::Observe;
         execution.pending_order_tree = execution.order_tree.clone();
         assert!(
@@ -279,6 +284,7 @@ mod tests {
                 )
                 .is_err()
         );
+
         execution.pending_order_tree = None;
         let mut nonterminal = observation.clone();
         nonterminal.topology.as_mut().unwrap().nodes[0].fulfillment = Some(FulfillmentStatus::Shipped);
@@ -292,6 +298,7 @@ mod tests {
                 )
                 .is_err()
         );
+
         assert!(
             execution
                 .ensure_funds_finality(

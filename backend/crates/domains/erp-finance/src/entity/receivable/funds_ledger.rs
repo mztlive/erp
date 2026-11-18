@@ -102,6 +102,7 @@ impl ReceivableFundsLedger {
         if pending.len() != actions.len() || pending.len() != reverses.len() {
             return Err(Error::from("核销计划行数超过待过账行数"));
         }
+
         let existing_net = net_receipt_allocated(existing)?;
         let pending_net = pending.iter().zip(actions.iter()).try_fold(
             zero_amount(),
@@ -114,6 +115,7 @@ impl ReceivableFundsLedger {
         if net_allocated_total.to_decimal().is_sign_negative() || net_allocated_total > receipt_amount {
             return Err(Error::from("核销合计超过回款金额"));
         }
+
         let mut entry_allocated: HashMap<String, erp_core::money::Amount> = HashMap::new();
         for allocation in existing {
             let balance =
@@ -353,6 +355,7 @@ impl ReceivableFundsLedger {
         if entry.base.id != line.receivable_entry_id.to_string() {
             return Err(Error::from("核销分录事实与回款行不一致"));
         }
+
         let current = self.entry_allocated.get(entry.base.id.as_str()).copied().unwrap_or_else(zero_amount);
         let next_balance = match action {
             AllocationAction::Apply => {
@@ -369,6 +372,7 @@ impl ReceivableFundsLedger {
                 checked_sub_amount(current, line.allocated_amount)?
             },
         };
+
         let allocation = ReceiptAllocation::new(
             allocation_id,
             ReceiptAllocationData {
@@ -381,6 +385,7 @@ impl ReceivableFundsLedger {
                 reverses_allocation_id,
             },
         )?;
+
         let account_id = entry.receivable_account_id.clone();
         let account_index = self.account_delta_index.get(account_id.as_ref()).copied();
         // 账户增量按符号聚合：APPLY 为正、REVERSE 从已聚合增量扣减，符号数与原值相同。
@@ -395,6 +400,7 @@ impl ReceivableFundsLedger {
             (None, AllocationAction::Apply) => signed,
             (None, AllocationAction::Reverse) => checked_sub_amount(zero_amount(), signed)?,
         };
+
         self.entry_allocated.insert(entry.base.id.clone(), next_balance);
         match account_index {
             Some(index) => self.account_deltas[index].1 = next_account_total,
@@ -627,6 +633,7 @@ mod tests {
                 ReceiptAllocationId::new("al-1"),
             )
             .unwrap();
+
         assert_eq!(
             ledger.account_settlement_deltas(),
             vec![(ReceivableAccountId::new("ra-1"), amount("30.00"))]
@@ -676,6 +683,7 @@ mod tests {
                 .apply(&pending_lines[1], &e2, ReceiptAllocationId::new("al-1"), Instant::from_unix_secs(1),)
                 .is_err()
         );
+
         let e1 = entry("e-1", "ra-2", "50.00");
         ledger
             .apply(&pending_lines[0], &e1, ReceiptAllocationId::new("al-1"), Instant::from_unix_secs(1))

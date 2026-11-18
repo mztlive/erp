@@ -117,6 +117,7 @@ impl BusinessFinanceFiles {
             .into_iter()
             .collect::<Vec<_>>();
         let invoices = self.db.invoices().find_invoices_by_ids(&invoice_ids, executor).await?;
+
         let mut result = Vec::new();
         let mut seen_assets = BTreeSet::new();
         for invoice in invoices.into_iter().filter(|i| {
@@ -179,13 +180,16 @@ impl BusinessFinanceFiles {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::ValidationError("履约回单读取必须使用快照事务".into()));
         }
+
         let (task, access) = auth.authorize(task_id, actor, executor).await?;
         if task.work_item_type != WorkItemType::FulfillmentOperation {
             return Err(Error::NotFound("采购履约任务不存在或无权查看".into()));
         }
+
         let purchase_id =
             self.purchase_source(&task.business_object_type, &task.business_object_id, executor).await?;
         let files = self.payment_files(&purchase_id, executor).await?;
+
         self.rbac.validate(&access, executor).await?;
         Ok(files)
     }
@@ -341,6 +345,7 @@ mod tests {
         let service = BusinessFinanceFiles::new(db, unavailable_authorization());
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         let auth = DeniedTask { executors: Mutex::new(vec![]) };
+
         let result =
             service.fulfillment_files_read(&actor, "task", &auth, &mut ReadExecutor::default()).await;
         assert!(matches!(
@@ -348,6 +353,7 @@ mod tests {
             Err(Error::ValidationError(reason)) if reason == "履约回单读取必须使用快照事务"
         ));
         assert!(auth.executors.lock().unwrap().is_empty());
+
         let mut executor = SnapshotExecutor::default();
         let pointer = &mut executor as *mut SnapshotExecutor as usize;
         let result = service.fulfillment_files_read(&actor, "task", &auth, &mut executor).await;
@@ -378,6 +384,7 @@ mod tests {
         use erp_finance::entity::payable::{
             AllocationAction, PaymentAllocationData, PaymentAllocationSource,
         };
+
         let allocation = |payment: &str, action, amount: &str| {
             PaymentAllocation::new(
                 PaymentAllocationId::new("a"),
@@ -405,6 +412,7 @@ mod tests {
             allocation("reversed", AllocationAction::Reverse, "5"),
             deposit_usage,
         ];
+
         assert_eq!(
             effective_payment_totals(&rows),
             BTreeMap::from([
@@ -432,16 +440,20 @@ mod tests {
         };
         let mut file = FileAsset::new(FileAssetId::new("file"), request.into_data("actor").unwrap()).unwrap();
         assert!(readable_file(&file));
+
         for status in [SecurityScanStatus::Rejected, SecurityScanStatus::Quarantined] {
             file.security_scan_status = status;
             assert!(!readable_file(&file));
         }
+
         file.security_scan_status = SecurityScanStatus::Pending;
         file.destroyed_at = Some(Instant::now());
         assert!(!readable_file(&file));
+
         file.destroyed_at = None;
         file.byte_size = 0;
         assert!(!readable_file(&file));
+
         assert!(!published_invoice(InvoiceStatus::Draft));
         assert!(published_invoice(InvoiceStatus::Registered));
         assert!(published_invoice(InvoiceStatus::RedInvoiced));

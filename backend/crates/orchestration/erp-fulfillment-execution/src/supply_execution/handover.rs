@@ -56,6 +56,7 @@ impl SupplierFulfillmentProcess {
         {
             reject_company_org(org)?;
         }
+
         let identity = self.identity.clone();
         let rbac = identity.rbac;
         let service = self.domain_with_scope(identity.data_scope);
@@ -111,6 +112,7 @@ impl SupplierFulfillmentProcess {
                         .access()
                         .require_order(&actor, &supplier_fulfillment::ORDER_HANDOVER, &id, executor)
                         .await?;
+
                     let accounts = db.accounts().list_by_kind(erp_core::AccountKind::Admin, executor).await?;
                     let mut candidates = Vec::new();
                     for account in accounts {
@@ -132,6 +134,7 @@ impl SupplierFulfillmentProcess {
                             .then_with(|| left.account.cmp(&right.account))
                             .then_with(|| left.user_id.cmp(&right.user_id))
                     });
+
                     service
                         .access()
                         .require_order(&actor, &supplier_fulfillment::ORDER_HANDOVER, &id, executor)
@@ -197,6 +200,7 @@ async fn persist_handover(
     {
         return Ok(existing);
     }
+
     ensure_target_qualified(db, rbac, req.target_user_id.trim(), executor).await?;
     ensure_org_enabled(db, req.target_org_unit_id.as_deref(), executor).await?;
     let mut view = service.apply_fulfillment_handover(id, req, actor, executor).await?;
@@ -206,6 +210,7 @@ async fn persist_handover(
         Vec::new()
     };
     view.transferred_work_item_ids = transferred.clone();
+
     let audit = actor
         .clone()
         .resource_log_with_id(
@@ -297,6 +302,7 @@ async fn replay(
     if !matches!(stored.result, SupplyCommandResult::FulfillmentHandover) {
         return Err(Error::Internal("供应商订单交接回执类型非法".to_string()));
     }
+
     let order = service
         .access()
         .require_order(actor, &supplier_fulfillment::ORDER_HANDOVER, order_id, executor)
@@ -378,6 +384,7 @@ mod tests {
         }))
         .unwrap();
         assert!(!req.transfer_open_exception_tasks);
+
         let with_transfer: HandoverFulfillmentOrderRequest = serde_json::from_value(serde_json::json!({
             "target_user_id": "buyer-2",
             "reason": "岗位调整",

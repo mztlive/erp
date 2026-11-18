@@ -76,6 +76,7 @@ impl SupplierPulledMessage {
     /// 身份、正文或意图不满足接收边界时拒绝。
     pub fn received(data: SupplierMessageData) -> Result<Self> {
         validate_data(&data)?;
+
         let state = if data.quarantine_reason.is_some() {
             SupplierMessageState::Quarantined
         } else {
@@ -117,6 +118,7 @@ impl SupplierPulledMessage {
         if self.content_fingerprint == incoming.content_fingerprint {
             return Ok(true);
         }
+
         if self.conflict.is_none() {
             self.conflict = Some(SupplierMessageConflict {
                 fingerprint: incoming.content_fingerprint.clone(),
@@ -224,6 +226,7 @@ fn validate_data(data: &SupplierMessageData) -> Result<()> {
             return Err(Error::ValidationError("供应商消息身份或证据长度无效".into()));
         }
     }
+
     if data.connection_id.is_empty()
         || data.refresh_hints.len() > 1000
         || (data.quarantine_reason.is_none() && data.refresh_hints.is_empty())
@@ -280,11 +283,13 @@ mod tests {
     fn deletion_unknown_never_reopens_application_or_deletion() {
         let mut message = message("one");
         assert!(message.begin_acknowledge().is_err());
+
         message.begin_apply().unwrap();
         message.applied(Instant::from_unix_secs(11)).unwrap();
         message.begin_acknowledge().unwrap();
         message.acknowledged(false, Instant::from_unix_secs(12)).unwrap();
         assert_eq!(message.state, SupplierMessageState::AckUnknown);
+
         assert!(message.begin_apply().is_err());
         assert!(message.begin_acknowledge().is_err());
         assert!(message.acknowledged_at.is_none());
@@ -295,8 +300,10 @@ mod tests {
         let mut existing = message("one");
         existing.begin_apply().unwrap();
         existing.applied(Instant::from_unix_secs(11)).unwrap();
+
         assert!(existing.observe_replay(&message("one")).unwrap());
         assert_eq!(existing.state, SupplierMessageState::AckPending);
+
         assert!(!existing.observe_replay(&message("two")).unwrap());
         assert_eq!(existing.state, SupplierMessageState::Quarantined);
         assert_eq!(existing.content_fingerprint, "one");
@@ -309,6 +316,7 @@ mod tests {
         existing.state = SupplierMessageState::Quarantined;
         assert!(existing.begin_apply().is_err());
         assert!(!format!("{existing:?}").contains("private-encrypted-body"));
+
         let mut moved = message("one");
         moved.connection_id = SupplierApiConnectionId::new("another");
         assert!(existing.observe_replay(&moved).is_err());

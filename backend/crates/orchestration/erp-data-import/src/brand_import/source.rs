@@ -22,7 +22,7 @@ impl BrandImportProcess {
             .as_deref()
             .filter(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
             .ok_or_else(|| Error::Internal("导入任务缺少源数据".into()))?;
-        
+
         let bytes = self
             .storage
             .read(super::submit::source_key(source))
@@ -40,11 +40,10 @@ impl BrandImportProcess {
             job.requested_by.clone(),
             json,
         ]);
-
         if expected.digest_hex() != source {
             return Err(Error::Forbidden("导入源数据不属于该任务".into()));
         }
-        
+
         let (proposed, _) = super::submit::build_job(&request, &job.requested_by, source)?;
         super::submit::ensure_replay(job, &proposed)?;
         Ok(request)

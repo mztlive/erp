@@ -66,6 +66,7 @@ mod tests {
         assert_eq!(document.get_str("document_type").unwrap(), "stock_adjustment");
         assert_eq!(document.get_document("business_object_id").unwrap(), &doc! { "$in": ["adj-1"] });
         assert_eq!(document.get_document("payload.submitted_by").unwrap(), &doc! { "$in": ["applicant-1"] });
+
         let empty = AdjustmentSnapshotReadFilter { submitted_by_ids: Some(Vec::new()), ..Default::default() };
         assert_eq!(
             empty.to_doc().get_document("payload.submitted_by").unwrap().get_array("$in").unwrap(),

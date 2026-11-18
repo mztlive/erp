@@ -158,6 +158,7 @@ pub async fn definition_management_visibility_with_executor(
             ));
         }
     }
+
     let required = policies
         .iter()
         .flat_map(|(_, define, runtime)| [define.clone(), runtime.clone()])
@@ -166,6 +167,7 @@ pub async fn definition_management_visibility_with_executor(
     let Some(qualification) = qualification else {
         return Ok(DefinitionManagementVisibility::default());
     };
+
     let permissions = qualification.permissions();
     let mut enforced = Vec::new();
     for (document_type, definition_permission, runtime_permission) in policies {
@@ -295,6 +297,7 @@ pub(crate) async fn approval_binding_upgrade_authorization_with_executor(
         .permissions(actor, slice::from_ref(&definition), executor)
         .await?
         .ok_or_else(|| Error::Forbidden("审批绑定升级账号不存在、已停用或身份已变化".into()))?;
+
     let mut roles = qualified.roles(&definition);
     roles.sort();
     let actor_role =
@@ -374,6 +377,7 @@ mod tests {
         let relation = candidate.relations.values().next().unwrap();
         assert_eq!(relation.expected_ids, ["order".into()].into());
         assert!(relation.objects.is_empty());
+
         facts.source_id.clear();
         assert!(super::binding_upgrade_target(&facts).is_err());
     }

@@ -73,11 +73,13 @@ impl DocumentParticipantRepositoryExt for Repository<'_, DocumentParticipant> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
+
         let rows = mongo_ops::find_many(
             &self.collection().clone_with_type::<ParticipantDocumentIdRow>(),
             doc! { "participant_user_id": user_id, "document_id": { "$in": ids }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
             FindOptions::builder().projection(doc! { "document_id": 1 }).build(), executor,
         ).await?;
+
         let mut result = rows.into_iter().map(|row| row.document_id).collect::<Vec<_>>();
         result.sort_unstable();
         result.dedup();
@@ -99,6 +101,7 @@ impl DocumentParticipantRepositoryExt for Repository<'_, DocumentParticipant> {
         .into_iter()
         .map(|row| row.document_id)
         .collect::<Vec<_>>();
+
         ids.sort_unstable();
         ids.dedup();
         Ok(ids)

@@ -36,10 +36,12 @@ impl JdVopRuntime {
         let messages = settings.messages.clone();
         let interval = settings.message_poll_interval_seconds;
         let source_type = settings.source_type;
+
         let mut runtime = match profile {
             Some(profile) => Self::with_verified_execution(settings, read, write.clone(), profile, codec)?,
             None => Self::with_verified_transport(settings, read)?,
         };
+
         if let Some(messages) = messages {
             runtime.configure_messages(write, messages.types, source_type, interval)?;
         }
@@ -168,8 +170,10 @@ mod tests {
         assert_eq!(funds.trade_types["2"].direction, SupplierFundsDirection::Debit);
         assert_eq!(funds.trade_types["2"].sign, JdVopFundsSign::Negative);
         assert_eq!(funds.message_effects["109"], SupplierFundsDirection::Return);
+
         value.funds.as_mut().unwrap().verified_account_reference = "other".into();
         assert!(execution(&settings, &value).is_err());
+
         value.funds.as_mut().unwrap().verified_account_reference = "funds-account".into();
         value.funds.as_mut().unwrap().trade_types.clear();
         assert!(execution(&settings, &value).is_err());

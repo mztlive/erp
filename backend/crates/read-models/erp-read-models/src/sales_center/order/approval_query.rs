@@ -52,6 +52,7 @@ pub(super) async fn load_document_approval(
         executor,
     )
     .await?;
+
     let mut view = document_approval_view_with_history(
         binding,
         runtime.instance,

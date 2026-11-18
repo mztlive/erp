@@ -143,16 +143,19 @@ mod tests {
         let mut work = work();
         work.advance(200, "200".into()).unwrap();
         assert!(work.start_review().is_err());
+
         work.status = BatchWorkStatus::Failed;
         work.retry().unwrap();
         assert_eq!((work.completed, work.after.as_str(), work.generation), (200, "200", 8));
         assert!(work.advance(1, "200".into()).is_err());
         assert!(work.advance(2, "201".into()).is_err());
+
         work.advance(1, "201".into()).unwrap();
         work.start_review().unwrap();
         assert_eq!(work.phase, BatchWorkPhase::Reviewing);
         assert_eq!(work.completed, 0);
         assert!(work.after.is_empty());
+
         work.status = BatchWorkStatus::Completed;
         assert!(!work.blocking());
         assert!(work.retry().is_err());

@@ -110,6 +110,7 @@ mod tests {
         assert_eq!(facts.sales_order_ids.len(), 10_001);
         assert_eq!(facts.sales_order_ids.last().map(String::as_str), Some("10000"));
         assert!(facts.purchase_order_ids.is_empty());
+
         let empty = sales_keyword("q".into(), Ok(vec![]), Ok(vec![])).unwrap();
         assert!(empty.party_ids.is_empty());
         assert!(empty.sales_order_ids.is_empty());
@@ -158,6 +159,7 @@ mod tests {
             );
             assert!(matches!(error, Err(Error::Internal(message)) if message == first_error));
         }
+
         let error = purchase_keyword(
             "q".into(),
             Ok((vec![], vec![])),
@@ -165,6 +167,7 @@ mod tests {
             Err(Error::Internal("statement".into())),
         );
         assert!(matches!(error, Err(Error::Internal(message)) if message == "purchase"));
+
         let error = purchase_keyword(
             "q".into(),
             Ok((vec![], vec![])),
@@ -172,6 +175,7 @@ mod tests {
             Err(Error::Internal("statement".into())),
         );
         assert!(matches!(error, Err(Error::Internal(message)) if message == "statement"));
+
         let empty = purchase_keyword("q".into(), Ok((vec![], vec![])), Ok(vec![]), Ok(vec![])).unwrap();
         assert!(empty.party_ids.is_empty());
         assert!(empty.supplier_ids.is_empty());

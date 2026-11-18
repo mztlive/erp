@@ -54,6 +54,7 @@ impl SalesSelectionService {
             page: page_or_default(params.page),
             page_size: page_size_or_default(params.page_size),
         };
+
         let domain = SalesSelectionDomainRepository::new(&self.db);
         let result = domain.search_proposals(&filter, authorized_scope, executor).await?;
         authorized_scope.ensure_current(Database::SALES_SELECTION_PROPOSALS, executor)?;
@@ -90,6 +91,7 @@ impl SalesSelectionService {
         let result = domain.search_booklets(&filter, authorized_scope, executor).await?;
         let ids = result.items.iter().map(|book| book.base.id.clone()).collect::<Vec<_>>();
         let summaries = domain.booklet_summaries(&ids, executor).await?;
+
         let items = result
             .items
             .iter()
@@ -102,6 +104,7 @@ impl SalesSelectionService {
                 view
             })
             .collect();
+
         authorized_scope.ensure_current(Database::SALES_SELECTION_BOOKLETS, executor)?;
         Ok(SalesSelectionBookletPage {
             items,
@@ -139,6 +142,7 @@ impl SalesSelectionService {
             Vec::new()
         };
         let task = self.active_task_of(booklet, executor).await?;
+
         let mut view = Self::booklet_view(booklet, &items, task.as_ref(), None);
         if let Some(proposal_id) = booklet.proposal_id.as_ref()
             && let Some(proposal) =
@@ -201,6 +205,7 @@ impl SalesSelectionService {
             .find_by_booklet(booklet_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("该选品册尚无选品会话".into()))?;
+
         let selections: Vec<PublicChoiceView> = session
             .choices
             .iter()

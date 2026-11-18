@@ -61,6 +61,7 @@ fn missing_external_order_number_keeps_ordinary_and_replay_rules_distinct() {
     assert_eq!(order.fulfillment_status, FulfillmentStatus::Accepted);
     assert_eq!(action.status, SupplierOrderActionStatus::Succeeded);
     assert!(order.external_order_no.is_none());
+
     let mut order = sample_order();
     let before = order.clone();
     let mut action = sample_action(SupplierOrderActionType::Place);
@@ -95,6 +96,7 @@ fn ordinary_retry_fact_preserves_pending_and_no_retry_fact_marks_exception() {
     assert_eq!(action.attempt_count, 1);
     assert!(action.next_attempt_at.is_some());
     assert_eq!(action.response_summary, None);
+
     let mut order = sample_order();
     let mut action = sample_action(SupplierOrderActionType::Place);
     SupplierFulfillmentService::apply_dispatch_outcome(

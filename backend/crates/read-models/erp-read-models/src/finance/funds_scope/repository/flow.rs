@@ -167,6 +167,7 @@ pub(in crate::finance::funds_scope) fn summary(
             }
         }
     }
+
     let mut summary = build_summary(&triples, &owners, whole_amount(whole, total), version, !whole)?;
     summary.balance_total = rows.iter().try_fold(zero_amount(), |sum, row| {
         row.balance.filter(|_| row.whole).map(|balance| sum.checked_add(balance))
@@ -276,6 +277,7 @@ pub(in crate::finance::funds_scope) fn summaries(
     for link in links {
         grouped.entry(link.parent_id.clone()).or_default().push(link);
     }
+
     let mut versions = Vec::with_capacity(headers.len());
     let mut summary = Vec::with_capacity(headers.len());
     for header in headers {
@@ -491,6 +493,7 @@ mod tests {
             ),
             amount_link("plus", "first", "sale", None, "1", AllocationAction::Apply),
         ];
+
         let (versions, summaries) = super::summaries(headers, links);
         assert_eq!(versions.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(), ["first", "second"]);
         assert_eq!(
@@ -500,6 +503,7 @@ mod tests {
         assert_eq!(summaries[1].links.len(), 1);
         assert_eq!(summaries[1].links[0].order.as_deref(), Some("supplier_settlement_statement:same"));
         assert_eq!(summary(&summaries[..1], "v").unwrap().grouped[0].visible_share, max.parse().unwrap());
+
         let unassigned = summary(&summaries[1..], "v").unwrap();
         assert!(unassigned.grouped.is_empty());
         assert_eq!(unassigned.unassigned, "7".parse().unwrap());
@@ -512,6 +516,7 @@ mod tests {
         assert_eq!(branches.len(), 2);
         assert!(branches.contains_key("items"));
         assert!(branches.contains_key("total"));
+
         let first = header_stages(doc! { "id": 1 });
         let second = recheck_stages(doc! { "id": 1 });
         assert!(first[2].get_document("$project").unwrap().contains_key("amount"));
@@ -570,6 +575,7 @@ mod tests {
         );
         assert_ne!(before, changed);
         assert_ne!(version("scope", &[]), version("new-scope", &[]));
+
         let page = FlowPage::<()> {
             items: vec![],
             versions: vec![],
@@ -594,11 +600,13 @@ mod tests {
         assert_eq!(result.grouped[0].visible_share, "20".parse().unwrap());
         assert_eq!(summary(&[], "v").unwrap().balance_total, Some(Amount::zero()));
         assert_eq!(summary(&[], "v").unwrap().with_balance_access(false).balance_total, None);
+
         let mut draft = header("draft", &[]);
         draft.whole = true;
         draft.status = "draft".into();
         let (_, rows) = summaries(vec![draft], vec![]);
         assert_eq!(summary(&rows, "v").unwrap().balance_total, Some(Amount::zero()));
+
         let (_, rows) = summaries(vec![header("partial", &[])], vec![]);
         assert_eq!(summary(&rows, "v").unwrap().balance_total, None);
     }

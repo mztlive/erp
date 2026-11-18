@@ -34,6 +34,7 @@ impl ActualProfitLossReadModel {
             ..Default::default()
         };
         let bounds = query.validate()?;
+
         let this = self.clone();
         let tx_actor = actor.clone();
         let tx_query = query.clone();
@@ -44,19 +45,24 @@ impl ActualProfitLossReadModel {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (context, scope) = this.authorized_scope(&tx_actor, executor).await?;
+
                     let orders =
                         source::authorized_orders(&this.db, &tx_query, bounds, scope, executor).await?;
+
                     let expected = source::version(&context.scope_version, &orders);
                     super::ensure_version(input.scope_version.as_deref(), &expected)?;
+
                     let view = HistoricalDirectoryView::from_attributions(
                         orders.iter().filter_map(|row| row.attribution.as_ref()),
                         expected,
                     )?;
+
                     context.validate(executor).await?;
                     Ok::<_, Error>(view)
                 })
             })
             .await?;
+
         self.recheck(&query, actor, &view.scope_version).await?;
         Ok(view)
     }

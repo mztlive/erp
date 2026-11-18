@@ -191,6 +191,7 @@ impl CatalogService {
         actor: &AuditActor,
     ) -> Result<ProductView> {
         let plan = self.prepare_product_update(id, req, &pending_assets, actor).await?;
+
         let service = self.clone();
         let actor = actor.clone();
         self.db
@@ -257,6 +258,7 @@ impl CatalogService {
         let mut base = self.prepare_spec_edit_base(&product, &req, pending_assets, executor).await?;
         let existing_sku_nos = base.current_by_signature.values().map(|sku| sku.sku_no.clone());
         ProductSkuInput::fill_blank_sku_nos(&product.product_no, existing_sku_nos, &mut req.skus);
+
         let change_reason = req.change_reason.as_deref().map(str::trim);
         let audit_message = change_reason.filter(|reason| !reason.is_empty()).map(str::to_string);
         let line_ctx = SkuLineContext {
@@ -281,6 +283,7 @@ impl CatalogService {
             );
         }
         let disable = sweep_removed_signatures(&mut base.current_by_signature, &signatures, actor.id())?;
+
         let revision = assemble_spec_product_revision(&mut product, &base, req, actor.id())?;
         Ok(PreparedSpecEditPlan {
             change_reason: audit_message,
@@ -320,10 +323,12 @@ impl CatalogService {
             executor,
         )
         .await?;
+
         let product_id = ProductId::new(product.base.id.clone());
         let existing = self.db.catalog().skus_for_product(&product_id, executor).await?;
         let current_by_signature: HashMap<String, Sku> =
             existing.into_iter().map(|sku| (sku.specification_signature.clone(), sku)).collect();
+
         let next_product_revision_no = self.next_product_revision_no(&product_id, executor).await?;
         let revision_id = ProductRevisionId::new(next_id());
         let media = self
@@ -357,11 +362,13 @@ impl CatalogService {
     ) -> Result<SkuEditItem> {
         let signature = specification_signature_for(&sku_input.spec_entries)?;
         signatures.register_signature(signature.clone())?;
+
         if let Some(mut existing_sku) = current_by_signature.remove(&signature) {
             let identity = sku_edit_identity(&sku_input, line_ctx.change_reason);
             let action = existing_sku.classify_edit(&identity).map_err(map_sku_edit_error)?;
             self.ensure_barcode_available(&sku_input.barcode, Some(existing_sku.base.id.as_str()), executor)
                 .await?;
+
             let sku_id = SkuId::new(existing_sku.base.id.clone());
             let revision_no = self.next_sku_revision_no(&sku_id, executor).await?;
             let revision = super::sku_edit::sku_revision_for_input(
@@ -417,6 +424,7 @@ impl CatalogService {
             .await?;
         product.ensure_has_responsibility()?;
         ensure_version(product.base.version, plan.request.version)?;
+
         let plan = self
             .build_spec_edit_plan(product, plan.request, actor, pending_assets.as_ref(), executor)
             .await?;
@@ -431,9 +439,11 @@ impl CatalogService {
         )?;
         let db = self.db.clone();
         let audit_port = self.audit.clone();
+
         pending_assets.persist(&db, executor).await?;
         db.products().update(&mut product, executor).await?;
         db.catalog().create_product_revision_with_media(&revision, &media, executor).await?;
+
         for item in &mut sku_items {
             match item.action {
                 SkuEditAction::Create => {
@@ -448,6 +458,7 @@ impl CatalogService {
         for sku in &mut disable {
             db.skus().update(sku, executor).await?;
         }
+
         self.record_source_company_edit(&product.base.id, executor).await?;
         audit_port.persist(&audit, executor).await?;
         Ok(product)

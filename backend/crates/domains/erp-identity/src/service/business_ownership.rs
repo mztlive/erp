@@ -26,6 +26,7 @@ pub async fn required_business_org(db: &Database, user: &str, executor: &mut dyn
         .await?
         .filter(|a| a.is_active_backoffice())
         .ok_or_else(|| Error::BusinessLogicError("业务负责人必须为有效后台账号".into()))?;
+
     let state = OrganizationRepository::new(db).directory_state(user, Instant::now(), executor).await?;
     let org = state
         .own_org(user, Instant::now())?

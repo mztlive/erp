@@ -85,6 +85,7 @@ impl SalesChangeWithdrawal<'_> {
         let Some((writes, open_tasks)) = self.prepare(db, purchase, &command, now, executor).await? else {
             return Ok(());
         };
+
         let mut order = purchase.clone();
         let submission_id = order.current_submission_id.clone().unwrap_or_default();
         let adapter = purchase_order_adapter()?;
@@ -94,12 +95,14 @@ impl SalesChangeWithdrawal<'_> {
             &submission_id,
             self.actor.id(),
         )?;
+
         let closed_tasks = WorkItem::close_all_for_approval_cancellation(
             open_tasks,
             self.actor.id(),
             command.reason(),
             now,
         )?;
+
         let audit = self.actor.clone().resource_log(
             "purchase_order.cancel_approval",
             "purchase_order",
@@ -131,6 +134,7 @@ impl SalesChangeWithdrawal<'_> {
         let runtime =
             load_cancel_runtime(db, &binding, command.subject(), purchase.approval_subject_version, executor)
                 .await?;
+
         let input = build_purchase_order_cancel_input(
             &runtime,
             command.reason(),
@@ -250,7 +254,6 @@ mod tests {
 
         let ids =
             in_approval_affected(&state).into_iter().map(|order| order.base.id.as_str()).collect::<Vec<_>>();
-
         assert_eq!(ids, vec!["approval"]);
     }
 }

@@ -246,6 +246,7 @@ async fn persist_created_purchase_return_order(
             executor,
         )
         .await?;
+
     let audit = actor.clone().resource_log(
         "purchase_return_order.create",
         "purchase_return_order",
@@ -253,6 +254,7 @@ async fn persist_created_purchase_return_order(
     )?;
     let mut creation = MongoCreation { db, rbac, order: &order, line: &line, actor: &actor, audit: &audit };
     persist_creation(&mut creation, executor).await?;
+
     Ok(ReturnsReadService::new(db.clone(), rbac.identity.clone())
         .purchase_return_created_result(&order.base.id, order.purchase_order_id.as_ref(), &actor, executor)
         .await?)
@@ -450,6 +452,7 @@ mod creation_authorization_tests {
         }))
         .unwrap();
         let (_, order, line) = build_purchase_return_order_and_line(request, actor.id()).unwrap();
+
         denied(
             persist_created_purchase_return_order(
                 &process.db,

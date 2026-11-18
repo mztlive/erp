@@ -118,6 +118,7 @@ async fn action_uses_one_executor_and_stops_at_every_failed_step() {
         Step::Result,
         Step::Receipt,
     ];
+
     for stop in 0..=steps.len() {
         let mut executor = TestExecutor::default();
         let identity = &mut executor as *mut TestExecutor as usize;
@@ -139,6 +140,7 @@ async fn completion_receipt_follows_task_write_and_precedes_result() {
         Step::Receipt,
         Step::Result,
     ];
+
     for stop in 0..=steps.len() {
         let mut executor = TestExecutor::default();
         let identity = &mut executor as *mut TestExecutor as usize;
@@ -177,6 +179,7 @@ async fn committed_receipt_bypasses_closed_task_and_preparation_path() {
     )
     .await
     .unwrap();
+
     assert_eq!(result, "committed");
     assert_eq!(*trace.borrow(), ["receipt"]);
 }
@@ -258,6 +261,7 @@ async fn unknown_commit_recovery_failure_preserves_source_and_never_reexecutes()
         },
     )
     .await;
+
     match result.unwrap_err() {
         Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(source)) => {
             assert_eq!(source.get_custom::<&str>(), Some(&"original W29 commit"));

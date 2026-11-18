@@ -251,6 +251,7 @@ impl BackgroundJob {
         let domain_job_type =
             normalize_optional_text(data.domain_job_type, "领域任务类型", DOMAIN_JOB_TYPE_MAX_LEN)?;
         let domain_job_id = normalize_optional_text(data.domain_job_id, "领域任务ID", DOMAIN_JOB_ID_MAX_LEN)?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             job_no,
@@ -341,6 +342,7 @@ impl BackgroundJob {
         if processed > self.total_count {
             return Err(Error::from("已处理数不能超过目标总数"));
         }
+
         self.processed_count = processed;
         self.success_count = self.success_count.saturating_add(success);
         self.skipped_count = self.skipped_count.saturating_add(skipped);
@@ -386,6 +388,7 @@ impl BackgroundJob {
         if self.processed_count != self.total_count {
             return Err(Error::from("仍有目标未处理，不能标记成功"));
         }
+
         self.status = JobStatus::Succeeded;
         self.finished_at = Some(at);
         self.last_progress_at = Some(at);
@@ -461,11 +464,13 @@ impl BackgroundJob {
         if failed_item_count == 0 || self.failed_count != failed_item_count {
             return Err(Error::from("领域失败项与后台任务计数不一致"));
         }
+
         self.processed_count = self
             .processed_count
             .checked_sub(failed_item_count)
             .ok_or_else(|| Error::from("失败项数超过已处理数"))?;
         self.failed_count = 0;
+
         self.status = JobStatus::Pending;
         self.started_at = None;
         self.finished_at = None;
@@ -617,6 +622,7 @@ mod tests {
         job.record_progress(3, 0, 1, Instant::from_unix_secs(1_700_000_100)).unwrap();
         job.mark_partially_succeeded().unwrap();
         assert_eq!(job.status, JobStatus::PartiallySucceeded);
+
         job.record_progress(1, 0, 0, Instant::from_unix_secs(1_700_000_200)).unwrap();
         job.mark_succeeded(Instant::from_unix_secs(1_700_000_300)).unwrap();
         assert_eq!(job.status, JobStatus::Succeeded);
@@ -731,6 +737,7 @@ mod tests {
 
         job.start(Instant::from_unix_secs(1_700_000_000)).unwrap();
         assert!(job.mark_succeeded(Instant::from_unix_secs(1_700_000_100)).is_err(), "未处理完不能成功");
+
         job.cancel(Instant::from_unix_secs(1_700_000_100)).unwrap();
         assert!(
             job.record_progress(1, 0, 0, Instant::from_unix_secs(1_700_000_200)).is_err(),
@@ -754,6 +761,7 @@ mod tests {
         ] {
             assert!(ensure_transition(from, to).is_ok(), "{from:?} → {to:?}");
         }
+
         assert!(ensure_transition(JobStatus::Pending, JobStatus::Succeeded).is_err());
         assert!(ensure_transition(JobStatus::Succeeded, JobStatus::Failed).is_err());
         assert!(ensure_transition(JobStatus::Cancelled, JobStatus::Running).is_err());

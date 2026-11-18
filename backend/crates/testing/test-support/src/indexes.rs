@@ -25,6 +25,7 @@ use crate::{Error, Result};
 pub async fn assert_indexes(db: &Database, collection: &str, names: &[&str]) -> Result<()> {
     let existing: HashSet<String> =
         db.collection::<Document>(collection).list_index_names().await?.into_iter().collect();
+
     let missing: Vec<_> =
         names.iter().copied().filter(|name| !existing.contains(*name)).map(str::to_owned).collect();
     if missing.is_empty() {

@@ -59,6 +59,7 @@ impl CatalogService {
         sku_edit_identity(&input, None).ensure_new().map_err(map_sku_edit_error)?;
         let signature = specification_signature_for(&input.spec_entries)?;
         self.ensure_barcode_available(&input.barcode, None, executor).await?;
+
         let revision =
             sku_revision_for_input(SkuId::new(next_id()), 1, ctx.effective_from, ctx.effective_to, &input)?;
         let mut sku = Sku::new(

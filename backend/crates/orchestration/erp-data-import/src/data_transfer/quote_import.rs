@@ -25,10 +25,12 @@ impl BusinessTransfers {
             .internal_quotes(actor, required(input, "inquiry_id")?, required(input, "task_id")?)
             .await?;
         let prior = serde_json::to_value(prior).map_err(|_| invalid("报价数据格式无效"))?;
+
         let files = input["files"].as_array().ok_or_else(|| invalid("请选择报价文件"))?.clone();
         if files.is_empty() || files.len() > 20 {
             return Err(invalid("每次选择 1 至 20 个文件"));
         }
+
         spawn_blocking(move || parse_files(&files, &source, &prior))
             .await
             .map_err(|_| Error::Internal("报价解析中断".into()))?
@@ -92,11 +94,13 @@ pub(super) fn parse_files(files: &[Value], source: &Value, prior: &Value) -> Res
         if total > 50 * 1024 * 1024 {
             return Err(invalid("报价文件合计不得超过 50 MiB"));
         }
+
         match parse_file(name, &bytes, source, prior) {
             Ok(file) => preview.extend(file),
             Err(error) => preview.issues.push(format!("{name}：{error}")),
         }
     }
+
     if preview.rows.len() > 1000 {
         return Err(invalid("每次最多导入 1000 条回复"));
     }
@@ -111,6 +115,7 @@ fn parse_file(name: &str, bytes: &[u8], source: &Value, prior: &Value) -> Result
     let metadata = metadata(&sheets, &source["inquiry"])?;
     let sheet = sheets.get("报价表").ok_or_else(|| invalid("缺少报价表"))?;
     metadata.layout.check_headers(sheet)?;
+
     let rows = sheet
         .iter()
         .filter(|row| row.number >= 5)
@@ -158,11 +163,13 @@ mod tests {
         let value = serde_json::to_value(terms(&row, &line, Template::V4.layout()).unwrap()).unwrap();
         assert_eq!(value["unit_cost_gross"], "1.2345");
         assert_eq!(value["input_tax_rate"], "0.13");
+
         row.cells[13].value.clear();
         assert!(terms(&row, &line, Template::V4.layout()).is_err());
         row.cells[13].value = "0".into();
         row.cells[12].value = "2.01".into();
         assert!(terms(&row, &line, Template::V4.layout()).is_err());
+
         assert!(decimal("-1", 4, "单价").is_err());
         assert!(decimal("1.23456", 4, "单价").is_err());
     }
@@ -204,6 +211,7 @@ mod tests {
             for (index, header) in headers.iter().enumerate() {
                 sheet.write_string(3, u16::try_from(index).unwrap(), *header).unwrap();
             }
+
             let mut values = vec![
                 "".to_string(),
                 "商品".into(),
@@ -231,6 +239,7 @@ mod tests {
             for (index, value) in values.iter().enumerate() {
                 sheet.write_string(4, u16::try_from(index).unwrap(), value).unwrap();
             }
+
             let meta = book.add_worksheet();
             meta.set_name("回导信息").unwrap();
             for (index, value) in [
@@ -245,6 +254,7 @@ mod tests {
             {
                 meta.write_string(u32::try_from(index).unwrap(), 0, value).unwrap();
             }
+
             let bytes = book.save_to_buffer().unwrap();
             let result = parse_files(
                 &[json!({"file_name":"报价.xlsx","content_base64":STANDARD.encode(bytes)})],
@@ -252,6 +262,7 @@ mod tests {
                 &json!([]),
             )
             .unwrap();
+
             assert_eq!(result["issues"], json!([]), "v{version}: {result}");
             assert_eq!(result["rows"].as_array().unwrap().len(), 1);
             let terms = &result["rows"][0]["quote"]["terms"];
@@ -330,6 +341,7 @@ mod tests {
         let reply = filled_row();
         assert!(matches!(parse_row(&reply, "S1", Template::V4.layout(), &source, &json!([])),
             Err(Error::ValidationError(message)) if message == "可用供给缺失或存在多个供给，请先手工登记以确定供给关系"));
+
         let prior = json!([
             {"line_id":"L1","supplier_id":"S1","supplier_offering_id":"O1","feedback_round":1,"revision_no":9,"quote_id":"Q1"},
             {"line_id":"L1","supplier_id":"S1","supplier_offering_id":"O2","feedback_round":2,"revision_no":3,"quote_id":"Q2"}
@@ -339,6 +351,7 @@ mod tests {
         assert_eq!(value["quote"]["supplier_offering_id"], "O2");
         assert_eq!(value["quote"]["quote_id"], "Q2");
         assert_eq!(value["quote"]["revision_no"], 4);
+
         source["offerings"].as_array_mut().unwrap().pop();
         let value = preview(&reply, &source, &prior);
         assert_eq!(value["quote"]["supplier_offering_id"], "O1");
@@ -357,6 +370,7 @@ mod tests {
         old["terms"]["input_tax_rate"] = json!("0.1300");
         old["terms"]["valid_to"] = json!("2020-01-01");
         old["terms"]["address_limits"] = json!([{"legacy":"not compared by preview"}]);
+
         let value = preview(&reply, &source, &json!([old.clone()]));
         assert_eq!(value["status"], "已导入");
         assert_eq!(value["previous"], old);
@@ -405,6 +419,7 @@ mod tests {
         let value = serde_json::to_value(terms(&reply, &line, Template::V2.layout()).unwrap()).unwrap();
         assert_eq!(value["expected_delivery_date"], "");
         assert_eq!(value["freight_gross"], Value::Null);
+
         // 列解释只按冻结需求精度约束，预览不新增另一套 Quantity 精度拒绝。
         reply.cells[12].value = "0.1234567".into();
         reply.cells[10].value = "1".into();
@@ -435,6 +450,7 @@ mod tests {
                     .unwrap();
             }
         }
+
         let meta = book.add_worksheet();
         meta.set_name("回导信息").unwrap();
         for (index, value) in ["supplier-inquiry-quote-v4", "I1", "1", "1", "S1"].iter().enumerate() {
@@ -453,6 +469,7 @@ mod tests {
             {"file_name":"valid.xlsx","content_base64":STANDARD.encode(bytes)},
             {"file_name":"again.xlsx","content_base64":STANDARD.encode(workbook(&[filled_row()]))}
         ]);
+
         let result = parse_files(files.as_array().unwrap(), &source(), &json!([])).unwrap();
         assert_eq!(result["rows"].as_array().unwrap().len(), 1);
         assert_eq!(result["rows"][0]["source"], "valid.xlsx 第 5 行");

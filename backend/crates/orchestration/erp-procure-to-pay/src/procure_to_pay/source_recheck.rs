@@ -39,6 +39,7 @@ pub(super) async fn ensure_source_unaffected(
     if references_current(sales.current_revision_id(), order) {
         return Ok(());
     }
+
     let state = load_purchase_source_state(db, &sales, executor).await?;
     reject_if_affected(&state, order, message)
 }
@@ -146,7 +147,6 @@ mod tests {
 
         assert!(reject_if_affected(&state(&["po-2"]), &order, "请修改原单").is_ok());
         let error = reject_if_affected(&state(&["po-1"]), &order, "请修改原单").unwrap_err();
-
         assert!(matches!(error, Error::ConflictError(message) if message == "请修改原单"));
     }
 }

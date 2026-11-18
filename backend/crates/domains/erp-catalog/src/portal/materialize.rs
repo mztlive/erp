@@ -64,7 +64,9 @@ impl CatalogPortalService {
         let input = draft.submitted()?;
         input.ensure_submission_images()?;
         self.ensure_dictionaries(input, &command.normalized, executor).await?;
+
         let (product, product_created) = self.resolve_product(input, command, executor).await?;
+
         let mut skus = Vec::with_capacity(input.skus.len());
         for row in &input.skus {
             let mapped = command
@@ -102,6 +104,7 @@ impl CatalogPortalService {
             {
                 return Err(Error::ConflictError("匹配商品已变化或不可用".into()));
             }
+
             let revision = self
                 .db
                 .catalog()
@@ -113,9 +116,11 @@ impl CatalogPortalService {
             {
                 return Err(Error::BusinessLogicError("匹配商品的品牌或分类与内部确认映射不一致".into()));
             }
+
             product.ensure_has_responsibility()?;
             return Ok((product, false));
         }
+
         let (owner, org) = self
             .catalog
             .access()
@@ -151,6 +156,7 @@ impl CatalogPortalService {
             actor.id(),
         )?;
         self.catalog.access().require_create(actor, &product, executor).await?;
+
         let revision = ProductRevision::new(
             ProductRevisionId::new(next_id()),
             ProductRevisionData {
@@ -168,6 +174,7 @@ impl CatalogPortalService {
         )?;
         product.attach_revision(&revision, actor.id())?;
         let media = product_media(input, &revision)?;
+
         self.db.products().create(&product, executor).await?;
         self.db.catalog().create_product_revision_with_media(&revision, &media, executor).await?;
         Ok(product)
@@ -198,6 +205,7 @@ impl CatalogPortalService {
             {
                 return Err(Error::ConflictError("匹配SKU身份、单位、规格或修订已变化".into()));
             }
+
             let revision = self
                 .db
                 .sku_revisions()
@@ -213,14 +221,17 @@ impl CatalogPortalService {
             {
                 return Err(Error::BusinessLogicError("匹配SKU条码不一致，须重新核对".into()));
             }
+
             self.db.catalog().claim_sku_barcode(&revision, executor).await?;
             return Ok(sku_result(row, &sku, &revision, false));
         }
+
         if let Some(barcode) = row.barcode.as_deref().map(str::trim).filter(|code| !code.is_empty())
             && !self.db.catalog().barcode_owner_sku_ids(barcode, executor).await?.is_empty()
         {
             return Err(Error::ConflictError("条码已被SKU占用，请明确匹配后重试".into()));
         }
+
         let (sku, revision) = new_sku(product, row, mapped, &signature, actor.id())?;
         self.db.catalog().create_sku_with_revision(&sku, &revision, &[], executor).await?;
         Ok(sku_result(row, &sku, &revision, true))
@@ -259,6 +270,7 @@ fn new_sku(
         },
         actor_id,
     )?;
+
     let revision = SkuRevision::new(
         SkuRevisionId::new(next_id()),
         SkuRevisionData {
@@ -371,6 +383,7 @@ mod tests {
             unit_synonym_confirmation: None,
             target_sku: None,
         };
+
         let (sku, revision) = new_sku(&product, &row(), &mapped, "", "reviewer").unwrap();
         assert_eq!(sku.listing_status, ListingStatus::Unlisted);
         assert_ne!(sku.sku_no, "SUPPLIER-CODE");
@@ -402,8 +415,10 @@ mod tests {
             unit_synonym_confirmation: None,
             target_sku: None,
         };
+
         let (mut sku, revision) = new_sku(&product, &row(), &mapped, "", "reviewer").unwrap();
         sku.set_listing_status(ListingStatus::Listed, "buyer").unwrap();
+
         let result = sku_result(&row(), &sku, &revision, false);
         assert_eq!(result.listing_status, ListingStatus::Listed);
         assert!(!result.sku_created);

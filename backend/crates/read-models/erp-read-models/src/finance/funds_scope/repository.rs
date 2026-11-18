@@ -64,6 +64,7 @@ pub(super) mod tests {
             "order_no",
             &authorization.sales_stages(),
         );
+
         let lookup = stages[0].get_document("$lookup").unwrap();
         let pipeline = lookup.get_array("pipeline").unwrap();
         let facet = pipeline[1].as_document().unwrap().get_document("$facet").unwrap();

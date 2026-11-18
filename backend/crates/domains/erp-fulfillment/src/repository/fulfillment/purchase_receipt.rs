@@ -228,11 +228,11 @@ mod tests {
             page_size: 10,
             ..Default::default()
         };
-
         let document = filter.to_doc();
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(document.get_str("purchase_order_id").unwrap(), "po-1");
         assert_eq!(document.get_str("status").unwrap(), "POSTED");
+
         assert_eq!(filter.skip(), 10);
         assert_eq!(filter.limit(), 10);
     }

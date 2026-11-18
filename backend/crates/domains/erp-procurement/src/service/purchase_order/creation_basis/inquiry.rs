@@ -39,6 +39,7 @@ pub fn inquiry_basis_groups(
     if !order.is_effective {
         return Ok(vec![]);
     }
+
     let mut groups = Vec::new();
     for candidate in candidates {
         candidate.source.validate()?;
@@ -51,10 +52,12 @@ pub fn inquiry_basis_groups(
         if candidate.source.expected_delivery_date > business_date_of(line.goods_line.fulfillment_due_at)? {
             continue;
         }
+
         let Some(supply) = special_supply(facts, &candidate.supplier_offering_id) else { continue };
         if supply.offering.sku_id != line.goods_line.sku_id {
             continue;
         }
+
         let max = maximum_create_quantity(
             line.summary.remaining_quantity,
             Some(candidate.remaining_quote_quantity),
@@ -64,6 +67,7 @@ pub fn inquiry_basis_groups(
         if max.to_decimal() <= Decimal::ZERO {
             continue;
         }
+
         append_groups(coverage, line, &supply, candidate, max, facts, &mut groups)?;
     }
     Ok(groups)
@@ -145,6 +149,7 @@ fn address_maximum(
         else {
             continue;
         };
+
         let assigned = line
             .goods_line
             .assigned_delivery_allocations

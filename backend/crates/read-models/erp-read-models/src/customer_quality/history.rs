@@ -55,6 +55,7 @@ impl super::CustomerQualityReadModel {
         sales_context.validate(executor).await?;
         let expected = version(&sales_context.scope_version, &sources.orders);
         super::ensure_version(query.scope_version.as_deref(), &expected)?;
+
         let mut view = project_history(query, sources);
         apply_context(&mut view, &sales_context);
         if !export {
@@ -96,6 +97,7 @@ impl super::CustomerQualityReadModel {
                     let access =
                         QualityAccess::new(this.db.clone(), this.rbac.clone(), this.customer_scope.clone());
                     let (sales_context, sales_scope) = access.resolve_history(&actor, executor).await?;
+
                     let bounds = query.validate()?;
                     let order_customer_ids = query.customer_id.clone().map(|id| vec![id]);
                     let filter = super::source::quality_order_filter(&bounds, order_customer_ids);
@@ -105,6 +107,7 @@ impl super::CustomerQualityReadModel {
                 })
             })
             .await?;
+
         super::ensure_version(Some(expected), &current)
     }
 }
@@ -114,9 +117,11 @@ fn project_history(query: &HistoryQualityQuery, sources: HistorySnapshot) -> His
     let has_period_orders = !sources.orders.is_empty();
     let matched: Vec<&QualityOrder> =
         sources.orders.iter().filter(|o| matches_history(o, query, &sources)).collect();
+
     let rows = group_history_rows(&matched, &query.dimension, &sources);
     let totals = totals_for(&rows);
     let mut view = assemble_history(query, rows, totals);
+
     // 候选由调用方填入，此处仅决定空态。
     if view.rows.total == 0 {
         view.empty_reason = Some(if has_period_orders { "filtered_empty" } else { "no_data" }.into());
@@ -193,6 +198,7 @@ fn group_history_rows(
         };
         groups.entry(key).or_default().push(order);
     }
+
     groups
         .into_iter()
         .map(|(key, values)| {

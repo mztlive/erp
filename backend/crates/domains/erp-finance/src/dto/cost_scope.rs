@@ -33,6 +33,7 @@ impl CostEntryView {
         if !whole && allocations.is_empty() {
             return Ok(None);
         }
+
         let scope_gross_amount = sum(allocations.iter().map(|line| line.allocated_gross_amount))?;
         let scope_net_amount = sum(allocations.iter().map(|line| line.allocated_net_amount))?;
         Ok(Some(ScopedCostEntryView {
@@ -128,6 +129,7 @@ mod tests {
         let view = entry().restrict(false, &BTreeSet::from(["a".into()])).unwrap().unwrap();
         assert_eq!(view.scope_net_amount, "60".parse().unwrap());
         assert_eq!(view.allocations.len(), 1);
+
         let json = serde_json::to_value(view).unwrap();
         for field in [
             "gross_amount",

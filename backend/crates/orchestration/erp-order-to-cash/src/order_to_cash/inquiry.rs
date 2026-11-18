@@ -81,6 +81,7 @@ impl SalesOrderCommandProcess {
                 "询价来源只适用于实物与服务销售，不能同时使用选品方案来源".into(),
             ));
         }
+
         let inquiry = SalesInquiryAccess::new(self.db.clone(), self.authorization.clone())
             .require_sales(
                 actor,
@@ -115,6 +116,7 @@ pub(super) async fn reserve_inquiry_creation(
     let Some(request) = request else {
         return Ok(());
     };
+
     let mut inquiry = SalesInquiryAccess::new(db.clone(), authorization.clone())
         .require_sales(
             actor,
@@ -126,6 +128,7 @@ pub(super) async fn reserve_inquiry_creation(
     if order.customer_id.as_ref() != inquiry.customer_id {
         return Err(Error::ValidationError("销售客户必须与询价客户一致".into()));
     }
+
     let source = SalesOrderInquirySource::from_inquiry(
         order.base.id.clone(),
         &inquiry,

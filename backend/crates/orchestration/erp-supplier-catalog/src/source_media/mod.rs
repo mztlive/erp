@@ -325,6 +325,7 @@ impl SourceMediaPreparer {
         if count > MAX_SOURCE_IMAGES {
             return Err(Error::ValidationError("供应商商品图片超过 100 张，请分批处理".into()));
         }
+
         let previous = previous
             .into_iter()
             .flat_map(|item| item.images.iter().chain(item.detail_images.iter()).flatten())
@@ -338,6 +339,7 @@ impl SourceMediaPreparer {
             only_missing,
             cleanup: SourceMediaCleanup::new(self.store.clone()),
         };
+
         let result = self.prepare_groups(item, actor, &mut preparation).await;
         if result.is_err() {
             preparation.cleanup.discard_uncommitted().await;
@@ -355,6 +357,7 @@ impl SourceMediaPreparer {
             self.prepare_group(item.images.as_deref(), "轮播图", preparation).await?;
         let (detail_images, detail_media) =
             self.prepare_group(item.detail_images.as_deref(), "详情图", preparation).await?;
+
         let pending_assets =
             PendingFileAssets::prepare_content_checked(take(&mut preparation.requests), actor)?
                 .into_catalog_batch();
@@ -384,6 +387,7 @@ impl SourceMediaPreparer {
             if retain_without_download(source, position, preparation.only_missing, &mut sources, &mut media) {
                 continue;
             }
+
             let checkpoint = preparation.cleanup.checkpoint();
             let result = timeout_at(
                 preparation.deadline,
@@ -411,6 +415,7 @@ impl SourceMediaPreparer {
                 },
                 Err(error) => return Err(error),
             };
+
             sources.push(source);
             media.push(ProductMediaInput {
                 file_asset_id: reference,
@@ -432,6 +437,7 @@ impl SourceMediaPreparer {
         let image = spawn_blocking(move || image::validate(downloaded))
             .await
             .map_err(|_| Error::Internal("供应商商品图片核验中断，请重试".into()))??;
+
         if let Some(id) = previous.iter().find_map(|previous| verified_existing(previous, &image.digest)) {
             let source = CatalogImage {
                 content_fingerprint: Some(image.digest),
@@ -440,10 +446,12 @@ impl SourceMediaPreparer {
             };
             return Ok((source, FileAssetId::new(id)));
         }
+
         let token = next_id();
         let object_key = format!("supplier-source-media/{token}.{}", image.extension);
         cleanup.track(object_key.clone());
         self.store.save(&object_key, &image.bytes, image.content_type).await?;
+
         let reference = format!("pending-file:{token}");
         requests.push(PendingFileAssetRequest {
             reference: reference.clone(),

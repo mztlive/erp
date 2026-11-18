@@ -81,6 +81,7 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<CustomerRefundAdapter>
             mismatch_message: "客户退款单审批适配器登记不完整",
         },
     )?;
+
     Ok(CustomerRefundAdapter {
         document_type: spec.document_type,
         process_kind: spec.process_kind,
@@ -261,6 +262,7 @@ mod tests {
         let adapter = customer_refund_adapter().expect("客户退款单必须可登记");
         assert_eq!(adapter.document_type, DocumentType::CustomerRefund);
         assert_eq!(adapter.process_kind.as_str(), "customer_refund");
+
         assert_eq!(
             customer_refund_subject_ref("crf-1").expect("主体引用必须可构造").subject_kind(),
             "customer_refund"
@@ -271,15 +273,18 @@ mod tests {
             ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
         );
         assert_eq!(adapter.subject_snapshot_builder, "build_customer_refund_snapshot");
+
         assert_eq!(adapter.on_approval_start, ApprovalDomainAction::CustomerRefundSubmit);
         assert_eq!(adapter.on_final_approve, ApprovalDomainAction::CustomerRefundPost);
         assert_eq!(adapter.cancel_action, ApprovalDomainAction::CustomerRefundCancelApproval);
+
         assert_eq!(adapter.owner_role, "customer_refund_approver");
         assert_eq!(
             adapter.owner_organization_snapshot,
             OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         );
         assert_eq!(adapter.read_scope, AdapterReadScope::DocumentOrganizationAndCreator);
+
         assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
     }
@@ -291,6 +296,7 @@ mod tests {
         start_customer_refund_approval(&mut refund).unwrap();
         assert_eq!(refund.status, CustomerRefundStatus::InApproval);
         assert_eq!(refund.approval_subject_version, 1);
+
         execute_customer_refund_domain_action(
             &mut refund,
             ApprovalDomainAction::CustomerRefundCancelApproval,
@@ -334,12 +340,14 @@ mod tests {
         let payload =
             build_customer_refund_snapshot(&refund, "party-1", "user-1", Instant::from_unix_secs(10))
                 .unwrap();
+
         assert_eq!(payload.document_no, "RF-1");
         assert_eq!(payload.responsible_org_id, "party-1");
         assert_eq!(payload.submitted_by, "user-1");
         assert_eq!(payload.total_amount.unwrap().to_string(), "100");
         assert_eq!(payload.line_count, 1);
         assert!(payload.total_quantity.is_none());
+
         assert!(build_customer_refund_snapshot(&refund, " ", "user-1", Instant::from_unix_secs(10)).is_err());
     }
 

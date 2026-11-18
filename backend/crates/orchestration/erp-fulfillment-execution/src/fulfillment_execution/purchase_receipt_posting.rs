@@ -106,11 +106,13 @@ async fn post_receipt(
         executor,
     )
     .await?;
+
     let domain = FulfillmentService::new(db.clone());
     let (mut receipt, lines) =
         domain.prepare_purchase_receipt_posting(receipt_id, req.version, req.warehouse_id, executor).await?;
     let PurchasePostingFacts { mut po, revision_lines, mut received } =
         load_purchase_posting_facts(db, &receipt, executor).await?;
+
     let occurred_at = Instant::now();
     execute_posting(
         &mut MongoReceiptPosting {
@@ -130,6 +132,7 @@ async fn post_receipt(
         executor,
     )
     .await?;
+
     wake_purchase_receipts(db, receipt.purchase_order_id.as_ref(), executor).await?;
     Ok(receipt)
 }
@@ -153,11 +156,13 @@ async fn load_purchase_posting_facts(
         .await?
         .ok_or_else(|| Error::NotFound("来源采购单不存在".to_string()))?;
     ensure_po_fulfillable(&po)?;
+
     let revision = load_po_current_revision(db, executor, &po).await?;
     let revision_lines = db
         .purchase_order_revision_lines()
         .find_lines_by_revision_ids(&[revision.base.id.clone().into()], executor)
         .await?;
+
     let received = db
         .fulfillment()
         .qualified_received_totals_by_purchase_revision_line(&receipt.purchase_order_id, executor)
@@ -254,6 +259,7 @@ async fn execute_posting(
     for index in 0..line_count {
         steps.apply(ReceiptPostingStep::Line(index), executor).await?;
     }
+
     for step in [
         ReceiptPostingStep::Receipt,
         ReceiptPostingStep::Task,
@@ -349,8 +355,10 @@ impl MongoReceiptPosting<'_> {
             already_received,
         )
         .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+
         post_receipt_line(self.db, session, self.receipt, line, revision_line, &self.occurred_at, self.actor)
             .await?;
+
         match self.received.entry(line.purchase_order_revision_line_id.clone()) {
             Entry::Occupied(mut occupied) => {
                 let next = occupied
@@ -430,6 +438,7 @@ async fn post_receipt_line(
         actor.id(),
     )
     .await?;
+
     establish_reservations(db, session, receipt, line, revision_line, &sku_id, &balance_id).await
 }
 
@@ -471,6 +480,7 @@ async fn establish_reservations(
     if allocations.is_empty() {
         return Ok(());
     }
+
     let total =
         revision_line.quantity.ok_or_else(|| Error::BusinessLogicError("采购明细缺少数量".to_string()))?;
     let allocation_quantities: Vec<Quantity> =
@@ -478,6 +488,7 @@ async fn establish_reservations(
     let shares = line
         .reservation_shares(&allocation_quantities, total)
         .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+
     let sales_revision_lines = db
         .sales_order_revision_lines()
         .list_active_by_ids(
@@ -489,6 +500,7 @@ async fn establish_reservations(
         )
         .await?;
     let sales_lines_by_id = first_by_id(&sales_revision_lines, |line| line.base.id.as_str());
+
     for (index, quantity) in shares.into_iter().enumerate() {
         let allocation = &allocations[index];
         let sales_line_id = sales_line_id(&sales_lines_by_id, &allocation.sales_order_revision_line_id)?;
@@ -540,6 +552,7 @@ async fn create_warehouse_ship_drafts(
     if reservations.is_empty() {
         return Ok(());
     }
+
     let line_ids = reservations
         .iter()
         .map(|reservation| reservation.sales_order_line_id.clone())
@@ -554,6 +567,7 @@ async fn create_warehouse_ship_drafts(
         .into_iter()
         .map(|line| (line.base.id, line.sales_order_id.to_string()))
         .collect::<HashMap<_, _>>();
+
     let mut by_order_warehouse = BTreeMap::<(String, String), Vec<&StockReservation>>::new();
     for reservation in &reservations {
         let sales_order_id = sales_order_by_line
@@ -564,6 +578,7 @@ async fn create_warehouse_ship_drafts(
             .or_default()
             .push(reservation);
     }
+
     for ((order_id, warehouse_id), reservations) in by_order_warehouse {
         ensure_receipt_stock_delivery(
             db,
@@ -602,6 +617,7 @@ async fn ensure_receipt_stock_delivery(
         .await?;
         return Ok(());
     }
+
     let delivery = domain
         .create_receipt_stock_delivery(
             sales_order_id,
@@ -700,6 +716,7 @@ mod posting_contract_tests {
     fn receipt_purchase_index_preserves_first_match_and_requested_order() {
         let rows = [purchase_revision("b", "2"), purchase_revision("a", "3"), purchase_revision("b", "99")];
         let index = first_by_id(&rows, |line| line.base.id.as_str());
+
         for id in ["a", "b", "a"] {
             let found = purchase_line(&index, &PurchaseOrderRevisionLineId::new(id)).unwrap();
             let original = rows.iter().find(|line| line.base.id == id).unwrap();
@@ -709,6 +726,7 @@ mod posting_contract_tests {
             purchase_line(&index, &PurchaseOrderRevisionLineId::new("b")).unwrap().quantity,
             Some("2".parse().unwrap())
         );
+
         assert!(matches!(
             purchase_line(&index, &PurchaseOrderRevisionLineId::new("missing")),
             Err(Error::BusinessLogicError(message)) if message == "采购明细不存在"
@@ -729,6 +747,7 @@ mod posting_contract_tests {
             .map(|id| sales_line_id(&index, &SalesOrderRevisionLineId::new(id)).unwrap().to_string())
             .collect::<Vec<_>>();
         assert_eq!(stable_ids, ["stable-b", "stable-a", "stable-b"]);
+
         assert!(matches!(
             sales_line_id(&index, &SalesOrderRevisionLineId::new("missing")),
             Err(Error::BusinessLogicError(message)) if message == "采购销售分配缺少销售明细归属"

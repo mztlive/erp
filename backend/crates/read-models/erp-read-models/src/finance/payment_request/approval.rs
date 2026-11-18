@@ -41,6 +41,7 @@ impl PurchasePaymentRequestReadService {
             };
             (ApprovalProcessDefinitionId::new(definition.base.id), definition.definition_version)
         };
+
         let mut graph = self
             .db
             .bpm_workflow()
@@ -121,6 +122,7 @@ mod tests {
             )
             .is_err()
         );
+
         let binding = ApprovalDefinitionBinding::new(
             ApprovalProcessDefinitionId::new("definition"),
             2,
@@ -138,6 +140,7 @@ mod tests {
             .unwrap(),
             Some(binding)
         );
+
         assert!(
             registered_binding("other", PurchasePaymentRequestStatus::Draft, 0, Some(document.clone()))
                 .is_err()

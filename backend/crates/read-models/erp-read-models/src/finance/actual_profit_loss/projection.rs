@@ -30,6 +30,7 @@ impl Summary {
         for (kind, amount) in &order.composition {
             add(self.composition.entry(kind.clone()).or_default(), *amount)?;
         }
+
         if order.row.coverage_state == "COVERED" {
             self.covered_count += 1;
             add(&mut self.covered, order.revenue)?;
@@ -106,10 +107,12 @@ pub(super) fn project(
     let has_period_orders = !orders.is_empty();
     let matched: Vec<_> = orders.into_iter().filter(|o| matches_query(o, query)).collect();
     let coverage = summarize(&matched)?.coverage(matched.len());
+
     let selected: Vec<_> = matched.into_iter().filter(|o| coverage_matches(o, &query.coverage)).collect();
     let summary = summarize(&selected)?;
     let trend = trend(&selected)?;
     let rows = rows(&selected, query, export)?;
+
     let mut view = assemble(query, as_of, scope_label, coverage, summary, trend, rows)?;
     if view.rows.total == 0 {
         view.empty_reason = Some(if has_period_orders { "filtered_empty" } else { "no_data" }.into());
@@ -163,6 +166,7 @@ fn group_rows(orders: &[OrderResult], dimension: &str) -> Result<Vec<ProfitLossR
         let key = group_key(&order.row, dimension);
         groups.entry(key).or_default().push(order);
     }
+
     groups.into_iter().map(|(key, values)| group_row(&key, &values, dimension)).collect()
 }
 /// 人员和组织使用冻结身份分组；缺失快照单列，不用当前负责人回填。
@@ -201,6 +205,7 @@ fn group_row(key: &str, values: &[&OrderResult], dimension: &str) -> Result<Prof
     for order in values {
         summary.push(order)?;
     }
+
     let mut row = values[0].row.clone();
     row.row_id = format!("{dimension}:{key}");
     row.object_type = dimension.into();
@@ -215,6 +220,7 @@ fn group_row(key: &str, values: &[&OrderResult], dimension: &str) -> Result<Prof
     row.attribution_user_name = row.attribution_user_id.as_ref().map(|_| row.identity_label.clone());
     row.attribution_org_unit_id = (dimension == "attribution_org" && !key.is_empty()).then(|| key.into());
     row.attribution_org_unit_name = row.attribution_org_unit_id.as_ref().map(|_| row.identity_label.clone());
+
     group_totals(&mut row, &summary, values.len());
     group_sources(&mut row, values);
     Ok(row)
@@ -264,6 +270,7 @@ fn trend(orders: &[OrderResult]) -> Result<Vec<TrendPoint>> {
         summary.push(order)?;
         *count += 1;
     }
+
     months
         .into_iter()
         .map(|(month, (s, count))| {
@@ -424,6 +431,7 @@ fn filter_summary(q: &ProfitLossQuery) -> String {
         .map(|t| t.label())
         .collect::<Vec<_>>()
         .join("、");
+
     let mut parts = vec![
         format!("{} 至 {}", q.from, q.to),
         BASIS_LABEL.into(),

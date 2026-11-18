@@ -53,6 +53,7 @@ impl SupplierApiOrderProcess {
             .availability(&query)
             .await
             .map_err(|failure| Error::BusinessLogicError(failure.summary))?;
+
         for line in &request.lines {
             let state = available
                 .iter()
@@ -65,6 +66,7 @@ impl SupplierApiOrderProcess {
             }
             self.verify_offer(execution, connector, line).await?;
         }
+
         ensure_total(request)
     }
 
@@ -83,9 +85,11 @@ impl SupplierApiOrderProcess {
         else {
             return Err(Error::BusinessLogicError("供应商当前未返回原订货规格，尚未发单".into()));
         };
+
         if let Some(terms) = &offer.value.details.source_purchase_terms {
             terms.ensure_orderable_quantity(line.quantity)?;
         }
+
         let quote = offer
             .value
             .quote
@@ -124,6 +128,7 @@ impl SupplierApiOrderProcess {
         {
             return Err(Error::BusinessLogicError("供应商规格单位与采购已确认映射不一致，尚未发单".into()));
         }
+
         let frozen = line
             .supplier_offering_source
             .as_ref()
@@ -228,6 +233,7 @@ mod tests {
         ensure_total(&request("0.3333", 1, "0.33")).unwrap();
         ensure_total(&request("0.335", 2, "0.68")).unwrap();
         assert!(ensure_total(&request("0.335", 2, "0.67")).is_err());
+
         let mut shipping = request("0.3333", 1, "0.34");
         shipping.delivery.shipping_fee = "0.01".parse().unwrap();
         ensure_total(&shipping).unwrap();

@@ -216,6 +216,7 @@ impl SupplierFulfillmentOrder {
         )?;
         let external_order_no =
             normalize_optional_text(data.external_order_no, "外部订单号", EXTERNAL_ORDER_NO_MAX_LEN)?;
+
         let address_snapshot_encrypted = normalize_required_text(
             data.address_snapshot_encrypted,
             "履约地址快照不能为空",
@@ -228,12 +229,14 @@ impl SupplierFulfillmentOrder {
             ADDRESS_FINGERPRINT_MAX_LEN,
             "履约地址查询指纹过长",
         )?;
+
         ensure_timestamp_consistency(
             data.fulfillment_status,
             data.submitted_at,
             data.accepted_at,
             data.completed_at,
         )?;
+
         let follow_up_user_id = normalize_optional_text(
             Some(data.follow_up_user_id).filter(|value| !value.trim().is_empty()),
             "内部跟进人",
@@ -303,6 +306,7 @@ impl SupplierFulfillmentOrder {
     /// [`erp_core::Error::InvalidStateTransition`]。
     pub fn advance_fulfillment(&mut self, to: FulfillmentStatus) -> Result<()> {
         ensure_transition(self.fulfillment_status, to)?;
+
         self.fulfillment_status = to;
         match to {
             FulfillmentStatus::Submitting => {
@@ -456,6 +460,7 @@ impl SupplierFulfillmentOrder {
         if action.supplier_fulfillment_order_id.as_ref() != self.base.id {
             return None;
         }
+
         match action.action_type {
             SupplierOrderActionType::Place => match (self.fulfillment_status, action.status) {
                 (FulfillmentStatus::Completed, SupplierOrderActionStatus::Succeeded) => {
@@ -565,9 +570,11 @@ impl SupplierFulfillmentOrder {
         if next_org.is_empty() || is_company_org(&next_org) {
             return Err(Error::from("目标业务组织不能为空或公司根"));
         }
+
         if target == self.follow_up_user_id && next_org == self.business_org_unit_id {
             return Err(Error::from("目标已是当前跟进人，无需交接"));
         }
+
         self.follow_up_user_id = target;
         self.business_org_unit_id = next_org;
         Ok(true)
@@ -736,6 +743,7 @@ mod tests {
         order.external_order_no = Some("supplier-original-order".into());
         assert!(order.ensure_unsubmitted().is_err());
         order.external_order_no = None;
+
         for status in [
             FulfillmentStatus::Submitting,
             FulfillmentStatus::Accepted,
@@ -881,6 +889,7 @@ mod tests {
         assert_eq!(data.fulfillment_status, FulfillmentStatus::Submitting);
         assert_eq!(data.cancel_status, CancelStatus::None);
         assert_eq!(data.refund_status, RefundStatus::None);
+
         let order = SupplierFulfillmentOrder::new(SupplierFulfillmentOrderId::new("order-2"), data).unwrap();
         assert!(order.ensure_version(order.base.version).is_ok());
         assert!(order.ensure_version(order.base.version + 1).is_err());
@@ -943,6 +952,7 @@ mod tests {
         let order = sample_order();
         assert!(!order.has_follow_up());
         assert!(order.ensure_follow_up().is_err());
+
         let company = SupplierFulfillmentOrderData {
             follow_up_user_id: "buyer-1".into(),
             business_org_unit_id: "company".into(),
@@ -951,6 +961,7 @@ mod tests {
         assert!(
             SupplierFulfillmentOrder::new(SupplierFulfillmentOrderId::new("order-company"), company).is_err()
         );
+
         let mut assigned = sample_order();
         assigned.handover("buyer-1".into(), Some("org-procurement".into())).unwrap();
         assigned.ensure_follow_up().unwrap();

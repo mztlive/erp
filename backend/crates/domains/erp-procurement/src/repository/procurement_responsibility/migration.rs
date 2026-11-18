@@ -38,6 +38,7 @@ pub(crate) async fn migrate_pools(db: &Database) -> Result<()> {
             doc! { "$set": { "strategy": "ROUND_ROBIN" } },
         )
         .await?;
+
     merge_defaults(db).await?;
     rules
         .update_many(
@@ -45,6 +46,7 @@ pub(crate) async fn migrate_pools(db: &Database) -> Result<()> {
             doc! { "$set": { "selector_key": "default_dispatcher" } },
         )
         .await?;
+
     rules
         .update_many(
             doc! { "owner_user_id": { "$exists": true } },
@@ -64,6 +66,7 @@ async fn merge_defaults(db: &Database) -> Result<()> {
     let Some(first) = defaults.first() else {
         return Ok(());
     };
+
     let owners = merged_owners(&defaults)?;
     let last = legacy_last_owner(db).await?;
     rules.update_one(doc! { "id": &first.id }, doc! { "$set": { "owner_user_ids": owners } }).await?;
@@ -76,6 +79,7 @@ async fn merge_defaults(db: &Database) -> Result<()> {
             )
             .await?;
     }
+
     db.collection::<Document>("procurement_dispatch_rotation")
         .update_one(
             doc! { "_id": &first.id },
@@ -95,6 +99,7 @@ async fn legacy_last_owner(db: &Database) -> Result<Option<String>> {
     let Some(id) = old.as_ref().and_then(|value| value.get_str("last_rule_id").ok()) else {
         return Ok(None);
     };
+
     let rule = db
         .collection::<LegacyPool>(
             <Database as ProcurementResponsibilityExt>::PROCUREMENT_RESPONSIBILITY_RULES,
@@ -112,6 +117,7 @@ fn merged_owners(rules: &[LegacyPool]) -> Result<Vec<String>> {
             owners.push(owner.clone());
         }
     }
+
     if owners.is_empty() || owners.len() > 100 {
         return Err(Error::UnsupportedDeployment("默认负责人池须包含 1 至 100 人，请维护旧规则后重新启动"));
     }
@@ -127,6 +133,7 @@ mod tests {
             id: id.into(),
             owner_user_ids: names.iter().map(|name| name.to_string()).collect(),
         };
+
         assert_eq!(merged_owners(&[rule("a", &["u1"]), rule("b", &["u2"])]).unwrap(), ["u1", "u2"]);
         assert_eq!(merged_owners(&[rule("a", &["u1", "u2"]), rule("b", &["u2"])]).unwrap(), ["u1", "u2"]);
         assert!(merged_owners(&[rule("empty", &[])]).is_err());

@@ -193,6 +193,7 @@ impl FundsAccess {
         params.validate()?;
         let query = params.normalized().map_err(Error::from)?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
+
         let snapshot =
             self.checked_customer_receipts(params, &query, actor, params.scope_version.as_deref()).await?;
         Ok(snapshot)
@@ -323,13 +324,16 @@ impl FundsAccess {
     ) -> Result<FundsScopedPage<ScopedCustomerReceiptRow>> {
         let (_, authorization) =
             self.resolve(actor, &receivable_permissions::CUSTOMER_RECEIPT_LIST, executor).await?;
+
         let condition = self.receipt_condition(query, executor).await?;
         let filter = self.receipt_filter(query, executor).await?;
         let snapshot =
             receipt_repository::page(&self.db, query, &filter, &authorization, &condition, executor).await?;
+
         let total = snapshot.count()?;
         let version = flow::version(&authorization.context.scope_version, &snapshot.versions);
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
+
         let summary =
             flow::summary(&snapshot.summary, &version)?.with_balance_access(authorization.ledger_read);
         let whole_ids = snapshot
@@ -342,6 +346,7 @@ impl FundsAccess {
         let items = self
             .receipt_page(snapshot.items, &snapshot.versions, &whole_ids, &authorization, executor)
             .await?;
+
         authorization.deliver(executor).await?;
         Ok(FundsScopedPage {
             items,
@@ -374,6 +379,7 @@ impl FundsAccess {
                     let (_, authorization) = this
                         .resolve(&actor, &receivable_permissions::CUSTOMER_RECEIPT_LIST, executor)
                         .await?;
+
                     let condition = this.receipt_condition(&query, executor).await?;
                     let filter = this.receipt_filter(&query, executor).await?;
                     let versions = receipt_repository::versions(
@@ -390,6 +396,7 @@ impl FundsAccess {
                             "回款查询超过上限，请收窄组织或负责人条件".into(),
                         ));
                     }
+
                     authorization.deliver(executor).await?;
                     Ok(flow::version(&authorization.context.scope_version, &versions))
                 })
@@ -414,6 +421,7 @@ impl FundsAccess {
                 executor,
             )
             .await?;
+
         let allowed =
             versions.iter().flat_map(|row| row.sources.iter().map(|source| source.id.clone())).collect();
         let expected = rows.len();
@@ -429,6 +437,7 @@ impl FundsAccess {
         if decided.len() != expected {
             return Err(Error::Internal("回款来源聚合与正式裁剪规则不一致".into()));
         }
+
         let links = self.receipt_decided_links(&ids, &links, executor).await?;
         let mut items = self.receipt_page_items(&decided, &links, whole_ids);
         self.attach_receipt_pending(&mut items, decided.iter().map(|(row, _)| row), authorization, executor)
@@ -523,6 +532,7 @@ fn decide_receipt_rows(
         if !linked_sources_exist(row_links.iter().map(|link| link.order.as_deref()), facts) {
             continue;
         }
+
         let tuples = receipt_tuples(&row, row_links, facts);
         let matched = matched_orders(&tuples, allowed);
         let matched = filter_matched_orders(
@@ -534,10 +544,12 @@ fn decide_receipt_rows(
         if (condition.owner_user_ids.is_some() || condition.org_unit_ids.is_some()) && matched.is_empty() {
             continue;
         }
+
         let whole = whole_ids.contains(&row.id);
         if !whole && matched.is_empty() {
             continue;
         }
+
         let doc_operators = operators.get(&row.id).map(Vec::as_slice).unwrap_or_default();
         if !matches_multi_condition(&tuples, doc_operators, &[], condition) {
             continue;
@@ -633,6 +645,7 @@ impl FundsAccess {
         let (_access, authorization) =
             self.resolve(actor, &receivable_permissions::CUSTOMER_RECEIPT_DETAIL, executor).await?;
         self.require_visible_root(&authorization, id, executor).await?;
+
         let row = self.customer_receipt_row(id, executor).await?;
         let links = self.receipt_matched_links(std::slice::from_ref(&row.id), executor).await?;
         let order_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
@@ -646,6 +659,7 @@ impl FundsAccess {
         if !linked_sources_exist(row_links.iter().map(|link| link.order.as_deref()), &facts) {
             return Err(Error::NotFound("客户回款单不存在".into()));
         }
+
         let tuples = receipt_tuples(&row, row_links, &facts);
         let matched = matched_orders(&tuples, &allowed);
         let whole = self
@@ -660,6 +674,7 @@ impl FundsAccess {
         if !whole && matched.is_empty() {
             return Err(Error::NotFound("客户回款单不存在".into()));
         }
+
         let mut data = Self::cut_receipt_row(&row, row_links, &matched, whole);
         self.attach_receipt_pending(
             std::slice::from_mut(&mut data),
@@ -669,6 +684,7 @@ impl FundsAccess {
         )
         .await?;
         self.finish_receipt_names(std::slice::from_mut(&mut data), executor).await?;
+
         let parts = receipt_detail_parts(&row, &matched, &facts);
         let view = FundsScopedResult {
             data,
@@ -817,6 +833,7 @@ mod tests {
         assert_eq!(view.unallocated_amount, None);
         assert_eq!(view.allocations.as_ref().unwrap().len(), 1);
         assert_eq!(view.allocations.as_ref().unwrap()[0].id, "a");
+
         let json = serde_json::to_value(view).unwrap();
         for field in [
             "counterparty_party_id",
@@ -931,6 +948,7 @@ mod tests {
         assert_eq!(sum_signed(links, &[]), Amount::zero());
         assert_eq!(links[0].view.receivable_entry_id, "entry-missing");
         assert_eq!(links[0].view.allocated_at, Instant::from_unix_secs(10));
+
         assert!(receipt_links_from_allocations(Vec::new(), &orders).is_empty());
     }
 
@@ -989,6 +1007,7 @@ mod tests {
         assert_eq!(decided.len(), 1);
         assert_eq!(decided[0].0.id, "empty");
         assert!(decided[0].1.is_empty());
+
         assert!(
             decide_receipt_rows(
                 rows,
@@ -1029,6 +1048,7 @@ mod tests {
             )
             .is_empty()
         );
+
         condition.org_unit_ids = Some(vec!["org-a".into()]);
         let decided = decide_receipt_rows(
             vec![receipt("r")],
@@ -1040,6 +1060,7 @@ mod tests {
             &BTreeSet::new(),
         );
         assert_eq!(decided[0].1, ["so-a"]);
+
         condition.operator_user_ids = Some(vec!["someone_else".into()]);
         assert!(
             decide_receipt_rows(
@@ -1077,10 +1098,12 @@ mod tests {
             );
             assert_eq!(matched, vec!["so-a"]);
             assert_eq!(sum_signed(&links, &matched), "50".parse().unwrap());
+
             let summary = build_summary(&summary_inputs(&links, &matched), &owners, None, "v", true).unwrap();
             assert_eq!(summary.grouped.len(), 1);
             assert_eq!(summary.grouped[0].visible_share, "50".parse().unwrap());
             assert_eq!(summary.unassigned, zero_amount());
+
             let whole = build_summary(
                 &summary_inputs(&links, &matched),
                 &owners,
@@ -1091,6 +1114,7 @@ mod tests {
             .unwrap();
             assert_eq!(whole.unassigned, "5".parse().unwrap());
         }
+
         // 不允许负责人命中 A、组织命中 B 后把整单作为同时匹配。
         assert!(
             filter_matched_orders(

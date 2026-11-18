@@ -28,10 +28,12 @@ pub async fn authorized_customer(
     let access = &context.compiled;
     ensure_model(access.model(), "customer", Database::CUSTOMER_ACCOUNTS)?;
     access.ensure_current(executor)?;
+
     let collection = db.customer_accounts().collection();
     let options = FindOptions::builder().limit(1).build();
     let rows =
         aggregate::find(&collection, doc! {"id":id}, options, access.stages().to_vec(), executor).await?;
+
     access.ensure_current(executor)?;
     rows.into_iter().next().ok_or_else(|| Error::NotFound("客户不存在".into()))
 }
@@ -79,11 +81,13 @@ pub async fn authorized_page(
     let compiled = &context.compiled;
     ensure_model(compiled.model(), "customer", Database::CUSTOMER_ACCOUNTS)?;
     compiled.ensure_current(executor)?;
+
     let collection = db.customer_accounts().collection().clone_with_type::<CustomerAccountRow>();
     let options = filter.page_options();
     let items =
         aggregate::find(&collection, filter.to_doc(), options, compiled.stages().to_vec(), executor).await?;
     let total = aggregate::count(&collection, filter.to_doc(), compiled.stages().to_vec(), executor).await?;
+
     compiled.ensure_current(executor)?;
     let total = i64::try_from(total).map_err(|_| Error::ValidationError("客户总数超限".into()))?;
     Ok(PageResult { items, total })
@@ -106,6 +110,7 @@ pub async fn authorized_versions(
     let compiled = &context.compiled;
     ensure_model(compiled.model(), "customer", Database::CUSTOMER_ACCOUNTS)?;
     compiled.ensure_current(executor)?;
+
     let mut stages = vec![doc! {"$match": filter.to_doc()}];
     stages.extend_from_slice(compiled.stages());
     stages.extend([
@@ -115,6 +120,7 @@ pub async fn authorized_versions(
     ]);
     let collection = db.customer_accounts().collection().clone_with_type::<CustomerVersion>();
     let rows = aggregate::rows(&collection, stages, executor).await?;
+
     compiled.ensure_current(executor)?;
     Ok(rows)
 }

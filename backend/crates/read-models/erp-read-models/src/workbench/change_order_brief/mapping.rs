@@ -56,8 +56,10 @@ pub(super) fn sales_change_brief_source(
         push_section(&mut sections, "目标提交", Some(&submission_no), false);
         push_section(&mut sections, "提交时间", Some(&submitted_at), false);
     }
+
     push_sales_header_comparisons(&mut sections, base, submission);
     push_line_difference_summary(&mut sections, base.is_some() && submission.is_some(), &lines, more_count);
+
     let amount_label = submission
         .map(|item| format_yuan(&item.gross_amount))
         .or_else(|| base.map(|item| format_yuan(&item.gross_amount)));
@@ -115,8 +117,10 @@ pub(super) fn purchase_change_brief_source(
         push_section(&mut sections, "采购类型", Some(submission.purchase_type.label()), false);
         push_section(&mut sections, "履约责任", Some(submission.fulfillment_responsibility.label()), false);
     }
+
     push_purchase_header_comparisons(&mut sections, base, submission);
     push_line_difference_summary(&mut sections, base.is_some() && submission.is_some(), &lines, more_count);
+
     let amount_label = submission
         .map(|item| format_yuan(&item.gross_amount))
         .or_else(|| base.map(|item| format_yuan(&item.gross_amount)));
@@ -162,6 +166,7 @@ fn push_sales_header_comparisons(
         base.map(|item| &item.tax_amount),
         submission.map(|item| &item.tax_amount),
     );
+
     let customer = text_comparison(
         base.map(|item| item.customer_snapshot.customer_name.as_str()),
         submission.map(|item| item.customer_snapshot.customer_name.as_str()),
@@ -203,6 +208,7 @@ fn push_purchase_header_comparisons(
         base.map(|item| &item.tax_amount),
         submission.map(|item| &item.tax_amount),
     );
+
     let supplier = text_comparison(
         base.map(|item| item.supplier_snapshot.supplier_name.as_str()),
         submission.map(|item| item.supplier_snapshot.supplier_name.as_str()),
@@ -289,6 +295,7 @@ pub(super) fn sales_base_line_states(
         goods_lines.iter().map(|line| (line.revision_line_id.to_string(), line)).collect::<HashMap<_, _>>();
     let vouchers =
         voucher_lines.iter().map(|line| (line.revision_line_id.to_string(), line)).collect::<HashMap<_, _>>();
+
     let mut grouped: HashMap<String, LineStateMap> = HashMap::new();
     for line in lines {
         let goods_line = goods.get(&line.base.id);
@@ -308,6 +315,7 @@ pub(super) fn sales_base_line_states(
         let supply_price = goods_line
             .and_then(|item| item.procurement_supply_price_gross)
             .map(|value| format_unit_price(value.to_decimal()));
+
         grouped.entry(line.sales_order_revision_id.to_string()).or_default().insert(
             line.sales_order_line_id.to_string(),
             DiffLineState::new(
@@ -345,6 +353,7 @@ pub(super) fn sales_target_line_states(lines: &[SalesChangeSubmissionLine]) -> H
         let unit_price = line.unit_price_gross.map(|value| format_unit_price(value.to_decimal()));
         let supply_price =
             line.procurement_supply_price_gross.map(|value| format_unit_price(value.to_decimal()));
+
         grouped.entry(line.sales_change_submission_id.to_string()).or_default().insert(
             line.sales_order_line_id.to_string(),
             DiffLineState::new(
@@ -540,6 +549,7 @@ pub(in super::super) fn change_diff_lines(
     pairs.sort_by_key(|(before, after)| {
         after.as_ref().or(before.as_ref()).map(|line| line.line_no).unwrap_or(u32::MAX)
     });
+
     pairs
         .into_iter()
         .filter_map(|(before, after)| changed_line_brief(before.as_ref(), after.as_ref()))
@@ -551,6 +561,7 @@ fn changed_line_brief(before: Option<&DiffLineState>, after: Option<&DiffLineSta
     if before == after {
         return None;
     }
+
     let chosen = after.or(before)?;
     let mut title = match (before, after) {
         (None, Some(item)) => format!("{} · 新增 {}", item.title, item.amount),
@@ -572,6 +583,7 @@ fn changed_line_brief(before: Option<&DiffLineState>, after: Option<&DiffLineSta
     if title.trim().is_empty() {
         title = chosen.title.clone();
     }
+
     let mut quantity_parts = Vec::new();
     let detail = |field: fn(&DiffLineState) -> Option<&str>| (before.and_then(field), after.and_then(field));
     push_detail_change(&mut quantity_parts, "数量", detail(|item| item.quantity.as_deref()))?;
@@ -582,6 +594,7 @@ fn changed_line_brief(before: Option<&DiffLineState>, after: Option<&DiffLineSta
     {
         quantity_parts.push(format!("行号 {} → {}", before.line_no, after.line_no));
     }
+
     let due_label =
         if before.and_then(|item| item.due.as_deref()) != after.and_then(|item| item.due.as_deref()) {
             text_comparison(
@@ -592,6 +605,7 @@ fn changed_line_brief(before: Option<&DiffLineState>, after: Option<&DiffLineSta
         } else {
             None
         };
+
     Some(BriefLine {
         title,
         quantity: (!quantity_parts.is_empty()).then(|| quantity_parts.join(" · ")),

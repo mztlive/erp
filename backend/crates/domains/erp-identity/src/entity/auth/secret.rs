@@ -57,7 +57,6 @@ impl LoginAccount {
         if !(ACCOUNT_MIN_LEN..=ACCOUNT_MAX_LEN).contains(&length) {
             return Err(Error::LogicError("账号长度不符合要求".to_string()));
         }
-
         Ok(Self(value.to_string()))
     }
 
@@ -318,7 +317,6 @@ mod tests {
     #[test]
     fn login_account_should_trim_without_changing_case() {
         let account = LoginAccount::new("  Admin01  ").unwrap();
-
         assert_eq!(account.as_str(), "Admin01");
     }
 

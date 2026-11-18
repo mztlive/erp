@@ -47,6 +47,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if let Some((id, live)) = lookup_coded(self.db.unit_of_measures(), "unit_code", &step.key).await? {
             return self.adopt_coded(actor, step, DemoKindDictionary::Unit, id, live).await;
         }
+
         let view = erp_master_data::create_unit_of_measure(
             self.db.clone(),
             self.authorization.clone(),
@@ -77,6 +78,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if let Some((id, live)) = lookup_coded(self.db.product_brands(), "brand_code", &step.key).await? {
             return self.adopt_coded(actor, step, DemoKindDictionary::Brand, id, live).await;
         }
+
         let view = self.ports.catalog.product_brand_create(request.clone(), actor).await?;
         record::save(&self.db, step, view.id, Vec::new()).await?;
         Ok(EnsureOutcome::Created)
@@ -103,6 +105,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         {
             return self.adopt_coded(actor, step, DemoKindDictionary::Category, id, live).await;
         }
+
         let view = erp_master_data::create_product_category(
             self.db.clone(),
             self.authorization.clone(),
@@ -128,6 +131,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if !live {
             lifecycle::restore_dictionary(&self.db, self.authorization.clone(), actor, kind, &id).await?;
         }
+
         record::save(&self.db, step, id, Vec::new()).await?;
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
     }

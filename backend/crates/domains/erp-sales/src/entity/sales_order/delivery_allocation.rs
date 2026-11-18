@@ -44,6 +44,7 @@ impl SalesDeliveryAllocation {
         if allocations.len() > 100 {
             return Err(Error::from("每条商品最多分配 100 个收货地址"));
         }
+
         let mut total = Decimal::ZERO;
         for allocation in &mut allocations {
             allocation.recipient = normalize_required_text(
@@ -66,6 +67,7 @@ impl SalesDeliveryAllocation {
                 512,
                 "收货地址过长",
             )?;
+
             if allocation.quantity.to_decimal() <= Decimal::ZERO {
                 return Err(Error::from("每个地址的分配数量必须大于 0"));
             }
@@ -73,6 +75,7 @@ impl SalesDeliveryAllocation {
                 .checked_add(allocation.quantity.to_decimal())
                 .ok_or_else(|| Error::from("分配数量超出范围"))?;
         }
+
         if total != quantity.to_decimal() {
             return Err(Error::from("各地址分配数量合计必须等于商品数量"));
         }
@@ -117,6 +120,7 @@ mod tests {
         assert_eq!(rows[0].region_name, "上海市浦东新区");
         assert_eq!(rows[0].full_address(), "上海市浦东新区测试路 1 号");
         assert!(!format!("{:?}", rows[0]).contains("张三"));
+
         let json = serde_json::to_string(&rows).unwrap();
         assert_eq!(serde_json::from_str::<Vec<SalesDeliveryAllocation>>(&json).unwrap(), rows);
     }

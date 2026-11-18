@@ -248,6 +248,7 @@ mod tests {
                 doc! { "customer_acceptance_id": 1, "line_no": 1 },
             ),
         ];
+
         for (indexes, name, expected) in pairs {
             let index = indexes
                 .iter()
@@ -274,6 +275,7 @@ mod tests {
             (electronic_delivery_indexes(), "uk_electronic_deliveries_fulfillment_no"),
             (service_fulfillment_indexes(), "uk_service_fulfillments_fulfillment_no"),
         ];
+
         for (indexes, name) in pairs {
             let identity = indexes
                 .iter()

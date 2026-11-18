@@ -49,9 +49,11 @@ async fn sending_purchase_email_requires_both_independent_grants_before_loading_
         assert!(matches!(result, Err(Error::Forbidden(_))));
     }
     assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
+
     grant(&identity, &[("sender", std::slice::from_ref(&send)), ("reader", &[purchase_order::DETAIL])]);
     service.require(&actor(), &send, AccessTarget::record("purchase").unwrap(), &mut executor).await.unwrap();
     assert_eq!(facts.calls.load(Ordering::SeqCst), 1);
+
     facts.objects.lock().unwrap().clear();
     assert!(matches!(
         service.require(&actor(), &send, AccessTarget::record("purchase").unwrap(), &mut executor).await,
@@ -91,9 +93,11 @@ async fn work_item_management_accepts_the_original_snapshot_and_rejects_nontrans
         Err(Error::ValidationError(_))
     ));
     assert_eq!(identity.permissions_calls.load(Ordering::SeqCst), 0);
+
     let mut executor = SnapshotExecutor::default();
     service.require(&actor(), &work_item::MANAGE, target(), &mut executor).await.unwrap();
     assert_eq!(facts.calls.load(Ordering::SeqCst), 1);
+
     facts.objects.lock().unwrap()[0].owner_id = FactValue::Known(Some("other".into()));
     assert!(matches!(
         service.require(&actor(), &work_item::MANAGE, target(), &mut executor).await,
@@ -161,9 +165,11 @@ async fn missing_management_qualification_preserves_reads_and_revocation_invalid
     assert_eq!(members(access.stages()), ["mine", "other"]);
     assert!(members(access.management_stages().unwrap()).is_empty());
     service.validate(&access, &mut executor).await.unwrap();
+
     grant(&identity, &[("reader", &[work_item::LIST]), ("manager", &[work_item::MANAGE])]);
     let access = service.query(&actor(), &work_item::LIST, &mut executor).await.unwrap();
     assert_eq!(members(access.management_stages().unwrap()), ["mine", "other"]);
+
     grant(&identity, &[("reader", &[work_item::LIST])]);
     assert!(matches!(service.validate(&access, &mut executor).await, Err(Error::ConflictError(_))));
 }

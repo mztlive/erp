@@ -218,6 +218,7 @@ mod tests {
                 == Some("uk_supplier_settlement_statements_statement_no")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
+
         let external_bill = indexes
             .iter()
             .find(|index| {
@@ -230,6 +231,7 @@ mod tests {
             external_bill.options.as_ref().unwrap().partial_filter_expression,
             Some(doc! { "external_bill_no": { "$type": "string" } })
         );
+
         let confirmed = indexes
             .iter()
             .find(|index| {
@@ -242,6 +244,7 @@ mod tests {
             confirmed.options.as_ref().unwrap().partial_filter_expression,
             Some(doc! { "status": { "$eq": "CONFIRMED" } })
         );
+
         assert!(indexes.iter().any(|index| {
             index.keys
                 == doc! {
@@ -256,7 +259,6 @@ mod tests {
     #[test]
     fn settlement_item_identity_is_unique() {
         let indexes = supplier_settlement_item_indexes();
-
         let identity = indexes
             .iter()
             .find(|index| {
@@ -271,7 +273,6 @@ mod tests {
     #[test]
     fn difference_query_indexes_cover_item_and_status() {
         let indexes = supplier_settlement_difference_indexes();
-
         assert!(indexes.iter().any(|index| index.keys == doc! { "statement_item_id": 1 }));
         assert!(indexes.iter().any(|index| index.keys == doc! { "status": 1 }));
     }
@@ -289,6 +290,7 @@ mod tests {
                 == Some("uk_supplier_settlement_source_evidence_period_version")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
+
         let evidence = supplier_settlement_difference_evidence_indexes();
         assert!(evidence.iter().any(|index| {
             index.options.as_ref().and_then(|options| options.name.as_deref())

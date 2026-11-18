@@ -66,6 +66,7 @@ async fn writes_reject_non_snapshot_before_identity_object_version_and_overlap_r
     let service = service(identities.clone());
     let actor = AuditActor::new("actor".into(), "login".into(), AccountKind::Admin);
     let mut executor = NoTransaction;
+
     let results = [
         service.create(&actor, serde_json::from_value(request()).unwrap(), &mut executor).await.map(|_| ()),
         service
@@ -91,6 +92,7 @@ async fn writes_reject_non_snapshot_before_identity_object_version_and_overlap_r
             .map(|_| ()),
         service.delete_policy(&actor, "policy", &mut executor).await,
     ];
+
     for result in results {
         assert!(
             matches!(result, Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务")

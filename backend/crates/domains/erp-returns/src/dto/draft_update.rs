@@ -90,6 +90,7 @@ mod tests {
         let update = CustomerRefundUpdate::from(request);
         assert_eq!(update.amount.unwrap().to_string(), "20");
         assert_eq!(update.reason_text.as_deref(), Some("更正退款金额"));
+
         for key in [
             "refund_no",
             "original_receipt_id",
@@ -102,6 +103,7 @@ mod tests {
             forged[key] = json!("forged");
             assert!(serde_json::from_value::<UpdateFinancialReturnRequest>(forged).is_err());
         }
+
         let invalid: UpdateFinancialReturnRequest = serde_json::from_value(json!({"version": 0})).unwrap();
         assert!(invalid.validate().is_err());
     }

@@ -60,6 +60,7 @@ impl ReturnSettlementDecision {
         if self.sales_revision_id != revision || self.target_gross != target {
             return Err(Error::from("销售依据或调整金额已变化，请重新核对处置方案"));
         }
+
         if self.idempotency_key.trim().is_empty()
             || self.idempotency_key.len() > 128
             || self.supplier_confirmation.trim().is_empty()
@@ -67,6 +68,7 @@ impl ReturnSettlementDecision {
         {
             return Err(Error::from("请填写供应商确认依据后提交"));
         }
+
         if self.refund_amount < Amount::zero()
             || self.credit_amount < Amount::zero()
             || self.refund_amount.to_decimal().checked_add(self.credit_amount.to_decimal())
@@ -114,6 +116,7 @@ mod tests {
                 returned
             ));
         }
+
         assert_eq!(ReturnSettlementDecision::excess(amount("1175"), amount("1000")), amount("175"));
         assert_eq!(ReturnSettlementDecision::excess(amount("900"), amount("1000")), amount("0"));
     }
@@ -131,6 +134,7 @@ mod tests {
         let mut plan = decision();
         assert!(plan.validate("r3", amount("1000"), amount("175")).is_err());
         assert!(plan.validate("r2", amount("900"), amount("175")).is_err());
+
         plan.supplier_confirmation.clear();
         assert!(plan.validate("r2", amount("1000"), amount("175")).is_err());
     }

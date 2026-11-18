@@ -75,6 +75,7 @@ fn requirement<'a>(entry: &Permission, object: &'a ObjectFacts) -> Result<(Permi
         .find(|(kind, _, _)| *kind == subject_type)
         .ok_or_else(|| Error::ValidationError("审批管理的冻结主体类型未登记".into()))?;
     let admin = if entry == &approval_instance::UPGRADE_BINDING { definition } else { runtime };
+
     let related = object
         .relations
         .get(&RelationKey::parse("subject_source")?)
@@ -132,6 +133,7 @@ pub(super) fn candidate_source(candidate: &ObjectFacts) -> Result<(RelationKey, 
     if !allows_source(kind, resource) {
         return Err(Error::ValidationError("审批升级的真实来源与主体类型错配".into()));
     }
+
     let key = RelationKey::parse("subject_source")?;
     let related = candidate
         .relations
@@ -177,6 +179,7 @@ impl AuthorizationService {
         if proof.context.permission == inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL {
             return self.stock_adjustment_cancel_sources(proof, facts, executor).await;
         }
+
         let mut sources = Vec::new();
         for object in facts.roots() {
             if proof.context.permission == internal::APPROVAL_INSTANCE_READ
@@ -184,6 +187,7 @@ impl AuthorizationService {
             {
                 continue;
             }
+
             let expanded = if proof.context.permission == internal::APPROVAL_INSTANCE_READ {
                 Some(self.management_facts(proof, object, executor).await?)
             } else {
@@ -211,9 +215,11 @@ impl AuthorizationService {
         if matches!(source.resource.as_str(), "customer_receipt" | "supplier_payment") {
             required.push(policy_permission::FINANCE_LEDGER_READ);
         }
+
         let mut source_proof = self
             .resolve_approval_source(&proof.context, &permission, &required, &proof.qualified, executor)
             .await?;
+
         let grants = self.target_grants(&source_proof.context, &source_proof.rule, facts, executor).await?;
         let earliest = facts.flattened()?.iter().filter_map(|fact| fact.valid_until).min();
         source_proof.valid_until = source_proof.valid_until.into_iter().chain(earliest).min();
@@ -234,12 +240,14 @@ impl AuthorizationService {
         if !proof.boundary.is_snapshot() {
             return Err(Error::ValidationError("审批管理读取必须使用快照事务".into()));
         }
+
         let context =
             AccessContext { permission: internal::APPROVAL_MANAGEMENT_READ, ..proof.context.clone() };
         let targets = ResourceTargets::new(&[object.id.as_str()])?;
         let expanded_facts =
             TargetFacts::load(&self.facts, &context, &AccessRule::Allow, Target::Records(&targets), executor)
                 .await?;
+
         let expanded = expanded_facts
             .roots()
             .next()
@@ -275,11 +283,13 @@ impl AuthorizationService {
         if !qualified.same_role(required) {
             return Err(Error::Forbidden("审批管理的真实来源缺少完整同角色资格".into()));
         }
+
         let context = AccessContext { resource: source.resource().into(), model: None, ..entry.clone() };
         let mut resolution = Resolution { versions: vec![qualified.version().into()], ..Default::default() };
         let rule = self
             .approval_source_condition(&context, source, required, qualified, &mut resolution, executor)
             .await?;
+
         let mut resources = BTreeSet::new();
         rule.grant_resources(&mut resources);
         for resource in resources {
@@ -289,6 +299,7 @@ impl AuthorizationService {
                 self.facilities.grant_revision(&context.actor, resource, executor).await?
             ));
         }
+
         let source = ApprovalSource { source: source.clone(), required: required.to_vec() };
         self.approval_source_proof(context, source, qualified, rule, resolution, executor)
     }
@@ -306,6 +317,7 @@ impl AuthorizationService {
         let mut version = Fingerprint::new("approval-source-v1");
         version.unordered(&resolution.versions, |hash, value| hash.text(value));
         version.rule(&rule);
+
         let proof = AccessProof {
             context,
             qualified: qualified.clone(),
@@ -352,6 +364,7 @@ impl AuthorizationService {
             resolution.include(&scope);
             scopes.push((scope_source, scope.scope.clone()));
         }
+
         if context.permission == work_item::DETAIL && source == &purchase_order::DETAIL {
             let scope =
                 &scopes.first().ok_or_else(|| Error::ValidationError("任务采购来源范围未加载".into()))?.1;
@@ -420,9 +433,11 @@ mod tests {
             ensure_admin(&entry, admin.clone(), &QualifiedPermissions::test_grants(&[("role", &required)]))
                 .is_ok()
         );
+
         let split =
             QualifiedPermissions::test_grants(&[("entry", &required[..2]), ("admin", &required[2..])]);
         assert!(matches!(ensure_admin(&entry, admin.clone(), &split), Err(Error::Forbidden(_))));
+
         let wrong_type =
             [entry.clone(), approval_instance::INSTANCE_LIST, approval_admin::PURCHASE_ORDER_RUNTIME];
         assert!(
@@ -440,6 +455,7 @@ mod tests {
         assert!(requirement(&entry, &object).is_err());
         object.subject_type = FactValue::Missing;
         assert!(requirement(&entry, &object).is_err());
+
         object = instance("sales_order", "sales_order");
         object.relations.values_mut().next().unwrap().objects.clear();
         assert!(requirement(&entry, &object).is_err());

@@ -60,6 +60,7 @@ impl SalesChangeTerms {
         if !(Decimal::ZERO..=Decimal::from(100)).contains(&tax.to_decimal()) {
             return Err(Error::ValidationError("税点须在0至100之间".into()));
         }
+
         let snapshot = HeaderSnapshotData {
             customer_name: copy.customer_snapshot.customer_name.clone(),
             contract_no: copy.contract_snapshot.as_ref().map(|value| value.contract_no.clone()),

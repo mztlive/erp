@@ -118,6 +118,7 @@ impl PurchasePaymentRequestQuery {
                 return Err(Error::from("查询条件不能超过 200 个字符"));
             }
         }
+
         self.page = Some(self.page.unwrap_or(1).max(1));
         self.page_size = Some(self.page_size.unwrap_or(20).clamp(1, 100));
         Ok(self)
@@ -148,6 +149,7 @@ impl CreatePaymentRequestBatch {
         if self.idempotency_key.is_empty() || self.idempotency_key.len() > 160 {
             return Err(Error::from("请提供有效批量操作号"));
         }
+
         let mut sources = HashSet::new();
         self.requests = self
             .requests
@@ -186,6 +188,7 @@ mod batch_tests {
         let result = batch(vec![request("a"), request("b")]).normalize().unwrap();
         assert_eq!(result.requests.len(), 2);
         assert_eq!(result.requests[0].reason, "预付款");
+
         assert!(batch(vec![]).normalize().is_err());
         assert!(batch(vec![request("a"), request("a")]).normalize().is_err());
         assert!(batch((0..51).map(|i| request(&format!("p-{i}"))).collect()).normalize().is_err());
@@ -203,6 +206,7 @@ mod batch_tests {
             }))
             .is_err()
         );
+
         let mut data = serde_json::to_value(request("a")).unwrap();
         data["lines"][0]["amount"] = json!("not-money");
         assert!(
@@ -211,6 +215,7 @@ mod batch_tests {
             }))
             .is_err()
         );
+
         assert!(
             CreatePaymentRequestBatch { idempotency_key: " ".into(), requests: vec![request("a")] }
                 .normalize()

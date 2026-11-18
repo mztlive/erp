@@ -22,6 +22,7 @@ fn submit_receipt(
         fields.push("resubmission_reason".into());
         fields.push(reason.trim().to_owned());
     }
+
     CommandReceipt::from_resource_parts(
         &format!("{resource_type}-submit-"),
         actor_id,
@@ -148,6 +149,7 @@ mod tests {
             expected_version: 7,
             idempotency_key: "key".into(),
         };
+
         for (receipt, changed_version) in [
             (
                 receipt_request.command_receipt("reversal-1", "handler").unwrap(),
@@ -174,10 +176,12 @@ mod tests {
             assert_eq!(receipt.match_structured(&fact), StructuredReceiptMatch::SamePayload);
             assert_eq!(changed_version.id(), receipt.id());
             assert_eq!(changed_version.match_structured(&fact), StructuredReceiptMatch::DifferentPayload);
+
             let mut other_actor = fact.clone();
             other_actor.actor_id = "other".into();
             assert_eq!(receipt.match_structured(&other_actor), StructuredReceiptMatch::Corrupted);
         }
+
         assert_ne!(
             receipt_request.command_receipt("reversal-1", "handler").unwrap().id(),
             receipt_request.command_receipt("reversal-2", "handler").unwrap().id()
@@ -209,6 +213,7 @@ mod tests {
             req.command_receipt("rr-1", "actor").unwrap(),
             normalized.command_receipt("rr-1", "actor").unwrap()
         );
+
         assert!(req.command_receipt(" ", "actor").is_err());
         assert!(
             SubmitPaymentReversalRequest {
@@ -229,6 +234,7 @@ mod tests {
             let fact = StructuredCommandReceipt::from_command(&receipt).unwrap();
             let normalized = submit_receipt(resource_type, "id", "actor", 3, "key", Some("已核实")).unwrap();
             assert_eq!(normalized.match_structured(&fact), StructuredReceiptMatch::SamePayload);
+
             for reason in [None, Some("已修改")] {
                 let changed = submit_receipt(resource_type, "id", "actor", 3, "key", reason).unwrap();
                 assert_eq!(changed.id(), receipt.id());
@@ -250,6 +256,7 @@ mod tests {
             idempotency_key: "key".into(),
             resubmission_reason: Some("已核实".into()),
         };
+
         let pairs = [
             (
                 customer.command_receipt("id", "actor").unwrap(),
@@ -264,6 +271,7 @@ mod tests {
                     .unwrap(),
             ),
         ];
+
         for (original, changed) in pairs {
             let fact = StructuredCommandReceipt::from_command(&original).unwrap();
             assert_eq!(original.match_structured(&fact), StructuredReceiptMatch::SamePayload);

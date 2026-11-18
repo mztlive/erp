@@ -37,10 +37,12 @@ async fn sync_category(rbac: &SharedRbacService, category: PersonDirectoryCatego
     if enabled.is_empty() {
         return Ok(());
     }
+
     let account_ids = rbac.direct_admin_ids_for_role(role_id).await?;
     if account_ids.is_empty() {
         return Ok(());
     }
+
     let db = rbac.database().clone();
     db.client()
         .clone()

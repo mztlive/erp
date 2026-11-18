@@ -37,6 +37,7 @@ impl NotificationData {
         self.recipient_id = required(&self.recipient_id, 128)?;
         self.title = required(&self.title, 128)?;
         self.body = required(&self.body, 2048)?;
+
         if let Some(href) = &self.href
             && (!href.starts_with('/')
                 || href.starts_with("//")
@@ -104,6 +105,7 @@ mod tests {
             data.href = Some(href.into());
             assert!(data.normalized().is_err());
         }
+
         let mut data = content();
         data.recipient_id = " ".into();
         assert!(data.normalized().is_err());
@@ -117,6 +119,7 @@ mod tests {
         let mut message = Notification { base: BaseModel::fake(), content: content(), read_at: Some(42) };
         assert!(message.replay(&content()).is_ok());
         assert_eq!(message.read_at, Some(42));
+
         message.content.body = "changed".into();
         assert!(matches!(message.replay(&content()), Err(Error::Conflict)));
     }

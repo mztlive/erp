@@ -180,6 +180,7 @@ async fn persists_before_application_and_replay_never_debits_twice_or_uses_remot
     let source = Source { trace: trace.clone(), fail: false, records: 1 };
     let store = Store::new(trace.clone(), false);
     let process = FundsInvestigationProcess { source: &source, store: &store };
+
     let result = process.run(Instant::from_unix_secs(10)).await.unwrap();
     assert_eq!(result.applied, 1);
     assert_eq!(
@@ -187,6 +188,7 @@ async fn persists_before_application_and_replay_never_debits_twice_or_uses_remot
         ["resume", "checkpoint", "read", "receive", "resume", "balance", "save-balance"]
     );
     assert_eq!(store.state.lock().unwrap().account.book_balance, "900".parse::<Amount>().unwrap());
+
     assert_eq!(process.run(Instant::from_unix_secs(10)).await.unwrap().applied, 0);
     assert_eq!(store.state.lock().unwrap().account.book_balance, "900".parse::<Amount>().unwrap());
 }
@@ -219,6 +221,7 @@ async fn query_failure_and_empty_page_do_not_manufacture_payment_conclusions() {
             .is_err()
     );
     assert!(!store.state.lock().unwrap().checkpoint);
+
     let source = Source { trace, fail: false, records: 0 };
     let result = FundsInvestigationProcess { source: &source, store: &store }
         .run(Instant::from_unix_secs(10))

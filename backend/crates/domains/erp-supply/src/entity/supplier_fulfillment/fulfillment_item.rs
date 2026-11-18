@@ -131,6 +131,7 @@ impl SupplierFulfillmentItem {
             data.unit_cost_snapshot_gross,
             data.cost_snapshot_total_gross,
         )?;
+
         let supplier_sku_code_snapshot = normalize_required_text(
             data.supplier_sku_code_snapshot,
             "供应商 SKU 编码快照不能为空",
@@ -142,6 +143,7 @@ impl SupplierFulfillmentItem {
             "供应商商品编码快照",
             SUPPLIER_ITEM_CODE_MAX_LEN,
         )?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             supplier_fulfillment_order_id: data.supplier_fulfillment_order_id,
@@ -232,6 +234,7 @@ mod tests {
         assert_eq!(item.input_tax_rate, Rate::from_str("0.130000").unwrap());
         assert_eq!(item.supplier_sku_code_snapshot, "SUP-SKU-1");
         assert_eq!(item.supplier_product_code_snapshot.as_deref(), Some("SUP-SPU-1"));
+
         assert!(item.belongs_to_order(&SupplierFulfillmentOrderId::new("order-1")));
         assert!(!item.belongs_to_order(&SupplierFulfillmentOrderId::new("order-2")));
     }

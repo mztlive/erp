@@ -45,9 +45,11 @@ pub(super) async fn recovery_events(
             resource_id: id.clone(),
         })
         .collect::<Vec<_>>();
+
     let mut cursor = bound(query.cursor()?.as_ref(), "recovery:");
     let limit = usize::try_from(query.limit()?).expect("分页上限可转换");
     let mut events = Vec::new();
+
     loop {
         let rows = db
             .audit_logs()
@@ -57,6 +59,7 @@ pub(super) async fn recovery_events(
         if let Some(last) = rows.last() {
             cursor = Some((last.base.created_at, last.base.id.clone()));
         }
+
         for log in rows {
             let Some(audit) = log.structured_event else {
                 continue;
@@ -70,6 +73,7 @@ pub(super) async fn recovery_events(
             let Some(document) = documents.get(instance.subject.subject_id()) else {
                 continue;
             };
+
             let actor = audit
                 .actor_name_snapshot
                 .filter(|name| !name.trim().is_empty())

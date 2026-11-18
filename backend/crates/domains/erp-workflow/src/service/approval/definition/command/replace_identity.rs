@@ -56,6 +56,7 @@ pub(in crate::service::approval::definition) fn replace_nodes_identity(
         .map(serde_json::to_string)
         .transpose()
         .map_err(|error| Error::Internal(error.to_string()))?;
+
     let mut payload = CanonicalCommandPayload::new()
         .field(CommandPayloadField::Text(definition_id))
         .field(CommandPayloadField::U64(expected_lock))
@@ -63,6 +64,7 @@ pub(in crate::service::approval::definition) fn replace_nodes_identity(
     if let Some(copies) = &copy_payload {
         payload = payload.field(CommandPayloadField::Text(copies));
     }
+
     let current = ApprovalCommandIdentity::new(
         ApprovalCommandKind::DefinitionWrite,
         REPLACE_NODES_COMMAND_DOMAIN,
@@ -86,6 +88,7 @@ mod tests {
         let team = replace_nodes_identity(key.clone(), "def", 1, &[node.clone()], None, "admin").unwrap();
         node.assignee_source = AssigneeSource::ApplicantDepartmentLeader;
         let department = replace_nodes_identity(key, "def", 1, &[node], None, "admin").unwrap();
+
         assert_eq!(team.current.scope(), department.current.scope());
         assert_ne!(team.current.digest(), department.current.digest());
     }
@@ -103,6 +106,7 @@ mod tests {
         let first = replace_nodes_identity(key.clone(), "def", 1, &nodes, Some(&rules), "admin").unwrap();
         let replay = replace_nodes_identity(key.clone(), "def", 1, &nodes, Some(&rules), "admin").unwrap();
         let empty = replace_nodes_identity(key, "def", 1, &nodes, Some(&[]), "admin").unwrap();
+
         assert_eq!(first, replay);
         assert_eq!(first.current.scope(), empty.current.scope());
         assert_ne!(first.current.digest(), empty.current.digest());
@@ -115,6 +119,7 @@ mod tests {
         node.additional_assignee_user_ids.push("u2".into());
         let group = replace_nodes_identity(key.clone(), "def", 1, &[node.clone()], None, "admin").unwrap();
         let retry = replace_nodes_identity(key, "def", 1, &[node], None, "admin").unwrap();
+
         assert_eq!(single.current.scope(), group.current.scope());
         assert_ne!(single.current.digest(), group.current.digest());
         assert_eq!(group, retry);

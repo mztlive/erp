@@ -96,6 +96,7 @@ fn rejects_empty_oversize_and_duplicates() {
     assert!(validate_envelope(&mut request(0), "a").is_err());
     assert!(validate_envelope(&mut request(101), "a").is_err());
     assert!(validate_envelope(&mut request(100), "a").is_ok());
+
     for change in 0..3 {
         let mut batch = request(2);
         match change {
@@ -114,6 +115,7 @@ fn isolates_keys_by_actor_and_hides_internal_messages() {
     validate_envelope(&mut a, "alice").unwrap();
     validate_envelope(&mut b, "bob").unwrap();
     assert_ne!(a.rows[0].input.key, b.rows[0].input.key);
+
     let error = Error::Internal("database-password".into());
     assert!(!safe_message(&error).contains("database-password"));
     assert_eq!(failure_status(&error), RowStatus::Unknown);
@@ -165,6 +167,7 @@ async fn preflight_failure_blocks_all_writes_and_replays_stay_locked() {
     let calls = batch.rows[0].input.writes.clone();
     batch.rows[1].input.invalid = true;
     batch.rows[2].input.replay = true;
+
     let result = run_batch(&FakeRunner, batch).await.unwrap();
     assert_eq!(calls.load(Ordering::SeqCst), 0);
     assert_eq!(result.rows[0].status, RowStatus::Ready);
@@ -180,6 +183,7 @@ async fn validation_does_not_write_and_execution_skips_replays() {
         batch.rows[1].input.replay = true;
         let writes = batch.rows[0].input.writes.clone();
         let replay_writes = batch.rows[1].input.writes.clone();
+
         let result = run_batch(&FakeRunner, batch).await.unwrap();
         assert_eq!(writes.load(Ordering::SeqCst), usize::from(!validate_only));
         assert_eq!(replay_writes.load(Ordering::SeqCst), 0);
@@ -193,6 +197,7 @@ async fn partial_failure_preserves_successes_and_continues_later_rows() {
     let mut batch = request(4);
     batch.rows[1].input.identity = "reject".into();
     batch.rows[2].input.identity = "unknown".into();
+
     let result = run_batch(&FakeRunner, batch).await.unwrap();
     let statuses: Vec<_> = result.rows.into_iter().map(|row| row.status).collect();
     assert_eq!(

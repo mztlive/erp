@@ -131,12 +131,14 @@ impl SupplierMessageProcess<'_> {
         }
         self.store.check_lease().await?;
         let mut result = self.resume_pending().await?;
+
         let pulled = self.source.pull(limit).await.map_err(|error| {
             Error::BusinessLogicError(format!("供应商消息读取失败：{} ({})", error.summary, error.code))
         })?;
         if pulled.len() > usize::try_from(limit.get()).expect("u32批次不超过50") {
             return Err(Error::BusinessLogicError("供应商消息响应超过批次上限".into()));
         }
+
         for incoming in pulled {
             let (account, connection) = self.store.binding();
             let message = intake::receive(account, connection, incoming, self.codec, Instant::now())?;
@@ -144,6 +146,7 @@ impl SupplierMessageProcess<'_> {
             result.received += 1;
             result.quarantined += usize::from(saved.state == SupplierMessageState::Quarantined);
         }
+
         for mut message in self.store.pending().await? {
             self.process_one(&mut message, &mut result).await?;
         }
@@ -190,6 +193,7 @@ impl SupplierMessageProcess<'_> {
             SupplierMessageState::AckPending => {},
             _ => return Ok(()),
         }
+
         self.acknowledge(message, result).await
     }
 
@@ -201,6 +205,7 @@ impl SupplierMessageProcess<'_> {
         message.begin_apply()?;
         self.store.save(message).await?;
         self.store.check_lease().await?;
+
         if self.applier.refresh(message).await.is_err() {
             let retry = Instant::try_from_unix_secs(Instant::now().unix_secs().saturating_add(120))?;
             message.defer_application(retry, "REFRESH_APPLICATION_FAILED".into())?;
@@ -208,6 +213,7 @@ impl SupplierMessageProcess<'_> {
             result.deferred += 1;
             return Ok(false);
         }
+
         message.applied(Instant::now())?;
         self.store.save(message).await?;
         result.applied += 1;
@@ -222,10 +228,12 @@ impl SupplierMessageProcess<'_> {
         message.begin_acknowledge()?;
         self.store.save(message).await?;
         self.store.check_lease().await?;
+
         let confirmed = matches!(
             self.source.acknowledge(&message.source_message_id).await,
             Ok(MessageAcknowledgement::Confirmed)
         );
+
         message.acknowledged(confirmed, Instant::now())?;
         self.store.save(message).await?;
         if confirmed {

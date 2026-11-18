@@ -100,6 +100,7 @@ pub fn prepare_start_with_identity(
     if identity.current().scope().as_str() != expected_scope {
         return Err(Error::ValidationError("启动命令 scope 与业务主体不一致".to_string()));
     }
+
     match identity.classify(input.command.receipt.as_ref()) {
         ReceiptBranch::PayloadConflict => return Err(super::idempotency::payload_conflict_error()),
         ReceiptBranch::SamePayload(receipt) => {
@@ -107,6 +108,7 @@ pub fn prepare_start_with_identity(
         },
         ReceiptBranch::Fresh => {},
     }
+
     let plan = start(
         StartCommand {
             instance_id: input.instance_id,

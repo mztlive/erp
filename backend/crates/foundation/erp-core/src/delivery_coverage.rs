@@ -45,6 +45,7 @@ fn merge_reach(terms: impl IntoIterator<Item = (DeliveryTerm, DeliveryTerm)>) ->
         }
         freight_extra |= bulk == DeliveryTerm::FreightExtra;
     }
+
     if freight_extra { DeliveryReach::FreightExtra } else { DeliveryReach::NotDeliverable }
 }
 
@@ -117,6 +118,7 @@ impl RegionCoverage {
         if self.covers_fully(region) {
             return TREE.leaf_count(region.as_str());
         }
+
         self.full
             .iter()
             .filter_map(|code| RegionCode::try_from(code.clone()).ok())
@@ -181,6 +183,7 @@ impl DeliveryCoverage {
         if policies.is_empty() {
             return Self::none();
         }
+
         let indexed = policies.iter().map(|policy| IndexedPolicy::new(policy)).collect::<Vec<_>>();
         let (included, reachable): (Vec<_>, Vec<_>) = TREE
             .leaf_chains
@@ -190,6 +193,7 @@ impl DeliveryCoverage {
                 (reach == DeliveryReach::FreightIncluded, reach != DeliveryReach::NotDeliverable)
             })
             .unzip();
+
         Self { included: TREE.summarize(&included), reachable: TREE.summarize(&reachable) }
     }
 
@@ -353,6 +357,7 @@ impl RegionTree {
                 None => provinces.push(node.code),
             }
         }
+
         let mut tree = Self { provinces: Vec::new(), leaf_chains: Vec::new(), leaf_counts: HashMap::new() };
         tree.provinces = provinces.into_iter().map(|code| tree.build(code, &children)).collect();
         tree
@@ -365,6 +370,7 @@ impl RegionTree {
             self.leaf_counts.insert(code, 1);
             return TreeNode { code, children: Vec::new(), leaf_index: Some(self.leaf_chains.len() - 1) };
         };
+
         let nodes = codes.iter().map(|child| self.build(child, children)).collect::<Vec<_>>();
         let count = nodes.iter().map(|node| self.leaf_counts[node.code]).sum();
         self.leaf_counts.insert(code, count);
@@ -385,6 +391,7 @@ impl RegionTree {
         } else {
             push_full_children(&self.provinces, &extents, &mut coverage);
         }
+
         coverage.full.sort();
         coverage.partial.sort();
         coverage
@@ -396,6 +403,7 @@ fn walk(node: &TreeNode, covered: &[bool], coverage: &mut RegionCoverage) -> Ext
     if let Some(index) = node.leaf_index {
         return if covered[index] { Extent::All } else { Extent::None };
     }
+
     let extents = node.children.iter().map(|child| walk(child, covered, coverage)).collect::<Vec<_>>();
     if extents.iter().all(|extent| *extent == Extent::All) {
         return Extent::All;
@@ -403,6 +411,7 @@ fn walk(node: &TreeNode, covered: &[bool], coverage: &mut RegionCoverage) -> Ext
     if extents.iter().all(|extent| *extent == Extent::None) {
         return Extent::None;
     }
+
     coverage.partial.push(node.code.to_string());
     push_full_children(&node.children, &extents, coverage);
     Extent::Some
@@ -464,6 +473,7 @@ mod tests {
         assert!(!coverage.included.full.contains(&"440305".to_string()));
         assert!(coverage.included.full.contains(&"440304".to_string()));
         assert!(coverage.included.full.contains(&"110000".to_string()));
+
         assert!(coverage.matches(&query("440100", DeliveryExtent::Full, false)));
         assert!(!coverage.matches(&query("440000", DeliveryExtent::Full, false)));
         assert!(coverage.matches(&query("440000", DeliveryExtent::Partial, false)));
@@ -483,6 +493,7 @@ mod tests {
         assert!(!coverage.matches(&query("650000", DeliveryExtent::Partial, false)));
         assert!(coverage.matches(&query("650102", DeliveryExtent::Full, true)));
         assert_eq!(coverage.reachable.full, vec![NATIONWIDE_REGION_CODE.to_string()]);
+
         assert!(coverage.freight_extra_within(&code("650000")));
         assert!(coverage.freight_extra_within(&code("650102")));
         assert!(!coverage.freight_extra_within(&code("440000")));
@@ -497,6 +508,7 @@ mod tests {
         let coverage = DeliveryCoverage::from_policies(&[&south_only, &north_only]);
         assert_eq!(coverage.included.full, vec!["110000".to_string(), "440000".to_string()]);
         assert!(coverage.included.partial.is_empty());
+
         assert!(!coverage.matches(&query("310000", DeliveryExtent::Full, true)));
         assert!(!coverage.matches(&query("310000", DeliveryExtent::Partial, true)));
     }
@@ -536,6 +548,7 @@ mod tests {
             policy(rules(NotDeliverable, &[("710000", FreightIncluded)]), rules(NotDeliverable, &[]));
         let policies = [&mixed, &refuse];
         let coverage = DeliveryCoverage::from_policies(&policies);
+
         for chain in &TREE.leaf_chains {
             let leaf = &chain[0];
             let reach = delivery_reach(&policies, leaf);

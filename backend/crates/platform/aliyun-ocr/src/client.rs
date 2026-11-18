@@ -28,6 +28,7 @@ impl Client {
     /// 无效凭据或 TLS 客户端初始化失败。
     pub fn new(credentials: Credentials) -> Result<Self> {
         credentials.validate()?;
+
         let http = HttpClient::builder()
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(30))
@@ -53,6 +54,7 @@ impl Client {
         if !status.is_success() {
             return Err(response::classify_http_error(status.as_u16()));
         }
+
         let bytes = read_response(response).await?;
         response::decode(&bytes)
     }
@@ -61,9 +63,11 @@ impl Client {
         if image.is_empty() || image.len() > MAX_IMAGE_BYTES {
             return Err(Error::ImageSize);
         }
+
         let date = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
         let nonce = Uuid::new_v4().to_string();
         let headers = signing::headers(&self.credentials, image, QUERY, &date, &nonce)?;
+
         self.http
             .post(format!("https://{ENDPOINT}/?{QUERY}"))
             .headers(headers)
@@ -78,6 +82,7 @@ async fn read_response(mut response: Response) -> Result<Vec<u8>> {
     if response.content_length().is_some_and(|length| length > MAX_RESPONSE_BYTES as u64) {
         return Err(Error::ResponseSize);
     }
+
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(transport_error)? {
         if bytes.len().saturating_add(chunk.len()) > MAX_RESPONSE_BYTES {
@@ -104,6 +109,7 @@ mod tests {
         .unwrap();
         let a = client.request(b"image-bytes").unwrap();
         let b = client.request(b"image-bytes").unwrap();
+
         assert_eq!(a.method(), "POST");
         assert_eq!(a.url().scheme(), "https");
         assert_eq!(a.url().host_str(), Some(ENDPOINT));
@@ -111,6 +117,7 @@ mod tests {
         assert_eq!(a.body().unwrap().as_bytes(), Some(b"image-bytes".as_slice()));
         assert_eq!(a.headers()["content-type"], "application/octet-stream");
         assert_ne!(a.headers()["x-acs-signature-nonce"], b.headers()["x-acs-signature-nonce"]);
+
         assert!(matches!(client.request(&[]), Err(Error::ImageSize)));
         assert!(matches!(client.request(&vec![0; MAX_IMAGE_BYTES + 1]), Err(Error::ImageSize)));
     }

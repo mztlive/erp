@@ -44,10 +44,10 @@ impl SupplierApiService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
+
         let page =
             self.db.supplier_api_connections().search_supplier_api_connections(&filter, executor).await?;
         let items = page.items.into_iter().map(SupplierApiConnectionView::from_row).collect();
-
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 }

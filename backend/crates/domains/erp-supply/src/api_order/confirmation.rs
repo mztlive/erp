@@ -63,6 +63,7 @@ impl ApiOrderExecution {
                 incoming
             },
         };
+
         self.order_tree = Some(tree);
         self.pending_order_tree = None;
         Ok(())
@@ -86,7 +87,9 @@ impl ApiOrderExecution {
         if self.confirmations.values().any(|previous| previous.request.action.id == request.action.id) {
             return Err(Error::ConflictError("原确认动作不能复用于其他供应商子单".into()));
         }
+
         self.validate_confirmation_target(request)?;
+
         self.confirmations.insert(
             request.order.external_order_no.clone(),
             ConfirmationAction { request: request.clone(), state: ConfirmationActionState::SentUnknown },
@@ -118,6 +121,7 @@ impl ApiOrderExecution {
         if action.state != ConfirmationActionState::SentUnknown && action.state != next {
             return Err(Error::ConflictError("原订单确认结果发生冲突".into()));
         }
+
         action.state = next;
         let mut reservation_root = false;
         if let Some(node) = self
@@ -130,6 +134,7 @@ impl ApiOrderExecution {
                 node.confirmation = Some(state);
             }
         }
+
         self.stage = if next == ConfirmationActionState::Rejected {
             ApiOrderStage::Stopped
         } else if reservation_root {
@@ -195,6 +200,7 @@ impl ApiOrderExecution {
         {
             return Err(Error::ConflictError("订单确认身份或版本不一致".into()));
         }
+
         let node = tree
             .nodes
             .iter()
@@ -274,16 +280,19 @@ mod tests {
         value.order_tree.as_mut().unwrap().nodes[0].role = OrderNodeRole::ReservationRoot;
         value.order_tree.as_ref().unwrap().validate(&frozen).unwrap();
         assert!(value.order_tree.as_ref().unwrap().leaves().is_empty());
+
         assert!(value.begin_confirmation(&request()).unwrap());
         let mut recovered: ApiOrderExecution =
             serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap();
         assert!(!recovered.begin_confirmation(&request()).unwrap());
         recovered.observe_confirmation("root", ConfirmationState::Pending).unwrap();
         assert_eq!(recovered.stage, ApiOrderStage::ConfirmationUnknown);
+
         recovered.observe_confirmation("root", ConfirmationState::Confirmed).unwrap();
         assert_eq!(recovered.stage, ApiOrderStage::DiscoverOrders);
         assert!(recovered.awaiting_reservation_discovery());
         assert!(!recovered.all_leaves_confirmed());
+
         let mut split = recovered.order_tree.as_ref().unwrap().clone();
         split.nodes[0].role = OrderNodeRole::Parent;
         split.nodes[0].confirmation = Some(ConfirmationState::Confirmed);
@@ -310,12 +319,14 @@ mod tests {
         let (mut value, _) = execution();
         assert!(value.begin_confirmation(&request()).unwrap());
         assert_eq!(value.stage, ApiOrderStage::ConfirmationUnknown);
+
         let encoded = serde_json::to_string(&value).unwrap();
         let mut recovered: ApiOrderExecution = serde_json::from_str(&encoded).unwrap();
         assert!(!recovered.begin_confirmation(&request()).unwrap());
         recovered.observe_confirmation("root", ConfirmationState::Pending).unwrap();
         assert!(!recovered.begin_confirmation(&request()).unwrap());
         assert_eq!(recovered.stage, ApiOrderStage::ConfirmationUnknown);
+
         recovered.observe_confirmation("root", ConfirmationState::Confirmed).unwrap();
         assert_eq!(recovered.stage, ApiOrderStage::Observe);
         assert!(!recovered.begin_confirmation(&request()).unwrap());

@@ -101,6 +101,7 @@ impl SourceRegistryService {
         self.authorization
             .require(actor, &source_registry::SOURCE_SYSTEM_LIST, AccessTarget::Operation, executor)
             .await?;
+
         let query = params.normalized()?;
         let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
         let filter = SourceSystemFilter {
@@ -112,9 +113,9 @@ impl SourceRegistryService {
             sort_by,
             sort_ascending,
         };
+
         let page = self.db.source_systems().search_source_systems(&filter, executor).await?;
         let items = page.items.into_iter().map(SourceSystemView::from).collect();
-
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
@@ -143,6 +144,7 @@ impl SourceRegistryService {
         actor: &AuditActor,
     ) -> Result<SourceSystemView> {
         req.validate()?;
+
         let (db, audit_port, authorization) =
             (self.db.clone(), self.audit.clone(), self.authorization.clone());
         let (id, actor) = (id.to_string(), actor.clone());
@@ -159,6 +161,7 @@ impl SourceRegistryService {
                             executor,
                         )
                         .await?;
+
                     let mut system = db
                         .source_systems()
                         .find_by_id(&id, executor)
@@ -166,6 +169,7 @@ impl SourceRegistryService {
                         .ok_or_else(|| Error::NotFound("来源系统不存在".into()))?;
                     check_expected_version(system.base.version, req.version)?;
                     system.update(SourceSystemUpdate { name: req.name, status: req.status }, actor.id())?;
+
                     let audit = audit_port.resource_log(
                         actor,
                         "source_system.update",
@@ -205,6 +209,7 @@ impl SourceRegistryService {
         actor: &AuditActor,
     ) -> Result<ExternalIdentityMapView> {
         req.validate()?;
+
         let (db, audit_port, authorization) =
             (self.db.clone(), self.audit.clone(), self.authorization.clone());
         let actor = actor.clone();
@@ -221,10 +226,12 @@ impl SourceRegistryService {
                             executor,
                         )
                         .await?;
+
                     db.source_systems()
                         .find_by_id(&req.source_system_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("来源系统不存在".into()))?;
+
                     let (map, target) = build_identity_link(req)?;
                     let audit = audit_port.resource_log(
                         actor,
@@ -280,6 +287,7 @@ impl SourceRegistryService {
         self.authorization
             .require(actor, &source_registry::EXTERNAL_IDENTITY_MAP_LIST, AccessTarget::Operation, executor)
             .await?;
+
         let query = params.normalized()?;
         let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
         let filter = ExternalIdentityMapFilter {
@@ -290,9 +298,9 @@ impl SourceRegistryService {
             sort_by,
             sort_ascending,
         };
+
         let page = self.db.external_identity_maps().search_external_identity_maps(&filter, executor).await?;
         let items = page.items.into_iter().map(ExternalIdentityMapView::from).collect();
-
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 }
@@ -321,6 +329,7 @@ fn build_identity_link(
             mapped_by: None,
         },
     )?;
+
     let target = ExternalIdentityTarget::new(
         ExternalIdentityTargetId::new(next_id()),
         ExternalIdentityTargetData {
@@ -359,6 +368,7 @@ mod tests {
         );
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
         let maps = serde_json::from_value::<ExternalIdentityMapListParams>(serde_json::json!({})).unwrap();
+
         let errors = [
             service
                 .source_system_page(

@@ -63,12 +63,15 @@ impl ContractImportProcess {
         }
         task = current;
         self.require_source(&task, executor).await?;
+
         let (fields, values) = command.validate().map_err(|error| Error::ValidationError(error.message))?;
         let mut proof = self.match_all(&task, &values, command.create_customer, actor, executor).await?;
         proof.confirmed_fields = Some(command.fields.clone());
+
         let access = self.services.contract_access.clone();
         access.require_create(actor, &proof.customer_id, executor).await?;
         self.services.customer_access.require_current(actor, &proof.customer_id, executor).await?;
+
         let request = archive_request(fields, &proof);
         let mut planned = plan_upload_archive(
             request,
@@ -77,6 +80,7 @@ impl ContractImportProcess {
             actor.id(),
         )?;
         planned.revision.recognition = Some(proof);
+
         self.persist_plan(&task, actor, &mut planned, executor).await?;
         let view = self.complete_archive(task, planned, command, executor).await?;
         Ok((view, true))
@@ -127,6 +131,7 @@ impl ContractImportProcess {
                 .unwrap_or(0);
             planned.revision.contract_id = target.contract_id.clone().into();
             planned.revision.revision.revision_no = ContractRevision::next_revision_no(number)?;
+
             self.db
                 .contract()
                 .archive_contract_revision(&mut planned.contract, &planned.revision, executor)

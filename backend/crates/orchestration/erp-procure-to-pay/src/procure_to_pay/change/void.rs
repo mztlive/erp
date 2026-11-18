@@ -53,6 +53,7 @@ impl PurchaseOrderProcess {
                 })
             })
             .await?;
+
         self.change_view(id, actor, &internal::PURCHASE_CHANGE_VOIDED_RESULT_READ).await
     }
 
@@ -79,15 +80,18 @@ impl PurchaseOrderProcess {
                 executor,
             )
             .await?;
+
         change
             .ensure_expected_version(req.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         void_purchase_change(&mut change, actor.id())?;
+
         let audit = actor.clone().resource_log(
             "purchase_change_order.void",
             "purchase_change_order",
             id.to_string(),
         )?;
+
         restore_current_quotes(&self.db, change.purchase_order_id.as_ref(), executor).await?;
         self.db.purchase_change_orders().update(&mut change, executor).await?;
         complete_document_rework(&self.db, "purchase_change_order", id, actor.id(), Instant::now(), executor)

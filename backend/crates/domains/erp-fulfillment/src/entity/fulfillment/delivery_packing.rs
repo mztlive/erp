@@ -109,12 +109,14 @@ impl DeliveryPacking {
         {
             return Err(Error::from("一次发货最多100个地址、包裹或包裹商品关联"));
         }
+
         source.ensure_lines(lines)?;
         let allowed = source.quantities()?;
         let dispatched = dispatch_quantities(&self.dispatch, &allowed)?;
         if dispatched.len() != allowed.len() {
             return Err(Error::from("本次发货分配须列出所有地址商品，未发数量请填写零"));
         }
+
         if self
             .packages
             .iter()
@@ -131,12 +133,14 @@ impl DeliveryPacking {
                 return Err(Error::from("待补地址的商品本次不能发货，请补齐地址或将本次数量设为0"));
             }
         }
+
         let packed = package_quantities(&self.packages, &dispatched, posting)?;
         for (key, quantity) in &dispatched {
             if posting && packed.get(key).copied().unwrap_or_default() != *quantity {
                 return Err(Error::from("包裹商品数量合计必须等于该地址本次发货数量"));
             }
         }
+
         let totals = self.line_totals()?;
         if posting && !totals.values().any(|value| *value > Decimal::ZERO) {
             return Err(Error::from("本次发货数量必须大于0"));
@@ -191,6 +195,7 @@ impl DeliveryPacking {
                 });
             }
         }
+
         Ok(DeliveryTrackingEntries::new(entries)?.into_entries())
     }
 }
@@ -211,6 +216,7 @@ impl DeliveryAddressSnapshot {
             }
             value
         }
+
         sorted(self.clone()) == sorted(other.clone())
     }
 
@@ -226,6 +232,7 @@ impl DeliveryAddressSnapshot {
                 *total = total.checked_add(item.quantity.to_decimal()).ok_or("地址数量超出范围")?;
             }
         }
+
         if totals.len() != lines.len()
             || lines.iter().any(|line| totals.get(line.base.id.as_str()) != Some(&line.quantity.to_decimal()))
         {
@@ -278,6 +285,7 @@ fn package_quantities(
         if package.id.trim().is_empty() || package.id.len() > 128 || !ids.insert(&package.id) {
             return Err(Error::from("包裹标识为空、超长或重复"));
         }
+
         let carrier = package.carrier.trim();
         let number = package.tracking_no.trim();
         if carrier.chars().count() > 64 || number.chars().count() > 128 || package.items.len() > 200 {
@@ -289,6 +297,7 @@ fn package_quantities(
         if !number.is_empty() && !tracking.insert((carrier, number)) {
             return Err(Error::from("同一物流包裹不能重复登记或发往不同地址"));
         }
+
         add_package_items(package, dispatched, &mut totals)?;
     }
     Ok(totals)
@@ -348,6 +357,7 @@ pub(super) mod tests {
                 },
             ],
         };
+
         let lines = [("l1", "5"), ("l2", "3")]
             .into_iter()
             .map(|(id, quantity)| {
@@ -366,6 +376,7 @@ pub(super) mod tests {
                 .unwrap()
             })
             .collect();
+
         let packing = DeliveryPacking {
             source_version: source.source_version.clone(),
             dispatch: source
@@ -385,12 +396,14 @@ pub(super) mod tests {
                 })
                 .collect(),
         };
+
         (source, lines, packing)
     }
     #[test]
     fn multi_address_multi_product_and_split_packages_conserve_quantity() {
         let (source, lines, mut packing) = fixture();
         packing.validate(&source, &lines, true).unwrap();
+
         packing.packages[1].items[0].quantity = "1".parse().unwrap();
         packing.packages.push(DeliveryPackage {
             id: "third".into(),
@@ -409,6 +422,7 @@ pub(super) mod tests {
         packing.packages.clear();
         packing.validate(&source, &lines, false).unwrap();
         assert!(packing.validate(&source, &lines, true).is_err());
+
         packing.dispatch[1].items.iter_mut().for_each(|row| row.quantity = "0".parse().unwrap());
         packing.packages.push(DeliveryPackage {
             id: "first".into(),
@@ -423,23 +437,29 @@ pub(super) mod tests {
     #[test]
     fn rejects_cross_address_duplicates_stale_source_and_overallocation() {
         let (source, lines, packing) = fixture();
+
         let mut invalid = packing.clone();
         invalid.packages[0].destination_key = "missing".into();
         assert!(invalid.validate(&source, &lines, false).is_err());
+
         let mut invalid = packing.clone();
         invalid.packages[1].tracking_no = invalid.packages[0].tracking_no.clone();
         assert!(invalid.validate(&source, &lines, true).is_err());
+
         let mut invalid = packing.clone();
         invalid.packages[1].id = invalid.packages[0].id.clone();
         assert!(invalid.validate(&source, &lines, false).is_err());
+
         let mut invalid = packing.clone();
         invalid.source_version = "outdated".into();
         assert!(invalid.validate(&source, &lines, false).is_err());
+
         for value in ["-1", "6"] {
             let mut invalid = packing.clone();
             invalid.dispatch[0].items[0].quantity = value.parse().unwrap();
             assert!(invalid.validate(&source, &lines, false).is_err());
         }
+
         let mut invalid = packing.clone();
         invalid.packages[0].items.push(item("l1", "1"));
         assert!(invalid.validate(&source, &lines, false).is_err());

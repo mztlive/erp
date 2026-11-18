@@ -186,6 +186,7 @@ pub fn ensure_bulk_direct_minimum(lines: &[BulkOrderQuantity<'_>]) -> Result<()>
         let entry = totals.entry(line.offering_id).or_insert((rust_decimal::Decimal::ZERO, line.minimum));
         entry.0 += line.quantity.to_decimal();
     }
+
     for (total, minimum) in totals.values() {
         if *total < minimum.to_decimal() {
             return Err(Error::from(format!("集采直发数量合计须不少于集采起订量 {minimum}")));
@@ -215,6 +216,7 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(delivery.supply_price_basis, Some(SupplyPriceBasis::Dropship));
+
         let stored = serde_json::to_value(delivery).unwrap();
         assert!(stored.get("reselection_reasons").is_none());
         assert_eq!(stored["supply_price_basis"], "DROPSHIP");
@@ -268,6 +270,7 @@ mod tests {
         )
         .unwrap();
         assert!(!free);
+
         let extra = judge_line_delivery(
             &delivery(),
             SupplyPriceBasis::Bulk,

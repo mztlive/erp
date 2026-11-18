@@ -80,6 +80,7 @@ pub(crate) async fn mark_read(
         executor,
     )
     .await?;
+
     if result.matched_count == 0
         && repo.find_one(doc! { "id": id, "recipient_id": recipient }, executor).await?.is_none()
     {

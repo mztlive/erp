@@ -37,11 +37,13 @@ impl CatalogSupplyRepository<'_> {
         if restrict.is_some_and(<[String]>::is_empty) {
             return Ok(PageResult { items: Vec::new(), total: 0 });
         }
+
         let mut page = if projection_ready {
             self.db.sellable_sku_projections().search(filter, restrict, executor).await?
         } else {
             self.search_live(filter, restrict, executor).await?
         };
+
         if let Some(query) = filter.delivery.as_ref().filter(|query| query.include_freight_extra) {
             self.mark_freight_extra(&mut page.items, &query.region, executor).await?;
         }
@@ -80,6 +82,7 @@ impl CatalogSupplyRepository<'_> {
     ) -> Result<()> {
         let sku_ids = items.iter().map(|row| row.sku_id.clone()).collect::<Vec<_>>();
         let records = self.db.sku_delivery_coverages().find_by_sku_ids(&sku_ids, executor).await?;
+
         for row in items.iter_mut() {
             row.delivery_freight_extra = records
                 .iter()

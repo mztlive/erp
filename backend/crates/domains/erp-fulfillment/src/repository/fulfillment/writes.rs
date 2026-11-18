@@ -207,6 +207,7 @@ impl FulfillmentRepository<'_> {
             executor,
         )
         .await?;
+
         mongo_ops::insert_many(
             &self.db.collection::<CustomerAcceptanceLine>(CUSTOMER_ACCEPTANCE_LINES),
             lines,

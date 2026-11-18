@@ -117,6 +117,7 @@ impl Snapshot {
             self.allocation_created_at.insert(line.base.id.clone(), line.base.created_at);
             grouped.entry(line.cost_entry_id.to_string()).or_default().push(line);
         }
+
         for row in candidates {
             let allocations = grouped.remove(&row.id).unwrap_or_default();
             let whole = whole_ids.contains(&row.id);
@@ -184,6 +185,7 @@ impl CostReadModel {
             .ok_or_else(|| Error::ValidationError("成本入口没有销售来源".into()))?;
         let context = SalesReadContext::from_access(access.clone(), self.rbac.clone());
         let whole = WholeAccess::new(access.clone());
+
         let mut fingerprint = DefaultHasher::new();
         context.scope_version.hash(&mut fingerprint);
         whole.version().hash(&mut fingerprint);
@@ -201,6 +203,7 @@ impl CostReadModel {
         access.whole.ensure_current(executor)?;
         let mut snapshot = Snapshot::new(&access);
         access.require_filter(filter)?;
+
         let (candidates, allocations, versions) =
             self.candidate_facts(filter, selection, &access, executor).await?;
         let orders = self.authorized_orders(&versions, &mut access, executor).await?;
@@ -208,6 +211,7 @@ impl CostReadModel {
         whole_ids.hash(&mut access.fingerprint);
         versions.hash(&mut access.fingerprint);
         snapshot.project(candidates, allocations, &orders, &whole_ids)?;
+
         // 来源与整账计划共享根凭证，交付后不得再使用旧读取阶段。
         access.context.validate(executor).await?;
         snapshot.version = format!("{:x}", access.fingerprint.finish());
@@ -243,6 +247,7 @@ impl CostReadModel {
             let versions = VersionFacts::from_rows(&entries, &allocations);
             return Ok((entries, allocations, versions));
         };
+
         let versions = self.candidate_versions(filter, selection.id.as_deref(), access, executor).await?;
         let ids = versions.entries.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
         let matching = self
@@ -261,6 +266,7 @@ impl CostReadModel {
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
+
         let mut entries = Vec::new();
         for chunk in matched_ids.chunks(500) {
             entries.extend(self.db.cost_entries().scope_entries_by_ids(filter, chunk, executor).await?);
@@ -411,6 +417,7 @@ mod tests {
         let mut denied = snapshot();
         denied.project(vec![entry("unallocated")], vec![], &BTreeSet::new(), &BTreeSet::new()).unwrap();
         assert!(denied.rows.is_empty());
+
         let mut allowed = snapshot();
         allowed
             .project(
@@ -433,6 +440,7 @@ mod tests {
         projected
             .project(vec![entry("cost-a")], lines, &BTreeSet::from(["sales-a".into()]), &BTreeSet::new())
             .unwrap();
+
         let query = CostAllocationListQuery {
             sales_order_id: Some(SalesOrderId::new("sales-a")),
             cost_entry_id: Some(CostEntryId::new("cost-a")),
@@ -457,6 +465,7 @@ mod tests {
         .await;
         assert!(matches!(result, Err(Error::ConflictError(_))));
         assert_eq!(calls.get(), 0);
+
         let mut first = snapshot();
         first.version = "v1".into();
         let result = checked_snapshot(first, Some("v1"), || async { Ok("v2".into()) }).await;
@@ -478,6 +487,7 @@ mod tests {
         let result = checked_snapshot(first, Some("v1"), || async { Ok("v1".into()) }).await.unwrap();
         assert_eq!(result.rows[0].scope_net_amount, "60".parse().unwrap());
         assert_eq!(result.version, "v1");
+
         let failure = checked_snapshot(snapshot(), None, || async {
             Err(Error::ValidationError("authorization unavailable".into()))
         })

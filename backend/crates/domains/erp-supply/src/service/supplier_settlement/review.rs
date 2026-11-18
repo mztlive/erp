@@ -68,10 +68,12 @@ pub async fn ensure_review_submission_ready(
     if !statement.is_editable() {
         return Err(Error::ConflictError("结算单责任或状态已变化，请刷新后重试".to_string()));
     }
+
     let items = load_statement_items(db, &statement.base.id, executor).await?;
     if items.is_empty() {
         return Err(Error::BusinessLogicError("结算单没有冻结明细".to_string()));
     }
+
     let differences = load_statement_differences(db, &items, executor).await?;
     ensure_current_subject_and_resolved_differences(statement, &differences)
 }
@@ -174,6 +176,7 @@ pub fn settlement_review_access(
             )],
         );
     }
+
     if !separation_satisfied {
         return (
             Vec::new(),
@@ -184,6 +187,7 @@ pub fn settlement_review_access(
             )],
         );
     }
+
     if owned {
         return (vec!["REJECT".to_string(), "CONFIRM".to_string()], Vec::new());
     }

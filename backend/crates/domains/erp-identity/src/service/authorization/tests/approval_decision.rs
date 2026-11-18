@@ -88,8 +88,10 @@ async fn only_current_instance_recipient_rule_and_real_target_grant_can_suppleme
         ("purchase_order", "purchase_order", ResourceKind::PurchaseOrder),
     ] {
         let (service, identity, _) = setup(task(kind, resource));
+
         identity.record_grants.lock().unwrap().insert((target_kind, "order".into()));
         assert!(matches!(decide(&service).await, Err(Error::Forbidden(_))));
+
         for source in [
             key(target_kind, "different-instance"),
             SourceKey { recipient: "other".into(), ..key(target_kind, "instance") },
@@ -102,12 +104,14 @@ async fn only_current_instance_recipient_rule_and_real_target_grant_can_suppleme
             ));
             assert!(matches!(decide(&service).await, Err(Error::Forbidden(_))));
         }
+
         identity.source_grants.lock().unwrap().insert((
             key(target_kind, "instance").id().unwrap(),
             target_kind,
             "unrelated-order".into(),
         ));
         assert!(matches!(decide(&service).await, Err(Error::Forbidden(_))));
+
         identity.source_grants.lock().unwrap().insert((
             key(target_kind, "instance").id().unwrap(),
             target_kind,
@@ -126,18 +130,22 @@ async fn wrong_source_missing_instance_split_roles_and_reassignment_fail_closed(
         "order".into(),
     ));
     decide(&service).await.unwrap();
+
     identity.state.lock().unwrap().grants = vec![
         ("reader".into(), vec![approval_instance::INSTANCE_LIST]),
         ("decider".into(), vec![approval_instance::SUBMIT_DECISION]),
     ];
     assert!(matches!(decide(&service).await, Err(Error::Forbidden(_))));
+
     identity.state.lock().unwrap().grants =
         vec![("approver".into(), vec![approval_instance::INSTANCE_LIST, approval_instance::SUBMIT_DECISION])];
     facts.objects.lock().unwrap()[0].assignee_id = FactValue::Known(Some("other".into()));
     assert!(matches!(decide(&service).await, Err(Error::Forbidden(_))));
+
     let mut wrong = task("sales_order", "purchase_order");
     *facts.objects.lock().unwrap() = vec![wrong.clone()];
     assert!(matches!(decide(&service).await, Err(Error::ValidationError(_))));
+
     wrong = task("sales_order", "sales_order");
     wrong.relations.remove(&RelationKey::parse("decision_instance").unwrap());
     *facts.objects.lock().unwrap() = vec![wrong];

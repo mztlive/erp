@@ -44,6 +44,7 @@ impl<'a> CatalogRepository<'a> {
             executor,
         )
         .await?;
+
         Ok(rows
             .into_iter()
             .filter(|row| parse_specification_signature(&row.specification_signature).is_err())

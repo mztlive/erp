@@ -39,6 +39,7 @@ pub fn receipt_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableReceip
     receipts.sort_by(|left, right| {
         left.received_at.cmp(&right.received_at).then_with(|| left.base.id.cmp(&right.base.id))
     });
+
     receipts
         .into_iter()
         .map(|receipt| {
@@ -80,6 +81,7 @@ pub fn invoice_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableInvoic
     invoices.sort_by(|left, right| {
         left.invoice_date.cmp(&right.invoice_date).then_with(|| left.base.id.cmp(&right.base.id))
     });
+
     invoices
         .into_iter()
         .map(|invoice| {
@@ -378,6 +380,7 @@ mod mapping_grouping_equivalence_tests {
                 receipt_views.iter().find(|view| view.receipt_id.as_str() == receipt_id).expect("回款视图");
             assert_eq!(view.allocated_to_account, naive);
         }
+
         for (invoice_id, expected) in [("i-1", "70.00"), ("i-2", "50.00")] {
             let naive = snapshot
                 .invoice_allocations

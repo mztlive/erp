@@ -192,6 +192,7 @@ impl CatalogMembershipScan {
         {
             return Err(Error::ConflictError("商品池页面与原检查点不一致，请恢复原页面".into()));
         }
+
         let next_pool = self
             .next_pool_index
             .checked_add(u32::from(page.pool_finished && !self.scope.pool_ids.is_empty()))
@@ -201,9 +202,11 @@ impl CatalogMembershipScan {
             return Err(Error::ConflictError("商品池范围尚未完整扫描，不能声明结束".into()));
         }
         let pages = self.pages.checked_add(1).ok_or_else(range_error)?;
+
         self.next_pool_index = next_pool;
         self.next_offset = page.next_offset.clone().unwrap_or_else(|| "0".into());
         self.pages = pages;
+
         if finished {
             self.state = if page.confirmed_scope.as_ref() == Some(&self.scope) {
                 CatalogMembershipState::Complete
@@ -468,10 +471,12 @@ mod tests {
         assert_eq!(scan.next_offset, "100");
         assert_eq!(scan.next_pool_index, 0);
         assert!(!scan.can_reconcile());
+
         scan.observe_page(&page(&["a", "b"], Some("a"), "100", None, false), Instant::from_unix_secs(2))
             .unwrap();
         assert_eq!(scan.next_pool_index, 1);
         assert_eq!(scan.next_offset, "0");
+
         scan.observe_page(&page(&["a", "b"], Some("b"), "0", None, true), Instant::from_unix_secs(3))
             .unwrap();
         scan.authorize_reconciliation(None);
@@ -492,6 +497,7 @@ mod tests {
                 .is_err()
         );
         assert_eq!(to_value(&scan).unwrap(), before);
+
         scan.observe_page(&page(&["a", "b"], Some("a"), "0", Some("100"), false), Instant::from_unix_secs(1))
             .unwrap();
         let before = to_value(&scan).unwrap();
@@ -553,6 +559,7 @@ mod tests {
         scan.abort();
         assert!(!old.retirement_candidate(&scan));
         assert!(!scan.active);
+
         let mut legacy = to_value(complete_scan(&["a"])).unwrap();
         legacy.as_object_mut().unwrap().remove("active");
         legacy.as_object_mut().unwrap().remove("negative_allowed");
@@ -589,6 +596,7 @@ mod tests {
         complete.abort();
         assert_eq!(complete.state, CatalogMembershipState::Reconciled);
         assert!(!complete.active);
+
         let mut scan = scan(&["a"]);
         scan.pages = u64::MAX;
         let before = to_value(&scan).unwrap();

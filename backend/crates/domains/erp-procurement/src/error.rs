@@ -207,6 +207,7 @@ mod tests {
         let generic = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
         assert_eq!(generic.class(), ErrorClass::Conflict);
         assert_eq!(generic.to_string(), "数据冲突: 数据已存在，请勿重复提交");
+
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_purchase_orders_purchase_no")),
             "数据已存在，请勿重复提交"
@@ -253,6 +254,7 @@ mod tests {
 
         let database = persistence_core::Error::DatabaseError(MongoError::custom("db"));
         assert_eq!(Error::RepositoryError(database).class(), ErrorClass::Internal);
+
         let conflict_source = persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key"));
         assert_eq!(Error::RepositoryError(conflict_source).class(), ErrorClass::Conflict);
     }
@@ -281,6 +283,7 @@ mod tests {
                 "同一匹配条件只能启用一个负责人池，请编辑现有规则添加人员",
             ),
         ];
+
         for (index, expected) in cases {
             assert_eq!(super::known_duplicate_index_message(index), Some(expected));
             assert_eq!(super::known_duplicate_index_message(&format!("{index}_extra")), None);

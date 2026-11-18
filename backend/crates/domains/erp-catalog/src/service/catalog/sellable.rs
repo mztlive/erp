@@ -190,6 +190,7 @@ pub fn prepare_sellable_sku_list(params: &SellableSkuListParams) -> Result<Sella
 
     params.validate()?;
     validate_sales_price_range(params.sales_price_min, params.sales_price_max)?;
+
     let page = page_or_default(params.page);
     let page_size = page_size_or_default(params.page_size);
     let eligibility_as_of = params.eligibility_as_of.unwrap_or_else(BusinessDate::today);
@@ -299,6 +300,7 @@ pub fn sellable_sku_page_view(
     let page = filter.page;
     let page_size = filter.page_size;
     let eligibility_as_of = filter.eligibility_as_of;
+
     let mut items = Vec::with_capacity(rows.items.len());
     for row in rows.items {
         items.push(SellableSkuView {
@@ -359,6 +361,7 @@ mod tests {
             "effective_from": "2026-01-01", "supplier_count": 1, "supplier_ids": ["supplier-1"]
         }))
         .unwrap();
+
         let filter = SellableSkuFilter::as_of(BusinessDate::from_ymd(2026, 1, 1).unwrap());
         let page = sellable_sku_page_view(PageResult { items: vec![row], total: 1 }, &filter).unwrap();
         let item = &page.items[0];
@@ -367,6 +370,7 @@ mod tests {
         assert_eq!(item.bulk_min_quantity, Some(Quantity::from_str("10.000000").unwrap()));
         assert_eq!(item.market_price, Some(Amount::from_str("129.00").unwrap()));
         assert!(item.supplier_codes.is_empty());
+
         let wire = serde_json::to_value(item).unwrap();
         assert!(wire.get("supplier_ids").is_none());
     }
@@ -428,6 +432,7 @@ mod tests {
 
         let params: SellableSkuListParams = serde_json::from_value(json!({ "sort_dir": "down" })).unwrap();
         assert!(prepare_sellable_sku_list(&params).is_err());
+
         let many = (0..501).map(|index| format!("sku-{index}")).collect::<Vec<_>>().join(",");
         let params: SellableSkuListParams = serde_json::from_value(json!({ "sku_ids": many })).unwrap();
         assert!(prepare_sellable_sku_list(&params).is_err());
@@ -470,6 +475,7 @@ mod tests {
                 assert_eq!(filter.sales_price_min, params.sales_price_min);
                 assert_eq!(filter.sales_price_max, params.sales_price_max);
             }
+
             for (min, max) in [("10.01", "10.00"), ("-0.01", "10.00"), ("0.00", "-0.01")] {
                 let params: SellableSkuListParams = serde_json::from_value(serde_json::json!({
                     "price_kind": wire, "sales_price_min": min, "sales_price_max": max
@@ -478,6 +484,7 @@ mod tests {
                 assert!(prepare_sellable_sku_list(&params).is_err());
             }
         }
+
         let default: SellableSkuListParams = serde_json::from_str("{}").unwrap();
         assert_eq!(default.price_kind, SellablePriceKind::Dropship);
         assert!(
@@ -496,7 +503,6 @@ mod tests {
     #[test]
     fn sellable_sku_page_size_is_bounded() {
         let params = SellableSkuListParams { page: Some(1), page_size: Some(101), ..Default::default() };
-
         assert!(params.validate().is_err());
     }
 
@@ -523,6 +529,7 @@ mod tests {
         assert_eq!(attributes[0].value, "L");
         assert_eq!(attributes[1].name, "颜色");
         assert_eq!(attributes[1].value, "红色");
+
         assert!(specification_attribute_views("").is_empty());
         assert!(specification_attribute_views("尺码L").is_empty());
     }

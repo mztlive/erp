@@ -78,6 +78,7 @@ impl ExportPolicyRequest {
         {
             return Err(Error::ValidationError("导出须选择1至100个角色或人员".into()));
         }
+
         let roles = self
             .role_ids
             .into_iter()
@@ -95,6 +96,7 @@ impl ExportPolicyRequest {
             .into_iter()
             .map(|user_id| PolicyBinding { user_id, mode: PolicyMode::Replace, role_ids: vec![] })
             .collect();
+
         PolicyDocument { version: PolicyVersion::V1, roles, bindings, data_scopes: vec![] }.normalized()
     }
 }

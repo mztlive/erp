@@ -41,6 +41,7 @@ pub async fn reject_order(
     if submission.submission_no != subject_version {
         return Err(Error::ConflictError("销售单审批提交版本已变化".into()));
     }
+
     order.reject_approval_submission(actor_id)?;
     submission.reject(actor_id)?;
     db.sales_order_submissions().update(&mut submission, executor).await?;

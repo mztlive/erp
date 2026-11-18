@@ -106,6 +106,7 @@ impl ReturnsProcess {
         let refund = erp_returns::service::ReturnsService::prepare_customer_refund(req, actor.id())?;
         persist_created_customer_refund(&self.db, &self.rbac, refund.clone(), actor.clone(), executor)
             .await?;
+
         self.customer_refund_result_read(
             &refund.base.id,
             actor,
@@ -146,6 +147,7 @@ impl ReturnsProcess {
             command_receipt: req.command_receipt(id, actor.id())?,
             actor: actor.clone(),
         };
+
         let process = self.clone();
         let command = submission.clone();
         let persisted = self
@@ -155,6 +157,7 @@ impl ReturnsProcess {
                 Box::pin(async move { process.submit_customer_refund_stage(req, &command, executor).await })
             })
             .await;
+
         self.finish_reversal_submit(&submission, persisted).await?;
         self.customer_refund_result(
             &submission.id,
@@ -176,6 +179,7 @@ impl ReturnsProcess {
         if self.replay_reversal_submit_stage(submission, executor).await?.is_some() {
             return Ok(());
         }
+
         let id = submission.id.as_str();
         let adapter = customer_refund_adapter()?;
         let mut refund = self.domain().load_customer_refund(id, executor).await?;
@@ -248,6 +252,7 @@ impl ReturnsProcess {
         let mut refund = self.domain().load_customer_refund(id, executor).await?;
         conflict_if_stale_version(refund.matches_version(req.expected_version))?;
         self.persist_cancelled_customer_refund(id, &mut refund, &req, actor, executor).await?;
+
         self.customer_refund_result_read(
             id,
             actor,
@@ -284,6 +289,7 @@ pub(super) async fn apply_customer_refund_final_post(
         &mut refund,
         erp_workflow::service::approval::policy::ApprovalDomainAction::CustomerRefundPost,
     )?;
+
     execute_refund_posting(&mut MongoRefundPosting { db, refund: &mut refund, actor }, executor).await
 }
 
@@ -383,6 +389,7 @@ async fn persist_created_customer_refund(
     rbac.identity
         .require(&actor, &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_CREATE, AccessTarget::Operation, executor)
         .await?;
+
     let organization_id = load_customer_responsible_org_id(db, &refund.customer_id, executor).await?;
     let bind_command = BindPublishedDefinitionCommand {
         document_type: DocumentType::CustomerRefund,
@@ -485,6 +492,7 @@ async fn apply_customer_refund_posting(
     erp_returns::service::ReturnsService::new(db.clone())
         .validate_customer_refund_amount(refund, &original_receipt_id, receipt.amount, executor)
         .await?;
+
     erp_finance::service::receivable::customer_refund::persist_refund_offsets_and_reversals(
         db,
         &erp_finance::service::receivable::customer_refund::CustomerRefundPosting {
@@ -542,6 +550,7 @@ mod posting_contract_tests {
             calls: vec![],
             fail_at: None,
         };
+
         execute_refund_posting(&mut steps, &mut executor).await.unwrap();
         assert_eq!(
             steps.calls,
@@ -561,6 +570,7 @@ mod posting_contract_tests {
             RefundPostingStep::Audit,
             RefundPostingStep::SalesProgress,
         ];
+
         for (index, step) in order.iter().enumerate() {
             let mut executor = TestExecutor::default();
             let mut steps = RecordingSteps {
@@ -568,6 +578,7 @@ mod posting_contract_tests {
                 calls: vec![],
                 fail_at: Some(*step),
             };
+
             assert!(
                 matches!(execute_refund_posting(&mut steps,&mut executor).await,Err(Error::ConflictError(message)) if message=="原退款写入冲突")
             );

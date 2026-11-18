@@ -66,6 +66,7 @@ async fn replay(
     if receipt.request_fingerprint != identity.fingerprint {
         return Err(Error::ConflictError("同一幂等键不能提交不同参数".into()));
     }
+
     let job_no = match receipt.job_id.as_deref() {
         Some(id) => port.job_no(id, executor).await?,
         None => None,
@@ -243,6 +244,7 @@ mod tests {
             Err(Error::Forbidden(_))
         ));
         assert_eq!(*denied.calls.lock().unwrap(), ["authorize"]);
+
         let mut changed = receipt(&identity, Some("job"));
         changed.request_fingerprint = "different".into();
         let conflict = Replay::new(true, Some(changed));
@@ -250,6 +252,7 @@ mod tests {
             matches!(replay(&conflict, &identity, &mut SnapshotExecutor::default()).await, Err(Error::ConflictError(message)) if message == "同一幂等键不能提交不同参数")
         );
         assert_eq!(*conflict.calls.lock().unwrap(), ["authorize", "receipt"]);
+
         let absent = Replay::new(true, None);
         assert!(replay(&absent, &identity, &mut SnapshotExecutor::default()).await.unwrap().is_none());
         assert_eq!(*absent.calls.lock().unwrap(), ["authorize", "receipt"]);

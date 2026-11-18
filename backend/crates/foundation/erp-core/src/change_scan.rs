@@ -127,6 +127,7 @@ mod tests {
                 ChangeWindow { from: margin_start, to: margin_start + 2 },
             ]
         );
+
         let next = state.advanced(1_002);
         assert_eq!((next.fresh_watermark, next.settled_watermark), (1_002, margin_start + 2));
         assert_eq!(
@@ -136,6 +137,7 @@ mod tests {
                 ChangeWindow { from: margin_start + 2, to: 1_200 - COMMIT_MARGIN_SECS },
             ]
         );
+
         let later = next.advanced(1_200);
         assert_eq!(later.settled_watermark, 1_200 - COMMIT_MARGIN_SECS);
         assert_eq!(later.advanced(1_100), later);
@@ -146,6 +148,7 @@ mod tests {
         let state = ChangeWatermarks::starting_at(1_000);
         assert_eq!(state.catch_up_window(1_000), ChangeWindow { from: 1_000, to: 1_001 });
         assert_eq!(state.catch_up_window(1_005), ChangeWindow { from: 1_000, to: 1_006 });
+
         let caught_up = state.fresh_advanced(1_005);
         assert_eq!(caught_up.fresh_watermark, 1_005);
         assert_eq!(caught_up.settled_watermark, state.settled_watermark);

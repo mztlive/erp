@@ -109,6 +109,7 @@ mod tests {
             Ok(Some("original-instance")),
         ]);
         let waits = RefCell::new(Vec::new());
+
         let result = recover_with_wait(
             unknown("first write"),
             || ready(outcomes.pop_front().expect("no probe after success")),
@@ -119,6 +120,7 @@ mod tests {
         )
         .await
         .unwrap();
+
         assert_eq!(result, "original-instance");
         assert!(outcomes.is_empty());
         assert_eq!(*waits.borrow(), vec![0, 1, 2, 3]);
@@ -141,6 +143,7 @@ mod tests {
         )
         .await
         .unwrap_err();
+
         let Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(source)) = error else {
             panic!("the first write error must survive exhaustion");
         };
@@ -183,6 +186,7 @@ mod tests {
         )
         .await
         .unwrap_err();
+
         assert!(matches!(error, Error::ConflictError(message) if message == "receipt identity mismatch"));
         assert_eq!(calls.get(), 1);
         assert_eq!(waits.get(), 0);

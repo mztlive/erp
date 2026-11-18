@@ -253,11 +253,13 @@ where
         return Err(Error::ValidationError("库存授权模型与查询集合不匹配".into()));
     }
     access.ensure_current(executor)?;
+
     let prefix = access.stages().to_vec();
     let collection = base.clone_with_type::<Row>();
     let items = aggregate::find(&collection, filter.clone(), options, prefix.clone(), executor).await?;
     let total = aggregate::count(base, filter, prefix, executor).await?;
     let total = i64::try_from(total).map_err(|_| Error::Internal("库存结果数量超限".into()))?;
+
     access.ensure_current(executor)?;
     Ok(PageResult { items, total })
 }
@@ -307,6 +309,7 @@ mod tests {
             let original = Decimal128::from_str(value).unwrap();
             let negated = Decimal128::from_str(opposite).unwrap();
             assert_eq!(quantity_bson, original);
+
             for (update, expected) in [
                 (
                     both_inc(quantity, "on_hand_quantity", "available_quantity").unwrap(),

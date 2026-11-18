@@ -86,6 +86,7 @@ impl SkuSnapshot {
         }
         let category_id =
             self.category_id.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
+
         Ok(Self {
             sku_id: self.sku_id,
             sku_revision_id: self.sku_revision_id,

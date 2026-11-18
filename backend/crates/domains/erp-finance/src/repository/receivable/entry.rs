@@ -82,11 +82,13 @@ impl ReceivableEntryRepositoryExt for persistence_core::Repository<'_, Receivabl
         if account_ids.is_empty() {
             return Ok(std::collections::HashMap::new());
         }
+
         let ids = account_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
         let pipeline = minimum_due_dates_pipeline(ids);
         let rows =
             aggregate::rows(&self.collection().clone_with_type::<AccountDueDateRow>(), pipeline, executor)
                 .await?;
+
         Ok(rows.into_iter().map(|row| (row.account_id, row.due_date)).collect())
     }
 
@@ -240,6 +242,7 @@ mod tests {
         let pipeline = minimum_due_dates_pipeline(vec!["ra-1".to_string()]);
         let matched = pipeline[0].get_document("$match").unwrap();
         assert_eq!(matched.get_str("direction").unwrap(), "increase");
+
         let group = pipeline[1].get_document("$group").unwrap();
         assert_eq!(group.get_str("_id").unwrap(), "$receivable_account_id");
         assert_eq!(group.get_document("due_date").unwrap(), &doc! { "$min": "$due_date" });

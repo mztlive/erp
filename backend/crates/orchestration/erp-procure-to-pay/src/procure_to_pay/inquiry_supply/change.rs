@@ -34,6 +34,7 @@ pub(in crate::procure_to_pay) async fn resize_quotes<L: InquiryPurchaseLine>(
     let service = InquirySupplyService::new(db.clone());
     let qualification = MongoOfferingQualification::new(db.clone());
     let mut kept = Vec::new();
+
     for line in lines {
         let Some(source) = line.source().and_then(|source| source.inquiry_quote.as_ref()) else { continue };
         ensure_line_terms(line, source)?;
@@ -41,9 +42,11 @@ pub(in crate::procure_to_pay) async fn resize_quotes<L: InquiryPurchaseLine>(
         kept.push(id.clone());
         let addresses = adoption_addresses(db, order, line, source, executor).await?;
         let usage = quote_usage(line, &order.supplier_id, source, addresses)?;
+
         let quote = service.resize_quote(&id, &usage, keep_existing, &qualification, executor).await?;
         ensure_exact_quote(source, &quote)?;
     }
+
     if !keep_existing {
         release_unused_quotes(&service, order, &kept, executor).await?;
     }
@@ -66,6 +69,7 @@ pub(in crate::procure_to_pay) async fn restore_current_quotes(
         .as_deref()
         .ok_or_else(|| Error::ConflictError("原采购生效版本缺失".into()))?;
     let lines = db.purchase_order().list_revision_lines(&revision.to_string().into(), executor).await?;
+
     let service = InquirySupplyService::new(db.clone());
     let mut kept = Vec::new();
     for line in &lines {
@@ -73,6 +77,7 @@ pub(in crate::procure_to_pay) async fn restore_current_quotes(
             kept.push(id);
         }
     }
+
     release_unused_quotes(&service, &order, &kept, executor).await
 }
 
@@ -104,6 +109,7 @@ async fn restore_current_line(
     let id = reservation_id(&order.base.id, line)?;
     let reservation = db.inquiry_quote_reservations().find_by_id(&id, executor).await?.ok_or_else(changed)?;
     let addresses = original_formal_addresses(line, &reservation)?;
+
     let quote = service
         .restore_existing_usage(
             &id,
@@ -136,6 +142,7 @@ fn original_formal_addresses(
             })
             .collect());
     }
+
     let quantity = line.quantity.ok_or_else(changed)?;
     if reservation.quantity == quantity {
         return Ok(reservation.addresses.clone());

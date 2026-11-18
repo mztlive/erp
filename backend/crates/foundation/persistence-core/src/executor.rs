@@ -217,7 +217,6 @@ mod tests {
     #[test]
     fn no_transaction_executor_never_provides_session() {
         let mut executor = NoTransaction;
-
         assert!(executor.session().is_none());
     }
 
@@ -225,7 +224,6 @@ mod tests {
     fn borrowed_executor_forwards_inner_session() {
         let mut inner = NoTransaction;
         let mut borrowed: &mut dyn Executor = &mut inner;
-
         assert!(Executor::session(&mut borrowed).is_none());
     }
 
@@ -237,8 +235,10 @@ mod tests {
         assert!(boundary.is_current(&executor));
         assert!(!boundary.is_current(&ReadExecutor::default()));
         assert!(!boundary.is_current(&NoTransaction));
+
         let mut borrowed: &mut dyn Executor = &mut executor;
         assert!(boundary.is_current(&borrowed));
+
         Executor::next_read(&mut borrowed);
         assert!(!boundary.is_current(&executor));
         assert!(executor.boundary().unwrap().is_current(&executor));
@@ -250,6 +250,7 @@ mod tests {
         let proof = executor.boundary().unwrap();
         let moved = Box::new(executor);
         assert!(proof.is_current(moved.as_ref()));
+
         drop(moved);
         assert!(!proof.is_current(&ReadExecutor::default()));
     }

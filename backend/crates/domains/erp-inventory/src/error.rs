@@ -113,6 +113,7 @@ mod tests {
         let generic = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
         assert_eq!(generic.class(), ErrorClass::Conflict);
         assert_eq!(generic.to_string(), "数据冲突: 数据已存在，请勿重复提交");
+
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_stock_movements_source")),
             "库存流水来源重复，请勿重复提交"
@@ -129,6 +130,7 @@ mod tests {
             super::duplicate_index_conflict_message(Some("uk_stock_adjustments_adjustment_no")),
             "库存调整单号重复，请勿重复提交"
         );
+
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_unknown_index")),
             "数据已存在，请勿重复提交"
@@ -141,6 +143,7 @@ mod tests {
         let denial = Error::from(IdentityError::Forbidden("对象无权访问".into()));
         assert_eq!(denial.class(), ErrorClass::Forbidden);
         assert!(matches!(denial, Error::Forbidden(message) if message == "对象无权访问"));
+
         let facility = Error::from(IdentityError::Rbac("策略读取失败".into()));
         assert_eq!(facility.class(), ErrorClass::Internal);
         assert!(matches!(facility, Error::Internal(message) if message == "策略读取失败"));

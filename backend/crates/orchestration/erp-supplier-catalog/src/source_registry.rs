@@ -53,6 +53,7 @@ pub async fn create_source_system(
     let system = SourceSystem::new(id, req.into_data(), actor.id())?;
     let audit =
         actor.clone().resource_log("source_system.create", "source_system", system.base.id.clone())?;
+
     let system_for_tx = system.clone();
     run_audited::<_, Error, _>(&db, audit, move |db, executor| {
         Box::pin(async move {

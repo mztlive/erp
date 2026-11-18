@@ -60,6 +60,7 @@ impl FundsAccess {
         if ids.is_empty() {
             return Ok(HashSet::new());
         }
+
         let entries = self.db.receivable_entries().find_entries_by_ids(ids, executor).await?;
         let account_ids = entries
             .iter()
@@ -74,11 +75,13 @@ impl FundsAccess {
             .collect::<HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
+
         let mut visible_orders = HashSet::new();
         for chunk in order_ids.chunks(500) {
             let orders = authorization.sales_scope()?.versions_in(&self.db, chunk, executor).await?;
             visible_orders.extend(orders.into_iter().map(|order| order.id));
         }
+
         let visible_accounts = accounts
             .into_iter()
             .filter(|account| visible_orders.contains(account.sales_order_id.as_ref()))
@@ -144,6 +147,7 @@ mod tests {
         assert_eq!(row.pending_allocations.as_ref().unwrap(), &source.pending_allocations);
         assert_eq!(row.allocated_total, Some("0".parse().unwrap()));
         assert_eq!(row.unallocated_amount, Some(source.amount));
+
         let json = serde_json::to_value(row).unwrap();
         assert_eq!(json["pending_allocations"][0]["receivable_entry_id"], "entry");
         assert_eq!(json["pending_allocations"][0]["allocated_amount"], "165");
@@ -157,6 +161,7 @@ mod tests {
             apply_pending(&mut row, &source.pending_allocations, &visible);
             assert!(serde_json::to_value(row).unwrap().get("pending_allocations").is_none());
         }
+
         let mut row = FundsAccess::cut_receipt_row(&source, &[], &[], true);
         let mut lines = source.pending_allocations.clone();
         lines.push(
@@ -177,6 +182,7 @@ mod tests {
         for status in [CustomerReceiptStatus::Posted, CustomerReceiptStatus::Reversed] {
             assert!(pending_for_status(&source(status)).is_empty());
         }
+
         let source = source(CustomerReceiptStatus::Draft);
         assert_eq!(pending_for_status(&source), source.pending_allocations);
         let mut row = FundsAccess::cut_receipt_row(&source, &[], &[], true);

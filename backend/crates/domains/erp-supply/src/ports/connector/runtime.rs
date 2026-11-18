@@ -105,6 +105,7 @@ pub fn bind_checked<R: SupplierRuntime + ?Sized>(
     if connection.base.is_deleted() || connection.connector_type != Some(runtime.connector_type()) {
         return Err(binding_error());
     }
+
     let connector = runtime.bind(connection, purpose)?;
     if connector.connection_id().as_ref() != connection.base.id {
         return Err(binding_error());
@@ -164,6 +165,7 @@ impl<T: SupplierRuntime + ?Sized> SupplierApiGateway for T {
                 .scan_scoped(scan)
                 .await
                 .map_err(classified)?;
+
             Ok(CatalogPage {
                 items: page.page.items,
                 next: page.page.next,

@@ -442,6 +442,7 @@ impl CustomerAcceptance {
         if reversal_of_acceptance_id.as_ref() == self.base.id {
             return Err(Error::from("反向验收不能引用自身"));
         }
+
         self.reversal_of_acceptance_id = Some(reversal_of_acceptance_id);
         self.status = CustomerAcceptanceState::Reversed;
         Ok(())
@@ -551,6 +552,7 @@ impl CustomerAcceptanceLine {
         {
             return Err(Error::from("验收行结果数量不得为负"));
         }
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             customer_acceptance_id: data.customer_acceptance_id,
@@ -646,6 +648,7 @@ pub(crate) mod tests {
         assert!(acceptance.require_evidence().is_err());
         acceptance.evidence_attachment_id = Some(FileAssetId::new("  "));
         assert!(acceptance.require_evidence().is_err());
+
         acceptance
             .update(CustomerAcceptanceUpdate {
                 evidence_attachment_id: Some(FileAssetId::new("file-signature")),
@@ -653,6 +656,7 @@ pub(crate) mod tests {
             })
             .unwrap();
         assert_eq!(acceptance.require_evidence().unwrap().as_ref(), "file-signature");
+
         let mut legacy = serde_json::to_value(&acceptance).unwrap();
         legacy.as_object_mut().unwrap().remove("evidence_attachment_id");
         let decoded: CustomerAcceptance = serde_json::from_value(legacy).unwrap();
@@ -700,6 +704,7 @@ pub(crate) mod tests {
 
         acceptance.mark_posted().unwrap();
         assert_eq!(acceptance.status, CustomerAcceptanceState::Posted);
+
         acceptance.reverse(CustomerAcceptanceId::new("acceptance-2")).unwrap();
         assert_eq!(acceptance.status, CustomerAcceptanceState::Reversed);
         assert_eq!(acceptance.reversal_of_acceptance_id.unwrap().as_ref(), "acceptance-2");
@@ -732,10 +737,12 @@ pub(crate) mod tests {
                 .is_ok()
         );
         assert_eq!(acceptance.result, AcceptanceResult::Shortage);
+
         acceptance.mark_posted().unwrap();
         // from == to 幂等迁移恒合法（state.rs 契约）；POSTED 不可编辑由 update 把关。
         assert!(acceptance.mark_posted().is_ok());
         assert!(acceptance.update(CustomerAcceptanceUpdate::default()).is_err(), "已过账不可编辑");
+
         assert!(acceptance.reverse(CustomerAcceptanceId::new("a6")).is_ok());
         assert!(
             acceptance.reverse(CustomerAcceptanceId::new("a7")).is_ok(),
@@ -770,12 +777,15 @@ pub(crate) mod tests {
             CustomerAcceptance::new(CustomerAcceptanceId::new("acceptance-1"), data()).unwrap();
         let line =
             CustomerAcceptanceLine::new(CustomerAcceptanceLineId::new("line-posting"), line_data()).unwrap();
+
         assert!(acceptance.matches_business_identity(&SalesOrderId::new("so-1"), Some("CA-2026-001"),));
         assert!(!acceptance.matches_business_identity(&SalesOrderId::new("other-order"), None));
         assert!(!acceptance.matches_business_identity(&SalesOrderId::new("so-1"), Some("other-no")));
+
         assert!(acceptance.ensure_draft_version(acceptance.base.version).is_ok());
         assert!(acceptance.ensure_draft_version(acceptance.base.version + 1).is_err());
         assert!(acceptance.ensure_draft().is_ok());
+
         assert!(acceptance.ensure_posting_lines(&[]).is_err());
         assert!(acceptance.ensure_posting_lines(std::slice::from_ref(&line)).is_ok());
         let foreign_line = CustomerAcceptanceLine::new(
@@ -787,8 +797,10 @@ pub(crate) mod tests {
         )
         .unwrap();
         assert!(acceptance.ensure_posting_lines(std::slice::from_ref(&foreign_line)).is_err());
+
         assert!(line.ensure_allocation_conserved([Quantity::from_str("9").unwrap()]).is_ok());
         assert!(line.ensure_allocation_conserved([Quantity::from_str("8").unwrap()]).is_err());
+
         acceptance.mark_posted().unwrap();
         assert!(acceptance.ensure_draft().is_err());
         assert!(acceptance.ensure_draft_version(acceptance.base.version).is_err());

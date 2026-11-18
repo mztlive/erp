@@ -50,6 +50,7 @@ impl FulfillmentService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
+
         super::map_search_page(
             self.db.purchase_receipts().search_purchase_receipts(&filter, executor),
             |row| PurchaseReceiptView {
@@ -103,6 +104,7 @@ impl FulfillmentService {
             .fulfillment()
             .receipt_lines_by_receipt_ids(&[receipt.base.id.clone().into()], executor)
             .await?;
+
         Ok(PurchaseReceiptDetailView {
             receipt: receipt.into(),
             lines: lines.into_iter().map(Into::into).collect(),
@@ -122,6 +124,7 @@ impl FulfillmentService {
         req: CreatePurchaseReceiptRequest,
     ) -> Result<(PurchaseReceipt, Vec<PurchaseReceiptLine>)> {
         req.validate()?;
+
         let id = PurchaseReceiptId::new(next_id());
         let receipt = PurchaseReceipt::new(
             id.clone(),
@@ -131,6 +134,7 @@ impl FulfillmentService {
                 warehouse_id: req.warehouse_id,
             },
         )?;
+
         let lines = PurchaseReceiptLineBatch::build(id.clone(), receipt_line_specs(&req.lines))
             .map_err(Error::Logic)?;
         Ok((receipt, lines))
@@ -155,6 +159,7 @@ impl FulfillmentService {
         executor: &mut dyn Executor,
     ) -> Result<PurchaseReceipt> {
         req.validate()?;
+
         let mut receipt = self
             .db
             .purchase_receipts()
@@ -169,6 +174,7 @@ impl FulfillmentService {
                 "采购入库单的目标仓库已冻结，不能在任务生成后变更".to_string(),
             ));
         }
+
         receipt.update(crate::entity::fulfillment::PurchaseReceiptUpdate {
             warehouse_id: req.warehouse_id.or(Some(receipt.warehouse_id.clone())),
         })?;
@@ -286,6 +292,7 @@ mod tests {
             QualityResult::from_quantities(passed.qualified_quantity, passed.rejected_quantity),
             QualityResult::Passed
         );
+
         let rejected = PurchaseReceiptLineInput {
             qualified_quantity: Quantity::from_str("0").unwrap(),
             rejected_quantity: Quantity::from_str("10").unwrap(),
@@ -295,6 +302,7 @@ mod tests {
             QualityResult::from_quantities(rejected.qualified_quantity, rejected.rejected_quantity),
             QualityResult::Rejected
         );
+
         let partial = PurchaseReceiptLineInput {
             qualified_quantity: Quantity::from_str("9").unwrap(),
             rejected_quantity: Quantity::from_str("1").unwrap(),
@@ -324,6 +332,7 @@ mod tests {
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0].line_no, 1);
         assert_eq!(lines[1].line_no, 2);
+
         let over_sum = PurchaseReceiptLineInput {
             qualified_quantity: Quantity::from_str("9.5").unwrap(),
             rejected_quantity: Quantity::from_str("1").unwrap(),
@@ -333,6 +342,7 @@ mod tests {
             PurchaseReceiptLineBatch::build(PurchaseReceiptId::new("r-2"), receipt_line_specs(&[over_sum]))
                 .is_err()
         );
+
         let _ = PurchaseReceiptLineData {
             purchase_receipt_id: PurchaseReceiptId::new("r-1"),
             line_no: 1,

@@ -89,10 +89,12 @@ impl SupplierProfileChangePlan {
         requested_qualifications: &[PlannedQualificationInput],
     ) -> erp_core::Result<Self> {
         use std::collections::{HashMap, HashSet};
+
         let requested_set = requested_capability_codes.iter().copied().collect();
         let existing_codes = capabilities.iter().map(|cap| cap.capability_code).collect();
         let capability_toggles = plan_capability_toggles(capabilities, &requested_set);
         let capability_creates = plan_capability_creates(requested_capability_codes, &existing_codes);
+
         let requested_map: HashMap<String, &PlannedQualificationInput> = requested_qualifications
             .iter()
             .map(|input| (qualification_identity_key(input.qualification_type, &input.certificate_no), input))
@@ -101,6 +103,7 @@ impl SupplierProfileChangePlan {
         let (qualification_updates, qualification_disables) =
             plan_qualification_updates(qualifications, &requested_map, linked_capabilities, capability_ids)?;
         let qualification_creates = plan_qualification_creates(requested_qualifications, &existing_keys);
+
         Ok(Self {
             capability_toggles,
             capability_creates,
@@ -201,6 +204,7 @@ fn plan_qualification_updates(
             let links_match = linked_capabilities
                 .get(&qual.base.id)
                 .map_or_else(|| desired_links.is_empty(), |current_links| current_links == &desired_links);
+
             if qual.matches_profile_fields(
                 input.issuer.as_deref(),
                 input.valid_from,

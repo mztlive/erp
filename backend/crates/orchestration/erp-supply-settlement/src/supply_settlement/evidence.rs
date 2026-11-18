@@ -43,6 +43,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         if difference_id != req.difference_id {
             return Err(Error::ValidationError("差异路径ID与命令载荷不一致".into()));
         }
+
         let process = self.clone();
         let command = req.clone();
         let writer = actor.clone();
@@ -53,6 +54,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
                 Box::pin(async move { process.append_evidence(&command, &writer, executor).await })
             })
             .await;
+
         let Err(error) = result else { return result };
         let process = self.clone();
         let actor = actor.clone();
@@ -77,12 +79,14 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         executor: &mut dyn Executor,
     ) -> Result<SettlementDifferenceEvidenceResult> {
         self.require_evidence_access(req, actor, executor).await?;
+
         let command_hash = evidence_command_hash(req);
         if let Some(result) =
             self.domain().replay_difference_evidence(&req.request_id, req, &command_hash, executor).await?
         {
             return Ok(result);
         }
+
         let evidence = self
             .domain()
             .prepare_difference_evidence(&req.difference_id, req, actor.id(), &command_hash, executor)

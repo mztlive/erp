@@ -22,6 +22,7 @@ impl DeliveryPacking {
                 && capacity(previous, destination, line)
                     .is_some_and(|value| Some(value) == capacity(next, destination, line))
         };
+
         let packages = self
             .packages
             .iter()
@@ -31,6 +32,7 @@ impl DeliveryPacking {
             .cloned()
             .collect::<Vec<_>>();
         let removed = self.packages.len() - packages.len();
+
         let dispatch = next
             .destinations
             .iter()
@@ -61,6 +63,7 @@ impl DeliveryPacking {
                     .collect(),
             })
             .collect();
+
         (Self { source_version: next.source_version.clone(), dispatch, packages }, removed)
     }
 }

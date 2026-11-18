@@ -148,7 +148,6 @@ mod tests {
     #[test]
     fn voided_order_without_receipt_is_conflict() {
         let result = ensure_void_target("actor-1", 5, PurchaseOrderStatus::Voided, 4, "actor-1");
-
         assert!(matches!(result, Err(Error::ConflictError(_))));
     }
 }

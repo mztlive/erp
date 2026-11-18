@@ -67,6 +67,7 @@ impl ReceiptEvidence {
             })
             .collect::<Vec<_>>();
         execution.ensure_receipt_coverage(&lines)?;
+
         let fingerprint = match facts {
             ActualReceiptFacts::Direct(facts) => fingerprint(&(
                 &lines,

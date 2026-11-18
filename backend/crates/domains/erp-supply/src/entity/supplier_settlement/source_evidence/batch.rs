@@ -82,6 +82,7 @@ impl SupplierSettlementSourceEvidenceData {
             self.external_bill_version.trim().to_string(),
             self.external_bill_evidence_reference_id.trim().to_string(),
         ];
+
         let mut lines = self.lines.iter().collect::<Vec<_>>();
         lines.sort_by(|left, right| {
             left.supplier_fulfillment_item_id.as_ref().cmp(right.supplier_fulfillment_item_id.as_ref())
@@ -185,6 +186,7 @@ impl SupplierSettlementSourceEvidence {
         if data.lines.is_empty() || data.lines.len() > MAX_LINES {
             return Err(Error::from("来源证据行数必须在 1-1000 之间"));
         }
+
         let request_id = normalize_required_text(
             data.request_id,
             "来源证据请求ID不能为空",
@@ -209,6 +211,7 @@ impl SupplierSettlementSourceEvidence {
             TIMEZONE_MAX_LEN,
             "结算期间策略时区过长",
         )?;
+
         let external_bill_no = normalize_required_text(
             data.external_bill_no,
             "外部账单号不能为空",
@@ -235,6 +238,7 @@ impl SupplierSettlementSourceEvidence {
         )?;
         let source_hash = normalize_hash(data.source_hash)?;
         let request_hash = normalize_hash(data.request_hash)?;
+
         let mut lines = data.lines;
         let mut identities = HashSet::with_capacity(lines.len());
         for line in &mut lines {

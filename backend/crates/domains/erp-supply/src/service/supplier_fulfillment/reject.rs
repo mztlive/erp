@@ -76,6 +76,7 @@ impl SupplierFulfillmentService {
                 external_event_id: req.external_event_id.clone(),
             }),
         )?;
+
         let mut action = self.latest_place_action(id, executor).await?;
         action.update(SupplierOrderActionUpdate {
             status: Some(SupplierOrderActionStatus::Failed),

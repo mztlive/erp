@@ -46,6 +46,7 @@ impl ReturnsService {
         actor_id: &str,
     ) -> Result<CustomerRefund> {
         req.validate()?;
+
         let refund = CustomerRefund::new(
             CustomerRefundId::new(next_id()),
             CustomerRefundData {
@@ -88,6 +89,7 @@ impl ReturnsService {
             .customer_id
             .clone()
             .ok_or_else(|| Error::BusinessLogicError("原回款未关联经营客户，不能退款".to_string()))?;
+
         let refund = CustomerRefund::new(
             CustomerRefundId::new(next_id()),
             CustomerRefundData {
@@ -284,6 +286,7 @@ pub fn ensure_customer_refund_source(source: &CustomerRefundSourceFact, expected
         source.is_posted,
         "只有已过账的客户回款才能发起退款",
     )?;
+
     if source.customer_id.is_none() {
         return Err(Error::BusinessLogicError("原回款未关联经营客户，不能退款".to_string()));
     }
@@ -319,10 +322,12 @@ mod tests {
         assert!(
             matches!(ensure_customer_refund_source(&fact,3),Err(Error::BusinessLogicError(message)) if message=="只有已过账的客户回款才能发起退款")
         );
+
         fact.is_posted = true;
         assert!(
             matches!(ensure_customer_refund_source(&fact,3),Err(Error::BusinessLogicError(message)) if message=="原回款未关联经营客户，不能退款")
         );
+
         fact.customer_id = Some(CustomerAccountId::new("customer-1"));
         ensure_customer_refund_source(&fact, 3).unwrap();
     }
@@ -337,6 +342,7 @@ mod tests {
             reason: "退款".into(),
             idempotency_key: " key-1 ".into(),
         };
+
         let refund = ReturnsService::prepare_committed_customer_refund(&request, &fact, "actor-1").unwrap();
         assert_eq!(refund.amount, fact.amount);
         assert_eq!(refund.customer_id, fact.customer_id.unwrap());

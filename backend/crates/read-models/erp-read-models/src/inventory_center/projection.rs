@@ -112,6 +112,7 @@ mod tests {
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
         assert!(!view.allowed_actions.iter().any(|item| item.contains("DEFINITION")));
         assert!(!view.allowed_actions.iter().any(|item| item.contains("ASSIGNEE")));
+
         let running = document_approval_view_with_history(
             Some(&binding),
             None,
@@ -122,6 +123,7 @@ mod tests {
             None,
         );
         assert!(running.allowed_actions.is_empty());
+
         let authorized = document_approval_view_with_history(
             Some(&binding),
             None,

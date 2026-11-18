@@ -79,9 +79,11 @@ mod tests {
         let fp = supplier_handover_fingerprint("actor", "supplier-1", &request).unwrap();
         assert_eq!(fp.len(), 64);
         assert_eq!(fp, supplier_handover_fingerprint("actor", "supplier-1", &request).unwrap());
+
         let mut changed = request.clone();
         changed.expected_version = 2;
         assert_ne!(fp, supplier_handover_fingerprint("actor", "supplier-1", &changed).unwrap());
+
         let capability = HandoverSupplierCapabilityRequest {
             expected_version: 1,
             target_user_id: "buyer-b".into(),

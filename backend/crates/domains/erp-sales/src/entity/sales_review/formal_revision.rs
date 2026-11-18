@@ -105,10 +105,12 @@ impl SalesOrderRevisionAggregate {
         lines: &[SalesChangeSubmissionLine],
     ) -> Result<Self> {
         ensure_change_business_type(context.business_type, submission.business_type)?;
+
         let prepared = lines
             .iter()
             .map(PreparedRevisionLine::from_sales_change_submission_line)
             .collect::<Result<Vec<_>>>()?;
+
         Self::from_prepared(
             identities,
             context,
@@ -341,6 +343,7 @@ mod tests {
         assert_eq!(aggregate.revision.settlement_party_id, submission.settlement_party_id);
         assert_eq!(aggregate.revision.customer_snapshot.customer_name, "东方企业");
         assert_eq!(aggregate.revision.business_remark.as_deref(), Some("变更后执行"));
+
         assert_eq!(aggregate.lines.len(), 1);
         assert_eq!(aggregate.goods_lines.len(), 1);
         assert_eq!(aggregate.goods_lines[0].pricing_mode, SalesPricingMode::Auto);

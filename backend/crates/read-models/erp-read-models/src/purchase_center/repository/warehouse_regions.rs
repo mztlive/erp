@@ -38,6 +38,7 @@ pub async fn active_warehouse_regions(
         })
         .collect::<Vec<_>>();
     current.sort();
+
     let revision_ids = current.iter().map(|(_, revision)| revision.clone()).collect::<Vec<_>>();
     let revisions = db.warehouse_revisions().list_active_by_ids(&revision_ids, executor).await?;
     Ok(current

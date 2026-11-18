@@ -51,6 +51,7 @@ impl CustomerService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
+
         let service = self.clone();
         let actor = actor.clone();
         let expected_version = params.scope_version.clone();
@@ -75,8 +76,10 @@ impl CustomerService {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::ValidationError("客户列表必须使用快照事务".into()));
         }
+
         let snapshot = self.list_snapshot(query.clone(), actor, executor).await?;
         ensure_scope_version(expected_version, &snapshot.context.scope_version)?;
+
         let current = self.list_version_snapshot(query, actor, executor).await?;
         ensure_stable_snapshot(&snapshot.context.scope_version, &current.context.scope_version)?;
         Ok(to_list_view(snapshot))
@@ -121,6 +124,7 @@ impl CustomerService {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(crate::Error::ValidationError("客户详情必须使用快照事务".into()));
         }
+
         let context =
             self.access.query_context(actor, &customer_permissions::DETAIL, executor).await.map_err(
                 |error| match error {
@@ -128,8 +132,10 @@ impl CustomerService {
                     error => error,
                 },
             )?;
+
         let account = authorized_customer(&self.db, id, &context, executor).await?;
         let view = self.detail_view(account, super::access::business_date(context.as_of)?, executor).await?;
+
         self.access.validate(&context, executor).await?;
         Ok(view)
     }
@@ -179,6 +185,7 @@ impl CustomerService {
             .next();
         let party_no = identity.as_ref().map(|fact| fact.party_no.clone());
         let legal_name = identity.as_ref().and_then(|fact| fact.legal_name.clone());
+
         let assignments = self
             .db
             .customer_assignments()
@@ -187,6 +194,7 @@ impl CustomerService {
         let owner_ids = CustomerAssignment::owner_ids(&assignments);
         let names = self.accounts.names(&owner_ids, executor).await?;
         let owner_user_id = owner_ids.first().cloned();
+
         let mut view: CustomerView = account.into();
         view.party_no = party_no.clone();
         view.legal_name = legal_name.clone();
@@ -274,11 +282,13 @@ mod tests {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         let params = serde_json::from_value::<CustomerListParams>(serde_json::json!({})).unwrap();
         let query = params.normalized().unwrap();
+
         let result = service.list_stage(query.clone(), &actor, None, &mut ReadExecutor::default()).await;
         assert!(matches!(
             result,
             Err(Error::ValidationError(message)) if message == "客户列表必须使用快照事务"
         ));
+
         let result = service.list_stage(query, &actor, None, &mut SnapshotExecutor::default()).await;
         assert!(matches!(
             result,
@@ -316,18 +326,21 @@ mod tests {
             },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
+
         match ensure_scope_version(Some("scope-a"), "scope-b") {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));
             },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
+
         match ensure_stable_snapshot("scope-a", "scope-b") {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));
             },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
+
         assert!(ensure_scope_version(Some("scope-a"), "scope-a").is_ok());
         assert!(ensure_stable_snapshot("scope-a", "scope-a").is_ok());
     }
@@ -369,6 +382,7 @@ mod tests {
             "scope-v1".into(),
             Instant::from_unix_secs(0),
         );
+
         let json = serde_json::to_value(&view).unwrap();
         assert!(json.get("owner_options").is_none());
         assert_eq!(json["ownership_basis"], "current_customer_owner");

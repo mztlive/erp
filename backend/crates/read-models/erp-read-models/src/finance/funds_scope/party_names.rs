@@ -33,6 +33,7 @@ impl FundsAccess {
         if unique.is_empty() {
             return Ok(HashMap::new());
         }
+
         let keys = unique.into_iter().map(PartyId::new).collect::<Vec<_>>();
         let parties = self.db.parties().find_parties_by_ids(&keys, executor).await.map_err(Error::from)?;
         let revision_ids =
@@ -43,6 +44,7 @@ impl FundsAccess {
             .find_revisions_by_ids(&revision_ids, executor)
             .await
             .map_err(Error::from)?;
+
         let mut legal_by_revision = HashMap::new();
         for revision in revisions {
             let name = revision.legal_name.trim().to_string();
@@ -50,6 +52,7 @@ impl FundsAccess {
                 legal_by_revision.insert(revision.base.id.clone(), name);
             }
         }
+
         let mut names = HashMap::new();
         for party in parties {
             let Some(revision_id) = party.stable.current_revision_id.as_ref() else {
@@ -88,6 +91,7 @@ impl FundsAccess {
             self.db.supplier_accounts().find_accounts_by_ids(&keys, executor).await.map_err(Error::from)?;
         let party_ids = suppliers.iter().map(|supplier| supplier.party_id.to_string()).collect::<Vec<_>>();
         let legal = self.party_legal_names(&party_ids, executor).await?;
+
         let mut names = HashMap::new();
         for supplier in suppliers {
             let Some(name) = legal.get(&supplier.party_id.to_string()) else {

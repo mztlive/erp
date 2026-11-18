@@ -105,12 +105,14 @@ impl FulfillmentProcess {
                         executor,
                     )
                     .await?;
+
                     let mut receipt = erp_fulfillment::service::FulfillmentService::new(db.clone())
                         .prepare_purchase_receipt_update(&id, req, executor)
                         .await?;
                     erp_fulfillment::service::FulfillmentService::new(db.clone())
                         .persist_purchase_receipt(&mut receipt, executor)
                         .await?;
+
                     super::task::record_fulfillment_activity(
                         &db,
                         &task_identity,
@@ -119,6 +121,7 @@ impl FulfillmentProcess {
                         executor,
                     )
                     .await?;
+
                     persist_log(&db, &audit, executor).await?;
                     Ok::<PurchaseReceipt, crate::Error>(receipt)
                 })
@@ -308,6 +311,7 @@ async fn persist_created_purchase_receipt(
                         executor,
                     )
                     .await?;
+
                 register_created_purchase_receipt_document(
                     &db,
                     workflow.as_ref(),
@@ -319,6 +323,7 @@ async fn persist_created_purchase_receipt(
                 erp_fulfillment::service::FulfillmentService::new(db.clone())
                     .persist_created_purchase_receipt(&receipt, &lines, executor)
                     .await?;
+
                 super::task::ensure_fulfillment_task(
                     &db,
                     &task_identity,
@@ -326,6 +331,7 @@ async fn persist_created_purchase_receipt(
                     executor,
                 )
                 .await?;
+
                 persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })

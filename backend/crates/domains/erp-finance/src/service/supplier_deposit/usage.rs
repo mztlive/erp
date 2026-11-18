@@ -33,6 +33,7 @@ impl SupplierDepositService {
     ) -> Result<SupplierDepositUsage> {
         require_transaction(executor)?;
         validate_evidence(&evidence, actor, amount)?;
+
         let mut reservation = self.reservation(reservation_id, executor).await?;
         let id = identity(&reservation.account_id, operation_key)?;
         let payload_fingerprint = fingerprint(&(reservation_id, amount, &evidence))?;
@@ -40,6 +41,7 @@ impl SupplierDepositService {
             replay(&payload_fingerprint, &existing.payload_fingerprint)?;
             return self.debit_receipt_usage(&id, executor).await;
         }
+
         let covered = amount.min(reservation.remaining()?);
         let mut account = self.account(&reservation.account_id, executor).await?;
         account.debit(amount, covered)?;
@@ -47,6 +49,7 @@ impl SupplierDepositService {
         if covered > Amount::zero() {
             reservation.consume(covered)?;
         }
+
         let usage = SupplierDepositUsage {
             base: BaseModel::new(id.clone()),
             account_id: reservation.account_id.clone(),
@@ -72,6 +75,7 @@ impl SupplierDepositService {
             evidence,
             actor_id: actor.into(),
         };
+
         self.db.supplier_deposit_accounts().update(&mut account, executor).await?;
         self.db.supplier_deposit_reservations().update(&mut reservation, executor).await?;
         self.db.supplier_deposit_ledger().create(&entry, executor).await?;
@@ -122,6 +126,7 @@ impl SupplierDepositService {
             }
             let from_batch = remaining.min(original.amount.checked_sub(offset));
             offset = Amount::zero();
+
             let mut batch = self
                 .db
                 .supplier_deposit_batches()
@@ -137,6 +142,7 @@ impl SupplierDepositService {
             allocations
                 .push(DepositBatchAllocation { batch_id: original.batch_id.clone(), amount: from_batch });
         }
+
         if remaining != Amount::zero() {
             return Err(Error::Internal("资金占用批次不守恒".into()));
         }

@@ -182,6 +182,7 @@ impl SupplierSettlementItem {
         if data.quantity.to_decimal() <= Decimal::ZERO {
             return Err(Error::from("结算明细数量必须大于零"));
         }
+
         ensure_non_negative(data.order_amount, "订单金额不得为负")?;
         ensure_non_negative(data.freight_amount, "运费金额不得为负")?;
         ensure_non_negative(data.service_fee_amount, "服务费金额不得为负")?;
@@ -192,6 +193,7 @@ impl SupplierSettlementItem {
         ensure_non_negative(data.supplier_billed_amount, "供应商账单金额不得为负")?;
         ensure_non_negative(data.supplier_billed_net_amount, "供应商账单不含税金额不得为负")?;
         ensure_non_negative(data.supplier_billed_tax_amount, "供应商账单税额不得为负")?;
+
         let expected = data
             .order_amount
             .checked_add(data.freight_amount)
@@ -200,6 +202,7 @@ impl SupplierSettlementItem {
         if expected != data.erp_calculated_amount {
             return Err(Error::from("ERP 计算金额必须等于订单金额加运费加服务费减退款金额"));
         }
+
         ensure_amount_components(
             data.erp_calculated_amount,
             data.erp_calculated_net_amount,
@@ -326,6 +329,7 @@ mod tests {
         assert_eq!(item.erp_calculated_amount, Amount::from_str("100.00").unwrap());
         assert_eq!(item.supplier_billed_amount, Amount::from_str("99.50").unwrap());
         assert!(item.belongs_to_statement(&SupplierSettlementStatementId::new("statement-1")));
+
         let delta = item.supplier_minus_erp_delta().unwrap();
         assert_eq!(delta.gross, Amount::from_str("-0.50").unwrap());
         assert_eq!(delta.net, Amount::from_str("-0.43").unwrap());

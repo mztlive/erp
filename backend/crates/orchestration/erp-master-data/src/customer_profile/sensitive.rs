@@ -54,6 +54,7 @@ impl CustomerProfileProcess {
         executor: &mut dyn Executor,
     ) -> Result<CustomerSensitiveRevealView> {
         let scope = self.sensitive_data.verify_reveal_token(&req.reveal_token, unix_now()?)?;
+
         self.authorization
             .require(actor, &customer::SENSITIVE_REVEAL, AccessTarget::Operation, executor)
             .await?;
@@ -61,10 +62,12 @@ impl CustomerProfileProcess {
             self.authorization.require(actor, &permission, AccessTarget::Operation, executor).await?;
         }
         self.access.require_with(actor.clone(), &customer::DETAIL, &scope.supplier_id, executor).await?;
+
         let account = self.load_customer(&scope.supplier_id, executor).await?;
         let ciphertext =
             self.sensitive_ciphertext(scope.kind, &scope.record_id, &account.party_id, executor).await?;
         let value = self.sensitive_data.decrypt(&ciphertext)?;
+
         let audit =
             actor.clone().resource_log("customer_sensitive.reveal", "customer_sensitive", scope.record_id)?;
         persist_log(&self.db, &audit, executor).await?;
@@ -160,6 +163,7 @@ mod tests {
         let access = CustomerAccess::new(db.clone(), authorization.clone());
         let process = CustomerProfileProcess::new(db, codec, access, authorization);
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let error = process
             .reveal_snapshot(
                 &RevealCustomerSensitiveRequest { reveal_token: token },
@@ -187,6 +191,7 @@ mod tests {
         let access = CustomerAccess::new(db.clone(), authorization.clone());
         let process = CustomerProfileProcess::new(db, codec, access, authorization);
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let result = process
             .reveal_snapshot(
                 &RevealCustomerSensitiveRequest { reveal_token: token },

@@ -47,6 +47,7 @@ pub(super) fn build_basis_view(
     let supplier_id = group.scope.supplier_id.as_ref();
     let supplier_name =
         query::supplier_display(supplier_id, facts.supplier_names.get(supplier_id).map(String::as_str));
+
     let mut estimated = zero_amount();
     let mut lines = Vec::with_capacity(group.lines.len());
     for line in &group.lines {
@@ -57,6 +58,7 @@ pub(super) fn build_basis_view(
         lines
             .push(basis_line_view(line, &group.scope.supplier_id, cost, gross)?.with_delivery_view(delivery));
     }
+
     Ok(CreationBasisView::new(
         work_item_id.to_string(),
         basis_id_for(order, group, work_item_id, None),
@@ -104,6 +106,7 @@ fn delivery_view(
         supplier_offering_id: Some(line.supply.offering.base.id.clone()),
         ..CreationBasisDeliveryView::default()
     };
+
     match scope.fulfillment_responsibility {
         FulfillmentResponsibility::SupplierDirect => {
             let regions = line
@@ -133,6 +136,7 @@ fn delivery_view(
         },
         _ => {},
     }
+
     if scope.fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect
         && scope.price_basis == SupplyPriceBasis::Bulk
         && line.inquiry_quote.is_none()

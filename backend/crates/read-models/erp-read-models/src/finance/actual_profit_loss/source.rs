@@ -70,8 +70,10 @@ impl Sources {
             pending_extra_cost_orders: HashSet::new(),
             pending_freight_orders: HashSet::new(),
         };
+
         result.load_sales(db, executor).await?;
         result.load_costs(db, executor).await?;
+
         let ids: Vec<_> = result.orders.iter().map(|o| o.id.clone()).collect();
         result.pending_extra_cost_orders =
             purchase_expense_facts(db, &ids, executor).await?.sales_orders_with_pending();
@@ -89,6 +91,7 @@ impl Sources {
             self.lines
                 .extend(db.sales_order_revision_lines().list_lines_by_revisions(&revisions, executor).await?);
         }
+
         let ids: Vec<_> = self.lines.iter().map(|l| l.base.id.clone().into()).collect();
         for chunk in ids.chunks(500) {
             self.goods.extend(
@@ -108,6 +111,7 @@ impl Sources {
                 return Err(Error::ValidationError("成本分配超过 100000 条，请缩小范围".into()));
             }
         }
+
         let ids: Vec<_> = self
             .allocations
             .iter()

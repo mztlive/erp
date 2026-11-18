@@ -467,6 +467,7 @@ mod tests {
     fn work_item_projection_includes_approval_node_execution_id() {
         let projection = work_item_projection();
         assert_eq!(projection.get_i32("approval_node_execution_id").unwrap(), 1);
+
         let row = WorkItemRow {
             links: Vec::new(),
             id: "wi-1".to_string(),
@@ -499,6 +500,7 @@ mod tests {
             updated_at: 1,
         };
         assert_eq!(row.approval_node_execution_id.as_deref(), Some("exec-1"));
+
         let decoded: WorkItemRow = mongodb::bson::deserialize_from_document(doc! {
             "id": "wi-2",
             "work_item_type": "CARD_FUNDS_DELTA_REVIEW",

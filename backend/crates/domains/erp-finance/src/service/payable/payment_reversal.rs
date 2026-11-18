@@ -97,8 +97,10 @@ pub async fn prepare_payment_reversal(
         .payment_allocations()
         .find_allocations_by_payments(&[payment.base.id.clone().into()], executor)
         .await?;
+
     let (reverse_rows, chunks) = PaymentAllocation::plan_reverse(&allocations, reversal.amount)?;
     let seqs = PaymentAllocation::next_allocation_seq_range(&allocations, reverse_rows.len())?;
+
     let affected_accounts = revert_payment_settlements(db, &chunks, actor_id, executor).await?;
     Ok((PaymentReversalWrite { payment, reversal, reverse_rows, seqs }, affected_accounts))
 }
@@ -195,6 +197,7 @@ async fn revert_payment_settlements(
         if !facts.accounts.contains_key(entry.payable_account_id.as_ref()) {
             return Err(Error::NotFound("应付往来子账不存在".to_string()));
         }
+
         let reverted = db
             .payable_accounts()
             .revert_settlement(&entry.payable_account_id, &chunk.amount, actor_id, session)
@@ -219,6 +222,7 @@ fn build_reverse_allocations(
     if reverse_rows.len() != seqs.len() {
         return Err(Error::Internal("反向分配与序号数量不一致".into()));
     }
+
     let mut allocations = Vec::with_capacity(reverse_rows.len());
     for (reverse, seq) in reverse_rows.iter().zip(seqs.iter()) {
         let allocation = PaymentAllocation::new(
@@ -323,8 +327,10 @@ mod tests {
         assert_eq!(partial.status, SupplierPaymentStatus::Posted);
         assert_eq!(reverses[0].reverses_allocation_id.as_ref().unwrap().as_ref(), "allocation-1");
         assert_eq!(reverses[0].allocated_amount, amount("30"));
+
         allocations.extend(reverses);
         assert!(PaymentAllocation::plan_reverse(&allocations, amount("70.01")).is_err());
+
         let (reversed, reverses) = prepare(partial, &allocations, "70").prepare_posting().unwrap();
         assert_eq!(reversed.status, SupplierPaymentStatus::Reversed);
         assert_eq!(reversed.reversed_amount, original.amount);

@@ -50,6 +50,7 @@ impl super::WorkItemFactsReader {
         if changes.is_empty() {
             return Ok(());
         }
+
         let sales_order_ids = changes.iter().map(|item| item.sales_order_id.to_string()).collect::<Vec<_>>();
         let sales_nos = self
             .read_sales_orders(&sales_order_ids, executor)
@@ -58,6 +59,7 @@ impl super::WorkItemFactsReader {
             .map(|order| (order.base.id, order.order_no))
             .collect::<HashMap<_, _>>();
         let context = self.sales_change_fact_context(&changes, executor).await?;
+
         for change in changes {
             let sales_no = sales_nos.get(&change.sales_order_id.to_string()).cloned();
             let base = context.base_revisions.get(&change.base_revision_id.to_string());
@@ -95,6 +97,7 @@ impl super::WorkItemFactsReader {
         if changes.is_empty() {
             return Ok(());
         }
+
         let purchase_ids = changes.iter().map(|item| item.purchase_order_id.to_string()).collect::<Vec<_>>();
         let purchase_nos = self
             .read_purchase_orders(&purchase_ids, executor)
@@ -103,6 +106,7 @@ impl super::WorkItemFactsReader {
             .map(|order| (order.base.id, order.purchase_no))
             .collect::<HashMap<_, _>>();
         let context = self.purchase_change_fact_context(&changes, executor).await?;
+
         for change in changes {
             let purchase_no = purchase_nos.get(&change.purchase_order_id.to_string()).cloned();
             let base = context.base_revisions.get(&change.base_revision_id.to_string());
@@ -121,6 +125,7 @@ impl super::WorkItemFactsReader {
     ) -> Result<SalesChangeFactContext> {
         let base_ids = changes.iter().map(|change| change.base_revision_id.to_string()).collect::<Vec<_>>();
         let base_revisions = self.read_sales_revisions(&base_ids, executor).await?;
+
         let submission_ids =
             changes.iter().filter_map(|change| change.current_submission_id.clone()).collect::<Vec<_>>();
         let submissions = self
@@ -148,6 +153,7 @@ impl super::WorkItemFactsReader {
     ) -> Result<PurchaseChangeFactContext> {
         let base_ids = changes.iter().map(|change| change.base_revision_id.to_string()).collect::<Vec<_>>();
         let base_revisions = self.read_purchase_revisions(&base_ids, executor).await?;
+
         let submission_ids =
             changes.iter().filter_map(|change| change.current_submission_id.clone()).collect::<Vec<_>>();
         let submissions = self

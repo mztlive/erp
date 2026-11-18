@@ -215,6 +215,7 @@ pub fn normalize_requested_lines(lines: &[RequestedLine]) -> Result<Vec<Requeste
         }
         normalized.push(line.clone());
     }
+
     normalized.sort_by(|left, right| left.sales_order_line_id.cmp(&right.sales_order_line_id));
     Ok(normalized)
 }
@@ -528,7 +529,6 @@ mod tests {
         SalesOrderGoodsServiceLineRevision {
             assigned_delivery_allocations: Vec::new(),
             delivery_allocations: Vec::new(),
-
             revision_line_id: SalesOrderRevisionLineId::new(revision_line_id),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: erp_core::ids::SkuRevisionId::new("skur-1"),
@@ -658,9 +658,11 @@ mod tests {
         let order = sales_order("sales");
         let mut group = basis_group("supplier", "NET-30");
         let original = basis_id_for(&order, &group, "task", None);
+
         group.lines[0].supply.offering.version += 1;
         let offering_changed = basis_id_for(&order, &group, "task", None);
         assert_ne!(original, offering_changed);
+
         group.lines[0].supply.revision.version += 1;
         assert_ne!(offering_changed, basis_id_for(&order, &group, "task", None));
     }
@@ -799,6 +801,7 @@ mod tests {
             line.expected_delivery_date,
             erp_core::common::time::BusinessDate::from_str("2026-08-25").unwrap()
         );
+
         assert!(RequestedLine::parse("sol-1", "abc", "2026-08-25").is_err());
         assert!(RequestedLine::parse("sol-1", "1", "not-a-date").is_err());
         assert!(RequestedLine::parse("sol-1", "0", "2026-08-25").is_err());
@@ -817,6 +820,7 @@ mod tests {
             normalized.iter().map(|line| line.sales_order_line_id.clone()).collect::<Vec<_>>(),
             vec!["sol-a".to_string(), "sol-b".to_string()]
         );
+
         assert!(normalize_requested_lines(&[b, duplicate]).is_err());
         assert_eq!(normalize_requested_lines(&[]).unwrap(), Vec::<RequestedLine>::new());
     }
@@ -861,11 +865,13 @@ mod tests {
             Some(group.lines[0].supply.revision.base.id.clone());
         let source = special_source();
         group.lines[0].inquiry_quote = Some(source.clone());
+
         assert_eq!(group.lines[0].unit_cost(SupplyPriceBasis::Bulk).unwrap(), source.unit_cost_gross);
         assert_eq!(group.lines[0].tax_rate(), source.input_tax_rate);
         let frozen = group.lines[0].offering_source().unwrap();
         assert_eq!(frozen.inquiry_quote, Some(source));
         assert_eq!(group.lines[0].supply.revision.bulk_supply_price_gross, general_price);
+
         assert!(
             frozen
                 .ensure_current_supply(
@@ -884,10 +890,12 @@ mod tests {
         let order = sales_order("sales");
         let mut group = basis_group("supplier", "NET-30");
         let general = basis_id_for(&order, &group, "task", None);
+
         group.lines[0].inquiry_quote = Some(special_source());
         group.scope.inquiry_quote_revision_id = Some("quote-v1".into());
         assert_ne!(general, basis_id_for(&order, &group, "task", None));
         assert!(basis_scope_key(&group.scope).ends_with("|INQUIRY:quote-v1"));
+
         let first = basis_id_for(&order, &group, "task", None);
         group.lines[0].inquiry_quote.as_mut().unwrap().quote_revision_id = "quote-v2".into();
         group.scope.inquiry_quote_revision_id = Some("quote-v2".into());
@@ -901,6 +909,7 @@ mod tests {
         let quote = special_source();
         group.lines[0].inquiry_quote = Some(quote.clone());
         let source = group.lines[0].offering_source().unwrap();
+
         super::super::offering_source::ensure_offering_source(
             super::super::PurchaseLineType::ItemService,
             Some(&source),
@@ -908,6 +917,7 @@ mod tests {
             Some(quote.input_tax_rate),
         )
         .unwrap();
+
         assert!(
             super::super::offering_source::ensure_offering_source(
                 super::super::PurchaseLineType::ItemService,

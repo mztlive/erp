@@ -82,6 +82,7 @@ mod tests {
                 ResolvedApprover::new(ParticipantId::new("leader").unwrap(), snapshot(&name, 100)).is_ok()
             );
         }
+
         for name in ["a".repeat(129), "人".repeat(43), " ".into()] {
             assert!(
                 ResolvedApprover::new(ParticipantId::new("leader").unwrap(), snapshot(&name, 100)).is_err()

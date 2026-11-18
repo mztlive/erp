@@ -33,6 +33,7 @@ pub fn material_mappings(
             return Err(Error::ValidationError("门户材料来源必须使用对应资源的完整对象模型".into()));
         }
     }
+
     let mut mappings = BTreeMap::new();
     for (partition, collection) in [
         ("application", Database::PORTAL_APPLICATIONS),
@@ -211,6 +212,7 @@ mod tests {
                 ["$snapshot.offering_id"], [],
             ]})
         );
+
         for partition in ["new_product", "cooperation"] {
             assert!(matches!(
                 mappings[partition].relation(&RelationKey::parse("offering").unwrap(), &context, None),

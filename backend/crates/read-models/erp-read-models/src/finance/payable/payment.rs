@@ -46,14 +46,17 @@ impl PayableReadService {
         let ids = [SupplierPaymentId::new(id)];
         let payments = self.db.supplier_payments().find_supplier_payments_by_ids(&ids, executor).await?;
         let ordered = ordered_supplier_payments(&ids, &payments)?;
+
         let allocations = self.db.payment_allocations().find_allocations_by_payments(&ids, executor).await?;
         let (totals, grouped) = payment_allocation_groups(&ordered, &allocations);
         let enriched =
             display::enrich_payment_allocation_views_batched_with_executor(&self.db, grouped, executor)
                 .await?;
+
         let suppliers = self.supplier_displays_by_ids_with_executor(&ordered, executor).await?;
         let receipts = self.bank_receipt_views_by_ids_with_executor(&ordered, executor).await?;
         let recipients = self.recipient_views_by_ids_with_executor(&ordered, executor).await?;
+
         let mut views =
             map_supplier_payment_views(&ordered, totals, enriched, &suppliers, &receipts, &recipients);
         self.attach_supplier_payment_reversals_with_executor(&mut views, executor).await?;
@@ -72,6 +75,7 @@ impl PayableReadService {
             .map(|payment| payment.supplier_id.clone())
             .collect::<Vec<_>>();
         let suppliers = self.db.supplier_accounts().find_accounts_by_ids(&supplier_ids, executor).await?;
+
         let mut seen_parties = HashSet::new();
         let mut party_ids = Vec::new();
         for supplier in &suppliers {
@@ -80,6 +84,7 @@ impl PayableReadService {
             }
         }
         let parties = self.db.parties().find_parties_by_ids(&party_ids, executor).await?;
+
         let revision_ids: Vec<String> = parties
             .iter()
             .filter_map(|party| party.stable.current_revision_id.clone())
@@ -87,6 +92,7 @@ impl PayableReadService {
             .into_iter()
             .collect();
         let revisions = self.db.party_revisions().find_revisions_by_ids(&revision_ids, executor).await?;
+
         let suppliers_by_id: HashMap<&str, &SupplierAccount> =
             suppliers.iter().map(|supplier| (supplier.base.id.as_str(), supplier)).collect();
         let parties_by_id: HashMap<String, Option<String>> = parties
@@ -97,6 +103,7 @@ impl PayableReadService {
             .iter()
             .map(|revision| (revision.base.id.as_str(), revision.legal_name.as_str()))
             .collect();
+
         let mut displays = HashMap::with_capacity(payments.len());
         for payment in payments {
             let display = suppliers_by_id
@@ -131,9 +138,11 @@ impl PayableReadService {
                 asset_ids.push(FileAssetId::new(asset_id.to_string()));
             }
         }
+
         let assets = self.db.file_assets().find_by_ids(&asset_ids, executor).await?;
         let assets_by_id: HashMap<&str, &FileAsset> =
             assets.iter().map(|asset| (asset.base.id.as_str(), asset)).collect();
+
         let mut views = HashMap::with_capacity(payments.len());
         for payment in payments {
             if let Some(asset_id) = payment.bank_receipt_asset_id.as_ref() {
@@ -168,10 +177,12 @@ impl PayableReadService {
                 account_ids.push(PartyBankAccountId::new(account_id.to_string()));
             }
         }
+
         let accounts =
             self.db.party_bank_accounts().find_bank_accounts_by_ids(&account_ids, executor).await?;
         let accounts_by_id: HashMap<&str, &PartyBankAccount> =
             accounts.iter().map(|account| (account.base.id.as_str(), account)).collect();
+
         let mut views = HashMap::new();
         for payment in payments {
             if let Some(account_id) = payment.payee_bank_account_id.as_ref()
@@ -217,6 +228,7 @@ fn payment_allocation_groups(
             left.allocation_seq.cmp(&right.allocation_seq).then_with(|| left.base.id.cmp(&right.base.id))
         });
     }
+
     let mut grouped_views = Vec::with_capacity(ordered.len());
     let mut allocated_totals = Vec::with_capacity(ordered.len());
     for payment in ordered {
@@ -317,6 +329,7 @@ mod tests {
             "cashier",
         )
         .unwrap();
+
         for (reversed, allocated, unallocated) in [("40", "60", "0"), ("40", "50", "10"), ("100", "0", "0")] {
             payment.reversed_amount = reversed.parse().unwrap();
             let views = map_supplier_payment_views(

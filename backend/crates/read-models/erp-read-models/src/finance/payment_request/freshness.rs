@@ -34,6 +34,7 @@ impl PurchasePaymentRequestReadService {
                 || account.base.id != snapshot.account_id
                 || account.identity != snapshot.identity);
         }
+
         let Some(snapshot) = &request.payee_account else { return Ok(true) };
         let Some(account) = self.db.party_bank_accounts().find_by_id(&snapshot.account_id, executor).await?
         else {
@@ -80,6 +81,7 @@ impl PurchasePaymentRequestReadService {
         {
             return Ok(true);
         }
+
         for source in &line.source_snapshot.sales_sources {
             let current = self.db.sales_orders().find_by_id(&source.sales_order_id, executor).await?;
             let Some(current) = current else {

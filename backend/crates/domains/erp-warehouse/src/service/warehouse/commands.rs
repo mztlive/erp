@@ -36,6 +36,7 @@ impl WarehouseService {
         req.validate()?;
         self.authorization.require(actor, &warehouse::CREATE, AccessTarget::Operation, executor).await?;
         self.ensure_handlers(&req.inbound_handler_user_id, &req.outbound_handler_user_id, executor).await?;
+
         let id = WarehouseId::new(next_id());
         let mut warehouse = Warehouse::new(
             id.clone(),
@@ -59,6 +60,7 @@ impl WarehouseService {
             },
         )?;
         self.db.warehouse().create_warehouse_with_revision(&mut warehouse, &revision, executor).await?;
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "warehouse.create",
@@ -95,6 +97,7 @@ impl WarehouseService {
             )
             .await?;
         let revision_no = self.db.warehouse().next_revision_no(id, executor).await?;
+
         warehouse.update(
             WarehouseUpdate {
                 status: Some(req.status),
@@ -117,8 +120,10 @@ impl WarehouseService {
             },
         )?;
         warehouse.apply_revision(&revision)?;
+
         self.db.warehouse_revisions().create(&revision, executor).await?;
         self.db.warehouses().update(&mut warehouse, executor).await?;
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "warehouse.update",
@@ -154,6 +159,7 @@ impl WarehouseService {
                 executor,
             )
             .await?;
+
         let audit_message = format!(
             "inbound:{}->{};outbound:{}->{}",
             warehouse.inbound_handler_user_id.as_deref().unwrap_or("未配置"),
@@ -169,6 +175,7 @@ impl WarehouseService {
             },
             actor.id(),
         )?;
+
         let audit = self.audit.resource_log_with_message(
             actor.clone(),
             "warehouse.fulfillment_handlers.update",
@@ -199,6 +206,7 @@ impl WarehouseService {
         self.authorization
             .require(actor, &warehouse::SKU_POLICY_UPDATE, AccessTarget::Operation, executor)
             .await?;
+
         let mut policy = self
             .db
             .warehouse_sku_policies()
@@ -210,12 +218,14 @@ impl WarehouseService {
             minimum_available_quantity: req.minimum_available_quantity,
             status: req.status,
         })?;
+
         let existing = self
             .db
             .warehouse()
             .sku_policies_for_dimensions(&policy.warehouse_id, &policy.sku_id, executor)
             .await?;
         policy.ensure_no_overlap(&existing).map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "warehouse_sku_policy.update",
@@ -243,12 +253,14 @@ impl WarehouseService {
         self.authorization
             .require(actor, &warehouse::SKU_POLICY_DELETE, AccessTarget::Operation, executor)
             .await?;
+
         let mut policy = self
             .db
             .warehouse_sku_policies()
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("预警策略不存在".into()))?;
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "warehouse_sku_policy.delete",
@@ -272,6 +284,7 @@ impl WarehouseService {
     ) -> Result<Warehouse> {
         self.authorization.require(actor, &warehouse::UPDATE, AccessTarget::Operation, executor).await?;
         self.ensure_handlers(inbound, outbound, executor).await?;
+
         let warehouse = self
             .db
             .warehouses()

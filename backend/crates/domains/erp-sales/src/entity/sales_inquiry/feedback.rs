@@ -100,6 +100,7 @@ impl InquiryFeedbackData {
         if self.lines.len() != requirement.lines.len() || self.fees.len() > 100 {
             return Err(Error::ValidationError("反馈必须覆盖全部需求行且费用不得超过 100 行".into()));
         }
+
         let mut ids = HashSet::new();
         for line in &self.lines {
             if !ids.insert(&line.line_id) {
@@ -112,6 +113,7 @@ impl InquiryFeedbackData {
                 .ok_or_else(|| Error::ValidationError("反馈包含不属于当前需求的商品行".into()))?;
             line.validate(demand, now)?;
         }
+
         let mut fee_ids = HashSet::new();
         for fee in &self.fees {
             if !fee_ids.insert(&fee.fee_id) {
@@ -156,6 +158,7 @@ impl InquiryFeedbackLine {
         if self.public_note.chars().count() > 4000 {
             return Err(Error::ValidationError("供给说明超出限制".into()));
         }
+
         if available == Decimal::ZERO {
             return Ok(());
         }
@@ -191,6 +194,7 @@ impl InquiryFee {
         if self.amount_gross.to_decimal() < Decimal::ZERO {
             return Err(Error::ValidationError("费用金额不得为负数".into()));
         }
+
         let mut ids = HashSet::new();
         for id in &self.line_ids {
             if !ids.insert(id) || !requirement.lines.iter().any(|line| &line.line_id == id) {

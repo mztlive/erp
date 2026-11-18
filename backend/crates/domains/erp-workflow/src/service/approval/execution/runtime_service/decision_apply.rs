@@ -127,12 +127,14 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             expected_task_version,
             idempotency_key: key,
         };
+
         let commit_command = command.clone();
         let outcome = commit_or_recover(
             || self.commit_decision(actor, commit_command),
             |error| self.recover_decision_after_competing_commit(actor, command, error),
         )
         .await?;
+
         if outcome.blocked {
             return Err(Error::from_approval_code(ErrorCode::ApprovalInstanceBlocked));
         }
@@ -150,7 +152,6 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let rbac = self.auth.clone();
         let identity_service = self.identity.clone();
         let action_port = Arc::clone(&self.action_port);
-
         let audit_port = Arc::clone(&self.audit);
         let actor = actor.clone();
         self.db
@@ -272,6 +273,7 @@ async fn replay_decision(
         DecisionReceiptLookup::Fresh => return Ok(None),
         DecisionReceiptLookup::Terminal(execution_id) => execution_id,
     };
+
     let execution = db
         .bpm_workflow()
         .find_execution_by_id(&execution_id, executor)
@@ -283,6 +285,7 @@ async fn replay_decision(
     if original_actor_id != actor.id() {
         return Err(decision_terminal_fresh_error());
     }
+
     match authorize_decision_terminal_replay(
         &DecisionServices { authorization, identity_service, db, rbac },
         actor,
@@ -298,6 +301,7 @@ async fn replay_decision(
         },
         Err(error) => return Err(error),
     }
+
     replay_terminal_receipt_view(db, actor, command, &item, &execution_id, executor).await
 }
 
@@ -325,6 +329,7 @@ async fn replay_terminal_receipt_view(
     let Some(receipt) = find_receipt_for_identity(db, &identity, executor).await? else {
         return Err(decision_terminal_fresh_error());
     };
+
     // 历史无版本摘要可能存在分隔符碰撞，必须先证明收据仍指向该任务的冻结运行身份。
     ensure_decision_receipt_scope(&receipt, &identity)?;
     let ended_execution =
@@ -338,6 +343,7 @@ async fn replay_terminal_receipt_view(
         ReceiptBranch::Fresh => unreachable!("receipt was loaded"),
         ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
     }
+
     let view = persisted_command_view_with_executor(
         db,
         &receipt.result_ref,
@@ -371,6 +377,7 @@ async fn submit_decision_apply(
     {
         return Ok(replay);
     }
+
     let loaded = load_open_decision_runtime(db, actor, command, executor).await?;
     let authorization_result = authorization
         .require(
@@ -390,6 +397,7 @@ async fn submit_decision_apply(
         }
         return Err(error);
     }
+
     let services = DecisionServices { authorization, identity_service, db, rbac };
     let prepared = prepare_open_decision(&services, actor, command, &loaded, executor).await?;
     persist_open_decision(
@@ -415,16 +423,19 @@ async fn persist_open_decision(
     let DecisionServices { identity_service, db, rbac, .. } = *services;
     let (action_port, audit_port) = ports;
     let (loaded, prepared) = runtime;
+
     // 收据唯一键先于任何领域写入仲裁同键并发；后续失败会随事务整体回滚。
     db.bpm_workflow()
         .insert_command_receipt(&prepared.writes.receipt, executor)
         .await
         .map_err(map_receipt_first_write_error)?;
+
     if prepared.should_finalize {
         action_port.execute(loaded.spec.on_final_approve, &prepared.action_context, actor, executor).await?;
     } else if prepared.writes.domain_action == Some(DomainActionKind::Reject) {
         action_port.execute(loaded.spec.on_reject, &prepared.action_context, actor, executor).await?;
     }
+
     persist_decision_writes(db, persist_decision_input(loaded, prepared, command, audit_port), executor)
         .await?;
     rbac.append_assignment_grants(&prepared.writes, executor).await?;
@@ -515,6 +526,7 @@ async fn verify_decision_receipt_runtime_identity(
     {
         return Err(hidden_not_found());
     }
+
     let document_type = crate::entity::approval_integration::resolve_runtime_document_type(
         instance.subject.subject_kind(),
         instance.process_kind,
@@ -667,6 +679,7 @@ async fn authorize_decision_terminal_replay(
     {
         return Err(hidden_forbidden());
     }
+
     let eligibility = revalidate_decision_approver(
         authorization,
         db,
@@ -708,6 +721,7 @@ async fn load_decision_terminal_replay_facts(
     if execution.process_instance_id.as_ref() != instance.base.id {
         return Err(hidden_not_found());
     }
+
     let document_type = crate::entity::approval_integration::resolve_runtime_document_type(
         instance.subject.subject_kind(),
         instance.process_kind,
@@ -725,6 +739,7 @@ async fn load_decision_terminal_replay_facts(
             instance.subject_version,
         )
         .map_err(|_| hidden_not_found())?;
+
     let assignee = db
         .bpm_workflow()
         .find_assignee_for_node(
@@ -807,6 +822,7 @@ mod rejection_replay_tests {
         .unwrap();
         ensure_decision_receipt_scope(&receipt, &identity).unwrap();
         assert!(matches!(identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)));
+
         let changed = decision_identity(
             normalize_idempotency_key("reject-key").unwrap(),
             "execution-1",
@@ -818,6 +834,7 @@ mod rejection_replay_tests {
         )
         .unwrap();
         assert!(matches!(changed.classify(Some(&receipt)), ReceiptBranch::PayloadConflict));
+
         let actor = decision_identity(
             normalize_idempotency_key("reject-key").unwrap(),
             "execution-1",
@@ -829,6 +846,7 @@ mod rejection_replay_tests {
         )
         .unwrap();
         assert!(matches!(actor.classify(Some(&receipt)), ReceiptBranch::PayloadConflict));
+
         let other = decision_identity(
             normalize_idempotency_key("reject-key").unwrap(),
             "execution-other",

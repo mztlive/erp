@@ -58,6 +58,7 @@ impl SupplierApiService {
         if let Some(blocker) = blockers.into_iter().next() {
             return Err(Error::BusinessLogicError(blocker.message));
         }
+
         match action {
             SupplierConnectionAction::Enable => connection.enable(actor_id),
             SupplierConnectionAction::Disable => connection.disable(actor_id),

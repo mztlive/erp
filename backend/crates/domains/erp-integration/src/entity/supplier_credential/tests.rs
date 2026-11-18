@@ -64,12 +64,14 @@ fn ordinary_import_requires_original_identity_and_version_and_redacts_every_sens
     ] {
         assert!(record.require_binding(&changed).is_err());
     }
+
     let before = record.clone();
     assert!(record.import(payload("sealed-new"), 2, at(101)).is_err());
     assert_eq!(record, before);
     record.import(payload("sealed-new"), 1, at(101)).unwrap();
     assert_eq!(record.base.version, 2);
     assert_eq!(record.encrypted_payload, "sealed-new");
+
     for debug in [format!("{record:?}"), format!("{:?}", binding()), format!("{:?}", payload("secret"))] {
         for forbidden in ["sealed-new", "application-key", "account-scope", "secret"] {
             assert!(!debug.contains(forbidden));
@@ -84,6 +86,7 @@ fn unexpired_claim_has_one_owner_and_only_unsent_expired_claim_can_be_replaced()
     let old = record.clone();
     assert!(!record.claim_refresh(2, &claim("worker-two", "refresh-two", 102)).unwrap());
     assert_eq!(record, old);
+
     let mut expired_old = old;
     assert!(expired_old.mark_refresh_sent(at(131)).is_err());
     assert!(record.claim_refresh(2, &claim("worker-two", "refresh-two", 131)).unwrap());
@@ -101,6 +104,7 @@ fn sent_unknown_survives_timeout_crash_and_import_and_never_returns_to_ready_by_
     assert!(record.release_claim(at(103)).is_err());
     assert!(record.mark_refresh_sent(at(103)).is_err());
     assert_eq!(record, before);
+
     let restored: SupplierCredential =
         serde_json::from_str(&serde_json::to_string(&record).unwrap()).unwrap();
     assert_eq!(restored.refresh.code(), "SENT_UNKNOWN");
@@ -121,10 +125,12 @@ fn original_late_success_keeps_one_completion_receipt_and_rejects_expired_result
             .is_err()
     );
     assert_eq!(record, before);
+
     record.complete_refresh(payload("sealed-rotated"), at(150)).unwrap();
     assert_eq!(record.refresh.code(), "READY");
     assert_eq!(record.last_completed_refresh_operation_id.as_deref(), Some("refresh-one"));
     assert_eq!(record.base.version, 4);
+
     let version = record.base.version;
     assert!(record.claim_refresh(version, &claim("worker", "refresh-one", 151)).is_err());
     assert!(record.complete_refresh(payload("duplicate-result"), at(151)).is_err());
@@ -141,6 +147,7 @@ fn reauthorization_requires_expired_sending_deadline_and_preserves_original_oper
     implicit.new_authorization = false;
     assert!(record.reauthorize(payload("new-authorization"), &implicit, at(131)).is_err());
     assert!(record.reauthorize(payload("new-authorization"), &recovery(2), at(131)).is_err());
+
     assert!(record.reauthorize(payload("new-authorization"), &recovery(3), at(131)).unwrap());
     assert_eq!(record.base.id, "credential-id");
     assert_eq!(record.binding(), binding());
@@ -157,10 +164,12 @@ fn reauthorization_requires_expired_sending_deadline_and_preserves_original_oper
 fn same_semantic_reauthorization_replays_across_random_ciphertexts_but_different_payloads_are_rejected() {
     let mut record = sent();
     record.reauthorize(payload("cipher-nonce-one"), &recovery(3), at(131)).unwrap();
+
     let before = record.clone();
     assert!(!record.reauthorize(payload("cipher-nonce-two"), &recovery(3), at(132)).unwrap());
     assert!(!record.reauthorize(payload("cipher-nonce-three"), &recovery(3), at(2000)).unwrap());
     assert_eq!(record, before);
+
     let changed =
         SupplierCredentialPayload { payload_fingerprint: "b".repeat(64), ..payload("cipher-other") };
     assert!(record.reauthorize(changed, &recovery(3), at(132)).is_err());
@@ -178,6 +187,7 @@ fn verified_invalid_grant_requires_new_authorization_and_does_not_restore_old_to
     assert_eq!(record.encrypted_payload, "sealed-original");
     assert!(record.import(payload("ordinary-import"), 4, at(104)).is_err());
     assert!(!record.claim_refresh(4, &claim("worker", "operation", 104)).unwrap());
+
     assert!(record.reauthorize(payload("new-authorization"), &recovery(4), at(104)).unwrap());
     assert_eq!(record.refresh.code(), "READY");
     assert_eq!(record.base.version, 5);
@@ -187,6 +197,7 @@ fn verified_invalid_grant_requires_new_authorization_and_does_not_restore_old_to
 fn expired_ready_or_unsent_claim_requires_explicit_new_authorization_but_never_bypasses_sent_deadline() {
     let new_authorization =
         || SupplierCredentialPayload { expires_at: at(2000), ..payload("new-authorization") };
+
     let mut ready = record();
     let before = ready.clone();
     assert!(ready.reauthorize(new_authorization(), &recovery(1), at(999)).is_err());
@@ -233,8 +244,10 @@ fn invalid_metadata_time_and_payload_fail_without_partial_state_change() {
         );
         assert_eq!(record, before);
     }
+
     record.base.version = u64::MAX;
     assert!(record.import(payload("new"), u64::MAX, at(101)).is_err());
+
     for invalid in [
         SupplierCredentialPayload { encrypted_payload: String::new(), ..payload("x") },
         SupplierCredentialPayload { payload_fingerprint: "not-hmac".into(), ..payload("x") },

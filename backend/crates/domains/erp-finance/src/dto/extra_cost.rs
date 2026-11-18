@@ -225,6 +225,7 @@ impl SalesExtraCostView {
                     .find(|allocation| allocation.cost_entry_id.as_ref() == entry.base.id)
                     .and_then(|allocation| allocation.sales_order_line_id.as_ref())
                     .map(ToString::to_string);
+
                 Some(Self {
                     source: ExtraCostSource::Registration,
                     id: entry.base.id.clone(),
@@ -263,6 +264,7 @@ fn reductions_of(original: &CostEntry, entries: &[CostEntry]) -> Vec<ExtraCostRe
             evidence_attachment_id: entry.evidence_attachment_id.as_ref().map(ToString::to_string),
         })
         .collect::<Vec<_>>();
+
     reductions.sort_by(|left, right| {
         (left.occurred_at.unix_secs(), &left.cost_entry_id)
             .cmp(&(right.occurred_at.unix_secs(), &right.cost_entry_id))
@@ -292,6 +294,7 @@ impl SalesExtraCostListView {
             };
             key(left).cmp(&key(right))
         });
+
         let mut pending = Amount::zero();
         let mut occurred = Amount::zero();
         for item in &items {
@@ -321,6 +324,7 @@ mod tests {
         assert!(request.validate().is_ok());
         assert_eq!(request.input().category, ExtraCostCategory::Logistics);
         assert!(request.input().sales_order_line_id.is_none());
+
         let mut unknown = body.clone();
         unknown["cost_stage"] = json!("reduction");
         assert!(serde_json::from_value::<RegisterExtraCostRequest>(unknown).is_err());
@@ -382,11 +386,11 @@ mod tests {
 
         let list =
             SalesExtraCostListView::from_items(SalesExtraCostView::registrations(&entries, &allocations));
-
         assert_eq!(list.items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), ["xc-a", "xc-b"]);
         let late = &list.items[1];
         assert_eq!(late.reductions.len(), 1);
         assert_eq!(late.remaining_gross_amount, Amount::from_str("50.00").unwrap());
+
         assert_eq!(list.occurred_gross_total, Amount::from_str("70.00").unwrap());
         assert_eq!(list.pending_gross_total, Amount::zero());
     }

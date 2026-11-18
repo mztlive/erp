@@ -137,6 +137,7 @@ impl<'a> CatalogRepository<'a> {
             Some(sku_no) => Some(self.sku_ids_by_sku_no(sku_no, executor).await?),
             None => None,
         };
+
         let mut ids = match (by_product, by_sku) {
             (None, None) => return Ok(None),
             (Some(ids), None) | (None, Some(ids)) => ids,
@@ -171,6 +172,7 @@ impl<'a> CatalogRepository<'a> {
         if products.is_empty() {
             return Ok(Vec::new());
         }
+
         let product_ids =
             products.into_iter().map(|product| ProductId::new(product.base.id)).collect::<Vec<_>>();
         Ok(SkuRepository::new(self.db, SKUS)
@@ -232,6 +234,7 @@ impl<'a> CatalogRepository<'a> {
                     .collect(),
             );
         }
+
         let mut result = self.db.skus().search_skus(&filter, executor).await?;
         self.attach_current_sku_names(&mut result.items, executor).await?;
         Ok(result)
@@ -398,11 +401,13 @@ impl<'a> CatalogRepository<'a> {
         if revision_ids.is_empty() {
             return Ok(());
         }
+
         let revisions = self.db.sku_revisions().find_many(in_filter("id", revision_ids), executor).await?;
         let names = revisions
             .into_iter()
             .map(|revision| (revision.base.id, revision.name))
             .collect::<HashMap<_, _>>();
+
         for row in rows {
             row.name =
                 row.current_revision_id.as_ref().and_then(|revision_id| names.get(revision_id).cloned());
@@ -442,6 +447,7 @@ impl<'a> CatalogRepository<'a> {
     ) -> CatalogResult<()> {
         self.lock_product_match(sku.product_id.as_ref(), executor).await?;
         self.claim_sku_barcode(revision, executor).await?;
+
         mongo_ops::insert_one(&self.db.collection::<Sku>(SKUS), sku, executor).await?;
         mongo_ops::insert_one(&self.db.collection::<SkuRevision>(SKU_REVISIONS), revision, executor).await?;
         mongo_ops::insert_many(
@@ -460,14 +466,17 @@ impl CatalogRepository<'_> {
     /// 保持库存专用搜索口径不变；只接受商品当前修订，数据库错误整次返回。
     async fn list_keyword_sku_ids(&self, keyword: &str, executor: &mut dyn Executor) -> Result<Vec<SkuId>> {
         let mut ids = self.keyword_sku_ids(keyword, true, executor).await?;
+
         let mut name_filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut name_filter, "name", Some(keyword));
         let revisions = self.db.collection::<Document>(<mongodb::Database as CatalogExt>::PRODUCT_REVISIONS);
         let revision_ids = mongo_ops::distinct(&revisions, "id", name_filter, executor).await?;
+
         let mut number = Document::new();
         insert_literal_regex_filter(&mut number, "product_no", Some(keyword));
         let products = self.db.collection::<Document>(<mongodb::Database as CatalogExt>::PRODUCTS);
         let product_ids = mongo_ops::distinct(&products, "id", doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": [number, doc! { "current_revision_id": { "$in": revision_ids } }] }, executor).await?;
+
         let skus = self.db.collection::<Document>(SKUS);
         let values = mongo_ops::distinct(
             &skus,
@@ -480,6 +489,7 @@ impl CatalogRepository<'_> {
             Bson::String(value) => Some(SkuId::new(value)),
             _ => None,
         }));
+
         ids.sort_by_key(ToString::to_string);
         ids.dedup();
         Ok(ids)
@@ -575,10 +585,12 @@ mod tests {
             },
         )
         .unwrap();
+
         let bytes = bson::serialize_to_vec(&revision).unwrap();
         let wire_doc: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
         assert!(matches!(wire_doc.get("sales_visible_price_gross"), Some(Bson::Decimal128(_))));
         assert!(matches!(wire_doc.get("weight_kg"), Some(Bson::Decimal128(_))));
+
         let back: SkuRevision = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(back, revision);
     }
@@ -593,6 +605,7 @@ mod inventory_keyword_tests {
         let regular = sku_revision_keyword_filter("500ml.[x]", false);
         assert!(regular.contains_key("name"));
         assert!(!regular.contains_key("$or"));
+
         let inventory = sku_revision_keyword_filter("500ml.[x]", true);
         assert!(inventory.contains_key("deleted_at"));
         let clauses = inventory.get_array("$or").unwrap();

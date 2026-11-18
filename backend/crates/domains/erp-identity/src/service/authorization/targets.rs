@@ -63,6 +63,7 @@ impl TargetFacts {
         }
         let boundary =
             executor.boundary().ok_or_else(|| Error::ValidationError("目标读取缺少执行边界".into()))?;
+
         let (form, ids, candidate, version) = match target {
             Target::Records(ids) => (TargetForm::Record, ids.clone(), None, None),
             Target::Candidate(candidate) => {
@@ -85,15 +86,18 @@ impl TargetFacts {
         if !matches!(form, TargetForm::Candidate) && ids.ids().is_empty() {
             return Err(Error::ValidationError("授权目标不能为空".into()));
         }
+
         let task = matches!(form, TargetForm::Task);
         let objects = load_target_records(bindings, context, &ids, task, executor).await?;
         if version.is_some_and(|version| objects[0].version != version) {
             return Err(Error::ConflictError("任务版本已改变".into()));
         }
+
         let candidate = match candidate {
             Some(candidate) => Some(load_candidate(bindings, context, rule, candidate, executor).await?),
             None => None,
         };
+
         let result = Self { objects, candidate, boundary, task };
         if !result.boundary.is_current(executor) {
             return Err(Error::ValidationError("目标读取跨越执行阶段".into()));
@@ -167,6 +171,7 @@ impl TargetFacts {
                 return Err(Error::ConflictError("DATA_SCOPE_CHANGED：对象事实已改变".into()));
             }
         }
+
         self.ensure_current()
     }
 }
@@ -225,6 +230,7 @@ async fn load_candidate(
         let (key, resource) = approvals::candidate_source(&candidate)?;
         resources.insert(key, resource);
     }
+
     for (key, related) in &mut candidate.relations {
         if !related.objects.is_empty() {
             return Err(Error::ValidationError("候选不能提供现存来源的授权事实".into()));
@@ -234,6 +240,7 @@ async fn load_candidate(
         if related.expected_ids.is_empty() {
             continue;
         }
+
         let port =
             bindings.get(resource).ok_or_else(|| Error::ValidationError("缺少来源 Facts 绑定".into()))?;
         let ids = related.expected_ids.iter().map(String::as_str).collect::<Vec<_>>();
@@ -392,6 +399,7 @@ mod tests {
         .unwrap();
         facts.require(&context, &rule, &BTreeSet::new(), &mut executor).unwrap();
         assert!(facts.objects.is_empty());
+
         assert!(matches!(
             TargetFacts::load(
                 &BTreeMap::new(),
@@ -403,6 +411,7 @@ mod tests {
             .await,
             Err(Error::ValidationError(_))
         ));
+
         let wrong = ObjectFacts { version: "persisted-v1".into(), ..candidate };
         assert!(matches!(
             TargetFacts::load(&BTreeMap::new(), &context, &rule, Target::Candidate(&wrong), &mut executor)
@@ -424,6 +433,7 @@ mod tests {
         let bindings: FactsBindings =
             [(context.resource.clone(), port.clone() as Arc<dyn AccessFactsPort>)].into();
         let mut executor = SnapshotExecutor::default();
+
         for (owner, allowed) in [("user", true), ("other", false)] {
             let candidate = candidate(&context.resource, owner);
             let facts = TargetFacts::load(
@@ -444,6 +454,7 @@ mod tests {
                 (context.resource.clone(), ["original".into()].into()),
             ]
         );
+
         let original_denied = Arc::new(Facts {
             objects: vec![ObjectFacts {
                 id: "original".into(),
@@ -627,16 +638,19 @@ mod tests {
         )
         .await
         .unwrap();
+
         executor.next_read();
         assert!(matches!(
             facts.require(&context, &rule, &BTreeSet::new(), &mut executor),
             Err(Error::ValidationError(_))
         ));
+
         executor.restart();
         assert!(matches!(
             facts.require(&context, &rule, &BTreeSet::new(), &mut executor),
             Err(Error::ValidationError(_))
         ));
+
         facts.boundary = executor.boundary().unwrap();
         facts.candidate.as_mut().unwrap().valid_until = Some(Instant::from_unix_secs(1));
         assert!(matches!(
@@ -671,6 +685,7 @@ mod tests {
             }),
         };
         build(related.clone()).ensure_current().unwrap();
+
         related.expected_ids.insert("extra".into());
         related.objects.push(ObjectFacts {
             resource: "purchase_order".into(),

@@ -49,6 +49,7 @@ pub struct CancelPlan {
 pub fn plan_cancel(input: CancelPlanInput<'_>) -> EngineResult<CancelPlan> {
     let task_policy = input.instance.cancellation_task_policy()?;
     input.current.ensure_cancellation_tasks(task_policy, input.open_task_count)?;
+
     let blocker = input.instance.blocker_code.or(input.current.blocker_code);
     let blocked_port_required = blocker.is_some_and(|code| !code.allows_assignee_recovery());
     Ok(CancelPlan { task_policy, close_open_task: task_policy.closes_open_task(), blocked_port_required })
@@ -254,6 +255,7 @@ mod tests {
             at: at(10),
         })
         .unwrap();
+
         let error = plan_cancel(CancelPlanInput {
             instance: &fresh,
             current: &current_execution(),

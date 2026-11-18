@@ -203,9 +203,11 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             ResponsibilityChange::Handover,
             handover_fingerprint(actor.id(), id, &req),
         );
+
         if let Some(statement) = self.replay_responsibility_change(&command, executor).await? {
             return Ok(handover_view(statement));
         }
+
         ensure_target_qualified(&self.authorization, req.target_user_id.trim(), executor).await?;
         ensure_org_enabled(&self.db, req.target_org_unit_id.as_deref(), executor).await?;
         let dependencies = SettlementDependencies::from_process(self);
@@ -260,9 +262,11 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             ResponsibilityChange::ReassignDifferenceHandler,
             handler_fingerprint(actor.id(), id, &req),
         );
+
         if let Some(statement) = self.replay_responsibility_change(&command, executor).await? {
             return Ok(handler_view(statement));
         }
+
         ensure_target_qualified(&self.authorization, req.target_user_id.trim(), executor).await?;
         let dependencies = SettlementDependencies::from_process(self);
         apply_handler(&dependencies, &command, &req, executor).await
@@ -334,6 +338,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         };
         stored.verify(&command.fingerprint, Some(&command.statement_id), conflict_message)?;
         command.change.verify_result(&stored.result)?;
+
         self.data_scope
             .require_statement(
                 &command.actor,
@@ -365,11 +370,13 @@ async fn apply_handover(
     if statement.base.version != req.expected_version {
         return Err(Error::ConflictError("结算单责任或版本已变化，请刷新后重试".into()));
     }
+
     ensure_target_qualified(&dependencies.authorization, req.target_user_id.trim(), executor).await?;
     ensure_org_enabled(&dependencies.db, req.target_org_unit_id.as_deref(), executor).await?;
     let next_org = req.target_org_unit_id.clone().filter(|value| !value.trim().is_empty());
     statement.handover(req.target_user_id.clone(), next_org)?;
     dependencies.access.require_owner_change(&command.actor, &statement, executor).await?;
+
     dependencies.db.supplier_settlement_statements().update(&mut statement, executor).await?;
     dependencies.write_audit(command, Some(statement.statement_no.clone()), executor).await?;
     Ok(handover_view(statement))
@@ -394,8 +401,10 @@ async fn apply_handler(
     if statement.base.version != req.expected_version {
         return Err(Error::ConflictError("结算单责任或版本已变化，请刷新后重试".into()));
     }
+
     ensure_target_qualified(&dependencies.authorization, req.target_user_id.trim(), executor).await?;
     statement.reassign_difference_handler(req.target_user_id.clone())?;
+
     dependencies.db.supplier_settlement_statements().update(&mut statement, executor).await?;
     dependencies.write_audit(command, Some(statement.statement_no.clone()), executor).await?;
     Ok(handler_view(statement))
@@ -455,6 +464,7 @@ async fn list_candidates(
             account: account.login_account.clone(),
         });
     }
+
     candidates.sort_by(|left, right| left.display_name.cmp(&right.display_name));
     Ok(candidates)
 }
@@ -516,6 +526,7 @@ mod tests {
             ),
         ];
         let mut command_ids = Vec::new();
+
         for (change, action, expected_result) in cases {
             let command =
                 ResponsibilityCommand::new(&actor, "statement-1", " private-key ", change, "a".repeat(64));
@@ -525,6 +536,7 @@ mod tests {
             assert_eq!(audit.resource_id.as_deref(), Some("statement-1"));
             assert_eq!(audit.actor_id, "actor-1");
             assert_eq!(change.result(), expected_result);
+
             let event = audit.structured_event.unwrap();
             assert_eq!(event.command_id.as_deref(), Some(command.audit_id.as_str()));
             assert_eq!(event.resource_number_snapshot.as_deref(), Some("JS202610040001"));

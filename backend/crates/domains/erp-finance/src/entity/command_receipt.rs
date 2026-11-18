@@ -306,9 +306,11 @@ mod tests {
         let mut changed = valid.clone();
         changed.result_schema_version = 2;
         assert!(changed.purchase_invoice_id(&command(10)).is_err());
+
         let mut changed = valid.clone();
         changed.result = FinanceCommandResult::PurchaseInvoiceRegistered { invoice_id: InvoiceId::new("") };
         assert!(changed.purchase_invoice_id(&command(10)).is_err());
+
         let mut changed = valid;
         changed.command.actor_id = "other".to_string();
         assert!(matches!(changed.purchase_invoice_id(&command(10)), Err(Error::Internal(_))));
@@ -335,9 +337,11 @@ mod tests {
             let mut receipt =
                 FinanceCommandReceipt::resource(&command, "target".to_string(), "audit".to_string()).unwrap();
             assert_eq!(receipt.resource_id(&command).unwrap(), "target");
+
             let changed =
                 CommandReceipt::from_payload("finance-", "actor", action, resource_type, "key", &20).unwrap();
             assert!(matches!(receipt.resource_id(&changed), Err(Error::ConflictError(_))));
+
             receipt.result = FinanceCommandResult::ResourceCommitted {
                 resource: FinanceCommandResource::Invoice(InvoiceId::new("wrong")),
             };
@@ -345,6 +349,7 @@ mod tests {
                 assert!(matches!(receipt.resource_id(&command), Err(Error::Internal(_))));
             }
         }
+
         let unsupported = CommandReceipt::from_payload(
             "finance-",
             "actor",
@@ -372,6 +377,7 @@ mod tests {
         )
         .unwrap();
         assert!(FinanceCommandReceipt::resource(&command, "other".to_string(), "audit".to_string()).is_err());
+
         let mut receipt =
             FinanceCommandReceipt::resource(&command, "target".to_string(), "audit".to_string()).unwrap();
         receipt.result = FinanceCommandResult::ResourceCommitted {

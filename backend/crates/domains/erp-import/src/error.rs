@@ -106,6 +106,7 @@ mod tests {
         let generic = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
         assert_eq!(generic.class(), ErrorClass::Conflict);
         assert_eq!(generic.to_string(), "数据冲突: 数据已存在，请勿重复提交");
+
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_legacy_import_batches_batch_no")),
             "导入批次号重复，请勿重复提交"

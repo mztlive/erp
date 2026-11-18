@@ -92,15 +92,18 @@ impl InquirySupplyService {
         let quote = InquiryQuote::new(quote.base.id.clone(), quote.data.clone())?;
         let prior = self.db.inquiry_quotes().history(&quote.data.quote_id, executor).await?;
         quote.ensure_next_revision(prior.first())?;
+
         if prior.is_empty() {
             self.db
                 .inquiry_quote_balances()
                 .create(&InquiryQuoteBalance::empty(quote.data.quote_id.clone())?, executor)
                 .await?;
         }
+
         self.ensure_offering(&quote, executor).await?;
         port.ensure_qualified(&quote.data.supplier_id, &quote.data.sku_id, BusinessDate::today(), executor)
             .await?;
+
         self.db.inquiry_quotes().create(&quote, executor).await?;
         Ok(())
     }
@@ -125,6 +128,7 @@ impl InquirySupplyService {
             return Err(Error::ConflictError("专项报价版本已变化，请重新确认".into()).into());
         }
         quote.ensure_applicable(usage)?;
+
         self.ensure_offering(&quote, executor).await?;
         port.ensure_qualified(&quote.data.supplier_id, &quote.data.sku_id, usage.on_date, executor).await?;
         Ok(quote)
@@ -182,6 +186,7 @@ impl InquirySupplyService {
                 executor,
             )
             .await?;
+
         if let Some(mut existing) = existing {
             if existing.base.id != normalized.base.id {
                 return Err(Error::ConflictError("费用内部依据稳定身份不符".into()));
@@ -236,6 +241,7 @@ impl InquirySupplyService {
             usage,
         } = input;
         let quote = self.ensure_quote(id, version, usage, port, executor).await?;
+
         let mut balance = self
             .db
             .inquiry_quote_balances()
@@ -244,6 +250,7 @@ impl InquirySupplyService {
             .ok_or_else(|| Error::ConflictError("专项报价余额缺失，禁止采用".into()))?;
         balance.reserve(&quote, usage)?;
         self.db.inquiry_quote_balances().update(&mut balance, executor).await?;
+
         let reservation = InquiryQuoteReservation {
             base: BaseModel::new(reservation_id.to_string()),
             purchase_order_id: purchase_order_id.to_string(),
@@ -282,10 +289,12 @@ impl InquirySupplyService {
         if reservation.released {
             return Err(Error::ConflictError("专项采购采用已释放".into()).into());
         }
+
         let quote = self.quote(&reservation.quote_revision_id, executor).await?;
         quote.ensure_applicable(usage)?;
         self.ensure_offering(&quote, executor).await?;
         port.ensure_qualified(&quote.data.supplier_id, &quote.data.sku_id, usage.on_date, executor).await?;
+
         let mut balance = self
             .db
             .inquiry_quote_balances()
@@ -293,6 +302,7 @@ impl InquirySupplyService {
             .await?
             .ok_or_else(|| Error::ConflictError("专项报价余额缺失".into()))?;
         reservation = balance.resized(&quote, usage, &reservation, keep_existing)?;
+
         self.db.inquiry_quote_balances().update(&mut balance, executor).await?;
         self.db.inquiry_quote_reservations().update(&mut reservation, executor).await?;
         Ok(quote)
@@ -322,10 +332,12 @@ impl InquirySupplyService {
         if reservation.quote_revision_id != quote_revision_id {
             return Err(Error::ConflictError("恢复不得切换原专项报价".into()));
         }
+
         let quote = self.quote(quote_revision_id, executor).await?;
         if quote.data.quote_id != reservation.quote_id {
             return Err(Error::ConflictError("原专项报价与采用余额归属不一致".into()));
         }
+
         let mut balance = self
             .db
             .inquiry_quote_balances()
@@ -333,6 +345,7 @@ impl InquirySupplyService {
             .await?
             .ok_or_else(|| Error::ConflictError("原专项报价余额缺失".into()))?;
         reservation = balance.restore_existing_usage(&reservation, quantity, addresses)?;
+
         self.db.inquiry_quote_balances().update(&mut balance, executor).await?;
         self.db.inquiry_quote_reservations().update(&mut reservation, executor).await?;
         Ok(quote)
@@ -369,6 +382,7 @@ impl InquirySupplyService {
         if reservation.released {
             return Ok(());
         }
+
         let mut balance = self
             .db
             .inquiry_quote_balances()
@@ -377,6 +391,7 @@ impl InquirySupplyService {
             .ok_or_else(|| Error::ConflictError("专项报价采用余额缺失".into()))?;
         balance.release(&reservation)?;
         self.db.inquiry_quote_balances().update(&mut balance, executor).await?;
+
         reservation.released = true;
         self.db.inquiry_quote_reservations().update(&mut reservation, executor).await?;
         Ok(())

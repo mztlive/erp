@@ -81,6 +81,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         }
         let idempotency_key = normalize_idempotency_key(&command.idempotency_key)?;
         command.idempotency_key = idempotency_key.as_str().to_string();
+
         let commit_command = command.clone();
         let commit_key = idempotency_key.clone();
         commit_or_recover(
@@ -103,7 +104,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let authorization = self.authorization.clone();
         let identity_service = self.identity.clone();
         let action_port = Arc::clone(&self.action_port);
-
         let audit_port = Arc::clone(&self.audit);
         let actor = actor.clone();
         self.db
@@ -177,6 +177,7 @@ async fn replay_cancel_blocked(
 ) -> Result<Option<ApprovalCommandView>> {
     ensure_cancel_blocked_authorized(authorization, actor, &command.approval_process_instance_id, executor)
         .await?;
+
     let instance = db
         .bpm_workflow()
         .find_instance_by_id(&ApprovalProcessInstanceId::new(&command.approval_process_instance_id), executor)
@@ -188,6 +189,7 @@ async fn replay_cancel_blocked(
     let Some(terminal_facts) = replay_terminal_facts(db, actor, command, &instance, executor).await? else {
         return Ok(None);
     };
+
     let identity = cancel_blocked_identity(CancelBlockedIdentityParams {
         idempotency_key: idempotency_key.clone(),
         instance_id: &command.approval_process_instance_id,
@@ -215,6 +217,7 @@ async fn replay_cancel_blocked(
         ReceiptBranch::Fresh => unreachable!("receipt was loaded"),
         ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
     }
+
     persisted_command_view_with_executor(db, &receipt.result_ref, CommitRequired::Cancelled, true, executor)
         .await
         .map(Some)
@@ -273,6 +276,7 @@ async fn load_cancel_blocked_terminal_facts(
         .approval_tasks_for_execution(&ApprovalNodeExecutionId::new(&fact.execution_id), executor)
         .await?;
     fact.ensure_runtime(instance, &execution, &tasks)?;
+
     let receipt = db
         .bpm_workflow()
         .find_command_receipt(
@@ -373,8 +377,10 @@ async fn cancel_blocked_apply(
     {
         return Ok(replay);
     }
+
     let source = load_cancel_source(authorization, db, actor, command, executor).await?;
     let operation = prepare_blocked_cancel(db, source, command, idempotency_key, actor, executor).await?;
+
     persist_cancel_operation(
         identity_service,
         db,
@@ -416,6 +422,7 @@ async fn load_cancel_source(
 ) -> Result<CancelSource> {
     ensure_cancel_blocked_authorized(authorization, actor, &command.approval_process_instance_id, executor)
         .await?;
+
     let instance_id = ApprovalProcessInstanceId::new(&command.approval_process_instance_id);
     let instance =
         db.bpm_workflow().find_instance_by_id(&instance_id, executor).await?.ok_or_else(hidden_not_found)?;
@@ -437,6 +444,7 @@ async fn load_cancel_execution(
     if policy.closes_open_task() {
         return Err(Error::ConflictError("受阻取消不得处理运行中审批实例".into()));
     }
+
     let instance_id = ApprovalProcessInstanceId::new(&instance.base.id);
     let current = db
         .bpm_workflow()
@@ -451,6 +459,7 @@ async fn load_cancel_execution(
         return Err(Error::ConflictError("受阻审批当前执行引用不一致".into()));
     }
     ensure_expected_version("审批执行", command.expected_execution_version, current.base.version)?;
+
     let execution_id = ApprovalNodeExecutionId::new(&current.base.id);
     let open_tasks = db.work_items().open_approval_tasks_for_execution(&execution_id, executor).await?;
     policy
@@ -481,6 +490,7 @@ async fn prepare_blocked_cancel(
         (Some(instance), Some(execution)) if instance == execution => {},
         _ => return Err(Error::ConflictError("受阻实例与当前执行 blocker 不一致".into())),
     }
+
     let now = Instant::now();
     let prepared = prepare_cancel(cancel_input(graph, &source, command, key, actor, now)?)?;
     let PreparedExecution::Apply(writes) = prepared else {
@@ -489,6 +499,7 @@ async fn prepare_blocked_cancel(
     let [execution] = writes.updated_executions.as_slice() else {
         return Err(Error::Internal("受阻取消必须产生唯一执行终态".into()));
     };
+
     let audit = PreparedWorkflowAudit::resource_with_message(
         actor.clone(),
         "approval.cancel_blocked",
@@ -559,13 +570,16 @@ async fn persist_cancel_operation(
 ) -> Result<ApprovalCommandView> {
     let CancelOperation { source, writes, now, fact, audit } = operation;
     let context = cancel_action_context(&source, command, actor)?;
+
     db.bpm_workflow()
         .insert_command_receipt(&writes.receipt, executor)
         .await
         .map_err(map_receipt_first_write_error)?;
+
     action_port
         .execute(adapter_spec_of(source.document_type)?.cancel_action, &context, actor, executor)
         .await?;
+
     db.bpm_workflow()
         .persist_cancelled_runtime_after_receipt(
             &writes.instance,
@@ -575,6 +589,7 @@ async fn persist_cancel_operation(
         )
         .await?;
     db.approval_cancellation_facts().create(&fact, executor).await?;
+
     persist_copies(identity_service, db, &writes.instance, &writes.events, executor).await?;
     persist_cancel_notifications(
         db,
@@ -592,6 +607,7 @@ async fn persist_cancel_operation(
     )
     .await?;
     audit_port.persist(&audit, executor).await?;
+
     let subject_status = match source.document_type {
         DocumentType::PurchasePaymentRequest => "withdrawn",
         _ => "DRAFT",

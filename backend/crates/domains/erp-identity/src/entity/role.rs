@@ -247,6 +247,7 @@ mod tests {
         assert_eq!(data.name, "测试角色");
         assert!(data.description.is_none());
         assert!(!data.system);
+
         let system = RoleData::new("系统角色").with_system(true).with_description("内建");
         assert!(system.system);
         assert_eq!(system.description.as_deref(), Some("内建"));
@@ -284,7 +285,6 @@ mod tests {
     #[test]
     fn custom_role_should_be_deletable() {
         let role = Role::new(RoleId::parse("role-custom").unwrap(), RoleData::new("自定义角色")).unwrap();
-
         assert!(role.ensure_deletable().is_ok());
     }
 

@@ -25,6 +25,7 @@ where
         .limit(filter.limit())
         .projection(projection)
         .build();
+
     let collection = repo.collection().clone_with_type::<Row>();
     let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
     let total = mongo_ops::count_documents(&repo.collection(), filter.to_doc(), executor).await?;

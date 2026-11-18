@@ -47,6 +47,7 @@ pub async fn create_unit_of_measure(
     actor: AuditActor,
 ) -> Result<UnitOfMeasureView> {
     req.validate()?;
+
     let id = UnitOfMeasureId::new(next_id());
     let unit = UnitOfMeasure::new(
         id.clone(),
@@ -60,6 +61,7 @@ pub async fn create_unit_of_measure(
         },
         actor.id(),
     )?;
+
     let audit = actor.clone().resource_log("unit_of_measure.create", "unit_of_measure", id.to_string())?;
     run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
@@ -131,6 +133,7 @@ async fn persist_category(
         .require(actor, &catalog::PRODUCT_CATEGORY_CREATE, AccessTarget::Operation, executor)
         .await?;
     service.ensure_parent_chain_ok(id.as_ref(), req.parent_category_id.as_ref(), executor).await?;
+
     if req.category_code.trim().is_empty() {
         req.category_code = DocumentNumberGenerator::new(db.clone())
             .next_number(DocumentNumberKind::ProductCategory, BusinessDate::today().as_naive_date(), executor)
@@ -172,6 +175,7 @@ pub async fn create_sku_attribute(
     actor: AuditActor,
 ) -> Result<SkuAttributeView> {
     req.validate()?;
+
     let id = SkuAttributeId::new(next_id());
     let attribute = SkuAttribute::new(
         id.clone(),
@@ -183,6 +187,7 @@ pub async fn create_sku_attribute(
         },
         actor.id(),
     )?;
+
     let audit = actor.clone().resource_log("sku_attribute.create", "sku_attribute", id.to_string())?;
     run_audited(&db, audit, move |db, executor| {
         Box::pin(async move {
@@ -219,6 +224,7 @@ pub async fn create_sku_attribute_value(
     actor: AuditActor,
 ) -> Result<SkuAttributeValueView> {
     req.validate()?;
+
     let id = SkuAttributeValueId::new(next_id());
     let value = SkuAttributeValue::new(
         id.clone(),
@@ -231,6 +237,7 @@ pub async fn create_sku_attribute_value(
         },
         actor.id(),
     )?;
+
     let audit =
         actor.clone().resource_log("sku_attribute_value.create", "sku_attribute_value", id.to_string())?;
     run_audited(&db, audit, move |db, executor| {
@@ -277,6 +284,7 @@ mod tests {
             product_kind: ProductKind::Physical,
             status: None,
         };
+
         let error = persist_category(
             &db,
             &authorization,
@@ -301,6 +309,7 @@ mod tests {
             actor.id(),
         )
         .unwrap();
+
         let error =
             persist_unit(&db, &unavailable_authorization(), &actor, &unit, &mut SnapshotExecutor::default())
                 .await

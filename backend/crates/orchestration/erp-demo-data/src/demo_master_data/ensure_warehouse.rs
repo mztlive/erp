@@ -34,6 +34,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let Some(handler_user_id) = handler_user_id else {
             return Ok(EnsureOutcome::Notice("没有可用的仓储账号，未生成仓库".to_string()));
         };
+
         if let Some(existing) = self
             .db
             .warehouses()
@@ -54,6 +55,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             record::save(&self.db, step, existing.base.id, Vec::new()).await?;
             return Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored });
         }
+
         let view = match self
             .ports
             .warehouse
@@ -66,6 +68,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             },
             Err(error) => return Err(error.into()),
         };
+
         record::save(&self.db, step, view.id.clone(), Vec::new()).await?;
         self.verify_warehouse_ready(&view.id).await?;
         Ok(EnsureOutcome::Created)
@@ -208,6 +211,7 @@ mod tests {
         warehouse.stable.status = EnableStatus::Disabled;
         assert!(matches!(warehouse_ready(&warehouse, &identity, &mut ReadExecutor::default()).await,
             Err(Error::ValidationError(message)) if message.contains("停用")));
+
         warehouse.stable.status = EnableStatus::Active;
         warehouse.inbound_handler_user_id = None;
         assert!(matches!(warehouse_ready(&warehouse, &identity, &mut ReadExecutor::default()).await,
@@ -229,6 +233,7 @@ mod tests {
                 Err(Error::ValidationError(message)) if message.contains("入库经办人不可用")));
             assert_eq!(*identity.calls.lock().unwrap(), ["inbound"]);
         }
+
         let mut identity = identity();
         identity.facts[1].outbound_eligible = false;
         assert!(matches!(warehouse_ready(&warehouse, &identity, &mut ReadExecutor::default()).await,

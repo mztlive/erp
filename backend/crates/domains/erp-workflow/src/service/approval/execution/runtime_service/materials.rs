@@ -85,6 +85,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             return Err(Error::ValidationError("审批资料读取必须使用快照事务".into()));
         }
         self.ensure_ordinary_runtime_read_stage(actor, instance_id, executor).await?;
+
         let subject = self.load_runtime_read_subject_stage(instance_id, executor).await?;
         let snapshot = subject.snapshot;
         let mut display =
@@ -97,11 +98,13 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             );
         }
         display.validate()?;
+
         let mut attachments = Vec::new();
         for file in &snapshot.material_files {
             file.validate()?;
             attachments.push(ApprovalMaterialView::from(file));
         }
+
         Ok(ApprovalMaterialsView {
             document_no: snapshot.payload.document_no,
             document_type: snapshot.document_type.as_str().into(),
@@ -191,6 +194,7 @@ mod tests {
             definition.authorization,
             FailClosedWorkflowAuthorizationPort,
         );
+
         assert!(matches!(
             runtime.materials_with(&actor, "instance", &mut NoTransaction).await,
             Err(Error::ValidationError(reason)) if reason == "审批资料读取必须使用快照事务"

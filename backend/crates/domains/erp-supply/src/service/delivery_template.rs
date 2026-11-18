@@ -85,6 +85,7 @@ impl DeliveryTemplateService {
     ) -> Result<SupplierDeliveryTemplate> {
         let template = SupplierDeliveryTemplate::new(id, supplier_id, content, actor)?;
         self.ensure_name_available(&template, executor).await?;
+
         if template.is_default {
             self.clear_other_default(&template, actor, executor).await?;
         }
@@ -118,10 +119,12 @@ impl DeliveryTemplateService {
         if !template.replace_content(content, actor)? {
             return Ok(template);
         }
+
         self.ensure_name_available(&template, executor).await?;
         if template.is_default {
             self.clear_other_default(&template, actor, executor).await?;
         }
+
         self.db.supplier_delivery_templates().update(&mut template, executor).await?;
         Ok(template)
     }
@@ -149,6 +152,7 @@ impl DeliveryTemplateService {
         if self.db.supplier_offerings().references_delivery_template(&template_id, executor).await? {
             return Err(Error::BusinessLogicError("该模板仍被供给使用，请先为这些供给更换模板".into()));
         }
+
         let snapshot = template.clone();
         self.db.supplier_delivery_templates().soft_delete(&mut template, executor).await?;
         Ok(snapshot)
@@ -178,6 +182,7 @@ impl DeliveryTemplateService {
             Some(id) => Some(self.find(id, executor).await?),
             None => None,
         };
+
         let mut updated = 0;
         for mut offering in offerings {
             if template.as_ref().is_some_and(|template| !template.belongs_to(&offering.supplier_id)) {
@@ -215,8 +220,10 @@ impl DeliveryTemplateService {
             .filter(|offering| seen.insert(offering.supplier_id.clone()))
             .map(|offering| offering.supplier_id.clone())
             .collect::<Vec<_>>();
+
         let templates =
             self.db.supplier_delivery_templates().list_by_suppliers(&supplier_ids, executor).await?;
+
         Ok(offerings
             .iter()
             .map(|offering| (offering.base.id.clone(), resolve_offering_delivery(offering, &templates)))

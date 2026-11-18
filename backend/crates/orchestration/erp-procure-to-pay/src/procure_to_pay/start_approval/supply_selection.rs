@@ -50,6 +50,7 @@ pub(super) async fn revalidate_selected_supply(
     if ids.is_empty() {
         return Ok(());
     }
+
     let facts = load_selected_facts(db, &ids, executor).await?;
     for line in lines {
         let Some(source) = &line.supplier_offering_source else { continue };
@@ -57,11 +58,13 @@ pub(super) async fn revalidate_selected_supply(
             revalidate_quote(db, order_id, supplier_id, line, quote, executor).await?;
             continue;
         }
+
         let offering = facts.offerings.get(source.supplier_offering_id.as_ref()).ok_or_else(changed)?;
         let revision_id = offering.stable.current_revision_id.as_deref().ok_or_else(changed)?;
         let revision = facts.revisions.get(revision_id).ok_or_else(changed)?;
         let availability =
             facts.availability.get(source.supplier_offering_id.as_ref()).ok_or_else(changed)?;
+
         let supply = LineSupply {
             offering: offering.clone(),
             revision: revision.clone(),
@@ -101,6 +104,7 @@ async fn load_selected_facts(
         .collect::<Vec<_>>();
     let revisions = db.supplier_offering_revisions().list_by_ids(&revision_ids, executor).await?;
     let availability = db.supplier_offering_availabilities().find_by_offering_ids(ids, executor).await?;
+
     Ok(SelectedSupplyFacts {
         offerings: offerings.into_iter().map(|fact| (fact.base.id.clone(), fact)).collect(),
         revisions: revisions

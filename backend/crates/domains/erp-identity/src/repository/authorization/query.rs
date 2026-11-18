@@ -66,6 +66,7 @@ impl AccessProof {
         if !self.boundary.is_current(executor) {
             return Err(Error::ValidationError("授权结果不能跨事务或读取阶段使用".into()));
         }
+
         #[cfg(test)]
         let now = PROOF_TIME.try_with(Cell::get).unwrap_or_else(|_| Instant::now());
         #[cfg(not(test))]
@@ -130,6 +131,7 @@ impl MappingDependency {
             return Err(Error::ValidationError("授权 Mapping 模型已改变".into()));
         }
         self.facts.validate(false, Instant::now())?;
+
         let preparation = self
             .mapping
             .preparation()

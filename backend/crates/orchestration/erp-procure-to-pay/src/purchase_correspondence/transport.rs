@@ -30,6 +30,7 @@ pub(super) async fn deliver(
     else {
         return unknown();
     };
+
     let response = client.post(&config.endpoint).bearer_auth(&config.api_key).header("Idempotency-Key", &record.base.id)
         .json(&json!({ "from": config.from, "to": [record.recipient], "subject": format!("采购单 {number}"),
             "html": record.html, "attachments": [{ "filename": filename, "content": STANDARD.encode(record.html.as_bytes()) }] }))
@@ -37,6 +38,7 @@ pub(super) async fn deliver(
     let Ok(response) = response else {
         return unknown();
     };
+
     let status = response.status().as_u16();
     let message_id = if response.status().is_success() {
         response.json::<Response>().await.ok().map(|value| value.id)
@@ -69,6 +71,7 @@ mod tests {
             assert_eq!(classify(status, None).status, PurchaseEmailStatus::Unknown);
         }
         assert_eq!(classify(200, Some(" ".into())).status, PurchaseEmailStatus::Unknown);
+
         for status in [400, 401, 403, 422, 429] {
             assert_eq!(classify(status, None).status, PurchaseEmailStatus::Failed);
         }

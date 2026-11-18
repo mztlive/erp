@@ -75,6 +75,7 @@ impl SupplierCatalogAdoptionProcess {
                         }
                         return Ok(batch_summary(batch));
                     }
+
                     batch.ensure_version(payload.version())?;
                     batch.ensure_draft_available(Instant::now().unix_secs())?;
                     if has_inflight_batch_items(&process.db, &id, executor).await? {
@@ -110,6 +111,7 @@ impl SupplierCatalogAdoptionProcess {
             },
             WorkPayload::Review(_) => false,
         };
+
         batch.work = Some(BatchWork {
             id: key.clone(),
             claimed: false,
@@ -193,6 +195,7 @@ impl SupplierCatalogAdoptionProcess {
             };
             self.save_batch_work(batch, token, save, &actor).await?;
         }
+
         let (connection, id, acting) = (batch.connection_id.clone(), batch.base.id.clone(), actor.clone());
         let current = self
             .with_snapshot(move |process, executor| {
@@ -271,6 +274,7 @@ impl SupplierCatalogAdoptionProcess {
         if batch.draft_operation.as_deref() != Some(token) {
             return Ok(());
         }
+
         if let Some(work) = &mut batch.work {
             work.status = BatchWorkStatus::Failed;
             work.error = Some(match error {
@@ -316,6 +320,7 @@ impl SupplierCatalogAdoptionProcess {
                     if work.status != BatchWorkStatus::Failed {
                         return Err(Error::ConflictError("只能操作已中断的任务".into()));
                     }
+
                     if retry {
                         work.retry()?;
                         work.claimed = false;
@@ -330,6 +335,7 @@ impl SupplierCatalogAdoptionProcess {
                         batch.draft_operation = None;
                         batch.draft_started_at = None;
                     }
+
                     process.db.catalog_adoption_batches().update(&mut batch, executor).await?;
                     Ok(batch_summary(batch))
                 })

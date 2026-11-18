@@ -34,11 +34,13 @@ impl FrozenMapping {
         if let Some((_, frozen)) = cache.iter().find(|(original, _)| Arc::ptr_eq(original, &inner)) {
             return Ok(frozen.clone());
         }
+
         let model = inner.model().clone();
         model.validate()?;
         let stages = inner.stages();
         validate_stages(&stages)?;
         let stage_bytes = encode_stages(&stages)?;
+
         let originals = inner.relations();
         let mut relations = BTreeMap::new();
         for (key, mapping) in &originals {
@@ -47,6 +49,7 @@ impl FrozenMapping {
             }
             relations.insert(key.clone(), Self::freeze(mapping.clone(), cache, depth + 1)?);
         }
+
         let frozen: Arc<dyn AccessMapping> =
             Arc::new(Self { inner: inner.clone(), model, stages, stage_bytes, originals, relations });
         cache.push((inner, frozen.clone()));

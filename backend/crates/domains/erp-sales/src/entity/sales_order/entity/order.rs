@@ -370,6 +370,7 @@ impl SalesOrder {
         {
             return false;
         }
+
         if close == CloseStatus::Closed && self.close_status != CloseStatus::Closed {
             self.closed_at = Some(changed_at);
         }
@@ -418,6 +419,7 @@ impl SalesOrder {
     /// 已生效/已作废，或更新字段校验失败时返回错误。
     pub fn update(&mut self, update: SalesOrderUpdate, updated_by: impl Into<String>) -> Result<()> {
         self.ensure_editable()?;
+
         if let Some(customer_id) = update.customer_id {
             self.customer_id = customer_id;
         }
@@ -427,6 +429,7 @@ impl SalesOrder {
         if let Some(settlement_party_id) = update.settlement_party_id {
             self.settlement_party_id = settlement_party_id;
         }
+
         if let Some(source_status_code) = update.source_status_code {
             self.source_status_code = normalize_optional_text(
                 Some(source_status_code),
@@ -442,6 +445,7 @@ impl SalesOrder {
     pub fn start_approval_submission(&mut self, updated_by: impl Into<String>) -> Result<()> {
         ensure_transition(self.commercial_status, CommercialStatus::PendingReview)?;
         ensure_transition(self.review_status, ReviewStatus::NotSubmitted)?;
+
         self.transition_commercial_status(CommercialStatus::PendingReview)?;
         self.review_status = ReviewStatus::InApproval;
         self.stable.touch(updated_by);
@@ -552,8 +556,10 @@ impl SalesOrder {
             .as_ref()
             .ok_or_else(|| Error::from("首次生效归属快照缺失"))?
             .validate(&self.sales_owner_user_id, &self.business_org_unit_id)?;
+
         ensure_transition(self.commercial_status, CommercialStatus::Effective)?;
         ensure_transition(self.review_status, ReviewStatus::Approved)?;
+
         self.transition_commercial_status(CommercialStatus::Effective)?;
         self.review_status = ReviewStatus::Approved;
         self.effective_at = Some(effective_at);
@@ -694,6 +700,7 @@ impl SalesOrder {
         if self.commercial_status == CommercialStatus::Voided {
             return Err(Error::from("已作废的销售单不允许交接"));
         }
+
         let target_owner = normalize_required_text(
             target_owner_user_id,
             "目标负责销售不能为空",
@@ -707,6 +714,7 @@ impl SalesOrder {
         if target_owner == self.sales_owner_user_id && next_org == self.business_org_unit_id {
             return Err(Error::from("目标已是当前负责人，无需交接"));
         }
+
         self.sales_owner_user_id = target_owner;
         self.business_org_unit_id = next_org;
         self.stable.touch(updated_by);

@@ -56,6 +56,7 @@ impl SupplierMessageSource for JdVopConnector {
         if types.is_empty() || types.len() > 100 || self.account_scope.trim().is_empty() {
             return Err(mapping("京东消息订阅及消费账号尚未完整核验"));
         }
+
         let reader = self.reader.as_ref().ok_or_else(protocol_required)?;
         let records: Vec<Box<RawValue>> = reader
             .read(JdVopReadRequest::Messages {
@@ -64,6 +65,7 @@ impl SupplierMessageSource for JdVopConnector {
                 source_type,
             })
             .await?;
+
         // 官方查询没有条数参数；只接收本地批次上限，其他远端消息继续保留而不删除。
         records
             .into_iter()
@@ -76,6 +78,7 @@ impl SupplierMessageSource for JdVopConnector {
         let (_, source_type, writer) = self.message_settings()?;
         let id: WireId = serde_json::from_value(serde_json::Value::String(source_id.into()))
             .map_err(|_| mapping("京东来源消息号无效"))?;
+
         let result: WireText =
             match writer.send(JdVopWriteRequest::DeleteMessages { ids: vec![id.0], source_type }).await {
                 Ok(result) => result,
@@ -203,6 +206,7 @@ mod tests {
         connector.profile = None;
         assert!(connector.orders().is_none());
         assert!(connector.cancellations().is_none());
+
         let source = connector.messages().unwrap();
         assert_eq!(source.poll_interval(), Duration::from_secs(90));
         let records = source.pull(NonZeroU32::new(1).unwrap()).await.unwrap();
@@ -218,10 +222,12 @@ mod tests {
     async fn official_query_and_delete_envelopes_use_verified_types_and_single_message_identity() {
         let (connector, transport) = connector(Ok(deleted()));
         assert_eq!(connector.account_scope(), "verified-account");
+
         let messages = connector.pull(NonZeroU32::new(1).unwrap()).await.unwrap();
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].source_id, "9007199254740993");
         assert!(matches!(messages[0].interpretation, MessageInterpretation::Refresh(_)));
+
         assert_eq!(
             *transport.reads.lock().unwrap(),
             [JdVopReadRequest::Messages { types: vec![1, 2, 14], read_type: 2, source_type: 3 }]
@@ -239,6 +245,7 @@ mod tests {
             connector(Err(error(SupplierFailureClass::ResultUnknown, "TIMEOUT", "unknown")));
         assert_eq!(unknown.acknowledge("123").await.unwrap(), MessageAcknowledgement::Unknown);
         assert_eq!(transport.writes.lock().unwrap().len(), 1);
+
         let (wrong_rpc,transport) = connector(Ok(br#"{"jingdong_vop_message_deleteClientMsgByIdList_responce":{"openRpcResult":{"success":true,"resultCode":"0000","result":true}}}"#.to_vec()));
         assert_eq!(wrong_rpc.acknowledge("123").await.unwrap(), MessageAcknowledgement::Unknown);
         assert_eq!(transport.writes.lock().unwrap().len(), 1);
@@ -259,6 +266,7 @@ mod tests {
         }
         assert!(!connector.order_only_notice("109"));
         assert!(connector.acknowledge("1.5").await.is_err());
+
         connector.profile = None;
         assert!(connector.pull(NonZeroU32::new(1).unwrap()).await.is_err());
         assert!(connector.acknowledge("123").await.is_err());

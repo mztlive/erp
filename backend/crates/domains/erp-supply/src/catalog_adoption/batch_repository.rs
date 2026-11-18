@@ -201,6 +201,7 @@ pub async fn ensure_batch_indexes(db: &Database) -> Result<()> {
             ),
         ])
         .await?;
+
     db.collection::<Document>(ITEMS)
         .create_indexes([
             unique_index("uk_catalog_adoption_batch_item_id", doc! {"id":1}),
@@ -213,6 +214,7 @@ pub async fn ensure_batch_indexes(db: &Database) -> Result<()> {
             ),
         ])
         .await?;
+
     ensure_preparation_indexes(db).await?;
     ensure_work_indexes(db).await?;
     Ok(())

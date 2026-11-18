@@ -32,9 +32,11 @@ impl super::super::WorkItemFactsReader {
         if ids.is_empty() {
             return Ok(());
         }
+
         let payments = self.read_supplier_payments(&ids, executor).await?;
         let supplier_ids = payments.iter().map(|item| item.supplier_id.to_string()).collect::<Vec<_>>();
         let supplier_names = self.supplier_display_names(&supplier_ids, executor).await?;
+
         for payment in payments {
             let fact = mapping::supplier_payment_fact(
                 &payment,
@@ -67,9 +69,11 @@ impl super::super::WorkItemFactsReader {
         if ids.is_empty() {
             return Ok(());
         }
+
         let refunds = self.read_supplier_refunds(&ids, executor).await?;
         let supplier_ids = refunds.iter().map(|item| item.supplier_id.to_string()).collect::<Vec<_>>();
         let supplier_names = self.supplier_display_names(&supplier_ids, executor).await?;
+
         let payment_ids = refunds
             .iter()
             .filter_map(|refund| refund.original_payment_id.as_ref().map(ToString::to_string))
@@ -80,6 +84,7 @@ impl super::super::WorkItemFactsReader {
             .filter_map(|refund| refund.original_payable_entry_id.as_ref().map(ToString::to_string))
             .collect::<Vec<_>>();
         let entry_origins = self.payable_entry_origins(&entry_ids, executor).await?;
+
         for refund in refunds {
             let fact = mapping::supplier_refund_fact(
                 &refund,
@@ -114,12 +119,14 @@ impl super::super::WorkItemFactsReader {
         if ids.is_empty() {
             return Ok(());
         }
+
         let reversals = self.read_payment_reversals(&ids, executor).await?;
         let payment_ids = reversals
             .iter()
             .map(|reversal| reversal.original_supplier_payment_id.to_string())
             .collect::<Vec<_>>();
         let origins = self.supplier_payment_origins(&payment_ids, executor).await?;
+
         for reversal in reversals {
             let fact = mapping::payment_reversal_fact(&reversal, &origins);
             facts.insert((ObjectKind::PaymentReversal, reversal.base.id.clone()), fact);

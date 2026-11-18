@@ -86,6 +86,7 @@ fn invoice_requires_approval_and_cannot_exceed_remaining_authorization() {
     assert!(req.record_invoice(amount("1")).is_err());
     req.submit(amount("1000")).unwrap();
     assert!(req.record_invoice(amount("1")).is_err());
+
     req.approve().unwrap();
     req.record_invoice(amount("200")).unwrap();
     let before = req.clone();
@@ -93,6 +94,7 @@ fn invoice_requires_approval_and_cannot_exceed_remaining_authorization() {
         assert!(req.record_invoice(amount(invalid)).is_err());
         assert_eq!(req, before);
     }
+
     req.record_invoice(amount("400")).unwrap();
     assert_eq!(req.status, InvoiceRequestStatus::Completed);
     assert_eq!(req.invoiced_amount, amount("600"));
@@ -106,6 +108,7 @@ fn duplicate_transitions_and_approved_withdrawal_are_rejected_without_mutation()
     let pending = req.clone();
     assert!(req.submit(amount("1000")).is_err());
     assert_eq!(req, pending);
+
     req.approve().unwrap();
     let approved = req.clone();
     assert!(req.approve().is_err());
@@ -179,11 +182,13 @@ fn rejection_releases_capacity_and_allows_fresh_submission() {
     assert_eq!(req.status, InvoiceRequestStatus::Rejected);
     assert_eq!(req.reserved(), Amount::zero());
     assert_eq!(req.approval_subject_version, 1);
+
     let rejected = req.clone();
     assert!(req.reject().is_err());
     assert!(req.approve().is_err());
     assert!(req.submit(amount("599")).is_err());
     assert_eq!(req, rejected);
+
     req.submit(amount("600")).unwrap();
     assert_eq!(req.approval_subject_version, 2);
     assert_eq!(req.reserved(), amount("600"));
@@ -199,17 +204,20 @@ fn rejected_edit_preserves_state_and_rejects_invalid_data_atomically() {
     let mut req = request("600");
     req.submit(amount("1000")).unwrap();
     req.reject().unwrap();
+
     let mut data = req.data.clone();
     data.reason = "补充开票资料".into();
     req.update(data).unwrap();
     assert_eq!(req.status, InvoiceRequestStatus::Rejected);
     assert_eq!(req.approval_subject_version, 1);
     assert_eq!(req.reserved(), Amount::zero());
+
     let saved = req.clone();
     let mut invalid = req.data.clone();
     invalid.amount = Amount::zero();
     assert!(req.update(invalid).is_err());
     assert_eq!(req, saved);
+
     req.submit(amount("600")).unwrap();
     assert!(req.update(req.data.clone()).is_err());
 }

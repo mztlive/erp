@@ -32,8 +32,10 @@ pub(in crate::reverse_flow) async fn apply_supplier_refund_final_post(
         &mut refund,
         erp_workflow::service::approval::policy::ApprovalDomainAction::SupplierRefundPost,
     )?;
+
     apply_supplier_refund_posting(db, rbac, &refund, actor.id(), executor).await?;
     ReturnsService::new(db.clone()).persist_supplier_refund_post(&mut refund, executor).await?;
+
     let audit =
         actor.clone().resource_log("supplier_refund.post", "supplier_refund", refund.base.id.clone())?;
     persist_log(db, &audit, executor).await?;
@@ -52,6 +54,7 @@ async fn apply_supplier_refund_posting(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let account = validate_settlement(db, refund, executor).await?;
+
     let original_payment_id = erp_returns::service::supplier_refund::original_payment_id(refund)?;
     let mut payment = erp_finance::service::payable::supplier_refund::load_posted_payment_for_refund(
         db,
@@ -64,6 +67,7 @@ async fn apply_supplier_refund_posting(
         .supplier_refunds()
         .posted_refund_total_by_payment(&original_payment_id, &refund.base.id, executor)
         .await?;
+
     erp_finance::service::payable::supplier_refund::persist_refund_offsets_and_reversals(
         db,
         &erp_finance::service::payable::supplier_refund::SupplierRefundPostingFact {
@@ -77,6 +81,7 @@ async fn apply_supplier_refund_posting(
         executor,
     )
     .await?;
+
     if refund.settlement_method == SupplierSettlementMethod::SupplierCredit {
         let account = account.as_ref().ok_or_else(|| Error::ConflictError("留抵缺少来源应付".into()))?;
         create_credit(db, refund, &payment, account, executor).await?;
@@ -84,6 +89,7 @@ async fn apply_supplier_refund_posting(
         payment.record_cash_refund(refund.amount)?;
     }
     db.supplier_payments().update(&mut payment, executor).await?;
+
     let allocations =
         db.payment_allocations().find_allocations_by_payments(&[original_payment_id], executor).await?;
     let entry_ids = allocations.into_iter().map(|line| line.payable_entry_id).collect::<Vec<_>>();

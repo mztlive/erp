@@ -90,6 +90,7 @@ impl SourceMediaWorker {
         let actor = self.actor(item).await?;
         let media = self.preparer.prepare_pending_media(item, &actor).await?;
         let cleanup = media.cleanup_handle();
+
         let db = self.db.clone();
         let expected = item.clone();
         let catalog = self.catalog.clone();
@@ -107,12 +108,14 @@ impl SourceMediaWorker {
                     if current.base.version != expected.base.version {
                         return Err(Error::ConflictError("供应商商品已变化，图片将重新处理".into()));
                     }
+
                     media.pending_assets.persist(&db, executor).await?;
                     media.apply_to(&mut current)?;
                     current.media_errors = media.verification_errors.clone();
                     current.media_retry_at =
                         (!current.media_errors.is_empty()).then(|| Instant::now().unix_secs() + 300);
                     db.supplier_catalog_items().update(&mut current, executor).await?;
+
                     crate::product_source_sync::apply_source_observation(
                         &db, &catalog, &current, &actor, executor,
                     )
@@ -121,6 +124,7 @@ impl SourceMediaWorker {
                 })
             })
             .await;
+
         cleanup.after_transaction(&outcome).await;
         outcome
     }

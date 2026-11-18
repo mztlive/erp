@@ -115,6 +115,7 @@ impl PartyBankAccountService {
             executor,
         )
         .await?;
+
         let paging = normalize_paging(
             &params.sort_by,
             &params.sort_dir,
@@ -131,6 +132,7 @@ impl PartyBankAccountService {
             sort_by: Some(paging.sort_by.to_string()),
             sort_ascending: matches!(paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.party_bank_accounts().search_party_bank_accounts(&filter, executor).await?;
         let items = page
             .items
@@ -152,7 +154,6 @@ impl PartyBankAccountService {
                 created_at: row.created_at,
             })
             .collect();
-
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
@@ -233,6 +234,7 @@ impl PartyBankAccountService {
             .require(actor, &party::BANK_ACCOUNT_CREATE, AccessTarget::Operation, executor)
             .await?;
         super::ensure_new_fact_guards(&self.db, self.supplier_roles.as_ref(), party_id, executor).await?;
+
         let account = self.prepare_record(party_id, req, actor)?;
         let audit = self.audit.resource_log(
             actor.clone(),
@@ -240,6 +242,7 @@ impl PartyBankAccountService {
             "party_bank_account",
             account.base.id.clone(),
         )?;
+
         if account.is_default {
             self.db
                 .party_bank_accounts()
@@ -302,6 +305,7 @@ impl PartyBankAccountService {
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &account.party_id, executor)
             .await?;
         super::map_version_conflict(account.ensure_version(req.version))?;
+
         account.update(
             PartyBankAccountUpdate {
                 status: req.status,
@@ -316,6 +320,7 @@ impl PartyBankAccountService {
             "party_bank_account",
             account.base.id.clone(),
         )?;
+
         if account.is_default {
             self.db
                 .party_bank_accounts()

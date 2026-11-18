@@ -53,15 +53,18 @@ impl SupplierApiOrderProcess {
                             "执行已变化或没有待查询的原请求，请刷新后核对".into(),
                         ));
                     }
+
                     execution.wake_original_result_query(Instant::now())?;
                     execution.wake_receipt_confirmation(Instant::now());
                     db.supplier_api_order_executions().update(&mut execution, executor).await?;
+
                     if let Some(mut tracking) = db.supplier_order_tracking().find_by_id(&id, executor).await?
                     {
                         tracking.poll_after = Instant::now();
                         tracking.state = TrackingState::Polling;
                         db.supplier_order_tracking().update(&mut tracking, executor).await?;
                     }
+
                     let audit = actor.resource_log(
                         "supplier_fulfillment.query_original_result",
                         "supplier_fulfillment_order",
@@ -72,6 +75,7 @@ impl SupplierApiOrderProcess {
                 })
             })
             .await?;
+
         self.setup_result(&result_id, &result_actor, &supplier_fulfillment::ORDER_SUBMIT).await
     }
 }

@@ -77,8 +77,10 @@ mod tests {
                 Some("暂无可申请开票金额")
             );
         }
+
         source.effective = false;
         assert_eq!(source.unavailable_reason(positive), Some("销售单尚未生效，暂不能申请开票"));
+
         source.effective = true;
         source.tax_number.clear();
         assert_eq!(
@@ -100,8 +102,10 @@ mod tests {
             invoice_content: "服务费".into(),
             reason: "按约定开票".into(),
         };
+
         assert!(source.validate(&data, amount).is_ok());
         assert!(source.validate(&data, Amount::zero()).is_err());
+
         let changed_title = InvoiceRequestData { invoice_title: "另一公司".into(), ..data.clone() };
         assert!(source.validate(&changed_title, amount).is_err());
         let changed_tax = InvoiceRequestData { tax_number: "91310000987654321A".into(), ..data };

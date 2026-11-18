@@ -87,6 +87,7 @@ async fn authorize(
 ) -> Result<AuthorizedResolutionPlan> {
     let snapshot = executor.boundary().is_some_and(|boundary| boundary.is_snapshot());
     let policy_revision = policy.revision(executor).await?;
+
     let mut owners = HashSet::new();
     for candidate in &candidates {
         if owners.insert(candidate.owner_user_id.as_str())
@@ -101,6 +102,7 @@ async fn authorize(
     if !snapshot && policy.revision(executor).await? != policy_revision {
         return Err(Error::ConflictError("采购负责人授权策略正在变化，请重试".to_string()));
     }
+
     let mut lines = Vec::with_capacity(candidates.len());
     for candidate in candidates {
         lines.push(authorized_line(candidate)?);
@@ -120,6 +122,7 @@ async fn revalidate(
     if actual != expected_identity {
         return Err(Error::ConflictError("采购责任规则或目录事实已变化，请重新提交审批".to_string()));
     }
+
     let revision = policy.revision(executor).await?;
     if revision != expected.policy_revision {
         return Err(Error::ConflictError("采购负责人授权策略已变化，请重新提交审批".to_string()));
@@ -188,6 +191,7 @@ mod tests {
         let fixture = Fixture::new(&[7]);
         let mut executor = SnapshotExecutor::default();
         let expected = &mut executor as *mut SnapshotExecutor as usize;
+
         let plan = authorize(
             &fixture,
             vec![
@@ -199,6 +203,7 @@ mod tests {
         )
         .await
         .unwrap();
+
         assert_eq!(plan.policy_revision, 7);
         assert_eq!(
             plan.lines.iter().map(|line| line.identity.line_key.as_str()).collect::<Vec<_>>(),
@@ -212,6 +217,7 @@ mod tests {
     async fn missing_permission_fails_before_later_owners_and_second_revision() {
         let mut fixture = Fixture::new(&[7]);
         fixture.denied = Some("owner-1");
+
         let error = authorize(
             &fixture,
             vec![candidate("line-1", "owner-1", "管理员"), candidate("line-2", "owner-2", "李四")],
@@ -219,6 +225,7 @@ mod tests {
         )
         .await
         .unwrap_err();
+
         assert!(
             matches!(error, Error::ValidationError(message) if message == "采购负责人 owner-1 缺少 purchase_order:create 权限")
         );
@@ -228,6 +235,7 @@ mod tests {
     #[tokio::test]
     async fn policy_change_prevents_creation_of_authorized_plan() {
         let fixture = Fixture::new(&[7, 8]);
+
         let error = authorize(
             &fixture,
             vec![candidate("line-1", "owner-1", "张三")],
@@ -235,6 +243,7 @@ mod tests {
         )
         .await
         .unwrap_err();
+
         assert!(
             matches!(error, Error::ConflictError(message) if message == "采购负责人授权策略正在变化，请重试")
         );
@@ -245,9 +254,11 @@ mod tests {
         let fixture = Fixture::new(&[7]);
         let mut executor = RecordingExecutor::default();
         let address = &mut executor as *mut RecordingExecutor as usize;
+
         revalidate(&fixture, &[candidate("line-1", "owner-1", "新姓名")], &plan(), &mut executor)
             .await
             .unwrap();
+
         assert_eq!(*fixture.events.lock().unwrap(), ["revision"]);
         assert_eq!(*fixture.executors.lock().unwrap(), [address]);
     }
@@ -255,6 +266,7 @@ mod tests {
     #[tokio::test]
     async fn changed_identity_fails_before_reading_policy_revision() {
         let fixture = Fixture::new(&[]);
+
         let error = revalidate(
             &fixture,
             &[candidate("line-1", "owner-2", "旧姓名")],
@@ -263,6 +275,7 @@ mod tests {
         )
         .await
         .unwrap_err();
+
         assert!(
             matches!(error, Error::ConflictError(message) if message == "采购责任规则或目录事实已变化，请重新提交审批")
         );
@@ -272,6 +285,7 @@ mod tests {
     #[tokio::test]
     async fn changed_transaction_policy_revision_preserves_conflict_message() {
         let fixture = Fixture::new(&[8]);
+
         let error = revalidate(
             &fixture,
             &[candidate("line-1", "owner-1", "旧姓名")],
@@ -280,6 +294,7 @@ mod tests {
         )
         .await
         .unwrap_err();
+
         assert!(
             matches!(error, Error::ConflictError(message) if message == "采购负责人授权策略已变化，请重新提交审批")
         );

@@ -310,6 +310,7 @@ impl ContractListParams {
         if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
             return Err(crate::error::Error::ValidationError("包含下级时必须提供组织筛选".into()));
         }
+
         Ok(ContractListQuery {
             owner_user_ids: self.owner_user_ids.clone(),
             org_unit_ids: self.org_unit_ids.clone(),
@@ -561,6 +562,7 @@ mod tests {
         let query = params.normalized().unwrap();
         assert_eq!(query.org_unit_ids.unwrap().as_slice(), &["org-1".to_string(), "org-2".to_string()]);
         assert_eq!(query.include_descendants, Some(true));
+
         assert!(serde_json::from_value::<ContractListParams>(json!({"owner": "张三"})).is_err());
         assert!(serde_json::from_value::<ContractListParams>(json!({"owner_name": "张三"})).is_err());
     }
@@ -718,6 +720,7 @@ mod sales_access_tests {
     fn sharing_request_rejects_forged_owner_and_missing_reason() {
         let forged = serde_json::json!({"version":1,"shared_sales_user_ids":["sales-b"],"change_reason":"框架合同共用","sales_owner_user_id":"sales-b"});
         assert!(serde_json::from_value::<ContractSalesAccessRequest>(forged).is_err());
+
         let request: ContractSalesAccessRequest = serde_json::from_value(
             serde_json::json!({"version":1,"shared_sales_user_ids":["sales-b"],"change_reason":" "}),
         )

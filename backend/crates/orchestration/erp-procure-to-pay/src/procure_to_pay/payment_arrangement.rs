@@ -34,10 +34,12 @@ pub async fn sync_payment_arrangement(
         }
         return Ok(());
     }
+
     let mut summary = arrangement_summary(&facts);
     if released {
         summary.push_str("；原付款申请占用已释放，请重新核对付款安排");
     }
+
     if let Some(mut task) = facts.task.take() {
         let previous = task.clone();
         task = task.with_link("sales_order", facts.order.sales_order_id.to_string())?;

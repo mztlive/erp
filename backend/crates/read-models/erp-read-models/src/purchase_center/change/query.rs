@@ -67,6 +67,7 @@ impl PurchaseOrderReadService {
         let expected = params.scope_version.as_deref();
         crate::support::ensure_deep_page(params.page.unwrap_or(1), expected)?;
         params.validate()?;
+
         let snapshot = self.change_list_snapshot(params, actor).await?;
         if expected.is_some_and(|value| value != snapshot.scope_version) {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
@@ -114,12 +115,14 @@ impl PurchaseOrderReadService {
         {
             return Err(Error::ValidationError("采购变更回包必须使用固定入口和新快照".into()));
         }
+
         let entry = if *permission == internal::PURCHASE_CHANGE_SUBMITTED_RESULT_READ {
             purchase_order::PURCHASE_CHANGE_SUBMIT
         } else {
             purchase_order::CHANGE_VOID_PURCHASE_CHANGE_VOID
         };
         self.rbac.require(actor, &entry, AccessTarget::Operation, executor).await?;
+
         let change = self
             .db
             .purchase_change_orders()
@@ -128,6 +131,7 @@ impl PurchaseOrderReadService {
             .ok_or_else(|| Error::NotFound("采购变更单不存在".into()))?;
         let target = change.purchase_order_id.clone();
         self.rbac.require(actor, permission, AccessTarget::record(target.as_ref())?, executor).await?;
+
         let order = self
             .db
             .purchase_orders()
@@ -135,6 +139,7 @@ impl PurchaseOrderReadService {
             .await?
             .ok_or_else(|| Error::NotFound("来源采购单不存在".into()))?;
         let view = render_change(&self.db, change, order, executor).await?;
+
         self.rbac.require(actor, permission, AccessTarget::record(target.as_ref())?, executor).await?;
         Ok(view)
     }
@@ -188,6 +193,7 @@ async fn read_change_list(
         .require(actor, &purchase_order::PURCHASE_CHANGE_LIST, AccessTarget::Operation, executor)
         .await?;
     let (mut context, scope) = access.resolve(actor, &purchase_order::LIST, executor).await?;
+
     let (_, sort_dir) = normalize_sort(&params.sort_by, &params.sort_dir, &["created_at"])?;
     let page = params.page.unwrap_or(1);
     let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
@@ -207,11 +213,13 @@ async fn read_change_list(
             executor,
         )
         .await?;
+
     let versions = db
         .purchase_order()
         .query_change_versions(purchase_order_id.as_deref(), status.as_deref(), &scope, executor)
         .await?;
     context.scope_version = change_scope_version(&context.scope_version, &versions)?;
+
     let views = result.items.into_iter().map(|change| change_list_view(change, None)).collect();
     scope.validate(executor).await?;
     Ok(PurchaseChangeListView {
@@ -283,17 +291,20 @@ async fn load_change_snapshot(
     authorization
         .require(actor, &purchase_order::PURCHASE_CHANGE_DETAIL, AccessTarget::Operation, executor)
         .await?;
+
     let change = db
         .purchase_change_orders()
         .find_by_id(id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("采购变更单不存在或无权查看".to_string()))?;
+
     let (_, scope) = access.resolve(actor, &purchase_order::DETAIL, executor).await?;
     let order = db
         .purchase_orders()
         .find_authorized(change.purchase_order_id.as_ref(), &scope, executor)
         .await?
         .ok_or_else(|| Error::NotFound("采购变更单不存在或无权查看".to_string()))?;
+
     let view = render_change(db, change, order, executor).await?;
     scope.validate(executor).await?;
     Ok(view)
@@ -320,7 +331,9 @@ async fn render_change(
         executor,
     )
     .await?;
+
     let coverage_effects = load_coverage_effects(db, &change, &order, executor).await?;
+
     let mut view = change_list_view(change, binding);
     view.approval = approval;
     view.coverage_effects = coverage_effects;
@@ -414,6 +427,7 @@ mod authorization_tests {
             sort_by: None,
             sort_dir: None,
         };
+
         let result = read_change_list(
             &db,
             &access,
@@ -424,6 +438,7 @@ mod authorization_tests {
         )
         .await;
         assert!(matches!(result,Err(Error::Internal(message)) if message == "测试授权设施不可用"));
+
         let result = load_change_snapshot(
             &db,
             &access,
@@ -443,6 +458,7 @@ mod authorization_tests {
             unavailable_authorization(),
             Arc::new(UnusedScope),
         );
+
         let result = reads
             .command_change_order_view(
                 "change",
@@ -452,6 +468,7 @@ mod authorization_tests {
             )
             .await;
         assert!(matches!(result, Err(Error::ValidationError(_))));
+
         let result = reads
             .command_change_order_view(
                 "change",

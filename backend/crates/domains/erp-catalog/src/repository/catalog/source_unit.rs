@@ -39,6 +39,7 @@ impl CatalogRepository<'_> {
         let name = name.trim();
         let labels = vec![name.to_owned(), name.to_lowercase(), name.to_uppercase()];
         let codes = [labels.clone(), vec![format!("AUTO-{}", name.to_uppercase())]].concat();
+
         Ok(mongo_ops::find_many(
             &self.db.unit_of_measures().collection(),
             doc! {"$or": [{"name": {"$in": &labels}}, {"symbol": {"$in": &labels}}, {"unit_code": {"$in": codes}}]},

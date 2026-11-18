@@ -420,6 +420,7 @@ pub(super) fn sku_revision_keyword_filter(keyword: &str, include_specification: 
         filter.extend(name);
         return filter;
     }
+
     let mut specification = Document::new();
     insert_literal_regex_filter(&mut specification, "specification", Some(keyword));
     filter.insert("$or", vec![name, specification]);

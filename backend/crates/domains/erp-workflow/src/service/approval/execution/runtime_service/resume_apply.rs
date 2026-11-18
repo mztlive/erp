@@ -67,6 +67,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             command.expected_closed_task_version,
             actor.id(),
         )?;
+
         let service = self.clone();
         let transaction_actor = actor.clone();
         let transaction_identity = identity.clone();
@@ -87,6 +88,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 })
             })
             .await;
+
         commit_or_recover(
             move || async move { view },
             |error| self.recover_resume_after_competing_commit(actor, instance_id, identity, error),
@@ -109,6 +111,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         {
             return Ok(view);
         }
+
         let Some(prepared) = self.prepare_resume_runtime(actor, command, idempotency_key, executor).await?
         else {
             return self.persisted_resume_view(actor, instance_id, executor).await;
@@ -226,8 +229,10 @@ async fn apply_resume(
         )
         .await?;
     }
+
     persist_resume_writes(&service.db, prepared, service.audit.as_ref(), executor).await?;
     service.auth.append_assignment_grants(&prepared.writes, executor).await?;
+
     Ok(map_command_view(
         &prepared.writes.instance,
         prepared.writes.created_executions.last(),
@@ -268,6 +273,7 @@ async fn replay_resume_apply(
     authorization
         .require(actor, &internal_permissions::APPROVAL_RECOVER, AccessTarget::record(instance_id)?, executor)
         .await?;
+
     let Some(receipt) = find_receipt_for_identity(db, identity, executor).await? else {
         return Ok(None);
     };
@@ -279,6 +285,7 @@ async fn replay_resume_apply(
         ReceiptBranch::Fresh => unreachable!("receipt was loaded"),
         ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
     }
+
     persisted_command_view_with_executor(db, instance_id, CommitRequired::Proceed, true, executor)
         .await
         .map(Some)

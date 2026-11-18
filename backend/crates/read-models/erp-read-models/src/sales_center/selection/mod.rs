@@ -102,9 +102,11 @@ impl SalesSelectionReadService {
                                     .find_authorized_booklet(&id, scope, executor)
                                     .await?
                                     .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+
                                 let mut view = SalesSelectionService::new(db.clone(), authorization)
                                     .detail_view(&book, None, executor)
                                     .await?;
+
                                 view.sales_owner_name =
                                     owner_display_names(&db, &[view.sales_owner_user_id.clone()], executor)
                                         .await?

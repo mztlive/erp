@@ -241,10 +241,10 @@ impl PartyRevisionRepositoryExt for Repository<'_, PartyRevision> {
             .limit(filter.limit())
             .projection(party_revision_projection())
             .build();
+
         let collection = self.collection().clone_with_type::<PartyRevisionRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 
@@ -285,6 +285,7 @@ impl PartyRevisionRepositoryExt for Repository<'_, PartyRevision> {
                 executor,
             )
             .await?;
+
         let mut ids: Vec<PartyId> = revisions.into_iter().map(|revision| revision.party_id).collect();
         ids.sort_by_key(ToString::to_string);
         ids.dedup();

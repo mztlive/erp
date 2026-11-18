@@ -13,6 +13,7 @@ pub(super) fn projection(
     let Some((state, operation, can_authorize, message)) = phase(record, now) else {
         return ready(record, crypto, now);
     };
+
     let mut status = JdVopAuthorizationStatus::empty(state, can_authorize, message);
     status.version = Some(record.base.version);
     status.expires_at = (!record.encrypted_payload.is_empty()).then(|| record.expires_at.unix_secs());
@@ -86,6 +87,7 @@ pub(super) fn operation_projection(
         status.operation_state = Some("completed");
         return status;
     }
+
     let event = record.authorization_history.iter().find(|event| event.operation_id == id);
     status.operation_id = event.map(|event| event.operation_id.clone());
     status.operation_state = event.map(|event| {
@@ -141,6 +143,7 @@ fn ready(record: &SupplierCredential, crypto: &CredentialCrypto, now: Instant) -
     } else {
         JdVopAuthorizationStatus::empty("authorized", true, "授权已保存；请执行连接检查核验京东接口是否可用")
     };
+
     status.version = Some(record.base.version);
     status.expires_at = Some(record.expires_at.unix_secs());
     status.operation_id = record.last_completed_authorization_operation_id.clone();

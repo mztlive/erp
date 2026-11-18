@@ -200,11 +200,13 @@ impl SupplierSettlementStatement {
         if self.status != SettlementStatus::PendingReview {
             return Err(Error::from("仅待复核结算单可以记录正式决定"));
         }
+
         let reviewed_by =
             normalize_required_text(reviewed_by.into(), "复核人不能为空", ACTOR_MAX_LEN, "复核人过长")?;
         if reviewed_by == self.prepared_by {
             return Err(Error::from("经办人与复核人不得相同"));
         }
+
         let (result, target_status, reason_code, comment, payable_account_id) = match decision {
             SettlementReviewDecision::Confirm { payable_account_id, comment } => (
                 SettlementReviewResult::Confirmed,
@@ -226,6 +228,7 @@ impl SupplierSettlementStatement {
                 )
             },
         };
+
         self.status = target_status;
         self.reviewed_by = Some(reviewed_by);
         self.review_result = Some(result);

@@ -141,6 +141,7 @@ mod tests {
         let actor = AuditActor::new("sales".into(), "sales".into(), AccountKind::Admin);
         let mut executor = SnapshotExecutor::default();
         let pointer = &mut executor as *mut SnapshotExecutor as usize;
+
         let files = read(&port, &actor, "sales", &mut executor).await.unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_asset_id, "file");
@@ -164,6 +165,7 @@ mod tests {
                     matches!(result, Err(Error::ConflictError(message)) if message.starts_with("DATA_SCOPE_CHANGED"))
                 );
             }
+
             let steps = port.calls.lock().unwrap().iter().map(|(step, _)| *step).collect::<Vec<_>>();
             assert_eq!(steps, if denied { vec!["query"] } else { vec!["query", "files", "validate"] });
         }

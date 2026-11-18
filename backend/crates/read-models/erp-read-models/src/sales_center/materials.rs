@@ -63,6 +63,7 @@ pub async fn revision_materials(
     let source = revision_source(db, revision, executor).await?;
     let contract = revision_contract(db, revision, source.as_ref(), executor).await?;
     let mut files = revision_frozen_materials(db, revision, source.as_ref(), executor).await?;
+
     if let Some(contract) = &contract {
         let id = contract.contract_pdf_file_id.as_ref();
         if files
@@ -81,6 +82,7 @@ pub async fn revision_materials(
             files.push(material_from_asset(&asset));
         }
     }
+
     if files.len() > 100 {
         return Err(Error::ConflictError("销售合同与凭证超过100个文件".into()));
     }
@@ -108,6 +110,7 @@ pub async fn validate_materials(
     if current.len() != files.len() {
         return Err(Error::ConflictError("来源销售材料不存在或已删除".into()));
     }
+
     for file in files {
         let asset = current
             .iter()
@@ -179,6 +182,7 @@ async fn revision_contract(
             .ok_or_else(|| Error::ConflictError("来源销售单不存在".into()))?;
         order.customer_id
     };
+
     contract
         .ensure_customer_reference(
             &identity,
@@ -268,9 +272,11 @@ pub async fn change_evidence(
         .await?
         .filter(|base| base.sales_order_id == submission.sales_order_id)
         .ok_or_else(|| Error::ConflictError("销售变更基准版本与销售单不匹配".into()))?;
+
     let source = revision_source(db, &base, executor).await?;
     let mut files = revision_frozen_materials(db, &base, source.as_ref(), executor).await?;
     remove_previous_contract(db, &base, &mut files, executor).await?;
+
     validate_materials(db, &files, executor).await?;
     Ok(files)
 }
@@ -297,6 +303,7 @@ async fn locked_contract(
         .find_by_id(source.sales_order_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::ConflictError("销售提交对应销售单不存在".into()))?;
+
     revision
         .ensure_customer_reference(&contract, source.customer_id, source.contract_no)
         .map_err(|_| Error::ConflictError("销售提交与锁定合同的客户或合同关系不匹配".into()))?;
@@ -312,6 +319,7 @@ fn validate_asset(file: &ApprovalMaterialFile, asset: &FileAsset) -> Result<()> 
     if !file.matches_current(&material_from_asset(asset)) {
         return Err(Error::ConflictError("来源销售材料已变化，请重新核对".into()));
     }
+
     if asset.destroyed_at.is_some()
         || matches!(
             asset.security_scan_status,
@@ -335,12 +343,14 @@ async fn revision_frozen_materials(
     let mut visited = BTreeSet::from([child.base.id.clone()]);
     let mut files = Vec::new();
     let mut inherited = false;
+
     while let Some(current) = source {
         let mut captured = source_materials(db, &current, executor).await?;
         if inherited {
             remove_previous_contract(db, &child, &mut captured, executor).await?;
         }
         files.extend(captured);
+
         let Some(base_id) = &current.base_revision_id else { break };
         let base = db
             .sales_order_revisions()
@@ -352,6 +362,7 @@ async fn revision_frozen_materials(
         child = base;
         inherited = true;
     }
+
     files.sort_by(|left, right| left.file_asset_id.as_ref().cmp(right.file_asset_id.as_ref()));
     files.dedup();
     if files.len() > 100 {
@@ -432,6 +443,7 @@ async fn revision_source(
             base_revision_id: None,
         }));
     }
+
     let submission = db
         .sales_change_submissions()
         .find_by_id(id, executor)
@@ -583,6 +595,7 @@ mod tests {
                 .unwrap(),
             vec![file]
         );
+
         for (kind, id, version) in [
             (DocumentType::VoucherSalesOrder, "sales-1", 2),
             (DocumentType::SalesOrder, "sales-other", 2),
@@ -592,6 +605,7 @@ mod tests {
                 selected_materials(std::slice::from_ref(&selected), kind, id, version).unwrap().is_empty()
             );
         }
+
         assert!(selected_materials(&[legacy], DocumentType::SalesOrder, "sales-1", 1).unwrap().is_empty());
         assert!(
             selected_materials(&[selected.clone(), selected], DocumentType::SalesOrder, "sales-1", 2)
@@ -604,12 +618,15 @@ mod tests {
         let original = asset();
         let file = material_from_asset(&original);
         validate_asset(&file, &original).unwrap();
+
         let mut changed = original.clone();
         changed.base.version += 1;
         assert!(matches!(validate_asset(&file, &changed), Err(Error::ConflictError(_))));
+
         changed = original;
         changed.security_scan_status = SecurityScanStatus::Quarantined;
         assert!(matches!(validate_asset(&file, &changed), Err(Error::Forbidden(_))));
+
         require_contract_pdf(&asset()).unwrap();
         changed.content_type = "text/html".into();
         assert!(matches!(require_contract_pdf(&changed), Err(Error::ConflictError(_))));

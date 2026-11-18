@@ -37,6 +37,7 @@ impl WorkflowTimelineRepositoryExt for Repository<'_, WorkflowAction> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
+
         let mut filter = doc! { "deleted_at": 0_i64, "document_id": { "$in": ids } };
         if let Some((time, id)) = before {
             let time = i64::try_from(time).unwrap_or(i64::MAX);
@@ -48,6 +49,7 @@ impl WorkflowTimelineRepositoryExt for Repository<'_, WorkflowAction> {
                 ],
             );
         }
+
         let options =
             FindOptions::builder().sort(doc! { "created_at": -1, "id": -1 }).limit(i64::from(limit)).build();
         mongo_ops::find_many(&self.collection(), filter, options, executor).await

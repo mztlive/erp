@@ -76,6 +76,7 @@ impl SupplierProfileProcess {
         req.validate_contract()?;
         let request_fingerprint = req.fingerprint()?;
         let key = req.idempotency_key.clone();
+
         let id = supplier_id.to_owned();
         let this = self.clone();
         let actor_owned = actor.clone();
@@ -89,6 +90,7 @@ impl SupplierProfileProcess {
                 })
             })
             .await;
+
         self.resolve_transaction_result_with_assets(
             transaction,
             &key,
@@ -116,12 +118,14 @@ impl SupplierProfileProcess {
         {
             return Ok(SupplierProfileWithAssetsResult { view, assets_committed: false });
         }
+
         let used = resolve_supplier_file_references(&mut req, pending_assets.as_ref())?;
         pending_assets.ensure_all_used(&used)?;
         self.ensure_party_active(&req.signing_entity_party_id, executor).await?;
         self.ensure_party_active(&req.payment_entity_party_id, executor).await?;
         self.ensure_attachment_references(&req.qualifications, pending_assets.as_ref(), executor).await?;
         self.ensure_unique_inputs(&req)?;
+
         let prepared = self
             .prepare_update(supplier_id, req, fingerprint.to_owned(), actor, pending_assets, executor)
             .await?;
@@ -144,12 +148,14 @@ impl SupplierProfileProcess {
             self.prepare_update_roots(supplier_id, &req, actor, executor).await?;
         let party_id = supplier.party_id.clone();
         let supplier_id = SupplierAccountId::new(supplier_id);
+
         let facts = self.prepare_party_facts(&party_id, &req, actor.id(), executor).await?;
         let capabilities = self.prepare_capability_changes(&supplier_id, &req, actor.id(), executor).await?;
         let qualifications = self
             .prepare_qualification_changes(&supplier_id, &req, &capabilities.ids, actor.id(), executor)
             .await?;
         let ratings = self.prepare_rating_changes(&supplier_id, &req, executor).await?;
+
         PreparedUpdate::new(
             PreparedUpdateContext {
                 party,
@@ -180,12 +186,14 @@ impl SupplierProfileProcess {
     ) -> Result<UpdateRoots> {
         let mut supplier = self.load_supplier_for_update(supplier_id, req, executor).await?;
         let mut party = self.load_party_for_update(&supplier, req, executor).await?;
+
         let party_id = supplier.party_id.clone();
         let supplier_id = SupplierAccountId::new(supplier_id);
         let party_revision_no = self.next_party_revision_no(&party_id, executor).await?;
         let profile_revision_no = self.next_profile_revision_no(&supplier_id, executor).await?;
         let party_revision_id = PartyRevisionId::new(next_id());
         let commercial_profile_id = SupplierCommercialProfileRevisionId::new(next_id());
+
         let party_revision = party_change::plan_party_revision(party_change::PlanPartyRevisionParams {
             party: &mut party,
             unified_credit_code: req.unified_credit_code.clone(),
@@ -197,6 +205,7 @@ impl SupplierProfileProcess {
             actor_id: actor.id(),
         })
         .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
+
         let commercial_profile = profile_change::plan_commercial_profile_revision(
             profile_change::PlanCommercialProfileRevisionParams {
                 supplier: &mut supplier,
@@ -350,18 +359,21 @@ impl SupplierProfileProcess {
                 .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes.new_contact = self.create_contact(req, party_id, actor_id)?;
         }
+
         if req.address.is_some() || req.clear_address {
             changes.addresses = self.db.party_addresses().list_by_party(party_id, executor).await?;
             party_change::disable_addresses(&mut changes.addresses, actor_id)
                 .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes.new_address = self.create_address(req, party_id, actor_id)?;
         }
+
         if req.clear_tax_profile || req.tax_no.as_deref().is_some_and(|value| !value.trim().is_empty()) {
             changes.tax_profiles = self.db.party_tax_profiles().list_by_party(party_id, executor).await?;
             party_change::disable_tax_profiles(&mut changes.tax_profiles, actor_id)
                 .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
             changes.new_tax_profile = create_tax_profile(req, party_id, actor_id)?;
         }
+
         if req.bank_account.is_some() || req.clear_bank_account {
             changes.bank_accounts = self.db.party_bank_accounts().list_by_party(party_id, executor).await?;
             party_change::disable_bank_accounts(&mut changes.bank_accounts, actor_id)
@@ -405,6 +417,7 @@ impl SupplierProfileProcess {
         }) {
             return Ok(RatingChanges::default());
         }
+
         if let Some(previous) = current.as_mut() {
             previous.close_before(input.valid_from)?;
         }

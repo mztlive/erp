@@ -104,6 +104,7 @@ impl ContractAccess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.require_import(actor, executor).await?;
+
         let candidate = self.creation.candidate(actor, customer_id, executor).await?;
         Ok(self
             .authorization
@@ -285,12 +286,14 @@ mod permission_tests {
         let creation = Arc::new(CreationFacts(AtomicUsize::new(0)));
         let access = ContractAccess::new(db, unavailable_authorization(), creation.clone());
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let error = access
             .require_create(&actor, "unread-customer", &mut SnapshotExecutor::default())
             .await
             .expect_err("资格取证失败必须先于客户候选事实读取");
         assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
         assert_eq!(creation.0.load(Ordering::SeqCst), 0);
+
         let error = access
             .require_create(&actor, "unread-customer", &mut NoTransaction)
             .await
@@ -317,6 +320,7 @@ mod model_tests {
             facts: Default::default(),
         };
         assert!(CompiledScope::ensure_model(&model).is_ok());
+
         let mut invalid = Vec::new();
         let mut other = model.clone();
         other.resource = "customer".into();
@@ -335,6 +339,7 @@ mod model_tests {
             other.output = output;
             invalid.push(other);
         }
+
         for other in invalid {
             assert!(matches!(CompiledScope::ensure_model(&other), Err(IdentityError::ValidationError(_))));
         }

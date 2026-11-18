@@ -50,6 +50,7 @@ pub(super) async fn load_document_approval(
     let submit_command = submit_token(service, adjustment, binding, actor, executor).await?;
     let subject = subject_ref_for(DocumentType::StockAdjustment, &adjustment.base.id)
         .map_err(|error| Error::ValidationError(error.to_string()))?;
+
     let mut view = match service.db.bpm_workflow().find_latest_by_subject(&subject, executor).await? {
         None => document_approval_view_with_history(
             binding,
@@ -72,6 +73,7 @@ pub(super) async fn load_document_approval(
             .await?
         },
     };
+
     enrich_bound_definition(service, binding, &mut view, executor).await?;
     Ok(view)
 }
@@ -182,6 +184,7 @@ async fn project_runtime(
     let instance_id = ApprovalProcessInstanceId::new(instance.base.id.clone());
     let current = service.db.bpm_workflow().find_current_execution(&instance_id, executor).await?;
     let open_tasks = load_open_tasks(service, current.as_ref(), executor).await?;
+
     let rows = service
         .db
         .bpm_workflow()
@@ -191,6 +194,7 @@ async fn project_runtime(
         rows.iter().map(history_item_from_execution).collect(),
         RECENT_HISTORY_LIMIT as u32,
     );
+
     let cancel_command = cancel_token(
         service,
         adjustment,
@@ -201,6 +205,7 @@ async fn project_runtime(
         ApprovalRead { actor, executor },
     )
     .await?;
+
     Ok(document_approval_view_with_history(
         binding,
         Some(instance_view(
@@ -232,6 +237,7 @@ async fn submit_token(
     if !service.policy.actor_can_submit(adjustment, actor, executor).await? {
         return Ok(None);
     }
+
     let expected_subject_version = adjustment
         .approval_subject_version
         .checked_add(1)
@@ -272,12 +278,14 @@ async fn cancel_token(
     {
         return Ok(None);
     }
+
     service.policy.ensure_instance_subject(
         instance,
         &adjustment.base.id,
         adjustment.approval_subject_version,
     )?;
     service.policy.ensure_instance_binding(instance, require_frozen_binding(binding)?)?;
+
     let organization_id = cancel_snapshot_org(service, adjustment, instance, executor).await?;
     let Some(current) = current else {
         return Ok(None);
@@ -287,6 +295,7 @@ async fn cancel_token(
     else {
         return Ok(None);
     };
+
     if !service.policy.actor_can_cancel(instance, actor, executor).await? {
         return Ok(None);
     }
@@ -473,6 +482,7 @@ mod tests {
             at: Timestamp::from_unix_secs(1).unwrap(),
         })
         .unwrap();
+
         assert!(ensure_result_instance(&instance, "adjustment", "original-instance", 2).is_ok());
         for (adjustment, id, version) in [
             ("other-adjustment", "original-instance", 2),

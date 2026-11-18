@@ -98,15 +98,18 @@ impl SalesSelectionService {
         {
             return Ok(view);
         }
+
         let mut book = self.load_booklet(&req.booklet_id, tx).await?;
         book.ensure_version(req.expected_version)
             .map_err(|error| Error::selection_conflict(error.to_string()))?;
         validate_prepare_request(&book, &req)?;
+
         let id = SalesSelectionPrepareTaskId::new(id_generator::next_id());
         book.begin_prepare(id.as_ref(), req.kind, actor)?;
         self.db.sales_selection_booklets().update(&mut book, tx).await?;
         let task = queued_task(id, &book, &req, actor, json, key, hash);
         self.db.sales_selection_prepare_tasks().create(&task, tx).await?;
+
         self.queued_view(&book, &task, tx).await
     }
 
@@ -173,12 +176,14 @@ impl SalesSelectionService {
         if task.status != PrepareTaskStatus::Queued {
             return Ok(false);
         }
+
         task.mark_running(Instant::now())?;
         match self.db.sales_selection_prepare_tasks().update(&mut task, &mut NoTransaction).await {
             Ok(_) => (),
             Err(persistence_core::Error::OptimisticLockingError) => return Ok(false),
             Err(error) => return Err(error.into()),
         }
+
         self.execute_task(task, catalog, images).await?;
         Ok(true)
     }
@@ -196,6 +201,7 @@ impl SalesSelectionService {
             self.calculate_task(&task, catalog, images),
         )
         .await;
+
         match outcome {
             Ok(Ok(prepared)) => {
                 if let Err(error) = self.commit_task(&task, prepared).await {
@@ -226,11 +232,14 @@ impl SalesSelectionService {
         if matches!(req.kind, PrepareKind::FirstPrepare | PrepareKind::RePrepare) {
             super::prepare::apply_reprepare_request(&mut book, &req)?;
         }
+
         let batch = self.resolve_batch_id(&book, req.kind);
         let snapshots = self.freeze_pool(&book, &batch, req.kind, catalog, images).await?;
+
         self.prepare_progress(&book, PrepareStage::Search, 0).await?;
         let (items, members, reports) =
             self.build_displays(&book, &batch, &snapshots, &req, Arc::new(FirstNonEmptyMemberImage)).await?;
+
         self.prepare_progress(&book, PrepareStage::Write, reports.len() as u32).await?;
         Ok(Prepared { book, batch, items, members, reports })
     }
@@ -265,6 +274,7 @@ impl SalesSelectionService {
             .ok_or_else(|| Error::NotFound("准备任务不存在".into()))?;
         task.ensure_writable_run(task.run_version, Instant::now())?;
         ensure_task_book(&task, book)?;
+
         task.heartbeat(stage, completed, Instant::now());
         self.db.sales_selection_prepare_tasks().update(&mut task, &mut NoTransaction).await?;
         Ok(())
@@ -298,6 +308,7 @@ impl SalesSelectionService {
         task.ensure_writable_run(run.run_version, Instant::now())?;
         let current = self.load_booklet(run.booklet_id.as_ref(), tx).await?;
         ensure_task_book(&task, &current)?;
+
         prepared.finish(&mut task)?;
         crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db)
             .persist_prepare_success(&task, &mut prepared.book, &prepared.members, &prepared.items, tx)
@@ -331,12 +342,14 @@ impl SalesSelectionService {
         if !task.status.is_active() || task.run_version != run.run_version {
             return Ok(());
         }
+
         let mut book = self.load_booklet(task.booklet_id.as_ref(), tx).await?;
         if ensure_task_book(&task, &book).is_ok() && book.has_persisted_scope() {
             let actor = task.actor_id.as_str();
             book.fail_prepare(&reason, if actor.is_empty() { "system" } else { actor })?;
             self.db.sales_selection_booklets().update(&mut book, tx).await?;
         }
+
         task.mark_failed(reason, Vec::new(), Instant::now());
         self.db.sales_selection_prepare_tasks().update(&mut task, tx).await?;
         Ok(())
@@ -474,8 +487,10 @@ mod tests {
             "key".into(),
             "hash".into(),
         );
+
         assert_eq!(book.pool_source, source);
         assert!(ensure_task_book(&task, &book).is_ok());
+
         book.base.version += 1;
         assert!(ensure_task_book(&task, &book).is_err());
         book.base.version -= 1;

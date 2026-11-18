@@ -26,6 +26,7 @@ impl CatalogRepository<'_> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::Internal("条码占用必须与正式 SKU 建档共用事务".into()));
         }
+
         let owners = self.barcode_owner_sku_ids(barcode, executor).await?;
         let repository = self.db.sku_barcode_claims();
         match repository.find_by_id(barcode, executor).await? {
@@ -62,6 +63,7 @@ impl CatalogRepository<'_> {
             .ok_or_else(|| Error::NotFound("公司 SKU 不存在".into()))?;
         self.lock_product_match(sku.product_id.as_ref(), executor).await?;
         self.claim_sku_barcode(revision, executor).await?;
+
         mongo_ops::insert_one(&self.db.sku_revisions().collection(), revision, executor).await?;
         Ok(())
     }

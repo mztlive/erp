@@ -58,6 +58,7 @@ impl CancelWritePort for MongoCancelWrite<'_> {
             &self.reason,
             self.now,
         )?;
+
         self.db
             .bpm_workflow()
             .persist_cancelled_runtime(
@@ -104,6 +105,7 @@ async fn execute<P: CancelWritePort>(port: &mut P, executor: &mut dyn Executor) 
         port.runtime(executor).await?;
         port.tasks(executor).await?;
     }
+
     port.record(executor).await?;
     port.audit(executor).await?;
     Ok(())
@@ -176,7 +178,6 @@ mod tests {
             calls: Vec::new(),
         };
         let result = execute(&mut port, &mut executor).await;
-
         (result, port.calls)
     }
     #[tokio::test]

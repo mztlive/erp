@@ -38,6 +38,7 @@ impl SupplierApiOrderProcess {
     ) -> Result<ExecutionSetupView> {
         validate_request(&request)?;
         let (hash, receipt) = request.receipt(id)?;
+
         let (mut execution, connector) = match self.start_setup(id, &hash, &receipt, actor).await? {
             SetupStart::Replayed(view) => return Ok(*view),
             SetupStart::Prepared(execution, connector) => (*execution, connector),
@@ -47,11 +48,13 @@ impl SupplierApiOrderProcess {
         {
             return Err(Error::ConflictError("接口执行资料已变化，请刷新后核对".into()));
         }
+
         self.apply_setup_request(&mut execution, &request, connector.as_ref()).await?;
         execution.setup_idempotency_key = Some(request.idempotency_key);
         execution.setup_payload_hash = Some(hash);
         execution.blocker = None;
         execution.next_run_at = Instant::now();
+
         self.persist_setup(execution, receipt, actor).await?;
         self.setup_result(id, actor, &supplier_fulfillment::ORDER_SUBMIT).await
     }
@@ -72,6 +75,7 @@ impl SupplierApiOrderProcess {
                     let (access, execution) = process
                         .setup_access(&id, &actor, &supplier_fulfillment::ORDER_SUBMIT, executor)
                         .await?;
+
                     if let Some(previous) = process
                         .db
                         .supplier_api_order_setup_receipts()
@@ -83,6 +87,7 @@ impl SupplierApiOrderProcess {
                         access.validate(executor).await?;
                         return Ok(SetupStart::Replayed(Box::new(view)));
                     }
+
                     let connector = process.setup_connector(&execution, executor).await?;
                     access.validate(executor).await?;
                     Ok(SetupStart::Prepared(Box::new(execution), connector))
@@ -101,11 +106,13 @@ impl SupplierApiOrderProcess {
         if request.geocode.is_some() && requirement != AddressRequirement::Geocoded(CoordinateSystem::Bd09) {
             return Err(Error::ValidationError("当前供应商不使用百度坐标，请按其收货地址要求补齐".into()));
         }
+
         let mut snapshot = self.decode(execution)?;
         apply_setup(execution, &mut snapshot, request)?;
         if let Some(ticket) = &request.supplier_address_ticket {
             self.apply_supplier_address(execution, &mut snapshot, ticket, connector).await?;
         }
+
         if execution.stage == ApiOrderStage::PrepareAddress {
             snapshot.recipient.ensure_address_ready(
                 requirement,
@@ -136,8 +143,10 @@ impl SupplierApiOrderProcess {
                             executor,
                         )
                         .await?;
+
                     process.db.supplier_api_order_executions().update(&mut execution, executor).await?;
                     process.db.supplier_api_order_setup_receipts().create(&receipt, executor).await?;
+
                     let audit = actor.resource_log(
                         "supplier_fulfillment.execution_setup",
                         "supplier_fulfillment_order",

@@ -49,6 +49,7 @@ impl WorkItemReadService {
                 projected.task.decidable_task_ids.insert(field.id.clone());
             }
         }
+
         let ids = fields.iter().map(|field| field.id.clone()).collect::<Vec<_>>();
         projected.task.managed_task_ids = self
             .db
@@ -57,7 +58,6 @@ impl WorkItemReadService {
             .await?
             .into_iter()
             .collect();
-
         Ok(projected)
     }
 }

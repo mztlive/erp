@@ -468,6 +468,7 @@ mod tests {
         );
         assert_eq!(data.sku_id.as_ref().map(ToString::to_string), Some("sku-1".to_string()));
         assert_eq!(data.quantity, Some(Quantity::from_str("3.000000").unwrap()));
+
         assert_eq!(data.gross_amount, Amount::from_str("29.97").unwrap());
         assert_eq!(data.net_amount, Amount::from_str("26.07").unwrap());
         assert_eq!(data.tax_amount, Amount::from_str("3.90").unwrap());
@@ -487,6 +488,7 @@ mod tests {
         assert_eq!(data.base_unit_code, None);
         assert_eq!(data.sales_order_line_id, None);
         assert_eq!(data.allocated_quantity, None);
+
         assert_eq!(data.gross_amount, Amount::from_str("100.00").unwrap());
         assert_eq!(data.net_amount, Amount::from_str("87.00").unwrap());
         assert_eq!(data.tax_amount, Amount::from_str("13.00").unwrap());

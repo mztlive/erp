@@ -95,6 +95,7 @@ async fn refresh_money_progress(
         .load(sales_order_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+
     let accounts = port.receivable_balances(sales_order_id, executor).await?;
     let collection = CollectionProgress::from_receivable_balances(
         accounts.iter().map(|account| (account.open_total, account.settled_total)),
@@ -102,6 +103,7 @@ async fn refresh_money_progress(
     let invoice = InvoiceProgress::from_receivable_balances(
         accounts.iter().map(|account| (account.open_invoiceable_total, account.invoiced_total)),
     );
+
     if !order.refresh_progress(fulfillment, collection, invoice, now(), actor_id) {
         return Ok(());
     }
@@ -283,6 +285,7 @@ mod tests {
 
         fixture.assert_events(&["sales.read", "money.read", "clock", "sales.write"]);
         assert_eq!(fixture.0.lock().unwrap().executors, vec![expected_executor; 3]);
+
         let saved = fixture.stored();
         assert_eq!(saved.fulfillment_progress, FulfillmentProgress::Completed);
         assert_eq!(saved.collection_progress, CollectionProgress::Settled);
@@ -395,6 +398,7 @@ mod tests {
                 InvoiceProgress::Completed,
             ),
         ];
+
         for (facts, collection, invoice) in cases {
             let fixture = Fixture::new(Some(order()), facts);
             fixture
@@ -453,8 +457,10 @@ mod tests {
         let fixture = Fixture::new(Some(original), vec![fact("0", "100", "100", "0")]);
         let first = Instant::from_unix_secs(600);
         fixture.run(&mut ReadExecutor::default(), None, first).await.unwrap();
+
         fixture.0.lock().unwrap().facts = vec![fact("0", "100", "0", "100")];
         fixture.run(&mut ReadExecutor::default(), None, Instant::from_unix_secs(900)).await.unwrap();
+
         let saved = fixture.stored();
         assert_eq!(saved.invoice_progress, InvoiceProgress::Completed);
         assert_eq!(saved.closed_at, Some(first));

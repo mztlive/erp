@@ -158,10 +158,12 @@ impl SupplierDepositAuthorization {
         {
             return Err(Error::from("预存款自动执行授权缺失、失效或超出范围"));
         }
+
         let total = add(self.committed_amount, amount)?;
         if self.committed_amount < Amount::zero() || total > self.cumulative_limit {
             return Err(Error::from("预存款自动执行累计授权额度不足"));
         }
+
         self.committed_amount = total;
         Ok(())
     }
@@ -220,6 +222,7 @@ mod tests {
                 .commit("account", "other-purchase", "100".parse().unwrap(), 1, Instant::from_unix_secs(11))
                 .is_err()
         );
+
         grant.commit("account", "purchase", "100".parse().unwrap(), 1, Instant::from_unix_secs(11)).unwrap();
         grant.ensure_active("account", "purchase", 1, Instant::from_unix_secs(12)).unwrap();
         assert!(
@@ -228,6 +231,7 @@ mod tests {
                 .is_err()
         );
         assert!(grant.ensure_active("account", "purchase", 1, grant.valid_until).is_err());
+
         let mut expanded = grant.clone();
         expanded.purchase_order_ids.push("another".into());
         assert!(expanded.ensure_active("account", "purchase", 1, Instant::from_unix_secs(12)).is_err());

@@ -86,6 +86,7 @@ async fn settlement_formation_requires_review_decision_without_adding_read_permi
         )
         .await
         .unwrap();
+
     grant(&identity, &[("reader", &[supplier_settlement::STATEMENT_DETAIL, work_item::DETAIL])]);
     assert!(matches!(
         service
@@ -119,6 +120,7 @@ async fn settlement_recipient_requires_same_role_read_and_review_on_the_exact_ta
         .require(&actor(), &internal::WORK_ITEM_RECIPIENT, target.clone(), &mut SnapshotExecutor::default())
         .await
         .unwrap();
+
     for grants in [
         vec![("reader", &required[..1])],
         vec![("reviewer", &required[1..])],
@@ -137,6 +139,7 @@ async fn settlement_recipient_requires_same_role_read_and_review_on_the_exact_ta
             Err(Error::Forbidden(_))
         ));
     }
+
     grant(&identity, &[("reviewer", &required)]);
     assert!(
         service
@@ -171,6 +174,7 @@ async fn inquiry_formation_requires_complete_same_role_execution_permissions() {
         )
         .await
         .unwrap();
+
     for missing in 0..required.len() {
         let partial = required
             .iter()
@@ -209,6 +213,7 @@ async fn formation_checks_execution_only_and_rejects_split_roles() {
         )
         .await
         .unwrap();
+
     for missing in 0..required.len() {
         let partial = required
             .iter()
@@ -264,6 +269,7 @@ async fn formation_retains_rework_detail_requirement_without_adding_source_read(
 async fn formation_rejects_untrusted_shape_unknown_kind_expiry_and_non_snapshot() {
     let identity = Arc::new(Identity::default());
     let service = service(identity.clone(), Arc::new(Facts::default()));
+
     for invalid in [
         candidate("UNKNOWN", "sales_order"),
         candidate("CUSTOMER_ACCEPTANCE_REGISTRATION", "wrong"),
@@ -285,6 +291,7 @@ async fn formation_rejects_untrusted_shape_unknown_kind_expiry_and_non_snapshot(
             Err(Error::ValidationError(_))
         ));
     }
+
     let valid = candidate("CUSTOMER_ACCEPTANCE_REGISTRATION", "sales_order");
     assert!(matches!(
         service
@@ -297,6 +304,7 @@ async fn formation_rejects_untrusted_shape_unknown_kind_expiry_and_non_snapshot(
             .await,
         Err(Error::ValidationError(_))
     ));
+
     let expired = ObjectFacts { valid_until: Some(Instant::from_unix_secs(1)), ..valid.clone() };
     assert!(matches!(
         service
@@ -309,6 +317,7 @@ async fn formation_rejects_untrusted_shape_unknown_kind_expiry_and_non_snapshot(
             .await,
         Err(Error::ConflictError(_))
     ));
+
     identity.state.lock().unwrap().active = false;
     assert!(matches!(
         service
@@ -336,6 +345,7 @@ async fn recipient_loads_exact_task_without_requiring_current_ownership() {
         .require(&actor(), &internal::WORK_ITEM_RECIPIENT, target.clone(), &mut SnapshotExecutor::default())
         .await
         .unwrap();
+
     for (id, version) in [("task", "old"), ("missing", "v1")] {
         assert!(
             service
@@ -349,6 +359,7 @@ async fn recipient_loads_exact_task_without_requiring_current_ownership() {
                 .is_err()
         );
     }
+
     grant(
         &identity,
         &[("partial", &required[..2]), ("other", &required[2..]), ("source-reader", &[work_item::DETAIL])],
@@ -364,6 +375,7 @@ async fn recipient_loads_exact_task_without_requiring_current_ownership() {
             .await,
         Err(Error::Forbidden(_))
     ));
+
     facts.objects.lock().unwrap()[0].subject_type = FactValue::Known("UNKNOWN".into());
     assert!(matches!(
         service
@@ -371,6 +383,7 @@ async fn recipient_loads_exact_task_without_requiring_current_ownership() {
             .await,
         Err(Error::ValidationError(_))
     ));
+
     assert!(matches!(
         service
             .require(
@@ -401,6 +414,7 @@ async fn recipient_preserves_independent_source_roles_and_rejects_missing_real_s
         .require(&actor(), &internal::WORK_ITEM_RECIPIENT, target.clone(), &mut SnapshotExecutor::default())
         .await
         .unwrap();
+
     grant(&identity, &[("executor", &required)]);
     assert!(matches!(
         service
@@ -413,6 +427,7 @@ async fn recipient_preserves_independent_source_roles_and_rejects_missing_real_s
             .await,
         Err(Error::Forbidden(_))
     ));
+
     facts.objects.lock().unwrap()[0].relations.clear();
     assert!(matches!(
         service
@@ -443,6 +458,7 @@ async fn fulfillment_recipient_preserves_task_read_roles_without_adding_order_me
         .require(&actor(), &internal::WORK_ITEM_RECIPIENT, target.clone(), &mut SnapshotExecutor::default())
         .await
         .unwrap();
+
     grant(&identity, &[("executor", &full)]);
     assert!(matches!(
         service
@@ -455,6 +471,7 @@ async fn fulfillment_recipient_preserves_task_read_roles_without_adding_order_me
             .await,
         Err(Error::Forbidden(_))
     ));
+
     grant(&identity, &[("executor", &full), ("task-reader", &[work_item::DETAIL])]);
     {
         let mut roots = facts.objects.lock().unwrap();
@@ -473,6 +490,7 @@ async fn fulfillment_recipient_preserves_task_read_roles_without_adding_order_me
             .await,
         Err(Error::Forbidden(_))
     ));
+
     identity.record_grants.lock().unwrap().insert((ResourceKind::SalesOrder, "purchase".into()));
     service
         .require(&actor(), &internal::WORK_ITEM_RECIPIENT, target, &mut SnapshotExecutor::default())
@@ -498,6 +516,7 @@ async fn recipient_purchase_source_retains_history_and_explicit_record_read_supp
         .require(&actor(), &internal::WORK_ITEM_RECIPIENT, target.clone(), &mut SnapshotExecutor::default())
         .await
         .unwrap();
+
     facts.objects.lock().unwrap()[0].relations.values_mut().next().unwrap().objects[0].history_participants =
         FactValue::Known(Default::default());
     assert!(matches!(
@@ -511,6 +530,7 @@ async fn recipient_purchase_source_retains_history_and_explicit_record_read_supp
             .await,
         Err(Error::Forbidden(_))
     ));
+
     identity.record_grants.lock().unwrap().insert((ResourceKind::PurchaseOrder, "purchase".into()));
     service
         .require(&actor(), &internal::WORK_ITEM_RECIPIENT, target, &mut SnapshotExecutor::default())
@@ -545,6 +565,7 @@ async fn query_qualification_and_recipient_use_the_same_complete_task_combinatio
             );
             assert!(access.decision_qualified(&mut executor).unwrap());
             service.validate(&access, &mut executor).await.unwrap();
+
             assert_eq!(
                 service
                     .require(
@@ -565,17 +586,21 @@ async fn query_qualification_and_recipient_use_the_same_complete_task_combinatio
 async fn query_qualification_rejects_other_queries_expiry_and_cross_stage_reuse() {
     let service = complete().build().unwrap();
     let mut executor = SnapshotExecutor::default();
+
     let other = service.query(&actor(), &sales_inquiry::QUERY_SALES_LIST, &mut executor).await.unwrap();
     assert!(matches!(other.decision_qualified(&mut executor), Err(Error::ValidationError(_))));
+
     let mut access = service.query(&actor(), &work_item::LIST, &mut executor).await.unwrap();
     assert!(
         access.execution_qualified("PURCHASE_PAYMENT_ARRANGEMENT", "purchase_order", &mut executor).unwrap()
     );
     access.proof.valid_until = Some(Instant::from_unix_secs(1));
     assert!(matches!(access.decision_qualified(&mut executor), Err(Error::ConflictError(_))));
+
     let access = service.query(&actor(), &work_item::LIST, &mut executor).await.unwrap();
     executor.next_read();
     assert!(matches!(access.decision_qualified(&mut executor), Err(Error::ValidationError(_))));
+
     let access = service.query(&actor(), &work_item::LIST, &mut executor).await.unwrap();
     executor.restart();
     assert!(matches!(access.decision_qualified(&mut executor), Err(Error::ValidationError(_))));
@@ -600,6 +625,7 @@ async fn optional_qualification_revocation_invalidates_the_original_nontransacti
     assert!(
         access.execution_qualified("PURCHASE_PAYMENT_ARRANGEMENT", "purchase_order", &mut executor).unwrap()
     );
+
     grant(&identity, &[("reader", &[work_item::LIST])]);
     assert!(matches!(service.validate(&access, &mut executor).await, Err(Error::ConflictError(_))));
 }

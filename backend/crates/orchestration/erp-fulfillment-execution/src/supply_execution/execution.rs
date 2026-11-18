@@ -110,6 +110,7 @@ mod tests {
         .await;
         assert!(matches!(result,Err(Error::ConflictError(message)) if message=="intent"));
         assert!(!*called.lock().unwrap());
+
         let result =
             after_intent(async { Ok(()) }, |_| async { Err::<(), _>(Error::NotFound("result".into())) })
                 .await;
@@ -127,12 +128,14 @@ mod tests {
         .unwrap();
         assert_eq!(frozen, "first-result");
         assert_eq!(*calls.lock().unwrap(), 0);
+
         let failure =
             recover_final_result::<(), _, _>(Err(Error::ConflictError("final CAS".into())), || async {
                 Ok(None)
             })
             .await;
         assert!(matches!(failure, Err(Error::ConflictError(_))));
+
         let frozen = reuse_or_prepare(Some("first-result"), || async {
             *calls.lock().unwrap() += 1;
             Ok("second-result")
@@ -165,18 +168,21 @@ mod tests {
             assert_eq!(result, 7);
         }
         assert_eq!(*calls.lock().unwrap(), 3);
+
         let result =
             recover_final_result::<u8, _, _>(Err(Error::ConflictError("original".into())), || async {
                 Err(Error::Internal("receipt read".into()))
             })
             .await;
         assert!(matches!(result,Err(Error::Internal(message)) if message=="receipt read"));
+
         let result =
             recover_final_result::<u8, _, _>(Err(Error::ConflictError("original".into())), || async {
                 Ok(None)
             })
             .await;
         assert!(matches!(result,Err(Error::ConflictError(message)) if message=="original"));
+
         let result = recover_final_result(Ok(9), || async {
             Err(Error::Internal("successful final transaction must not replay".into()))
         })

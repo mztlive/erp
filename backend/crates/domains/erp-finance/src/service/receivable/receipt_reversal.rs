@@ -50,6 +50,7 @@ pub async fn load_receivable_offset_facts(
         |entry| entry.base.id.clone(),
         |_| Error::NotFound("应收分录不存在".to_string()),
     )?;
+
     let unique_account_ids = unique_account_ids_for_entries(&entries, &unique_entry_ids, |entry| {
         entry.receivable_account_id.to_string()
     });
@@ -123,8 +124,10 @@ pub async fn reverse_receipt_allocations(
         .await?;
     let (reverse_rows, chunks) = ReceiptAllocation::plan_reverse(&allocations, amount)?;
     let seqs = ReceiptAllocation::next_allocation_seq_range(&allocations, reverse_rows.len())?;
+
     revert_receipt_settlements(db, &chunks, actor_id, session).await?;
     persist_reverse_allocations(db, occurred_at, &receipt, &reverse_rows, &seqs, session).await?;
+
     let mut receipt = receipt;
     receipt.transition(CustomerReceiptStatus::Reversed)?;
     db.customer_receipts().update(&mut receipt, session).await?;
@@ -229,6 +232,7 @@ async fn sales_order_ids_for_receipt_allocations(
             .ok_or_else(|| Error::NotFound("应收往来子账不存在".to_string()))?;
         sales_order_ids.push(account.sales_order_id.to_string());
     }
+
     sales_order_ids.sort();
     sales_order_ids.dedup();
     Ok(sales_order_ids)

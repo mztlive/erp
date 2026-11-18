@@ -145,6 +145,7 @@ impl ReturnsProcess {
         req.validate()?;
         let audit =
             actor.clone().resource_log(&format!("{}.update", kind.as_str()), kind.as_str(), id.to_owned())?;
+
         let rbac = self.rbac.clone();
         let actor = actor.clone();
         let id = id.to_owned();

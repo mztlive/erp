@@ -129,6 +129,7 @@ impl SupplierCatalogAdoptionProcess {
             if original.preparation.as_ref().is_none_or(|state| !state.runnable()) {
                 return Ok(());
             }
+
             let (process, batch) = (self.clone(), original.clone());
             let outcome: Result<()> = self
                 .db
@@ -138,6 +139,7 @@ impl SupplierCatalogAdoptionProcess {
                     Box::pin(async move { process.prepare_chunk(batch, executor).await })
                 })
                 .await;
+
             if let Err(error) = outcome {
                 // 未知提交和并发冲突只重新读取原子进度，不能重放未查明的一块。
                 if !matches!(
@@ -161,12 +163,14 @@ impl SupplierCatalogAdoptionProcess {
         if batch.preparation.as_ref().is_none_or(|state| !state.runnable()) {
             return Ok(());
         }
+
         let actor = self.batch_actor(&batch.actor_id, executor).await?;
         let source = self.batch_access(&batch.connection_id, &actor, executor).await?;
         self.ensure_source(&source)?;
         if batch.supplier_id != source.supplier_id.as_ref() {
             return Err(Error::Forbidden("原批次所属供应商已变更，请取消后重新选择".into()));
         }
+
         let state = batch.preparation.as_ref().ok_or_else(|| Error::Internal("准备状态缺失".into()))?;
         let page = selection_page(&self.db, &batch.base.id, state.next_page, executor)
             .await?
@@ -182,6 +186,7 @@ impl SupplierCatalogAdoptionProcess {
         for item in &items {
             source.ensure_offering_source(&item.supplier_id)?;
         }
+
         let rows = items.into_iter().map(|item| new_batch_item(&batch, item)).collect::<Vec<_>>();
         let state = batch.preparation.as_mut().expect("已检查准备状态存在");
         state.advance(rows.len(), batch.selected_count)?;
@@ -288,6 +293,7 @@ mod tests {
             let result = process.read_preparation_batch("connection", "batch", &actor, executor).await;
             assert!(matches!(result, Err(Error::ValidationError(_))));
         }
+
         let result = process
             .read_preparation_batch("connection", "batch", &actor, &mut SnapshotExecutor::default())
             .await;

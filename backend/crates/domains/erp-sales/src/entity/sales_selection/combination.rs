@@ -110,6 +110,7 @@ pub fn search_packages(
     if pool.is_empty() {
         return Err(Error::from("商品池不能为空"));
     }
+
     let mut occupied = occupied.clone();
     let mut packages = Vec::new();
     let mut reports = Vec::with_capacity(tiers.len());
@@ -127,6 +128,7 @@ pub fn search_packages(
         packages.extend(tier_packages);
         reports.push(report);
     }
+
     if packages.len() > PACKAGE_DISPLAY_MAX {
         return Err(Error::from("套餐陈列项数不得超过 200"));
     }
@@ -184,6 +186,7 @@ fn search_one_tier(
     let mut progress =
         DfsProgress { expanded: 0, stopped: SearchStopReason::ExhaustedSpace, candidates: Vec::new() };
     dfs_collect(&scope, &mut progress, k, 0, Amount::zero(), &mut Vec::new())?;
+
     let DfsProgress { expanded, mut stopped, mut candidates } = progress;
     candidates.sort_by(|left, right| compare_preference(left, right, &[], tier.target_amount, pool));
     let mut accepted = Vec::new();
@@ -215,6 +218,7 @@ fn search_one_tier(
             stopped = SearchStopReason::ReachedExpected;
         }
     }
+
     let ranked = rerank_accepted(accepted, pool, tier.target_amount, tier.expected_count);
     let report = TierSearchReport {
         tier_id: tier.tier_id.clone(),
@@ -302,6 +306,7 @@ fn dfs_collect(
         progress.stopped = SearchStopReason::BudgetTime;
         return Ok(());
     }
+
     if remaining == 0 {
         record_complete_candidate(
             scope.pool,
@@ -313,6 +318,7 @@ fn dfs_collect(
         )?;
         return Ok(());
     }
+
     let available = scope.pool.len().saturating_sub(start);
     if available < remaining {
         return Ok(());
@@ -320,6 +326,7 @@ fn dfs_collect(
     if !can_still_hit_range(scope.pool, start, remaining, sum, scope.tier)? {
         return Ok(());
     }
+
     for index in start..scope.pool.len() {
         if matches!(progress.stopped, SearchStopReason::BudgetStates | SearchStopReason::BudgetTime) {
             return Ok(());
@@ -396,6 +403,7 @@ fn can_still_hit_range(
     let max_add = super::pricing::try_sum(rest.iter().rev().copied().take(remaining))?;
     let min_total = super::pricing::try_add(sum, min_add)?;
     let max_total = super::pricing::try_add(sum, max_add)?;
+
     let lower = if tier.tolerance >= tier.target_amount {
         Amount::zero()
     } else {
@@ -431,6 +439,7 @@ fn materialize_package(
         return Err(Error::from("同一套餐内 SKU 不得重复"));
     }
     let price = package_price(&members)?;
+
     let urls: Vec<Option<String>> = members.iter().map(SkuSnapshot::image_port_url).collect();
     let cover_url = generator.generate(&urls)?;
     let cover = cover_from_port_url(&members, &cover_url, generator.implementation_version())?;
@@ -700,6 +709,7 @@ mod tests {
         ];
         let (packages, reports) =
             search_packages(&pool, &[tier()], &HashSet::new(), &FirstNonEmptyMemberImage, 0).unwrap();
+
         assert!(!packages.is_empty());
         assert!(packages.len() <= 2);
         for package in &packages {

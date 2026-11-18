@@ -236,10 +236,12 @@ impl InquiryReadService {
             self.access.resolve_sales(actor, &sales_inquiry_permissions::QUERY_SALES_LIST, executor).await?;
         let version = access.version().to_string();
         validate_page(params, &version)?;
+
         let mut filter = list_filter(params);
         let scope = InquiryReadScope::from_compiled(access.clone(), authorization.clone());
         filter.inquiry_ids = None;
         let page = SalesInquiryService::new(self.db.clone()).inquiry_list(&filter, &scope, executor).await?;
+
         authorization.validate(&access, executor).await?;
         let items = page.items.iter().map(InquirySalesView::from_inquiry).collect();
         Ok(list_view(items, page.total, params, version, false))
@@ -312,10 +314,12 @@ impl InquiryReadService {
         let (access, authorization) = authorization::task_query(&self.authorization, actor, executor).await?;
         let version = access.version();
         validate_page(params, &version)?;
+
         let mut filter = list_filter(params);
         let scope = InquiryReadScope::from_compiled(access.clone(), authorization.clone());
         filter.inquiry_ids = Some(tasks.iter().map(|task| task.business_object_id.clone()).collect());
         let page = SalesInquiryService::new(self.db.clone()).inquiry_list(&filter, &scope, executor).await?;
+
         let mut items = Vec::with_capacity(page.items.len());
         for inquiry in page.items {
             let task = tasks
@@ -325,6 +329,7 @@ impl InquiryReadService {
                 .ok_or_else(scope_changed)?;
             items.push(ProcurementInquiryDetail::from_task(&inquiry, task)?);
         }
+
         authorization.validate(&access, executor).await?;
         Ok(list_view(items, page.total, params, version, false))
     }
@@ -462,9 +467,11 @@ impl InquiryReadService {
                 executor,
             )
             .await?;
+
         if params.feedback_round == 0 || params.feedback_round > inquiry.feedback_round.saturating_add(1) {
             return Err(Error::ValidationError("费用反馈轮次无效".into()));
         }
+
         let view = InquiryProcurementView::from_inquiry_at(&inquiry, Instant::now());
         let fee_ids = view
             .feedbacks
@@ -474,6 +481,7 @@ impl InquiryReadService {
             .chain(view.feedback_work.iter().flat_map(|work| &work.data.fees))
             .map(|fee| fee.fee_id.clone())
             .collect::<BTreeSet<_>>();
+
         let bases = InquirySupplyService::new(self.db.clone())
             .fee_bases(id, inquiry.requirement_version, params.feedback_round, executor)
             .await?;
@@ -530,6 +538,7 @@ impl InquiryReadService {
             .iter()
             .find(|basis| basis.base.id == basis_id)
             .ok_or_else(|| Error::NotFound("询价费用附件不存在或无权读取".into()))?;
+
         let links = self
             .db
             .document_attachments()
@@ -710,6 +719,7 @@ mod tests {
             change_reason: String::new(),
             data,
         });
+
         let task = WorkItem::new_with_responsibility_scope(
             WorkItemId::new("task"),
             WorkItemData {
@@ -740,9 +750,11 @@ mod tests {
         assert!(ensure_task_snapshot(&inquiry, &task).is_ok());
         task.subject_version = inquiry_subject_version(2);
         assert!(ensure_task_snapshot(&inquiry, &task).is_err());
+
         task.subject_version = inquiry_subject_version(1);
         task.complete_by_domain_command("buyer", Instant::now()).unwrap();
         assert!(ensure_task_snapshot(&inquiry, &task).is_ok());
+
         task.completed_by = None;
         assert!(ensure_task_snapshot(&inquiry, &task).is_err());
     }
@@ -788,6 +800,7 @@ mod tests {
             )
             .is_ok()
         );
+
         assert!(validate_template_ids(&[]).is_err());
         assert!(validate_template_ids(&["sku".into(), "sku".into()]).is_err());
         assert!(validate_template_ids(&["sku".into()]).is_ok());

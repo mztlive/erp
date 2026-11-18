@@ -62,6 +62,7 @@ impl SupplierMessageRefresh {
             .ok_or_else(|| Error::BusinessLogicError("消息来源不支持定向商品查询".into()))?;
         let skus = self.catalog_targets(hint).await?;
         let actor = self.catalog.actor(&self.connection.base.id).await?;
+
         for sku in skus {
             let Lookup::Found(snapshot) =
                 offers.offer(&sku).await.map_err(|error| Error::BusinessLogicError(error.summary))?
@@ -77,6 +78,7 @@ impl SupplierMessageRefresh {
             {
                 return Err(Error::ConflictError("消息补查的商品身份或观察时间不一致".into()));
             }
+
             let mut item = SupplierCatalogItem::observed(
                 &self.connection.base.id,
                 self.connection.supplier_id.as_ref(),
@@ -134,6 +136,7 @@ impl SupplierMessageRefresh {
             "external_order" => OrderKey::External(hint.object_id.clone()),
             _ => return Err(Error::BusinessLogicError("订单消息缺少可核验的原单身份".into())),
         };
+
         let (db, received) = (self.db.clone(), message.clone());
         let refresh = async {
             self.db
@@ -144,6 +147,7 @@ impl SupplierMessageRefresh {
                 })
                 .await
         };
+
         let funds = async {
             self.funds
                 .as_ref()
@@ -172,6 +176,7 @@ impl SupplierMessageRefreshApplier for SupplierMessageRefresh {
             .messages()
             .filter(|source| source.account_scope() == message.account_scope)
             .ok_or_else(|| Error::Forbidden("消息来源账号与当前适配器不一致".into()))?;
+
         for hint in &message.refresh_hints {
             if hint.topic == "address" {
                 let source = connector.address_source().ok_or_else(|| {
@@ -228,6 +233,7 @@ async fn refresh_order_intent(
     if execution.superseded_by_purchase_revision_id.is_some() {
         return Ok(true);
     }
+
     let mut tracking = db
         .supplier_order_tracking()
         .find_by_id(&order.base.id, executor)
@@ -241,6 +247,7 @@ async fn refresh_order_intent(
     if tracking.applied_since(message.received_at) {
         return Ok(true);
     }
+
     if tracking.can_refresh(false, Instant::now()) {
         tracking.poll_after = Instant::now();
         tracking.state = TrackingState::Polling;
@@ -265,6 +272,7 @@ async fn resolve_execution(
             .ok_or_else(|| Error::NotFound("消息原订单缺少接口执行关联".into()))?;
         return Ok((order, execution));
     }
+
     if let OrderKey::External(external) = key
         && let Some(execution) =
             for_external_order(db, message.connection_id.as_ref(), external, executor).await?

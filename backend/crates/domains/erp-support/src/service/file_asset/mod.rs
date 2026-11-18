@@ -88,6 +88,7 @@ impl FileAssetService {
     ) -> Result<PageView<FileAssetListItemView>> {
         params.validate()?;
         self.require_operation(actor, &file_asset::LIST, executor).await?;
+
         let query = params.normalized()?;
         let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
         let filter = FileAssetFilter {
@@ -100,6 +101,7 @@ impl FileAssetService {
             sort_by,
             sort_ascending,
         };
+
         let page = self.db.file_assets().search_file_assets(&filter, executor).await?;
         Ok(PageView {
             items: page.items.into_iter().map(Into::into).collect(),
@@ -335,6 +337,7 @@ mod tests {
         .unwrap();
         assert_eq!(asset.security_scan_status, SecurityScanStatus::Pending);
         assert!(!asset.is_usable_at(Instant::now()));
+
         let mut invalid = registration();
         invalid.content_hmac = "not-a-valid-fingerprint".into();
         assert!(
@@ -360,6 +363,7 @@ mod tests {
         .unwrap();
         assert!(expired.is_usable_at(Instant::from_unix_secs(9)));
         assert!(!expired.is_usable_at(Instant::from_unix_secs(10)));
+
         for status in [SecurityScanStatus::Quarantined, SecurityScanStatus::Rejected] {
             let mut asset = FileAssetService::registration_asset(
                 registration(),
@@ -371,6 +375,7 @@ mod tests {
             assert!(!asset.is_usable_at(Instant::now()));
             assert!(asset.mark_content_checked().is_err());
         }
+
         let mut destroyed = FileAssetService::registration_asset(
             registration(),
             "procurement-1",

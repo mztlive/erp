@@ -47,6 +47,7 @@ pub(super) async fn commit_row<P: RowCommitPort>(
     let supplier = port.supplier(executor).await?;
     let product = port.product(executor).await?;
     let created = port.offering(&supplier, &product, executor).await?;
+
     let message = if created {
         "商品及供应商供给已导入，可供数量初始为 999"
     } else {
@@ -91,6 +92,7 @@ impl RowCommitPort for ImportCommit<'_> {
                     .await?
             },
         };
+
         let skus = self
             .process
             .db
@@ -129,6 +131,7 @@ impl ProductImportProcess {
         qualification
             .ensure_qualified(supplier, &SkuId::new(sku_id), input.terms.valid_from.parse()?, executor)
             .await?;
+
         if let Some(existing) = self
             .db
             .supplier_offerings()
@@ -141,6 +144,7 @@ impl ProductImportProcess {
             }
             return Ok(false);
         }
+
         let request = input.request(supplier.as_ref(), sku_id);
         let service = self.services.offerings.clone();
         let prepared = service.prepare_create(&request, actor, &qualification, executor).await?;
@@ -149,6 +153,7 @@ impl ProductImportProcess {
                 "该导入已有供给登记记录，但原供给已不可用，请核对后重试".into(),
             ));
         };
+
         let audit = actor.clone().resource_log_with_message(
             "supplier_offering.create",
             "supplier_offering",

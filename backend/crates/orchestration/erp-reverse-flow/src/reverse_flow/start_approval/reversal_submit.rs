@@ -85,6 +85,7 @@ impl ReturnsProcess {
                 .await?
             },
         }
+
         committed_reversal_submit(&self.db, &input.id, &input.command_receipt, executor).await
     }
 
@@ -111,6 +112,7 @@ impl ReturnsProcess {
         if !original_error.command_may_have_committed() {
             return Err(original_error);
         }
+
         const RECOVERY_ATTEMPTS: usize = 8;
         for attempt in 0..RECOVERY_ATTEMPTS {
             match self.replay_reversal_submit(input).await {
@@ -124,6 +126,7 @@ impl ReturnsProcess {
                 tokio::time::sleep(command_recovery_delay(attempt)).await;
             }
         }
+
         Err(original_error)
     }
 }
@@ -168,6 +171,7 @@ pub(super) async fn persist_start_guard(
         .insert_command_receipt(&writes.receipt, executor)
         .await
         .map_err(map_receipt_first_write_error)?;
+
     let guarded = db
         .business_documents()
         .mark_approval_started(

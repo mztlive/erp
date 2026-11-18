@@ -30,11 +30,13 @@ pub(super) fn total(
         let sum = settled.entry(allocation.receivable_entry_id.as_ref()).or_insert_with(Amount::zero);
         *sum = allocation.allocation_action.apply_to_net(*sum, allocation.allocated_amount);
     }
+
     let mut reduced = HashMap::<&str, Amount>::new();
     for offset in offsets {
         let sum = reduced.entry(offset.increase_entry_id.as_ref()).or_insert_with(Amount::zero);
         *sum = sum.checked_add(offset.offset_amount);
     }
+
     entries.iter().fold(Amount::zero(), |sum, entry| {
         sum.checked_add(entry.overdue_balance(
             today,

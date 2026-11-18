@@ -17,6 +17,7 @@ pub(super) fn merge_recent<T: HasBaseModel + PartialEq>(recent: Vec<T>, required
     if recent.len() > 100 || required.len() > 1000 {
         return Err(Error::BusinessLogicError("账户待处理资金记录超过读取上限，请先分批核实原记录".into()));
     }
+
     let mut records = BTreeMap::new();
     for value in recent.into_iter().chain(required) {
         let id = value.base().id.clone();
@@ -25,6 +26,7 @@ pub(super) fn merge_recent<T: HasBaseModel + PartialEq>(recent: Vec<T>, required
         }
         records.insert(id, value);
     }
+
     let mut records = records.into_values().collect::<Vec<_>>();
     records.sort_by(|left, right| {
         right
@@ -75,6 +77,7 @@ mod tests {
         let required = (0..1000).map(|id| record(&format!("pending-{id:04}"), 1)).collect::<Vec<_>>();
         let records = merge_recent(vec![record("latest", 2)], required.clone()).unwrap();
         assert_eq!(records.len(), 1001);
+
         let mut too_many = required;
         too_many.push(record("one-more", 1));
         assert!(matches!(merge_recent(vec![], too_many), Err(Error::BusinessLogicError(_))));

@@ -199,6 +199,7 @@ impl ReceivableAccountListParams {
         if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
             return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
         }
+
         Ok(ReceivableAccountListQuery {
             scope_version: self.scope_version.clone(),
             sales_owner_user_ids: self.sales_owner_user_ids.clone(),
@@ -344,6 +345,7 @@ impl CustomerReceiptListParams {
         if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
             return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
         }
+
         Ok(CustomerReceiptListQuery {
             scope_version: self.scope_version.clone(),
             sales_owner_user_ids: self.sales_owner_user_ids.clone(),
@@ -531,6 +533,7 @@ impl InvoiceListParams {
         if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
             return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
         }
+
         Ok(InvoiceListQuery {
             scope_version: self.scope_version.clone(),
             sales_owner_user_ids: self.sales_owner_user_ids.clone(),

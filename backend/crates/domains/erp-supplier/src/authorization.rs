@@ -167,6 +167,7 @@ impl AccessFactsPort for Facts {
             executor,
         )
         .await?;
+
         rows.into_iter().map(|row| object(&self.resource, row)).collect()
     }
 }
@@ -247,6 +248,7 @@ mod tests {
     fn supplier_model_requires_fixed_resource_collection_identity_and_object_output() {
         let model = mapping().model;
         supplier_model(&model).unwrap();
+
         for invalid in [
             QueryModel { resource: "warehouse".into(), ..model.clone() },
             QueryModel { collection: "other_suppliers".into(), ..model.clone() },
@@ -266,6 +268,7 @@ mod tests {
             if wrong_collection {
                 mapping.model.collection = "other_suppliers".into();
             }
+
             let authorization = fixed_authorization(
                 &[supplier::LIST],
                 ResolvedScope {
@@ -283,6 +286,7 @@ mod tests {
                 compiled: Arc::new(compiled),
                 authorization,
             };
+
             if wrong_collection {
                 assert!(matches!(
                     scope.ensure_current(&mut executor),
@@ -317,6 +321,7 @@ mod tests {
         assert_eq!(mapping.key(&context, None).unwrap(), Bson::String("$id".into()));
         assert!(matches!(mapping.records(&context, None).unwrap(), QueryFragment::Match(filter)
             if filter == doc! {"deleted_at": NOT_DELETED_TIMESTAMP_BSON}));
+
         assert!(mapping.predicate(&AccessFact::HistoryParticipant, &context, None).is_err());
         assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context, None).is_err());
     }
@@ -361,6 +366,7 @@ mod tests {
                     ScopeClause { self_owned: true, ..Default::default() }.covers(&scoped),
                     query_owned
                 );
+
                 let organizations = ["org".into()].into();
                 let QueryFragment::Match(filter) =
                     mapping.predicate(&AccessFact::OrganizationIn(organizations), &context, None).unwrap()
@@ -376,9 +382,11 @@ mod tests {
                 assert!(ScopeClause { company: true, ..Default::default() }.covers(&scoped));
             }
         }
+
         let no_owner = object("supplier", doc! {"id":"row","version":1_i64,"created_by":"creator"}).unwrap();
         assert_eq!(no_owner.owner_id.get().unwrap(), &None);
         assert_eq!(no_owner.org_unit_id.get().unwrap(), &None);
+
         for field in ["maintainer_user_id", "business_org_unit_id"] {
             let mut malformed = doc! {"id":"row","version":1_i64};
             malformed.insert(field, 123);

@@ -91,12 +91,14 @@ impl DangaoshushuConnector {
                 "/dsapi/city/get_rules"
             },
         };
+
         if !matches!(query.kind, DangaoshushuReadKind::DeliveryMap)
             && let Some(city) = &query.city_id
         {
             valid_id(city)?;
             parameters.push(("city_id".into(), city.clone()));
         }
+
         self.transport.send(Request::Read { path, parameters }).await
     }
 }
@@ -116,6 +118,7 @@ mod tests {
         .unwrap();
         let (connector, calls) = recording_connector(vec![Ok(json!({"product_list":[]}))]);
         assert_eq!(connector.read(&query).await.unwrap(), json!({"product_list":[]}));
+
         let requests = calls.requests.lock().unwrap();
         let Request::Read { path, parameters } = &requests[0] else { panic!("expected readonly") };
         assert_eq!(*path, "/dsapi/product/get_product_hot_lists");

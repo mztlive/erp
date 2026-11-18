@@ -390,6 +390,7 @@ mod tests {
             business_org_unit_id: "org-1".to_string(),
             delivery_template: None,
         };
+
         view.redact_costs();
         assert!(view.dropship_supply_price_gross.is_none());
         assert_eq!(view.available_quantity.as_deref(), Some("5"));

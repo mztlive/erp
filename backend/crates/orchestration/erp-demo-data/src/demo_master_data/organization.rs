@@ -47,12 +47,14 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             let spec = spec::foundation_spec();
             let mut snap = self.org_snapshot(actor).await?;
             let root_id = self.ensure_root(actor, &mut snap).await?;
+
             let mut changed = false;
             for department in &spec.departments {
                 let unit_id = self.ensure_department(actor, &mut snap, &root_id, department).await?;
                 changed |=
                     self.seat_members(actor, &mut snap, &unit_id, department, user_ids, notices).await?;
             }
+
             if changed {
                 notices.push("已按演示部门放置岗位账号".to_string());
             }
@@ -70,6 +72,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if let Some(unit) = find_unit(&snap.units, &name, None)? {
             return live_unit(unit);
         }
+
         self.apply_org(
             actor,
             snap,
@@ -92,6 +95,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if let Some(unit) = find_unit(&snap.units, &department.name, Some(root_id))? {
             return live_unit(unit);
         }
+
         self.apply_org(
             actor,
             snap,
@@ -126,6 +130,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             if active_membership(snap, &user_id)?.is_some_and(|row| row.org_unit_id == unit_id) {
                 continue;
             }
+
             self.apply_org(
                 actor,
                 snap,
@@ -234,6 +239,7 @@ mod tests {
         assert_eq!(original, retry);
         original.validate().unwrap();
         let seated = state().changed(&original, "seat-1", "admin", Instant::from_unix_secs(10)).unwrap();
+
         let move_request = organization_request(
             "manual-transfer",
             seated.version,
@@ -241,10 +247,12 @@ mod tests {
         );
         let moved = seated.changed(&move_request, "seat-2", "admin", Instant::from_unix_secs(20)).unwrap();
         assert_eq!(moved.own_org("seller", Instant::from_unix_secs(20)).unwrap(), Some("other"));
+
         let repair = organization_request("demo-org-member-seller", moved.version, target);
         assert_ne!(repair.idempotency_key, original.idempotency_key);
         let repaired = moved.changed(&repair, "seat-3", "admin", Instant::from_unix_secs(30)).unwrap();
         assert_eq!(repaired.own_org("seller", Instant::from_unix_secs(30)).unwrap(), Some("sales"));
+
         assert!(matches!(
             moved.changed(&original, "stale", "admin", Instant::from_unix_secs(30)),
             Err(IdentityError::ConflictError(_))

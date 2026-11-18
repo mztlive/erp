@@ -96,6 +96,7 @@ impl PersonBusinessOption {
         if actions.is_empty() {
             return Err(Error::ValidationError("缺少操作权限".into()));
         }
+
         let policy_description = scope_spec::policy_description(resource, &actions)?;
         let configurable_actions = actions
             .iter()
@@ -112,6 +113,7 @@ impl PersonBusinessOption {
         let default_self =
             !configurable_actions.is_empty() && default_self_actions.len() == configurable_actions.len();
         let dimensions = scope_spec::configurable_dimensions(resource, &configurable_actions);
+
         Ok(Self {
             resource: resource.into(),
             configurable_actions,
@@ -185,6 +187,7 @@ impl SavePersonScopeRequest {
             enabled: true,
         }
         .validate(DataScopeType::Company, &[])?;
+
         let mut grants = Vec::new();
         let mut targets = Vec::new();
         for mut grant in self.grants {
@@ -194,6 +197,7 @@ impl SavePersonScopeRequest {
                 grants.push(grant);
             }
         }
+
         self.grants = grants;
         Ok(PersonScopeCommand { request: self, targets })
     }
@@ -252,6 +256,7 @@ impl PersonScopeGrant {
         {
             return Err(Error::ValidationError("附加授权必须选择本次保存的操作和完整范围".into()));
         }
+
         let mut keyed = Vec::new();
         let mut targets = Vec::new();
         for mut term in self.terms.drain(..) {
@@ -272,6 +277,7 @@ impl PersonScopeGrant {
             }
             keyed.push((serde_json::to_string(&term)?, term));
         }
+
         keyed.sort_by(|left, right| left.0.cmp(&right.0));
         keyed.dedup_by(|left, right| left.0 == right.0);
         self.terms = keyed.into_iter().map(|(_, term)| term).collect();
@@ -337,6 +343,7 @@ mod tests {
         assert!(option.policy_description.contains("岗位共享"));
         assert!(option.policy_description.contains("confirm"));
         assert!(option.policy_description.contains("流程任务"));
+
         let task =
             PersonBusinessOption::from_granted("approval_instance", vec!["read".into(), "decide".into()])
                 .unwrap();
@@ -365,6 +372,7 @@ mod tests {
             input.grants.clear();
             assert!(input.normalized().is_err());
         }
+
         let retired = PersonDataScope::default_for("alice", "approval_instance", "read");
         let retired = RetiredPersonScope::from_scope(&retired).unwrap();
         assert_eq!(retired.resource, "approval_instance");
@@ -381,6 +389,7 @@ mod tests {
         assert_eq!(normalized.actions, vec!["detail", "update"]);
         assert_eq!(normalized.expression("detail").alternatives.len(), 1);
         assert!(normalized.expression("update").alternatives.is_empty());
+
         let mut empty = request();
         empty.grants.clear();
         assert!(empty.normalized().is_ok());
@@ -393,12 +402,15 @@ mod tests {
         incomplete.actions = vec!["list".into()];
         incomplete.grants[0].actions = vec!["list".into()];
         assert!(incomplete.normalized().is_err());
+
         let mut invalid = request();
         invalid.grants[0].terms.clear();
         assert!(invalid.normalized().is_err());
+
         let mut invalid = request();
         invalid.grants[0].actions = vec!["delete".into()];
         assert!(invalid.normalized().is_err());
+
         let mut invalid = request();
         invalid.actions = vec!["*".into()];
         invalid.grants[0].actions = vec!["*".into()];
@@ -423,6 +435,7 @@ mod tests {
             scope_targets: vec!["party-one".into()],
             ..org.clone()
         };
+
         let mut input = request();
         input.resource = "supplier_deposit".into();
         input.actions = vec!["list".into(), "resolve".into()];
@@ -430,9 +443,11 @@ mod tests {
             PersonScopeGrant { actions: vec!["list".into()], terms: vec![org.clone(), party.clone()] },
             PersonScopeGrant { actions: vec!["resolve".into()], terms: vec![org] },
         ];
+
         let mut invalid = input.grants[1].clone();
         let error = invalid.normalize(&input.resource, &input.actions).unwrap_err();
         assert!(error.to_string().contains("supplier_deposit:resolve"));
+
         input.grants[1].terms.push(party);
         let command = input.normalized().unwrap();
         assert_eq!(command.grants.len(), 2);
@@ -446,6 +461,7 @@ mod tests {
         let command = duplicate.normalized().unwrap();
         assert_eq!(command.grants.len(), 1);
         assert_eq!(command.targets().len(), command.grants[0].terms.len());
+
         let mut over_limit = request();
         over_limit.grants = vec![over_limit.grants[0].clone(); 33];
         assert!(over_limit.normalized().is_err());
@@ -563,10 +579,12 @@ mod tests {
                 scope_targets: vec![id.into()],
             }],
         };
+
         let mut save = request();
         save.actions = vec!["list".into(), "update".into(), "submit".into()];
         save.grants = vec![grant("one", &["list"]), grant("two", &["list", "update"])];
         let save = save.normalized().unwrap();
+
         for (action, expected) in
             [("list", [true, true]), ("update", [false, true]), ("submit", [false, false])]
         {
@@ -585,6 +603,7 @@ mod tests {
                 target.org_unit_id = Some(department);
                 assert_eq!(scope.allows(&target, action == "list"), allowed);
             }
+
             target.org_unit_id = Some("outside");
             target.owned = true;
             assert!(scope.allows(&target, action == "list"));

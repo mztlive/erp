@@ -142,6 +142,7 @@ mod tests {
             executor: &mut executor as *mut persistence_core::ReadExecutor as usize,
             fail: None,
         };
+
         let facts = load(&port, &HashSet::new(), &mut executor).await.unwrap();
         assert_eq!(
             *port.seen.lock().unwrap(),
@@ -170,7 +171,6 @@ mod tests {
                 Step::SupplierPortal,
             ]
         );
-
         assert_eq!(facts.len(), 22);
     }
     #[tokio::test]
@@ -182,6 +182,7 @@ mod tests {
                 executor: &mut executor as *mut persistence_core::ReadExecutor as usize,
                 fail: Some(*step),
             };
+
             let error = load(&port, &HashSet::new(), &mut executor).await.unwrap_err();
             assert!(matches!(error,Error::ConflictError(message) if message=="first-read-failure"));
             assert_eq!(&*port.seen.lock().unwrap(), &ORDER[..=index]);

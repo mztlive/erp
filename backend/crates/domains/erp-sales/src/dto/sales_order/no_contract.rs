@@ -39,6 +39,7 @@ impl SalesOrderEditableDraftRequest {
             .no_contract_terms
             .ok_or_else(|| Error::ValidationError("无合同销售单必须填写付款与开票条款".into()))?;
         terms.validate()?;
+
         let draft = SalesOrderDraftRequest {
             editor_user_id: editable.editor_user_id,
             customer_name: name,
@@ -56,6 +57,7 @@ impl SalesOrderEditableDraftRequest {
             receivable_due_date: editable.receivable_due_date,
             lines: editable.lines,
         };
+
         draft.validate()?;
         Ok(draft)
     }
@@ -107,6 +109,7 @@ mod tests {
         let mut draft = editable();
         draft.no_contract_terms = None;
         assert!(draft.into_no_contract_draft("客户".into(), "结算".into()).is_err());
+
         let mut draft = editable();
         draft.no_contract_terms.as_mut().unwrap().tax_point = " ".into();
         assert!(draft.into_no_contract_draft("客户".into(), "结算".into()).is_err());

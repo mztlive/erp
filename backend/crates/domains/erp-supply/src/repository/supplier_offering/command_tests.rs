@@ -24,6 +24,7 @@ fn fingerprint_versioned_and_legacy_are_compatible() {
     );
     assert!(versioned.ensure_replayable("create_offering", ZERO_DIGEST).is_ok());
     assert!(versioned.ensure_replayable("create_offering", ONE_DIGEST).is_err());
+
     let doc = bson::serialize_to_document(&bare).unwrap();
     let roundtrip: SupplierOfferingCommand = bson::deserialize_from_document(doc).unwrap();
     assert_eq!(roundtrip.request_fingerprint, ZERO_DIGEST);

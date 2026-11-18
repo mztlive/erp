@@ -73,6 +73,7 @@ mod tests {
         assert!(view.recent_history.len() <= RECENT_HISTORY_LIMIT);
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
         assert!(!view.allowed_actions.iter().any(|item| item.contains("DEFINITION")));
+
         let rejected = document_approval_view(Some(&binding), None, SalesChangeOrderStatus::Rejected);
         assert_eq!(rejected.allowed_actions, vec!["SUBMIT".to_string()]);
         let running = document_approval_view(Some(&binding), None, SalesChangeOrderStatus::InApproval);

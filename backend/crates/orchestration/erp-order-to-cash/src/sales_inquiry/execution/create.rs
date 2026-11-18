@@ -33,17 +33,20 @@ impl SalesInquiryProcess {
         data.sales_owner_user_id = actor.id().to_string();
         data.business_org_unit_id = required_business_org(&self.db, actor.id(), executor).await?;
         data.customer_name = self.require_customer(actor, &data.customer_id, executor).await?;
+
         if let Some(source) = &data.copied_from_inquiry_id {
             self.access()
                 .require_sales(actor, &sales_inquiry_permissions::QUERY_SALES_DETAIL, source, executor)
                 .await?;
         }
         normalize_requirement(&self.db, self.services.catalog.as_ref(), &mut data.draft, executor).await?;
+
         let id = next_id();
         let inquiry = SalesInquiry::create(id.clone(), format!("IQ{id}"), data.clone())?;
         self.access()
             .require(actor, &sales_inquiry_permissions::COMMANDS_SALES_CREATE, &inquiry, executor)
             .await?;
+
         Ok(SalesInquiryService::new(self.db.clone())
             .create(id.clone(), format!("IQ{id}"), data, executor)
             .await?)
@@ -70,6 +73,7 @@ impl SalesInquiryProcess {
             .await?
             .filter(|customer| customer.stable.status == CustomerAccountStatus::Active)
             .ok_or_else(|| Error::NotFound("客户不存在或当前不可选用".into()))?;
+
         let party = self
             .db
             .parties()

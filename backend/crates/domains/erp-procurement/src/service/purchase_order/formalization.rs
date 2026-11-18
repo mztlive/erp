@@ -53,12 +53,14 @@ impl PurchaseOrderService {
         if submission.purchase_order_id.as_ref() != order.base.id {
             return Err(crate::Error::BusinessLogicError("采购提交不属于当前采购单".to_string()));
         }
+
         let revision = PurchaseOrderRevision::from_submission(
             PurchaseOrderRevisionId::new(next_id()),
             revision_no,
             submission,
             Instant::now(),
         )?;
+
         let revision_id = PurchaseOrderRevisionId::new(revision.base.id.clone());
         let revision_lines = submission_lines
             .iter()
@@ -99,6 +101,7 @@ impl PurchaseOrderService {
             submission,
             Instant::now(),
         )?;
+
         let revision_id = PurchaseOrderRevisionId::new(revision.base.id.clone());
         let revision_lines = lines
             .iter()
@@ -152,6 +155,7 @@ pub async fn persist_formalized_order(
     let FormalizedOrderWrite { order, submission, revision, revision_lines, allocations } = write;
     db.purchase_order().create_effective_revision(revision, revision_lines, executor).await?;
     super::allocation_maintenance::persist_current_sales_allocations(db, allocations, executor).await?;
+
     let mut order_mut = order;
     order_mut.formalize_with_revision(revision.base.id.clone().into(), actor_id)?;
     let mut submission_mut = submission;
@@ -160,9 +164,9 @@ pub async fn persist_formalized_order(
         Instant::now(),
         actor_id,
     )?;
+
     db.purchase_order_submissions().update(&mut submission_mut, executor).await?;
     db.purchase_orders().update(&mut order_mut, executor).await?;
-
     Ok(order_mut)
 }
 

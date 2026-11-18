@@ -49,6 +49,7 @@ impl SupplierConnectionExecutionProcess {
                     authorization
                         .require(&actor, &supplier_api::ADOPTIONS_PREVIEW, AccessTarget::Operation, executor)
                         .await?;
+
                     let mut job = db
                         .background_jobs()
                         .find_by_id(&job.base.id, executor)
@@ -63,6 +64,7 @@ impl SupplierConnectionExecutionProcess {
                         .ok_or_else(|| Error::BusinessLogicError("目录同步任务缺少连接ID".into()))?;
                     let connection =
                         SupplierApiService::new(db.clone()).load_connection(connection_id, executor).await?;
+
                     job.start(Instant::now())?;
                     db.background_jobs().update(&mut job, executor).await?;
                     Ok((connection, job))
@@ -93,11 +95,13 @@ impl SupplierConnectionExecutionProcess {
                         memberships::abort_scan(&db, &job.base.id, executor).await?;
                         return Ok(());
                     }
+
                     let mut run = db
                         .supplier_catalog_runs()
                         .find_by_id(&job.base.id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("同步记录不存在".into()))?;
+
                     let at = Instant::now();
                     run.resume_requested =
                         outcome.as_ref().is_err_and(|error| error.code == "CATALOG_SHUTDOWN");
@@ -114,8 +118,10 @@ impl SupplierConnectionExecutionProcess {
                         job.mark_succeeded(at)?;
                         run.complete()?;
                     }
+
                     db.supplier_catalog_runs().update(&mut run, executor).await?;
                     db.background_jobs().update(&mut job, executor).await?;
+
                     let audit = actor.clone().resource_log_with_id(
                         format!("w20-catalog-audit-{}", digest(&[&job.base.id])),
                         "supplier_api_connection.catalog_sync.settle",

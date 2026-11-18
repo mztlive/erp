@@ -137,6 +137,7 @@ impl<'a> CopyRepository<'a> {
     ) -> Result<Option<ApprovalCopyReceipt>> {
         ensure_copy_model(access.model())?;
         access.ensure_current(ex).map_err(|_| Error::UnsupportedDeployment("抄送授权阶段已失效"))?;
+
         let mut pipeline = access.stages().to_vec();
         pipeline.extend([doc! { "$match": { "id": id } }, doc! { "$limit": 1 }]);
         let mut rows = aggregate::rows(&self.db.collection(RECEIPTS), pipeline, ex).await?;
@@ -203,11 +204,13 @@ impl<'a> CopyRepository<'a> {
         ex: &mut dyn Executor,
     ) -> Result<CopyPage> {
         ensure_copy_model(access.model())?;
+
         let collection = self.db.collection::<Document>(RECEIPTS);
         let mut pipeline = access.stages().to_vec();
         pipeline.extend(list_pipeline(query));
         access.ensure_current(ex).map_err(|_| Error::UnsupportedDeployment("抄送授权阶段已失效"))?;
         let mut rows = aggregate::rows(&collection.clone_with_type::<Facet>(), pipeline, ex).await?;
+
         let facet =
             rows.pop().unwrap_or(Facet { items: vec![], total: vec![], unread: vec![], types: vec![] });
         Ok(CopyPage {
@@ -250,6 +253,7 @@ fn list_pipeline(query: &CopyListQuery) -> Vec<Document> {
     if let Some(kind) = &query.document_type {
         filter.insert("document_type", kind);
     }
+
     let offset = u64::from(query.page.unwrap_or(1).saturating_sub(1)) * 20;
     vec![
         doc! { "$lookup": { "from": "approval_subject_snapshots", "localField": "snapshot_id", "foreignField": "id", "as": "snapshot" } },
@@ -330,6 +334,7 @@ mod tests {
         for other in [wrong_collection, wrong_resource, wrong_id, wrong_key] {
             assert!(matches!(ensure_copy_model(&other), Err(Error::UnsupportedDeployment(_))));
         }
+
         for output in [
             QueryOutput::Share { fields: ["id".into()].into() },
             QueryOutput::Existence { fields: ["id".into()].into() },

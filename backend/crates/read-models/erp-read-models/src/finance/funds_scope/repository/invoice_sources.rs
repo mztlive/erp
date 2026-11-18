@@ -61,6 +61,7 @@ pub(super) fn sales_stages(
         "order_no",
         &authorization.sales_stages(),
     ));
+
     stages.push(doc! { "$set": { "order": "$_account.sales_order_id",
         "source_exists": { "$eq": [{ "$type": "$_source" }, "object"] },
         "matched": matched_expression(condition.owner_user_ids.as_deref(), condition.org_unit_ids.as_deref()),
@@ -87,6 +88,7 @@ pub(super) fn purchase_stages(
 ) -> Vec<Document> {
     let mut stages = account_stages(<Database as PayableExt>::PAYABLE_ACCOUNTS, "$payable_account_id");
     stages.extend(purchase_source_stages(authorization));
+
     stages.push(doc! { "$set": {
         "_source": { "$cond": [{ "$eq": ["$_account.source_type", "purchase_order"] },
             "$_purchase", "$_settlement"] },

@@ -484,6 +484,7 @@ impl SalesOrderListParams {
         if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
             return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
         }
+
         Ok(SalesOrderListQuery {
             owner_user_ids: self.owner_user_ids.clone(),
             org_unit_ids: self.org_unit_ids.clone(),
@@ -852,6 +853,7 @@ mod tests {
             "page_size": 50,
         }))
         .unwrap();
+
         let query = params.normalized().unwrap();
         assert_eq!(query.order_no.as_deref(), Some("SO-2026"));
         assert_eq!(

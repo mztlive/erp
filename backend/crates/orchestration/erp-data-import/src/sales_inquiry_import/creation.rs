@@ -26,6 +26,7 @@ impl SalesInquiryImportProcess {
     ) -> Result<InquiryImportResult> {
         command.command_key = command.command_key.trim().into();
         let receipt = creation_identity(actor.id(), &command)?;
+
         let this = self.clone();
         let actor_copy = actor.clone();
         let request = command.clone();
@@ -38,6 +39,7 @@ impl SalesInquiryImportProcess {
                 Box::pin(async move { this.create_command(&actor_copy, &request, &identity, executor).await })
             })
             .await;
+
         match result {
             Err(error) if error.command_may_have_committed() => {
                 let this = self.clone();
@@ -68,6 +70,7 @@ impl SalesInquiryImportProcess {
         let receipt =
             self.db.inquiry_import_receipts().find_by_id_including_deleted(identity.id(), executor).await?;
         let Some(receipt) = receipt else { return Ok(None) };
+
         self.creation_header(actor, &command.customer_id, executor).await?;
         let inquiry = self.require_import(actor, &receipt.inquiry_id, executor).await?;
         if inquiry.customer_id != command.customer_id {
@@ -92,6 +95,7 @@ impl SalesInquiryImportProcess {
         if let Some(result) = self.recover_creation(actor, command, identity, executor).await? {
             return Ok(result);
         }
+
         let mut data = self.creation_header(actor, &command.customer_id, executor).await?;
         self.require_preview(actor, &command.preview_id, executor).await?;
         let mut preview = self
@@ -107,6 +111,7 @@ impl SalesInquiryImportProcess {
             Instant::now().unix_secs(),
         )?;
         self.revalidate(&preview, executor).await?;
+
         data.draft = preview.data.clone();
         let inquiry = self
             .inquiry
@@ -116,6 +121,7 @@ impl SalesInquiryImportProcess {
                 executor,
             )
             .await?;
+
         self.record_preview(
             actor,
             &inquiry,

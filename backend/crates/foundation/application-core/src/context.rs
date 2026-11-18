@@ -186,6 +186,7 @@ mod tests {
         let actor = actor.with_actor_name_snapshot(Some("  周晓彤  ".into())).unwrap();
         assert_eq!(actor.actor_name_snapshot(), Some("周晓彤"));
         assert_eq!(actor.into_parts(), ("actor-1".into(), "sales".into(), AccountKind::Admin));
+
         let blank = AuditActor::new("actor-1".into(), "sales".into(), AccountKind::Admin)
             .with_actor_name_snapshot(Some("   ".into()))
             .unwrap();
@@ -200,6 +201,7 @@ mod tests {
             .with_actor_name_snapshot(Some(name.clone()))
             .unwrap();
         assert_eq!(actor.actor_name_snapshot(), Some(name.as_str()));
+
         for invalid in ["名".repeat(129), "周\n晓彤".into(), "周\u{0}晓彤".into()] {
             let result = AuditActor::new("actor-1".into(), "sales".into(), AccountKind::Admin)
                 .with_actor_name_snapshot(Some(invalid));
@@ -215,6 +217,7 @@ mod tests {
         let actor = actor.with_request_id(Some(" request-1 ".into())).unwrap();
         assert_eq!(actor.request_id(), Some("request-1"));
         assert_eq!(actor.into_parts(), ("actor-1".into(), "sales".into(), AccountKind::Admin));
+
         for invalid in ["r".repeat(129), "request\nforged".into()] {
             let result = AuditActor::new("actor-1".into(), "sales".into(), AccountKind::Admin)
                 .with_request_id(Some(invalid));

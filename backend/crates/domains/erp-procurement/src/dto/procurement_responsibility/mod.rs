@@ -220,12 +220,15 @@ mod tests {
             serde_json::from_value(valid.clone()).unwrap();
         request.validate().unwrap();
         assert_eq!(request.into_data().owner_user_ids, ["buyer-a", "buyer-b"]);
+
         let mut legacy = valid.clone();
         legacy["owner_user_id"] = json!("buyer-a");
         assert!(serde_json::from_value::<CreateProcurementResponsibilityRuleRequest>(legacy).is_err());
+
         let mut unsupported = valid.clone();
         unsupported["strategy"] = json!("LOAD_BALANCE");
         assert!(serde_json::from_value::<CreateProcurementResponsibilityRuleRequest>(unsupported).is_err());
+
         let mut empty = valid;
         empty["owner_user_ids"] = json!([]);
         assert!(

@@ -49,6 +49,7 @@ impl SupplierPortalProcess {
                         executor,
                     )
                     .await?;
+
                     let accounts = PortalIdentityService::new(process.db.clone())
                         .account_list(&supplier_id, executor)
                         .await?;
@@ -76,6 +77,7 @@ impl SupplierPortalProcess {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::ValidationError("内部门户读取必须使用快照事务".into()));
         }
+
         let access = suppliers.resolve(actor, &supplier::DETAIL, executor).await?;
         let filter = SupplierAccountFilter {
             keyword: None,
@@ -94,6 +96,7 @@ impl SupplierPortalProcess {
         if db.supplier_accounts().query_versions(&filter, executor).await?.is_empty() {
             return Err(Error::NotFound("供应商不存在或无权查看".into()));
         }
+
         let supplier = db
             .supplier_accounts()
             .find_by_id(supplier_id, executor)
@@ -119,6 +122,7 @@ impl SupplierPortalProcess {
     ) -> Result<PortalActor> {
         input.validate()?;
         let prepared = PortalIdentityService::new(self.db.clone()).prepare_password(actor, input).await?;
+
         let this = self.clone();
         let actor = actor.clone();
         self.db
@@ -130,6 +134,7 @@ impl SupplierPortalProcess {
                     let current = PortalIdentityService::new(this.db.clone())
                         .password_update(prepared, executor)
                         .await?;
+
                     let log = current.audit_actor().resource_log(
                         "supplier_portal.password_update",
                         "supplier_portal_request",
@@ -236,6 +241,7 @@ mod read_tests {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
         let access = SupplierAccess::new(db.clone(), unbound_authorization());
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         for executor in [&mut NoTransaction as &mut dyn Executor, &mut ReadExecutor::default()] {
             assert!(matches!(
                 SupplierPortalProcess::management_supplier(&db, &access, &actor, "supplier", executor).await,

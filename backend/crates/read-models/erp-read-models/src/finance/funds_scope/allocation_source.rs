@@ -71,6 +71,7 @@ impl FundsAccess {
         let (_, authorization) = self.resolve(actor, &receivable::ACCOUNT_DETAIL, ex).await?;
         let account_id = self.allocation_account_id(kind, id, ex).await?;
         self.require_visible_root(&authorization, &account_id, ex).await?;
+
         let account = self
             .db
             .receivable_accounts()
@@ -78,6 +79,7 @@ impl FundsAccess {
             .await?
             .ok_or_else(|| Error::NotFound("分配来源不存在".into()))?;
         let result = self.allocation_source_view(&account, ex).await?;
+
         authorization.deliver(ex).await?;
         Ok(result)
     }
@@ -142,6 +144,7 @@ impl FundsAccess {
             self.db.sales_order_goods_service_line_revisions().list_by_revision_line_ids(&ids, ex).await?;
         let vouchers =
             self.db.sales_order_voucher_line_revisions().list_by_revision_line_ids(&ids, ex).await?;
+
         Ok(lines
             .into_iter()
             .map(|line| AllocationProduct {
@@ -183,6 +186,7 @@ mod tests {
         let service =
             FundsAccess::new(db, unavailable_authorization(), FailClosedFundsDataScopePort::shared());
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         for kind in [AllocationSourceKind::ReceivableEntry, AllocationSourceKind::ReceivableAccount] {
             let result = service
                 .load_allocation_source(&actor, kind, "source", &mut SnapshotExecutor::default())

@@ -21,14 +21,17 @@ pub(super) fn current_catalog_facts() -> Vec<Document> {
     pipeline.extend(join(<Database as CatalogExt>::PRODUCTS, "sku.product_id", "product"));
     pipeline
         .push(doc! {"$match":{"product.status":"active","product.deleted_at":NOT_DELETED_TIMESTAMP_BSON}});
+
     pipeline.extend(join(<Database as CatalogExt>::SKU_REVISIONS, "sku.current_revision_id", "revision"));
     pipeline.push(doc! {"$match":{"revision.status":"active","revision.deleted_at":NOT_DELETED_TIMESTAMP_BSON,"$expr":{"$eq":["$revision.sku_id","$sku.id"]}}});
+
     pipeline.extend(join(
         <Database as CatalogExt>::PRODUCT_REVISIONS,
         "product.current_revision_id",
         "product_revision",
     ));
     pipeline.push(doc! {"$match":{"product_revision.status":"active","product_revision.deleted_at":NOT_DELETED_TIMESTAMP_BSON,"$expr":{"$eq":["$product_revision.product_id","$product.id"]}}});
+
     pipeline.extend(join(<Database as CatalogExt>::UNIT_OF_MEASURES, "sku.base_unit_id", "unit"));
     pipeline.push(doc! {"$match":{"unit.status":"active","unit.deleted_at":NOT_DELETED_TIMESTAMP_BSON}});
     pipeline.push(current_product_image());

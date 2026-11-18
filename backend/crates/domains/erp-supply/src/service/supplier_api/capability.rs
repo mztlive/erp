@@ -40,6 +40,7 @@ impl SupplierApiService {
         if connection.stable.status == SupplierApiConnectionStatus::Active {
             return Err(Error::BusinessLogicError("连接启用期间不能修改能力，请先停用连接".to_string()));
         }
+
         let capabilities = self
             .db
             .supplier_api()
@@ -50,8 +51,10 @@ impl SupplierApiService {
             .supplier_api()
             .business_confirmations(&SupplierApiConnectionId::new(id), executor)
             .await?;
+
         let classified = change_set.classify(&capabilities).map_err(map_capability_change_rejection)?;
         let (mut updates, creates) = apply_validated_changes(id, &classified, &confirmations, &capabilities)?;
+
         self.db.supplier_api().persist_capability_changes(&mut updates, &creates, executor).await?;
         connection.record_capability_configuration(actor_id)?;
         self.db.supplier_api_connections().update(&mut connection, executor).await?;

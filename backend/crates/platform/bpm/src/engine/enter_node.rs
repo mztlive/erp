@@ -62,11 +62,13 @@ pub(crate) fn plan_enter_node(mut input: EnterNodeInput<'_>) -> EngineResult<Tra
             "定义图缺少目标节点，无法形成合法阻塞快照"
         }));
     };
+
     let assignee = node.assignee()?;
     if input.participant != *assignee || input.eligibility.participant_ref() != assignee {
         return Err(EngineError::InvalidCommand("节点责任人必须匹配定义审批人"));
     }
     input.eligibility.validate_node(node)?;
+
     let execution_input = NewNodeExecution {
         id: input.execution_id.clone(),
         process_instance_id: input.instance.typed_id(),
@@ -86,6 +88,7 @@ pub(crate) fn plan_enter_node(mut input: EnterNodeInput<'_>) -> EngineResult<Tra
         None => ApprovalNodeExecution::new_active(execution_input)?,
     }
     .with_additional_assignees(node.additional_assignees.clone())?;
+
     input.instance.set_current_execution(input.execution_id.clone(), input.now)?;
     let mut plan = if let Some(code) = blocker {
         input.instance.enter_blocked(code, input.now)?;
@@ -121,6 +124,7 @@ fn add_enter_intents(
             .with_node_key(node.node_key.clone())
             .with_actor(execution.assignee_participant_id.clone()),
     );
+
     for member in eligibility.members().into_iter().filter(|member| member.blocked_code().is_none()) {
         plan.task_intents.push(TaskIntent::HumanTaskRequested {
             execution_id: execution.typed_id(),
@@ -151,6 +155,7 @@ pub(crate) fn require_decision_edges<'a>(
         .unique_transition(from_node_key, ApprovalTransitionEvent::Approve)
         .map_err(|_| EngineError::GraphCorrupted)?;
     approve.validate_shape()?;
+
     let reject = graph
         .unique_transition(from_node_key, ApprovalTransitionEvent::Reject)
         .map_err(|_| EngineError::GraphCorrupted)?;

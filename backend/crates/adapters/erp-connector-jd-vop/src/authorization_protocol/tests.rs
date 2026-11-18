@@ -62,6 +62,7 @@ fn callback_matching_requires_original_origin_path_query_and_unique_code_without
     )
     .unwrap();
     assert_eq!(code.as_str(), "a+&=");
+
     for location in [
         "https://127.0.0.1:8080/callback?tenant=A%26B&code=x",
         "http://127.0.0.1:8081/callback?tenant=A%26B&code=x",
@@ -84,12 +85,15 @@ fn invalid_key_oversized_input_and_callback_errors_are_static() {
     let error = prepare(&invalid, "app").err().unwrap();
     assert_eq!(error, AuthorizationError::InvalidInput);
     assert!(!error.to_string().contains("private-key-sentinel"));
+
     let mut oversized = request();
     oversized.private_key = Zeroizing::new("x".repeat(32769));
     assert!(oversized.validate().is_err());
+
     let mut username = request();
     username.username = Zeroizing::new("中".repeat(86));
     assert!(username.validate().is_err());
+
     for value in [
         "javascript:alert(1)",
         "https://user:password@erp.example/callback",

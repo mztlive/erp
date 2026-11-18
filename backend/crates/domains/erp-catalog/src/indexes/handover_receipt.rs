@@ -25,6 +25,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
                 .build(),
         )
         .build();
+
     db.collection::<Document>(<Database as ProductHandoverReceiptExt>::HANDOVER_COMMAND_RECEIPTS)
         .create_indexes([index])
         .await?;

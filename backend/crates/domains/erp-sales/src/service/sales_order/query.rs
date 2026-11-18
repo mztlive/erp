@@ -17,6 +17,7 @@ fn group_revision_lines(lines: Vec<SalesOrderRevisionLine>) -> HashMap<String, V
     for line in lines {
         grouped.entry(line.sales_order_revision_id.to_string()).or_default().push(line);
     }
+
     for group in grouped.values_mut() {
         group.sort_by_key(|line| line.line_no);
     }
@@ -66,6 +67,7 @@ impl SalesOrderService {
         let lines =
             self.db.sales_order_revision_lines().list_lines_by_revisions(&revision_ids, executor).await?;
         let mut commercial_by_line = self.revision_commercial_lines(&lines, executor).await?;
+
         let mut lines_by_revision = group_revision_lines(lines);
         let previous_nos = previous_revision_numbers(&revisions);
         Ok(revisions
@@ -95,6 +97,7 @@ impl SalesOrderService {
             .await?;
         let vouchers =
             self.db.sales_order_voucher_line_revisions().list_by_revision_line_ids(&ids, executor).await?;
+
         let goods_by_line: HashMap<_, _> =
             goods.into_iter().map(|line| (line.revision_line_id.to_string(), line)).collect();
         let vouchers_by_line: HashMap<_, _> =

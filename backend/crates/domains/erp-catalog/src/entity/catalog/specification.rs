@@ -207,6 +207,7 @@ pub fn parse_specification_signature(signature: &str) -> Result<Vec<SpecSignatur
         };
         entries.push(SpecSignatureEntry { attribute_code: name.to_string(), value_code: value.to_string() });
     }
+
     let canonical = compute_specification_signature(&entries)?;
     if canonical != signature {
         return Err(Error::from("规格签名不是规范形态"));

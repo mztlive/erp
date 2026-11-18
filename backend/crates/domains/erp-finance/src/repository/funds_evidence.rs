@@ -100,6 +100,7 @@ pub async fn funds_scan_checkpoint(
     if let Some(checkpoint) = active.into_iter().next() {
         return Ok(Some(checkpoint));
     }
+
     let completed: Vec<FundsScanCheckpoint> = mongo_ops::find_many(
         &repository.collection(),
         doc! {"account_id":account,"finished":true,"deleted_at":0_i64},

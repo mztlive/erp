@@ -50,6 +50,7 @@ pub(crate) async fn load_sales_order(
         .await?
         .ok_or_else(|| Error::NotFound(format!("{}不存在", requested_type.label())))?;
     ensure_sales_document_type(requested_type, order.business_type)?;
+
     build_facts(
         requested_type,
         document_id,
@@ -90,6 +91,7 @@ pub(crate) async fn load_sales_change(
         .await?
         .ok_or_else(|| Error::NotFound("销售变更单来源销售单不存在".to_string()))?;
     ensure_known_sales_business_type(order.business_type)?;
+
     build_facts(
         DocumentType::SalesChangeOrder,
         document_id,
@@ -130,6 +132,7 @@ pub(crate) async fn load_purchase_order(
         .await?
         .ok_or_else(|| Error::NotFound("采购单来源销售单不存在".to_string()))?;
     ensure_goods_service_source(sales.business_type, DocumentType::PurchaseOrder)?;
+
     build_facts(
         DocumentType::PurchaseOrder,
         document_id,
@@ -175,6 +178,7 @@ pub(crate) async fn load_purchase_change(
         .await?
         .ok_or_else(|| Error::NotFound("采购变更单来源销售单不存在".to_string()))?;
     ensure_goods_service_source(sales.business_type, DocumentType::PurchaseChangeOrder)?;
+
     build_facts(
         DocumentType::PurchaseChangeOrder,
         document_id,
@@ -209,6 +213,7 @@ pub(crate) async fn load_stock_adjustment(
         .find_by_id(document_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
+
     build_facts(
         DocumentType::StockAdjustment,
         document_id,
@@ -243,6 +248,7 @@ pub(crate) async fn load_customer_receipt(
         .find_by_id(document_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
+
     build_facts(
         DocumentType::CustomerReceipt,
         document_id,
@@ -283,6 +289,7 @@ pub(crate) async fn load_customer_refund(
         .await?
         .ok_or_else(|| Error::NotFound("客户退款单所属客户不存在".to_string()))?;
     let source = customer_refund_source(db, &refund, executor).await?;
+
     build_facts(
         DocumentType::CustomerRefund,
         document_id,
@@ -323,6 +330,7 @@ pub(crate) async fn load_supplier_refund(
         .await?
         .ok_or_else(|| Error::NotFound("供应商退款单所属供应商不存在".to_string()))?;
     let source = supplier_refund_source(db, &refund, executor).await?;
+
     build_facts(
         DocumentType::SupplierRefund,
         document_id,
@@ -362,6 +370,7 @@ pub(crate) async fn load_receipt_reversal(
         .find_by_id(reversal.original_customer_receipt_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("回款冲正单原回款不存在".to_string()))?;
+
     build_facts(
         DocumentType::ReceiptReversal,
         document_id,
@@ -406,6 +415,7 @@ pub(crate) async fn load_payment_reversal(
         .find_by_id(payment.supplier_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("付款冲正单原付款供应商不存在".to_string()))?;
+
     build_facts(
         DocumentType::PaymentReversal,
         document_id,
@@ -443,6 +453,7 @@ pub(crate) async fn ensure_fresh_sales_order(
     ensure_sales_document_type(facts.document_type, order.business_type)?;
     ensure_fresh_subject_identity(facts, &order.base.id, order.base.version)?;
     ensure_initial_sales_order_state(&order)?;
+
     let latest_submission = db
         .sales_order_submissions()
         .find_latest_by_order(&SalesOrderId::new(order.base.id.clone()), executor)
@@ -477,6 +488,7 @@ pub(crate) async fn ensure_fresh_sales_change(
         .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
     ensure_fresh_subject_identity(facts, &change.base.id, change.base.version)?;
     ensure_initial_sales_change_state(&change)?;
+
     let latest_submission_no = db
         .sales_change_submissions()
         .latest_submission_no_by_change_order(&SalesChangeOrderId::new(change.base.id.clone()), executor)

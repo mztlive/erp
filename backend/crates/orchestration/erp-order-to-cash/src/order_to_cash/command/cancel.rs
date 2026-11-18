@@ -66,6 +66,7 @@ impl SalesOrderCommandProcess {
                 })
             })
             .await?;
+
         self.command_result(id, actor, &sales_order::CANCEL_APPROVAL).await
     }
 
@@ -91,11 +92,13 @@ impl SalesOrderCommandProcess {
             .map(|submission| submission.submission_no)
             .ok_or_else(|| Error::ConflictError("销售单没有可撤回的提交版本".into()))?;
         let runtime = load_cancel_runtime(&self.db, &binding, &subject, subject_version, executor).await?;
+
         let now = Instant::now();
         let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
         let input =
             build_sales_order_cancel_input(&runtime, &req.reason, actor.id(), &idempotency_key, None, now)?;
         let prepared = prepare_cancel(input)?;
+
         execute_sales_order_domain_action(&mut order, ports.cancel_action, actor.id())?;
         let audit =
             actor.clone().resource_log("sales_order.cancel_approval", "sales_order", id.to_string())?;
@@ -270,6 +273,7 @@ mod tests {
             let source = Source::new(failure);
             let mut executor = SnapshotExecutor::default();
             let expected = &mut executor as *mut SnapshotExecutor as usize;
+
             let result = cancel(&source, source.order.base.version, &mut executor).await;
             if matches!(source.failure, Some(Failure::Apply)) {
                 assert!(matches!(result, Err(Error::ConflictError(message)) if message == "审批状态已变化"));

@@ -112,6 +112,7 @@ async fn write_receivable_delta(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     delta.persist(db, executor).await?;
+
     let account = delta.account();
     let account_id = ReceivableAccountId::new(account.base.id.clone());
     sync_sales_invoice_task(db, &account_id, SalesInvoiceTaskChange::ReceivableChanged, executor)
@@ -145,6 +146,7 @@ pub(super) async fn prepare_receivable_delta(
             erp_finance::entity::receivable::SalesBusinessTypeFact::Voucher
         },
     };
+
     Ok(prepare_sales_change_receivable(
         db,
         SalesChangeReceivableInput {
@@ -213,6 +215,7 @@ mod tests {
         let mut port = RecordingPosting::default();
         let mut executor = TestExecutor::default();
         let expected = &mut executor as *mut TestExecutor as usize;
+
         post(&mut port, &mut executor).await.unwrap();
         assert_eq!(port.events, ["revision", "receivable_and_tasks", "change", "procurement", "audit"]);
         assert_eq!(port.executors, vec![expected; 5]);

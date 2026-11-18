@@ -44,10 +44,12 @@ impl OfferTransform<JdVopOffer<'_>> for JdVopOfferMapper {
         } else {
             detail.sku_name.trim().to_owned()
         };
+
         let mut terms = purchase_limits(detail)?;
         if let Some(price) = source.price {
             terms.restrictions = price.purchase_restrictions()?;
         }
+
         let minimum = terms.minimum_quantity;
         let price = source.price.map(|price| self.price(detail, price)).transpose()?.flatten();
         let rate = source
@@ -68,6 +70,7 @@ impl OfferTransform<JdVopOffer<'_>> for JdVopOfferMapper {
             tax_rate,
             valid_until: None,
         });
+
         Ok(Offer {
             sku: SupplierSku {
                 product_id: Some(
@@ -260,6 +263,7 @@ fn specification(detail: &SkuDetail) -> String {
             values.push(format!("{label}：{value}"))
         }
     }
+
     for group in &detail.param_group_attr_list {
         for attr in &group.param_attribute_list {
             let name = attr.param_attr_name.trim();
@@ -275,6 +279,7 @@ fn specification(detail: &SkuDetail) -> String {
             }
         }
     }
+
     let mut seen = BTreeSet::new();
     values.retain(|value| seen.insert(value.clone()));
     if values.is_empty() { detail.sku_name.trim().to_owned() } else { values.join("；") }
@@ -332,6 +337,7 @@ mod tests {
         assert!(offer.details.barcode.is_none());
         assert_eq!(offer.details.availability, CatalogAvailability::Unknown);
         assert!(offer.details.available_quantity.is_none());
+
         detail.spu_id = Some(super::super::wire::WireId("123".into()));
         detail.spu_name = Some("共有名称".into());
         assert_eq!(mapped(&detail, None).name, "共有名称");
@@ -371,6 +377,7 @@ mod tests {
         assert_eq!(mapper.image("file:///private/secret").url, "");
         assert_eq!(mapper.image("jfs/a.jpg").url, "");
         assert_eq!(mapper.image("//img.example/a.jpg").url, "https://img.example/a.jpg");
+
         let mapper = JdVopOfferMapper { image_base_url: Some("https://img.example/base/".into()) };
         assert_eq!(mapper.image("jfs/a.jpg").url, "https://img.example/base/jfs/a.jpg");
         assert!(mapper.image("../private").url.is_empty());
@@ -422,6 +429,7 @@ mod tests {
             assert_eq!(terms.restrictions, vec![expected]);
             assert!(terms.ensure_automatic_order().is_err());
         }
+
         let price: SellPrice =
             serde_json::from_str(r#"{"skuId":"1","salePrice":"10","hasPromotion":"UNKNOWN"}"#).unwrap();
         assert!(price.purchase_restrictions().is_err());

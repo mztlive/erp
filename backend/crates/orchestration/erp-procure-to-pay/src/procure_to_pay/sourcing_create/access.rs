@@ -50,6 +50,7 @@ impl CandidateAccess for PlannedAccess<'_, '_> {
             executor,
         )
         .await?;
+
         self.ports
             .access(self.db.clone())
             .ensure_create_and_submit(self.input.actor, &candidate, executor)
@@ -107,6 +108,7 @@ mod tests {
         let access = Access { reject: None, calls: Mutex::new(Vec::new()) };
         let mut executor = SnapshotExecutor::default();
         let expected = &mut executor as *mut SnapshotExecutor as usize;
+
         authorize_all(&access, &[1, 2, 3], &mut executor).await.unwrap();
         assert_eq!(*access.calls.lock().unwrap(), vec![(1, expected), (2, expected), (3, expected)]);
     }
@@ -115,8 +117,10 @@ mod tests {
     async fn denied_candidate_stops_the_batch_and_empty_batch_needs_no_candidate_permission() {
         let access = Access { reject: Some(2), calls: Mutex::new(Vec::new()) };
         let mut executor = SnapshotExecutor::default();
+
         assert!(matches!(authorize_all(&access, &[1, 2, 3], &mut executor).await, Err(Error::Forbidden(_))));
         assert_eq!(access.calls.lock().unwrap().iter().map(|(id, _)| *id).collect::<Vec<_>>(), vec![1, 2]);
+
         access.calls.lock().unwrap().clear();
         authorize_all(&access, &[], &mut executor).await.unwrap();
         assert!(access.calls.lock().unwrap().is_empty());

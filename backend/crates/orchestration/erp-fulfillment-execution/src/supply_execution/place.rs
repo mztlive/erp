@@ -53,6 +53,7 @@ impl SupplierFulfillmentProcess {
         let intent = self.db.client().with_transaction(move |executor| {
             Box::pin(async move { process.prepare_place_intent(&req, &actor_for_tx, executor).await })
         });
+
         super::execution::after_intent(intent, |intent| async move {
             match intent {
                 PlaceIntent::Existing(order) => Ok((*order).into()),
@@ -108,6 +109,7 @@ impl SupplierFulfillmentProcess {
             outcome = %outcome_label(&outcome),
             "供应商动作派发完成（事务外）"
         );
+
         let can_auto_retry = match &outcome {
             DispatchOutcome::Failed { error_class, .. } => {
                 super::failure::integration_class(*error_class).can_auto_retry()
@@ -116,6 +118,7 @@ impl SupplierFulfillmentProcess {
         };
         let applied =
             SupplierFulfillmentService::apply_dispatch_outcome(order, action, outcome, can_auto_retry)?;
+
         let task = match applied {
             DispatchMessageResult::Processed => {
                 message.update(InboxMessageUpdate {
@@ -135,6 +138,7 @@ impl SupplierFulfillmentProcess {
                 self.build_error_task(message, order, super::failure::integration_class(class), actor, org)?
             },
         };
+
         self.write_dispatch_result(order, action, message, task.as_ref(), actor).await
     }
 
@@ -203,6 +207,7 @@ impl SupplierFulfillmentProcess {
         let task_for_tx = task.cloned();
         let work_item_id = WorkItemId::new(next_id());
         let task_audit_actor = actor.clone();
+
         let (order_out, action_out, message_out) = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
@@ -225,6 +230,7 @@ impl SupplierFulfillmentProcess {
                 })
             })
             .await?;
+
         *order = order_out;
         *action = action_out;
         *message = message_out;

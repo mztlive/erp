@@ -285,6 +285,7 @@ impl<'a> FulfillmentQueueRepository<'a> {
             executor,
         )
         .await?;
+
         let facet = rows.into_iter().next().unwrap_or_default();
         Ok(FulfillmentQueueRepositoryPage {
             items: facet.items,

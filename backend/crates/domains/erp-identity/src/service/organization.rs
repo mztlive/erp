@@ -92,6 +92,7 @@ impl OrganizationService {
         let visible = visible_state(access.organizations.clone(), &access);
         let people = people_for(&self.db, &visible, access.as_of, executor).await?;
         let roles = roles_for(&self.db, executor).await?;
+
         access.ensure_current(executor)?;
         Ok(OrganizationStateView::compose(
             visible,
@@ -170,6 +171,7 @@ impl OrganizationService {
         {
             return self.save_profile_roles(actor, request).await;
         }
+
         let this = self.clone();
         let actor = actor.clone();
         self.db
@@ -190,6 +192,7 @@ impl OrganizationService {
         executor: &mut dyn Executor,
     ) -> Result<OrganizationChangeReceipt> {
         let access = self.profile_access(actor, &request.change, executor).await?;
+
         let repository = OrganizationRepository::new(&self.db);
         let receipt_id = format!("{}:{}", actor.id(), request.idempotency_key);
         let existing = repository.receipt(&receipt_id, executor).await?;
@@ -200,6 +203,7 @@ impl OrganizationService {
                 return Err(Error::ConflictError("授权版本已变化，请刷新后重试".into()));
             }
         }
+
         let (mut receipt, persist) = prepare_organization_change(
             preview,
             existing,
@@ -210,6 +214,7 @@ impl OrganizationService {
             Instant::from_unix_secs(Instant::now().unix_secs()),
         )?;
         access.ensure_current(executor)?;
+
         if persist {
             self.update_profile_name(&receipt.request.change, true, executor).await?;
             self.assign_profile_roles(actor, &receipt.request.change, access.facts.policy_version, executor)
@@ -241,6 +246,7 @@ impl OrganizationService {
             }
             return Ok(());
         }
+
         match change {
             OrganizationOperation::SetLeader { user_id: Some(user_id), .. }
             | OrganizationOperation::TransferMember { user_id, .. } => {

@@ -94,6 +94,7 @@ async fn unavailable_stale_incomplete_or_wrong_target_notices_cannot_finish() {
         }
         assert!(refresh_address_notice(&source, &hint(), Instant::from_unix_secs(10)).await.is_err());
     }
+
     let source = source();
     let mut wrong = hint();
     wrong.target_kind = "sku".into();

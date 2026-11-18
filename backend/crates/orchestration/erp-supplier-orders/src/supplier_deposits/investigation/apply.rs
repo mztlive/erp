@@ -136,6 +136,7 @@ impl MongoFundsInvestigationStore {
                 Err(error) => return Err(error),
             }
         }
+
         self.review(&evidence.base.id, "FUNDS_APPLICATION_NEEDS_REVIEW").await
     }
 
@@ -166,6 +167,7 @@ impl MongoFundsInvestigationStore {
             }
             return existing_resource(&existing, &transaction);
         }
+
         match transaction.direction {
             FundsTransactionDirection::Debit => self.apply_debit(&transaction, executor).await,
             FundsTransactionDirection::Return => self.apply_return(&transaction, executor).await,
@@ -191,6 +193,7 @@ impl MongoFundsInvestigationStore {
         if reservation.account_id != self.account_id {
             return Ok(CashApplication::Review("CROSS_ACCOUNT_RESERVATION"));
         }
+
         let usage = SupplierDepositService::new(self.db.clone())
             .record_debit(
                 &reservation.base.id,
@@ -219,6 +222,7 @@ impl MongoFundsInvestigationStore {
         else {
             return Ok(CashApplication::Review("AMBIGUOUS_OR_MISSING_ORIGINAL_DEBIT"));
         };
+
         let result = SupplierDepositService::new(self.db.clone())
             .return_usage(
                 &usage.base.id,
@@ -229,6 +233,7 @@ impl MongoFundsInvestigationStore {
                 executor,
             )
             .await?;
+
         self.sync_task(&result, executor).await?;
         self.audit("refund", executor).await?;
         Ok(CashApplication::Applied(FundsAppliedResource::ReturnUsage { usage_id: result.base.id }))
@@ -253,6 +258,7 @@ impl MongoFundsInvestigationStore {
         else {
             return Ok(CashApplication::Review("UNMATCHED_BANK_PAID_RECHARGE"));
         };
+
         let evidence = self.recharge_evidence(request, transaction, executor).await?;
         let batch = SupplierDepositService::new(self.db.clone())
             .receive_recharge(
@@ -313,6 +319,7 @@ impl MongoFundsInvestigationStore {
         {
             return Ok(Some(execution));
         }
+
         let root = self
             .db
             .supplier_fulfillment_orders()

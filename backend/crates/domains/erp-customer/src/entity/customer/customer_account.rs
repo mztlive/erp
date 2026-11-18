@@ -444,6 +444,7 @@ mod tests {
         for key in object.keys() {
             covered.insert(key.as_str());
         }
+
         for key in [
             "id",
             "version",

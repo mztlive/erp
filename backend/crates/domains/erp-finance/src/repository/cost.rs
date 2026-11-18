@@ -307,10 +307,10 @@ impl CostEntryRepositoryExt for persistence_core::Repository<'_, CostEntry> {
             .limit(filter.limit())
             .projection(cost_entry_projection())
             .build();
+
         let collection = self.collection().clone_with_type::<CostEntryRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 }
@@ -372,10 +372,10 @@ impl CostAllocationRepositoryExt for persistence_core::Repository<'_, CostAlloca
             .limit(filter.limit())
             .projection(cost_allocation_projection())
             .build();
+
         let collection = self.collection().clone_with_type::<CostAllocationRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 

@@ -147,9 +147,11 @@ mod tests {
         let event = RefreshSignal::Changed { topic: RefreshTopic::Copies, recipient: Some("alice".into()) };
         assert!(event.collect("bob", &mut topics));
         assert!(topics.is_empty());
+
         assert!(event.collect("alice", &mut topics));
         assert!(event.collect("alice", &mut topics));
         assert_eq!(topics, [RefreshTopic::Copies].into());
+
         assert!(
             RefreshSignal::Changed { topic: RefreshTopic::Tasks, recipient: None }
                 .collect("alice", &mut topics)
@@ -162,11 +164,13 @@ mod tests {
         let mut first = hub.subscribe();
         let mut second = hub.subscribe();
         assert!(!hub.is_available());
+
         let publisher = hub.clone();
         publisher.set_available(true);
         assert!(hub.is_available());
         assert!(matches!(first.recv().await.unwrap(), RefreshSignal::Resync));
         assert!(matches!(second.recv().await.unwrap(), RefreshSignal::Resync));
+
         for _ in 0..300 {
             hub.publish(RefreshSignal::Changed { topic: RefreshTopic::Jobs, recipient: None });
         }
@@ -174,6 +178,7 @@ mod tests {
         let mut topics = BTreeSet::new();
         RefreshSignal::Resync.collect("alice", &mut topics);
         assert_eq!(topics, RefreshTopic::all());
+
         let mut current = hub.subscribe();
         publisher.set_available(false);
         assert!(!hub.is_available());

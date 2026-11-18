@@ -130,6 +130,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
+
         let json = serde_json::to_value(&view).unwrap();
         assert_eq!(json["empty_reason"], "no_scope");
         assert_eq!(json["organization_version"], 4);

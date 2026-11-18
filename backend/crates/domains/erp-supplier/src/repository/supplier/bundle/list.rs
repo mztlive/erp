@@ -141,6 +141,7 @@ impl<'a> SupplierRepository<'a> {
         let capability_owner_ids =
             self.supplier_ids_by_capability_owners(&input.capability_owner_user_ids, executor).await?;
         let supplier_ids = intersect_supplier_ids(supplier_ids, capability_owner_ids);
+
         let filter = SupplierAccountFilter {
             keyword: input.keyword.clone(),
             party_id: input.party_id.clone(),
@@ -158,6 +159,7 @@ impl<'a> SupplierRepository<'a> {
         let page = SupplierAccountRepository::new(self.db, SUPPLIER_ACCOUNTS)
             .search_supplier_accounts(&filter, executor)
             .await?;
+
         self.hydrate_supplier_list_page(page, executor).await.map_err(Into::into)
     }
 
@@ -185,6 +187,7 @@ impl<'a> SupplierRepository<'a> {
             page.items.iter().filter_map(|row| row.current_commercial_profile_revision_id.clone()).collect();
         let supplier_ids: Vec<SupplierAccountId> =
             page.items.iter().map(|row| SupplierAccountId::new(&row.id)).collect();
+
         let profiles = self.list_commercial_profiles_by_ids(&profile_ids, executor).await?;
         let capabilities = self.list_capabilities_by_supplier_ids(&supplier_ids, executor).await?;
         let qualifications = self.list_qualifications_by_supplier_ids(&supplier_ids, executor).await?;

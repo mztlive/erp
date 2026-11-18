@@ -75,6 +75,7 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
         },
         ReceiptBranch::Fresh => {},
     }
+
     if !input.current.has_participant(input.actor.as_str()) {
         return Err(Error::ConflictError("APPROVAL_RESPONSIBILITY_CONFLICT".into()));
     }
@@ -84,9 +85,11 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
         input.actor.as_str(),
         &input.instance_assignee_id,
     )?;
+
     if input.open_task_count > 1 + input.current.additional_assignees.len() {
         return prepare_open_task_conflict(input, identity.current());
     }
+
     let terminal_reject = input.decision == ApprovalDecision::Reject;
     let plan = decide(
         input.instance,
@@ -104,6 +107,7 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
         },
     )
     .map_err(map_engine_error)?;
+
     let domain_action = decision_domain_action(&plan, terminal_reject);
     let receipt = receipt_from_plan(input.receipt_id, identity.current(), &plan, input.command.now)?;
     Ok(PreparedExecution::Apply(Box::new(apply_plan(plan, receipt, domain_action))))

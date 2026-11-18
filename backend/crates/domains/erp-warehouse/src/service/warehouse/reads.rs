@@ -153,6 +153,7 @@ mod tests {
     async fn revision_and_policy_reads_allow_permissions_and_prepare_production_filters() {
         let service = service(true, Arc::new(Identities::default())).await;
         let mut executor = SnapshotExecutor::default();
+
         let params =
             serde_json::from_value(serde_json::json!({"name":"  仓库名称  ","page":2,"page_size":7}))
                 .unwrap();
@@ -160,6 +161,7 @@ mod tests {
         assert_eq!(revisions.name.as_deref(), Some("仓库名称"));
         assert_eq!(revisions.page, 2);
         assert_eq!(revisions.page_size, 7);
+
         let params = serde_json::from_value(
             serde_json::json!({"warehouse_id":"warehouse-1","sku_id":"sku-1","page":3,"page_size":5}),
         )
@@ -178,6 +180,7 @@ mod tests {
         let revisions = serde_json::from_value(serde_json::json!({})).unwrap();
         let policies = serde_json::from_value(serde_json::json!({})).unwrap();
         let mut executor = SnapshotExecutor::default();
+
         let errors = [
             service.handler_options_snapshot(&actor(), &mut executor).await.map(|_| ()).unwrap_err(),
             service
@@ -191,6 +194,7 @@ mod tests {
                 .map(|_| ())
                 .unwrap_err(),
         ];
+
         for error in errors {
             assert!(matches!(error, Error::Forbidden(_)));
         }
@@ -203,6 +207,7 @@ mod tests {
         let service = service(true, identities.clone()).await;
         let revisions = serde_json::from_value(serde_json::json!({})).unwrap();
         let policies = serde_json::from_value(serde_json::json!({})).unwrap();
+
         let errors = [
             service.handler_options_snapshot(&actor(), &mut NoTransaction).await.map(|_| ()).unwrap_err(),
             service
@@ -216,6 +221,7 @@ mod tests {
                 .map(|_| ())
                 .unwrap_err(),
         ];
+
         for error in errors {
             assert!(matches!(error, Error::ValidationError(message) if message.contains("必须使用快照事务")));
         }

@@ -46,6 +46,7 @@ impl SupplierOfferingReadService {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::ValidationError("供给详情读取必须使用快照事务".into()));
         }
+
         let context = self.access.resolve(actor, &supplier_offering_permissions::DETAIL, executor).await?;
         let query = SupplierOfferingListQuery {
             offering_ids: Some(vec![SupplierOfferingId::new(id)]),
@@ -59,8 +60,10 @@ impl SupplierOfferingReadService {
             .into_iter()
             .next()
             .ok_or_else(|| Error::NotFound("供给不存在或无权查看".into()))?;
+
         let names = self.db.accounts().names_by_ids(&[view.maintainer_user_id.clone()], executor).await?;
         view.maintainer_user_name = names.get(&view.maintainer_user_id).cloned();
+
         context.validate(executor).await?;
         Ok(view)
     }

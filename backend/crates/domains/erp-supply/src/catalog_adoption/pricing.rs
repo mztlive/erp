@@ -53,6 +53,7 @@ impl PriceRule {
         if let Self::Fixed(value) = self {
             return Ok(Some(*value));
         }
+
         let source = quote(source)?;
         let value = match self {
             Self::Unset => return Ok(None),
@@ -144,6 +145,7 @@ mod tests {
             assert_eq!(rule.calculate(source).unwrap(), Some(expected.parse().unwrap()));
             assert_eq!(rule.calculate(source).unwrap(), Some(expected.parse().unwrap()));
         }
+
         let half = PriceRule::Percentage("0".parse().unwrap());
         assert_eq!(half.calculate(Some("1.005".parse().unwrap())).unwrap(), Some("1.01".parse().unwrap()));
     }
@@ -172,8 +174,10 @@ mod tests {
         ] {
             assert!(rule.calculate(Some("100".parse().unwrap())).is_err());
         }
+
         assert!(serde_json::from_str::<PriceRule>(r#"{"method":"PERCENTAGE","value":"0.00001"}"#).is_err());
         assert!(serde_json::from_str::<PriceRule>(r#"{"method":"FIXED","value":99}"#).is_err());
+
         let max = UnitPrice::try_from(Decimal::MAX).unwrap();
         assert!(PriceRule::Percentage(max).calculate(Some(max)).is_err());
         assert!(PriceRule::Add("1".parse().unwrap()).calculate(Some(max)).is_err());

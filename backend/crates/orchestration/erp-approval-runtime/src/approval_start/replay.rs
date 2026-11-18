@@ -100,6 +100,7 @@ async fn replay_from_store(
         definition_version: expected.binding.approval_definition_version,
         actor_participant_id: expected.actor_id,
     })?;
+
     let mut receipt = None;
     for scope in identity.scope_candidates() {
         receipt = store.receipt(scope, identity.idempotency_key(), executor).await?;
@@ -112,6 +113,7 @@ async fn replay_from_store(
         ReceiptBranch::PayloadConflict => return Err(payload_conflict_error().into()),
         ReceiptBranch::SamePayload(receipt) => receipt,
     };
+
     let instance = store
         .instance(&ApprovalProcessInstanceId::new(&receipt.result_ref), executor)
         .await?
@@ -278,6 +280,7 @@ mod tests {
     async fn missing_receipt_queries_v3_then_legacy_and_never_reads_an_instance() {
         let fixture = Fixture::new();
         let store = RecordingStore::new(Vec::new(), Some(fixture.instance()));
+
         let result = replay_from_store(&store, fixture.expected(), " key-1 ", errors(), &mut NoTransaction)
             .await
             .unwrap();
@@ -301,6 +304,7 @@ mod tests {
         let store = RecordingStore::new(vec![fixture.receipt(), legacy], Some(fixture.instance()));
         let mut executor = NoTransaction;
         let executor_id = &mut executor as *mut NoTransaction as usize;
+
         let result =
             replay_from_store(&store, fixture.expected(), "key-1", errors(), &mut executor).await.unwrap();
         assert_eq!(result.as_deref(), Some("original-instance"));
@@ -330,6 +334,7 @@ mod tests {
         let mut current = fixture.receipt();
         current.payload_digest = "different-payload".into();
         let store = RecordingStore::new(vec![current, fixture.legacy_receipt()], Some(fixture.instance()));
+
         let error = replay_from_store(&store, fixture.expected(), "key-1", errors(), &mut NoTransaction)
             .await
             .unwrap_err();
@@ -362,6 +367,7 @@ mod tests {
             .unwrap_err();
         assert!(matches!(error, Error::ValidationError(_)));
         assert!(store.calls.lock().unwrap().is_empty());
+
         store.fail_at = Some("receipt");
         let error = replay_from_store(&store, fixture.expected(), "key-1", errors(), &mut NoTransaction)
             .await

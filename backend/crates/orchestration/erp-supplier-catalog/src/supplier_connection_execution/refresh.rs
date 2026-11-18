@@ -46,6 +46,7 @@ pub(crate) async fn guard_catalog_refresh(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     authorization.require(actor, &supplier_api::ADOPTIONS_PREVIEW, AccessTarget::Operation, executor).await?;
+
     let service = SupplierApiService::new(db.clone());
     let mut current = service.load_connection(&connection.base.id, executor).await?;
     if current.technical_config_version != connection.technical_config_version

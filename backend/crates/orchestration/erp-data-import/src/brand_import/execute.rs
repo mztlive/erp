@@ -46,6 +46,7 @@ impl BrandImportProcess {
         }
         job.last_progress_at = Some(Instant::now());
         self.db.background_jobs().update(job, &mut ReadExecutor::default()).await?;
+
         let request = match self.execution_source(job).await {
             Ok(request) => request,
             Err(_) => return self.fail_job(job, "导入源文件读取失败，请使用原文件重新提交核对").await,
@@ -55,8 +56,10 @@ impl BrandImportProcess {
             .background_job_items()
             .list_entities_by_job(&BackgroundJobId::new(&job.base.id), &mut ReadExecutor::default())
             .await?;
+
         let mut execution = BrandRows { process: self, request: &request };
         let result = execute_rows(&mut execution, job, items, import_budget()).await;
+
         if matches!(result, Err(Error::Forbidden(_) | Error::Unauthenticated(_))) {
             return self
                 .fail_job(
@@ -109,6 +112,7 @@ impl BrandImportProcess {
         let row =
             request.rows.get(row_index).cloned().ok_or_else(|| Error::Internal("导入源数据不完整".into()))?;
         let key = request.key()?;
+
         let result = db
             .client()
             .clone()
@@ -125,10 +129,12 @@ impl BrandImportProcess {
                     if item.status.is_some() {
                         return Err(Error::ConflictError("导入行已由其他执行器处理".into()));
                     }
+
                     let actor = job_actor(&current);
                     authorize(&process.authorization, &actor, executor).await?;
                     let outcome =
                         process.catalog.product_brand_import_row(&key, row, &actor, executor).await?;
+
                     record(&mut current, &mut item, outcome)?;
                     db.background_job_items().update(&mut item, executor).await?;
                     db.background_jobs().update(&mut current, executor).await?;
@@ -136,6 +142,7 @@ impl BrandImportProcess {
                 })
             })
             .await?;
+
         if let Some(updated) = result {
             *job = updated;
             Ok(true)

@@ -190,18 +190,21 @@ async fn sync_sales_order_supply(
 ) -> Result<()> {
     let order = load_sales_order(db, sales_order_id, executor).await?;
     let state = load_purchase_source_state(db, &order, executor).await?;
+
     let remaining_by_line = state
         .coverage
         .lines
         .iter()
         .map(|line| (line.revision_line.sales_order_line_id.to_string(), line.summary.remaining_quantity))
         .collect::<HashMap<_, _>>();
+
     let tasks = db
         .work_items()
         .list_procurement_by_sales_order_newest_first(sales_order_id.as_ref(), executor)
         .await?;
     synchronize_tasks(db, &order, &state.coverage.revision.base.id, &remaining_by_line, tasks, executor)
         .await?;
+
     SourceUpdateSync { db, responsibility, order: &order, state: &state, trigger, now: Instant::now() }
         .run(executor)
         .await
@@ -389,7 +392,6 @@ mod tests {
         item.complete_when_requirement_satisfied(Instant::from_unix_secs(10)).unwrap();
 
         let error = validate_procurement_task_access(&item, &SalesOrderId::new("sales-1")).unwrap_err();
-
         assert!(matches!(
             error,
             Error::ConflictError(message) if message == "可分配供给数量已更新，请刷新后重试"
@@ -400,6 +402,7 @@ mod tests {
     fn authorized_open_task_requires_expected_business_object() {
         let mut item = procurement_task("user-1");
         validate_procurement_task_access(&item, &SalesOrderId::new("sales-1")).unwrap();
+
         item.business_object_type = "purchase_order".into();
         assert!(matches!(
             validate_procurement_task_access(&item, &SalesOrderId::new("sales-1")),

@@ -65,6 +65,7 @@ impl PurchasePaymentRequestReadService {
         if rows.len() > 10_000 {
             return Err(Error::ValidationError("付款申请实际付款记录超过读取上限".into()));
         }
+
         let accounts = request.lines.iter().map(|line| line.payable_account_id.as_str()).collect();
         if rows.iter().any(|payment| !payment_matches(payment, request, &accounts)) {
             return Err(Error::ConflictError("实际付款记录与付款申请批准来源不一致".into()));

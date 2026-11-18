@@ -24,6 +24,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
             .build();
         db.collection::<Document>(collection).create_index(index).await?;
     }
+
     let ttl = IndexModel::builder()
         .keys(doc! {"expires_at_date": 1})
         .options(

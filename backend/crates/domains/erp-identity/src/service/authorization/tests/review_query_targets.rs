@@ -81,12 +81,14 @@ async fn exception_task_completion_cannot_replace_an_exact_task_with_an_operatio
         Err(Error::ValidationError(_))
     ));
     assert_eq!(task.calls.load(Ordering::SeqCst), 0);
+
     let target = |version: &str| AccessTarget::Task { id: "task".into(), version: version.into() };
     service.require(&actor(), &permission, target("v1"), &mut executor).await.unwrap();
     assert!(matches!(
         service.require(&actor(), &permission, target("stale"), &mut executor).await,
         Err(Error::ConflictError(_))
     ));
+
     task.objects.lock().unwrap()[0].assignee_id = FactValue::Known(Some("other".into()));
     assert!(matches!(
         service.require(&actor(), &permission, target("v1"), &mut executor).await,
@@ -110,6 +112,7 @@ async fn connection_detail_needs_supplier_qualification_and_catalog_keeps_its_in
     identity.state.lock().unwrap().grants.push(("supplier".into(), vec![supplier::DETAIL]));
     let access = service.query(&actor(), &supplier_api::CONNECTION_DETAIL, &mut executor).await.unwrap();
     service.validate(&access, &mut executor).await.unwrap();
+
     let supplier = object("supplier", "supplier", "user");
     let connection = ObjectFacts {
         relations: [(
@@ -130,6 +133,7 @@ async fn connection_detail_needs_supplier_qualification_and_catalog_keeps_its_in
         .require(&actor(), &internal::CONNECTION_CATALOG_READ, check("connection"), &mut executor)
         .await
         .unwrap();
+
     identity.scopes.lock().unwrap().insert(
         (supplier::DETAIL, supplier::DETAIL),
         ResolvedScope { role_clauses: vec![ScopeClause::default()], user_limit: None },
@@ -185,6 +189,7 @@ async fn protocol_operations_keep_their_own_qualification_and_complete_connectio
         builder.facts.insert("supplier_api_connection".into(), facts.clone());
         let service = builder.build().unwrap();
         let mut executor = SnapshotExecutor::default();
+
         identity.state.lock().unwrap().grants = vec![
             ("connection".into(), vec![supplier_api::CONNECTION_DETAIL]),
             ("supplier".into(), vec![supplier::DETAIL]),
@@ -196,11 +201,13 @@ async fn protocol_operations_keep_their_own_qualification_and_complete_connectio
             Err(Error::Forbidden(_))
         ));
         assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
+
         identity.state.lock().unwrap().grants.push(("protocol".into(), vec![qualification]));
         service
             .require(&actor(), &entry, AccessTarget::record("connection").unwrap(), &mut executor)
             .await
             .unwrap();
+
         let mut incomplete = connection;
         incomplete.relations.get_mut(&RelationKey::parse("supplier").unwrap()).unwrap().objects.clear();
         *facts.objects.lock().unwrap() = vec![incomplete];

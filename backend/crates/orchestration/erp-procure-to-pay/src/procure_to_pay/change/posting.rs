@@ -82,17 +82,21 @@ async fn execute(steps: &mut impl EffectSteps, executor: &mut dyn Executor) -> R
     for step in [QuantityGuard, SalesGuard] {
         steps.apply(step, executor).await?;
     }
+
     let allocations = steps.prepare_allocations(executor).await?;
     steps.apply(Revision, executor).await?;
     steps.persist_allocations(allocations, executor).await?;
     steps.apply(CurrentOrder, executor).await?;
+
     if steps.reschedule_api() {
         steps.apply(ApiFulfillment, executor).await?;
     }
     steps.apply(ProcurementTasks, executor).await?;
+
     if let Some(payable) = steps.take_payable() {
         steps.persist_payable(payable, executor).await?;
     }
+
     for step in [Submission, Change, Audit] {
         steps.apply(step, executor).await?;
     }
@@ -306,6 +310,7 @@ pub(super) async fn persist_effective_writes(
         executor,
     )
     .await?;
+
     let mut steps =
         MongoEffect { db, ports, write, audit, actor_id, reschedule_api, allocation_ids: HashMap::new() };
     execute(&mut steps, executor).await?;
@@ -425,7 +430,6 @@ mod tests {
     #[tokio::test]
     async fn effective_change_uses_same_executor_and_original_write_order_without_cost_step() {
         let mut executor = TestExecutor::default();
-
         let identity = &mut executor as *mut TestExecutor as usize;
         let mut steps = RecordingSteps {
             calls: Vec::new(),
@@ -434,6 +438,7 @@ mod tests {
             payable: Some("payable-1"),
             reschedule_api: true,
         };
+
         execute(&mut steps, &mut executor).await.unwrap();
         assert_eq!(steps.calls, expected());
         assert!(steps.payable.is_none());
@@ -450,6 +455,7 @@ mod tests {
                 payable: Some("payable-1"),
                 reschedule_api: true,
             };
+
             let error = execute(&mut steps, &mut executor).await.unwrap_err();
             assert!(
                 matches!(error, Error::ConflictError(message) if message == "original purchase change conflict")
@@ -470,6 +476,7 @@ mod tests {
             payable: None,
             reschedule_api: true,
         };
+
         execute(&mut steps, &mut executor).await.unwrap();
         let expected =
             expected().into_iter().filter(|step| !matches!(step, Call::Payable)).collect::<Vec<_>>();
@@ -487,6 +494,7 @@ mod tests {
             payable: None,
             reschedule_api: false,
         };
+
         execute(&mut steps, &mut executor).await.unwrap();
         let expected = expected()
             .into_iter()

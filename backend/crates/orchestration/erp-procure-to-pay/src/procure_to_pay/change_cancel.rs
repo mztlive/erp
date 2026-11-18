@@ -81,6 +81,7 @@ pub(super) async fn load_cancel_runtime(
         .work_items()
         .open_approval_tasks_for_execution(&ApprovalNodeExecutionId::new(current.base.id.clone()), executor)
         .await?;
+
     let plan = plan_cancel(CancelPlanInput {
         instance: &instance,
         current: &current,
@@ -251,10 +252,12 @@ pub(super) async fn persist_purchase_change_cancel(
             executor,
         )
         .await?;
+
     if let PreparedExecution::Apply(writes) = prepared {
         persist_cancel_runtime(db, &writes, &open_tasks, &actor_id, &reason, now, executor).await?;
         ports.approval.persist_cancel_copies(db, &writes, executor).await?;
     }
+
     db.purchase_change_orders().update(&mut change_order, executor).await?;
     persist_log(db, &audit, executor).await?;
     Ok(())
@@ -297,6 +300,7 @@ async fn persist_cancel_runtime(
             .await?,
         "审批实例",
     )?;
+
     for execution in &writes.updated_executions {
         let expected = execution
             .base
@@ -308,6 +312,7 @@ async fn persist_cancel_runtime(
             "审批执行",
         )?;
     }
+
     db.approval_command_receipts().create(&writes.receipt, executor).await?;
     close_open_tasks(db, open_tasks, actor_id, reason, now, executor).await
 }
@@ -491,6 +496,7 @@ mod tests {
         assert_eq!(writes.instance.subject.subject_kind(), "purchase_change_order");
         assert_eq!(writes.instance.status.as_str(), "CANCELLED");
         assert_eq!(writes.events.iter().filter(|event| rule.matches(event, None)).count(), 1);
+
         input.command.receipt = Some(writes.receipt.clone());
         assert!(matches!(prepare_cancel(input).unwrap(), PreparedExecution::Replay { .. }));
     }
@@ -526,6 +532,7 @@ mod tests {
         .unwrap();
         assert!(!built.close_open_task);
         assert!(!built.blocked_port);
+
         let error = prepare_cancel(built).unwrap_err();
         assert!(
             matches!(error, erp_workflow::Error::ValidationError(message) if message.contains("不可恢复原审批人的阻塞只能走受阻取消"))

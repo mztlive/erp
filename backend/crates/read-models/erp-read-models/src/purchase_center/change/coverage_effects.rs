@@ -40,6 +40,7 @@ pub(super) async fn load_coverage_effects(
     if !change.stable.status.is_in_progress() || !order.stable.status.allows_change() {
         return Ok(Vec::new());
     }
+
     let lines = db.purchase_order().list_change_submission_lines(submission_id, executor).await?;
     let target = lines
         .iter()

@@ -135,6 +135,7 @@ impl CustomerQualityReadModel {
         export: bool,
     ) -> Result<CurrentQualityView> {
         let bounds = query.validate()?;
+
         let this = self.clone();
         let tx_actor = actor.clone();
         let (mut view, expected) = self
@@ -147,6 +148,7 @@ impl CustomerQualityReadModel {
                 Box::pin(async move { this.snapshot_current(&query, &actor, bounds, export, executor).await })
             })
             .await?;
+
         self.recheck_current(&view.query, actor, &expected).await?;
         view.view.scope_version.clone_from(&expected);
         view.view.scope.permission_version.clone_from(&expected);
@@ -161,6 +163,7 @@ impl CustomerQualityReadModel {
         export: bool,
     ) -> Result<HistoryQualityView> {
         let bounds = query.validate()?;
+
         let this = self.clone();
         let tx_actor = actor.clone();
         let (mut view, expected) = self
@@ -173,6 +176,7 @@ impl CustomerQualityReadModel {
                 Box::pin(async move { this.snapshot_history(&query, &actor, bounds, export, executor).await })
             })
             .await?;
+
         self.recheck_history(&view.query, actor, &expected).await?;
         view.view.scope_version.clone_from(&expected);
         view.view.scope.permission_version.clone_from(&expected);

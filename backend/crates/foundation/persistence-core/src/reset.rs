@@ -36,6 +36,7 @@ impl ResetRetention {
         let mut document = mongo_ops::find_one(&db.collection::<Document>(collection), filter, executor)
             .await?
             .ok_or(Error::EntityMetadataOutOfRange("reset retention document missing"))?;
+
         let id = document
             .remove("_id")
             .ok_or(Error::EntityMetadataOutOfRange("reset retention document has no _id"))?;
@@ -86,6 +87,7 @@ impl DatabaseReset {
         if retention.0.keys().any(|name| !self.collections.contains(name)) {
             return Err(Error::EntityMetadataOutOfRange("reset retention collection missing"));
         }
+
         let mut store = MongoResetStore { db: &self.db, executor };
         execute(&mut store, &self.collections, &retention).await
     }
@@ -141,6 +143,7 @@ async fn execute(store: &mut impl ResetStore, collections: &[String], kept: &Res
             .checked_add(store.erase(collection, ids).await?)
             .ok_or(Error::EntityMetadataOutOfRange("reset deleted count overflow"))?;
     }
+
     for collection in collections {
         let ids = kept.0.get(collection).map(Vec::as_slice).unwrap_or_default();
         if store.has_residue(collection, ids).await? {
@@ -189,9 +192,11 @@ mod tests {
         store.rows.insert("empty".into(), vec![]);
         let collections = store.rows.keys().cloned().collect::<Vec<_>>();
         let kept = ResetRetention(HashMap::from([("identities".into(), vec![Bson::from("keep")])]));
+
         assert_eq!(execute(&mut store, &collections, &kept).now_or_never().unwrap().unwrap(), 2);
         assert_eq!(store.rows["identities"], vec![Bson::from("keep")]);
         assert!(store.rows["historical_unregistered"].is_empty());
+
         assert_eq!(execute(&mut store, &collections, &kept).now_or_never().unwrap().unwrap(), 0);
     }
 
@@ -203,6 +208,7 @@ mod tests {
             execute(&mut store, &collections, &ResetRetention::default()).now_or_never().unwrap().is_err()
         );
         assert_eq!(store.calls, vec!["first"]);
+
         store.fail = None;
         store.residue = true;
         assert!(

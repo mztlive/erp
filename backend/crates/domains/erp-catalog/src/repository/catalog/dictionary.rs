@@ -380,6 +380,7 @@ impl<'a> CatalogRepository<'a> {
         if by_code.is_some() {
             return Ok(by_code);
         }
+
         self.db
             .product_brands()
             .find_one_by_field("name", VOUCHER_DEFAULT_BRAND_NAME.to_string(), executor)

@@ -50,6 +50,7 @@ impl TimelineRepository<'_> {
             },
             _ => self.document_roots(document, &mut roots, &mut purchases, executor).await?,
         }
+
         for row in self.db.purchase_orders().find_many(doc! { "id": { "$in": purchases } }, executor).await? {
             // 只回填当前单据实际关联的采购来源；多来源资金单不得任选一个销售单。
             document.resolve_purchase_source(&row.base.id, row.sales_order_id.as_ref());
@@ -91,6 +92,7 @@ impl TimelineRepository<'_> {
             },
             _ => {},
         }
+
         for row in
             self.db.receivable_accounts().find_many(doc! { "id": { "$in": receivables } }, executor).await?
         {
@@ -182,6 +184,7 @@ impl TimelineRepository<'_> {
             },
             _ => self.finance_roots(document.kind, id, roots, purchases, executor).await?,
         }
+
         roots.extend(document.sales_order_id.iter().cloned());
         purchases.extend(document.purchase_order_id.iter().cloned());
         Ok(())
@@ -195,6 +198,7 @@ impl TimelineRepository<'_> {
                 receipt.pending_allocations.into_iter().map(|line| line.receivable_entry_id.to_string()),
             );
         }
+
         Ok(self
             .db
             .receivable_entries()
@@ -208,6 +212,7 @@ impl TimelineRepository<'_> {
         let rows =
             self.db.payment_allocations().find_many(doc! { "supplier_payment_id": id }, executor).await?;
         let ids = rows.into_iter().map(|row| row.payable_entry_id.to_string()).collect::<Vec<_>>();
+
         Ok(self
             .db
             .payable_entries()

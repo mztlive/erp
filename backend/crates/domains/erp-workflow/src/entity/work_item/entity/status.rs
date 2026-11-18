@@ -239,6 +239,7 @@ impl WorkItem {
             CLOSE_REASON_MAX_LEN,
             "关闭原因过长",
         )?;
+
         self.status = WorkItemStatus::Closed;
         self.closed_at = Some(at);
         self.closed_by = Some(closed_by);
@@ -312,6 +313,7 @@ impl WorkItem {
             "完成执行人过长",
         )?;
         self.ensure_open()?;
+
         self.started_at.get_or_insert(at);
         self.status = WorkItemStatus::Completed;
         self.completed_at = Some(at);
@@ -380,6 +382,7 @@ impl WorkItem {
             USER_ID_MAX_LEN,
             "目标责任人过长",
         )?;
+
         self.assigned_at.get_or_insert(at);
         self.record_responsibility_actor(&target_user_id);
         self.owner_user_id = Some(target_user_id);
@@ -425,6 +428,7 @@ mod tests {
             if started {
                 task.record_activity(Instant::from_unix_secs(110)).unwrap();
             }
+
             let before = task.clone();
             let completed_at = Instant::from_unix_secs(120);
             task.complete_when_payable_settled(completed_at).unwrap();
@@ -438,6 +442,7 @@ mod tests {
             assert_eq!(task.owner_user_id, before.owner_user_id);
             assert_eq!(task.responsibility_actor_ids, before.responsibility_actor_ids);
             assert_eq!(task.responsibility_key(), before.responsibility_key());
+
             let completed = task.clone();
             assert_eq!(
                 task.complete_when_payable_settled(Instant::from_unix_secs(130)).unwrap_err().to_string(),
@@ -485,6 +490,7 @@ mod tests {
                 WorkItem::new_at(WorkItemId::new("missing"), data.clone(), Instant::from_unix_secs(1))
                     .is_err()
             );
+
             let mut task = WorkItem::new_with_responsibility_key(
                 WorkItemId::new("return"),
                 data,
@@ -495,6 +501,7 @@ mod tests {
             assert_eq!(task.status, WorkItemStatus::Completed);
             assert!(task.complete_when_return_settled(Instant::from_unix_secs(3)).is_err());
         }
+
         let mut other =
             WorkItem::new_at(WorkItemId::new("other"), direct_data(), Instant::from_unix_secs(1)).unwrap();
         assert!(other.complete_when_return_settled(Instant::from_unix_secs(2)).is_err());
@@ -530,6 +537,7 @@ mod tests {
             )
             .is_err()
         );
+
         let mut task = WorkItem::new_with_responsibility_key(
             WorkItemId::new("wi-payment"),
             data,
@@ -537,7 +545,6 @@ mod tests {
         )
         .unwrap();
         task.complete_when_payable_settled(Instant::from_unix_secs(120)).unwrap();
-
         assert_eq!(task.status, WorkItemStatus::Completed);
         assert_eq!(task.completed_by.as_deref(), Some("__system__"));
     }
@@ -559,15 +566,14 @@ mod tests {
             )
             .is_err()
         );
+
         let mut task = WorkItem::new_with_responsibility_key(
             WorkItemId::new("wi-invoice"),
             data,
             "finance:SALES_INVOICE:rule-2",
         )
         .unwrap();
-
         task.complete_when_fully_invoiced(Instant::from_unix_secs(120)).unwrap();
-
         assert_eq!(task.status, WorkItemStatus::Completed);
         assert_eq!(task.completed_by.as_deref(), Some("__system__"));
     }

@@ -75,6 +75,7 @@ impl CatalogCenterReadService {
                     let context = access
                         .resolve(&actor, &catalog_permissions::PRODUCT_PRODUCT_DETAIL, executor)
                         .await?;
+
                     let mut filter = prepare_product_list(&ProductListParams {
                         page: Some(1),
                         page_size: Some(1),
@@ -84,6 +85,7 @@ impl CatalogCenterReadService {
                     filter.scope = Some(context.clone());
                     let page = query.product_page(&filter, executor).await?;
                     let view = product_page_view(page, &filter)?;
+
                     context.validate(executor).await?;
                     view.items
                         .into_iter()
@@ -134,22 +136,25 @@ async fn build_snapshot(
 ) -> Result<ProductSnapshot> {
     let mut context = access.resolve(&actor, &catalog_permissions::PRODUCT_PRODUCT_LIST, executor).await?;
     context.ensure_current(executor)?;
+
     let mut filter = prepare_product_list(&params)?;
     filter.scope = Some(context.clone());
     apply_org_filter(&mut filter, &access, &params, executor).await?;
     apply_procurement_filter(query.as_ref(), &mut filter, procurement.as_ref(), &params, executor).await?;
+
     let page = query.product_page(&filter, executor).await?;
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
     page.total.hash(&mut fingerprint);
     context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
+
     let mut view = product_page_view(page, &filter)?;
     let ids = view.items.iter().map(|row| row.maintainer_user_id.clone()).collect::<Vec<_>>();
     let names = db.accounts().names_by_ids(&ids, executor).await?;
     apply_maintainer_names(&mut view.items, &names);
+
     context.validate(executor).await?;
     Ok(ProductSnapshot {
         page: view,
-
         policy_version: context.policy_version(),
         organization_version: context.organization_version(),
         as_of: context.as_of().as_utc().to_rfc3339(),
@@ -190,6 +195,7 @@ async fn apply_org_filter(
     if params.include_descendants == Some(true) && org_ids.as_slice().is_empty() {
         return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
     }
+
     let expanded = access
         .expand_org_units(org_ids.as_slice(), params.include_descendants.unwrap_or(false), executor)
         .await?;
@@ -221,6 +227,7 @@ pub(super) async fn apply_procurement_filter(
     let Some(owners) = &params.procurement_owner_user_ids else {
         return Ok(());
     };
+
     let candidates = query.product_candidate_ids(filter, executor).await?;
     ensure_authorized_count(candidates.len())?;
     let matched = procurement.matching_product_ids(Some(&candidates), owners.as_slice(), executor).await?;

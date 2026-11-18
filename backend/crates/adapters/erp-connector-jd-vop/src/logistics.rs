@@ -45,6 +45,7 @@ impl JdVopConnector {
             })
             .await?;
         validate_delivery(order, &delivery)?;
+
         let shipments = self.merge_logistics(order, &tracks, &delivery)?;
         Ok(LogisticsObservation {
             shipments,
@@ -78,6 +79,7 @@ impl JdVopConnector {
             }
             shipment.events = self.track_events(external, track.third_ps_show_info_list.clone())?;
         }
+
         let mut result = shipments.into_values().collect::<Vec<_>>();
         let mut order_events = self.track_events(external, tracks.ziying_show_result.clone())?;
         merge_events(&mut order_events, self.delivery_events(delivery)?);
@@ -266,6 +268,7 @@ mod tests {
         tracks.ziying_show_result = from_value(json!([{"orderId":"201","msgTime":"2026-10-29 12:00:00",
             "content":"Receiver 13800000000"}]))
         .unwrap();
+
         validate_delivery(&order(), &delivery).unwrap();
         let shipments = connector.merge_logistics(&order(), &tracks, &delivery).unwrap();
         assert_eq!(shipments.len(), 3);
@@ -309,6 +312,7 @@ mod tests {
         delivery.logistic_info_list[0].jd_order_id.0 = "201".into();
         delivery.logistic_info_list[0].parent_jd_order_id.as_mut().unwrap().0 = "999".into();
         assert!(validate_delivery(&order(), &delivery).is_err());
+
         let conflicts = metadata(json!([waybill("JD-1", "京东快递"), waybill("JD-1", "other")]));
         assert!(delivery_shipments("201", &conflicts).is_err());
         let conflicting_track: Logistics = from_value(json!({"ziyingShowResult":[],
@@ -323,6 +327,7 @@ mod tests {
                 )
                 .is_err()
         );
+
         for id in ["", " JD-1", "JD\n1"] {
             assert!(delivery_shipments("201", &metadata(json!([waybill(id, "京东快递")]))).is_err());
         }

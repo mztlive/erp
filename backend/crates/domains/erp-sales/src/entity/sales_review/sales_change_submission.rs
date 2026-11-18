@@ -201,11 +201,13 @@ impl SalesChangeSubmissionData {
         if lines.iter().any(|line| !line.belongs_to_working_copy(&working_copy_id)) {
             return Err(Error::from("变更工作副本明细归属不一致"));
         }
+
         let line_data = lines
             .iter()
             .map(SalesChangeSubmissionLineData::from_sales_working_copy)
             .collect::<Result<Vec<_>>>()?;
         let (gross_amount, net_amount, tax_amount) = SalesOrderWorkingCopyLine::amount_totals(lines);
+
         Ok(Self {
             sales_change_order_id: change_order_id,
             submission_no,
@@ -387,12 +389,14 @@ impl SalesChangeSubmission {
         if data.working_copy_version == 0 {
             return Err(Error::from("草稿版本必须为正整数"));
         }
+
         let submitted_by =
             normalize_required_text(data.submitted_by, "提交人不能为空", SUBMITTER_MAX_LEN, "提交人过长")?;
         let snapshots = HeaderSnapshots::build(&data.snapshot)?;
         let project_name = normalize_optional_text(data.project_name, "项目名称", PROJECT_NAME_MAX_LEN)?;
         let business_remark =
             normalize_optional_text(data.business_remark, "业务备注", BUSINESS_REMARK_MAX_LEN)?;
+
         if data.voucher_category_sku_id.is_some() != data.voucher_expiry_at.is_some() {
             return Err(Error::from("卡券类目与卡券履约期限必须同时提供或同时省略"));
         }
@@ -697,6 +701,7 @@ impl SalesChangeSubmissionLine {
         )?;
         let spec_snapshot = normalize_optional_text(data.spec_snapshot, "规格", SPEC_MAX_LEN)?;
         let unit_snapshot = normalize_optional_text(data.unit_snapshot, "单位", UNIT_MAX_LEN)?;
+
         let built = build_line_groups(data.line_type, data.goods, data.voucher, data.sales_tax_rate)?;
         built.ensure_supply_price()?;
 
@@ -769,6 +774,7 @@ mod tests {
         submission.source_version = Some(7);
         assert!(submission.ensure_source_version(7).is_ok());
         assert!(submission.ensure_source_version(8).is_err());
+
         let value = serde_json::to_value(&submission).unwrap();
         assert_eq!(value["source_version"], 7);
         let restored: SalesChangeSubmission = serde_json::from_value(value).unwrap();
@@ -940,6 +946,7 @@ mod tests {
         let goods = mapped.goods.unwrap();
         assert_eq!(goods.sku_id.as_ref(), "sku-1");
         assert_eq!(goods.welfare_scenario, Some(WelfareScenario::MealSubsidy));
+
         let change_order = super::super::SalesChangeOrder::new(
             SalesChangeOrderId::new("co-1"),
             super::super::SalesChangeOrderData {
@@ -999,6 +1006,7 @@ mod tests {
             "sales-1",
         )
         .unwrap();
+
         assert_eq!(data.submission_no, 3);
         assert_eq!(data.working_copy_version, 2);
         assert_eq!(data.gross_amount, amt("29.97"));
@@ -1024,7 +1032,6 @@ mod tests {
     fn status_machine_approve_reject_supersede() {
         let mut submission =
             SalesChangeSubmission::new(SalesChangeSubmissionId::new("cs-1"), header_data()).unwrap();
-
         submission.reject("reviewer").unwrap();
         assert_eq!(submission.stable.status(), SubmissionStatus::Rejected);
         assert!(submission.approve("reviewer").is_err());
@@ -1137,6 +1144,7 @@ mod tests {
         let voucher = line.voucher_fields().unwrap();
         assert_eq!(voucher.card_count, 3);
         assert_eq!(voucher.card_form, super::super::types::CardForm::Electronic);
+
         let mut without_rate = line.clone();
         without_rate.gift_rate = None;
         assert!(without_rate.voucher_fields().unwrap().gift_rate.is_none());

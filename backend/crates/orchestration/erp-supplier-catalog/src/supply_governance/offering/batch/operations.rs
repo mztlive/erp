@@ -148,6 +148,7 @@ impl BatchOperation for Targeted<UpdateSupplierOfferingAvailabilityRequest> {
         if self.command.expected_version.is_none() {
             return Err(Error::ValidationError("缺少可供状态版本，请刷新供给列表".into()));
         }
+
         let domain = process.domain();
         let input = self.clone();
         let actor = actor.clone();

@@ -63,9 +63,11 @@ impl InventoryAdjustmentProcess {
         req.validate()?;
         let reason = normalize_cancel_reason(&req.reason)?;
         let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
+
         if let Some(view) = committed_cancel_replay(self, id, &req, &reason, &idempotency_key, actor).await? {
             return Ok(view);
         }
+
         let target = load_cancel_target(self, id, &req, actor).await?;
         let input =
             build_cancel_persist_input(self, target, &req, actor, reason.clone(), idempotency_key.clone())?;
@@ -118,14 +120,17 @@ async fn load_cancel_target_step(
             executor,
         )
         .await?;
+
     let instance = load_cancel_instance(&service.db, &req.approval_process_instance_id, executor).await?;
     ensure_cancel_instance_subject(&instance, id, req.expected_subject_version)?;
     let authorization = cancel_authority_facts(service, &instance, actor, executor).await?;
+
     let adjustment = service.inventory().load_stock_adjustment(id, executor).await?;
     ensure_expected_version("库存调整单", req.expected_version, adjustment.base.version)?;
     if adjustment.approval_subject_version != req.expected_subject_version {
         return Err(Error::ConflictError("库存调整审批主题版本已变化，请刷新后重试".to_string()));
     }
+
     let binding = load_approval_binding(&service.db, id, executor).await?;
     let binding = require_frozen_binding(binding.as_ref())?.clone();
     ensure_cancel_instance_binding(&instance, &binding)?;
@@ -151,6 +156,7 @@ fn build_cancel_persist_input(
         return Err(Error::Internal("新库存调整撤回不得进入回放分支".to_string()));
     };
     normalize_document_cancel_notification(&mut writes)?;
+
     let adapter = stock_adjustment_adapter()?;
     execute_stock_adjustment_domain_action(&mut adjustment, adapter.cancel_action)?;
     Ok(StockAdjustmentCancelPersistInput {

@@ -32,6 +32,7 @@ impl CustomerQualityReadModel {
             ..Default::default()
         };
         let bounds = query.validate()?;
+
         let this = self.clone();
         let tx_actor = actor.clone();
         let tx_query = query.clone();
@@ -44,11 +45,14 @@ impl CustomerQualityReadModel {
                     let access =
                         QualityAccess::new(this.db.clone(), this.rbac.clone(), this.customer_scope.clone());
                     let (context, scope) = access.resolve_history(&tx_actor, executor).await?;
+
                     let filter = quality_order_filter(&bounds, tx_query.customer_id.map(|id| vec![id]));
                     let orders = load_orders(&this.db, filter, &scope, executor).await?;
+
                     let expected = version(&context.scope_version, &orders);
                     super::ensure_version(input.scope_version.as_deref(), &expected)?;
                     context.validate(executor).await?;
+
                     HistoricalDirectoryView::from_attributions(
                         orders.iter().filter_map(|row| row.attribution.as_ref()),
                         expected,
@@ -56,6 +60,7 @@ impl CustomerQualityReadModel {
                 })
             })
             .await?;
+
         self.recheck_history(&query, actor, &view.scope_version).await?;
         Ok(view)
     }

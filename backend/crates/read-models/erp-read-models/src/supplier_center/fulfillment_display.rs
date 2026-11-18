@@ -30,6 +30,7 @@ fn item_view(item: SupplierFulfillmentItem, names: &ItemNames) -> SupplierFulfil
         (revision.sku_id.as_ref() == sku_id.as_str()).then_some(&revision.name)
     });
     let unit = sku.and_then(|(_, unit_id)| names.units.get(unit_id));
+
     SupplierFulfillmentItemDisplayView {
         product_name: sku_revision.cloned(),
         unit_name: unit.cloned(),
@@ -88,10 +89,12 @@ mod tests {
             )]),
             units: HashMap::from([("unit-1".into(), "盒".into())]),
         };
+
         let view = item_view(item(), &names);
         assert_eq!(view.product_name.as_deref(), Some("节日福利礼包"));
         assert_eq!(view.unit_name.as_deref(), Some("盒"));
         assert_eq!(view.supplier_offering_revision_no, Some(7));
+
         let json = serde_json::to_value(view).unwrap();
         assert_eq!(json["supplier_sku_code_snapshot"], "SUP-SKU-1");
         assert_eq!(json["quantity"], serde_json::to_value(item().quantity).unwrap());
@@ -119,6 +122,7 @@ mod tests {
             )]),
             units: HashMap::from([("unit-1".into(), "盒".into())]),
         };
+
         let view = item_view(item(), &names);
         assert!(view.product_name.is_none());
         assert_eq!(view.unit_name.as_deref(), Some("盒"));

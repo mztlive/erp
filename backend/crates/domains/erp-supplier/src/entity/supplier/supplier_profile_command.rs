@@ -97,6 +97,7 @@ impl SupplierProfileCommand {
             return Err(Error::from("供应商命令结果身份、请求指纹或变更原因不能为空"));
         }
         ProfileFingerprint::parse(&data.request_fingerprint)?;
+
         Ok(Self {
             base: BaseModel::new(id.into()),
             idempotency_key,
@@ -267,6 +268,7 @@ mod tests {
         assert!(command.ensure_replayable("create", Some("supplier-1"), ZERO_DIGEST).is_err());
         assert!(command.ensure_replayable("update", Some("supplier-2"), ZERO_DIGEST).is_err());
         assert!(command.ensure_replayable("update", Some("supplier-1"), ONE_DIGEST).is_err());
+
         // create 场景的 supplier_id 为 None 时不校验目标
         let create = SupplierProfileCommand::new(
             "command-create",
@@ -285,6 +287,7 @@ mod tests {
             bare_data(&format!("{FINGERPRINT_V1_PREFIX}{ZERO_DIGEST}")),
         )
         .unwrap();
+
         assert!(bare.ensure_replayable("update", Some("supplier-1"), ZERO_DIGEST).is_ok());
         assert!(
             bare.ensure_replayable(
@@ -296,6 +299,7 @@ mod tests {
         );
         assert!(versioned.ensure_replayable("update", Some("supplier-1"), ZERO_DIGEST).is_ok());
         assert!(versioned.ensure_replayable("update", Some("supplier-1"), ONE_DIGEST).is_err());
+
         let doc = serde_json::to_value(&bare).unwrap();
         let roundtrip: SupplierProfileCommand = serde_json::from_value(doc).unwrap();
         assert_eq!(roundtrip.request_fingerprint, ZERO_DIGEST);
@@ -344,6 +348,7 @@ mod tests {
             );
             assert!(command.ensure_replayable("update", Some("supplier-1"), &invalid).is_err());
         }
+
         let mut document = serde_json::to_value(&command).unwrap();
         document.as_object_mut().unwrap().remove("request_fingerprint");
         let historical: SupplierProfileCommand = serde_json::from_value(document).unwrap();
@@ -357,6 +362,7 @@ mod tests {
         assert!(SupplierProfileCommand::ensure_version(5, 4).is_err());
         assert_eq!(SupplierProfileCommand::required_update_version(Some(3), "供应商").unwrap(), 3);
         assert!(SupplierProfileCommand::required_update_version(None, "主体").is_err());
+
         assert_eq!(
             SupplierProfileCommand::required_create_identity(Some(" SUP-001 "), "供应商编号").unwrap(),
             "SUP-001"

@@ -60,11 +60,13 @@ pub async fn capture_stock_adjustment_display(
     let mut warehouses =
         reader.stock_adjustment_warehouse_labels(std::slice::from_ref(adjustment), executor).await?;
     let mut grouped = reader.stock_adjustment_brief_lines_from_facts(lines, executor).await?;
+
     let fact = stock_adjustment_workbench_fact(
         adjustment,
         warehouses.remove(adjustment.warehouse_id.as_ref()),
         grouped.remove(&adjustment.base.id).unwrap_or_default(),
     );
+
     let snapshot = ApprovalDisplaySnapshot {
         source_sales: Vec::new(),
         root_document_id: fact.display.root_document_id,
@@ -99,12 +101,15 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let adjustments = self.facts_reader().read_stock_adjustments(&ids, executor).await?;
         if adjustments.is_empty() {
             return Ok(());
         }
+
         let warehouse_labels = self.stock_adjustment_warehouse_labels(&adjustments, executor).await?;
         let mut lines_by_adjustment = self.stock_adjustment_brief_lines(&ids, executor).await?;
+
         for adjustment in adjustments {
             let warehouse = warehouse_labels.get(adjustment.warehouse_id.as_ref()).cloned();
             let lines = lines_by_adjustment.remove(&adjustment.base.id).unwrap_or_default();
@@ -136,8 +141,10 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let statements = self.facts_reader().read_settlement_statements(&ids, executor).await?;
         let context = self.supplier_settlement_brief_context(&statements, executor).await?;
+
         for statement in statements {
             let fact = settlement_workbench_fact(&statement, &context);
             facts.insert((ObjectKind::SupplierSettlement, statement.base.id.clone()), fact);
@@ -173,6 +180,7 @@ impl WorkbenchFactsReader<'_> {
             .supplier_settlement_difference_evidence()
             .find_by_difference_ids(&difference_ids, executor)
             .await?;
+
         let source_hashes =
             statements.iter().map(|statement| statement.source_snapshot_hash.clone()).collect::<Vec<_>>();
         let source_evidence = self
@@ -180,6 +188,7 @@ impl WorkbenchFactsReader<'_> {
             .supplier_settlement_source_evidence()
             .list_by_source_hashes(&source_hashes, executor)
             .await?;
+
         let supplier_names = self
             .facts_reader()
             .supplier_display_names(
@@ -187,6 +196,7 @@ impl WorkbenchFactsReader<'_> {
                 executor,
             )
             .await?;
+
         Ok(SettlementBriefContext {
             supplier_names,
             items_by_statement: group_settlement_items(items),
@@ -285,6 +295,7 @@ impl WorkbenchFactsReader<'_> {
             .into_iter()
             .map(|revision| (revision.base.id, revision.name))
             .collect::<HashMap<_, _>>();
+
         Ok(warehouses
             .into_iter()
             .map(|warehouse| {
@@ -327,6 +338,7 @@ impl WorkbenchFactsReader<'_> {
             .into_iter()
             .map(|revision| (revision.base.id.clone(), revision))
             .collect::<HashMap<_, _>>();
+
         Ok(skus
             .into_iter()
             .map(|sku| {
@@ -358,10 +370,12 @@ fn settlement_workbench_fact(
         .collect::<Vec<_>>();
     let pending_count = differences.iter().filter(|difference| difference.is_pending()).count();
     let source_evidence = context.source_evidence_by_hash.get(&statement.source_snapshot_hash);
+
     let all_lines = settlement_brief_lines(items, &differences, &context.evidence_by_difference);
     let more_count = all_lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
     let mut visible_lines = all_lines;
     visible_lines.truncate(BRIEF_LINE_LIMIT);
+
     let mut fact = WorkbenchObjectFact::from_authority(settlement_fact(
         statement,
         supplier.clone(),
@@ -413,6 +427,7 @@ fn settlement_sections(
     push_section(&mut sections, "供应商账单", external_bill.as_deref(), false);
     let source_as_of = format_instant_datetime(statement.source_as_of);
     push_section(&mut sections, "来源数据截至", Some(&source_as_of), false);
+
     settlement_amount_sections(&mut sections, statement);
     let difference_summary = settlement_difference_summary(differences.len(), pending_count);
     push_section(&mut sections, "差异处理", Some(&difference_summary), false);
@@ -447,6 +462,7 @@ fn settlement_evidence_sections(
         let evidence_summary = format!("{} 行 · {} 项引用", source.lines.len(), reference_count);
         push_section(sections, "逐行来源证据", Some(&evidence_summary), false);
     }
+
     let supplement_count = differences
         .iter()
         .flat_map(|difference| context.evidence_by_difference.get(&difference.base.id).into_iter().flatten())
@@ -467,6 +483,7 @@ fn stock_adjustment_workbench_fact(
     let total_lines = lines.len();
     let more_count = total_lines.saturating_sub(BRIEF_LINE_LIMIT) as u32;
     lines.truncate(BRIEF_LINE_LIMIT);
+
     let mut fact = WorkbenchObjectFact::from_authority(stock_adjustment_fact(adjustment));
     let mut sections = Vec::new();
     push_section(&mut sections, "仓库", warehouse.as_deref(), false);
@@ -475,6 +492,7 @@ fn stock_adjustment_workbench_fact(
     if !lines.is_empty() {
         push_section(&mut sections, "明细", Some(format!("{total_lines} 行")).as_deref(), false);
     }
+
     fact.display.brief_source = Some(ObjectBriefSource {
         customer: None,
         amount_label: None,
@@ -583,6 +601,7 @@ fn settlement_brief_lines(
             })
             .collect();
     }
+
     items
         .iter()
         .enumerate()
@@ -692,10 +711,12 @@ mod tests {
                 due_label: None,
             })
             .collect::<Vec<_>>();
+
         let fact = stock_adjustment_workbench_fact(&adjustment, Some("中心仓（WH-1）".into()), lines);
         assert_eq!(fact.display.root_document_id, "adjustment");
         assert_eq!(fact.display.approval_subject_version, Some(2));
         assert_eq!(fact.display.impact_summary.as_deref(), Some("不审批则库存调整不能入账"));
+
         let source = fact.display.brief_source.unwrap();
         assert_eq!(source.lines.len(), BRIEF_LINE_LIMIT);
         assert_eq!(source.lines[0].title, "SKU 0 · 增加");

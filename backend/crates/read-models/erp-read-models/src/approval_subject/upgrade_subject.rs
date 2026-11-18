@@ -268,6 +268,7 @@ pub async fn ensure_initial_unsubmitted_approval_upgrade_subject(
 ) -> Result<()> {
     require_process_required(facts.document_type)?;
     ensure_exact_document_id(facts.document_type, &facts.document_id)?;
+
     match classify_upgrade_subject(facts.document_type)? {
         UpgradeSubjectKind::SalesOrder => ensure_fresh_sales_order(db, facts, executor).await,
         UpgradeSubjectKind::SalesChangeOrder => ensure_fresh_sales_change(db, facts, executor).await,
@@ -407,6 +408,7 @@ mod tests {
             facts.binding_context(),
             BindingRevalidationContext::new("warehouse-1".to_string(), "creator-1".to_string())
         );
+
         facts.ensure_expected_business_object_version(7).expect("强对象版本一致");
         assert!(facts.ensure_expected_business_object_version(8).is_err());
     }

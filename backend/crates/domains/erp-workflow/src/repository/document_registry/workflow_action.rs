@@ -161,7 +161,6 @@ impl WorkflowActionRepositoryExt for Repository<'_, WorkflowAction> {
         let collection = self.collection().clone_with_type::<WorkflowActionRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 

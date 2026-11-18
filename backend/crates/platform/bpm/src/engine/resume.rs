@@ -55,6 +55,7 @@ pub fn resume(
     if command.eligibility.blocked_code().is_some() {
         return Err(EngineError::InvalidCommand("原审批人资格尚未恢复"));
     }
+
     let recovered_execution_id = command.next_execution_id.clone();
     current.supersede_for_assignee_recovery(command.now)?;
     let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Proceed);
@@ -63,6 +64,7 @@ pub fn resume(
             .with_execution(current.typed_id())
             .with_node_key(current.node_key.clone()),
     );
+
     let enter = plan_enter_node(EnterNodeInput {
         instance: plan.instance.clone(),
         graph,
@@ -78,6 +80,7 @@ pub fn resume(
     })?;
     plan.updated_executions.push(current);
     plan.merge_enter_adopt_commit(enter);
+
     plan.events.push(
         BpmEvent::new(
             BpmEventKind::AssigneeRecovered,
@@ -137,6 +140,7 @@ fn ensure_instance_execution_affinity(
     if current.process_instance_id != instance_id || assignee.process_instance_id != instance_id {
         return Err(EngineError::InvalidCommand("恢复事实不属于同一审批实例"));
     }
+
     let current_execution_id = current.typed_id();
     if instance.current_node_execution_id.as_ref() != Some(&current_execution_id) {
         return Err(EngineError::InvalidCommand("执行不是实例当前令牌"));
@@ -144,6 +148,7 @@ fn ensure_instance_execution_affinity(
     if current.round_no != instance.current_round_no {
         return Err(EngineError::InvalidCommand("受阻执行不属于实例当前轮次"));
     }
+
     if graph.definition.base.id != instance.process_definition_id.as_ref()
         || graph.definition.definition_version != instance.definition_version
     {
@@ -169,6 +174,7 @@ fn ensure_binding_eligibility_affinity(
     if eligibility.participant_ref() != &assignee.definition_assignee_participant_id {
         return Err(EngineError::InvalidCommand("资格结果必须属于原审批人"));
     }
+
     let node = graph.node(&assignee.node_key).ok_or(EngineError::GraphCorrupted)?;
     if node.additional_assignees != assignee.additional_assignees
         || current.additional_assignees != assignee.additional_assignees

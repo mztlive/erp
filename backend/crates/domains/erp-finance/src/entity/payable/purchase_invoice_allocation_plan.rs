@@ -89,6 +89,7 @@ impl PurchaseInvoiceAllocationPlan {
         if lines.len() != allocation_ids.len() {
             return Err(Error::from("分配 ID 数量必须与分配行数一致"));
         }
+
         let gross_total = lines.iter().try_fold(zero_amount(), |sum, line| {
             checked_add_with_message(sum, line.allocated_gross_amount, "发票分配金额合计溢出")
         })?;
@@ -107,6 +108,7 @@ impl PurchaseInvoiceAllocationPlan {
         if tax_total != invoice_tax {
             return Err(Error::from("发票分配税额合计必须等于发票税额"));
         }
+
         let mut allocations = Vec::with_capacity(lines.len());
         let mut account_deltas: Vec<(PayableAccountId, Amount)> = Vec::new();
         let mut account_delta_index: HashMap<&str, usize> = HashMap::new();
@@ -125,6 +127,7 @@ impl PurchaseInvoiceAllocationPlan {
                     reverses_allocation_id: None,
                 },
             )?);
+
             match account_delta_index.get(line.payable_account_id.as_ref()) {
                 Some(&delta_index) => {
                     let (_, total) = &mut account_deltas[delta_index];
@@ -300,6 +303,7 @@ mod tests {
             ],
             "同一账户只推进聚合值且按首次出现顺序"
         );
+
         // 计划总额与发票应付额精确守恒
         let gross: Amount = plan
             .new_allocations()
@@ -324,6 +328,7 @@ mod tests {
         let first = build("100.00", "94.00", "6.00", &lines).unwrap();
         let second = build("100.00", "94.00", "6.00", &lines).unwrap();
         assert_eq!(first, second, "相同输入必须产出相同计划");
+
         // 交换输入顺序后序号跟随输入顺序，金额归属确定
         let swapped_lines = [lines[1].clone(), lines[0].clone()];
         let swapped = build("100.00", "94.00", "6.00", &swapped_lines).unwrap();

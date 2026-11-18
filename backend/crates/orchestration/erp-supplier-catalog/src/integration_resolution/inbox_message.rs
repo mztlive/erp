@@ -66,6 +66,7 @@ impl IntegrationResolutionProcess {
         self.authorization
             .require(actor, &integration_ops::INBOX_MESSAGE_REGISTER, AccessTarget::Operation, executor)
             .await?;
+
         req.validate()?;
         self.db
             .source_systems()
@@ -127,6 +128,7 @@ impl IntegrationResolutionProcess {
         self.authorization
             .require(actor, &integration_ops::INBOX_MESSAGE_WRITE_BACK, AccessTarget::Operation, executor)
             .await?;
+
         let outcome = PreparedWriteBackOutcome::prepare(&req, Instant::now())?;
         let message = self
             .db
@@ -167,6 +169,7 @@ impl IntegrationResolutionProcess {
         executor: &mut dyn Executor,
     ) -> Result<InboxResultWrite> {
         apply_failed_outcome(&mut message)?;
+
         let org = self.domain().access().require_handler_org(actor.id(), attempt_at, executor).await?;
         let task = prepare_failed_message_task(
             InboxMessageId::new(message.base.id.clone()),

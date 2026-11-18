@@ -84,6 +84,7 @@ impl Layout {
         if let Some(index) = self.expiry {
             headers.insert(index, "报价失效日");
         }
+
         let row = rows.iter().find(|row| row.number == 4).ok_or_else(|| invalid("报价表缺少表头"))?;
         if headers.iter().enumerate().any(|(index, header)| cell(row, index) != *header) {
             return Err(invalid("报价表列已变化，请保留原模板"));

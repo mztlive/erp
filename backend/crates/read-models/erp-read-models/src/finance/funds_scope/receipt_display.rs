@@ -28,6 +28,7 @@ impl FundsAccess {
     ) -> Result<()> {
         let party_ids = rows.iter().filter_map(|row| row.counterparty_party_id.clone()).collect::<Vec<_>>();
         let names = self.party_legal_names(&party_ids, executor).await?;
+
         let customer_ids =
             crate::support::dedup_sorted(rows.iter().filter_map(|row| row.customer_id.clone()));
         let mut customer_names = HashMap::new();
@@ -42,6 +43,7 @@ impl FundsAccess {
                 }
             }
         }
+
         apply_receipt_names(rows, &names, &customer_names);
         Ok(())
     }

@@ -45,6 +45,7 @@ impl WorkItemCommandReceipt {
         else {
             return Ok(None);
         };
+
         if task.base.id != *work_item_id || task.base.version < *task_version || task.base.is_deleted() {
             return Err(corrupted());
         }
@@ -54,6 +55,7 @@ impl WorkItemCommandReceipt {
         if !task.responsibility_actor_ids.contains(target_user_id) {
             return Err(corrupted());
         }
+
         Ok(Some(GrantEventEvidence {
             payload: GrantEventPayload::InvoiceTaskReassigned {
                 work_item_id: work_item_id.clone(),
@@ -116,6 +118,7 @@ impl WorkItemCommandReceipt {
                 (work_item_id, *task_version, "work_item.close", evidence_reference)
             },
         };
+
         if self.base.id != self.command.command_id
             || self.base.is_deleted()
             || self.result_schema_version != 1
@@ -148,6 +151,7 @@ impl WorkItemCommandReceipt {
             StructuredReceiptMatch::Corrupted => return Err(corrupted()),
             StructuredReceiptMatch::SamePayload => {},
         }
+
         Ok(match &self.result {
             WorkItemCommandResult::ReworkAbandoned { work_item_id, task_version, .. }
             | WorkItemCommandResult::Reassigned { work_item_id, task_version, .. }
@@ -206,14 +210,17 @@ mod tests {
             "audit".into(),
         )
         .unwrap();
+
         let event = receipt.invoice_grant(&task).unwrap().unwrap();
         assert_eq!(event.recipient, "owner");
         assert_eq!(event.fact_version, 2);
         assert_eq!(event.payload.source("owner").unwrap().rule, "invoice_task_reassigned");
+
         task.reassign("next", Instant::now()).unwrap();
         task.base.version = 3;
         task.status = WorkItemStatus::Completed;
         assert_eq!(receipt.invoice_grant(&task).unwrap(), Some(event));
+
         task.responsibility_actor_ids.retain(|id| id != "owner");
         assert!(receipt.invoice_grant(&task).is_err());
         task.responsibility_actor_ids.push("owner".into());
@@ -222,6 +229,7 @@ mod tests {
         task.base.version = 3;
         task.base.id = "other".into();
         assert!(receipt.invoice_grant(&task).is_err());
+
         task.base.id = "task".into();
         task.work_item_type = WorkItemType::CardFundsReview;
         assert!(receipt.invoice_grant(&task).unwrap().is_none());
@@ -253,9 +261,11 @@ mod tests {
         .unwrap();
         assert_eq!(receipt.committed_task(&command("owner")).unwrap(), ("task", 2));
         assert!(matches!(receipt.committed_task(&command("other")), Err(Error::ConflictError(_))));
+
         let mut broken = receipt.clone();
         broken.result_schema_version = 2;
         assert!(matches!(broken.committed_task(&command("owner")), Err(Error::Internal(_))));
+
         let wire = serde_json::to_string(&receipt).unwrap();
         assert!(!wire.contains("command_fingerprint="));
         assert_eq!(serde_json::from_str::<WorkItemCommandReceipt>(&wire).unwrap(), receipt);
@@ -292,6 +302,7 @@ mod payment_follow_up_tests {
         .unwrap();
         assert_eq!(receipt.committed_task(&original).unwrap(), ("task", 2));
         assert!(receipt.committed_task(&command("2026-10-21")).is_err());
+
         let mut invalid = receipt;
         invalid.command.scope_id = Some("other-task".into());
         assert!(invalid.validate().is_err());

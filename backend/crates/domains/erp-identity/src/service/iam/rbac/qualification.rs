@@ -119,6 +119,7 @@ impl RbacService {
                 return Err(Error::ValidationError("功能资格查询必须指定具体权限".into()));
             }
         }
+
         let account = self
             .db
             .accounts()
@@ -126,6 +127,7 @@ impl RbacService {
             .await?
             .filter(|account| account.is_authorization_actor(actor.kind()));
         let Some(account) = account else { return Ok(None) };
+
         let snapshot = self.role_permission_snapshot(actor.kind(), actor.id(), permissions).await?;
         let roles = self.db.roles().enabled_roles(snapshot.role_ids(), executor).await?;
         self.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
@@ -183,6 +185,7 @@ fn qualified(
 ) -> QualifiedPermissions {
     snapshot.role_ids.retain(|id| roles.iter().any(|role| role.base.id == id.as_str()));
     snapshot.grants.retain(|id, _| snapshot.role_ids.contains(id));
+
     let mut versions = roles.iter().map(|role| (&role.base.id, role.base.version)).collect::<Vec<_>>();
     versions.sort();
     let version = format!(
@@ -226,6 +229,7 @@ mod tests {
         assert!(!both.same_role(&[read.clone(), write.clone()]));
         assert!(both.same_role(std::slice::from_ref(&read)));
         assert!(!both.same_role(&[]));
+
         let reduced = qualified(snapshot, &roles[..1], &actor, 1, account());
         assert!(reduced.permissions().covers_one(&read));
         assert!(!reduced.permissions().covers_one(&write));
@@ -250,9 +254,11 @@ mod tests {
         assert!(original.same_role(&[read, write]));
         assert_eq!(original.account(), &account());
         assert_eq!(original.account().display_name, "审批人");
+
         assert_ne!(original.version(), qualified(snapshot.clone(), &roles, &actor, 2, account()).version());
         roles[0].base.version += 1;
         assert_ne!(original.version(), qualified(snapshot.clone(), &roles, &actor, 1, account()).version());
+
         let empty = qualified(snapshot, &[], &actor, 1, account());
         assert!(empty.permissions().into_vec().is_empty());
     }

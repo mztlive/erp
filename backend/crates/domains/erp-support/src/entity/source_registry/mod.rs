@@ -822,7 +822,6 @@ mod tests {
     #[test]
     fn map_new_computes_key_and_validates_mapped_pair() {
         let map = ExternalIdentityMap::new(ExternalIdentityMapId::new("map-1"), map_data()).unwrap();
-
         assert_eq!(map.external_id, "SO-2025-001");
         assert_eq!(map.external_id_key, ExternalIdKey::new(b"SO-2025-001".to_vec()));
         assert_eq!(map.mapping_status, MappingStatus::Pending);
@@ -847,7 +846,6 @@ mod tests {
         };
         let target =
             ExternalIdentityTarget::new(ExternalIdentityTargetId::new("target-1"), data.clone()).unwrap();
-
         assert_eq!(target.internal_object_id, "SO-2025-001");
         assert_eq!(target.relation_role, RelationRole::Primary);
 

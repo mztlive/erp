@@ -87,6 +87,7 @@ async fn real_dispatch_sends_exact_signed_business_form_once() {
     let calls = sender.calls.lock().unwrap();
     assert_eq!(calls.len(), 1);
     assert_eq!(calls[0].0, "https://gateway.example/router");
+
     let parameters: BTreeMap<_, _> = parse(calls[0].1.as_bytes()).into_owned().collect();
     // 独立 Python hashlib/urllib 向量，JSON原值与发送表单共用同一次序列化。
     assert_eq!(parameters["sign"], "CA40A136486722CF947142BE0F3AC9B5");
@@ -134,6 +135,7 @@ async fn explicit_source_override_is_used_by_real_constructor_and_mismatch_sends
         let parameters: BTreeMap<_, _> = parse(calls[0].1.as_bytes()).into_owned().collect();
         assert_eq!(parameters["360buy_param_json"], r#"{"checkAccountBalanceOpenReq":{"sourceType":7}}"#);
     }
+
     assert!(transport.read(&JdVopReadRequest::FundsBalance { source_type: 3 }).await.is_err());
     assert_eq!(sender.calls.lock().unwrap().len(), 1);
 }
@@ -190,6 +192,7 @@ async fn writes_are_single_attempt_and_transport_or_response_limits_preserve_unk
         assert_eq!(sender.calls.lock().unwrap().len(), 1);
         assert_eq!(sender.replies.lock().unwrap().len(), 1);
     }
+
     let (transport, sender) = fixture(false, "account", 1_800_000_000, vec![]);
     let request = JdVopWriteRequest::Confirm {
         merchant_order_no: "original".into(),

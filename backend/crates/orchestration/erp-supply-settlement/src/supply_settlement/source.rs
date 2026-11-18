@@ -45,6 +45,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
                 Box::pin(async move { process.record_source(&command, &writer, executor).await })
             })
             .await;
+
         let Err(error) = result else { return result };
         let process = self.clone();
         let actor = actor.clone();
@@ -87,16 +88,19 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         self.authorization
             .require(actor, &supplier_settlement::SOURCE_EVIDENCE_RECORD, AccessTarget::Operation, executor)
             .await?;
+
         let request_hash = source_request_hash(req);
         if let Some(existing) = self.domain().replay_source(&req.request_id, &request_hash, executor).await? {
             return Ok(existing);
         }
+
         let evidence = self.domain().build_source_evidence(req, actor.id(), executor, request_hash).await?;
         let audit = actor.clone().resource_log(
             "supplier_settlement.source_evidence.record",
             "supplier_settlement_source_evidence",
             evidence.base.id.clone(),
         )?;
+
         settlement_source::link(&self.db, &evidence, executor).await?;
         self.domain().persist_source_evidence(&evidence, executor).await?;
         persist_log(&self.db, &audit, executor).await?;

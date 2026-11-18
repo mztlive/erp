@@ -260,6 +260,7 @@ impl<'a> CatalogRepository<'a> {
         row.status = revision.status;
         row.version = revision.base.version;
         row.created_at = revision.base.created_at;
+
         self.attach_voucher_profile_context(std::slice::from_mut(&mut row), executor).await?;
         Ok(row)
     }
@@ -335,9 +336,11 @@ impl<'a> CatalogRepository<'a> {
         let products = self.voucher_profile_products(&skus, executor).await?;
         let product_revisions = self.current_product_revisions(&products, executor).await?;
         let sku_revisions = self.current_sku_revisions(&skus, executor).await?;
+
         let sku_by_id = skus.into_iter().map(|sku| (sku.base.id.clone(), sku)).collect::<HashMap<_, _>>();
         let product_by_id =
             products.into_iter().map(|product| (product.base.id.clone(), product)).collect::<HashMap<_, _>>();
+
         for row in rows {
             attach_voucher_row(row, &sku_by_id, &product_by_id, &product_revisions, &sku_revisions);
         }
@@ -415,6 +418,7 @@ fn attach_voucher_row(
     };
     row.sku_no = Some(sku.sku_no.clone());
     row.product_id = Some(sku.product_id.to_string());
+
     if let Some(product) = product_by_id.get(sku.product_id.as_ref()) {
         row.product_version = Some(product.base.version);
         row.name = product_revisions.get(&product.base.id).map(|revision| revision.name.clone());

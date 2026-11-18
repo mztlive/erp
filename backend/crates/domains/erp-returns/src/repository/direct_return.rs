@@ -87,6 +87,7 @@ mod tests {
     fn settlement_filter_matches_persisted_occupying_states_only() {
         let filter = purchase_settlement_filter("purchase-1");
         assert_eq!(filter.get_str("source_purchase_order_id").unwrap(), "purchase-1");
+
         let statuses = filter.get_document("status").unwrap().get_array("$in").unwrap();
         for status in [SupplierRefundStatus::InApproval, SupplierRefundStatus::Posted] {
             assert!(statuses.contains(&serialize_to_bson(&status).unwrap()));

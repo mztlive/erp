@@ -191,6 +191,7 @@ impl StockMovementListParams {
         {
             return Err(Error::ValidationError("发生时间区间下界不得晚于上界".to_string()));
         }
+
         Ok(StockMovementListQuery {
             q: application_core::normalized_text(self.q.as_deref()),
             warehouse_id: self.warehouse_id.clone(),

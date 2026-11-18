@@ -22,6 +22,7 @@ impl FundsAccess {
     ) -> Result<()> {
         let access = authorization.root_access()?;
         access.ensure_current(executor)?;
+
         let mut pipeline = vec![doc! { "$match": { "id": id } }];
         pipeline.extend(root_membership_stages(access));
         pipeline.push(doc! { "$project": { "id": 1 } });
@@ -46,6 +47,7 @@ impl FundsAuthorization {
         let Some(access) = &self.access else {
             return vec![doc! { "$match": { "$expr": false } }];
         };
+
         let mut authorized = vec![doc! { "$match": { "$expr": { "$eq": ["$id", "$$root"] } } }];
         authorized.extend(root_membership_stages(access));
         authorized.push(doc! { "$project": { "_id": 0, "id": 1 } });
@@ -67,6 +69,7 @@ fn root_membership_stages(access: &CompiledAccess) -> Vec<Document> {
     partial.push(identity.clone());
     let mut whole = whole.to_vec();
     whole.push(identity);
+
     vec![
         doc! {"$facet": {"partial":partial,"whole":whole}},
         doc! {"$match": {"$or": [

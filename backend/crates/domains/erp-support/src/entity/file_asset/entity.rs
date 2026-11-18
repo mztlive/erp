@@ -48,6 +48,7 @@ pub fn content_fingerprint(plain: &str, key: &[u8]) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC 接受任意长度密钥");
     mac.update(plain.as_bytes());
     let digest = mac.finalize().into_bytes();
+
     let mut hex = String::with_capacity(HMAC_HEX_LEN);
     for byte in digest {
         hex.push(char::from_digit(u32::from(byte >> 4), 16).expect("半字节恒可编码为十六进制"));
@@ -298,6 +299,7 @@ impl FileAsset {
         {
             return Err(Error::from("发票文件须为 5 MiB 内的有效图片或 PDF"));
         }
+
         if self.sensitivity_class == SensitivityClass::General
             || self.retention_class != RetentionClass::LongTerm
             || self.destroyed_at.is_some()
@@ -347,6 +349,7 @@ impl FileAsset {
         if data.retention_class.requires_expiry() && data.expires_at.is_none() {
             return Err(Error::from("非长期保留策略必须提供到期时间"));
         }
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             storage_object_key,
@@ -483,6 +486,7 @@ mod tests {
             assert_eq!(asset.is_usable_at(now), result == SecurityScanStatus::Passed);
             assert!(asset.mark_content_checked().is_err());
         }
+
         let mut asset = FileAsset::new(FileAssetId::new("destroyed"), data()).unwrap();
         asset.mark_content_checked().unwrap();
         asset.destroy(now).unwrap();
@@ -585,6 +589,7 @@ mod tests {
         ] {
             assert!(ensure_transition(from, to).is_ok(), "{from:?} → {to:?}");
         }
+
         assert!(ensure_transition(SecurityScanStatus::Passed, SecurityScanStatus::Quarantined).is_err());
         assert!(ensure_transition(SecurityScanStatus::Rejected, SecurityScanStatus::Passed).is_err());
         assert!(ensure_transition(SecurityScanStatus::Pending, SecurityScanStatus::Pending).is_ok());
@@ -636,6 +641,7 @@ mod tests {
         input.expires_at = None;
         let mut file = FileAsset::new(FileAssetId::new("invoice-file"), input).unwrap();
         assert!(file.ensure_invoice_evidence().is_ok());
+
         file.file_name = "发票.png".into();
         assert!(file.ensure_invoice_evidence().is_err());
         file.file_name = "发票.pdf".into();
@@ -643,6 +649,7 @@ mod tests {
         assert!(file.ensure_invoice_evidence().is_err());
         file.byte_size = 5 * 1024 * 1024 + 1;
         assert!(file.ensure_invoice_evidence().is_err());
+
         file.byte_size = 12;
         file.sensitivity_class = SensitivityClass::General;
         assert!(file.ensure_invoice_evidence().is_err());

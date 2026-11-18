@@ -26,6 +26,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     pub async fn reset_database(&self, actor: &AuditActor) -> Result<DemoResetReport> {
         self.ensure_enabled()?;
         let revision = self.identity.authorize_database_reset(actor).await?;
+
         let reset = DatabaseReset::prepare(self.db.clone()).await?;
         let actor = actor.clone();
         let identity = self.identity.clone();

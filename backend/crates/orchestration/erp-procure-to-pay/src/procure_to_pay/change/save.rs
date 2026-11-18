@@ -48,6 +48,7 @@ impl PurchaseOrderProcess {
     ) -> Result<PurchaseChangeDraftView> {
         request.validate()?;
         let (identity, fingerprint) = request.command(id, actor.id())?;
+
         let service = self.clone();
         let id = id.to_string();
         let actor = actor.clone();
@@ -58,11 +59,14 @@ impl PurchaseOrderProcess {
                     let change = service.domain().load_change(&id, executor).await?;
                     let order =
                         authorized_order(&service.db, &service.ports, &change, &actor, executor).await?;
+
                     if let Some(result) = replay_save(&service.db, &identity, &fingerprint, executor).await? {
                         return Ok(result);
                     }
+
                     change.ensure_expected_version(request.expected_lock_version)?;
                     change.ensure_draft_origin(&order)?;
+
                     let mut target = service
                         .prepare_change_target(&change, &order, &request.target_request(), &actor, executor)
                         .await?;
@@ -99,14 +103,18 @@ async fn persist_save(
     let domain = PurchaseOrderService::new(db.clone());
     let mut current = domain.load_change(&input.change.base.id, executor).await?;
     let order = authorized_order(db, ports, &current, &input.actor, executor).await?;
+
     if let Some(result) = replay_save(db, &input.identity, &input.fingerprint, executor).await? {
         return Ok(result);
     }
+
     current.ensure_expected_version(input.request.expected_lock_version)?;
     current.ensure_draft_origin(&order)?;
+
     let lines = input.target.lines.iter().map(SavePurchaseOrderLine::from).collect::<Vec<_>>();
     let inputs = SavePurchaseOrderLine::to_line_inputs(&lines)?;
     check_change_inputs(db, &order, &inputs, input.target.submission.gross_amount, executor).await?;
+
     current.save_draft_target(
         &input.target.submission,
         &input.target.lines,
@@ -117,6 +125,7 @@ async fn persist_save(
     db.purchase_order()
         .create_change_submission(&mut current, &input.target.submission, &input.target.lines, executor)
         .await?;
+
     let result = domain.change_draft(&current, &order, executor).await?;
     let audit = input.actor.resource_log(
         "purchase_change_order.save_draft",

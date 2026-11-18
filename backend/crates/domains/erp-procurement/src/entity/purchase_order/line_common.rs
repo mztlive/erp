@@ -66,11 +66,13 @@ impl PurchaseLineFields {
         if line_no == 0 {
             return Err(Error::from("行号必须从 1 开始"));
         }
+
         self.product_name_snapshot =
             normalize_optional_text(self.product_name_snapshot.take(), "商品名称快照", PRODUCT_NAME_MAX_LEN)?;
         self.specification_snapshot =
             normalize_optional_text(self.specification_snapshot.take(), "规格快照", SPECIFICATION_MAX_LEN)?;
         self.base_unit_code = normalize_optional_text(self.base_unit_code.take(), "单位", BASE_UNIT_MAX_LEN)?;
+
         match self.line_type {
             PurchaseLineType::ItemService => validate_item_service_line(self, allow_zero_quantity),
             PurchaseLineType::LogisticsFee => validate_logistics_fee_line(self),
@@ -119,6 +121,7 @@ fn validate_item_service_line(fields: &PurchaseLineFields, allow_zero_quantity: 
     if fields.base_unit_code.is_none() {
         return Err(Error::from("商品/服务行必须保存单位快照"));
     }
+
     let quantity = fields.quantity.ok_or("商品/服务行数量不能为空")?;
     if quantity.to_decimal() < rust_decimal::Decimal::ZERO
         || (!allow_zero_quantity && quantity.to_decimal().is_zero())
@@ -133,6 +136,7 @@ fn validate_item_service_line(fields: &PurchaseLineFields, allow_zero_quantity: 
     if tax_rate.to_decimal() < rust_decimal::Decimal::ZERO {
         return Err(Error::from("进项税率不能为负"));
     }
+
     let expected = line_amounts(unit_cost, quantity, tax_rate);
     if (fields.gross_amount, fields.net_amount, fields.tax_amount) != expected {
         return Err(Error::from(format!(
@@ -169,6 +173,7 @@ fn validate_logistics_fee_line(fields: &PurchaseLineFields) -> Result<()> {
     if fields.unit_cost_gross.is_some() {
         return Err(Error::from("物流费用行不得填写含税单价"));
     }
+
     let tax_rate = fields.input_tax_rate.ok_or("物流费用行进项税率不能为空")?;
     if tax_rate.to_decimal() < rust_decimal::Decimal::ZERO {
         return Err(Error::from("进项税率不能为负"));
@@ -179,6 +184,7 @@ fn validate_logistics_fee_line(fields: &PurchaseLineFields) -> Result<()> {
     {
         return Err(Error::from("物流费用行金额不能为负"));
     }
+
     let expected_tax = round_to_cent(fields.gross_amount.to_decimal() * tax_rate.to_decimal());
     let expected_net = fields.gross_amount.to_decimal() - expected_tax;
     if expected_tax != fields.tax_amount.to_decimal() || expected_net != fields.net_amount.to_decimal() {

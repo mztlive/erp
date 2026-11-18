@@ -66,6 +66,7 @@ impl FulfillmentProcess {
         if req.packing.is_some() && req.tracking_entries.is_some() {
             return Err(Error::ValidationError("地址包裹与旧物流字段不能同时提交".into()));
         }
+
         let packing_context = PackingContext {
             codec: self.sensitive_data.clone(),
             key: self.fingerprint_key.clone(),
@@ -111,6 +112,7 @@ impl DeliveryPostingCommand {
             executor,
         )
         .await?;
+
         let (mut delivery, lines) = FulfillmentService::new(self.db.clone())
             .prepare_delivery_posting(
                 &self.delivery_id,
@@ -123,6 +125,7 @@ impl DeliveryPostingCommand {
             .packing_context
             .prepare_posting(&self.db, &self.task_identity, &mut delivery, lines, executor)
             .await?;
+
         let delivery_type = delivery.delivery_type;
         let line_count = lines.len();
         let mut posting = DeliveryPosting {
@@ -172,6 +175,7 @@ async fn execute_posting(
         },
         DeliveryType::SupplierDirect => steps.apply(PostingStep::SupplierGate, executor).await?,
     }
+
     for step in [PostingStep::Delivery, PostingStep::Task, PostingStep::AcceptanceTask, PostingStep::Audit] {
         steps.apply(step, executor).await?;
     }
@@ -285,9 +289,9 @@ impl DeliveryPosting<'_> {
         } else {
             (self.actor.clone(), "delivery.post")
         };
+
         let audit = actor.resource_log(action, "delivery", self.delivery_id.to_string())?;
         persist_log(self.db, &audit, executor).await?;
-
         Ok(())
     }
 
@@ -418,6 +422,7 @@ mod tests {
                 let mut executor = TestExecutor::default();
                 let mut steps = recording(&mut executor);
                 steps.fail_at = Some(step);
+
                 let error = execute_posting(&mut steps, delivery_type, 3, &mut executor).await.unwrap_err();
                 assert!(matches!(error, Error::BusinessLogicError(message) if message == "原发货步骤失败"));
                 assert_eq!(steps.calls, expected[..=index]);

@@ -109,6 +109,7 @@ mod tests {
     fn create_request_validates_lines_and_fingerprint_ignores_key() {
         let request: CreateExpensePurchaseRequest = serde_json::from_value(body()).unwrap();
         assert!(request.validate().is_ok());
+
         let mut other_key = request.clone();
         other_key.idempotency_key = "k-2".into();
         assert_eq!(
@@ -119,9 +120,11 @@ mod tests {
             request.request_fingerprint("so-1").unwrap(),
             request.request_fingerprint("so-2").unwrap()
         );
+
         let mut empty = request.clone();
         empty.lines.clear();
         assert!(empty.validate().is_err());
+
         let mut unknown = body();
         unknown["lines"][0]["sku_id"] = json!("sku-1");
         assert!(serde_json::from_value::<CreateExpensePurchaseRequest>(unknown).is_err());

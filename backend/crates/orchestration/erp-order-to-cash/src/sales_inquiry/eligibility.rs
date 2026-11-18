@@ -27,9 +27,11 @@ pub async fn normalize_requirement(
     if data.lines.len() > 200 {
         return Err(Error::ValidationError("询价商品行不能超过 200 行".into()));
     }
+
     let refs =
         data.lines.iter().map(|line| (line.sku_id.clone(), line.sku_revision_id.clone())).collect::<Vec<_>>();
     let rows = catalog.find_sellable_sku_refs(&refs, BusinessDate::today(), executor).await?;
+
     for line in &mut data.lines {
         let row = rows
             .iter()
@@ -40,6 +42,7 @@ pub async fn normalize_requirement(
         if !line.unit_code.is_empty() && line.unit_code != unit.unit_code {
             return Err(unavailable());
         }
+
         line.quantity_scale = u32::from(unit.quantity_scale);
         line.unit_code = unit.unit_code;
         line.sku_code = row.sku_no.clone();

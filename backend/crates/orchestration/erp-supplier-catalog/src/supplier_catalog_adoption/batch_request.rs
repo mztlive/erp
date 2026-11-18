@@ -47,6 +47,7 @@ impl CreateBatchRequest {
         if self.excluded_ids.iter().collect::<HashSet<_>>().len() != self.excluded_ids.len() {
             return Err(Error::ValidationError("排除项不能重复".into()));
         }
+
         let encoded = serde_json::to_string(&(&self.item_ids, &self.filter, &self.excluded_ids))
             .map_err(|error| Error::Internal(error.to_string()))?;
         Ok(adoption_identity(&[&encoded]))
@@ -138,6 +139,7 @@ impl SubmitBatchRequest {
         {
             return Err(Error::ValidationError("原入库确认身份或范围无效".into()));
         }
+
         let payload = serde_json::to_string(&(batch, self.preview_version, &self.item_ids))
             .map_err(|_| Error::Internal("原入库确认无法编码".into()))?;
         Ok(format!("NOT_ACCEPTED:{}", adoption_identity(&[&payload])))
@@ -226,9 +228,11 @@ mod tests {
         value["idempotency_key"] = json!("selection-2");
         let same: CreateBatchRequest = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(same.fingerprint().unwrap(), original);
+
         value["filter"]["only_unadopted"] = json!(false);
         let changed: CreateBatchRequest = serde_json::from_value(value).unwrap();
         assert_ne!(changed.fingerprint().unwrap(), original);
+
         for value in [
             json!({"idempotency_key":"", "filter":{}}),
             json!({"idempotency_key":"key", "item_ids":[]}),
@@ -262,6 +266,7 @@ mod tests {
         }"#,
         )
         .unwrap();
+
         assert_eq!(request.step.as_deref(), Some("DETAILS"));
         let BatchPricing::Separate { dropship, bulk, minimum_quantity } = request.rules.unwrap() else {
             panic!("separate pricing must retain both rules");
@@ -310,6 +315,7 @@ mod tests {
         assert_ne!(request.unaccepted_fingerprint("other-batch").unwrap(), original);
         request.preview_version = 9;
         assert_ne!(request.unaccepted_fingerprint("batch").unwrap(), original);
+
         request.item_ids.push("first".into());
         assert!(matches!(request.unaccepted_fingerprint("batch"), Err(Error::ValidationError(_))));
         request.item_ids.clear();
@@ -335,11 +341,14 @@ mod tests {
             item_ids: vec!["first".into()],
             fingerprint: "payload".into(),
         };
+
         request.ensure_confirmation(&confirmation, "actor").unwrap();
         assert!(request.ensure_confirmation(&confirmation, "other").is_err());
+
         confirmation.preview_version += 1;
         assert!(request.ensure_confirmation(&confirmation, "actor").is_err());
         confirmation.preview_version = 8;
+
         confirmation.item_ids = vec!["other-item".into()];
         assert!(request.ensure_confirmation(&confirmation, "actor").is_err());
     }

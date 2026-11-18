@@ -72,16 +72,19 @@ pub async fn record_page(
             CatalogMembershipScan::new(job, connection, supplier, page.scope.clone())?
         },
     };
+
     scan.observe_page(page, observed_at)?;
     if scan.state == CatalogMembershipState::Complete {
         let previous = latest_baseline(db, &scan, executor).await?;
         scan.authorize_reconciliation(previous.as_ref().map(|scan| &scan.scope));
     }
+
     if is_new {
         db.supplier_catalog_membership_scans().create(&scan, executor).await?;
     } else {
         db.supplier_catalog_membership_scans().update(&mut scan, executor).await?;
     }
+
     if let Some(pool) = &page.pool_id {
         for sku in &page.members {
             save_member(db, &scan, pool, sku.clone(), observed_at, executor).await?;
@@ -108,6 +111,7 @@ async fn ensure_new_scan(
     if !old_account.is_empty() {
         return Err(Error::ConflictError("该连接已绑定其他供应商账号，请新建连接保留原来源命名空间".into()));
     }
+
     let active = mongo_ops::find_many(
         &collection,
         doc! {"connection_id":connection,"scope.account_scope":account,"active":true,"deleted_at":0_i64},
@@ -199,6 +203,7 @@ pub async fn retire_member(
 ) -> Result<()> {
     let mut fence = current_scan(db, scan, executor).await?;
     db.supplier_catalog_membership_scans().update(&mut fence, executor).await?;
+
     let Some(mut current) = db.supplier_catalog_pool_members().find_by_id(&member.base.id, executor).await?
     else {
         return Ok(());
@@ -209,6 +214,7 @@ pub async fn retire_member(
     {
         return Err(Error::ConflictError("旧商品池成员不属于当前账号或供应商".into()));
     }
+
     if current.retirement_candidate(&fence) {
         current.active = false;
         db.supplier_catalog_pool_members().update(&mut current, executor).await?;
@@ -258,6 +264,7 @@ pub async fn finish_reconciliation(
     if existing.state == CatalogMembershipState::Reconciled {
         return Ok(());
     }
+
     let mut current = current_scan(db, scan, executor).await?;
     let remaining = mongo_ops::find_many(
         &db.collection::<CatalogPoolMember>(MEMBERS),
@@ -269,6 +276,7 @@ pub async fn finish_reconciliation(
     if !remaining.is_empty() {
         return Err(Error::ConflictError("目录池仍有旧成员未完成核对".into()));
     }
+
     current.finish_reconciliation()?;
     db.supplier_catalog_membership_scans().update(&mut current, executor).await?;
     Ok(())

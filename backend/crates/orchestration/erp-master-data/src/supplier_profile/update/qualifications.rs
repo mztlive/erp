@@ -50,6 +50,7 @@ impl SupplierProfileProcess {
     ) -> Result<QualificationChanges> {
         let mut plan = self.qualification_plan(supplier_id, req, capability_ids, executor).await?;
         let mut changes = QualificationChanges::default();
+
         for key in plan.changes.qualification_updates {
             let qualification = plan
                 .existing
@@ -69,6 +70,7 @@ impl SupplierProfileProcess {
             )
             .await?;
         }
+
         for key in plan.changes.qualification_disables {
             let qualification = plan
                 .existing
@@ -76,6 +78,7 @@ impl SupplierProfileProcess {
                 .ok_or_else(|| Error::Internal("资质停用计划与已加载事实不一致".to_string()))?;
             self.prepare_qualification_disable(qualification, actor_id, &mut changes, executor).await?;
         }
+
         for input in plan.changes.qualification_creates {
             changes.append_created(supplier_id, &input, capability_ids, actor_id)?;
         }
@@ -92,6 +95,7 @@ impl SupplierProfileProcess {
     ) -> Result<QualificationPlan> {
         let existing = self.db.supplier().list_qualifications(supplier_id, executor).await?;
         let linked_capabilities = self.qualification_links(&existing, executor).await?;
+
         let planned_inputs: Vec<PlannedQualificationInput> = req
             .qualifications
             .iter()
@@ -114,6 +118,7 @@ impl SupplierProfileProcess {
             &planned_inputs,
         )
         .map_err(|e| Error::ValidationError(e.to_string()))?;
+
         let requested_map: HashMap<String, PlannedQualificationInput> = planned_inputs
             .into_iter()
             .map(|input| (qualification_identity_key(input.qualification_type, &input.certificate_no), input))
@@ -135,6 +140,7 @@ impl SupplierProfileProcess {
             .supplier_qualification_capabilities()
             .list_by_qualification_ids(&qualification_ids, executor)
             .await?;
+
         let mut linked_capabilities: HashMap<String, HashSet<String>> = HashMap::new();
         for link in existing_links {
             linked_capabilities
@@ -165,6 +171,7 @@ impl SupplierProfileProcess {
         )
         .map_err(|e| Error::BusinessLogicError(e.to_string()))?;
         let revision = self.qualification_revision(&mut qualification, executor).await?;
+
         let link_ids = input
             .capability_codes
             .iter()
@@ -177,6 +184,7 @@ impl SupplierProfileProcess {
             link_ids,
         )
         .map_err(|e| Error::ValidationError(e.to_string()))?;
+
         changes.replacements.push((SupplierQualificationId::new(&qualification.base.id), links));
         changes.updated.push(qualification);
         changes.revisions.push(revision);
@@ -248,6 +256,7 @@ impl QualificationChanges {
             .iter()
             .map(|_| SupplierQualificationCapabilityId::new(next_id()))
             .collect();
+
         let (qualification, revision, links) =
             profile_change::new_qualification(profile_change::NewQualificationParams {
                 supplier_id,
@@ -317,6 +326,7 @@ mod tests {
         assert_eq!(revision.revision.revision_no, 1);
         assert_eq!(revision.certificate_no, qualification.certificate_no);
         assert_eq!(revision.valid_from, qualification.valid_from);
+
         assert_eq!(replacement_id.as_ref(), qualification.base.id.as_str());
         assert_eq!(links.len(), 2);
         assert!(links.iter().all(|link| link.qualification_id == *replacement_id));

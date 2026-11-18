@@ -36,7 +36,6 @@ mod tests {
     #[test]
     fn serializes_existing_items_and_total_contract() {
         let page = Page::new(vec!["item"], 1);
-
         assert_eq!(
             serde_json::to_value(page).unwrap(),
             json!({

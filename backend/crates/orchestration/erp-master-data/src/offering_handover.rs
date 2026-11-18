@@ -70,6 +70,7 @@ pub async fn handover_offering(
     actor: &AuditActor,
 ) -> Result<HandoverSupplierOfferingView> {
     req.validate()?;
+
     let key = trimmed_idempotency_key(&req.idempotency_key)?;
     let fingerprint = handover_fingerprint(actor.id(), id, &req, &key)?;
     let command = CommandReceipt::from_resource_parts(
@@ -81,6 +82,7 @@ pub async fn handover_offering(
         &key,
         [fingerprint],
     )?;
+
     let context = handover_context(
         actor,
         &command,
@@ -134,6 +136,7 @@ pub async fn handover_candidates(
             Box::pin(async move {
                 let offering =
                     ports.access.require_offering(&actor, &supplier_offering::REVISE, &id, executor).await?;
+
                 Ok(qualified_candidates(
                     &db,
                     &rbac,
@@ -181,6 +184,7 @@ async fn replay(
         return Ok(None);
     };
     receipt.ensure_matches(command)?;
+
     let offering = access.require_offering(actor, &supplier_offering::REVISE, id, executor).await?;
     Ok(Some(HandoverSupplierOfferingView {
         offering_id: offering.base.id,
@@ -221,17 +225,21 @@ impl AuditedCommand for OfferingHandoverCommand {
         self.rbac
             .require(&self.actor, &supplier_offering::REVISE, AccessTarget::record(&self.id)?, executor)
             .await?;
+
         if let Some(view) =
             replay(&self.db, &self.ports.access, &self.command, &self.id, &self.actor, executor).await?
         {
             return Ok(AuditedWrite::Replayed(view));
         }
+
         ensure_target_qualified(&self.db, &self.rbac, self.req.target_user_id.trim(), executor).await?;
         ensure_org_enabled(&self.db, self.req.target_org_unit_id.as_deref(), executor).await?;
+
         let (before, view) =
             self.ports.service.apply_offering_handover(&self.id, &self.req, &self.actor, executor).await?;
         let receipt = OfferingHandoverReceipt::new(&self.command, view.clone(), self.event_id.clone())?;
         self.db.offering_handover_receipts().create(&receipt, executor).await?;
+
         Ok(AuditedWrite::Fresh {
             content: handover_content(HandoverEventFacts {
                 target_id: view.offering_id.clone(),
@@ -346,10 +354,12 @@ mod tests {
             command,
             event_id: "event".into(),
         };
+
         let result = operation.execute(&mut ReadExecutor::default()).await;
         assert!(
             matches!(result, Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务")
         );
+
         let result = operation.execute(&mut SnapshotExecutor::default()).await;
         assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
     }
@@ -369,9 +379,11 @@ mod tests {
         let req = request();
         let first = handover_fingerprint("actor", "offering-1", &req, "key-1").unwrap();
         assert_eq!(first, handover_fingerprint("actor", "offering-1", &req, "key-1").unwrap());
+
         let mut other = req.clone();
         other.target_user_id = "user-3".into();
         assert_ne!(first, handover_fingerprint("actor", "offering-1", &other, "key-1").unwrap());
+
         let mut other_key = req.clone();
         other_key.idempotency_key = "key-2".into();
         assert_ne!(first, handover_fingerprint("actor", "offering-1", &other_key, "key-2").unwrap());

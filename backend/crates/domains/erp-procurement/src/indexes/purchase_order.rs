@@ -72,6 +72,7 @@ pub(crate) const PURCHASE_CHANGE_SUBMISSION_LINES: &str =
 /// 或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     reconcile_purchase_order_no_index(db).await?;
+
     create_indexes(db, PURCHASE_ORDERS, purchase_order_indexes()).await?;
     create_indexes(db, PURCHASE_ORDER_SUBMISSIONS, purchase_order_submission_indexes()).await?;
     create_indexes(db, PURCHASE_ORDER_SUBMISSION_LINES, purchase_order_submission_line_indexes()).await?;
@@ -311,7 +312,6 @@ mod tests {
     #[test]
     fn purchase_order_no_is_globally_unique_and_query_indexes_exist() {
         let indexes = purchase_order_indexes();
-
         let no_index = indexes
             .iter()
             .find(|index| {
@@ -353,12 +353,12 @@ mod tests {
     #[test]
     fn submission_order_no_unique_and_queue_index_carries_submitted_at() {
         let indexes = purchase_order_submission_indexes();
-
         assert!(indexes.iter().any(|index| {
             index.options.as_ref().and_then(|options| options.name.as_deref())
                 == Some("uk_purchase_order_submissions_order_no")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
+
         assert!(indexes.iter().any(|index| {
             index.keys
                 == doc! {
@@ -396,12 +396,12 @@ mod tests {
     #[test]
     fn change_submission_order_no_unique() {
         let indexes = purchase_change_submission_indexes();
-
         assert!(indexes.iter().any(|index| {
             index.options.as_ref().and_then(|options| options.name.as_deref())
                 == Some("uk_purchase_change_submissions_order_no")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
+
         assert_eq!(unique_index("probe", doc! { "a": 1 }).options.as_ref().unwrap().unique, Some(true));
     }
 }

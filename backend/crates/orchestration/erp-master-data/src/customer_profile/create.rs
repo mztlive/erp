@@ -45,6 +45,7 @@ impl CustomerProfileProcess {
     ) -> Result<CustomerProfileMutationView> {
         req.validate_protocol()?;
         req.validate_structure(CustomerProfileOperation::Create)?;
+
         let replay = req.replay_context(CustomerProfileOperation::Create, None, actor.id())?;
         let fields = field_changes::permissions(&req, CustomerProfileOperation::Create);
         let transaction = self.commit_create(req, replay.clone(), actor).await;
@@ -86,13 +87,16 @@ impl CustomerProfileProcess {
                         executor,
                     )
                     .await?;
+
                     if let Some(view) = this.replay_command(&replay, &actor, executor).await? {
                         return Ok(view);
                     }
+
                     let identity = this.creation_identity(&req, &actor, executor).await?;
                     let prepared = this.prepare_create(req, identity, replay, &actor)?;
                     let result = prepared.result.clone();
                     rbac.require_candidate(&actor, &result.customer_id, executor).await?;
+
                     prepared.persist(&this.db, executor).await?;
                     Ok(result)
                 })
@@ -129,6 +133,7 @@ impl CustomerProfileProcess {
         let account = create_customer(&req, &customer_id, &party_id, actor.id())?;
         let assignment = create_owner(&req, &customer_id, actor.id().to_string())?;
         let facts = if reused { None } else { Some(self.create_facts(&req, &party_id, actor.id())?) };
+
         PreparedCreate::new(
             PreparedCreateParts { party, revision, account, assignment, facts, reused },
             req,
@@ -186,6 +191,7 @@ impl PreparedCreate {
             },
         )?;
         let result = command_view(command.clone());
+
         let audit = actor.clone().resource_log(
             "customer_profile.create",
             "customer_profile",
@@ -203,11 +209,13 @@ impl PreparedCreate {
             db.party_revisions().create(&self.revision, executor).await?;
             db.parties().create(&self.party, executor).await?;
         }
+
         db.customer_accounts().create(&self.account, executor).await?;
         db.customer_assignments().create(&self.assignment, executor).await?;
         if let Some(facts) = self.facts {
             facts.persist(db, executor).await?;
         }
+
         db.customer_profile_commands().create(&self.command, executor).await.map_err(command_insert_error)?;
         persist_log(db, &self.audit, executor).await?;
         Ok(())
@@ -314,6 +322,7 @@ mod tests {
             access,
             rbac,
         );
+
         let actor = AuditActor::new("sales-a".into(), "sales".into(), AccountKind::Admin);
         let mut req: SaveCustomerProfileRequest = serde_json::from_value(json!({
             "idempotency_key": "reuse-supplier-party", "reuse_existing_party": true,
@@ -334,6 +343,7 @@ mod tests {
         party.unified_credit_code = Some("91310000123456789A".into());
         revision.revision.revision_no = 4;
         revision.short_name = Some("原有简称".into());
+
         let replay = req.replay_context(CustomerProfileOperation::Create, None, actor.id()).unwrap();
         let prepared = service
             .prepare_create(
@@ -343,6 +353,7 @@ mod tests {
                 &actor,
             )
             .unwrap();
+
         assert_eq!(prepared.party, party);
         assert_eq!(prepared.revision, revision);
         assert!(prepared.reused);

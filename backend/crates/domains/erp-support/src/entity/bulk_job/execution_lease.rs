@@ -131,11 +131,13 @@ mod tests {
                     original.status = status;
                     original.finished_at = finished_at;
                     original.last_progress_at = last_progress_at;
+
                     let mut updated = original.clone();
                     let result = updated.heartbeat_execution(now);
                     let allowed = finished_at.is_none()
                         && matches!(status, JobStatus::Running | JobStatus::PartiallySucceeded)
                         && last_progress_at == Some(Instant::from_unix_secs(1081));
+
                     if allowed {
                         result.unwrap();
                         original.last_progress_at = Some(now);
@@ -154,6 +156,7 @@ mod tests {
         let mut job = job();
         job.claim_execution(Instant::from_unix_secs(1000)).unwrap();
         assert!(job.heartbeat_execution(Instant::from_unix_secs(1120)).is_err());
+
         job.cancel(Instant::from_unix_secs(1120)).unwrap();
         assert!(!job.claim_execution(Instant::from_unix_secs(1300)).unwrap());
         assert!(job.heartbeat_execution(Instant::from_unix_secs(1300)).is_err());

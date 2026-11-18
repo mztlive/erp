@@ -300,12 +300,14 @@ impl PaymentAllocation {
         if amount.to_decimal().is_sign_negative() {
             return Err(Error::from("反向金额必须为正数"));
         }
+
         let reverse_sums = Self::reversed_amounts(allocations);
         let zero = Amount::zero();
         let mut applies: Vec<&PaymentAllocation> =
             allocations.iter().filter(|a| a.allocation_action == AllocationAction::Apply).collect();
         applies
             .sort_by(|a, b| a.allocation_seq.cmp(&b.allocation_seq).then_with(|| a.base.id.cmp(&b.base.id)));
+
         let mut remaining = amount;
         let mut rows = Vec::new();
         let mut chunks = Vec::new();
@@ -331,6 +333,7 @@ impl PaymentAllocation {
                 break;
             }
         }
+
         if !remaining.to_decimal().is_zero() {
             return Err(Error::from("原付款有效分配不足，无法全额反向"));
         }
@@ -367,6 +370,7 @@ mod tests {
         assert_eq!(wire["supplier_payment_id"], "sp-1");
         assert!(wire.get("supplier_deposit_usage_id").is_none());
         assert_eq!(from_value::<PaymentAllocation>(wire.clone()).unwrap(), legacy);
+
         let deposit_data = PaymentAllocationData {
             source: PaymentAllocationSource::deposit_usage("usage").unwrap(),
             ..data()
@@ -376,6 +380,7 @@ mod tests {
         assert_eq!(wire["supplier_deposit_usage_id"], "usage");
         assert!(wire.get("supplier_payment_id").is_none());
         assert_eq!(from_value::<PaymentAllocation>(wire.clone()).unwrap(), deposit);
+
         let mut ambiguous = wire;
         ambiguous["supplier_payment_id"] = json!("sp-1");
         assert!(from_value::<PaymentAllocation>(ambiguous).is_err());
@@ -403,6 +408,7 @@ mod tests {
             },
         )
         .unwrap();
+
         let (rows, _) =
             PaymentAllocation::plan_reverse(&[original.clone(), reverse.clone()], "750".parse().unwrap())
                 .unwrap();
@@ -411,6 +417,7 @@ mod tests {
         assert!(
             PaymentAllocation::plan_reverse(&[original.clone(), reverse], "751".parse().unwrap()).is_err()
         );
+
         let unrelated = PaymentAllocation::new(PaymentAllocationId::new("bank"), data()).unwrap();
         assert!(PaymentAllocation::plan_reverse(&[original, unrelated], "10".parse().unwrap()).is_err());
     }
@@ -548,6 +555,7 @@ mod tests {
                 .unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].amount, Amount::from_str("60.00").unwrap());
+
         let (rows, _) =
             PaymentAllocation::plan_reverse(&[a1, a2], Amount::from_str("150.00").unwrap()).unwrap();
         assert_eq!(rows.len(), 2);
@@ -564,6 +572,7 @@ mod tests {
         let (rows, _) =
             PaymentAllocation::plan_reverse(&allocations, Amount::from_str("50.00").unwrap()).unwrap();
         assert_eq!(rows[0].amount, Amount::from_str("50.00").unwrap());
+
         let err =
             PaymentAllocation::plan_reverse(&allocations, Amount::from_str("60.00").unwrap()).unwrap_err();
         assert!(err.to_string().contains("不足"));
@@ -577,6 +586,7 @@ mod tests {
             PaymentAllocation::plan_reverse(&[a1.clone(), a2.clone()], Amount::from_str("0.00").unwrap())
                 .unwrap();
         assert!(rows.is_empty() && chunks.is_empty());
+
         let (rows, _) =
             PaymentAllocation::plan_reverse(&[a2.clone(), a1.clone()], Amount::from_str("100.00").unwrap())
                 .unwrap();
@@ -657,8 +667,10 @@ mod tests {
             },
         )
         .unwrap();
+
         let p_a1 = payment_allocation_for_plan("pa-1", 2, AllocationAction::Apply, "100.00", "pe-1", None);
         let p_a2 = payment_allocation_for_plan("pa-2", 1, AllocationAction::Apply, "100.00", "pe-2", None);
+
         let (r_rows, _) = crate::entity::receivable::ReceiptAllocation::plan_reverse(
             &[r_a1, r_a2],
             Amount::from_str("150.00").unwrap(),
@@ -666,6 +678,7 @@ mod tests {
         .unwrap();
         let (p_rows, _) =
             PaymentAllocation::plan_reverse(&[p_a1, p_a2], Amount::from_str("150.00").unwrap()).unwrap();
+
         // Both must produce same count and amounts regardless of original order
         assert_eq!(r_rows.len(), p_rows.len());
         assert_eq!(r_rows[0].amount, p_rows[0].amount);

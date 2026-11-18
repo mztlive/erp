@@ -67,7 +67,9 @@ pub async fn persist_start_runtime(
         resolve_runtime_document_type(writes.instance.subject.subject_kind(), writes.instance.process_kind)?;
     let first =
         writes.created_executions.first().ok_or_else(|| Error::Internal(missing_entry.to_string()))?;
+
     apply_runtime_steps(&MongoStartRuntime { db, identity, writes, first, now }, executor).await?;
+
     ApprovalSubjectSnapshot::new(
         ApprovalSubjectSnapshotId::new(next_id()),
         ApprovalProcessInstanceId::new(writes.instance.base.id.clone()),
@@ -143,6 +145,7 @@ pub async fn persist_start_snapshot<A: WorkflowAuthorizationPort>(
 ) -> Result<()> {
     let mut snapshot = freeze_approval_materials(identity_service, db, auth, snapshot, executor).await?;
     snapshot.freeze_resubmission_display()?;
+
     db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
     persist_started_copy(rbac, db, &snapshot, executor).await?;
     Ok(())
@@ -172,6 +175,7 @@ pub async fn persist_start_tasks(
         .find_by_process_instance_id(&writes.instance.base.id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("审批任务缺少冻结业务快照".into()))?;
+
     let mut first_task = None;
     for intent in &writes.create_tasks {
         let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
@@ -198,6 +202,7 @@ pub async fn persist_start_tasks(
         }
         db.work_items().create(&item, executor).await?;
     }
+
     crate::resource_grants::append_assignments(db, writes, executor).await?;
     Ok(first_task)
 }

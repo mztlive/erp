@@ -65,11 +65,13 @@ impl AuthorizationService {
         {
             return Err(Error::ValidationError("此入口不提供组织配置范围".into()));
         }
+
         executor.next_read();
         let boundary = executor
             .boundary()
             .filter(ExecutionBoundary::is_snapshot)
             .ok_or_else(|| Error::ValidationError("组织配置范围必须使用快照事务".into()))?;
+
         let qualified = self.qualify(actor, permission, executor).await?;
         let context = AccessContext {
             actor: actor.clone(),
@@ -79,6 +81,7 @@ impl AuthorizationService {
             as_of: Instant::now(),
         };
         let access = self.resolve_scope(&context, permission, &qualified, executor).await?;
+
         let mut resolution = Resolution::default();
         resolution.include(&access);
         let scope = OrganizationScope { access, boundary, valid_until: resolution.valid_until };

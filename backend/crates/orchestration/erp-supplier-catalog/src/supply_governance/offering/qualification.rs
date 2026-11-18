@@ -114,6 +114,7 @@ async fn qualify<P: CatalogQualificationPort>(
     if !sku.is_active {
         return Err(Error::BusinessLogicError("公司 SKU 未启用".to_string()));
     }
+
     let product = port
         .product(&sku.product_id, executor)
         .await?
@@ -121,6 +122,7 @@ async fn qualify<P: CatalogQualificationPort>(
     if !product.is_active {
         return Err(Error::BusinessLogicError("公司商品未启用".into()));
     }
+
     let fact = match product.kind {
         ProductKind::Physical => OfferingProductKind::Physical,
         ProductKind::Virtual => OfferingProductKind::Virtual,
@@ -225,7 +227,6 @@ mod tests {
             &mut executor,
         )
         .await;
-
         (result, port.calls.into_inner().unwrap())
     }
     #[tokio::test]

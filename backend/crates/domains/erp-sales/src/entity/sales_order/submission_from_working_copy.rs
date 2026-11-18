@@ -96,6 +96,7 @@ impl SalesOrderSubmissionData {
             .iter()
             .map(SalesOrderSubmissionLineData::from_working_copy_line)
             .collect::<Result<Vec<_>>>()?;
+
         Ok(Self {
             sales_order_id: working_copy.sales_order_id.clone(),
             submission_no,
@@ -236,6 +237,7 @@ mod tests {
         assert_eq!(data.tax_amount, amt("3.90"));
         assert_eq!(data.submitted_at, submitted_at);
         assert_eq!(data.submitted_by, "sales-1");
+
         assert_eq!(data.lines.len(), 1);
         assert_line_copied_from_working_copy(&lines[0], &data.lines[0]);
         let goods = data.lines[0].goods.as_ref().expect("实物行必须复制商品字段组");
@@ -286,6 +288,7 @@ mod tests {
             lines: vec![voucher_line_data()],
         };
         let copy = SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-v"), data, "admin-1").unwrap();
+
         let submission = SalesOrderSubmissionData::from_working_copy(
             &copy,
             std::slice::from_ref(&line),
@@ -298,6 +301,7 @@ mod tests {
         assert_eq!(submission.business_type, BusinessType::Voucher);
         assert_eq!(submission.snapshot.contract_no, None);
         assert_eq!(submission.voucher_category_sku_id, Some(SkuId::new("vcat-1")));
+
         assert_line_copied_from_working_copy(&line, &submission.lines[0]);
         let voucher = submission.lines[0].voucher.as_ref().expect("卡券行必须复制卡券字段组");
         assert_eq!(voucher.face_value, line.face_value.unwrap());
@@ -324,6 +328,7 @@ mod tests {
             line_data(1),
         )
         .unwrap();
+
         let converted = [
             SalesOrderSubmissionLineData::from_working_copy_line(&first).unwrap(),
             SalesOrderSubmissionLineData::from_working_copy_line(&second).unwrap(),

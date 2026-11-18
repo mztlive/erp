@@ -72,6 +72,7 @@ impl FundsEvidencePage {
         {
             return Err(Error::from("资金证据页超过上限或无法证明游标继续推进"));
         }
+
         for observation in &self.observations {
             observation.validate()?;
         }
@@ -112,6 +113,7 @@ impl FundsScanCheckpoint {
         inbox_ids: Vec<String>,
     ) -> Result<()> {
         self.ensure_page(page)?;
+
         self.page_number = self.page_number.checked_add(1).ok_or_else(|| Error::from("资金查询页数超限"))?;
         self.cursor = page.next_cursor.clone();
         self.read_complete = page.complete;

@@ -138,11 +138,13 @@ impl SalesInquiryAccess {
         {
             return Err(task_missing());
         }
+
         let task = self.authorized_task(actor, permission, task_id, executor).await?;
         if task.status == WorkItemStatus::Open {
             let inquiry = self.current_task_inquiry(id, &task, executor).await?;
             return Ok((inquiry, task));
         }
+
         let inquiry = SalesInquiryService::new(self.db.clone()).require(id, executor).await?;
         let requirement = inquiry
             .requirements

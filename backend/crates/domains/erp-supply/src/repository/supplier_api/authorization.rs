@@ -114,6 +114,7 @@ pub async fn authorized_connection(
     executor: &mut dyn Executor,
 ) -> Result<SupplierApiConnection> {
     ensure_connection(access, executor)?;
+
     let collection = db.collection::<SupplierApiConnection>(SUPPLIER_API_CONNECTIONS);
     let rows = aggregate::find(
         &collection,
@@ -123,6 +124,7 @@ pub async fn authorized_connection(
         executor,
     )
     .await?;
+
     ensure_connection(access, executor)?;
     rows.into_iter().next().ok_or_else(|| Error::NotFound("连接不存在".into()))
 }
@@ -184,11 +186,13 @@ mod tests {
             model: None,
             as_of: Instant::from_unix_secs(1),
         };
+
         let key = RelationKey::parse("supplier").unwrap();
         let relation = mapping.relation(&key, &context, None).unwrap();
         assert_eq!(relation.expected_ids, Bson::Array(vec!["$supplier_id".into()]));
         assert!(Arc::ptr_eq(&relation.mapping, &supplier));
         assert!(Arc::ptr_eq(&mapping.relations()[&key], &supplier));
+
         assert!(mapping.relation(&RelationKey::parse("other").unwrap(), &context, None).is_err());
         assert!(mapping.predicate(&AccessFact::Owned, &context, None).is_err());
         assert!(mapping.preparation().is_none());

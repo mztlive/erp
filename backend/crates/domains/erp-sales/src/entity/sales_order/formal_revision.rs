@@ -370,10 +370,12 @@ impl SalesOrderRevisionAggregate {
         lines: &[SalesOrderSubmissionLine],
     ) -> Result<Self> {
         ensure_business_type(context.business_type, submission.business_type)?;
+
         let prepared = lines
             .iter()
             .map(PreparedRevisionLine::from_sales_order_submission_line)
             .collect::<Result<Vec<_>>>()?;
+
         Self::from_prepared(
             identities,
             context,
@@ -406,6 +408,7 @@ impl SalesOrderRevisionAggregate {
     ) -> Result<Self> {
         identities.ensure_matches_lines(&lines)?;
         validate_line_list(context.business_type, &line_summaries(&lines))?;
+
         let revision = build_revision_header(&identities.revision_id, context, header)?;
         let (revision_lines, goods_lines, voucher_lines) =
             build_revision_children(&identities.revision_id, &identities.lines, lines)?;
@@ -477,6 +480,7 @@ fn build_revision_children(
     let mut revision_lines = Vec::with_capacity(lines.len());
     let mut goods_lines = Vec::new();
     let mut voucher_lines = Vec::new();
+
     for (identity, line) in identities.iter().zip(lines) {
         revision_lines.push(build_common_line(revision_id, identity, &line)?);
         append_subtype_line(identity, line, &mut goods_lines, &mut voucher_lines)?;
@@ -806,6 +810,7 @@ mod tests {
         assert_eq!(aggregate.revision.customer_snapshot.customer_name, "东方企业");
         assert_eq!(aggregate.revision.project_name.as_deref(), Some("端午福利项目"));
         assert_eq!(aggregate.revision.gross_amount, amt("59.94"));
+
         assert_eq!(aggregate.lines.len(), 2);
         assert_eq!(aggregate.goods_lines.len(), 2);
         assert!(aggregate.voucher_lines.is_empty());
@@ -816,6 +821,7 @@ mod tests {
         assert_eq!(aggregate.goods_lines[0].pricing_mode, SalesPricingMode::Auto);
         assert_eq!(aggregate.goods_lines[0].procurement_price_basis, Some(SalesProcurementPriceBasis::Bulk));
         assert_eq!(aggregate.goods_lines[1].pricing_mode, SalesPricingMode::Manual);
+
         assert_eq!(aggregate.goods_lines[0].delivery_allocations.len(), 2);
         assert_eq!(aggregate.goods_lines[0].delivery_allocations[1].recipient, "收货人乙");
         let fields = lines[0].goods_fields().unwrap();

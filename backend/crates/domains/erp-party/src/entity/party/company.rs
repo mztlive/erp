@@ -60,10 +60,12 @@ impl CompanyProfile {
         if legal_name.is_empty() || legal_name.chars().count() > 256 || aliases.len() > 32 {
             return Err(Error::from("公司全称必填且不超过 256 字，别名不超过 32 个"));
         }
+
         let mut aliases: Vec<String> =
             aliases.into_iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
         aliases.sort();
         aliases.dedup();
+
         let mut names = vec![identity_name(&legal_name)];
         for name in short_name.iter().chain(aliases.iter()) {
             if name.chars().count() > 128 {
@@ -89,6 +91,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(p.names, vec!["公司", "公司(广东)", "科技"]);
+
         assert!(CompanyProfile::new(" ".into(), None, vec![]).is_err());
         assert!(CompanyProfile::new("公司".into(), None, vec!["x".into(); 33]).is_err());
     }

@@ -98,6 +98,7 @@ async fn batch_names(
 ) -> Result<()> {
     let ids = items.iter().map(|item| SourceSystemId::new(&item.source_system_id)).collect::<Vec<_>>();
     let names = source_names(db, &ids, executor).await?;
+
     for item in items {
         item.source_system_name = names.get(&item.source_system_id).cloned();
     }

@@ -89,6 +89,7 @@ impl SalesInquiryProcess {
             .map(|line| line.line_id.clone())
             .collect::<Vec<_>>();
         let assignments = group_assignments(candidates, &line_ids)?;
+
         let mut authorized = Vec::with_capacity(assignments.len());
         for assignment in assignments {
             let organization = self.access().assignment_owner(&assignment.owner_user_id, executor).await?;
@@ -115,6 +116,7 @@ fn group_assignments(
             });
         }
     }
+
     let mut assignments = InquiryTaskAssignments::new(assignments, line_ids)?.into_values();
     // 以需求行顺序确定首位责任采购，不依赖数据库返回或任务创建顺序。
     assignments.sort_by_key(|item| {

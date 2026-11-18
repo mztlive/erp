@@ -134,6 +134,7 @@ impl PortalOfferingImpactReadService {
         if !self.authorization.offering_readable(actor, id, executor).await? {
             return Err(Error::NotFound("供给不存在或无权查看".into()));
         }
+
         let offering = self
             .db
             .supplier_offerings()
@@ -145,6 +146,7 @@ impl PortalOfferingImpactReadService {
             .supplier_offering_availabilities()
             .find_by_offering_id(&SupplierOfferingId::new(id), executor)
             .await?;
+
         let mut visible = self.visible_usage(actor, id, &offering.supplier_id, query, executor).await?;
         visible.sort_by(|a, b| {
             (&a.order.purchase_no, &a.order.base.id).cmp(&(&b.order.purchase_no, &b.order.base.id))
@@ -156,6 +158,7 @@ impl PortalOfferingImpactReadService {
             .skip(skip)
             .take(usize::try_from(query.page_size).unwrap_or(100))
             .collect::<Vec<_>>();
+
         let items = self.project_page(actor, page, executor).await?;
         Ok(PortalOfferingImpactView {
             offering_id: id.into(),
@@ -198,6 +201,7 @@ impl PortalOfferingImpactReadService {
                 visible.push(fact);
             }
         }
+
         scope.validate(executor).await?;
         Ok(visible)
     }
@@ -214,6 +218,7 @@ impl PortalOfferingImpactReadService {
             .map(|fact| fact.order.current_owner_user_id().map(str::to_string))
             .collect::<erp_core::Result<Vec<_>>>()?;
         let names = self.db.accounts().names_by_ids(&owner_ids, executor).await?;
+
         let workbench = self.workflow.clone();
         let mut result = Vec::new();
         for fact in facts {

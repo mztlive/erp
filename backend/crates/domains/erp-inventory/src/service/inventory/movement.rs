@@ -45,6 +45,7 @@ impl InventoryService {
     ) -> Result<InventoryListPage<StockMovementView>> {
         params.validate()?;
         let query = params.normalized()?;
+
         let service = self.clone();
         let actor = actor.clone();
         self.db
@@ -67,6 +68,7 @@ impl InventoryService {
         if !authorization.actor_is_active() {
             return Err(Error::Forbidden("当前账号无库存流水读取权限".to_string()));
         }
+
         let search = super::search::sku_filter(
             self.catalog_facts.as_ref(),
             query.q.as_deref(),
@@ -76,6 +78,7 @@ impl InventoryService {
         .await?;
         let scope_version = query.scope_version.take();
         let filter = movement_filter(query, search);
+
         let page = self
             .db
             .stock_movements()
@@ -87,6 +90,7 @@ impl InventoryService {
             .await?;
         let meta = authorization.meta(InventoryAction::MovementList);
         ensure_scope_version(filter.page, scope_version.as_deref(), meta.scope_version())?;
+
         let mut items = page.items.into_iter().map(movement_row_view).collect::<Vec<_>>();
         let numbers =
             load_movement_source_document_nos(&self.db, self.fulfillment_facts.as_ref(), &items, executor)
@@ -95,6 +99,7 @@ impl InventoryService {
         for item in &mut items {
             item.source_document_no = numbers.get(&item.source_document_id).cloned();
         }
+
         let result = InventoryListPage::from_page(
             PageView { items, total: page.total, page: filter.page, page_size: filter.page_size },
             meta,
@@ -195,6 +200,7 @@ pub(super) async fn load_movement_source_document_nos(
             document_nos.insert(adjustment.base.id, adjustment.adjustment_no);
         }
     }
+
     let receipt_ids: Vec<String> = movements
         .iter()
         .filter(|movement| matches!(movement.movement_type, MovementType::PurchaseReceiptIn))
@@ -237,11 +243,13 @@ async fn hydrate_movement_warehouses(
     if items.is_empty() {
         return Ok(());
     }
+
     let ids = items.iter().map(|row| row.warehouse_id.clone()).collect::<Vec<_>>();
     let warehouses = warehouse.warehouses_by_ids(&ids, executor).await?;
     let revision_ids =
         warehouses.values().filter_map(|row| row.current_revision_id.clone()).collect::<Vec<_>>();
     let revisions = warehouse.warehouse_revisions_by_ids(&revision_ids, executor).await?;
+
     for item in items {
         item.warehouse_name = warehouses.get(&item.warehouse_id).map(|warehouse| {
             warehouse
@@ -336,6 +344,7 @@ mod tests {
                 recorded_at: Instant::now(),
                 recorded_by: "actor".into(),
             })];
+
             let result = hydrate_movement_warehouses(&warehouse, &mut items, &mut executor).await;
             if fail_revision {
                 assert!(matches!(result, Err(Error::Internal(message)) if message == "revision-unavailable"));

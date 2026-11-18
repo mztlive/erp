@@ -84,6 +84,7 @@ fn old_balanced_record_cannot_clear_later_risk_in_reviewed_or_applied_state() {
         *occurred_at = Instant::from_unix_secs(30);
     }
     record.needs_review("FUNDS_SETTLEMENT_NEEDS_REVIEW").unwrap();
+
     let mut ledger_base = BaseModel::new("ledger".into());
     ledger_base.created_at = 31;
     ledger_base.updated_at = 32;
@@ -105,6 +106,7 @@ fn old_balanced_record_cannot_clear_later_risk_in_reviewed_or_applied_state() {
             occurred_at: Instant::from_unix_secs(30),
         },
     };
+
     let mut basis = SupplierDepositReconciliation {
         base: BaseModel::new("balanced".into()),
         account_id: "account".into(),
@@ -124,6 +126,7 @@ fn old_balanced_record_cannot_clear_later_risk_in_reviewed_or_applied_state() {
     assert!(record.ensure_review_coverage(&basis, &ledger, Some(&reservation)).is_err());
     assert_eq!(record.state, FundsEvidenceInboxState::NeedsReview);
     assert!(record.applied_resource.is_none());
+
     basis.covered_until = Instant::from_unix_secs(40);
     basis.observed_at = Instant::from_unix_secs(40);
     record.ensure_review_coverage(&basis, &ledger, Some(&reservation)).unwrap();
@@ -140,6 +143,7 @@ fn old_balanced_record_cannot_clear_later_risk_in_reviewed_or_applied_state() {
             },
         )
         .unwrap();
+
     let fresh = basis.clone();
     basis.observed_at = Instant::from_unix_secs(34);
     assert!(record.ensure_review_coverage(&basis, &ledger, Some(&reservation)).is_err());
@@ -192,6 +196,7 @@ fn reviewed_real_resource_keeps_original_reason_and_can_conclude_message() {
             FundsTransactionDirection::Debit,
         )
         .unwrap();
+
     let mut conflict = inbox(transaction(FundsTransactionDirection::Debit));
     conflict.needs_review("SOURCE_FACT_CONFLICT").unwrap();
     assert!(
@@ -202,6 +207,7 @@ fn reviewed_real_resource_keeps_original_reason_and_can_conclude_message() {
             )
             .is_err()
     );
+
     let mut unknown = inbox(unresolved(Some(amount("10"))));
     assert!(
         unknown
@@ -316,6 +322,7 @@ fn semantic_result_ignores_archiving_and_sampling_without_ignoring_financial_cha
         *evidence_reference = "another-archive".into();
     }
     assert!(sampled_again.semantic_result() == expected);
+
     for mutation in 0..5 {
         let mut changed = original.clone();
         if let FundsEvidenceResult::Transaction {
@@ -337,6 +344,7 @@ fn semantic_result_ignores_archiving_and_sampling_without_ignoring_financial_cha
         }
         assert!(changed.semantic_result() != expected, "mutation {mutation}");
     }
+
     let unknown = unresolved(None);
     let mut rearchived = unknown.clone();
     rearchived.source_observed_at = Instant::from_unix_secs(300);
@@ -379,12 +387,14 @@ fn inbox_rejects_wrong_direction_resource_and_review_state_without_mutating_evid
     assert!(value == before);
     assert!(value.apply(FundsAppliedResource::DebitUsage { usage_id: " ".into() }).is_err());
     assert!(value == before);
+
     value.apply(FundsAppliedResource::DebitUsage { usage_id: "first-usage".into() }).unwrap();
     let applied = value.clone();
     assert!(value.apply(FundsAppliedResource::DebitUsage { usage_id: "another-usage".into() }).is_err());
     assert!(value == applied);
     assert!(value.apply(FundsAppliedResource::ReturnUsage { usage_id: "first-usage".into() }).is_err());
     assert!(value == applied);
+
     for mut reviewing in [inbox(unresolved(None)), inbox(transaction(FundsTransactionDirection::Debit))] {
         reviewing.state = FundsEvidenceInboxState::NeedsReview;
         let before = reviewing.clone();
@@ -459,6 +469,7 @@ fn empty_intermediate_pages_advance_and_restart_keeps_the_exact_window_cursor_an
     assert!(saved.cursor.as_deref() == Some("opaque-middle"));
     assert!(saved.page_number == 1);
     assert!(saved.pending_inbox_ids.is_empty());
+
     let mut middle = page(Some("opaque-middle"), Some("opaque-next"), false);
     middle.observations = vec![transaction(FundsTransactionDirection::Debit), unresolved(None)];
     let pending = vec!["inbox-one".to_string(), "inbox-two".to_string()];
@@ -469,13 +480,16 @@ fn empty_intermediate_pages_advance_and_restart_keeps_the_exact_window_cursor_an
     assert!(!saved.read_complete);
     assert!(!saved.finished);
     assert!(saved.pending_inbox_ids == pending);
+
     let mut recovered: FundsScanCheckpoint =
         serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
     assert!(recovered == saved);
     assert!(recovered.pending_inbox_ids == pending);
+
     let before = recovered.clone();
     assert!(recovered.advance(&middle, "same-page-digest".into(), vec![]).is_err());
     assert!(recovered == before);
+
     let mut next = page(Some("opaque-next"), None, true);
     let mut last_observation = transaction(FundsTransactionDirection::Return);
     if let FundsEvidenceResult::Transaction { stable_transaction_id, .. } = &mut last_observation.result {
@@ -503,14 +517,17 @@ fn page_cursor_completion_and_fixed_window_must_agree_before_any_checkpoint_chan
     ] {
         assert!(invalid.validate().is_err());
     }
+
     let mut saved = checkpoint();
     let before = saved.clone();
     let mut changed_window = page(None, Some("next"), false);
     changed_window.window.through = Instant::from_unix_secs(101);
     assert!(saved.advance(&changed_window, "changed".into(), vec![]).is_err());
     assert!(saved == before);
+
     assert!(saved.advance(&page(Some("unrequested"), None, true), "wrong-cursor".into(), vec![]).is_err());
     assert!(saved == before);
+
     saved.page_number = u64::MAX;
     let overflow = saved.clone();
     assert!(saved.advance(&page(None, None, true), "overflow".into(), vec![]).is_err());

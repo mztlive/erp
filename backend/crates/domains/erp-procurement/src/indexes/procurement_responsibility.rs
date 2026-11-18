@@ -22,6 +22,7 @@ use crate::repository::procurement_responsibility::migration::migrate_pools;
 /// 已有启用规则违反选择器唯一性或 MongoDB 创建失败时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     migrate_pools(db).await?;
+
     db.collection::<Document>(<Database as ProcurementResponsibilityExt>::PROCUREMENT_RESPONSIBILITY_RULES)
         .create_indexes(indexes())
         .await?;

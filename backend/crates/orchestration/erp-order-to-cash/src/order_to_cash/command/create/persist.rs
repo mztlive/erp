@@ -63,7 +63,6 @@ impl SalesOrderCommandProcess {
     ) -> Result<CreationWriteContext> {
         let bind_command = sales_create_bind_command(plan.order(), actor)?;
         let authorization = self.authorization.clone();
-
         let sellable_refs = SalesOrderService::sellable_working_copy_refs(plan.working_copy_lines())?;
         Ok(CreationWriteContext {
             services: self.services.clone(),
@@ -92,12 +91,14 @@ pub(super) async fn persist_creation(
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
     ensure_creation_ready(&context, plan.order(), executor).await?;
+
     if let Some(order_id) =
         replay_creation_event(&context.db, plan.create_event(), context.actor.id(), &context.access, executor)
             .await?
     {
         return Ok(Some(order_id));
     }
+
     reserve_inquiry_creation(
         &context.db,
         &context.authorization,
@@ -108,6 +109,7 @@ pub(super) async fn persist_creation(
         executor,
     )
     .await?;
+
     match plan {
         CreationPlan::Draft(draft) => persist_created_draft(&context, *draft, executor).await?,
         CreationPlan::Submit(submission) => {
@@ -133,6 +135,7 @@ async fn persist_created_draft(
         executor,
     )
     .await?;
+
     let sales = SalesOrderService::new(context.db.clone());
     sales.create_order(&creation.order, executor).await?;
     persist_creation_binding(context, &mut creation.document, executor).await?;
@@ -144,6 +147,7 @@ async fn persist_created_draft(
             executor,
         )
         .await?;
+
     draft.audit.persist(&context.db, executor).await?;
     Ok(())
 }
@@ -163,6 +167,7 @@ async fn persist_created_submission(
         executor,
     )
     .await?;
+
     let prepared = prepare_bound_submission(
         &context.db,
         &context.authorization,
@@ -172,9 +177,11 @@ async fn persist_created_submission(
         executor,
     )
     .await?;
+
     ensure_creation_org(&context.db, &submit.creation.order, executor).await?;
     persist_submission_records(&context.db, &submit, executor).await?;
     persist_created_runtime(context, &submit, prepared, executor).await?;
+
     let audit = submit.create_audit;
     audit.persist(&context.db, executor).await?;
     let audit = submit.submit_audit;
@@ -211,6 +218,7 @@ async fn prepare_bound_submission(
     let approval = &submit.approval;
     let graph = load_bound_definition_graph_with_executor(db, binding, executor).await?;
     let graph = resolve_approvers(db, identity, graph, actor.id(), executor).await?;
+
     let start_input = build_sales_order_start_input(SalesOrderStartInput {
         resubmission_reason: None,
         graph,
@@ -244,6 +252,7 @@ async fn persist_submission_records(
             executor,
         )
         .await?;
+
     sales.create_submission(&submit.submission, &submit.submission_lines, executor).await?;
     db.workflow_actions().create(&submit.approval.workflow_action, executor).await?;
     Ok(())
@@ -287,6 +296,7 @@ async fn ensure_creation_ready(
 ) -> Result<()> {
     context.access.related_order(order, executor).await?;
     context.access.creation(order, executor).await?;
+
     if let Some(source) = &order.selection_source {
         let access = context.services.selections.clone();
         let proposal = access
@@ -299,6 +309,7 @@ async fn ensure_creation_ready(
             .await?;
         SalesSelectionSource::from_proposal(&proposal, &order.customer_id, order.business_type)?;
     }
+
     SalesOrderService::new(context.db.clone())
         .ensure_sellable_refs(
             &context.sellable_refs,

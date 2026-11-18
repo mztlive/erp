@@ -29,6 +29,7 @@ impl InventoryAdjustmentProcess {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::Internal("库存调整驳回缺少运行时事务".into()));
         }
+
         let mut adjustment = self
             .db
             .inventory()
@@ -37,6 +38,7 @@ impl InventoryAdjustmentProcess {
             .ok_or_else(|| Error::NotFound("库存调整单不存在".into()))?;
         adjustment.reject_approval(expected_subject_version)?;
         self.db.stock_adjustments().update(&mut adjustment, executor).await?;
+
         let audit =
             actor.clone().resource_log("stock_adjustment.reject", "stock_adjustment", id.to_owned())?;
         persist_log(&self.db, &audit, executor).await?;

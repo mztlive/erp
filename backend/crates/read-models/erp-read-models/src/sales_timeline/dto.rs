@@ -131,8 +131,10 @@ pub(super) fn page(mut items: Vec<TimelineEvent>, query: &TimelineQuery) -> Resu
         query.category.is_none_or(|category| item.category == category)
             && cursor.as_ref().is_none_or(|cursor| cursor.accepts(item))
     });
+
     items.sort_by(|a, b| (b.occurred_at, &b.id).cmp(&(a.occurred_at, &a.id)));
     items.dedup_by(|a, b| a.id == b.id);
+
     let limit = usize::try_from(query.limit()?).expect("分页上限可转换为 usize");
     let more = items.len() > limit;
     items.truncate(limit);

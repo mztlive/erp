@@ -149,6 +149,7 @@ mod tests {
         let mut sections = vec![section()];
         apply_submitter_name(&mut sections, &HashMap::from([(id.into(), " 陈国平 ".into())]));
         assert_eq!(sections[0].value, "陈国平");
+
         for names in [HashMap::new(), HashMap::from([(id.into(), id.into())])] {
             let mut sections = vec![section()];
             apply_submitter_name(&mut sections, &names);

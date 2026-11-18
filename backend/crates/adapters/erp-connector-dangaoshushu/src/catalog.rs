@@ -69,10 +69,12 @@ impl DangaoshushuConnector {
         if let Some(city) = city_id {
             parameters.push(("city_id".into(), city.into()));
         }
+
         let product = self
             .transport
             .send(Request::Read { path: "/dsapi/product/get_product_details", parameters })
             .await?;
+
         if id(&product["product"]["id"]).map_err(|e| context(e, "商品详情 product.id 缺失或格式无效"))?
             != product_id
         {
@@ -110,11 +112,13 @@ pub(super) fn scan_parameters(scan: &Scan) -> ConnectorResult<(u32, Parameters)>
     if page == 0 {
         return Err(mapping());
     }
+
     let mut parameters = vec![
         ("sort_price_type".into(), "1".into()),
         ("page".into(), page.to_string()),
         ("size".into(), scan.limit.to_string()),
     ];
+
     if let ScanWindow::Changes { since, through } = scan.window {
         if since > through {
             return Err(mapping());
@@ -238,6 +242,7 @@ impl OfferSource for DangaoshushuConnector {
             .send(Request::Read { path: "/dsapi/product/get_product_hot_lists", parameters })
             .await?;
         let products = value["product_list"].as_array().ok_or_else(mapping)?;
+
         let mut items = Vec::new();
         for (product_index, product) in products.iter().enumerate() {
             for (spec_index, spec) in product["specs"].as_array().ok_or_else(mapping)?.iter().enumerate() {
@@ -254,6 +259,7 @@ impl OfferSource for DangaoshushuConnector {
                 items.push(snapshot(OfferChange::Upsert(Box::new(offer)), None));
             }
         }
+
         let next = next_page(page, products.len(), scan.limit)?;
         self.name_catalog_categories(&mut items).await?;
         Ok(Page { items, next })
@@ -284,6 +290,7 @@ impl AvailabilitySource for DangaoshushuConnector {
         };
         let city = self.query_city(query.region.as_ref())?;
         let product = self.product(sku, city).await?;
+
         let (state, quantity, changed_at) = if let Some(spec) = spec_value(&product, sku)? {
             let quantity = stock(&spec["stock"])?;
             let state = availability_state(&product, spec, &quantity)?;
@@ -330,6 +337,7 @@ impl ServiceAreas for DangaoshushuConnector {
                 parameters: vec![("product_id".into(), product.into())],
             })
             .await?;
+
         let mut regions = BTreeSet::new();
         for city in value.as_array().ok_or_else(mapping)? {
             let id = id(&city["city_id"])?;
@@ -391,6 +399,7 @@ mod tests {
         assert_eq!(offer.sku.spec_id, "721-101902");
         assert_eq!(offer.unit, None);
         assert_eq!(offer.quote, None);
+
         let Lookup::Found(detail) = connector.offer(&offer.sku).await.unwrap() else {
             panic!("商品详情")
         };
@@ -460,6 +469,7 @@ mod tests {
         );
         assert_eq!(connector.scan_with_details(&scan).await.unwrap_err(), mapping());
         assert_eq!(calls.requests.lock().unwrap().len(), 2);
+
         let (connector, calls) =
             recording_connector(vec![Ok(json!({"product_list":[]})), Ok(json!({"product_list":[]}))]);
         assert_eq!(connector.scan(&scan).await.unwrap().next, None);
@@ -479,6 +489,7 @@ mod tests {
                 .name,
             "蛋糕  礼盒"
         );
+
         for (target, key, invalid) in [
             ("product", "id", " product-1 "),
             ("spec", "id", " spec-1 "),
@@ -516,6 +527,7 @@ mod tests {
         let result = connector(vec![product()]).availability(&query).await.unwrap().remove(0).value;
         assert_eq!(result.state, AvailabilityState::Available);
         assert_eq!(result.quantity, AvailableQuantity::Unreported);
+
         for (parent, key, value, expected) in [
             ("brand", "status", "0", AvailabilityBlock::Brand),
             ("product", "status", "0", AvailabilityBlock::Product),
@@ -566,6 +578,7 @@ mod tests {
         let result = connector(vec![value]).availability(&query).await.unwrap().remove(0).value;
         assert_eq!(result.sku, sku());
         assert_eq!(result.state, AvailabilityState::Unknown);
+
         let transport =
             Arc::new(FakeTransport { responses: Mutex::new(vec![]), requests: Mutex::new(vec![]) });
         let connector = DangaoshushuConnector::with_transport(settings(), transport.clone());
@@ -582,6 +595,7 @@ mod tests {
         let mut value = product();
         value["specs"][0]["product_id"] = json!("foreign-product");
         assert!(spec_value(&value, &sku()).is_err());
+
         let mut value = product();
         let duplicate = value["specs"][0].clone();
         value["specs"].as_array_mut().unwrap().push(duplicate);
@@ -595,6 +609,7 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(error.code, "DGSS_REGION_UNMAPPED");
+
         let result = connector(vec![json!([])]).regions(&sku()).await.unwrap();
         assert_eq!(result.value, RegionCoverage::Included(vec![]));
         let result =
@@ -622,6 +637,7 @@ mod tests {
         let Request::Read { parameters, .. } = &requests[0] else { panic!("只读目录请求") };
         assert!(parameters.contains(&("start_time".into(), "2024-01-01".into())));
         assert!(parameters.contains(&("end_time".into(), "2024-01-03".into())));
+
         let reversed = Scan {
             window: ScanWindow::Changes {
                 since: Instant::from_unix_secs(2),
@@ -643,6 +659,7 @@ mod tests {
             .unwrap();
         assert_eq!(offer.unit, None);
         assert_eq!(offer.quote.as_ref().unwrap().dropship.as_ref().unwrap().unit_price.to_string(), "100.25");
+
         connector.settings.spec_units.insert("spec-1".into(), "个".into());
         let quote = connector
             .transform(DangaoshushuOffer::Detail { root: &json!({"product": product}), spec: &spec })
@@ -674,6 +691,7 @@ mod tests {
                 .quote
                 .is_none()
         );
+
         for value in ["0", "123.4567"] {
             spec["clearing_price"] = json!(value);
             let quote = connector
@@ -685,6 +703,7 @@ mod tests {
             assert!(quote.bulk.is_none());
             assert!(quote.tax_rate.is_none());
         }
+
         for invalid in ["-1", "invalid", "", "1.12345"] {
             spec["clearing_price"] = json!(invalid);
             assert!(
@@ -722,6 +741,7 @@ mod tests {
             assert!(quote.bulk.is_none());
             assert_eq!(offer.details.availability, expected);
             assert_eq!(offer.details.available_quantity.as_deref(), Some("5"));
+
             let requests = transport.requests.lock().unwrap();
             let [Request::Read { path, parameters }] = requests.as_slice() else {
                 panic!("定向商品补查只读一次")

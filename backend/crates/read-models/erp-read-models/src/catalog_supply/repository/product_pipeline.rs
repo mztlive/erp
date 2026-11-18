@@ -56,6 +56,7 @@ fn product_candidate_matching_pipeline(filter: &ProductFilter) -> Vec<Document> 
     {
         return product_matching_pipeline(filter);
     }
+
     let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
     if filter.category_id.is_some() || filter.brand_id.is_some() {
         pipeline.extend([
@@ -77,6 +78,7 @@ fn product_matching_pipeline(filter: &ProductFilter) -> Vec<Document> {
     ];
     append_product_revision_filters(&mut pipeline, filter);
     append_source_diff(&mut pipeline, filter);
+
     pipeline.extend([product_sku_lookup(not_deleted), product_sku_counts(), product_listing_status()]);
     append_product_aggregate_filters(&mut pipeline, filter);
     pipeline
@@ -404,6 +406,7 @@ mod tests {
         assert_eq!(&candidates[..common.len()], &common);
         assert_eq!(candidates[common.len()], doc! { "$project": { "_id": 0, "id": 1 } });
         assert_eq!(candidates.last(), Some(&doc! { "$limit": 10001 }));
+
         let mut first_page = filter;
         first_page.page = 1;
         first_page.page_size = 20;
@@ -426,6 +429,7 @@ mod tests {
             filter.to_doc().get_document("id").unwrap().get_array("$in").unwrap(),
             &Vec::<Bson>::new()
         );
+
         let revision =
             ProductFilter { category_id: Some("leaf".into()), brand_id: Some("brand".into()), ..filter };
         let matching = product_candidate_matching_pipeline(&revision);

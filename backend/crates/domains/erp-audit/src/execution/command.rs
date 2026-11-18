@@ -120,6 +120,7 @@ where
     if !prepared.success {
         return Err(Error::ValidationError("成功业务边界不能提交失败审计".into()).into());
     }
+
     let result = write(executor).await?;
     sink.persist(&prepared, executor).await?;
     Ok(result)
@@ -188,6 +189,7 @@ where
                     Error::ValidationError("成功业务事件不能记录拒绝或未知执行结果".to_string()).into()
                 );
             }
+
             let log = context.log(content)?;
             sink.persist(&log, executor).await?;
             Ok(result)
@@ -313,6 +315,7 @@ mod tests {
         let context = context();
         assert_eq!(execute_audited(&context, &boundary, &mut executor, &boundary).await.unwrap(), 17);
         assert_eq!(*boundary.calls.lock().unwrap(), ["execute", "audit"]);
+
         let logs = boundary.logs.lock().unwrap();
         assert_eq!(logs.len(), 1);
         assert_eq!(logs[0].base.id, context.event_id());
@@ -380,6 +383,7 @@ mod tests {
             },
             other => panic!("未知业务结果分类被更改: {other:?}"),
         }
+
         assert_eq!(*boundary.calls.lock().unwrap(), ["execute"]);
         assert!(boundary.logs.lock().unwrap().is_empty());
     }
@@ -443,6 +447,7 @@ mod ordinary_boundary_tests {
                 })
             })
             .await;
+
             if invalid {
                 assert!(result.is_err());
                 assert!(sink.calls.lock().unwrap().is_empty());
@@ -471,6 +476,7 @@ mod ordinary_boundary_tests {
                 })
             })
             .await;
+
             assert!(
                 matches!(result, Err(Error::Internal(message)) if message == if fail_write { "original write failure" } else { "original event failure" })
             );
@@ -509,6 +515,7 @@ mod ordinary_boundary_tests {
                 )
             })
             .await;
+
             match (fail_write, result) {
                 (true, Err(ConsumerError::Business(message))) => {
                     assert_eq!(message, "original");

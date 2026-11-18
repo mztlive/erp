@@ -679,6 +679,7 @@ async fn keyword_filter(
     let Some(q) = filter.q.as_deref() else {
         return Ok(query);
     };
+
     let mut name = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
     insert_literal_regex_filter(&mut name, "name", Some(q));
     let collection = repo.database().collection::<Document>(WAREHOUSE_REVISIONS);
@@ -686,6 +687,7 @@ async fn keyword_filter(
     if ids.len() > KEYWORD_REVISION_ID_CAP {
         return Err(mongodb::error::Error::custom("关键词命中修订过多，请使用更精确的关键词").into());
     }
+
     let mut code = Document::new();
     insert_literal_regex_filter(&mut code, "warehouse_code", Some(q));
     query.insert("$or", vec![code, doc! { "current_revision_id": { "$in": ids } }]);

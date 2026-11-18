@@ -55,6 +55,7 @@ impl DeliveryLineBatch {
         if first_line_no < 1 {
             return Err(Error::from("行号必须从 1 开始"));
         }
+
         let mut lines = Vec::with_capacity(specs.len());
         for (index, spec) in specs.into_iter().enumerate() {
             let offset = u32::try_from(index).map_err(|_| Error::from("发货行号溢出"))?;
@@ -151,6 +152,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(
             DeliveryLineBatch::build(
                 DeliveryId::new("d-1"),
@@ -174,6 +176,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(
             DeliveryLineBatch::build(
                 DeliveryId::new("d-1"),

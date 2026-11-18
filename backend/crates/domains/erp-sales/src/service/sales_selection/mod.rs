@@ -132,6 +132,7 @@ mod tests {
         let service = SalesSelectionService::new(db, authorization);
         let owner = AuditActor::new("owner".into(), "owner".into(), AccountKind::Admin);
         let outsider = AuditActor::new("outsider".into(), "outsider".into(), AccountKind::Admin);
+
         service
             .authorize_booklet(
                 &owner,
@@ -141,6 +142,7 @@ mod tests {
             )
             .await
             .unwrap();
+
         let error = service
             .clone()
             .authorize_booklet(
@@ -152,6 +154,7 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(error, Error::Forbidden(message) if message == "操作包含不可访问的对象或目标归属"));
+
         service
             .authorize_booklet(
                 &owner,

@@ -112,6 +112,7 @@ impl BusinessTransfers {
             TransferKind::SupplierQuotePreview => self.quote_preview(input, actor).await?,
             _ => return Err(Error::ValidationError("不支持的导入任务".into())),
         };
+
         let authorization = json!({"expires_at":result.get("expires_at")});
         TransferResult::file(
             "处理结果.json".into(),

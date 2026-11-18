@@ -25,6 +25,7 @@ mod tests {
         let restored: GoodsLineFields = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(restored.procurement_price_basis, None);
         assert_eq!(restored.procurement_supply_price_gross, goods.procurement_supply_price_gross);
+
         value["procurement_price_basis"] = "INVALID".into();
         assert!(serde_json::from_value::<GoodsLineFields>(value).is_err());
     }

@@ -193,6 +193,7 @@ mod tests {
             update_many(&writer, &deltas, "actor", InvoicingDirection::Apply, &mut executor).await.unwrap();
         assert_eq!(result.applied, vec![deltas[0].0.clone(), deltas[2].0.clone()]);
         assert_eq!(result.rejected, vec![deltas[1].0.clone()]);
+
         let calls = writer.calls.lock().unwrap();
         assert_eq!(calls.len(), 3);
         for (call, (id, amount)) in calls.iter().zip(&deltas) {
@@ -204,6 +205,7 @@ mod tests {
             let add = limit[0].as_document().unwrap().get_array("$add").unwrap();
             assert_eq!(add, &vec![Bson::String("$invoiced_total".into()), expected_amount]);
             assert_eq!(limit[1], Bson::String("$invoiceable_total".into()));
+
             let set = call.pipeline[0].get_document("$set").unwrap();
             assert_eq!(set.get_str("updated_by").unwrap(), "actor");
             assert_eq!(set.get_document("invoiced_total").unwrap().get_array("$add").unwrap(), add);
@@ -223,12 +225,14 @@ mod tests {
             .unwrap();
         assert_eq!(result.applied, vec![deltas[0].0.clone()]);
         assert_eq!(result.rejected, vec![deltas[1].0.clone()]);
+
         let calls = writer.calls.lock().unwrap();
         for (call, (id, amount)) in calls.iter().zip(&deltas) {
             let expected = vec![Bson::String("$invoiced_total".into()), amount_bson(amount).unwrap()];
             assert_eq!(call.filter.get_str("id").unwrap(), id.as_ref());
             assert_eq!(call.filter.get_i64("deleted_at").unwrap(), 0);
             assert_eq!(call.filter.get_document("$expr").unwrap().get_array("$gte").unwrap(), &expected);
+
             let set = call.pipeline[0].get_document("$set").unwrap();
             assert_eq!(
                 set.get_document("invoiced_total").unwrap().get_array("$subtract").unwrap(),

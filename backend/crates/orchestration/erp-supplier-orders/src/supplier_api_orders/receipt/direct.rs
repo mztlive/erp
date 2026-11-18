@@ -35,8 +35,10 @@ impl DirectReceiptFacts {
             {
                 return Err(Error::BusinessLogicError("实际验收的发货单不属于原采购直发执行".into()));
             }
+
             let source = self.source(execution, tracking, line)?;
             self.ensure_acceptance_lineage(line, delivery.sales_order_id.as_ref())?;
+
             let net =
                 AcceptanceFulfillmentAllocation::net_quantity_for_fact(&self.allocations, &line.base.id)?;
             if net > line.quantity {
@@ -58,6 +60,7 @@ impl DirectReceiptFacts {
             .as_ref()
             .and_then(|id| self.purchase_allocations.iter().find(|row| row.base.id == id.as_ref()))
             .ok_or_else(|| Error::BusinessLogicError("原实际发货缺少可核实的采购销售分配".into()))?;
+
         let candidates = execution
             .source_lines
             .iter()
@@ -103,6 +106,7 @@ impl DirectReceiptFacts {
                 .iter()
                 .find(|row| row.base.id == acceptance_line.customer_acceptance_id.as_ref())
                 .ok_or_else(|| Error::BusinessLogicError("净验收分配缺少原验收单".into()))?;
+
             if acceptance.status == CustomerAcceptanceState::Draft
                 || acceptance.sales_order_id.as_ref() != sales_order
                 || acceptance_line.sales_order_line_id != line.sales_order_line_id
@@ -111,6 +115,7 @@ impl DirectReceiptFacts {
             {
                 return Err(Error::BusinessLogicError("原验收状态、签收依据或销售行与实际交付不一致".into()));
             }
+
             if acceptance.status == CustomerAcceptanceState::Reversed
                 && allocation.allocation_action == AllocationAction::Apply
                 && !self.allocations.iter().any(|reverse| {
@@ -168,6 +173,7 @@ mod tests {
             }],
         )
         .unwrap();
+
         let mut delivery = Delivery::new(
             DeliveryId::new("delivery"),
             DeliveryData {
@@ -197,6 +203,7 @@ mod tests {
             DeliveryType::SupplierDirect,
         )
         .unwrap();
+
         let mut acceptance = CustomerAcceptance::new(
             CustomerAcceptanceId::new("acceptance"),
             CustomerAcceptanceData {
@@ -232,6 +239,7 @@ mod tests {
             allocated_quantity: qty("2"),
             reverses_allocation_id: None,
         };
+
         let purchase_allocation = PurchaseLineSalesAllocation {
             base: BaseModel { id: "allocation".into(), ..BaseModel::fake() },
             purchase_order_revision_line_id: PurchaseOrderRevisionLineId::new("purchase-line"),
@@ -258,6 +266,7 @@ mod tests {
     fn actual_direct_acceptance_keeps_source_line_identity_and_refuses_ambiguous_or_foreign_proof() {
         let (execution, tracking, facts) = facts();
         assert_eq!(facts.quantities(&execution, &tracking).unwrap()["item"], qty("2"));
+
         for invalid in [
             "allocation",
             "tracking",
@@ -299,6 +308,7 @@ mod tests {
         facts.acceptance_lines[0].accepted_quantity = qty("1");
         facts.acceptance_lines[0].short_quantity = qty("1");
         assert_eq!(facts.quantities(&execution, &tracking).unwrap()["item"], qty("1"));
+
         let mut later = facts.acceptance_lines[0].clone();
         later.base.id = "later-line".into();
         later.short_quantity = qty("0");
@@ -308,6 +318,7 @@ mod tests {
         later.customer_acceptance_line_id = CustomerAcceptanceLineId::new("later-line");
         facts.allocations.push(later);
         assert_eq!(facts.quantities(&execution, &tracking).unwrap()["item"], qty("2"));
+
         let mut reverse = facts.allocations[0].clone();
         reverse.base.id = "reversed".into();
         reverse.allocation_action = AllocationAction::Reverse;

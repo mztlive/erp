@@ -94,6 +94,7 @@ pub(crate) async fn record_invoice_execution(
     if task.base.version != expected_task_version {
         return Err(Error::ConflictError("开票任务版本已变化，请刷新工作台任务后重试".to_string()));
     }
+
     let account = db
         .receivable_accounts()
         .find_by_id(&task.business_object_id, executor)
@@ -105,12 +106,14 @@ pub(crate) async fn record_invoice_execution(
     }
     require_task(rbac, actor, &task, TaskPurpose::Invoice, executor).await?;
     rbac.tasks.ensure_domain_decision_access(actor, &task, executor).await?;
+
     if &account.counterparty_party_id != party_id {
         return Err(Error::BusinessLogicError("发票往来主体与当前任务的应收子账不一致".to_string()));
     }
     if account_ids.iter().any(|account_id| account_id.as_ref() != task.business_object_id) {
         return Err(Error::BusinessLogicError("一次销项开票只能分配到当前任务绑定的应收子账".to_string()));
     }
+
     let request_id = super::invoice_request::consume_authorization(
         db,
         work_item_id.as_ref(),
@@ -120,6 +123,7 @@ pub(crate) async fn record_invoice_execution(
         executor,
     )
     .await?;
+
     task.record_activity(Instant::now()).map_err(Error::Logic)?;
     db.work_items().update(&mut task, executor).await?;
     Ok(request_id)

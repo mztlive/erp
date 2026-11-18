@@ -96,6 +96,7 @@ impl ApprovalCopyRule {
         if rules.len() > 54 {
             return Err(Error::ValidationError("最多配置 54 条抄送规则".into()));
         }
+
         let mut seen = BTreeSet::new();
         for rule in &mut rules {
             let valid_node = match (rule.trigger, rule.node_order) {
@@ -111,6 +112,7 @@ impl ApprovalCopyRule {
             if !seen.insert((rule.trigger.label(), rule.node_order)) {
                 return Err(Error::ValidationError("同一抄送时机只能配置一次".into()));
             }
+
             if rule.recipient_user_ids.is_empty() || rule.recipient_user_ids.len() > 50 {
                 return Err(Error::ValidationError("每条抄送规则须配置 1 至 50 人".into()));
             }
@@ -123,6 +125,7 @@ impl ApprovalCopyRule {
             rule.recipient_user_ids.sort();
             rule.recipient_user_ids.dedup();
         }
+
         rules.sort_by_key(|r| (r.trigger.label(), r.node_order));
         Ok(rules)
     }
@@ -227,6 +230,7 @@ mod tests {
         let mut event =
             BpmEvent::new(BpmEventKind::AssigneeRecovered, ApprovalProcessInstanceId::new("i"), 1);
         assert_eq!(CopyTrigger::from_event(&event), None);
+
         event.kind = BpmEventKind::NodeApproved;
         let rule = ApprovalCopyRule {
             trigger: CopyTrigger::NodeApproved,
@@ -299,6 +303,7 @@ mod tests {
         snapshot.base.id = "snapshot".into();
         let record = receipt();
         assert!(record.matches_subject(&snapshot, &instance));
+
         snapshot.subject_version = 2;
         assert!(!record.matches_subject(&snapshot, &instance));
         snapshot.subject_version = 1;

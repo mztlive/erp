@@ -112,6 +112,7 @@ impl QueryFilter for SelectionBookFilter {
         if let Some(orgs) = &self.org_unit_ids {
             and.push(doc! { "business_org_unit_id": { "$in": orgs } });
         }
+
         let mut filter = doc! { "$and": and };
         if let Some(customer_id) = &self.customer_id {
             filter.insert("customer_id", customer_id);
@@ -277,6 +278,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
             .limit(filter.limit())
             .build();
         let condition = filter.to_doc();
+
         authorized_scope.ensure_current(BOOKLETS, executor)?;
         let stages = authorized_scope.lookup_after(condition.clone());
         let items = aggregate::find(
@@ -294,6 +296,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
             executor,
         )
         .await?;
+
         authorized_scope.ensure_current(BOOKLETS, executor)?;
         Ok(PageResult {
             items,
@@ -502,6 +505,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     ) -> Result<()> {
         let mut task = task.clone();
         self.db.sales_selection_prepare_tasks().update(&mut task, executor).await?;
+
         if task.kind.reuses_current_batch() {
             let old = self
                 .list_effective_items(
@@ -520,6 +524,7 @@ impl<'a> SalesSelectionDomainRepository<'a> {
                 }
             }
         }
+
         self.db.sales_selection_booklets().update(booklet, executor).await?;
         self.insert_members_and_items(members, items, executor).await
     }

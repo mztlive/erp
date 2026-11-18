@@ -50,11 +50,13 @@ impl PackingContext {
             }
             return Ok(None);
         };
+
         guard_sources(db, delivery, executor).await?;
         let source = address_source(db, &self.codec, &self.key, delivery, lines, executor)
             .await?
             .ok_or_else(|| Error::ValidationError("缺少可核对的收货分配，请先补充来源交付安排".into()))?;
         packing.validate(&source, lines, posting)?;
+
         delivery.tracking_entries = packing.tracking(lines)?;
         delivery.packing = Some(packing);
         freeze_addresses(&self.codec, delivery, &source)?;
@@ -107,6 +109,7 @@ impl PackingContext {
         let mut rest = new_remainder(delivery, next_id(), next_delivery_no(db).await?)?;
         let (shipped, remaining, current_source, rest_source, current_packing) =
             packing.partition(delivery, &rest, original, &source, next_id)?;
+
         for line in original {
             db.delivery_lines().soft_delete(&mut line.clone(), executor).await?;
         }
@@ -115,6 +118,7 @@ impl PackingContext {
         }
         delivery.tracking_entries = delivery.packing.insert(current_packing).tracking(&shipped)?;
         freeze_addresses(&self.codec, delivery, &current_source)?;
+
         if !remaining.is_empty() {
             freeze_addresses(&self.codec, &mut rest, &rest_source)?;
             db.fulfillment().create_delivery_with_lines(&rest, &remaining, executor).await?;

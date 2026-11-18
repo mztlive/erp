@@ -68,6 +68,7 @@ impl PurchaseOrderDomainRepository<'_> {
         if rows.len() > usize::try_from(limit).unwrap_or(10_000) {
             return Err(Error::ValidationError("供给关联采购超过查询上限，请收窄采购范围".into()));
         }
+
         let mut grouped = BTreeMap::<String, PurchaseOfferingUsageFact>::new();
         for row in rows {
             row.order.current_owner_user_id()?;
@@ -77,6 +78,7 @@ impl PurchaseOrderDomainRepository<'_> {
                 .lines
                 .push(row.line);
         }
+
         scope.ensure_current(executor)?;
         Ok(grouped.into_values().collect())
     }
@@ -153,6 +155,7 @@ fn usage_pipeline(
     if !revision {
         pointer_checks.push(doc! { "$eq": [{ "$ifNull": ["$order.current_revision_id", null] }, null] });
     }
+
     vec![
         doc! { "$match": { "supplier_offering_source.supplier_offering_id": id.to_string(), "deleted_at": NOT_DELETED_TIMESTAMP_BSON } },
         doc! { "$lookup": { "from": headers, "localField": line_pointer, "foreignField": "id", "as": "header" } },

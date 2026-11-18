@@ -217,6 +217,7 @@ mod tests {
         };
         writes.instance.process_kind = ProcessKind::PurchasePaymentRequest;
         writes.instance.subject = SubjectRef::new("purchase_payment_request", "req-1").unwrap();
+
         let prepared = prepare_decision(decision_input(
             writes.instance,
             writes.created_executions[0].clone(),
@@ -264,6 +265,7 @@ mod tests {
         let PreparedExecution::Apply(writes) = started else {
             panic!("启动必须写入");
         };
+
         let prepared = prepare_decision(decision_input(
             writes.instance,
             writes.created_executions[0].clone(),
@@ -335,6 +337,7 @@ mod tests {
         let PreparedExecution::Apply(start_writes) = started else {
             panic!("启动必须写入");
         };
+
         let blocked_now = prepare_decision(decision_input(
             start_writes.instance,
             start_writes.created_executions[0].clone(),
@@ -348,6 +351,7 @@ mod tests {
         let PreparedExecution::Apply(writes) = blocked_now else {
             panic!("原审批人失效必须提交 BLOCKED");
         };
+
         let resumed = prepare_resume(resume_input(
             writes.instance.clone(),
             writes.updated_executions[0].clone(),
@@ -379,6 +383,7 @@ mod tests {
         let PreparedExecution::Apply(start_writes) = started else {
             panic!("启动必须写入");
         };
+
         let recoverable = prepare_decision(decision_input(
             start_writes.instance.clone(),
             start_writes.created_executions[0].clone(),
@@ -421,6 +426,7 @@ mod tests {
             structural_writes.instance.blocker_code,
             Some(ApprovalBlockerCode::DefinitionGraphCorrupted)
         );
+
         let normal_cancel = prepare_cancel(cancel_input(
             structural_writes.instance.clone(),
             structural_writes.updated_executions[0].clone(),
@@ -429,6 +435,7 @@ mod tests {
         ))
         .unwrap_err();
         assert!(normal_cancel.to_string().contains("不可恢复原审批人的阻塞只能走受阻取消"));
+
         let blocked_cancel = prepare_cancel(cancel_input(
             structural_writes.instance,
             structural_writes.updated_executions[0].clone(),
@@ -499,6 +506,7 @@ mod tests {
             actor_id: "u1".into(),
             now: Instant::from_unix_secs(10),
         };
+
         let mut failing = MemoryRuntimeStore::default();
         let fail_domain = RecordingDomainActions { fail: true, ..RecordingDomainActions::default() };
         assert!(commit_writes(&mut failing, &writes, &ctx, &fail_domain).is_err());
@@ -562,6 +570,7 @@ mod tests {
         let mut store = MemoryRuntimeStore::default();
         let domain = RecordingDomainActions::default();
         commit_writes(&mut store, &started, &ctx, &domain).unwrap();
+
         let due_at = Instant::from_unix_secs(1_700_000_000);
         let mut original = store.work_items().next().unwrap().clone();
         original.due_at = Some(due_at);

@@ -173,10 +173,12 @@ pub(in crate::finance::funds_scope) async fn allocation_snapshot(
         let versions = aggregate(collection.clone(), pipeline, executor).await?;
         let mut snapshot = AllocationSnapshot { versions, ..Default::default() };
         snapshot.ensure_bounded()?;
+
         if materialize {
             let page = allocation_page(db, base.clone(), query, sort.clone(), executor).await?;
             snapshot.items = page.items;
             snapshot.total = page.total;
+
             let mut summary = base;
             summary.extend([
                 doc! { "$sort": sort },
@@ -188,6 +190,7 @@ pub(in crate::finance::funds_scope) async fn allocation_snapshot(
         Ok(snapshot)
     }
     .await;
+
     let result = result?;
     authorization.validate(executor).await?;
     Ok(result)
@@ -226,6 +229,7 @@ fn allocation_pipeline(
         pipeline.extend(invoice_header_stages());
         pipeline.push(doc! { "$match": { "_invoice.created_by": { "$in": ids } } });
     }
+
     pipeline.extend(authorization.guard_stages());
     pipeline.extend(purchase_stages(
         authorization,
@@ -233,6 +237,7 @@ fn allocation_pipeline(
         condition.org_unit_ids.as_deref(),
     ));
     pipeline.push(doc! { "$match": { "source_exists": true, "matched": true } });
+
     if condition.operator_user_ids.is_none() {
         pipeline.extend(invoice_header_stages());
     }
@@ -299,6 +304,7 @@ mod tests {
                 .unwrap(),
             <Database as PayableExt>::PAYABLE_ACCOUNTS
         );
+
         let unrestricted = allocation_pipeline(&query, &authorization(), &FundsLinkedCondition::default());
         assert_eq!(
             unrestricted[1 + authorization().guard_stages().len()]
@@ -327,9 +333,11 @@ mod tests {
         row.version.hash(&mut legacy);
         Some(row.order.clone()).hash(&mut legacy);
         row.source_version.hash(&mut legacy);
+
         let mut actual = DefaultHasher::new();
         row.hash_into(&mut actual);
         assert_eq!(actual.finish(), legacy.finish());
+
         row.source_version += 1;
         let mut changed = DefaultHasher::new();
         row.hash_into(&mut changed);

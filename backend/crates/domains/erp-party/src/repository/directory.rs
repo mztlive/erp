@@ -30,6 +30,7 @@ fn pipeline(query: &DirectoryQuery) -> Vec<Document> {
     if let Some(ids) = &query.ids {
         filter.insert("id", doc! { "$in": ids.as_slice() });
     }
+
     let mut pipeline = vec![
         doc! { "$match": filter },
         doc! { "$lookup": {
@@ -40,6 +41,7 @@ fn pipeline(query: &DirectoryQuery) -> Vec<Document> {
             "name": { "$ifNull": [{ "$arrayElemAt": ["$directory_revision.legal_name", 0] }, "$party_no"] }
         } },
     ];
+
     if let Some(q) = &query.q {
         let mut name = Document::new();
         let mut code = Document::new();
@@ -65,6 +67,7 @@ mod tests {
                 "company_profile": { "$exists": true, "$ne": null }
             }
         );
+
         let query = DirectoryQuery {
             ids: Some(serde_json::from_value(serde_json::json!("company-a,company-b")).unwrap()),
             ..Default::default()

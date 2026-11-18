@@ -95,10 +95,12 @@ mod tests {
         };
         value.coverage_blockers =
             vec![CoverageBlocker { code: "missing".into(), message: "缺少成本".into() }];
+
         assert_eq!(
             row(&value),
             "\"'@订单\",\"客户\"\"甲\",\"冻结销售\",\"\",\"100.00\",\"120.00\",\"0.00\",\"0.00\",\"\",\"\",\"部分\",\"缺少成本\""
         );
+
         value.totals.actual_profit_loss_net = Some("-20.00".into());
         value.totals.margin_rate = Some("-20.00%".into());
         value.coverage_state = "COVERED".into();

@@ -43,6 +43,7 @@ impl SalesSelectionService {
         if let Some(page) = ended_public_page(&booklet, now) {
             return Ok(page);
         }
+
         let Some(grant) = grant else {
             return Ok(Self::public_page(PublicSelectionPageKind::Locked, &booklet, &[], None, None));
         };
@@ -80,6 +81,7 @@ impl SalesSelectionService {
         if public_kind(&booklet, now) == PublicSelectionPageKind::Ended {
             return Ok(Self::public_page(PublicSelectionPageKind::Ended, &booklet, &[], None, None));
         }
+
         let scope = participant_scope(&booklet, &session);
         let hash = request_hash(
             &serde_json::to_string(&req).map_err(|_| Error::Internal("选择载荷无法编码".into()))?,
@@ -97,14 +99,17 @@ impl SalesSelectionService {
         {
             return self.participant_page(&booklet, &session, now, executor).await;
         }
+
         if session.frozen || public_kind(&booklet, now) != PublicSelectionPageKind::Selecting {
             return self.participant_page(&booklet, &session, now, executor).await;
         }
         booklet.ensure_public_write(&token_hash(token), now)?;
         let items = self.current_items(&booklet, executor).await?;
         apply_choices(&booklet, &mut session, req, &items)?;
+
         self.db.sales_selection_booklets().update(&mut booklet, executor).await?;
         self.db.sales_selection_sessions().update(&mut session, executor).await?;
+
         let page = self.participant_page(&booklet, &session, now, executor).await?;
         self.store_public_result(
             IdempotencyOperation::SaveSession,
@@ -141,6 +146,7 @@ impl SalesSelectionService {
         if public_kind(&booklet, now) == PublicSelectionPageKind::Ended {
             return Ok(Self::public_page(PublicSelectionPageKind::Ended, &booklet, &[], None, None));
         }
+
         let scope = participant_scope(&booklet, &session);
         let hash = request_hash(
             &serde_json::to_string(&req).map_err(|_| Error::Internal("提交载荷无法编码".into()))?,
@@ -158,6 +164,7 @@ impl SalesSelectionService {
         {
             return self.participant_page(&booklet, &session, now, executor).await;
         }
+
         if session.frozen || public_kind(&booklet, now) == PublicSelectionPageKind::Ended {
             return self.participant_page(&booklet, &session, now, executor).await;
         }
@@ -167,13 +174,16 @@ impl SalesSelectionService {
         session
             .freeze_for_submit(req.expected_session_version)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
+
         let items = self.current_items(&booklet, executor).await?;
         ensure_budget(&booklet, &session, &items)?;
+
         let proposal_id = self.create_participant_proposal(&booklet, &session, &items, now, executor).await?;
         session.proposal_id = Some(proposal_id.clone());
         booklet.mark_submitted(proposal_id, now)?;
         self.db.sales_selection_sessions().update(&mut session, executor).await?;
         self.db.sales_selection_booklets().update(&mut booklet, executor).await?;
+
         let page = self.participant_page(&booklet, &session, now, executor).await?;
         self.store_public_result(
             IdempotencyOperation::Submit,
@@ -221,6 +231,7 @@ impl SalesSelectionService {
                 recipient: session.recipient.clone(),
             },
         )?;
+
         self.db.sales_selection_proposals().create(&proposal, executor).await?;
         for line in &display_lines {
             self.db.sales_selection_proposal_display_lines().create(line, executor).await?;
@@ -287,6 +298,7 @@ impl SalesSelectionService {
         if session.frozen {
             kind = PublicSelectionPageKind::Receipt;
         }
+
         let items = self
             .current_items(booklet, executor)
             .await?
@@ -298,6 +310,7 @@ impl SalesSelectionService {
         } else {
             None
         };
+
         let mut page = Self::public_page(kind, booklet, &items, Some(session), receipt);
         if booklet.submit_mode.requires_quantity() {
             let prices =
@@ -331,6 +344,7 @@ impl SalesSelectionService {
         if proposal.participant_id != session.participant_id {
             return Err(Error::Forbidden("无权查看该回执".into()));
         }
+
         let lines = self
             .db
             .sales_selection_proposal_display_lines()
@@ -547,6 +561,7 @@ fn apply_choices(
             quantity: choice.quantity,
         })
         .collect();
+
     ensure_session_version(session, req.expected_session_version)?;
     session
         .save(req.expected_session_version, choices, booklet.submit_mode, &allowed)
@@ -646,6 +661,7 @@ mod tests {
         active.status = BookletStatus::Published;
         active.link_expires_at = Some(Instant::from_unix_secs(200));
         assert!(ended_public_page(&active, Instant::from_unix_secs(100)).is_none());
+
         let mut closed = active.clone();
         closed.status = BookletStatus::Closed;
         let mut revoked = active.clone();
@@ -678,12 +694,14 @@ mod tests {
             choices: vec![PublicChoiceRequest { item_id: "item".into(), quantity: Some(quantity) }],
         };
         let book = book();
+
         apply_choices(&book, &mut session, request(1, 2), &[item()]).unwrap();
         assert_eq!(session.session_version, 2);
         assert_eq!(
             session.quantity_total(book.submit_mode, |_| Some("25.00".parse().unwrap())).unwrap(),
             Some("50.00".parse().unwrap())
         );
+
         assert!(matches!(
             apply_choices(&book, &mut session, request(2, 3), &[item()]),
             Err(Error::SelectionLimitExceeded(_))

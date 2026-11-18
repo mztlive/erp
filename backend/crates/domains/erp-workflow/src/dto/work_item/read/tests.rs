@@ -110,6 +110,7 @@ fn w18_route_context_uses_only_fixed_owner_role_registry() {
             Some(scope)
         );
     }
+
     let unknown =
         handler_route(WorkItemType::ImportBusinessConfirmation, "LEGACY_IMPORT_BATCH", "role-unregistered");
     match unknown {
@@ -186,12 +187,12 @@ fn supplier_payment_execution_maps_to_w12_finance_family() {
     let route =
         handler_route(WorkItemType::SupplierPaymentExecution, "purchase_payment_request", "role-finance")
             .unwrap();
-
     assert_eq!(route.handler_key, "supplier_payment_execution");
     assert_eq!(route.destination_workspace_id, "W12");
     assert!(route.route_context.is_none());
     assert_eq!(family_of(WorkItemType::SupplierPaymentExecution), WorkItemFamily::Finance);
     assert!(WORK_ITEM_TYPES.contains(&WorkItemType::SupplierPaymentExecution));
+
     assert!(
         handler_route(WorkItemType::SupplierPaymentExecution, "supplier_payment", "role-finance").is_err()
     );
@@ -211,11 +212,13 @@ fn document_approval_maps_to_signed_workspace_and_approval_family() {
         stock.route_context.and_then(|context| context.document_type).as_deref(),
         Some("stock_adjustment")
     );
+
     let missing = handler_route(WorkItemType::DocumentApproval, "unknown_type", "approver");
     match missing {
         Err(error) => assert!(error.to_string().contains("APPROVAL_DOCUMENT_ROUTE_UNMAPPED")),
         Ok(_) => panic!("缺少映射必须失败关闭"),
     }
+
     assert_eq!(family_of(WorkItemType::DocumentApproval), WorkItemFamily::Approval);
     assert!(WORK_ITEM_TYPES.contains(&WorkItemType::DocumentApproval));
 }
@@ -255,6 +258,7 @@ fn rework_detail_exposes_bound_instance_without_fabricating_list_association() {
         "approval_rework:rejected-instance",
     )
     .unwrap();
+
     for closed in [false, true] {
         if closed {
             item.abandon_approval_rework("submitter", "停止办理", Instant::from_unix_secs(1_700_000_000))
@@ -266,6 +270,7 @@ fn rework_detail_exposes_bound_instance_without_fabricating_list_association() {
         assert_eq!(view.business_object_id, "original-order");
         assert_eq!(view.approval_node_execution_id, None);
     }
+
     let row: crate::WorkItemRow = serde_json::from_value(serde_json::to_value(&item).unwrap()).unwrap();
     let list = WorkItemView::from_fields(row.into(), "queue".into()).unwrap();
     assert!(list.approval_process_instance_id.is_none());
@@ -278,6 +283,7 @@ fn rework_detail_exposes_bound_instance_without_fabricating_list_association() {
         let view = WorkItemView::from_fields(invalid.into(), "queue".into()).unwrap();
         assert!(view.approval_process_instance_id.is_none());
     }
+
     // 同样格式的键不能把普通任务升级成审批资料读取入口。
     item.work_item_type = WorkItemType::BusinessException;
     item.business_object_type = "integration_error_task".into();

@@ -664,6 +664,7 @@ impl<'a> SourceRegistryRepository<'a> {
         if targets.is_empty() {
             return Ok(Vec::new());
         }
+
         let map_ids =
             targets.iter().map(|target| target.external_identity_map_id.to_string()).collect::<Vec<_>>();
         let maps = mongo_ops::find_many(
@@ -675,9 +676,9 @@ impl<'a> SourceRegistryRepository<'a> {
             executor,
         )
         .await?;
+
         let external_ids =
             maps.into_iter().map(|mapping| (mapping.base.id, mapping.external_id)).collect::<HashMap<_, _>>();
-
         Ok(targets
             .into_iter()
             .filter_map(|target| external_ids.get(target.external_identity_map_id.as_ref()).cloned())
@@ -889,6 +890,7 @@ mod tests {
             panic!("external_id_key 必须以 BSON Binary 持久化，实际为 {stored:?}");
         };
         assert_eq!(binary.bytes, b"SO-2025-001");
+
         let back: ExternalIdentityMap = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(back, map);
     }

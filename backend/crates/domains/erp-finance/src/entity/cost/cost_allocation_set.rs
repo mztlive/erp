@@ -85,6 +85,7 @@ impl CostAllocationSet {
         if lines.is_empty() {
             return Err(Error::from("至少提供一条成本分配"));
         }
+
         let mut gross_sum = Decimal::ZERO;
         let mut net_sum = Decimal::ZERO;
         for line in &lines {
@@ -100,6 +101,7 @@ impl CostAllocationSet {
         if gross_sum != gross_amount.to_decimal() || net_sum != net_amount.to_decimal() {
             return Err(Error::from("成本分配合计必须等于成本事实金额"));
         }
+
         let planned = lines
             .into_iter()
             .enumerate()

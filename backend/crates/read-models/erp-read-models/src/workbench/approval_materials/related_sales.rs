@@ -51,6 +51,7 @@ pub(super) async fn capture(
     let mut files = Vec::new();
     for revision in revisions {
         let mut sales = revision_display(db, &revision, executor).await?;
+
         match revision_materials(db, &revision, executor).await {
             Ok(materials) => files.extend(materials.files),
             Err(error) => {
@@ -106,6 +107,7 @@ async fn source_revisions(
         .purchase_order()
         .list_submission_lines(&PurchaseOrderSubmissionId::new(&submission.base.id), executor)
         .await?;
+
     let ids = lines
         .iter()
         .filter_map(|line| line.sales_order_revision_line_id.as_ref().map(ToString::to_string))
@@ -115,6 +117,7 @@ async fn source_revisions(
         return Err(Error::ConflictError("采购提交引用的销售版本行不存在".into()));
     }
     validate_source_lines(&lines, &sources)?;
+
     let mut revision_ids =
         sources.iter().map(|line| line.sales_order_revision_id.to_string()).collect::<BTreeSet<_>>();
     if revision_ids.is_empty() {
@@ -230,6 +233,7 @@ async fn revision_display(
     let ids = lines.iter().map(|line| SalesOrderRevisionLineId::new(&line.base.id)).collect::<Vec<_>>();
     let goods =
         db.sales_order_goods_service_line_revisions().list_by_revision_line_ids(&ids, executor).await?;
+
     let brief_lines = lines.iter().map(|line| sales_brief_line(line, &goods)).collect::<Result<Vec<_>>>()?;
     Ok(ApprovalRelatedSalesSnapshot {
         document_id: revision.sales_order_id.to_string(),
@@ -267,6 +271,7 @@ fn revision_brief(revision: &SalesOrderRevision, mut lines: Vec<BriefLine>) -> R
     let more_count = u32::try_from(lines.len().saturating_sub(BRIEF_LINE_LIMIT))
         .map_err(|_| Error::ValidationError("来源销售明细数量超出允许范围".into()))?;
     lines.truncate(BRIEF_LINE_LIMIT);
+
     let mut sections: Vec<BriefSection> = Vec::new();
     push_section(
         &mut sections,
@@ -366,6 +371,7 @@ mod tests {
             validate_submission(&order_id, &PurchaseOrderSubmissionId::new("old-submission"), 1, &submission),
             Err(Error::ConflictError(_))
         ));
+
         submission.submission_no = "SUB-000002".into();
         assert!(matches!(validate_submission(&order_id, &id, 1, &submission), Err(Error::ConflictError(_))));
         submission.submission_no = "DRAFT-000001".into();
@@ -448,10 +454,12 @@ mod tests {
         let source = source_line();
         let mut purchase = purchase_line();
         validate_source_lines(std::slice::from_ref(&purchase), std::slice::from_ref(&source)).unwrap();
+
         purchase.sales_order_revision_line_id = None;
         assert!(
             validate_source_lines(std::slice::from_ref(&purchase), std::slice::from_ref(&source)).is_err()
         );
+
         purchase = purchase_line();
         purchase.sales_order_line_id = Some(SalesOrderLineId::new("another-stable-line"));
         assert!(validate_source_lines(&[purchase], &[source]).is_err());

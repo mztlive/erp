@@ -136,9 +136,11 @@ pub(super) async fn persist_sales_order_cancel(
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(());
     };
+
     let closed_tasks = WorkItem::close_all_for_approval_cancellation(open_tasks, &actor_id, &reason, now)?;
     claim_and_persist_document_cancel_runtime(db, &writes, &closed_tasks, &actor_id, executor).await?;
     approvals.persist_cancel_copies(db, &writes, executor).await?;
+
     SalesOrderService::new(db.clone()).persist_order(&mut order, executor).await?;
     persist_log(db, &audit, executor).await?;
     Ok(())
@@ -304,9 +306,11 @@ mod tests {
             Instant::from_unix_secs(30),
         )
         .expect("取消输入必须可构造");
+
         assert!(!input.blocked_port);
         assert!(input.close_open_task);
         assert_eq!(input.subject_version, 1);
+
         let prepared = prepare_cancel(input).expect("必须走统一 prepare_cancel");
         let PreparedExecution::Apply(writes) = prepared else {
             panic!("取消必须写入");

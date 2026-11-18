@@ -43,6 +43,7 @@ pub fn build_sales_return_case_and_line(
         },
         created_by,
     )?;
+
     let line = SalesReturnLine::new(
         SalesReturnLineId::new(next_id()),
         SalesReturnLineData {

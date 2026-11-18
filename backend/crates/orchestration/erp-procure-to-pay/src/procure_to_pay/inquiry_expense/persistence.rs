@@ -96,6 +96,7 @@ pub(super) async fn confirm_payee(
     if payee_basis_matches(&bases, &source.fee_id, order.supplier_id.as_ref(), &order.payment_term_code)? {
         return Ok(());
     }
+
     let basis = conversion_basis(inquiry, source, order, feedback.requirement_version, actor_id)?;
     persistence.append_basis(&basis, executor).await?;
     // 发生写入时保留原重读验证，确认唯一收款依据未发生冲突；无写入分支直接复用已核对结果。

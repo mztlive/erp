@@ -61,6 +61,7 @@ impl RuntimeApprovalRoute {
         {
             return Err(Error::ConflictError("审批链条与本次审批不一致，请刷新后重试".into()));
         }
+
         let pending = matches!(
             instance.status,
             ApprovalProcessInstanceStatus::Running | ApprovalProcessInstanceStatus::Blocked
@@ -129,6 +130,7 @@ mod tests {
         third.assignee_label_snapshot = "王五".into();
         third.assignee_participant_id = Some(ParticipantId::new("u3").unwrap());
         graph.nodes.push(third);
+
         let instance = ApprovalProcessInstance::start_running(NewProcessInstance {
             id: ApprovalProcessInstanceId::new("instance"),
             process_definition_id: ApprovalProcessDefinitionId::new(graph.definition.base.id.clone()),
@@ -174,6 +176,7 @@ mod tests {
             .unwrap();
         let current = execution(&graph, 1, 2);
         graph.nodes.reverse();
+
         let route = RuntimeApprovalRoute::from_runtime(&instance, &graph, &[current, approved]).unwrap();
         assert_eq!(
             route
@@ -224,6 +227,7 @@ mod tests {
         current
             .block(ApprovalBlockerCode::ApproverAccountInactive, Timestamp::from_unix_secs(13).unwrap())
             .unwrap();
+
         let route = RuntimeApprovalRoute::from_runtime(&instance, &graph, &[current, old]).unwrap();
         assert_eq!(route.nodes[0].result, "BLOCKED");
         assert_eq!(route.nodes[0].execution.as_ref().unwrap().execution_id, "execution2");
@@ -272,6 +276,7 @@ mod tests {
             participant_name: "原负责人".into(),
             resolved_at: Timestamp::from_unix_secs(10).unwrap(),
         });
+
         let frozen = graph.with_frozen_assignees(&instance, &bindings).unwrap();
         let route = RuntimeApprovalRoute::from_runtime(&instance, &frozen, &[]).unwrap();
         assert_eq!(route.nodes[1].assignee_name, "原负责人");
@@ -293,6 +298,7 @@ mod tests {
                 Err(Error::ConflictError(_))
             ));
         }
+
         let mut newer = graph.clone();
         newer.definition.definition_version += 1;
         assert!(matches!(
@@ -320,6 +326,7 @@ mod tests {
         instance.status = ApprovalProcessInstanceStatus::Approved;
         let route = RuntimeApprovalRoute::from_runtime(&instance, &graph, &executions).unwrap();
         assert!(route.nodes.iter().all(|node| node.result == "APPROVED"));
+
         let mut page = super::super::runtime_history::history_page_from(
             executions.iter().map(history_item_from_execution).collect(),
             1,

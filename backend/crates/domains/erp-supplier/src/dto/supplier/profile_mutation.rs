@@ -205,6 +205,7 @@ impl SaveSupplierProfileRequest {
     /// 银行账户、资质。
     pub fn validate_contract(&self) -> Result<()> {
         self.validate()?;
+
         if self.clear_contact && self.contact.is_some() {
             return Err(Error::ValidationError("联系人不能同时替换和清空".to_string()));
         }
@@ -217,6 +218,7 @@ impl SaveSupplierProfileRequest {
         if self.clear_bank_account && self.bank_account.is_some() {
             return Err(Error::ValidationError("银行账户不能同时替换和清空".to_string()));
         }
+
         if let Some(contact) = &self.contact {
             contact.validate().map_err(|error| ValidationIssues::from(error).at("contact"))?;
         }
@@ -611,11 +613,13 @@ mod tests {
         assert!(fp1.starts_with("sha256-v1:"));
         assert_eq!(fp1, fp2);
         assert_eq!(fp1.len(), "sha256-v1:".len() + 64);
+
         // 字段乱序或键排序不影响指纹：规范 JSON 按键排序
         let mut req2 = req.clone();
         req2.legal_name = "不同名称".to_string();
         let fp3 = req2.fingerprint().unwrap();
         assert_ne!(fp1, fp3);
+
         // 兼容旧裸 hex：存储为裸 hex 的命令仍可回放
         let digest = fp1.strip_prefix("sha256-v1:").unwrap();
         assert!(digest.chars().all(|c| c.is_ascii_hexdigit()));

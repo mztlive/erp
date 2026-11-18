@@ -129,6 +129,7 @@ fn fee_lines_map_to_pending_or_occurred_and_skip_removed() {
         ],
         occurrences: vec![occurrence("po-1", "b", "30.00")],
     };
+
     let list = SalesExtraCostListView::from_items(purchase_expense_views(&facts));
     assert_eq!(list.items.len(), 2);
     assert_eq!((list.items[0].id.as_str(), list.items[0].status), ("b", ExtraCostStatus::Occurred));
@@ -136,6 +137,7 @@ fn fee_lines_map_to_pending_or_occurred_and_skip_removed() {
     assert_eq!((list.items[1].id.as_str(), list.items[1].status), ("a", ExtraCostStatus::Pending));
     assert_eq!(list.items[1].purchase_no.as_deref(), Some("PO-po-1"));
     assert_eq!(list.items[1].sales_order_line_id.as_deref(), Some("sol-1"));
+
     assert_eq!(list.pending_gross_total, Amount::from_str("100.00").unwrap());
     assert_eq!(list.occurred_gross_total, Amount::from_str("30.00").unwrap());
 }

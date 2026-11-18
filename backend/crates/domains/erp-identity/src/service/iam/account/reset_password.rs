@@ -50,6 +50,7 @@ impl AdminService {
         let current = existing_admin_for_password_reset(current)?;
         let active = current.status.is_active();
         let admin_id = current.base.id.clone();
+
         let mut updated = apply_account_update(
             current,
             AccountCoreUpdate { password: Some(password), ..Default::default() },
@@ -76,7 +77,6 @@ fn existing_admin_for_password_reset(account: Option<AccountCore>) -> Result<Acc
     if account.base.is_deleted() {
         return Err(Error::BusinessLogicError("账号已删除，请使用 init-admin 修复超级管理员".to_string()));
     }
-
     Ok(account)
 }
 
@@ -115,14 +115,12 @@ mod tests {
     #[test]
     fn deleted_admin_cannot_reset_password() {
         let error = existing_admin_for_password_reset(Some(account(true))).unwrap_err();
-
         assert!(matches!(error, crate::error::Error::BusinessLogicError(_)));
     }
 
     #[test]
     fn active_admin_is_accepted_for_password_reset() {
         let account = existing_admin_for_password_reset(Some(account(false))).unwrap();
-
         assert_eq!(account.base.id, "admin-1");
     }
 }

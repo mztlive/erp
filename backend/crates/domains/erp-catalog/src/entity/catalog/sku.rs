@@ -270,6 +270,7 @@ impl Sku {
         if self.listing_status == listing_status {
             return Ok(false);
         }
+
         self.listing_status = listing_status;
         self.stable.touch(updated_by);
         Ok(true)
@@ -299,12 +300,14 @@ impl Sku {
         if identity.sku_no.trim() != self.sku_no || identity.base_unit_id != &self.base_unit_id {
             return Err(SkuEditIdentityError::StableIdentityChanged);
         }
+
         if self.is_active() {
             if identity.reenable {
                 return Err(SkuEditIdentityError::UnexpectedReactivationIntent);
             }
             return Ok(SkuEditAction::Keep);
         }
+
         if !identity.reenable || identity.change_reason.map(str::trim).is_none_or(str::is_empty) {
             return Err(SkuEditIdentityError::ReactivationIntentRequired);
         }

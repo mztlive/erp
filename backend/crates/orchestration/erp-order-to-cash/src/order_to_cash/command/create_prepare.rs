@@ -46,6 +46,7 @@ impl SalesOrderCommandProcess {
         let (customer_id, settlement_party_id, draft) = self
             .resolve_sales_command_draft(access, &req.contract_id, &req.customer_id, editable, executor)
             .await?;
+
         let refs = draft
             .lines
             .iter()
@@ -53,6 +54,7 @@ impl SalesOrderCommandProcess {
             .map(|goods| (goods.sku_id.to_string(), goods.sku_revision_id.to_string()))
             .collect::<Vec<_>>();
         self.sales().ensure_sellable_refs(&refs, &self.catalog(), executor).await?;
+
         let organization = required_business_org(&self.db, actor.id(), executor).await?;
         let mut order =
             SalesOrderService::prepare_order(req, customer_id, settlement_party_id, actor, organization)?;
@@ -62,6 +64,7 @@ impl SalesOrderCommandProcess {
                     .await?,
             );
         }
+
         let order_id = SalesOrderId::new(order.base.id.clone());
         let document = BusinessDocument::new(
             BusinessDocumentId::new(order.base.id.clone()),

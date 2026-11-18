@@ -77,9 +77,11 @@ fn empty_collaboration_and_real_task_history_match_object_and_query_scope() {
     closed.withdraw_supplier_portal_review("supplier", "withdrawn", Instant::from_unix_secs(110)).unwrap();
     // 终态任务允许没有当前负责人；已冻结的个人责任及结束操作事实仍保留。
     closed.owner_user_id = None;
+
     let mapping = WorkItemMapping::shared();
     assert!(mapping.model().facts.contains(&FactKind::Collaborators));
     assert!(mapping.model().facts.contains(&FactKind::HistoryParticipants));
+
     for item in [completed, closed] {
         let row = serialize_to_document(&item).unwrap();
         let facts = item_facts(item, None, None);
@@ -88,11 +90,13 @@ fn empty_collaboration_and_real_task_history_match_object_and_query_scope() {
             panic!("任务存在性不得依赖当前负责人或主属关系");
         };
         assert!(query_matches(&records, &row));
+
         let collaborators = facts.collaborators.get().unwrap();
         let history = facts.history_participants.get().unwrap();
         assert!(collaborators.is_empty());
         assert!(history.contains("reviewer") && history.contains("replacement"));
         assert!(history.contains("decider") || history.contains("supplier"));
+
         for actor in ["reviewer", "replacement", "decider", "supplier", "bpm-observer", "unrelated"] {
             let object = ScopedObject {
                 owned: facts.owner_id.get().unwrap().as_deref() == Some(actor),

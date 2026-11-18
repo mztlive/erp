@@ -148,6 +148,7 @@ async fn accept_deduplicates_busy_and_mismatched_identity_before_any_work() {
     let work = Arc::new(Work::default());
     let callback = Arc::new(Callback::default());
     let p = process(store.clone(), work.clone(), callback, "one");
+
     p.accept(request(1), 1_000_000).await.unwrap();
     p.accept(request(1), 1_000_000).await.unwrap();
     assert!(matches!(p.accept(request(2), 1_000_000).await, Err(DispatchError::Busy)));
@@ -155,6 +156,7 @@ async fn accept_deduplicates_busy_and_mismatched_identity_before_any_work() {
     different.log_time += 1;
     assert!(matches!(p.accept(different, 1_000_000).await, Err(DispatchError::Identity)));
     assert_eq!(work.calls.load(Ordering::SeqCst), 0);
+
     p.run_next().await.unwrap();
     assert!(!p.run_next().await.unwrap());
     p.accept(request(1), 1_000_000).await.unwrap();
@@ -171,9 +173,11 @@ async fn failed_callbacks_retry_without_replaying_business_and_preserve_backoff(
     let p = process(store.clone(), work.clone(), callback.clone(), "one");
     p.accept(request(1), 1_000_000).await.unwrap();
     p.run_next().await.unwrap();
+
     p.callbacks(1000).await.unwrap();
     p.callbacks(1010).await.unwrap();
     assert_eq!(callback.calls.load(Ordering::SeqCst), 1);
+
     callback.succeed.store(true, Ordering::SeqCst);
     let restarted = process(store, work.clone(), callback.clone(), "two");
     restarted.recover().await.unwrap();
@@ -189,15 +193,18 @@ async fn uncertain_completion_is_not_replayed_after_restart() {
     let work = Arc::new(Work::default());
     let callback = Arc::new(Callback::default());
     let p = process(store.clone(), work.clone(), callback.clone(), "one");
+
     p.accept(request(1), 1_000_000).await.unwrap();
     store.fail_finish.store(true, Ordering::SeqCst);
     assert!(p.run_next().await.is_err());
+
     store.fail_finish.store(false, Ordering::SeqCst);
     let restarted = process(store.clone(), work.clone(), callback, "two");
     restarted.recover().await.unwrap();
     assert!(!restarted.run_next().await.unwrap());
     assert_eq!(store.find("test:1").await.unwrap().unwrap().handle_code, 500);
     assert_eq!(work.calls.load(Ordering::SeqCst), 1);
+
     restarted.accept(request(2), 1_000_000).await.unwrap();
     work.fail.store(true, Ordering::SeqCst);
     restarted.run_next().await.unwrap();
@@ -221,12 +228,15 @@ async fn accepted_work_survives_restart_and_runs_once() {
     let work = Arc::new(Work::default());
     let callback = Arc::new(Callback::default());
     let before = process(store.clone(), work.clone(), callback.clone(), "one");
+
     before.accept(request(1), 1_000_000).await.unwrap();
     assert_eq!(work.calls.load(Ordering::SeqCst), 0);
+
     drop(before);
     let after = process(store.clone(), work.clone(), callback, "two");
     after.recover().await.unwrap();
     assert_eq!(store.find("test:1").await.unwrap().unwrap().state, ScheduledState::Accepted);
+
     assert!(after.run_next().await.unwrap());
     after.accept(request(1), 100_000_000).await.unwrap();
     assert!(!after.run_next().await.unwrap());
@@ -238,13 +248,16 @@ async fn persistence_failure_rejects_but_lost_acknowledgement_recovers_original_
     let store = Arc::new(MemoryStore::default());
     let work = Arc::new(Work::default());
     let p = process(store.clone(), work.clone(), Arc::new(Callback::default()), "one");
+
     store.insert_failure.store(1, Ordering::SeqCst);
     assert!(matches!(p.accept(request(1), 1_000_000).await, Err(DispatchError::Store(_))));
     assert!(!p.run_next().await.unwrap());
+
     store.insert_failure.store(2, Ordering::SeqCst);
     p.accept(request(1), 1_000_000).await.unwrap();
     assert_eq!(store.rows.lock().unwrap().len(), 1);
     assert_eq!(work.calls.load(Ordering::SeqCst), 0);
+
     p.run_next().await.unwrap();
     p.accept(request(1), 1_000_000).await.unwrap();
     assert!(!p.run_next().await.unwrap());
@@ -270,9 +283,11 @@ async fn different_jobs_share_a_handler_but_only_the_same_job_is_blocked() {
     another.job_id = 456;
     p.accept(another.clone(), 1_000_000).await.unwrap();
     assert!(p.busy(456).await.unwrap());
+
     let mut mismatched = first;
     mismatched.job_id = 456;
     assert!(matches!(p.accept(mismatched, 1_000_000).await, Err(DispatchError::Identity)));
+
     assert!(p.run_next().await.unwrap());
     assert!(!p.busy(123).await.unwrap());
     p.accept(another, 1_000_000).await.unwrap();

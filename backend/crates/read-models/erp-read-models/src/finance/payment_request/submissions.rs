@@ -37,9 +37,11 @@ impl PurchasePaymentRequestReadService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (request, scope) = this.authorized_submission(&actor, &id, version, executor).await?;
+
                     let (purchase_previews, sales_previews) =
                         frozen_previews(&request.lines, &request.payer_party_id)?;
                     let attachments = this.attachments(&request, executor).await?;
+
                     scope.deliver(executor).await?;
                     Ok(PurchasePaymentRequestSubmissionView {
                         request,
@@ -107,6 +109,7 @@ impl PurchasePaymentRequestReadService {
             })
             .map(|snapshot| snapshot.request)
             .ok_or_else(|| Error::NotFound("付款申请历史提交不存在或无权查看".into()))?;
+
         if !self.readable(&request, &scope, executor).await? {
             return Err(Error::NotFound("付款申请历史提交不存在或无权查看".into()));
         }

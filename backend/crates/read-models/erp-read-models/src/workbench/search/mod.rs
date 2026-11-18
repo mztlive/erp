@@ -18,6 +18,7 @@ fn append_sections(document: &mut SearchDocument, sections: &[BriefSection]) {
         if ["提交人", "责任人"].contains(&section.label.as_str()) {
             continue;
         }
+
         document.text(&section.label, &section.value);
         let key = match section.label.as_str() {
             "仓库" | "发货仓库" | "收货仓库" => Some("warehouses"),

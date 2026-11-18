@@ -31,10 +31,12 @@ pub(super) fn details(product: &Value, spec: &Value, root: Option<&Value>) -> Co
         description: optional_text(product, "description")?,
         ..OfferDetails::default()
     };
+
     if let Some(root) = root {
         details.images = image_list(root, "images");
         details.detail_images = image_list(root, "content_images");
         details.brand_name = details.brand_name.or(optional_text(&root["brand"], "name")?);
+
         let complete_state = !root["brand"]["status"].is_null()
             && !root["product"]["status"].is_null()
             && !root["product"]["can_buy"].is_null()
@@ -184,12 +186,14 @@ mod tests {
             details(&json!({}), &spec, Some(&root)).unwrap_err(),
             context(mapping(), "状态字段 brand.status 必须为 0 或 1")
         );
+
         root["product"]["can_buy"] = Value::Null;
         let value = details(&json!({}), &spec, Some(&root)).unwrap();
         assert_eq!(value.availability, CatalogAvailability::Unknown);
         assert_eq!(value.available_quantity.as_deref(), Some("2.500000"));
         spec["stock"] = json!("-1");
         assert_eq!(details(&json!({}), &spec, Some(&root)).unwrap_err(), stock_error);
+
         let listed = details(&json!({}), &spec, None).unwrap();
         assert_eq!(listed.availability, CatalogAvailability::Unknown);
         assert_eq!(listed.available_quantity, None);
@@ -202,10 +206,12 @@ mod tests {
             assert_eq!(value.images, None);
             assert_eq!(value.detail_images, None);
         }
+
         let root = json!({"images":[], "content_images":[]});
         let value = details(&json!({}), &json!({}), Some(&root)).unwrap();
         assert_eq!(value.images, Some(vec![]));
         assert_eq!(value.detail_images, Some(vec![]));
+
         for malformed in [json!("invalid"), json!({}), json!(true), json!(1)] {
             let root = json!({"images":malformed, "content_images":malformed});
             let value = details(&json!({}), &json!({}), Some(&root)).unwrap();
@@ -221,6 +227,7 @@ mod tests {
             image_list(&json!({"images":[{"m_path":"file:///secret"}]}), "images").unwrap()[0].url,
             ""
         );
+
         let root = json!({"product":{"status":"1","can_buy":"1"},"brand":{"status":"1"}});
         let spec = json!({"deleted":"0","is_up":"1","can_buy":"1","stock":"-9999999"});
         let value = details(&json!({}), &spec, Some(&root)).unwrap();

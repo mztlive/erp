@@ -50,6 +50,7 @@ impl LegacyImportConfirmation {
             ConfirmationDecision::ConfirmScope => ConfirmationStatus::Confirmed,
             ConfirmationDecision::ReturnForFix => ConfirmationStatus::Rejected,
         };
+
         outcome.confirmation_id == self.base.id
             && outcome.confirmation_version == self.base.version
             && outcome.batch_id == command.batch_id.as_ref()
@@ -142,6 +143,7 @@ mod tests {
         let command = command();
         let fact = confirmation();
         assert!(fact.matches_pending_completion(&command, ConfirmationScope::Sales));
+
         for case in 0..5 {
             let mut wrong = fact.clone();
             match case {
@@ -161,6 +163,7 @@ mod tests {
             let mut command = command();
             command.decision = decision;
             command.reason_code = (decision == ConfirmationDecision::ReturnForFix).then(|| "REWORK".into());
+
             let mut fact = confirmation();
             fact.decide(
                 decision,
@@ -173,6 +176,7 @@ mod tests {
             fact.base.version += 1;
             let outcome = outcome(&fact);
             assert!(fact.matches_completed_decision(&outcome, &command, "actor-1", ConfirmationScope::Sales));
+
             for case in 0..7 {
                 let mut wrong = fact.clone();
                 match case {
@@ -191,6 +195,7 @@ mod tests {
                     ConfirmationScope::Sales
                 ));
             }
+
             command.expected_batch_version = u64::MAX;
             assert!(!fact.matches_completed_decision(
                 &outcome,

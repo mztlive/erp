@@ -77,6 +77,7 @@ impl ProcurementOfferingRepositoryExt for SupplierOfferingRepository<'_> {
             executor,
         )
         .await?;
+
         if let Some(scope) = &filter.scope {
             scope.ensure_model("supplier_offering", executor)?;
         }

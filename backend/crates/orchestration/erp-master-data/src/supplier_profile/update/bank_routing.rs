@@ -36,6 +36,7 @@ impl BankRoutingChange {
         if account.bank_routing_number.as_deref().unwrap_or("") == self.value.trim() {
             return Ok(());
         }
+
         let mut account = account.clone();
         account.set_routing_number(Some(self.value), self.actor_id)?;
         db.party_bank_accounts().update(&mut account, executor).await?;

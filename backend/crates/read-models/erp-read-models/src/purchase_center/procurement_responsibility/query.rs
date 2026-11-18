@@ -85,11 +85,13 @@ async fn rule_list_page(
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::ValidationError("采购责任列表读取必须使用快照事务".into()));
     }
+
     source.require(actor, executor).await?;
     let boundary = executor
         .boundary()
         .filter(|boundary| boundary.is_snapshot())
         .ok_or_else(|| Error::ValidationError("采购责任列表缺少授权快照".into()))?;
+
     let filter = ProcurementResponsibilityRuleFilter {
         rule_type: params.rule_type,
         owner_user_id: params.owner_user_id,
@@ -99,6 +101,7 @@ async fn rule_list_page(
     };
     let page = source.page(&filter, executor).await?;
     let items = to_rule_list_views(page.items, &page.facts);
+
     if !boundary.is_current(executor) {
         return Err(Error::ValidationError("采购责任列表读取跨越授权快照".into()));
     }
@@ -227,7 +230,9 @@ mod tests {
         let source = Source::default();
         let mut executor = SnapshotExecutor::default();
         let address = &mut executor as *mut SnapshotExecutor as usize;
+
         let view = rule_list_page(&source, params(), &actor(), &mut executor).await.unwrap();
+
         assert_eq!(*source.calls.lock().unwrap(), [("require", address), ("page", address)]);
         assert_eq!((view.total, view.page, view.page_size), (7, 2, 3));
         assert_eq!(view.items.len(), 1);

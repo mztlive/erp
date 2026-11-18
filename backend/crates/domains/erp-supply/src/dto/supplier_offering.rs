@@ -417,6 +417,7 @@ impl SupplierOfferingTermsWrite {
             write_data::parse_unit_price(&self.dropship_supply_price_gross, "一件代发供给价")
                 .map_err(|error| Error::ValidationError(error.to_string()))?;
         let (bulk_gross, moq) = self.parse_bulk_terms(allow_missing_bulk)?;
+
         let valid_from = write_data::parse_business_date(&self.valid_from)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
         let valid_to = self
@@ -425,6 +426,7 @@ impl SupplierOfferingTermsWrite {
             .map(write_data::parse_business_date)
             .transpose()
             .map_err(|error| Error::ValidationError(error.to_string()))?;
+
         Ok(SupplierOfferingRevisionData::from_gross_prices(FromGrossPricesParams {
             supplier_offering_id: offering_id,
             revision_no,
@@ -674,11 +676,13 @@ mod tests {
             create.command_fingerprint().unwrap(),
             legacy_fingerprint(CREATE_OFFERING_COMMAND, &create)
         );
+
         let revise = revise_request();
         assert_eq!(
             revise.command_fingerprint("offering-1").unwrap(),
             legacy_fingerprint(REVISE_OFFERING_COMMAND, &("offering-1", &revise))
         );
+
         let update = update_request();
         assert_eq!(
             update.command_fingerprint("offering-1").unwrap(),
@@ -721,7 +725,9 @@ mod tests {
         assert!(revision.bulk_supply_price_net.is_none());
         assert!(revision.bulk_minimum_order_quantity.is_none());
         assert_eq!(revision.dropship_supply_price_gross, "10".parse().unwrap());
+
         assert!(write.try_into_revision_data(SupplierOfferingId::new("manual"), 1).is_err());
+
         write.bulk_minimum_order_quantity = Some("1".into());
         assert!(write.try_into_api_revision_data(SupplierOfferingId::new("api"), 1).is_err());
     }
@@ -796,13 +802,16 @@ mod tests {
         let mut bad = terms();
         bad.input_tax_rate = "  ".to_string();
         assert!(bad.try_into_revision_data(SupplierOfferingId::new("o1"), 1).is_err());
+
         let mut bad_price = terms();
         bad_price.dropship_supply_price_gross = "abc".to_string();
         let err = bad_price.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap_err();
         assert!(err.to_string().contains("非法一件代发供给价"));
+
         let mut bad_moq = terms();
         bad_moq.bulk_minimum_order_quantity = Some("0".to_string());
         assert!(bad_moq.try_into_revision_data(SupplierOfferingId::new("o1"), 1).is_ok());
+
         let mut bad_window = terms();
         bad_window.valid_from = "not-a-date".to_string();
         assert!(bad_window.try_into_revision_data(SupplierOfferingId::new("o1"), 1).is_err());
@@ -826,6 +835,7 @@ mod tests {
         assert_eq!(data.source_updated_at, Some(source));
         assert_eq!(data.received_at, received);
         assert!(data.available_quantity.is_some());
+
         let mut missing = req.clone();
         missing.available_quantity = Some("  ".to_string());
         let data = missing
@@ -837,6 +847,7 @@ mod tests {
             )
             .unwrap();
         assert!(data.available_quantity.is_none());
+
         let mut illegal = req.clone();
         illegal.available_quantity = Some("abc".to_string());
         assert!(
@@ -865,6 +876,7 @@ mod tests {
         let mut document = serde_json::to_value(terms()).unwrap();
         document.as_object_mut().unwrap().insert("freight_amount".into(), serde_json::json!("1.00"));
         assert!(serde_json::from_value::<SupplierOfferingTermsWrite>(document).is_err());
+
         let mut document = serde_json::to_value(terms()).unwrap();
         document.as_object_mut().unwrap().insert("supply_region".into(), serde_json::json!(["全国"]));
         assert!(serde_json::from_value::<SupplierOfferingTermsWrite>(document).is_err());
@@ -874,6 +886,7 @@ mod tests {
     fn create_request_delivery_template_is_optional_and_fingerprinted() {
         let mut document = serde_json::to_value(create_request()).unwrap();
         assert!(document.get("delivery_template_id").is_none());
+
         document.as_object_mut().unwrap().insert("delivery_template_id".into(), serde_json::json!("tpl-1"));
         let with_template: CreateSupplierOfferingRequest = serde_json::from_value(document).unwrap();
         assert_eq!(with_template.delivery_template_id.as_deref(), Some("tpl-1"));
@@ -906,6 +919,7 @@ mod tests {
         multi.valid_from = "abc".to_string();
         let err = multi.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap_err();
         assert!(err.to_string().contains("非法进项税率"));
+
         let mut second = terms();
         second.dropship_supply_price_gross = "abc".to_string();
         second.bulk_supply_price_gross = Some("abc".to_string());

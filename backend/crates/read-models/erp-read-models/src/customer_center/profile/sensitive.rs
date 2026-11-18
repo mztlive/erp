@@ -38,6 +38,7 @@ impl CustomerProfileReadService {
                 expires_at,
             )?);
         }
+
         for address in addresses {
             fields.push(self.sensitive_field(
                 SensitiveFieldKind::Address,
@@ -47,6 +48,7 @@ impl CustomerProfileReadService {
                 expires_at,
             )?);
         }
+
         for account in bank_accounts {
             fields.push(self.sensitive_field(
                 SensitiveFieldKind::BankAccountNumber,

@@ -47,6 +47,7 @@ impl SupplierDepositService {
             }
             return Ok(existing);
         }
+
         let account = SupplierDepositAccount::new(id, normalized)?;
         self.db.supplier_deposit_accounts().create(&account, executor).await?;
         Ok(account)
@@ -79,6 +80,7 @@ impl SupplierDepositService {
             replay(&payload, &existing.payload_fingerprint)?;
             return Ok(existing);
         }
+
         let mut request = SupplierDepositRechargeRequest::new(
             id,
             account.into(),
@@ -125,6 +127,7 @@ impl SupplierDepositService {
         {
             return Ok(request);
         }
+
         ensure_version(request.base.version, version)?;
         request.approve(actor, reference, Instant::now())?;
         self.db.supplier_deposit_recharge_requests().update(&mut request, executor).await?;
@@ -157,6 +160,7 @@ impl SupplierDepositService {
             self.verify_existing_recharge_payment(payment_id, &data, actor, executor).await?;
             return Ok(request);
         }
+
         ensure_version(request.base.version, version)?;
         let source = self.account(account, executor).await?;
         if let Some(reference) = data.bank_reference.as_deref()
@@ -171,6 +175,7 @@ impl SupplierDepositService {
         {
             return Err(Error::BusinessLogicError("充值未批准或付款金额、供应商不符".into()));
         }
+
         let payment_id = identity(account, &format!("bank-payment:{id}"))?;
         let mut payment = SupplierPayment::new(SupplierPaymentId::new(payment_id), data, actor)?;
         payment.post_deposit_recharge(
@@ -187,6 +192,7 @@ impl SupplierDepositService {
             actor,
             Instant::now(),
         )?;
+
         request.supplier_payment_id = Some(payment.base.id.clone());
         request.status = DepositRechargeStatus::BankPaid;
         self.db.supplier_payments().create(&payment, executor).await?;
@@ -259,6 +265,7 @@ impl SupplierDepositService {
         {
             return Err(Error::ValidationError("财务授权须有完整身份、期限及有效限额".into()));
         }
+
         if let Some(existing) =
             self.db.supplier_deposit_authorizations().find_by_id(&authorization.base.id, executor).await?
         {
@@ -276,6 +283,7 @@ impl SupplierDepositService {
             }
             return Ok(existing);
         }
+
         self.db.supplier_deposit_authorizations().create(&authorization, executor).await?;
         Ok(authorization)
     }
@@ -332,6 +340,7 @@ impl SupplierDepositService {
         {
             return Err(Error::ValidationError("对账时间范围或证据不完整".into()));
         }
+
         if let Some(existing) =
             self.db.supplier_deposit_reconciliations().find_by_id(&record.base.id, executor).await?
         {
@@ -344,6 +353,7 @@ impl SupplierDepositService {
             }
             return Ok(existing);
         }
+
         let mut account = self.account(&record.account_id, executor).await?;
         account.retain_legacy_reconciliation_risk()?;
         let local_balance =
@@ -356,6 +366,7 @@ impl SupplierDepositService {
         {
             account.flag_reconciliation_risk(Instant::now())?;
         }
+
         self.db.supplier_deposit_accounts().update(&mut account, executor).await?;
         self.db.supplier_deposit_reconciliations().create(&record, executor).await?;
         Ok(record)

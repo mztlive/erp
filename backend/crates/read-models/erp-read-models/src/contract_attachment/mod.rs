@@ -171,11 +171,14 @@ async fn read<P: AttachmentRead>(
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::ValidationError("合同附件读取必须使用快照事务".into()));
     }
+
     let proof = port.query(actor, executor).await?;
     if !port.bound(&proof, contract_id, file_id, executor).await? {
         return Err(Error::NotFound("合同附件不存在或无权查看".into()));
     }
+
     let asset = port.asset(file_id, actor, preview, executor).await?;
+
     port.validate(&proof, executor).await?;
     Ok(asset)
 }

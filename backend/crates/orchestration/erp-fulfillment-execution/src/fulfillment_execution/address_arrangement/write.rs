@@ -73,6 +73,7 @@ impl FulfillmentProcess {
                         context::authorize_sales(&process, &id, &actor, true, executor).await?;
                         id.clone()
                     };
+
                     let mut context = Context::load(&process, &sales_id, executor).await?;
                     context.load_snapshots(&process, executor).await?;
                     save(&process, &mut context, delivery_scope.then_some(id.as_str()), req, &actor, executor)
@@ -96,16 +97,19 @@ async fn save(
     let capacities =
         if let Some(id) = target { context.task_plan(id)?.0 } else { context.capacities.clone() };
     validate_arrangement(&mut req.lines, &capacities)?;
+
     let previous = if let Some(id) = target { context.task_plan(id)?.1 } else { context.plan.clone() };
     if requires_change_reason(&previous, &req.lines)? {
         req.reason = normalize_required_text(req.reason, "修改已有收货安排请填写原因", 500, "修改原因过长")?;
     } else if req.reason.chars().count() > 500 {
         return Err(Error::ValidationError("修改原因过长".into()));
     }
+
     let mut plan = merge_plan(context, target, &req.lines)?;
     validate_arrangement(&mut plan, &context.capacities)?;
     let snapshots = assignments(process, context, target, &plan, &req.lines)?;
     persist_drafts(process, context, snapshots, req.reset_packages, executor).await?;
+
     let content_encrypted = process
         .sensitive_data
         .encrypt(&serde_json::to_string(&plan).map_err(|_| Error::Internal("收货安排无法保存".into()))?)?;
@@ -134,6 +138,7 @@ fn merge_plan(
     if let Some((_, snapshot)) = context.snapshots.iter().find(|(key, _)| key == id) {
         pool.consume(snapshot, &context.task_lines(id))?;
     }
+
     for row in input {
         let line = context
             .lines
@@ -162,6 +167,7 @@ fn assignments(
             "该销售单已有供应商接口订单，收货地址需按供应商订单变更流程核对".into(),
         ));
     }
+
     let mut pool = AddressPool(plan.to_vec());
     for delivery in &context.deliveries {
         if !delivery.is_editable() || target.is_some_and(|id| id != delivery.base.id) {
@@ -175,6 +181,7 @@ fn assignments(
     if target.is_none() {
         return reconcile_drafts(process, context, pool);
     }
+
     let mut snapshots = vec![];
     for delivery in context.deliveries.iter().filter(|row| row.is_editable()) {
         let version = context.source_version(delivery)?;
@@ -220,6 +227,7 @@ async fn persist_drafts(
         if !changed && delivery.packing_addresses_encrypted.is_some() {
             continue;
         }
+
         if changed {
             if let (Some(packing), Some(previous)) = (&delivery.packing, old) {
                 let (rebased, removed) = packing.rebase(previous, &snapshot);
@@ -241,8 +249,10 @@ async fn persist_drafts(
                 return Err(Error::ConflictError("原包裹缺少可信地址，请先核对原发货记录".into()));
             }
         }
+
         delivery_addresses::freeze_addresses(&process.sensitive_data, delivery, &snapshot)?;
         process.db.deliveries().update(delivery, executor).await?;
+
         let mut task = task::load_single_open_task(&process.db, "delivery", &id, executor).await?;
         task::ensure_task_matches_frozen_identity(&task, &task::FulfillmentTaskObject::Delivery(delivery))?;
         task.subject_version = delivery.base.version.to_string();
@@ -267,6 +277,7 @@ async fn persist_record(
     let mut history = record.clone();
     history.base = BaseModel::new(format!("history:{}:{}", context.sales.base.id, record.base.version));
     process.db.address_arrangements().create(&history, executor).await?;
+
     let audit = actor.clone().resource_log(
         "sales_order.delivery_arrangement",
         "sales_order",

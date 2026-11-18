@@ -165,6 +165,7 @@ impl AccessFactsPort for Facts {
             executor,
         )
         .await?;
+
         rows.into_iter().map(|row| object(&self.resource, row)).collect()
     }
 }
@@ -239,6 +240,7 @@ mod tests {
     fn product_repository_rejects_other_resources_collections_and_restricted_outputs() {
         let model = mapping().model;
         assert!(CompiledScope::ensure_model(&model).is_ok());
+
         for (resource, collection, id_field, output) in [
             ("customer", "products", "id", QueryOutput::Object),
             ("product", "customers", "id", QueryOutput::Object),
@@ -267,10 +269,12 @@ mod tests {
             model: None,
             as_of: Instant::from_unix_secs(0),
         };
+
         assert!(mapping.preparation().is_none());
         assert_eq!(mapping.key(&context, None).unwrap(), Bson::String("$id".into()));
         assert!(matches!(mapping.records(&context, None).unwrap(), QueryFragment::Match(filter)
             if filter == doc! {"deleted_at": NOT_DELETED_TIMESTAMP_BSON}));
+
         assert!(mapping.predicate(&AccessFact::HistoryParticipant, &context, None).is_err());
         assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context, None).is_err());
     }
@@ -315,6 +319,7 @@ mod tests {
                     ScopeClause { self_owned: true, ..Default::default() }.covers(&scoped),
                     query_owned
                 );
+
                 let organizations = ["org".into()].into();
                 let QueryFragment::Match(filter) =
                     mapping.predicate(&AccessFact::OrganizationIn(organizations), &context, None).unwrap()
@@ -330,9 +335,11 @@ mod tests {
                 assert!(ScopeClause { company: true, ..Default::default() }.covers(&scoped));
             }
         }
+
         let no_owner = object("product", doc! {"id":"row","version":1_i64,"created_by":"creator"}).unwrap();
         assert_eq!(no_owner.owner_id.get().unwrap(), &None);
         assert_eq!(no_owner.org_unit_id.get().unwrap(), &None);
+
         for field in ["maintainer_user_id", "business_org_unit_id"] {
             let mut malformed = doc! {"id":"row","version":1_i64};
             malformed.insert(field, 123);

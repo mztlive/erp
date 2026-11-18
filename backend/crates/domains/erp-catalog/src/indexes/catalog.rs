@@ -71,6 +71,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SKU_ATTRIBUTES, sku_attribute_indexes()).await?;
     create_indexes(db, SKU_ATTRIBUTE_VALUES, sku_attribute_value_indexes()).await?;
     create_indexes(db, PRODUCT_CATEGORY_ATTRIBUTES, product_category_attribute_indexes()).await?;
+
     create_indexes(db, PRODUCTS, product_indexes()).await?;
     create_indexes(db, PRODUCT_REVISIONS, product_revision_indexes()).await?;
     create_indexes(db, PRODUCT_REVISION_MEDIAS, product_revision_media_indexes()).await?;
@@ -79,6 +80,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SKU_REVISION_ATTRIBUTE_VALUES, sku_revision_attribute_value_indexes()).await?;
     create_indexes(db, VOUCHER_CATEGORY_PROFILE_REVISIONS, voucher_category_profile_revision_indexes())
         .await?;
+
     create_indexes(db, SELLABLE_SKU_PROJECTIONS, sellable_sku_projection_indexes()).await?;
     Ok(())
 }
@@ -273,6 +275,7 @@ fn sellable_sku_projection_indexes() -> Vec<IndexModel> {
     .into_iter()
     .map(|(name, keys)| partial_index(name, keys, sellable.clone()))
     .collect::<Vec<_>>();
+
     indexes.push(partial_index(
         "idx_sellable_sku_projections_dirty",
         doc! { "dirty": 1 },
@@ -327,8 +330,10 @@ mod tests {
             page.options.as_ref().unwrap().partial_filter_expression,
             Some(doc! { "row": { "$type": "object" } })
         );
+
         let dirty = indexes.iter().find(|index| index.keys == doc! { "dirty": 1 }).unwrap();
         assert_eq!(dirty.options.as_ref().unwrap().partial_filter_expression, Some(doc! { "dirty": true }));
+
         for indexes in [sku_indexes(), sku_revision_indexes(), product_indexes(), product_revision_indexes()]
         {
             assert!(indexes.iter().any(|index| index.keys == doc! { "updated_at": 1 }));

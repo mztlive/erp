@@ -56,6 +56,7 @@ pub(super) async fn reserve_selected_quotes(
 ) -> Result<()> {
     let domain = InquirySupplyService::new(db.clone());
     let qualification = MongoOfferingQualification::new(db.clone());
+
     for line in lines {
         let Some(source) =
             line.supplier_offering_source.as_ref().and_then(|source| source.inquiry_quote.as_ref())
@@ -65,6 +66,7 @@ pub(super) async fn reserve_selected_quotes(
         ensure_line_terms(line, source)?;
         let addresses = adoption_addresses(db, order, line, source, executor).await?;
         let usage = quote_usage(line, &order.supplier_id, source, addresses)?;
+
         let quote = domain
             .reserve_quote(
                 QuoteReservationInput {
@@ -105,6 +107,7 @@ pub(super) async fn revalidate_quote(
     {
         return Err(changed());
     }
+
     if !line.delivery_allocations.is_empty() {
         let current =
             PurchaseInquiryAddress::from_delivery(&line.delivery_allocations, &source.address_limits)?;
@@ -118,6 +121,7 @@ pub(super) async fn revalidate_quote(
             .collect::<Vec<_>>();
         ensure_same_addresses(&current, &reservation.addresses)?;
     }
+
     let usage = quote_usage(line, supplier_id, source, reservation.addresses)?;
     let quote = InquirySupplyService::new(db.clone())
         .ensure_quote(
@@ -201,6 +205,7 @@ async fn warehouse_source_addresses<L: InquiryPurchaseLine>(
     if quote.address_limits.is_empty() {
         return Ok(vec![]);
     }
+
     let source =
         inquiry_sources(db).find_by_id(order.sales_order_id.as_ref(), executor).await?.ok_or_else(changed)?;
     if source.inquiry_id != quote.inquiry_id
@@ -217,10 +222,12 @@ async fn warehouse_source_addresses<L: InquiryPurchaseLine>(
                 && binding.inquiry_line_id == quote.inquiry_line_id
         })
         .ok_or_else(changed)?;
+
     let balance =
         db.inquiry_quote_balances().find_by_id(&quote.quote_id, executor).await?.ok_or_else(changed)?;
     let own =
         db.inquiry_quote_reservations().find_by_id(&reservation_id(&order.base.id, line)?, executor).await?;
+
     let bindings = binding
         .allocations
         .iter()
@@ -241,6 +248,7 @@ async fn warehouse_source_addresses<L: InquiryPurchaseLine>(
         .filter(|row| !row.released)
         .map(|reservation| reservation.addresses.iter().map(purchase_address).collect::<Vec<_>>())
         .unwrap_or_default();
+
     quote
         .warehouse_allocations(&bindings, &held, &owned, line.quantity().ok_or_else(changed)?)
         .map_err(Into::into)
@@ -308,6 +316,7 @@ mod tests {
     fn address_comparison_accepts_reordered_allocations_and_empty_sets() {
         let first = address("a", "address-a", 1);
         let second = address("b", "address-b", 2);
+
         assert!(ensure_same_addresses(&[first.clone(), second.clone()], &[second, first]).is_ok());
         assert!(ensure_same_addresses(&[], &[]).is_ok());
     }
@@ -315,6 +324,7 @@ mod tests {
     #[test]
     fn address_comparison_rejects_missing_or_changed_allocation_facts() {
         let original = address("a", "address-a", 1);
+
         for replacement in [
             vec![],
             vec![address("b", "address-a", 1)],
@@ -335,6 +345,7 @@ mod tests {
         let first = address("a", "address-a", 1);
         let second = address("a", "address-b", 2);
         let original = [first.clone(), second.clone()];
+
         assert!(ensure_same_addresses(&original, &original).is_ok());
         assert!(ensure_same_addresses(&original, &[second, first]).is_err());
     }

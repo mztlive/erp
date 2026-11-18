@@ -38,6 +38,7 @@ pub(super) async fn load_receipt_document_approval(
         definition.name = name;
         definition.nodes = nodes;
     }
+
     let Some(runtime) =
         load_document_runtime(db, DocumentType::CustomerReceipt, &receipt.base.id, binding, executor).await?
     else {
@@ -52,6 +53,7 @@ pub(super) async fn load_receipt_document_approval(
     if !runtime.cancellable {
         view.allowed_actions.retain(|action| action != "CANCEL");
     }
+
     view.instance = Some(runtime.instance);
     view.recent_history =
         runtime.history.items.into_iter().map(DocumentApprovalHistoryItemView::from).collect();

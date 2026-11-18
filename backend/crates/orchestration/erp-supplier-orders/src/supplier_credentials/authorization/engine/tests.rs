@@ -295,16 +295,20 @@ async fn first_authorization_returns_pending_then_saves_identity_and_only_local_
     assert_eq!(engine.status(None).await.state, "missing");
     let initial = authorize(&engine, 1, "buyer", None).await;
     assert_eq!(initial.state, "authorizing");
+
     let status = engine.status(None).await;
     assert_eq!(status.state, "authorized");
     assert_eq!(status.operation_state, Some("completed"));
     assert!(status.message.contains("连接检查"));
+
     let record = store.load().await.unwrap().unwrap();
     assert!(record.account_identity_fingerprint.is_some() && record.authorized_uid_fingerprint.is_some());
+
     let output = serde_json::to_string(&status).unwrap();
     for secret in ["buyer", "offline-test-password", "new-access", "new-refresh", "PRIVATE KEY"] {
         assert!(!output.contains(secret));
     }
+
     assert_eq!(http.codes.load(Ordering::SeqCst), 1);
     assert_eq!(http.exchanges.load(Ordering::SeqCst), 1);
 }
@@ -316,13 +320,16 @@ async fn explicit_first_rejection_allows_corrected_username_and_old_operation_re
     authorize(&engine, 1, "wrong-buyer", None).await;
     let rejected = engine.status(None).await;
     assert_eq!(rejected.state, "rejected");
+
     http.state.lock().await.login = Login::Code;
     authorize(&engine, 2, "correct-buyer", rejected.version).await;
+
     let writes = store.state.lock().await.writes;
     let replay = engine.authorize("connection", request(1, "wrong-buyer", None), &actor()).await.unwrap();
     assert_eq!(replay.state, "authorized");
     assert_eq!(replay.operation_id.as_deref(), Some(request(1, "wrong-buyer", None).operation_id.as_str()));
     assert_eq!(replay.operation_state, Some("rejected"));
+
     let queried = engine.status(Some(&request(1, "wrong-buyer", None).operation_id)).await;
     assert_eq!(queried.operation_state, Some("rejected"));
     assert_eq!(store.state.lock().await.writes, writes);
@@ -340,6 +347,7 @@ async fn same_operation_and_cross_account_requests_never_send_again() {
         engine.authorize("connection", request(1, "buyer", None), &actor()).await.unwrap().operation_state,
         Some("completed")
     );
+
     assert_eq!(
         engine.authorize("connection", request(2, "different", version), &actor()).await.err(),
         Some(AuthorizationError::IdentityMismatch)
@@ -360,11 +368,14 @@ async fn unknown_keeps_candidate_account_and_requires_new_operation_version_evid
             .await
             .is_err()
     );
+
     let mut retry = request(2, "buyer", Some(record.base.version));
     retry.evidence_reference = Some("new-authorization".into());
     assert!(engine.authorize("connection", retry, &actor()).await.is_err());
+
     clock.0.store(record.refresh.deadline().unwrap().unix_secs() + 1, Ordering::SeqCst);
     assert_eq!(engine.status(None).await.state, "unknown");
+
     let mut recovery = request(2, "buyer", Some(record.base.version));
     recovery.evidence_reference = Some("new-authorization".into());
     http.state.lock().await.login = Login::Code;
@@ -386,6 +397,7 @@ async fn stale_login_response_cannot_exchange_after_new_authorization_epoch() {
     http.started.notified().await;
     let first = store.load().await.unwrap().unwrap();
     clock.0.store(first.refresh.deadline().unwrap().unix_secs() + 1, Ordering::SeqCst);
+
     let second = AuthorizationEngine {
         tasks: Arc::new(JdVopAuthorizationTasks::default()),
         owner_id: "second-owner".into(),
@@ -396,6 +408,7 @@ async fn stale_login_response_cannot_exchange_after_new_authorization_epoch() {
     recovery.evidence_reference = Some("new-authorization".into());
     second.authorize("connection", recovery, &actor()).await.unwrap();
     second.tasks.idle().await.unwrap();
+
     http.release.notify_one();
     engine.tasks.idle().await.unwrap();
     assert_eq!(http.codes.load(Ordering::SeqCst), 2);
@@ -441,8 +454,10 @@ async fn failed_save_and_uid_mismatch_keep_unknown_but_committed_unknown_is_read
         }
         assert_eq!(http.exchanges.load(Ordering::SeqCst), 1);
     }
+
     let (engine, _, http, clock) = fixture();
     authorize(&engine, 1, "buyer", None).await;
+
     http.state.lock().await.uid = "uid:different".into();
     authorize(&engine, 2, "buyer", engine.status(None).await.version).await;
     clock.0.store(1100, Ordering::SeqCst);
@@ -457,13 +472,16 @@ async fn detached_authorization_survives_response_drop_and_shutdown_waits_withou
     let response = engine.authorize("connection", request(1, "buyer", None), &actor()).await.unwrap();
     drop(response);
     http.started.notified().await;
+
     let tasks = engine.tasks.clone();
     let shutdown = tokio::spawn(async move { tasks.shutdown().await });
     tokio::task::yield_now().await;
     assert!(!shutdown.is_finished());
+
     http.release.notify_one();
     shutdown.await.unwrap().unwrap();
     assert_eq!(engine.status(None).await.state, "authorized");
+
     assert!(
         engine
             .authorize("connection", request(2, "buyer", engine.status(None).await.version), &actor())

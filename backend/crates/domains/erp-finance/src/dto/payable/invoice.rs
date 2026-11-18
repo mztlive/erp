@@ -164,6 +164,7 @@ impl PurchaseInvoiceAllocationListParams {
         if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
             return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
         }
+
         Ok(PurchaseInvoiceAllocationListQuery {
             scope_version: self.scope_version.clone(),
             procurement_owner_user_ids: self.procurement_owner_user_ids.clone(),

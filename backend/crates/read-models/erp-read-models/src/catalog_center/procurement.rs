@@ -107,6 +107,7 @@ impl ProductProcurementOwners for MongoProductProcurementOwners {
         if product_ids.is_empty() {
             return Ok(Vec::new());
         }
+
         let rules = self
             .db
             .procurement_responsibility_rules()
@@ -117,6 +118,7 @@ impl ProductProcurementOwners for MongoProductProcurementOwners {
         let revisions = load_revisions(&self.db, &products, executor).await?;
         let rule_set = ProcurementResponsibilityRuleSet::new(&rules);
         let mut categories = prefetch_category_chains(&self.db, &revisions, executor).await;
+
         let mut matched = HashSet::new();
         for sku in &skus {
             if let Some(id) =
@@ -363,6 +365,7 @@ mod tests {
             rule("leaf", ProcurementResponsibilityRuleType::Category, None, Some("leaf"), None, "leaf-owner"),
             rule("sku", ProcurementResponsibilityRuleType::Sku, Some("sku"), None, None, "sku-owner"),
         ];
+
         for (length, expected_owner) in [
             (5, "sku-owner"),
             (4, "leaf-owner"),
@@ -379,6 +382,7 @@ mod tests {
                 &HashSet::from([expected_owner])
             ));
         }
+
         let rule_set = ProcurementResponsibilityRuleSet::new(&rules[..4]);
         assert!(!matches_procurement_owner(
             ProductKind::Physical,
@@ -395,12 +399,14 @@ mod tests {
         let wanted = HashSet::from(["owner"]);
         let empty = ProcurementResponsibilityRuleSet::new(&[]);
         assert!(!matches_procurement_owner(ProductKind::Physical, "sku", chain(), &empty, &wanted));
+
         let rules = [
             rule("first", ProcurementResponsibilityRuleType::Category, None, Some("leaf"), None, "owner"),
             rule("second", ProcurementResponsibilityRuleType::Category, None, Some("leaf"), None, "owner"),
         ];
         let ambiguous = ProcurementResponsibilityRuleSet::new(&rules);
         assert!(!matches_procurement_owner(ProductKind::Physical, "sku", chain(), &ambiguous, &wanted));
+
         let single = ProcurementResponsibilityRuleSet::new(&rules[..1]);
         assert!(!matches_procurement_owner(ProductKind::Physical, "sku", Vec::new(), &single, &wanted));
         assert!(!matches_procurement_owner(
@@ -419,6 +425,7 @@ mod tests {
             rule("inquiry", ProcurementResponsibilityRuleType::Inquiry, None, None, None, "inquiry-buyer");
         let rules = [sku, inquiry];
         let set = ProcurementResponsibilityRuleSet::new(&rules);
+
         for owner in ["buyer-a", "buyer-b"] {
             assert!(matches_procurement_owner(
                 ProductKind::Physical,

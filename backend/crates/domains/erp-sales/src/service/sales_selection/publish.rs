@@ -91,6 +91,7 @@ impl SalesSelectionService {
         if let Some(replay) = self.publish_replay(booklet_id, actor, key, hash, executor).await? {
             return Ok(replay);
         }
+
         let mut booklet = self.load_booklet(booklet_id, executor).await?;
         booklet
             .ensure_version(req.expected_version)
@@ -100,11 +101,13 @@ impl SalesSelectionService {
             .as_deref()
             .ok_or_else(|| Error::ValidationError("请重新预览并确认准备批次".into()))?;
         self.ensure_batch_current(&booklet, batch_id)?;
+
         let domain = SalesSelectionDomainRepository::new(&self.db);
         let items = domain.list_effective_items(&booklet.base.id, batch_id, executor).await?;
         let tier_ids: Vec<String> = booklet.tiers.iter().map(|tier| tier.tier_id.clone()).collect();
         let publishable = ensure_publishable_display(booklet.form.is_package(), &tier_ids, &items)?;
         self.review_publishable(&booklet, batch_id, &publishable, catalog, executor).await?;
+
         let (_token, token_hash, cipher) =
             crypto.issue().map_err(|error| Error::Internal(error.to_string()))?;
         booklet.publish(token_hash, cipher, Instant::now(), actor.id())?;
@@ -166,10 +169,12 @@ impl SalesSelectionService {
         let booklet_id = SalesSelectionBookletId::new(booklet.base.id.clone());
         self.authorize_booklet(&command.actor, &booklet.base.id, &sales_selection::BOOKLET_PUBLISH, executor)
             .await?;
+
         self.db.sales_selection_booklets().update(&mut booklet, executor).await?;
         for session in &sessions {
             self.db.sales_selection_sessions().create(session, executor).await?;
         }
+
         let view = Self::booklet_view(&booklet, &items, None, None);
         let record = Self::idempotency_record(IdempotencyStoreInput {
             operation: IdempotencyOperation::Publish,
@@ -232,6 +237,7 @@ impl SalesSelectionService {
             .collect();
         let qualified = catalog.qualified_refs(&refs, BusinessDate::today(), executor).await?;
         ensure_refs_qualified(&refs, &qualified)?;
+
         self.ensure_revisions_unchanged(booklet, batch_id, publishable, executor).await
     }
 
@@ -311,6 +317,7 @@ impl SalesSelectionService {
         if !booklet.status.allows_delete_display() {
             return Err(Error::ValidationError("只有待发布可以删除陈列项".into()));
         }
+
         let batch = booklet.current_batch_id.clone().unwrap_or_default();
         let mut item = self
             .db
@@ -319,6 +326,7 @@ impl SalesSelectionService {
             .await?
             .ok_or_else(|| Error::NotFound("陈列项不存在".into()))?;
         ensure_item_of_batch(&item, &booklet.base.id, &batch)?;
+
         item.remove()?;
         booklet.record_display_edit(actor.id())?;
         self.db.sales_selection_display_items().update(&mut item, executor).await?;
@@ -488,6 +496,7 @@ fn ensure_revision_match(
             }
         }
     }
+
     if changed.is_empty() {
         return Ok(());
     }

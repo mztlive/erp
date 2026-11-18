@@ -98,6 +98,7 @@ impl SupplierPortalProcess {
                 Box::pin(async move {
                     this.validate_assets(&actor.supplier_id, id.as_deref(), &input.input, true, executor)
                         .await?;
+
                     let service = this.catalog_portal();
                     Ok(match id {
                         None => {
@@ -177,9 +178,11 @@ impl SupplierPortalProcess {
         let draft = service.detail(id, &actor.supplier_id, executor).await?;
         draft.draft.ensure_submission_images()?;
         self.validate_assets(&actor.supplier_id, Some(id), &draft.draft, true, executor).await?;
+
         self.batch_new_product_reviewer(&draft, executor).await?;
         let supplier = self.active_supplier(&actor.supplier_id, executor).await?;
         let task_id = next_id();
+
         let draft = service
             .submit(
                 draft,
@@ -193,6 +196,7 @@ impl SupplierPortalProcess {
                 executor,
             )
             .await?;
+
         self.services
             .work_items
             .create_supplier_portal_review(
@@ -250,6 +254,7 @@ impl SupplierPortalProcess {
                         executor,
                     )
                     .await?;
+
                     Ok(service
                         .withdraw(
                             &id,
@@ -316,12 +321,14 @@ impl SupplierPortalProcess {
         let draft = service.load(id, executor).await?;
         let subject = new_product_subject(&draft)?;
         self.validate_task(id, &subject, input, actor, executor).await?;
+
         if matches!(input.decision, PortalDecision::Return) {
             self.complete_task(id, &subject, input, actor, executor).await?;
             return Ok(service
                 .return_to_supplier(id, input.expected_version, review_comment(input)?, actor.id(), executor)
                 .await?);
         }
+
         validate_reported_times(draft.submitted()?, input.availability_reported_at_confirmed)?;
         input
             .comment
@@ -332,6 +339,7 @@ impl SupplierPortalProcess {
         let (normalized, owner, org) =
             self.prepare_new_product_review(&draft, input, actor, executor).await?;
         self.validate_assets(&draft.supplier_id, Some(id), draft.submitted()?, true, executor).await?;
+
         let mut result = service
             .materialize(
                 &CatalogMaterializeCommand {
@@ -346,12 +354,14 @@ impl SupplierPortalProcess {
                 executor,
             )
             .await?;
+
         self.materialize_supply(
             SupplyContext { draft: &draft, review: input, actor, owner: &owner, org: &org },
             &mut result,
             executor,
         )
         .await?;
+
         self.finish_new_product(
             SupplyContext { draft: &draft, review: input, actor, owner: &owner, org: &org },
             normalized,
@@ -378,6 +388,7 @@ impl SupplierPortalProcess {
             .ok_or_else(|| Error::ValidationError("新品审核必须填写真实核对或匹配理由".into()))?;
         self.complete_task(id, &new_product_subject(context.draft)?, context.review, context.actor, executor)
             .await?;
+
         Ok(self
             .catalog_portal()
             .mark_effective(
@@ -406,12 +417,14 @@ impl SupplierPortalProcess {
             .clone()
             .or(draft.normalized_product.clone())
             .ok_or_else(|| Error::ValidationError("请完成品牌分类单位及SKU映射".into()))?;
+
         self.submission_actor(
             &draft.supplier_id,
             &draft.submissions.last().ok_or_else(|| Error::Internal("缺少冻结提交".into()))?.submitted_by,
             executor,
         )
         .await?;
+
         let owner = input
             .maintainer_user_id
             .as_deref()
@@ -436,9 +449,11 @@ impl SupplierPortalProcess {
                 .iter()
                 .find(|r| r.row_id == resolved.row_id)
                 .ok_or_else(|| Error::Internal("正式SKU缺少原始提报行".into()))?;
+
             let (snapshot, target_owner, target_org) =
                 self.new_product_supply_snapshot(&context, row, &resolved.sku_id, executor).await?;
             let app = supply_application(context.draft, snapshot)?;
+
             let confirmed = service
                 .create_for_new_product(
                     ConfirmedOfferingInput {
@@ -468,6 +483,7 @@ impl SupplierPortalProcess {
             .map_err(|e| Error::ValidationError(e.to_string()))?;
         let quantity = row.available_quantity.map(|q| q.to_string());
         self.validate_supply_quantity(sku_id, &terms, quantity.as_deref(), executor).await?;
+
         let service = PortalOfferingService::new(self.db.clone());
         let access = &self.services.offering_access;
         if let Some(existing) = service
@@ -494,6 +510,7 @@ impl SupplierPortalProcess {
                 existing.business_org_unit_id,
             ));
         }
+
         access.ensure_writable(context.actor, &supplier_offering::CREATE, executor).await?;
         Ok((
             OfferingApplicationSnapshot::ExistingQuote {
@@ -588,6 +605,7 @@ mod tests {
         assert!(validate_reported_times(&input, false).is_err());
         validate_reported_times(&input, true).unwrap();
         assert_eq!(serde_json::to_value(&input).unwrap(), original);
+
         let future = submitted_input(Instant::from_unix_secs(Instant::now().unix_secs() + 3600));
         assert!(validate_reported_times(&future, true).is_err());
     }

@@ -43,12 +43,14 @@ impl TierRule {
         if tier_id.is_empty() {
             return Err(Error::from("档位身份不能为空"));
         }
+
         if self.target_amount <= Amount::zero() {
             return Err(Error::from("档位目标金额必须大于 0"));
         }
         if self.tolerance < Amount::zero() {
             return Err(Error::from("档位容差必须大于或等于 0"));
         }
+
         if !(TIER_PACKAGE_MIN..=TIER_PACKAGE_MAX).contains(&self.expected_count) {
             return Err(Error::from("每档期望套餐数必须在 1 到 20 之间"));
         }
@@ -56,6 +58,7 @@ impl TierRule {
             return Err(Error::from("每套餐独立 SKU 数必须在 2 到 8 之间"));
         }
         let _ = super::pricing::try_add(self.target_amount, self.tolerance)?;
+
         Ok(Self {
             tier_id: tier_id.to_string(),
             name,
@@ -81,6 +84,7 @@ pub fn normalize_tiers(tiers: Vec<TierRule>) -> Result<Vec<TierRule>> {
     if tiers.len() < super::limits::TIER_COUNT_MIN || tiers.len() > super::limits::TIER_COUNT_MAX {
         return Err(Error::from("套餐形态必须填写 1 到 10 个档位"));
     }
+
     let mut normalized = Vec::with_capacity(tiers.len());
     let mut names = std::collections::BTreeSet::new();
     let mut ids = std::collections::BTreeSet::new();

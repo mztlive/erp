@@ -56,6 +56,7 @@ impl AcceptanceReadService {
                     let access = SalesAccess::new(this.db.clone(), this.rbac);
                     let (context, scope) =
                         access.resolve(&actor, &sales_order_permissions::LIST, executor).await?;
+
                     let page =
                         super::repository::acceptance_list(&this.db, &params, &scope, executor).await?;
                     context.validate(executor).await?;
@@ -95,9 +96,11 @@ impl AcceptanceReadService {
         let (context, scope) = SalesAccess::new(self.db.clone(), self.rbac.clone())
             .resolve(actor, &sales_order_permissions::DETAIL, executor)
             .await?;
+
         let identity = super::repository::acceptance_identity(&self.db, id, &scope, executor)
             .await?
             .ok_or_else(|| Error::NotFound("客户验收单不存在或无权查看".into()))?;
+
         let detail =
             FulfillmentService::new(self.db.clone()).load_customer_acceptance(&identity, executor).await?;
         context.validate(executor).await?;
@@ -126,6 +129,7 @@ impl AcceptanceReadService {
                     SalesAccess::new(this.db.clone(), this.rbac)
                         .require_object(&actor, &sales_order_permissions::DETAIL, &id, executor)
                         .await?;
+
                     super::FulfillmentReadService::new(this.db)
                         .load_acceptance_eligibility(&id, executor)
                         .await
@@ -158,6 +162,7 @@ mod tests {
         let error =
             service.load_detail("acceptance", &actor, &mut SnapshotExecutor::default()).await.unwrap_err();
         assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+
         let db = client.database("acceptance_missing_detail");
         let authorization = fixed_authorization(
             &[sales_order_permissions::LIST],

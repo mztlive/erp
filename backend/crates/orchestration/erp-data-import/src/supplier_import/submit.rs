@@ -39,6 +39,7 @@ impl SupplierImportProcess {
         if json.len() > 10 * 1024 * 1024 {
             return Err(Error::ValidationError("导入内容不能超过 10 MB".into()));
         }
+
         let source = CommandFingerprint::from_parts([
             hex::encode(self.codec.fingerprint_key()),
             actor.id().to_string(),
@@ -50,6 +51,7 @@ impl SupplierImportProcess {
         if let Some(existing) = self.replay(&job, actor).await? {
             return Ok(existing.into());
         }
+
         let encrypted = self.codec.encrypt(&json)?;
         self.storage
             .save_with_content_type(
@@ -59,6 +61,7 @@ impl SupplierImportProcess {
             )
             .await
             .map_err(|_| Error::Internal("保存供应商导入文件失败，请重试".into()))?;
+
         self.persist(job, items, actor).await
     }
 
@@ -98,6 +101,7 @@ impl SupplierImportProcess {
                 )
             })
             .await;
+
         match result {
             Ok(BackgroundJobRegistration::Created) => Ok(job.into()),
             Ok(BackgroundJobRegistration::ReplaySame(existing)) => {
@@ -281,6 +285,7 @@ pub(super) mod tests {
         let authorization = unavailable_authorization();
         let actor = AuditActor::new("actor-1".into(), "operator".into(), AccountKind::Admin);
         let (job, items) = fixture();
+
         let replay_error =
             replay_registration(&db, &authorization, &actor, &job, &mut SnapshotExecutor::default())
                 .await
@@ -289,6 +294,7 @@ pub(super) mod tests {
             register_job(&db, &authorization, &actor, &job, items, &mut SnapshotExecutor::default())
                 .await
                 .expect_err("未授权不能登记");
+
         for error in [replay_error, write_error] {
             assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
         }
@@ -303,6 +309,7 @@ pub(super) mod tests {
         assert_eq!(items[0].source_row_no, Some(9));
         assert_eq!(job.total_count, 1);
         assert!(items[0].status.is_none());
+
         same.request_fingerprint = None;
         assert!(ensure_replay(&same, &job).is_err());
         let (mut changed, _) = fixture();

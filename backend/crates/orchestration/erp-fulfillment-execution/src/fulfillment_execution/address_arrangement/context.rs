@@ -56,6 +56,7 @@ impl Context {
             .current_revision_id
             .clone()
             .ok_or_else(|| Error::ConflictError("销售单尚未生效".into()))?;
+
         let (capacities, mut plan) = source_lines(db, &revision, executor).await?;
         let stored = db.address_arrangements().find_by_id(id, executor).await?;
         if let Some(stored) = &stored
@@ -64,6 +65,7 @@ impl Context {
             plan = serde_json::from_str(&process.sensitive_data.decrypt(&stored.content_encrypted)?)
                 .map_err(|_| Error::Internal("收货安排无法读取".into()))?;
         }
+
         let deliveries =
             db.fulfillment().deliveries_for_arrangement(&id.to_string().into(), executor).await?;
         let lines = db
@@ -73,6 +75,7 @@ impl Context {
                 executor,
             )
             .await?;
+
         Ok(Self {
             sales,
             revision,
@@ -138,6 +141,7 @@ impl Context {
                 self.snapshots.push((delivery.base.id.clone(), frozen));
             }
         }
+
         for delivery in self
             .deliveries
             .iter()
@@ -159,6 +163,7 @@ impl Context {
                 self.snapshots.push((delivery.base.id.clone(), snapshot));
             }
         }
+
         self.sources = Some(sources);
         Ok(())
     }
@@ -265,6 +270,7 @@ impl Context {
                 quantity: line.quantity,
                 ..source.clone()
             });
+
             let mut allocations = vec![];
             if let Some((_, snapshot)) = self.snapshots.iter().find(|(key, _)| key == id) {
                 for destination in snapshot.destinations.iter().filter(|row| !row.pending_address) {
@@ -337,6 +343,7 @@ pub(super) async fn authorize_delivery(
     {
         return Err(Error::BusinessLogicError("已发货或供应商接口订单不能在此修改地址".into()));
     }
+
     let mut task = task::load_single_open_task(&process.db, "delivery", id, executor).await?;
     task::ensure_task_matches_frozen_identity(&task, &task::FulfillmentTaskObject::Delivery(&delivery))?;
     super::super::task_access::require_assignee(
@@ -377,6 +384,7 @@ pub(in crate::fulfillment_execution) async fn planned_source(
     let plan: Vec<ArrangementLine> = serde_json::from_str(&codec.decrypt(&record.content_encrypted)?)
         .map_err(|_| Error::Internal("收货安排无法读取".into()))?;
     let mut pool = AddressPool(plan);
+
     let deliveries = db.fulfillment().deliveries_for_arrangement(&delivery.sales_order_id, executor).await?;
     let lines = db
         .fulfillment()
@@ -385,6 +393,7 @@ pub(in crate::fulfillment_execution) async fn planned_source(
             executor,
         )
         .await?;
+
     for row in &deliveries {
         if let Some(snapshot) = delivery_addresses::frozen_addresses(codec, row)? {
             pool.consume(
@@ -399,6 +408,7 @@ pub(in crate::fulfillment_execution) async fn planned_source(
             return Err(Error::ConflictError("历史已发记录缺少地址分配，请先核对收货安排".into()));
         }
     }
+
     for row in deliveries.iter().filter(|row| row.is_editable() && row.packing_addresses_encrypted.is_none())
     {
         let snapshot = pool.assign(
@@ -433,6 +443,7 @@ async fn source_lines(
             executor,
         )
         .await?;
+
     let mut capacities = vec![];
     let mut plan = vec![];
     for row in &source {

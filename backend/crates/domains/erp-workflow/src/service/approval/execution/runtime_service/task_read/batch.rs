@@ -41,6 +41,7 @@ pub(crate) async fn approval_task_facts_current(
     {
         return Ok(false);
     }
+
     let items = [item];
     let facts = load_runtime_facts(db, &items, executor).await?;
     let subjects = [subject_for_task(item, &facts)];
@@ -74,6 +75,7 @@ async fn load_runtime_facts(
 ) -> Result<RuntimeBatchFacts> {
     let execution_ids = execution_ids(items);
     let executions = db.bpm_workflow().list_executions_by_ids(&execution_ids, executor).await?;
+
     let mut seen = HashSet::new();
     let instance_ids = executions
         .iter()
@@ -86,6 +88,7 @@ async fn load_runtime_facts(
         instances: instances.into_iter().map(|instance| (instance.base.id.clone(), instance)).collect(),
         snapshots: HashMap::new(),
     };
+
     let snapshot_ids = snapshot_instance_ids(items, &facts);
     facts.snapshots = db
         .approval_subject_snapshots()
@@ -184,6 +187,7 @@ fn subject_for_task(item: &WorkItem, facts: &RuntimeBatchFacts) -> Result<Option
     let snapshot =
         facts.snapshots.get(instance.base.id.as_str()).ok_or_else(|| runtime_snapshot_mismatch(false))?;
     ensure_exact_runtime_snapshot(instance, snapshot, document_type, false)?;
+
     let execution = item.approval_node_execution_id.as_ref().and_then(|id| facts.executions.get(id.as_ref()));
     Ok(Some(RuntimeReadSubject {
         instance: instance.clone(),
@@ -331,9 +335,11 @@ mod tests {
         terminal.status = WorkItemStatus::Completed;
         let subjects = [Ok(Some(subject))];
         assert!(open_execution_ids(&[&terminal], &subjects).is_empty());
+
         let (subject, task) = fixture();
         let subjects = [Err(Error::ConflictError("bad-subject".into())), Ok(Some(subject))];
         assert!(open_execution_ids(&[&task, &task], &subjects).is_empty());
+
         let (subject, task) = fixture();
         let subjects = [Ok(Some(subject))];
         assert_eq!(open_execution_ids(&[&task], &subjects), [ApprovalNodeExecutionId::new("execution-1")]);

@@ -67,8 +67,10 @@ pub async fn load_procurement_coverage_facts(
         .collect::<Vec<_>>();
     let goods_lines =
         db.sales_order_goods_service_line_revisions().list_by_revision_line_ids(&goods_ids, executor).await?;
+
     let sku_ids = goods_lines.iter().map(|line| line.sku_id.clone()).collect::<Vec<_>>();
     let catalog = load_catalog_facts(db, &sku_ids, executor).await?;
+
     let sources = db.purchase_order().coverage_sources(sales_order_id, executor).await?;
     let target_sales_line_ids = revision_lines
         .iter()
@@ -77,9 +79,11 @@ pub async fn load_procurement_coverage_facts(
         .collect::<Vec<_>>();
     let reservations =
         db.inventory().existing_stock_reservations_for_sales_lines(&target_sales_line_ids, executor).await?;
+
     let (historical_sales_lines, maintained_sales_revisions) =
         load_source_baselines(db, revision_id.as_ref(), sales_order_id, &sources.purchase_orders, executor)
             .await?;
+
     Ok(ProcurementCoverageFacts {
         quantity_scales: catalog.quantity_scales,
         revision: Some(sales_revision_fact(revision)),
@@ -131,6 +135,7 @@ async fn load_catalog_facts(
         .into_iter()
         .map(|sku| (sku.base.id.clone(), sku))
         .collect::<HashMap<_, _>>();
+
     let unit_ids = skus.values().map(|sku| sku.base_unit_id.to_string()).collect::<Vec<_>>();
     let units = db
         .unit_of_measures()
@@ -145,6 +150,7 @@ async fn load_catalog_facts(
         .iter()
         .filter_map(|(id, sku)| unit_scales.get(sku.base_unit_id.as_ref()).map(|scale| (id.clone(), *scale)))
         .collect();
+
     let product_ids = skus.values().map(|sku| sku.product_id.clone()).collect::<Vec<_>>();
     let products = db
         .products()
@@ -153,6 +159,7 @@ async fn load_catalog_facts(
         .into_iter()
         .map(|product| (product.base.id.clone(), product))
         .collect::<HashMap<_, _>>();
+
     Ok(CatalogFacts { skus, products, quantity_scales })
 }
 
@@ -533,8 +540,10 @@ mod isolation_tests {
             .create(&test_goods_line("sorl-1"), &mut NoTransaction)
             .await
             .expect("商品子类型行写入失败");
+
         db.skus().create(&test_sku("sku-1"), &mut NoTransaction).await.expect("SKU 写入失败");
         db.products().create(&test_product("product-sku-1"), &mut NoTransaction).await.expect("商品写入失败");
+
         db.purchase_orders()
             .create(
                 &purchase_order("po-draft", PurchaseOrderStatus::Draft, Some("sub-1"), None),
@@ -550,6 +559,7 @@ mod isolation_tests {
             .create(&submission_line("subl-1", "sub-1", "sol-1"), &mut NoTransaction)
             .await
             .expect("采购提交行写入失败");
+
         db.purchase_orders()
             .create(
                 &purchase_order(
@@ -574,6 +584,7 @@ mod isolation_tests {
             .create(&allocation("alloc-1", "porl-1"), &mut NoTransaction)
             .await
             .expect("销售分配写入失败");
+
         db.stock_reservations()
             .create(&reservation("rsv-1"), &mut NoTransaction)
             .await

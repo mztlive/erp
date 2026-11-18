@@ -47,6 +47,7 @@ impl OrganizationService {
             &organization::CHANGE
         };
         let access = self.authorization.organization_scope(actor, permission, executor).await?;
+
         let mut account_revision = None;
         if let Some(profile) = profile {
             account_revision = Some(
@@ -61,6 +62,7 @@ impl OrganizationService {
                     .policy_revision(),
             );
         }
+
         if account_revision.is_some_and(|revision| revision != access.policy_version) {
             return Err(Error::ConflictError("授权版本已变化，请刷新后重试".into()));
         }
@@ -100,6 +102,7 @@ impl OrganizationService {
         if let Some(receipt) = receipt {
             return Ok(receipt);
         }
+
         let this = self.clone();
         let actor = actor.clone();
         self.rbac
@@ -150,6 +153,7 @@ impl OrganizationService {
         let Some(roles) = &profile.role_ids else {
             return Ok(());
         };
+
         let authorization = self
             .rbac
             .authorize_target_management(actor, AccountKind::Admin, &profile.user_id, Some(roles.clone()))
@@ -187,6 +191,7 @@ impl OrganizationService {
         let Some(name) = &profile.name else {
             return Ok(());
         };
+
         let mut account = self
             .db
             .accounts()
@@ -196,6 +201,7 @@ impl OrganizationService {
         if account.name != profile.expected_name {
             return Err(Error::ConflictError("人员姓名已变化，请刷新后重新编辑".into()));
         }
+
         account.update(AccountCoreUpdate { name: Some(name.clone()), ..Default::default() })?;
         if persist {
             self.db.accounts().update(&mut account, executor).await?;

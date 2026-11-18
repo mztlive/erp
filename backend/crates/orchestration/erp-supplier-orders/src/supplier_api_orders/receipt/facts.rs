@@ -47,6 +47,7 @@ pub(super) async fn load(
             "原采购已有实际退货，请先核对原退货与供应商子单，未用原入库或验收量推定全部收到".into(),
         ));
     }
+
     let actual = match purchase.fulfillment_responsibility {
         FulfillmentResponsibility::SupplierDirect => {
             ActualReceiptFacts::Direct(direct(db, execution, tracking, executor).await?)
@@ -85,6 +86,7 @@ async fn direct(
         .fulfillment()
         .allocations_by_fulfillment_fact(FulfillmentFactType::Delivery, &line_ids, executor)
         .await?;
+
     let ids = allocations
         .iter()
         .map(|row| row.customer_acceptance_line_id.to_string())
@@ -99,6 +101,7 @@ async fn direct(
         .into_iter()
         .collect::<Vec<_>>();
     let acceptances = receipt_confirmation::acceptances(db, &ids, executor).await?;
+
     let ids = execution
         .source_lines
         .iter()
@@ -135,10 +138,12 @@ async fn warehouse(
     .await?;
     let ids = receipts.iter().map(|row| PurchaseReceiptId::new(&row.base.id)).collect::<Vec<_>>();
     let lines = db.fulfillment().receipt_lines_by_receipt_ids(&ids, executor).await?;
+
     let purchase_lines = db
         .purchase_order()
         .list_revision_lines(&execution.purchase_order_revision_id.clone().into(), executor)
         .await?;
+
     let executions =
         for_purchase(db, &execution.purchase_order_id, Some(&execution.purchase_order_revision_id), executor)
             .await?;

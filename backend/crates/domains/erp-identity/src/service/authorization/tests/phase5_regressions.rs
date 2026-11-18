@@ -58,6 +58,7 @@ async fn create_and_submit_uses_only_jointly_qualified_roles_for_creation_scope_
             .await
             .unwrap();
     }
+
     for org in ["org-a", "org-b"] {
         facts.objects.lock().unwrap()[0].org_unit_id = FactValue::Known(Some(org.into()));
         for target in [AccessTarget::Candidate(sales_candidate(org)), AccessTarget::record("order").unwrap()]
@@ -96,11 +97,13 @@ async fn extra_cost_requires_independent_cost_qualification_and_preserves_detail
         service.query(&actor(), &internal::SALES_ORDER_EXTRA_COST_READ, &mut executor).await,
         Err(Error::Forbidden(_))
     ));
+
     grant(&identity, &[("sales", &[sales_order::DETAIL]), ("cost", &[cost::ENTRY_LIST])]);
     let access =
         service.query(&actor(), &internal::SALES_ORDER_EXTRA_COST_READ, &mut executor).await.unwrap();
     assert_eq!(inquiry_members(&access), ["one"]);
     service.validate(&access, &mut executor).await.unwrap();
+
     identity.scopes.lock().unwrap().insert(
         (internal::SALES_ORDER_EXTRA_COST_READ, sales_order::DETAIL),
         ResolvedScope {
@@ -129,6 +132,7 @@ async fn extra_cost_requires_independent_cost_qualification_and_preserves_detail
             assert!(matches!(result, Err(Error::Forbidden(_))));
         }
     }
+
     grant(&identity, &[("sales", &[sales_order::DETAIL])]);
     assert!(matches!(
         service
@@ -198,6 +202,7 @@ async fn purchase_return_source_requires_the_complete_command_role_without_a_det
         .await
         .expect("固定采购退货来源使用已取证的公司范围，完整命令角色无需详情菜单资格");
     assert_eq!(facts.calls.load(Ordering::SeqCst), 1);
+
     for roles in [
         vec![("operator", &required[..1])],
         vec![("operator", &required[1..])],
@@ -214,6 +219,7 @@ async fn purchase_return_source_requires_the_complete_command_role_without_a_det
         ));
         assert_eq!(facts.calls.load(Ordering::SeqCst), calls);
     }
+
     grant(&identity, &[("operator", &required)]);
     assert!(matches!(
         service
@@ -244,6 +250,7 @@ async fn stock_adjustment_update_checks_the_persisted_record_and_complete_wareho
             user_limit: None,
         },
     );
+
     let warehouse_relation = RelationKey::parse("warehouse").unwrap();
     let adjustment = ObjectFacts {
         warehouse_id: FactValue::Known(Some("warehouse".into())),
@@ -265,6 +272,7 @@ async fn stock_adjustment_update_checks_the_persisted_record_and_complete_wareho
         .require(&actor(), permission, target(), &mut executor)
         .await
         .expect("库存调整更新与详情必须来自同一角色，真实仓库在该角色范围内");
+
     for roles in [
         vec![("update-only", &required[..1])],
         vec![("detail-only", &required[1..])],
@@ -278,24 +286,28 @@ async fn stock_adjustment_update_checks_the_persisted_record_and_complete_wareho
         ));
         assert_eq!(facts.calls.load(Ordering::SeqCst), calls);
     }
+
     grant(&identity, &[("warehouse-editor", &required)]);
     facts.objects.lock().unwrap()[0].warehouse_id = FactValue::Known(Some("outside".into()));
     assert!(matches!(
         service.require(&actor(), permission, target(), &mut executor).await,
         Err(Error::Forbidden(_))
     ));
+
     *facts.objects.lock().unwrap() = vec![adjustment.clone()];
     facts.objects.lock().unwrap()[0].relations.get_mut(&warehouse_relation).unwrap().objects.clear();
     assert!(matches!(
         service.require(&actor(), permission, target(), &mut executor).await,
         Err(Error::Forbidden(_))
     ));
+
     *facts.objects.lock().unwrap() = vec![adjustment];
     facts.objects.lock().unwrap()[0].warehouse_id = FactValue::Missing;
     assert!(matches!(
         service.require(&actor(), permission, target(), &mut executor).await,
         Err(Error::ValidationError(message)) if message.contains("Warehouse")
     ));
+
     assert!(matches!(
         service.require(&actor(), permission, AccessTarget::record("missing").unwrap(), &mut executor).await,
         Err(Error::NotFound(_))
@@ -363,6 +375,7 @@ async fn supplier_completion_replay_requires_one_role_with_all_three_current_per
             .await,
         Err(Error::Forbidden(_))
     ));
+
     grant(&identity, &[("operator", &required)]);
     service
         .require(
@@ -373,6 +386,7 @@ async fn supplier_completion_replay_requires_one_role_with_all_three_current_per
         )
         .await
         .unwrap();
+
     for (active, permissions) in [(true, &required[..2]), (false, required.as_slice())] {
         grant(&identity, &[("operator", permissions)]);
         identity.state.lock().unwrap().active = active;
@@ -421,6 +435,7 @@ async fn customer_creation_receipt_rechecks_the_real_record_with_only_current_cr
         service.require(&actor(), permission, AccessTarget::record("missing").unwrap(), &mut executor).await,
         Err(Error::NotFound(_))
     ));
+
     grant(&identity, &[("reader", &[customer::DETAIL])]);
     let calls = facts.calls.load(Ordering::SeqCst);
     assert!(matches!(

@@ -69,12 +69,14 @@ mod tests {
         }))
         .unwrap();
         assert!(request.clone().prepare().is_ok());
+
         let mut mixed = request.clone();
         mixed.assignee_user_id = "u1".into();
         assert!(mixed.prepare().is_err());
         let mut mixed = request;
         mixed.additional_assignee_user_ids.push("u2".into());
         assert!(mixed.prepare().is_err());
+
         let old: DefinitionNodeRequest = serde_json::from_value(serde_json::json!({
             "node_name": "指定审核", "display_order": 1, "assignee_user_id": "u1"
         }))

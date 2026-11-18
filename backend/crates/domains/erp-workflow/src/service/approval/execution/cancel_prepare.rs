@@ -193,6 +193,7 @@ async fn runtime_from_store(
         .ok_or_else(|| Error::ConflictError("没有可撤回的审批实例".to_string()))?;
     let task_policy =
         instance.cancellation_task_policy().map_err(|error| Error::ConflictError(error.to_string()))?;
+
     let current = store
         .current(&ApprovalProcessInstanceId::new(instance.base.id.clone()), executor)
         .await?
@@ -202,6 +203,7 @@ async fn runtime_from_store(
     current
         .ensure_cancellation_tasks(task_policy, open_tasks.len())
         .map_err(|error| Error::ConflictError(error.to_string()))?;
+
     let graph = store.graph(binding, missing_definition, executor).await?;
     Ok(DocumentCancelRuntime { graph, instance, current, task_policy, open_tasks })
 }
@@ -390,6 +392,7 @@ mod tests {
             payload_digest: "original-payload".into(),
             result_ref: "original-instance".into(),
         };
+
         let input = loaded
             .cancel_input(
                 "  撤回重改  ",
@@ -399,6 +402,7 @@ mod tests {
                 Instant::from_unix_secs(30),
             )
             .unwrap();
+
         assert_eq!(input.subject_version, 7);
         assert_eq!(input.expected_instance_version, 13);
         assert_eq!(input.expected_execution_version, 17);

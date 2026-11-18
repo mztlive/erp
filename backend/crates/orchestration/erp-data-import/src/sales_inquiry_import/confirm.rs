@@ -37,6 +37,7 @@ impl SalesInquiryImportProcess {
         if command.command_key.is_empty() || command.command_key.len() > 128 {
             return Err(Error::ValidationError("操作号须为 1 至 128 字符".into()));
         }
+
         let result = self.confirm_transaction(actor, id, &command).await;
         match result {
             Err(error) if error.command_may_have_committed() => recover_command(
@@ -79,6 +80,7 @@ impl SalesInquiryImportProcess {
         let Some(receipt) = receipt else {
             return Ok(None);
         };
+
         self.access()
             .require_sales(actor, &sales_inquiry_permissions::IMPORT_SALES_IMPORT_CONFIRM, id, executor)
             .await?;
@@ -95,6 +97,7 @@ impl SalesInquiryImportProcess {
         if let Some(result) = self.recover_confirm(actor, id, command, executor).await? {
             return Ok(result);
         }
+
         let mut inquiry = self.require_import(actor, id, executor).await?;
         let (command_id, fingerprint) = command_identity(actor.id(), id, command)?;
         self.require_preview(actor, &command.preview_id, executor).await?;
@@ -114,6 +117,7 @@ impl SalesInquiryImportProcess {
         if preview.result.is_some() {
             return Err(Error::ConflictError("该预览已由其他确认命令处理".into()));
         }
+
         inquiry.ensure_version(command.expected_version)?;
         self.revalidate(&preview, executor).await?;
         self.apply_preview(actor, &mut inquiry, &mut preview, &command_id, fingerprint, executor).await
@@ -176,6 +180,7 @@ impl SalesInquiryImportProcess {
         };
         preview.result = Some(result.clone());
         self.db.inquiry_import_previews().update(preview, executor).await?;
+
         let receipt = InquiryImportReceipt {
             base: BaseModel::new(command_id.to_string()),
             actor_id: actor.id().into(),
@@ -184,6 +189,7 @@ impl SalesInquiryImportProcess {
             result: result.clone(),
         };
         self.db.inquiry_import_receipts().create(&receipt, executor).await.map_err(receipt_write_error)?;
+
         let log =
             actor.clone().resource_log("sales_inquiry.import", "sales_inquiry", inquiry.base.id.clone())?;
         persist_log(&self.db, &log, executor).await?;

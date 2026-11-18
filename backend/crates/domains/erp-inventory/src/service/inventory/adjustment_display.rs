@@ -41,6 +41,7 @@ impl InventoryService {
         } else {
             self.people_facts.names_by_ids(&ids, executor).await?
         };
+
         for adjustment in adjustments {
             adjustment.apply_names(&names);
         }
@@ -76,6 +77,7 @@ impl InventoryService {
         } else {
             self.catalog_facts.skus_by_ids(&ids, executor).await?
         };
+
         let revision_ids = skus
             .values()
             .filter_map(|sku| sku.current_revision_id.as_ref())
@@ -89,6 +91,7 @@ impl InventoryService {
         } else {
             self.catalog_facts.sku_revisions_by_ids(&revision_ids, executor).await?
         };
+
         for line in lines {
             line.apply_sku_names(&skus, &revisions);
         }

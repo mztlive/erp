@@ -37,9 +37,11 @@ impl SettlementPartyDirectoryPage {
                 no_scope: false,
             },
         )?;
+
         if query.scope_version.as_ref().is_some_and(|version| version != &page.scope_version) {
             return Err(Error::ConflictError("DATA_SCOPE_CHANGED：目录已变化，请重新查询".into()));
         }
+
         Ok(Self {
             items: page.items,
             total: page.total,
@@ -83,6 +85,7 @@ mod tests {
         assert_eq!(first.scope_version, second.scope_version);
         assert_eq!(second.total, 2);
         assert!(SettlementPartyDirectoryPage::from_snapshot(vec![item("a")], &next).is_err());
+
         let selected = DirectoryQuery {
             ids: Some(serde_json::from_value(serde_json::json!("a,b")).unwrap()),
             ..Default::default()

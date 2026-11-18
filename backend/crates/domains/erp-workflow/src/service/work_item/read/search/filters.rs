@@ -43,6 +43,7 @@ impl WorkspaceFilters {
             Some(_) => return Err(Error::ValidationError("工作台筛选条件过长".into())),
             None => Self::default(),
         };
+
         for values in [
             &mut value.item_types,
             &mut value.counterparties,
@@ -62,6 +63,7 @@ impl WorkspaceFilters {
             values.sort();
             values.dedup();
         }
+
         value.validate_dates()?;
         if value.due.as_deref().is_some_and(|due| !["today", "overdue"].contains(&due)) {
             return Err(Error::ValidationError("截止条件不支持".into()));
@@ -69,6 +71,7 @@ impl WorkspaceFilters {
         if value.due.is_some() && (value.date_from.is_some() || value.date_to.is_some() || value.undated) {
             return Err(Error::ValidationError("截止快捷条件不能与日期区间同时使用".into()));
         }
+
         if value.option_query.as_ref().is_some_and(|q| q.chars().count() > 128) {
             return Err(Error::ValidationError("选项检索词不能超过128字".into()));
         }

@@ -83,6 +83,7 @@ impl CancellationScope {
                 "请填写有效取消原因，并完整选择本次接口执行的原商品范围".into(),
             ));
         }
+
         let mut seen = BTreeSet::new();
         for line in &request.lines {
             let item = frozen
@@ -98,6 +99,7 @@ impl CancellationScope {
                 ));
             }
         }
+
         let mut lines: Vec<_> = request
             .lines
             .iter()
@@ -124,6 +126,7 @@ impl CancellationScope {
         if Self::new(request, frozen)?.payload_hash != self.payload_hash {
             return Err(Error::ConflictError("取消范围与原请求不一致".into()));
         }
+
         let lines = frozen
             .iter()
             .map(|line| {
@@ -183,6 +186,7 @@ impl ApiOrderExecution {
             }
             return Ok(false);
         }
+
         if self.confirmations.values().any(|action| action.state == ConfirmationActionState::SentUnknown) {
             return Err(Error::BusinessLogicError("原订单确认尚未查明，请先查询确认结果后取消".into()));
         }
@@ -194,6 +198,7 @@ impl ApiOrderExecution {
         if leaves.is_empty() || root_action_id.trim().is_empty() {
             return Err(Error::ValidationError("取消范围或动作身份缺失".into()));
         }
+
         let mut actions = self.cancellation_actions.clone();
         for leaf in leaves {
             let order = OrderReference {
@@ -217,6 +222,7 @@ impl ApiOrderExecution {
                 },
             );
         }
+
         self.cancellation_actions = actions;
         self.cancellation_payload_hash = Some(scope.payload_hash.clone());
         self.cancellation_action_id = Some(root_action_id.into());
@@ -255,6 +261,7 @@ impl ApiOrderExecution {
         if action.state != CancellationActionState::Ready {
             return Ok(None);
         }
+
         let tree = self
             .order_tree
             .as_ref()
@@ -285,6 +292,7 @@ impl ApiOrderExecution {
         if action.action.id != accepted.action_id || action.state != CancellationActionState::SentUnknown {
             return Err(Error::ConflictError("取消受理身份与原请求不一致，继续查询原结果".into()));
         }
+
         action.state = CancellationActionState::Accepted;
         action.external_request_id = accepted.external_request_id;
         self.refresh_cancellation_stage();
@@ -325,6 +333,7 @@ impl ApiOrderExecution {
                 action.state = next;
             }
         }
+
         self.cancellation_actions = actions;
         self.refresh_cancellation_stage();
         Ok(())
@@ -477,6 +486,7 @@ mod tests {
         let canonical = scope.canonical_request(&altered, &frozen).unwrap();
         assert_eq!(canonical.lines[0].amount, "20".parse().unwrap());
         assert_eq!(request.lines[0].amount, Amount::zero());
+
         altered.lines[0].quantity = "1".parse().unwrap();
         assert!(CancellationScope::new(&altered, &frozen).is_err());
         altered = request.clone();
@@ -498,19 +508,23 @@ mod tests {
             .unwrap();
         assert!(!execution.all_cancellations_confirmed());
         assert!(!execution.prepare_cancellations(&scope, "aggregate").unwrap());
+
         let mut recovered: ApiOrderExecution =
             serde_json::from_str(&serde_json::to_string(&execution).unwrap()).unwrap();
         assert!(recovered.begin_cancellation("a").unwrap().is_none());
+
         recovered.order_tree.as_mut().unwrap().nodes[1].cancellation = Some(CancelStatus::CancelPending);
         recovered.order_tree.as_mut().unwrap().nodes[2].cancellation = Some(CancelStatus::Canceled);
         recovered.observe_cancellations().unwrap();
         assert_eq!(recovered.stage, ApiOrderStage::CancellationUnknown);
         assert!(!recovered.all_cancellations_confirmed());
         assert!(recovered.order_tree.as_ref().unwrap().nodes.iter().all(|node| node.refund.is_none()));
+
         recovered.order_tree.as_mut().unwrap().nodes[1].cancellation = Some(CancelStatus::Canceled);
         recovered.observe_cancellations().unwrap();
         assert!(recovered.all_cancellations_confirmed());
         assert_eq!(recovered.stage, ApiOrderStage::Stopped);
+
         let mut changed = request;
         changed.reason_code = Some("changed".into());
         assert!(
@@ -527,6 +541,7 @@ mod tests {
             .prepare_cancellations(&CancellationScope::new(&request, &frozen).unwrap(), "aggregate")
             .unwrap();
         execution.begin_cancellation("a").unwrap().unwrap();
+
         let mut changed = execution.order_tree.clone().unwrap();
         changed.version = 2;
         changed.nodes[1].role = OrderNodeRole::Parent;
@@ -540,6 +555,7 @@ mod tests {
             leaf.cancellation = None;
             changed.nodes.push(leaf);
         }
+
         execution.apply_order_tree(changed, &frozen).unwrap();
         execution.observe_cancellations().unwrap();
         assert_eq!(execution.cancellation_actions["a"].state, CancellationActionState::SentUnknown);

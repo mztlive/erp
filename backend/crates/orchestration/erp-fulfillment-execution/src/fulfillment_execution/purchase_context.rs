@@ -134,6 +134,7 @@ async fn effective_paid_amount(
         .map(|entry| entry.base.id.clone().into())
         .collect();
     let allocations = db.payment_allocations().find_allocations_by_entries(&entry_ids, session).await?;
+
     let mut net = Amount::from_str("0").map_err(Error::Logic)?;
     for allocation in allocations {
         net = match allocation.allocation_action {
@@ -178,6 +179,7 @@ pub(super) async fn ensure_allocation_valid(
         .await?;
     let current_purchase_line_ids =
         revision_lines.iter().map(|line| line.base.id.clone().into()).collect::<Vec<_>>();
+
     let sales_revision_line = db
         .sales_order_revision_lines()
         .sales_revision_line_for_allocation(
@@ -188,6 +190,7 @@ pub(super) async fn ensure_allocation_valid(
         .await?;
     let sales_association = sales_revision_line
         .map(|line| (erp_core::ids::SalesOrderRevisionLineId::new(line.base.id), line.sales_order_line_id));
+
     PurchaseFulfillmentEligibility::ensure_allocation_consistent(
         &PurchaseAllocationFact {
             purchase_order_revision_line_id: allocation.purchase_order_revision_line_id.clone(),

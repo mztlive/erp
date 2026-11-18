@@ -50,6 +50,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
                 Box::pin(async move { process.create_statement_apply(command, &writer, executor).await })
             })
             .await;
+
         let Err(error) = result else { return result };
         let process = self.clone();
         let actor = actor.clone();
@@ -80,17 +81,20 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             StatementPreparation::Replay(result) => return Ok(result),
             StatementPreparation::Ready(prepared) => prepared,
         };
+
         let PreparedStatement { statement, snapshot, statement_no, .. } = prepared;
         let audit_id =
             command_audit_id(actor.id(), "supplier_settlement.create", &statement_no, &req.idempotency_key);
         let audit = create_statement_audit(actor, audit_id, &statement)?;
         let item_count = snapshot.items.len();
         let difference_count = snapshot.differences.len();
+
         self.data_scope.require_create(actor, actor.id(), executor).await?;
         SupplierSettlementService::new(self.db.clone())
             .persist_statement_with_items(&statement, &snapshot.items, &snapshot.differences, executor)
             .await?;
         persist_log(&self.db, &audit, executor).await?;
+
         Ok(SettlementDraftCommandResult {
             result_status: "CREATED".to_string(),
             message: "结算草稿已从服务端权威来源快照创建".to_string(),
@@ -147,6 +151,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
                 })
             })
             .await;
+
         let Err(error) = result else { return result };
         let process = self.clone();
         let actor = actor.clone();
@@ -187,11 +192,13 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         validate_refresh_identity(id, &req)?;
         let fingerprint = refresh_fingerprint(&req);
         let audit_id = command_audit_id(actor.id(), "supplier_settlement.refresh", id, &req.idempotency_key);
+
         if let Some(result) =
             self.replay_refresh(&audit_id, &fingerprint, id, (actor, &replay_key), executor).await?
         {
             return Ok(result);
         }
+
         let prepared = self.domain().prepare_refresh(id, &req, actor, executor).await?;
         let mut statement = prepared.statement;
         let Some(snapshot) = prepared.snapshot else {
@@ -206,6 +213,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
                 )
                 .await;
         };
+
         let receipt = RefreshReceipt::new(req.request_id.clone(), statement.source_snapshot_hash.clone())
             .with_counts(statement.base.version + 1, snapshot.items.len(), snapshot.differences.len());
         let audit = refresh_audit(audit_id, &statement, actor)?;
@@ -219,6 +227,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
                 executor,
             )
             .await?;
+
         persist_supply_receipt(
             &self.db,
             &audit,
@@ -270,6 +279,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .await?;
         let current = self.domain().load_statement(&statement.base.id, executor).await?;
         ensure_refresh_replay(&current, receipt)?;
+
         persist_supply_receipt(
             &self.db,
             &audit,
@@ -295,6 +305,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
     ) -> Result<Option<SettlementDraftCommandResult>> {
         let (actor, key) = identity;
         self.data_scope.require_action(actor, SettlementAction::Refresh, statement_id, executor).await?;
+
         let Some(stored) = self.db.supply_command_receipts().find_command(audit_id, executor).await? else {
             return Ok(None);
         };
@@ -309,6 +320,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let SupplyCommandResult::Refresh(receipt) = stored.result else {
             return Err(Error::Internal("结算刷新回执类型非法".to_string()));
         };
+
         let statement = self.domain().load_statement(statement_id, executor).await?;
         ensure_refresh_replay(&statement, &receipt)?;
         Ok(Some(refresh_result(statement, receipt, "REPLAYED", "结算试算刷新结果已恢复")))
@@ -419,11 +431,14 @@ mod replay_tests {
             request_id: "request-1".into(),
             idempotency_key: "refresh-key".into(),
         };
+
         let attempt =
             process.refresh_statement_apply("statement-1", request.clone(), &actor, &mut NoTransaction).await;
         assert!(matches!(attempt, Err(Error::Internal(message)) if message == "供应链授权未接线"));
+
         let recovery = process.recover_refresh("statement-1", &request, &actor, &mut NoTransaction).await;
         assert!(matches!(recovery, Err(Error::Internal(message)) if message == "供应链授权未接线"));
+
         let replay = process
             .replay_refresh(
                 "audit",
@@ -445,6 +460,7 @@ mod replay_tests {
             statement.base.version = version;
             assert_eq!(ensure_refresh_replay(&statement, &receipt).is_ok(), version == 2);
         }
+
         statement.base.version = 2;
         statement.source_snapshot_hash = "c".repeat(64);
         assert!(ensure_refresh_replay(&statement, &receipt).is_err());

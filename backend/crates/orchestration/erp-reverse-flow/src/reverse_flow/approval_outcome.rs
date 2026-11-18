@@ -56,6 +56,7 @@ pub(super) async fn persist_approval_outcome(
             return Err(Error::ValidationError(format!("{} 不属于退货退款审批动作端口", other.label())));
         },
     }
+
     let audit = actor.clone().resource_log(audit_action, document_type.as_str(), id.to_string())?;
     persist_log(db, &audit, executor).await?;
     Ok(())

@@ -76,6 +76,7 @@ impl ContractTemplateService {
             "contract_number_counter",
             initial.base.id.clone(),
         )?;
+
         self.db
             .client()
             .with_transaction(move |executor| {
@@ -84,11 +85,13 @@ impl ContractTemplateService {
                         .authorization
                         .require(&actor, &contract::TEMPLATES_CREATE, AccessTarget::Operation, executor)
                         .await?;
+
                     let existing =
                         service.db.contract_counters().find_by_id(&initial.base.id, executor).await?;
                     if existing.as_ref().map(|c| c.base.version) != request.version {
                         return Err(Error::ConflictError("流水已变化，请刷新后重试".into()));
                     }
+
                     let is_new = existing.is_none();
                     let mut counter = existing.unwrap_or(initial);
                     counter.advance_to(request.last_sequence)?;

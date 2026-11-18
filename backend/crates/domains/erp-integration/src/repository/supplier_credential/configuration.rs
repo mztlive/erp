@@ -23,10 +23,12 @@ impl SupplierCredentialRepository<'_> {
             mongo_ops::insert_one(&self.collection(), &record, executor).await?;
             return Ok((record, true));
         };
+
         let mut next = current.clone();
         if !next.configure_tokens(payload, command, now)? {
             return Ok((current, false));
         }
+
         // 每次刷新和授权状态迁移均推进version，旧远端结果不能覆盖新配置。
         let filter = filters::version(&current, current.base.version)?;
         let saved = self.replace(filter, &next, executor).await?.ok_or_else(changed)?;

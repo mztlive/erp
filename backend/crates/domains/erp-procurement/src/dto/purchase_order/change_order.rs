@@ -230,6 +230,7 @@ mod submit_tests {
         let request = request();
         let identity = request.command_identity("change-1", "actor").unwrap();
         let fingerprint = request.request_fingerprint("change-1").unwrap();
+
         let result = PurchaseChangeSubmitResult {
             change_id: "change-1".into(),
             submission_id: "submission-2".into(),
@@ -248,6 +249,7 @@ mod submit_tests {
         )
         .unwrap();
         assert_eq!(decoded.into_payload(), result);
+
         for changed in [
             {
                 let mut value = request.clone();

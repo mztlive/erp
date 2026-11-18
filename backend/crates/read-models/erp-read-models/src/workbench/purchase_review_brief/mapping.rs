@@ -80,6 +80,7 @@ pub(super) fn assemble_purchase_review_displays(
         .iter()
         .map(|submission| (submission.base.id.as_str(), submission))
         .collect::<HashMap<_, _>>();
+
     submissions
         .iter()
         .map(|submission| {
@@ -243,6 +244,7 @@ fn purchase_review_display(
         submitter_name,
         PurchaseSubmissionComparison { origin, previous, changed_line_count },
     );
+
     let line_count = Some(brief.lines.len() + brief.more_count as usize).filter(|count| *count > 0);
     let mut impact = purchase_review_impact_summary(
         line_count,
@@ -252,6 +254,7 @@ fn purchase_review_display(
     if previous.is_some() {
         impact.push_str("；本次为再次提交，必须先核对前后差异");
     }
+
     PurchaseReviewDisplay {
         subject_version: submission.formal_sequence(),
         purchase_order_id: submission.purchase_order_id.to_string(),
@@ -347,11 +350,13 @@ fn purchase_review_sections(
         sales_order_no.map(str::trim).filter(|text| !text.is_empty()),
         sales_order_id,
     );
+
     push_section(&mut sections, "含税金额", Some(format_yuan(&submission.gross_amount)).as_deref(), true);
     push_section(&mut sections, "不含税金额", Some(format_yuan(&submission.net_amount)).as_deref(), true);
     if !submission.tax_amount.to_decimal().is_zero() {
         push_section(&mut sections, "税额", Some(format_yuan(&submission.tax_amount)).as_deref(), true);
     }
+
     push_section(&mut sections, "付款条件", payment, false);
     let category = split_encoded_payment_term_snapshot(&submission.payment_term_snapshot.payment_term_code)
         .business_category;
@@ -360,6 +365,7 @@ fn purchase_review_sections(
     push_section(&mut sections, "履约责任", Some(submission.fulfillment_responsibility.label()), false);
     push_section(&mut sections, "提交来源", origin, false);
     push_section(&mut sections, "提交号", non_empty(&submission.submission_no).as_deref(), false);
+
     if let Some(previous) = previous {
         push_resubmission_comparisons(
             &mut sections,
@@ -429,6 +435,7 @@ fn push_resubmission_comparisons(
         current.fulfillment_responsibility.label().to_string(),
         false,
     ));
+
     let summary = if header_change_count == 0 && changed_line_count == 0 {
         "与上一次正式提交一致".to_string()
     } else {
@@ -771,6 +778,7 @@ mod tests {
             payment_term_label(&payment("现结｜经营类目：礼盒", false)).as_deref(),
             Some("现结（审批通过日）")
         );
+
         let mut unknown = payment("现结", false);
         unknown.payment_term_code = "UNKNOWN-TERM-1".into();
         assert_eq!(payment_term_label(&unknown).as_deref(), Some("付款条件待核对"));
@@ -792,7 +800,6 @@ mod tests {
         draft.mark_superseded().expect("冻结后草稿必须可失效");
 
         let origins = submission_origins(&[draft, formal]);
-
         assert!(!origins.contains_key("draft-1"));
         assert_eq!(origins.get("submission-1"), Some(&"初次提交"));
     }
@@ -819,7 +826,6 @@ mod tests {
         .expect("再次正式提交必须可冻结");
 
         let origins = submission_origins(&[first, second]);
-
         assert_eq!(origins.get("submission-1"), Some(&"初次提交"));
         assert_eq!(origins.get("submission-2"), Some(&"再次提交"));
     }
@@ -845,7 +851,6 @@ mod tests {
         .expect("再次正式提交必须可冻结");
 
         let previous = previous_formal_submission_ids(&[draft, first, second]);
-
         assert_eq!(previous.get("submission-2").map(String::as_str), Some("submission-1"));
         assert!(!previous.contains_key("submission-1"));
     }
@@ -863,6 +868,7 @@ mod tests {
         ));
         assert_eq!(sections[0].value, "¥100 → ¥120");
         assert!(sections[0].numeric);
+
         assert!(!push_changed_section(
             &mut sections,
             "供应商（前→后）",
@@ -916,6 +922,7 @@ mod tests {
             quantity: Some("¥80".to_string()),
             due_label: None,
         });
+
         let (visible, more_count) = split_purchase_brief_lines(lines);
         assert_eq!(more_count, 1);
         assert_eq!(visible.len(), 4);

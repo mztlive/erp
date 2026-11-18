@@ -47,6 +47,7 @@ async fn offering_detail_requires_its_own_qualification_for_record_and_query() {
         )
         .await
         .unwrap();
+
     let access = service.query(&actor(), &supplier_offering::DETAIL, &mut executor).await.unwrap();
     access.ensure_current(&mut executor).unwrap();
     service.validate(&access, &mut executor).await.unwrap();
@@ -65,6 +66,7 @@ async fn offering_detail_query_requires_mapping_and_rejects_expired_delivery() {
         missing.build(),
         Err(Error::ValidationError(reason)) if reason == "缺少查询 Mapping：supplier_offering:detail"
     ));
+
     let service = complete().build().unwrap();
     let mut executor = SnapshotExecutor::default();
     let mut access = service.query(&actor(), &supplier_offering::DETAIL, &mut executor).await.unwrap();

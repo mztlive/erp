@@ -17,6 +17,7 @@ pub fn procurement_responsibility_key(line_ids: &[String]) -> Result<String> {
     if line_ids.is_empty() {
         return Err(Error::from("供给分配任务责任行不能为空"));
     }
+
     let mut digest = Sha256::new();
     for line_id in line_ids {
         digest.update((line_id.len() as u64).to_be_bytes());

@@ -43,10 +43,12 @@ async fn reserve_lines(
         let Some(detail) = line.expense.as_ref() else { continue };
         let Some(source) = detail.inquiry_source.as_ref() else { continue };
         let source = source.normalized()?;
+
         let mut inquiry = match inquiries.remove(&source.inquiry_id) {
             Some(inquiry) => inquiry,
             None => persistence.inquiry(&source.inquiry_id, executor).await?,
         };
+
         inquiry.fee_for_terms(
             source.feedback_round,
             &source.fee_id,
@@ -54,6 +56,7 @@ async fn reserve_lines(
             line.input_tax_rate,
         )?;
         confirm_payee(persistence, &inquiry, &source, order, actor_id, executor).await?;
+
         let reserved = reservation(
             &source,
             order.sales_order_id.as_ref(),
@@ -306,6 +309,7 @@ mod tests {
         let persistence = RecordedPersistence::new(&["first", "second"], true);
         let mut executor = TestExecutor::default();
         let expected_executor = &mut executor as *mut TestExecutor as usize;
+
         reserve_lines(
             &persistence,
             &order(),
@@ -315,6 +319,7 @@ mod tests {
         )
         .await
         .unwrap();
+
         let store = persistence.0.lock().unwrap();
         assert_eq!(
             store.calls.iter().map(|(step, _)| step).collect::<Vec<_>>(),
@@ -330,6 +335,7 @@ mod tests {
             ]
         );
         assert!(store.calls.iter().all(|(_, executor)| *executor == expected_executor));
+
         let first = &store.inquiries["first"];
         assert_eq!(first.base.version, 3);
         assert_eq!(first.fee_ledger.len(), 2);
@@ -351,6 +357,7 @@ mod tests {
         assert!(
             matches!(result, Err(Error::BusinessLogicError(message)) if message == "费用来源或销售分摊可用余额不足")
         );
+
         let store = persistence.0.lock().unwrap();
         assert_eq!(store.inquiries["first"].fee_ledger.len(), 1);
         assert_eq!(store.inquiries["first"].base.version, 2);
@@ -371,6 +378,7 @@ mod tests {
         )
         .await;
         assert!(matches!(result, Err(Error::ConflictError(message)) if message == "保存失败"));
+
         let store = persistence.0.lock().unwrap();
         assert_eq!(store.calls.len(), 3);
         assert_eq!(store.calls[2].0, Step::Save("first".into(), 1));
@@ -389,6 +397,7 @@ mod tests {
         )
         .await
         .unwrap();
+
         let store = persistence.0.lock().unwrap();
         assert_eq!(store.calls.len(), 5);
         assert_eq!(store.calls[2].0, Step::Append);

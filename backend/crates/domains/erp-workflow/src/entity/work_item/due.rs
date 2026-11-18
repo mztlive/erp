@@ -62,12 +62,14 @@ impl WorkItemDueFilter {
             .timestamp_opt(now.unix_secs(), 0)
             .single()
             .ok_or_else(|| Error::from("无法读取统计时点"))?;
+
         let start = timezone
             .with_ymd_and_hms(local.year(), local.month(), local.day(), 0, 0, 0)
             .single()
             .ok_or_else(|| Error::from("无法形成业务日边界"))?;
         let start = Instant::from_unix_secs(start.timestamp());
         let tomorrow = Instant::from_unix_secs(start.unix_secs() + 86_400);
+
         Ok(match self {
             Self::Today => WorkItemDueWindow { from: Some(start), before: tomorrow },
             Self::Overdue => WorkItemDueWindow { from: None, before: now },

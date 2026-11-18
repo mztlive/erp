@@ -48,9 +48,11 @@ impl CustomerProfileProcess {
         self.authorization
             .require(actor, &internal::CUSTOMER_PROFILE_COMMAND_READ, AccessTarget::Operation, executor)
             .await?;
+
         let Some(command) = self.command_record(key, executor).await? else {
             return Ok(None);
         };
+
         if command.initiated_by != actor.id() {
             self.access
                 .require_with(actor.clone(), &customer::DETAIL, &command.customer_id, executor)
@@ -144,6 +146,7 @@ impl CustomerProfileProcess {
                                 },
                             }
                             this.require_fields(&actor, &fields, executor).await?;
+
                             this.replay_command(&context, &actor, executor).await
                         })
                     })
@@ -250,6 +253,7 @@ mod tests {
             },
         )
         .unwrap();
+
         let error = process
             .authorize_command(&command, &actor, &mut SnapshotExecutor::default())
             .await
@@ -269,6 +273,7 @@ mod tests {
             authorization,
         );
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let error = process
             .command_result_snapshot("key", &actor, &mut SnapshotExecutor::default())
             .await
@@ -296,6 +301,7 @@ mod tests {
             erp_customer::CustomerProfileRequestFingerprint::parse_compatible("0".repeat(64)).unwrap(),
         )
         .unwrap();
+
         let result =
             process.resolve_transaction(Err(Error::Forbidden("revoked".into())), &context, &actor, &[]).await;
         assert!(matches!(result, Err(Error::Forbidden(message)) if message == "revoked"));

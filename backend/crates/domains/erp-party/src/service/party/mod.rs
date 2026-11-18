@@ -141,6 +141,7 @@ impl PartyService {
         executor: &mut dyn Executor,
     ) -> Result<PartyView> {
         req.validate()?;
+
         let party_id = PartyId::new(next_id());
         let revision_id = PartyRevisionId::new(next_id());
         let mut party = Party::new(
@@ -154,6 +155,7 @@ impl PartyService {
             actor.id(),
         )?;
         party.company_profile = company;
+
         let revision = PartyRevision::new(
             revision_id.clone(),
             PartyRevisionData {
@@ -186,6 +188,7 @@ impl PartyService {
         )
         .await?;
         ensure_identity_available(&self.db, &party, &revision, executor).await?;
+
         let audit = self.audit.resource_log(actor.clone(), "party.create", "party", party.base.id.clone())?;
         self.db.party_revisions().create(&revision, executor).await?;
         self.db.parties().create(&party, executor).await?;
@@ -230,6 +233,7 @@ impl PartyService {
         executor: &mut dyn Executor,
     ) -> Result<PageView<PartyView>> {
         let query = self.list_query(actor, params, executor).await?;
+
         let matching_name_ids = match query.keyword.as_deref() {
             Some(keyword) => self.db.party().matching_current_party_ids_by_name(keyword, executor).await?,
             None => Vec::new(),
@@ -244,6 +248,7 @@ impl PartyService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.parties().search_parties(&filter, executor).await?;
         let items = page
             .items
@@ -261,7 +266,6 @@ impl PartyService {
                 )
             })
             .collect();
-
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
@@ -302,6 +306,7 @@ impl PartyService {
             .find_with_current_revision(&id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("主体不存在".to_string()))?;
+
         let current_revision = revision.and_then(|revision| {
             party.current_revision(slice::from_ref(&revision)).ok()?;
             Some(revision.into())
@@ -386,12 +391,15 @@ impl PartyService {
     ) -> Result<PartyView> {
         req.validate()?;
         self.authorization.require(actor, permission, AccessTarget::Operation, executor).await?;
+
         let prepared = self.load_party_for_update(id, req, company, actor, executor).await?;
         let next_no = self.db.party_revisions().next_revision_no(&PartyId::new(id), executor).await?;
+
         let PendingPartyUpdate { mut party, revision, update } = prepared;
         let revision = PartyRevision { revision: RevisionBase::new(next_no), ..revision };
         party.update(update, actor.id())?;
         ensure_identity_available(&self.db, &party, &revision, executor).await?;
+
         let audit = self.audit.resource_log(actor.clone(), "party.update", "party", id.to_owned())?;
         self.db.party().append_party_revision(&mut party, &revision, actor.id(), executor).await?;
         self.audit.persist(&audit, executor).await?;
@@ -517,6 +525,7 @@ impl PartyService {
         executor: &mut dyn Executor,
     ) -> Result<PageView<PartyRevisionView>> {
         let filter = self.revision_filter(actor, party_id, params, executor).await?;
+
         let page = self.db.party_revisions().search_party_revisions(&filter, executor).await?;
         let items = page
             .items
@@ -533,7 +542,6 @@ impl PartyService {
                 )
             })
             .collect();
-
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
@@ -712,6 +720,7 @@ mod tests {
                 assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
             }
         }
+
         let error = service
             .delete_party("unread-party", &actor, &mut SnapshotExecutor::default())
             .await

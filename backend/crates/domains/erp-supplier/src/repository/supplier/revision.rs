@@ -138,6 +138,7 @@ async fn next_revision_no(
     let rows =
         mongo_ops::find_many(&db.collection::<RevisionNoRow>(collection_name), filter, options, executor)
             .await?;
+
     rows.into_iter()
         .next()
         .map(|row| row.revision_no)

@@ -101,6 +101,7 @@ impl AuditActorLogs for AuditActor {
         let request_id = self.request_id().map(str::to_string);
         let data = AuditLog::success_resource_data(self, action, resource_type, resource_id, message)?;
         let mut prepared = prepare_business_log(&AuditLog::new(id, data)?)?;
+
         if let Some(event) = &mut prepared.structured_event {
             event.actor_name_snapshot = actor_name_snapshot;
             event.request_id = request_id;
@@ -151,6 +152,7 @@ pub fn prepare_business_log(log: &AuditLog) -> Result<AuditLog> {
         prepared.message = Some(event.message());
         return Ok(prepared);
     }
+
     let actor = AuditActor::new(log.actor_id.clone(), log.actor_account.clone(), log.actor_type);
     let context = BusinessEventContext::new(actor, action)?;
     let mut prepared = context.log(BusinessEventContent {
@@ -163,6 +165,7 @@ pub fn prepare_business_log(log: &AuditLog) -> Result<AuditLog> {
         field_changes: Vec::new(),
         facts: Vec::new(),
     })?;
+
     prepared.base = log.base.clone();
     if let Some(event) = &mut prepared.structured_event {
         event.occurred_at = log.base.created_at;
@@ -191,6 +194,7 @@ pub fn attempt_context(log: &AuditLog) -> Result<BusinessEventContext> {
         log.resource_id.clone(),
         event.and_then(|event| event.resource_number_snapshot.clone()),
     )?;
+
     if let Some(event) = event {
         context = context
             .with_command_id(event.command_id.clone())?
@@ -263,6 +267,7 @@ mod tests {
         assert_eq!(event.resource_type, "party");
         assert_eq!(event.resource_id, "party-1");
         assert!(log.message.as_deref().unwrap().contains("同步内置我方公司"));
+
         assert!(actor.clone().resource_log("company.bootstrap", "company", "party-1".into()).is_err());
         assert!(actor.resource_log("company.bootstrap", "party", " ".into()).is_err());
     }
@@ -302,7 +307,6 @@ mod tests {
     fn audit_actor_validates_before_transaction() {
         let result = AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin)
             .resource_log("", "customer", "customer-1".to_string());
-
         assert!(result.is_err());
     }
 }
@@ -376,6 +380,7 @@ mod ordinary_factory_tests {
         assert_eq!(event.actor_name_snapshot, None);
         assert!(prepared.message.as_deref().unwrap().contains("KH-0001"));
         assert!(!serde_json::to_string(&prepared).unwrap().contains("secret request"));
+
         let attempt = attempt_context(&prepared).unwrap().attempt(crate::AuditAttemptResult::Rejected);
         assert_eq!(attempt.resource_id.as_deref(), Some("customer"));
         assert_eq!(attempt.command_id.as_deref(), Some("command"));
@@ -401,6 +406,7 @@ mod ordinary_factory_tests {
     fn unknown_factory_and_mismatched_structured_identity_fail_closed() {
         assert!(actor().resource_log("customer.update:customer", "customer", "customer".into()).is_err());
         assert!(actor().resource_log("customer.update", "supplier", "customer".into()).is_err());
+
         let mut log = actor().resource_log("customer.update", "customer", "customer".into()).unwrap();
         log.structured_event.as_mut().unwrap().actor_id = "another actor".into();
         assert!(prepare_business_log(&log).is_err());
@@ -410,6 +416,7 @@ mod ordinary_factory_tests {
         let log = actor().resource_log("customer.update", "customer", "customer".into()).unwrap();
         assert!(log.clone().with_command_id(Some("invalid\nkey".into())).is_err());
         assert!(log.clone().with_resource_number(Some("invalid\nnumber".into())).is_err());
+
         let mut missing = log;
         missing.structured_event = None;
         assert!(missing.with_command_id(Some("command".into())).is_err());
@@ -435,6 +442,7 @@ mod ordinary_factory_tests {
         assert_eq!(event.actor_id, "actor");
         assert_eq!(event.actor_account, "account");
         assert!(persisted.message.as_deref().unwrap().contains("王慧敏"));
+
         let attempt = attempt_context(&persisted).unwrap().attempt(crate::AuditAttemptResult::Unknown);
         assert_eq!(attempt.actor_name_snapshot.as_deref(), Some("王慧敏"));
         assert_eq!(attempt.request_id.as_deref(), Some("request-original"));

@@ -685,6 +685,7 @@ mod tests {
         assert_eq!(view.prepared_by_name.as_deref(), Some("赵卫东"));
         assert_eq!(view.submitted_by_name.as_deref(), Some("林晓燕"));
         assert_eq!(view.current_assignee_name.as_deref(), Some("王慧敏"));
+
         assert_eq!(view.prepared_by, "operator-1");
         assert_eq!(view.submitted_by.as_deref(), Some("applicant-1"));
         assert_eq!(view.current_assignee.as_deref(), Some("handler-1"));
@@ -700,6 +701,7 @@ mod tests {
         assert!(view.prepared_by_name.is_none());
         assert!(view.submitted_by_name.is_none());
         assert!(view.current_assignee_name.is_none());
+
         view.prepared_by = " ".into();
         view.submitted_by = None;
         view.current_assignee = Some(String::new());
@@ -747,13 +749,16 @@ mod tests {
                 },
             ),
         ]);
+
         line.apply_sku_names(&skus, &revisions);
         assert_eq!(line.sku_code.as_deref(), Some("SKU-001"));
         assert_eq!(line.sku_name.as_deref(), Some("礼品卡"));
         assert_eq!(line.sku_id, "sku-1");
+
         line.apply_sku_names(&skus, &HashMap::new());
         assert_eq!(line.sku_code.as_deref(), Some("SKU-001"));
         assert!(line.sku_name.is_none());
+
         line.apply_sku_names(&HashMap::new(), &revisions);
         assert!(line.sku_code.is_none());
         assert!(line.sku_name.is_none());
@@ -938,6 +943,7 @@ mod tests {
             }))
             .is_err()
         );
+
         let submit: SubmitStockAdjustmentRequest = serde_json::from_value(serde_json::json!({
             "expected_version": 1,
             "expected_subject_version": 1,
@@ -1026,6 +1032,7 @@ mod tests {
         ] {
             assert!(serde_json::from_value::<StockBalanceListParams>(raw).is_err());
         }
+
         let ok: StockBalanceListParams =
             serde_json::from_value(serde_json::json!({"page": 1, "scope_version": "v1"})).unwrap();
         assert_eq!(ok.scope_version.as_deref(), Some("v1"));
@@ -1049,6 +1056,7 @@ mod tests {
             }))
             .is_err()
         );
+
         let adjustment: StockAdjustmentListParams = serde_json::from_value(serde_json::json!({
             "operator_user_ids": "op-1",
             "applicant_user_ids": "app-1",
@@ -1065,6 +1073,7 @@ mod tests {
             }))
             .is_err()
         );
+
         let me: StockMovementListParams =
             serde_json::from_value(serde_json::json!({"operator_user_ids": "me"})).unwrap();
         assert!(me.normalized().is_err());

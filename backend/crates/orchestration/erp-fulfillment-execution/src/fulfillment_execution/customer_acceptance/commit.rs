@@ -60,6 +60,7 @@ impl CustomerAcceptanceProcess {
         if let Some(view) = self.committed_result(&req, actor, &command_receipt).await? {
             return Ok(view);
         }
+
         let command = PreparedAcceptanceCommit::new(self, req.clone(), actor, command_receipt.clone())?;
         let transaction_result = self
             .db
@@ -67,6 +68,7 @@ impl CustomerAcceptanceProcess {
             .clone()
             .with_transaction(move |executor| Box::pin(command.execute(executor)))
             .await;
+
         match transaction_result {
             Ok(view) => Ok(view),
             Err(error) => self.recover_commit(error, &command_receipt, &req, actor).await,
@@ -190,9 +192,11 @@ impl PreparedAcceptanceCommit {
                 .committed_customer_acceptance_view(&persisted.base.id, &self.req.sales_order_id, executor)
                 .await?);
         }
+
         SalesAccess::new(self.db.clone(), self.authorization.clone())
             .require_object(&self.actor, &sales_order_permissions::DETAIL, &self.req.sales_order_id, executor)
             .await?;
+
         let existing =
             FulfillmentService::load_customer_acceptance_commit_draft(&self.db, &self.req, executor).await?;
         let order = self
@@ -204,6 +208,7 @@ impl PreparedAcceptanceCommit {
         if order.base.version != self.req.expected_sales_order_version {
             return Err(Error::ConflictError("销售单已变化，请刷新履约事实后重试".to_string()));
         }
+
         self.persist(existing, executor).await
     }
 
@@ -222,6 +227,7 @@ impl PreparedAcceptanceCommit {
             executor,
         )
         .await?;
+
         let generated_acceptance_no = self.allocate_number(&existing, executor).await?;
         let (mut acceptance, is_new) = FulfillmentService::prepare_customer_acceptance_commit(
             existing,
@@ -230,6 +236,7 @@ impl PreparedAcceptanceCommit {
             generated_acceptance_no,
         )?;
         self.write(&mut acceptance, is_new, executor).await?;
+
         complete_acceptance(
             &self.db,
             &self.authorization,
@@ -239,6 +246,7 @@ impl PreparedAcceptanceCommit {
             executor,
         )
         .await?;
+
         Ok(FulfillmentReadService::new(self.db.clone())
             .committed_customer_acceptance_view(&acceptance.base.id, &self.req.sales_order_id, executor)
             .await?)
@@ -282,6 +290,7 @@ impl PreparedAcceptanceCommit {
         let document =
             CustomerAcceptanceDocument { db: &self.db, workflow: self.workflow.as_ref(), actor: &self.actor };
         document.prepare(acceptance, is_new, executor).await?;
+
         FulfillmentService::persist_customer_acceptance_commit(
             &self.db,
             acceptance,
@@ -346,9 +355,11 @@ mod tests {
         let first = commit_command_receipt(&request, "actor-1").unwrap();
         let replay = commit_command_receipt(&request, "actor-1").unwrap();
         assert_eq!(first.fingerprint(), replay.fingerprint());
+
         request.evidence_attachment_id = Some(FileAssetId::new("file-two"));
         let changed = commit_command_receipt(&request, "actor-1").unwrap();
         assert_ne!(first.fingerprint(), changed.fingerprint());
+
         request.evidence_attachment_id = None;
         let missing = commit_command_receipt(&request, "actor-1").unwrap();
         assert_ne!(first.fingerprint(), missing.fingerprint());

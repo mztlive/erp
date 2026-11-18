@@ -22,6 +22,7 @@ mod tests {
             )
             .is_err()
         );
+
         let item = WorkItem::new_with_responsibility_key(
             WorkItemId::new("wi-fulfillment"),
             data,
@@ -48,6 +49,7 @@ mod tests {
             )
             .is_err()
         );
+
         let item = WorkItem::new_with_responsibility_key(
             WorkItemId::new("wi-acceptance"),
             data,

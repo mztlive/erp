@@ -43,6 +43,7 @@ impl InventoryService {
     ) -> Result<StockAdjustmentView> {
         req.validate()?;
         let line_updates = build_adjustment_line_updates(req.lines.as_deref().unwrap_or_default())?;
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "stock_adjustment.update",
@@ -56,6 +57,7 @@ impl InventoryService {
             line_updates,
             audit,
         };
+
         let db = self.db.clone();
         let authorization = self.authorization.clone();
         let audit = self.audit.clone();
@@ -69,6 +71,7 @@ impl InventoryService {
                 })
             })
             .await?;
+
         Ok(updated.into())
     }
 }
@@ -84,6 +87,7 @@ async fn update_adjustment_lines(
     let mut existing =
         db.inventory().adjustment_lines_by_adjustment_ids(std::slice::from_ref(id), executor).await?;
     let changed = adjustment.apply_line_updates(&mut existing, updates, false)?;
+
     for line in &changed {
         if !db.inventory().persist_adjustment_line(line, executor).await? {
             return Err(Error::NotFound("调整明细不存在".into()));
@@ -110,6 +114,7 @@ async fn adjustment_for_update(
             other => other,
         }
     })?;
+
     let adjustment = db
         .stock_adjustments()
         .find_by_id(id.as_ref(), executor)
@@ -139,6 +144,7 @@ async fn persist_update(
 ) -> Result<StockAdjustment> {
     let UpdateCommand { actor, id, req, line_updates, audit } = command;
     let mut adjustment = adjustment_for_update(db, authorization, &actor, &id, req.version, executor).await?;
+
     adjustment.update(StockAdjustmentUpdate {
         reason_type: req.reason_type,
         reviewed_by: None,
@@ -149,6 +155,7 @@ async fn persist_update(
     if req.reason_type.is_some() || !line_updates.is_empty() {
         update_adjustment_lines(db, &id, &mut adjustment, &line_updates, executor).await?;
     }
+
     db.stock_adjustments().update(&mut adjustment, executor).await?;
     audit_port.persist(&audit, executor).await?;
     Ok(adjustment)

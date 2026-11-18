@@ -158,11 +158,13 @@ fn creation_response_preserves_saved_revision_pointer_and_version() {
     .unwrap();
     let planned = plan_first_archive(request, "actor").unwrap();
     assert!(planned.contract.stable.current_revision_id.is_none());
+
     let revision_id = planned.revision.base.id;
     let mut saved = planned.contract;
     saved.attach_revision(&revision_id, "actor");
     // 仓储成功写入后的元数据作为视图输入；不在本测试模拟数据库的 CAS 实现。
     saved.base.version = 2;
+
     let view = ContractView::from(saved);
     assert_eq!(view.contract_no, "CT-NEW");
     assert_eq!(view.current_revision_id.as_deref(), Some(revision_id.as_str()));

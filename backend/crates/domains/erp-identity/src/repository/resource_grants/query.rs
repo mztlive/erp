@@ -62,6 +62,7 @@ pub(crate) async fn source_target(
     let mut pipeline = vec![doc! { "$match": filter }];
     pipeline.extend(valid_source(&source.recipient, target.resource, Some(source)));
     pipeline.extend([doc! { "$limit": 1 }, doc! { "$project": { "_id": 0, "id": "$resource_id" } }]);
+
     let rows = aggregate::rows(&db.collection::<TargetId>(GRANTS), pipeline, executor).await?;
     Ok(!rows.is_empty())
 }
@@ -107,6 +108,7 @@ fn valid_source(user: &str, resource: ResourceKind, source: Option<&SourceKey>) 
         filter.insert("key.business_type", &source.business_type);
         filter.insert("key.business_id", &source.business_id);
     }
+
     vec![
         doc! { "$lookup": {
             "from": SOURCES,
@@ -137,6 +139,7 @@ mod tests {
         );
         assert_eq!(stages[2], doc! { "$match": { "__grant_source.0": { "$exists": true } } });
         assert_eq!(stages[3], doc! { "$group": { "_id": "$resource_id" } });
+
         let empty = target_pipeline("u", ResourceKind::SalesOrder, &ResourceTargets::new(&[]).unwrap());
         assert_eq!(
             empty[0].get_document("$match").unwrap().get_document("resource_id").unwrap(),
@@ -163,6 +166,7 @@ mod tests {
         assert_eq!(filter.get_str("key.recipient").unwrap(), "u");
         assert!(!filter.get_bool("terminated").unwrap());
         assert_eq!(filter.get_i32("deleted_at").unwrap(), 0);
+
         let predicates = filter.get_document("$expr").unwrap().get_array("$and").unwrap();
         assert_eq!(predicates[0], doc! { "$eq": ["$id", "$$source_id"] }.into());
         assert_eq!(predicates[1], doc! { "$eq": ["$version", "$$source_version"] }.into());

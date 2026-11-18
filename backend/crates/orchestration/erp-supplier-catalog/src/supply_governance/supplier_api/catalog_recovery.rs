@@ -26,6 +26,7 @@ pub(super) async fn clear_stalled(
     if jobs.len() >= 100 {
         return Err(Error::ConflictError("未结束同步任务过多，请联系管理员".into()));
     }
+
     let now = Instant::now();
     for mut job in jobs {
         if !job.catalog_stalled(now) {

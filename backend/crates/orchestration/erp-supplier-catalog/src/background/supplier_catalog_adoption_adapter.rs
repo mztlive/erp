@@ -57,6 +57,7 @@ impl BackgroundTaskAdapter for SupplierCatalogAdoptionTaskAdapter {
             cursor.clear();
             return Ok(0);
         }
+
         let mut claimed = 0;
         for batch in batches {
             *cursor = batch.base.id.clone();
@@ -65,6 +66,7 @@ impl BackgroundTaskAdapter for SupplierCatalogAdoptionTaskAdapter {
             }
             let Ok(permit) = Arc::clone(&self.permits).try_acquire_owned() else { break };
             self.active.lock().await.insert(batch.base.id.clone());
+
             let active = Arc::clone(&self.active);
             let process = Arc::clone(&self.process);
             tokio::spawn(async move {

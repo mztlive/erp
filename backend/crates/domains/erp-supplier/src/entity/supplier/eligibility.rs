@@ -91,6 +91,7 @@ pub fn ensure_capability_qualified(
     if revision.status != CapabilityStatus::Active {
         return Err(CapabilityEligibilityViolation::RevisionDisabled);
     }
+
     if revision.supplier_id.to_string() != supplier.base.id
         || revision.capability_code != capability.capability_code
         || capability.supplier_id.to_string() != supplier.base.id
@@ -101,6 +102,7 @@ pub fn ensure_capability_qualified(
     if !is_current {
         return Err(CapabilityEligibilityViolation::NotCurrentRevision);
     }
+
     if on_date < revision.valid_from {
         return Err(CapabilityEligibilityViolation::NotYetValid);
     }

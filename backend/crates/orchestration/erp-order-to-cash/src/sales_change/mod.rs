@@ -80,6 +80,7 @@ impl SalesChangeProcess {
             "sales_change_order",
             write.change_id().to_string(),
         )?;
+
         let db = self.db.clone();
         let procurement_actor = actor.clone();
         let services = self.services.clone();
@@ -100,6 +101,7 @@ impl SalesChangeProcess {
                 })
             })
             .await?;
+
         SalesChangeReadService::new(self.db.clone(), self.authorization.clone())
             .command_detail(id, actor, &internal::SALES_CHANGE_APPLIED_RESULT_READ)
             .await
@@ -132,6 +134,7 @@ impl SalesChangeProcess {
             "sales_change_order",
             write.change_id().to_string(),
         )?;
+
         persist_effective_writes(&self.db, &self.services, write, delta, &audit, actor, executor).await
     }
 }
@@ -165,6 +168,7 @@ pub async fn cancel_approval(
         .ok_or_else(|| crate::Error::NotFound("销售变更单不存在".to_string()))?;
     adapter::execute_sales_change_domain_action(&mut change, action, actor.id())?;
     erp_sales::service::sales_review::persist_cancelled_change(db, &mut change, executor).await?;
+
     let audit = actor.clone().resource_log(
         "sales_change_order.cancel_approval",
         "sales_change_order",

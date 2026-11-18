@@ -24,6 +24,7 @@ impl SupplierApiOrderProcess {
         if execution.stage == ApiOrderStage::Queued {
             self.initialize(&mut execution).await?;
         }
+
         // 调查可能已送达的写请求不受新业务启停、采购修订或预付款变化阻断。
         match execution.stage {
             ApiOrderStage::CancelOrders | ApiOrderStage::CancellationUnknown => {
@@ -36,10 +37,12 @@ impl SupplierApiOrderProcess {
             ApiOrderStage::DiscoverOrders => return self.discover_orders(execution).await,
             _ => {},
         }
+
         if let Err(error) = self.ensure_eligible(&execution).await {
             execution.defer(error.to_string());
             return self.persist(&mut execution).await;
         }
+
         match execution.stage {
             ApiOrderStage::PrepareAddress => self.prepare_address(execution).await,
             ApiOrderStage::PlanDelivery => self.plan_delivery(execution).await,
@@ -70,6 +73,7 @@ impl SupplierApiOrderProcess {
                 "采购生效版本已变化，请先核对已有供应商订单；系统不会按新版本重复下单".into(),
             ));
         }
+
         self.ensure_preflight_funds(execution, &order, &mut NoTransaction).await?;
         Ok(order)
     }
@@ -81,6 +85,7 @@ impl SupplierApiOrderProcess {
             .find_by_id(&execution.purchase_order_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("来源采购单不存在".into()))?;
+
         let snapshot = self.build_snapshot(execution).await;
         match snapshot {
             Ok(mut snapshot) => {
@@ -94,6 +99,7 @@ impl SupplierApiOrderProcess {
                     .to_owned();
                 self.reuse_geocode(execution, &mut snapshot, &fingerprint).await?;
                 execution.address_fingerprint = Some(fingerprint);
+
                 let ready = self.address_ready(execution, &snapshot).await;
                 execution.stage =
                     if ready.is_ok() { ApiOrderStage::PrepareAddress } else { ApiOrderStage::AwaitingSetup };
@@ -105,6 +111,7 @@ impl SupplierApiOrderProcess {
                 execution.blocker = Some(error.to_string());
             },
         }
+
         self.persist_initial_order(execution, &order).await
     }
 
@@ -160,6 +167,7 @@ impl SupplierApiOrderProcess {
         let order = self.initial_order(execution, purchase)?;
         let items = self.initial_items(execution).await?;
         let tracking = tracking_for(execution, purchase)?;
+
         let db = self.db.clone();
         let client = db.client().clone();
         let mut saved = execution.clone();
@@ -235,6 +243,7 @@ impl SupplierApiOrderProcess {
                 .find_by_id(frozen.supplier_offering_id.as_ref(), &mut NoTransaction)
                 .await?
                 .ok_or_else(|| Error::NotFound("冻结供给不存在".into()))?;
+
             let data = SupplierFulfillmentItemData::from_unit_cost(
                 SupplierFulfillmentOrderId::new(&execution.base.id),
                 source.supplier_offering_revision_id.clone().into(),

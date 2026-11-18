@@ -55,6 +55,7 @@ impl SupplierCatalogCallbackProcess {
             "brand" => CatalogMessageTarget::Brand(&hint.object_id),
             _ => return Err(Error::ValidationError("商品回调目标类型不支持".into())),
         };
+
         let item = supplier_catalog::next_callback_target(
             &self.db,
             receipt.connection_id.as_ref(),
@@ -112,6 +113,7 @@ pub async fn query_current(
             regions,
         });
     }
+
     let source =
         connector.offers().ok_or_else(|| Error::BusinessLogicError("来源尚不支持商品补查".into()))?;
     let Lookup::Found(snapshot) =
@@ -122,6 +124,7 @@ pub async fn query_current(
     if snapshot.value.sku != sku || snapshot.stamp.observed_at < receipt.received_at {
         return Err(Error::ConflictError("商品补查身份或观察时间不一致".into()));
     }
+
     let mut item = SupplierCatalogItem::observed(
         &connection.base.id,
         connection.supplier_id.as_ref(),
@@ -133,6 +136,7 @@ pub async fn query_current(
     {
         return Err(Error::BusinessLogicError("商品补查未取得明确可售状态或采购报价".into()));
     }
+
     item.availability_valid_until = registry
         .catalog_availability_validity(connection)
         .and_then(|seconds| i64::try_from(seconds).ok())
@@ -344,6 +348,7 @@ mod tests {
                 .is_err()
             );
         }
+
         let mut wrong = offer();
         wrong.value.sku.product_id = Some("another-product".into());
         assert!(
@@ -351,6 +356,7 @@ mod tests {
                 .await
                 .is_err()
         );
+
         let mut future = receipt("price");
         future.received_at = Instant::from_unix_secs(Instant::now().unix_secs() + 100);
         assert!(
@@ -358,6 +364,7 @@ mod tests {
                 .await
                 .is_err()
         );
+
         assert!(
             query(&context(None, RegionCoverage::Unreported), &receipt("product"), sku(), &registry)
                 .await
@@ -377,6 +384,7 @@ mod tests {
             assert_eq!(id, SupplierCatalogItem::source_id("connection-1", "product-1", "spec-1"));
             assert_eq!(regions.included, expected);
         }
+
         assert!(
             query(&context(None, RegionCoverage::Unreported), &receipt("cities"), sku(), &registry)
                 .await

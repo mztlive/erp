@@ -86,6 +86,7 @@ impl CreatePurchaseOrderFromBasisRequest {
                     .map_err(|error| Error::ValidationError(error.to_string()))?,
             );
         }
+
         normalize_requested_lines(&parsed).map_err(|error| Error::ValidationError(error.to_string()))
     }
 
@@ -114,12 +115,14 @@ impl CreatePurchaseOrderFromBasisRequest {
         parts.extend(lines.iter().map(|line| {
             format!("{}|{}|{}", line.sales_order_line_id, line.quantity, line.expected_delivery_date)
         }));
+
         for line in lines.iter().filter(|line| !line.delivery_allocations.is_empty()) {
             parts.push(
                 serde_json::to_string(&("delivery", &line.sales_order_line_id, &line.delivery_allocations))
                     .expect("交付安排可序列化"),
             );
         }
+
         digest_parts(parts)
     }
 }
@@ -340,6 +343,7 @@ impl CreatePurchaseOrdersFromSourcingRequest {
                 .map_err(|error| Error::ValidationError(error.to_string()))?,
             );
         }
+
         SourcingAssignmentSet::normalize(&parsed).map_err(|error| Error::ValidationError(error.to_string()))
     }
 
@@ -371,11 +375,13 @@ impl CreatePurchaseOrdersFromSourcingRequest {
                 )
             })
             .collect::<Vec<_>>();
+
         let delivery = assignments
             .iter()
             .filter(|line| !line.delivery_allocations.is_empty())
             .map(|line| (&line.sales_order_line_id, &line.basis_id, &line.delivery_allocations))
             .collect::<Vec<_>>();
+
         if !delivery.is_empty() {
             return payload_fingerprint(
                 CREATE_SOURCING_ACTION,
@@ -489,6 +495,7 @@ mod delivery_tests {
         })).unwrap();
         let first =
             request.request_fingerprint(request.sourcing_assignments().unwrap().assignments()).unwrap();
+
         request.lines[0].delivery_allocations[0].address = "B".into();
         let changed =
             request.request_fingerprint(request.sourcing_assignments().unwrap().assignments()).unwrap();
@@ -519,12 +526,14 @@ mod sourcing_contract_tests {
         let assignments = request.sourcing_assignments().unwrap();
         assert_eq!(assignments.assignments().len(), 2);
         assert_eq!(assignments.assignments()[0].quantity.to_string(), "60");
+
         let fingerprint = request.request_fingerprint(assignments.assignments()).unwrap();
         request.lines.reverse();
         assert_eq!(
             fingerprint,
             request.request_fingerprint(request.sourcing_assignments().unwrap().assignments()).unwrap()
         );
+
         request.lines[0].quantity = "0".into();
         assert!(request.sourcing_assignments().unwrap_err().to_string().contains("必须大于 0"));
     }
@@ -538,6 +547,7 @@ mod sourcing_contract_tests {
         })).unwrap();
         request.validate().unwrap();
         assert_eq!(request.normalized_lines().unwrap()[0].quantity.to_string(), "100");
+
         request.lines[0].quantity = "0".into();
         assert!(request.normalized_lines().unwrap_err().to_string().contains("必须大于 0"));
     }
@@ -547,6 +557,7 @@ mod sourcing_contract_tests {
         let line = json!({"sales_order_line_id": "line", "quantity": "1", "expected_delivery_date": "2026-10-30", "reselection_reason": "旧客户端字段"});
         let error = serde_json::from_value::<CreatePurchaseOrderLineRequest>(line.clone()).unwrap_err();
         assert!(error.to_string().contains("unknown field `reselection_reason`"));
+
         let mut assignment = line;
         assignment["basis_id"] = json!("general");
         let error = serde_json::from_value::<SourcingLineAssignment>(assignment).unwrap_err();

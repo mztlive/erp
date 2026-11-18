@@ -41,12 +41,14 @@ pub async fn ensure(db: &Database) -> Result<()> {
             doc! { "$unset": { "owner_user_id": "" } },
         )
         .await?;
+
     reconcile_open_object_type_index(db).await?;
     reconcile_approval_execution_index(db).await?;
     db.collection::<Document>(WORK_ITEMS).create_indexes(work_item_indexes()).await?;
     db.collection::<Document>(FINANCE_RESPONSIBILITY_RULES)
         .create_indexes(finance_responsibility_indexes())
         .await?;
+
     db.collection::<Document>(Database::WORK_ITEM_COMMAND_RECEIPTS)
         .create_index(
             IndexModel::builder()
@@ -87,6 +89,7 @@ async fn reconcile_open_object_type_index(db: &Database) -> Result<()> {
     if !collection_names.iter().any(|name| name == WORK_ITEMS) {
         return Ok(());
     }
+
     let collection = db.collection::<Document>(WORK_ITEMS);
     let mut indexes = collection.list_indexes().await?;
     while let Some(index) = indexes.try_next().await? {
@@ -377,6 +380,7 @@ async fn reconcile_approval_execution_index(db: &Database) -> Result<()> {
     if !db.list_collection_names().await?.iter().any(|name| name == WORK_ITEMS) {
         return Ok(());
     }
+
     let collection = db.collection::<Document>(WORK_ITEMS);
     let mut indexes = collection.list_indexes().await?;
     while let Some(index) = indexes.try_next().await? {
@@ -517,6 +521,7 @@ mod tests {
             execution.options.as_ref().unwrap().partial_filter_expression,
             Some(doc! { "approval_node_execution_id": { "$type": "string" } })
         );
+
         assert!(indexes.iter().all(|index| {
             index.options.as_ref().and_then(|options| options.name.as_deref())
                 != Some("uk_work_items_open_approval_step")
@@ -544,6 +549,7 @@ mod tests {
                 "work_item_type": "FULFILLMENT_OPERATION",
             })
         );
+
         assert_eq!(
             index_named(&indexes, "idx_work_items_mine").keys,
             doc! { "status": 1, "owner_user_id": 1, "due_at": 1, "id": 1 }
@@ -552,6 +558,7 @@ mod tests {
             index_named(&indexes, "idx_work_items_pending_approval").keys,
             doc! { "status": 1, "owner_user_id": 1, "assigned_at": -1, "id": -1 }
         );
+
         let approval_owner = index_named(&indexes, "idx_work_items_document_approval_owner_page");
         assert_eq!(approval_owner.keys, doc! { "owner_user_id": 1, "assigned_at": -1, "id": -1 });
         assert_eq!(
@@ -562,6 +569,7 @@ mod tests {
                 "work_item_type": "DOCUMENT_APPROVAL",
             })
         );
+
         let approval_owner_type = index_named(&indexes, "idx_work_items_document_approval_owner_type_page");
         assert_eq!(
             approval_owner_type.keys,
@@ -576,11 +584,13 @@ mod tests {
             approval_owner_type.options.as_ref().unwrap().partial_filter_expression,
             approval_owner.options.as_ref().unwrap().partial_filter_expression
         );
+
         assert!(indexes.iter().all(|index| {
             index.options.as_ref().and_then(|options| options.name.as_deref())
                 != Some("idx_work_items_team_pool")
                 && !index.keys.contains_key("owner_pool")
         }));
+
         assert_eq!(
             index_named(&indexes, "idx_work_items_managed").keys,
             doc! {
@@ -606,7 +616,6 @@ mod tests {
     fn finance_responsibility_indexes_enforce_one_active_selector() {
         let indexes = finance_responsibility_indexes();
         let selector = index_named(&indexes, "uk_finance_responsibility_active_selector");
-
         assert_eq!(selector.keys, doc! { "selector_key": 1 });
         assert_eq!(selector.options.as_ref().unwrap().unique, Some(true));
         assert_eq!(

@@ -73,6 +73,7 @@ impl Fingerprint {
             })
             .collect();
         parts.sort();
+
         self.0.push(b'[');
         for part in parts {
             self.0.extend(part);

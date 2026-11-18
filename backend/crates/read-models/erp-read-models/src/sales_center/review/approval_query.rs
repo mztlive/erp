@@ -51,6 +51,7 @@ pub(super) async fn load_change_document_approval(
             has_more: runtime.history.has_more,
         };
     }
+
     view.allowed_actions = change_actions(db, rbac, change, cancellable, actor, executor).await?;
     Ok(view)
 }
@@ -69,6 +70,7 @@ async fn change_actions(
         SalesChangeOrderStatus::InApproval if cancellable => &sales_order_permissions::CANCEL_APPROVAL,
         _ => return Ok(Vec::new()),
     };
+
     if !rbac.has_permission(actor, &sales_review_permissions::SALES_CHANGE_DRAFT, executor).await? {
         return Ok(Vec::new());
     }

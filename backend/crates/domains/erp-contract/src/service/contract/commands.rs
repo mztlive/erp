@@ -26,6 +26,7 @@ impl ContractService {
         actor: &AuditActor,
     ) -> Result<ContractDetailView> {
         req.validate()?;
+
         let (service, id, actor) = (self.clone(), id.to_owned(), actor.clone());
         self.db
             .client()
@@ -45,12 +46,14 @@ impl ContractService {
     ) -> Result<ContractDetailView> {
         let contract = self.command_contract(actor, &contract::ARCHIVE_REVISION, id, executor).await?;
         conflict_if_stale_version(contract.matches_version(req.version))?;
+
         let revision_no = self
             .db
             .contract_revisions()
             .latest_revision_no(&contract.base.id.clone().into(), executor)
             .await?;
         let mut planned = plan_next_revision(contract, req, revision_no.unwrap_or(0))?;
+
         let audit =
             self.audit.resource_log(actor.clone(), "contract.archive_revision", "contract", id.into())?;
         self.db
@@ -58,6 +61,7 @@ impl ContractService {
             .archive_contract_revision(&mut planned.contract, &planned.revision, executor)
             .await?;
         self.audit.persist(&audit, executor).await?;
+
         self.detail_view(planned.contract, executor).await
     }
 
@@ -75,6 +79,7 @@ impl ContractService {
         actor: &AuditActor,
     ) -> Result<ContractDetailView> {
         req.validate()?;
+
         let (service, id, actor) = (self.clone(), id.to_owned(), actor.clone());
         self.db
             .client()
@@ -95,9 +100,11 @@ impl ContractService {
         let mut contract = self.command_contract(actor, &contract::TERMINATE, id, executor).await?;
         conflict_if_stale_version(contract.matches_version(req.version))?;
         contract.terminate(actor.id())?;
+
         let audit = self.audit.resource_log(actor.clone(), "contract.terminate", "contract", id.into())?;
         self.db.contracts().update(&mut contract, executor).await?;
         self.audit.persist(&audit, executor).await?;
+
         self.detail_view(contract, executor).await
     }
 

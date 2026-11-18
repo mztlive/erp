@@ -209,6 +209,7 @@ mod tests {
         assert_eq!(projection, PermissionView::from(entity));
         assert_eq!(projection.resource, "sales_order");
         assert_eq!(projection.action, "detail");
+
         let mut incomplete = document;
         incomplete.remove("resource");
         assert!(deserialize_from_document::<PermissionView>(incomplete).is_err());

@@ -47,6 +47,7 @@ impl CustomerAcceptanceProcess {
         actor: &AuditActor,
     ) -> Result<CustomerAcceptanceView> {
         req.validate()?;
+
         let db = self.db.clone();
         let workflow = self.workflow.clone();
         let authorization = self.authorization.clone();
@@ -65,6 +66,7 @@ impl CustomerAcceptanceProcess {
                     }
                     .allocate(executor)
                     .await?;
+
                     let (acceptance, lines) = prepare_customer_acceptance_draft(
                         CustomerAcceptanceId::new(next_id()),
                         acceptance_no,

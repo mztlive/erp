@@ -58,6 +58,7 @@ pub async fn load_change_quantity_facts(
         .await?
         .ok_or_else(|| Error::NotFound("来源销售单不存在".into()))?;
     let state = load_purchase_source_state(db, &sales, executor).await?;
+
     let current = order
         .stable
         .current_revision_id
@@ -66,6 +67,7 @@ pub async fn load_change_quantity_facts(
     let base_lines =
         db.purchase_order().list_revision_lines(&PurchaseOrderRevisionId::new(current), executor).await?;
     let fulfilled = load_purchase_fulfilled_quantities(db, order, executor).await?;
+
     let bounds = build_change_quantity_bounds(
         &base_lines,
         &state.coverage,
@@ -99,6 +101,7 @@ pub async fn load_purchase_fulfilled_quantities(
         db.fulfillment().qualified_received_totals_by_purchase_revision_line(&order_id, executor).await?;
     let mut rows =
         rollup_by_stable_key(&all_lines, &received).map_err(Error::Logic)?.into_iter().collect::<Vec<_>>();
+
     let stable_ids = stable_line_ids(&all_lines);
     rows.extend(shipped_rows(db, order, executor).await?);
     rows.extend(
@@ -117,6 +120,7 @@ pub async fn load_purchase_fulfilled_quantities(
             .filter(|row| row.purchase_order_id == order_id && row.result != FulfillmentResult::Failure)
             .map(|row| (row.sales_order_line_id.to_string(), row.quantity)),
     );
+
     let mut totals = sum_by_line(rows)?;
     for returned in confirmed_direct_returns(db, &order.base.id, executor).await? {
         if let Some(evidence) = returned.direct_return {
@@ -196,6 +200,7 @@ fn sum_by_line(rows: impl IntoIterator<Item = (String, Quantity)>) -> Result<Has
             .checked_add(value.to_decimal())
             .ok_or_else(|| Error::BusinessLogicError("累计数量超出范围".into()))?;
     }
+
     totals
         .into_iter()
         .map(|(line, value)| Ok((line, Quantity::try_from(value).map_err(Error::Logic)?)))

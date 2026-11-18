@@ -318,6 +318,7 @@ impl AccountCoreRepositoryExt for Repository<'_, AccountCore> {
         if limit == 0 {
             return Ok(Vec::new());
         }
+
         let mut filter = doc! {
             "status": "active",
             "kind": AccountKind::Admin.as_str(),
@@ -333,6 +334,7 @@ impl AccountCoreRepositoryExt for Repository<'_, AccountCore> {
                 ],
             );
         }
+
         let options = FindOptions::builder().limit(i64::from(limit)).build();
         mongo_ops::find_many(&self.collection(), filter, options, executor).await
     }

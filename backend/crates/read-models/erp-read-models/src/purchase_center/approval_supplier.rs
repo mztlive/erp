@@ -29,6 +29,7 @@ impl ApprovalSupplierRating {
         if ratings.iter().any(|rating| &rating.supplier_id != supplier_id) {
             return Err(Error::ConflictError("供应商评估与采购提交不一致".into()));
         }
+
         let latest = ratings.iter().max_by_key(|rating| rating.revision.revision_no);
         let initial = ratings.iter().find(|rating| rating.revision.revision_no == 1);
         Ok(Self {
@@ -57,6 +58,7 @@ pub(crate) async fn supplier_rating(
     if materials.document_type != "purchase_order" {
         return Ok(None);
     }
+
     let submission = db
         .purchase_order_submissions()
         .find_by_order_and_submission_no(
@@ -67,6 +69,7 @@ pub(crate) async fn supplier_rating(
         .await?
         .ok_or_else(|| Error::ConflictError("本次审批对应的采购提交不存在，无法核对供应商评估".into()))?;
     validate_source(materials, submission.purchase_order_id.as_ref(), submission.formal_sequence())?;
+
     let ratings = db.supplier().list_ratings_latest_first(&submission.supplier_id, executor).await?;
     ApprovalSupplierRating::from_ratings(&submission.supplier_id, &ratings).map(Some)
 }
@@ -130,9 +133,11 @@ mod tests {
         assert!(empty.rating_label.is_none());
         assert!(empty.current_score.is_none());
         assert!(empty.initial_score.is_none());
+
         let later = ApprovalSupplierRating::from_ratings(&id, &[rating(2, 90)]).unwrap();
         assert_eq!(later.current_score, Some(90));
         assert!(later.initial_score.is_none());
+
         assert!(matches!(
             ApprovalSupplierRating::from_ratings(&SupplierAccountId::new("other"), &[rating(1, 80)]),
             Err(Error::ConflictError(_))
@@ -149,12 +154,15 @@ mod tests {
             display: ApprovalDisplaySnapshot::new("purchase-1".into()),
             attachments: vec![],
         };
+
         assert!(validate_source(&materials, "purchase-1", Some(2)).is_ok());
         for (id, version) in [("other", Some(2)), ("purchase-1", Some(1)), ("purchase-1", None)] {
             assert!(matches!(validate_source(&materials, id, version), Err(Error::ConflictError(_))));
         }
+
         materials.display.root_document_id = "other".into();
         assert!(validate_source(&materials, "purchase-1", Some(2)).is_err());
+
         materials.display.root_document_id = "purchase-1".into();
         materials.document_type = "sales_order".into();
         assert!(validate_source(&materials, "purchase-1", Some(2)).is_err());

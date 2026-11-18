@@ -49,6 +49,7 @@ impl SupplierDepositFundsAdapter {
         {
             return Err(Error::BusinessLogicError("资金资格来源与冻结采购执行不一致".into()));
         }
+
         let account = self.bound_account(&execution, executor).await?;
         let reservation = SupplierDepositService::new(self.db.clone())
             .execution_coverage(
@@ -90,6 +91,7 @@ impl SupplierDepositFundsAdapter {
             .find_by_id(account_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("连接预存款账户不存在".into()))?;
+
         let revision = self
             .db
             .purchase_order_revisions()

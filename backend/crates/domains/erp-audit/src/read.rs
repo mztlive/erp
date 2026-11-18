@@ -76,6 +76,7 @@ impl AuditLogReadService {
         self.authorization
             .require(actor, &admin::AUDIT_LOG_LIST_AUDIT_LOGS, AccessTarget::Operation, executor)
             .await?;
+
         params.validate()?;
         Ok(AuditLogFilter::from(params))
     }

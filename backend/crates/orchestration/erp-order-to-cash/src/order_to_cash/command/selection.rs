@@ -48,6 +48,7 @@ impl SalesOrderCommandProcess {
             .await?
             .ok_or_else(|| Error::NotFound("销售方案不存在或无权查看".into()))?;
         let lines = self.db.sales_selection_proposal_sku_lines().list_by_proposal(id, executor).await?;
+
         let basis = SelectionOrderBasis::from_proposal(&proposal, lines)?;
         scope.validate(executor).await?;
         Ok(basis)

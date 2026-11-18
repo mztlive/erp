@@ -27,6 +27,7 @@ impl AuthorizationService {
             if source.warehouse_id.get()?.as_deref() != Some(warehouse.id.as_str()) {
                 return Err(Error::ValidationError("库存调整来源与真实仓库不一致".into()));
             }
+
             if object.owner_id.get()?.as_deref() == Some(proof.context.actor.id()) {
                 continue;
             }
@@ -40,6 +41,7 @@ impl AuthorizationService {
             {
                 return Err(Error::Forbidden("撤回需要原提交人或完整运行管理及独立库存详情资格".into()));
             }
+
             let context = AccessContext {
                 permission: inventory::STOCK_ADJUSTMENT_DETAIL,
                 resource: "stock_adjustment".into(),

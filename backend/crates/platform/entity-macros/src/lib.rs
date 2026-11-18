@@ -43,6 +43,7 @@ fn expand_derive_entity(input: &DeriveInput) -> Result<TokenStream2> {
     if !fields.named.iter().any(|field| field.ident.as_ref().is_some_and(|id| id == "base")) {
         return Err(Error::new_spanned(name, "Entity 派生要求含有 base 字段"));
     }
+
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     Ok(quote! {
         impl #impl_generics ::entity_core::HasBaseModel for #name #ty_generics #where_clause {
@@ -192,7 +193,6 @@ mod tests {
     #[test]
     fn derive_keeps_generics_in_impl() {
         let expanded = expand_to_string("struct Foo<T> { base: ::entity_core::BaseModel, value: T }");
-
         assert!(expanded.contains("Foo"));
     }
 

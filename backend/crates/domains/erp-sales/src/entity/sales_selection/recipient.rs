@@ -86,9 +86,11 @@ mod tests {
         let mut value = recipient();
         value.address = "  ".into();
         assert!(SelectionRecipient::new(value).is_err());
+
         let mut value = recipient();
         value.phone = "138ABC13800".into();
         assert!(SelectionRecipient::new(value).is_err());
+
         let mut value = recipient();
         value.name = "中".repeat(65);
         assert!(SelectionRecipient::new(value).is_err());

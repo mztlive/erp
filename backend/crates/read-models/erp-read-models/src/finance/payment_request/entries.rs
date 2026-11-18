@@ -50,9 +50,11 @@ fn entry_views(
         };
         add(&mut settled, allocation.payable_entry_id.as_ref(), amount)?;
     }
+
     for offset in offsets {
         add(&mut decreased, offset.increase_entry_id.as_ref(), offset.offset_amount)?;
     }
+
     let mut views = Vec::new();
     for entry in entries.iter().filter(|entry| entry.direction == EntryDirection::Increase) {
         let settled_total = settled.get(entry.base.id.as_str()).copied().unwrap_or_else(Amount::zero);
@@ -141,6 +143,7 @@ mod tests {
             &[offset],
         )
         .unwrap();
+
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].id, "e-1");
         assert_eq!(rows[0].settled_total, "40".parse().unwrap());

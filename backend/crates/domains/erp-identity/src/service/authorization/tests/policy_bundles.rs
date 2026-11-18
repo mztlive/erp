@@ -92,6 +92,7 @@ async fn documents_require_the_entire_same_role_combination_for_their_actual_wri
         access_control::PERSON_SCOPE_LIST,
     ];
     check_document_requirements(&service, &identity, &document, &required).await;
+
     document.roles.push(PolicyRole {
         id: RoleId::parse("role-test").unwrap(),
         name: "测试岗位".into(),
@@ -100,6 +101,7 @@ async fn documents_require_the_entire_same_role_combination_for_their_actual_wri
     });
     required.extend([admin::ROLE_CREATE_ROLE, admin::ROLE_UPDATE_ROLE]);
     check_document_requirements(&service, &identity, &document, &required).await;
+
     document.bindings.push(PolicyBinding {
         user_id: "target".into(),
         mode: PolicyMode::Replace,
@@ -107,6 +109,7 @@ async fn documents_require_the_entire_same_role_combination_for_their_actual_wri
     });
     required.push(admin::ACCOUNT_UPDATE_ADMIN);
     check_document_requirements(&service, &identity, &document, &required).await;
+
     document.data_scopes.push(PolicyScope {
         user_id: "target".into(),
         resource: "customer".into(),
@@ -140,6 +143,7 @@ async fn export_and_public_operations_share_the_fixed_company_boundary() {
         .require(&actor(), permission, AccessTarget::Operation, &mut SnapshotExecutor::default())
         .await
         .unwrap();
+
     for company in [true, false] {
         for key in [(permission.clone(), organization::LIST), (organization::LIST, organization::LIST)] {
             identity.scopes.lock().unwrap().get_mut(&key).unwrap().user_limit =
@@ -160,6 +164,7 @@ async fn export_and_public_operations_share_the_fixed_company_boundary() {
             company
         );
     }
+
     configure(&identity, permission, vec![("entry-only".into(), vec![permission.clone()])]);
     assert!(matches!(
         service
@@ -167,6 +172,7 @@ async fn export_and_public_operations_share_the_fixed_company_boundary() {
             .await,
         Err(Error::Forbidden(_))
     ));
+
     configure(&identity, permission, vec![("manager".into(), required)]);
     assert!(matches!(
         service.require_policy_bundle(&actor(), permission, None, &mut ReadExecutor::default()).await,

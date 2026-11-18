@@ -134,6 +134,7 @@ impl<'a> CooperationRepository<'a> {
         if limit == 0 || limit > 100 || supplier_id.trim().is_empty() {
             return Err(Error::ValidationError("申请分页或供应商范围无效".into()));
         }
+
         let filter = list_filter(supplier_id, status)?;
         let options = FindOptions::builder()
             .skip(offset)
@@ -187,6 +188,7 @@ impl<'a> CooperationRepository<'a> {
             .await?
             .ok_or_else(|| Error::NotFound("合作条款申请不可见".into()))?;
         application.ensure_history_preserved(&before)?;
+
         Ok(Repository::new(self.db, COOPERATION_APPLICATIONS).update(application, executor).await?)
     }
 
@@ -212,6 +214,7 @@ impl<'a> CooperationRepository<'a> {
             executor,
         )
         .await?;
+
         if let Some(receipt) = &result {
             receipt.ensure_replayable(command, supplier_id)?;
         }
@@ -257,6 +260,7 @@ impl<'a> CooperationRepository<'a> {
             return Err(Error::Internal("合作条款确认必须使用调用方事务执行器".into()));
         }
         ensure_confirmed_plan(before, plan)?;
+
         let version =
             i64::try_from(before.base.version).map_err(|_| Error::ConflictError("供应商版本超限".into()))?;
         let next = i64::try_from(plan.result.supplier_version)
@@ -278,7 +282,9 @@ impl<'a> CooperationRepository<'a> {
         if written.matched_count != 1 {
             return Err(Error::ConflictError("供应商商务档案已改变，请重新提交".into()));
         }
+
         self.db.supplier_commercial_profile_revisions().create(&plan.profile, executor).await?;
+
         plan.supplier.base.version = plan.result.supplier_version;
         plan.supplier.base.updated_at = plan.result.confirmed_at;
         Ok(())

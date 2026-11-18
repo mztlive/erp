@@ -120,9 +120,11 @@ async fn execute<P: TaskCreationPort>(
             ));
         },
     }
+
     let owner = port.owner(&object, executor).await?;
     let identity = authorization();
     port.authorize(&identity, &owner.owner_user_id, object.business_object_type(), executor).await?;
+
     let task = new_task(&object, owner)?;
     ensure_task_matches_frozen_identity(&task, &object)?;
     port.create(&task, executor).await
@@ -259,9 +261,11 @@ mod tests {
         let mut executor = TestExecutor::default();
         let port = port(&mut executor);
         invoke(&port, &mut executor).await.unwrap();
+
         let recorded = port.recorded.lock().unwrap();
         assert_eq!(recorded.calls, ["open", "owner", "identity", "authorize", "create"]);
         assert_eq!(recorded.identities, [1]);
+
         assert_eq!(recorded.writes.len(), 1);
         let written = &recorded.writes[0];
         assert_eq!(written.work_item_type, WorkItemType::FulfillmentOperation);
@@ -328,8 +332,10 @@ mod tests {
         let mut port = port(&mut executor);
         port.fail_at = Some("authorize");
         assert!(matches!(invoke(&port, &mut executor).await, Err(Error::Forbidden(_))));
+
         port.fail_at = None;
         invoke(&port, &mut executor).await.unwrap();
+
         let recorded = port.recorded.lock().unwrap();
         assert_eq!(recorded.identities, [1, 2]);
         assert_eq!(recorded.writes.len(), 1);

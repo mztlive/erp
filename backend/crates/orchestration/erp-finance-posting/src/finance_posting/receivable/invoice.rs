@@ -139,12 +139,14 @@ impl ReceivableProcess {
             )?,
             req,
         };
+
         let result = self
             .db
             .client()
             .clone()
             .with_transaction(move |executor| Box::pin(transaction.execute(executor)))
             .await;
+
         self.committed_invoice_view(result, &command_receipt, has_pending, actor).await
     }
 
@@ -168,6 +170,7 @@ impl ReceivableProcess {
                 (recovered.id, has_pending && unknown, recovered.original_unknown)
             },
         };
+
         let view = self
             .authorized_invoice_result(&detail_id, actor)
             .await
@@ -283,6 +286,7 @@ pub(super) async fn ensure_postable_draft(
     if invoice.stable.status() != InvoiceStatus::Draft {
         return Err(Error::ConflictError("发票已登记，请勿重复提交".to_string()));
     }
+
     let duplicate = db
         .invoices()
         .find_by_direction_and_normalized_no(invoice.invoice_direction, &invoice.normalized_no, executor)
@@ -431,6 +435,7 @@ async fn persist_unbound_invoice_document(
 ) -> Result<()> {
     let _ = ensure_invoice_skips_approval_binding()?;
     ensure_invoice_has_no_adapter()?;
+
     let binding = rbac.runtime.bind_document(db, bind_command, actor, executor).await?;
     apply_invoice_create_binding(&mut document, binding)?;
     persist_registered_document(db, &document, executor).await.map_err(crate::Error::from)
@@ -482,7 +487,6 @@ async fn persist_created_invoice(
     let audit = actor.clone().resource_log("invoice.create", "invoice", invoice.base.id.clone())?;
     let db = db.clone();
     let rbac = rbac.clone();
-
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
@@ -490,8 +494,10 @@ async fn persist_created_invoice(
                 rbac.authorization
                     .require(&actor, &receivable::INVOICE_CREATE, AccessTarget::Operation, executor)
                     .await?;
+
                 register_created_invoice_document(&db, &rbac, &invoice, &actor, executor).await?;
                 db.invoices().create(&invoice, executor).await?;
+
                 super::invoice_attachments::persist(
                     &db,
                     &rbac.authorization,
@@ -503,6 +509,7 @@ async fn persist_created_invoice(
                 )
                 .await?;
                 persist_log(&db, &audit, executor).await?;
+
                 created_invoice_result(&db, &rbac.authorization, &actor, &invoice.base.id, executor).await
             })
         })
@@ -544,12 +551,14 @@ mod result_tests {
             Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("created_invoice_results");
         let authorization = unavailable_authorization();
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let error =
             created_invoice_result(&db, &authorization, &actor, "draft", &mut ReadExecutor::default())
                 .await
                 .unwrap_err();
         assert!(matches!(error, Error::ValidationError(message)
             if message == "写入授权必须使用快照事务"));
+
         let error =
             created_invoice_result(&db, &authorization, &actor, "draft", &mut SnapshotExecutor::default())
                 .await

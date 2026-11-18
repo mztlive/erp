@@ -34,6 +34,7 @@ impl SalesSelectionProcess {
         actor: AuditActor,
     ) -> Result<SalesSelectionBookletView> {
         let fingerprint = self.crypto.request_fingerprint(IdempotencyOperation::Copy, &(&id, &req))?;
+
         let access = self.services.selections.clone();
         let customer_access = self.services.customer_access.clone();
         let db = self.db.clone();
@@ -54,6 +55,7 @@ impl SalesSelectionProcess {
                         executor,
                     )
                     .await?;
+
                     let customer = customer_fact(&db, &req.customer_id, executor).await?;
                     SalesSelectionService::new(db, access.authorization())
                         .copy(&source, &req, customer, actor.id(), &fingerprint, executor)

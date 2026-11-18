@@ -339,6 +339,7 @@ pub(crate) fn proposed_line_fact(
     if value.line_type != LineType::GoodsService {
         return None;
     }
+
     let goods = SalesGoodsLineFact {
         revision_line_id: SalesOrderRevisionLineId::new(&value.base.id),
         sku_id: value.sku_id?,
@@ -360,6 +361,7 @@ pub(crate) fn proposed_line_fact(
             .collect(),
         assigned_delivery_allocations: Vec::new(),
     };
+
     let line = SalesRevisionLineFact {
         base: FactIdentity { id: value.base.id },
         sales_order_line_id: value.sales_order_line_id,
@@ -436,6 +438,7 @@ mod tests {
         let input = proposed_goods_line();
         let deliveries = input.delivery_allocations.clone();
         let (line, goods) = proposed_line_fact(input).unwrap();
+
         assert_eq!(line.base.id, "proposed-line");
         assert_eq!(line.sales_order_line_id.as_ref(), "sales-line");
         assert_eq!(line.line_no, 3);
@@ -443,12 +446,14 @@ mod tests {
         assert_eq!(line.item_name_snapshot, "商品快照");
         assert_eq!(line.spec_snapshot.as_deref(), Some("规格快照"));
         assert_eq!(line.unit_snapshot.as_deref(), Some("盒"));
+
         assert_eq!(goods.revision_line_id.as_ref(), "proposed-line");
         assert_eq!(goods.sku_id.as_ref(), "sku");
         assert_eq!(goods.sku_revision_id.as_ref(), "sku-revision");
         assert_eq!(goods.quantity, "2.125".parse().unwrap());
         assert_eq!(goods.base_unit_code, "BOX");
         assert_eq!(goods.fulfillment_due_at, Instant::from_unix_secs(1_800_000_000));
+
         assert!(goods.assigned_delivery_allocations.is_empty());
         assert_eq!(goods.delivery_allocations.len(), deliveries.len());
         for (actual, expected) in goods.delivery_allocations.iter().zip(deliveries) {
@@ -466,6 +471,7 @@ mod tests {
         let mut empty = proposed_goods_line();
         empty.delivery_allocations.clear();
         assert!(proposed_line_fact(empty).unwrap().1.delivery_allocations.is_empty());
+
         for missing in 0..6 {
             let mut input = proposed_goods_line();
             match missing {

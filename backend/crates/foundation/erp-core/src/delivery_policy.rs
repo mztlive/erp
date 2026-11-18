@@ -127,6 +127,7 @@ impl DeliveryRuleSet {
             return Err(Error::from(format!("{}规则最多 {MAX_DELIVERY_RULES} 个地区", mode.label())));
         }
         ensure_term_allowed(mode, self.default_term)?;
+
         let mut seen = HashSet::new();
         for rule in &self.rules {
             RegionCode::parse(rule.region_code.as_str())?;
@@ -139,6 +140,7 @@ impl DeliveryRuleSet {
                 )));
             }
         }
+
         self.rules.sort_by(|left, right| left.region_code.cmp(&right.region_code));
         Ok(self)
     }
@@ -259,6 +261,7 @@ mod tests {
         assert_eq!(policy.judge(DeliveryMode::Bulk, &code("440303")), DeliveryTerm::NotDeliverable);
         assert_eq!(policy.judge(DeliveryMode::Bulk, &code("440305")), DeliveryTerm::FreightExtra);
         assert_eq!(policy.judge(DeliveryMode::Bulk, &code("310115")), DeliveryTerm::FreightExtra);
+
         assert_eq!(policy.judge(DeliveryMode::Dropship, &code("650102")), DeliveryTerm::NotDeliverable);
         assert_eq!(policy.judge(DeliveryMode::Dropship, &code("440305")), DeliveryTerm::FreightIncluded);
     }
@@ -278,6 +281,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.to_string().contains("代发规则只能选择配送或不配送"));
+
         let in_rule = DeliveryPolicy::new(
             DeliveryRuleSet {
                 default_term: DeliveryTerm::FreightIncluded,

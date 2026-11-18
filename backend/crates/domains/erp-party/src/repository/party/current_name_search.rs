@@ -46,6 +46,7 @@ pub(super) async fn current_name_ids(
     )
     .await?;
     let revision_ids = unique_revision_ids(revisions);
+
     let mut party_ids = Vec::new();
     for batch in revision_ids.chunks(REVISION_BATCH_SIZE) {
         let parties = mongo_ops::find_many(
@@ -57,6 +58,7 @@ pub(super) async fn current_name_ids(
         .await?;
         party_ids.extend(parties.into_iter().map(|party| party.id));
     }
+
     Ok(sorted_party_ids(party_ids))
 }
 

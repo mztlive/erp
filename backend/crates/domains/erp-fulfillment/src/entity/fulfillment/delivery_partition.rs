@@ -61,6 +61,7 @@ impl DeliveryLine {
         {
             return Err(Error::from("部分直发数量或采购销售归属无效"));
         }
+
         let shipped = Self::new(
             line_id,
             DeliveryLineData {
@@ -73,6 +74,7 @@ impl DeliveryLine {
             },
             DeliveryType::SupplierDirect,
         )?;
+
         let rest = self
             .quantity
             .to_decimal()
@@ -119,6 +121,7 @@ mod tests {
         let rest = rest.unwrap();
         assert_eq!(first.quantity.to_decimal() + rest.quantity.to_decimal(), original.quantity.to_decimal());
         assert_eq!(first.purchase_line_sales_allocation_id, original.purchase_line_sales_allocation_id);
+
         let (last, rest) = rest
             .split_quantity(DeliveryId::new("part2"), DeliveryLineId::new("line2"), "2".parse().unwrap())
             .unwrap();

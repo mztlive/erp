@@ -39,6 +39,7 @@ impl SupplierPortalProcess {
                         executor,
                     )
                     .await?;
+
                     let grants = PortalOfferingService::new(process.db.clone())
                         .quote_access_list(&supplier_id, executor)
                         .await?;
@@ -87,6 +88,7 @@ impl SupplierPortalProcess {
                     if input.active && (!sku.is_active() || !product.is_active()) {
                         return Err(Error::BusinessLogicError("停用商品或SKU不能开放报价".into()));
                     }
+
                     Ok(PortalOfferingService::new(this.db.clone())
                         .quote_access_update(
                             &input.supplier_id,

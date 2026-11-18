@@ -277,6 +277,7 @@ impl<'a> SkuDeliveryCoverageStore<'a> {
                 .into_iter()
                 .map(|row| row.sku_id)
                 .collect::<BTreeSet<_>>();
+
         let availabilities = self.db.collection::<OfferingRow>(AVAILABILITIES);
         let offering_projection = projection(doc! { "_id": 0, "supplier_offering_id": 1 });
         let offering_ids =

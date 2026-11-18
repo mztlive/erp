@@ -273,6 +273,7 @@ impl ConfirmationScope {
                 .ok_or_else(|| Error::from(format!("批次对象类型 {raw} 未配置 W18 确认责任")))?;
             scopes.insert(scope);
         }
+
         if scopes.is_empty() {
             return Err(Error::from("批次对象集无法解析必要确认责任"));
         }
@@ -532,6 +533,7 @@ impl LegacyImportConfirmation {
         {
             return Err(Error::from("新试算版本不得低于已有确认版本"));
         }
+
         let mut rejected = false;
         for item in confirmations.iter().filter(|item| item.trial_version == trial_version) {
             if item.batch_version != batch_version || item.import_rule_version != rule_version {
@@ -651,6 +653,7 @@ impl LegacyImportConfirmation {
                 confirmed.insert(scope);
             }
         }
+
         required_scopes.iter().all(|scope| confirmed.contains(scope))
     }
 
@@ -722,6 +725,7 @@ impl LegacyImportConfirmation {
         if self.status != ConfirmationStatus::Pending {
             return Err(Error::from(format!("仅待确认事实可决策，当前状态：{}", self.status.label())));
         }
+
         let status = match decision {
             ConfirmationDecision::ConfirmScope => ConfirmationStatus::Confirmed,
             ConfirmationDecision::ReturnForFix => {
@@ -735,6 +739,7 @@ impl LegacyImportConfirmation {
                 ConfirmationStatus::Rejected
             },
         };
+
         self.decision = Some(decision);
         self.comment = normalize_optional_text(comment, "意见", COMMENT_MAX_LEN)?;
         self.decided_by = Some(normalize_required_text(
@@ -967,6 +972,7 @@ mod tests {
                 None,
             )
             .unwrap();
+
         let required = BTreeSet::from([ConfirmationScope::Sales]);
         assert_eq!(
             LegacyImportConfirmation::matrix_decision(
@@ -976,6 +982,7 @@ mod tests {
             ),
             ConfirmationMatrixDecision::StartApply
         );
+
         assert_eq!(
             LegacyImportConfirmation::subject_version(1, 2, " rule-1 "),
             "batch:1;trial:2;rule:rule-1"
@@ -984,6 +991,7 @@ mod tests {
         assert_eq!(LegacyImportConfirmation::latest_active_trial(&[sales.clone()], " v1 "), Some(2));
         assert!(LegacyImportConfirmation::is_trial_confirmed(&[sales.clone()], 2, "v1", &required,));
         assert!(LegacyImportConfirmation::matrix_summary(2, &[sales]).contains("SALES=CONFIRMED"));
+
         assert!(LegacyImportConfirmation::ensure_trial_snapshot(&[], u32::MAX, u32::MAX, "v1").is_err());
     }
 
@@ -994,6 +1002,7 @@ mod tests {
                 .unwrap();
         LegacyImportConfirmation::ensure_trial_snapshot(&[], 1, 2, "v1").unwrap();
         LegacyImportConfirmation::ensure_trial_snapshot(std::slice::from_ref(&pending), 1, 2, "v1").unwrap();
+
         let mut rejected = pending.clone();
         rejected
             .decide(
@@ -1008,6 +1017,7 @@ mod tests {
             LegacyImportConfirmation::ensure_trial_snapshot(std::slice::from_ref(&rejected), 1, 2, "v1"),
             Err(Error::LogicError(message)) if message == "当前试算已被退回，必须修复并生成新试算版本"
         ));
+
         for inconsistent in [
             LegacyImportConfirmation { batch_version: 2, ..pending.clone() },
             LegacyImportConfirmation { import_rule_version: "v2".into(), ..pending },

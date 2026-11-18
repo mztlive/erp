@@ -277,6 +277,7 @@ pub(super) async fn persist_purchase_change_start(
     {
         return Ok(result);
     }
+
     let PreparedExecution::Apply(ref writes) = input.prepared else {
         return Err(Error::ConflictError("缺少完整采购变更提交回执，无法安全回放".into()));
     };
@@ -285,8 +286,10 @@ pub(super) async fn persist_purchase_change_start(
         .await
         .map_err(map_receipt_first_write_error)?;
     guard_change_start(db, writes, input.now, executor).await?;
+
     persist_change_target(db, &mut input.change_order, &input.submission, &input.submission_lines, executor)
         .await?;
+
     persist_runtime_writes(
         db,
         (input.ports.approval.as_ref(), &input.ports.task_identity.clone()),
@@ -302,6 +305,7 @@ pub(super) async fn persist_purchase_change_start(
         executor,
     )
     .await?;
+
     persist_log(db, &input.audit, executor).await?;
     persist_change_result(db, &input, executor).await
 }
@@ -327,6 +331,7 @@ async fn persist_change_target(
         executor,
     )
     .await?;
+
     db.purchase_order().create_change_submission(change, submission, lines, executor).await?;
     Ok(())
 }
@@ -416,6 +421,7 @@ async fn persist_runtime_writes(
     )
     .await?;
     approval.persist_start_snapshot(db, snapshot, executor).await?;
+
     persist_start_tasks(db, writes, context, executor).await.map_err(Error::from).map(|_| ())
 }
 
@@ -629,6 +635,7 @@ mod tests {
             at(10),
         )
         .unwrap();
+
         let mut built =
             build_purchase_change_start_input(input(two_node_graph(), &binding(1), "org-1")).unwrap();
         built.command.receipt = Some(receipt);

@@ -49,6 +49,7 @@ impl CatalogService {
             id.to_string(),
             req.change_reason.clone(),
         )?;
+
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
@@ -109,11 +110,13 @@ async fn write_disabled_product(
         access.require_product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, id, session).await?;
     scoped.ensure_has_responsibility()?;
     ensure_version(scoped.base.version, req.version)?;
+
     let snapshot = db
         .catalog()
         .product_disable_snapshot(id, session)
         .await?
         .ok_or_else(|| Error::NotFound("商品不存在或无权查看".to_string()))?;
+
     let mut product = snapshot.product;
     product.disable(actor.id()).map_err(|error| Error::BusinessLogicError(error.to_string()))?;
     let revision_no = next_revision_no(snapshot.latest_revision_no)?;
@@ -124,6 +127,7 @@ async fn write_disabled_product(
         revision_no,
         req.effective_from,
     )?;
+
     let media = snapshot
         .media
         .iter()
@@ -135,6 +139,7 @@ async fn write_disabled_product(
         })
         .collect::<std::result::Result<Vec<_>, _>>()?;
     product.attach_revision(&revision, actor.id())?;
+
     db.products().update(&mut product, session).await?;
     db.catalog().create_product_revision_with_media(&revision, &media, session).await?;
     audit_port.persist(audit, session).await?;

@@ -66,6 +66,7 @@ fn final_approval_guard_accepts_only_the_current_approval_state() {
             assert_eq!(order, before);
         }
     }
+
     order.commercial_status = CommercialStatus::PendingReview;
     order.review_status = ReviewStatus::InApproval;
     assert!(order.attribution.is_none());
@@ -80,6 +81,7 @@ fn attribution_is_frozen_once_and_effective_time_must_match() {
     let frozen = order.attribution.clone().unwrap();
     assert!(order.freeze_attribution(frozen.clone()).is_err());
     assert!(order.approve(Instant::from_unix_secs(1_800_000_001), "approver").is_err());
+
     order.approve(frozen.attributed_at, "approver").unwrap();
     order.stable.touch("another-editor");
     assert_eq!(order.attribution, Some(frozen));
@@ -150,6 +152,7 @@ fn progress_derivation_and_refresh_are_entity_owned() {
         CollectionProgress::PartiallyCollected
     );
     assert_eq!(CollectionProgress::from_receivable_balances([(zero, hundred)]), CollectionProgress::Settled);
+
     assert_eq!(
         InvoiceProgress::from_receivable_balances([(fifty, fifty)]),
         InvoiceProgress::PartiallyInvoiced
@@ -167,6 +170,7 @@ fn progress_derivation_and_refresh_are_entity_owned() {
     ));
     assert_eq!(order.close_status, CloseStatus::Closed);
     assert_eq!(order.closed_at, Some(closed_at));
+
     assert!(!order.refresh_progress(
         None,
         CollectionProgress::Settled,
@@ -272,13 +276,13 @@ fn commercial_status_machine_edges_are_directed() {
 #[test]
 fn full_approval_flow_and_rejection_flow() {
     let mut order = SalesOrder::new(SalesOrderId::new("o-1"), data(), "admin-1").unwrap();
-
     // 实物及服务：提交直接进入统一审批，最终通过生效；撤回回到草稿。
     order.start_approval_submission("admin-1").unwrap();
     assert_eq!(order.commercial_status, CommercialStatus::PendingReview);
     assert_eq!(order.review_status, ReviewStatus::InApproval);
     assert!(order.transition_review(ReviewStatus::Rejected, "approver").is_err());
     assert!(order.transition_review(ReviewStatus::PendingProcurementConfirmation, "approver").is_err());
+
     crate::entity::sales_order::attribution::freeze_fixture(&mut order);
     order
         .transition_review(ReviewStatus::Approved, "approver")
@@ -307,6 +311,7 @@ fn voucher_order_enters_unified_in_approval() {
     assert!(order.transition_review(ReviewStatus::Rejected, "approver").is_err());
     assert!(order.transition_review(ReviewStatus::PendingSalesLeader, "approver").is_err());
     assert!(order.transition_review(ReviewStatus::PendingOperations, "approver").is_err());
+
     crate::entity::sales_order::attribution::freeze_fixture(&mut order);
     order
         .transition_review(ReviewStatus::Approved, "approver")
@@ -410,6 +415,7 @@ fn extra_cost_source_accepts_only_effective_goods_and_keeps_closed_orders() {
             );
         }
     }
+
     order.business_type = BusinessType::GoodsService;
     order.commercial_status = CommercialStatus::Effective;
     order.closed_at = Some(Instant::from_unix_secs(1_800_000_000));
@@ -439,6 +445,7 @@ fn inquiry_fee_sales_require_effective_goods_and_a_revision_pointer() {
             }
         }
     }
+
     order.business_type = BusinessType::GoodsService;
     order.commercial_status = CommercialStatus::Effective;
     order.closed_at = Some(Instant::from_unix_secs(1_800_000_000));
@@ -462,11 +469,14 @@ fn rejected_orders_keep_content_and_can_edit_resubmit_or_void() {
         assert!(!order.review_status.has_active_review_task());
         assert_eq!(order.source_identity_id.as_deref(), Some("inquiry-source"));
         assert!(order.effective_at.is_none());
+
         order.update(SalesOrderUpdate::default(), "editor").unwrap();
         assert_eq!(order.review_status, ReviewStatus::Rejected);
+
         let mut abandoned = order.clone();
         abandoned.void("creator").unwrap();
         assert_eq!(abandoned.commercial_status, CommercialStatus::Voided);
+
         order.start_approval_submission("submitter").unwrap();
         assert_eq!(order.commercial_status, CommercialStatus::PendingReview);
         assert_eq!(order.review_status, ReviewStatus::InApproval);
@@ -484,6 +494,7 @@ fn rejection_requires_current_pending_approval_and_does_not_mutate_other_states(
         assert!(order.reject_approval_submission("approver").is_err());
         assert_eq!(order, before);
     }
+
     order.commercial_status = CommercialStatus::PendingReview;
     order.review_status = ReviewStatus::InApproval;
     order.reject_approval_submission("approver").unwrap();

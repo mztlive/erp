@@ -96,6 +96,7 @@ impl PurchaseAccess {
             .find_authorized(id, &scope, executor)
             .await?
             .ok_or_else(|| Error::NotFound("采购单不存在或无权查看".into()))?;
+
         let version = format!("{}:{}:{}", context.scope_version, order.base.id, order.base.version);
         Ok((order, version, scope))
     }

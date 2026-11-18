@@ -41,6 +41,7 @@ pub async fn update_draft_chunk(
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::EntityMetadataOutOfRange("批量草稿更新必须使用事务"));
     }
+
     let (filter, update) = draft_chunk_update(rows, Instant::now().unix_secs())?;
     let collection = db.collection::<Document>("supplier_catalog_adoption_batch_items");
     let result = mongo_ops::update_many_pipeline(&collection, filter, update, executor).await?;
@@ -55,6 +56,7 @@ fn draft_chunk_update(rows: &[CatalogAdoptionBatchItem], now: i64) -> Result<(Do
     if rows.len() > 200 || rows.is_empty() {
         return Err(Error::EntityMetadataOutOfRange("批量草稿页长必须为1至200"));
     }
+
     let batch = &rows[0].batch_id;
     let (mut filters, mut branches, mut ids) = (Vec::new(), Vec::new(), HashSet::new());
     for row in rows {
@@ -70,6 +72,7 @@ fn draft_chunk_update(rows: &[CatalogAdoptionBatchItem], now: i64) -> Result<(Do
         filters.push(doc! {"id":&row.base.id,"version":version});
         branches.push(doc! {"case":{"$eq":["$id",{"$literal":&row.base.id}]},"then":{"$literal":value}});
     }
+
     Ok((
         doc! {"batch_id":batch,"deleted_at":0_i64,"$or":filters},
         vec![

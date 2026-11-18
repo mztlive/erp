@@ -70,6 +70,7 @@ pub async fn handover_product(
     actor: &AuditActor,
 ) -> Result<HandoverProductView> {
     req.validate()?;
+
     let key = trimmed_idempotency_key(&req.idempotency_key)?;
     let fingerprint = handover_fingerprint(actor.id(), id, &req, &key)?;
     let command = CommandReceipt::from_resource_parts(
@@ -81,6 +82,7 @@ pub async fn handover_product(
         &key,
         [fingerprint],
     )?;
+
     let context = handover_context(
         actor,
         &command,
@@ -136,6 +138,7 @@ pub async fn handover_candidates(
                     .access
                     .require_product(&actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, &id, executor)
                     .await?;
+
                 Ok(qualified_candidates(
                     &db,
                     &rbac,
@@ -183,6 +186,7 @@ async fn replay(
         return Ok(None);
     };
     receipt.ensure_matches(command)?;
+
     let product =
         access.require_product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, id, executor).await?;
     Ok(Some(HandoverProductView {
@@ -224,17 +228,21 @@ impl AuditedCommand for ProductHandoverCommand {
         self.rbac
             .require(&self.actor, &catalog::PRODUCT_PRODUCT_UPDATE, AccessTarget::record(&self.id)?, executor)
             .await?;
+
         if let Some(view) =
             replay(&self.db, &self.ports.access, &self.command, &self.id, &self.actor, executor).await?
         {
             return Ok(AuditedWrite::Replayed(view));
         }
+
         ensure_target_qualified(&self.db, &self.rbac, self.req.target_user_id.trim(), executor).await?;
         ensure_org_enabled(&self.db, self.req.target_org_unit_id.as_deref(), executor).await?;
+
         let (before, view) =
             self.ports.service.apply_product_handover(&self.id, &self.req, &self.actor, executor).await?;
         let receipt = ProductHandoverReceipt::new(&self.command, view.clone(), self.event_id.clone())?;
         self.db.product_handover_receipts().create(&receipt, executor).await?;
+
         Ok(AuditedWrite::Fresh {
             content: handover_content(HandoverEventFacts {
                 target_id: view.product_id.clone(),
@@ -355,10 +363,12 @@ mod tests {
             command,
             event_id: "event".into(),
         };
+
         let result = operation.execute(&mut ReadExecutor::default()).await;
         assert!(
             matches!(result, Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务")
         );
+
         let result = operation.execute(&mut SnapshotExecutor::default()).await;
         assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
     }

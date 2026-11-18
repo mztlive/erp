@@ -40,6 +40,7 @@ pub(super) fn source_revision_id(
         }
         revisions.insert(line.sales_order_revision_id.to_string());
     }
+
     if revisions.len() > 1 {
         return Err(Error::BusinessLogicError("采购明细关联多个销售版本，请联系经办人核对".into()));
     }
@@ -151,7 +152,6 @@ mod tests {
         PurchaseOrderLineView {
             inquiry_quote_source: None,
             delivery_allocations: Vec::new(),
-
             line_id: "purchase-line".into(),
             line_no: 1,
             line_type: PurchaseLineType::ItemService,
@@ -188,6 +188,7 @@ mod tests {
                 .as_ref(),
             "new-revision"
         );
+
         assert!(source_revision_id(std::slice::from_ref(&purchase), &[], &creation).is_err());
         assert!(
             source_revision_id(
@@ -197,6 +198,7 @@ mod tests {
             )
             .is_err()
         );
+
         let other = sales_line("other-line", "other-revision", "other-stable");
         assert!(
             source_revision_id(
@@ -239,6 +241,7 @@ mod tests {
         assert_eq!(views[0].unit_price_gross, "123.4567");
         assert_eq!(views[0].unit, "件");
         assert_eq!(views[0].sales_order_revision_line_id, "frozen-line");
+
         goods.revision_line_id = SalesOrderRevisionLineId::new("different-revision-line");
         assert!(sales_line_views(&[line], &[goods]).is_err());
     }

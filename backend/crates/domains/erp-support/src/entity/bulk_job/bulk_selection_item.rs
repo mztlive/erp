@@ -111,6 +111,7 @@ impl BulkSelectionItem {
             expected_hash.is_some(),
             "预期版本与内容摘要必须同时提供或同时省略",
         )?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             selection_snapshot_id: data.selection_snapshot_id,
@@ -145,6 +146,7 @@ impl BulkSelectionItem {
         if status == SelectionItemStatus::Failed && result_code.is_none() {
             return Err(Error::from("失败项必须记录原因代码"));
         }
+
         self.result_status = Some(status);
         self.result_code = result_code;
         Ok(())

@@ -182,6 +182,7 @@ mod tests {
             },
         )
         .unwrap();
+
         assert!(
             new_difference_work_item(WorkItemId::new("wi-4"), &unknown, Instant::from_unix_secs(NOW),)
                 .is_err()

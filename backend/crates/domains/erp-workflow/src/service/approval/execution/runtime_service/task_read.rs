@@ -78,6 +78,7 @@ fn terminal_task_matches_subject(
             && item.owner_organization_id == subject.snapshot.payload.responsible_org_id
             && item.owner_role == owner_role;
     }
+
     item.status == WorkItemStatus::Completed
         && item.completed_by.as_deref() == Some(owner)
         && item.owner_user_id.as_deref() == Some(owner)

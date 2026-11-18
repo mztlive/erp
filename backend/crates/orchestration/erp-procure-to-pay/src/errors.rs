@@ -325,14 +325,12 @@ mod tests {
     #[test]
     fn optimistic_locking_error_maps_to_conflict() {
         let error = Error::from(persistence_core::Error::OptimisticLockingError);
-
         assert!(matches!(error, Error::ConflictError(_)));
     }
 
     #[test]
     fn duplicate_key_error_maps_to_conflict() {
         let error = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
-
         assert!(matches!(error, Error::ConflictError(_)));
         assert_eq!(error.to_string(), "数据冲突: 数据已存在，请勿重复提交");
     }
@@ -340,14 +338,12 @@ mod tests {
     #[test]
     fn fulfillment_open_task_duplicate_maps_to_refresh_message() {
         let message = duplicate_index_conflict_message(Some("uk_work_items_open_fulfillment_object"));
-
         assert_eq!(message, "该履约对象已存在开放任务，请刷新后重试");
     }
 
     #[test]
     fn customer_acceptance_open_task_duplicate_maps_to_refresh_message() {
         let message = duplicate_index_conflict_message(Some("uk_work_items_open_customer_acceptance_object"));
-
         assert_eq!(message, "该销售单已存在开放客户验收任务，请刷新后重试");
     }
 
@@ -481,6 +477,7 @@ mod tests {
                 assert!(matches!(error, Error::RepositoryError(persistence_core::Error::EntityMetadataOutOfRange("field-marker"))));
             };
         }
+
         check_domain!(erp_identity);
         check_domain!(erp_workflow);
         check_domain!(erp_supplier);
@@ -497,12 +494,14 @@ mod tests {
         // 只覆盖其余同构变体；冲突文案路径由仓储单测覆盖。
         check_domain!(erp_fulfillment, common_variants);
         check_domain!(erp_procurement);
+
         assert!(
             matches!(Error::from(erp_identity::Error::Rbac("identity".to_string())), Error::Rbac(message) if message == "identity")
         );
         assert!(
             matches!(Error::from(erp_workflow::Error::Rbac("workflow".to_string())), Error::Rbac(message) if message == "workflow")
         );
+
         for code in WorkflowErrorCode::ALL {
             assert!(
                 matches!(Error::from(erp_workflow::Error::Coded(code)), Error::Coded(actual) if actual == code)
@@ -536,6 +535,7 @@ mod tests {
             (Error::RepositoryError(persistence_core::Error::EntityMetadataOutOfRange("x")), false),
             (Error::Coded(WorkflowErrorCode::ApprovalTaskVersionConflict), false),
         ];
+
         for (error, expected) in cases {
             assert_eq!(error.command_may_have_committed(), expected, "{error:?}");
         }
@@ -548,6 +548,7 @@ mod tests {
             matches!(&error, Error::ReceiptDuplicate(source) if source.duplicate_index_name() == Some("receipt-index"))
         );
         assert!(error.command_may_have_committed());
+
         let code = WorkflowErrorCode::ApprovalAlreadyStarted;
         assert!(
             matches!(Error::from(erp_read_models::Error::Coded(code)), Error::Coded(actual) if actual == code)

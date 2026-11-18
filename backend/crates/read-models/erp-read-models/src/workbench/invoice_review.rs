@@ -112,17 +112,20 @@ async fn current(
         .await?
         .ok_or_else(|| Error::ConflictError("申请绑定的应收不存在".into()))?;
     source::validate_binding(&request, &account)?;
+
     let reserved = db.sales_invoice_requests().reserved_for_account(&account.base.id, executor).await?;
     for row in &reserved {
         source::validate_binding(row, &account)?;
     }
     let amounts =
         InvoiceReviewAmounts::from_requests(account.open_invoiceable_total, &request.base.id, &reserved);
+
     let (order, _, source) = source::load(db, &request, executor).await?;
     let identity = invoice_request_source::load(db, &account, executor).await?;
     let warnings = warnings(&request, &materials.display.source_sales, &source, &amounts, &identity);
     let sales_owner = owner_name(db, &order.sales_owner_user_id, executor).await?;
     let (requests, request_count) = related_requests(&request, &reserved);
+
     Ok(InvoiceApprovalReview {
         read_at: Instant::now(),
         account_label: format!("{} · 第 {} 笔应收", order.order_no, account.account_seq),
@@ -234,6 +237,7 @@ pub(super) async fn capture(
         .await?
         .ok_or_else(|| Error::ConflictError("开票申请应收不存在".into()))?;
     source::validate_binding(&request, &account)?;
+
     let (_, revision, mut source) = source::load(db, &request, executor).await?;
     super::brief::push_section(
         &mut source.source.extra_sections,
@@ -241,6 +245,7 @@ pub(super) async fn capture(
         Some(&super::presentation::format_yuan(&account.gross_total)),
         true,
     );
+
     let files = match revision_materials(db, &revision, executor).await {
         Ok(materials) => materials.files,
         Err(error) => {
@@ -254,6 +259,7 @@ pub(super) async fn capture(
             Vec::new()
         },
     };
+
     source.validate()?;
     Ok((source, files))
 }
@@ -294,6 +300,7 @@ mod tests {
         )
         .unwrap();
         account.base = BaseModel { id: "account".into(), ..BaseModel::fake() };
+
         let mut request = SalesInvoiceRequest::new(
             SalesInvoiceRequestId::new("request"),
             &account,
@@ -357,6 +364,7 @@ mod tests {
             std::slice::from_ref(&request),
         );
         assert!(warnings(&request, std::slice::from_ref(&frozen), &frozen, &amounts, &identity).is_empty());
+
         identity.effective = false;
         identity.tax_number = "NEW-TAX".into();
         let shortage = InvoiceReviewAmounts::from_requests(
@@ -369,6 +377,7 @@ mod tests {
         assert!(issues.iter().any(|value| value.contains("税号")));
         assert!(issues.iter().any(|value| value.contains("销售版本已变更")));
         assert!(issues.iter().any(|value| value.contains("65")));
+
         assert_eq!(frozen.revision_id, "revision");
         assert_eq!(request.data.tax_number, "TAX");
     }

@@ -111,6 +111,7 @@ pub(super) async fn confirm_current_order(
     if execution.stage != ApiOrderStage::ConfirmOrder {
         return application.persist(&mut execution).await;
     }
+
     let request = next_confirmation(&mut execution)?;
     if !execution.begin_confirmation(&request)? {
         execution.defer("原订单确认已经发送，请查询原结果");
@@ -118,6 +119,7 @@ pub(super) async fn confirm_current_order(
     }
     // 本事务仍重验批准、授权和专属资金；不重复要求已预占库存或整单可用余额。
     application.claim(&mut execution).await?;
+
     match application.send(&request).await {
         Ok(result) => {
             execution.observe_confirmation(&request.order.external_order_no, result.value)?;
@@ -128,6 +130,7 @@ pub(super) async fn confirm_current_order(
         },
         Err(error) => execution.defer(error.summary),
     }
+
     application.persist(&mut execution).await
 }
 
@@ -239,6 +242,7 @@ mod tests {
         let original_payload = execution.request_encrypted.clone();
         let application = Application::new(ClaimResult::Covered);
         confirm_current_order(&application, execution).await.unwrap();
+
         assert_eq!(
             *application.calls.lock().unwrap(),
             [
@@ -248,10 +252,12 @@ mod tests {
                 "persist-original-result"
             ]
         );
+
         let sent = application.sent.lock().unwrap();
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].order.merchant_order_no, "group");
         assert_eq!(sent[0].order.external_order_no, "child-a");
+
         let saved = application.saved.lock().unwrap();
         let saved = saved.as_ref().unwrap();
         assert_eq!(saved.stage, ApiOrderStage::ConfirmOrder);
@@ -270,6 +276,7 @@ mod tests {
         confirm_current_order(&application, execution).await.unwrap();
         assert_eq!(*application.calls.lock().unwrap(), ["query-original-order", "persist-original-result"]);
         assert!(application.sent.lock().unwrap().is_empty());
+
         let saved = application.saved.lock().unwrap();
         let saved = saved.as_ref().unwrap();
         assert!(saved.confirmations.is_empty());
@@ -300,8 +307,10 @@ mod tests {
         let original = to_value(&execution.confirmations).unwrap();
         let application = Application::new(ClaimResult::Covered);
         confirm_current_order(&application, execution).await.unwrap();
+
         assert_eq!(*application.calls.lock().unwrap(), ["query-original-order", "persist-original-result"]);
         assert!(application.sent.lock().unwrap().is_empty());
+
         let saved = application.saved.lock().unwrap();
         let saved = saved.as_ref().unwrap();
         assert_eq!(saved.stage, ApiOrderStage::ConfirmationUnknown);
@@ -315,6 +324,7 @@ mod tests {
         confirm_current_order(&application, execution).await.unwrap();
         let next = application.saved.lock().unwrap().clone().unwrap();
         confirm_current_order(&application, next).await.unwrap();
+
         let sent = application.sent.lock().unwrap();
         assert_eq!(sent.len(), 2);
         assert_eq!(sent[0].order.external_order_no, "child-a");
@@ -329,11 +339,13 @@ mod tests {
         let mut application = Application::new(ClaimResult::Covered);
         application.send_unknown = true;
         confirm_current_order(&application, execution).await.unwrap();
+
         let original = application.sent.lock().unwrap()[0].clone();
         let saved = application.saved.lock().unwrap().clone().unwrap();
         assert_eq!(saved.stage, ApiOrderStage::ConfirmationUnknown);
         assert_eq!(saved.confirmations["child-a"].request, original);
         assert!(saved.blocker.as_ref().unwrap().contains("待核实"));
+
         application.calls.lock().unwrap().clear();
         confirm_current_order(&application, saved).await.unwrap();
         assert_eq!(*application.calls.lock().unwrap(), ["query-original-order", "persist-original-result"]);

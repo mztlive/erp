@@ -130,6 +130,7 @@ impl ReconciliationDifferenceResolutionBatchExt for Repository<'_, Reconciliatio
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
+
         let records = self.find_many(latest_batch_filter(&ids), executor).await?;
         Ok(latest_per_difference(records))
     }

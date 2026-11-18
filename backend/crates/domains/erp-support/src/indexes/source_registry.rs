@@ -113,7 +113,6 @@ mod tests {
     #[test]
     fn source_system_identity_index_is_globally_unique() {
         let indexes = source_system_indexes();
-
         let code_index = indexes
             .iter()
             .find(|index| {
@@ -130,7 +129,6 @@ mod tests {
     #[test]
     fn external_identity_map_identity_index_covers_the_binary_key() {
         let indexes = external_identity_map_indexes();
-
         let identity = indexes
             .iter()
             .find(|index| {
@@ -149,12 +147,12 @@ mod tests {
     #[test]
     fn external_identity_target_indexes_cover_link_lineage_and_status() {
         let indexes = external_identity_target_indexes();
-
         assert!(indexes.iter().any(|index| {
             index.options.as_ref().and_then(|options| options.name.as_deref())
                 == Some("uk_external_identity_targets_link")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
+
         assert!(indexes.iter().any(|index| {
             index.keys
                 == doc! {

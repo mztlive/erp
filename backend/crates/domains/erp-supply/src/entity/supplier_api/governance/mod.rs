@@ -174,6 +174,7 @@ impl SupplierConnectionGovernance<'_> {
                 None,
             )];
         }
+
         match action {
             SupplierConnectionAction::UpdateBusinessProfile
             | SupplierConnectionAction::BindEndpointReference
@@ -294,6 +295,7 @@ impl SupplierConnectionGovernance<'_> {
         if self.connection.is_active() {
             return vec![governance_blocker(action, "ALREADY_ENABLED", "连接已经启用", None)];
         }
+
         if !self.connection.technical_references_ready() {
             return vec![governance_blocker(
                 action,
@@ -623,9 +625,11 @@ mod tests {
             }
             .blockers(SupplierConnectionAction::Enable, Default::default(), true)
         };
+
         assert_eq!(blockers(&connection)[0].code, "TECHNICAL_HEALTH_MISSING");
         connection.record_health(HealthCheckResult::Healthy, Instant::from_unix_secs(4));
         assert!(blockers(&connection).is_empty());
+
         let capability = governance_capability(SupplierApiCapabilityCode::Product);
         let confirmation = governance_confirmation(&capability, "same-operator");
         let health = governance_health(&connection, &capability, "same-operator");
@@ -636,6 +640,7 @@ mod tests {
             health_runs: &[health],
         };
         assert!(historical.blockers(SupplierConnectionAction::Enable, Default::default(), true).is_empty());
+
         connection.bind_credential_reference("new-config".into(), "same-operator").unwrap();
         assert_eq!(blockers(&connection)[0].code, "TECHNICAL_HEALTH_MISSING");
     }
@@ -682,6 +687,7 @@ mod tests {
                 )
                 .is_empty()
         );
+
         assert!(
             governance
                 .blockers(
@@ -708,6 +714,7 @@ mod tests {
             confirmations: &[],
             health_runs: &[],
         };
+
         for action in [SupplierConnectionAction::RunHealthCheck, SupplierConnectionAction::StartCatalogSync] {
             assert!(governance.blockers(action, Default::default(), true).is_empty());
             assert_eq!(

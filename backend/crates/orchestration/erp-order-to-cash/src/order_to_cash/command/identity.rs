@@ -72,6 +72,7 @@ pub(super) async fn persist_bound_sales_document(
         sales_order_object_readable(&bind_command.context.organization_id, &bind_command.context.creator_id)?;
     let binding = approvals.bind_document(db, bind_command, actor, executor).await?;
     let binding = binding.ok_or_else(|| Error::Internal("销售单必须绑定已发布定义".to_string()))?;
+
     attach_published_binding(document, binding.clone())?;
     db.business_documents().create(document, executor).await?;
     Ok(binding)

@@ -104,8 +104,10 @@ async fn commit_receipt_snapshot(
     if let Some(view) = replay_receipt_command(&replay, &request.command_receipt, None, executor).await? {
         return Ok(view);
     }
+
     let actor = request.actor.clone();
     let receipt = persist_receipt_commit(db, rbac, request, executor).await?;
+
     receipt_command_result(
         db,
         &rbac.authorization,
@@ -175,6 +177,7 @@ pub async fn post_customer_receipt_apply(
         return Err(Error::BusinessLogicError("已冲正回款不能再核销".to_string()));
     }
     ensure_final_approve_posting(&receipt)?;
+
     execute_customer_receipt_domain_action(
         &mut receipt,
         erp_workflow::service::approval::policy::ApprovalDomainAction::CustomerReceiptPost,
@@ -187,9 +190,11 @@ pub async fn post_customer_receipt_apply(
             executor,
         )
         .await?;
+
     let audit =
         actor.clone().resource_log("customer_receipt.post", "customer_receipt", receipt.base.id.clone())?;
     persist_log(db, &audit, executor).await?;
+
     sales_order_ids.sort();
     sales_order_ids.dedup();
     for sales_order_id in sales_order_ids {
@@ -234,6 +239,7 @@ pub async fn cancel_customer_receipt_approval_apply(
         .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
     execute_customer_receipt_domain_action(&mut receipt, action)?;
     db.customer_receipts().update(&mut receipt, executor).await?;
+
     let audit = actor.clone().resource_log(
         "customer_receipt.cancel_approval",
         "customer_receipt",
@@ -270,9 +276,11 @@ pub async fn reject_customer_receipt_approval_apply(
     if receipt.approval_subject_version != expected_subject_version {
         return Err(Error::ConflictError("审批主题版本已变化，请刷新后重试".into()));
     }
+
     receipt.reject_approval()?;
     release_receipt(db, &receipt, executor).await?;
     db.customer_receipts().update(&mut receipt, executor).await?;
+
     let audit =
         actor.clone().resource_log("customer_receipt.reject", "customer_receipt", receipt_id.to_owned())?;
     persist_log(db, &audit, executor).await?;
@@ -312,9 +320,9 @@ pub(super) async fn persist_created_customer_receipt(
             .map_err(crate::Error::from)?;
     let audit =
         actor.clone().resource_log("customer_receipt.create", "customer_receipt", receipt.base.id.clone())?;
+
     let db = db.clone();
     let rbac = rbac.clone();
-
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
@@ -322,6 +330,7 @@ pub(super) async fn persist_created_customer_receipt(
                 rbac.authorization
                     .require(&actor, &receivable::CUSTOMER_RECEIPT_CREATE, AccessTarget::Operation, executor)
                     .await?;
+
                 persist_bound_customer_receipt_document(
                     &db,
                     &rbac,
@@ -333,6 +342,7 @@ pub(super) async fn persist_created_customer_receipt(
                 .await?;
                 db.customer_receipts().create(&receipt, executor).await?;
                 persist_log(&db, &audit, executor).await?;
+
                 receipt_command_result(
                     &db,
                     &rbac.authorization,
@@ -468,6 +478,7 @@ pub(super) async fn create_new_commit_records(
     if db.customer_receipts().find_by_receipt_no(&candidate.receipt_no, executor).await?.is_some() {
         return Err(Error::ConflictError("回款单号已存在，请刷新后重试".to_string()));
     }
+
     let organization_id = customer_receipt_responsible_org_id(&candidate)?;
     let bind_command = BindPublishedDefinitionCommand {
         document_type: DocumentType::CustomerReceipt,
@@ -481,6 +492,7 @@ pub(super) async fn create_new_commit_records(
         candidate.receipt_no.clone(),
     )
     .map_err(crate::Error::from)?;
+
     let binding =
         persist_bound_customer_receipt_document(db, rbac, document, &bind_command, actor, executor).await?;
     db.customer_receipts().create(&candidate, executor).await?;
@@ -512,6 +524,7 @@ async fn load_existing_commit_records(
         .await?
         .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
     ensure_expected_version(receipt.base.version, expected_version)?;
+
     let binding = find_approval_binding(db, receipt_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("客户回款单缺少审批绑定".to_string()))?;
@@ -566,6 +579,7 @@ pub(super) async fn load_commit_receipt(
             let version =
                 expected_version.ok_or_else(|| Error::ValidationError("已有回款缺少期望版本".to_string()))?;
             let (receipt, binding) = load_existing_commit_records(db, receipt_id, version, executor).await?;
+
             super::receipt_access::require_receipt_owner(&rbac.authorization, actor, receipt_id, executor)
                 .await?;
             receipt.ensure_draft_editable()?;
@@ -598,6 +612,7 @@ pub(super) async fn persist_loaded_commit_start(
 ) -> Result<CustomerReceipt> {
     let binding = require_frozen_binding(Some(&request.binding))?.clone();
     start_customer_receipt_approval(&mut request.receipt, request.allocations)?;
+
     let id = request.receipt.base.id.clone();
     let now = Instant::now();
     let (snapshot, organization_id) = receipt_start_metadata(&request.receipt, &request.actor, now)?;
@@ -611,6 +626,7 @@ pub(super) async fn persist_loaded_commit_start(
         executor,
     )
     .await?;
+
     let prepared = prepare_start(build_document_start_input(DocumentStartInput {
         resubmission_reason: request.resubmission_reason.as_deref(),
         document_type: DocumentType::CustomerReceipt,
@@ -624,6 +640,7 @@ pub(super) async fn persist_loaded_commit_start(
         receipt: existing_receipt,
         now,
     })?)?;
+
     let committed = persist_customer_receipt_start_apply(
         db,
         rbac,
@@ -641,6 +658,7 @@ pub(super) async fn persist_loaded_commit_start(
         executor,
     )
     .await?;
+
     let writes = MongoReceiptCommandWrites { db };
     persist_receipt_command_success(&writes, command_receipt, context, &committed, executor).await?;
     Ok(committed)
@@ -666,6 +684,7 @@ async fn load_receipt_start_graph(
         executor,
     )
     .await?;
+
     let graph =
         resolve_start_approvers(db, &rbac.authorization, graph, actor.id(), existing.as_ref(), executor)
             .await?;
@@ -728,6 +747,7 @@ pub(super) async fn prepare_dispatch_start(
         executor,
     )
     .await?;
+
     let start_input = build_document_start_input(DocumentStartInput {
         resubmission_reason,
         document_type: DocumentType::CustomerReceipt,

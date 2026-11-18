@@ -220,6 +220,7 @@ mod tests {
             )
             .unwrap(),
         );
+
         assert_eq!(
             PurchasePaymentRequestCandidate::summary_from_lines(&[logistics, printing]),
             "物流：货拉拉、印刷：礼盒印刷"

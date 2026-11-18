@@ -45,11 +45,13 @@ pub(in crate::supplier_portal) async fn actual_open_tasks(
     if receipts.len() > 1000 {
         return Err(Error::ValidationError("采购未完成入库作业超过影响读取上限".into()));
     }
+
     let receipt_ids = receipts.into_iter().map(|receipt| receipt.id).collect::<Vec<_>>();
     let tasks=aggregate::<WorkItem>(db.work_items().collection().clone_with_type::<Document>(),vec![doc! {"$match":{"work_item_type":"FULFILLMENT_OPERATION","status":"OPEN","deleted_at":NOT_DELETED_TIMESTAMP_BSON,"$or":[{"responsibility_key":format!("purchase_order:{}",order.base.id)},{"business_object_type":"purchase_receipt","business_object_id":{"$in":receipt_ids}}]}},doc! {"$sort":{"created_at":1,"id":1}},doc! {"$limit":1001}],executor).await?;
     if tasks.len() > 1000 {
         return Err(Error::ValidationError("采购未完成履约任务超过影响读取上限".into()));
     }
+
     let facts = current_operation_facts(db, &tasks, executor).await?;
     let owner = order.current_owner_user_id()?;
     let mut current = Vec::new();
@@ -100,6 +102,7 @@ async fn current_operation_facts(
             );
         }
     }
+
     for value in db.electronic_deliveries().list_active_by_ids(&ids("electronic_delivery"), executor).await? {
         if value.status == ElectronicDeliveryState::Draft {
             facts.insert(
@@ -112,6 +115,7 @@ async fn current_operation_facts(
             );
         }
     }
+
     for value in db.service_fulfillments().list_active_by_ids(&ids("service_fulfillment"), executor).await? {
         if value.status == ServiceFulfillmentState::Draft {
             facts.insert(
@@ -124,6 +128,7 @@ async fn current_operation_facts(
             );
         }
     }
+
     facts.extend(receipt_operation_facts(db, &ids("purchase_receipt"), executor).await?);
     Ok(facts)
 }
@@ -209,6 +214,7 @@ mod tests {
         assert!(current_operation(&task, "purchase1", "buyer1", &fact));
         assert!(!current_operation(&task, "purchase1", "other-buyer", &fact));
         assert!(!current_operation(&task, "other-purchase", "buyer1", &fact));
+
         fact.version = 4;
         assert!(!current_operation(&task, "purchase1", "buyer1", &fact));
     }
@@ -228,6 +234,7 @@ mod tests {
             warehouse_id: Some("warehouse1".into()),
         };
         assert!(current_operation(&task, "purchase1", "current-purchase-buyer", &fact));
+
         fact.warehouse_id = Some("other-warehouse".into());
         assert!(!current_operation(&task, "purchase1", "current-purchase-buyer", &fact));
     }

@@ -119,6 +119,7 @@ impl FundsAccess {
             .find_entries_by_accounts(&ids, executor)
             .await
             .map_err(Error::from)?;
+
         let mut grouped: HashMap<String, Vec<ReceivableEntryView>> = HashMap::new();
         for entry in found {
             grouped.entry(entry.receivable_account_id.to_string()).or_default().push(entry_view(entry));
@@ -126,6 +127,7 @@ impl FundsAccess {
         for views in grouped.values_mut() {
             views.sort_by_key(|view| view.source_sequence);
         }
+
         for row in rows {
             row.entries = grouped.remove(&row.id).unwrap_or_default();
         }

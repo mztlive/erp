@@ -165,6 +165,7 @@ impl CapabilityChangeSet {
         }
         ensure_unique_capability_codes(inputs.iter().map(|input| input.code))
             .map_err(|_| CapabilityChangeSetRejection::DuplicateCodes)?;
+
         let mut changes = Vec::with_capacity(inputs.len());
         for input in inputs {
             let key = input.code.as_str();
@@ -179,6 +180,7 @@ impl CapabilityChangeSet {
                 expected_version: expected,
             });
         }
+
         for key in expected_versions.keys() {
             if !changes.iter().any(|change| change.code.as_str() == key) {
                 return Err(CapabilityChangeSetRejection::UnexpectedExpectedVersion(key.clone()));
@@ -480,6 +482,7 @@ mod tests {
             CapabilityChangeSet::new(vec![], &versions(vec![])).expect_err("空清单必须拒绝"),
             CapabilityChangeSetRejection::EmptyOrTooMany
         );
+
         let overlong: Vec<CapabilityChangeInput> =
             (0..=MAX_CHANGES).map(|_| change(SupplierApiCapabilityCode::Order, false)).collect();
         assert_eq!(

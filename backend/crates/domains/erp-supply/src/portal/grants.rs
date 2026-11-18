@@ -96,6 +96,7 @@ mod tests {
         let other = AuditActor::new("buyer-b".into(), "buyer-b".into(), AccountKind::Admin);
         let mut grant = QuoteAccessGrant::new("grant".into(), "supplier", "sku", &owner).unwrap();
         let opened_at = grant.opened_at;
+
         grant.set_active(false, &other, Instant::from_unix_secs(100)).unwrap();
         grant.set_active(true, &other, Instant::from_unix_secs(101)).unwrap();
         assert_eq!(grant.opened_by, "buyer-a");
@@ -106,6 +107,7 @@ mod tests {
         assert!(grant.history[0].active);
         assert!(!grant.history[1].active);
         assert!(grant.history[2].active);
+
         let external = AuditActor::new("supplier-account".into(), "external".into(), AccountKind::Supplier);
         assert!(grant.set_active(false, &external, Instant::from_unix_secs(102)).is_err());
         assert_eq!(grant.history.len(), 3);

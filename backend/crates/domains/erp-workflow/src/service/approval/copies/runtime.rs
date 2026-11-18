@@ -96,6 +96,7 @@ async fn persist_events(
     if config.rules.is_empty() {
         return Ok(());
     }
+
     snapshot.ensure_matches_runtime_subject(
         snapshot.document_type,
         instance.subject.subject_id(),
@@ -111,6 +112,7 @@ async fn persist_events(
     {
         return Err(Error::Internal("抄送版本不匹配".into()));
     }
+
     for event in events {
         persist_event(
             identity_service,
@@ -151,6 +153,7 @@ async fn persist_event(
     if ids.is_empty() {
         return Ok(());
     }
+
     let accounts =
         identity_service.directory().accounts(&ids.iter().cloned().collect::<Vec<_>>(), ex).await?;
     let mut rows = Vec::new();
@@ -180,6 +183,7 @@ async fn persist_event(
             read_at: None,
         });
     }
+
     db.approval_copies().insert(&rows, ex).await?;
     Ok(())
 }

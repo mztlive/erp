@@ -59,10 +59,12 @@ fn combined_request_exposes_only_matching_purchase_and_account() {
     assert_eq!(view.requested_amount, "60".parse().unwrap());
     assert_eq!(view.paid_amount, Amount::zero());
     assert_eq!(view.remaining_amount, "60".parse().unwrap());
+
     assert!(FulfillmentRequestView::for_purchase(&request, &purchase, "other-account").is_none());
     assert!(
         FulfillmentRequestView::for_purchase(&request, &PurchaseOrderId::new("missing"), "account").is_none()
     );
+
     let response = serde_json::to_value(view).unwrap();
     assert!(response.get("total_amount").is_none());
     assert!(response.get("source_snapshot").is_none());
@@ -84,6 +86,7 @@ fn approval_never_implies_payment_and_closed_amount_is_separate() {
         assert_eq!(view.status, status);
         assert_eq!(view.paid_amount, Amount::zero());
     }
+
     request.status = PurchasePaymentRequestStatus::Closed;
     request.lines[0].paid_amount = "20".parse().unwrap();
     request.lines[0].closed_amount = "40".parse().unwrap();

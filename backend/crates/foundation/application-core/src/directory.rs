@@ -45,6 +45,7 @@ impl DirectoryQuery {
     pub fn normalized(mut self) -> Result<Self> {
         self.q = normalized_text(self.q.as_deref());
         self.scope_version = normalized_text(self.scope_version.as_deref());
+
         let page = self.page.unwrap_or(1);
         if self.q.as_ref().is_some_and(|q| q.chars().count() > 200)
             || page == 0
@@ -116,8 +117,10 @@ impl DirectoryPage {
         if items.len() > DIRECTORY_LIMIT {
             return Err(Error::ValidationError("目录超过查询上限，请收窄搜索条件".into()));
         }
+
         items.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));
         let scope_version = snapshot_scope_version(&scope.scope_version, query.q.as_deref(), &items)?;
+
         let total = items.len();
         let page = query.page.unwrap_or(1);
         let page_size = if query.ids.is_some() { 100 } else { query.page_size.unwrap_or(20) };
@@ -143,6 +146,7 @@ impl DirectoryPage {
 fn snapshot_scope_version(scope_version: &str, q: Option<&str>, items: &[DirectoryItem]) -> Result<String> {
     let search = q.unwrap_or_default().trim();
     let encoded_items = serde_json::to_vec(items).map_err(|error| Error::Internal(error.to_string()))?;
+
     let mut hash = Sha256::new();
     for field in [
         b"erp.directory.snapshot.v1".as_slice(),
@@ -250,6 +254,7 @@ mod tests {
                 .normalized()
                 .is_ok()
         );
+
         let ids = serde_json::from_value(serde_json::json!("a")).unwrap();
         assert!(
             DirectoryQuery { ids: Some(ids), q: Some("name".into()), ..Default::default() }
@@ -266,6 +271,7 @@ mod tests {
         disabled.status = "disabled".into();
         let disabled = DirectoryPage::from_snapshot(vec![disabled], &query, scope("v1")).unwrap();
         let revoked = DirectoryPage::from_snapshot(vec![], &query, scope("v2")).unwrap();
+
         assert_ne!(original.scope_version, renamed.scope_version);
         assert_ne!(original.scope_version, disabled.scope_version);
         assert_ne!(original.scope_version, revoked.scope_version);
@@ -280,6 +286,7 @@ mod tests {
                 .normalized()
                 .unwrap();
         let second = DirectoryPage::from_snapshot(rows, &second_query, scope("v1")).unwrap();
+
         assert_eq!(first.items[0].id, "a");
         assert_eq!(second.items[0].id, "b");
         assert_eq!(first.total, 2);
@@ -293,6 +300,7 @@ mod tests {
         let first = DirectoryPage::from_snapshot(rows.clone(), &alpha, scope("v1")).unwrap();
         let other = DirectoryPage::from_snapshot(rows.clone(), &beta, scope("v1")).unwrap();
         assert_ne!(first.scope_version, other.scope_version);
+
         let second_query = DirectoryQuery {
             q: Some("甲".into()),
             page: Some(2),
@@ -302,6 +310,7 @@ mod tests {
         };
         let second = DirectoryPage::from_snapshot(rows.clone(), &second_query, scope("v1")).unwrap();
         assert_eq!(first.scope_version, second.scope_version);
+
         let absent =
             DirectoryPage::from_snapshot(rows.clone(), &DirectoryQuery::default(), scope("v1")).unwrap();
         let blank = DirectoryPage::from_snapshot(
@@ -325,6 +334,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(first.scope_version, padded.scope_version);
+
         let ids = serde_json::from_value(serde_json::json!("a,b")).unwrap();
         let selected = DirectoryPage::from_snapshot(
             rows,
@@ -350,6 +360,7 @@ mod tests {
         )
         .unwrap();
         assert_ne!(prefix_scope.scope_version, prefix_query.scope_version);
+
         let split_scope = DirectoryPage::from_snapshot(
             rows.clone(),
             &DirectoryQuery { q: Some("y".into()), ..Default::default() },
@@ -369,10 +380,12 @@ mod tests {
         for size in [0, 101] {
             assert!(DirectoryQuery { page_size: Some(size), ..Default::default() }.normalized().is_err());
         }
+
         let too_many = (0..101).map(|id| format!("id-{id}")).collect::<Vec<_>>().join(",");
         assert!(
             serde_json::from_value::<DirectorySelectedQuery>(serde_json::json!({"ids": too_many})).is_err()
         );
+
         assert!(
             DirectoryPage::from_snapshot(
                 vec![item("a", "x"); DIRECTORY_LIMIT + 1],
@@ -381,6 +394,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(
             serde_json::from_value::<DirectorySelectedQuery>(serde_json::json!({"ids": "a", "q": "x"}))
                 .is_err()

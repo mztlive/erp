@@ -34,6 +34,7 @@ impl AdminService {
     pub async fn bootstrap_super_admin_if_absent(&self, params: InitializeSuperAdminParams) -> Result<()> {
         let (account, password, name) = params.into_validated_parts()?;
         ensure_root_role(&self.rbac).await?;
+
         let existing = self.load_account(&account).await?;
         match plan_super_admin_bootstrap(existing)? {
             SuperAdminBootstrapPlan::LeaveUnchanged => {
@@ -110,14 +111,12 @@ mod tests {
     #[test]
     fn non_admin_account_blocks_bootstrap() {
         let error = plan_super_admin_bootstrap(Some(false)).unwrap_err();
-
         assert!(matches!(error, Error::BusinessLogicError(_)));
     }
 
     #[test]
     fn create_conflict_keeps_existing_admin_and_preserves_other_conflicts() {
         let conflict = Error::ConflictError("唯一索引冲突".to_string());
-
         assert!(finish_bootstrap_create_conflict(Some(true), conflict, "admin").is_ok());
 
         let conflict = Error::ConflictError("唯一索引冲突".to_string());

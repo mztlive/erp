@@ -25,6 +25,7 @@ where
             return;
         }
         run().await;
+
         tokio::select! {
             biased;
             _ = stop.changed() => {},
@@ -57,9 +58,11 @@ mod tests {
             })
             .await;
         });
+
         started.notified().await;
         send.send(true).unwrap();
         assert!(!task.is_finished());
+
         finish.notify_one();
         tokio::time::timeout(Duration::from_secs(1), task).await.unwrap().unwrap();
         assert_eq!(count.load(Ordering::SeqCst), 1);
@@ -69,6 +72,7 @@ mod tests {
     async fn already_stopped_or_dropped_sender_never_runs() {
         let (send, receive) = watch::channel(true);
         periodic(receive, Duration::ZERO, || async { panic!("must not run") }).await;
+
         let (send2, receive2) = watch::channel(false);
         drop((send, send2));
         periodic(receive2, Duration::ZERO, || async { panic!("must not run") }).await;

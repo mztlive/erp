@@ -68,6 +68,7 @@ pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> 
         },
         ReceiptBranch::Fresh => {},
     }
+
     let plan = resume(
         input.instance,
         input.current,
@@ -81,6 +82,7 @@ pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> 
         },
     )
     .map_err(map_engine_error)?;
+
     let receipt = ApprovalCommandReceipt::new(
         input.receipt_id,
         identity.current(),

@@ -37,6 +37,7 @@ pub fn build_expense_draft_lines(
     if requested.is_empty() || requested.len() > EXPENSE_LINE_LIMIT {
         return Err(Error::ValidationError("费用行须为 1–50 行".into()));
     }
+
     let (mut gross_total, mut net_total, mut tax_total) = (zero_amount(), zero_amount(), zero_amount());
     let mut lines = Vec::with_capacity(requested.len());
     for (index, line) in requested.iter().enumerate() {
@@ -61,6 +62,7 @@ fn expense_line(
     if rate.is_sign_negative() || rate >= rust_decimal::Decimal::ONE {
         return Err(Error::ValidationError(format!("第 {} 行税率必须在 0 到 1 之间", index + 1)));
     }
+
     let mut expense = PurchaseExpenseDetail::new(
         next_id(),
         line.category,
@@ -70,6 +72,7 @@ fn expense_line(
     .map_err(|error| Error::ValidationError(format!("第 {} 行{error}", index + 1)))?;
     expense.inquiry_source = line.inquiry_source.clone();
     let expense = expense.normalized()?;
+
     let (gross, net, tax) = fee_amounts(line.gross_amount, line.input_tax_rate);
     let line_no = u32::try_from(index + 1).map_err(|_| Error::ValidationError("费用行数溢出".into()))?;
     PurchaseOrderSubmissionLine::new(
@@ -158,6 +161,7 @@ mod tests {
         let expense = first.expense.as_ref().unwrap();
         assert_eq!(expense.sales_order_line_id, Some(SalesOrderLineId::new("sol-1")));
         assert_ne!(expense.expense_line_id, built.lines[1].expense.as_ref().unwrap().expense_line_id);
+
         assert_eq!(built.totals.0, Amount::from_str("126.00").unwrap());
         assert_eq!(built.totals.1.checked_add(built.totals.2), built.totals.0);
     }
@@ -168,9 +172,11 @@ mod tests {
         assert!(build_expense_draft_lines(&id, &[]).is_err());
         assert!(build_expense_draft_lines(&id, &[request("0", "0")]).is_err());
         assert!(build_expense_draft_lines(&id, &[request("1.00", "1")]).is_err());
+
         let mut blank = request("1.00", "0");
         blank.description = " ".into();
         assert!(build_expense_draft_lines(&id, &[blank]).is_err());
+
         let many = vec![request("1.00", "0"); EXPENSE_LINE_LIMIT + 1];
         assert!(build_expense_draft_lines(&id, &many).is_err());
     }

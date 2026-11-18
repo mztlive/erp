@@ -84,6 +84,7 @@ mod tests {
             damaged.resource_id(&command).map(Some).map_err(Error::from),
             receipt.resource_id(&self::command(20)).map(Some).map_err(Error::from),
         ];
+
         for result in results {
             match recovered_resource(unknown(), result) {
                 Err(error) => confirm_original_unknown(error),
@@ -100,6 +101,7 @@ mod tests {
             recovered_view::<u32>(Err(Error::NotFound("视图缺失".into())), recovered.original_unknown)
                 .unwrap_err(),
         );
+
         let recovered = recovered_resource(unknown(), Ok(Some("invoice-1".into()))).unwrap();
         assert_eq!(recovered_view(Ok(17_u32), recovered.original_unknown).unwrap(), 17);
     }
@@ -108,11 +110,13 @@ mod tests {
     fn known_failure_preserves_first_error_if_missing_and_exposes_read_conflict_if_present() {
         let result = recovered_resource(Error::BusinessLogicError("原业务失败".into()), Ok(None));
         assert!(matches!(result, Err(Error::BusinessLogicError(value)) if value == "原业务失败"));
+
         let result = recovered_resource(
             Error::ConflictError("原事务失败".into()),
             Err(Error::Internal("回执损坏".into())),
         );
         assert!(matches!(result, Err(Error::Internal(value)) if value == "回执损坏"));
+
         let error = recovered_view::<u32>(Err(Error::NotFound("原视图不存在".into())), None).unwrap_err();
         assert!(matches!(error, Error::NotFound(value) if value == "原视图不存在"));
     }

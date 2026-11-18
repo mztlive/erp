@@ -29,6 +29,7 @@ impl AuthorizationService {
         if proof.context.permission != approval_instance::SUBMIT_DECISION {
             return Ok(vec![]);
         }
+
         let mut proofs = Vec::new();
         for task in facts.roots() {
             let Some((permission, resource, rule)) = order_source(task)? else { continue };
@@ -37,6 +38,7 @@ impl AuthorizationService {
             if instance.subject_type != task.subject_type {
                 return Err(Error::ValidationError("审批决定的冻结实例与任务类型不符".into()));
             }
+
             let access = self
                 .resolve_approval_source(
                     &proof.context,
@@ -65,6 +67,7 @@ impl AuthorizationService {
         if proof.rule.allows_object(proof.context.actor.id(), source, &grants)? {
             return Ok(());
         }
+
         let key = SourceKey {
             rule: rule.into(),
             business_type: "approval_instance".into(),
@@ -75,6 +78,7 @@ impl AuthorizationService {
         if self.facilities.source_grant(&key, &target, executor).await? {
             grants.insert((resource, source.id.clone()));
         }
+
         if !proof.rule.allows_object(proof.context.actor.id(), source, &grants)? {
             return Err(Error::Forbidden("没有审批单据的读取资格".into()));
         }

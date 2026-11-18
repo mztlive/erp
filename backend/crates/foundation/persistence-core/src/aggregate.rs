@@ -58,6 +58,7 @@ pub async fn find<T: DeserializeOwned + Send + Sync>(
     if let Some(projection) = options.projection {
         prefix.push(doc! { "$project": projection });
     }
+
     rows(collection, prefix, executor).await
 }
 
@@ -78,6 +79,7 @@ pub async fn count<T: Send + Sync>(
     struct Count {
         count: u64,
     }
+
     prefix.extend([doc! { "$match": filter }, doc! { "$count": "count" }]);
     Ok(rows(&collection.clone_with_type::<Count>(), prefix, executor).await?.first().map_or(0, |r| r.count))
 }

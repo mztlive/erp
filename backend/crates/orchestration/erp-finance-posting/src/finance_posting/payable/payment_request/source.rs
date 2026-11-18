@@ -48,6 +48,7 @@ pub(super) async fn prepare_submission(
         let order = authorized_source(sources, &account.source_document_id)?;
         let revision = current_revision(db, order, executor).await?;
         validate_account(&account, order, &revision, request)?;
+
         let payer = &revision.payment_subject;
         if subject.as_ref().is_some_and(|(id, _, _)| id != payer.settlement_party_id.as_ref()) {
             return Err(Error::ValidationError("所选采购跨我方付款主体，请按主体分组分别申请".into()));
@@ -58,6 +59,7 @@ pub(super) async fn prepare_submission(
             payer.settlement_party_name.clone(),
             order.business_org_unit_id.clone(),
         ));
+
         lines.push(freeze_line(db, &account, order, &revision, data.amount, executor).await?);
         if reserve
             && !db
@@ -68,15 +70,18 @@ pub(super) async fn prepare_submission(
             return Err(Error::ConflictError("采购可申请余额已变化，请刷新后重新核对".into()));
         }
     }
+
     if reserve {
         sync_reserved_arrangements(db, &lines, executor).await?;
     }
+
     validate_attachments(db, authorization, request, actor, executor).await?;
     let (payer_party_id, payer_party_name, org_unit_id) =
         subject.ok_or_else(|| Error::ValidationError("付款申请缺少采购来源".into()))?;
     let (payee_account, deposit_account) =
         funding::selected_accounts(db, request, &payer_party_id, reserve, executor).await?;
     ensure_company(db, &payer_party_id, executor).await?;
+
     Ok(PaymentRequestSubmission {
         supplier_id: request.data.supplier_id.clone(),
         payer_party_id,
@@ -199,6 +204,7 @@ async fn selected_account(
         .into_iter()
         .find(|a| a.base.id == request.data.payee_bank_account_id)
         .ok_or_else(|| Error::ConflictError("指定收款账户不属于供应商或已失效".into()))?;
+
     if lock
         && !db
             .party_bank_accounts()
@@ -226,6 +232,7 @@ async fn validate_attachments(
 ) -> Result<()> {
     let ids = request.data.attachment_ids.iter().map(AsRef::as_ref).collect::<Vec<&str>>();
     require_owned(authorization, actor, &ids, executor).await?;
+
     for id in &request.data.attachment_ids {
         let asset = db
             .file_assets()
@@ -247,6 +254,7 @@ pub(super) async fn revalidate(
 ) -> Result<()> {
     funding::revalidate(db, request, executor).await?;
     ensure_company(db, &request.payer_party_id, executor).await?;
+
     for line in &request.lines {
         let order = db
             .purchase_orders()
@@ -262,6 +270,7 @@ pub(super) async fn revalidate(
             ));
         }
         current_sales::revalidate(db, &order.base.id, &revision.payment_subject, request, executor).await?;
+
         let account = db
             .payable_accounts()
             .find_by_id(&line.payable_account_id, executor)

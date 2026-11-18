@@ -52,8 +52,10 @@ pub(crate) async fn source_sales(
         .ok_or_else(|| Error::NotFound("采购来源销售单不存在".into()))?;
     let names =
         db.accounts().names_by_ids(std::slice::from_ref(&sales.sales_owner_user_id), executor).await?;
+
     let lines = sales_lines(db, &revision, executor).await?;
     let (materials, materials_unavailable) = source_materials(db, &revision, executor).await;
+
     let view = PurchaseSourceSalesOrderView {
         sales_order_id: sales.base.id,
         sales_order_no: sales.order_no,
@@ -111,6 +113,7 @@ async fn source_revision(
     let referenced = revision_lines(db, &ids, executor).await?;
     let revision_id =
         mapping::source_revision_id(purchase_lines, &referenced, &order.sales_order_revision_id)?;
+
     let revision = db
         .sales_order_revisions()
         .find_by_id(&revision_id, executor)
@@ -136,6 +139,7 @@ async fn sales_lines(
     let goods =
         db.sales_order_goods_service_line_revisions().list_by_revision_line_ids(&ids, executor).await?;
     let mut views = mapping::sales_line_views(&lines, &goods)?;
+
     let prices =
         revision_line_prices(db, &ids.iter().map(ToString::to_string).collect::<Vec<_>>(), executor).await?;
     for view in &mut views {

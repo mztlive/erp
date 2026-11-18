@@ -395,9 +395,11 @@ mod tests {
         let tax = Amount::from_str("12.00").unwrap();
         let allocation_ids =
             vec![SalesInvoiceAllocationId::new("alloc-1"), SalesInvoiceAllocationId::new("alloc-2")];
+
         let via_commit = convert_invoice_allocations(&lines);
         let via_post = convert_post_allocations(&lines);
         assert_eq!(via_commit, via_post, "两条入口转换必须产出相同输入行");
+
         let plan_commit = SalesInvoiceAllocationPlan::new(
             invoice_id.clone(),
             gross,
@@ -410,6 +412,7 @@ mod tests {
         let plan_post =
             SalesInvoiceAllocationPlan::new(invoice_id, gross, net, tax, &via_post, &allocation_ids)
                 .expect("post 计划必须构造成功");
+
         assert_eq!(
             plan_commit.new_allocations(),
             plan_post.new_allocations(),
@@ -420,6 +423,7 @@ mod tests {
             plan_post.account_invoicing_deltas(),
             "同一 facts 的两条入口必须产出完全相同 account_deltas"
         );
+
         let seqs_commit: Vec<u32> = plan_commit.new_allocations().iter().map(|a| a.allocation_seq).collect();
         let seqs_post: Vec<u32> = plan_post.new_allocations().iter().map(|a| a.allocation_seq).collect();
         assert_eq!(seqs_commit, vec![1, 2]);
@@ -471,6 +475,7 @@ mod tests {
             "tester",
         )
         .expect("进项发票必须可构造");
+
         let err = ensure_sales_invoice(&purchase_invoice).unwrap_err();
         assert!(matches!(err, Error::ValidationError(_)));
         assert!(err.to_string().contains("应收登记命令只接受销项发票"));

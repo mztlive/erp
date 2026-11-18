@@ -35,6 +35,7 @@ pub(super) async fn validate_settlement(
         }
         return Ok(None);
     };
+
     let update = find_open_for_purchase(db, id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("采购依据更新已结束".into()))?;
@@ -55,6 +56,7 @@ pub(super) async fn validate_settlement(
     {
         return Err(Error::ConflictError("来源或退货结果已变化，请重新核对采购方案".into()));
     }
+
     let limit = if refund.settlement_method == SupplierSettlementMethod::SupplierCredit {
         decision.credit_amount
     } else {
@@ -62,8 +64,10 @@ pub(super) async fn validate_settlement(
     };
     let settlements = purchase_settlements(db, id, executor).await?;
     refund.ensure_settlement_limit(limit, &settlements)?;
+
     // 同采购所有处置申请、退回和销售依据变化竞争同一 CAS。
     db.purchase_orders().update(&mut order, executor).await?;
+
     let account = db
         .payable_accounts()
         .find_by_purchase_order(&id.to_owned().into(), executor)
@@ -97,6 +101,7 @@ pub(super) async fn create_credit(
     if account.settlement_party_id.as_ref() != Some(payer) {
         return Err(Error::ConflictError("原付款与采购的付款主体不一致".into()));
     }
+
     let record = SupplierCredit {
         base: BaseModel::new(format!("SC-{}", refund.base.id)),
         source_refund_id: refund.base.id.clone(),

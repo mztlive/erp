@@ -117,8 +117,10 @@ mod tests {
             ensure_final_approve_effective(&change),
             Err(Error::ConflictError(message)) if message == "只有审批中的采购变更单可以由最终通过动作生效"
         ));
+
         change.stable.status = PurchaseChangeOrderStatus::InApproval;
         ensure_final_approve_effective(&change).unwrap();
+
         apply_change_reason(&mut change, Some(" 变更原因 "), "other").unwrap();
         assert_eq!(change.stable.updated_by, "buyer");
         assert!(matches!(

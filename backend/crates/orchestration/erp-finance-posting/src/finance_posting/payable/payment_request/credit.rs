@@ -53,6 +53,7 @@ impl PurchasePaymentRequestProcess {
                         executor,
                     )
                     .await?;
+
                     Ok(available_credits(&db, &request.supplier_id, &request.payer_party_id, executor)
                         .await?)
                 })
@@ -101,6 +102,7 @@ async fn apply(
         authorize_replay(db, rbac, id, req, actor, &previous, executor).await?;
         return Ok(result_id);
     }
+
     let mut request = load(db, id, executor).await?;
     if request.base.version != req.expected_version {
         return Err(Error::ConflictError("付款申请已变化，请刷新后重新核对".into()));
@@ -116,6 +118,7 @@ async fn apply(
     )
     .await?;
     source::revalidate(db, &request, executor).await?;
+
     let entry = db
         .payable_entries()
         .find_by_id(&req.payable_entry_id, executor)
@@ -124,19 +127,23 @@ async fn apply(
     if entry.payable_account_id.as_ref() != req.payable_account_id {
         return Err(Error::ConflictError("分录与所选采购应付不一致".into()));
     }
+
     let allocation =
         PaymentRequestAllocation { payable_account_id: req.payable_account_id.clone(), amount: req.amount };
     request.record_payment(std::slice::from_ref(&allocation))?;
+
     let mut credit = supplier_credits(db)
         .find_by_id(&req.credit_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("留抵余额不存在".into()))?;
     credit.consume(&request.supplier_id, &request.payer_party_id, req.amount)?;
+
     post_allocation(db, &request, &credit, req, actor, executor).await?;
     supplier_credits(db).update(&mut credit, executor).await?;
     db.purchase_payment_requests().update(&mut request, executor).await?;
     persist_use(db, id, &result_id, req, actor, executor).await?;
     execution::sync_task(db, id, executor).await?;
+
     let audit =
         actor.clone().resource_log("supplier_credit.use", "purchase_payment_request", id.to_owned())?;
     persist_log(db, &audit, executor).await?;
@@ -161,6 +168,7 @@ async fn post_allocation(
     {
         return Err(Error::ConflictError("留抵原付款主体与本申请不一致".into()));
     }
+
     if !db
         .payable_accounts()
         .consume_payment_request(&req.payable_account_id, &req.amount, actor.id(), executor)
@@ -168,6 +176,7 @@ async fn post_allocation(
     {
         return Err(Error::ConflictError("批准未付额度已变化".into()));
     }
+
     payment.cash_refunded_amount = db
         .supplier_refunds()
         .posted_refund_total_by_payment(&payment.base.id.clone().into(), "", executor)
@@ -204,6 +213,7 @@ async fn authorize_replay(
     {
         return Err(Error::ConflictError("抵扣提交标识已用于其他内容".into()));
     }
+
     let task = db
         .work_items()
         .find_by_id(&req.work_item_id, executor)

@@ -39,6 +39,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let SeedRequest::Product(template) = &step.request else {
             return Err(Error::ValidationError("商品补齐必须使用商品种子".into()));
         };
+
         let prices_changed = prices::fill_missing(&mut request.skus, &template.skus, record);
         let missing = request.skus.iter().any(|sku| {
             needs_image(sku.sku_id.as_ref().map(AsRef::as_ref), sku.main_image_asset_id.is_some(), record)
@@ -46,6 +47,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if !prices_changed && !missing && !request.carousel_media.is_empty() {
             return Ok(());
         }
+
         if prices_changed {
             request.change_reason = Some("补齐演示商品价格及展示资料".into());
         }
@@ -75,6 +77,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                 sku.main_image_asset_id = Some(self.store_demo_image(image, &step.key, &mut pending).await?);
             }
         }
+
         if request.carousel_media.is_empty() {
             let file_asset_id = self.store_demo_image(image, &step.key, &mut pending).await?;
             request.carousel_media.push(ProductMediaInput {
@@ -125,6 +128,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             .save_with_content_type(&object_key, image, Some("image/jpeg"))
             .await
             .map_err(|error| Error::Internal(format!("演示商品图片保存失败：{error}")))?;
+
         let reference = format!("pending-file:{token}");
         pending.push(PendingFileAssetRequest {
             reference: reference.clone(),

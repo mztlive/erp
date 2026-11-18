@@ -54,12 +54,13 @@ impl ReceivableProcess {
         if let Some(view) = self.replay_invoice_request_command(&command, actor).await? {
             return Ok(view);
         }
+
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-
         let response_actor = actor.clone();
         let actor = actor.clone();
         let recover = command.clone();
+
         let result = db
             .client()
             .clone()
@@ -71,6 +72,7 @@ impl ReceivableProcess {
                 })
             })
             .await;
+
         self.finish_invoice_request_command(result, &recover, &response_actor).await
     }
 }
@@ -91,21 +93,26 @@ impl SubmitWrite<'_> {
         if access.replay(actor, command, executor).await?.is_some() {
             return Err(super::command::replay_requires_readback());
         }
+
         if let Some(id) = req.request_id.as_deref() {
             authorize(&access, actor, id, RequestAction::Submit, executor).await?;
         }
+
         let account = lock_account(db, &req.receivable_account_id, executor).await?;
         let available =
             account.open_invoiceable_total.checked_sub(reserved(db, &account.base.id, executor).await?);
         invoice_request_source::load(db, &account, executor).await?.validate(&req.data, available)?;
+
         let mut request = candidate(db, &account, req, actor, executor).await?;
         if req.request_id.is_none() {
             authorize(&access, actor, &request.base.id, RequestAction::Submit, executor).await?;
         }
         request.submit(available)?;
+
         let binding = bind(db, rbac, &request, actor, executor).await?;
         let id = request.base.id.clone();
         start(db, rbac, &mut request, &binding, req, actor, executor).await?;
+
         let audit = super::command::event(actor, &request, super::command::SUBMIT, Some(command))?;
         receipts.save_resource(command, id.clone(), audit.base.id.clone(), executor).await?;
         persist_log(db, &audit, executor).await?;
@@ -136,6 +143,7 @@ async fn candidate(
         request.data = req.data.clone().normalize()?;
         return Ok(request);
     }
+
     if req.expected_version.is_some() {
         return Err(Error::ValidationError("新建申请不能指定已有版本".into()));
     }
@@ -178,6 +186,7 @@ async fn bind(
             .approval_binding
             .ok_or_else(|| Error::ConflictError("请先发布开票申请审批流程".into()));
     }
+
     let command = BindPublishedDefinitionCommand {
         document_type: DocumentType::SalesInvoiceRequest,
         business_object_id: request.base.id.clone(),
@@ -192,6 +201,7 @@ async fn bind(
         .bind_document(db, &command, actor, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("请先发布开票申请审批流程".into()))?;
+
     let mut document: BusinessDocument = new_registered_document(
         &request.base.id,
         DocumentType::SalesInvoiceRequest,
@@ -215,6 +225,7 @@ async fn start(
     let graph = start_approval::load_bound_definition_graph_with_executor(db, binding, executor).await?;
     let graph = resolve_approvers(db, &rbac.authorization, graph, actor.id(), executor).await?;
     let subject = subject_ref_for(DocumentType::SalesInvoiceRequest, &request.base.id)?;
+
     let input = start_approval::build_document_start_input(start_approval::DocumentStartInput {
         resubmission_reason: req.resubmission_reason.as_deref(),
         document_type: DocumentType::SalesInvoiceRequest,
@@ -231,9 +242,11 @@ async fn start(
     let PreparedExecution::Apply(writes) = prepare_start(input)? else {
         return Err(Error::ConflictError("申请已提交，请刷新查看结果".into()));
     };
+
     db.bpm_workflow().insert_command_receipt(&writes.receipt, executor).await?;
     mark_request_started(db, request, binding, now, executor).await?;
     db.sales_invoice_requests().update(request, executor).await?;
+
     let snapshot = request_start_snapshot(request, actor, now);
     let spec = adapter_spec_of(DocumentType::SalesInvoiceRequest)?;
     start_approval::persist_runtime_writes(

@@ -219,6 +219,7 @@ impl SupplierPaymentTerm {
             "YEAR" => CalendarPeriod::Year,
             _ => return Err(Error::from("结算周期无效")),
         };
+
         let days: u16 = days.parse().map_err(|_| Error::from("付款天数必须是整数"))?;
         if days > 366 {
             return Err(Error::from("付款天数不能超过 366 天"));
@@ -316,6 +317,7 @@ mod tests {
             assert_eq!(term.label(), label);
             assert_eq!(SupplierPaymentTerm::parse(code).unwrap(), term);
         }
+
         for (period, code, label) in [
             (CalendarPeriod::Week, "WEEK", "周结"),
             (CalendarPeriod::Month, "MONTH", "月结"),
@@ -377,6 +379,7 @@ mod tests {
                 assert_eq!(term.days_after_delivery(), None);
             }
         }
+
         for invalid in
             ["PERIOD_MONTH_", "PERIOD_MONTH_-1", "PERIOD_MONTH_1.5", "PERIOD_MONTH_367", "PERIOD_UNKNOWN_15"]
         {

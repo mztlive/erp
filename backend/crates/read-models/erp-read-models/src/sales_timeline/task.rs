@@ -32,6 +32,7 @@ impl SalesTimelineReadService {
     ) -> Result<TaskTimeline> {
         query.limit()?;
         query.cursor()?;
+
         let before = runtime.instance_detail(actor, id).await?.instance;
         let kind = DocumentType::try_from_code(
             before.document_type.as_deref().ok_or_else(|| Error::NotFound("审批来源不可用".into()))?,
@@ -39,6 +40,7 @@ impl SalesTimelineReadService {
         let document_id =
             before.document_id.clone().ok_or_else(|| Error::NotFound("审批来源不可用".into()))?;
         let submitted_at = before.started_at.and_then(|at| u64::try_from(at).ok());
+
         let this = self.clone();
         let reader = actor.clone();
         let result = self
@@ -51,6 +53,7 @@ impl SalesTimelineReadService {
                 })
             })
             .await?;
+
         let after = runtime.instance_detail(actor, id).await?.instance;
         if before.document_id != after.document_id || before.subject_version != after.subject_version {
             return Err(Error::ConflictError("审批资料已变化，请刷新".into()));
@@ -75,6 +78,7 @@ impl SalesTimelineReadService {
     ) -> Result<TaskTimeline> {
         query.limit()?;
         query.cursor()?;
+
         let this = self.clone();
         let actor = actor.clone();
         let id = id.to_owned();
@@ -94,6 +98,7 @@ impl SalesTimelineReadService {
                             });
                         },
                     };
+
                     let submitted_at = if let Some(context) = task.approval_context {
                         this.db
                             .approval_process_instances()
@@ -103,6 +108,7 @@ impl SalesTimelineReadService {
                     } else {
                         None
                     };
+
                     this.task_document(&actor, kind, &task.business_object_id, submitted_at, &query, executor)
                         .await
                 })
@@ -124,6 +130,7 @@ impl SalesTimelineReadService {
         let roots = TimelineRepository { db: &self.db }.roots(&mut document, executor).await?;
         let current_readable = self.access.readable(actor, &document, executor).await?;
         sources.documents.insert(id.into(), document);
+
         let mut sales_orders = Vec::new();
         for root in roots {
             match SalesAccess::new(self.db.clone(), self.rbac.clone())
@@ -138,8 +145,10 @@ impl SalesTimelineReadService {
                 Err(error) => return Err(error),
             }
         }
+
         sources.check_size()?;
         numbers(&mut sources, &self.db, executor).await?;
+
         // 当前任务资格只提供办理摘要；原单详情链接另行授权。
         let mut timeline = self.read(sources, query, submitted_at, executor).await?;
         restrict_task_details(&mut timeline, id, current_readable);

@@ -208,6 +208,7 @@ impl SalesInvoiceRequest {
         if self.data.amount > available {
             return Err(Error::from("可申请开票金额不足，请刷新后调整申请金额"));
         }
+
         let version =
             self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批版本已达上限"))?;
         self.approval_subject_version = version;
@@ -298,6 +299,7 @@ impl SalesInvoiceRequest {
         if amount <= Amount::zero() || amount > self.remaining() {
             return Err(Error::from("本次开票金额超过申请剩余批准金额"));
         }
+
         self.invoiced_amount = self.invoiced_amount.checked_add(amount);
         if self.remaining() == Amount::zero() {
             self.status = InvoiceRequestStatus::Completed;

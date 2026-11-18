@@ -391,9 +391,11 @@ impl CustomerReceipt {
                 return Err(Error::from("核销来源不能重复"));
             }
         }
+
         if self.approval_subject_version > 0 {
             ensure_resubmit_sources(&self.pending_allocations, &allocations)?;
         }
+
         self.pending_allocations = allocations;
         Ok(())
     }
@@ -436,6 +438,7 @@ impl CustomerReceipt {
         if self.approval_subject_version > 0 {
             ensure_resubmit_sources(&self.pending_allocations, &allocations)?;
         }
+
         let next =
             self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))?;
         self.approval_subject_version = next;
@@ -671,6 +674,7 @@ mod tests {
         let mut receipt = CustomerReceipt::new(CustomerReceiptId::new("cr-1"), data(), "creator-1").unwrap();
         receipt.ensure_initial_approval_state().expect("新建草稿是初始未提交状态");
         assert_eq!(receipt.approval_subject_version, 0);
+
         let version = receipt
             .start_approval(vec![
                 PendingReceiptAllocation::new(
@@ -682,6 +686,7 @@ mod tests {
             .unwrap();
         assert_eq!(version, 1);
         assert_eq!(receipt.status, CustomerReceiptStatus::InApproval);
+
         receipt.cancel_approval().unwrap();
         assert_eq!(receipt.status, CustomerReceiptStatus::Draft);
         assert_eq!(receipt.approval_subject_version, 1);
@@ -780,8 +785,10 @@ mod tests {
                 .unwrap(),
             ]
         };
+
         receipt.start_approval(allocations()).unwrap();
         assert!(matches!(receipt.ensure_draft_editable(), Err(DraftEditError::ConflictError(_))));
+
         receipt.cancel_approval().unwrap();
         receipt.ensure_draft_editable().unwrap();
         receipt
@@ -804,6 +811,7 @@ mod tests {
         assert_eq!(receipt.amount.to_string(), "150");
         assert_eq!(receipt.received_at.unix_secs(), 1700000100);
         assert_eq!(receipt.bank_reference.as_deref(), Some("BANK-EDIT"));
+
         assert_eq!(receipt.start_approval(allocations()).unwrap(), 2);
     }
 
@@ -817,10 +825,12 @@ mod tests {
         };
         receipt.start_approval(vec![allocation("original", "100")]).unwrap();
         receipt.cancel_approval().unwrap();
+
         assert!(receipt.start_approval(vec![allocation("replacement", "80")]).is_err());
         assert_eq!(receipt.status, CustomerReceiptStatus::Draft);
         assert_eq!(receipt.approval_subject_version, 1);
         assert_eq!(receipt.pending_allocations[0].receivable_entry_id.as_ref(), "original");
+
         assert_eq!(receipt.start_approval(vec![allocation("original", "80")]).unwrap(), 2);
         assert_eq!(receipt.pending_allocations[0].allocated_amount.to_string(), "80");
     }
@@ -833,9 +843,11 @@ mod tests {
         receipt.save_allocations(vec![line("one", "10")]).unwrap();
         assert_eq!(receipt.status, CustomerReceiptStatus::Draft);
         assert_eq!(receipt.approval_subject_version, 0);
+
         assert!(receipt.save_allocations(vec![line("one", "10"), line("one", "10")]).is_err());
         assert!(receipt.save_allocations(vec![line("one", "999999")]).is_err());
         assert_eq!(receipt.pending_allocations.len(), 1);
+
         receipt.save_allocations(vec![line("two", "20")]).unwrap();
         receipt.start_approval(vec![line("three", "20")]).unwrap();
         assert!(receipt.save_allocations(vec![]).is_err());
@@ -855,6 +867,7 @@ mod tests {
             )
             .unwrap(),
         ];
+
         assert!(receipt.reject_approval().is_err());
         receipt.start_approval(allocations.clone()).unwrap();
         receipt.reject_approval().unwrap();
@@ -863,6 +876,7 @@ mod tests {
         assert_eq!(receipt.pending_allocations, allocations);
         assert!(receipt.reject_approval().is_err());
         assert!(receipt.cancel_approval().is_err());
+
         receipt.ensure_draft_editable().unwrap();
         receipt
             .update(CustomerReceiptUpdate {
@@ -873,6 +887,7 @@ mod tests {
             .unwrap();
         assert_eq!(receipt.status, CustomerReceiptStatus::Rejected);
         assert_eq!(receipt.base.id, "rejected");
+
         assert_eq!(receipt.start_approval(allocations).unwrap(), 2);
         receipt.mark_posted().unwrap();
         assert!(receipt.reject_approval().is_err());

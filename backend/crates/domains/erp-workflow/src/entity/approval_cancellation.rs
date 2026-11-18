@@ -223,6 +223,7 @@ mod tests {
         .unwrap();
         instance.set_current_execution(execution.typed_id(), at).unwrap();
         instance.enter_blocked(ApprovalBlockerCode::DefinitionGraphCorrupted, at).unwrap();
+
         let identity = cancel_blocked_identity(CancelBlockedIdentityParams {
             idempotency_key: IdempotencyKey::parse("key").unwrap(),
             instance_id: "instance",
@@ -242,6 +243,7 @@ mod tests {
             ended,
         )
         .unwrap();
+
         instance.cancel(ended).unwrap();
         execution.cancel(ended).unwrap();
         (instance, execution, receipt)
@@ -287,6 +289,7 @@ mod tests {
         )
         .unwrap();
         assert!(fact.ensure_runtime(&instance, &execution, &[]).is_ok());
+
         for case in 0..9 {
             let mut damaged = fact.clone();
             match case {
@@ -302,6 +305,7 @@ mod tests {
             }
             assert!(damaged.ensure_runtime(&instance, &execution, &[]).is_err(), "case {case}");
         }
+
         let mut wrong = execution.clone();
         wrong.process_instance_id = ApprovalProcessInstanceId::new("foreign");
         assert!(fact.ensure_runtime(&instance, &wrong, &[]).is_err());
@@ -339,6 +343,7 @@ mod tests {
             }
             assert!(fact.ensure_runtime(&instance, &execution, &[changed]).is_err(), "case {case}");
         }
+
         assert!(
             ApprovalCancellationFact::new(
                 receipt.clone(),
@@ -351,6 +356,7 @@ mod tests {
             )
             .is_err()
         );
+
         let mut open = task;
         open.status = WorkItemStatus::Open;
         assert!(

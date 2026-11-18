@@ -43,6 +43,7 @@ impl ProcurementResponsibilityProcess {
         let data = request.into_data();
         let id = ProcurementResponsibilityRuleId::new(id_generator::next_id());
         let rule = ProcurementResponsibilityRule::new(id, data.clone(), actor.id()).map_err(Error::Logic)?;
+
         let audit = actor.clone().resource_log(
             "procurement_responsibility_rule.create",
             "procurement_responsibility_rule",
@@ -156,8 +157,10 @@ impl ProcurementResponsibilityProcess {
         self.require_management(actor, executor).await?;
         self.validate_selector_reference(&data, executor).await?;
         self.validate_pool(&data, executor).await?;
+
         ProcurementResponsibilityService::new(self.db.clone()).create_rule(&rule, executor).await?;
         persist_log(&self.db, &audit, executor).await?;
+
         self.command_view(rule, actor, executor).await
     }
 
@@ -175,10 +178,12 @@ impl ProcurementResponsibilityProcess {
         self.require_management(actor, executor).await?;
         self.validate_selector_reference(&data, executor).await?;
         self.validate_pool(&data, executor).await?;
+
         let rule = ProcurementResponsibilityService::new(self.db.clone())
             .update_rule(id, version, data, actor.id(), executor)
             .await?;
         persist_log(&self.db, &audit, executor).await?;
+
         self.command_view(rule, actor, executor).await
     }
 
@@ -257,10 +262,12 @@ mod tests {
             )
             .unwrap();
         let mut executor = SnapshotExecutor::default();
+
         let create =
             process.create_rule_stage(rule.clone(), data.clone(), audit.clone(), &actor, &mut executor).await;
         let update = process.update_rule_stage("rule", 1, data, audit, &actor, &mut executor).await;
         let view = process.command_view(rule, &actor, &mut executor).await;
+
         for result in [create, update, view] {
             assert!(matches!(result, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
         }

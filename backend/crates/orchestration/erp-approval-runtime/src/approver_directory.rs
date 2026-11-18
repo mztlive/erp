@@ -42,10 +42,12 @@ impl ApproverDirectory for OrganizationApprovers<'_> {
                 return Err(WorkflowError::ValidationError("指定人员不使用组织负责人解析".into()));
             },
         };
+
         let unit = applicant_leader(self.db, applicant, kind, at, ex)
             .await
             .map_err(|e| map_service(Error::from(e)))?;
         let leader = unit.leader.ok_or_else(|| WorkflowError::ValidationError("组织未配置负责人".into()))?;
+
         let actor = AuditActor::new(leader.user_id.clone(), leader.user_id, AccountKind::Admin);
         let required = [approval_instance::INSTANCE_LIST, approval_instance::SUBMIT_DECISION];
         let qualified = self
@@ -61,6 +63,7 @@ impl ApproverDirectory for OrganizationApprovers<'_> {
                 "审批负责人缺少审批读取或决定权限，请联系管理员配置角色".into(),
             ));
         }
+
         let account = qualified.account();
         let participant_id = ParticipantId::new(account.id.clone())
             .map_err(|e| WorkflowError::ValidationError(e.to_string()))?;
@@ -139,6 +142,7 @@ pub async fn resolve_start_approvers(
     ex: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
     let Some(receipt) = receipt else { return resolve_approvers(db, identity, graph, applicant, ex).await };
+
     let instance = db
         .bpm_workflow()
         .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), ex)
@@ -150,6 +154,7 @@ pub async fn resolve_start_approvers(
     {
         return Err(Error::ConflictError("审批提交结果与本次请求不匹配".into()));
     }
+
     db.bpm_workflow()
         .load_instance_graph(&instance, ex)
         .await?

@@ -211,6 +211,7 @@ mod tests {
         ] {
             assert!(permissions.covers_one(&Permission::parse(code).unwrap()), "{code}");
         }
+
         for code in ["party_revision:create", "party_revision:update", "sales_change_order:create"] {
             assert!(!permissions.covers_one(&Permission::parse(code).unwrap()), "{code}");
         }
@@ -373,6 +374,7 @@ mod tests {
                 role.id
             );
         }
+
         let leader = PREDEFINED_ROLES.iter().find(|role| role.id == "role-sales-leader").unwrap();
         for permission in required {
             assert!(leader.permissions.contains(&permission), "销售领导缺少 {permission}");
@@ -422,6 +424,7 @@ mod tests {
             let required = PermissionSet::new([Permission::parse(required).unwrap()]);
             assert!(permissions.covers(&required), "采购缺少 {required:?}");
         }
+
         for forbidden in [
             "supplier_payment:commit",
             "supplier_settlement_statement:confirm",
@@ -444,6 +447,7 @@ mod tests {
             assert!(sales.covers_one(&Permission::parse(format!("sales_inquiry:{action}")).unwrap()));
             assert!(!procurement.covers_one(&Permission::parse(format!("sales_inquiry:{action}")).unwrap()));
         }
+
         for action in ["detail", "save_feedback", "publish", "reassign", "internal_quote", "convert_expenses"]
         {
             let permission = Permission::parse(format!("procurement_inquiry:{action}")).unwrap();
@@ -467,6 +471,7 @@ mod tests {
                 .iter()
                 .any(|p| p.covers(&Permission::parse("procurement_responsibility:list").unwrap()))
         );
+
         for forbidden in [
             "product:list",
             "product_revision:list",

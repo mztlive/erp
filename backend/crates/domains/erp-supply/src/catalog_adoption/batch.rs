@@ -217,6 +217,7 @@ impl CatalogAdoptionBatch {
         {
             return Err(Error::ConflictError("预览已失效，请重新核对后确认入库".into()));
         }
+
         let unique: HashSet<_> = item_ids.iter().collect();
         if item_ids.is_empty() || unique.len() != item_ids.len() {
             return Err(Error::ValidationError("请确认至少一个不重复的可入库规格".into()));
@@ -294,6 +295,7 @@ impl CatalogAdoptionBatchItem {
         if !self.editable() {
             return Err(Error::ConflictError("该项已确认执行或结果待核实，不能调整资料".into()));
         }
+
         for (field, value) in [("category_id", &mapping.category_id), ("unit_id", &mapping.unit_id)] {
             let origin = if value.trim().is_empty() { ValueOrigin::Cleared } else { ValueOrigin::Manual };
             self.field_origins.insert(field.into(), origin);
@@ -324,6 +326,7 @@ impl CatalogAdoptionBatchItem {
             return Err(Error::ConflictError("该项已确认执行或结果待核实，不能调整供给".into()));
         }
         self.source.ensure_purchase_price(terms.dropship_supply_price_gross.trim().parse()?)?;
+
         for (field, value) in [("input_tax_rate", &terms.input_tax_rate), ("valid_from", &terms.valid_from)] {
             let origin = if value.trim().is_empty() { ValueOrigin::Cleared } else { ValueOrigin::Manual };
             self.field_origins.insert(field.into(), origin);
@@ -350,6 +353,7 @@ impl CatalogAdoptionBatchItem {
             return Err(Error::ConflictError("该项已确认执行，不能应用资料补值".into()));
         }
         defaults.validate()?;
+
         let keeps_product = self.resolution.as_ref().is_some_and(|value| value.kind != "CREATE_PRODUCT");
         if !keeps_product && let Some(category) = defaults.category_for(&self.source) {
             let origin = self.field_origin("category_id", !self.mapping.category_id.is_empty());
@@ -358,6 +362,7 @@ impl CatalogAdoptionBatchItem {
                 self.field_origins.insert("category_id".into(), ValueOrigin::Rule);
             }
         }
+
         self.apply_terms(defaults, policy);
         if let Some(template) = &defaults.delivery_template_id {
             let origin = self.field_origin("delivery_template_id", self.delivery_template_id.is_some());
@@ -366,6 +371,7 @@ impl CatalogAdoptionBatchItem {
                 self.field_origins.insert("delivery_template_id".into(), ValueOrigin::Rule);
             }
         }
+
         self.apply_clears(defaults, policy, keeps_product);
         Ok(())
     }
@@ -385,6 +391,7 @@ impl CatalogAdoptionBatchItem {
             {
                 continue;
             }
+
             match field.as_str() {
                 "category_id" => self.mapping.category_id.clear(),
                 "delivery_template_id" => self.delivery_template_id = None,
@@ -421,6 +428,7 @@ impl CatalogAdoptionBatchItem {
             valid_from: String::new(),
             valid_to: None,
         });
+
         for (field, incoming, value) in [
             ("input_tax_rate", &defaults.input_tax_rate, &mut terms.input_tax_rate),
             ("valid_from", &defaults.valid_from, &mut terms.valid_from),
@@ -437,6 +445,7 @@ impl CatalogAdoptionBatchItem {
                 self.field_origins.insert(field.into(), ValueOrigin::Rule);
             }
         }
+
         let origin = self.field_origins.get("valid_to").copied().unwrap_or(if terms.valid_to.is_some() {
             ValueOrigin::Source
         } else {
@@ -715,14 +724,17 @@ mod tests {
         assert!(item.freeze("operation".into(), 3).is_err());
         item.freeze("operation".into(), 4).unwrap();
         assert!(!item.editable());
+
         item.begin().unwrap();
         assert!(item.processing_started_at.is_some());
         assert!(item.begin().is_err());
+
         item.mark_unknown("请求结果待核实".into()).unwrap();
         assert_eq!(item.operation_id.as_deref(), Some("operation"));
         assert!(item.mark_failed("重新提交".into()).is_err());
         assert!(item.invalidate_preview().is_err());
         assert!(item.begin().is_err());
+
         let result = AdoptionResult {
             item_id: item.source.base.id.clone(),
             product_id: "p".into(),
@@ -741,11 +753,13 @@ mod tests {
         assert!(item.freeze("operation".into(), 4).is_err());
         item.warnings_confirmed = true;
         item.freeze("operation".into(), 4).unwrap();
+
         item.begin().unwrap();
         item.mark_failed("分类已停用".into()).unwrap();
         assert!(item.editable());
         assert!(item.begin().is_err());
         assert!(item.freeze("new-operation".into(), 4).is_err());
+
         item.invalidate_preview().unwrap();
         assert_eq!(item.status, BatchItemStatus::Draft);
         assert!(item.frozen_row.is_none());
@@ -766,12 +780,14 @@ mod tests {
         assert_eq!(item.mapping.category_id, "manual-category");
         assert_eq!(item.terms.as_ref().unwrap().dropship_supply_price_gross, "");
         assert_eq!(item.terms.as_ref().unwrap().input_tax_rate, "0.13");
+
         let clear = BatchDefaults { clear_fields: vec!["input_tax_rate".into()], ..Default::default() };
         item.apply_defaults(&clear, FillPolicy { overwrite: true, preserve_manual: false }).unwrap();
         assert!(item.terms.as_ref().unwrap().input_tax_rate.is_empty());
         assert_eq!(item.field_origins["input_tax_rate"], ValueOrigin::Cleared);
         item.apply_defaults(&defaults, FillPolicy { overwrite: true, preserve_manual: true }).unwrap();
         assert!(item.terms.as_ref().unwrap().input_tax_rate.is_empty());
+
         item.resolution = Some(BatchResolution {
             kind: "CREATE_SKU".into(),
             expected_match: "m".into(),
@@ -798,6 +814,7 @@ mod tests {
         };
         first.apply_defaults(&defaults, FillPolicy::default()).unwrap();
         assert_eq!(first.mapping.category_id, "food");
+
         let mut items = vec![];
         for status in [
             BatchItemStatus::Draft,
@@ -827,6 +844,7 @@ mod tests {
                 excluded: 1
             }
         );
+
         let invalid = BatchDefaults {
             category_id: Some("c".into()),
             clear_fields: vec!["category_id".into()],
@@ -927,6 +945,7 @@ mod tests {
         batch.draft_operation = Some("saving".into());
         assert!(batch.ensure_submission(4, &ids).is_err());
         batch.draft_operation = None;
+
         let mut encoded = serde_json::to_value(&batch).unwrap();
         encoded.as_object_mut().unwrap().remove("selection_complete");
         encoded.as_object_mut().unwrap().remove("execution_pending");
@@ -943,6 +962,7 @@ mod tests {
         assert!(old.draft_started_at.is_none());
         assert!(old.inactive_pricing.is_none());
         assert!(old.published_operations.is_empty());
+
         let mut encoded = serde_json::to_value(item()).unwrap();
         encoded.as_object_mut().unwrap().remove("previous_source");
         encoded.as_object_mut().unwrap().remove("submitted_by");
@@ -1022,6 +1042,7 @@ mod tests {
         assert_eq!(row.field_origins["company_name"], ValueOrigin::Source);
         assert_eq!(row.field_origins["company_description"], ValueOrigin::Unset);
         assert_eq!(row.preview_version, Some(4));
+
         mapping.category_id = "company-category".into();
         mapping.unit_id.clear();
         mapping.company_name = Some(String::new());
@@ -1032,10 +1053,12 @@ mod tests {
         assert_eq!(row.field_origins["company_name"], ValueOrigin::Cleared);
         assert_eq!(row.field_origins["company_description"], ValueOrigin::Manual);
         assert_eq!(row.mapping.company_description.as_deref(), Some("公司介绍"));
+
         row.source.description = Some("来源介绍".into());
         mapping.company_description = None;
         row.edit_mapping(mapping.clone()).unwrap();
         assert_eq!(row.field_origins["company_description"], ValueOrigin::Source);
+
         row.freeze("operation".into(), 4).unwrap();
         assert!(row.edit_mapping(mapping).is_err());
     }
@@ -1046,6 +1069,7 @@ mod tests {
         let mut terms = row.terms.clone().unwrap();
         terms.dropship_supply_price_gross = "0".into();
         assert!(row.edit_terms(terms.clone()).is_err());
+
         row.source.purchase_price = Some("0".into());
         terms.input_tax_rate.clear();
         terms.valid_from.clear();
@@ -1054,6 +1078,7 @@ mod tests {
         for field in ["input_tax_rate", "valid_from", "valid_to"] {
             assert_eq!(row.field_origins[field], ValueOrigin::Cleared);
         }
+
         terms.input_tax_rate = "0.13".into();
         terms.valid_from = "2026-10-27".into();
         terms.valid_to = Some("2027-10-27".into());
@@ -1061,9 +1086,11 @@ mod tests {
         for field in ["input_tax_rate", "valid_from", "valid_to"] {
             assert_eq!(row.field_origins[field], ValueOrigin::Manual);
         }
+
         terms.dropship_supply_price_gross = "1".into();
         assert!(row.edit_terms(terms.clone()).is_err());
         assert_eq!(row.terms.as_ref().unwrap().dropship_supply_price_gross, "0");
+
         row.status = BatchItemStatus::Unknown;
         terms.dropship_supply_price_gross = "0".into();
         assert!(row.edit_terms(terms).is_err());

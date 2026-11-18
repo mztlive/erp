@@ -254,6 +254,7 @@ impl ApiOrderExecution {
             }
             return Ok(());
         }
+
         self.superseded_by_purchase_revision_id = Some(replacement_revision.into());
         self.stage = ApiOrderStage::Stopped;
         self.blocker = Some("采购变更已替代此已安全停止的执行，原请求及交付记录保留备查".into());
@@ -324,6 +325,7 @@ mod purchase_change_tests {
     fn querying_original_result_preserves_action_and_does_not_wake_unsent_confirmation() {
         let now = Instant::from_unix_secs(100);
         let later = Instant::from_unix_secs(200);
+
         let mut unknown = execution(ApiOrderStage::CreationUnknown);
         unknown.next_run_at = later;
         unknown.action_hashes.insert("create".into(), "original-payload".into());
@@ -331,6 +333,7 @@ mod purchase_change_tests {
         assert_eq!(unknown.stage, ApiOrderStage::CreationUnknown);
         assert_eq!(unknown.next_run_at, now);
         assert_eq!(unknown.action_hashes["create"], "original-payload");
+
         let mut pending = execution(ApiOrderStage::ConfirmOrder);
         pending.next_run_at = later;
         pending.action_hashes.insert("create".into(), "original-payload".into());

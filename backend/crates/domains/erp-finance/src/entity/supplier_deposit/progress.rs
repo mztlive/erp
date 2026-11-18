@@ -62,6 +62,7 @@ impl DepositExecutionFundsSummary {
             returned_amount: Amount::zero(),
             pending_return_amount: None,
         };
+
         let Some(reservation) = reservation else {
             if !usages.is_empty() || account.is_some() {
                 return Err(Error::from("资金摘要缺少原执行组占用"));
@@ -73,9 +74,11 @@ impl DepositExecutionFundsSummary {
         {
             return Err(Error::from("资金摘要账户或执行组归属不一致"));
         }
+
         summary.approved_amount = reservation.amount;
         summary.reserved_amount = reservation.remaining()?;
         summary.reconciliation_required = account.is_some_and(|account| account.reconciliation_required);
+
         for usage in usages {
             if usage.reservation_id != reservation.base.id || usage.account_id != reservation.account_id {
                 return Err(Error::from("资金使用不属于当前执行组"));
@@ -87,6 +90,7 @@ impl DepositExecutionFundsSummary {
             )?;
             summary.returned_amount = add(summary.returned_amount, usage.returned_amount)?;
         }
+
         summary.status = summary.stage(reservation);
         Ok(summary)
     }

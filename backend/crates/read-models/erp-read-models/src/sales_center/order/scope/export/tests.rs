@@ -113,6 +113,7 @@ async fn final_authorization_or_changed_root_binding_discards_contract_numbers_a
     let reader = Reader { fail_final: true, ..Default::default() };
     let result = export_page(&reader, &params(), &actor(), &mut SnapshotExecutor::default()).await;
     assert!(matches!(result, Err(Error::ConflictError(message)) if message == "销售根交付检查失败"));
+
     for change in ["root", "version", "contract", "scope", "total"] {
         let reader = Reader { change: Some(change), ..Default::default() };
         let result = export_page(&reader, &params(), &actor(), &mut SnapshotExecutor::default()).await;

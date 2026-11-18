@@ -50,6 +50,7 @@ pub fn execution_budget(
 ) -> Result<ApprovedExecutionBudget> {
     let snapshot: ApiOrderRequestSnapshot = serde_json::from_str(decrypted_snapshot)
         .map_err(|_| Error::Internal("执行组批准预算无法读取".into()))?;
+
     let budget = snapshot
         .approved_budget
         .ok_or_else(|| Error::BusinessLogicError("原执行未保存可核实的费用分配，请先核查采购依据".into()))?;
@@ -122,6 +123,7 @@ mod tests {
         snapshot.approved_budget = None;
         let mut json = serde_json::to_value(&snapshot).unwrap();
         assert!(matches!(execution_budget(&execution, &json.to_string()), Err(Error::BusinessLogicError(_))));
+
         json.as_object_mut().unwrap().remove("recipient");
         assert!(matches!(execution_budget(&execution, &json.to_string()), Err(Error::Internal(message))
             if message == "执行组批准预算无法读取"));

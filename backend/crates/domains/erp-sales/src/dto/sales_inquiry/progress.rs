@@ -64,6 +64,7 @@ impl InquirySalesProgress {
         } else {
             InquiryTransferStatus::NotStarted
         };
+
         let accepted =
             inquiry.acceptances.last().filter(|row| row.requirement_version == inquiry.requirement_version);
         Self {

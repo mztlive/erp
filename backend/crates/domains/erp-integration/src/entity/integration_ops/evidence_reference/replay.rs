@@ -153,10 +153,12 @@ mod tests {
         assert_eq!(replay.business_fact_key(), KEY);
         let wire = replay.into_wire();
         assert_eq!(wire, format!("inbox_message:msg-1:v2:requeued;business_fact_key:{KEY}"));
+
         let parsed = ReplayOriginalReference::parse(&wire).unwrap();
         assert_eq!(parsed.business_fact_key(), KEY);
         assert_eq!(parsed.inbox().id(), "msg-1");
         assert_eq!(parsed.inbox().version(), Some(2));
+
         assert!(ReplayOriginalReference::parse("inbox_message:msg-1:v2:requeued").is_err());
         assert!(ReplayOriginalReference::new("msg-1", 2, "  ").is_err());
     }
@@ -170,6 +172,7 @@ mod tests {
             assert_eq!(parsed, expected);
             assert_eq!(parsed.business_fact_key(), key.trim());
         }
+
         for key in ["", " \t "] {
             assert_eq!(
                 ReplayOriginalReference::new("msg-1", 2, key).unwrap_err().to_string(),

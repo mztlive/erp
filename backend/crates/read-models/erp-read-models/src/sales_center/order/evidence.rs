@@ -43,6 +43,7 @@ impl SalesOrderReadService {
                     if !order.evidence_file_asset_ids.iter().any(|id| id.as_ref() == asset_id) {
                         return Err(Error::NotFound("销售单凭证不存在或无权下载".into()));
                     }
+
                     let attachments = db
                         .document_attachments()
                         .list_by_document(&BusinessDocumentId::new(order_id), executor)

@@ -106,6 +106,7 @@ impl SalesOrderWorkingCopy {
         if !self.matches_version(expected_version) {
             return Err(Error::ConflictError("变更内容已变化，请刷新后重试".into()));
         }
+
         let mut copy = self.clone();
         if self.stable.status == WorkingCopyStatus::Submitted {
             copy.base = BaseModel::new(new_id.to_string());
@@ -164,6 +165,7 @@ impl SalesOrderWorkingCopy {
             .draft_version
             .checked_add(1)
             .ok_or_else(|| Error::ConflictError("草稿版本已达上限".into()))?;
+
         let lines = target
             .into_iter()
             .map(|(line_id, data)| {
@@ -172,6 +174,7 @@ impl SalesOrderWorkingCopy {
             })
             .collect::<Result<Vec<_>>>()?;
         let (gross, net, tax) = SalesOrderWorkingCopyLine::amount_totals(&lines);
+
         let mut edited = self.clone();
         edited.update(
             SalesOrderWorkingCopyUpdate {
@@ -186,6 +189,7 @@ impl SalesOrderWorkingCopy {
         )?;
         edited.draft_version = next;
         edited.editor_user_id = actor_id.to_string();
+
         *self = edited;
         Ok(lines)
     }
@@ -222,6 +226,7 @@ fn validate_target_lines(
     {
         return Err(Error::ValidationError("变更目标必须保留全部原明细，且不得重复".into()));
     }
+
     for old in original {
         let data = &target
             .iter()
@@ -243,6 +248,7 @@ fn validate_target_lines(
             return Err(Error::ValidationError("赠品标记不可修改，请将原行数量归零并新增明细".into()));
         }
     }
+
     let summaries = target
         .iter()
         .map(|(_, line)| crate::entity::sales_order::types::LineSummary {
@@ -432,6 +438,7 @@ mod tests {
         change.start_approval(SalesChangeSubmissionId::new("sub-1"), "hash-1", "sales-1").unwrap();
         copy.lock_for_submission_if_needed().unwrap();
         change.reject_approval("approver").unwrap();
+
         let historical = copy.clone();
         let editable = copy
             .editable_change_copy(
@@ -441,6 +448,7 @@ mod tests {
                 "sales-1",
             )
             .unwrap();
+
         assert_eq!(copy, historical);
         assert_eq!(copy.stable.status, WorkingCopyStatus::Submitted);
         assert_eq!(editable.stable.status, WorkingCopyStatus::Editing);
@@ -464,12 +472,14 @@ mod tests {
         assert_eq!(copy.contract_id, original.contract_id);
         assert_eq!(copy.payment_term_snapshot.payment_term_code, "PREPAY_100");
         assert_eq!(copy.project_name.as_deref(), Some("节日福利"));
+
         for invalid in ["-1", "100.000001", "13%"] {
             let before = copy.clone();
             terms.tax_point = invalid.into();
             assert!(terms.clone().apply(&mut copy, "sales-1").is_err());
             assert_eq!(copy, before);
         }
+
         terms.tax_point = "100".into();
         terms.clone().apply(&mut copy, "sales-1").unwrap();
         terms.invoice_type.clear();
@@ -484,6 +494,7 @@ mod tests {
         let mut added = line_data(2);
         added.sales_order_line_id = SalesOrderLineId::new("change-1:line:new-sku");
         added.goods.as_mut().unwrap().sku_id = SkuId::new("sku-2");
+
         let stable = vec![
             SalesOrderLine::new(
                 original[0].sales_order_line_id.clone(),
@@ -495,6 +506,7 @@ mod tests {
         let created = change.new_lines(&original, &[removed.clone(), added.clone()], &stable).unwrap();
         assert_eq!(created.len(), 1);
         assert_eq!(created[0].sales_order_id, change.sales_order_id);
+
         let saved = copy
             .edit_change_lines(
                 "change-1",
@@ -510,10 +522,12 @@ mod tests {
         assert_eq!(saved.len(), 2);
         assert!(saved[0].sellable_sku_ref().unwrap().is_none());
         assert!(saved[1].sellable_sku_ref().unwrap().is_some());
+
         let mut terms = SalesChangeTerms::from_copy(&copy);
         terms.payment_term_code = "PREPAY_100".into();
         terms.payment_term_name = "先款100%".into();
         terms.apply(&mut copy, "sales-1").unwrap();
+
         let data = SalesChangeSubmissionData::from_sales_working_copy(
             &change,
             &copy,
@@ -538,6 +552,7 @@ mod tests {
                 .unwrap()
             })
             .collect::<Vec<_>>();
+
         let identities = FormalRevisionIdentities::new(
             SalesOrderRevisionId::new("revision-new"),
             (0..saved.len())
@@ -562,6 +577,7 @@ mod tests {
             &submitted_lines,
         )
         .unwrap();
+
         assert_eq!(revision.goods_lines[0].quantity, "0".parse().unwrap());
         assert_eq!(revision.goods_lines[1].sku_id, SkuId::new("sku-2"));
         assert_eq!(revision.revision.gross_amount, copy.gross_amount);
@@ -586,6 +602,7 @@ mod tests {
         added.sales_order_line_id = SalesOrderLineId::new("change-1:line:new");
         added.line_no = 1;
         assert!(change.new_lines(&original, &[added], &stable).is_err());
+
         let mut swapped = original[0].draft_data().unwrap();
         swapped.goods.as_mut().unwrap().sku_id = SkuId::new("sku-other");
         let before = copy.clone();
@@ -608,6 +625,7 @@ mod tests {
         original.submit().unwrap();
         let frozen = original.clone();
         change.edit_draft(change.base.version, "补充数量".into(), "sales-1").unwrap();
+
         let mut copy = original
             .editable_change_copy(
                 &change,
@@ -616,6 +634,7 @@ mod tests {
                 "sales-1",
             )
             .unwrap();
+
         let mut target = lines[0].draft_data().unwrap();
         target.goods.as_mut().unwrap().quantity = "4".parse().unwrap();
         let saved = copy
@@ -627,6 +646,7 @@ mod tests {
                 "sales-1",
             )
             .unwrap();
+
         assert_eq!(original, frozen);
         assert_eq!(copy.stable.status, WorkingCopyStatus::Editing);
         assert_eq!(copy.draft_version, 2);
@@ -641,10 +661,12 @@ mod tests {
         let before = change.clone();
         assert!(change.edit_draft(change.base.version + 1, "新原因".into(), "sales-1").is_err());
         assert_eq!(change, before);
+
         change
             .start_approval(SalesChangeSubmissionId::new("submission-1"), "target-hash", "sales-1")
             .unwrap();
         assert!(change.edit_draft(change.base.version, "新原因".into(), "sales-1").is_err());
+
         let mut target = lines[0].draft_data().unwrap();
         target.sales_order_line_id = SalesOrderLineId::new("foreign-line");
         let before_copy = copy.clone();
@@ -675,17 +697,22 @@ mod tests {
         .unwrap();
         let mut submission =
             SalesChangeSubmission::new(SalesChangeSubmissionId::new("submission-1"), data).unwrap();
+
         assert!(
             submission.saved_target_content_hash(&change, &copy).is_err(),
             "可编辑副本不能证明已提交目标"
         );
+
         copy.submit().unwrap();
         assert_eq!(submission.saved_target_content_hash(&change, &copy).unwrap(), copy.content_hash);
+
         submission.working_copy_version += 1;
         assert!(submission.saved_target_content_hash(&change, &copy).is_err());
+
         submission.working_copy_version -= 1;
         submission.working_copy_id = SalesOrderWorkingCopyId::new("other-copy");
         assert!(submission.saved_target_content_hash(&change, &copy).is_err());
+
         submission.working_copy_id = SalesOrderWorkingCopyId::new("copy-1");
         submission.sales_order_id = SalesOrderId::new("other-order");
         assert!(submission.saved_target_content_hash(&change, &copy).is_err());
@@ -779,6 +806,7 @@ mod tests {
             )
             .is_err()
         );
+
         copy.draft_version = u32::MAX;
         assert!(
             copy.edit_change_lines(
@@ -825,6 +853,7 @@ mod tests {
                 "sales-1",
             )
             .unwrap();
+
         assert_eq!(saved[0].sales_order_line_id, lines[0].sales_order_line_id);
         assert_eq!(saved[0].quantity, Some("0".parse().unwrap()));
         assert_eq!(saved[0].gross_amount, Amount::zero());
@@ -859,6 +888,7 @@ mod tests {
             data.clone(),
         )
         .unwrap();
+
         data.voucher.as_mut().unwrap().transaction_amount = amt("269");
         let before = copy.clone();
         assert!(

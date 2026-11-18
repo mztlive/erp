@@ -189,6 +189,7 @@ mod tests {
             quantity: Quantity::from_str("10").unwrap(),
             expected_delivery_date: BusinessDate::from_str("2026-08-25").unwrap(),
         }];
+
         assert_eq!(
             request.request_fingerprint(&lines),
             "e225f0fda8a15fdf6b332cf1bb97ee893e9f0fd9092367986446a4e3f87f5a2f"
@@ -240,6 +241,7 @@ mod tests {
                 expected_delivery_date: BusinessDate::from_str("2026-08-26").unwrap(),
             },
         ];
+
         assert_eq!(
             request.request_fingerprint(&assignments).unwrap(),
             "189640d37d07d808e3fc76001481775cade3f948f9873ddfdf9af4ecd87cfa1b"
@@ -305,9 +307,11 @@ mod tests {
             submit_request_shape(&payment_term_code, &line_patches),
             r#"Some("NET-30")|[SavePurchaseOrderLinePatch { line_id: "line-1", line_type: ItemService, quantity: Some("10"), unit_cost_gross: Some("100.00"), input_tax_rate: Some("0.13") }]"#
         );
+
         let empty_term = None;
         let empty_patches = vec![];
         assert_eq!(submit_request_shape(&empty_term, &empty_patches), "None|[]");
+
         let logistics = vec![SavePurchaseOrderLinePatch {
             line_id: "line-2".to_string(),
             line_type: PurchaseLineType::LogisticsFee,
@@ -448,20 +452,24 @@ mod tests {
         assert_eq!(order.purchase_order_id, "po-1");
         assert_eq!(order.lock_version, 3);
         assert!(!order.replayed);
+
         let sourcing = CreatePurchaseOrdersFromSourcingResult::new("OPEN", "so-1")
             .with_orders(vec![order])
             .with_replayed(true);
         assert_eq!(sourcing.work_item_status, "OPEN");
         assert!(sourcing.replayed);
+
         let assignment = SourcingLineAssignment::new("sol-1", "basis-1", "10", "2026-08-25")
             .with_target_warehouse_id("wh-1");
         assert_eq!(assignment.source_type, SupplySourceType::Purchase);
         assert_eq!(assignment.target_warehouse_id.as_deref(), Some("wh-1"));
+
         let review =
             PurchaseReviewResult::new("wi-1", "COMPLETED", "3", "2", "APPROVED", "so-1").with_lock_version(4);
         assert_eq!(review.work_item_id, "wi-1");
         assert_eq!(review.lock_version, 4);
         assert!(review.revision_id.is_none());
+
         let resolve = ProcurementResponsibilityResolveLineView::new("line-1").with_resolved(true);
         assert_eq!(resolve.line_key, "line-1");
         assert!(resolve.resolved);
@@ -646,6 +654,7 @@ mod tests {
             expected_delivery_date: None,
             delivery_allocations: None,
         }]);
+
         let merged = request.resolve_lines(&existing).unwrap();
         assert_eq!(merged.len(), 1);
         let line = &merged[0];
@@ -698,6 +707,7 @@ mod tests {
             expected_delivery_date: None,
             delivery_allocations: None,
         };
+
         let partial = draft_request(vec![patch("subl-1")]);
         assert!(SavePurchaseOrderLinePatch::resolve_all(&partial.line_patches, &existing).is_err());
 

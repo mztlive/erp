@@ -433,6 +433,7 @@ impl<'a> InventoryRepository<'a> {
             executor,
         )
         .await?;
+
         mongo_ops::insert_many(
             &self.db.collection::<StockAdjustmentLine>(STOCK_ADJUSTMENT_LINES),
             lines,
@@ -472,6 +473,7 @@ impl<'a> InventoryRepository<'a> {
         if let Some(direction) = direction {
             set.insert("direction", mongodb::bson::serialize_to_bson(&direction)?);
         }
+
         let result = mongo_ops::update_one(
             &self.db.collection::<StockAdjustmentLine>(STOCK_ADJUSTMENT_LINES),
             doc! {

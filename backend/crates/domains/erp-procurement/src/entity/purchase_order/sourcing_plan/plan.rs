@@ -78,6 +78,7 @@ impl SourcingPlan {
     ) -> std::result::Result<Self, SourcingPlanError> {
         let purchase_plans = plan_sourcing_drafts(order, purchase_groups, work_item_id, assignments)?;
         let stock_plans = plan_stock_allocations(order, stock_groups, work_item_id, assignments)?;
+
         validate_combined_line_totals(&purchase_plans, &stock_plans)?;
         validate_delivery_plans(&purchase_plans)?;
         Ok(Self { purchase_plans, stock_plans })
@@ -109,6 +110,7 @@ impl SourcingPlan {
                 let line =
                     latest.line_for(&requested.sales_order_line_id).ok_or(SourcingPlanError::StaleFacts)?;
                 validate_quantity(&line.coverage, requested.quantity)?;
+
                 add_requested_total(
                     &mut line_totals,
                     &requested.sales_order_line_id,
@@ -123,6 +125,7 @@ impl SourcingPlan {
                 );
             }
         }
+
         if exceeds_any_cap(&line_totals) || exceeds_any_cap(&balance_totals) {
             return Err(SourcingPlanError::StaleFacts);
         }
@@ -163,6 +166,7 @@ impl SourcingPlan {
                     .find(|line| stable_line_id(line) == requested.sales_order_line_id)
                     .ok_or(SourcingPlanError::StaleFacts)?;
                 validate_quantity(&basis.coverage, requested.quantity)?;
+
                 add_requested_total(
                     &mut line_totals,
                     &requested.sales_order_line_id,
@@ -182,6 +186,7 @@ impl SourcingPlan {
                 );
             }
         }
+
         if exceeds_any_cap(&line_totals) || exceeds_any_cap(&supply_totals) {
             return Err(SourcingPlanError::StaleFacts);
         }
@@ -251,6 +256,7 @@ fn plan_sourcing_drafts(
             basis_scope_key(&group.scope),
             target_warehouse_id.as_ref().map(ToString::to_string).unwrap_or_default()
         );
+
         let requested = RequestedLine {
             sales_order_line_id: assignment.sales_order_line_id.clone(),
             quantity: assignment.quantity,
@@ -340,6 +346,7 @@ fn plan_stock_allocations(
                     && group.line_for(&assignment.sales_order_line_id).is_some()
             })
             .ok_or(SourcingPlanError::StaleFacts)?;
+
         let requested = RequestedStockLine {
             sales_order_line_id: assignment.sales_order_line_id.clone(),
             quantity: assignment.quantity,
@@ -391,6 +398,7 @@ fn validate_combined_line_totals(
             );
         }
     }
+
     for plan in stock_plans {
         for requested in &plan.requested_lines {
             let line =
@@ -404,6 +412,7 @@ fn validate_combined_line_totals(
             );
         }
     }
+
     if exceeds_any_cap(&totals) {
         return Err(SourcingPlanError::StaleFacts);
     }
@@ -556,6 +565,7 @@ fn validate_delivery_plans(plans: &[SourcingDraftPlan]) -> Result<(), SourcingPl
             let prior = assigned
                 .entry(requested.sales_order_line_id.clone())
                 .or_insert_with(|| goods.assigned_delivery_allocations.clone());
+
             PurchaseDeliveryAllocation::validate_source(
                 &requested.delivery_allocations,
                 &goods.delivery_allocations,

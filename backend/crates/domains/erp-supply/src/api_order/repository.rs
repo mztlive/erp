@@ -71,6 +71,7 @@ pub async fn for_external_order(
     if connection.trim().is_empty() || external.trim().is_empty() {
         return Err(Error::ValidationError("供应商消息订单身份无效".into()));
     }
+
     let rows = mongo_ops::find_many(
         &db.collection::<ApiOrderExecution>(EXECUTIONS),
         doc! {"connection_id":connection,"$or":[
@@ -179,6 +180,7 @@ pub async fn for_sales_lines(
     if lines.is_empty() {
         return Ok(vec![]);
     }
+
     let rows: Vec<ApiOrderExecution> = mongo_ops::find_many(
         &db.collection(EXECUTIONS),
         doc! {"source_lines.sales_order_line_id":{"$in":lines},"deleted_at":0_i64},
@@ -241,6 +243,7 @@ pub async fn ensure_indexes(db: &Database) -> Result<()> {
     db.collection::<Document>(SETUP_RECEIPTS)
         .create_indexes(vec![unique_index("uk_supplier_api_order_setup_receipt_id", doc! {"id":1})])
         .await?;
+
     db.collection::<Document>(EXECUTIONS)
         .create_indexes(vec![
             unique_index("uk_supplier_api_order_execution_id", doc! {"id":1}),

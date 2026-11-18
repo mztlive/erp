@@ -334,6 +334,7 @@ mod tests {
         let base = serde_json::json!({ "version": 1, "name": "体验卡", "description": "体验卡描述" });
         let original: super::UpdateVoucherCategoryRequest = serde_json::from_value(base.clone()).unwrap();
         assert_eq!(original.status, None);
+
         for (wire, expected) in
             [("active", super::EnableStatus::Active), ("disabled", super::EnableStatus::Disabled)]
         {
@@ -343,9 +344,11 @@ mod tests {
             assert_eq!(request.status, Some(expected));
             assert!(validator::Validate::validate(&request).is_ok());
         }
+
         let mut invalid = base.clone();
         invalid["status"] = serde_json::json!("unknown");
         assert!(serde_json::from_value::<super::UpdateVoucherCategoryRequest>(invalid).is_err());
+
         let mut stale = base;
         stale["version"] = serde_json::json!(0);
         let request: super::UpdateVoucherCategoryRequest = serde_json::from_value(stale).unwrap();

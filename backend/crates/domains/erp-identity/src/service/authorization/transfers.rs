@@ -81,6 +81,7 @@ mod tests {
             required.iter().map(|(role, permissions)| (*role, permissions.as_slice())).collect::<Vec<_>>();
         let complete = QualifiedPermissions::test_grants(&grants);
         assert!(qualified(&internal::DATA_TRANSFER_SUPPLIER_QUOTES, &complete));
+
         for missing in 0..required.len() {
             let partial = grants
                 .iter()

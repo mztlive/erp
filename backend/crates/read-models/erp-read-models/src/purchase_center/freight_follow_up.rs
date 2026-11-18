@@ -113,6 +113,7 @@ pub async fn freight_follow_ups(
     if sales_order_ids.is_empty() {
         return Ok(HashMap::new());
     }
+
     let orders = active_orders_by_sales_orders(db, sales_order_ids, executor).await?;
     let (goods, expenses): (Vec<_>, Vec<_>) =
         orders.into_iter().partition(|order| order.purchase_type != PurchaseType::Expense);
@@ -121,8 +122,10 @@ pub async fn freight_follow_ups(
     if goods.is_empty() {
         return Ok(HashMap::new());
     }
+
     let lines = current_lines(db, goods.iter().chain(expenses.iter()), executor).await?;
     let pending = pending_freight_lines(freight_facts(&goods, &lines), &logistics_facts(&expenses, &lines));
+
     let supplier_ids = pending
         .iter()
         .map(|line| SupplierAccountId::new(line.supplier_id.clone()))
@@ -130,6 +133,7 @@ pub async fn freight_follow_ups(
         .into_iter()
         .collect::<Vec<_>>();
     let names = current_legal_names_by_account_ids(db, &supplier_ids, executor).await?;
+
     let mut grouped: HashMap<String, Vec<FreightFollowUpView>> = HashMap::new();
     for line in pending {
         grouped.entry(line.sales_order_id.clone()).or_default().push(FreightFollowUpView {
@@ -168,6 +172,7 @@ async fn current_lines<'a>(
             submission_owner.insert(submission_id, order.base.id.clone());
         }
     }
+
     let revision_ids = revision_owner.keys().cloned().map(PurchaseOrderRevisionId::new).collect::<Vec<_>>();
     let submission_ids =
         submission_owner.keys().cloned().map(PurchaseOrderSubmissionId::new).collect::<Vec<_>>();

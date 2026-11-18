@@ -69,6 +69,7 @@ impl ProcurementResponsibilityService {
         if rule.base.version != version {
             return Err(Error::ConflictError("采购责任规则版本已变化".to_string()));
         }
+
         rule.update(data, updated_by).map_err(Error::Logic)?;
         self.db.procurement_responsibility_rules().update(&mut rule, executor).await?;
         Ok(rule)

@@ -181,6 +181,7 @@ mod wire_tests {
             "recent_history": [], "history_page": { "next_cursor": null, "has_more": false },
             "allowed_actions": []
         });
+
         for actual in [
             unbound!(finance::DocumentApprovalView),
             unbound!(review::DocumentApprovalView),
@@ -190,6 +191,7 @@ mod wire_tests {
         ] {
             assert_eq!(actual, expected);
         }
+
         assert_eq!(
             to_value(DocumentApprovalDefinitionView::new("def-1".into(), "单据审批".into())).unwrap(),
             json!({ "id": "def-1", "name": "单据审批", "version": 0, "nodes": [] })
@@ -216,6 +218,7 @@ mod wire_tests {
         instance.process_version = Some(3);
         instance.blocker_code = Some("WAITING".into());
         instance.started_by = Some("sales-1".into());
+
         let mut item = finance::DocumentApprovalHistoryItemView::new(
             "exec-0".into(),
             "node-0".into(),
@@ -228,6 +231,7 @@ mod wire_tests {
         item.decided_by = Some("reviewer-1".into());
         item.decision_reason = Some("补充资料".into());
         item.decided_at = Some(1_800_000_000);
+
         let finance: finance::DocumentApprovalView = approval(instance, item);
         let change: review::DocumentApprovalView = finance.clone();
         let expected = expected_approval(
@@ -249,6 +253,7 @@ mod wire_tests {
                 "decision_reason": "补充资料", "decided_at": 1_800_000_000
             }),
         );
+
         assert_eq!(to_value(finance).unwrap(), expected);
         assert_eq!(to_value(change).unwrap(), expected);
     }
@@ -264,6 +269,7 @@ mod wire_tests {
             .with_latest_rejection(Some("补充资料".into()))
             .with_process_version(Some(3))
             .with_blocker_code(Some("WAITING".into()));
+
         let item = sales::DocumentApprovalHistoryItemView::new(
             "exec-0".into(),
             "node-0".into(),
@@ -276,6 +282,7 @@ mod wire_tests {
         .with_decided_by(Some("reviewer-1".into()))
         .with_decision_reason(Some("补充资料".into()))
         .with_decided_at(Some(1_800_000_000));
+
         let sales: sales::DocumentApprovalView = approval(instance, item);
         let purchase: purchase::DocumentApprovalView = sales.clone();
         let expected = expected_approval(
@@ -292,6 +299,7 @@ mod wire_tests {
                 "decision_reason": "补充资料", "decided_at": 1_800_000_000
             }),
         );
+
         assert_eq!(to_value(sales).unwrap(), expected);
         assert_eq!(to_value(purchase).unwrap(), expected);
     }
@@ -312,6 +320,7 @@ mod wire_tests {
         )
         .with_round_no(1);
         let returns: returns::DocumentApprovalView = approval(instance, item);
+
         assert_eq!(
             to_value(returns).unwrap(),
             expected_approval(

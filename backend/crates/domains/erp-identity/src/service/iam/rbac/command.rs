@@ -36,12 +36,14 @@ impl RbacService {
         let access = ManagementAccess::new(authorization, actor.clone(), &admin::ROLE_CREATE_ROLE);
         access.preflight(&self.db).await?;
         let authorized = self.authorize_permissions(&actor, params.permissions).await?;
+
         let id = id_generator::next_id();
         let audit = self.audit.resource_log(actor, "role.create", "role", id.clone())?;
         let role = Role::new(
             RoleId::parse(id)?,
             RoleData { workbenches: params.workbenches, ..RoleData::new(params.name) },
         )?;
+
         self.create_managed_role(role, authorized.permissions, audit, authorized.policy_revision, access)
             .await
     }
@@ -98,6 +100,7 @@ impl RbacService {
     ) -> Result<Role> {
         let access = ManagementAccess::new(authorization, actor.clone(), &admin::ROLE_UPDATE_ROLE);
         access.preflight(&self.db).await?;
+
         let role = role_or_not_found(self.db.roles().find_by_id(id, &mut NoTransaction).await?)?;
         role.ensure_mutable().map_err(|_| Error::Forbidden("系统角色不能修改".into()))?;
         let authorized =
@@ -225,9 +228,11 @@ impl RbacService {
         self.run_policy_transaction_at_revision(expected_revision, move |executor| {
             Box::pin(async move {
                 access.require(executor).await?;
+
                 let mut role = role_or_not_found(db.roles().find_by_id(&role_id, executor).await?)?;
                 db.roles().update(&mut role, executor).await?;
                 policy_store.replace_role_permissions(&role_key, &permissions, executor).await?;
+
                 if let Some(audit) = audit {
                     audit_port.persist(&audit, executor).await?;
                 }
@@ -271,6 +276,7 @@ impl RbacService {
             Box::pin(async move {
                 db.roles().create(&role, executor).await?;
                 policy_store.replace_role_permissions(&role_key, &permissions, executor).await?;
+
                 if let Some(audit) = audit {
                     audit_port.persist(&audit, executor).await?;
                 }

@@ -58,10 +58,12 @@ pub async fn directory_page(
 ) -> Result<DirectoryResult> {
     ensure_model(access.model(), read.category)?;
     access.ensure_current(executor)?;
+
     let collection = db.collection::<DirectoryResult>("accounts");
     let mut pipeline = access.stages().to_vec();
     pipeline.extend(directory_pipeline(read, access.as_of())?);
     let result = aggregate::rows(&collection, pipeline, executor).await?.pop().unwrap_or_default();
+
     if result.versions.len() > DIRECTORY_LIMIT {
         return Err(Error::ValidationError("人员目录超过查询上限，请收窄组织或搜索条件".into()));
     }
@@ -98,6 +100,7 @@ fn directory_pipeline(read: &DirectoryRead<'_>, as_of: Instant) -> Result<Vec<Do
     if read.category != PersonDirectoryCategory::Business {
         pipeline.extend(qualification_stages(read.category));
     }
+
     let skip = read
         .page
         .saturating_sub(1)
@@ -167,8 +170,10 @@ mod tests {
         };
         assert!(ensure_model(&model, PersonDirectoryCategory::Sales).is_ok());
         assert!(ensure_model(&model, PersonDirectoryCategory::Procurement).is_err());
+
         let wrong_collection = QueryModel { collection: "other_accounts".into(), ..model.clone() };
         assert!(ensure_model(&wrong_collection, PersonDirectoryCategory::Sales).is_err());
+
         let partial = QueryModel { output: QueryOutput::Existence { fields: ["id".into()].into() }, ..model };
         assert!(ensure_model(&partial, PersonDirectoryCategory::Sales).is_err());
     }
@@ -188,6 +193,7 @@ mod tests {
         let matches = sales[0].get_document("$match").unwrap().get_array("$and").unwrap();
         assert_eq!(matches[1], doc! { "id": { "$in": &ids } }.into());
         assert!(sales[1].contains_key("$lookup"));
+
         read.category = PersonDirectoryCategory::Business;
         let business = directory_pipeline(&read, Instant::from_unix_secs(1)).unwrap();
         assert_eq!(business.len(), 2);

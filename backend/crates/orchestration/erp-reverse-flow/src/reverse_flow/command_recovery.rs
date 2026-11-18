@@ -44,6 +44,7 @@ pub(super) fn commit_audits(
         "receipt_reversal" => ("receipt_reversal.create", "receipt_reversal.submit"),
         _ => return Err(Error::Internal("逆向创建提交审计资源类型不受支持".into())),
     };
+
     let create = actor
         .clone()
         .resource_log(create_action, resource_type, resource_id.to_string())?
@@ -120,6 +121,7 @@ mod tests {
             assert_eq!(create.resource_id.as_deref(), Some("result-1"));
             assert_eq!(submit.resource_id, create.resource_id);
             assert_ne!(create.base.id, submit.base.id);
+
             let created = create.structured_event.unwrap();
             let submitted = submit.structured_event.unwrap();
             assert_eq!(created.command_id.as_deref(), Some(receipt.id()));
@@ -156,6 +158,7 @@ mod tests {
         assert!(
             matches!(recovered_resource(Error::ConflictError("race".into()), Ok(None)), Err(Error::ConflictError(message)) if message == "race")
         );
+
         let original =
             Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(MongoError::custom("first commit")));
         assert!(matches!(

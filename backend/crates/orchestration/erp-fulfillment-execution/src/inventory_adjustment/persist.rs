@@ -120,6 +120,7 @@ pub(super) async fn persist_stock_adjustment_start(
     let audit =
         input.actor.clone().resource_log("stock_adjustment.submit", "stock_adjustment", input.id.clone())?;
     validate_stock_adjustment_start(db, &input, executor).await?;
+
     persist_start_document(db, &mut input, executor).await?;
     persist_runtime_writes(
         db,
@@ -161,6 +162,7 @@ async fn validate_stock_adjustment_start(
         input.expected_subject_version,
     )?;
     input.workflow.as_ref().authorize_stock_adjustment_submit(&current, &input.actor, executor).await?;
+
     let persisted_binding = load_approval_binding(db, &input.id, executor).await?;
     let persisted_binding = require_frozen_binding(persisted_binding.as_ref())?;
     if persisted_binding != &input.binding {
@@ -179,8 +181,10 @@ async fn validate_stock_adjustment_start(
         executor,
     )
     .await?;
+
     revalidate_start_lines(db, &current, &input.lines, executor).await?;
     validate_balance_versions(db, &input.adjustment, &input.lines, &input.balances, executor).await?;
+
     validate_start_writes(
         &input.writes,
         &graph,
@@ -202,6 +206,7 @@ async fn persist_start_document(
         .insert_command_receipt(&input.writes.receipt, executor)
         .await
         .map_err(map_receipt_first_write_error)?;
+
     let guarded = db
         .business_documents()
         .mark_approval_started(
@@ -216,6 +221,7 @@ async fn persist_start_document(
     if guarded.is_none() {
         return Err(Error::ConflictError("库存调整单审批启动守卫冲突，请刷新后重试".to_string()));
     }
+
     for line in &input.lines {
         if !db
             .inventory()
@@ -314,6 +320,7 @@ fn validate_start_writes(
     {
         return Err(Error::Internal("库存调整启动计划与签署命令身份不一致".to_string()));
     }
+
     let [first] = writes.created_executions.as_slice() else {
         return Err(Error::Internal("库存调整启动计划必须且只能创建一个入口执行".to_string()));
     };
@@ -335,6 +342,7 @@ fn validate_start_execution(
     {
         return Err(Error::Internal("库存调整启动计划的入口执行身份不一致".to_string()));
     }
+
     let entry =
         graph.entry_node().map_err(|_| Error::Internal("库存调整事务内定义缺少入口节点".to_string()))?;
     if first.node_key != entry.node_key
@@ -345,6 +353,7 @@ fn validate_start_execution(
     {
         return Err(Error::ConflictError("库存调整启动入口执行与事务内定义事实不一致".to_string()));
     }
+
     ensure_start_tasks(writes, first)?;
     if writes.created_assignees.len() != graph.nodes.len()
         || graph.nodes.iter().any(|node| {
@@ -454,6 +463,7 @@ async fn persist_runtime_writes(
         executor,
     )
     .await?;
+
     snapshot.display =
         Some(capture_stock_adjustment_display(db, context.adjustment, context.lines, executor).await?);
     complete_resubmission(
@@ -466,6 +476,7 @@ async fn persist_runtime_writes(
     )
     .await?;
     context.workflow.persist_start_snapshot(snapshot, executor).await?;
+
     persist_start_tasks(
         db,
         writes,
@@ -510,6 +521,7 @@ async fn persist_start_notifications(
         &writes.instance.base.id,
         &first.base.id,
     )?;
+
     for intent in &writes.notifications {
         let mut recipients = first
             .participants()
@@ -521,6 +533,7 @@ async fn persist_start_notifications(
         }
         recipients.sort();
         recipients.dedup();
+
         let record = ApprovalNotificationOutbox::enqueue(
             ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
             intent.dedup_key.clone(),

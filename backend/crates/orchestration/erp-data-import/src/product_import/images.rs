@@ -96,11 +96,13 @@ pub async fn upload_row_images(
         let Some(image) = image else {
             continue;
         };
+
         let carousel_pending = store_image(storage, secret, &image).await?;
         let reference = FileAssetId::new(carousel_pending.reference.clone());
         media.carousel.push((reference, sort_order));
         sort_order += 1;
         media.pending.push(carousel_pending);
+
         if column == 2 {
             let sku_pending = store_image(storage, secret, &image).await?;
             media.main_image = Some(FileAssetId::new(sku_pending.reference.clone()));
@@ -123,6 +125,7 @@ async fn store_image(
         .save_with_content_type(&object_key, &image.bytes, Some(image.content_type))
         .await
         .map_err(|error| Error::Internal(format!("保存商品图片失败: {error}")))?;
+
     Ok(PendingFileAssetRequest {
         reference: format!("{PENDING_FILE_REFERENCE_PREFIX}{token}"),
         registration: RegisterFileAssetRequest {

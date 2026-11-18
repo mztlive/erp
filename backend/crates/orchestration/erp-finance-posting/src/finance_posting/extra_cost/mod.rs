@@ -91,9 +91,11 @@ impl SalesExtraCostProcess {
     ) -> Result<ExtraCostCommandResult> {
         req.idempotency_key = req.idempotency_key.trim().to_string();
         req.validate()?;
+
         let pending = PendingFileAssets::prepare(assets, actor)?.shared();
         resolve_evidence(&mut req.evidence_attachment_id, pending.as_ref())?;
         let receipt = registration_receipt(actor, sales_order_id, &req, pending.as_ref())?;
+
         let registration = ExtraCostRegistration::new(req.input(), BusinessDate::today())?;
         let entry_id = extra_cost_entry_id(actor.id(), REGISTER_ACTION, &req.idempotency_key);
         let order_id = SalesOrderId::new(sales_order_id.to_string());
@@ -105,6 +107,7 @@ impl SalesExtraCostProcess {
             receipt,
             inquiry_source: req.inquiry_source.clone(),
         }));
+
         match self.transact(actor, pending, command, expected.clone(), entry_id.clone()).await {
             Ok(result) => Ok(result),
             Err(error) => {
@@ -150,8 +153,10 @@ impl SalesExtraCostProcess {
         actor: &AuditActor,
     ) -> Result<ExtraCostCommandResult> {
         req.validate()?;
+
         let pending = PendingFileAssets::prepare(assets, actor)?.shared();
         resolve_evidence(&mut req.evidence_attachment_id, pending.as_ref())?;
+
         let reduction = ExtraCostReduction::new(req.input(), BusinessDate::today())?;
         let entry_id = extra_cost_entry_id(actor.id(), REDUCE_ACTION, &req.idempotency_key);
         let order_id = SalesOrderId::new(sales_order_id.to_string());
@@ -159,6 +164,7 @@ impl SalesExtraCostProcess {
         let expected = Expected::reduction(&req, &order_id, &original_id);
         let command =
             Command::Reduce(ReduceCommand { order_id, original_id, entry_id: entry_id.clone(), reduction });
+
         match self.transact(actor, pending, command, expected.clone(), entry_id.clone()).await {
             Ok(result) => Ok(result),
             Err(error) => {
@@ -201,6 +207,7 @@ impl SalesExtraCostProcess {
                     if let Some(result) = replay(&db, &entry_id, &expected, executor).await? {
                         return Ok(result);
                     }
+
                     command.apply(&db, &actor, pending.as_ref(), executor).await?;
                     Ok(ExtraCostCommandResult { cost_entry_id: entry_id.to_string(), replayed: false })
                 })
@@ -271,8 +278,10 @@ impl RegisterCommand {
         let order = load_order(db, &self.order_id, executor).await?;
         ensure_attributable_line(db, &order, self.registration.sales_order_line_id(), executor).await?;
         ensure_supplier(db, self.registration.supplier_id(), executor).await?;
+
         let (entry, allocation) =
             self.registration.clone().into_facts(self.entry_id.clone(), self.order_id.clone())?;
+
         erp_procure_to_pay::procure_to_pay::inquiry_expense::register_finance(
             db,
             self.inquiry_source.as_ref(),
@@ -307,9 +316,11 @@ impl ReduceCommand {
         load_order(db, &self.order_id, executor).await?;
         let (original, allocation) = load_original(db, &self.order_id, &self.original_id, executor).await?;
         let (entries, _) = order_costs(db, self.order_id.as_ref(), executor).await?;
+
         let reduced = ReducedAmounts::of(&original, entries.iter());
         let (entry, allocation) =
             self.reduction.clone().into_facts(self.entry_id.clone(), &original, &allocation, reduced)?;
+
         write(db, entry, allocation, REDUCE_ACTION, actor, pending, executor).await.map(|_| ())
     }
 }
@@ -342,6 +353,7 @@ async fn load_original(
         .await?
         .filter(|entry| is_registered_extra_cost(entry) && entry.source_document_id == order_id.as_ref())
         .ok_or_else(|| Error::NotFound("附加费用不存在".into()))?;
+
     let allocation = db
         .cost_allocations()
         .find_allocations_by_entries(std::slice::from_ref(original_id), executor)
@@ -458,18 +470,21 @@ async fn replay(
         },
         None => None,
     };
+
     let Some(entry) = db.cost_entries().find_by_id(entry_id.as_ref(), executor).await? else {
         if committed.is_some() {
             return Err(Error::Internal("财务登记回执缺少成本事实".into()));
         }
         return Ok(None);
     };
+
     if expected.receipt.is_some() && committed.as_deref() != Some(entry_id.as_ref()) {
         return Err(Error::Internal("财务登记缺少完整命令回执，请核对原办理结果".into()));
     }
     if !expected.matches(&entry) {
         return Err(Error::ConflictError("幂等键已用于不同的附加费用命令".into()));
     }
+
     if expected.fact_type == SALES_EXTRA_COST_FACT {
         erp_procure_to_pay::procure_to_pay::inquiry_expense::check_finance_source(
             db,
@@ -537,6 +552,7 @@ mod tests {
         assert!(!expected(SALES_EXTRA_COST_REDUCTION_FACT, Some("xc-0")).matches(&registered));
         let other_description = entry(SALES_EXTRA_COST_FACT, None, "包装");
         assert!(!expected(SALES_EXTRA_COST_FACT, None).matches(&other_description));
+
         let reduction = entry(SALES_EXTRA_COST_REDUCTION_FACT, Some("xc-0"), "运费");
         assert!(expected(SALES_EXTRA_COST_REDUCTION_FACT, Some("xc-0")).matches(&reduction));
         assert!(!expected(SALES_EXTRA_COST_REDUCTION_FACT, Some("xc-9")).matches(&reduction));

@@ -88,6 +88,7 @@ pub fn plan_commercial_profile_revision(
             change_reason,
         },
     )?;
+
     supplier.update(
         SupplierAccountUpdate {
             default_payment_term_id: FieldUpdate::Unchanged,

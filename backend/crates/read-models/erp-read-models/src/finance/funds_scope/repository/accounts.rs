@@ -112,6 +112,7 @@ impl<T> AccountListSnapshot<T> {
                 if authorization.context.resource == "receivable_account" { "应收" } else { "应付" }
             )));
         }
+
         let mut fingerprint = DefaultHasher::new();
         authorization.context.scope_version.hash(&mut fingerprint);
         for row in &self.versions {
@@ -153,6 +154,7 @@ impl FundsAccess {
                 query,
                 keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Receivable, executor).await?,
             );
+
             let scope = linked_condition_document(condition, "sales_owner_user_id");
             let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
             pipeline.extend(authorization.guard_stages());
@@ -169,6 +171,7 @@ impl FundsAccess {
                 &authorization.sales_stages(),
             ));
             pipeline.push(doc! { "$match": { "_source_allowed": true } });
+
             let sort = sort_document(
                 query.paging.sort_by,
                 filter.sort_ascending,
@@ -194,6 +197,7 @@ impl FundsAccess {
             .await
         }
         .await;
+
         let result = result?;
         authorization.validate(executor).await?;
         Ok(result)
@@ -227,10 +231,12 @@ impl FundsAccess {
                 query,
                 keyword_ids(&self.db, query.q.as_deref(), FinanceSearchTarget::Payable, executor).await?,
             );
+
             let mut pipeline = vec![doc! { "$match": filter.to_doc() }];
             pipeline.extend(authorization.guard_stages());
             pipeline.extend(payable_source_stages(authorization, condition));
             pipeline.push(doc! { "$match": { "_source_allowed": true } });
+
             let sort = sort_document(
                 query.paging.sort_by,
                 filter.sort_ascending,
@@ -249,6 +255,7 @@ impl FundsAccess {
             .await
         }
         .await;
+
         let result = result?;
         authorization.validate(executor).await?;
         Ok(result)
@@ -283,6 +290,7 @@ impl FundsAccess {
                 { "$sort": sort }, { "$limit": 10001 }, { "$project": versions }] } }
         };
         pipeline.push(facet);
+
         aggregate(self.db.collection(collection), pipeline, executor)
             .await?
             .into_iter()
@@ -350,6 +358,7 @@ fn payable_source_stages(
         "purchase_no",
         authorization.purchase_scope.as_ref().map_or(&[], |scope| scope.stages()),
     );
+
     let settlement_scope =
         authorization.settlement.as_ref().map_or_else(|| doc! { "$expr": false }, |_| doc! {});
     stages.extend(source_stages(
@@ -361,6 +370,7 @@ fn payable_source_stages(
         "statement_no",
         authorization.settlement.as_ref().map_or(&[], |scope| scope.stages()),
     ));
+
     stages.push(doc! { "$set": {
         "_source": { "$switch": { "branches": [
             { "case": { "$eq": ["$source_type", "purchase_order"] }, "then": "$_purchase" },
@@ -418,13 +428,17 @@ mod tests {
         let mut rows = snapshot();
         let original = rows.version(&access).unwrap();
         assert_eq!(rows.total(), 2);
+
         rows.versions[1].source_version += 1;
         assert_ne!(rows.version(&access).unwrap(), original);
+
         rows.versions[1].source_version -= 1;
         rows.versions[1].version += 1;
         assert_ne!(rows.version(&access).unwrap(), original);
+
         rows.versions.pop();
         assert_ne!(rows.version(&access).unwrap(), original);
+
         rows.versions.push(AccountVersion {
             id: "new".into(),
             version: 1,
@@ -432,6 +446,7 @@ mod tests {
             source_version: 1,
         });
         assert_ne!(rows.version(&access).unwrap(), original);
+
         let mut changed = authorization();
         changed.context.scope_version = "revoked".into();
         assert_ne!(snapshot().version(&changed).unwrap(), original);
@@ -451,6 +466,7 @@ mod tests {
             })
             .collect();
         assert!(rows.version(&access).is_ok());
+
         rows.versions.push(AccountVersion {
             id: "10000".into(),
             version: 1,

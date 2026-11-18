@@ -106,6 +106,7 @@ impl<P: CommandReceiptSink> AuditedCommand for ReceiptWrite<'_, P> {
     type Output = ();
     async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<()>> {
         self.sink.persist_receipt(&self.receipt, executor).await?;
+
         let outcome = match &self.receipt.result {
             IntegrationCommandResult::TaskAction(result) => result.outcome,
             IntegrationCommandResult::DirectDecision(result) => result.outcome,
@@ -259,6 +260,7 @@ mod receipt_event_tests {
         let mut executor = TestExecutor::default();
         let sink = sink(&mut executor, false, false);
         store_receipt_with_sinks(&actor(), &identity(), result(), &mut executor, &sink, &sink).await.unwrap();
+
         assert_eq!(*sink.calls.lock().unwrap(), ["receipt", "event"]);
         let receipts = sink.receipts.lock().unwrap();
         let events = sink.events.lock().unwrap();
@@ -266,6 +268,7 @@ mod receipt_event_tests {
         assert_eq!(events.len(), 1);
         assert_eq!(receipts[0].audit_event_id, events[0].base.id);
         assert_ne!(identity().receipt_id(), events[0].base.id);
+
         let event = events[0].structured_event.as_ref().unwrap();
         assert_eq!(event.command_id.as_deref(), Some(identity().receipt_id()));
         assert_eq!(event.result, BusinessEventResult::Succeeded);

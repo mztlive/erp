@@ -87,14 +87,18 @@ async fn apply_maintenance(
             "已登记实际退货，请完成款票处理和采购改单，不能维持原采购金额".into(),
         ));
     }
+
     // 与实际直退登记竞争同一采购版本，禁止并发维持越过刚写入的退货事实。
     let mut guarded_order = order.clone();
     db.purchase_orders().update(&mut guarded_order, executor).await?;
+
     let now = Instant::now();
     update.maintain(&req.reason, actor.id(), now).map_err(Error::Logic)?;
     purchase_source_updates(db).update(&mut update, executor).await?;
+
     close_work_item(db, &update, now, executor).await?;
     super::sync_payment_arrangement(db, &order.base.id, false, executor).await?;
+
     let audit = actor.clone().resource_log(
         "purchase_order.maintain_source",
         "purchase_order",
@@ -151,6 +155,7 @@ async fn close_work_item(
     if item.status != WorkItemStatus::Open {
         return Ok(());
     }
+
     item.complete_when_source_updated(now).map_err(Error::Logic)?;
     db.work_items().update(&mut item, executor).await?;
     Ok(())
@@ -228,7 +233,6 @@ mod tests {
 
         let stale = ensure_record_current(&update, update.base.version + 1, Some("rev-2")).unwrap_err();
         let changed = ensure_record_current(&update, update.base.version, Some("rev-3")).unwrap_err();
-
         assert!(matches!(stale, Error::ConflictError(message) if message.contains("采购依据已更新")));
         assert!(matches!(changed, Error::ConflictError(message) if message.contains("销售单已再次变更")));
     }

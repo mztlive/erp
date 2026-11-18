@@ -228,6 +228,7 @@ mod tests {
         assert_eq!(subject.business_object_id.as_deref(), Some("business-context"));
         assert!(subject.business_object_type.is_none());
         assert!(subject.fact_references.is_empty());
+
         task.message_id = None;
         task.business_object_id = None;
         let subject = EvidenceSubject::error(&task);
@@ -250,8 +251,10 @@ mod tests {
         assert_eq!(subject.business_object_type.as_deref(), Some(difference.business_object_type.as_str()));
         assert_eq!(subject.business_object_id.as_deref(), Some(difference.business_object_id.as_str()));
         assert_eq!(subject.fact_references, ["left-fact", "right-fact"]);
+
         difference.left_fact_reference = None;
         assert_eq!(EvidenceSubject::difference(&difference).fact_references, ["right-fact"]);
+
         difference.left_fact_reference = Some("left-fact".to_string());
         difference.right_fact_reference = None;
         assert_eq!(EvidenceSubject::difference(&difference).fact_references, ["left-fact"]);

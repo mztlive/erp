@@ -88,6 +88,7 @@ mod tests {
         let fields: BTreeMap<_, _> = parse(request.as_bytes()).into_owned().collect();
         assert_eq!(fields["grant_type"], "refresh_token");
         assert_eq!(fields["app_secret"], "secret&=");
+
         for body in [br#"{"code":0,"access_token":"next","refresh_token":"refresh","expires_in":86400}"#.as_slice(),br#"{"success":true,"resultCode":"0000","result":{"accessToken":"next","refreshToken":"refresh","expiresIn":86400}}"#.as_slice(),br#"{"code":"0","access_token":"next","refresh_token":"refresh","expires_in":"86400"}"#.as_slice(),br#"{"success":"true","resultCode":"0000","result":{"accessToken":"next","refreshToken":"refresh","expiresIn":"86400"}}"#.as_slice()] {
             let result=parse_refresh(body).unwrap();assert_eq!(result.refresh_token(),"refresh");
             let token=result.access_token("account".into(),"version-2".into(),Instant::from_unix_secs(1)).unwrap();
@@ -119,6 +120,7 @@ mod tests {
                     serde_json::json!({"code": 0, "access_token": access,
                         "refresh_token": refresh, "expires_in": seconds})
                 };
+
                 let result = parse_refresh(&serde_json::to_vec(&body).unwrap());
                 if accepted {
                     let result = result.unwrap();

@@ -61,12 +61,15 @@ pub(super) async fn check_change_inputs(
             .ensure_purchase_change_amount(new_gross)
             .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
     }
+
     let facts = load_change_quantity_facts(db, order, executor).await?;
     validate_change_quantities(&facts.bounds, &input_quantities(inputs))
         .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+
     let occurred = occurred_expense_lines(db, order, executor).await?;
     validate_change_expenses(&revision_expenses(&facts.base_lines), &input_expenses(inputs), &occurred)
         .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+
     let recheck = due_recheck_lines(&facts, order);
     validate_change_input_delivery(db, order, inputs, &facts.base_lines, &recheck, executor).await
 }
@@ -92,13 +95,16 @@ pub(super) async fn check_effective_lines(
 ) -> Result<Option<ProgressStatus>> {
     let facts = load_change_quantity_facts(db, order, executor).await?;
     validate_change_quantities(&facts.bounds, &revision_quantities(lines)).map_err(stale)?;
+
     let occurred = occurred_expense_lines(db, order, executor).await?;
     validate_change_expenses(&revision_expenses(&facts.base_lines), &revision_expenses(lines), &occurred)
         .map_err(stale)?;
+
     let recheck = due_recheck_lines(&facts, order);
     validate_change_revision_delivery(db, order, lines, &facts.base_lines, &recheck, executor)
         .await
         .map_err(stale_process)?;
+
     if order.fulfillment_responsibility == FulfillmentResponsibility::NotApplicable {
         return Ok(Some(expense_progress(lines, &occurred)));
     }
@@ -120,6 +126,7 @@ async fn receipt_progress(
     let ids = revisions.into_iter().map(|row| PurchaseOrderRevisionId::new(row.base.id)).collect::<Vec<_>>();
     let mut all_lines = db.purchase_order_revision_lines().find_lines_by_revision_ids(&ids, executor).await?;
     all_lines.extend_from_slice(lines);
+
     let received =
         db.fulfillment().qualified_received_totals_by_purchase_revision_line(&order_id, executor).await?;
     let rekeyed = rekey_to_current_lines(lines, &all_lines, &received)?;

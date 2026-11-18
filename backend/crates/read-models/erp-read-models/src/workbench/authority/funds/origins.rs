@@ -49,12 +49,14 @@ impl super::super::WorkItemFactsReader {
         let account_ids =
             entries.iter().map(|entry| entry.receivable_account_id.to_string()).collect::<Vec<_>>();
         let accounts = self.read_receivable_accounts(&account_ids, executor).await?;
+
         let party_names = self
             .party_legal_names(
                 &accounts.iter().map(|account| account.counterparty_party_id.to_string()).collect::<Vec<_>>(),
                 executor,
             )
             .await?;
+
         let accounts =
             accounts.into_iter().map(|account| (account.base.id.clone(), account)).collect::<HashMap<_, _>>();
         Ok(receivable_entry_counterparties(&entries, &accounts, &party_names))
@@ -104,6 +106,7 @@ impl super::super::WorkItemFactsReader {
         let account_ids =
             entries.iter().map(|entry| entry.payable_account_id.to_string()).collect::<Vec<_>>();
         let accounts = self.read_payable_accounts(&account_ids, executor).await?;
+
         let supplier_names = self.payable_supplier_names(&accounts, executor).await?;
         let accounts =
             accounts.into_iter().map(|account| (account.base.id.clone(), account)).collect::<HashMap<_, _>>();

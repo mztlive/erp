@@ -99,6 +99,7 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<PurchaseChangeOrderAda
     {
         return Err(Error::Internal("采购变更单审批适配器登记不完整".to_string()));
     }
+
     Ok(PurchaseChangeOrderAdapter {
         document_type: spec.document_type,
         process_kind: spec.process_kind,
@@ -254,6 +255,7 @@ pub fn build_purchase_change_snapshot(
     if lines.is_empty() {
         return Err(Error::ValidationError("采购变更单没有明细，无法启动审批".to_string()));
     }
+
     Ok(ApprovalSubjectSnapshotPayload {
         document_no: change_order.base.id.clone(),
         responsible_org_id: purchase_change_responsible_org_id(sales_order)?,
@@ -278,6 +280,7 @@ fn sum_line_quantity(lines: &[PurchaseChangeSubmissionLine]) -> Result<Quantity>
         return Quantity::try_from(rust_decimal::Decimal::ZERO)
             .map_err(|error| Error::ValidationError(error.to_string()));
     }
+
     let mut quantities = lines.iter().filter_map(|line| line.quantity);
     let Some(first) = quantities.next() else {
         return Err(Error::ValidationError("采购变更明细没有数量，无法启动审批".to_string()));
@@ -426,9 +429,11 @@ mod tests {
             ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
         );
         assert_eq!(adapter.subject_snapshot_builder, "build_purchase_change_snapshot");
+
         assert_eq!(adapter.on_approval_start, ApprovalDomainAction::PurchaseChangeOrderSubmitChange);
         assert_eq!(adapter.on_final_approve, ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange);
         assert_eq!(adapter.cancel_action, ApprovalDomainAction::PurchaseChangeOrderCancelApproval);
+
         assert_eq!(adapter.owner_role, "purchase_change_order_approver");
         assert_eq!(
             adapter.owner_organization_snapshot,
@@ -452,6 +457,7 @@ mod tests {
         .unwrap();
         assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::InApproval);
         assert_eq!(order.approval_subject_version, 1);
+
         execute_purchase_change_domain_action(
             &mut order,
             ApprovalDomainAction::PurchaseChangeOrderCancelApproval,
@@ -512,6 +518,7 @@ mod tests {
         assert_eq!(payload.submitted_by, "user-1");
         assert_eq!(payload.total_amount.unwrap().to_string(), "10");
         assert_eq!(payload.total_quantity.unwrap().to_string(), "2");
+
         assert!(
             build_purchase_change_snapshot(
                 &draft_order(),
@@ -550,6 +557,7 @@ mod tests {
             "user-1",
         )
         .unwrap();
+
         assert!(
             execute_purchase_change_domain_action(
                 &mut order,

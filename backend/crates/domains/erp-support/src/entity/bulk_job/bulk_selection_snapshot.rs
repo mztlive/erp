@@ -143,6 +143,7 @@ impl BulkSelectionSnapshot {
         if data.item_count > MAX_ITEM_COUNT {
             return Err(Error::from(format!("冻结目标数不能超过 {MAX_ITEM_COUNT}")));
         }
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             selection_type: data.selection_type,
@@ -344,6 +345,7 @@ mod tests {
         ] {
             assert!(ensure_transition(from, to).is_ok(), "{from:?} → {to:?}");
         }
+
         assert!(ensure_transition(SelectionStatus::Executing, SelectionStatus::Expired).is_err());
         assert!(ensure_transition(SelectionStatus::Completed, SelectionStatus::Executing).is_err());
         assert!(ensure_transition(SelectionStatus::Expired, SelectionStatus::Pending).is_err());

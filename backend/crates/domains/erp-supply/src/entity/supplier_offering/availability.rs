@@ -113,10 +113,12 @@ impl SupplierOfferingAvailability {
         if data.received_at < self.received_at {
             return Err(Error::from("可供观察时间早于当前数据"));
         }
+
         let source_revision_token =
             normalize_optional_text(data.source_revision_token, "来源版本", SOURCE_REVISION_TOKEN_MAX_LEN)?;
         let updated_by = data.updated_by.trim().to_string();
         ensure_valid(data.available_quantity, &updated_by)?;
+
         self.availability_status = data.availability_status;
         self.available_quantity = data.available_quantity;
         self.source_updated_at = data.source_updated_at;
@@ -270,8 +272,8 @@ mod tests {
                 ..data(11)
             })
             .unwrap();
-
         assert_eq!(availability.interruption_reason(), Some(AvailabilityInterruptionReason::ZeroInventory));
+
         assert!(availability.ensure_version(availability.base.version).is_ok());
         assert!(availability.ensure_version(availability.base.version.saturating_add(1)).is_err());
         assert_eq!(availability.next_persisted_version().unwrap(), availability.base.version + 1);
@@ -284,6 +286,7 @@ mod tests {
         incoming.source_updated_at = None;
         availability.apply(incoming).unwrap();
         assert_eq!(availability.source_updated_at, None);
+
         assert_eq!(availability.verified_at, Some(Instant::from_unix_secs(11)));
         let mut older = data(9);
         older.source_updated_at = None;

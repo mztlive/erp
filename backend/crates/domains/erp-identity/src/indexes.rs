@@ -96,6 +96,7 @@ pub async fn ensure_authorization(db: &Database) -> Result<()> {
     create_indexes(db, CASBIN_RULES, casbin_indexes()).await?;
     create_indexes(db, PERMISSIONS, permission_indexes()).await?;
     create_indexes(db, USER_ROLES, user_role_indexes()).await?;
+
     create_indexes(db, AUDIT_EVENTS, audit_event_indexes()).await?;
     create_indexes(
         db,
@@ -103,9 +104,11 @@ pub async fn ensure_authorization(db: &Database) -> Result<()> {
         person_query_qualification_indexes(),
     )
     .await?;
+
     ensure_resource_grants(db).await?;
     ensure_person_scopes(db).await?;
     ensure_organizations(db).await?;
+
     create_indexes(
         db,
         POLICY_RECEIPTS,
@@ -238,6 +241,7 @@ async fn ensure_organizations(db: &Database) -> Result<()> {
         create_indexes(db, collection, vec![unique_index(format!("uk_{collection}_id"), doc! { "id": 1 })])
             .await?;
     }
+
     create_indexes(
         db,
         ORG_UNITS,
@@ -417,7 +421,6 @@ mod tests {
     #[test]
     fn casbin_indexes_cover_both_grouping_policy_positions() {
         let indexes = casbin_indexes();
-
         assert!(indexes.iter().any(|index| index.keys.contains_key("values.0")));
         assert!(indexes.iter().any(|index| index.keys.contains_key("values.1")));
     }
@@ -425,7 +428,6 @@ mod tests {
     #[test]
     fn permission_identity_is_globally_unique() {
         let indexes = permission_indexes();
-
         let identity = indexes
             .iter()
             .find(|index| {
@@ -436,13 +438,13 @@ mod tests {
         assert_eq!(identity.keys, doc! { "resource": 1, "action": 1 });
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
         assert!(identity.options.as_ref().unwrap().partial_filter_expression.is_none());
+
         assert!(indexes.iter().any(|index| index.keys == doc! { "disabled": 1 }));
     }
 
     #[test]
     fn user_role_uniqueness_is_partial_over_unrevoked_bindings() {
         let indexes = user_role_indexes();
-
         let active = indexes
             .iter()
             .find(|index| {
@@ -456,6 +458,7 @@ mod tests {
             active.options.as_ref().unwrap().partial_filter_expression,
             Some(doc! { "revoked_at": null })
         );
+
         assert!(indexes.iter().any(|index| { index.keys == doc! { "user_id": 1, "effective_from": -1 } }));
     }
 

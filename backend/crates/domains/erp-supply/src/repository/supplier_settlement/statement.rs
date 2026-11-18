@@ -204,6 +204,7 @@ impl QueryFilter for SupplierSettlementStatementFilter {
             filter.insert("period_end", doc! { "$lte": period_to.to_string() });
         }
         insert_literal_regex_filter(&mut filter, "statement_no", self.statement_no.as_deref());
+
         let ands = self.narrowing_conditions();
         if !ands.is_empty() {
             filter.insert("$and", ands);
@@ -218,6 +219,7 @@ impl SupplierSettlementStatementFilter {
         if let Some(q) = &self.q {
             ands.push(keyword_clause(q, &self.keyword_supplier_ids));
         }
+
         if let Some(ids) = &self.owner_user_ids {
             ands.push(doc! { "prepared_by": { "$in": ids } });
         }
@@ -463,6 +465,7 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         executor: &mut dyn Executor,
     ) -> crate::Result<Option<SupplierSettlementStatement>> {
         scope.ensure_model("supplier_settlement_statement", executor)?;
+
         let result = aggregate::find(
             &self.collection(),
             doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
@@ -473,6 +476,7 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         .await?
         .into_iter()
         .next();
+
         scope.ensure_model("supplier_settlement_statement", executor)?;
         Ok(result)
     }
@@ -504,6 +508,7 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         if deduped.is_empty() {
             return Ok(HashMap::new());
         }
+
         let rows = mongo_ops::find_many(
             &self.collection().clone_with_type::<SupplierSettlementNoRow>(),
             doc! { "id": { "$in": deduped } },
@@ -511,6 +516,7 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
             executor,
         )
         .await?;
+
         let mut map = HashMap::new();
         for row in rows {
             if !row.statement_no.trim().is_empty() {
@@ -570,10 +576,12 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
         if let Some(scope) = &filter.authorized_scope {
             scope.ensure_model("supplier_settlement_statement", executor)?;
         }
+
         let authorization = filter.authorized_scope.as_ref().map_or(&[][..], |scope| scope.stages());
         let collection = self.collection().clone_with_type::<SupplierSettlementStatementStatsRow>();
         let rows =
             aggregate::rows(&collection, statement_stats_pipeline(filter, authorization), executor).await?;
+
         if let Some(scope) = &filter.authorized_scope {
             scope.ensure_model("supplier_settlement_statement", executor)?;
         }
@@ -833,6 +841,7 @@ mod keyword_regression_tests {
             ..Default::default()
         };
         let pipeline = statement_stats_pipeline(&filter, &authorization);
+
         assert_eq!(&pipeline[..authorization.len()], authorization.as_slice());
         let business_filter = pipeline[authorization.len()].get_document("$match").unwrap();
         assert_eq!(business_filter.get_str("supplier_id").unwrap(), "supplier");
@@ -846,6 +855,7 @@ mod keyword_regression_tests {
         let authorization = vec![doc! { "$match": { "$expr": false } }];
         let pipeline =
             statement_stats_pipeline(&SupplierSettlementStatementFilter::default(), &authorization);
+
         assert_eq!(pipeline[0], authorization[0]);
         assert!(pipeline[1].contains_key("$match"));
         assert!(pipeline[2].contains_key("$group"));
@@ -863,10 +873,10 @@ mod keyword_regression_tests {
             period_to: None,
             ..Default::default()
         };
-
         filter.q = Some("BILL.[1]".into());
         filter.supplier_id = Some(erp_core::ids::SupplierAccountId::new("selected"));
         let query = filter.to_doc();
+
         assert_eq!(query.get_str("supplier_id").unwrap(), "selected");
         let text = format!("{query:?}");
         assert!(text.contains("external_bill_no"));

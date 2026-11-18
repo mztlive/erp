@@ -74,6 +74,7 @@ impl CostService {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::ValidationError("成本命令结果必须在原授权快照中读取".into()));
         }
+
         let entry = self
             .db
             .cost_entries()
@@ -88,6 +89,7 @@ impl CostService {
             .into_iter()
             .map(cost_allocation_entity_view)
             .collect();
+
         Ok(CostEntryView {
             id: entry.base.id,
             cost_type: entry.cost_type,
@@ -410,7 +412,6 @@ mod tests {
         .unwrap();
 
         let view = cost_entry_row_view(row, Vec::new());
-
         assert_eq!(view.gross_amount.to_string(), "0.00");
         assert_eq!(view.net_amount.to_string(), "0.00");
         assert_eq!(view.tax_amount.to_string(), "0.00");
@@ -433,7 +434,6 @@ mod tests {
         .unwrap();
 
         let view = cost_allocation_entity_view(allocation);
-
         assert_eq!(view.allocated_gross_amount.to_string(), "1.00");
         assert_eq!(view.allocated_net_amount.to_string(), "0.10");
     }

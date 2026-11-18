@@ -68,10 +68,12 @@ async fn authorized<T: DeserializeOwned + Send + Sync>(
     {
         return Err(Error::ValidationError("集成详情授权模型与仓储不匹配".into()));
     }
+
     let mut stages = vec![doc! {"$match": {"id": id}}];
     stages.extend(access.stages().iter().cloned());
     stages.push(doc! {"$limit": 1});
     let mut rows = aggregate::rows(&collection, stages, executor).await?;
+
     access.ensure_current(executor)?;
     rows.pop().ok_or_else(|| Error::NotFound("集成对象不存在或无权查看".into()))
 }

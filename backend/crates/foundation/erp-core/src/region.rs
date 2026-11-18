@@ -48,6 +48,7 @@ fn load_regions() -> RegionIndex {
             RegionNode { code, name, parent_code }
         })
         .collect::<Vec<_>>();
+
     let by_code = nodes.iter().enumerate().map(|(index, node)| (node.code, index)).collect();
     let parents = nodes.iter().filter_map(|node| node.parent_code).collect();
     RegionIndex { nodes, by_code, parents }
@@ -211,6 +212,7 @@ impl RegionCode {
             }
             current = node.parent_code.and_then(node_of);
         }
+
         if names.is_empty() {
             return self.0.clone();
         }

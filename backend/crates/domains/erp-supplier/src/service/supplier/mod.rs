@@ -141,6 +141,7 @@ impl SupplierService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     service.data_scope.require_with(&actor, &supplier::DETAIL, &id, executor).await?;
+
                     let view = service.load_supplier_detail(&id, executor).await?;
                     Ok(view)
                 })
@@ -187,17 +188,21 @@ impl SupplierService {
             .load_supplier_detail_bundle(&supplier_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
+
         let (party, party_revision) = self
             .party
             .find_with_current_revision(&bundle.party_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("供应商关联的企业主体不存在".to_string()))?;
+
         let contacts = self.party.list_contacts(&bundle.party_id, executor).await?;
         let addresses = self.party.list_addresses(&bundle.party_id, executor).await?;
         let tax_profiles = self.party.list_tax_profiles(&bundle.party_id, executor).await?;
         let bank_accounts = self.party.list_bank_accounts(&bundle.party_id, executor).await?;
+
         let commercial_party_names =
             self.party.current_legal_names_by_party_ids(&bundle.commercial_party_ids, executor).await?;
+
         Ok(LoadedSupplierDetail {
             id: id.to_string(),
             bundle,
@@ -231,6 +236,7 @@ impl SupplierService {
             .accounts
             .names(std::slice::from_ref(&loaded.bundle.supplier.maintainer_user_id), executor)
             .await?;
+
         assemble_supplier_views(SupplierViewAssembleInput {
             rows: vec![row],
             parties: vec![loaded.party.clone()],
@@ -274,10 +280,12 @@ impl SupplierService {
             commercial_party_names,
             ..
         } = loaded;
+
         let capabilities: Vec<SupplierCapabilityView> =
             bundle.capabilities.into_iter().map(Into::into).collect();
         let qualifications = assemble_qualification_views(bundle.qualifications, bundle.qualification_links);
         let ratings = bundle.ratings.into_iter().map(Into::into).collect();
+
         let mut commercial_profiles: Vec<CommercialProfileView> =
             bundle.commercial_profiles.into_iter().map(Into::into).collect();
         for profile in &mut commercial_profiles {
@@ -287,7 +295,9 @@ impl SupplierService {
             account.current_profile =
                 commercial_profiles.iter().find(|profile| profile.id == current_id).cloned();
         }
+
         let sensitive_fields = self.sensitive_field_views(&id, &contacts, &addresses, &bank_accounts)?;
+
         Ok(SupplierDetailView {
             account,
             party_status: party.status,
@@ -348,6 +358,7 @@ impl SupplierService {
             .map_err(|_| Error::Internal("系统时间非法".to_string()))?
             + 60;
         let mut fields = Vec::new();
+
         if let Some(contact) =
             select_current_default(contacts, |item| item.is_default, |item| item.status.is_active())
         {
@@ -361,6 +372,7 @@ impl SupplierService {
                 expires_at,
             )?);
         }
+
         if let Some(address) =
             select_current_default(addresses, |item| item.is_default, |item| item.status.is_active())
         {
@@ -374,6 +386,7 @@ impl SupplierService {
                 expires_at,
             )?);
         }
+
         if let Some(account) =
             select_current_default(bank_accounts, |item| item.is_default, |item| item.status.is_active())
         {
@@ -400,6 +413,7 @@ fn assemble_qualification_views(
     for link in links {
         links_by_qualification.entry(link.qualification_id.to_string()).or_default().push(link.capability_id);
     }
+
     qualifications
         .into_iter()
         .map(|qualification| {

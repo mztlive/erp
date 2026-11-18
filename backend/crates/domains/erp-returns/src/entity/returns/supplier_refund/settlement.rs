@@ -27,6 +27,7 @@ impl SupplierRefund {
                     && row.settlement_decision_key == self.settlement_decision_key
             })
             .fold(Amount::zero(), |total, row| total.checked_add(row.amount));
+
         if self.amount > limit.checked_sub(used) {
             return Err(Error::ConflictError(
                 "本次金额超过采购方案剩余可处理金额，审批中的金额也已占用".into(),
@@ -69,12 +70,14 @@ mod tests {
             refund("posted", SupplierRefundStatus::Posted, "29.99"),
         ];
         current.ensure_settlement_limit(amount("100.00"), &rows).unwrap();
+
         current.amount = amount("30.01");
         assert!(matches!(
             current.ensure_settlement_limit(amount("100.00"), &rows),
             Err(Error::ConflictError(message))
                 if message == "本次金额超过采购方案剩余可处理金额，审批中的金额也已占用"
         ));
+
         current.amount = amount("0.01");
         assert!(current.ensure_settlement_limit(amount("70.00"), &rows).is_err());
     }
@@ -91,6 +94,7 @@ mod tests {
             refund("reversed", SupplierRefundStatus::Reversed, "100.00"),
             deleted,
         ];
+
         current.ensure_settlement_limit(amount("100.00"), &rows).unwrap();
         assert!(current.ensure_settlement_limit(amount("99.99"), &rows).is_err());
     }
@@ -104,6 +108,7 @@ mod tests {
         other_decision.settlement_decision_key = Some("decision-2".into());
         let mut credit = refund("credit", SupplierRefundStatus::Posted, "100.00");
         credit.settlement_method = SupplierSettlementMethod::SupplierCredit;
+
         current.ensure_settlement_limit(amount("100.00"), &[other_purchase, other_decision, credit]).unwrap();
     }
 }

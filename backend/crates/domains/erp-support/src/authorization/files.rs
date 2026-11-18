@@ -59,6 +59,7 @@ async fn require_files(
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(IdentityError::ValidationError("写入授权必须使用快照事务".into()).into());
     }
+
     if ids.is_empty() {
         authorization
             .permissions(actor, &[], executor)
@@ -130,6 +131,7 @@ mod tests {
     async fn file_association_checks_require_a_snapshot_before_identity_or_file_reads() {
         let authorization = unavailable_authorization();
         let actor = AuditActor::new("user".into(), "user".into(), AccountKind::Admin);
+
         for ids in [&[][..], &["asset"][..]] {
             let transfer = require_transfer(&authorization, &actor, ids, &mut NoTransaction).await;
             let owned = require_owned(&authorization, &actor, ids, &mut NoTransaction).await;
@@ -172,6 +174,7 @@ mod tests {
         )
         .unwrap();
         let actor = AuditActor::new("user".into(), "user".into(), AccountKind::Admin);
+
         for ids in [&[][..], &["asset"][..]] {
             let transfer = require_transfer(&authorization, &actor, ids, &mut NoTransaction).await;
             let owned = require_owned(&authorization, &actor, ids, &mut NoTransaction).await;
@@ -181,6 +184,7 @@ mod tests {
                     Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务"
                 ));
             }
+
             require_transfer(&authorization, &actor, ids, &mut SnapshotExecutor::default()).await.unwrap();
             require_owned(&authorization, &actor, ids, &mut SnapshotExecutor::default()).await.unwrap();
         }

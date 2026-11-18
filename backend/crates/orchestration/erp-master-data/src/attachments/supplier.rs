@@ -138,6 +138,7 @@ mod tests {
         let service = service().await;
         for update in [false, true] {
             let mut req = request();
+
             req.clear_contact = true;
             let result = save(&service, req, update).await;
             assert!(matches!(

@@ -139,8 +139,10 @@ pub async fn replay_unsubmitted_document_definition_upgrade(
 ) -> Result<Option<UpgradeBindingResultView>> {
     let reason = normalized_upgrade_reason(command)?;
     ensure_prepared_upgrade_identity(command, actor, reason)?;
+
     let _authorized =
         load_authorized_upgrade_context(authorization, upgrade, command, actor, executor).await?;
+
     let receipt = find_upgrade_receipt(db, &command.identity, executor).await?;
     match command.identity.classify(receipt.as_ref()) {
         ReceiptBranch::SamePayload(receipt) => {
@@ -335,6 +337,7 @@ async fn apply_fresh_upgrade(
     ensure_action_matches_upgraded_document(&action, &document)?;
 
     let (receipt, audit, view) = prepare_upgrade_result(&input, &previous, &action)?;
+
     db.bpm_workflow()
         .insert_command_receipt(&receipt, executor)
         .await
@@ -525,11 +528,13 @@ pub(super) fn upgrade_result_from_action(
     if !matches!(command.identity.classify(Some(receipt)), ReceiptBranch::SamePayload(_)) {
         return Err(payload_conflict_error());
     }
+
     let expected_current_binding_version =
         command.expected_binding_version.checked_add(1).ok_or_else(payload_conflict_error)?;
     let Some(context) = action.approval_binding_context.as_ref() else {
         return Err(payload_conflict_error());
     };
+
     let immutable_metadata = immutable_upgrade_metadata(receipt, action);
     let exact_action = !action.base.id.trim().is_empty()
         && receipt.result_ref == action.base.id
@@ -554,6 +559,7 @@ pub(super) fn upgrade_result_from_action(
     if !immutable_metadata || !exact_action || !exact_context {
         return Err(payload_conflict_error());
     }
+
     Ok(UpgradeBindingResultView {
         document_type: command.document_type,
         document_id: command.document_id.clone(),

@@ -49,6 +49,7 @@ impl SalesOrderCommandProcess {
         order
             .ensure_first_submission_working_copy_editable()
             .map_err(|error| Error::ConflictError(error.to_string()))?;
+
         let order_id = SalesOrderId::new(order.base.id.clone());
         let stable = self
             .sales()
@@ -122,11 +123,13 @@ impl SalesOrderCommandProcess {
         let sellable_refs = SalesOrderService::sellable_working_copy_refs(&working_copy_lines)?;
         let access = self.command_access(actor, sales_order_permissions::HANDOVER);
         let related_order = order.clone();
+
         let persisted = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     access.related_order(&related_order, executor).await?;
                     access.revalidate(&order_id, expected_order_version, executor).await?;
+
                     Self::persist_first_contract_binding(
                         &db,
                         &access,
@@ -135,6 +138,7 @@ impl SalesOrderCommandProcess {
                         executor,
                     )
                     .await?;
+
                     SalesOrderService::new(db.clone())
                         .ensure_sellable_refs(
                             &sellable_refs,
@@ -142,6 +146,7 @@ impl SalesOrderCommandProcess {
                             executor,
                         )
                         .await?;
+
                     SalesOrderService::new(db.clone())
                         .create_working_copy(
                             &created_stable_lines,

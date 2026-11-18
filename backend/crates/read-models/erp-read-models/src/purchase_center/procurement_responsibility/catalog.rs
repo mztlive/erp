@@ -37,17 +37,20 @@ pub async fn load_procurement_catalog_bundle(
             categories: HashMap::new(),
         });
     }
+
     let sku_list = db.skus().find_by_ids(sku_ids, executor).await?;
     let mut skus = HashMap::with_capacity(sku_list.len());
     for sku in sku_list {
         skus.insert(sku.base.id.clone(), sku);
     }
+
     let product_ids = unique_ids(skus.values().map(|sku| sku.product_id.clone()));
     let product_list = db.products().find_by_ids(&product_ids, executor).await?;
     let mut products = HashMap::with_capacity(product_list.len());
     for product in product_list {
         products.insert(product.base.id.clone(), product);
     }
+
     let revision_ids = unique_ids(
         products
             .values()
@@ -58,8 +61,10 @@ pub async fn load_procurement_catalog_bundle(
     for revision in revision_list {
         revisions.insert(revision.base.id.clone(), revision);
     }
+
     let initial_category_ids = unique_ids(revisions.values().map(|revision| revision.category_id.clone()));
     let categories = load_category_ancestors(db, initial_category_ids, executor).await?;
+
     Ok(ProcurementCatalogBundle {
         skus: skus.into_iter().map(|(id, value)| (id, sku_fact(value))).collect(),
         products: products.into_iter().map(|(id, value)| (id, product_fact(value))).collect(),
@@ -98,6 +103,7 @@ async fn load_category_ancestors(
         for row in rows {
             row_map.insert(row.base.id.clone(), row);
         }
+
         // Deterministic parent collection: iterate sorted keys to guarantee stable per-depth $in order.
         let mut sorted_keys: Vec<String> = row_map.keys().cloned().collect();
         sorted_keys.sort();
@@ -117,6 +123,7 @@ async fn load_category_ancestors(
             }
         }
         next = unique_ids(next.into_iter());
+
         categories.extend(row_map);
         pending = next;
     }

@@ -27,10 +27,12 @@ pub(crate) async fn acceptance_list(
 ) -> Result<PageView<CustomerAcceptanceView>> {
     let filter = acceptance_filter(params)?;
     scope.ensure_current(executor)?;
+
     let prefix = acceptance_prefix(&filter, scope.related_stages("sales_order_id"));
     let collection = db.collection::<CustomerAcceptanceRow>(Database::CUSTOMER_ACCEPTANCES);
     let rows = aggregate::rows(&collection, page_pipeline(prefix.clone(), &filter)?, executor).await?;
     let total = aggregate::count(&collection, doc! {}, prefix, executor).await?;
+
     scope.ensure_current(executor)?;
     let total = i64::try_from(total).map_err(|_| Error::ValidationError("验收总数超过上限".into()))?;
     Ok(PageView {
@@ -173,10 +175,12 @@ mod tests {
             .resolve(&actor, &sales_order_permissions::DETAIL, &mut SnapshotExecutor::default())
             .await
             .unwrap();
+
         let pipeline = acceptance_identity_pipeline("acceptance", &scope);
         assert_eq!(pipeline[0], doc! { "$match": { "id": "acceptance", "deleted_at": 0_i64 } });
         assert_eq!(&pipeline[1..pipeline.len() - 2], scope.related_stages("sales_order_id").as_slice());
         assert_eq!(pipeline.last(), Some(&doc! { "$project": { "_id": 0, "id": 1 } }));
+
         let lookup = pipeline[1].get_document("$lookup").unwrap();
         assert_eq!(lookup.get_document("let").unwrap(), &doc! { "sales_source_id": "$sales_order_id" });
         let source = lookup.get_array("pipeline").unwrap();
@@ -200,11 +204,13 @@ mod tests {
         let filter = acceptance_filter(&params()).unwrap();
         let authorization = vec![doc! {"$match": {"authorized_source": true}}];
         let prefix = acceptance_prefix(&filter, authorization.clone());
+
         assert_eq!(
             prefix[0],
             doc! { "$match": { "deleted_at": 0_i64, "sales_order_id": "sales-one", "status": "POSTED" } }
         );
         assert_eq!(&prefix[1..], authorization.as_slice());
+
         let page = page_pipeline(prefix.clone(), &filter).unwrap();
         assert_eq!(&page[..prefix.len()], prefix.as_slice());
         assert_eq!(page[page.len() - 3], doc! { "$skip": 20_i64 });
@@ -245,6 +251,7 @@ mod tests {
         assert_eq!(view.created_at, 1_699_999_999);
         assert!(view.evidence_attachment_id.is_none());
         assert!(view.reversal_of_acceptance_id.is_none());
+
         projected.remove("id");
         assert!(deserialize_from_document::<CustomerAcceptanceRow>(projected).is_err());
     }

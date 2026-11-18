@@ -87,6 +87,7 @@ fn same_group(frozen: &Option<Vec<CatalogImage>>, prepared: &Option<Vec<CatalogI
         frozen.iter().flatten().filter(|image| image.source_valid != Some(false)).collect::<Vec<_>>();
     let prepared =
         prepared.iter().flatten().filter(|image| image.source_valid != Some(false)).collect::<Vec<_>>();
+
     frozen.len() == prepared.len()
         && frozen.iter().zip(prepared).all(|(before, after)| {
             verified(before) && verified(after) && before.content_fingerprint == after.content_fingerprint
@@ -187,6 +188,7 @@ mod tests {
             let preview = preview(images);
             assert!(CatalogAdoptionPreview::media_blockers(&preview.items[0]).is_empty());
         }
+
         let mut missing = image('a', "asset");
         missing.content_fingerprint = None;
         let preview = preview(Some(vec![missing]));

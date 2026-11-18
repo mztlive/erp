@@ -121,6 +121,7 @@ impl HttpTransport {
             ("timestamp", timestamp.clone()),
             ("sign", signing::sign(&self.settings.channel_no, &timestamp, &self.settings.private_key)),
         ];
+
         let endpoint = |path: &str| format!("{}{path}", self.settings.base_url.trim_end_matches('/'));
         match request {
             Request::Read { path, parameters } => {
@@ -154,11 +155,13 @@ impl Transport for HttpTransport {
         if let Some(remaining) = remaining {
             builder = builder.timeout(remaining.min(Duration::from_secs(self.settings.timeout_seconds)));
         }
+
         let mut response = builder.send().await.map_err(|_| transport_failure(write))?;
         let status = response.status();
         if !status.is_success() {
             return Err(http_failure(status.as_u16(), write));
         }
+
         let mut body = Vec::new();
         while let Some(chunk) = response.chunk().await.map_err(|_| transport_failure(write))? {
             if body.len().saturating_add(chunk.len()) > MAX_RESPONSE_BYTES {
@@ -166,6 +169,7 @@ impl Transport for HttpTransport {
             }
             body.extend_from_slice(&chunk);
         }
+
         decode(&body, write)
     }
 }
@@ -290,6 +294,7 @@ mod tests {
             decode(br#"{"code":3005}"#, true).unwrap_err().class,
             SupplierFailureClass::BusinessRejected
         );
+
         assert_eq!(decode(b"invalid", true).unwrap_err().class, SupplierFailureClass::ResultUnknown);
         assert_eq!(decode(br#"{"code":200}"#, true).unwrap_err().class, SupplierFailureClass::ResultUnknown);
         assert!(

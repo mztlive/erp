@@ -131,11 +131,14 @@ mod tests {
                 "target_version":{"sku_version":2,"sku_revision_id":"sr1","sku_revision_version":1,"product_id":"product1","product_version":2,"product_revision_id":"pr1","product_revision_version":1,"unit_id":"unit1","unit_version":1}
             })).unwrap()
         }
+
         let fallback = row(None).freeze_current();
         assert_eq!(fallback.image_asset_id.as_deref(), Some("product-main"));
         assert_eq!(fallback.specification.as_deref(), Some("容量：350ml"));
+
         let preferred = row(Some("sku-main")).freeze_current();
         assert_eq!(preferred.image_asset_id.as_deref(), Some("sku-main"));
+
         let serialized = serde_json::to_value(preferred).unwrap();
         assert!(serialized.get("product_image_asset_id").is_none());
         assert!(serialized.get("specification_signature").is_none());

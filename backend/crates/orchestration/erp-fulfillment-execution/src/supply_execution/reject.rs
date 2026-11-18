@@ -74,12 +74,14 @@ impl SupplierFulfillmentProcess {
             }
             return Ok(existing.into());
         }
+
         let (history, mut action) = self.domain().prepare_reject(id, &mut order, req, executor).await?;
         let audit = actor.clone().resource_log(
             "supplier_fulfillment.reject",
             "supplier_fulfillment_order",
             id.to_string(),
         )?;
+
         persist_reject(&self.db, &mut order, &history, &mut action, executor).await?;
         persist_log(&self.db, &audit, executor).await?;
         Ok(history.into())

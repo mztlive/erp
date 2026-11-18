@@ -199,6 +199,7 @@ mod tests {
             ],
             "列表投影必须精确等于 Row 字段集合"
         );
+
         assert!(!projection.contains_key("recipient_snapshot"), "交付对象快照不得进入服务履约列表投影");
         assert!(
             !projection.contains_key("recipient_snapshot_fingerprint"),
@@ -209,6 +210,7 @@ mod tests {
             !projection.contains_key("service_location_fingerprint"),
             "服务地点指纹不得进入服务履约列表投影"
         );
+
         assert_eq!(projection.get_i32("purchase_line_sales_allocation_id").unwrap(), 1);
     }
 

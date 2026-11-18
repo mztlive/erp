@@ -28,6 +28,7 @@ impl PurchaseOrderService {
         executor: &mut dyn Executor,
     ) -> Result<PurchaseChangeDraftView> {
         change.ensure_draft_origin(order).map_err(|error| Error::ConflictError(error.to_string()))?;
+
         let revision = self
             .db
             .purchase_order_revisions()
@@ -36,6 +37,7 @@ impl PurchaseOrderService {
             .ok_or_else(|| Error::ConflictError("采购变更基准版本不存在".into()))?;
         let base_lines =
             self.db.purchase_order().list_revision_lines(&change.base_revision_id, executor).await?;
+
         let view = self.change_target_view(change, &revision, &base_lines, executor).await?;
         Ok(view.with_base(&revision, &base_lines))
     }

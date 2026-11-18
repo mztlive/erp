@@ -88,6 +88,7 @@ impl AuthorizationService {
         if (permission == &access_control::POLICY_BUNDLE_EXPORT) != document.is_none() {
             return Err(Error::ValidationError("授权文件入口与文档目标错配".into()));
         }
+
         let boundary = executor
             .boundary()
             .filter(|boundary| boundary.is_snapshot())
@@ -97,6 +98,7 @@ impl AuthorizationService {
             .await?
             .filter(|qualified| qualified.same_role(&required))
             .ok_or_else(|| Error::Forbidden("账号缺少授权文件的同角色完整资格".into()))?;
+
         let source = operations::source(permission).expect("固定文件入口具有组织范围来源");
         // 预览和应用必须沿用同一个组织目标，否则同一文件的审核摘要无法在应用时复验。
         let context = AccessContext {
@@ -107,6 +109,7 @@ impl AuthorizationService {
             as_of: Instant::now(),
         };
         let access = self.company_operation_scope(&context, &source, &required, &qualified, executor).await?;
+
         if !boundary.is_current(executor) {
             return Err(Error::ValidationError("授权文件检查跨越执行阶段".into()));
         }
@@ -140,11 +143,14 @@ mod tests {
         let mut access =
             PolicyBundleAccess { scope, boundary: executor.boundary().unwrap(), valid_until: None };
         access.ensure_current(&mut executor).unwrap();
+
         access.valid_until = Some(Instant::from_unix_secs(1));
         assert!(matches!(access.ensure_current(&mut executor), Err(Error::ConflictError(_))));
+
         access.valid_until = None;
         executor.next_read();
         assert!(matches!(access.ensure_current(&mut executor), Err(Error::ValidationError(_))));
+
         access.boundary = executor.boundary().unwrap();
         access.ensure_current(&mut executor).unwrap();
         executor.restart();

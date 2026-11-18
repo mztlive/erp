@@ -114,6 +114,7 @@ impl SourcePurchaseTerms {
         {
             return Err(Error::ValidationError("供应商起购、限购数量或购买倍数无效".into()));
         }
+
         let mut restrictions = self.restrictions.clone();
         restrictions.sort();
         restrictions.dedup();
@@ -122,6 +123,7 @@ impl SourcePurchaseTerms {
         }) {
             return Err(Error::ValidationError("供应商附加履约限制无效".into()));
         }
+
         if let Some(context) = &self.quote_context {
             context.validate()?;
         }
@@ -202,10 +204,12 @@ mod tests {
             quantity_multiple: Some("1.25".parse().unwrap()),
             ..Default::default()
         };
+
         for quantity in ["2.5", "3.75", "10"] {
             terms.ensure_quantity(quantity.parse().unwrap()).unwrap();
             terms.ensure_orderable_quantity(quantity.parse().unwrap()).unwrap();
         }
+
         for quantity in ["0", "-1", "1.25", "3", "11.25"] {
             assert!(terms.ensure_quantity(quantity.parse().unwrap()).is_err());
             assert!(matches!(
@@ -214,6 +218,7 @@ mod tests {
                     if message == "采购数量不满足供应商起购、限购或整倍数要求"
             ));
         }
+
         let invalid = SourcePurchaseTerms { quantity_multiple: Some("0".parse().unwrap()), ..terms };
         assert!(invalid.validate().is_err());
     }
@@ -231,6 +236,7 @@ mod tests {
         assert!(context.applies_to("1".parse().unwrap(), Some(&"a".repeat(64))));
         assert!(!context.applies_to("100".parse().unwrap(), Some(&"a".repeat(64))));
         assert!(!context.applies_to("1".parse().unwrap(), None));
+
         let terms = SourcePurchaseTerms { quote_context: Some(context), ..Default::default() };
         let restored: SourcePurchaseTerms =
             serde_json::from_str(&serde_json::to_string(&terms).unwrap()).unwrap();
@@ -313,6 +319,7 @@ mod tests {
                 "供应商报价数量、税率或适用地址证据无效",
             ),
         ];
+
         for (terms, expected) in invalid_terms {
             let restored: SourcePurchaseTerms =
                 serde_json::from_value(serde_json::to_value(terms).unwrap()).unwrap();

@@ -131,6 +131,7 @@ mod tests {
         assert_eq!(branches.get_array("total").unwrap().len(), 1);
         assert_eq!(branches.get_array("versions").unwrap().len(), 3);
         assert_eq!(branches.get_array("summary").unwrap().len(), 1);
+
         let normal = page_only_facet(2, 25, doc! { "id": 1 }, doc! { "id": 1 });
         assert_eq!(
             normal.get_document("$facet").unwrap().get_array("items").unwrap()[1]

@@ -62,6 +62,7 @@ async fn read_response(client: &Client, url: Url) -> Result<DownloadedSourceImag
     if response.content_length().is_some_and(|length| length > u64::from(10_u32 * 1024 * 1024)) {
         return Err(image_size_error());
     }
+
     let content_type = response
         .headers()
         .get(reqwest::header::CONTENT_TYPE)

@@ -24,6 +24,7 @@ pub async fn append_assignments(
     if !matches!(writes.instance.subject.subject_kind(), "sales_order" | "purchase_order") {
         return Ok(());
     }
+
     for intent in &writes.create_tasks {
         let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
             continue;
@@ -36,7 +37,6 @@ pub async fn append_assignments(
         append_event(db, assignment_evidence(&writes.instance, execution, assignee.as_str())?, executor)
             .await?;
     }
-
     Ok(())
 }
 
@@ -49,6 +49,7 @@ fn assignment_evidence(
     if execution.process_instance_id.as_ref() != instance.base.id || !execution.has_participant(recipient) {
         return Err(Error::ConflictError("审批授权事件与正式分配不一致".into()));
     }
+
     let payload = match instance.subject.subject_kind() {
         "sales_order" => GrantEventPayload::SalesOrderApprovalAssigned {
             sales_order_id: instance.subject.subject_id().into(),
@@ -125,6 +126,7 @@ mod tests {
                 participant_id: ParticipantId::new("additional-reviewer").unwrap(),
                 name: "另一位复核人".into(),
             });
+
             assert_eq!(
                 assignment_evidence(&subject, &node, "additional-reviewer").unwrap().recipient,
                 "additional-reviewer"
@@ -155,6 +157,7 @@ mod tests {
                 ),
                 _ => panic!("事件类型错配"),
             }
+
             assert!(assignment_evidence(&subject, &node, "candidate").is_err());
             assert!(assignment_evidence(&subject, &execution("other"), "reviewer").is_err());
         }

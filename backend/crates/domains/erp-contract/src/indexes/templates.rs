@@ -23,6 +23,7 @@ pub(super) async fn ensure(db: &Database) -> Result<()> {
             .create_index(index(&format!("uk_{collection}_id"), doc! { "id": 1 }, true))
             .await?;
     }
+
     db.collection::<Document>(TEMPLATES)
         .create_index(index(
             "idx_contract_templates_directory",
@@ -30,6 +31,7 @@ pub(super) async fn ensure(db: &Database) -> Result<()> {
             false,
         ))
         .await?;
+
     db.collection::<Document>(APPLICATIONS)
         .create_indexes([
             index("uk_contract_applications_command", doc! { "applicant_id": 1, "command_id": 1 }, true),

@@ -81,6 +81,7 @@ pub async fn batch_history(
     if batches.is_empty() {
         return Ok(Vec::new());
     }
+
     let ids: Vec<_> = batches.iter().map(|batch| batch.base.id.as_str()).collect();
     let pipeline = vec![
         doc! {"$match":{"batch_id":{"$in":ids},"deleted_at":0_i64}},
@@ -89,6 +90,7 @@ pub async fn batch_history(
     let collection = db.collection::<BatchStates>("supplier_catalog_adoption_batch_items");
     let states: Vec<BatchStates> = aggregate::rows(&collection, pipeline, executor).await?;
     let states: HashMap<_, _> = states.into_iter().map(|entry| (entry.batch_id, entry.states)).collect();
+
     Ok(batches
         .into_iter()
         .map(|batch| {

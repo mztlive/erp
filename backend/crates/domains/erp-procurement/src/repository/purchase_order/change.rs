@@ -54,6 +54,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         let PurchaseChangeSearch { purchase_order_id, status, scope, page, page_size, sort_ascending } =
             search;
         scope.ensure_current(executor)?;
+
         let filter = change_order_filter(purchase_order_id, status);
         let stages = scope.related_stages(filter.clone(), "$purchase_order_id");
         let skip = page.saturating_sub(1).saturating_mul(u64::from(page_size));
@@ -63,9 +64,11 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
             .skip(skip)
             .limit(i64::from(page_size))
             .build();
+
         let collection = self.db.collection::<PurchaseChangeOrder>(PURCHASE_CHANGE_ORDERS);
         let items = aggregate::find(&collection, filter.clone(), options, stages.clone(), executor).await?;
         let total = aggregate::count(&collection, filter, stages, executor).await?;
+
         scope.ensure_current(executor)?;
         let total = i64::try_from(total)
             .map_err(|_| RepositoryError::EntityMetadataOutOfRange("采购变更总数超限"))?;
@@ -156,6 +159,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<super::scope::PurchaseVersion>> {
         scope.ensure_current(executor)?;
+
         let filter = change_order_filter(purchase_order_id, status);
         let rows = aggregate::find(
             &self.db.collection::<super::scope::PurchaseVersion>(PURCHASE_CHANGE_ORDERS),
@@ -169,6 +173,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
             executor,
         )
         .await?;
+
         scope.ensure_current(executor)?;
         Ok(rows)
     }

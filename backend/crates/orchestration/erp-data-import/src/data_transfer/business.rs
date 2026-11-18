@@ -140,6 +140,7 @@ impl BusinessTransfers {
         let mut rows = Vec::new();
         let mut identities = HashSet::new();
         let mut expected = None;
+
         for page in 1..=1000 {
             query["page"] = json!(page);
             query["page_size"] = json!(100);
@@ -147,6 +148,7 @@ impl BusinessTransfers {
             if response["empty_reason"] == "no_scope" {
                 return Err(Error::Forbidden("当前无可导出范围".into()));
             }
+
             let total =
                 response["total"].as_u64().ok_or_else(|| Error::Internal("导出列表缺少总数".into()))?;
             if total > 100_000 || expected.is_some_and(|value| value != total) {
@@ -161,6 +163,7 @@ impl BusinessTransfers {
                 }
                 query["scope_version"] = version.clone();
             }
+
             for row in items {
                 let id = row
                     .get("id")
@@ -172,6 +175,7 @@ impl BusinessTransfers {
                 }
                 rows.push(row.clone());
             }
+
             if u64::try_from(rows.len()).ok() == expected {
                 query["page"] = json!(1);
                 self.check_final_scope(kind, &query, actor, expected).await?;
@@ -246,6 +250,7 @@ impl BusinessTransfers {
                 (name, content, json!({"row_count":rows.len(), "scope_version":input.get("scope_version")}))
             }
         };
+
         let signed = if is_report(kind) {
             content
                 .lines()
@@ -259,6 +264,7 @@ impl BusinessTransfers {
             content.clone()
         };
         let hash = hex::encode(Sha256::digest(signed.as_bytes()));
+
         let mut result = TransferResult::file(
             name,
             "text/csv;charset=utf-8",
@@ -316,6 +322,7 @@ impl TransferHandler for BusinessTransfers {
         if !kind.is_export() {
             return self.prepare_import(kind, input, actor).await;
         }
+
         if !is_report(kind)
             && !matches!(kind, TransferKind::ProductPoolExcel | TransferKind::SupplierQuoteArchive)
         {
@@ -352,6 +359,7 @@ impl TransferHandler for BusinessTransfers {
         if !kind.is_export() {
             return self.authorize_import(kind, input, authorization, actor).await;
         }
+
         let fresh = if matches!(kind, TransferKind::ProductPoolExcel | TransferKind::SupplierQuoteArchive) {
             self.workbook_authorization(kind, input, actor).await?
         } else {
@@ -529,6 +537,7 @@ mod tests {
             assert!(
                 matches!(error, Error::ValidationError(message) if message == "无对象操作及其业务读取必须使用快照事务")
             );
+
             let error = authorized_page(
                 &authorization,
                 &reader,
@@ -562,6 +571,7 @@ mod tests {
         assert!(
             matches!(error, Error::ValidationError(message) if message == "此任务不使用附加资格快照读取")
         );
+
         let supplier = AuditActor::new("supplier".into(), "login".into(), AccountKind::Supplier);
         let error = authorized_page(
             &authorization,
@@ -588,6 +598,7 @@ mod tests {
                 permission
             );
         }
+
         for input in [json!({ "mode": "create" }), json!({ "mode": "invalid" }), json!({})] {
             assert!(matches!(
                 transfer_permission(TransferKind::SupplyBatch, &input),

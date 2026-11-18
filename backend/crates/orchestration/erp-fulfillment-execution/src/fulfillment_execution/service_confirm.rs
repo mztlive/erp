@@ -69,6 +69,7 @@ impl FulfillmentProcess {
             &self.fingerprint_key,
             &ServiceCryptoAdapter(self.sensitive_data.as_ref()),
         )?;
+
         persist_confirmed_service_fulfillment(
             &self.db,
             &self.task_identity,
@@ -115,6 +116,7 @@ async fn persist_confirmed_service_fulfillment(
     let db = db.clone();
     let task_identity = task_identity.clone();
     let client = db.client().clone();
+
     let confirmed = client
         .with_transaction(move |executor| {
             Box::pin(async move {
@@ -131,6 +133,7 @@ async fn persist_confirmed_service_fulfillment(
             })
         })
         .await;
+
     let confirmed = erp_audit::execution::finish_attempt(
         confirmed,
         &attempt_context,
@@ -313,13 +316,16 @@ async fn execute_confirmation_steps<P: ServiceConfirmationPort>(
     executor: &mut dyn Executor,
 ) -> Result<P::Record> {
     port.authorize(executor).await?;
+
     let mut record = port.load(executor).await?;
     let purchase = port.purchase(&record, executor).await?;
     port.allocation(&record, &purchase, executor).await?;
     port.evidence(executor).await?;
+
     port.pending(executor).await?;
     port.confirm(&mut record, executor).await?;
     port.task(&record, executor).await?;
+
     if port.is_acceptance_eligible(&record) {
         port.cost(&record, &purchase, executor).await?;
         port.acceptance(&purchase, executor).await?;
@@ -661,6 +667,7 @@ mod confirmation_order_tests {
                 fail: Some(step),
                 calls: Mutex::new(Vec::new()),
             };
+
             let error =
                 execute_confirmation(&port, &audit_context(), &port, &mut executor).await.unwrap_err();
             assert!(matches!(error, Error::ConflictError(message) if message == format!("failed {step}")));
@@ -677,6 +684,7 @@ mod confirmation_order_tests {
             fail: None,
             calls: Mutex::new(Vec::new()),
         };
+
         assert!(!execute_confirmation(&port, &audit_context(), &port, &mut executor).await.unwrap());
         assert_eq!(
             *port.calls.lock().unwrap(),

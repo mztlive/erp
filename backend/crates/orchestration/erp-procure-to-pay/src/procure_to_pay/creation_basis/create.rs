@@ -144,6 +144,7 @@ impl PurchaseOrderProcess {
         )?;
         let authorization = self.authorization.clone();
         let sales_order_id = parse_basis_sales_order_id(&req.basis_id)?;
+
         let transaction_result = self
             .basis_transaction(
                 BasisTransactionInput {
@@ -157,6 +158,7 @@ impl PurchaseOrderProcess {
                 authorization,
             )
             .await;
+
         match transaction_result {
             Ok(result) => Ok(result),
             Err(error) => recover_command(
@@ -184,11 +186,11 @@ impl PurchaseOrderProcess {
         } = input;
         let db = self.db.clone();
         let binding_rbac = rbac.clone();
-
         let transaction_actor = actor.clone();
         let transaction_req = req.clone();
         let transaction_fingerprint = request_fingerprint.to_string();
         let transaction_receipt_identity = receipt_identity.clone();
+
         db.client()
             .clone()
             .with_transaction(move |executor| {
@@ -245,6 +247,7 @@ async fn create_from_basis_apply(
     {
         return Ok(result);
     }
+
     let task = load_owned_open_procurement_task(
         db,
         rbac,
@@ -264,8 +267,10 @@ async fn create_from_basis_apply(
     )?
     .clone();
     ensure_request_scope(command.req, &selected.scope)?;
+
     order.advance_procurement_guard(command.actor.id())?;
     db.sales_orders().update(&mut order, executor).await?;
+
     let (latest_groups, latest_facts) =
         basis_groups_and_facts(db, &order, task.responsibility_scope_ids(), executor).await?;
     let latest = latest_groups
@@ -273,6 +278,7 @@ async fn create_from_basis_apply(
         .find(|group| group.scope == selected.scope)
         .ok_or_else(procurement_quantity_changed)?;
     let selected_lines = validate_requested_quantities(command.requested_lines, &latest)?;
+
     let input = VerifiedBasisInput {
         sales_order: &order,
         group: &latest,
@@ -330,10 +336,13 @@ pub async fn persist_basis_draft(
 ) -> Result<CreatePurchaseOrderResult> {
     let PreparedBasisDraft { order, submission, lines } =
         prepare_basis_draft(db, ports, rbac, input, command, executor).await?;
+
     reserve_selected_quotes(db, &order, &lines, executor).await?;
+
     let write =
         PreparedDraftWrite { order: &order, submission: &submission, lines: &lines, actor: command.actor };
     let document = write_prepared_draft(db, ports, &write, executor).await?;
+
     let purchase_order_id = order.base.id.clone();
     let bundle = CreatedDraftBundle {
         order,
@@ -353,6 +362,7 @@ pub async fn persist_basis_draft(
         executor,
     )
     .await?;
+
     write_creation_receipt(
         db,
         command,
@@ -390,8 +400,10 @@ async fn prepare_basis_draft(
         executor,
     )
     .await?;
+
     let warehouse_region = target_warehouse_region(db, target_warehouse_id.as_ref(), executor).await?;
     let judgements = judge_selected_delivery(input.selected_lines, &group.scope, warehouse_region.as_ref())?;
+
     let mut order = prepare_basis_order(
         db,
         input.sales_order,
@@ -405,6 +417,7 @@ async fn prepare_basis_draft(
     order.record_sourcing_delivery(group.scope.price_basis, judgements);
     let (submission, lines) = prepare_basis_submission(db, &order, input, executor).await?;
     order.attach_draft_submission(submission.base.id.clone().into())?;
+
     ports.access(db.clone()).ensure_create_and_submit(command.actor, &order, executor).await?;
     Ok(PreparedBasisDraft { order, submission, lines })
 }
@@ -475,6 +488,7 @@ async fn prepare_basis_submission(
         executor,
     )
     .await?;
+
     let submission_id = PurchaseOrderSubmissionId::new(submission.base.id.clone());
     let mut submission_lines = Vec::with_capacity(computed.lines.len());
     for (index, line) in computed.lines.iter().enumerate() {
@@ -524,10 +538,12 @@ pub(in crate::procure_to_pay) async fn write_prepared_draft(
     let mut document = new_registered_document(&write.order.base.id, DocumentType::PurchaseOrder, "")
         .map_err(crate::Error::from)?;
     attach_published_binding(&mut document, binding)?;
+
     db.purchase_orders().create(write.order, executor).await?;
     db.business_documents().create(&document, executor).await?;
     db.purchase_order_submissions().create(write.submission, executor).await?;
     db.purchase_order().create_draft_submission_lines(write.lines, executor).await?;
+
     sync_procurement_tasks_for_sales_order(
         db,
         ports.finance_responsibility.as_ref(),
@@ -676,6 +692,7 @@ async fn resolve_target_warehouse(
             if !warehouse.is_active() {
                 return Err(Error::ValidationError("目标仓库已停用，请重新选择后再创建采购单".to_string()));
             }
+
             let handler_user_id =
                 warehouse.fulfillment_handler(WarehouseFulfillmentOperation::Receipt).map_err(|_| {
                     Error::ValidationError("目标仓库未配置合格入库经办人，请先完成仓库责任配置".to_string())
@@ -787,6 +804,7 @@ pub(in crate::procure_to_pay) async fn replay_creation(
     if receipt_identity.actor_id != actor.id() {
         return Err(Error::ConflictError("采购创建回执与操作人不一致".into()));
     }
+
     let order = db
         .purchase_orders()
         .find_by_id(&receipt.payload().purchase_order_id, executor)
@@ -795,6 +813,7 @@ pub(in crate::procure_to_pay) async fn replay_creation(
     if order.base.id != receipt.payload().purchase_order_id {
         return Err(Error::ConflictError("采购创建幂等收据与当前采购单不一致".to_string()));
     }
+
     authorization
         .require(
             actor,
@@ -890,6 +909,7 @@ mod tests {
                 lock_version: 4,
             },
         ];
+
         let sequences = SourcingEventSequencePlan::new(receipts.len()).unwrap();
         let mut logs = Vec::new();
         for (receipt, sequence) in receipts.iter().zip(sequences.orders()) {
@@ -898,10 +918,12 @@ mod tests {
             logs.push(creation_audit(&actor, command_id, receipt, sequence).unwrap());
         }
         logs.push(sourcing_audit(&actor, command_id, "so-source", "SO-001", sequences.main()).unwrap());
+
         let logs = logs.iter().map(|log| prepare_business_log(log).unwrap()).collect::<Vec<_>>();
         let encoded = serde_json::to_string(&logs).unwrap();
         let decoded: Vec<AuditLog> = serde_json::from_str(&encoded).unwrap();
         let events = decoded.iter().map(|log| log.structured_event.as_ref().unwrap()).collect::<Vec<_>>();
+
         assert_eq!(
             events.iter().map(|event| event.event_sequence.get()).collect::<Vec<_>>(),
             [1, 2, 3, 4, 5]
@@ -951,6 +973,7 @@ mod tests {
             submit.structured_event.as_ref().unwrap().command_id,
             created.structured_event.as_ref().unwrap().command_id
         );
+
         let stock_only = SourcingEventSequencePlan::new(0).unwrap();
         let batch =
             sourcing_audit(&actor, "stock-command", "so-source", "SO-ONLY", stock_only.main()).unwrap();

@@ -32,6 +32,7 @@ impl SupplierCatalogAdoptionProcess {
             {
                 self.renew_batch_work(batch, token, actor).await?;
             }
+
             if !row.editable() || row.status == BatchItemStatus::Excluded {
                 continue;
             }
@@ -41,6 +42,7 @@ impl SupplierCatalogAdoptionProcess {
                 Err(error) if row_matching_error(&error) => continue,
                 Err(error) => return Err(error),
             };
+
             let key = row.source.product_id.clone();
             if anchors.get(&key).is_some_and(|existing| existing.target.product_id != target.product_id) {
                 ambiguous.insert(key.clone());
@@ -51,6 +53,7 @@ impl SupplierCatalogAdoptionProcess {
                 target,
             });
         }
+
         anchors.retain(|key, _| !ambiguous.contains(key));
         Ok(anchors)
     }
@@ -86,6 +89,7 @@ impl SupplierCatalogAdoptionProcess {
     ) -> Result<AdoptionResolution> {
         let Some(anchor) = anchor else { return self.resolve_item(item, mapping, actor, executor).await };
         self.revalidate_group_anchor(item, anchor, command, actor, executor).await?;
+
         let mut resolution = self
             .resolve_item_with_parent(item, mapping, Some(&anchor.target.product_id), actor, executor)
             .await?;

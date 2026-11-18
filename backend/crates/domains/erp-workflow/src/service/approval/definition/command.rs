@@ -124,6 +124,7 @@ impl ApprovalDefinitionService {
         if !self.authorization.has_permission(actor, permission, executor).await? {
             return Err(Error::Forbidden("账号缺少审批定义动作资格".into()));
         }
+
         let process_kind = self
             .db
             .bpm_workflow()
@@ -162,6 +163,7 @@ impl ApprovalDefinitionService {
         if !definition_command_may_have_committed(&error) {
             return Err(error);
         }
+
         for attempt in 0..DEFINITION_COMMAND_RECOVERY_ATTEMPTS {
             let recovered = self.recover_definition_attempt(permission, actor, &identity, &expectation).await;
             match recovered {
@@ -240,8 +242,10 @@ async fn replay_current_receipt(
     else {
         return Ok(None);
     };
+
     receipt.reconcile_identity(identity).map_err(map_model_error)?;
     let result_ref = DefinitionCommandResultRef::parse(&receipt.result_ref)?;
+
     let graph = db
         .bpm_workflow()
         .load_definition_graph(&ApprovalProcessDefinitionId::new(result_ref.definition_id.clone()), session)
@@ -276,6 +280,7 @@ pub(super) async fn replay_prepared_definition_receipt(
     if let Some(view) = replay_current_receipt(db, &identity.current, expectation, session).await? {
         return Ok(Some(view));
     }
+
     let Some(legacy) = identity.legacy.as_ref() else {
         return Ok(None);
     };
@@ -294,7 +299,9 @@ async fn replay_legacy_receipt(
     else {
         return Ok(None);
     };
+
     receipt.reconcile(&legacy.payload_digest).map_err(map_model_error)?;
+
     let graph = db
         .bpm_workflow()
         .load_definition_graph(&ApprovalProcessDefinitionId::new(receipt.result_ref.clone()), session)
@@ -547,6 +554,7 @@ pub(super) fn lock_command_identity(
             .field(CommandPayloadField::Text(actor_id)),
     )
     .map_err(map_identity_error)?;
+
     let proof = match command_kind {
         ApprovalCommandKind::PublishDefinition => LegacyDefinitionProof::Published {
             definition_id: definition_id.to_string(),
@@ -631,6 +639,7 @@ impl DefinitionCommandResultRef {
         if payload.len() <= length || !payload.is_char_boundary(length) {
             return Err(idempotency_payload_conflict());
         }
+
         let definition_id = &payload[..length];
         let version = payload[length..]
             .strip_prefix(':')
@@ -1165,6 +1174,7 @@ mod tests {
                 .ensure_matches(&graph, &DefinitionResultExpectation::DefinitionId("other".to_string()),)
                 .is_err()
         );
+
         let mut drifted = graph.clone();
         drifted.definition.base.version += 1;
         assert!(

@@ -221,6 +221,7 @@ mod tests {
         record_initial_failure(&mut task, &error).unwrap();
         assert_eq!(task.attempt_count, 1);
         assert_eq!(task.last_attempt_summary.as_deref(), Some("TOKEN_EXPIRED: 授权已过期"));
+
         error.summary = "长".repeat(1024);
         record_initial_failure(&mut task, &error).unwrap();
         assert_eq!(task.last_attempt_summary.as_ref().unwrap().chars().count(), 512);

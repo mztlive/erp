@@ -38,12 +38,14 @@ pub(crate) async fn booklet_list_snapshot(
     params.validate()?;
     let scope = access.resolve(actor, &sales_selection::BOOKLET_LIST, executor).await?;
     ensure_version(params.scope_version.as_deref(), &scope.version())?;
+
     let orgs =
         expanded_orgs(access, params.org_unit_ids.as_deref(), params.include_descendants, executor).await?;
     let mut effective = params.clone();
     effective.org_unit_ids = orgs;
     let service = SalesSelectionService::new(db.clone(), access.authorization());
     let page = service.list_booklets_with(&effective, &scope, executor).await?;
+
     let page = named_owner_page(
         db,
         page,
@@ -52,6 +54,7 @@ pub(crate) async fn booklet_list_snapshot(
         executor,
     )
     .await?;
+
     scope.validate(executor).await?;
     Ok(SelectionBookletListView { page, scope_version: scope.version(), no_scope: false })
 }
@@ -81,12 +84,14 @@ pub(crate) async fn proposal_list_snapshot(
     params.validate()?;
     let scope = access.resolve(actor, &sales_selection::PROPOSAL_LIST, executor).await?;
     ensure_version(params.scope_version.as_deref(), &scope.version())?;
+
     let orgs =
         expanded_orgs(access, params.org_unit_ids.as_deref(), params.include_descendants, executor).await?;
     let mut effective = params.clone();
     effective.org_unit_ids = orgs;
     let service = SalesSelectionService::new(db.clone(), access.authorization());
     let page = service.proposal_list_with(&effective, &scope, executor).await?;
+
     let page = named_owner_page(
         db,
         page,
@@ -95,6 +100,7 @@ pub(crate) async fn proposal_list_snapshot(
         executor,
     )
     .await?;
+
     scope.validate(executor).await?;
     Ok(SelectionProposalListView { page, scope_version: scope.version(), no_scope: false })
 }
@@ -173,6 +179,7 @@ async fn named_owner_page<T, R>(
 ) -> Result<PageView<R>> {
     let ids: Vec<String> = page.items.iter().map(&owner_id).collect();
     let names = db.accounts().names_by_ids(&ids, executor).await?;
+
     let items = page
         .items
         .into_iter()

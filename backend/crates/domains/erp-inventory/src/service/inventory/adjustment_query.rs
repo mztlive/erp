@@ -44,6 +44,7 @@ impl InventoryService {
     ) -> Result<InventoryListPage<StockAdjustmentView>> {
         params.validate()?;
         let query = params.normalized()?;
+
         let service = self.clone();
         let actor = actor.clone();
         self.db
@@ -67,6 +68,7 @@ impl InventoryService {
         if !authorization.actor_is_active() {
             return Err(Error::Forbidden("当前账号无库存调整读取权限".to_string()));
         }
+
         let id_in = people_object_ids(self.people_facts.as_ref(), &query, executor).await?;
         let search = super::search::sku_filter(
             self.catalog_facts.as_ref(),
@@ -79,6 +81,7 @@ impl InventoryService {
             self.db.inventory().adjustment_search(search, query.adjustment_id.as_deref(), executor).await?;
         let scope_version = query.scope_version.take();
         let filter = adjustment_filter(query, search, id_in);
+
         let page = self
             .db
             .stock_adjustments()
@@ -88,6 +91,7 @@ impl InventoryService {
                 executor,
             )
             .await?;
+
         let ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
         let people = self.people_facts.people_by_adjustment_ids(&ids, executor).await?;
         let meta = authorization.meta(InventoryAction::AdjustmentList);
@@ -95,6 +99,7 @@ impl InventoryService {
         let mut items =
             page.items.into_iter().map(|row| adjustment_row_view(row, &people)).collect::<Vec<_>>();
         self.enrich_adjustment_people_names(&mut items, executor).await?;
+
         let result = InventoryListPage::from_page(
             PageView { items, total: page.total, page: filter.page, page_size: filter.page_size },
             meta,
@@ -151,6 +156,7 @@ impl InventoryService {
             Error::Forbidden(_) | Error::NotFound(_) => Error::NotFound("库存调整单不存在".into()),
             other => other,
         })?;
+
         self.load_stock_adjustment(id, executor).await
     }
 
@@ -431,6 +437,7 @@ mod people_projection_tests {
                 Arc::new(FailClosedAuditPort),
                 Arc::new(FailClosedAdjustmentPeopleFactsPort),
             );
+
             let result = service
                 .readable_stock_adjustment("adjustment", &actor, &mut SnapshotExecutor::default())
                 .await;

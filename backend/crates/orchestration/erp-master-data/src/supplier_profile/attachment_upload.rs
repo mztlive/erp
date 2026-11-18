@@ -108,11 +108,13 @@ mod tests {
                     .await,
                 Err(Error::Forbidden(_))
             ));
+
             let service = service(&[grant]);
             service
                 .attachment_upload_qualification(&actor, &entry, &mut SnapshotExecutor::default())
                 .await
                 .unwrap();
+
             assert!(matches!(
                 service.attachment_upload_qualification(&actor, &entry, &mut ReadExecutor::default()).await,
                 Err(Error::ValidationError(_))

@@ -50,6 +50,7 @@ impl SupplierOrderTrackingProcess {
                         .find_by_id(&observation_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商订单观察不存在".into()))?;
+
                     apply_current_observation(
                         &MongoObservationApplication { db: &db, task_identity: &task_identity },
                         &mut tracking,
@@ -115,6 +116,7 @@ async fn apply_erp_deliveries(
         // 入仓只记录供应商运输结果，实际收货和自有库存继续由仓库确认。
         return Ok(complete);
     }
+
     if observation.topology.is_some()
         || !tracking.applied_shipments.is_empty()
         || observation.shipments.iter().flatten().any(|shipment| shipment.quantity_lines.is_some())
@@ -147,6 +149,7 @@ async fn apply_complete_deliveries(
         .deliveries()
         .find_for_purchase(&PurchaseOrderId::new(&tracking.purchase_order_id), &ids, executor)
         .await?;
+
     let mut covered = HashSet::new();
     for mut delivery in deliveries {
         let lines = db
@@ -166,8 +169,10 @@ async fn apply_complete_deliveries(
         if ids.iter().any(|id| !covered.insert(id.clone())) {
             return Err(Error::BusinessLogicError("同一供应商订货行关联多张完整发货单，请核对数量".into()));
         }
+
         apply_one_delivery(db, task_identity, tracking, observation, &mut delivery, lines, executor).await?;
     }
+
     if observation.proves_dispatch() && covered.len() != tracking.source_lines.len() {
         return Err(Error::BusinessLogicError("来源发货结果尚未匹配全部 ERP 发货行，请核对采购分配".into()));
     }
@@ -231,6 +236,7 @@ async fn apply_one_delivery(
     if delivery.delivery_type != DeliveryType::SupplierDirect || delivery.status == DeliveryState::Reversed {
         return Err(Error::BusinessLogicError("供应商结果不能改写仓发或已冲正发货单".into()));
     }
+
     let before = delivery.tracking_entries.clone();
     let entries = tracking_entries(tracking, observation)?
         .into_iter()
@@ -238,6 +244,7 @@ async fn apply_one_delivery(
         .collect();
     delivery.merge_observed_tracking(entries)?;
     delivery.ensure_tracking_lines(&lines)?;
+
     let complete_coverage = observation.proves_complete_coverage();
     if delivery.status == DeliveryState::Draft && observation.proves_dispatch() && complete_coverage {
         let actor = delegated_actor(db, &tracking.purchase_order_id, executor).await?;
@@ -303,6 +310,7 @@ fn tracking_entries(
     if shipments.len() > 1 && shipments.iter().any(|shipment| shipment.line_ids.is_empty()) {
         return Err(Error::BusinessLogicError("多个包裹未提供明细关联，请核对后登记物流".into()));
     }
+
     let mut entries = Vec::new();
     for shipment in shipments {
         let Some(number) = &shipment.tracking_no else {
@@ -417,6 +425,7 @@ mod tests {
         let mut observation = observation(&tracking);
         observation.shipments = Some(vec![shipment(&[], "SF-1"), shipment(&[], "SF-2")]);
         assert!(tracking_entries(&tracking, &observation).is_err());
+
         observation.shipments = Some(vec![shipment(&[], "SF-1")]);
         assert_eq!(tracking_entries(&tracking, &observation).unwrap().len(), 2);
     }
@@ -427,6 +436,7 @@ mod tests {
         tracking.latest_observation_id = Some(observation.base.id.clone());
         observation.cancellation = Some(CancelStatus::Canceled);
         assert!(tracking.ensure_current_observation(&observation).is_ok());
+
         observation.cancellation = None;
         observation.refund = Some(RefundStatus::Refunded);
         assert!(tracking.ensure_current_observation(&observation).is_err());

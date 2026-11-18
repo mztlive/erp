@@ -255,12 +255,14 @@ impl PurchaseReturnOrder {
         if self.stable.status().is_terminal() {
             return Err(Error::from("已完成或作废的退货单不可编辑"));
         }
+
         if let Some(return_mode) = update.return_mode {
             self.return_mode = return_mode;
         }
         if let Some(status) = update.status {
             self.stable.status = status;
         }
+
         self.stable.touch(updated_by);
         Ok(())
     }
@@ -361,6 +363,7 @@ mod tests {
             serde_json::to_string(&PurchaseReturnStatus::PendingExecution).unwrap(),
             "\"pending_execution\""
         );
+
         assert_eq!(ReturnMode::CompanyWarehouseToSupplier.label(), "公司仓退供应商");
         assert_eq!(PurchaseReturnStatus::Returned.label(), "已退货");
         assert!(PurchaseReturnStatus::Voided.is_terminal());

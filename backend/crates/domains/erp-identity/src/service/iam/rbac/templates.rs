@@ -56,6 +56,7 @@ impl RbacService {
             (permissions_for_actor(&enforcer, actor)?, self.loaded_policy_revision.load(Ordering::Acquire))
         };
         let can_create = permissions.covers_one(&admin::ROLE_CREATE_ROLE);
+
         let mut templates = Vec::new();
         for template in builtin_role_templates()? {
             let role = self.db.roles().find_by_id_including_deleted(&template.id, executor).await?;
@@ -69,6 +70,7 @@ impl RbacService {
                 existing_name: role.map(|role| role.name),
             });
         }
+
         if self.current_policy_revision().await? != policy_version {
             return Err(Error::ConflictError("权限配置已变化，请重新加载岗位模板".into()));
         }
@@ -97,6 +99,7 @@ impl RbacService {
         if authorized.policy_revision != request.expected_policy_version {
             return Err(Error::ConflictError("权限配置已变化，请重新加载岗位模板后生成".into()));
         }
+
         let service = Arc::clone(self);
         self.run_authorized_policy_transaction(authorized.policy_revision, move |executor| {
             Box::pin(async move {
@@ -123,10 +126,12 @@ impl RbacService {
         if let Some(role) = existing {
             return Ok(GeneratedBuiltinRole { id: role.base.id, name: role.name, created: false, state });
         }
+
         let mut data = RoleData::new(template.name).with_description(template.description);
         data.workbenches = RoleWorkbench::recommended(&template.id);
         let role = Role::new(RoleId::parse(template.id)?, data)?;
         let audit = self.audit.resource_log(actor.clone(), "role.create", "role", role.base.id.clone())?;
+
         self.db.roles().create(&role, executor).await?;
         self.policy_store
             .replace_role_permissions(

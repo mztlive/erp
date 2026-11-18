@@ -72,6 +72,7 @@ impl SupplierCatalogCallbackProcess {
                 },
             };
             count += 1;
+
             if let Err(error) = self.process(&mut receipt).await {
                 let summary = safe_error(&error);
                 if self.defer(&receipt, &summary).await.is_err() {
@@ -94,6 +95,7 @@ impl SupplierCatalogCallbackProcess {
         if connector.callbacks().is_none() || connector.connection_id().as_ref() != connection.base.id {
             return Err(Error::Forbidden("商品回调协议绑定不属于当前连接".into()));
         }
+
         let actor = catalog_refresh_actor(&self.db, &connection.base.id).await?;
         self.authorize(&actor).await?;
         Ok(Context { connection, connector, actor })
@@ -118,9 +120,11 @@ impl SupplierCatalogCallbackProcess {
                 Some(sku) => Some(query::query(&context, receipt, sku, &self.registry).await?),
                 None => None,
             };
+
             self.authorize(&context.actor).await?;
             *receipt = self.save_step(receipt, &context, update).await?;
         }
+
         *receipt = self.settle(receipt).await?;
         Ok(())
     }

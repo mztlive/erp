@@ -206,6 +206,7 @@ fn conditions_with(
     if output == Output::Share && !allows_shares(permission) {
         return Err(Error::ValidationError("此权限不允许份额输出".into()));
     }
+
     let sources = sources(permission)?;
     if matches!(
         permission.resource(),
@@ -213,6 +214,7 @@ fn conditions_with(
     ) {
         return refund_conditions(&sources, qualifies, scopes);
     }
+
     let ledger = output == Output::Object && needs_ledger(permission);
     let ledger_allowed = qualifies(&[permission.clone(), policy_permission::FINANCE_LEDGER_READ]);
     let mut partitions = Vec::new();
@@ -223,10 +225,12 @@ fn conditions_with(
         if permission.resource() == "payable_account" && mask.count_ones() != 1 {
             continue;
         }
+
         let (present, absent): (Vec<_>, Vec<_>) =
             sources.iter().enumerate().partition(|(index, _)| mask & (1 << index) != 0);
         let present = present.into_iter().map(|(_, source)| *source).collect::<Vec<_>>();
         let absent = absent.into_iter().map(|(_, source)| *source).collect::<Vec<_>>();
+
         let rules = present
             .iter()
             .filter(|source| output == Output::Object || share_source(permission, **source))
@@ -343,6 +347,7 @@ impl Partition {
                 present: self.present.contains(source),
             });
         }
+
         if let Some((source, partitions)) = &self.nested {
             rules.push(AccessRule::Related {
                 relation: RelationKey::parse(source.relation())?,
@@ -514,23 +519,27 @@ mod tests {
         let qualified = qualifications(&permission, true);
         let scopes = scopes();
         let grants = BTreeSet::new();
+
         let mut object = root(&permission, vec![child("s1", "actor")]);
         assert!(check(&permission, &qualified, &object, &scopes, &grants).unwrap());
         object = root(&permission, vec![child("s1", "other")]);
         assert!(!check(&permission, &qualified, &object, &scopes, &grants).unwrap());
         let grants = BTreeSet::from([(ResourceKind::SalesOrder, "s1".into())]);
         assert!(check(&permission, &qualified, &object, &scopes, &grants).unwrap());
+
         object.relations.get_mut(&RelationKey::parse("sales_source").unwrap()).unwrap().objects[0].owner_id =
             FactValue::Missing;
         assert!(matches!(
             check(&permission, &qualified, &object, &scopes, &grants),
             Err(Error::ValidationError(_))
         ));
+
         object = root(&permission, vec![child("s1", "actor"), child("s2", "other")]);
         assert!(!check(&permission, &qualified, &object, &scopes, &grants).unwrap());
         object.relations.get_mut(&RelationKey::parse("sales_source").unwrap()).unwrap().objects.pop();
         assert!(!check(&permission, &qualified, &object, &scopes, &grants).unwrap());
         assert!(check(&permission, &qualified, &root(&permission, vec![]), &scopes, &grants).unwrap());
+
         let split = QualifiedPermissions::test_grants(&[
             ("cost", std::slice::from_ref(&permission)),
             ("sales", &[sales_order::LIST]),
@@ -546,6 +555,7 @@ mod tests {
         assert!(partitions.iter().any(|partition| partition.matches(&object).unwrap()
             && partition.allows(&context(&permission), &object, &BTreeSet::new()).unwrap()));
         assert!(!check(&permission, &qualified, &object, &scopes(), &BTreeSet::new()).unwrap());
+
         let create = cost::ENTRY_CREATE;
         let object = root(&create, vec![child("s1", "actor")]);
         assert!(
@@ -576,6 +586,7 @@ mod tests {
                 RelatedObjects { expected_ids: ["p1".into()].into(), objects: vec![child.clone()] },
             );
             assert!(check(&permission, &qualified, &object, &scopes(), &BTreeSet::new()).unwrap());
+
             object
                 .relations
                 .get_mut(&RelationKey::parse(source.relation()).unwrap())
@@ -598,6 +609,7 @@ mod tests {
         let shares = conditions(&permission, &qualified, &scopes(), Output::Share).unwrap();
         assert!(shares.iter().any(|partition| partition.matches(&object).unwrap()
             && partition.allows(&context(&permission), &object, &BTreeSet::new()).unwrap()));
+
         let ledger = qualifications(&permission, true);
         assert!(!check(&permission, &ledger, &object, &scopes(), &BTreeSet::new()).unwrap());
         let zero = root(&permission, vec![]);
@@ -607,6 +619,7 @@ mod tests {
             ("ledger", &[policy_permission::FINANCE_LEDGER_READ]),
         ]);
         assert!(!check(&permission, &split, &zero, &scopes(), &BTreeSet::new()).unwrap());
+
         let mut missing = zero;
         missing.relations.clear();
         assert!(matches!(
@@ -630,6 +643,7 @@ mod tests {
                 );
             }
         }
+
         let permission = purchase_payment_request::CREATE;
         assert!(matches!(
             conditions(&permission, &qualifications(&permission, false), &scopes(), Output::Share),
@@ -651,10 +665,12 @@ mod tests {
             RelatedObjects { expected_ids: [origin.id.clone()].into(), objects: vec![origin] },
         );
         assert!(check(&permission, &qualified, &object, &scopes(), &BTreeSet::new()).unwrap());
+
         assert!(
             !check(&permission, &qualifications(&permission, false), &object, &scopes(), &BTreeSet::new())
                 .unwrap()
         );
+
         object.owner_id = FactValue::Known(Some("other".into()));
         assert!(!check(&permission, &qualified, &object, &scopes(), &BTreeSet::new()).unwrap());
         object.owner_id = FactValue::Known(Some("actor".into()));
@@ -692,6 +708,7 @@ mod tests {
                 RelatedObjects { expected_ids: [origin.id.clone()].into(), objects: vec![origin] },
             );
             assert!(check(&permission, &qualified, &object, &scopes(), &BTreeSet::new()).unwrap());
+
             let missing_source = QualifiedPermissions::test_grants(&[(
                 "submit",
                 &[permission.clone(), policy_permission::FINANCE_LEDGER_READ],
@@ -703,8 +720,10 @@ mod tests {
                 ("ledger", &[policy_permission::FINANCE_LEDGER_READ]),
             ]);
             assert!(!check(&permission, &split_ledger, &object, &scopes(), &BTreeSet::new()).unwrap());
+
             object.owner_id = FactValue::Known(Some("other".into()));
             assert!(!check(&permission, &qualified, &object, &scopes(), &BTreeSet::new()).unwrap());
+
             object.owner_id = FactValue::Known(Some("actor".into()));
             let source = &mut object.relations.get_mut(&key).unwrap().objects[0];
             let nested = source.relations.get_mut(&RelationKey::parse("sales_source").unwrap()).unwrap();

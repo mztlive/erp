@@ -148,6 +148,7 @@ impl QueryFilter for PurchaseOrderFilter {
         if let Some(ids) = &self.owner_user_ids {
             filter.insert("owner_user_id", doc! { "$in": ids.as_slice() });
         }
+
         if !self.keyword_sales_order_ids.is_empty() || !self.keyword_supplier_ids.is_empty() {
             let mut number = Document::new();
             insert_literal_regex_filter(&mut number, "purchase_no", self.purchase_no.as_deref());
@@ -162,6 +163,7 @@ impl QueryFilter for PurchaseOrderFilter {
         } else {
             insert_literal_regex_filter(&mut filter, "purchase_no", self.purchase_no.as_deref());
         }
+
         if let Some(sales_order_id) = &self.sales_order_id {
             filter.insert("sales_order_id", sales_order_id.to_string());
         }
@@ -250,6 +252,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         if deduped.is_empty() {
             return Ok(HashMap::new());
         }
+
         let rows = mongo_ops::find_many(
             &self
                 .db
@@ -259,6 +262,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
             executor,
         )
         .await?;
+
         let mut map = HashMap::new();
         for row in rows {
             if !row.purchase_no.trim().is_empty() {
@@ -381,6 +385,7 @@ impl PurchaseOrderRepositoryExt for persistence_core::Repository<'_, PurchaseOrd
             .limit(filter.limit())
             .projection(purchase_order_projection())
             .build();
+
         let collection = self.collection().clone_with_type::<PurchaseOrderRow>();
         let items = aggregate::find(
             &collection,
@@ -397,7 +402,6 @@ impl PurchaseOrderRepositoryExt for persistence_core::Repository<'_, PurchaseOrd
             executor,
         )
         .await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 
@@ -551,11 +555,13 @@ mod tests {
                 doc! { "purchase_no": { "$regex": r"XS\.1", "$options": "i" } }.into(),
             ]
         );
+
         filter.keyword_sales_order_ids.clear();
         filter.keyword_supplier_ids.clear();
         let unmatched_references = filter.to_doc();
         assert!(!unmatched_references.contains_key("$or"));
         assert!(unmatched_references.contains_key("purchase_no"));
+
         filter.purchase_no = None;
         assert!(!filter.to_doc().contains_key("purchase_no"));
     }
@@ -609,7 +615,6 @@ mod tests {
     #[test]
     fn filter_omits_absent_fields() {
         let filter = PurchaseOrderFilter::default();
-
         assert_eq!(filter.to_doc(), doc! { "deleted_at": 0i64 });
     }
 }

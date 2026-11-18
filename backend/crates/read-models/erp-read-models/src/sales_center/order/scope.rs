@@ -113,11 +113,13 @@ impl SalesListRead for SalesOrderReadService {
     ) -> Result<SalesListSnapshot<Self::Context>> {
         let access = SalesAccess::new(self.db.clone(), self.authorization.clone());
         let (context, scope) = access.resolve(actor, &sales_order_permissions::LIST, executor).await?;
+
         let org_ids = requested_business_org_units(&access, params, executor).await?;
         let search = self.keyword_search(params.q.as_deref(), executor).await?;
         let (page, versions) = SalesOrderService::new(self.db.clone())
             .list_rows(params, search, &scope, org_ids, executor)
             .await?;
+
         let scope_version = list_scope_version(&context.scope_version, &versions);
         let as_of = context.as_of.as_utc().to_rfc3339();
         Ok(SalesListSnapshot { page, context, scope_version, as_of })
@@ -148,10 +150,12 @@ async fn read_list(
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::ValidationError("销售列表必须使用快照事务".into()));
     }
+
     let snapshot = reader.load(params, actor, executor).await?;
     if params.scope_version.as_deref().is_some_and(|expected| expected != snapshot.scope_version) {
         return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
     }
+
     let data = reader.present(snapshot.page, executor).await?;
     reader.validate(&snapshot.context, executor).await?;
     Ok(SalesListView {
@@ -220,6 +224,7 @@ mod tests {
         .unwrap();
         assert_eq!(query.scope_version.as_deref(), Some("v1"));
         assert!(serde_json::from_value::<SalesListParams>(serde_json::json!({"owner": "张三"})).is_err());
+
         let org: SalesListParams = serde_json::from_value(serde_json::json!({
             "org_unit_ids": "org-1,org-2",
             "include_descendants": true
@@ -287,6 +292,7 @@ mod tests {
             empty_reason: None,
             scope_summary: "销售单当前负责人、业务组织及合法单据参与范围",
         };
+
         let json = serde_json::to_value(&view).unwrap();
         assert!(json.get("owner_options").is_none());
         assert_eq!(json["ownership_basis"], "document_sales_owner");

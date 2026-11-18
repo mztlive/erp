@@ -193,6 +193,7 @@ impl WarehouseSkuPolicy {
             ensure_non_negative_quantity(minimum_available_quantity)?;
             self.minimum_available_quantity = minimum_available_quantity;
         }
+
         if let Some(status) = update.status {
             ensure_transition(self.status, status)?;
             self.status = status;
@@ -485,6 +486,7 @@ mod tests {
                 )
                 .is_err()
         );
+
         assert!(
             policy
                 .update(WarehouseSkuPolicyUpdate {

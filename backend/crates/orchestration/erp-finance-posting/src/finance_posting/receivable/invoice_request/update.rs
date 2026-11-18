@@ -46,10 +46,12 @@ impl ReceivableProcess {
                         executor,
                     )
                     .await?;
+
                     let mut request = load(&db, &request_id, executor).await?;
                     ensure_expected_version(request.base.version, req.expected_version)?;
                     request.update(req.data)?;
                     db.sales_invoice_requests().update(&mut request, executor).await?;
+
                     let audit = actor.clone().resource_log(
                         "sales_invoice_request.update",
                         "sales_invoice_request",
@@ -60,6 +62,7 @@ impl ReceivableProcess {
                 })
             })
             .await?;
+
         super::command::committed_result(
             self.authorized_invoice_request_result(id, &response_actor, RequestAction::Submit).await,
         )

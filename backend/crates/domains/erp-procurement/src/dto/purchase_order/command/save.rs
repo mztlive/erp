@@ -254,6 +254,7 @@ impl SavePurchaseOrderLinePatch {
                 if patch.line_type != line.line_type {
                     return Err(Error::ValidationError("采购草稿行类型不可修改".to_string()));
                 }
+
                 let mut result = saved_line(line);
                 if line.line_type == PurchaseLineType::ItemService {
                     result.quantity = patch.quantity.clone().or(result.quantity);

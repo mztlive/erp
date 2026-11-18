@@ -57,6 +57,7 @@ pub struct ProcurementCatalogBundle {
 pub fn current_revision_ids(products: &HashMap<String, Product>) -> Result<Vec<ProductRevisionId>> {
     let mut products: Vec<_> = products.iter().collect();
     products.sort_by_key(|(key, _)| *key);
+
     let ids = products
         .into_iter()
         .map(|(_, product)| {
@@ -111,6 +112,7 @@ pub fn build_catalog_facts(
         let revision = revisions
             .get(revision_id)
             .ok_or_else(|| Error::from(format!("商品当前修订不存在或已删除：{revision_id}")))?;
+
         let category_chain = category_chain(&revision.category_id, categories)?;
         facts.insert(
             input.line_key.clone(),
@@ -356,6 +358,7 @@ mod tests {
         let mut prod_unique = test_product(Some("rev-alpha"));
         prod_unique.base.id = "product-unique".to_string();
         products.insert("product-unique".to_string(), prod_unique);
+
         let ids = current_revision_ids(&products).unwrap();
         // Sorted order: rev-alpha < rev-shared lexicographically.
         assert_eq!(ids, vec![ProductRevisionId::new("rev-alpha"), ProductRevisionId::new("rev-shared")]);
@@ -412,6 +415,7 @@ mod tests {
         let mut cat = test_category("cat-1", None);
         cat.parent_category_id = Some(ProductCategoryId::new("cat-1"));
         categories.insert("cat-1".to_string(), cat);
+
         let err = build_catalog_facts(&inputs, &skus, &products, &revisions, &categories).unwrap_err();
         assert!(err.to_string().contains("环"));
     }

@@ -74,6 +74,7 @@ impl SupplierOfferingCommand {
         if data.result_json.trim().is_empty() {
             return Err(Error::from("命令结果不能为空"));
         }
+
         Ok(Self {
             base: BaseModel::new(id.into()),
             idempotency_key,
@@ -258,6 +259,7 @@ mod tests {
             ..command_data(ZERO_DIGEST)
         };
         assert!(SupplierOfferingCommand::new("bad-1", bad).is_err());
+
         let short = SupplierOfferingCommandData {
             request_fingerprint: ZERO_DIGEST[..32].to_string(),
             ..command_data(ZERO_DIGEST)
@@ -315,6 +317,7 @@ mod tests {
                 Err(serde::ser::Error::custom("测试序列化失败"))
             }
         }
+
         let error = SupplierOfferingCommand::with_result(
             "command-1",
             "key-1",

@@ -31,6 +31,7 @@ impl PaymentRequestList {
             let needle = name.to_lowercase();
             rows.retain(|row| applicant(row, names).to_lowercase().contains(&needle));
         }
+
         if let Some(sort) = query.sort_by {
             rows.sort_by(|left, right| {
                 let order = compare(left, right, names, sort);
@@ -40,6 +41,7 @@ impl PaymentRequestList {
                     .then_with(|| right.base.id.cmp(&left.base.id))
             });
         }
+
         let total = i64::try_from(rows.len()).map_err(|_| Error::Internal("付款申请总数超过范围".into()))?;
         let page = query.page.unwrap_or(1).max(1);
         let page_size = query.page_size.unwrap_or(20).clamp(1, 100);
@@ -157,13 +159,16 @@ mod tests {
         }
         .normalize()
         .unwrap();
+
         let first = PaymentRequestList::page(rows.clone(), &names, &query).unwrap();
         assert_eq!(first.total, 3);
         assert_eq!(first.items.iter().map(|r| r.base.id.as_str()).collect::<Vec<_>>(), ["d", "c"]);
+
         query.page = Some(2);
         let last = PaymentRequestList::page(rows.clone(), &names, &query).unwrap();
         assert_eq!(last.total, 3);
         assert_eq!(last.items[0].base.id, "a");
+
         query.page = Some(u64::MAX);
         let beyond = PaymentRequestList::page(rows, &names, &query).unwrap();
         assert!(beyond.items.is_empty());
@@ -181,10 +186,12 @@ mod tests {
         };
         let page = PaymentRequestList::page(rows.clone(), &HashMap::new(), &query).unwrap();
         assert_eq!(page.items.iter().map(|r| r.base.id.as_str()).collect::<Vec<_>>(), ["c", "b", "a"]);
+
         query.applicant_name = Some("不存在".into());
         let empty = PaymentRequestList::page(rows.clone(), &HashMap::new(), &query).unwrap();
         assert_eq!(empty.total, 0);
         assert!(empty.items.is_empty());
+
         query.applicant_name = Some("未记录姓名".into());
         assert_eq!(PaymentRequestList::page(rows, &HashMap::new(), &query).unwrap().total, 3);
     }
@@ -196,6 +203,7 @@ mod tests {
         left.lines[0].closed_amount = "60".parse().unwrap();
         let mut right = request("b", "buyer", "20");
         right.lines[0].paid_amount = "5".parse().unwrap();
+
         assert_eq!(paid(&left), "30".parse().unwrap());
         assert_eq!(unpaid(&left), "10".parse().unwrap());
         assert_eq!(compare(&left, &right, &HashMap::new(), PaymentRequestSort::Paid), Ordering::Greater);

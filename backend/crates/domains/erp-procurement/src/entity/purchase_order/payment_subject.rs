@@ -85,6 +85,7 @@ mod tests {
                 .is_err()
             );
         }
+
         assert!(
             PaymentSubjectSnapshot::new(
                 "our-company".to_string().into(),

@@ -42,6 +42,7 @@ impl FundsAccess {
         params.validate()?;
         let query = params.normalized().map_err(Error::from)?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
+
         let snapshot =
             self.checked_payable_accounts(params, &query, actor, params.scope_version.as_deref()).await?;
         Ok(snapshot)
@@ -161,8 +162,10 @@ impl FundsAccess {
             self.payable_database_snapshot(query, &authorization, &condition, true, executor).await?;
         let version = snapshot.version(&authorization)?;
         ensure_version(params.scope_version.as_deref(), &version)?;
+
         let items = self.payable_page_items(&snapshot.items, executor).await?;
         let summary = payable_summary(&snapshot.summary, &version)?;
+
         authorization.deliver(executor).await?;
         Ok(FundsScopedPage {
             items,
@@ -286,6 +289,7 @@ impl FundsAccess {
         let (_access, authorization) =
             self.resolve_with_purchase(actor, &payable_permissions::ACCOUNT_DETAIL, executor).await?;
         self.require_visible_root(&authorization, id, executor).await?;
+
         let accounts = self
             .db
             .payable_accounts()
@@ -293,12 +297,14 @@ impl FundsAccess {
             .await?;
         let account =
             accounts.into_iter().next().ok_or_else(|| Error::NotFound("应付往来子账不存在".into()))?;
+
         let key = source_key(account.source_type, &account.source_document_id);
         let mut facts = self.purchase_fact_map(std::slice::from_ref(&key), executor).await?;
         let allowed = self.payable_targets(&authorization, &facts, executor).await?;
         if !allowed.contains(&key) {
             return Err(Error::NotFound("应付往来子账不存在".into()));
         }
+
         let fact = facts.remove(&key).ok_or_else(|| Error::NotFound("应付往来子账不存在".into()))?;
         let fact = Some(fact);
         let row_facts = FundsLinkedFacts {
@@ -311,6 +317,7 @@ impl FundsAccess {
         };
         let data = self.payable_detail_data(&account, fact.as_ref(), executor).await?;
         let parts = vec![format!("{}:{}", account.base.id, account.base.version), row_facts.version_part()];
+
         authorization.deliver(executor).await?;
         Ok(FundsScopedResult {
             data,
@@ -350,6 +357,7 @@ impl FundsAccess {
         );
         data.entries = self.payable_detail_entries(account, executor).await?;
         data.payment_allocations = payment_allocations_for_entries(&self.db, &data.entries, executor).await?;
+
         self.fill_payment_guidance(std::slice::from_mut(&mut data), executor).await?;
         data.supplier_name = self.supplier_name_of(&account.supplier_id, executor).await?;
         data.payment_recipient =
@@ -401,6 +409,7 @@ fn payable_summary(rows: &[AccountSummaryRow], version: &str) -> Result<FundsSum
             owner_of.insert(row.order_id.clone(), owner.clone());
         }
     }
+
     let mut summary = build_summary(&triples, &owner_of, Some(whole_sum), version, false)?;
     summary.balance_total = Some(balance_sum);
     Ok(summary)
@@ -542,6 +551,7 @@ mod tests {
         assert_eq!(summary.unassigned, amount("20.02"));
         assert_eq!(summary.scope_version, "v");
         assert!(!summary.permission_limited);
+
         assert_eq!(payable_summary(&[], "empty").unwrap().whole_total, Some(Amount::zero()));
         assert_eq!(payable_summary(&[], "empty").unwrap().balance_total, Some(Amount::zero()));
         assert_eq!(summary.with_balance_access(false).balance_total, None);

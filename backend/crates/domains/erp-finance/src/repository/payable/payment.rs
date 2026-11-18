@@ -104,6 +104,7 @@ impl QueryFilter for SupplierPaymentFilter {
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "payment_no", self.payment_no.as_deref());
+
         if let Some(keyword) = self.keyword.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
             let mut number_match = Document::new();
             insert_literal_regex_filter(&mut number_match, "payment_no", Some(keyword));
@@ -113,12 +114,14 @@ impl QueryFilter for SupplierPaymentFilter {
             }
             filter.insert("$or", alternatives);
         }
+
         if let Some(supplier_id) = &self.supplier_id {
             filter.insert("supplier_id", supplier_id.to_string());
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }
+
         if let Some(ids) = &self.keyword_ids {
             let condition = doc! { "id": { "$in": ids } };
             return doc! { "$and": [filter, condition] };
@@ -261,10 +264,10 @@ impl SupplierPaymentRepositoryExt for persistence_core::Repository<'_, SupplierP
             .limit(filter.limit())
             .projection(supplier_payment_projection())
             .build();
+
         let collection = self.collection().clone_with_type::<SupplierPaymentRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 }

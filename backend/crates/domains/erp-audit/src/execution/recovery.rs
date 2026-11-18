@@ -58,12 +58,14 @@ mod tests {
     #[test]
     fn original_result_recovers_and_normal_failure_keeps_explicit_conflict() {
         assert_eq!(recover_command(unknown(), Ok(Some(17))).unwrap(), 17);
+
         let error = recover_command::<u32, _>(
             Error::BusinessLogicError("首次失败".into()),
             Err(Error::ConflictError("回执冲突".into())),
         )
         .unwrap_err();
         assert!(matches!(error, Error::ConflictError(message) if message == "回执冲突"));
+
         let error =
             recover_command::<u32, _>(Error::BusinessLogicError("首次失败".into()), Ok(None)).unwrap_err();
         assert!(matches!(error, Error::BusinessLogicError(message) if message == "首次失败"));

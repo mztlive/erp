@@ -73,6 +73,7 @@ async fn materials_read<A: WorkflowAuthorizationPort>(
     executor: &mut dyn Executor,
 ) -> Result<ApprovalDocumentMaterials> {
     let materials = runtime.materials_with(actor, instance_id, executor).await?;
+
     let sales_order = if matches!(materials.document_type.as_str(), "sales_order" | "voucher_sales_order") {
         Some(sales_submission(db, &materials, executor).await?)
     } else {
@@ -87,6 +88,7 @@ async fn materials_read<A: WorkflowAuthorizationPort>(
     let (current_sales_basis, current_sales_basis_error) =
         optional_sales_basis(db, &materials, executor).await?;
     let latest_supplier_rating = supplier_rating(db, &materials, executor).await?;
+
     Ok(ApprovalDocumentMaterials {
         materials,
         sales_order,
@@ -141,6 +143,7 @@ async fn copy_read<A: WorkflowAuthorizationPort>(
 ) -> Result<CopyDocumentDetail> {
     let (detail, access) = runtime.copy_read(actor, id, after, executor).await?;
     let materials = detail.materials;
+
     let sales_order = if matches!(materials.document_type.as_str(), "sales_order" | "voucher_sales_order") {
         Some(sales_submission(db, &materials, executor).await?)
     } else {
@@ -152,6 +155,7 @@ async fn copy_read<A: WorkflowAuthorizationPort>(
         None
     };
     let source_sales_orders = source_sales_orders(db, &materials, executor).await?;
+
     runtime.validate_copy_read(&access, executor).await?;
     Ok(CopyDocumentDetail {
         receipt: detail.receipt,
@@ -184,6 +188,7 @@ async fn sales_submission(
         .sales_order_submission_lines()
         .list_lines_by_submissions(&[SalesOrderSubmissionId::new(&submission.base.id)], executor)
         .await?;
+
     validate_submission(
         materials,
         submission.sales_order_id.as_ref(),
@@ -191,6 +196,7 @@ async fn sales_submission(
         submission.business_type,
         lines.len(),
     )?;
+
     lines.sort_by_key(|line| line.line_no);
     let mut view = submission_view(submission, lines);
     enrich_line_prices(db, &mut view.lines, executor).await?;
@@ -282,6 +288,7 @@ mod tests {
             UnusedAuthorization,
         );
         let actor = AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin);
+
         for result in [
             materials_read(&db, &runtime, &actor, "instance", &mut SnapshotExecutor::default())
                 .await
@@ -292,6 +299,7 @@ mod tests {
         ] {
             assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
         }
+
         assert!(matches!(
             materials_read(&db, &runtime, &actor, "instance", &mut ReadExecutor::default()).await,
             Err(Error::ValidationError(_))
@@ -334,9 +342,11 @@ mod tests {
         assert!(validate_submission(&materials, "sales-2", 2, BusinessType::GoodsService, 19).is_err());
         assert!(validate_submission(&materials, "sales-1", 3, BusinessType::GoodsService, 19).is_err());
         assert!(validate_submission(&materials, "sales-1", 2, BusinessType::Voucher, 19).is_err());
+
         let mut voucher = materials;
         voucher.document_type = "voucher_sales_order".into();
         assert!(validate_submission(&voucher, "sales-1", 2, BusinessType::Voucher, 19).is_ok());
+
         voucher.display.root_document_id = "sales-2".into();
         assert!(validate_submission(&voucher, "sales-1", 2, BusinessType::Voucher, 19).is_err());
     }

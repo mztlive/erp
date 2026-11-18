@@ -217,6 +217,7 @@ impl SupplierCredential {
         identity(&id, 128)?;
         binding.validate()?;
         payload.validate(now)?;
+
         let timestamp =
             u64::try_from(now.unix_secs()).map_err(|_| Error::ValidationError("技术凭据时间无效".into()))?;
         let mut base = BaseModel::new(id);
@@ -295,6 +296,7 @@ impl SupplierCredential {
                 "原技术凭据正在刷新或需要明确重新授权，不能普通导入覆盖".into(),
             ));
         }
+
         let base = self.next_base(now)?;
         self.encrypted_payload = payload.encrypted_payload;
         self.payload_fingerprint = payload.payload_fingerprint;
@@ -315,6 +317,7 @@ impl SupplierCredential {
         if self.base.is_deleted() || self.base.version == 0 {
             return Err(Error::ConflictError("原技术凭据元数据无效或已停用".into()));
         }
+
         let mut base = self.base.clone();
         base.version = base
             .version

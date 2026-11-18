@@ -169,6 +169,7 @@ impl SupplierRatingRevision {
         if next_valid_from <= self.valid_from {
             return Err(Error::from("新评估版本生效日期必须晚于当前版本生效日期"));
         }
+
         let previous = next_valid_from
             .as_naive_date()
             .pred_opt()
@@ -296,6 +297,7 @@ mod tests {
         .unwrap();
         revision.close_before(BusinessDate::from_ymd(2026, 2, 1).unwrap()).unwrap();
         assert_eq!(revision.valid_to, BusinessDate::from_ymd(2026, 1, 31));
+
         assert!(revision.close_before(BusinessDate::from_ymd(2026, 1, 1).unwrap()).is_err());
     }
 

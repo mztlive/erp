@@ -307,6 +307,7 @@ impl InboxMessage {
             BUSINESS_FACT_KEY_MAX_LEN,
             "业务事实键过长",
         )?;
+
         let payload_schema_version = normalize_required_text(
             data.payload_schema_version,
             "来源契约版本不能为空",
@@ -315,6 +316,7 @@ impl InboxMessage {
         )?;
         let payload_reference =
             normalize_optional_text(data.payload_reference, "规范化内容引用", PAYLOAD_REFERENCE_MAX_LEN)?;
+
         if data.status == InboxMessageStatus::Processed && data.processed_at.is_none() {
             return Err(Error::from("消息状态为已处理时必须提供处理完成时间"));
         }
@@ -355,6 +357,7 @@ impl InboxMessage {
         if update.processed_at.is_some() && update.status != Some(InboxMessageStatus::Processed) {
             return Err(Error::from("设置处理完成时间必须同时把状态置为已处理"));
         }
+
         if let Some(status) = update.status {
             self.status = status;
         }
@@ -452,6 +455,7 @@ pub(crate) mod tests {
 
         assert_eq!(message.status, InboxMessageStatus::Processed);
         assert_eq!(message.processed_at, Some(Instant::from_unix_secs(PROCESSED_AT)));
+
         assert_eq!(message.source_event_id, original_event_id, "消息身份不可被通用更新修改");
         assert_eq!(message.source_system_id, SourceSystemId::new("sys-mall-1"), "来源系统不可被通用更新修改");
         assert_eq!(message.business_fact_key, "mall-1|PAYMENT_SUCCEEDED|SO-2026-001|v3");

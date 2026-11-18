@@ -60,6 +60,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::PRODUCT_CATEGORY_LIST, AccessTarget::Operation, executor)
             .await?;
+
         params.validate()?;
         let query = params.normalized()?;
         let filter = ProductCategoryFilter {
@@ -73,6 +74,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.product_categories().search_product_categories(&filter, executor).await?;
         let items = page.items.into_iter().map(ProductCategoryView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
@@ -122,6 +124,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::PRODUCT_CATEGORY_UPDATE, AccessTarget::Operation, executor)
             .await?;
+
         req.validate()?;
         let mut category = self.load_category(id, executor).await?;
         ensure_version(category.base.version, req.version)?;
@@ -133,6 +136,7 @@ impl CatalogService {
             )
             .await?;
         }
+
         category.update(
             ProductCategoryUpdate { name: req.name, product_kind: req.product_kind, status: req.status },
             actor.id(),
@@ -140,6 +144,7 @@ impl CatalogService {
         if let Some(parent_change) = req.parent_change {
             category.set_parent(parent_change.parent_category_id, actor.id())?;
         }
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "product_category.update",
@@ -196,10 +201,12 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::PRODUCT_CATEGORY_UPDATE, AccessTarget::Operation, executor)
             .await?;
+
         req.validate()?;
         let mut category = self.load_category(id, executor).await?;
         ensure_version(category.base.version, req.version)?;
         self.ensure_parent_chain_ok(&category.base.id, req.parent_category_id.as_ref(), executor).await?;
+
         category.set_parent(req.parent_category_id, actor.id())?;
         let audit = self.audit.resource_log(
             actor.clone(),
@@ -250,11 +257,13 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::PRODUCT_CATEGORY_DELETE, AccessTarget::Operation, executor)
             .await?;
+
         let mut category = self.load_category(id, executor).await?;
         let has_children = self.db.product_categories().has_children(id, executor).await?;
         if has_children {
             return Err(Error::BusinessLogicError("分类下存在子分类，不能删除".to_string()));
         }
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "product_category.delete",

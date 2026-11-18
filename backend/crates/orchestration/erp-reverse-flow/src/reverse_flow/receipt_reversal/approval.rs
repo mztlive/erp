@@ -66,6 +66,7 @@ impl ReturnsProcess {
             command_receipt: req.command_receipt(id, actor.id())?,
             actor: actor.clone(),
         };
+
         let process = self.clone();
         let command = submission.clone();
         let persisted = self
@@ -75,6 +76,7 @@ impl ReturnsProcess {
                 Box::pin(async move { process.submit_receipt_reversal_stage(req, &command, executor).await })
             })
             .await;
+
         self.finish_reversal_submit(&submission, persisted).await?;
         self.receipt_reversal_result(
             &submission.id,
@@ -96,6 +98,7 @@ impl ReturnsProcess {
         if self.replay_reversal_submit_stage(submission, executor).await?.is_some() {
             return Ok(());
         }
+
         let id = submission.id.as_str();
         let adapter = receipt_reversal_adapter()?;
         let mut reversal = self.domain().load_receipt_reversal(id, executor).await?;
@@ -167,6 +170,7 @@ impl ReturnsProcess {
         let mut reversal = self.domain().load_receipt_reversal(id, executor).await?;
         ensure_receipt_reversal_version(&reversal, req.expected_version)?;
         self.persist_cancelled_receipt_reversal(id, &mut reversal, &req, actor, executor).await?;
+
         self.receipt_reversal_result_read(
             id,
             actor,
@@ -195,10 +199,12 @@ impl ReturnsProcess {
         let subject = receipt_reversal_subject_ref(id)?;
         let binding = find_approval_binding(&self.db, id, executor).await.map_err(crate::Error::from)?;
         let binding = require_receipt_reversal_binding(binding.as_ref())?.clone();
+
         let now = Instant::now();
         let (organization_id, snapshot) =
             self.receipt_reversal_start_snapshot(&reversal, actor, now, executor).await?;
         let _ = receipt_reversal_object_readable(&organization_id, actor.id())?;
+
         let version = reversal.approval_subject_version;
         let existing_receipt =
             load_receipt_reversal_start_receipt(&self.db, &subject, version, &idempotency_key, executor)
@@ -218,6 +224,7 @@ impl ReturnsProcess {
             receipt: existing_receipt,
             now,
         })?)?;
+
         persist_receipt_reversal_start(
             &self.db,
             &self.rbac,
@@ -277,6 +284,7 @@ impl ReturnsProcess {
         let runtime =
             load_cancel_runtime(&self.db, &binding, &subject, reversal.approval_subject_version, executor)
                 .await?;
+
         let now = Instant::now();
         let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
         let input = build_receipt_reversal_cancel_input(
@@ -288,12 +296,14 @@ impl ReturnsProcess {
             now,
         )?;
         let prepared = prepare_cancel(input)?;
+
         execute_receipt_reversal_domain_action(reversal, adapter.cancel_action)?;
         let audit = actor.clone().resource_log(
             "receipt_reversal.cancel_approval",
             "receipt_reversal",
             id.to_string(),
         )?;
+
         persist_receipt_reversal_cancel(
             &self.db,
             &self.rbac,

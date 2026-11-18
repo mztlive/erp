@@ -82,6 +82,7 @@ impl SupplierApiOrderProcess {
                 self.defer_current(&id, &error).await;
             }
         }
+
         Ok(count + self.run_receipts_once().await?)
     }
 

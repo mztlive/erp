@@ -62,6 +62,7 @@ impl DeliverySource for JdVopConnector {
         let profile = self.profile.as_ref().ok_or_else(protocol_required)?;
         self.validate_context(&query.context)?;
         let shipping = self.freight(&query.context, &query.lines).await?;
+
         let expires_at = Instant::now()
             .unix_secs()
             .checked_add(
@@ -105,6 +106,7 @@ impl JdVopConnector {
                 &address.address_fingerprint,
             )
             .map_err(|_| mapping("京东原地址绑定不完整"))?;
+
         let proof = AddressProof {
             binding: self.binding.clone(),
             action_id: key.id.clone(),
@@ -182,6 +184,7 @@ impl JdVopConnector {
         let (body, signature) = value.split_once('.').ok_or_else(|| mapping("京东协议上下文无效"))?;
         let body = hex::decode(body).map_err(|_| mapping("京东协议上下文无效"))?;
         let signature = hex::decode(signature).map_err(|_| mapping("京东协议上下文无效"))?;
+
         let mut mac = self.mac();
         mac.update(&body);
         mac.verify_slice(&signature).map_err(|_| mapping("京东协议上下文已失效"))?;

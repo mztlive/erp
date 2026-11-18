@@ -99,6 +99,7 @@ impl SupplierDepositManagementProcess {
                 Box::pin(async move {
                     identity_access(&db, &authorization, &command.identity, &actor, "create", executor)
                         .await?;
+
                     let account = SupplierDepositService::new(db.clone())
                         .open_account(&command.operation_key, command.identity, executor)
                         .await?;
@@ -135,10 +136,12 @@ async fn list_accounts(
     if has_more {
         candidates.pop();
     }
+
     let mut items = Vec::new();
     for candidate in candidates {
         items.push(account_row(db, candidate, executor).await?);
     }
+
     authorization.validate(&compiled, executor).await?;
     Ok(DepositAccountList { items, has_more })
 }

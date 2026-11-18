@@ -46,6 +46,7 @@ fn submission_idempotency_identity_is_stable_and_payload_bound() {
     let receipt = sales_submission_audit_id("actor-1", "order-1", "secret-request");
     assert_eq!(receipt, sales_submission_audit_id("actor-1", "order-1", "secret-request"));
     assert!(!receipt.contains("secret-request"));
+
     assert_ne!(
         sales_submission_fingerprint("actor-1", "order-1", &submission_request(1)).unwrap(),
         sales_submission_fingerprint("actor-1", "order-1", &submission_request(2)).unwrap()

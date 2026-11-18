@@ -103,6 +103,7 @@ async fn revert_invoicings_many_empty_input_returns_empty_without_db() {
         <mongodb::Database as ReceivableExt>::RECEIVABLE_ACCOUNTS,
     );
     let repository: ReceivableAccountRepository<'_> = repository;
+
     let result = repository
         .revert_invoicings_many(&[], "tester", &mut NoTransaction)
         .await

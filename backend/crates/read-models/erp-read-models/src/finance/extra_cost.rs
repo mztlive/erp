@@ -95,10 +95,12 @@ impl SalesExtraCostReadModel {
             .find_authorized(sales_order_id, &scope, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在或无权查看附加费用".into()))?;
+
         let (entries, allocations) = order_costs(&self.db, sales_order_id, executor).await?;
         let mut items = SalesExtraCostView::registrations(&entries, &allocations);
         let facts = purchase_expense_facts(&self.db, &[sales_order_id.to_string()], executor).await?;
         items.extend(purchase_expense_views(&facts));
+
         self.rbac.validate(&access, executor).await?;
         Ok(SalesExtraCostListView::from_items(items))
     }
@@ -202,6 +204,7 @@ pub async fn purchase_expense_facts(
         let orders = formal_orders_by_sales_orders(db, chunk, executor).await?;
         let orders =
             orders.into_iter().filter(|order| order.stable.current_revision_id.is_some()).collect::<Vec<_>>();
+
         let revision_ids = orders
             .iter()
             .filter_map(|order| order.stable.current_revision_id.clone().map(PurchaseOrderRevisionId::new))
@@ -213,6 +216,7 @@ pub async fn purchase_expense_facts(
                 .into_iter()
                 .filter(|line| line.line_type == PurchaseLineType::LogisticsFee && line.expense.is_some()),
         );
+
         let order_ids = orders.iter().map(|order| order.base.id.clone()).collect::<Vec<_>>();
         facts.occurrences.extend(occurrences_by_orders(db, &order_ids, executor).await?);
         facts.orders.extend(orders);

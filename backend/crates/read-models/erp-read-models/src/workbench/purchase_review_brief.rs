@@ -62,6 +62,7 @@ impl WorkbenchFactsReader<'_> {
         if orders.is_empty() {
             return Ok(());
         }
+
         let (displays, authority) = self.purchase_review_displays(&orders, executor).await?;
         insert_purchase_order_facts(facts, &orders, &displays, &authority);
         Ok(())
@@ -88,6 +89,7 @@ impl WorkbenchFactsReader<'_> {
         let line_context = self.purchase_submission_brief_lines(&submissions, executor).await?;
         let submitter_names = HashMap::<String, String>::new();
         let _ = executor;
+
         let authority = purchase_facts(orders, &submissions, &line_context.line_counts);
         Ok((
             assemble_purchase_review_displays(
@@ -149,6 +151,7 @@ impl WorkbenchFactsReader<'_> {
         let lines = self.facts_reader().purchase_submission_lines(submissions, executor).await?;
         let line_counts = purchase_line_counts(&lines);
         let line_states = purchase_order_submission_line_states(&lines);
+
         let mut grouped: HashMap<String, Vec<(u32, PurchaseOrderSubmissionLine)>> = HashMap::new();
         for line in lines {
             grouped
@@ -156,6 +159,7 @@ impl WorkbenchFactsReader<'_> {
                 .or_default()
                 .push((line.line_no, line));
         }
+
         let brief_lines = grouped
             .into_iter()
             .map(|(submission_id, mut rows)| {

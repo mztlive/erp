@@ -97,6 +97,7 @@ impl GrantTarget {
                 return Err(Error::ValidationError("目标身份不能带首尾空白".into()));
             }
         }
+
         targets.sort_unstable();
         targets.dedup();
         Ok(targets)
@@ -163,9 +164,11 @@ impl GrantSource {
         if self.terminated {
             return Err(Error::ConflictError("授权来源已经终止".into()));
         }
+
         let targets = GrantTarget::normalize(targets)?;
         let operator = normalize_required_text_ref(operator, "操作人不能为空", 128, "操作人过长")?;
         let reason = normalize_required_text_ref(reason, "原因不能为空", 512, "原因过长")?;
+
         if rule_version == 0
             || fact_version == 0
             || rule_version < self.rule_version
@@ -180,6 +183,7 @@ impl GrantSource {
                 Err(Error::ConflictError("同版本授权结果不一致".into()))
             };
         }
+
         self.rule_version = rule_version;
         self.fact_version = fact_version;
         self.targets = targets;
@@ -200,6 +204,7 @@ impl GrantSource {
         if self.terminated {
             return Ok(false);
         }
+
         self.terminated = true;
         self.operator = operator;
         self.reason = reason;
@@ -282,6 +287,7 @@ mod tests {
         ] {
             assert_eq!(resource.scope_action(&Permission::parse(permission).unwrap()).unwrap(), action);
         }
+
         for (resource, permission) in [
             (ResourceKind::SalesOrder, "sales_order:update"),
             (ResourceKind::PurchaseOrder, "purchase_order:delete"),
@@ -298,10 +304,12 @@ mod tests {
         let mut s = source();
         assert!(s.apply(1, 2, vec![target("s1"), target("s1")], "admin", "分配").unwrap());
         assert_eq!(s.targets.len(), 1);
+
         assert!(!s.apply(1, 2, vec![target("s1")], "admin", "重试").unwrap());
         assert!(s.apply(1, 2, vec![target("s2")], "admin", "冲突").is_err());
         assert!(s.apply(2, 1, vec![], "admin", "旧事实").is_err());
         assert_eq!(s.targets, vec![target("s1")]);
+
         assert!(s.revoke("admin", "明确撤销").unwrap());
         assert!(!s.revoke("admin", "重试").unwrap());
         assert!(s.apply(2, 3, vec![target("s1")], "worker", "重算").is_err());
@@ -313,9 +321,11 @@ mod tests {
         assert_eq!(s.fact_version, 0);
         assert!(s.revoke("admin", " ").is_err());
         assert!(!s.terminated);
+
         let mut other = s.key.clone();
         other.recipient = "u2".into();
         assert_ne!(s.key.id().unwrap(), other.id().unwrap());
+
         assert!(s.apply(1, 1, vec![], "admin", "明确空集").unwrap());
     }
 }

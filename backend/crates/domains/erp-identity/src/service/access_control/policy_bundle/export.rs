@@ -41,12 +41,14 @@ impl PolicyBundleService {
             .authorization
             .require_policy_bundle(actor, &access_control::POLICY_BUNDLE_EXPORT, None, executor)
             .await?;
+
         let facts = self.facts(&selection, executor).await?;
         if selection.roles.iter().any(|r| !facts.roles.contains_key(r.id.as_str())) {
             return Err(Error::NotFound("所选角色不存在".into()));
         }
         let output = facts.export(authorization.scope.policy_version)?;
         output.document.validate_catalog(&self.catalog)?;
+
         self.access
             .rbac
             .clone()

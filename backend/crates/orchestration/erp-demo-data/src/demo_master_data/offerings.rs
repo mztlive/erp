@@ -63,6 +63,7 @@ fn validate(rows: &[CreateSupplierOfferingRequest], steps: &[DemoStep]) -> Resul
             _ => None,
         })
         .collect::<HashMap<_, _>>();
+
     let mut covered = HashSet::new();
     let mut relationships = HashSet::new();
     let mut keys = HashSet::new();
@@ -74,6 +75,7 @@ fn validate(rows: &[CreateSupplierOfferingRequest], steps: &[DemoStep]) -> Resul
         let supplier = suppliers.get(row.supplier_id.as_str()).ok_or_else(|| {
             Error::ValidationError(format!("演示供给供应商引用未定义：{}", row.supplier_id))
         })?;
+
         if !relationships.insert((row.sku_id.as_str(), row.supplier_id.as_str())) {
             return Err(Error::ValidationError(format!(
                 "演示供给关系重复：{} / {}",
@@ -83,9 +85,11 @@ fn validate(rows: &[CreateSupplierOfferingRequest], steps: &[DemoStep]) -> Resul
         if !keys.insert(row.idempotency_key.as_str()) {
             return Err(Error::ValidationError(format!("演示供给幂等键重复：{}", row.idempotency_key)));
         }
+
         validate_qualification(*kind, supplier, revision.valid_from)?;
         covered.insert(row.sku_id.as_str());
     }
+
     if covered.len() != skus.len() {
         return Err(Error::ValidationError("每个演示 SKU 必须配置至少一条初始供给".into()));
     }
@@ -95,16 +99,19 @@ fn validate(rows: &[CreateSupplierOfferingRequest], steps: &[DemoStep]) -> Resul
 /// 与正式创建入口共用供给、条款与可供实体的不变式，防止字段解析成功后才写入失败。
 fn validate_request(row: &CreateSupplierOfferingRequest) -> Result<SupplierOfferingRevision> {
     row.validate().map_err(|error| Error::ValidationError(format!("演示供给字段无效：{error}")))?;
+
     let offering_id = SupplierOfferingId::new("validation");
     SupplierOffering::new(
         offering_id.clone(),
         row.try_into_offering_data("$supplier_maintainer".into(), "validation".into())?,
         "validation",
     )?;
+
     let revision = SupplierOfferingRevision::new(
         SupplierOfferingRevisionId::new("validation"),
         row.terms.try_into_revision_data(offering_id.clone(), 1)?,
     )?;
+
     let at = Instant::from_unix_secs(0);
     SupplierOfferingAvailability::new(
         SupplierOfferingAvailabilityId::new("validation"),
@@ -133,6 +140,7 @@ fn validate_qualification(
             capability.as_str()
         )));
     }
+
     let contracts = linked_contracts(supplier, capability)?;
     ensure_linked_contracts_qualified(&contracts, valid_from)?;
     ensure_linked_contracts_qualified(&contracts, BusinessDate::today())?;
@@ -212,6 +220,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let SeedRequest::Product(product) = &step.request else {
             return Err(Error::ValidationError("可售准备只接受商品".into()));
         };
+
         let mut expected = Vec::new();
         for template in &product.skus {
             let sku = skus
@@ -223,6 +232,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             }
             expected.push(sku.base.id.clone());
         }
+
         self.ports
             .catalog
             .product_listing_update(
@@ -231,6 +241,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                 &actor,
             )
             .await?;
+
         self.verify_sellable(&expected).await
     }
 
@@ -302,6 +313,7 @@ mod tests {
             })
             .sum::<usize>();
         assert!(rows.len() >= sku_count);
+
         let first = resolve(&rows[0], "sku-one", "supplier-one");
         let retry = resolve(&rows[0], "sku-one", "supplier-one");
         let rebuilt = resolve(&rows[0], "sku-two", "supplier-two");
@@ -347,19 +359,23 @@ mod tests {
         assert!(
             matches!(validate(&incomplete, &steps), Err(Error::ValidationError(message)) if message.contains("至少一条"))
         );
+
         let mut invalid = rows.clone();
         invalid[0].supplier_id = "missing".into();
         assert!(
             matches!(validate(&invalid, &steps), Err(Error::ValidationError(message)) if message.contains("供应商引用未定义"))
         );
+
         invalid = rows.clone();
         invalid[0].sku_id = "missing".into();
         assert!(
             matches!(validate(&invalid, &steps), Err(Error::ValidationError(message)) if message.contains("SKU 引用未定义"))
         );
+
         invalid = rows.clone();
         invalid[0].terms.input_tax_rate = "NaN".into();
         assert!(validate(&invalid, &steps).is_err());
+
         invalid = rows.clone();
         invalid.push(rows[0].clone());
         assert!(validate(&invalid, &steps).is_err());
@@ -395,6 +411,7 @@ mod tests {
         assert!(
             matches!(validate(&rows, &steps), Err(Error::ValidationError(message)) if message.contains("关系重复"))
         );
+
         let reused_key = rows[0].idempotency_key.clone();
         let last = rows.last_mut().unwrap();
         last.supplier_id = "demo-master-supplier-02".into();
@@ -411,9 +428,11 @@ mod tests {
         let mut invalid = rows.clone();
         invalid[0].available_quantity = Some("-1".into());
         assert!(validate(&invalid, &steps).is_err());
+
         invalid = rows.clone();
         invalid[0].source_connection_id = Some("unexpected-api-connection".into());
         assert!(validate(&invalid, &steps).is_err());
+
         invalid = rows;
         invalid[0].terms.bulk_minimum_order_quantity = Some("0".into());
         assert!(validate(&invalid, &steps).is_err());

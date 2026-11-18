@@ -35,11 +35,13 @@ pub async fn reconcile(
     if source.lines == updated {
         return Ok(());
     }
+
     let mut inquiry = SalesInquiryService::new(db.clone()).require(&source.inquiry_id, executor).await?;
     source.lines = updated;
     let selections = source.selections();
     source.released = selections.is_empty();
     inquiry.reconcile_quantities(order_id, selections, Instant::now())?;
+
     SalesInquiryService::new(db.clone()).save(&mut inquiry, executor).await?;
     inquiry_sources(db).update(&mut source, executor).await?;
     Ok(())
@@ -59,6 +61,7 @@ pub async fn release(db: &Database, order_id: &str, executor: &mut dyn Executor)
     if source.released {
         return Ok(());
     }
+
     let mut inquiry = SalesInquiryService::new(db.clone()).require(&source.inquiry_id, executor).await?;
     inquiry.release_quantities(order_id)?;
     source.released = true;
@@ -81,6 +84,7 @@ pub async fn consume(db: &Database, order_id: &str, executor: &mut dyn Executor)
     if source.consumed {
         return Ok(());
     }
+
     let mut inquiry = SalesInquiryService::new(db.clone()).require(&source.inquiry_id, executor).await?;
     inquiry.consume_quantities(order_id)?;
     source.consumed = true;

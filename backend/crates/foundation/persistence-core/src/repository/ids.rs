@@ -65,6 +65,7 @@ impl IdRepository {
         for field in [parent, tag].into_iter().flatten() {
             projection.insert(field, 1);
         }
+
         let mut result = Vec::new();
         for chunk in values.chunks(200) {
             let docs = mongo_ops::find_many(
@@ -121,6 +122,7 @@ mod tests {
         assert_eq!(row.id, "line");
         assert_eq!(row.parent.as_deref(), Some("order"));
         assert_eq!(row.tag.as_deref(), Some("sku"));
+
         assert!(linked_id(&doc! {"_id":"mongo-only"}, None, None).is_err());
         assert!(linked_id(&doc! {"id":""}, None, None).is_err());
         assert!(linked_id(&doc! {"id":"line"}, Some("parent"), None).is_err());

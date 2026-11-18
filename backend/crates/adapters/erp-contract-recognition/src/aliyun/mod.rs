@@ -42,6 +42,7 @@ impl ContractOcr for AliyunContractOcr {
         if pdf_page_count(pdf)? != page_count {
             return Err(ImportFailure::new("PAGE_COVERAGE", "合同页数不一致，请重新上传完整文件"));
         }
+
         let client = Client::new(self.credentials.clone()).map_err(provider_error)?;
         let pdf = PdfFile::create(pdf, &self.pdftoppm_path).await?;
         collect_pages(&LivePages { client, pdf }, page_count).await
@@ -64,6 +65,7 @@ impl PageSource for LivePages {
         if image.blank {
             return Ok((OcrPage { number, text: String::new(), blank: true, readable: true }, String::new()));
         }
+
         let page = self.client.recognize_image(&image.bytes).await.map_err(provider_error)?;
         // API 不提供可靠的空白页判定；零文字不得伪装成成功空白页。
         let readable = !page.text.trim().is_empty();
@@ -75,6 +77,7 @@ async fn collect_pages(source: &impl PageSource, page_count: u32) -> Result<OcrD
     if !(1..=200).contains(&page_count) {
         return Err(ImportFailure::new("PAGE_COVERAGE", "合同须包含 1 至 200 页"));
     }
+
     let mut document =
         OcrDocument { provider: "aliyun-ocr".into(), version: String::new(), pages: Vec::new() };
     let mut bytes = 0_usize;
@@ -97,6 +100,7 @@ async fn collect_pages(source: &impl PageSource, page_count: u32) -> Result<OcrD
             error.page = Some(number);
             return Err(error);
         }
+
         if !version.is_empty() {
             if document.version.is_empty() {
                 document.version = version;
@@ -109,6 +113,7 @@ async fn collect_pages(source: &impl PageSource, page_count: u32) -> Result<OcrD
         }
         document.pages.push(page);
     }
+
     if document.version.is_empty() {
         document.version = "2021-07-07;local-white-pages".into();
     }
@@ -188,6 +193,7 @@ mod tests {
         document.validate(3).unwrap();
         assert_eq!(*source.calls.lock().unwrap(), [1, 2, 3]);
         assert_eq!(document.pages[2].text, "第3页合同原文");
+
         let source =
             FakePages { calls: Mutex::new(vec![]), fail_at: Some(2), empty_at: None, blank_at: None };
         let failure = collect_pages(&source, 3).await.unwrap_err();

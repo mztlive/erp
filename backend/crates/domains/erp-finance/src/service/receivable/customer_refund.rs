@@ -190,10 +190,12 @@ async fn post_with_store(
     let allocations = store.allocations(receipt, session).await?;
     let (reverse_rows, chunks) = ReceiptAllocation::plan_reverse(&allocations, refund.amount)?;
     let seqs = ReceiptAllocation::next_allocation_seq_range(&allocations, reverse_rows.len())?;
+
     let decrease_entry = create_decrease_offsets(store, refund, receipt, actor_id, &chunks, session).await?;
     if let Some(entry) = decrease_entry {
         store.decrease_entry(&entry, session).await?;
     }
+
     for (reverse, seq) in reverse_rows.into_iter().zip(seqs) {
         let allocation = ReceiptAllocation::new(
             ReceiptAllocationId::new(next_id()),
@@ -237,6 +239,7 @@ async fn create_decrease_offsets(
         if account.counterparty_party_id != receipt.counterparty_party_id {
             return Err(Error::BusinessLogicError("禁止跨往来主体退款".to_string()));
         }
+
         revert_customer_refund_settlement(store, entry, chunk, actor_id, session).await?;
         if decrease_entry.is_none() {
             decrease_entry = Some(build_customer_refund_decrease_entry(refund, entry)?);

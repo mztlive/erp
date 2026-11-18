@@ -40,6 +40,7 @@ impl ImportInquiryQuotesCommand {
         if self.rows.is_empty() || self.rows.len() > 1000 {
             return Err(Error::ValidationError("每次须导入 1 至 1000 条供应商回复".into()));
         }
+
         let mut seen = BTreeSet::new();
         for row in &self.rows {
             if row.source.trim().is_empty() || row.source.chars().count() > 256 {
@@ -91,9 +92,11 @@ impl SalesInquiryProcess {
         {
             return Err(Error::ConflictError("报价表对应的需求或反馈轮次已变化，请重新生成报价表".into()));
         }
+
         let prior = InquirySupplyService::new(self.db.clone())
             .quotes(&inquiry.base.id, inquiry.requirement_version, executor)
             .await?;
+
         for row in &request.rows {
             let line = inquiry.responsibility_line(task.responsibility_scope_ids(), &row.quote.line_id)?;
             if line.sku_id != row.sku_id {
@@ -104,6 +107,7 @@ impl SalesInquiryProcess {
             if quote.matches_prior_reply(&prior, inquiry, request.feedback_round) {
                 continue;
             }
+
             self.services
                 .suppliers
                 .require_with(actor, &supplier::DETAIL, row.quote.supplier_id.as_ref(), executor)
@@ -152,11 +156,14 @@ mod tests {
     fn batch_accepts_complete_rows_and_rejects_duplicates_missing_freight_and_empty_batch() {
         let mut input = request();
         input.validate().unwrap();
+
         input.rows.push(input.rows[0].clone());
         assert!(input.validate().is_err());
+
         input.rows.pop();
         input.rows[0].quote.terms.freight_gross = None;
         assert!(input.validate().is_err());
+
         input.rows.clear();
         assert!(input.validate().is_err());
     }
@@ -179,6 +186,7 @@ mod tests {
                     if message == "报价表第5行：原错误"
             ));
         }
+
         assert!(matches!(
             row_error("报价表第5行", Error::Forbidden("不可见".into())),
             Error::Forbidden(message) if message == "不可见"

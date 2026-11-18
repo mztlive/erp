@@ -43,6 +43,7 @@ impl PolicyBundleService {
     pub async fn preview(&self, document: PolicyDocument, actor: AuditActor) -> Result<PolicyPreview> {
         let document = document.normalized()?;
         document.validate_catalog(&self.catalog)?;
+
         let service = self.clone();
         self.access
             .db
@@ -60,6 +61,7 @@ impl PolicyBundleService {
                             executor,
                         )
                         .await?;
+
                     let plan = service.plan(document, &actor, &authorization.scope, executor).await?;
                     authorization.ensure_current(executor)?;
                     Ok(plan.preview)
@@ -86,9 +88,11 @@ impl PolicyBundleService {
                 )
                 .await?;
         }
+
         let rbac = self.access.rbac.clone();
         let actor_permissions = rbac.bundle_actor_permissions(actor, executor).await?;
         rbac.ensure_policy_snapshot_with_executor(authorization.policy_version, executor).await?;
+
         PolicyPlan::build(
             document,
             &facts,

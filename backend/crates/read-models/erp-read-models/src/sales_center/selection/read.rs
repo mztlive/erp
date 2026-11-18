@@ -159,6 +159,7 @@ mod tests {
             let mut executor = SnapshotExecutor::default();
             let expected = &mut executor as *mut SnapshotExecutor as usize;
             let reader = authorization.clone();
+
             let result = checked(
                 authorization.as_ref(),
                 &actor,
@@ -193,6 +194,7 @@ mod tests {
             });
             let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
             let reader = authorization.clone();
+
             let error = checked(
                 authorization.as_ref(),
                 &actor,

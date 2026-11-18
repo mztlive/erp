@@ -29,6 +29,7 @@ impl FundsAccess {
             _ => return Err(Error::ValidationError("未知完整资金模型".into())),
         };
         authorization.validate(executor).await?;
+
         let mut pipeline = vec![
             doc! { "$match": { "id": id, "deleted_at": 0 } },
             super::whole_facts::fields(
@@ -41,6 +42,7 @@ impl FundsAccess {
         pipeline.extend([doc! { "$match": { "scope_whole": true } }, doc! { "$project": { "id": 1 } }]);
         let rows: Vec<Document> =
             super::aggregate(self.db.collection(collection), pipeline, executor).await?;
+
         authorization.validate(executor).await?;
         Ok(!rows.is_empty())
     }

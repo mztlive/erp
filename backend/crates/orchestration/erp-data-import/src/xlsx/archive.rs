@@ -54,6 +54,7 @@ impl<'a> Archive<'a> {
         if u64::try_from(bytes.len()).map_err(|_| invalid("工作簿过大"))? > MAX_XML_BYTES {
             return Err(invalid("XML 解压大小超过 16 MiB"));
         }
+
         String::from_utf8(bytes).map_err(|_| invalid("工作簿编码无效"))
     }
 
@@ -93,10 +94,12 @@ impl<'a> Archive<'a> {
         let Some(xml) = self.optional_xml("xl/sharedStrings.xml")? else {
             return Ok(Vec::new());
         };
+
         let doc = document(&xml)?;
         if doc.root_element().tag_name().name() != "sst" {
             return Err(invalid("共享文本表结构无效"));
         }
+
         Ok(doc
             .root_element()
             .children()
@@ -119,6 +122,7 @@ fn check_archive(archive: &mut ZipArchive<Cursor<&[u8]>>, limits: ArchiveLimits)
         if file.size() > limits.entry_bytes || expanded > limits.expanded_bytes {
             return Err(invalid("工作簿解压大小超过限制"));
         }
+
         if file.enclosed_name().is_none()
             || name.contains(['\\', ':', '\0'])
             || name.split('/').any(|part| part == ".." || part == ".")
@@ -126,6 +130,7 @@ fn check_archive(archive: &mut ZipArchive<Cursor<&[u8]>>, limits: ArchiveLimits)
         {
             return Err(invalid("工作簿路径重复或不安全"));
         }
+
         if name.contains("vbaProject") || name.starts_with("xl/externalLinks/") {
             return Err(invalid("工作簿不得包含宏或外部链接"));
         }

@@ -39,7 +39,9 @@ impl SalesInquiryProcess {
         let owners =
             assignments.iter().map(|(assignment, _)| assignment.owner_user_id.clone()).collect::<Vec<_>>();
         inquiry.assign_shared_fee_owner(None, &owners)?;
+
         self.close_tasks(actor, &inquiry.base.id, "询价需求重新提交或重询，旧任务冻结", executor).await?;
+
         let mut ids = Vec::new();
         for (assignment, organization) in assignments {
             let item = new_task(inquiry, assignment, organization)?;
@@ -75,6 +77,7 @@ impl SalesInquiryProcess {
             .iter()
             .map(|line| line.line_id.clone())
             .collect::<Vec<_>>();
+
         for mut item in self.active_tasks(&inquiry.base.id, executor).await? {
             if !item.inquiry_task_current(&inquiry.base.id, inquiry.requirement_version, &lines) {
                 return Err(Error::ConflictError("询价任务与当前需求或冻结责任范围不一致".into()));

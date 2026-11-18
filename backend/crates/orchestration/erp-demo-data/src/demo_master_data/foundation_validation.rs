@@ -32,6 +32,7 @@ impl FoundationFile {
             return Err(Error::ValidationError("演示岗位键或登录名重复".into()));
         }
         self.validate_account_references(&keys, &logins)?;
+
         if self.required_permissions.len() != keys.len() {
             return Err(Error::ValidationError("每个演示岗位必须声明必要操作权限".into()));
         }
@@ -43,6 +44,7 @@ impl FoundationFile {
                 Permission::parse(permission)?;
             }
         }
+
         let mut types = HashSet::new();
         for approval in &self.approvals {
             let kind = document_type(&approval.document_type)?;
@@ -65,6 +67,7 @@ impl FoundationFile {
             let assignees = approval.nodes.iter().map(|node| node.assignee.clone()).collect::<Vec<_>>();
             ensure_separation_of_duties(policy.separation_of_duties_policy, &approval.submitter, &assignees)?;
         }
+
         for kind in ALL_DOCUMENT_TYPES {
             if policy_of(kind)?.requirement() == ApprovalRequirement::ProcessRequired
                 && !types.contains(&kind)
@@ -92,6 +95,7 @@ impl FoundationFile {
         {
             return Err(Error::ValidationError("演示默认责任人未定义".into()));
         }
+
         for login in logins {
             let count = self
                 .departments
@@ -103,6 +107,7 @@ impl FoundationFile {
                 return Err(Error::ValidationError(format!("演示账号 {login} 必须有且只有一个部门")));
             }
         }
+
         let defaults = &self.person_scope_defaults;
         for login in defaults
             .self_accounts
@@ -175,9 +180,11 @@ mod tests {
         let mut missing = spec();
         missing.approvals.pop();
         assert!(missing.validate().is_err());
+
         let mut duplicate = spec();
         duplicate.approvals[1].document_type = duplicate.approvals[0].document_type.clone();
         assert!(duplicate.validate().is_err());
+
         let mut forbidden = spec();
         forbidden.approvals[0].document_type = "supplier_payment".into();
         assert!(forbidden.validate().is_err());
@@ -188,11 +195,13 @@ mod tests {
         let mut missing = spec();
         missing.procurement_responsibility_owner = "missing".into();
         assert!(missing.validate().is_err());
+
         let mut collision = spec();
         let approval =
             collision.approvals.iter_mut().find(|row| row.document_type == "purchase_order").unwrap();
         approval.nodes[0].assignee = approval.submitter.clone();
         assert!(collision.validate().is_err());
+
         let mut missing_department = spec();
         missing_department.departments.clear();
         assert!(missing_department.validate().is_err());

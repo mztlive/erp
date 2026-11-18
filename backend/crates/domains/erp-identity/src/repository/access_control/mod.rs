@@ -166,11 +166,13 @@ mod keyword_regression_tests {
         filter.keyword_actions = Some("customer.create".into());
         filter.created_from = Some(10);
         filter.created_before = Some(20);
+
         let query = filter.to_doc();
         assert_eq!(query.get_str("id").unwrap(), "event");
         assert_eq!(query.get_document("created_at").unwrap().get_i64("$lt").unwrap(), 20);
         assert!(query.contains_key("$or"));
         assert!(query.contains_key("$and"));
+
         let text = format!("{query:?}");
         assert!(text.contains("actor_label"));
         assert!(text.contains("customer.create"));

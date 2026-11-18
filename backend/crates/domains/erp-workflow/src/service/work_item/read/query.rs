@@ -131,6 +131,7 @@ impl WorkItemReadService {
                 Some("overdue") => Some(WorkItemDueFilter::Overdue),
                 _ => query.due,
             };
+
             let this = self.clone();
             self.db
                 .client()
@@ -153,13 +154,16 @@ impl WorkItemReadService {
         let identity_version = access.version();
         let queue_context_id = queue_context_id(actor.id(), &query, &access.version());
         ensure_queue_context(&query.queue_context_id, &queue_context_id)?;
+
         let mut filter = access.scope_filter(&query)?;
         apply_due_filter(&mut filter, query.due)?;
         filter.narrow_current_handlers(&query.handler_user_ids);
         let (authorized_page, result_version, filter_options) =
             self.authorized_page_fields(&filter, &query, &access, executor).await?;
+
         let scope_version = queue_scope_version(&identity_version, &queue_context_id, &result_version);
         ensure_scope_version(query.page, query.scope_version.as_deref(), &scope_version)?;
+
         let fields = self
             .focused_fields(
                 authorized_page.items,
@@ -171,6 +175,7 @@ impl WorkItemReadService {
             )
             .await?;
         let items = self.project_fields(fields, query.scope, &access, &queue_context_id, executor).await?;
+
         self.validate_access(&access, executor).await?;
         Ok(WorkItemPageView {
             filter_options,
@@ -204,6 +209,7 @@ impl WorkItemReadService {
             fields.insert(0, current);
             return Ok(fields);
         }
+
         let mut candidates = filter.clone();
         candidates.query = None;
         let current = self
@@ -212,6 +218,7 @@ impl WorkItemReadService {
             .find_visible_by_id(current_id, &candidates, executor)
             .await?
             .ok_or_else(|| Error::NotFound("当前焦点任务不在授权队列中".to_string()))?;
+
         let mut current = vec![dto::WorkItemFields::from(current)];
         for field in &mut current {
             field.search = super::search::task_document(field);
@@ -226,6 +233,7 @@ impl WorkItemReadService {
         }) else {
             return Err(Error::NotFound("当前焦点任务不在授权队列中".to_string()));
         };
+
         fields.insert(0, current);
         fields.truncate(context.page_size as usize);
         Ok(fields)
@@ -285,6 +293,7 @@ impl WorkItemReadService {
                 access.action_blockers,
             ));
         }
+
         self.apply_party_names_with(executor, &mut items).await?;
         self.apply_approval_contexts(&mut items, executor).await?;
         Ok(items)
@@ -317,6 +326,7 @@ impl WorkItemReadService {
         if execution_ids.is_empty() {
             return Ok(());
         }
+
         let executions = self.db.bpm_workflow().list_executions_by_ids(&execution_ids, executor).await?;
         let instance_ids =
             executions.iter().map(|execution| execution.process_instance_id.clone()).collect::<Vec<_>>();
@@ -328,6 +338,7 @@ impl WorkItemReadService {
             .collect::<HashMap<_, _>>();
         let summaries =
             summaries.into_iter().map(|summary| (summary.id.clone(), summary)).collect::<HashMap<_, _>>();
+
         for item in items {
             let Some(execution_id) = item.approval_node_execution_id.as_deref() else {
                 continue;
@@ -440,6 +451,7 @@ impl WorkItemReadService {
                 self.authorization.require(actor, &permission, id, executor).await?;
                 return Err(Error::NotFound("任务不存在".into()));
             };
+
             let item_id = item.base.id.clone();
             let scope = WorkItemScope::for_task(&item, actor.id());
             let fields = dto::WorkItemFields::from(item);
@@ -452,8 +464,10 @@ impl WorkItemReadService {
                 view_access.allowed_actions,
                 view_access.action_blockers,
             );
+
             self.apply_party_names_with(executor, std::slice::from_mut(&mut view)).await?;
             self.apply_approval_contexts(std::slice::from_mut(&mut view), executor).await?;
+
             self.validate_access(&access, executor).await?;
             Ok(view)
         })
@@ -547,6 +561,7 @@ mod tests {
         use crate::entity::work_item::{
             AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
         };
+
         let mut fields: super::dto::WorkItemFields = WorkItem::new(
             WorkItemId::new("task"),
             WorkItemData {
@@ -573,6 +588,7 @@ mod tests {
         assert!(super::matches_keyword(&fields, Some(" object ")));
         assert!(!super::matches_keyword(&fields, Some(".*")));
         assert!(super::matches_keyword(&fields, Some("  ")));
+
         let mut other = fields.clone();
         other.business_object_id = "other-object-id".into();
         other.id = "different".into();

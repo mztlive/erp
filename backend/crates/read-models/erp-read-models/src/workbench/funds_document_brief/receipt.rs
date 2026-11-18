@@ -38,18 +38,22 @@ impl WorkbenchFactsReader<'_> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.load_invoice_request_facts(keys, facts, executor).await?;
+
         let ids = object_ids(keys, ObjectKind::CustomerReceipt);
         if ids.is_empty() {
             return Ok(());
         }
+
         let receipts = self.funds_reader().read_customer_receipts(&ids, executor).await?;
         if receipts.is_empty() {
             return Ok(());
         }
+
         let party_ids =
             receipts.iter().map(|item| item.counterparty_party_id.to_string()).collect::<Vec<_>>();
         let party_names = self.party_legal_names(&party_ids, executor).await?;
         let allocation_lines = self.receipt_allocation_lines(&receipts, executor).await?;
+
         for receipt in receipts {
             let counterparty = party_names.get(&receipt.counterparty_party_id.to_string()).cloned();
             let lines = allocation_lines.get(&receipt.base.id).cloned().unwrap_or_default();
@@ -88,9 +92,11 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let refunds = self.funds_reader().read_customer_refunds(&ids, executor).await?;
         let customer_ids = refunds.iter().map(|refund| refund.customer_id.to_string()).collect::<Vec<_>>();
         let customer_names = self.customer_display_names(&customer_ids, executor).await?;
+
         let receipt_ids = refunds
             .iter()
             .filter_map(|refund| refund.original_receipt_id.as_ref().map(ToString::to_string))
@@ -101,6 +107,7 @@ impl WorkbenchFactsReader<'_> {
             .filter_map(|refund| refund.original_receivable_entry_id.as_ref().map(ToString::to_string))
             .collect::<Vec<_>>();
         let entry_origins = self.receivable_entry_origins(&entry_ids, executor).await?;
+
         for refund in refunds {
             let customer = customer_names.get(&refund.customer_id.to_string()).cloned();
             let origin = select_funds_origin(
@@ -118,6 +125,7 @@ impl WorkbenchFactsReader<'_> {
                 ),
                 customer.clone().or_else(|| origin.and_then(|item| item.counterparty.clone())),
             );
+
             let mut brief = amount_reason_brief(
                 "退款金额",
                 format_yuan(&refund.amount),
@@ -138,6 +146,7 @@ impl WorkbenchFactsReader<'_> {
                 refund.evidence_attachment_id.is_some(),
                 "通过后追加应收冲减与反向核销，原回款或应收事实保留",
             );
+
             fact.display.brief_source = Some(brief);
             fact.display.approval_subject_version = (!refund.status.as_str().eq_ignore_ascii_case("draft"))
                 .then_some(refund.approval_subject_version);
@@ -168,18 +177,21 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let reversals = self.funds_reader().read_receipt_reversals(&ids, executor).await?;
         let receipt_ids = reversals
             .iter()
             .map(|reversal| reversal.original_customer_receipt_id.to_string())
             .collect::<Vec<_>>();
         let origins = self.customer_receipt_origins(&receipt_ids, executor).await?;
+
         for reversal in reversals {
             let origin = origins.briefs.get(&reversal.original_customer_receipt_id.to_string());
             let mut fact = funds_fact_display(
                 authority_mapping::receipt_reversal_fact(&reversal, &origins.counterparties),
                 origin.and_then(|item| item.counterparty.clone()),
             );
+
             let mut brief = amount_reason_brief(
                 "冲正金额",
                 format_yuan(&reversal.amount),
@@ -200,6 +212,7 @@ impl WorkbenchFactsReader<'_> {
                 reversal.evidence_attachment_id.is_some(),
                 "通过后追加反向回款与反向核销，原回款事实保留并标记已冲正",
             );
+
             fact.display.brief_source = Some(brief);
             fact.display.approval_subject_version = (!reversal.status.as_str().eq_ignore_ascii_case("draft"))
                 .then_some(reversal.approval_subject_version);
@@ -229,6 +242,7 @@ impl WorkbenchFactsReader<'_> {
             let mut fact =
                 WorkbenchObjectFact::from_authority(authority_mapping::invoice_request_fact(&request));
             fact.display.approval_subject_version = Some(request.approval_subject_version);
+
             let sections = [
                 ("申请金额", request.data.amount.to_string()),
                 ("开票抬头", request.data.invoice_title.clone()),

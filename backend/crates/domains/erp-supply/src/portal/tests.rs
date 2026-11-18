@@ -46,9 +46,11 @@ fn snapshot() -> OfferingApplicationSnapshot {
 fn first_quote_requires_the_supplier_observed_target_and_rejects_forged_extra_fields() {
     let original = serde_json::to_value(snapshot()).unwrap();
     serde_json::from_value::<OfferingApplicationSnapshot>(original.clone()).unwrap();
+
     let mut missing = original.clone();
     missing.as_object_mut().unwrap().remove("target_version");
     assert!(serde_json::from_value::<OfferingApplicationSnapshot>(missing).is_err());
+
     let mut injected = original;
     injected["target_version"]["internal_cost"] = json!("1.00");
     assert!(serde_json::from_value::<OfferingApplicationSnapshot>(injected).is_err());
@@ -88,10 +90,12 @@ fn submitted_snapshot_is_frozen_and_withdrawal_preserves_history() {
     let mut app = submitted();
     let original = serde_json::to_value(&app.submissions).unwrap();
     assert!(app.edit(snapshot(), "改价").is_err());
+
     app.withdraw(&supplier()).unwrap();
     assert_eq!(app.status, ApplicationStatus::Withdrawn);
     assert!(app.result.is_none());
     assert_eq!(serde_json::to_value(&app.submissions).unwrap(), original);
+
     assert!(app.decide(&internal(), Some(result()), "通过", Instant::from_unix_secs(300)).is_err());
 }
 #[test]
@@ -102,6 +106,7 @@ fn effective_application_preserves_submitter_and_separate_internal_confirmer() {
     assert_eq!(app.status, ApplicationStatus::Effective);
     assert_eq!(app.submissions[0].submitted_by, "portal-user");
     assert_eq!(app.decisions[0].decided_by, "buyer");
+
     assert!(app.withdraw(&supplier()).is_err());
     assert!(app.edit(snapshot(), "修改").is_err());
     assert!(app.submit(&supplier(), "buyer", "task-2", 1, Instant::from_unix_secs(400)).is_err());
@@ -110,8 +115,10 @@ fn effective_application_preserves_submitter_and_separate_internal_confirmer() {
 fn returned_and_resubmitted_application_append_history_without_rewriting_original() {
     let mut app = submitted();
     let original = serde_json::to_value(&app.submissions[0]).unwrap();
+
     assert!(app.decide(&internal(), None, " ", Instant::from_unix_secs(300)).is_err());
     app.decide(&internal(), None, "请核对报价", Instant::from_unix_secs(300)).unwrap();
+
     let before = app.clone();
     app.edit(snapshot(), "已核对报价").unwrap();
     app.submit(&supplier(), "buyer", "task-2", 1, Instant::from_unix_secs(400)).unwrap();
@@ -125,9 +132,11 @@ fn history_prefix_guard_rejects_changed_or_removed_submissions() {
     let mut changed = before.clone();
     changed.submissions[0].reason = "篡改".into();
     assert!(changed.ensure_history_preserved(&before).is_err());
+
     changed = before.clone();
     changed.submissions.clear();
     assert!(changed.ensure_history_preserved(&before).is_err());
+
     changed = before.clone();
     changed.supplier_id = "supplier-2".into();
     assert!(changed.ensure_history_preserved(&before).is_err());
@@ -144,19 +153,23 @@ fn valid_transfer_keeps_original_handler_fact_and_accepts_current_task_version()
 fn portal_allow_lists_reject_relation_price_and_server_state_in_availability() {
     let base = json!({"expected_version":1,"availability_status":"AVAILABLE","available_quantity":null,"reason":"补报","idempotency_key":"cmd"});
     serde_json::from_value::<PortalAvailabilityInput>(base.clone()).unwrap();
+
     for key in ["supplier_id", "terms", "status", "source_updated_at"] {
         let mut malicious = base.clone();
         malicious[key] = json!("value");
         assert!(serde_json::from_value::<PortalAvailabilityInput>(malicious).is_err());
     }
+
     let mut missing = base.clone();
     missing.as_object_mut().unwrap().remove("expected_version");
     assert!(serde_json::from_value::<PortalAvailabilityInput>(missing).is_err());
+
     for state in ["STOPPED", "STALE", "UNAVAILABLE"] {
         let mut malicious = base.clone();
         malicious["availability_status"] = json!(state);
         assert!(serde_json::from_value::<PortalAvailabilityInput>(malicious).is_err());
     }
+
     assert_eq!(
         AvailabilityStatus::from(PortalAvailabilityStatus::OutOfStock),
         AvailabilityStatus::Unavailable
@@ -169,13 +182,16 @@ fn nested_terms_allow_list_and_current_validity_fail_closed() {
     let mut nested = serde_json::to_value(terms()).unwrap();
     nested["payment_term"] = json!("PREPAY_100");
     assert!(serde_json::from_value::<SupplierOfferingTermsWrite>(nested).is_err());
+
     let mut future = terms();
     future.valid_from = "2027-01-01".into();
     future.valid_to = None;
     assert!(validate_portal_terms(&future, on).is_err());
+
     let mut expired = terms();
     expired.valid_to = Some("2026-09-01".into());
     assert!(validate_portal_terms(&expired, on).is_err());
+
     let mut invalid = terms();
     invalid.input_tax_rate = "bad".into();
     assert!(validate_portal_terms(&invalid, on).is_err());
@@ -186,6 +202,7 @@ fn api_source_is_read_only_without_changing_internal_pause_or_provenance() {
     PortalOfferingService::ensure_portal_writable(&offering).unwrap();
     assert_eq!(offering.stable.status, OfferingStatus::Paused);
     assert_eq!(offering.source_type, OfferingSourceType::Excel);
+
     offering.source_type = OfferingSourceType::Api;
     let error = PortalOfferingService::ensure_portal_writable(&offering).unwrap_err();
     assert!(matches!(error, Error::Forbidden(message)
@@ -202,12 +219,15 @@ fn independent_receipt_replays_original_and_rejects_changed_payload_or_corruptio
     let receipt = PortalCommandReceipt::new(&cmd, "supplier-1", &response).unwrap();
     assert_eq!(receipt.replay(&cmd).unwrap(), response);
     assert!(receipt.replay(&command(&json!({"price":"105"}))).is_err());
+
     let mut corrupted = receipt.clone();
     corrupted.schema_version = 2;
     assert!(corrupted.replay(&cmd).is_err());
+
     corrupted = receipt.clone();
     corrupted.base.deleted_at = 1;
     assert!(corrupted.replay(&cmd).is_err());
+
     corrupted = receipt;
     corrupted.actor_id = "other".into();
     assert!(corrupted.replay(&cmd).is_err());

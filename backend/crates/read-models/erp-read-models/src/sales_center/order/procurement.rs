@@ -58,10 +58,12 @@ impl SalesOrderReadService {
         if order.current_revision_id().is_none() {
             return empty_coverage();
         }
+
         let state = load_purchase_source_state(&self.db, order, executor).await?;
         let records = list_by_sales_order(&self.db, &order.base.id, executor).await?;
         let pending = pending_purchases(&state, &records);
         let awaiting = pending.iter().filter(|purchase| purchase.awaiting_submission).count();
+
         let updates = if !pending.is_empty()
             && can_list_purchases(&self.db, &self.authorization, actor, executor).await?
         {
@@ -377,7 +379,6 @@ mod tests {
         };
 
         let view = source_update_view(&pending, &suppliers, &owners);
-
         assert_eq!(view.purchase_no, "PO-0001");
         assert_eq!(view.status, "IN_APPROVAL");
         assert_eq!(view.status_label, "审批中");
@@ -434,7 +435,6 @@ mod tests {
             PendingPurchase { order: &order, reasons: &[], blocks_payment: false, awaiting_submission: true };
 
         let view = source_update_view(&pending, &HashMap::new(), &HashMap::new());
-
         assert_eq!(view.supplier_name, None);
         assert_eq!(view.owner_name, None);
         assert!(view.awaiting_submission);

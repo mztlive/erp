@@ -147,6 +147,7 @@ pub async fn persist_payment_reversal_start(
     if replay_committed_start(db, rbac, &input, executor).await?.is_some() {
         return Ok(());
     }
+
     let PaymentReversalStartPersistInput {
         resubmission_reason,
         reversal,
@@ -165,10 +166,12 @@ pub async fn persist_payment_reversal_start(
     if command_receipt.actor_id() != actor.id() {
         return Err(Error::Forbidden("当前账号不能复用其他账号的操作号".to_string()));
     }
+
     let audit = actor.resource_log("payment_reversal.submit", "payment_reversal", id.clone())?;
     persist_start_guard(db, DocumentType::PaymentReversal, &writes, now, executor).await?;
     let mut reversal = reversal;
     ReturnsService::persist_payment_reversal(db, &mut reversal, executor).await?;
+
     persist_payment_reversal_runtime(
         resubmission_reason.as_deref(),
         db,
@@ -184,6 +187,7 @@ pub async fn persist_payment_reversal_start(
         executor,
     )
     .await?;
+
     persist_submit_receipt(db, &command_receipt, id, &audit, executor).await?;
     Ok(())
 }
@@ -262,6 +266,7 @@ pub async fn persist_payment_reversal_runtime(
         executor,
     )
     .await?;
+
     snapshot.display = Some(
         erp_read_models::workbench::capture_approval_display(
             db,
@@ -281,5 +286,6 @@ pub async fn persist_payment_reversal_runtime(
     )
     .await?;
     rbac.runtime.persist_start_snapshot(db, snapshot, executor).await?;
+
     persist_start_tasks(db, writes, context, executor).await.map(|_| ()).map_err(Into::into)
 }

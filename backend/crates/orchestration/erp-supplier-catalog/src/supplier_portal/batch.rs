@@ -132,6 +132,7 @@ impl SupplierPortalProcess {
         actor.require_write()?;
         self.session_validate(actor, &mut NoTransaction).await?;
         validate_rows(&input)?;
+
         let service = PortalOfferingService::new(self.db.clone());
         let mut rows = Vec::with_capacity(input.rows.len());
         for ParsedRow { row, input } in parse_batch_rows(&input) {
@@ -146,6 +147,7 @@ impl SupplierPortalProcess {
             let receipt = service.command_result(&command, &mut NoTransaction).await?;
             rows.push(batch_receipt_result(&row.row_id, receipt)?);
         }
+
         self.session_validate(actor, &mut NoTransaction).await?;
         Ok(PortalBatchResult { valid: batch_rows_valid(&rows), rows })
     }
@@ -161,12 +163,14 @@ impl SupplierPortalProcess {
         actor.require_write()?;
         self.session_validate(actor, &mut NoTransaction).await?;
         validate_rows(&input)?;
+
         let (prepared, mut results) = self.preflight_batch(actor, &input).await;
         let valid = batch_rows_valid(&results);
         if !valid || input.validate_only {
             retain_unresolved_recovery(&input, valid, &mut results);
             return Ok(PortalBatchResult { valid: batch_rows_valid(&results), rows: results });
         }
+
         let mut rows = Vec::new();
         for plan in prepared {
             rows.push(self.run_prepared_row(actor, plan, input.recovery_only).await);
@@ -181,6 +185,7 @@ impl SupplierPortalProcess {
     ) -> (Vec<PreparedRow>, Vec<PortalBatchRowResult>) {
         let parsed = parse_batch_rows(input);
         let duplicates = duplicate_business_units(&parsed);
+
         let mut prepared = Vec::new();
         let mut results = Vec::new();
         for ParsedRow { row, input: parsed } in parsed {
@@ -191,6 +196,7 @@ impl SupplierPortalProcess {
                     continue;
                 },
             };
+
             let plan = match self
                 .prepare_batch_row(actor, row, parsed, input.recovery_only && !input.validate_only)
                 .await
@@ -202,6 +208,7 @@ impl SupplierPortalProcess {
                     continue;
                 },
             };
+
             if matches!(&plan.state, PreparedRowState::Ready { .. })
                 && let Some(message) = duplicates.get(&row.row_id)
             {
@@ -211,6 +218,7 @@ impl SupplierPortalProcess {
             results.push(plan.preflight_result());
             prepared.push(plan);
         }
+
         validate_prepared_rows(&prepared, &mut results);
         (prepared, results)
     }
@@ -243,6 +251,7 @@ impl SupplierPortalProcess {
         let action = batch_action(&input);
         let command =
             scoped_command(&actor.account_id, &actor.supplier_id, action, &row.idempotency_key, &row.input)?;
+
         let service = PortalOfferingService::new(self.db.clone());
         let mut replay = service.command_result(&command, &mut NoTransaction).await?;
         if replay.is_none()
@@ -270,9 +279,11 @@ impl SupplierPortalProcess {
                 }
             }
         }
+
         if let Some(rejection) = replay.as_ref().map(rejection).transpose()?.flatten() {
             return Ok(PreparedRow { row: row.clone(), state: PreparedRowState::Rejected(rejection) });
         }
+
         let (sku_count, business_units) = self.batch_units(actor, &input).await?;
         let state = match replay {
             Some(result) => PreparedRowState::Replayed { result, sku_count },
@@ -342,6 +353,7 @@ impl SupplierPortalProcess {
             )
             .await?;
         self.validate_snapshot(actor, &snapshot, executor).await?;
+
         let app = OfferingApplication::new(
             "batch-preflight".into(),
             &actor.supplier_id,
@@ -366,6 +378,7 @@ impl SupplierPortalProcess {
         service.validate_for_submission(&draft.draft, &SupplyTerms, executor).await?;
         self.validate_assets(&actor.supplier_id, Some(id), &draft.draft, false, executor).await?;
         self.batch_new_product_reviewer(&draft, executor).await.map_err(qualification_error)?;
+
         draft.submit(
             input.expected_version,
             "batch-preflight-submission".into(),
@@ -427,6 +440,7 @@ impl SupplierPortalProcess {
             )
             .await?;
         self.validate_snapshot(actor, &snapshot, executor).await?;
+
         let mut app = OfferingApplication::new(
             next_id(),
             &actor.supplier_id,
@@ -438,6 +452,7 @@ impl SupplierPortalProcess {
         let task_id = next_id();
         app.submit(&actor.audit_actor(), &owner, &task_id, 1, Instant::now())?;
         service.save_application(&mut app, true, executor).await?;
+
         self.services
             .work_items
             .create_supplier_portal_review(
@@ -465,6 +480,7 @@ impl SupplierPortalProcess {
         self.validate_assets(&actor.supplier_id, None, &req.input, true, executor).await?;
         let service = self.catalog_portal();
         service.validate_for_submission(&req.input, &SupplyTerms, executor).await?;
+
         let draft = service
             .create(next_id(), actor.supplier_id.clone(), actor.account_id.clone(), req.input, executor)
             .await?;
@@ -521,6 +537,7 @@ fn validate_rows(input: &PortalBatchInput) -> Result<()> {
     if input.rows.is_empty() || input.rows.len() > 100 {
         return Err(Error::ValidationError("每批必须包含1至100条SKU或供给数据".into()));
     }
+
     let mut rows = HashSet::new();
     let mut keys = HashSet::new();
     let mut count = 0usize;
@@ -602,6 +619,7 @@ fn validate_prepared_rows(prepared: &[PreparedRow], results: &mut [PortalBatchRo
             }
         }
     }
+
     let oversized = prepared.iter().map(PreparedRow::sku_count).sum::<usize>() > 100;
     for row in results {
         if !matches!(row.status.as_str(), "valid" | "validation_failed") {
@@ -719,6 +737,7 @@ mod tests {
             Some(json!({"id":"saved-application","version":2,"status":"draft","result":null}))
         );
         assert!(batch_rows_valid(&[success]));
+
         let rejected = batch_receipt_result(
             "rejected-row",
             Some(json!({"portal_command_outcome":"rejected","rejection":{"kind":"conflict","message":"原版本已变化"}})),
@@ -772,6 +791,7 @@ mod tests {
         assert_eq!(duplicates.len(), 2);
         assert!(duplicates["row-a"].contains("row-b"));
         assert!(duplicates["row-b"].contains("offering-1"));
+
         let mut independent = input;
         independent.rows[1].input["offering_id"] = json!("offering-2");
         assert!(duplicate_business_units(&parse_batch_rows(&independent)).is_empty());
@@ -789,10 +809,12 @@ mod tests {
         assert!(
             matches!(&parsed[1].input, Err(Error::ValidationError(message)) if message == "批量行必须是对象")
         );
+
         let duplicates = duplicate_business_units(&parsed);
         assert_eq!(duplicates.len(), 2);
         assert_eq!(duplicates["first"], "行first与行last重复业务单元offering:offering-1，必须合并后再提交");
         assert_eq!(duplicates["first"], duplicates["last"]);
+
         let Ok(PreparedInput::Availability(id, request)) = &parsed[0].input else {
             panic!("expected parsed availability")
         };
@@ -833,6 +855,7 @@ mod tests {
             },
             rejected_plan(),
         ];
+
         let results = plans.iter().map(PreparedRow::preflight_result).collect::<Vec<_>>();
         assert_eq!(
             results.iter().map(|row| row.status.as_str()).collect::<Vec<_>>(),
@@ -871,6 +894,7 @@ mod tests {
             results.iter().map(|row| row.status.as_str()).collect::<Vec<_>>(),
             ["valid", "replayed", "failed"]
         );
+
         plans[0] = ready_row("ready", 100);
         validate_prepared_rows(&plans, &mut results);
         assert_eq!(results[0].status, "validation_failed");
@@ -895,6 +919,7 @@ mod tests {
         input.mode = PortalBatchMode::Quote;
         assert!(parse_row(input.mode, input.phase, &input.rows[0]).is_ok());
         assert_eq!(duplicate_business_units(&parse_batch_rows(&input)).len(), 2);
+
         input.rows[1] = quote_row("sku-b", "key-b", "OTHER");
         assert!(duplicate_business_units(&parse_batch_rows(&input)).is_empty());
     }
@@ -918,6 +943,7 @@ mod tests {
         input.phase = Some(PortalBatchPhase::Prepare);
         assert!(parse_row(input.mode, input.phase, &input.rows[0]).is_ok());
         assert_eq!(duplicate_business_units(&parse_batch_rows(&input)).len(), 2);
+
         input.rows[1].input = product("OTHER");
         assert!(duplicate_business_units(&parse_batch_rows(&input)).is_empty());
     }
@@ -958,10 +984,12 @@ mod tests {
             idempotency_key: "original-key".into(),
             input: json!({"input":{"name":"新品","product_kind":erp_catalog::ProductKind::Physical,"brand":dictionary,"category":dictionary,"image_asset_ids":[],"file_asset_ids":[],"skus":[{"row_id":"sku-row","name":"新品SKU","spec_entries":[],"unit":dictionary,"ordering_code":"CODE","supply_terms":{},"available_quantity":null,"reported_at":Instant::from_unix_secs(10)}]}}),
         };
+
         let parsed = parse_row(PortalBatchMode::NewProduct, Some(PortalBatchPhase::Prepare), &row).unwrap();
         assert_eq!(batch_action(&parsed), "supplier_portal.new_product_save");
         let PreparedInput::NewProduct(req) = parsed else { panic!("expected new product") };
         req.input.validate_submission().unwrap();
+
         let mut draft = erp_catalog::portal::NewProductDraft::new(
             "draft-a".into(),
             "supplier-a".into(),
@@ -975,6 +1003,7 @@ mod tests {
         assert!(draft.result.is_none());
         let view = external_result(serialize(&draft).unwrap());
         assert_eq!(view, json!({"id":"draft-a","version":1,"status":"draft","result":null}));
+
         let mut with_image = draft.draft.clone();
         with_image.image_asset_ids.push("uploaded-to-this-draft".into());
         draft.update(draft.base.version, with_image).unwrap();
@@ -995,6 +1024,7 @@ mod tests {
         assert!(validate_rows(&input).is_err());
         input.phase = Some(PortalBatchPhase::Submit);
         validate_rows(&input).unwrap();
+
         let parsed = parse_row(input.mode, input.phase, &row).unwrap();
         assert_eq!(batch_action(&parsed), "supplier_portal.new_product_submit");
         let PreparedInput::NewProductSubmit(id, transition) = parsed else {
@@ -1003,6 +1033,7 @@ mod tests {
         assert_eq!(id, "draft-a");
         assert_eq!(transition.expected_version, 3);
         assert_eq!(transition.idempotency_key, "original-submit-key");
+
         let mut forged = row;
         forged.input["image_asset_ids"] = json!(["other-draft-image"]);
         assert!(parse_row(input.mode, input.phase, &forged).is_err());
@@ -1028,11 +1059,14 @@ mod tests {
             },
         };
         let results = || vec![row_result("a", "valid", None, None), row_result("b", "valid", None, None)];
+
         let mut rows = results();
         validate_prepared_rows(&[plan("a", 50, "A"), plan("b", 50, "B")], &mut rows);
         assert!(rows.iter().all(|row| row.status == "valid"));
+
         validate_prepared_rows(&[plan("a", 50, "A"), plan("b", 51, "B")], &mut rows);
         assert!(rows.iter().all(|row| row.status == "validation_failed"));
+
         rows = results();
         validate_prepared_rows(&[plan("a", 1, "SAME"), plan("b", 1, "SAME")], &mut rows);
         assert!(rows.iter().all(|row| row.status == "validation_failed"));
@@ -1051,6 +1085,7 @@ mod tests {
             row_result("sealed", "failed", Some("旧版本已封存".into()), Some(rejected.clone())),
             row_result("uncertain", "unknown", Some("提交结果未知".into()), None),
         ];
+
         retain_unresolved_recovery(&input, false, &mut rows);
         assert_eq!(
             rows.iter().map(|row| row.status.as_str()).collect::<Vec<_>>(),
@@ -1072,6 +1107,7 @@ mod tests {
         retain_unresolved_recovery(&input, true, &mut rows);
         assert_eq!(rows[0].status, "unknown");
         assert!(!batch_rows_valid(&rows));
+
         input.recovery_only = false;
         rows[0].status = "validation_failed".into();
         retain_unresolved_recovery(&input, false, &mut rows);
@@ -1090,6 +1126,7 @@ mod tests {
         }];
         let marker = json!({"command_outcome":"rejected"});
         let mut rows = vec![row_result("sealed", "failed", Some("版本已封存".into()), Some(marker.clone()))];
+
         validate_prepared_rows(&prepared, &mut rows);
         assert_eq!(rows[0].status, "failed");
         assert_eq!(rows[0].result, Some(marker));
@@ -1119,6 +1156,7 @@ mod tests {
                 Error::Rbac("权限配置无法证明".into()),
             ]
         };
+
         for error in errors() {
             let result = execution_row_result("original-row", true, Err(error));
             assert_eq!(result.status, "unknown");
@@ -1126,6 +1164,7 @@ mod tests {
             assert!(result.error.is_some());
             assert!(result.result.is_none());
         }
+
         for error in errors() {
             assert_eq!(execution_row_result("new-row", false, Err(error)).status, "failed");
         }
@@ -1141,6 +1180,7 @@ mod tests {
             );
             assert_eq!(success.status, "succeeded");
             assert_eq!(success.result.unwrap()["id"], "original-application");
+
             let uncertain = execution_row_result(
                 "row",
                 recovering,

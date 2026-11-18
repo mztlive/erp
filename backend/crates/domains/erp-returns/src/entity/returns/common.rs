@@ -36,6 +36,7 @@ pub(crate) fn validate_actor_pair(handled_by: String, reviewed_by: String) -> Re
         normalize_required_text(handled_by, "财务经办人不能为空", ACTOR_MAX_LEN, "经办人标识过长")?;
     let reviewed_by =
         normalize_required_text(reviewed_by, "财务复核人不能为空", ACTOR_MAX_LEN, "复核人标识过长")?;
+
     if handled_by == reviewed_by {
         return Err(Error::from("财务经办人与复核人不得相同"));
     }
@@ -194,8 +195,10 @@ mod tests {
     fn created_by_and_approval_version_helpers() {
         assert_eq!(normalize_created_by(" creator-1 ").unwrap(), "creator-1");
         assert!(normalize_created_by("   ").is_err());
+
         assert_eq!(next_approval_version(0).unwrap(), 1);
         assert!(next_approval_version(u32::MAX).is_err());
+
         assert!(ensure_initial_approval(true, 0, "已提交").is_ok());
         assert!(ensure_initial_approval(false, 0, "已提交").is_err());
         assert!(ensure_initial_approval(true, 1, "已提交").is_err());

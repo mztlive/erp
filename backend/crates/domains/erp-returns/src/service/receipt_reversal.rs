@@ -306,6 +306,7 @@ mod tests {
             "actor",
         )
         .unwrap();
+
         assert_eq!(whole.amount, source_amount);
         assert_eq!(partial.amount, Amount::from_str("25").unwrap());
         assert_eq!(whole.reversal_no, partial.reversal_no);
@@ -329,11 +330,13 @@ mod tests {
         start_receipt_reversal_approval(&mut reversal).unwrap();
         reversal.mark_posted().unwrap();
         let before = reversal.clone();
+
         let error = prepare_receipt_reversal_submit(&mut reversal, 0).unwrap_err();
         assert!(
             matches!(error, Error::ConflictError(message) if message == "数据已被其他请求修改，请刷新后重试")
         );
         assert_eq!(reversal, before);
+
         let version = reversal.base.version;
         let error = prepare_receipt_reversal_submit(&mut reversal, version).unwrap_err();
         assert!(matches!(error, Error::Logic(_)));
@@ -354,6 +357,7 @@ mod tests {
         assert_eq!(reversal.status, ReceiptReversalStatus::InApproval);
         assert_eq!(reversal.approval_subject_version, 1);
         assert_eq!(reversal.base.version, version);
+
         assert!(
             matches!(ReturnsService::reject_receipt_reversal_client_post(), Err(Error::ConflictError(message)) if message == "回款冲正过账只能由审批最终通过动作执行，客户端不得直接过账")
         );

@@ -99,6 +99,7 @@ impl SupplierDepositReconciliation {
         ] {
             required(value.clone(), "资金结案依据")?;
         }
+
         if let Some(previous) = &self.resolution {
             if previous.operation_key != resolution.operation_key
                 || previous.payload_fingerprint != resolution.payload_fingerprint
@@ -111,6 +112,7 @@ impl SupplierDepositReconciliation {
         if self.resolved_by.is_some() || self.resolution_reference.is_some() {
             return Err(Error::from("历史结案缺少完整回执，请先核实原依据"));
         }
+
         self.resolved_by = Some(resolution.actor_id.clone());
         self.resolution_reference = Some(resolution.evidence_asset_id.clone());
         self.resolution = Some(resolution);
@@ -142,6 +144,7 @@ impl FundsEvidenceInbox {
         {
             return Err(Error::from("风险重核的平衡依据、流水或原占用归属不一致"));
         }
+
         let registered_at = timestamp(ledger.base.created_at)?;
         let mut since = (*occurred_at).min(ledger.evidence.occurred_at);
         if let Some(reservation) = reservation {
@@ -189,12 +192,14 @@ impl SupplierDepositReservation {
             net = add(net, debit)?;
             consumed = usage.batches.iter().try_fold(consumed, |sum, batch| add(sum, batch.amount))?;
         }
+
         if consumed != self.consumed_amount
             || (reason != DepositReleaseReason::ChargesSettled && net != Amount::zero())
             || (reason == DepositReleaseReason::FailedWithoutCharge && !usages.is_empty())
         {
             return Err(Error::from("原执行批次、扣款或返款尚不满足风险释放条件"));
         }
+
         let amount = self.remaining()?;
         if amount <= Amount::zero() {
             return Err(Error::from("原占用没有待释放余额"));
@@ -259,6 +264,7 @@ mod tests {
             resolved_at: Instant::from_unix_secs(12),
         };
         assert!(record.resolve(resolution.clone()).unwrap());
+
         let mut replay = resolution.clone();
         replay.resolved_at = Instant::from_unix_secs(13);
         assert!(!record.resolve(replay.clone()).unwrap());

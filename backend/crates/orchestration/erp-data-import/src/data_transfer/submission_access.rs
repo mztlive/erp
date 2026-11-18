@@ -97,6 +97,7 @@ impl BusinessTransfers {
             .as_array()
             .filter(|rows| !rows.is_empty())
             .ok_or_else(|| Error::ValidationError("请选择供给处理行".into()))?;
+
         for row in rows {
             self.authorization
                 .require(
@@ -251,6 +252,7 @@ mod tests {
         let handler = Handler::default();
         let input = json!({"customer_id":"customer-1"});
         let mut executor = SnapshotExecutor::default();
+
         authorize_registration(
             &handler,
             TransferKind::InquiryCreationPreview,
@@ -260,6 +262,7 @@ mod tests {
         )
         .await
         .unwrap();
+
         assert_eq!(
             *handler.calls.lock().unwrap(),
             vec![(TransferKind::InquiryCreationPreview, input, "sales-1".into(),)]

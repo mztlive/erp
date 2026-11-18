@@ -61,10 +61,12 @@ mod tests {
             security_token: Some("token123".into()),
         };
         value.validate().unwrap();
+
         let debug = format!("{value:?}");
         for secret in ["LTAItest123", "secret123", "token123"] {
             assert!(!debug.contains(secret));
         }
+
         for bad in ["", " a", "a\r\nb", "a\tb"] {
             value.access_key_secret = bad.into();
             assert_eq!(value.validate(), Err(Error::Configuration));

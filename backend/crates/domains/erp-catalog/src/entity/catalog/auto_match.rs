@@ -43,6 +43,7 @@ pub fn same_specification(source: &str, signature: &str) -> Result<bool> {
     if entries.len() == 1 && entries[0].attribute_code == "规格" {
         return Ok(spec_text(source) == spec_text(&entries[0].value_code));
     }
+
     let Ok(source_entries) = parse_specification_signature(source) else { return Ok(false) };
     Ok(source_entries.len() == entries.len()
         && source_entries.iter().zip(entries).all(|(a, b)| {
@@ -106,6 +107,7 @@ impl MatchIdentity<'_> {
                 "匹配商品已停用，或品牌、规格、单位、商品类型不一致，请先核对商品档案".into(),
             ));
         }
+
         if self.barcode.zip(company.barcode).is_some_and(|(a, b)| a != b) {
             return Err(Error::ConflictError("来源条码与公司 SKU 当前条码不一致，请先核对条码归属".into()));
         }
@@ -130,6 +132,7 @@ mod identity_tests {
         let mut company = MatchIdentity { specification: "规格=250ml×12盒", ..source };
         assert!(source.ensure_matches(&company, true).is_ok());
         assert!(source.ensure_matches(&company, false).is_err());
+
         company.specification = "规格=500ml×6盒";
         assert!(source.ensure_matches(&company, true).is_err());
         company.specification = "规格=250ml×12盒";
@@ -138,6 +141,7 @@ mod identity_tests {
         company.unit = "箱";
         company.brand = Some("另一品牌");
         assert!(source.ensure_matches(&company, true).is_err());
+
         company.brand = Some("品牌");
         company.barcode = Some("123");
         assert!(source.ensure_matches(&company, true).is_err());

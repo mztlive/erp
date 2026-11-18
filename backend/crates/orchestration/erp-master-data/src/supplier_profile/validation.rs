@@ -41,6 +41,7 @@ impl SupplierProfileProcess {
                 let key = key.to_owned();
                 let target = target.clone();
                 let fingerprint = fingerprint.to_owned();
+
                 let recovered = self
                     .db
                     .client()
@@ -78,6 +79,7 @@ impl SupplierProfileProcess {
             .party(party_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("签约或付款主体不存在".to_string()))?;
+
         if party.company_profile.is_none() {
             return Err(Error::ValidationError("签约和付款主体必须是已维护的公司主体".into()));
         }
@@ -108,6 +110,7 @@ impl SupplierProfileProcess {
             let Some(attachment_id) = qualification.attachment_id.as_ref() else {
                 continue;
             };
+
             let sensitivity = match pending_assets.sensitivity(attachment_id) {
                 Some(sensitivity) => sensitivity,
                 None => {

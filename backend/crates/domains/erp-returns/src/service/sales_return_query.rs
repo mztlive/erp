@@ -77,6 +77,7 @@ impl SalesReturnQueryService {
         self.authorization
             .require(actor, &returns::SALES_RETURN_SALES_RETURN_CASE_LIST, AccessTarget::Operation, executor)
             .await?;
+
         params.validate()?;
         let query = params.normalized()?;
         let filter = SalesReturnCaseFilter {
@@ -89,6 +90,7 @@ impl SalesReturnQueryService {
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
         let page = self.db.sales_return_cases().search_sales_return_cases(&filter, executor).await?;
+
         let domain = ReturnsService::new(self.db.clone());
         let mut views = Vec::with_capacity(page.items.len());
         for row in page.items {
@@ -178,6 +180,7 @@ impl ReturnsService {
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售退货处理单不存在".to_string()))?;
+
         let lines = self
             .db
             .sales_return_lines()
@@ -193,6 +196,7 @@ impl ReturnsService {
                 restockable_quantity: line.restockable_quantity,
             })
             .collect();
+
         Ok(SalesReturnCaseView {
             id: case.base.id,
             return_no: case.return_no,
@@ -228,6 +232,7 @@ mod tests {
             .database("sales_return_snapshot_test");
         let service = SalesReturnQueryService::new(db, unavailable_authorization());
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let list_error = service
             .sales_return_case_list_snapshot(
                 &actor,
@@ -240,6 +245,7 @@ mod tests {
             .sales_return_case_detail_snapshot("return", &actor, &mut SnapshotExecutor::default())
             .await
             .unwrap_err();
+
         for error in [list_error, detail_error] {
             assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
         }

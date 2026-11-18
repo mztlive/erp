@@ -275,12 +275,14 @@ mod tests {
         let mapping = mapping();
         let context = context();
         let facts = MappingFacts::default();
+
         let QueryFragment::Match(owner) =
             mapping.predicate(&AccessFact::Owned, &context, Some(&facts)).unwrap()
         else {
             panic!("owner fact must use current sales owner");
         };
         assert_eq!(owner, doc! {"sales_owner_user_id":"sales"});
+
         let QueryFragment::Match(org) = mapping
             .predicate(&AccessFact::OrganizationIn(["org".into()].into()), &context, Some(&facts))
             .unwrap()
@@ -288,6 +290,7 @@ mod tests {
             panic!("organization must use the inquiry business organization");
         };
         assert_eq!(org, doc! {"business_org_unit_id":{"$in":["org"]}});
+
         assert!(
             mapping
                 .predicate(&AccessFact::WarehouseIn(["warehouse".into()].into()), &context, Some(&facts))
@@ -346,9 +349,11 @@ mod tests {
             vec!["a".into()],
         )
         .unwrap();
+
         let before = task_object(&task);
         assert_eq!(before.assignee_id, FactValue::Known(Some("buyer".into())));
         assert_eq!(before.completed, FactValue::Known(false));
+
         task.reassign("next", Instant::now()).unwrap();
         task.complete_by_domain_command("next", Instant::now()).unwrap();
         let after = task_object(&task);
@@ -375,6 +380,7 @@ mod tests {
         )
         .unwrap();
         assert!(!object(&inquiry).version.is_empty());
+
         let candidate = inquiry_candidate(&inquiry);
         assert!(candidate.version.is_empty());
         assert_eq!(candidate.owner_id, FactValue::Known(Some("owner".into())));

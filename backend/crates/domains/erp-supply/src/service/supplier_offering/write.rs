@@ -28,6 +28,7 @@ pub(super) async fn created<P: OfferingWritePort>(
         executor,
     )
     .await?;
+
     port.command(&prepared.command, executor).await?;
     Ok(())
 }
@@ -49,6 +50,7 @@ pub(super) async fn revised<P: OfferingWritePort>(
     executor: &mut dyn Executor,
 ) -> Result<ReviseSupplierOfferingResult> {
     repository_write::append_revision(port, &mut prepared.offering, &prepared.revision, executor).await?;
+
     let result = ReviseSupplierOfferingResult {
         offering_id: prepared.offering.base.id.clone(),
         revision_id: prepared.revision.base.id.clone(),
@@ -101,6 +103,7 @@ pub(super) async fn availability<P: OfferingWritePort>(
     executor: &mut dyn Executor,
 ) -> Result<UpdateSupplierOfferingAvailabilityResult> {
     port.update_availability(&mut prepared.availability, executor).await?;
+
     let result = UpdateSupplierOfferingAvailabilityResult {
         offering_id: prepared.offering_id.to_string(),
         availability_status: prepared.availability.availability_status,
@@ -227,6 +230,7 @@ mod tests {
             change_reason: "reason".into(),
             idempotency_key: "key".into(),
         };
+
         let id = SupplierOfferingId::new("offering");
         let mut offering = SupplierOffering::new(
             id.clone(),
@@ -251,6 +255,7 @@ mod tests {
         )
         .unwrap();
         offering.stable.current_revision_id = Some(revision.base.id.clone());
+
         let result = CreateSupplierOfferingResult {
             offering_id: "offering".into(),
             revision_id: "revision".into(),
@@ -274,6 +279,7 @@ mod tests {
         let port =
             Recorder { pointer: &mut executor as *mut Marker as usize, calls: Mutex::new(vec![]), fail };
         let f = fixture();
+
         let result = match kind {
             0 => created(&port, &f, &mut executor).await,
             1 => {

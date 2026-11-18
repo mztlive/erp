@@ -63,6 +63,7 @@ impl CatalogSupplyRepository<'_> {
             executor,
         )
         .await?;
+
         if let Some(scope) = &filter.scope {
             scope.ensure_current(executor)?;
         }
@@ -97,6 +98,7 @@ impl CatalogSupplyRepository<'_> {
         }
         pipeline.extend(product_list_pipeline(filter));
         let facet = self.aggregate_products(pipeline, executor).await?;
+
         if let Some(scope) = &filter.scope {
             scope.ensure_current(executor)?;
         }

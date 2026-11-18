@@ -102,16 +102,19 @@ pub async fn invalidate_replaced_confirmation(
     if replaced_ids.is_empty() {
         return Ok(());
     }
+
     let work_items = db.work_items().list_legacy_import_confirmations_by_ids(&replaced_ids, executor).await?;
     let mut work_items_by_id = HashMap::new();
     for item in work_items {
         work_items_by_id.insert(item.base.id.clone(), item);
     }
+
     let replacement_id = LegacyImportConfirmationId::new(replacement.base.id.clone());
     for confirmation in confirmations.iter_mut().filter(|item| item.is_replaced_by(replacement.trial_version))
     {
         confirmation.invalidate(replacement_id.clone(), Instant::now())?;
     }
+
     let mut to_close = collect_superseded_closable_work_items(
         confirmations,
         replacement.trial_version,
@@ -125,6 +128,7 @@ pub async fn invalidate_replaced_confirmation(
             Instant::now(),
         )?;
     }
+
     db.legacy_import_confirmations()
         .persist_invalidated_confirmations(confirmations, &replacement_id, executor)
         .await?;
@@ -164,6 +168,7 @@ mod tests {
                 erp_core::common::time::Instant::from_unix_secs(1_700_000_000),
             )
             .unwrap();
+
         let mut work_items = HashMap::new();
         let error = collect_superseded_closable_work_items(
             std::slice::from_ref(&confirmation),

@@ -39,6 +39,7 @@ impl PurchasePaymentRequestReadService {
                 actions.push("SUBMIT".into());
             }
         }
+
         if request.status == PurchasePaymentRequestStatus::InApproval
             && self
                 .actionable(actor, request, &purchase_payment_request_permissions::WITHDRAW, executor)
@@ -46,6 +47,7 @@ impl PurchasePaymentRequestReadService {
         {
             actions.push("WITHDRAW".into());
         }
+
         if request.status.can_close()
             && self.actionable(actor, request, &purchase_payment_request_permissions::CLOSE, executor).await?
         {

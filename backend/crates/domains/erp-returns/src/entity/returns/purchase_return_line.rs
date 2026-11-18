@@ -135,6 +135,7 @@ mod tests {
         let mut line = PurchaseReturnLine::new(PurchaseReturnLineId::new("prl-1"), data()).unwrap();
         line.base = BaseModel::fake();
         let before = line.clone();
+
         for value in ["0.000000", "-0.000000", "-0.000001", "-1.000000"] {
             let quantity = Quantity::from_str(value).unwrap();
             let invalid = PurchaseReturnLineData { return_quantity: quantity, ..data() };
@@ -142,6 +143,7 @@ mod tests {
                 PurchaseReturnLine::new(PurchaseReturnLineId::new("prl-2"), invalid),
                 Err(Error::LogicError(message)) if message == "退货数量必须为正数"
             ));
+
             assert!(matches!(
                 line.update(PurchaseReturnLineUpdate {
                     return_quantity: Some(quantity),
@@ -161,6 +163,7 @@ mod tests {
         line.base = BaseModel::fake();
         assert_eq!(line.return_quantity, minimum);
         assert_eq!(line.warehouse_id, None);
+
         let before = line.clone();
         line.update(PurchaseReturnLineUpdate::default()).unwrap();
         assert_eq!(line, before);
@@ -171,12 +174,14 @@ mod tests {
         })
         .unwrap();
         assert_eq!(line.return_quantity, Quantity::from_str("5.000000").unwrap());
+
         line.update(PurchaseReturnLineUpdate { return_quantity: Some(minimum), ..Default::default() })
             .unwrap();
         assert_eq!(line.return_quantity, minimum);
         assert_eq!(line.warehouse_id, Some(WarehouseId::new("wh-2")));
         assert_eq!(line.purchase_return_order_id, before.purchase_return_order_id);
         assert_eq!(line.purchase_order_revision_line_id, before.purchase_order_revision_line_id);
+
         let before = line.clone();
         line.update(PurchaseReturnLineUpdate::default()).unwrap();
         assert_eq!(line, before);

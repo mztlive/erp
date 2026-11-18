@@ -74,6 +74,7 @@ impl ReturnsReadService {
         self.authorization
             .require(actor, &internal::PURCHASE_RETURN_SOURCE, AccessTarget::record(source_id)?, executor)
             .await?;
+
         let order = self
             .db
             .purchase_return_orders()
@@ -108,10 +109,12 @@ impl ReturnsReadService {
         let expected = params.scope_version.as_deref();
         crate::support::ensure_deep_page(params.page.unwrap_or(1), expected)?;
         params.validate()?;
+
         let snapshot = self.purchase_return_list_snapshot(params, actor).await?;
         if expected.is_some_and(|value| value != snapshot.scope_version) {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
+
         let current = self.purchase_return_scope_fingerprint(params, actor).await?;
         if current != snapshot.scope_version {
             return Err(crate::support::data_scope_changed("数据范围或业务单据已变化，请刷新"));
@@ -178,9 +181,11 @@ impl ReturnsReadService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (mut context, scope, filter) = list_query(&access, &params, &actor, executor).await?;
+
                     let page = authorized_returns::search(&db, &filter, &scope, executor).await?;
                     let versions = authorized_returns::versions(&db, &filter, &scope, executor).await?;
                     context.scope_version = list_scope_version(&context.scope_version, &versions)?;
+
                     let mut views = Vec::with_capacity(page.items.len());
                     // 明细查询未定义排序；保留原单 ID 条件，避免多 ID 查询计划改变行顺序。
                     for row in page.items {
@@ -190,6 +195,7 @@ impl ReturnsReadService {
                             .await?;
                         views.push(purchase_return_row_view(row, lines));
                     }
+
                     scope.validate(executor).await?;
                     Ok(PurchaseReturnListView {
                         page: PageView {
@@ -238,6 +244,7 @@ impl ReturnsReadService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (context, scope, filter) = list_query(&access, &params, &actor, executor).await?;
+
                     let versions = authorized_returns::versions(&db, &filter, &scope, executor).await?;
                     let version = list_scope_version(&context.scope_version, &versions)?;
                     scope.validate(executor).await?;
@@ -297,6 +304,7 @@ async fn purchase_return_detail(
         .find_authorized(&source_id, &scope, executor)
         .await?
         .ok_or_else(|| Error::NotFound("采购退货单不存在或无权查看".into()))?;
+
     let view = purchase_return_order_view(db, identity, executor).await?;
     let version = format!("{}:{}:{}", context.scope_version, source.base.id, source.base.version);
     scope.validate(executor).await?;
@@ -323,6 +331,7 @@ async fn list_query(
     executor: &mut dyn Executor,
 ) -> Result<(PurchaseResolvedScope, PurchaseReadScope, PurchaseReturnOrderFilter)> {
     let (context, scope) = access.resolve(actor, &purchase_order_permissions::LIST, executor).await?;
+
     let query = params.normalized()?;
     let filter = PurchaseReturnOrderFilter {
         purchase_return_no: query.purchase_return_no,
@@ -496,10 +505,12 @@ mod tests {
         .unwrap();
         let access = PurchaseAccess::new(db.clone(), PurchaseDataScope::shared(db.clone(), authorization));
         let actor = AuditActor::new("buyer".into(), "buyer".into(), AccountKind::Admin);
+
         let error = purchase_return_detail(&db, &access, "return", &actor, &mut SnapshotExecutor::default())
             .await
             .unwrap_err();
         assert!(matches!(error, Error::Forbidden(_)));
+
         let access = ReturnsReadService::new(db.clone(), unavailable_authorization()).purchase_access();
         let error = purchase_return_detail(&db, &access, "return", &actor, &mut SnapshotExecutor::default())
             .await
@@ -515,11 +526,13 @@ mod tests {
         let service =
             ReturnsReadService::new(client.database("purchase_return_result"), unavailable_authorization());
         let actor = AuditActor::new("buyer".into(), "buyer".into(), AccountKind::Admin);
+
         let error = service
             .purchase_return_created_result("return", "purchase", &actor, &mut ReadExecutor::default())
             .await
             .unwrap_err();
         assert!(matches!(error, Error::ValidationError(reason) if reason.contains("原授权快照")));
+
         let error = service
             .purchase_return_created_result("return", "purchase", &actor, &mut SnapshotExecutor::default())
             .await
@@ -562,6 +575,7 @@ mod tests {
                 line("line-a", "revision-1", "1", None),
             ],
         );
+
         assert_eq!(view.id, "return-1");
         assert_eq!(view.purchase_return_no, "PR-1");
         assert_eq!(view.purchase_order_id, "po-1");
@@ -570,6 +584,7 @@ mod tests {
         assert_eq!(view.status, PurchaseReturnStatus::PendingExecution);
         assert_eq!(view.version, 4);
         assert_eq!(view.created_at, 100);
+
         assert_eq!(view.lines.iter().map(|line| line.id.as_str()).collect::<Vec<_>>(), ["line-z", "line-a"]);
         assert_eq!(view.lines[0].purchase_order_revision_line_id, "revision-2");
         assert_eq!(view.lines[0].return_quantity, Quantity::from_str("2").unwrap());
@@ -610,10 +625,13 @@ mod tests {
             PurchaseReturnVersion { id: "return-2".into(), version: 3 },
         ];
         let first = list_scope_version("scope", &versions).unwrap();
+
         versions[1].version += 1;
         assert_ne!(first, list_scope_version("scope", &versions).unwrap());
+
         versions[1].version -= 1;
         assert_ne!(first, list_scope_version("new-scope", &versions).unwrap());
+
         versions.pop();
         assert_ne!(first, list_scope_version("scope", &versions).unwrap());
     }
@@ -625,6 +643,7 @@ mod tests {
             .map(|index| PurchaseReturnVersion { id: format!("return-{index:05}"), version: 1 })
             .collect();
         assert!(list_scope_version("scope", &versions).is_ok());
+
         versions.push(PurchaseReturnVersion { id: "return-over-limit".into(), version: 1 });
         assert!(matches!(
             list_scope_version("scope", &versions),

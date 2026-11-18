@@ -106,17 +106,18 @@ impl AccessControlService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     access.require(executor).await?;
+
                     params.validate()?;
                     let filter = params.normalized()?;
                     let page = db.permissions().search_permissions(&filter, executor).await?;
                     let items = page.items;
-
                     let result = Ok(PageView {
                         items,
                         total: page.total,
                         page: filter.paging.page,
                         page_size: filter.paging.page_size,
                     });
+
                     access.require(executor).await?;
                     result
                 })
@@ -150,8 +151,10 @@ impl AccessControlService {
             &access_control::PERMISSION_CREATE,
         );
         access.preflight(&self.db).await?;
+
         req.validate()?;
         let permission = PermissionDefinition::new(PermissionId::new(next_id()), req.into_data())?;
+
         let event = self
             .build_audit_event(
                 actor,
@@ -161,6 +164,7 @@ impl AccessControlService {
                 Vec::new(),
             )
             .await?;
+
         let db = self.db.clone();
         let permission = self
             .with_audited_write(event, access, move |executor| {
@@ -170,7 +174,6 @@ impl AccessControlService {
                 })
             })
             .await?;
-
         Ok(permission.into())
     }
 
@@ -202,10 +205,12 @@ impl AccessControlService {
             &access_control::PERMISSION_UPDATE,
         );
         access.preflight(&self.db).await?;
+
         req.validate()?;
         let mut permission = self.load_permission_with_version(id, req.version).await?;
         let changed = req.changed_field_names();
         permission.update(req.into_update())?;
+
         let event = self
             .build_audit_event(
                 actor,
@@ -215,6 +220,7 @@ impl AccessControlService {
                 changed,
             )
             .await?;
+
         let db = self.db.clone();
         let updated = self
             .with_audited_write(event, access, move |executor| {
@@ -224,7 +230,6 @@ impl AccessControlService {
                 })
             })
             .await?;
-
         Ok(updated.into())
     }
 
@@ -250,6 +255,7 @@ impl AccessControlService {
             &access_control::PERMISSION_DELETE,
         );
         access.preflight(&self.db).await?;
+
         let mut permission = self
             .db
             .permissions()
@@ -257,9 +263,11 @@ impl AccessControlService {
             .await?
             .ok_or_else(|| Error::NotFound("权限定义不存在".to_string()))?;
         permission.ensure_deletable()?;
+
         let event = self
             .build_audit_event(actor, "permission.delete", "permission", Some(id.to_string()), Vec::new())
             .await?;
+
         let db = self.db.clone();
         self.with_audited_write(event, access, move |executor| {
             Box::pin(async move {
@@ -298,6 +306,7 @@ impl AccessControlService {
                     params.validate()?;
                     let items = db.user_roles().list_by_user(&params.user_id, executor).await?;
                     let result = Ok(items.into_iter().map(Into::into).collect());
+
                     access.require(executor).await?;
                     result
                 })
@@ -334,6 +343,7 @@ impl AccessControlService {
             &access_control::USER_ROLE_CREATE,
         );
         access.preflight(&self.db).await?;
+
         let data = req.into_data(actor.id())?;
         self.db
             .roles()
@@ -341,6 +351,7 @@ impl AccessControlService {
             .await?
             .ok_or_else(|| Error::NotFound("角色不存在".to_string()))?;
         let binding = UserRole::new(UserRoleId::new(next_id()), data)?;
+
         let event = self
             .build_audit_event(
                 actor,
@@ -350,6 +361,7 @@ impl AccessControlService {
                 Vec::new(),
             )
             .await?;
+
         let db = self.db.clone();
         let binding = self
             .with_audited_write(event, access, move |executor| {
@@ -359,7 +371,6 @@ impl AccessControlService {
                 })
             })
             .await?;
-
         Ok(binding.into())
     }
 
@@ -391,6 +402,7 @@ impl AccessControlService {
             &access_control::USER_ROLE_REVOKE,
         );
         access.preflight(&self.db).await?;
+
         req.validate()?;
         let event = self
             .build_audit_event(
@@ -401,6 +413,7 @@ impl AccessControlService {
                 vec!["revoked_at".to_string()],
             )
             .await?;
+
         let db = self.db.clone();
         let id = id.to_string();
         let revoked_by = actor.id().to_string();
@@ -419,7 +432,6 @@ impl AccessControlService {
                 })
             })
             .await?;
-
         Ok(updated.into())
     }
 
@@ -452,17 +464,18 @@ impl AccessControlService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     access.require(executor).await?;
+
                     params.validate()?;
                     let filter = params.normalized()?;
                     let page = db.audit_events().search_audit_events(&filter, executor).await?;
                     let items = page.items.into_iter().map(AuditEventView::from).collect();
-
                     let result = Ok(PageView {
                         items,
                         total: page.total,
                         page: filter.paging.page,
                         page_size: filter.paging.page_size,
                     });
+
                     access.require(executor).await?;
                     result
                 })
@@ -529,6 +542,7 @@ impl AccessControlService {
         {
             return Err(Error::ValidationError("审计写入动作未登记".into()));
         }
+
         let account = self.db.accounts().find_by_id(actor.id(), &mut NoTransaction).await?;
         let actor_label = account.map(|account| account.name).unwrap_or_else(|| "系统操作人".to_string());
         Ok(AuditEvent::new(
@@ -574,6 +588,7 @@ impl AccessControlService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     access.require(executor).await?;
+
                     let value = write(executor).await?;
                     db.audit_events().create(&event, executor).await?;
                     Ok(value)

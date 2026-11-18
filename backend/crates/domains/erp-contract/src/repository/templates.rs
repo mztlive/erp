@@ -177,6 +177,7 @@ where
         .skip((page - 1) * u64::from(page_size))
         .limit(i64::from(page_size))
         .build();
+
     let items = mongo_ops::find_many(&collection, filter.clone(), options, &mut *executor).await?;
     let total = mongo_ops::count_documents(&collection, filter, executor).await?;
     Ok(PageView { items, total: i64::try_from(total).unwrap_or(i64::MAX), page, page_size })

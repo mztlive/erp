@@ -156,9 +156,11 @@ async fn run_list_snapshot(
 ) -> Result<CustomerSnapshot> {
     let (mut context, authorized, as_of) = resolve_list_authorized(&deps, executor).await?;
     let filter = build_account_filter(&deps, authorized, executor).await?;
+
     let versions = authorized_versions(&deps.db, &filter, &context, &deps.access, executor).await?;
     ensure_limit(versions.len(), "客户查询超过上限，请收窄组织或负责人条件")?;
     apply_version_fingerprint(&mut context, &versions);
+
     if !hydrate {
         deps.access.validate(&context, executor).await?;
         return Ok(CustomerSnapshot {
@@ -169,6 +171,7 @@ async fn run_list_snapshot(
             context,
         });
     }
+
     let page = authorized_page(&deps.db, &filter, &context, &deps.access, executor).await?;
     let items = hydrate_rows(
         &deps.db,
@@ -180,6 +183,7 @@ async fn run_list_snapshot(
         executor,
     )
     .await?;
+
     deps.access.validate(&context, executor).await?;
     Ok(CustomerSnapshot { items, total: page.total, page: filter.page, page_size: filter.page_size, context })
 }
@@ -465,12 +469,14 @@ async fn apply_org_unit_filter(
     if query.include_descendants == Some(true) && org_ids.as_slice().is_empty() {
         return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
     }
+
     let expanded = data_scope
         .organization()
         .expand_org_units(org_ids.as_slice(), query.include_descendants.unwrap_or(false), executor)
         .await?;
     let members = data_scope.organization().org_member_ids(&expanded, context.as_of, executor).await?;
     ensure_limit(members.len(), "组织成员超过查询上限，请收窄组织筛选")?;
+
     Ok(Some(current_owner_customer_ids(db, ids.as_deref(), &members, as_of, executor).await?))
 }
 
@@ -563,14 +569,17 @@ async fn hydrate_rows(
     if rows.is_empty() {
         return Ok(Vec::new());
     }
+
     let party_ids: Vec<erp_core::ids::PartyId> =
         rows.iter().map(|row| erp_core::ids::PartyId::new(row.party_id.clone())).collect();
     let identities = party.identities_by_ids(&party_ids, executor).await?;
+
     let customer_ids: Vec<String> = rows.iter().map(|row| row.id.clone()).collect();
     let assignments =
         db.customer_assignments().list_active_for_customers(&customer_ids, as_of, executor).await?;
     let account_ids: Vec<String> = assignments.iter().map(|assignment| assignment.user_id.clone()).collect();
     let account_names = accounts.names(&account_ids, executor).await?;
+
     Ok(super::assemble_customer_views(
         rows,
         identities,
@@ -626,6 +635,7 @@ mod tests {
             },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
+
         match ensure_stable_snapshot("v1", "v9") {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));

@@ -73,11 +73,13 @@ impl LegacyImportCommandIdentity {
             "{prefix}{}",
             sha256_hex(format!("{actor_id}|{action}|{resource_id}|{idempotency_key}").as_bytes())
         );
+
         let mut digest = Sha256::new();
         for part in parts {
             digest.update((part.len() as u64).to_be_bytes());
             digest.update(part.as_bytes());
         }
+
         Self {
             command_id,
             fingerprint: encode_digest(digest.finalize()),

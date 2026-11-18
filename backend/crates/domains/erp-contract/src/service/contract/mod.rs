@@ -133,6 +133,7 @@ impl ContractService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     service.require_create(&actor, &customer_id, executor).await?;
+
                     service.apply_create(&mut planned.contract, &planned.revision, executor).await?;
                     let view = ContractView::from(planned.contract);
                     service.audit.persist(&audit, executor).await?;
@@ -189,6 +190,7 @@ impl ContractService {
     ) -> Result<()> {
         self.ensure_active_customer(&contract.customer_id, executor).await?;
         require_signing_company(self.companies.as_ref(), &contract.settlement_party_id, executor).await?;
+
         self.db.contract().create_contract_with_revision(contract, revision, executor).await?;
         Ok(())
     }
@@ -259,12 +261,14 @@ impl ContractService {
     ) -> Result<ContractDetailView> {
         let revisions =
             self.db.contract_revisions().list_by_contract(&contract.base.id.clone().into(), executor).await?;
+
         let shared_sales_user_ids = contract.shared_sales_user_ids.clone();
         let view: ContractView = contract.into();
         let names = match &view.owner_user_id {
             Some(id) => self.accounts.names(std::slice::from_ref(id), executor).await?,
             None => Default::default(),
         };
+
         Ok(ContractDetailView {
             shared_sales_user_ids,
             owner_user_name: view.owner_user_id.as_ref().and_then(|id| names.get(id).cloned()),

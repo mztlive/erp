@@ -106,6 +106,7 @@ mod tests {
         assert_eq!(parsed.kind(), "inbox_message");
         assert_eq!(parsed.id(), "message-1");
         assert_eq!(parsed.to_string(), "inbox_message:message-1");
+
         assert!(EvidenceRecordRef::parse("message-1").is_err());
         assert!(EvidenceRecordRef::parse("inbox_message:").is_err());
         assert!(EvidenceRecordRef::parse(":message-1").is_err());

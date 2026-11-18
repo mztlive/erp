@@ -371,6 +371,7 @@ impl Invoice {
             },
             _ => {},
         }
+
         let invoice_code = normalize_optional_text(data.invoice_code, "发票代码", INVOICE_CODE_MAX_LEN)?;
         let invoice_no =
             normalize_required_text(data.invoice_no, "发票号码不能为空", INVOICE_NO_MAX_LEN, "发票号码过长")?;
@@ -419,11 +420,13 @@ impl Invoice {
         if self.stable.status() != InvoiceStatus::Draft {
             return Err(Error::from("已登记或已红冲的发票不可编辑"));
         }
+
         let gross = update.gross_amount.unwrap_or(self.gross_amount);
         let (current_net, current_tax) = self.tax_breakdown()?;
         let net = update.net_amount.unwrap_or(current_net);
         let tax = update.tax_amount.unwrap_or(current_tax);
         validate_amounts(gross, net, tax)?;
+
         if let Some(gross) = update.gross_amount {
             self.gross_amount = gross;
         }
@@ -433,6 +436,7 @@ impl Invoice {
         if let Some(tax) = update.tax_amount {
             self.tax_amount = Some(tax);
         }
+
         if let Some(date) = update.invoice_date {
             self.invoice_date = Some(date);
         }
@@ -443,6 +447,7 @@ impl Invoice {
             self.rounding_reason =
                 normalize_optional_text(Some(reason), "尾差原因", ROUNDING_REASON_MAX_LEN)?;
         }
+
         if let Some(code) = update.invoice_code {
             self.invoice_code = normalize_optional_text(Some(code), "发票代码", INVOICE_CODE_MAX_LEN)?;
             self.normalized_code = self.invoice_code.as_ref().map(|code| code.to_uppercase());
@@ -452,6 +457,7 @@ impl Invoice {
             self.normalized_no = no.to_uppercase();
             self.invoice_no = Some(no);
         }
+
         self.stable.touch(updated_by);
         Ok(())
     }

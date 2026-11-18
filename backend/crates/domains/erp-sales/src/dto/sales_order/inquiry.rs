@@ -26,6 +26,7 @@ impl SalesOrderEditableDraftRequest {
         if self.lines.len() != source.selections.len() {
             return Err(Error::ValidationError("销售商品行必须与询价来源选择逐一对应".into()));
         }
+
         let mut result = self.clone();
         for line in &mut result.lines {
             let selected = source
@@ -44,6 +45,7 @@ impl SalesOrderEditableDraftRequest {
                 ));
             }
             goods.pricing_mode.ensure_price(goods.unit_price_gross)?;
+
             line.item_name_snapshot.clone_from(&demand.product_name);
             line.spec_snapshot = Some(demand.specification.clone());
             line.unit_snapshot = Some(demand.unit_code.clone());
@@ -52,12 +54,14 @@ impl SalesOrderEditableDraftRequest {
             goods.quantity = selected.quantity;
             goods.base_unit_code.clone_from(&demand.unit_code);
             goods.fulfillment_due_at = demand.delivery_due_at;
+
             goods.procurement_price_basis = None;
             goods.procurement_supply_price_gross = Some(
                 price
                     .unit_price_gross
                     .ok_or_else(|| Error::ValidationError("询价供给单价未填写，不能转单".into()))?,
             );
+
             goods.delivery_allocations = selected
                 .allocations
                 .iter()
@@ -152,11 +156,13 @@ mod tests {
                 .with_inquiry_source(&inquiry(), &source(), Instant::from_unix_secs(100))
                 .is_ok()
         );
+
         assert!(
             draft("MANUAL", "100")
                 .with_inquiry_source(&inquiry(), &source(), Instant::from_unix_secs(3000))
                 .is_ok()
         );
+
         let mut closed = inquiry();
         closed.status = InquiryStatus::Closed;
         assert!(
@@ -164,6 +170,7 @@ mod tests {
                 .with_inquiry_source(&closed, &source(), Instant::from_unix_secs(100))
                 .is_err()
         );
+
         let mut wrong = source();
         wrong.feedback_round = 2;
         assert!(

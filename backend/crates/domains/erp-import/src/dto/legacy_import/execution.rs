@@ -173,6 +173,7 @@ impl TryFrom<ImportExecutionCommand> for PreparedImportExecution {
         {
             return Err(Error::ValidationError("提交应用或重试失败项必须携带试算版本".to_string()));
         }
+
         let reason_code = optional_text(command.reason_code);
         if command.action == ImportExecutionAction::CancelPending && reason_code.is_none() {
             return Err(Error::ValidationError("取消尚未应用项必须提供原因码".to_string()));
@@ -180,6 +181,7 @@ impl TryFrom<ImportExecutionCommand> for PreparedImportExecution {
         if command.action == ImportExecutionAction::StartApply && reason_code.is_some() {
             return Err(Error::ValidationError("提交应用不得携带取消或重试原因码".to_string()));
         }
+
         Ok(Self {
             batch_id: command.batch_id,
             expected_batch_version: parse_command_version(&command.expected_batch_version, "批次版本")?,

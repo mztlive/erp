@@ -33,11 +33,13 @@ impl GrantEventRepository {
         if owner.is_empty() {
             return Err(Error::ValidationError("领取令牌不能为空".into()));
         }
+
         let now = i64::try_from(now).map_err(|_| Error::ValidationError("时间溢出".into()))?;
         let filter = doc! { "deleted_at": 0, "$or": [
             { "status": { "$in": ["pending", "failed"] }, "available_at": { "$lte": now } },
             { "status": "processing", "lease_until": { "$lte": now } }
         ] };
+
         Ok(self
             .db
             .collection::<GrantEvent>("resource_grant_events")
@@ -79,6 +81,7 @@ impl GrantEventRepository {
         if event.status == GrantEventStatus::Applied {
             return Ok(());
         }
+
         event.status = GrantEventStatus::Applied;
         event.lease_owner = None;
         event.lease_until = None;
@@ -97,6 +100,7 @@ impl GrantEventRepository {
         let delay = event.retry_delay();
         let next = i64::try_from(now.saturating_add(delay))
             .map_err(|_| Error::ValidationError("时间溢出".into()))?;
+
         self.db
             .collection::<Document>("resource_grant_events")
             .update_one(
@@ -141,6 +145,7 @@ impl GrantEventRepository {
         let backlog = collection.count_documents(filter.clone()).await?;
         let oldest = collection.find_one(filter).sort(doc! { "evidence.occurred_at": 1 }).await?;
         let failures = collection.count_documents(doc! { "status": "failed", "deleted_at": 0 }).await?;
+
         let latest = self
             .db
             .collection::<GrantSource>("resource_grant_sources")
@@ -148,6 +153,7 @@ impl GrantEventRepository {
             .sort(doc! { "updated_at": -1, "id": 1 })
             .await
             ?;
+
         Ok(GrantQueueHealth {
             latest_fact_version: latest.map(|s| s.fact_version),
             backlog,
@@ -182,6 +188,7 @@ impl GrantEventRepository {
             executor,
         )
         .await?;
+
         let now = i64::try_from(now).map_err(|_| Error::ValidationError("时间溢出".into()))?;
         for event in &events {
             mongo_ops::update_one(&collection, doc! { "id": &event.base.id, "status": "applied", "version": i64::try_from(event.base.version).map_err(|_| Error::Internal("版本溢出".into()))? },

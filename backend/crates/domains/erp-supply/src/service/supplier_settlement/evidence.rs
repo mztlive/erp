@@ -42,6 +42,7 @@ impl SupplierSettlementService {
         ) {
             return Err(Error::BusinessLogicError("当前结算状态禁止追加差异补证".to_string()));
         }
+
         let difference = self
             .db
             .supplier_settlement_differences()
@@ -49,6 +50,7 @@ impl SupplierSettlementService {
             .await?
             .ok_or_else(|| Error::NotFound("供应商结算差异不存在".to_string()))?;
         ensure_difference_version(difference.base.version, req.expected_difference_version)?;
+
         let item = self
             .db
             .supplier_settlement_items()
@@ -58,6 +60,7 @@ impl SupplierSettlementService {
         if item.statement_id.as_ref() != req.statement_id {
             return Err(Error::BusinessLogicError("差异不属于命令指定的结算单".to_string()));
         }
+
         let evidence = SupplierSettlementDifferenceEvidence::new(
             next_id(),
             SupplierSettlementDifferenceEvidenceData {
@@ -72,7 +75,6 @@ impl SupplierSettlementService {
                 command_hash: command_hash.to_string(),
             },
         )?;
-
         Ok(evidence)
     }
     /// 结算本域persist_difference_evidence，保持原校验、构造和执行器顺序。

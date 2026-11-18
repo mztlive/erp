@@ -45,6 +45,7 @@ pub async fn sync_return_finance(
     if confirmed_direct_returns(db, purchase_id, executor).await?.is_empty() {
         return Ok(());
     }
+
     let active = db.work_items().list_active_by_object("purchase_order", purchase_id, executor).await?;
     let open = find_open_for_purchase(db, purchase_id, executor).await?.is_some();
     let plan = if open && order.stable.current_revision_id.is_some() {
@@ -64,6 +65,7 @@ pub async fn sync_return_finance(
             )
         })
         .unwrap_or((Amount::zero(), Amount::zero()));
+
     for (kind, amount) in
         [(WorkItemType::PurchaseReturnRefund, amounts.0), (WorkItemType::PurchaseReturnInvoice, amounts.1)]
     {
@@ -109,12 +111,14 @@ async fn create_task(
         .find_by_id(order.sales_order_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("来源销售单不存在".into()))?;
+
     let counterparty = if kind == WorkItemType::PurchaseReturnRefund {
         order.supplier_id.as_ref()
     } else {
         sales.customer_id.as_ref()
     };
     let owner = responsibility.resolve_return_finance_responsibility(kind, counterparty, executor).await?;
+
     let item = WorkItem::new_with_responsibility_key(
         WorkItemId::new(next_id()),
         WorkItemData {
@@ -162,6 +166,7 @@ pub async fn sync_return_accounts(
     let mut ids = account_ids;
     ids.sort();
     ids.dedup();
+
     for id in ids {
         if let Some(account) = db.payable_accounts().find_by_id(&id, executor).await? {
             sync_return_finance(db, responsibility, &account.source_document_id, executor).await?;

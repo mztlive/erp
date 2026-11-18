@@ -39,6 +39,7 @@ pub fn service_confirmation_from_request<C: ServiceLocationCryptoPort>(
 ) -> std::result::Result<ServiceFulfillmentConfirmation, C::Error> {
     let service_location = ActualServiceLocation::parse(&req.service_location)
         .map_err(|error| Error::ValidationError(error.to_string()))?;
+
     Ok(ServiceFulfillmentConfirmation::new(ServiceFulfillmentConfirmationParams {
         result: req.result,
         completion_note: req.completion_note.clone(),

@@ -80,16 +80,19 @@ mod tests {
         let before = item.clone();
         assert!(item.schedule_payment_follow_up(past, today, now).is_err());
         assert_eq!(item, before);
+
         item.schedule_payment_follow_up(today, today, now).unwrap();
         assert_eq!(item.status, WorkItemStatus::Open);
         assert_eq!(item.due_at, Some(payment_due_at(today).unwrap()));
         assert_eq!(item.started_at, Some(now));
+
         item.complete_payment_arrangement(now).unwrap();
         assert_eq!(item.status, WorkItemStatus::Completed);
         assert_eq!(item.completed_by.as_deref(), Some("__system__"));
         assert_eq!(item.completed_at, Some(now));
         assert_eq!(item.last_activity_at, Some(now));
         assert_eq!(item.started_at, Some(now));
+
         assert!(item.schedule_payment_follow_up(today, today, now).is_err());
         assert!(item.complete_payment_arrangement(now).is_err());
     }

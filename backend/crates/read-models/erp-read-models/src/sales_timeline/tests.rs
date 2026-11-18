@@ -25,11 +25,13 @@ fn event(id: &str, time: u64) -> TimelineEvent {
 fn pagination_has_no_loss_at_equal_timestamp() {
     let events =
         vec![event("audit:b", 10), event("workflow:a", 10), event("audit:a", 10), event("allocation:x", 9)];
+
     let first = page(events.clone(), &TimelineQuery { page_size: Some(2), ..Default::default() }).unwrap();
     assert_eq!(
         first.items.iter().map(|event| event.id.as_str()).collect::<Vec<_>>(),
         ["workflow:a", "audit:b"]
     );
+
     let second =
         page(events, &TimelineQuery { cursor: first.next_cursor, page_size: Some(2), ..Default::default() })
             .unwrap();
@@ -52,6 +54,7 @@ fn cursor_keeps_other_streams_at_same_timestamp() {
 fn filters_are_applied_before_page_size() {
     let mut approval = event("workflow:1", 1);
     approval.category = TimelineCategory::Approval;
+
     let result = page(
         vec![event("audit:1", 2), approval],
         &TimelineQuery {
@@ -100,6 +103,7 @@ fn partial_allocations_and_reversals_preserve_each_original_fact() {
         "付款",
         TimelineCategory::Payable,
     );
+
     let page = page(sources.facts, &TimelineQuery::default()).unwrap();
     assert_eq!(page.items.len(), 2);
     assert_eq!(page.items[0].title, "付款冲减本单分配");
@@ -142,6 +146,7 @@ fn financial_audit_does_not_expose_whole_document_amount() {
     .unwrap();
     let mut sources = sources::Sources::new();
     sources.add(DocumentType::SupplierPayment, "payment".into(), Some("sale"), None);
+
     let event = history::audit_event(log, &sources.documents, true).unwrap();
     assert!(event.details.is_empty());
     assert!(event.amount.is_none());
@@ -175,6 +180,7 @@ fn actual_node_decision_uses_frozen_actor_round_and_decision_time() {
     sources.add(DocumentType::SalesOrder, "sale".into(), Some("sale"), None);
     let document = &sources.documents["sale"];
     assert!(approval::decision_event(&execution, document).is_none());
+
     let mut approved = execution.clone();
     approved
         .record_approve(
@@ -189,6 +195,7 @@ fn actual_node_decision_uses_frozen_actor_round_and_decision_time() {
         serde_json::to_value(&approved).unwrap()["approval"],
         serde_json::json!({"result": "APPROVED", "node_name": "财务复核", "round_no": 2})
     );
+
     execution
         .record_reject(
             ParticipantId::new("reviewer").unwrap(),
@@ -269,6 +276,7 @@ async fn authorization_removes_hidden_documents_and_their_allocated_amounts() {
         TimelineCategory::Payable,
     );
     sources.facts.push(event("submission:visible", 9));
+
     query::authorize(&TimelineAccess, &actor, &mut sources, &mut NoTransaction).await.unwrap();
     assert_eq!(sources.documents.keys().map(String::as_str).collect::<Vec<_>>(), ["sale"]);
     assert_eq!(
@@ -295,6 +303,7 @@ fn fulfillment_sources_resolve_only_the_current_purchase() {
         document.purchase_order_id = Some("purchase".into());
         document.resolve_purchase_source("other-purchase", "other-sale");
         assert!(document.sales_order_id.is_none());
+
         document.resolve_purchase_source("purchase", "sale");
         assert_eq!(document.sales_order_id.as_deref(), Some("sale"));
         assert_eq!(document.purchase_order_id.as_deref(), Some("purchase"));
@@ -307,6 +316,7 @@ fn missing_or_direct_sources_are_not_replaced_by_another_root() {
     missing.resolve_purchase_source("purchase", "sale");
     assert!(missing.sales_order_id.is_none());
     assert!(missing.purchase_order_id.is_none());
+
     let mut delivery = TimelineDocument::new(DocumentType::Delivery, "delivery".into());
     delivery.sales_order_id = Some("direct-sale".into());
     delivery.purchase_order_id = Some("purchase".into());
@@ -322,12 +332,14 @@ fn readable_fulfillment_keeps_result_and_quantity_but_hidden_task_is_sanitized()
     let mut completion = document.event("audit:service".into(), 10, "确认服务".into(), "经办人".into());
     completion.details = vec!["服务结果：已完成".into(), "数量：3".into()];
     completion.href = Some("/original-document".into());
+
     let mut root = event("audit:sale", 9);
     root.details = vec!["销售单已生效".into()];
     let mut timeline = page(vec![completion.clone(), root.clone()], &TimelineQuery::default()).unwrap();
     task::restrict_task_details(&mut timeline, "service", true);
     assert_eq!(timeline.items[0].details, completion.details);
     assert_eq!(timeline.items[0].href, completion.href);
+
     task::restrict_task_details(&mut timeline, "service", false);
     assert!(timeline.items[0].details.is_empty());
     assert!(timeline.items[0].href.is_none());

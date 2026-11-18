@@ -91,7 +91,9 @@ async fn persist_refund<P: RefundPostingPort>(
     let scoped = target_allocations(port, &allocations, refund.target_account_id.as_deref(), session).await?;
     let (reverse_rows, chunks) = PaymentAllocation::plan_reverse(&scoped, refund.amount)?;
     let seqs = PaymentAllocation::next_allocation_seq_range(&allocations, reverse_rows.len())?;
+
     revert_settlements(port, payment, actor_id, &chunks, session).await?;
+
     for (reverse, seq) in reverse_rows.into_iter().zip(seqs) {
         let allocation = PaymentAllocation::new(
             PaymentAllocationId::new(port.next_id()),
@@ -158,6 +160,7 @@ async fn revert_settlements<P: RefundPostingPort>(
         if account.supplier_id != payment.supplier_id {
             return Err(Error::BusinessLogicError("禁止跨供应商退款".to_string()));
         }
+
         revert_supplier_refund_settlement(port, entry, chunk, actor_id, session).await?;
     }
     Ok(())
@@ -266,6 +269,7 @@ mod tests {
         request.target_account_id = Some("account".into());
         request.amount = amount("40");
         persist_refund(&port, &request, &payment(), "actor", &mut e).await.unwrap();
+
         let rows = &port.recorded.lock().unwrap().allocations;
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].payable_entry_id.as_ref(), "entry2");
@@ -279,6 +283,7 @@ mod tests {
         let mut request = input();
         request.target_account_id = Some("account".into());
         request.amount = amount("41");
+
         assert!(persist_refund(&port, &request, &payment(), "actor", &mut e).await.is_err());
         assert!(port.recorded.lock().unwrap().allocations.is_empty());
     }
@@ -479,6 +484,7 @@ mod tests {
         let port = port(&mut e);
         let payment = payment();
         persist_refund(&port, &input(), &payment, "actor", &mut e).await.unwrap();
+
         let state = port.recorded.lock().unwrap();
         assert_eq!(
             state.calls,

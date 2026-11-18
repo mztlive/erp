@@ -92,6 +92,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         executor: &mut dyn Executor,
     ) -> Result<Option<PreparedResume>> {
         let runtime = self.load_resume_runtime(actor, command, executor).await?;
+
         let mut members = Vec::new();
         for person in runtime.current.participants() {
             members.push(
@@ -108,6 +109,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let eligibility =
             Eligibility::any_of(members).map_err(|error| Error::ValidationError(error.to_string()))?;
         ensure_resume_approver_recovered(&eligibility)?;
+
         let graph = self
             .db
             .bpm_workflow()
@@ -135,6 +137,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await?;
         self.require_recovery_action(instance_id, RuntimeRecoveryAction::ResumeCurrentApprover, executor)
             .await?;
+
         let (instance, current, assignee) = self.load_resume_execution(command, executor).await?;
         let closed_task_guard = self
             .load_resume_task_guard(
@@ -143,6 +146,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 executor,
             )
             .await?;
+
         let (snapshot, document_type) = self.load_resume_subject(&instance, instance_id, executor).await?;
         let spec = adapter_spec_of(document_type)?;
         Ok(ResumeRuntime { instance, current, assignee, closed_task_guard, snapshot, document_type, spec })
@@ -162,6 +166,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await?
             .ok_or_else(hidden_not_found)?;
         ensure_expected_version("审批实例", command.expected_instance_version, instance.base.version)?;
+
         let current = self
             .db
             .bpm_workflow()
@@ -169,6 +174,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .await?
             .ok_or_else(|| Error::ConflictError("审批实例缺少当前受阻执行".to_string()))?;
         ensure_expected_version("审批执行", command.expected_execution_version, current.base.version)?;
+
         let assignee = self
             .db
             .bpm_workflow()

@@ -78,6 +78,7 @@ impl SupplierSettlementReadService {
                 })
                 .chain(extra_user_ids.iter().map(String::as_str)),
         );
+
         let supplier_names = if supplier_ids.is_empty() {
             HashMap::new()
         } else {
@@ -155,6 +156,7 @@ impl SupplierSettlementReadService {
                 executor,
             )
             .await?;
+
         Ok(fulfillment_items
             .into_iter()
             .filter_map(|item| {

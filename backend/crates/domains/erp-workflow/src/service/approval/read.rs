@@ -319,6 +319,7 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_eq!(result.base.id, "receipt-1");
+
         let expected_scopes = start_scope_candidates(
             process_kind_of(DocumentType::StockAdjustment).as_str(),
             subject.subject_kind(),
@@ -434,6 +435,7 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(error, Error::ConflictError(message) if message == "原入口定义缺失"));
+
         *store.graph.lock().unwrap() = Some(Err(Error::Internal("read failed".into())));
         let error = definition_from_store(&store, &binding(), Some(2), "unused", &mut NoTransaction)
             .await

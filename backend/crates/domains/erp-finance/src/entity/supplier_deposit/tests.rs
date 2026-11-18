@@ -83,6 +83,7 @@ fn verified_tail_release_requires_settlement_and_full_refund_for_cancelled_order
         batches: vec![DepositBatchAllocation { batch_id: "batch".into(), amount: amount("1000") }],
         payment_allocation_ids: vec!["allocation".into()],
     };
+
     assert_eq!(
         reservation.verified_release_amount(&[usage.clone()], DepositReleaseReason::ChargesSettled).unwrap(),
         amount("20")
@@ -92,10 +93,12 @@ fn verified_tail_release_requires_settlement_and_full_refund_for_cancelled_order
             .verified_release_amount(&[usage.clone()], DepositReleaseReason::CancelledAndReturned)
             .is_err()
     );
+
     usage.settled_amount = amount("900");
     assert!(
         reservation.verified_release_amount(&[usage.clone()], DepositReleaseReason::ChargesSettled).is_err()
     );
+
     usage.settled_amount = amount("1000");
     usage.returned_amount = amount("1000");
     usage.reversed_settlement_amount = amount("1000");
@@ -105,6 +108,7 @@ fn verified_tail_release_requires_settlement_and_full_refund_for_cancelled_order
             .unwrap(),
         amount("20")
     );
+
     usage.account_id = "other".into();
     assert!(
         reservation.verified_release_amount(&[usage], DepositReleaseReason::CancelledAndReturned).is_err()
@@ -121,12 +125,14 @@ fn reservation_consumption_does_not_count_occupancy_twice() {
     batch.reserve(amount("1020")).unwrap();
     assert_eq!(account.book_balance, amount("10000"));
     assert_eq!(account.available().unwrap(), amount("8980"));
+
     account.debit(amount("1020"), amount("1020")).unwrap();
     batch.consume(amount("1020")).unwrap();
     assert_eq!(account.book_balance, amount("8980"));
     assert_eq!(account.reserved_amount, Amount::zero());
     assert_eq!(account.available().unwrap(), amount("8980"));
     assert_eq!(batch.available().unwrap(), amount("8980"));
+
     account.credit(amount("500")).unwrap();
     batch.record_return(amount("500")).unwrap();
     assert_eq!(account.available().unwrap(), amount("9480"));
@@ -159,10 +165,12 @@ fn batch_reservation_preserves_source_order_and_skips_exhausted_batches() {
 fn batch_reservation_preserves_insufficient_and_corrupt_history_errors() {
     let error = DepositBatchAllocation::reserve_from(&mut [batch()], amount("10000.01")).unwrap_err();
     assert!(matches!(error, crate::Error::BusinessLogicError(ref text) if text == "到账批次可分配额度不足"));
+
     let mut damaged = batch();
     damaged.reserved_amount = amount("10001");
     let error = DepositBatchAllocation::reserve_from(&mut [damaged.clone()], amount("0.01")).unwrap_err();
     assert!(matches!(error, crate::Error::Logic(ref error) if error.to_string() == "充值批次余额异常"));
+
     // 已全额分配时不读取后续批次；历史损坏不扩大到原先未访问的来源。
     let allocations = DepositBatchAllocation::reserve_from(&mut [batch(), damaged], amount("10000")).unwrap();
     assert_eq!(allocations.len(), 1);
@@ -292,6 +300,7 @@ fn funds_summary_keeps_occupancy_and_verified_settlement_separate() {
     assert_eq!(summary.status, DepositExecutionFundsStatus::Reserved);
     assert_eq!(summary.reserved_amount, amount("1020"));
     assert_eq!(summary.settled_amount, Amount::zero());
+
     reservation.mark_sent().unwrap();
     let summary =
         DepositExecutionFundsSummary::from_records("execution", Some(&reservation), &[], Some(&account))
@@ -299,6 +308,7 @@ fn funds_summary_keeps_occupancy_and_verified_settlement_separate() {
     assert_eq!(summary.status, DepositExecutionFundsStatus::AwaitingDebitVerification);
     assert_eq!(summary.verified_debit_amount, Amount::zero());
     assert!(summary.pending_return_amount.is_none());
+
     assert!(
         DepositExecutionFundsSummary::from_records("other", Some(&reservation), &[], Some(&account)).is_err()
     );
@@ -341,10 +351,13 @@ fn purchase_replacement_requires_cash_return_and_settlement_reversal_separately(
         payment_allocation_ids: vec!["allocation".into()],
     };
     assert!(original.replacement_release_amount(true, &account, std::slice::from_ref(&usage)).is_err());
+
     usage.returned_amount = amount("1000");
     assert!(original.replacement_release_amount(true, &account, std::slice::from_ref(&usage)).is_err());
+
     usage.reversed_settlement_amount = amount("1000");
     assert!(original.replacement_release_amount(true, &account, std::slice::from_ref(&usage)).is_err());
+
     original.clear_exposure("financial-finality-proof".into()).unwrap();
     assert_eq!(original.replacement_release_amount(true, &account, &[usage]).unwrap(), amount("20"));
 }

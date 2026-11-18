@@ -44,10 +44,12 @@ impl SalesInquiryImportProcess {
         if !file_name.to_ascii_lowercase().ends_with(".xlsx") {
             return Err(Error::ValidationError("请选择 .xlsx 客户选品工作簿".into()));
         }
+
         let fingerprint = hex::encode(Sha256::digest(&bytes));
         let workbook = tokio::task::spawn_blocking(move || parse::parse(&bytes))
             .await
             .map_err(|_| Error::Internal("工作簿解析任务失败".into()))??;
+
         let this = self.clone();
         let actor = actor.clone();
         let id = id.to_string();
@@ -87,12 +89,14 @@ impl SalesInquiryImportProcess {
     ) -> Result<InquiryImportPreviewView> {
         let inquiry = self.require_import(actor, id, executor).await?;
         inquiry.ensure_version(expected_version)?;
+
         let products = product_rows(&workbook);
         let deliveries = delivery_rows(&workbook);
         let codes = products.iter().map(|row| row.sku_code.clone()).collect::<Vec<_>>();
         let facts = sku_facts(&self.db, &codes, self.supply.as_ref(), executor).await?;
         let validated =
             InquiryImportValidation::build(&products, &deliveries, &facts, &inquiry.draft, next_id);
+
         let mut errors = workbook.errors;
         errors.extend(
             validated
@@ -100,6 +104,7 @@ impl SalesInquiryImportProcess {
                 .into_iter()
                 .map(|issue| locate_issue(issue, workbook.product_sheet, workbook.automatic_delivery)),
         );
+
         let expires_at = Instant::now().unix_secs() + 3600;
         let preview = InquiryImportPreview {
             base: BaseModel::new(next_id()),

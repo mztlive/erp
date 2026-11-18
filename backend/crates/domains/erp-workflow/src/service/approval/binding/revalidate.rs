@@ -62,6 +62,7 @@ pub async fn revalidate_binding_graph(
 ) -> Result<()> {
     let assignee_ids = graph.assignee_ids();
     ensure_separation_of_duties(policy.separation_of_duties_policy, &context.creator_id, &assignee_ids)?;
+
     for user_id in &assignee_ids {
         let actor = AuditActor::new(user_id.clone(), user_id.clone(), AccountKind::Admin);
         match approver_qualification(authorization, db, identity_service, &actor, executor).await? {

@@ -195,6 +195,7 @@ impl WorkbenchFactsReader<'_> {
             .funds_reader()
             .read_sales_revisions(&revision_ids.iter().map(ToString::to_string).collect::<Vec<_>>(), executor)
             .await?;
+
         let revision_lines =
             self.db.sales_order_revision_lines().list_lines_by_revisions(&revision_ids, executor).await?;
         let revision_line_ids = revision_lines
@@ -206,6 +207,7 @@ impl WorkbenchFactsReader<'_> {
             .sales_order_voucher_line_revisions()
             .list_by_revision_line_ids(&revision_line_ids, executor)
             .await?;
+
         let revision_line_by_id =
             revision_lines.iter().map(|line| (line.base.id.clone(), line)).collect::<HashMap<_, _>>();
         let (command_ids, invoice_requirements, vouchers) =
@@ -244,6 +246,7 @@ impl WorkbenchFactsReader<'_> {
                 )
             })
             .collect::<HashMap<_, _>>();
+
         let command_ids = voucher_revision_ids(revisions);
         let mut briefs = revisions
             .iter()
@@ -288,6 +291,7 @@ impl WorkbenchFactsReader<'_> {
                 .or_default()
                 .push((revision_line.line_no, voucher_account_line(revision_line, &voucher)));
         }
+
         for (revision_id, brief) in briefs {
             let mut lines = raw_lines.remove(revision_id).unwrap_or_default();
             lines.sort_by_key(|(line_no, _)| *line_no);
@@ -325,6 +329,7 @@ impl WorkbenchFactsReader<'_> {
             .party_tax_profiles()
             .list_current_for_parties_on(&unique_ids, BusinessDate::today(), executor)
             .await?;
+
         let mut tax_nos = HashMap::new();
         for profile in profiles {
             tax_nos.entry(profile.party_id.to_string()).or_insert(profile.tax_no);
@@ -384,6 +389,7 @@ impl WorkbenchFactsReader<'_> {
         if entry_ids.is_empty() {
             return Ok(HashMap::new());
         }
+
         let entries = self.funds_reader().read_receivable_entries(&entry_ids, executor).await?;
         let account_ids =
             entries.iter().map(|entry| entry.receivable_account_id.to_string()).collect::<Vec<_>>();
@@ -391,6 +397,7 @@ impl WorkbenchFactsReader<'_> {
         let sales_order_ids =
             accounts.iter().map(|account| account.sales_order_id.to_string()).collect::<Vec<_>>();
         let sales_nos = self.sales_order_numbers(&sales_order_ids, executor).await?;
+
         let account_by_id =
             accounts.into_iter().map(|account| (account.base.id.clone(), account)).collect::<HashMap<_, _>>();
         let entry_by_id =
@@ -455,6 +462,7 @@ impl WorkbenchFactsReader<'_> {
         let account_ids =
             entries.iter().map(|entry| entry.receivable_account_id.to_string()).collect::<Vec<_>>();
         let accounts = self.funds_reader().read_receivable_accounts(&account_ids, executor).await?;
+
         let sales_nos = self
             .sales_order_numbers(
                 &accounts.iter().map(|account| account.sales_order_id.to_string()).collect::<Vec<_>>(),
@@ -467,6 +475,7 @@ impl WorkbenchFactsReader<'_> {
                 executor,
             )
             .await?;
+
         let accounts =
             accounts.into_iter().map(|account| (account.base.id.clone(), account)).collect::<HashMap<_, _>>();
         Ok(receivable_origins_from_rows(entries, accounts, party_names, sales_nos))
@@ -519,6 +528,7 @@ impl WorkbenchFactsReader<'_> {
         let account_ids =
             entries.iter().map(|entry| entry.payable_account_id.to_string()).collect::<Vec<_>>();
         let accounts = self.funds_reader().read_payable_accounts(&account_ids, executor).await?;
+
         let purchase_nos = self.payable_purchase_numbers(&accounts, executor).await?;
         let supplier_names = self.payable_supplier_names(&accounts, executor).await?;
         let accounts =
@@ -545,6 +555,7 @@ impl WorkbenchFactsReader<'_> {
         if payments.is_empty() {
             return Ok(HashMap::new());
         }
+
         let payment_ids = payments.iter().map(|payment| payment.base.id.clone().into()).collect::<Vec<_>>();
         let allocations =
             self.db.payment_allocations().find_allocations_by_payments(&payment_ids, executor).await?;
@@ -559,6 +570,7 @@ impl WorkbenchFactsReader<'_> {
             )
             .await?;
         let purchase_nos = self.payable_purchase_numbers(&accounts, executor).await?;
+
         let account_by_id =
             accounts.into_iter().map(|account| (account.base.id.clone(), account)).collect::<HashMap<_, _>>();
         let entry_by_id =

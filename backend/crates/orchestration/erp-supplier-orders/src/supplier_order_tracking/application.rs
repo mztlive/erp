@@ -68,6 +68,7 @@ pub(super) async fn apply_current_observation(
     } else {
         application.deliveries(tracking, observation, executor).await?
     };
+
     tracking.record_applied(observation, complete, now)?;
     application.checkpoint(tracking, executor).await
 }

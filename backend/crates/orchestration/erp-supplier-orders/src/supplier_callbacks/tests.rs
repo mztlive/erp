@@ -41,6 +41,7 @@ async fn successful_ack_requires_durable_persistence() {
             .await
             .is_err()
     );
+
     let mut persisted = false;
     let result = acknowledge_after_persistence(reply(), async {
         persisted = true;
@@ -71,12 +72,15 @@ fn generic_protocol_receives_catalog_events_and_rejects_same_event_changed_body(
     assert_eq!(original.integrity, "body_authenticated");
     assert_eq!(original.source_event_id.as_deref(), Some("event-1"));
     assert_eq!(codec.decrypt(&original.body_encrypted).unwrap(), "first");
+
     let (repeat, _) = intake::prepare(&protocol, &connection, "binding", &codec, &request).unwrap();
     intake::verify_replay(&codec, &original, &repeat).unwrap();
+
     request.body = b"changed";
     let (changed, _) = intake::prepare(&protocol, &connection, "binding", &codec, &request).unwrap();
     assert_eq!(original.base.id, changed.base.id);
     assert!(matches!(intake::verify_replay(&codec, &original, &changed), Err(Error::ConflictError(_))));
+
     let (other, _) =
         intake::prepare(&protocol, &SupplierApiConnectionId::new("other"), "binding", &codec, &request)
             .unwrap();
@@ -101,6 +105,7 @@ fn no_event_identity_is_byte_scoped_and_historical_receipts_require_matching_evi
     original.content_fingerprint = None;
     let (repeat, _) = intake::prepare(&protocol, &connection, "binding", &codec, &request).unwrap();
     intake::verify_replay(&codec, &original, &repeat).unwrap();
+
     request.body = b"changed";
     let (changed, _) = intake::prepare(&protocol, &connection, "binding", &codec, &request).unwrap();
     assert_ne!(original.base.id, changed.base.id);
@@ -142,6 +147,7 @@ fn protocol_reception_identity_and_original_url_are_preserved_by_generic_intake(
         body: b"original",
         received_at: Instant::from_unix_secs(1700000000),
     };
+
     let (receipt, reply) =
         intake::prepare(&connector, &SupplierApiConnectionId::new("connection-1"), "scope", &codec, &request)
             .unwrap();

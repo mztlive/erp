@@ -292,7 +292,6 @@ mod tests {
     #[test]
     fn commercial_profile_indexes_cover_revision_identity() {
         let indexes = commercial_profile_indexes();
-
         assert!(indexes.iter().any(|index| {
             index.options.as_ref().and_then(|options| options.name.as_deref())
                 == Some("uk_supplier_commercial_profile_revisions_supplier_revision")
@@ -313,6 +312,7 @@ mod tests {
                 }
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
+
         assert!(indexes.iter().any(|index| {
             index.keys
                 == doc! {
@@ -336,6 +336,7 @@ mod tests {
                 }
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
+
         assert!(indexes.iter().any(|index| { index.keys == doc! { "valid_to": 1, "status": 1 } }));
     }
 

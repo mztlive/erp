@@ -282,8 +282,10 @@ impl SupplierRefund {
         )?;
         let reason_code = normalize_optional_text(data.reason_code, "原因代码", REASON_CODE_MAX_LEN)?;
         ensure_positive_amount(data.amount, "退款金额必须为正数")?;
+
         let (handled_by, reviewed_by) = validate_actor_pair(data.handled_by, data.reviewed_by)?;
         let created_by = normalize_created_by(created_by)?;
+
         validate_exclusive_target(
             &data.original_payment_id,
             &data.original_payable_entry_id,
@@ -350,6 +352,7 @@ impl SupplierRefund {
         if !matches!(self.status, SupplierRefundStatus::Draft | SupplierRefundStatus::Rejected) {
             return Err(Error::from("只有草稿或已驳回的退款可编辑"));
         }
+
         if let Some(amount) = update.amount {
             ensure_positive_amount(amount, "退款金额必须为正数")?;
             self.amount = amount;
@@ -426,6 +429,7 @@ impl SupplierRefund {
         if self.status != SupplierRefundStatus::InApproval {
             return Err(Error::from("只有审批中的供应商退款单可以驳回"));
         }
+
         self.status = SupplierRefundStatus::Rejected;
         Ok(())
     }
@@ -647,6 +651,7 @@ pub(crate) mod tests {
                 if message == "只有审批中的供应商退款单可以由最终通过动作过账"));
             assert_eq!(record, before);
         }
+
         for status in
             [SupplierRefundStatus::InApproval, SupplierRefundStatus::Posted, SupplierRefundStatus::Reversed]
         {
@@ -664,9 +669,11 @@ pub(crate) mod tests {
         let mut refund = SupplierRefund::new(SupplierRefundId::new("srf-1"), data(), "creator-1").unwrap();
         refund.ensure_initial_approval_state().expect("新建草稿是初始未提交状态");
         assert_eq!(refund.approval_subject_version, 0);
+
         let version = refund.start_approval().unwrap();
         assert_eq!(version, 1);
         assert_eq!(refund.status, SupplierRefundStatus::InApproval);
+
         refund.cancel_approval().unwrap();
         assert_eq!(refund.status, SupplierRefundStatus::Draft);
         assert_eq!(refund.approval_subject_version, 1);
@@ -682,8 +689,10 @@ pub(crate) mod tests {
         let identity = serde_json::to_value(&record).unwrap();
         record.ensure_draft_editable().unwrap();
         assert!(!record.matches_version(0));
+
         record.start_approval().unwrap();
         assert!(matches!(record.ensure_draft_editable(), Err(DraftEditError::ConflictError(_))));
+
         record.cancel_approval().unwrap();
         record.ensure_draft_editable().unwrap();
         record
@@ -693,6 +702,7 @@ pub(crate) mod tests {
                 ..SupplierRefundUpdate::default()
             })
             .unwrap();
+
         let edited = serde_json::to_value(&record).unwrap();
         for key in [
             "id",
@@ -715,6 +725,7 @@ pub(crate) mod tests {
         }
         assert_eq!(record.amount.to_string(), "120.00");
         assert_eq!(record.reason_text, "修正金额后重新提交");
+
         assert_eq!(record.start_approval().unwrap(), 2);
     }
     /// 驳回保留原单，编辑不清除结果，重新提交递增版本且禁止终态过账。
@@ -722,11 +733,13 @@ pub(crate) mod tests {
     fn rejection_preserves_content_and_supports_new_submission() {
         let mut record = SupplierRefund::new(SupplierRefundId::new("rejected-1"), data(), "creator").unwrap();
         assert!(record.reject_approval(1).is_err());
+
         assert_eq!(record.start_approval().unwrap(), 1);
         let submitted = record.clone();
         assert!(record.reject_approval(0).is_err());
         assert!(record.reject_approval(2).is_err());
         assert_eq!(record, submitted);
+
         record.reject_approval(1).unwrap();
         assert_eq!(record.status, SupplierRefundStatus::Rejected);
         assert_eq!(record.approval_subject_version, 1);
@@ -734,14 +747,17 @@ pub(crate) mod tests {
         assert!(record.reject_approval(1).is_err());
         assert!(record.mark_posted().is_err());
         assert_eq!(record, before);
+
         assert!(record.ensure_draft_editable().is_ok());
         record.update(SupplierRefundUpdate::default()).unwrap();
         assert_eq!(record.status, SupplierRefundStatus::Rejected);
+
         assert_eq!(record.start_approval().unwrap(), 2);
         assert_eq!(record.status, SupplierRefundStatus::InApproval);
         let resubmitted = record.clone();
         assert!(record.reject_approval(1).is_err());
         assert_eq!(record, resubmitted);
+
         record.mark_posted().unwrap();
         assert!(record.reject_approval(1).is_err());
     }

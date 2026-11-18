@@ -80,6 +80,7 @@ impl ReturnsCommandReceipt {
     /// 身份、结果或关联损坏时返回内部错误。
     pub fn validate(&self) -> Result<()> {
         self.command.validate().map_err(|_| corrupted())?;
+
         if self.result_schema_version != 1
             || self.base.id != self.command.command_id
             || self.base.is_deleted()
@@ -127,6 +128,7 @@ fn result_for_command(action: &str, resource_type: &str, id: String) -> Result<R
     if id.trim().is_empty() {
         return Err(corrupted());
     }
+
     match (action, resource_type) {
         ("customer_refund.commit" | "customer_refund.submit", "customer_refund") => {
             Ok(ReturnsCommandResult::CustomerRefund(CustomerRefundId::new(id)))
@@ -175,14 +177,17 @@ mod tests {
             assert_eq!(receipt.resource_id(&command).unwrap(), "result");
             let changed = test_command(action, resource_type, 20);
             assert!(matches!(receipt.resource_id(&changed), Err(Error::ConflictError(_))));
+
             let encoded = serde_json::to_string(&receipt).unwrap();
             assert_eq!(serde_json::from_str::<ReturnsCommandReceipt>(&encoded).unwrap(), receipt);
+
             receipt.command.actor_id = "other".to_string();
             assert!(matches!(receipt.resource_id(&command), Err(Error::Internal(_))));
             receipt.command.actor_id = "actor".to_string();
             receipt.result_schema_version = 2;
             assert!(receipt.resource_id(&command).is_err());
         }
+
         let invalid =
             CommandReceipt::from_payload("receipt-", "actor", "unregistered", "other", "key", &10).unwrap();
         assert!(
@@ -211,6 +216,7 @@ mod tests {
     fn reversal_submission_results_require_the_exact_original_target() {
         let command = test_command("receipt_reversal.submit", "receipt_reversal", 7);
         assert!(ReturnsCommandReceipt::resource(&command, "wrong".to_string(), "audit".to_string()).is_err());
+
         let mut receipt =
             ReturnsCommandReceipt::resource(&command, "result".to_string(), "audit".to_string()).unwrap();
         receipt.result = ReturnsCommandResult::PaymentReversal(PaymentReversalId::new("result"));

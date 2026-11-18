@@ -38,6 +38,7 @@ impl SalesOrderSubmission {
             })
             .collect::<Vec<_>>();
         validate_line_list(self.business_type, &summaries)?;
+
         match self.business_type {
             BusinessType::GoodsService => sum_goods_quantities(lines),
             BusinessType::Voucher => voucher_line_quantity(required_single_line(lines)?),
@@ -246,6 +247,7 @@ mod tests {
             gross += Decimal::from_str("10.00").unwrap() * quantity;
         }
         let gross_amount = Amount::try_from(gross).unwrap();
+
         SalesOrderSubmissionData {
             sales_order_id: SalesOrderId::new("o-1"),
             submission_no: 1,

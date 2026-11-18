@@ -102,16 +102,19 @@ impl InventoryAdjustmentReadService {
         let adjustment = inventory.readable_stock_adjustment(id, actor, executor).await?;
         let lines = inventory.load_adjustment_lines(&adjustment.base.id, executor).await?;
         let movements = inventory.load_movements_for_source_document(id, executor).await?;
+
         let binding = load_approval_binding(&self.db, id, executor).await?;
         let binding = binding
             .as_ref()
             .ok_or_else(|| Error::ConflictError("无有效审批绑定的库存调整单不得提交".into()))?;
         let approval = self.approval_view(&adjustment, binding, actor, approval_instance, executor).await?;
+
         let mut adjustment_view = StockAdjustmentView::from(adjustment);
         if let Some(fact) = inventory.adjustment_people_by_ids(&[id.to_string()], executor).await?.remove(id)
         {
             adjustment_view.apply_people(&fact);
         }
+
         let lines = lines.into_iter().map(Into::into).collect::<Vec<StockAdjustmentLineView>>();
         let mut view = StockAdjustmentDetailView {
             approval,
@@ -119,6 +122,7 @@ impl InventoryAdjustmentReadService {
             lines,
             posted_movements: movements.into_iter().map(Into::into).collect(),
         };
+
         enrich_display_names(inventory, &mut view.adjustment, &mut view.lines, actor, executor).await;
         Ok(view)
     }
@@ -377,6 +381,7 @@ mod tests {
                 Arc::new(FailClosedAuditPort),
                 facts.clone(),
             );
+
             let mut adjustment = StockAdjustmentView {
                 id: "adjustment".into(),
                 adjustment_no: "ADJ-1".into(),
@@ -397,6 +402,7 @@ mod tests {
                 created_at: 1,
             };
             let mut lines = vec![line()];
+
             enrich_display_names(&inventory, &mut adjustment, &mut lines, &actor(), &mut executor).await;
             assert_eq!(facts.calls.lock().unwrap().as_slice(), ["people", "sku", "revision"]);
             assert_eq!(adjustment.prepared_by_name.as_deref(), (!fail_people).then_some("仓储经办"));
@@ -414,6 +420,7 @@ mod tests {
         let failed = ready(Err(InventoryError::Internal("名称查询不可用".into())));
         assert!(!optional_display_names(failed, &actor, "people").await);
         assert_eq!(line, original);
+
         let succeeded = async {
             line.sku_code = Some("SKU-001".into());
             line.sku_name = Some("礼品卡".into());

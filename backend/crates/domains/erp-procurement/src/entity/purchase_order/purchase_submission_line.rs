@@ -89,6 +89,7 @@ impl PurchaseOrderSubmissionLineData {
             input_tax_rate: self.input_tax_rate,
         };
         fields.normalize_and_validate(self.line_no, false)?;
+
         self.ensure_allocation()?;
         ensure_offering_source(
             self.line_type,
@@ -456,6 +457,7 @@ mod tests {
         inherit_submission_sources(&mut inputs, std::slice::from_ref(&draft)).unwrap();
         assert_eq!(inputs[0].supplier_offering_source, Some(offering_source()));
         assert_eq!(inputs[0].delivery_allocations, draft.delivery_allocations);
+
         inputs[0].delivery_allocations[0].quantity = Quantity::from_str("2").unwrap();
         let requested = inputs[0].delivery_allocations.clone();
         inherit_submission_sources(&mut inputs, std::slice::from_ref(&draft)).unwrap();
@@ -468,6 +470,7 @@ mod tests {
             Err(Error::LogicError(message)) if message == "采购原行身份歧义，不能继承正式选源"
         ));
         assert_eq!(inputs, before);
+
         let mut incomplete = draft.clone();
         incomplete.sku_id = None;
         assert!(matches!(
@@ -475,6 +478,7 @@ mod tests {
             Err(Error::LogicError(message)) if message == "采购来源缺少SKU"
         ));
         assert_eq!(inputs, before);
+
         let mut repeated = vec![inputs[0].clone(), inputs[0].clone()];
         inherit_submission_sources(&mut repeated, std::slice::from_ref(&draft)).unwrap();
         assert_eq!(repeated, vec![before[0].clone(), before[0].clone()]);
@@ -482,6 +486,7 @@ mod tests {
         let mut wrong_revision = inputs.clone();
         wrong_revision[0].sku_revision_id = Some(erp_core::ids::SkuRevisionId::new("foreign-version"));
         assert!(inherit_revision_sources(&mut wrong_revision, std::slice::from_ref(&revision)).is_err());
+
         let change_data = inputs
             .remove(0)
             .into_change_submission_line_data(PurchaseChangeSubmissionId::new("change"), 1)
@@ -512,6 +517,7 @@ mod tests {
         let restored: PurchaseOrderSubmissionLine = serde_json::from_value(json).unwrap();
         assert!(restored.supplier_offering_source.is_none());
         assert!(restored.delivery_allocations.is_empty());
+
         let mut data = goods_line_data();
         let mut invalid = offering_source();
         invalid.revision_version = 0;
@@ -551,6 +557,7 @@ mod tests {
             let error = PurchaseOrderSubmissionLine::new("invalid".to_string().into(), data).unwrap_err();
             assert!(matches!(error, Error::LogicError(message) if message == expected));
         };
+
         let mut data = PurchaseOrderSubmissionLineData {
             line_no: 0,
             product_name_snapshot: Some("名".repeat(257)),
@@ -568,6 +575,7 @@ mod tests {
         data.specification_snapshot = None;
         assert_error(data.clone(), "单位长度不符合要求");
         data.base_unit_code = Some("件".into());
+
         assert_error(data.clone(), "商品/服务行必须引用 SKU");
         data.sku_id = Some(SkuId::new("sku-1"));
         assert_error(data.clone(), "商品/服务行必须保存商品名称快照");
@@ -581,6 +589,7 @@ mod tests {
             let error = PurchaseOrderSubmissionLine::new("invalid".to_string().into(), data).unwrap_err();
             assert!(matches!(error, Error::LogicError(message) if message == expected));
         };
+
         let mut data = goods_line_data();
         data.sales_order_revision_line_id = None;
         let mut source = offering_source();
@@ -603,6 +612,7 @@ mod tests {
             )
             .unwrap(),
         );
+
         assert_error(data.clone(), "商品/服务行必须引用销售稳定行与当前版本行");
         data.sales_order_revision_line_id = Some(SalesOrderRevisionLineId::new("sorl-1"));
         assert_error(data.clone(), "采购正式选源身份或版本缺失");
@@ -610,6 +620,7 @@ mod tests {
         assert_error(data.clone(), "交付安排须填写有效收货人、电话、地址和正数数量");
         data.delivery_allocations[0].recipient = "张三".into();
         assert_error(data.clone(), "商品/服务行不得携带费用内容");
+
         data.expense = None;
         let line = PurchaseOrderSubmissionLine::new("valid".to_string().into(), data).unwrap();
         assert_eq!(line.delivery_allocations[0].region_name, "上海市浦东新区");
@@ -638,6 +649,7 @@ mod tests {
         missing_name.product_name_snapshot = Some("  ".into());
         let mut missing_unit = goods_line_data();
         missing_unit.base_unit_code = None;
+
         for (mut data, expected) in [
             (missing_sku, "商品/服务行必须引用 SKU"),
             (missing_name, "商品/服务行必须保存商品名称快照"),

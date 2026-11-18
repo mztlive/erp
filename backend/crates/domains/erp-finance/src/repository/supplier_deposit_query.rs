@@ -79,6 +79,7 @@ fn account_pipeline(
     if size == 0 || size > 100 {
         return Err(Error::ValidationError("账户分页上限为一百条".into()));
     }
+
     let mut filter = doc! {"deleted_at": 0_i64};
     if let Some(supplier) = supplier {
         filter.insert("identity.supplier_id", supplier);
@@ -86,6 +87,7 @@ fn account_pipeline(
     if let Some(payer) = payer {
         filter.insert("identity.payer_party_id", payer);
     }
+
     let mut pipeline = access.stages().to_vec();
     pipeline.extend([
         doc! {"$match": filter},
@@ -228,6 +230,7 @@ pub async fn reservations_for_manual_command(
     if prefix.is_empty() || prefix.len() > 256 {
         return Err(Error::ValidationError("余额执行命令前缀无效".into()));
     }
+
     let mut expression = String::from("^");
     for character in prefix.chars() {
         if ".+*?()[]{}|^$\\".contains(character) {
@@ -235,6 +238,7 @@ pub async fn reservations_for_manual_command(
         }
         expression.push(character);
     }
+
     let values: Vec<SupplierDepositReservation> = mongo_ops::find_many(&db.supplier_deposit_reservations().collection(), doc! {
         "account_id":account, "basis.payment_request_id":request, "operation_key":{"$regex":expression}, "deleted_at":0_i64,
     }, FindOptions::builder().sort(doc! {"id":1}).limit(1001).build(), executor).await?;
@@ -292,6 +296,7 @@ pub async fn ledger_balance_at(
         doc! {"$group": {"_id": "$kind", "amount": {"$sum": "$amount"}}},
     ];
     let rows = aggregate::rows(&collection.clone_with_type::<LedgerBalanceRow>(), pipeline, executor).await?;
+
     rows.into_iter().try_fold(Amount::zero(), |balance, row| {
         let decimal = match row.kind {
             DepositLedgerKind::Recharge | DepositLedgerKind::Return => {
@@ -452,6 +457,7 @@ mod tests {
                 Err(Error::ValidationError(_))
             ));
         }
+
         let access = access(model(), &mut executor).await;
         assert!(matches!(
             account_page(&db, None, None, 0, 10, &access, &mut ReadExecutor::default()).await,

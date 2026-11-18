@@ -169,6 +169,7 @@ impl InvoicePageRow {
                 view: sales_invoice_allocation_view(&row.item),
             })
             .collect();
+
         let purchase = self
             .purchase
             .iter()
@@ -257,6 +258,7 @@ pub(in crate::finance::funds_scope) async fn invoice_snapshot(
                 .await?;
         let mut snapshot = InvoiceSnapshot { versions, ..Default::default() };
         snapshot.ensure_bounded()?;
+
         if materialize {
             let page = invoice_page(db, base, query, sort, executor).await?;
             snapshot.items = page.items;
@@ -266,6 +268,7 @@ pub(in crate::finance::funds_scope) async fn invoice_snapshot(
         Ok(snapshot)
     }
     .await;
+
     let result = result?;
     authorization.validate(executor).await?;
     Ok(result)
@@ -312,6 +315,7 @@ fn invoice_pipeline(
     pipeline.push(doc! { "$match": { "$expr": { "$allElementsTrue": [{ "$map": {
         "input": { "$concatArrays": ["$_sales", "$_purchase"] }, "as": "link", "in": "$$link.source_exists",
     } }] } } });
+
     pipeline.push(super::whole_facts::fields("$_sales.order".into(), "$_purchase.order".into(), true.into()));
     pipeline.extend(authorization.whole.stages());
     pipeline.push(doc! { "$set": { "_sales_sources": matched_sources("$_sales"), "_purchase_sources": matched_sources("$_purchase"), "_whole": "$scope_whole" } });
@@ -352,6 +356,7 @@ fn final_match(query: &InvoiceListQuery, condition: &FundsLinkedCondition) -> Do
         conditions.push(doc! { "$or": [{ "_sales_sources.0": { "$exists": true } },
         { "_purchase_sources.0": { "$exists": true } }] });
     }
+
     if let Some(id) = &query.sales_order_id {
         conditions.push(doc! { "$or": [
             { "invoice_direction": "sales", "_sales.order": id },
@@ -430,6 +435,7 @@ mod tests {
         let filter = InvoiceFilter { keyword_ids: Some(vec!["invoice".into()]), ..Default::default() };
         let original = filter.to_doc();
         assert_eq!(header_filter(&filter, &FundsLinkedCondition::default()), original);
+
         let condition = FundsLinkedCondition {
             operator_user_ids: Some(vec!["registrar".into(), "second".into()]),
             ..Default::default()
@@ -437,6 +443,7 @@ mod tests {
         let mut expected = original.clone();
         expected.insert("created_by", doc! { "$in": ["registrar", "second"] });
         assert_eq!(header_filter(&filter, &condition), expected);
+
         let condition = FundsLinkedCondition { operator_user_ids: Some(vec![]), ..Default::default() };
         let mut expected = original;
         expected.insert("created_by", doc! { "$in": [] });
@@ -451,6 +458,7 @@ mod tests {
             {"id":"first","version":8,"sales_versions":[],"purchase_versions":[9]}
         ]))
         .unwrap();
+
         let mut legacy = DefaultHasher::new();
         for row in &rows {
             row.id.hash(&mut legacy);
@@ -459,11 +467,13 @@ mod tests {
                 version.hash(&mut legacy);
             }
         }
+
         let mut actual = DefaultHasher::new();
         for row in &rows {
             row.hash_into(&mut actual);
         }
         assert_eq!(actual.finish(), legacy.finish());
+
         rows[1].purchase_versions[0] += 1;
         let mut current = DefaultHasher::new();
         for row in &rows {
@@ -488,6 +498,7 @@ mod tests {
             ..Default::default()
         };
         snapshot.ensure_bounded().unwrap();
+
         snapshot.versions.push(InvoiceVersion {
             id: "sentinel".into(),
             version: 1,
@@ -511,6 +522,7 @@ mod tests {
         })).unwrap();
         assert!(snapshot.items.is_empty());
         assert_eq!(snapshot.total(), 3);
+
         let summary = snapshot.summary("v").unwrap();
         assert_eq!(summary.grouped[0].visible_share, "60".parse().unwrap());
         assert_eq!(summary.whole_total, None);

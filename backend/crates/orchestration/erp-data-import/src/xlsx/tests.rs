@@ -32,11 +32,14 @@ fn workbook_bytes_preserve_entities_strings_and_formula_metadata() {
         ("xl/sharedStrings.xml", shared.as_bytes()),
         ("xl/worksheets/sheet1.xml", sheet),
     ]);
+
     let mut archive = Archive::open(&bytes, ArchiveLimits::CUSTOMER).unwrap();
     assert_eq!(sheet_paths(&mut archive).unwrap(), [("A&B".into(), "xl/worksheets/sheet1.xml".into())]);
     assert!(date1904(&archive.xml("xl/workbook.xml").unwrap()).unwrap());
+
     let strings = archive.shared_strings().unwrap();
     assert_eq!(strings, ["A&lt;中文"]);
+
     let sheet =
         rows(&archive.xml("xl/worksheets/sheet1.xml").unwrap(), &strings, SheetLimits::CUSTOMER).unwrap();
     assert_eq!(sheet.rows[0].number, 2);
@@ -121,6 +124,7 @@ fn sparse_rows_keep_sorted_coordinates_metadata_and_retained_column_limit() {
     </worksheet>"#;
     let sheet = rows(xml, &["00123".into()], limits).unwrap();
     assert_eq!(sheet.rows.iter().map(|row| row.number).collect::<Vec<_>>(), [1, 3]);
+
     let first = &sheet.rows[0].cells;
     assert_eq!(first.len(), 2);
     assert!(first[0].value.is_empty());
@@ -128,6 +132,7 @@ fn sparse_rows_keep_sorted_coordinates_metadata_and_retained_column_limit() {
     assert!(first[0].formula_text.is_none());
     assert_eq!(first[1].value, "00123");
     assert!(first[1].text);
+
     let second = &sheet.rows[1].cells;
     assert_eq!(second.len(), 3);
     assert_eq!(second[0].value, "2");
@@ -136,5 +141,6 @@ fn sparse_rows_keep_sorted_coordinates_metadata_and_retained_column_limit() {
     assert_eq!(second[2].value, "cached");
     assert!(second[2].text && second[2].formula);
     assert_eq!(second[2].formula_text.as_deref(), Some("A3&B3"));
+
     assert!(rows(r#"<worksheet><c r="E1"/><c r="E1"/></worksheet>"#, &[], limits).is_err());
 }

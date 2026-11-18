@@ -77,6 +77,7 @@ async fn manage_target(
             executor,
         )
         .await?;
+
     let account = db
         .accounts()
         .find_by_id(account_id, executor)
@@ -85,10 +86,12 @@ async fn manage_target(
     if account.kind != AccountKind::Admin {
         return Err(Error::ValidationError("只允许维护后台账号查询资格".into()));
     }
+
     let current = db.person_query_qualifications().find_for_account(account_id, category, executor).await?;
     let Some(change) = change else {
         return Ok(current);
     };
+
     let exists = current.is_some();
     let mut updated = apply_change(current, account_id, category, &change, actor)?;
     if exists {
@@ -112,6 +115,7 @@ fn apply_change(
     if reason.is_empty() || reason.chars().count() > 500 {
         return Err(Error::ValidationError("维护原因须为 1 到 500 字".into()));
     }
+
     let mut row = match current {
         Some(row) if Some(row.base.version) == change.version => row,
         Some(_) => return Err(Error::ConflictError("查询资格版本已变化".into())),
@@ -122,6 +126,7 @@ fn apply_change(
         },
         None => return Err(Error::ConflictError("查询资格不存在，须先显式授予".into())),
     };
+
     row.status = change.status;
     row.terminated_at = (change.status == PersonQueryStatus::Terminated).then(Instant::now);
     row.managed_by = Some(actor.id().to_owned());
@@ -175,6 +180,7 @@ mod tests {
         let row =
             apply_change(None, "custom-role-user", PersonDirectoryCategory::Sales, &request, &actor).unwrap();
         assert_eq!(row.grant_role_id, None);
+
         request.status = PersonQueryStatus::Terminated;
         assert!(
             apply_change(
@@ -186,11 +192,13 @@ mod tests {
             )
             .is_err()
         );
+
         request.version = Some(row.base.version);
         let terminated =
             apply_change(Some(row), "custom-role-user", PersonDirectoryCategory::Sales, &request, &actor)
                 .unwrap();
         assert!(terminated.terminated_at.is_some());
+
         request.status = PersonQueryStatus::Active;
         let restored = apply_change(
             Some(terminated),
@@ -202,6 +210,7 @@ mod tests {
         .unwrap();
         assert_eq!(restored.status, PersonQueryStatus::Active);
         assert!(restored.terminated_at.is_none());
+
         request.reason.clear();
         assert!(
             apply_change(

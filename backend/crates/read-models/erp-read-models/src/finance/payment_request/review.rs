@@ -41,6 +41,7 @@ impl PurchasePaymentRequestReadService {
             let scope = entries.iter().map(|entry| entry.base.id.clone()).collect();
             let mut settlements = PaymentReviewSettlement::from_allocations(&allocations, &scope)?;
             self.settlement_labels(request, &mut settlements, executor).await?;
+
             let mut other_requests: Vec<_> = self
                 .db
                 .purchase_payment_requests()
@@ -54,6 +55,7 @@ impl PurchasePaymentRequestReadService {
             other_requests.sort_by(|left, right| {
                 right.created_at.cmp(&left.created_at).then(left.request_id.cmp(&right.request_id))
             });
+
             let due_dates =
                 entries.iter().map(|entry| entry.due_date).collect::<BTreeSet<_>>().into_iter().collect();
             rows.push(PaymentRequestReviewLine {
@@ -93,6 +95,7 @@ impl PurchasePaymentRequestReadService {
             row.document_no = Some(payment.payment_no.clone());
             row.occurred_at = payment.paid_at;
         }
+
         rows.sort_by(|left, right| right.occurred_at.cmp(&left.occurred_at).then(left.id.cmp(&right.id)));
         Ok(())
     }

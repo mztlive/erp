@@ -45,10 +45,12 @@ impl OAuthRefresh for OAuthHttp {
         // 官方授权指南规定 GET。敏感 query 不进入错误字符串、日志或可 Debug 对象。
         let endpoint = format!("https://open-oauth.jd.com/oauth2/refresh_token?{}", encode_refresh(&request));
         let mut response = self.client.get(endpoint).send().await.map_err(|_| RefreshFailure::Unknown)?;
+
         let status = response.status().as_u16();
         if (300..400).contains(&status) {
             return Err(RefreshFailure::Unknown);
         }
+
         if response.content_length().is_some_and(|size| size > 1_048_576) {
             return Err(RefreshFailure::Unknown);
         }

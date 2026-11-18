@@ -51,6 +51,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let spec = spec::foundation_spec();
         let procurement_owner = account_id(accounts, &spec.procurement_responsibility_owner)?;
         self.ensure_procurement_dispatcher(actor, &procurement_owner, report).await?;
+
         for rule in &spec.finance_responsibilities {
             let owner = account_id(accounts, &rule.owner)?;
             self.ensure_finance_default(actor, rule.operation, &owner, report).await?;
@@ -104,11 +105,13 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                 )
                 .await?;
             let batch = found.items.len();
+
             for rule in found.items.iter().filter(|rule| rule.is_active()) {
                 for owner in &rule.owner_user_ids {
                     responsibility.authorize_owner_eligibility(owner).await?;
                 }
             }
+
             flags.extend(found.items.iter().map(|rule| rule.is_active()));
             let counted = i64::try_from(flags.len())
                 .map_err(|_| Error::Internal("采购责任规则数量溢出".to_string()))?;
@@ -134,6 +137,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             .into_iter()
             .filter(|rule| rule.operation == operation && rule.scope == FinanceResponsibilityScope::Default)
             .collect::<Vec<_>>();
+
         if defaults.iter().any(|rule| rule.is_active()) {
             let options = self.ports.work_items.clone().finance_responsibility_owner_options(actor).await?;
             for rule in defaults.iter().filter(|rule| rule.is_active()) {

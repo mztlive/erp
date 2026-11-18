@@ -56,6 +56,7 @@ impl DeliveryCoverageRefreshProcess {
         let state = self.prepare_state(now).await?;
         self.mark_changes(&state, now).await?;
         self.db.sku_delivery_coverages().mark_due(BusinessDate::today(), &mut NoTransaction).await?;
+
         self.recompute(now).await
     }
 
@@ -66,8 +67,10 @@ impl DeliveryCoverageRefreshProcess {
         if let Some(state) = state.filter(|state| !SkuDeliveryCoverageState::needs_rebuild(Some(state))) {
             return Ok(state);
         }
+
         let sku_ids = store.offered_sku_ids(&mut NoTransaction).await?;
         store.mark_skus(&sku_ids, &mut NoTransaction).await?;
+
         let state = SkuDeliveryCoverageState::rebuilt(now);
         store.advance_state(&state, &mut NoTransaction).await?;
         tracing::info!(sku_count = sku_ids.len(), "SKU 配送覆盖开始全量重建");
@@ -80,9 +83,11 @@ impl DeliveryCoverageRefreshProcess {
         for window in state.watermarks.scan_windows(now) {
             let sku_ids = store.changed_sku_ids(window, &mut NoTransaction).await?;
             store.mark_skus(&sku_ids, &mut NoTransaction).await?;
+
             let supplier_ids = store.changed_template_supplier_ids(window, &mut NoTransaction).await?;
             store.mark_suppliers(&supplier_ids, &mut NoTransaction).await?;
         }
+
         store.advance_state(&state.advanced(now), &mut NoTransaction).await?;
         Ok(())
     }
@@ -98,6 +103,7 @@ impl DeliveryCoverageRefreshProcess {
             let tokens =
                 batch.iter().map(|dirty| (dirty.id.clone(), dirty.dirty_token)).collect::<HashMap<_, _>>();
             let sku_ids = batch.into_iter().map(|dirty| dirty.id).collect::<Vec<_>>();
+
             let records = delivery_coverage_refresh_records(
                 &self.db,
                 &sku_ids,
@@ -107,6 +113,7 @@ impl DeliveryCoverageRefreshProcess {
                 &mut executor,
             )
             .await?;
+
             for record in records {
                 let token = tokens[&record.sku_id];
                 if store.save(&record, token, &mut executor).await? {

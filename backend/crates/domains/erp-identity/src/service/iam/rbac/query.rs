@@ -67,6 +67,7 @@ impl RbacService {
             .collect::<StdResult<Vec<_>, _>>()?;
         ids.sort();
         ids.dedup();
+
         let enabled = self.enabled_role_ids(&ids, executor).await?;
         ids.retain(|id| enabled.contains(id));
         Ok(ids)
@@ -179,6 +180,7 @@ impl RbacService {
         if let Some(actor) = actor {
             policy.pending.push(subject(actor.kind(), actor.id()));
         }
+
         loop {
             let subjects = policy.next_subjects();
             if subjects.is_empty() {
@@ -346,6 +348,7 @@ impl QueryPolicy {
             self.enforcer.add_role_for_user(subject, &parent, None).await?;
             self.pending.push(parent);
         }
+
         for (resource, action) in permissions {
             self.enforcer.add_permission_for_user(subject, vec![resource, action]).await?;
         }
@@ -392,6 +395,7 @@ mod tests {
             .map(|id| Role::new(RoleId::parse(id).unwrap(), RoleData::new(id)).unwrap())
             .collect::<Vec<_>>();
         let ids = roles.iter().map(|role| role.base.id.clone()).collect::<Vec<_>>();
+
         let mut permissions = collect_role_permissions(&enforcer, &ids).unwrap();
         let items = role_items_from_map(roles.clone(), &mut permissions);
         assert_eq!(items[0].id, "role-b");
@@ -417,6 +421,7 @@ mod tests {
         assert_eq!(items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), ["candidate", "empty"]);
         assert_eq!(items[0].permissions, [Permission::parse("contract:list").unwrap()]);
         assert!(items[1].permissions.is_empty());
+
         let allowed = assignable_role_items(roles.clone(), &actor, &frozen.enforcer).unwrap();
         assert_eq!(allowed.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), ["candidate", "empty"]);
         let changed = assignable_role_items(roles.clone(), &actor, &current.enforcer).unwrap();
@@ -462,6 +467,7 @@ mod tests {
                 .await
                 .unwrap();
         }
+
         for (id, resource) in [("actor-parent", actor_resource), ("candidate-parent", candidate_resource)] {
             policy.include(&role_key(id), vec![], vec![(resource.into(), "*".into())]).await.unwrap();
         }

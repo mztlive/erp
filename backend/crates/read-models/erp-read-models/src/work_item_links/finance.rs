@@ -156,6 +156,7 @@ mod tests {
         ] {
             assert!(links.contains(&link(kind, id).unwrap()));
         }
+
         assert!(request_links(&[line("", &["sales"])]).is_err());
     }
 }

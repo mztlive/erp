@@ -72,6 +72,7 @@ impl SupplierPortalReadService {
     pub async fn cooperation(&self, actor: &PortalActor) -> Result<PortalCooperationView> {
         let supplier = self.portal_supplier(actor, &mut NoTransaction).await?;
         let name = self.supplier_name(&supplier, &mut NoTransaction).await?;
+
         let pointer = supplier.current_commercial_profile_revision_id.as_ref().map(ToString::to_string);
         let profile = match pointer.as_deref() {
             Some(id) => self
@@ -85,6 +86,7 @@ impl SupplierPortalReadService {
         if pointer.is_some() && profile.is_none() {
             return Err(Error::BusinessLogicError("供应商商务档案不可用".into()));
         }
+
         let contact = self
             .db
             .accounts()

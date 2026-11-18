@@ -93,6 +93,7 @@ mod tests {
         });
         assert_eq!(row.amount, "165".parse().unwrap());
         assert_eq!(row.status, "已冲正");
+
         let json = serde_json::to_value(row).unwrap();
         assert!(json.get("gross_amount").is_none());
         assert!(json.get("receipt_id").is_none());

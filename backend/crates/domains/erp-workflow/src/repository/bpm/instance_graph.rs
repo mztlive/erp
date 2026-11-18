@@ -24,6 +24,7 @@ impl BpmWorkflowRepository<'_> {
         if graph.nodes.iter().all(|node| node.assignee_rule.is_none()) {
             return Ok(Some(graph));
         }
+
         let assignments = Repository::<ApprovalInstanceAssignee>::new(self.db, ASSIGNEES)
             .find_many(doc! { "process_instance_id": instance.base.id.clone() }, ex)
             .await?;

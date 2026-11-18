@@ -122,6 +122,7 @@ mod tests {
             },
             error => panic!("原错误被替换: {error:?}"),
         }
+
         let attempts = sink.attempts.lock().unwrap();
         assert_eq!(attempts.len(), 1);
         assert_eq!(attempts[0].result, AuditAttemptResult::Unknown);
@@ -139,11 +140,13 @@ mod tests {
             assert!(result.is_err());
         }
         assert_eq!(finish_attempt(Ok::<_, Error>(7), &context(), &sink).await.unwrap(), 7);
+
         let attempts = sink.attempts.lock().unwrap();
         assert_eq!(attempts.len(), 2);
         assert_eq!(attempts[0].result, AuditAttemptResult::Rejected);
         assert_eq!(attempts[1].result, AuditAttemptResult::Failed);
         assert_ne!(attempts[0].base.id, attempts[1].base.id);
+
         let wire = serde_json::to_string(&*attempts).unwrap();
         assert!(!wire.contains("raw request"));
         assert!(!wire.contains("secret authorization"));

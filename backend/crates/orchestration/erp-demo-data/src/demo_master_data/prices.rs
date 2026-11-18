@@ -111,9 +111,11 @@ mod tests {
         expected.bulk_price_gross = template.bulk_price_gross;
         expected.market_price = template.market_price;
         expected.bulk_min_quantity = template.bulk_min_quantity;
+
         let mut current = vec![sku];
         assert!(fill_missing(&mut current, from_ref(&template), &record()));
         assert_eq!(serde_json::to_value(&current[0]).unwrap(), serde_json::to_value(expected).unwrap());
+
         assert!(!fill_missing(&mut current, &[template], &record()));
     }
 
@@ -128,6 +130,7 @@ mod tests {
         sku.sales_visible_price_gross = None;
         let mut expected = sku.clone();
         expected.sales_visible_price_gross = template.sales_visible_price_gross;
+
         let mut current = vec![sku];
         assert!(fill_missing(&mut current, &[template], &record()));
         assert_eq!(serde_json::to_value(&current[0]).unwrap(), serde_json::to_value(expected).unwrap());

@@ -50,6 +50,7 @@ pub fn normalize_pool(members: Vec<String>) -> Result<Vec<String>> {
     if members.is_empty() || members.len() > 100 {
         return Err(Error::from("负责人池人数必须在 1 至 100 之间"));
     }
+
     let mut seen = HashSet::new();
     let mut result = Vec::with_capacity(members.len());
     for member in members {
@@ -75,8 +76,10 @@ mod tests {
         }
         assert_eq!(AssignmentStrategy::RoundRobin.select(&["a".into()], Some("a")).unwrap(), "a");
         assert!(AssignmentStrategy::RoundRobin.select(&[], None).is_err());
+
         let reordered = vec!["a".into(), "b".into(), "c".into()];
         assert_eq!(AssignmentStrategy::RoundRobin.select(&reordered, Some("b")).unwrap(), "c");
+
         // 预览只选择不修改位置；重复选择不占名额。
         assert_eq!(AssignmentStrategy::RoundRobin.select(&pool, Some("b")).unwrap(), "a");
     }
@@ -92,6 +95,7 @@ mod tests {
         ] {
             assert!(normalize_pool(members).is_err());
         }
+
         assert!(serde_json::from_str::<AssignmentStrategy>("\"LOAD_BALANCE\"").is_err());
     }
 }

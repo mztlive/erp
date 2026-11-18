@@ -30,6 +30,7 @@ pub(super) async fn process(
         row.unsupported();
         return store.save(row).await;
     };
+
     if row.begin() {
         store.save(row).await?;
         match source.request(&row.request).await {
@@ -49,6 +50,7 @@ pub(super) async fn process(
     } else {
         observe(source, row).await;
     }
+
     store.save(row).await
 }
 
@@ -201,11 +203,13 @@ mod tests {
         process(&store, Some(&source), &mut row).await.unwrap();
         assert_eq!(row.state, RefundExecutionState::Accepted);
         assert!(row.receipt.is_none());
+
         let mut recovered: RefundExecution =
             serde_json::from_str(&serde_json::to_string(&row).unwrap()).unwrap();
         process(&store, Some(&source), &mut recovered).await.unwrap();
         assert_eq!(recovered.state, RefundExecutionState::Received);
         assert!(recovered.fact_id.is_none());
+
         process(&store, Some(&source), &mut recovered).await.unwrap();
         assert_eq!(*store.trace.lock().unwrap(), ["save", "send", "save", "query", "save"]);
     }
@@ -215,6 +219,7 @@ mod tests {
             let (store, source) = fixture(fail_on);
             let mut row = row();
             assert!(process(&store, Some(&source), &mut row).await.is_err());
+
             let saved = store.stored.lock().unwrap().clone();
             if fail_on == 1 {
                 assert_eq!(saved.state, RefundExecutionState::Ready);
@@ -238,6 +243,7 @@ mod tests {
         for _ in 0..3 {
             process(&store, Some(&source), &mut row).await.unwrap();
         }
+
         assert_eq!(row.state, RefundExecutionState::Unknown);
         assert!(row.receipt.is_none());
         assert_eq!(store.trace.lock().unwrap().iter().filter(|s| **s == "send").count(), 1);
@@ -250,6 +256,7 @@ mod tests {
         process(&store, Some(&source), &mut row).await.unwrap();
         assert_eq!(row.state, RefundExecutionState::Rejected);
         assert!(row.next_run_at.is_none());
+
         process(&store, Some(&source), &mut row).await.unwrap();
         assert_eq!(*store.trace.lock().unwrap(), ["save", "send", "save"]);
     }
@@ -260,6 +267,7 @@ mod tests {
         let mut row = row();
         process(&store, None, &mut row).await.unwrap();
         process(&store, None, &mut row).await.unwrap();
+
         assert_eq!(row.state, RefundExecutionState::Unsupported);
         assert!(row.next_run_at.is_none());
         assert!(row.receipt.is_none());
@@ -274,6 +282,7 @@ mod tests {
         process(&store, Some(&source), &mut row).await.unwrap();
         assert_eq!(row.state, RefundExecutionState::Accepted);
         assert!(row.receipt.is_none());
+
         process(&store, None, &mut row).await.unwrap();
         assert_eq!(row.state, RefundExecutionState::Accepted);
         assert!(row.next_run_at.is_none());

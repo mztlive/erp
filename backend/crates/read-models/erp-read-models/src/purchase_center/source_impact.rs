@@ -72,6 +72,7 @@ pub async fn load_purchase_source_state(
         executor,
     )
     .await?;
+
     let coverage = build_procurement_coverage(facts.clone()).map_err(Error::Logic)?;
     let impacts = evaluate_source_impacts(&facts, &coverage).map_err(Error::Logic)?;
     Ok(PurchaseSourceState { facts, coverage, impacts })
@@ -132,11 +133,13 @@ pub async fn predict_change_impacts(
         executor,
     )
     .await?;
+
     let lines = db
         .sales_change_submission_lines()
         .list_lines_by_submission(&SalesChangeSubmissionId::new(submission_id), executor)
         .await?;
     let proposed = lines.into_iter().filter_map(proposed_line_fact).collect();
+
     let impacts = predict_source_impacts(&facts, &format!("proposed:{submission_id}"), proposed)
         .map_err(Error::Logic)?;
     Ok((facts.purchase_orders, impacts))

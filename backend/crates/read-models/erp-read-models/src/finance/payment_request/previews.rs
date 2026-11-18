@@ -21,6 +21,7 @@ pub(super) fn frozen_previews(
             return Err(Error::ConflictError("付款申请冻结采购预览与精确来源不一致".into()));
         }
         purchases.push(preview.clone());
+
         for source in &line.source_snapshot.sales_sources {
             if source.payer_party_id != payer
                 || source.preview.get("sales_order_id").and_then(Value::as_str)
@@ -92,12 +93,14 @@ mod tests {
         let mut wrong = line("p-1", "v-1");
         wrong.source_snapshot.purchase_preview["revision_id"] = json!("other");
         assert!(matches!(frozen_previews(&[wrong], "payer"), Err(Error::ConflictError(_))));
+
         let mut changed = line("p-2", "v-1");
         changed.source_snapshot.sales_sources[0].preview["totals"]["gross"] = json!("100");
         assert!(matches!(
             frozen_previews(&[line("p-1", "v-1"), changed], "payer"),
             Err(Error::ConflictError(_))
         ));
+
         assert!(matches!(
             frozen_previews(&[line("p-1", "v-1")], "other-payer"),
             Err(Error::ConflictError(_))

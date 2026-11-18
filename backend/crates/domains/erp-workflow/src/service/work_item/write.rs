@@ -217,6 +217,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             },
             Ok(result) => result,
         };
+
         match result {
             WorkItemWriteOutcome::Updated(item) => Ok(WorkItemMutationOutcome::Applied {
                 work_item_id: item.base.id,
@@ -358,6 +359,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         {
             return Err(Error::ValidationError("任务授权读取必须使用快照事务".into()));
         }
+
         ResourceTargets::new(&[id])?;
         let read = self.authorization.service.query(actor, &work_item::DETAIL, executor).await?;
         let filter = WorkItemFilter { authorization: Some(Arc::new(read.clone())), ..Default::default() };
@@ -365,6 +367,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             self.authorization.require(actor, &work_item::DETAIL, id, executor).await?;
             return Err(Error::NotFound("任务不存在".into()));
         };
+
         let access = self.task_actions(actor, &item, &read, executor).await?;
         let scope = WorkItemScope::for_task(&item, actor.id());
         self.ensure_task_current(&item, executor).await?;
@@ -508,6 +511,7 @@ mod receipt_recovery_tests {
             None,
         )
         .unwrap();
+
         let error = service
             .finish_command(
                 &receipt,

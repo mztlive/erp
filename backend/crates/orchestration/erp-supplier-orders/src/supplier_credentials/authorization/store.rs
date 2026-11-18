@@ -100,6 +100,7 @@ impl MongoAuthorizationStore {
                             .binding(&connection)
                             .map_err(|_| ProcessError::ConflictError("京东连接配置已变化".into()))?;
                     }
+
                     let result = this.apply(mutation, executor).await?;
                     if result.is_some() {
                         audit(&this.access, &this.credential_id, &context, executor).await?;
@@ -108,6 +109,7 @@ impl MongoAuthorizationStore {
                 })
             })
             .await;
+
         result.map_err(|error| {
             if before_remote_call { AuthorizationError::from(error) } else { AuthorizationError::Unknown }
         })
@@ -183,6 +185,7 @@ impl AuthorizationStore for MongoAuthorizationStore {
                     this.access
                         .binding(&connection)
                         .map_err(|_| ProcessError::ConflictError("京东连接配置已变化".into()))?;
+
                     let result = this
                         .access
                         .db

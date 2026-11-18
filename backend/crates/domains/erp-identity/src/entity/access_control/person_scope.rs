@@ -133,6 +133,7 @@ impl PersonScopeExpression {
                 branches.first().cloned()
             });
         }
+
         if self.history_read || self.condition.is_some() {
             return Err(Error::ValidationError("附加授权不能携带历史读取或旧交集条件".into()));
         }
@@ -180,6 +181,7 @@ impl PersonDataScope {
     ) -> Result<ResolvedScope> {
         let branches = self.expression.branches(&self.resource, &self.action);
         let condition = self.expression.read_limit(&branches, dimensions, allows_history)?;
+
         let tree = OrgTree::new(&state.units)?;
         let compiler = ScopeCompiler {
             user: &self.user_id,
@@ -189,6 +191,7 @@ impl PersonDataScope {
             memberships: &state.memberships,
             at,
         };
+
         let mut role_clauses = Vec::new();
         for branch in &branches {
             let clause = compiler.clause(branch)?;
@@ -196,6 +199,7 @@ impl PersonDataScope {
                 role_clauses.push(clause);
             }
         }
+
         // 显式空条件编译为空条款，始终拒绝普通和历史读取。
         let user_limit = condition.as_ref().map(|terms| compiler.clause(terms)).transpose()?;
         Ok(ResolvedScope { role_clauses, user_limit })
@@ -286,12 +290,14 @@ mod tests {
             ..term(DataScopeType::Organization)
         }]];
         assert!(policy.compile(&state, &[], false, Instant::now()).is_err());
+
         policy.expression.alternatives.clear();
         policy.expression.history_read = true;
         let scope = policy.compile(&state, &[], true, Instant::now()).unwrap();
         assert!(!scope.has_role_scope());
         assert!(!scope.allows(&object(true, false), false));
         assert!(scope.allows(&object(false, true), true));
+
         policy.expression.condition = Some(vec![PersonScopeTerm {
             target_mode: Some(ScopeTargetMode::OwnOrg),
             include_descendants: Some(false),
@@ -321,11 +327,13 @@ mod tests {
         let scope = policy.resolve(&OrganizationState::default(), Instant::now()).unwrap();
         assert!(!scope.allows(&object(false, true), true));
         assert!(scope.allows(&object(true, true), true));
+
         policy.expression.history_read = false;
         policy.action = "update".into();
         let scope = policy.resolve(&OrganizationState::default(), Instant::now()).unwrap();
         assert!(!scope.allows(&object(false, false), false));
         assert!(scope.allows(&object(true, false), false));
+
         policy.expression.condition = Some(vec![]);
         assert!(
             !policy
@@ -360,6 +368,7 @@ mod tests {
             }],
             ..Default::default()
         };
+
         let policy = config(vec![PersonScopeTerm {
             scope_type: DataScopeType::Organization,
             target_mode: Some(ScopeTargetMode::OwnOrg),
@@ -398,6 +407,7 @@ mod tests {
                 Instant::now(),
             )
             .unwrap();
+
         let mut target = object(false, false);
         target.warehouse_id = Some("a");
         target.settlement_party_id = Some("x");
@@ -449,6 +459,7 @@ mod tests {
         assert!(!scope.allows(&target, true));
         target.owned = true;
         assert!(scope.allows(&target, true));
+
         policy.expression.alternatives.clear();
         let scope = policy.resolve(&departments(), Instant::now()).unwrap();
         assert!(scope.allows(&target, true));
@@ -464,11 +475,13 @@ mod tests {
         let mut target = object(false, false);
         target.org_unit_id = Some("outside");
         assert!(policy.resolve(&departments(), Instant::now()).unwrap().allows(&target, true));
+
         policy.expression.alternatives.pop();
         let scope = policy.resolve(&departments(), Instant::now()).unwrap();
         assert!(!scope.allows(&target, true));
         target.org_unit_id = Some("one");
         assert!(scope.allows(&target, true));
+
         policy.expression.alternatives.clear();
         let scope = policy.resolve(&departments(), Instant::now()).unwrap();
         assert!(!scope.allows(&target, true));
@@ -486,6 +499,7 @@ mod tests {
         let mut target = object(true, false);
         target.org_unit_id = Some("outside");
         assert!(!policy.resolve(&departments(), Instant::now()).unwrap().allows(&target, true));
+
         policy.expression.additive = true;
         policy.expression.history_read = true;
         assert!(policy.resolve(&departments(), Instant::now()).is_err());
@@ -514,6 +528,7 @@ mod tests {
                 .unwrap()
                 .allows(&target, false)
         );
+
         policy.expression.alternatives =
             vec![vec![warehouse("a"), party("x")], vec![warehouse("b"), party("y")]];
         let scope = policy.compile(&departments(), &dimensions, false, Instant::now()).unwrap();

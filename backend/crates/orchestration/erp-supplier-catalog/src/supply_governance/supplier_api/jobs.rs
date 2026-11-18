@@ -49,6 +49,7 @@ impl SupplierApiGovernanceProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     require_job(&authorization, &actor, &identity, executor).await?;
+
                     let domain = SupplierApiService::new(db.clone());
                     let (mut connection, capabilities) = domain
                         .prepare_job_target(
@@ -61,6 +62,7 @@ impl SupplierApiGovernanceProcess {
                     if process.deployment(&connection)?.apply(&mut connection, actor.id())? {
                         domain.persist_connection(&mut connection, executor).await?;
                     }
+
                     let job = background_job(
                         &connection_id_value,
                         SupplierGovernanceJobKind::HealthCheck,
@@ -75,8 +77,10 @@ impl SupplierApiGovernanceProcess {
                         actor.id(),
                         &identity,
                     )?;
+
                     db.background_jobs().create(&job, executor).await?;
                     domain.create_health_run(&run, executor).await?;
+
                     processing_receipt(
                         &db,
                         &connection,
@@ -121,6 +125,7 @@ impl SupplierApiGovernanceProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     require_job(&authorization, &actor, &identity, executor).await?;
+
                     let domain = SupplierApiService::new(db.clone());
                     let (mut connection, _capabilities) = domain
                         .prepare_job_target(
@@ -134,6 +139,7 @@ impl SupplierApiGovernanceProcess {
                     process.deployment(&connection)?.apply(&mut connection, actor.id())?;
                     connection.stable.touch(actor.id());
                     domain.persist_connection(&mut connection, executor).await?;
+
                     let job = background_job(
                         &connection_id_value,
                         SupplierGovernanceJobKind::CatalogSync,
@@ -146,8 +152,10 @@ impl SupplierApiGovernanceProcess {
                         .ok_or_else(|| Error::BusinessLogicError("当前接口尚不支持商品同步".into()))?;
                     let run =
                         next_run(&db, &job.base.id, &connection, policy.mapping_version, executor).await?;
+
                     db.supplier_catalog_runs().create(&run, executor).await?;
                     db.background_jobs().create(&job, executor).await?;
+
                     processing_receipt(
                         &db,
                         &connection,

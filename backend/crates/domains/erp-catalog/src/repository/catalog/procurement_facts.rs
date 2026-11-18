@@ -179,6 +179,7 @@ impl CatalogRepository<'_> {
         let Some(mut filter) = batch_ids_filter(field, ids) else {
             return Ok(Vec::new());
         };
+
         filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
         mongo_ops::find_many(
             &self.db.collection::<T>(collection),
@@ -214,6 +215,7 @@ mod tests {
             deserialize_from_document(doc! { "id": "revision", "category_id": "leaf" }).unwrap();
         let category: ProcurementCategoryFact =
             deserialize_from_document(doc! { "id": "leaf", "parent_category_id": "parent" }).unwrap();
+
         assert_eq!(product.current_revision_id.as_deref(), Some(revision.id.as_str()));
         assert_eq!(product.id, sku.product_id);
         assert_eq!(revision.category_id, category.id);
@@ -224,6 +226,7 @@ mod tests {
     /// 缺少业务身份时拒绝；允许原有缺失当前修订和根分类。
     fn procurement_projection_rejects_missing_identity_and_keeps_optional_links() {
         assert!(deserialize_from_document::<ProcurementSkuFact>(doc! { "product_id": "product" }).is_err());
+
         let product: ProcurementProductFact =
             deserialize_from_document(doc! { "id": "product", "product_kind": "PHYSICAL" }).unwrap();
         let category: ProcurementCategoryFact = deserialize_from_document(doc! { "id": "root" }).unwrap();

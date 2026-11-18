@@ -92,6 +92,7 @@ mod tests {
         .unwrap();
         request.validate().unwrap();
         let (identity, fingerprint) = request.command("change", "buyer").unwrap();
+
         let result = PurchaseChangeDraftView {
             version: 4,
             reason: "成本调整".into(),
@@ -106,6 +107,7 @@ mod tests {
             PurchaseCommandReceipt::decode(receipt.clone(), &identity, &fingerprint).unwrap().into_payload();
         assert_eq!(restored.version, 4);
         assert_eq!(restored.lines[0].quantity.as_deref(), Some("2"));
+
         let mut changed = request.clone();
         changed.expected_lock_version += 1;
         let (_, altered) = changed.command("change", "buyer").unwrap();
@@ -113,6 +115,7 @@ mod tests {
             PurchaseCommandReceipt::decode(receipt.clone(), &identity, &altered).unwrap_err(),
             PurchaseCommandReceiptError::PayloadConflict
         );
+
         changed = request;
         changed.lines[0].quantity = Some("3".into());
         let (_, altered) = changed.command("change", "buyer").unwrap();

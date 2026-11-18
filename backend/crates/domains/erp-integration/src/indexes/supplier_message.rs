@@ -14,6 +14,7 @@ pub(super) async fn ensure(db: &Database) -> Result<()> {
             unique_index("uk_supplier_message_consumers_account", doc! {"account_scope":1}),
         ])
         .await?;
+
     db.collection::<Document>(Database::SUPPLIER_PULLED_MESSAGES)
         .create_indexes([
             unique_index("uk_supplier_pulled_messages_id", doc! {"id":1}),

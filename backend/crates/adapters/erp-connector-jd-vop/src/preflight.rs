@@ -24,6 +24,7 @@ impl OrderPreflight for JdVopConnector {
         let profile = self.profile.as_ref().ok_or_else(protocol_required)?;
         submit(request, profile)?;
         self.validate_choice(request)?;
+
         let address = request
             .delivery_context
             .supplier_address
@@ -32,6 +33,7 @@ impl OrderPreflight for JdVopConnector {
         if !SupplierAddressSource::validate(self, address).await?.value {
             return Err(mapping("京东收货地址已失效，请重新确认"));
         }
+
         let reader = self.reader.as_ref().ok_or_else(protocol_required)?;
         let lines = line_quantities(&request.lines)?;
         let area = area(&request.delivery_context)?;
@@ -40,6 +42,7 @@ impl OrderPreflight for JdVopConnector {
             .await?;
         let stock: Vec<Stock> = reader.read(JdVopReadRequest::Stock { lines, area }).await?;
         verify_eligibility(request, &eligibility, &stock)?;
+
         let result = self.verify_line_prices(request).await?;
         let shipping = self.freight(&request.delivery_context, &request.lines).await?;
         let goods = goods_amount(&result)?;
@@ -48,6 +51,7 @@ impl OrderPreflight for JdVopConnector {
             .checked_add(shipping.to_decimal())
             .ok_or_else(|| mapping("京东预检总额溢出"))?;
         let payable: Amount = payable.to_string().parse().map_err(|_| mapping("京东预检总额精度无效"))?;
+
         let balance: Balance = reader.read(JdVopReadRequest::Balance).await?;
         let available: Decimal = balance
             .balance_info
@@ -56,6 +60,7 @@ impl OrderPreflight for JdVopConnector {
             .0
             .parse()
             .map_err(|_| mapping("京东预存款余额格式无效"))?;
+
         let proof = PreflightProof {
             delivery_context: request.delivery_context.clone(),
             lines: result,
@@ -87,6 +92,7 @@ impl JdVopConnector {
             terms.ensure_quantity(line.quantity).map_err(|_| mapping("京东数量不符合原冻结采购限制"))?;
             terms.ensure_automatic_order().map_err(|_| mapping("京东商品包含尚未支持的附加履约流程"))?;
         }
+
         let detail: SkuDetail = reader
             .read(JdVopReadRequest::Detail { sku_id: line.sku.spec_id.clone(), query_ext_set: vec![13] })
             .await?;
@@ -102,6 +108,7 @@ impl JdVopConnector {
             .map(str::trim)
             .filter(|unit| !unit.is_empty())
             .ok_or_else(|| mapping("京东订购单位未取得，请先核实来源资料"))?;
+
         let unit_price = Self::current_price(reader, line).await?;
         Ok(PreflightLine {
             line_id: line.line_id.clone(),
@@ -128,6 +135,7 @@ impl JdVopConnector {
         if !price.purchase_restrictions()?.is_empty() {
             return Err(mapping("京东当前报价需要用户资格或促销限购核验，暂不支持自动采购"));
         }
+
         let unit_price: UnitPrice = price
             .sale_price
             .as_ref()
@@ -159,6 +167,7 @@ fn verify_eligibility(
     {
         return Err(mapping("京东可采或库存核验未完整覆盖采购行"));
     }
+
     for line in &request.lines {
         let eligibility =
             eligibility.get(line.sku.spec_id.as_str()).ok_or_else(|| mapping("京东可采核验缺少商品"))?;
@@ -280,6 +289,7 @@ mod tests {
         assert_eq!(checked.source_unit.as_deref(), Some("pack"));
         assert_eq!(checked.quantity, "8".parse().unwrap());
         assert_eq!(transport.requests.lock().unwrap().len(), 2);
+
         let error = JdVopConnector::verify_line_price(&reader, &line("6")).await.unwrap_err();
         assert!(error.summary.contains("整倍数"));
         assert_eq!(transport.requests.lock().unwrap().len(), 3);

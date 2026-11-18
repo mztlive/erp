@@ -37,6 +37,7 @@ pub async fn has_unsettled_business_org(
     {
         return Ok(true);
     }
+
     let differences =
         db.reconciliation_differences().find_many(doc! { "owner_org_unit_id": org }, executor).await?;
     let ids = differences.into_iter().map(|item| item.base.id).collect::<Vec<_>>();

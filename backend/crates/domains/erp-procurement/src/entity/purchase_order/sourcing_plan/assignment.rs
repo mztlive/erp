@@ -76,10 +76,12 @@ impl SourcingAssignment {
         if basis_id.is_empty() {
             return Err(Error::from("履约方案不能为空"));
         }
+
         let quantity = Quantity::from_str(quantity.trim())
             .map_err(|error| Error::from(format!("本次分配数量非法: {error}")))?;
         let expected_delivery_date = BusinessDate::from_str(expected_delivery_date.trim())
             .map_err(|error| Error::from(format!("预计交付日非法: {error}")))?;
+
         let target_warehouse_id =
             target_warehouse_id.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string);
         if source_type == SupplySourceType::ExistingStock && target_warehouse_id.is_some() {
@@ -88,6 +90,7 @@ impl SourcingAssignment {
         if quantity <= zero_quantity() {
             return Err(Error::from("本次分配数量必须大于 0"));
         }
+
         Ok(Self {
             sales_order_line_id,
             basis_id,
@@ -137,6 +140,7 @@ impl SourcingAssignmentSet {
             }
             normalized.push(assignment.clone());
         }
+
         normalized.sort_by(|left, right| {
             left.sales_order_line_id
                 .cmp(&right.sales_order_line_id)

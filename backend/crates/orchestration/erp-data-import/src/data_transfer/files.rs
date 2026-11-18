@@ -40,6 +40,7 @@ impl DataTransferProcess {
         if json.len() > 96 * 1024 * 1024 {
             return Err(Error::ValidationError("任务内容过大，请缩小处理范围".into()));
         }
+
         let encrypted = self.codec.encrypt(&json)?;
         timeout(
             Duration::from_secs(60),
@@ -52,6 +53,7 @@ impl DataTransferProcess {
         .await
         .map_err(|_| Error::Internal("任务文件保存超时，请查询原任务".into()))?
         .map_err(|_| Error::Internal("任务文件保存失败，请查询原任务后重试".into()))?;
+
         let expires = Instant::now().unix_secs() + 7 * 86400;
         Ok(FileAsset::new(
             FileAssetId::new(next_id()),
@@ -107,6 +109,7 @@ impl DataTransferProcess {
         if asset.expires_at.is_none_or(|at| at <= Instant::now()) {
             return Err(Error::Forbidden("任务文件已过期或无权读取，请重新提交".into()));
         }
+
         let text = std::str::from_utf8(&bytes).map_err(|_| Error::Internal("任务文件损坏".into()))?;
         let json = self.codec.decrypt(text)?;
         if content_fingerprint(&json, self.codec.fingerprint_key()) != asset.content_hmac.as_str() {
@@ -143,6 +146,7 @@ impl DataTransferProcess {
                 })
             })
             .await?;
+
         Ok((self.decrypt_private(&asset).await?, asset))
     }
     pub(super) async fn source(&self, job: &BackgroundJob) -> Result<Envelope> {
@@ -165,6 +169,7 @@ impl DataTransferProcess {
         {
             return Err(Error::BusinessLogicError("任务尚未完成或结果已过期，请查询原任务".into()));
         }
+
         let compact = self.reader_context(&reader, actor).await?;
         let source_id =
             job.input_file_asset_id.as_ref().ok_or_else(|| Error::NotFound("任务输入缺失".into()))?;
@@ -172,16 +177,18 @@ impl DataTransferProcess {
         if source.kind != compact.kind {
             return Err(Error::Internal("任务私有上下文与原输入类型不符".into()));
         }
+
         let asset =
             job.result_file_asset_id.as_ref().ok_or_else(|| Error::NotFound("任务结果不存在".into()))?;
-
         let (mut result, _): (TransferResult, _) = self.reader_private(job, asset.as_ref(), actor).await?;
         self.handler.authorize_result(source.kind, &source.input, &result.authorization, actor).await?;
+
         if !result.metadata.is_object() {
             result.metadata = json!({});
         }
         result.metadata["completed_at"] = json!(job.finished_at);
         result.metadata["expires_at"] = json!(job.result_expires_at);
+
         let decoded = if result.content_type == "application/json" {
             Some(
                 serde_json::from_slice(&result.bytes()?)
@@ -196,6 +203,7 @@ impl DataTransferProcess {
         }
         result.metadata["kind"] = json!(source.kind);
         result.metadata["context"] = context.context;
+
         self.validate_reader(job, actor).await?;
         Ok(result)
     }

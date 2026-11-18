@@ -316,6 +316,7 @@ impl ReceiptAllocation {
         if amount.to_decimal().is_sign_negative() {
             return Err(Error::from("反向金额必须为正数"));
         }
+
         let mut reverse_sums: HashMap<String, Amount> = HashMap::new();
         let zero = Amount::from_str("0.00").expect("固定零金额必须可解析");
         for allocation in allocations {
@@ -326,10 +327,12 @@ impl ReceiptAllocation {
                 *entry = entry.checked_add(allocation.allocated_amount);
             }
         }
+
         let mut applies: Vec<&ReceiptAllocation> =
             allocations.iter().filter(|a| a.allocation_action == AllocationAction::Apply).collect();
         applies
             .sort_by(|a, b| a.allocation_seq.cmp(&b.allocation_seq).then_with(|| a.base.id.cmp(&b.base.id)));
+
         let mut remaining = amount;
         let mut rows = Vec::new();
         let mut chunks = Vec::new();
@@ -354,6 +357,7 @@ impl ReceiptAllocation {
                 break;
             }
         }
+
         if !remaining.to_decimal().is_zero() {
             return Err(Error::from("原回款有效分配不足，无法全额反向"));
         }
@@ -473,12 +477,14 @@ mod tests {
     fn receipt_plan_partial_and_full_reverse() {
         let a1 = receipt_allocation_for_plan("rc-1", 1, AllocationAction::Apply, "100.00", "re-1", None);
         let a2 = receipt_allocation_for_plan("rc-2", 2, AllocationAction::Apply, "50.00", "re-2", None);
+
         // partial 60 -> only first row partially
         let (rows, _) =
             ReceiptAllocation::plan_reverse(&[a1.clone(), a2.clone()], Amount::from_str("60.00").unwrap())
                 .unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].amount, Amount::from_str("60.00").unwrap());
+
         // full 150 -> both rows
         let (rows, _) =
             ReceiptAllocation::plan_reverse(&[a1, a2], Amount::from_str("150.00").unwrap()).unwrap();
@@ -496,6 +502,7 @@ mod tests {
         let (rows, _) =
             ReceiptAllocation::plan_reverse(&allocations, Amount::from_str("50.00").unwrap()).unwrap();
         assert_eq!(rows[0].amount, Amount::from_str("50.00").unwrap());
+
         let err =
             ReceiptAllocation::plan_reverse(&allocations, Amount::from_str("60.00").unwrap()).unwrap_err();
         assert!(err.to_string().contains("不足"));
@@ -509,6 +516,7 @@ mod tests {
             ReceiptAllocation::plan_reverse(&[a1.clone(), a2.clone()], Amount::from_str("0.00").unwrap())
                 .unwrap();
         assert!(rows.is_empty() && chunks.is_empty());
+
         // duplicate seq should be deterministic by id
         let (rows, _) =
             ReceiptAllocation::plan_reverse(&[a2.clone(), a1.clone()], Amount::from_str("100.00").unwrap())
@@ -533,10 +541,12 @@ mod tests {
     #[test]
     fn receipt_next_seq_empty_and_sorted_and_duplicate() {
         assert_eq!(ReceiptAllocation::next_allocation_seq(&[]).unwrap(), 1);
+
         let a1 = receipt_allocation_for_plan("rc-1", 5, AllocationAction::Apply, "10.00", "re-1", None);
         let a2 = receipt_allocation_for_plan("rc-2", 2, AllocationAction::Apply, "10.00", "re-2", None);
         let a3 = receipt_allocation_for_plan("rc-3", 5, AllocationAction::Apply, "10.00", "re-3", None);
         assert_eq!(ReceiptAllocation::next_allocation_seq(&[a1, a2, a3]).unwrap(), 6);
+
         let range = ReceiptAllocation::next_allocation_seq_range(
             &[receipt_allocation_for_plan("rc-1", 3, AllocationAction::Apply, "10.00", "re-1", None)],
             3,

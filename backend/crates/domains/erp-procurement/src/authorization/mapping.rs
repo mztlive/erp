@@ -121,6 +121,7 @@ mod tests {
             };
             assert_eq!(actual, expected);
         }
+
         assert!(mapping.predicate(&AccessFact::Participant, &context(), None).is_err());
     }
 
@@ -136,6 +137,7 @@ mod tests {
                 ));
             }
         }
+
         assert!(PurchaseMapping::new("bad.resource").is_err());
     }
 
@@ -166,6 +168,7 @@ mod tests {
                 .collect(),
         )
         .unwrap();
+
         for entry in entries {
             let compiled =
                 authorization.query(&context().actor, &entry, &mut ReadExecutor::default()).await.unwrap();
@@ -191,6 +194,7 @@ mod tests {
             vec![(purchase_order::LIST, Arc::new(PurchaseMapping::new("purchase_order").unwrap()))],
         )
         .unwrap();
+
         assert!(matches!(
             authorization.query(&context().actor, &purchase_order::LIST, &mut ReadExecutor::default()).await,
             Err(Error::Forbidden(_))

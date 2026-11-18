@@ -347,6 +347,7 @@ mod tests {
                 assert!(matches!(error, Error::RepositoryError(persistence_core::Error::EntityMetadataOutOfRange("field-marker"))));
             };
         }
+
         check_domain!(erp_identity);
         check_domain!(erp_workflow);
         check_domain!(erp_party);
@@ -368,12 +369,14 @@ mod tests {
         check_domain!(erp_fulfillment, common_variants);
         check_domain!(erp_procurement);
         check_domain!(erp_import);
+
         assert!(
             matches!(Error::from(erp_identity::Error::Rbac("identity".to_string())), Error::Rbac(message) if message == "identity")
         );
         assert!(
             matches!(Error::from(erp_workflow::Error::Rbac("workflow".to_string())), Error::Rbac(message) if message == "workflow")
         );
+
         for code in WorkflowErrorCode::ALL {
             assert!(
                 matches!(Error::from(erp_workflow::Error::Coded(code)), Error::Coded(actual) if actual == code)

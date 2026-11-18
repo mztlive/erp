@@ -32,6 +32,7 @@ impl BuiltinRoleTemplate {
         if id == "role-finance" {
             permissions.push(FINANCE_LEDGER_READ);
         }
+
         Ok(Self {
             id: id.into(),
             name: name.into(),
@@ -112,6 +113,7 @@ impl BuiltinRoleTemplate {
         if self.id != "role-finance" {
             return Err(Error::ValidationError("财务岗位必须从综合财务模板派生".into()));
         }
+
         let (id, name, description, setup) = kind.metadata();
         let mut permissions = Vec::new();
         for permission in &self.permissions {
@@ -131,6 +133,7 @@ impl BuiltinRoleTemplate {
                 permissions.push(permission.clone());
             }
         }
+
         Ok(Self {
             id: id.into(),
             name: name.into(),
@@ -172,6 +175,7 @@ impl BuiltinRoleTemplate {
         if ids.is_empty() {
             return Err(Error::ValidationError("请选择有效的内建岗位".into()));
         }
+
         let mut selected = Vec::new();
         for id in ids {
             if selected.iter().any(|template: &Self| template.id == *id) {
@@ -303,8 +307,10 @@ mod tests {
             assert!(matches!(BuiltinRoleTemplate::select(&catalog, &ids),
                 Err(Error::ValidationError(message)) if message == expected));
         }
+
         assert!(BuiltinRoleTemplate::select(&[], &["unknown".into()]).is_err());
         assert!(BuiltinRoleTemplate::select(&catalog, &[]).is_err());
+
         let selected = BuiltinRoleTemplate::select(&catalog, &["role-sales".into()]).unwrap();
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].id, "role-sales");

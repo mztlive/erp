@@ -46,7 +46,9 @@ impl ReceivableProcess {
         run_audited(&self.db, audit, move |db, executor| {
             Box::pin(async move {
                 ensure_receipt_edit_authorized(&rbac, &actor, &receipt_id, executor).await?;
+
                 persist_receipt_draft(db, &receipt_id, req, executor).await?;
+
                 receipt_command_result(
                     db,
                     &rbac.authorization,
@@ -77,6 +79,7 @@ async fn persist_receipt_draft(
         .ok_or_else(|| Error::NotFound("客户回款单不存在".into()))?;
     receipt.ensure_draft_editable()?;
     ensure_expected_version(receipt.base.version, req.version)?;
+
     receipt.update(req.into()).map_err(|error| Error::ValidationError(error.to_string()))?;
     db.customer_receipts().update(&mut receipt, executor).await?;
     Ok(())

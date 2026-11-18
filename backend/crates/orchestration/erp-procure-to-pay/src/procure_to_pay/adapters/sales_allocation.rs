@@ -51,10 +51,12 @@ pub(crate) async fn current_revision_lines(
     let lines = db.sales_order_revision_lines().list_lines_by_revision(revision_id, executor).await?;
     let lines = lines.into_iter().filter(|line| line.line_type == LineType::GoodsService).collect::<Vec<_>>();
     let ids = lines.iter().map(|line| SalesOrderRevisionLineId::new(&line.base.id)).collect::<Vec<_>>();
+
     let goods =
         db.sales_order_goods_service_line_revisions().list_by_revision_line_ids(&ids, executor).await?;
     let goods =
         goods.into_iter().map(|line| (line.revision_line_id.to_string(), line)).collect::<HashMap<_, _>>();
+
     lines
         .into_iter()
         .map(|line| {

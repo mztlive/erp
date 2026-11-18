@@ -54,12 +54,14 @@ impl IntegrationResolutionProcess {
         self.authorization
             .require(actor, &integration_ops::ERROR_TASK_CREATE, AccessTarget::Operation, executor)
             .await?;
+
         req.validate()?;
         if let Some(message_id) = &req.message_id {
             self.domain().ensure_message_exists(message_id.as_ref(), executor).await?;
         }
         let org =
             self.domain().access().require_handler_org(&req.owner_user_id, Instant::now(), executor).await?;
+
         let task = prepare_error_task(&req, org)?;
         let work_item = error_work_item(&task)?;
         self.store_error_task(task.clone(), work_item, actor, executor).await?;

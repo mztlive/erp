@@ -68,6 +68,7 @@ impl ReturnsProcess {
             &req.idempotency_key,
             &req,
         )?;
+
         let this = self.clone();
         let actor_owned = actor.clone();
         let command = command_receipt.clone();
@@ -81,6 +82,7 @@ impl ReturnsProcess {
                 })
             })
             .await;
+
         let detail_id = match transaction_result {
             Ok(id) => id,
             Err(error) => {
@@ -94,6 +96,7 @@ impl ReturnsProcess {
                 .await?
             },
         };
+
         self.payment_reversal_result(
             &detail_id,
             actor,
@@ -118,6 +121,7 @@ impl ReturnsProcess {
         {
             return Ok(id);
         }
+
         let input = self.prepare_payment_reversal_commit(req, actor, command, executor).await?;
         let id = input.reversal.base.id.clone();
         apply_commit(&self.db, &self.rbac, input, command, actor, executor).await?;
@@ -134,6 +138,7 @@ impl ReturnsProcess {
     ) -> Result<CommitPreparation> {
         let (source_fact_id, source_version, mut reversal) =
             self.payment_reversal_commit_source(req, actor, executor).await?;
+
         let adapter = payment_reversal_adapter()?;
         start_payment_reversal_approval(&mut reversal)?;
         let id = reversal.base.id.clone();
@@ -144,6 +149,7 @@ impl ReturnsProcess {
         let now = Instant::now();
         let snapshot =
             build_payment_reversal_snapshot(&reversal, &organization_id, &supplier_id, actor.id(), now)?;
+
         let bind_command = BindPublishedDefinitionCommand {
             document_type: DocumentType::PaymentReversal,
             business_object_id: id.clone(),
@@ -153,6 +159,7 @@ impl ReturnsProcess {
         let document =
             new_registered_document(&id, DocumentType::PaymentReversal, reversal.reversal_no.clone())
                 .map_err(Error::from)?;
+
         let audits = commit_audits(actor, receipt, &id)?;
         let approval = CommitApproval {
             subject,
@@ -226,6 +233,7 @@ async fn write_commit(
         executor,
     )
     .await?;
+
     ReturnsService::new(db.clone()).create_payment_reversal(&input.reversal, executor).await?;
     if let PreparedExecution::Apply(writes) = prepared {
         persist_payment_reversal_runtime(
@@ -244,6 +252,7 @@ async fn write_commit(
         )
         .await?;
     }
+
     save_commit(db, command, &input.reversal.base.id, (&input.audits.0, &input.audits.1), executor).await
 }
 
@@ -298,6 +307,7 @@ mod authorization_tests {
             &request,
         )
         .unwrap();
+
         denied(
             process
                 .commit_payment_reversal_snapshot(

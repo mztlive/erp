@@ -71,6 +71,7 @@ impl RefundExecution {
         if reason.is_empty() || reason.len() > 128 || input.lines.is_empty() || input.lines.len() > 1000 {
             return Err(Error::ValidationError("退款原因和1至1000条原订单明细为必填".into()));
         }
+
         let (lines, amounts) = prepare_lines(input, items)?;
         let amount = sum_amounts(&amounts)?;
         let payload = serde_json::to_string(&(&order, &lines, &amounts, reason))
@@ -80,6 +81,7 @@ impl RefundExecution {
         if key.is_empty() || key.len() > 128 {
             return Err(Error::ValidationError("退款申请身份无效".into()));
         }
+
         let id = format!("api-refund-{}", identity(&[connection, &order.merchant_order_no, key]));
         Ok(Self {
             base: BaseModel::new(id.clone()),
@@ -117,6 +119,7 @@ impl RefundExecution {
                 .iter()
                 .find(|i| i.base.id == line.line_id)
                 .ok_or_else(|| Error::ValidationError("原退款明细不存在".into()))?;
+
             let mut quantity = line.quantity.to_decimal();
             let mut amounts = vec![self.line_amounts[index]];
             for old in previous.iter().filter(|old| {
@@ -139,6 +142,7 @@ impl RefundExecution {
                     );
                 }
             }
+
             if quantity > item.quantity.to_decimal()
                 || sum_amounts(&amounts)? > item.cost_snapshot_total_gross
             {
@@ -244,6 +248,7 @@ impl RefundExecution {
         {
             return Err(Error::ConflictError("退款来源与原动作、订单、金额或业务时间不一致".into()));
         }
+
         self.receipt = Some(receipt);
         self.state = RefundExecutionState::Received;
         self.blocker = Some("退款来源已核实，待在退款结果登记中分配原成本、应付及现金；尚未财务过账".into());
@@ -277,6 +282,7 @@ impl RefundExecution {
                 "只有明确未发送的未支持退款可凭人工核实证据登记；未知请求必须继续调查".into(),
             ));
         }
+
         self.accept_receipt(Snapshot {
             stamp: SourceStamp {
                 revision: SourceRevision::Unversioned,
@@ -329,6 +335,7 @@ impl RefundExecution {
         {
             return Err(Error::ConflictError("退款登记与原来源收据不一致".into()));
         }
+
         let mut seen = BTreeSet::new();
         for allocation in &request.allocations {
             let index = self
@@ -344,6 +351,7 @@ impl RefundExecution {
                 return Err(Error::ConflictError("退款分配数量或金额不等于原申请".into()));
             }
         }
+
         let payload =
             serde_json::to_string(request).map_err(|_| Error::ValidationError("退款分配无法冻结".into()))?;
         let hash = identity(&[&payload]);
@@ -401,6 +409,7 @@ fn prepare_lines(
         if line.quantity.to_decimal() <= Amount::zero().to_decimal() || line.quantity > item.quantity {
             return Err(Error::ValidationError("退款数量超出原采购范围".into()));
         }
+
         let extended = item
             .unit_cost_snapshot_gross
             .to_decimal()
@@ -415,6 +424,7 @@ fn prepare_lines(
         {
             return Err(Error::ValidationError("退款数量或金额超出原明细范围，或存在重复行".into()));
         }
+
         lines.push(ReturnLine {
             line_id: item.base.id.clone(),
             sku: SupplierSku {
@@ -528,6 +538,7 @@ mod tests {
         let two = prepare(&second).unwrap();
         assert_ne!(one.base.id, two.base.id);
         assert!(two.ensure_remaining(slice::from_ref(&one), &[item()]).is_ok());
+
         first.lines[0].amount = "9".parse().unwrap();
         let conflict = prepare(&first).unwrap();
         assert_eq!(one.base.id, conflict.base.id);
@@ -546,6 +557,7 @@ mod tests {
         request.lines[0].amount = "20".parse().unwrap();
         let next = prepare(&request).unwrap();
         assert!(next.ensure_remaining(&[previous.clone()], &[item()]).is_err());
+
         previous.state = RefundExecutionState::Unsupported;
         assert!(next.ensure_remaining(&[previous], &[item()]).is_ok());
     }
@@ -576,11 +588,13 @@ mod tests {
         assert_eq!(row.state, RefundExecutionState::Received);
         assert_eq!(row.manual_evidence.as_ref().unwrap().recorded_by, "operator");
         assert_eq!(row.receipt_version().unwrap(), "supplier-proof-1");
+
         let mut unknown = prepare(&input()).unwrap();
         unknown.begin();
         assert!(unknown.confirm_manual(&request, "operator").is_err());
         assert_eq!(unknown.state, RefundExecutionState::Unknown);
         assert!(unknown.receipt.is_none());
+
         let mut absent = prepare(&input()).unwrap();
         absent.unsupported();
         let mut missing = request;
@@ -616,12 +630,14 @@ mod tests {
                 cash_refund_amount: Amount::zero(),
             }],
         };
+
         let hash = row.validate_application(&request).unwrap();
         row.application_hash = Some(hash);
         row.state = RefundExecutionState::Applied;
         row.validate_application(&request).unwrap();
         request.allocations[0].original_cost_entry_id = CostEntryId::new("other-cost");
         assert!(row.validate_application(&request).is_err());
+
         row.application_hash = None;
         row.state = RefundExecutionState::Received;
         request.allocations[0].refund_quantity = "2".parse().unwrap();
@@ -647,12 +663,14 @@ mod tests {
             assert!(row.receive(observed).is_err());
             assert!(row.receipt.is_none());
         }
+
         let mut row = prepare(&input()).unwrap();
         row.begin();
         row.receive(receipt(&row)).unwrap();
         assert_eq!(row.state, RefundExecutionState::Received);
         assert!(row.fact_id.is_none());
         assert!(row.next_run_at.is_none());
+
         let restored: RefundExecution = serde_json::from_str(&serde_json::to_string(&row).unwrap()).unwrap();
         assert_eq!(row.receipt_version().unwrap(), restored.receipt_version().unwrap());
     }

@@ -108,10 +108,12 @@ impl SalesOrderCommandProcess {
             return Ok(None);
         }
         ensure_final_approve_formalize(&order)?;
+
         let attribution =
             erp_read_models::sales_attribution::sales_attribution(&self.db, &order, Instant::now(), executor)
                 .await?;
         order.freeze_attribution(attribution)?;
+
         let (submission, lines) = load_latest_submission(&self.db, id, executor).await?;
         let procurement = self.build_procurement_formalization_plan(&order, &lines).await?;
         prepare_formalized_submission_write(
@@ -172,11 +174,13 @@ fn prepare_formalized_submission_write(
         .ok_or_else(|| Error::BusinessLogicError("销售归属快照缺失".into()))?
         .attributed_at;
     let aggregate = build_revision_for_order(order, &submission, &lines, now)?;
+
     let procurement_items = procurement
         .as_ref()
         .map(|plan| build_procurement_work_items(order, &submission, plan))
         .transpose()?
         .unwrap_or_default();
+
     erp_sales::service::sales_order::formalize::approve_submission(
         order,
         &mut submission,
@@ -219,6 +223,7 @@ fn build_procurement_work_items(
     for line in &plan.resolution.lines {
         groups.entry(line.identity.owner_user_id.clone()).or_default().push(line.identity.line_key.clone());
     }
+
     let organization_id = sales_order_responsible_org_id(order)?;
     groups
         .into_iter()
@@ -287,6 +292,7 @@ pub(super) async fn persist_procurement_work_items(
         {
             return Err(Error::ConflictError("开放供给分配任务的冻结责任范围与当前解析不一致".to_string()));
         }
+
         if existing.is_empty() {
             db.work_items().create(item, executor).await?;
         }
@@ -347,6 +353,7 @@ mod tests {
         order.start_approval_submission("user-1").expect("卡券进入审批中");
         assert_eq!(order.review_status, ReviewStatus::InApproval);
         assert!(ensure_final_approve_formalize(&order).is_ok());
+
         assert_eq!(
             AccountReviewStatus::initial_for_sales_business_type(SalesBusinessTypeFact::Voucher),
             AccountReviewStatus::NotApplicable

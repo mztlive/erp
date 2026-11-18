@@ -439,6 +439,7 @@ mod tests {
         assert_eq!(event.request_id.as_deref(), Some("trace-1"));
         assert_eq!(event.actor_name_snapshot.as_deref(), Some("周晓彤"));
         assert_eq!(event.command_id.as_deref(), Some("command-1"));
+
         let internal = log.with_request_id(None).unwrap();
         assert!(internal.structured_event.unwrap().request_id.is_none());
     }
@@ -449,6 +450,7 @@ mod tests {
         assert!(log.clone().with_event_sequence(0).is_err());
         assert!(log.clone().with_request_id(Some("x".repeat(129))).is_err());
         assert!(log.with_request_id(Some("trace\nsecret".into())).is_err());
+
         let raw = AuditLog::new("audit-1".into(), audit_data()).unwrap();
         assert!(raw.clone().with_event_sequence(1).is_err());
         assert!(raw.with_request_id(Some("trace-1".into())).is_err());
@@ -461,6 +463,7 @@ mod tests {
         let unknown = log.clone().with_actor_name_snapshot(None).unwrap();
 
         assert_eq!(unknown.structured_event.as_ref().unwrap().actor_name_snapshot, None);
+
         assert!(log.clone().with_actor_name_snapshot(Some("x".repeat(129))).is_err());
         assert!(log.with_actor_name_snapshot(Some("name\nsecret".to_string())).is_err());
         assert!(
@@ -524,6 +527,7 @@ mod tests {
                             if message == format!("{field}长度不符合要求")
                     ));
                 }
+
                 for value in ["名\n称", "名\0称", "名\u{7f}称"] {
                     assert!(matches!(
                         setter(log.clone(), Some(value.into())),
@@ -532,6 +536,7 @@ mod tests {
                     ));
                 }
             }
+
             for value in [None, Some(String::new()), Some(" \t\n ".into()), Some("valid".into())] {
                 assert!(matches!(
                     setter(raw.clone(), value),
@@ -548,6 +553,7 @@ mod tests {
         assert_eq!(updated.base, log.base);
         assert_eq!(updated.message, log.message);
         assert_eq!(updated.structured_event.unwrap().event_sequence.get(), u32::MAX);
+
         let raw = AuditLog::new("audit-1".into(), audit_data()).unwrap();
         assert!(matches!(
             raw.clone().with_event_sequence(0),

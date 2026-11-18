@@ -44,17 +44,20 @@ impl InvoiceCommitTransaction {
     pub async fn execute(mut self, executor: &mut dyn Executor) -> Result<(String, bool)> {
         require_entry(&self.db, &self.rbac, &self.actor, &self.work_item_id, TaskPurpose::Invoice, executor)
             .await?;
+
         if let Some(id) = FinanceCommandReceiptService::new(self.db.clone())
             .committed_resource_id(&self.receipt, executor)
             .await?
         {
             return Ok((id, false));
         }
+
         if let Some(invoice) = self.req.invoice.as_mut() {
             self.req.attachment_asset_ids.append(&mut invoice.attachment_asset_ids);
         }
         super::invoice_attachments::resolve(&mut self.req.attachment_asset_ids, self.pending.as_ref())?;
         let prepared = self.req.prepare()?;
+
         let (mut invoice, lines) = self.load_invoice(prepared, executor).await?;
         ensure_postable_draft(&self.db, &invoice, executor).await?;
         post_invoice_apply(
@@ -72,6 +75,7 @@ impl InvoiceCommitTransaction {
             executor,
         )
         .await?;
+
         super::invoice_attachments::persist(
             &self.db,
             &self.rbac.authorization,

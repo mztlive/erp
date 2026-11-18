@@ -107,6 +107,7 @@ impl<'a> InvoiceSummaryRepository<'a> {
             executor,
         )
         .await?;
+
         let accounts = self.accounts(kind, &rows, executor).await?;
         Ok(assemble_links(kind, rows, &accounts))
     }

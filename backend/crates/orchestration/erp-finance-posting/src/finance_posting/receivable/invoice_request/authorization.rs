@@ -165,6 +165,7 @@ async fn replay<P: RequestAccess>(
 ) -> Result<Option<P::View>> {
     actor_access(port, actor, RequestAction::from_command(command)?, executor).await?;
     let Some(id) = port.committed(command, executor).await? else { return Ok(None) };
+
     let result = async {
         object_access(port, actor, &id, RequestAction::from_command(command)?, executor).await?;
         port.view(&id, executor).await.map(Some)
@@ -283,9 +284,11 @@ mod tests {
             Some("request".into())
         );
         assert_eq!(port.calls(), vec!["action", "receipt", "scope", "view"]);
+
         port.allowed.store(false, Ordering::SeqCst);
         assert!(replay(&port, &actor(), &command(1), &mut NoTransaction).await.is_err());
         assert_eq!(port.calls(), vec!["action"]);
+
         port.allowed.store(true, Ordering::SeqCst);
         port.readable.store(false, Ordering::SeqCst);
         assert!(matches!(
@@ -301,6 +304,7 @@ mod tests {
         port.active.store(false, Ordering::SeqCst);
         assert!(replay(&port, &actor(), &command(1), &mut NoTransaction).await.is_err());
         assert_eq!(port.calls(), vec!["action"]);
+
         port.active.store(true, Ordering::SeqCst);
         assert!(replay(&port, &actor(), &command(2), &mut NoTransaction).await.is_err());
         assert_eq!(port.calls(), vec!["action", "receipt"]);
@@ -311,10 +315,12 @@ mod tests {
         let port = RecordingAccess::new(false);
         assert!(replay(&port, &actor(), &command(1), &mut NoTransaction).await.unwrap().is_none());
         assert_eq!(port.calls(), vec!["action", "receipt"]);
+
         authorize_request(&port, &actor(), "request", RequestAction::Submit, &mut NoTransaction)
             .await
             .unwrap();
         assert_eq!(port.calls(), vec!["action", "scope"]);
+
         port.readable.store(false, Ordering::SeqCst);
         assert!(
             authorize_request(&port, &actor(), "request", RequestAction::Submit, &mut NoTransaction)
@@ -332,12 +338,14 @@ mod tests {
             authorize_request(&port, &delegate, "request", action, &mut NoTransaction).await.unwrap();
             assert_eq!(port.calls(), vec!["action", "scope"]);
         }
+
         port.allowed.store(false, Ordering::SeqCst);
         assert!(matches!(
             authorize_request(&port, &delegate, "request", RequestAction::Cancel, &mut NoTransaction).await,
             Err(Error::Forbidden(message)) if message == "当前账号不可办理该开票申请"
         ));
         assert_eq!(port.calls(), vec!["action"]);
+
         port.allowed.store(true, Ordering::SeqCst);
         port.readable.store(false, Ordering::SeqCst);
         assert!(matches!(

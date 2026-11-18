@@ -90,6 +90,7 @@ pub(in crate::demo_master_data) async fn save(
     };
     let document =
         mongodb::bson::serialize_to_document(&record).map_err(|error| Error::Internal(error.to_string()))?;
+
     db.collection::<Document>(COLLECTION)
         .update_one(doc! { "key": &record.key, "entity_id": &record.entity_id }, doc! { "$set": document })
         .with_options(UpdateOptions::builder().upsert(true).build())

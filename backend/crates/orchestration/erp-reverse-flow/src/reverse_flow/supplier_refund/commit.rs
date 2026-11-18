@@ -69,6 +69,7 @@ impl ReturnsProcess {
             &req.idempotency_key,
             &req,
         )?;
+
         let this = self.clone();
         let actor_owned = actor.clone();
         let command = command_receipt.clone();
@@ -82,6 +83,7 @@ impl ReturnsProcess {
                 })
             })
             .await;
+
         let detail_id = match transaction_result {
             Ok(id) => id,
             Err(error) => {
@@ -95,6 +97,7 @@ impl ReturnsProcess {
                 .await?
             },
         };
+
         self.supplier_refund_result(
             &detail_id,
             actor,
@@ -119,6 +122,7 @@ impl ReturnsProcess {
         {
             return Ok(id);
         }
+
         let input = self.prepare_supplier_refund_commit(req, actor, command, executor).await?;
         let id = input.refund.base.id.clone();
         apply_commit(&self.db, &self.rbac, input, command, actor, executor).await?;
@@ -135,6 +139,7 @@ impl ReturnsProcess {
     ) -> Result<CommitPreparation> {
         let (source_fact_id, source_version, mut refund) =
             self.supplier_refund_commit_source(req, actor, executor).await?;
+
         let adapter = supplier_refund_adapter()?;
         start_supplier_refund_approval(&mut refund)?;
         let id = refund.base.id.clone();
@@ -143,6 +148,7 @@ impl ReturnsProcess {
         let _ = supplier_refund_object_readable(&organization_id, actor.id())?;
         let now = Instant::now();
         let snapshot = build_supplier_refund_snapshot(&refund, &organization_id, actor.id(), now)?;
+
         let bind_command = BindPublishedDefinitionCommand {
             document_type: DocumentType::SupplierRefund,
             business_object_id: id.clone(),
@@ -151,6 +157,7 @@ impl ReturnsProcess {
         };
         let document = new_registered_document(&id, DocumentType::SupplierRefund, refund.refund_no.clone())
             .map_err(Error::from)?;
+
         let audits = commit_audits(actor, receipt, &id)?;
         let approval = CommitApproval {
             subject,
@@ -226,6 +233,7 @@ async fn write_commit(
         executor,
     )
     .await?;
+
     ReturnsService::new(db.clone()).create_supplier_refund(&input.refund, executor).await?;
     if let PreparedExecution::Apply(writes) = prepared {
         persist_supplier_refund_runtime(
@@ -244,6 +252,7 @@ async fn write_commit(
         )
         .await?;
     }
+
     save_commit(db, command, &input.refund.base.id, (&input.audits.0, &input.audits.1), executor).await
 }
 
@@ -298,6 +307,7 @@ mod authorization_tests {
             &request,
         )
         .unwrap();
+
         denied(
             process
                 .commit_supplier_refund_snapshot(&request, &receipt, &actor, &mut SnapshotExecutor::default())

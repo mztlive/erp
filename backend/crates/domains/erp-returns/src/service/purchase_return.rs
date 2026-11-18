@@ -40,6 +40,7 @@ pub fn build_purchase_return_order_and_line(
         },
         created_by,
     )?;
+
     let line = PurchaseReturnLine::new(
         PurchaseReturnLineId::new(next_id()),
         PurchaseReturnLineData {

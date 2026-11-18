@@ -70,6 +70,7 @@ impl AccessFactsPort for InstanceFacts {
         if context.permission == approval_instance::SUBMIT_DECISION {
             return self.decision_tasks(context, ids, executor).await;
         }
+
         let mut facts = Vec::new();
         for id in ids.ids() {
             let Some(instance) = self.db.approval_process_instances().find_by_id(id, executor).await? else {
@@ -79,6 +80,7 @@ impl AccessFactsPort for InstanceFacts {
                 facts.push(started_facts(&instance));
                 continue;
             }
+
             let executions = self
                 .db
                 .approval_node_executions()
@@ -135,6 +137,7 @@ impl InstanceFacts {
         let Some(task) = self.db.work_items().find_document_approval_by_id(id, executor).await? else {
             return Ok(None);
         };
+
         let execution_id = task
             .approval_node_execution_id
             .as_ref()
@@ -151,9 +154,11 @@ impl InstanceFacts {
             .find_by_id(execution.process_instance_id.as_ref(), executor)
             .await?
             .ok_or_else(|| Error::ValidationError("审批任务实例不存在".into()))?;
+
         let mut object = instance_facts(context.actor.id(), &instance, std::slice::from_ref(&execution))?;
         let snapshot = self.subject(context, &instance, &mut object, executor).await?;
         let tasks = self.db.work_items().open_approval_tasks_for_execution(execution_id, executor).await?;
+
         let subject = RuntimeReadSubject {
             document_type: snapshot.document_type,
             instance,
@@ -176,6 +181,7 @@ impl InstanceFacts {
             .find_by_process_instance_id(&instance.base.id, executor)
             .await?
             .ok_or_else(|| Error::ValidationError("审批实例缺少冻结业务快照".into()))?;
+
         let expected_subject = subject_ref_for(snapshot.document_type, &snapshot.business_object_id)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
         if expected_subject != instance.subject
@@ -184,11 +190,13 @@ impl InstanceFacts {
         {
             return Err(Error::ValidationError("审批实例与冻结业务快照身份或版本不符".into()));
         }
+
         let document_type = snapshot.document_type.as_str();
         subject_facts(&context.permission, &snapshot, object);
         if context.permission == internal::APPROVAL_INSTANCE_READ {
             return Ok(snapshot);
         }
+
         let related =
             self.subjects.load(context, document_type, &snapshot.business_object_id, executor).await?;
         object.relations.insert(RelationKey::parse("subject_source")?, related);
@@ -210,6 +218,7 @@ impl InstanceFacts {
             .work_items()
             .open_approval_tasks_for_execution(&ApprovalNodeExecutionId::new(&execution.base.id), executor)
             .await?;
+
         let role = adapter_spec_of(snapshot.document_type)
             .map_err(|error| Error::ValidationError(error.to_string()))?
             .owner_role;
@@ -219,6 +228,7 @@ impl InstanceFacts {
             document_type: snapshot.document_type,
             snapshot,
         };
+
         Ok((open_tasks_match(execution, &tasks)
             && tasks.iter().any(|task| {
                 task_proves_current_responsibility(
@@ -261,6 +271,7 @@ fn decision_task_object(
     {
         return Err(Error::Forbidden("当前审批任务责任或冻结身份不一致".into()));
     }
+
     object.relations.insert(
         RelationKey::parse("decision_instance")?,
         RelatedObjects {
@@ -274,6 +285,7 @@ fn decision_task_object(
             }],
         },
     );
+
     object.id = task.base.id.clone();
     object.version = task.base.version.to_string();
     object.assignee_id = FactValue::Known(task.owner_user_id.clone());
@@ -288,10 +300,12 @@ fn instance_facts(
     if executions.iter().any(|execution| execution.process_instance_id.as_ref() != instance.base.id) {
         return Err(Error::ValidationError("审批节点执行不属于精确实例".into()));
     }
+
     let mut participants = BTreeSet::from([instance.started_by.as_str().to_string()]);
     for execution in executions {
         participants.extend(historical_decider(execution).map(str::to_owned));
     }
+
     let current = current_execution(instance, executions)?;
     let assignee = current.map(|execution| {
         if execution.has_participant(actor) {
@@ -300,6 +314,7 @@ fn instance_facts(
             execution.assignee_participant_id.as_str().to_string()
         }
     });
+
     Ok(ObjectFacts {
         resource: "approval_instance".into(),
         id: instance.base.id.clone(),
@@ -546,6 +561,7 @@ mod tests {
         let facts = instance_facts("primary", &instance, &[execution.clone()]).unwrap();
         assert_eq!(facts.assignee_id, FactValue::Known(None));
         assert_eq!(facts.participants, FactValue::Known(["starter".into(), "additional".into()].into()));
+
         execution.decided_at = None;
         assert_eq!(historical_decider(&execution), None);
         execution.decided_at = Some(Timestamp::from_unix_secs(2).unwrap());
@@ -695,16 +711,19 @@ mod tests {
             snapshot,
             document_type: DocumentType::StockAdjustment,
         };
+
         let facts =
             decision_task_object("additional", &task, &subject, std::slice::from_ref(&task), raw.clone())
                 .unwrap();
         assert_eq!(facts.id, "real-task");
         assert_eq!(facts.version, "13");
         assert_eq!(facts.assignee_id, FactValue::Known(Some("additional".into())));
+
         assert!(matches!(
             decision_task_object("primary", &task, &subject, std::slice::from_ref(&task), raw.clone()),
             Err(Error::Forbidden(_))
         ));
+
         task.approval_node_execution_id = Some(ApprovalNodeExecutionId::new("other-execution"));
         assert!(matches!(
             decision_task_object("additional", &task, &subject, std::slice::from_ref(&task), raw),

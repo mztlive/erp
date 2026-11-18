@@ -103,6 +103,7 @@ impl PurchaseOrderRevision {
         ensure_header_triple(data.gross_amount, data.net_amount, data.tax_amount, || {
             format!("采购版本表头金额三元组不守恒（采购单 {}）", data.purchase_order_id)
         })?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             revision: RevisionBase::new(data.revision_no),
@@ -339,6 +340,7 @@ impl PurchaseOrderRevisionLineData {
             input_tax_rate: self.input_tax_rate,
         };
         fields.normalize_and_validate(self.line_no, true)?;
+
         self.ensure_allocation()?;
         ensure_offering_source(
             self.line_type,
@@ -703,6 +705,7 @@ mod tests {
         let data = PurchaseOrderRevisionData { revision_no: u32::MAX, ..revision_data() };
         let revision = PurchaseOrderRevision::new(PurchaseOrderRevisionId::new("last"), data).unwrap();
         assert_eq!(revision.revision.revision_no, u32::MAX);
+
         let error = PurchaseOrderRevision::next_revision_no(&[revision]).unwrap_err();
         assert!(matches!(error, Error::LogicError(message) if message == "采购版本号溢出"));
     }
@@ -712,6 +715,7 @@ mod tests {
         let existing =
             PurchaseOrderRevision::new(PurchaseOrderRevisionId::new("por-1"), revision_data()).unwrap();
         assert_eq!(PurchaseOrderRevision::next_revision_no(std::slice::from_ref(&existing)).unwrap(), 2);
+
         let revision = PurchaseOrderRevision::from_submission(
             PurchaseOrderRevisionId::new("por-2"),
             2,
@@ -725,6 +729,7 @@ mod tests {
             &submission_line(),
         )
         .unwrap();
+
         assert_eq!(revision.revision.revision_no, 2);
         assert_eq!(revision.payment_subject, pending_submission().payment_subject);
         assert_eq!(revision.gross_amount, line.gross_amount);
@@ -757,6 +762,7 @@ mod tests {
             let error = PurchaseOrderRevisionLine::new("invalid".to_string().into(), data).unwrap_err();
             assert!(matches!(error, Error::LogicError(message) if message == expected));
         };
+
         let mut data = PurchaseOrderRevisionLineData {
             line_no: 0,
             product_name_snapshot: Some("名".repeat(257)),

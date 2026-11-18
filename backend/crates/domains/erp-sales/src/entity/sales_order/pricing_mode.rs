@@ -83,6 +83,7 @@ mod tests {
         let restored: GoodsLineFields = serde_json::from_value(historical.clone()).unwrap();
         assert_eq!(restored.pricing_mode, SalesPricingMode::Manual);
         assert_eq!(serde_json::to_value(restored).unwrap(), historical);
+
         let automatic = GoodsLineFields { pricing_mode: SalesPricingMode::Auto, ..goods.clone() };
         assert_eq!(serde_json::to_value(automatic).unwrap()["pricing_mode"], "AUTO");
         let gift = GoodsLineFields { pricing_mode: SalesPricingMode::Gift, ..goods };

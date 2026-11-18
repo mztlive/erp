@@ -167,6 +167,7 @@ fn withdrawn_draft_restores_last_submission_with_all_lines_and_keys() {
     let mut change = change();
     change.start_approval(PurchaseChangeSubmissionId::new("submission-1"), "target", "buyer-1").unwrap();
     change.cancel_approval("buyer-1").unwrap();
+
     let view =
         PurchaseChangeDraftView::from_submission(&change, &submission(), &[item(), logistics()]).unwrap();
     assert_eq!(view.version, change.base.version);
@@ -181,6 +182,7 @@ fn withdrawn_draft_restores_last_submission_with_all_lines_and_keys() {
     assert_eq!(view.lines[0].gross_amount, None);
     assert_eq!(view.lines[1].gross_amount.as_deref(), Some("7"));
     assert_eq!(view.lines[1].sales_order_line_id, None);
+
     change.start_approval(PurchaseChangeSubmissionId::new("submission-2"), "edited", "buyer-1").unwrap();
     assert_eq!(change.approval_subject_version, 2);
 }
@@ -199,6 +201,7 @@ fn initial_draft_restores_complete_base_and_original_payment_term() {
             .unwrap()
         })
         .collect::<Vec<_>>();
+
     let view = PurchaseChangeDraftView::from_base(&change(), &revision(), &lines).unwrap();
     assert_eq!(view.payment_term_code, "NET-30");
     assert_eq!(view.line_keys, ["base-item-1", "base-logistics-1"]);
@@ -212,16 +215,21 @@ fn initial_draft_restores_complete_base_and_original_payment_term() {
 fn draft_target_rejects_missing_stale_or_cross_source_facts() {
     let mut change = change();
     assert!(PurchaseChangeDraftView::from_submission(&change, &submission(), &[item()]).is_err());
+
     change.start_approval(PurchaseChangeSubmissionId::new("submission-1"), "target", "buyer-1").unwrap();
     assert!(PurchaseChangeDraftView::from_submission(&change, &submission(), &[item()]).is_err());
+
     change.cancel_approval("buyer-1").unwrap();
     assert!(PurchaseChangeDraftView::from_submission(&change, &submission(), &[]).is_err());
+
     let mut wrong_header = submission();
     wrong_header.purchase_change_order_id = PurchaseChangeOrderId::new("other-change");
     assert!(PurchaseChangeDraftView::from_submission(&change, &wrong_header, &[item()]).is_err());
+
     let mut wrong_line = item();
     wrong_line.purchase_change_submission_id = PurchaseChangeSubmissionId::new("old-submission");
     assert!(PurchaseChangeDraftView::from_submission(&change, &submission(), &[wrong_line]).is_err());
+
     let mut wrong_base = revision();
     wrong_base.purchase_order_id = PurchaseOrderId::new("other-order");
     assert!(PurchaseChangeDraftView::from_base(&change, &wrong_base, &[]).is_err());

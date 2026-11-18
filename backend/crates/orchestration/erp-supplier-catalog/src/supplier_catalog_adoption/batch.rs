@@ -118,6 +118,7 @@ impl SupplierCatalogAdoptionProcess {
                 products.insert(product);
             }
         }
+
         for product in products {
             self.services
                 .catalog_access
@@ -219,6 +220,7 @@ pub(super) fn batch_view(batch: CatalogAdoptionBatch, rows: Vec<CatalogAdoptionB
                 || row.field_origins.values().any(|origin| *origin == ValueOrigin::Manual)
         })
         .count();
+
     BatchView {
         rows_complete: true,
         counts: BatchCounts::from_items(&rows),

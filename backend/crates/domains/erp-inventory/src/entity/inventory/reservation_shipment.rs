@@ -91,6 +91,7 @@ mod tests {
             .unwrap_err();
         assert!(matches!(error, Error::BusinessLogicError(message)
             if message == "库存预占不属于本销售明细，不能消耗"));
+
         let error = fact
             .shipment_warehouse(&fact.sales_order_line_id, Quantity::from_str("3").unwrap(), None)
             .unwrap_err();
@@ -104,6 +105,7 @@ mod tests {
         let error =
             fact.shipment_warehouse(&fact.sales_order_line_id, fact.reserved_quantity, None).unwrap_err();
         assert!(matches!(error, Error::BusinessLogicError(message) if message == "仓发缺少发货仓"));
+
         let error = fact
             .shipment_warehouse(
                 &fact.sales_order_line_id,

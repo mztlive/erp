@@ -155,6 +155,7 @@ async fn validate_bank_evidence(
     {
         return Err(Error::ConflictError("充值收款账户已变化".into()));
     }
+
     let asset = db
         .file_assets()
         .find_by_id(&command.bank_receipt_asset_id, executor)
@@ -230,6 +231,7 @@ async fn apply_pay_recharge(
         .ok_or_else(|| Error::NotFound("充值申请不存在".into()))?;
     validate_bank_evidence(&db, &authorization, &source.identity.supplier_id, &command, &actor, executor)
         .await?;
+
     let data = SupplierPaymentData {
         payment_no: format!("CZFK-{}", recharge.request_no),
         supplier_id: SupplierAccountId::new(source.identity.supplier_id),
@@ -278,6 +280,7 @@ async fn apply_receive_recharge(
         .find_by_id(&payment_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("实际充值付款不存在".into()))?;
+
     let evidence = DepositRechargeEvidence {
         approved_request_id: request.base.id,
         approval_reference: request

@@ -216,6 +216,7 @@ impl AuditAction {
         if self.version == 0 || self.allowed_fields.len() > PROJECTION_MAX_LEN {
             return Err(validation_error("动作版本或审计字段数量不符合要求"));
         }
+
         let mut fields = HashSet::new();
         for field in self.allowed_fields {
             validate_code(field.code)?;
@@ -252,6 +253,7 @@ impl BusinessEventContext {
     /// 身份含控制字符，或动作代码、标签、版本、字段白名单无效时返回 `Error::ValidationError`。
     pub fn new(actor: AuditActor, action: AuditAction) -> Result<Self> {
         action.validate()?;
+
         // AuditActor 的私有快照字段已在 setter 中规范化并校验。
         let actor_name_snapshot = actor.actor_name_snapshot().map(str::to_string);
         let request_id = actor.request_id().map(str::to_string);
@@ -259,6 +261,7 @@ impl BusinessEventContext {
         let (id, account) = normalized_actor_identity(id, account)?;
         validate_plain_text(&id)?;
         validate_plain_text(&account)?;
+
         Ok(Self {
             event_id: next_id(),
             event_sequence: NonZeroU32::MIN,
@@ -413,6 +416,7 @@ impl BusinessEventContext {
                 message: Some(event.message()),
             },
         )?;
+
         let mut event = event;
         event.occurred_at = log.base.created_at;
         log.structured_event = Some(event);
@@ -429,6 +433,7 @@ impl BusinessEventContext {
         )?;
         validate_plain_text(&resource_id)?;
         let resource_number_snapshot = normalized_snapshot(content.target_number, "业务编号")?;
+
         let (field_changes, facts) = self.projection(content.field_changes, content.facts)?;
         Ok(BusinessAuditEvent {
             schema_version: EVENT_SCHEMA_VERSION,
@@ -461,6 +466,7 @@ impl BusinessEventContext {
         if changes.len() + facts.len() > PROJECTION_MAX_LEN {
             return Err(validation_error("审计投影字段数量超过上限"));
         }
+
         let mut used_fields = HashSet::new();
         let mut projected_changes = Vec::with_capacity(changes.len());
         for change in changes {
@@ -474,6 +480,7 @@ impl BusinessEventContext {
                 after: change.after,
             });
         }
+
         let mut projected_facts = Vec::with_capacity(facts.len());
         for fact in facts {
             let field = self.checked_field(&fact.field, &mut used_fields)?;
@@ -514,6 +521,7 @@ impl BusinessAuditEvent {
             BusinessEventResult::Unknown => "结果待确认",
         };
         let mut message = format!("{actor}执行{}，业务对象：{target}，执行结果：{result}", self.action_label);
+
         for change in &self.field_changes {
             message.push_str(&format!(
                 "；{}：{} → {}",
@@ -522,6 +530,7 @@ impl BusinessAuditEvent {
                 change.after.display()
             ));
         }
+
         for fact in &self.facts {
             message.push_str(&format!("；{}：{}", fact.field_label, fact.value.display()));
         }
@@ -705,6 +714,7 @@ mod tests {
             assert_eq!(attempt.actor_name_snapshot.as_deref(), expected);
             assert_eq!(attempt.request_id.as_deref(), expected);
         }
+
         let too_long = "名".repeat(129);
         assert!(matches!(
             actor().with_actor_name_snapshot(Some(too_long.clone())),
@@ -714,6 +724,7 @@ mod tests {
             actor().with_request_id(Some(too_long)),
             Err(CoreError::LogicError(message)) if message == "请求编号长度不符合要求"
         ));
+
         for invalid in ["名\n称", "名\0称"] {
             assert!(matches!(
                 actor().with_actor_name_snapshot(Some(invalid.into())),
@@ -752,9 +763,11 @@ mod tests {
         assert_eq!(event.event_sequence.get(), 1);
         assert_eq!(event.request_id.as_deref(), Some("trace-1"));
         assert_eq!(context.attempt(AuditAttemptResult::Failed).request_id.as_deref(), Some("trace-1"));
+
         let ordered = context.clone().with_event_sequence(7).unwrap().log(content()).unwrap();
         assert_eq!(ordered.base.id, single.base.id);
         assert_eq!(ordered.structured_event.as_ref().unwrap().event_sequence.get(), 7);
+
         assert!(context.clone().with_event_sequence(0).is_err());
         assert_eq!(
             context
@@ -775,8 +788,10 @@ mod tests {
         let log = BusinessEventContext::new(actor(), ACTION).unwrap().log(content()).unwrap();
         let mut event = serde_json::to_value(log.structured_event.unwrap()).unwrap();
         assert_eq!(event["event_sequence"], 1);
+
         event["event_sequence"] = json!(0);
         assert!(serde_json::from_value::<BusinessAuditEvent>(event.clone()).is_err());
+
         event.as_object_mut().unwrap().remove("event_sequence");
         assert!(serde_json::from_value::<BusinessAuditEvent>(event).is_err());
     }
@@ -801,6 +816,7 @@ mod tests {
                 "周晓彤执行确认服务履约，业务对象：FW202610040001，执行结果：成功；确认状态：待确认 → 已确认；服务结果：服务失败；服务数量：1.234567"
             )
         );
+
         let event = log.structured_event.unwrap();
         assert_eq!(event.schema_version, 1);
         assert_eq!(event.action_version, 1);
@@ -824,6 +840,7 @@ mod tests {
         let log: AuditLog = serde_json::from_value(historical.clone()).unwrap();
         assert_eq!(log.structured_event, None);
         assert_eq!(serde_json::to_value(&log).unwrap(), historical);
+
         let response = serde_json::to_value(AuditLogItem::from(log)).unwrap();
         assert!(response.get("structured_event").is_none());
         assert_eq!(response["message"], "原历史记录");
@@ -837,6 +854,7 @@ mod tests {
         let event = context.log(data).unwrap().structured_event.unwrap();
         assert_eq!(event.actor_name_snapshot, None);
         assert_eq!(event.resource_number_snapshot, None);
+
         let value = serde_json::to_value(event).unwrap();
         assert!(value.get("actor_name_snapshot").is_none());
         assert!(value.get("resource_number_snapshot").is_none());
@@ -850,9 +868,11 @@ mod tests {
         let mut unregistered = content();
         unregistered.facts.push(AuditFact { field: "password".to_string(), value: AuditValue::Changed });
         assert!(context.log(unregistered).is_err());
+
         let mut forged = content();
         forged.facts[0].value = code("failure", "银行卡完整值");
         assert!(context.log(forged).is_err());
+
         let mut wrong_type = content();
         wrong_type.facts[0].value = AuditValue::Amount { value: Amount::from_str("12.34").unwrap() };
         assert!(context.log(wrong_type).is_err());
@@ -903,8 +923,10 @@ mod tests {
         assert!(BusinessEventContext::new(actor(), invalid).is_err());
         let invalid = AuditAction { allowed_fields: DUPLICATED_FIELDS, ..ACTION };
         assert!(BusinessEventContext::new(actor(), invalid).is_err());
+
         let invalid_actor = AuditActor::new(" ".to_string(), "sales".to_string(), AccountKind::Admin);
         assert!(BusinessEventContext::new(invalid_actor, ACTION).is_err());
+
         let context = BusinessEventContext::new(actor(), ACTION).unwrap();
         let mut data = content();
         data.target_id = " ".to_string();

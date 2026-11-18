@@ -170,6 +170,7 @@ mod tests {
                 "sales_order_submission_line_id": "ssl-1", "allocated_quantity": "3.000000"
             })
         );
+
         let revision = PurchaseOrderRevisionLine::from_submission_line(
             PurchaseOrderRevisionLineId::new("revl-1"),
             PurchaseOrderRevisionId::new("rev-1"),

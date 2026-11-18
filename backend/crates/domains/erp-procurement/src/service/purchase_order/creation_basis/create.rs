@@ -230,6 +230,7 @@ pub fn validate_requested_quantities(
         {
             return Err(procurement_quantity_changed());
         }
+
         let sales_due = business_date_of(basis.coverage.goods_line.fulfillment_due_at)?;
         ensure_expected_delivery_within_sales_due(requested_line.expected_delivery_date, sales_due)?;
         let goods = &basis.coverage.goods_line;
@@ -242,6 +243,7 @@ pub fn validate_requested_quantities(
             basis.coverage.quantity_scale,
             &goods.base_unit_code,
         )?;
+
         selected.push(SelectedLine {
             basis: basis.clone(),
             quantity: requested_line.quantity,
@@ -291,6 +293,7 @@ pub fn judge_selected_delivery(
             freight_extra,
         });
     }
+
     if scope.fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect
         && scope.price_basis == SupplyPriceBasis::Bulk
     {

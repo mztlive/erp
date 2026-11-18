@@ -54,6 +54,7 @@ impl PreflightProof {
         {
             return Err(Error::BusinessLogicError("地址或支付条件需要重新核验".into()));
         }
+
         let expected: BTreeMap<_, _> =
             request.lines.iter().map(|line| (line.line_id.as_str(), line)).collect();
         if expected.is_empty() || expected.len() != request.lines.len() || self.lines.len() != expected.len()
@@ -78,6 +79,7 @@ impl PreflightProof {
                 return Err(Error::BusinessLogicError("商品数量、采购限制或报价未通过下单核验".into()));
             }
         }
+
         self.validate_amounts(request)
     }
 
@@ -94,6 +96,7 @@ impl PreflightProof {
             .to_decimal()
             .checked_add(self.shipping_amount.to_decimal())
             .ok_or_else(|| Error::ValidationError("下单预检总额溢出".into()))?;
+
         if goods < Amount::zero().to_decimal()
             || self.shipping_amount < Amount::zero()
             || self.goods_amount.to_decimal() != goods
@@ -187,9 +190,11 @@ mod tests {
         let request = request();
         let checked = proof(&request);
         checked.validate(&request, Instant::now()).unwrap();
+
         let mut changed = request.clone();
         changed.lines[0].quantity = "30".parse().unwrap();
         assert!(checked.validate(&changed, Instant::now()).is_err());
+
         changed = request;
         changed.delivery_context.reference = "changed-address".into();
         assert!(checked.validate(&changed, Instant::now()).is_err());
@@ -199,15 +204,19 @@ mod tests {
     fn missing_duplicate_unknown_or_expired_facts_block_writes() {
         let request = request();
         let now = Instant::now();
+
         let mut value = proof(&request);
         value.lines.clear();
         assert!(value.validate(&request, now).is_err());
+
         value = proof(&request);
         value.lines[0].purchase_allowed = false;
         assert!(value.validate(&request, now).is_err());
+
         value = proof(&request);
         value.valid_until = Some(now);
         assert!(value.validate(&request, now).is_err());
+
         value = proof(&request);
         value.lines.push(value.lines[0].clone());
         assert!(value.validate(&request, now).is_err());
@@ -220,6 +229,7 @@ mod tests {
         value.shipping_amount = "3".parse().unwrap();
         value.payable_amount = "33".parse().unwrap();
         assert!(value.validate(&request, Instant::now()).is_err());
+
         value = proof(&request);
         value.lines[0].unit_price = "11".parse().unwrap();
         assert!(value.validate(&request, Instant::now()).is_err());

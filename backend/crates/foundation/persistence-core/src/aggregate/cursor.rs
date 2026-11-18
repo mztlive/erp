@@ -39,6 +39,7 @@ impl<T: DeserializeOwned + Send + Sync> RowCursor<T> {
             .aggregate(pipeline)
             .with_type::<T>()
             .with_options(AggregateOptions::builder().batch_size(batch_size.get()).build());
+
         let boundary = executor.boundary();
         let cursor = match session(executor) {
             Some(session) => CursorKind::Transactional(operation.session(session).await?),
@@ -62,6 +63,7 @@ impl<T: DeserializeOwned + Send + Sync> RowCursor<T> {
         if self.boundary.as_ref().is_some_and(|boundary| !boundary.is_current(executor)) {
             return Err(Error::UnsupportedDeployment("聚合游标不能跨事务或读取阶段使用"));
         }
+
         let mut rows = Vec::with_capacity(batch_size.get() as usize);
         match &mut self.cursor {
             CursorKind::Independent(cursor) => {

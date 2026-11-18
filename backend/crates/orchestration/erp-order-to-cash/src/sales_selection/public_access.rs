@@ -46,6 +46,7 @@ impl SalesSelectionProcess {
         if let Some(grant) = &grant {
             self.admit_participant("read", &grant.session_id, 120).await?;
         }
+
         Ok(SalesSelectionService::new(self.db.clone(), self.services.authorization.clone())
             .public_page_by_token(token, grant.as_ref(), Instant::now(), &mut ReadExecutor::default())
             .await?)
@@ -73,6 +74,7 @@ impl SalesSelectionProcess {
             .public_unlock_scope(&token, req.voucher_code.as_deref(), &mut ReadExecutor::default())
             .await?;
         self.admit_participant("unlock", &scope, 10).await?;
+
         let hash = service
             .public_password_hash(&token, &mut ReadExecutor::default())
             .await?
@@ -88,6 +90,7 @@ impl SalesSelectionProcess {
         if !accepted {
             return Err(Error::Forbidden("密码或提货码不正确".into()));
         }
+
         Ok(service
             .public_unlock(
                 &token,
@@ -120,6 +123,7 @@ impl SalesSelectionProcess {
         self.admit_public("write", &ip, Some(&token), 6000).await?;
         let grant = self.decode_grant(&access)?;
         self.admit_participant("write", &grant.session_id, 30).await?;
+
         let db = self.db.clone();
         let authorization = self.services.authorization.clone();
         retry_public_write(|| {
@@ -166,6 +170,7 @@ impl SalesSelectionProcess {
         self.admit_public("submit", &ip, Some(&token), 2000).await?;
         let grant = self.decode_grant(&access)?;
         self.admit_participant("submit", &grant.session_id, 10).await?;
+
         let db = self.db.clone();
         let authorization = self.services.authorization.clone();
         retry_public_write(|| {
@@ -265,6 +270,7 @@ impl SalesSelectionProcess {
                         .find_authorized_booklet(&id, &scope, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+
                     let result = SalesSelectionService::new(db, access.authorization())
                         .vouchers(&book.base.id, &crypto, executor)
                         .await?;
@@ -300,6 +306,7 @@ impl SalesSelectionProcess {
                         .find_authorized_booklet(&id, &scope, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+
                     let result = SalesSelectionService::new(db, access.authorization())
                         .selection_details(&book.base.id, &crypto, executor)
                         .await?;

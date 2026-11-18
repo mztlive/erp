@@ -337,6 +337,7 @@ impl WorkbenchReadService {
         Box::pin(async move {
             params.validate()?;
             let query = params.normalized()?;
+
             let this = self.clone();
             self.db
                 .client()
@@ -380,6 +381,7 @@ impl WorkbenchReadService {
         });
         let scope_version = queue_scope_version(&identity_version, &context_id, &result_version);
         ensure_scope_version(query.page, query.scope_version.as_deref(), &scope_version)?;
+
         let counts: HashMap<_, _> =
             repository_page.metrics.into_iter().map(|metric| (metric.operation_type, metric.count)).collect();
         let metrics = visible_types
@@ -390,8 +392,8 @@ impl WorkbenchReadService {
                 operation_type,
             })
             .collect();
-        tasks.validate_access(&access, executor).await?;
 
+        tasks.validate_access(&access, executor).await?;
         Ok(FulfillmentQueuePageView {
             items,
             total: repository_page.total,
@@ -580,6 +582,7 @@ mod tests {
         assert_eq!(value["operation_id"], "operation");
         assert_eq!(value["source_version"], "3");
         assert_eq!(value["purchase_order_id"], "purchase");
+
         for field in [
             "sales_order_no",
             "purchase_order_no",

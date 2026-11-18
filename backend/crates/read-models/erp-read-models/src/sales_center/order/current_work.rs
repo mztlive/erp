@@ -62,12 +62,14 @@ impl SalesOrderReadService {
         if order.commercial_status == CommercialStatus::Voided {
             return Ok(Vec::new());
         }
+
         let current = CurrentWorkRepository { db: &self.db }.tasks(order, executor).await?;
         let tasks = current.tasks;
         let ids = tasks.iter().filter_map(|task| task.owner_user_id.clone()).collect::<Vec<_>>();
         let names = self.db.accounts().names_by_ids(&ids, executor).await?;
         let org_names =
             OrganizationRepository::new(&self.db).primary_org_names(&ids, Instant::now(), executor).await?;
+
         let mut rows = tasks
             .iter()
             .filter_map(|task| SalesOrderCurrentWork::from_task(task, &names))
@@ -76,6 +78,7 @@ impl SalesOrderReadService {
             row.owner_org_name = row.owner_user_id.as_ref().and_then(|id| org_names.get(id).cloned());
             row.current_node = current.approval_nodes.get(&row.id).cloned();
         }
+
         rows.sort_by_key(|row| match row.section {
             "approval" => 0,
             "fulfillment" => 1,
@@ -238,10 +241,12 @@ mod tests {
             .into_iter()
             .map(|task| SalesOrderCurrentWork::from_task(task, &names).unwrap())
             .collect();
+
         let summary = SalesOrderCurrentWork::summarize(rows);
         assert_eq!(summary.len(), 1);
         assert_eq!(summary[0].count, 2);
         assert_eq!(summary[0].owner_name.as_deref(), Some("刘志强"));
+
         let wire = serde_json::to_value(&summary[0]).unwrap();
         let keys = wire.as_object().unwrap().keys().map(String::as_str).collect::<HashSet<_>>();
         assert_eq!(
@@ -295,6 +300,7 @@ mod tests {
         let missing = SalesOrderCurrentWork::from_task(&item, &names).unwrap();
         assert_eq!(missing.owner_user_id.as_deref(), Some("buyer"));
         assert!(missing.owner_name.is_none());
+
         item.owner_user_id = None;
         let unassigned = SalesOrderCurrentWork::from_task(&item, &names).unwrap();
         assert!(unassigned.owner_user_id.is_none());

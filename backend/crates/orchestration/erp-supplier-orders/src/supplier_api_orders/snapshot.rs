@@ -18,6 +18,7 @@ impl SupplierApiOrderProcess {
             .list_revision_lines(&execution.purchase_order_revision_id.clone().into(), &mut NoTransaction)
             .await?;
         let budget = self.approved_budget(execution, &purchase_lines).await?;
+
         let mut lines = Vec::new();
         let mut source_purchase_terms = Vec::new();
         let mut recipient = None;
@@ -34,10 +35,12 @@ impl SupplierApiOrderProcess {
             };
             recipient.get_or_insert(value);
             expected_delivery_date = line.expected_delivery_date;
+
             let (order_line, source_terms) = self.order_line(execution, source, line).await?;
             lines.push(order_line);
             source_purchase_terms.push(source_terms);
         }
+
         Ok(ExecutionSnapshot {
             recipient: recipient.ok_or_else(|| Error::BusinessLogicError("采购执行无明细".into()))?,
             lines,
@@ -71,6 +74,7 @@ impl SupplierApiOrderProcess {
                 frozen.revision_version,
             )
             .await?;
+
         let offering = self
             .db
             .supplier_offerings()
@@ -84,6 +88,7 @@ impl SupplierApiOrderProcess {
                         .is_some_and(|id| id.as_ref() == execution.connection_id)
             })
             .ok_or_else(|| Error::BusinessLogicError("采购供给与接口连接不一致".into()))?;
+
         Ok((
             OrderLine {
                 source_purchase_terms: terms.terms.clone(),

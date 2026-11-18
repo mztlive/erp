@@ -37,12 +37,14 @@ pub fn stamp(bytes: &[u8], number: &str) -> Result<Vec<u8>> {
     {
         return Err(invalid());
     }
+
     let mut package = unpack(bytes)?;
     let document_xml = xml(&package, "word/document.xml")?.to_string();
     let document = parse(&document_xml)?;
     if document.root_element().tag_name().namespace() != Some(W) {
         return Err(invalid());
     }
+
     let sections = document
         .descendants()
         .filter(|n| {
@@ -52,6 +54,7 @@ pub fn stamp(bytes: &[u8], number: &str) -> Result<Vec<u8>> {
     let first = *sections.first().ok_or_else(invalid)?;
     let source_id = reference(first, "headerReference", if title_page(first) { "first" } else { "default" });
     let headers = add_headers(&mut package, source_id, number)?;
+
     let mut edits = Vec::new();
     let mut inherited_first: Option<&str> = None;
     let mut inherited_footer: Option<&str> = None;
@@ -68,6 +71,7 @@ pub fn stamp(bytes: &[u8], number: &str) -> Result<Vec<u8>> {
         inherited_first = original_first.or(inherited_first);
         inherited_footer = original_footer.or(inherited_footer);
     }
+
     package.insert("word/document.xml".into(), replace(&document_xml, edits)?.into_bytes());
     pack(package)
 }
@@ -77,8 +81,10 @@ fn unpack(bytes: &[u8]) -> Result<Package> {
     if bytes.is_empty() || bytes.len() > MAX_TEMPLATE_BYTES {
         return Err(invalid());
     }
+
     let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(|_| invalid())?;
     require_directory_entries(bytes, archive.central_directory_start(), archive.len())?;
+
     let mut package = Package::new();
     let mut total = 0_u64;
     for index in 0..archive.len() {
@@ -92,6 +98,7 @@ fn unpack(bytes: &[u8]) -> Result<Package> {
         {
             return Err(invalid());
         }
+
         total = total.checked_add(entry.size()).ok_or_else(invalid)?;
         if entry.size() > 32 * 1024 * 1024 || total > 100 * 1024 * 1024 {
             return Err(invalid());
@@ -99,12 +106,14 @@ fn unpack(bytes: &[u8]) -> Result<Package> {
         if (name.ends_with(".xml") || name.ends_with(".rels")) && entry.size() > 10 * 1024 * 1024 {
             return Err(invalid());
         }
+
         let mut content = Vec::new();
         (&mut entry).take(32 * 1024 * 1024 + 1).read_to_end(&mut content).map_err(|_| invalid())?;
         if content.len() > 32 * 1024 * 1024 || package.insert(name, content).is_some() {
             return Err(invalid());
         }
     }
+
     let types = parse(xml(&package, "[Content_Types].xml")?)?;
     if !types.descendants().any(|n| {
         n.attribute("PartName") == Some("/word/document.xml")
@@ -204,6 +213,7 @@ fn first_section(source: &str, section: Node<'_, '_>, id: &str) -> Result<String
         footer = reference(section, "footerReference", "default");
     }
     let result = section_references(source, section, &remove, Some(id), footer)?;
+
     // titlePg 的 schema 顺序在 docGrid、printerSettings 前。
     // 原文可以使用额外前缀，顺序定位沿用原分节节点而非重新解析片段。
     let tail = section.children().find(|n| {
@@ -232,6 +242,7 @@ fn section_references(
     let Some(footer) = footer else {
         return Ok(result);
     };
+
     let mut offset = result.find('>').ok_or_else(invalid)? + 1 + insertion.len();
     for node in section.children().filter(|n| n.has_tag_name((W, "headerReference"))) {
         if remove.iter().any(|(tag, kind)| {
@@ -266,6 +277,7 @@ fn edit_section(
         })
         .map(|n| ((n.range().start - range.start)..(n.range().end - range.start), String::new()))
         .collect::<Vec<_>>();
+
     let end = fragment.find('>').ok_or_else(invalid)?;
     if fragment[..end].trim_end().ends_with('/') {
         let opening = fragment[..end].trim_end().trim_end_matches('/');
@@ -326,6 +338,7 @@ fn add_headers(package: &mut Package, source_id: Option<&str>, number: &str) -> 
         }
         header = xml(package, &format!("word/{target}"))?.to_string();
     }
+
     let suffix = available_header_suffix(package, &relationships)?;
     let (name, blank) = (format!("erp-number-{suffix}.xml"), format!("erp-blank-{suffix}.xml"));
     let (id, blank_id) = (format!("rIdErpNumber{suffix}"), format!("rIdErpBlank{suffix}"));
@@ -339,6 +352,7 @@ fn add_headers(package: &mut Package, source_id: Option<&str>, number: &str) -> 
     {
         package.insert(format!("word/_rels/{name}.rels"), bytes);
     }
+
     let additions = [(id.as_str(), name.as_str()), (blank_id.as_str(), blank.as_str())]
         .into_iter()
         .map(|(id, name)| {
@@ -346,9 +360,11 @@ fn add_headers(package: &mut Package, source_id: Option<&str>, number: &str) -> 
         })
         .collect::<String>();
     package.insert(rels_path.into(), insert_root(&rels, &additions)?.into_bytes());
+
     let types = xml(package, "[Content_Types].xml")?.to_string();
     let additions = [&name, &blank].into_iter().map(|name| format!("<Override xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\" PartName=\"/word/{name}\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml\"/>")).collect::<String>();
     package.insert("[Content_Types].xml".into(), insert_root(&types, &additions)?.into_bytes());
+
     let footer = add_blank_footer(package, suffix)?;
     Ok(AddedHeaders { number: id, blank: blank_id, footer })
 }
@@ -356,11 +372,13 @@ fn add_headers(package: &mut Package, source_id: Option<&str>, number: &str) -> 
 fn add_blank_footer(package: &mut Package, suffix: u32) -> Result<String> {
     let (name, id) = (format!("erp-blank-footer-{suffix}.xml"), format!("rIdErpBlankFooter{suffix}"));
     package.insert(format!("word/{name}"), format!("<w:ftr xmlns:w=\"{W}\"><w:p/></w:ftr>").into_bytes());
+
     let path = "word/_rels/document.xml.rels";
     let rels = xml(package, path)?.to_string();
     let relation =
         format!("<Relationship xmlns=\"{PKG}\" Id=\"{id}\" Type=\"{R}/footer\" Target=\"{name}\"/>");
     package.insert(path.into(), insert_root(&rels, &relation)?.into_bytes());
+
     let types = xml(package, "[Content_Types].xml")?.to_string();
     let addition = format!(
         "<Override xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\" PartName=\"/word/{name}\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml\"/>"
@@ -405,12 +423,14 @@ mod tests {
         let body = "<w:p><w:r><w:t>合同正文</w:t></w:r><w:pPr><w:sectPr><w:headerReference r:id=\"rId1\" w:type=\"default\"/><w:footerReference r:id=\"rId2\" w:type=\"default\"/><w:pgMar w:top=\"1440\"/></w:sectPr></w:pPr></w:p><w:sectPr><w:titlePg/></w:sectPr>";
         let original = fixture(body);
         let output = stamp(&original, "FSY-S-260453").unwrap();
+
         let before = unpack(&original).unwrap();
         let after = unpack(&output).unwrap();
         assert_eq!(before["word/media/logo.png"], after["word/media/logo.png"]);
         assert_eq!(before["word/header1.xml"], after["word/header1.xml"]);
         assert!(xml(&after, "word/erp-number-1.xml").unwrap().contains("FSY-S-260453"));
         assert!(xml(&after, "word/erp-number-1.xml").unwrap().contains("原页眉"));
+
         let document = parse(xml(&after, "word/document.xml").unwrap()).unwrap();
         let sections = document.descendants().filter(|n| n.has_tag_name((W, "sectPr"))).collect::<Vec<_>>();
         assert_eq!(reference(sections[0], "headerReference", "first"), Some("rIdErpNumber1"));
@@ -435,6 +455,7 @@ mod tests {
         let output = stamp(&fixture("<w:p/><w:sectPr/>"), "GYL-S-260016").unwrap();
         let package = unpack(&output).unwrap();
         parse(xml(&package, "word/document.xml").unwrap()).unwrap();
+
         assert!(stamp(b"not a docx", "FSY-S-260453").is_err());
         assert!(stamp(&fixture("<w:p/>"), "FSY-S-260453").is_err());
         assert!(stamp(&fixture("<w:sectPr/>"), "bad\nnumber").is_err());
@@ -491,9 +512,11 @@ mod tests {
         let relationships = format!("<Relationships xmlns=\"{PKG}\"><Relationship Id=\"logo\" Type=\"{R}/image\" Target=\"media/logo.png\"/></Relationships>").into_bytes();
         package.insert("word/_rels/header1.xml.rels".into(), relationships.clone());
         let input = pack(package).unwrap();
+
         let output = stamp(&input, "GYL-S-260016").unwrap();
         let package = unpack(&output).unwrap();
         assert_eq!(package["word/_rels/erp-number-1.xml.rels"], relationships);
+
         let document = parse(xml(&package, "word/document.xml").unwrap()).unwrap();
         let sections = document.descendants().filter(|n| n.has_tag_name((W, "sectPr"))).collect::<Vec<_>>();
         assert_eq!(reference(sections[0], "footerReference", "first"), Some("rId2"));

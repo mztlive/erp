@@ -274,7 +274,6 @@ mod tests {
     #[test]
     fn w29_business_exception_integration_error_object_policy_is_registered() {
         let policy = WorkItemType::BusinessException.brief_relation("integration_error_task").unwrap();
-
         assert_eq!(policy.object_kind, ObjectKind::IntegrationErrorTask);
     }
 
@@ -628,6 +627,7 @@ mod tests {
         fact.subject_versions = WorkItemSubjectVersions::constrained(vec!["submission-1".into()]).unwrap();
         assert!(task_facts_current(&item, &facts));
         assert!(candidate_facts_current(&item, &facts));
+
         facts.values_mut().next().unwrap().subject_versions =
             WorkItemSubjectVersions::constrained(vec!["submission-2".into()]).unwrap();
         assert!(!task_facts_current(&item, &facts));

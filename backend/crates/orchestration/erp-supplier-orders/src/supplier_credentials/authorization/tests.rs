@@ -71,8 +71,10 @@ pub(super) fn connection() -> SupplierApiConnection {
 fn unavailable_remote_authorization_does_not_block_local_token_binding() {
     let protocol: Result<Arc<dyn AuthorizationHttp>> = Ok(Arc::new(UnavailableHttp));
     assert_eq!(protocol.as_ref().unwrap().ensure_available(), Err(AuthorizationError::Unavailable));
+
     let mut connection = connection();
     assert_eq!(access::verify_binding(Some(&settings()), &protocol, &connection), Ok(()));
+
     connection.endpoint_reference = "wrong-endpoint".into();
     assert_eq!(
         access::verify_binding(Some(&settings()), &protocol, &connection),

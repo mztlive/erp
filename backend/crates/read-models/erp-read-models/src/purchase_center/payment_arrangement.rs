@@ -63,6 +63,7 @@ pub async fn arrangement_facts(
         .await?
         .ok_or_else(|| Error::NotFound("采购单不存在".into()))?;
     let account = db.payable_accounts().find_by_purchase_order(&PurchaseOrderId::new(id), executor).await?;
+
     let tasks = db.work_items().list_active_by_object("purchase_order", id, executor).await?;
     let mut tasks =
         tasks.into_iter().filter(|item| item.work_item_type == WorkItemType::PurchasePaymentArrangement);
@@ -70,6 +71,7 @@ pub async fn arrangement_facts(
     if tasks.next().is_some() {
         return Err(Error::ConflictError("采购付款安排责任重复，请联系管理员".into()));
     }
+
     let blocked = find_open_for_purchase(db, id, executor).await?.is_some_and(|value| value.blocks_payment);
     let state = account.as_ref().map_or(PaymentArrangementState::Inactive, |account| {
         PaymentArrangementState::resolve(
@@ -99,8 +101,10 @@ impl PurchaseOrderReadService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let (_, _, scope) = this.access().resolve_detail(&actor, &id, executor).await?;
+
                     let facts = arrangement_facts(&this.db, &id, executor).await?;
                     let view = arrangement_view(&this.db, facts, actor.id(), executor).await?;
+
                     scope.validate(executor).await?;
                     Ok(view)
                 })
@@ -119,11 +123,13 @@ async fn arrangement_view(
     let Some(account) = facts.account else {
         return Ok(view);
     };
+
     view.available_amount =
         account.open_total.checked_sub(account.payment_request_reserved_total).max(Amount::zero());
     view.reserved_amount = account.payment_request_reserved_total;
     view.paid_amount = account.settled_total;
     fill_terms(db, &facts.order, &account, &mut view, executor).await?;
+
     let requests = db.purchase_payment_requests().linked_for_account(&account.base.id, executor).await?;
     if requests.len() > 10_000 {
         return Err(Error::ValidationError("本采购单付款申请过多，请联系管理员核对".into()));

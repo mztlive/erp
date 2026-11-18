@@ -76,12 +76,14 @@ impl GrantEventPayload {
                 vec![purchase_order_id, approval_instance_id, node_id, assignment_id],
             ),
         };
+
         for id in ids {
             if normalize_required_text_ref(id, "业务事件证据不能为空", 128, "业务事件证据过长")? != *id
             {
                 return Err(Error::ValidationError("业务事件证据不能带首尾空白".into()));
             }
         }
+
         let source = SourceKey {
             rule: rule.into(),
             business_type: business_type.into(),
@@ -158,6 +160,7 @@ impl GrantEvent {
         if evidence.fact_version == 0 || evidence.occurred_at == 0 {
             return Err(Error::ValidationError("业务事件事实版本和发生时间必须为正数".into()));
         }
+
         let dedup_key = serde_json::to_string(&(
             evidence.payload.identity(),
             &evidence.recipient,
@@ -208,6 +211,7 @@ impl GrantEvent {
             return Err(Error::ConflictError("授权事件记录不一致".into()));
         }
         self.ensure_replay(claim)?;
+
         if self.status == GrantEventStatus::Applied {
             return Ok(());
         }
@@ -277,6 +281,7 @@ mod tests {
             let value = serde_json::to_value(&payload).unwrap();
             assert_eq!(value["type"], kind);
             assert_eq!(serde_json::from_value::<GrantEventPayload>(value).unwrap(), payload);
+
             let event = GrantEvent::new(evidence(payload)).unwrap();
             assert_eq!(event.source.rule, kind);
             assert_eq!(event.source.business_type, business_type);
@@ -294,10 +299,12 @@ mod tests {
                 assert_ne!(events[i].dedup_key, events[j].dedup_key);
             }
         }
+
         let original = &events[0];
         let mut changed = original.evidence.clone();
         changed.recipient = "operator-2".into();
         assert_ne!(original.dedup_key, GrantEvent::new(changed).unwrap().dedup_key);
+
         let mut changed = original.evidence.clone();
         changed.fact_version += 1;
         assert_ne!(original.dedup_key, GrantEvent::new(changed).unwrap().dedup_key);
@@ -311,6 +318,7 @@ mod tests {
             assert_eq!(original.dedup_key, retry.dedup_key);
             original.status = GrantEventStatus::Applied;
             original.ensure_replay(&retry).unwrap();
+
             let mut changed = original.evidence.clone();
             match &mut changed.payload {
                 GrantEventPayload::InvoiceTaskReassigned { work_item_id, .. } => {
@@ -329,6 +337,7 @@ mod tests {
             let changed = GrantEvent::new(changed).unwrap();
             assert_eq!(original.dedup_key, changed.dedup_key);
             assert!(matches!(original.ensure_replay(&changed), Err(Error::ConflictError(_))));
+
             let mut changed = original.evidence.clone();
             changed.occurred_at += 1;
             assert!(original.ensure_replay(&GrantEvent::new(changed).unwrap()).is_err());
@@ -359,9 +368,11 @@ mod tests {
             bad.recipient.clear();
             assert!(GrantEvent::new(bad).is_err());
         }
+
         for kind in ["invoice_task_assigned", "unknown"] {
             assert!(serde_json::from_value::<GrantEventPayload>(json!({ "type": kind })).is_err());
         }
+
         let mut bad = serde_json::to_value(&payloads()[0]).unwrap();
         bad["assignment_id"] = json!("unexpected");
         assert!(serde_json::from_value::<GrantEventPayload>(bad).is_err());
@@ -372,6 +383,7 @@ mod tests {
         let incoming = GrantEvent::new(evidence(payloads().remove(0))).unwrap();
         let legacy_id = r#"[["invoice_task_reassigned","command-1","",""],"operator-1",1]"#;
         assert_eq!(incoming.dedup_key, legacy_id);
+
         let mut stored = incoming.clone();
         stored.base.id = legacy_id.into();
         stored.status = GrantEventStatus::Applied;
@@ -380,6 +392,7 @@ mod tests {
         assert_eq!(stored.base.id, legacy_id);
         assert_eq!(stored.status, GrantEventStatus::Applied);
         assert_eq!(stored.attempts, 3);
+
         let mut wrong_key = incoming.clone();
         wrong_key.dedup_key = "other".into();
         assert!(stored.ensure_replay(&wrong_key).is_err());
@@ -394,17 +407,21 @@ mod tests {
         event.lease_owner = Some("worker-a-token".into());
         let claim = event.clone();
         event.ensure_claim(&claim).unwrap();
+
         let mut other_record = claim.clone();
         other_record.base.id = next_id();
         assert!(event.ensure_claim(&other_record).is_err());
+
         event.lease_owner = Some("worker-b-token".into());
         assert!(event.ensure_claim(&claim).is_err());
         event.status = GrantEventStatus::Failed;
         assert!(event.ensure_claim(&claim).is_err());
+
         event.status = GrantEventStatus::Applied;
         event.lease_owner = None;
         event.ensure_claim(&claim).unwrap();
         assert!(event.ensure_claim(&other_record).is_err());
+
         event.evidence.occurred_at += 1;
         assert!(event.ensure_claim(&claim).is_err());
     }

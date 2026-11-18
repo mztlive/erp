@@ -51,6 +51,7 @@ impl PurchaseOrderProcess {
             .ok_or_else(|| Error::BusinessLogicError("来源销售单缺少当前版本".to_string()))?;
         let revision_lines =
             current_revision_lines(&self.db, &SalesOrderRevisionId::new(revision_id), executor).await?;
+
         let by_stable_id = revision_lines
             .into_iter()
             .map(|line| {
@@ -94,6 +95,7 @@ impl PurchaseOrderProcess {
             .domain()
             .build_change_submission(change, order, base_revision, header, payment_term_snapshot)
             .await?;
+
         let sales = self
             .db
             .sales_orders()

@@ -41,6 +41,7 @@ impl JdVopConnector {
         let (Some(root), None) = (roots.next(), roots.next()) else {
             return Err(mapping("京东原根订单关系尚未完整可见"));
         };
+
         let mut snapshot = order_snapshot(root, &orders, frozen, verify_frozen_price)?;
         let mut shipments = snapshot.shipments.take().unwrap_or_default();
         let mut logistics = Vec::new();
@@ -62,6 +63,7 @@ impl JdVopConnector {
             }
         }
         snapshot.shipments = Some(shipments);
+
         let codec = self.evidence_codec.as_ref().ok_or_else(protocol_required)?;
         let evidence = OrderEvidence { orders: &orders, logistics };
         let text = serde_json::to_string(&evidence).map_err(|_| mapping("京东订单证据编码失败"))?;
@@ -85,6 +87,7 @@ impl JdVopConnector {
         let initial: Vec<JdOrder> = reader.read(request).await?;
         let mut orders = BTreeMap::new();
         append_orders(&mut orders, initial)?;
+
         loop {
             let missing = missing_nodes(&orders);
             if missing.is_empty() {
@@ -104,6 +107,7 @@ impl JdVopConnector {
                 return Err(mapping("京东子订单或原父订单暂不可见，请继续查询原结果"));
             }
         }
+
         validate_identity(key, &orders)?;
         Ok(orders)
     }
@@ -209,6 +213,7 @@ fn build_tree_facts(
             return Err(mapping("京东重复订货编号的采购行缺少可证明的数量分配"));
         }
     }
+
     let mut nodes = Vec::new();
     for order in orders.values() {
         let role = match order.parent_type.0.as_str() {
@@ -217,6 +222,7 @@ fn build_tree_facts(
             "0" if order.child_order_ids().is_empty() => OrderNodeRole::Leaf,
             _ => OrderNodeRole::Unresolved,
         };
+
         let mut lines = Vec::new();
         for source in &order.sku_info_list {
             if source.line_type.as_ref().is_some_and(|kind| kind.0 == "1") {
@@ -250,6 +256,7 @@ fn build_tree_facts(
             refund: None,
         });
     }
+
     let tree = OrderTree { root_order_no: root.jd_order_id.0.clone(), version: 1, nodes };
     tree.validate(frozen).map_err(|_| mapping("京东拆单关系或逐行数量尚未守恒，请继续核实原订单"))?;
     Ok(tree)
@@ -349,6 +356,7 @@ fn amounts(order: &JdOrder) -> ConnectorResult<Option<OrderAmounts>> {
     if payable < Amount::zero() || shipping.is_some_and(|value| value < Amount::zero()) {
         return Err(mapping("京东订单金额不能为负数"));
     }
+
     let goods = order.sku_info_list.iter().try_fold(Decimal::ZERO, |total, line| {
         let price: Decimal = line.sku_price.as_ref()?.0.parse().ok()?;
         let quantity: Decimal = line.sku_num.0.parse().ok()?;
@@ -444,6 +452,7 @@ mod tests {
             }],
         )
         .unwrap();
+
         let first = order_snapshot(&root, &orders, &frozen, true).unwrap();
         assert_eq!(first.fulfillment, Some(FulfillmentStatus::Fulfilling));
         let first = OrderObservation::from_snapshot("first".into(), &tracking, observed(first)).unwrap();
@@ -454,10 +463,12 @@ mod tests {
         assert!(pending[0].tracking_no.is_none());
         tracking.record_shipment(&pending[0], vec!["delivery-101".into()]).unwrap();
         assert!(!tracking.quantities_fully_applied().unwrap());
+
         for id in ["101", "102"] {
             orders.get_mut(id).unwrap().order_state.as_mut().unwrap().jd_order_state =
                 Some(WireText("19".into()));
         }
+
         let mut next = order_snapshot(&root, &orders, &frozen, true).unwrap();
         for number in ["waybill-a", "waybill-b"] {
             next.shipments.as_mut().unwrap().push(Shipment {
@@ -506,11 +517,13 @@ mod tests {
             let orders = BTreeMap::from([("100".into(), order.clone())]);
             assert!(order_snapshot(&order, &orders, &frozen, true).is_err());
         }
+
         let mut delivered = leaf("100", "16");
         delivered.order_state.as_mut().unwrap().jd_order_state = None;
         delivered.order_state.as_mut().unwrap().delivery_state = Some(WireText("1".into()));
         let orders = BTreeMap::from([("100".into(), delivered.clone())]);
         assert_eq!(order_snapshot(&delivered, &orders, &frozen, true).unwrap().shipments.unwrap().len(), 1);
+
         delivered.sku_info_list[0].sku_num = WireText("2".into());
         let orders = BTreeMap::from([("100".into(), delivered.clone())]);
         assert!(order_snapshot(&delivered, &orders, &frozen, true).is_err());
@@ -534,6 +547,7 @@ mod tests {
             assert!(!snapshot.complete_line_coverage);
             assert!(snapshot.shipments.is_none());
         }
+
         let mut parent = leaf("100", "19");
         parent.parent_type = WireText("1".into());
         parent.child_jd_order_id_list = Some(vec![]);
@@ -541,6 +555,7 @@ mod tests {
         parent.parent_type = WireText("0".into());
         parent.child_jd_order_id_list = Some(vec![WireId("101".into())]);
         assert_eq!(summary(&parent).unwrap().fulfillment, None);
+
         let mut rejected = leaf("100", "19");
         rejected.order_state.as_mut().unwrap().delivery_state = Some(WireText("2".into()));
         assert_eq!(summary(&rejected).unwrap().fulfillment, None);
@@ -561,6 +576,7 @@ mod tests {
             order.parent_jd_order_id = Some(root.jd_order_id.clone());
             orders.insert(order.jd_order_id.0.clone(), order);
         }
+
         let frozen = [frozen("123", "10", "2")];
         let tree = build_tree_facts(&root, &orders, &frozen, true).unwrap();
         assert_eq!(aggregate_fulfillment(&tree), Some(FulfillmentStatus::Fulfilling));
@@ -600,10 +616,12 @@ mod tests {
             )
         };
         tree(&order).unwrap();
+
         order.sku_info_list[0].sku_price = Some(WireText("11".into()));
         order.sku_info_list[1].sku_price = Some(WireText("19".into()));
         assert_eq!(amounts(&order).unwrap().unwrap().goods_cost, Some("30".parse().unwrap()));
         assert!(tree(&order).unwrap_err().summary.contains("单价与原批准"));
+
         order.sku_info_list[0].sku_price = None;
         assert!(tree(&order).unwrap_err().summary.contains("缺少可核实单价"));
     }

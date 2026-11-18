@@ -55,6 +55,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, RECONCILIATION_DIFFERENCES, reconciliation_difference_indexes()).await?;
     create_indexes(db, RECONCILIATION_DIFFERENCE_RESOLUTIONS, reconciliation_difference_resolution_indexes())
         .await?;
+
     db.collection::<Document>(Database::INTEGRATION_COMMAND_RECEIPTS)
         .create_index(
             IndexModel::builder()
@@ -68,6 +69,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
                 .build(),
         )
         .await?;
+
     super::supplier_callback::ensure(db).await?;
     super::supplier_message::ensure(db).await?;
     super::supplier_credential::ensure(db).await?;

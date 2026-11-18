@@ -124,15 +124,18 @@ impl<'a> ReceivableRepository<'a> {
             .sales_invoice_allocations()
             .find_allocations_by_accounts(std::slice::from_ref(account_id), executor)
             .await?;
+
         let receipt_ids = unique_ids(
             receipt_allocations.iter().map(|allocation| allocation.customer_receipt_id.to_string()),
         );
         let expected_receipt_count = receipt_ids.len();
         let receipts = self.db.customer_receipts().find_receipts_by_ids(&receipt_ids, executor).await?;
+
         let invoice_ids =
             unique_ids(invoice_allocations.iter().map(|allocation| allocation.invoice_id.to_string()));
         let expected_invoice_count = invoice_ids.len();
         let invoices = self.db.invoices().find_invoices_by_ids(&invoice_ids, executor).await?;
+
         Ok(ReceivableSnapshotFacts {
             entries,
             receipt_allocations,
@@ -433,6 +436,7 @@ mod tests {
             &database,
             <mongodb::Database as ReceivableExt>::RECEIVABLE_ACCOUNTS,
         );
+
         let result = repository
             .apply_settlements_many(&[], "tester", &mut NoTransaction)
             .await
@@ -475,12 +479,14 @@ mod tests {
             "客户九".to_string(),
             Some("结算主体".to_string()),
         );
+
         assert_eq!(snapshot.current_sales_order_revision_id, "sor-9");
         assert_eq!(snapshot.sales_order_no, "SO-9");
         assert_eq!(snapshot.sales_order_revision_no, 3);
         assert_eq!(snapshot.sales_order_snapshot_at, 1_700_000_000);
         assert_eq!(snapshot.customer_name, "客户九");
         assert_eq!(snapshot.counterparty_party_name.as_deref(), Some("结算主体"));
+
         let ids: Vec<&str> = snapshot.entries.iter().map(|entry| entry.base.id.as_str()).collect();
         assert_eq!(ids, vec!["e-2", "e-1"], "转换只搬运字段，不重排事实顺序");
         assert!(snapshot.receipts.is_empty());

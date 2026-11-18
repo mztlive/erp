@@ -47,18 +47,21 @@ impl PurchaseOrderDomainRepository<'_> {
     ) -> Result<PurchaseCoverageSources> {
         let purchase_orders =
             self.db.purchase_orders().find_covering_by_sales_order(sales_order_id, executor).await?;
+
         let submission_ids = current_pointer_ids(&purchase_orders);
         let submission_lines = self
             .db
             .purchase_order_submission_lines()
             .find_lines_by_submission_ids(&submission_ids, executor)
             .await?;
+
         let revision_ids = current_revision_pointer_ids(&purchase_orders);
         let purchase_revision_lines = self
             .db
             .purchase_order_revision_lines()
             .find_lines_by_revision_ids(&revision_ids, executor)
             .await?;
+
         let line_ids = purchase_revision_lines
             .iter()
             .filter(|line| line.line_type == PurchaseLineType::ItemService)
@@ -69,6 +72,7 @@ impl PurchaseOrderDomainRepository<'_> {
             .purchase_line_sales_allocations()
             .find_by_purchase_revision_line_ids(&line_ids, executor)
             .await?;
+
         Ok(PurchaseCoverageSources {
             purchase_orders,
             submission_lines,

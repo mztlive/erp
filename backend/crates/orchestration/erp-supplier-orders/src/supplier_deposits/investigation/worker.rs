@@ -67,6 +67,7 @@ impl SupplierFundsInvestigationWorker {
             cursor.clear();
             return Ok(0);
         }
+
         let mut applied = 0;
         for connection in connections {
             *cursor = connection.base.id.clone();
@@ -91,6 +92,7 @@ impl SupplierFundsInvestigationWorker {
         if connector.connection_id().as_ref() != connection.base.id {
             return Err(Error::Forbidden("资金能力不属于当前连接".into()));
         }
+
         let Some(store) = MongoFundsInvestigationStore::claim(
             self.db.clone(),
             connection,
@@ -101,6 +103,7 @@ impl SupplierFundsInvestigationWorker {
         else {
             return Ok(FundsInvestigationRun::default());
         };
+
         let result = FundsInvestigationProcess { source, store: &store }.run(Instant::now()).await;
         store.release().await?;
         result
@@ -144,6 +147,7 @@ impl SupplierFundsInvestigationWorker {
         if account.reconciliation_required {
             return Err(Error::BusinessLogicError("资金账户仍有待核对项目，消息继续保留".into()));
         }
+
         let record = funds_evidence_by_transaction(&self.db, account_id, transaction, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::BusinessLogicError("本次消息资金交易仍待核实".into()))?;
@@ -168,10 +172,12 @@ impl SupplierMessageFundsInvestigation for SupplierFundsInvestigationWorker {
         if connector.messages().is_none_or(|source| source.account_scope() != message.account_scope) {
             return Err(Error::Forbidden("资金消息账号不属于原技术连接".into()));
         }
+
         let source = connector
             .funds_source()
             .ok_or_else(|| Error::BusinessLogicError("资金只读协议尚未核实，原消息保留待查".into()))?;
         self.run_connection(&connection).await?;
+
         let effect = source
             .message_effect(&message.message_type)
             .ok_or_else(|| Error::BusinessLogicError("该消息未证明资金最终结果，继续保留原线索".into()))?;

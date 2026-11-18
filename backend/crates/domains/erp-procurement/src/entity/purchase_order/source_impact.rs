@@ -139,6 +139,7 @@ impl From<SourceImpactReason> for SourceImpactReasonWire {
             current_due: None,
             expected_delivery_date: None,
         };
+
         match reason.kind {
             SourceImpactKind::Zeroed { baseline_quantity } => {
                 wire.kind = SourceImpactKindCode::Zeroed;
@@ -180,6 +181,7 @@ impl TryFrom<SourceImpactReasonWire> for SourceImpactReason {
             },
             SourceImpactKindCode::DeliveryChanged => SourceImpactKind::DeliveryChanged,
         };
+
         Ok(Self {
             sales_order_line_id: wire.sales_order_line_id,
             line_no: wire.line_no,
@@ -235,12 +237,14 @@ pub fn evaluate_source_impacts(
     let context = ImpactContext::new(facts, coverage);
     let purchases = participating_purchases(facts)?;
     let assigned = cumulative_assignments(&purchases);
+
     let mut impacts = Vec::new();
     for (order, lines) in &purchases {
         let mut reasons = Vec::new();
         for line in lines {
             reasons.extend(context.line_reasons(order, line, &assigned)?);
         }
+
         if !reasons.is_empty() {
             reasons.sort_by_key(|reason| reason.line_no);
             impacts.push(PurchaseSourceImpact { purchase_order_id: order.base.id.clone(), reasons });
@@ -276,6 +280,7 @@ pub fn predict_source_impacts(
         .as_mut()
         .ok_or_else(|| Error::from("销售单当前版本不存在，无法预判采购影响"))?;
     let current_revision_id = std::mem::replace(&mut revision.base.id, proposed_revision_id.to_string());
+
     let mut goods = std::mem::take(&mut hypothetical.goods_lines)
         .into_iter()
         .map(|line| (line.revision_line_id.to_string(), line))
@@ -294,12 +299,14 @@ pub fn predict_source_impacts(
             );
         }
     }
+
     for (line, goods_line) in
         proposed.into_iter().filter(|(line, _)| existing.contains(line.sales_order_line_id.as_ref()))
     {
         hypothetical.revision_lines.push(line);
         hypothetical.goods_lines.push(goods_line);
     }
+
     let coverage = build_procurement_coverage(hypothetical.clone())?;
     evaluate_source_impacts(&hypothetical, &coverage)
 }
@@ -371,6 +378,7 @@ impl<'a> ImpactContext<'a> {
                 )
             })
             .collect();
+
         let mut historical = HashMap::new();
         let mut by_revision = HashMap::new();
         for (line_id, line) in &facts.historical_sales_lines {
@@ -385,6 +393,7 @@ impl<'a> ImpactContext<'a> {
                 view,
             );
         }
+
         Self {
             current_revision_id: &coverage.revision.base.id,
             current,
@@ -405,6 +414,7 @@ impl<'a> ImpactContext<'a> {
                 return Some(*view);
             }
         }
+
         let recorded = line.recorded_line_id?;
         match current {
             Some(view) if view.line_id == recorded => Some(view),
@@ -426,10 +436,12 @@ impl<'a> ImpactContext<'a> {
         if current.is_some_and(|current| current.view.line_id == baseline.line_id) {
             return Ok(Vec::new());
         }
+
         let kinds = match current {
             None => zeroed(baseline),
             Some(current) => changed_kinds(order, line, baseline, current, assigned)?,
         };
+
         let meta = current.map_or(baseline, |current| current.view).revision_line;
         Ok(kinds
             .into_iter()
@@ -471,7 +483,9 @@ fn changed_kinds(
             excess_quantity: current.excess,
         });
     }
+
     kinds.extend(due_earlier(before, after, line.expected_delivery_date)?);
+
     let responsibility = order.fulfillment_responsibility;
     let carries_addresses = matches!(
         responsibility,
@@ -882,6 +896,7 @@ mod tests {
             let mut purchase = order(id, PurchaseOrderStatus::Effective, responsibility);
             purchase.stable.current_revision_id = Some(format!("por-{id}"));
             let row = revision_line(&format!("porl-{id}"), &format!("por-{id}"), recorded, &line);
+
             self.facts.allocations.push(
                 PurchaseLineSalesAllocation::new(
                     PurchaseLineSalesAllocationId::new(format!("alloc-{id}")),
@@ -1008,6 +1023,7 @@ mod tests {
         let earlier = SalesLine { due: DUE_EARLY, ..sales_line("10") };
         let late = PurchaseLine { expected: Some("2026-10-15"), ..purchase_line("5") };
         let on_time = PurchaseLine { expected: Some("2026-10-08"), ..purchase_line("5") };
+
         let impacts = Scenario::new(&earlier)
             .history("rev-old", "old-1", &sales_line("10"))
             .effective("late", FulfillmentResponsibility::Warehouse, "old-1", late)
@@ -1030,6 +1046,7 @@ mod tests {
         let after = SalesLine { addresses: vec![address("李四", "10")], ..sales_line("10") };
         let direct = PurchaseLine { addresses: vec![address("张三", "4")], ..purchase_line("4") };
         let warehouse = PurchaseLine { addresses: vec![address("张三", "4")], ..purchase_line("4") };
+
         let impacts = Scenario::new(&after)
             .history("rev-old", "old-1", &before)
             .effective("direct", FulfillmentResponsibility::SupplierDirect, "old-1", direct)
@@ -1068,7 +1085,6 @@ mod tests {
         scenario.facts.purchase_orders[0].stable.status = PurchaseOrderStatus::Voided;
 
         let impacts = evaluate_source_impacts(&scenario.facts, &coverage).unwrap();
-
         assert!(impacts.is_empty());
     }
 
@@ -1142,7 +1158,6 @@ mod tests {
 
         let impacts =
             super::predict_source_impacts(&scenario.facts, "proposed", vec![(line, goods)]).unwrap();
-
         assert!(impacts.is_empty());
     }
 }

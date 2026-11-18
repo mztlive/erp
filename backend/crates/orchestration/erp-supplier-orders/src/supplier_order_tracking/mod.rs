@@ -95,10 +95,12 @@ impl SupplierOrderTrackingProcess {
         let Some(external) = &order.external_order_no else {
             return self.release_uncreated(tracking).await;
         };
+
         let connection = SupplierApiService::new(self.db.clone())
             .load_connection(&tracking.connection_id, &mut NoTransaction)
             .await?;
         let frozen = self.frozen_order_lines(tracking).await?;
+
         let result = self
             .runtime
             .observe_order_with_lines(&connection, &OrderKey::External(external.clone()), &frozen)
@@ -112,6 +114,7 @@ impl SupplierOrderTrackingProcess {
         {
             return Err(Error::ConflictError("供应商查询结果与原订单不一致".into()));
         }
+
         let observation = OrderObservation::from_snapshot(next_id(), tracking, snapshot)?;
         let observation_id = self.persist_observation(tracking, observation).await?;
         self.apply_delivery(tracking, &observation_id).await

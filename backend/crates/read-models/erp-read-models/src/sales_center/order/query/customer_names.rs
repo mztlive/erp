@@ -62,6 +62,7 @@ impl SalesOrderReadService {
                 executor,
             )
             .await?;
+
         let names = revisions
             .into_iter()
             .map(|revision| (revision.party_id.to_string(), revision.legal_name))

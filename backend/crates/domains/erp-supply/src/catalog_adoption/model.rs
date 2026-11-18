@@ -77,6 +77,7 @@ impl CatalogAdoptionPreview {
             .iter()
             .find(|item| item.base.id == current.base.id)
             .ok_or_else(|| Error::ValidationError("来源规格不属于本次冻结范围".into()))?;
+
         let media_changed = frozen.images != current.images || frozen.detail_images != current.detail_images;
         let (mut original, mut latest) = (frozen.clone(), current.clone());
         preserve_unseen_media(&mut latest.images, &original.images);
@@ -88,6 +89,7 @@ impl CatalogAdoptionPreview {
                 && !frozen.source_fingerprint.is_empty()
                 && !current.source_fingerprint.is_empty()
                 && frozen.source_fingerprint != current.source_fingerprint);
+
         if frozen.connection_id != current.connection_id
             || frozen.product_id != current.product_id
             || frozen.spec_id != current.spec_id
@@ -133,6 +135,7 @@ impl CatalogAdoptionPreview {
         if self.base.version != request.expected_version {
             return Err(Error::ConflictError("选品预览已变化或过期，请重新预览".into()));
         }
+
         request.validate()?;
         if request.rows.iter().any(|row| !self.items.iter().any(|item| item.base.id == row.item_id)) {
             return Err(Error::ValidationError("确认行不属于本次冻结的选品范围".into()));
@@ -405,6 +408,7 @@ mod tests {
         assert_eq!(encoded["suggested_unit"], "磅");
         assert_eq!(encoded["unit_inferred"], true);
         assert_eq!(view.item.source_fingerprint, original_fingerprint);
+
         let mut item = view.item;
         item.unit = Some("个".into());
         let view = CatalogItemView::from(item);
@@ -497,12 +501,14 @@ mod tests {
             expires_at: Instant::from_unix_secs(200),
             items: vec![item.clone()],
         };
+
         let mut current = item;
         let image = &mut current.images.as_mut().unwrap()[0];
         image.content_fingerprint = Some("a".repeat(64));
         image.file_asset_id = Some("asset".into());
         current.refresh_fingerprint().unwrap();
         assert!(preview.ensure_current_item(&current).is_ok());
+
         current.images.as_mut().unwrap()[0].url = "https://example.com/b".into();
         current.refresh_fingerprint().unwrap();
         assert!(preview.ensure_current_item(&current).is_err());
@@ -537,9 +543,11 @@ mod tests {
             sales_prices: None,
             delivery_template_id: None,
         };
+
         let mut legacy_json = serde_json::to_value(&row).unwrap();
         legacy_json["target"].as_object_mut().unwrap().remove("specification_confirmed");
         assert!(serde_json::from_value::<AdoptionRow>(legacy_json).is_err());
+
         let mut request = ConfirmAdoptionRequest {
             expected_version: preview.base.version,
             idempotency_key: "key".into(),
@@ -549,8 +557,10 @@ mod tests {
         assert!(preview.ensure_confirmable("c", &request, Instant::from_unix_secs(200)).is_err());
         assert!(preview.ensure_request("c", &request).is_ok());
         assert!(preview.ensure_request("other", &request).is_err());
+
         request.expected_version += 1;
         assert!(preview.ensure_request("c", &request).is_err());
+
         request.expected_version = preview.base.version;
         request.rows[0].item_id = "other-source".into();
         assert!(preview.ensure_request("c", &request).is_err());

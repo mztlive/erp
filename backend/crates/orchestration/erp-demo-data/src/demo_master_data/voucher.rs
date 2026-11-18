@@ -46,6 +46,7 @@ pub(super) fn voucher_request(request: &CreateProductRequest) -> Result<CreateVo
     if request.product_no.as_deref() != Some(sku.sku_no.as_str()) || !sku.spec_entries.is_empty() {
         return Err(Error::ValidationError("演示卡券的商品与 SKU 编号必须相同且无规格组合".into()));
     }
+
     let result = CreateVoucherCategoryRequest {
         voucher_no: sku.sku_no.clone(),
         name: request.name.clone(),
@@ -87,6 +88,7 @@ mod tests {
         let request = voucher_request(product).unwrap();
         assert_eq!(request.voucher_no, product.skus[0].sku_no);
         assert_eq!(request.sku.unwrap().sales_visible_price_gross, product.skus[0].sales_visible_price_gross);
+
         let mut invalid = product.clone();
         invalid.skus[0].sku_no = "another".into();
         assert!(voucher_request(&invalid).is_err());

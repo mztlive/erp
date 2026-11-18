@@ -91,6 +91,7 @@ fn build_initial_receivable(
         "system",
     )
     .map_err(Error::Logic)?;
+
     let entry = ReceivableEntry::new(
         entry_id,
         ReceivableEntryData {
@@ -213,6 +214,7 @@ mod tests {
         };
         assert_eq!(account.settled_total, Amount::zero());
         assert!(source.unavailable_reason(account.open_invoiceable_total).is_none());
+
         account.sync_totals(Amount::from_str("100").unwrap(), Amount::zero(), "finance").unwrap();
         assert_eq!(account.open_invoiceable_total, Amount::from_str("100").unwrap());
         assert!(source.unavailable_reason(account.open_invoiceable_total).is_none());

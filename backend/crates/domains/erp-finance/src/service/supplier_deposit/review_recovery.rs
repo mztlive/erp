@@ -25,6 +25,7 @@ impl SupplierDepositService {
         for mut inbox in reviewed_funds_evidence(&self.db, account, executor).await? {
             let resource = self.reviewed_resource(&inbox, basis, executor).await?;
             self.verify_funds_application(&inbox, &resource, executor).await?;
+
             let proof = FundsEvidenceReviewResolution {
                 operation_key: resolution.operation_key.clone(),
                 payload_fingerprint: fingerprint(&(
@@ -63,6 +64,7 @@ impl SupplierDepositService {
             None => None,
         };
         inbox.ensure_review_coverage(basis, &ledger, reservation.as_ref())?;
+
         match ledger.kind {
             DepositLedgerKind::Recharge => {
                 let batch = recharge_batch_for_transaction(

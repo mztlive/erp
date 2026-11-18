@@ -19,6 +19,7 @@ pub(super) const TOKEN_ENDPOINT: &str = "https://open-oauth.jd.com/oauth2/access
 pub(super) fn prepare(request: &JdVopAuthorizationRequest, app_key: &str) -> Result<AuthorizationParameters> {
     request.validate()?;
     let encrypted = password(&request.password, &request.private_key)?;
+
     let query = Serializer::new(String::new())
         .extend_pairs([
             ("app_key", app_key),
@@ -51,6 +52,7 @@ fn password(password: &str, private_key: &str) -> Result<Zeroizing<String>> {
     if !(1024..=4096).contains(&key.n().bits()) || key.validate().is_err() {
         return Err(AuthorizationError::InvalidInput);
     }
+
     let digest = Zeroizing::new(format!("{:x}", md5::compute(password.as_bytes())));
     // Java Cipher("RSA").ENCRYPT_MODE(privateKey): type1 PKCS#1 v1.5，原值是32字节小写MD5 ASCII，无DigestInfo。
     let result = key
@@ -67,6 +69,7 @@ pub(super) fn authorization_code(callback: &Url, location: &str) -> Result<Zeroi
     if target.fragment().is_some() {
         return Err(AuthorizationError::Unknown);
     }
+
     let mut extras = Vec::new();
     let mut code = None;
     let mut state = false;
@@ -85,6 +88,7 @@ pub(super) fn authorization_code(callback: &Url, location: &str) -> Result<Zeroi
             _ => extras.push((name.into_owned(), value.into_owned())),
         }
     }
+
     let expected: Vec<_> =
         callback.query_pairs().map(|(key, value)| (key.into_owned(), value.into_owned())).collect();
     if extras != expected {

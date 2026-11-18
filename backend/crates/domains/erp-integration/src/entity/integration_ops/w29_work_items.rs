@@ -278,6 +278,7 @@ mod tests {
                 IntegrationResponsibilityPriority::High,
             ),
         ];
+
         for (class, role, work_item_type, priority) in cases {
             assert_eq!(error_owner_role(class), role);
             assert_eq!(error_work_item_type(class), work_item_type);
@@ -296,17 +297,21 @@ mod tests {
         ] {
             assert_eq!(difference_owner_role(code).unwrap(), "role-operations");
         }
+
         for code in
             ["amount_mismatch", "refund_mismatch", "balance_mismatch", "settlement_mismatch", "cost_mismatch"]
         {
             assert_eq!(difference_owner_role(code).unwrap(), "role-finance");
         }
+
         for code in ["supplier_supply_mismatch", "supplier_order_mismatch", "supply_mismatch"] {
             assert_eq!(difference_owner_role(code).unwrap(), "role-procurement");
         }
+
         for code in ["result_unknown", "integration_result_unknown"] {
             assert_eq!(difference_owner_role(code).unwrap(), "role-sysadmin");
         }
+
         assert_eq!(difference_owner_role(" Amount_Mismatch ").unwrap(), "role-finance");
         assert!(difference_owner_role("free_form_type").is_err());
         assert!(difference_owner_role("  ").is_err());
@@ -320,6 +325,7 @@ mod tests {
         task.owner_role = Some("old-role".to_string());
         task.owner_user_id = Some("old-owner".to_string());
         task.owner_org_unit_id = "org-sysadmin".to_string();
+
         let spec = super::error_responsibility(&task);
         assert_eq!(
             spec,
@@ -349,6 +355,7 @@ mod tests {
         difference.base.version = 9;
         // 既有事实允许带历史大小写和空白；注册查询归一化，冻结原因仍用原值。
         difference.difference_type = " Amount_Mismatch ".to_string();
+
         let spec = super::difference_responsibility(&difference).unwrap();
         assert_eq!(
             spec,
@@ -376,6 +383,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(super::difference_responsibility(&difference).unwrap().owner_user_id, "user-1");
+
         difference.difference_type = "free_form_type".to_string();
         assert_eq!(
             super::difference_responsibility(&difference).unwrap_err().to_string(),

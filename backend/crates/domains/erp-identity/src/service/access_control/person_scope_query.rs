@@ -108,6 +108,7 @@ impl AccessControlService {
         if !account.is_active_backoffice() {
             return Ok(vec![]);
         }
+
         let resources = match resource {
             Some(resource) if scope_spec::resource_is_known(resource) => vec![resource],
             Some(_) => return Ok(vec![]),
@@ -118,10 +119,12 @@ impl AccessControlService {
             .flat_map(|resource| scope_spec::display_actions(resource))
             .cloned()
             .collect::<Vec<_>>();
+
         let rbac = self.rbac.clone();
         let snapshot = rbac.role_permission_snapshot(account.kind, user, &permissions).await?;
         rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
         let roles = self.db.roles().enabled_roles(snapshot.role_ids(), executor).await?;
+
         let mut options = Vec::new();
         for resource in resources {
             let mut granted: Vec<String> = Vec::new();

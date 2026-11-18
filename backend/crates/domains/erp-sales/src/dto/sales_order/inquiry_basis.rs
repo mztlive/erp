@@ -39,6 +39,7 @@ impl InquirySalesBasis {
     pub fn from_inquiry(inquiry: &SalesInquiry, round: u32, now: Instant) -> Result<Self> {
         let feedback = inquiry.accepted_feedback(round, now)?;
         let requirement = requirement(inquiry, feedback.requirement_version)?;
+
         let mut lines = Vec::new();
         for result in &feedback.data.lines {
             if !transferable_line(inquiry, &result.line_id)? {
@@ -63,6 +64,7 @@ impl InquirySalesBasis {
                 });
             }
         }
+
         if lines.is_empty() {
             return Err(Error::BusinessLogicError(
                 "当前已接受结果没有可转数量，请核对已开单数量或重新询价".into(),
@@ -135,6 +137,7 @@ fn available_selection(
             available -= amount;
         }
     }
+
     let quantity = if demand.allocations.is_empty() {
         available
     } else {
@@ -238,6 +241,7 @@ mod tests {
         inquiry.submit(1, "sales", String::new(), now()).unwrap();
         inquiry.publish(1, "buyer", feedback("10", "price-b"), now()).unwrap();
         inquiry.accept(1, "sales", 1, now()).unwrap();
+
         inquiry
             .reserve_quantities(
                 "existing-sale",
@@ -287,9 +291,11 @@ mod tests {
         let mut inquiry = accepted();
         reinquire_a(&mut inquiry);
         assert_only_original_b(&inquiry);
+
         inquiry.publish(1, "buyer", feedback("8", "price-b-new"), now()).unwrap();
         assert_only_original_b(&inquiry);
         assert!(InquirySalesBasis::from_inquiry(&inquiry, 2, now()).is_err());
+
         inquiry.accept(1, "sales", 2, now()).unwrap();
         assert!(InquirySalesBasis::from_inquiry(&inquiry, 1, now()).is_err());
         let basis = InquirySalesBasis::from_inquiry(&inquiry, 2, now()).unwrap();
@@ -319,6 +325,7 @@ mod tests {
                 now(),
             )
             .unwrap();
+
         assert_eq!(inquiry.requirement_version, 2);
         assert!(InquirySalesBasis::from_inquiry(&inquiry, 1, now()).is_err());
     }
@@ -329,6 +336,7 @@ mod tests {
         data.lines[0].prices[0].tax_rate = None;
         data.lines[1].prices[0].unit_price_gross = Some("0".parse().unwrap());
         data.lines[1].prices[0].tax_rate = Some("0".parse().unwrap());
+
         let bytes = bson::serialize_to_vec(&data).unwrap();
         let restored: InquiryFeedbackData = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(restored, data);

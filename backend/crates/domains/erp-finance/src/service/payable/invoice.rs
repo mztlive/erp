@@ -37,11 +37,13 @@ impl PayableService {
             .find_by_id(&invoice_id, executor)
             .await?
             .ok_or_else(|| Error::Internal("进项发票命令收据引用不存在".to_string()))?;
+
         let allocations = self
             .db
             .purchase_invoice_allocations()
             .find_allocations_by_invoices(std::slice::from_ref(&invoice_id), executor)
             .await?;
+
         let views = allocations.iter().map(purchase_invoice_allocation_view).collect();
         Ok(PurchaseInvoiceRegisteredView {
             invoice_id: invoice_id.to_string(),
@@ -206,6 +208,7 @@ pub async fn persist_purchase_invoice(
     if !invoicing.rejected.is_empty() {
         return Err(Error::BusinessLogicError("子账剩余可收票额度不足，收票被拒绝".to_string()));
     }
+
     let mut invoice_mut = invoice_for_tx;
     invoice_mut.mark_registered(actor_id)?;
     db.invoices().create(&invoice_mut, session).await?;

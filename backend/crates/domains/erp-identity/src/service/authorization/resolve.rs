@@ -116,6 +116,7 @@ impl AuthorizationService {
         let boundary = executor
             .boundary()
             .ok_or_else(|| Error::ValidationError("授权要求可核验的事务或读取阶段".into()))?;
+
         let mut resolution = Resolution { versions: vec![qualified.version().into()], ..Default::default() };
         let rule = self
             .target_condition(
@@ -129,9 +130,11 @@ impl AuthorizationService {
             .await?;
         let management_rule =
             self.management_condition(&context, qualified, &mut resolution, executor).await?;
+
         resolution.versions.extend(
             self.grant_versions(&context.actor, &rule, resolution.whole_rule.as_ref(), executor).await?,
         );
+
         let mut version = Fingerprint::new("authorization-proof-v3");
         version.unordered(&resolution.versions, |hash, value| hash.text(value));
         version.rule(&rule);
@@ -139,6 +142,7 @@ impl AuthorizationService {
         version.optional(management_rule.as_ref(), Fingerprint::rule);
         version.boolean(task);
         version.optional(model, Fingerprint::model);
+
         let proof = AccessProof {
             context,
             qualified: qualified.clone(),
@@ -175,6 +179,7 @@ impl AuthorizationService {
         if !qualified.same_role(&rules::same_role_permissions(&permission)) {
             return Ok(Some(AccessRule::Deny));
         }
+
         let context = AccessContext { permission, ..context.clone() };
         let scope = self.resolve_scope(&context, &context.permission, qualified, executor).await?;
         let has_role_scope = resolution.has_role_scope;
@@ -195,6 +200,7 @@ impl AuthorizationService {
         if let Some(whole) = whole_rule {
             whole.grant_resources(&mut resources);
         }
+
         let mut versions = Vec::new();
         for resource in resources {
             let revision = self.facilities.grant_revision(actor, resource, executor).await?;
@@ -246,11 +252,13 @@ impl AuthorizationService {
         if context.permission == internal::APPROVAL_MANAGEMENT_READ && context.model.is_some() {
             return self.approval_query_condition(context, qualified, resolution, executor).await;
         }
+
         match scope_spec::kind(&context.permission)? {
             ActionKind::Scope => {
                 let scope = self.resolve_scope(context, &context.permission, qualified, executor).await?;
                 resolution.include(&scope);
                 let base = rules::data_condition(&context.permission, Some(&scope.scope))?;
+
                 let mut scopes = Vec::new();
                 for (entry, source) in rules::selection::scope_requests(&context.permission)
                     .into_iter()
@@ -264,6 +272,7 @@ impl AuthorizationService {
                     resolution.include(&scope);
                     scopes.push((entry, source, scope.scope.clone()));
                 }
+
                 rules::quality::condition(
                     &context.permission,
                     qualified,
@@ -320,6 +329,7 @@ impl AuthorizationService {
             resolution.include(&scope);
             scopes.push((entry, source, scope.scope.clone()));
         }
+
         let output = match output {
             None | Some(QueryOutput::Object) => rules::sources::Output::Object,
             Some(_) => rules::sources::Output::Share,
@@ -352,6 +362,7 @@ impl Resolution {
         self.has_role_scope |= scope.scope.has_role_scope();
         self.versions.push(scope.scope_version.clone());
         self.organization_version = self.organization_version.max(scope.organizations.version);
+
         for membership in &scope.organizations.memberships {
             for until in
                 [Some(membership.validity.valid_from), membership.validity.valid_to].into_iter().flatten()

@@ -88,6 +88,7 @@ mod tests {
             filter.get_array("$or").unwrap()[1],
             doc! { "created_at": 42_i64, "id": { "$lt": "b" } }.into()
         );
+
         assert!(InboxQuery { before_created_at: Some(42), before_id: None }.filter("u1").is_err());
         assert!(
             InboxQuery { before_created_at: Some(-1), before_id: Some("b".into()) }.filter("u1").is_err()
@@ -110,11 +111,13 @@ mod tests {
                 read_at: None,
             })
             .collect();
+
         let page = InboxPage::from_records(messages, 30);
         assert!(page.has_more);
         assert_eq!(page.items.len(), 20);
         assert_eq!(page.items.last().unwrap().id, "19");
         assert_eq!(page.unread_count, 30);
+
         assert!(!InboxPage::from_records(Vec::new(), 0).has_more);
     }
 }

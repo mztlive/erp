@@ -54,19 +54,23 @@ impl PartyService {
         let party_id = PartyId::new(&party.base.id);
         let (contacts, addresses, taxes, _) =
             self.db.party().load_current_facts(&party_id, today, executor).await?;
+
         let contact = seed.contact(&party_id, codec, today)?;
         let existing_contact = contacts.into_iter().find(|c| {
             c.mobile_query_hmac == contact.mobile_query_hmac && c.contact_name == contact.contact_name
         });
         let contact_changed = save_default!(self, party_contacts, contact, existing_contact, executor);
+
         let address = seed.address(&party_id, codec, today)?;
         let existing_address = addresses.into_iter().find(|a| {
             a.address_type == AddressType::Registered && a.address_query_hmac == address.address_query_hmac
         });
         let address_changed = save_default!(self, party_addresses, address, existing_address, executor);
+
         let tax = seed.tax(&party_id, today)?;
         let existing_tax = taxes.into_iter().find(|t| t.tax_no == tax.tax_no);
         let tax_changed = save_default!(self, party_tax_profiles, tax, existing_tax, executor);
+
         let bank_changed = self.sync_company_bank(seed, &party_id, codec, today, executor).await?;
         Ok(contact_changed || address_changed || tax_changed || bank_changed)
     }
@@ -82,6 +86,7 @@ impl PartyService {
         let Some(desired) = seed.bank(party_id, codec, today)? else {
             return Ok(false);
         };
+
         let accounts = self
             .db
             .party_bank_accounts()
@@ -89,6 +94,7 @@ impl PartyService {
             .await?;
         let existing =
             accounts.into_iter().find(|a| a.account_number_query_hmac == desired.account_number_query_hmac);
+
         if let Some(account) = &existing {
             if account.base.deleted_at != 0
                 || account.status != EffectiveRecordStatus::Active
@@ -107,6 +113,7 @@ impl PartyService {
                 SensitiveFactReuse::reuse_original(),
             ))?;
         }
+
         Ok(save_default!(self, party_bank_accounts, desired, existing, executor))
     }
 }

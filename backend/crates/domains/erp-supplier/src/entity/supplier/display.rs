@@ -105,6 +105,7 @@ mod tests {
             SettlementMode::label,
             SettlementMode::as_str,
         );
+
         assert_enum_mapping(
             &[
                 (ReconciliationCycle::Daily, "daily", "日"),
@@ -168,6 +169,7 @@ mod tests {
         for (variant, code, _) in capabilities {
             assert_eq!(CapabilityCode::from_code(code), Some(variant));
         }
+
         let qualifications = [
             (QualificationType::Certificate, "certificate", "资质证照"),
             (QualificationType::Contract, "contract", "合同"),
@@ -179,6 +181,7 @@ mod tests {
         for (variant, code, _) in qualifications {
             assert_eq!(QualificationType::from_code(code), Some(variant));
         }
+
         for unknown in ["", "PHYSICAL", " physical ", "CONTRACT", " contract ", "unknown"] {
             assert_eq!(CapabilityCode::from_code(unknown), None);
             assert_eq!(QualificationType::from_code(unknown), None);

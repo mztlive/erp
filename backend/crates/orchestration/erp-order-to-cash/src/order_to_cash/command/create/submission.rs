@@ -131,6 +131,7 @@ impl SalesOrderCommandProcess {
                     .map_err(|error| Error::ValidationError(error.to_string()))?;
             let organization_id = sales_order_responsible_org_id(&creation.order)?;
             let _ = sales_order_object_readable(&organization_id, actor.id())?;
+
             self.ensure_procurement_responsibility_before_submit(
                 &creation.order,
                 &creation.working_copy_lines,
@@ -142,6 +143,7 @@ impl SalesOrderCommandProcess {
                 creation, context, identity, actor,
             )?)));
         }
+
         let audit = SalesCommandEvent::new(
             identity.audit_id.clone(),
             actor,
@@ -165,6 +167,7 @@ fn prepare_submitted_creation(
     let submission_lines = build_submission_lines(&submission, &creation.working_copy_lines)?;
     creation.working_copy.submit()?;
     execute_sales_order_domain_action(&mut creation.order, context.ports.on_approval_start, actor.id())?;
+
     let now = Instant::now();
     let snapshot =
         build_sales_order_snapshot(&creation.order, &submission, &submission_lines, actor.id(), now)?;
@@ -224,6 +227,7 @@ fn creation_submission_events(
         order.order_no.clone(),
     )?
     .with_command_sequence(&identity.audit_id, 1)?;
+
     let submit = SalesCommandEvent::new(
         sales_submission_audit_id(actor.id(), &order.base.id, &identity.idempotency_key),
         actor,
@@ -317,6 +321,7 @@ mod tests {
             actor.id(),
         )
         .unwrap();
+
         let draft: SalesOrderDraftRequest = serde_json::from_value(json!({
             "editor_user_id": actor.id(), "customer_name": "客户", "settlement_party_name": "客户",
             "payment_term_code": "PREPAID", "payment_term_name": "预付", "invoice_type": "普通发票",
@@ -329,6 +334,7 @@ mod tests {
         let stable_lines = build_stable_lines(&SalesOrderId::new("order"), &draft.lines).unwrap();
         let (working_copy, working_copy_lines) =
             build_working_copy(&order, &stable_lines, &draft, 1, actor).unwrap();
+
         let document = BusinessDocument::new(
             BusinessDocumentId::new("order"),
             BusinessDocumentData {
@@ -362,6 +368,7 @@ mod tests {
             let working_copy_id = creation.working_copy.base.id.clone();
             let context = context(&creation);
             let submitted = prepare_submitted_creation(creation, context, &identity, &actor).unwrap();
+
             assert_eq!(submitted.creation.order.commercial_status, CommercialStatus::PendingReview);
             assert_eq!(submitted.creation.order.review_status, ReviewStatus::InApproval);
             assert_eq!(submitted.creation.order.stable.created_by, actor.id());
@@ -374,6 +381,7 @@ mod tests {
                 submitted.submission_lines.iter().map(|line| line.line_no).collect::<Vec<_>>(),
                 line_nos
             );
+
             assert_eq!(submitted.approval.ports.document_type, document_type);
             assert_eq!(submitted.approval.snapshot.total_amount, Some(Amount::from_str(gross).unwrap()));
             assert_eq!(
@@ -381,6 +389,7 @@ mod tests {
                 Some(Quantity::from_str(quantity).unwrap())
             );
             assert_eq!(submitted.approval.workflow_action.actor_id, actor.id());
+
             assert_eq!(submitted.create_audit.receipt.base.id, identity.audit_id);
             assert_eq!(submitted.create_audit.receipt.fingerprint, identity.fingerprint);
             assert_eq!(
@@ -405,6 +414,7 @@ mod tests {
         let context = context(&creation);
         creation.working_copy.abandon().unwrap();
         creation.order.commercial_status = CommercialStatus::Voided;
+
         let result = prepare_submitted_creation(creation, context, &identity(&actor), &actor);
         assert!(matches!(result, Err(Error::Logic(CoreError::InvalidStateTransition { from, to }))
             if from == "Abandoned" && to == "Submitted"));
@@ -420,6 +430,7 @@ mod tests {
         for line in &mut creation.working_copy_lines {
             line.sku_id = None;
         }
+
         let result = prepare_submitted_creation(creation, context, &identity(&actor), &actor);
         assert!(matches!(result, Err(Error::Logic(CoreError::LogicError(message)))
             if message == "第 2 行缺少商品字段组"));

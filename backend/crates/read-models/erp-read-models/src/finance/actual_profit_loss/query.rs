@@ -37,6 +37,7 @@ impl ProfitLossQuery {
         {
             return invalid("不支持该盈亏分组");
         }
+
         if self.page == 0 || self.page > 1_000_000 || ![20, 50, 100].contains(&self.page_size) {
             return invalid("分页参数无效");
         }
@@ -46,9 +47,11 @@ impl ProfitLossQuery {
         if self.scope_version.as_ref().is_some_and(|version| version.len() > 128) {
             return invalid("范围版本无效");
         }
+
         self.validate_sort()?;
         self.validate_text()?;
         self.validate_attribution_group()?;
+
         let from = parse_date(&self.from)?;
         let to = parse_date(&self.to)?;
         if to < from || (to - from).num_days() > 366 {
@@ -107,6 +110,7 @@ impl ProfitLossQuery {
                 return invalid("筛选文本过长");
             }
         }
+
         for code in self.cost_codes() {
             if !cost_types().iter().any(|t| t.as_str() == code) {
                 return invalid("成本类型无效");
@@ -191,6 +195,7 @@ mod tests {
             chrono::DateTime::from_timestamp(q.validate().unwrap().from, 0).unwrap().to_rfc3339(),
             "2026-08-31T16:00:00+00:00"
         );
+
         q.period_basis = "cost_occurred_date".into();
         assert!(q.validate().is_err());
         q.period_basis = PERIOD_BASIS.into();
@@ -214,6 +219,7 @@ mod tests {
             page_size: 20,
             ..Default::default()
         };
+
         match q.validate() {
             Err(crate::Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED"));

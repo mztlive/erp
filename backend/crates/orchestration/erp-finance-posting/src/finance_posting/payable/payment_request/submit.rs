@@ -45,6 +45,7 @@ pub(super) async fn create_and_submit(
 ) -> Result<PurchasePaymentRequest> {
     let draft = PurchasePaymentRequest::new(id_generator::next_id(), data, actor.id())?;
     let draft = draft::create_draft(db, rbac, draft, actor, executor).await?;
+
     let req = SubmitPurchasePaymentRequest {
         resubmission_reason: None,
         expected_version: draft.base.version,
@@ -84,9 +85,9 @@ impl PurchasePaymentRequestProcess {
             &req.idempotency_key,
             payload,
         )?;
+
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-
         let response_actor = actor.clone();
         let actor = actor.clone();
         let id = id.to_owned();
@@ -111,6 +112,7 @@ impl PurchasePaymentRequestProcess {
                 })
             })
             .await;
+
         self.finish_command(result, &recovery, &response_actor, "submit", &response_id).await
     }
 
@@ -136,6 +138,7 @@ impl PurchasePaymentRequestProcess {
             Err(error) => return Err(error),
         };
         let unknown = matches!(original, Error::OutcomeUnknown(_));
+
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let actor = actor.clone();
@@ -159,6 +162,7 @@ impl PurchasePaymentRequestProcess {
                 })
             })
             .await;
+
         match recovered {
             Ok(Some(request)) => Ok(request),
             Ok(None) => Err(original),
@@ -180,6 +184,7 @@ async fn bind(
             .approval_binding
             .ok_or_else(|| Error::ConflictError("付款申请缺少发布的审批定义".into()));
     }
+
     let command = BindPublishedDefinitionCommand {
         document_type: DocumentType::PurchasePaymentRequest,
         business_object_id: request.base.id.clone(),
@@ -192,6 +197,7 @@ async fn bind(
         .bind_document(db, &command, actor, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("请先发布采购付款申请审批流程".into()))?;
+
     let mut document: BusinessDocument = new_registered_document(
         &request.base.id,
         DocumentType::PurchasePaymentRequest,
@@ -212,6 +218,7 @@ impl SubmitWrite<'_> {
         let Self { db, rbac, actor, .. } = *self;
         let now = Instant::now();
         let writes = self.prepare_start_plan(request, binding, now, executor).await?;
+
         db.bpm_workflow().insert_command_receipt(&writes.receipt, executor).await?;
         if request.submission_version == 1
             && db
@@ -229,10 +236,12 @@ impl SubmitWrite<'_> {
         {
             return Err(Error::ConflictError("申请审批启动状态已变化".into()));
         }
+
         request.approval_instance_id = Some(writes.instance.base.id.clone());
         db.purchase_payment_requests().update(request, executor).await?;
         let submission = PurchasePaymentRequestSubmissionSnapshot::freeze(request)?;
         db.purchase_payment_request_snapshots().create(&submission, executor).await?;
+
         let snapshot = snapshot_payload(request, actor, now)?;
         let spec = adapter_spec_of(DocumentType::PurchasePaymentRequest)?;
         start_approval::persist_runtime_writes(
@@ -250,6 +259,7 @@ impl SubmitWrite<'_> {
             executor,
         )
         .await?;
+
         assign_approval_due(db, request, &writes, executor).await
     }
 }
@@ -269,6 +279,7 @@ async fn assign_approval_due(
     if tasks.is_empty() || tasks.len() > 1 + execution.additional_assignees.len() {
         return Err(Error::ConflictError("申请入口审批任务不唯一".into()));
     }
+
     for mut task in tasks {
         task.due_at = Some(payment_due_at(request.data.desired_payment_date)?);
         db.work_items().update(&mut task, executor).await?;
@@ -293,6 +304,7 @@ impl SubmitWrite<'_> {
         if let Some(id) = receipts.committed_resource_id(command, executor).await? {
             return Ok(id);
         }
+
         let sources = require_sources(db, rbac, &request, actor, "submit", executor).await?;
         ensure_version(&request, req.expected_version)?;
         let submission =
@@ -300,8 +312,10 @@ impl SubmitWrite<'_> {
                 .await?;
         request.submit(submission)?;
         db.purchase_payment_requests().update(&mut request, executor).await?;
+
         let binding = bind(db, rbac, &request, actor, executor).await?;
         self.start(&mut request, &binding, executor).await?;
+
         let audit = actor.clone().resource_log(
             "purchase_payment_request.submit",
             "purchase_payment_request",
@@ -324,6 +338,7 @@ impl SubmitWrite<'_> {
         let Self { db, rbac, req, actor, .. } = *self;
         let graph = start_approval::load_bound_definition_graph_with_executor(db, binding, executor).await?;
         let graph = resolve_approvers(db, &rbac.authorization, graph, actor.id(), executor).await?;
+
         let context =
             BindingRevalidationContext::new(request.payer_party_id.clone(), request.created_by.clone())
                 .with_business_org_unit_id(request.org_unit_id.clone());
@@ -338,6 +353,7 @@ impl SubmitWrite<'_> {
         if graph.nodes.iter().any(|node| node.has_participant(&request.created_by)) {
             return Err(Error::ConflictError("付款申请人不得审批本人申请，请配置合格财务审批人".into()));
         }
+
         let input = start_approval::build_document_start_input(start_approval::DocumentStartInput {
             resubmission_reason: req.resubmission_reason.as_deref(),
             document_type: DocumentType::PurchasePaymentRequest,

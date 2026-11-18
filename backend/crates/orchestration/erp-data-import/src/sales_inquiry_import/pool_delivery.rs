@@ -41,6 +41,7 @@ pub(super) fn delivery_rows(
     for row in rows.iter_mut().filter(|row| row.number > 1) {
         resolve_row(row, &sources, errors);
     }
+
     Ok(data_rows(rows, DELIVERY_SHEET, &HEADERS, errors)
         .into_iter()
         .map(|row| Row {
@@ -61,6 +62,7 @@ fn source_products(rows: &[Row]) -> Result<BTreeMap<String, SourceProduct>> {
         .iter()
         .map(|name| header.cells.iter().position(|cell| cell.value == *name).ok_or_else(missing_source))
         .collect::<Result<Vec<_>>>()?;
+
     let mut sources = BTreeMap::new();
     for row in rows.iter().filter(|row| row.number > 2) {
         if row.cells.iter().all(|cell| cell.value.is_empty() && !cell.formula) {
@@ -109,6 +111,7 @@ fn resolve_row(
             );
             continue;
         };
+
         let value = if source.quantity.is_empty() {
             ""
         } else {
@@ -122,6 +125,7 @@ fn resolve_row(
         *cell = Cell { value: value.into(), text: true, ..Default::default() };
         keys.push(key);
     }
+
     if let Some(key) = keys.first() {
         let source = &sources[key];
         let sku = row.cells.get(1).map_or("", |cell| cell.value.as_str());
@@ -197,6 +201,7 @@ mod tests {
     fn deselection_clears_automatic_values_but_preserves_entered_address_for_validation() {
         let mut errors = vec![];
         assert!(parse_row(&sources(""), automatic_row(8), &mut errors).is_empty());
+
         let mut row = automatic_row(8);
         row.cells[3] = text("收件人");
         row.cells[4] = text("0012345");
@@ -230,11 +235,13 @@ mod tests {
         let mut errors = vec![];
         parse_row(&sources("2"), row, &mut errors);
         assert!(errors.iter().any(|error| error.column == "配送数量"));
+
         let mut row = automatic_row(8);
         row.cells[1] = text("other-sku");
         let mut errors = vec![];
         parse_row(&sources("2"), row, &mut errors);
         assert!(errors.iter().any(|error| error.message.contains("地址错配")));
+
         let mut errors = vec![];
         parse_row(&sources("2")[..1], automatic_row(8), &mut errors);
         assert!(errors.iter().any(|error| error.message.contains("已从选品页移除")));
@@ -298,6 +305,7 @@ mod tests {
         let quantity = &rows[0].cells[7];
         assert!(!quantity.text && quantity.numeric && quantity.formula);
         assert_eq!(quantity.formula_text.as_deref(), Some("1+1"));
+
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].column, "配送数量");
     }

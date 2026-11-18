@@ -97,6 +97,7 @@ impl PortalOfferingReadService {
         let query = portal_query(&actor.supplier_id, params)?;
         let bundle = repository_page(&self.db, &query, &mut NoTransaction).await?;
         let page = page_view(bundle, &query);
+
         let mut items = Vec::with_capacity(page.items.len());
         for view in page.items {
             items.push(self.external_view(view, &mut NoTransaction).await?);
@@ -113,6 +114,7 @@ impl PortalOfferingReadService {
     /// 不存在或属于其他供应商时返回相同 `NotFound`。仓储或下层读取失败会返回对应错误。
     pub async fn offering(&self, actor: &PortalActor, id: &str) -> Result<PortalOfferingView> {
         self.require_owned(actor, id, &mut NoTransaction).await?;
+
         let query = SupplierOfferingListQuery {
             supplier_id: Some(SupplierAccountId::new(&actor.supplier_id)),
             offering_ids: Some(vec![SupplierOfferingId::new(id)]),
@@ -133,6 +135,7 @@ impl PortalOfferingReadService {
     /// 不存在、越权或仓储失败时拒绝。
     pub async fn revisions(&self, actor: &PortalActor, id: &str) -> Result<Vec<PortalRevisionView>> {
         self.require_owned(actor, id, &mut NoTransaction).await?;
+
         let revisions = self
             .db
             .supplier_offering_revisions()

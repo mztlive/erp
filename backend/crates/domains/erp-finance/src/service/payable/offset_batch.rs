@@ -46,6 +46,7 @@ pub async fn load_payable_offset_facts(
         |entry| entry.base.id.clone(),
         |_| Error::NotFound("应付分录不存在".to_string()),
     )?;
+
     let unique_account_ids = unique_account_ids_for_entries(&entries, &unique_entry_ids, |entry| {
         entry.payable_account_id.to_string()
     });
@@ -93,6 +94,7 @@ mod tests {
             |entry| entry.id.clone(),
             |_| Error::NotFound("应收分录不存在".to_string()),
         )?;
+
         let account_ids =
             unique_account_ids_for_entries(&entries, &entry_ids, |entry| entry.account_id.clone());
         let accounts = index_required_by_id(

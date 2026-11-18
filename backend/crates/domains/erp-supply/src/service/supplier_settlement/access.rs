@@ -234,6 +234,7 @@ impl SettlementAccess {
         if owner_org == "company" {
             return Err(Error::ValidationError("请先维护对账负责人的有效主属组织".into()));
         }
+
         self.authorization()?
             .service
             .require(

@@ -69,6 +69,7 @@ impl IntegrationOpsService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, query.scope_version.as_deref())?;
+
         let scope = resolve_list_scope(
             &self.data_scope,
             actor,
@@ -79,6 +80,7 @@ impl IntegrationOpsService {
             executor,
         )
         .await?;
+
         let operator_difference_ids =
             self.operator_difference_ids(&query.operator_user_ids, executor).await?;
         let filter = difference_filter(query, scope.owner_org_unit_ids, operator_difference_ids);
@@ -87,6 +89,7 @@ impl IntegrationOpsService {
             .reconciliation_differences()
             .search_differences(&filter, &scope.read_scope, executor)
             .await?;
+
         let total = page.total;
         let items = project_difference_rows(self, page.items, executor).await?;
         Ok((difference_list_view(total, items, &filter, scope.meta), scope.read_scope))
@@ -147,7 +150,6 @@ pub fn prepare_difference(
         },
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
-
     Ok(difference)
 }
 
@@ -203,6 +205,7 @@ async fn project_difference_rows(
         .reconciliation_difference_resolutions()
         .find_latest_by_differences(&difference_ids, executor)
         .await?;
+
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
         let (status, version) = latest_by_difference

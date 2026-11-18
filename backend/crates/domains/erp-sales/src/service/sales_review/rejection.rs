@@ -39,6 +39,7 @@ pub async fn reject_change(
     if submission.submission_no != subject_version || submission.sales_change_order_id.as_ref() != id {
         return Err(Error::ConflictError("销售变更审批提交版本已变化".into()));
     }
+
     change.reject_approval(actor_id)?;
     submission.reject(actor_id)?;
     db.sales_change_submissions().update(&mut submission, executor).await?;

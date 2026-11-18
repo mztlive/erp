@@ -98,10 +98,12 @@ impl SupplierPortalProcess {
                 Box::pin(async move {
                     let current = this.session_validate(&actor, executor).await?;
                     current.require_write()?;
+
                     let service = PortalOfferingService::new(this.db.clone());
                     if let Some(result) = service.command_result(&command, executor).await? {
                         return Ok((decode(result)?, false));
                     }
+
                     let result = write(this.clone(), current.clone(), executor).await?;
                     this.command_commit(
                         &command,
@@ -223,10 +225,12 @@ impl SupplierPortalProcess {
         self.internal_permission(actor, &action.2, executor).await?;
         let (supplier_id, command) = resolve(self.clone(), actor.clone(), executor).await?;
         self.internal_supplier(actor, &action.1, &supplier_id, executor).await?;
+
         let service = PortalOfferingService::new(self.db.clone());
         if let Some(result) = service.command_result(&command, executor).await? {
             return decode(result);
         }
+
         let result = write(self.clone(), actor.clone(), executor).await?;
         self.command_commit(&command, actor, &supplier_id, &result, executor).await?;
         Ok(result)
@@ -246,6 +250,7 @@ impl SupplierPortalProcess {
             .and_then(|v| v.as_str())
             .or_else(|| value.get("offering_id").and_then(|v| v.as_str()))
             .unwrap_or(supplier_id);
+
         let log = if command.action() == "supplier_portal.availability_update" {
             availability_log(command, actor, &value)?
         } else {
@@ -269,6 +274,7 @@ fn availability_log(
 ) -> Result<AuditLog> {
     let change: PortalAvailabilityUpdateResult =
         serde_json::from_value(value.clone()).map_err(|e| Error::Internal(e.to_string()))?;
+
     let mut changes = vec![AuditFieldChange {
         field: "availability_status".into(),
         before: availability_value(change.before.availability_status),
@@ -301,6 +307,7 @@ fn availability_log(
             }
         },
     }
+
     let context = BusinessEventContext::new(
         actor.clone(),
         registered_action(command.action(), "supplier_portal_request")?,
@@ -429,16 +436,19 @@ mod tests {
                 "rejection":{"kind":kind,"message":"原命令已封存"}
             })
         };
+
         assert!(matches!(decode::<PortalAvailabilityUpdateResult>(receipt("validation")),
             Err(Error::ValidationError(message)) if message == "原命令已封存"));
         assert!(matches!(decode::<PortalAvailabilityUpdateResult>(receipt("business")),
             Err(Error::BusinessLogicError(message)) if message == "原命令已封存"));
         assert!(matches!(decode::<PortalAvailabilityUpdateResult>(receipt("conflict")),
             Err(Error::ConflictError(message)) if message == "原命令已封存"));
+
         assert!(matches!(
             decode::<serde_json::Value>(json!({"portal_command_outcome":"rejected"})),
             Err(Error::Internal(_))
         ));
+
         let positive = json!({"offering_id":"original-offering","availability_version":2});
         assert_eq!(decode::<serde_json::Value>(positive.clone()).unwrap(), positive);
     }
@@ -459,6 +469,7 @@ mod tests {
             &json!({"quantity":null}),
         )
         .unwrap();
+
         let log = availability_log(&command, &actor, &record(None, Some("0"))).unwrap();
         let event = log.structured_event.unwrap();
         assert_eq!(event.command_id.as_deref(), Some(command.id()));
@@ -482,6 +493,7 @@ mod tests {
             &json!({"quantity":"2"}),
         )
         .unwrap();
+
         let log = availability_log(&command, &actor, &record(Some("1.5"), Some("2"))).unwrap();
         let event = log.structured_event.unwrap();
         let quantity = event.field_changes.iter().find(|c| c.field == "available_quantity").unwrap();

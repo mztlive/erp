@@ -351,9 +351,11 @@ mod tests {
         assert_eq!(draft.status, SubmissionStatus::Draft);
         assert!(draft.submitted_at.is_none());
         assert_eq!(PurchaseChangeSubmission::next_submission_no(&[old, draft.clone()]).unwrap(), "CS-000002");
+
         let before = change.clone();
         assert!(change.save_draft_target(&draft, &[], None, "invalid".into(), "buyer").is_err());
         assert_eq!(change, before);
+
         change.start_approval(PurchaseChangeSubmissionId::new("new-formal"), "new-hash", "buyer").unwrap();
         assert_eq!(change.approval_subject_version, 2);
         assert!(change.save_draft_target(&draft, &lines, None, "invalid".into(), "buyer").is_err());
@@ -379,8 +381,10 @@ mod tests {
         .unwrap();
         change.start_approval(PurchaseChangeSubmissionId::new("pcs-current"), "hash", "buyer").unwrap();
         assert!(change.ensure_current_approval_submission(&submission).is_err());
+
         submission.submit(Instant::from_unix_secs(1_700_000_000), "buyer").unwrap();
         change.ensure_current_approval_submission(&submission).unwrap();
+
         for invalid in [
             {
                 let mut value = submission.clone();
@@ -440,6 +444,7 @@ mod tests {
             PurchaseChangeSubmission::next_submission_no(std::slice::from_ref(&first)).unwrap(),
             "CS-000010"
         );
+
         assert!(first.approve().is_err());
         first.submit(Instant::from_unix_secs(1_700_000_000), "buyer-1").unwrap();
         first.approve().unwrap();

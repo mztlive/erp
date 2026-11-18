@@ -209,6 +209,7 @@ impl DepositBatchAllocation {
             remaining = remaining.checked_sub(allocated);
             allocations.push(Self { batch_id: batch.base.id.clone(), amount: allocated });
         }
+
         if remaining > Amount::zero() {
             return Err(FinanceError::BusinessLogicError("到账批次可分配额度不足".into()));
         }

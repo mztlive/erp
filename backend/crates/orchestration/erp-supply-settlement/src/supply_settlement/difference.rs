@@ -60,6 +60,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
                 })
             })
             .await;
+
         let Err(error) = result else { return result };
         let process = self.clone();
         let actor = actor.clone();
@@ -113,6 +114,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let fingerprint = difference_decision_fingerprint(&req, &conclusion);
         let audit_id =
             command_audit_id(actor.id(), "supplier_settlement.difference_decision", id, &req.idempotency_key);
+
         if let Some(result) = self
             .replay_difference_decision(
                 &audit_id,
@@ -126,11 +128,13 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         {
             return Ok(result);
         }
+
         let (mut statement, mut difference) =
             self.domain().prepare_difference_decision(id, &req, &conclusion, actor, executor).await?;
         self.data_scope
             .require_action(actor, SettlementAction::ResolveDifference, &req.statement_id, executor)
             .await?;
+
         SupplierSettlementService::new(self.db.clone())
             .persist_difference_decision(&mut statement, &mut difference, executor)
             .await?;
@@ -147,6 +151,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             executor,
         )
         .await?;
+
         Ok(SettlementDifferenceDecisionResult {
             result_status: dto::SettlementDifferenceDecisionStatus::Resolved,
             message: "结算差异正式结论已登记".to_string(),
@@ -174,6 +179,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         self.authorization
             .require(actor, &supplier_settlement::DIFFERENCE_DECIDE, AccessTarget::Operation, executor)
             .await?;
+
         let Some(stored) = self.db.supply_command_receipts().find_command(audit_id, executor).await? else {
             return Ok(None);
         };
@@ -189,9 +195,11 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             return Err(Error::Internal("结算差异决定回执类型非法".to_string()));
         };
         ensure_difference_statement(&receipt, statement_id)?;
+
         let difference = self.load_replayed_difference(difference_id, &receipt, executor).await?;
         let statement = self.domain().load_statement(&receipt.statement_id, executor).await?;
         ensure_difference_statement_version(&receipt, statement.base.version)?;
+
         Ok(Some(SettlementDifferenceDecisionResult {
             result_status: dto::SettlementDifferenceDecisionStatus::Resolved,
             message: "结算差异正式结论已登记".to_string(),
@@ -221,6 +229,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .find_by_id(&difference.statement_item_id, executor)
             .await?
             .ok_or_else(|| Error::Internal("差异决定收据引用的结算明细不存在".to_string()))?;
+
         ensure_difference_replay(
             receipt,
             item.statement_id.as_ref(),
@@ -292,6 +301,7 @@ async fn persist_difference_result(input: DifferenceWrite<'_>, executor: &mut dy
             Some("结算差异正式结论已登记".to_string()),
         )?
         .with_command_id(Some(input.command_id.to_string()))?;
+
     persist_supply_receipt(
         input.db,
         &audit,
@@ -341,13 +351,16 @@ mod replay_tests {
             operation_id: "operation-1".into(),
             idempotency_key: "decision-key".into(),
         };
+
         let attempt = process
             .decide_difference_apply("difference-1", request.clone(), &actor, &mut NoTransaction)
             .await;
         assert!(matches!(attempt, Err(Error::Internal(message)) if message == "供应链授权未接线"));
+
         let recovery =
             process.recover_difference_decision("difference-1", &request, &actor, &mut NoTransaction).await;
         assert!(matches!(recovery, Err(Error::Internal(message)) if message == "供应链授权未接线"));
+
         let replay = process
             .replay_difference_decision(
                 "audit",
@@ -369,11 +382,13 @@ mod replay_tests {
             statement_version: 2,
             difference_version: 2,
         };
+
         ensure_difference_statement(&receipt, "statement-1").unwrap();
         assert!(matches!(
             ensure_difference_statement(&receipt, "statement-2"),
             Err(Error::ConflictError(message)) if message == "差异决定幂等收据与当前结算单不一致"
         ));
+
         for version in [1, 2, 3] {
             assert_eq!(
                 ensure_difference_replay(&receipt, "statement-1", version, false).is_ok(),

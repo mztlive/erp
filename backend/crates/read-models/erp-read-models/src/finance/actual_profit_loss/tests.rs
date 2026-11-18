@@ -77,6 +77,7 @@ fn sources() -> Sources {
         lines: vec![line],
         ..Default::default()
     };
+
     cost(&mut result, "purchase", CostStage::Actual, CostType::Product, "60");
     cost(&mut result, "delivery", CostStage::Actual, CostType::Delivery, "10");
     cost(&mut result, "reduction", CostStage::Reduction, CostType::Product, "5");
@@ -114,6 +115,7 @@ fn cost(source: &mut Sources, id: &str, stage: CostStage, kind: CostType, net: &
         },
     )
     .unwrap();
+
     let allocation = CostAllocation::new(
         format!("allocation-{id}").into(),
         CostAllocationData {
@@ -126,6 +128,7 @@ fn cost(source: &mut Sources, id: &str, stage: CostStage, kind: CostType, net: &
         },
     )
     .unwrap();
+
     source.entries.push(entry);
     source.allocations.push(allocation);
 }
@@ -165,6 +168,7 @@ fn missing_cost_unfinished_delivery_and_future_facts_never_create_profit() {
     assert!(result[0].row.totals.actual_profit_loss_net.is_none());
     assert!(result[0].row.allowed_drilldowns.is_empty());
     assert!(result[0].row.coverage_blockers.iter().any(|b| b.code == "COST_FACT_MISSING"));
+
     let mut source = sources();
     source.orders[0].fulfillment_progress = FulfillmentProgress::PartiallyFulfilled;
     assert!(
@@ -174,6 +178,7 @@ fn missing_cost_unfinished_delivery_and_future_facts_never_create_profit() {
             .actual_profit_loss_net
             .is_none()
     );
+
     assert!(
         calculation::calculate(&sources(), as_of() - 20 * 86400, true).unwrap()[0]
             .row
@@ -189,6 +194,7 @@ fn pending_extra_cost_blocks_complete_profit_until_confirmed() {
     let result = calculation::calculate(&source, as_of(), true).unwrap();
     assert!(result[0].row.totals.actual_profit_loss_net.is_none());
     assert!(result[0].row.coverage_blockers.iter().any(|b| b.code == "EXTRA_COST_PENDING"));
+
     let mut source = sources();
     cost(&mut source, "freight", CostStage::Actual, CostType::Logistics, "5");
     let result = calculation::calculate(&source, as_of(), true).unwrap();
@@ -215,6 +221,7 @@ fn voucher_scope_and_excess_reduction_do_not_inflate_profit() {
             .actual_profit_loss_net
             .is_none()
     );
+
     let mut source = sources();
     cost(&mut source, "too-much", CostStage::Reduction, CostType::Product, "200");
     assert!(
@@ -230,6 +237,7 @@ fn current_revision_must_match_order_and_line_revenue() {
     let mut source = sources();
     source.revisions[0].sales_order_id = "other-order".to_owned().into();
     assert!(calculation::calculate(&source, as_of(), true).is_err());
+
     let mut source = sources();
     source.lines.clear();
     assert!(calculation::calculate(&source, as_of(), true).is_err());
@@ -244,12 +252,14 @@ fn paging_does_not_change_totals_and_export_contains_all_rows() {
             o
         })
         .collect();
+
     let mut q = query();
     q.page = 2;
     let page = projection::project(orders.clone(), &q, "2026-09-11", false, "测试范围").unwrap();
     assert_eq!(page.rows.items.len(), 5);
     assert_eq!(page.rows.total, 25);
     assert_eq!(page.totals.actual_profit_loss_net.as_deref(), Some("875.00"));
+
     let full = projection::project(orders, &q, "2026-09-11", true, "测试范围").unwrap();
     let exported = super::export::export(full);
     assert_eq!(exported.row_count, 25);
@@ -259,6 +269,7 @@ fn paging_does_not_change_totals_and_export_contains_all_rows() {
 fn cost_filter_keeps_whole_order_cost_and_grouping_never_duplicates_revenue() {
     let mut orders = calculation::calculate(&sources(), as_of(), true).unwrap();
     orders[0].row.benefit_scenarios = vec!["生日".into(), "节日".into()];
+
     let mut q = query();
     q.cost_types = Some("delivery".into());
     q.dimension = "scenario".into();
@@ -288,6 +299,7 @@ fn historical_groups_use_frozen_ids_and_preserve_unknown_contribution() {
     same_name.row.attribution_org_unit_id = Some("org-other".into());
     orders.push(same_name);
     orders.extend(calculation::calculate(&sources(), as_of(), false).unwrap());
+
     for dimension in ["attribution_user", "attribution_org"] {
         let mut q = query();
         q.dimension = dimension.into();
@@ -312,6 +324,7 @@ fn attribution_filters_intersect_before_totals() {
     other.row.attribution_user_id = Some("sales-b".into());
     other.row.row_id = "other".into();
     orders.push(other);
+
     let mut q = query();
     q.attribution_user_ids = Some(serde_json::from_value(serde_json::json!("sales-a")).unwrap());
     q.attribution_org_unit_ids = Some(serde_json::from_value(serde_json::json!("old-parent")).unwrap());
@@ -319,6 +332,7 @@ fn attribution_filters_intersect_before_totals() {
     assert_eq!(view.rows.total, 1);
     assert_eq!(view.totals.net_sales_revenue, "100.00");
     assert_eq!(view.totals.actual_profit_loss_net.as_deref(), Some("35.00"));
+
     q.attribution_org_unit_ids = Some(serde_json::from_value(serde_json::json!("current-parent")).unwrap());
     let empty = projection::project(orders, &q, "2026-09-11", true, "测试范围").unwrap();
     assert_eq!(empty.rows.total, 0);
@@ -343,6 +357,7 @@ fn group_drilldown_preserves_exact_partition_including_unknown_attribution() {
     unknown.row.row_id = "unknown-order".into();
     unknown.row.attribution_org_unit_id = None;
     orders.extend([child, unknown]);
+
     let mut q = query();
     for group in ["attribution_org:parent", "attribution_org:child", "attribution_org:"] {
         q.attribution_group = Some(group.into());
@@ -352,11 +367,13 @@ fn group_drilldown_preserves_exact_partition_including_unknown_attribution() {
         assert_eq!(view.totals.net_sales_revenue, "100.00");
         assert!(view.empty_reason.is_none());
     }
+
     q.attribution_group = Some("attribution_org:unavailable".into());
     let empty = projection::project(orders, &q, "2026-09-11", true, "范围").unwrap();
     assert_eq!(empty.empty_reason.as_deref(), Some("filtered_empty"));
     let empty = projection::project(Vec::new(), &q, "2026-09-11", true, "范围").unwrap();
     assert_eq!(empty.empty_reason.as_deref(), Some("no_data"));
+
     for group in ["created_by:user", "attribution_org:a,b", "attribution_org:$where"] {
         q.attribution_group = Some(group.into());
         assert!(q.validate().is_err());
@@ -405,12 +422,14 @@ fn response_shape_preserves_decimal_strings_and_missing_profit() {
     });
     incomplete.finish().unwrap();
     orders.push(incomplete);
+
     let view =
         projection::project(orders, &query(), "2026-09-11T10:00:00+00:00", false, "测试财务范围").unwrap();
     let json = serde_json::to_value(&view).unwrap();
     assert_eq!(json["totals"]["actualProfitLossNet"], "35.00");
     assert!(json["rows"]["items"][1].get("actualProfitLossNet").is_none());
     assert_eq!(json["coverage"]["coverageRate"], "50.00%");
+
     if std::env::var_os("ERP_PROFIT_LOSS_QA").is_some() {
         println!("PROFIT_LOSS_QA={json}");
     }
@@ -424,6 +443,7 @@ fn literal_keyword_filters_do_not_interpret_regular_expressions() {
     q.q = Some(".[1]".into());
     let view = projection::project(orders.clone(), &q, "2026-09-11", false, "测试范围").unwrap();
     assert_eq!(view.rows.total, 1);
+
     q.q = Some(".*".into());
     let empty = projection::project(orders, &q, "2026-09-11", false, "测试范围").unwrap();
     assert_eq!(empty.rows.total, 0);

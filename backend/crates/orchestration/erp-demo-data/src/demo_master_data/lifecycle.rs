@@ -61,6 +61,7 @@ async fn restore_product_records(
         .await?
         .ok_or_else(|| Error::NotFound("演示商品已不在库中，无法恢复".into()))?;
     let skus = load_skus(db, product_id, sku_ids, executor).await?;
+
     if product.base.deleted_at != NOT_DELETED_TIMESTAMP {
         db.products().restore(&mut product, executor).await?;
     }
@@ -83,6 +84,7 @@ async fn load_skus(
         .skus()
         .find_many_by_field_including_deleted("product_id", product_id.to_string(), executor)
         .await?;
+
     for sku_id in sku_ids {
         if skus.iter().any(|sku| sku.base.id == *sku_id) {
             continue;
@@ -217,6 +219,7 @@ where
             authorization
                 .require(&actor, &demo_master_data::APPLY, AccessTarget::Operation, executor)
                 .await?;
+
             let repository = repository(db);
             let mut entity = repository
                 .find_by_id_including_deleted(&id, executor)

@@ -90,6 +90,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         if !statement.is_editable() {
             return Err(Error::Forbidden("仅当前经办人可为待提交的结算单选择复核人".into()));
         }
+
         let accounts =
             self.work_items.identity.directory().accounts_by_kind(AccountKind::Admin, executor).await?;
         let mut options = Vec::new();
@@ -106,6 +107,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
                 });
             }
         }
+
         options.sort_by(|a, b| a.display_name.cmp(&b.display_name).then_with(|| a.account.cmp(&b.account)));
         Ok(options)
     }
@@ -141,6 +143,7 @@ pub(super) async fn ensure_reviewer(
     if reviewer_id == preparer_id {
         return Err(Error::Forbidden("所选人员不能复核本单，请重新选择".into()));
     }
+
     let actor = AuditActor::new(account.id, account.login_account, account.kind);
     if qualified_reviewer(authorization, &actor, executor).await? {
         return Ok(());

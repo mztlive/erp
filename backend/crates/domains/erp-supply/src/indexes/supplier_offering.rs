@@ -125,6 +125,7 @@ fn sku_delivery_coverage_indexes() -> Vec<IndexModel> {
         })
         .collect::<Vec<_>>();
     indexes.push(named_index("idx_sku_delivery_coverages_suppliers", doc! { "supplier_ids": 1 }));
+
     indexes.push(partial_index(
         "idx_sku_delivery_coverages_dirty",
         doc! { "dirty": 1 },
@@ -215,8 +216,10 @@ mod tests {
         {
             assert!(coverage.iter().any(|index| index.keys == doc! { field: 1 }), "{field}");
         }
+
         let dirty = coverage.iter().find(|index| index.keys == doc! { "dirty": 1 }).unwrap();
         assert_eq!(dirty.options.as_ref().unwrap().partial_filter_expression, Some(doc! { "dirty": true }));
+
         assert!(offering_indexes().iter().any(|index| index.keys == doc! { "updated_at": 1 }));
         assert!(availability_indexes().iter().any(|index| index.keys == doc! { "updated_at": 1 }));
         assert!(delivery_template_indexes().iter().any(|index| index.keys == doc! { "updated_at": 1 }));

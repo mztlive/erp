@@ -107,6 +107,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     ) -> Result<Vec<WorkItemReassignCandidateView>> {
         let item = self.managed_item(id, actor, executor).await?;
         let tasks = self.cascade_tasks(&item, executor).await?;
+
         let accounts = self.identity.directory().accounts_by_kind(AccountKind::Admin, executor).await?;
         let mut candidates = Vec::new();
         for account in accounts {
@@ -124,12 +125,14 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                 account: account.login_account,
             });
         }
+
         candidates.sort_by(|left, right| {
             left.display_name
                 .cmp(&right.display_name)
                 .then_with(|| left.account.cmp(&right.account))
                 .then_with(|| left.user_id.cmp(&right.user_id))
         });
+
         // 候选逐项检查可能跨越授权到期边界，交付前重验管理目标。
         self.authorization.require(actor, &work_item::MANAGE, id, executor).await?;
         Ok(candidates)
@@ -210,6 +213,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         let target_user_id = required_text(&req.target_user_id, "目标用户不能为空")?;
         let reason = required_text(&req.reason, "转交原因不能为空")?;
         let expected_version = expected_task_version(&req.expected_task_version)?;
+
         let receipt = CommandReceipt::from_resource_parts(
             IDEMPOTENCY_AUDIT_PREFIX,
             actor.id(),
@@ -234,9 +238,11 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         if let Some(replayed) = self.idempotent_replay(&command.receipt, &item, executor).await? {
             return Ok(WorkItemWriteOutcome::Updated(Box::new(replayed)));
         }
+
         if item.base.version != command.expected_version {
             return Ok(WorkItemWriteOutcome::VersionConflict);
         }
+
         let assignee_kind = self.assignment_kind(&command.target_user_id, &item, executor).await?;
         let item = self
             .reassign_with_assignment_policy_audit(
@@ -311,9 +317,11 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                 executor,
             )
             .await?;
+
         self.ensure_assignment_candidate_access_with_executor(item, executor)
             .await
             .map_err(task_read_error)?;
+
         self.ensure_assignment_separation(user_id, item, allow_current_owner, executor).await
     }
 

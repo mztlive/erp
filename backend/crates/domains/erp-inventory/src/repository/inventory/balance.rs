@@ -537,11 +537,13 @@ impl<'a> InventoryRepository<'a> {
             return Err(InventoryError::ValidationError("库存授权模型与查询集合不匹配".into()));
         }
         access.ensure_current(executor)?;
+
         let mut stages = access.stages().to_vec();
         stages.push(doc! { "$match": { "id": id } });
         stages.push(doc! { "$limit": 1 });
         let collection = self.db.collection::<StockBalance>(STOCK_BALANCES);
         let mut rows = aggregate::rows(&collection, stages, executor).await?;
+
         access.ensure_current(executor)?;
         Ok(rows.pop())
     }

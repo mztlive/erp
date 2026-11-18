@@ -302,9 +302,11 @@ impl IntegrationTaskCompletionCommand {
             &self.expected_subject_version,
             &self.idempotency_key,
         )?;
+
         required(&self.decision.item_id, "业务项 ID", ID_MAX_LEN)?;
         required(&self.decision.operation_id, "操作 ID", OPERATION_ID_MAX_LEN)?;
         required(self.decision.reason_code.as_str(), "解决原因代码", REASON_CODE_MAX_LEN)?;
+
         required(&self.decision.evidence_policy_id, "证据策略 ID", ID_MAX_LEN)?;
         if self.decision.evidence_policy_version == 0 {
             return Err(Error::ValidationError("证据策略版本必须大于 0".to_string()));
@@ -312,6 +314,7 @@ impl IntegrationTaskCompletionCommand {
         required(&self.decision.policy_key.error_type, "策略错误类型", REASON_CODE_MAX_LEN)?;
         required(&self.decision.policy_key.funds_impact, "策略资金影响", REASON_CODE_MAX_LEN)?;
         optional(&self.decision.comment, "备注", COMMENT_MAX_LEN)?;
+
         validate_evidence_refs(&self.decision.evidence_refs)?;
         if self.decision.evidence_refs.is_empty() {
             return Err(Error::ValidationError("完成任务必须提供终态证据引用".to_string()));
@@ -495,6 +498,7 @@ impl DirectReconciliationCommand {
         let version = decimal_version(&self.expected_difference_version, true, "差异版本")?;
         required(&self.operation_id, "操作 ID", OPERATION_ID_MAX_LEN)?;
         required(&self.idempotency_key, "幂等键", IDEMPOTENCY_KEY_MAX_LEN)?;
+
         match &self.decision {
             DirectReconciliationDecision::NonTerminalAction { evidence_refs, comment, .. } => {
                 optional(comment, "备注", COMMENT_MAX_LEN)?;
@@ -514,6 +518,7 @@ impl DirectReconciliationCommand {
                 }
                 required(registered_reason_id, "注册原因 ID", ID_MAX_LEN)?;
                 optional(comment, "备注", COMMENT_MAX_LEN)?;
+
                 validate_evidence_refs(evidence_refs)?;
                 if evidence_refs.is_empty() {
                     return Err(Error::ValidationError("终态对账必须提供证据引用".to_string()));

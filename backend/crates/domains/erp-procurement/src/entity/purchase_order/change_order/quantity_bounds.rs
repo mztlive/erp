@@ -118,6 +118,7 @@ impl ChangeQuantityBound {
                 self.fulfilled_quantity.to_decimal().normalize()
             )));
         }
+
         let max = self.max_quantity()?;
         if value > max.to_decimal() {
             return Err(Error::from(self.above_max_message(max)));
@@ -178,6 +179,7 @@ pub fn build_change_quantity_bounds(
                 .map(ToString::to_string)
                 .ok_or_else(|| Error::from("采购商品行缺少销售稳定行"))?;
             let base_quantity = line.quantity.ok_or_else(|| Error::from("采购商品行缺少数量"))?;
+
             let current =
                 coverage.lines.iter().find(|row| row.revision_line.sales_order_line_id.as_ref() == stable_id);
             let (sales_quantity, covered) =
@@ -195,6 +197,7 @@ pub fn build_change_quantity_bounds(
             })
         })
         .collect::<Result<Vec<_>>>()?;
+
     bounds.sort_by_key(|bound| bound.line_no);
     Ok(bounds)
 }
@@ -226,6 +229,7 @@ pub fn validate_change_quantities(
         }
         bound.check(*value)?;
     }
+
     if seen.len() != bounds.len() {
         return Err(Error::from("原采购商品须保留记录；不再采购的商品请把数量改为 0"));
     }
@@ -276,7 +280,6 @@ mod tests {
     #[test]
     fn unaffected_line_keeps_base_and_caps_increase_by_capacity() {
         let line = bound("5", "10", "3", "0", false);
-
         assert_eq!(line.max_quantity().unwrap(), qty("7"));
         line.check(qty("7")).unwrap();
         line.check(qty("0")).unwrap();
@@ -289,7 +292,6 @@ mod tests {
     #[test]
     fn unaffected_overcovered_line_may_keep_base_quantity() {
         let line = bound("5", "4", "2", "0", false);
-
         assert_eq!(line.max_quantity().unwrap(), qty("5"));
         line.check(qty("5")).unwrap();
         assert!(line.check(qty("6")).is_err());
@@ -314,7 +316,6 @@ mod tests {
     #[test]
     fn fulfilled_quantity_is_floor_and_wins_over_capacity() {
         let line = bound("5", "0", "0", "2", true);
-
         assert_eq!(line.min_quantity(), qty("2"));
         assert_eq!(line.max_quantity().unwrap(), qty("2"));
         line.check(qty("2")).unwrap();

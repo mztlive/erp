@@ -60,6 +60,7 @@ impl SupplierFulfillmentListReadService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
+
         let snapshot = self.list_snapshot(&query, actor).await?;
         ScopeVersion::new(params.scope_version.as_deref(), EmptyScopeVersion::Provided)
             .verify(&snapshot.scope_version)
@@ -107,10 +108,12 @@ async fn build_snapshot(
     filter.scope = Some(context.clone());
     apply_org_filter(&access, query, &mut filter, executor).await?;
     apply_handler_filter(domain, query, &mut filter, executor).await?;
+
     let mut page = domain.search_fulfillment_orders(filter, executor).await?;
     attach_handlers(domain, &mut page.items, executor).await?;
     fingerprint(&mut context.scope_version, page.total);
     let names = account_display_names(db, &page.items, executor).await?;
+
     context.validate(executor).await?;
     Ok(ListSnapshot {
         page: PageView {
@@ -142,6 +145,7 @@ async fn apply_org_filter(
     if query.include_descendants == Some(true) && org_ids.as_slice().is_empty() {
         return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
     }
+
     let expanded = access
         .expand_org_units(org_ids.as_slice(), query.include_descendants.unwrap_or(false), executor)
         .await?;
@@ -276,15 +280,18 @@ mod tests {
             organization_version: 1,
             as_of: "2026-09-23T00:00:00Z".to_string(),
         });
+
         let json = serde_json::to_value(&view).expect("list view serializes");
         assert_eq!(json["items"][0]["follow_up_user_id"], "buyer-1");
         assert_eq!(json["items"][0]["follow_up_user_name"], "跟进甲");
         assert_eq!(json["items"][0]["handler_user_id"], "handler-1");
         assert_eq!(json["items"][0]["handler_user_name"], "处理乙");
+
         assert_eq!(json["items"][1]["follow_up_user_id"], "missing");
         assert!(json["items"][1].get("follow_up_user_name").is_none());
         assert!(json["items"][1].get("handler_user_id").is_none());
         assert!(json["items"][1].get("handler_user_name").is_none());
+
         assert_eq!(json["ownership_basis"], "fulfillment_follow_up");
         assert!(json.get("owner_options").is_none());
         assert!(json.get("handler_options").is_none());

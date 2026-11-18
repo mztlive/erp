@@ -41,6 +41,7 @@ impl SupplierCredentialAuthorizationRequest {
         if !(1..=300).contains(&self.claim.lease_seconds) || self.expected_version == Some(0) {
             return Err(Error::ValidationError("授权租期或所见版本无效".into()));
         }
+
         let seconds = i64::try_from(self.claim.lease_seconds)
             .map_err(|_| Error::ValidationError("授权租期超限".into()))?;
         self.claim

@@ -349,6 +349,7 @@ mod tests {
     #[test]
     fn sort_whitelist_rejects_unknown_fields() {
         assert!(normalize_sort(&Some("file_name".to_string()), &None, &["created_at"]).is_err());
+
         let (field, direction) = normalize_sort(
             &Some(" updated_at ".to_string()),
             &Some(" asc ".to_string()),

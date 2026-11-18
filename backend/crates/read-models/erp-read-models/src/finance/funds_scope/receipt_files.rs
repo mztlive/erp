@@ -30,8 +30,10 @@ impl FundsAccess {
                         this.customer_receipt_detail_read(&id, &actor, executor).await?;
                     let receipt = receipt.data;
                     ensure_whole_receipt(receipt.permission_limited)?;
+
                     let files =
                         financial_document_files(&this.db, &id, &receipt.receipt_no, executor).await?;
+
                     authorization.deliver(executor).await?;
                     Ok(files)
                 })

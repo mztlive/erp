@@ -160,9 +160,11 @@ mod tests {
             hash.finish()
         };
         assert_eq!(rules.iter().map(hash).collect::<BTreeSet<_>>().len(), rules.len());
+
         let mut golden = Fingerprint::new("rule-test-v2");
         golden.sequence(&rules, Fingerprint::rule);
         assert_eq!(golden.finish(), "3f0505d708daeb3790d15a777d654016");
+
         let branches = vec![rules[4].clone(), rules[5].clone()];
         let reversed = branches.iter().rev().cloned().collect();
         assert_eq!(hash(&AccessRule::All(branches.clone())), hash(&AccessRule::All(reversed)));
@@ -206,8 +208,10 @@ mod tests {
             hash.facts(facts);
             hash.finish()
         };
+
         let original = hash(&model, &facts);
         assert_eq!(original, "1d4065d4218375da9e6d5b8c6eeda8a4");
+
         let changed_models = [
             QueryModel { key: QueryModelKey::parse("other").unwrap(), ..model.clone() },
             QueryModel { resource: "other".into(), ..model.clone() },
@@ -220,6 +224,7 @@ mod tests {
         for changed in changed_models {
             assert_ne!(original, hash(&changed, &facts));
         }
+
         let changed_facts = [
             MappingFacts { version: None, ..facts.clone() },
             MappingFacts { version: Some("other".into()), ..facts.clone() },

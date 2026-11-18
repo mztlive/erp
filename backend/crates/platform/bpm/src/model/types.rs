@@ -762,6 +762,7 @@ mod tests {
                 "CANCEL_BLOCKED",
             ]
         );
+
         let mut codes = ApprovalCommandKind::ALL.map(ApprovalCommandKind::as_str);
         codes.sort_unstable();
         assert!(codes.windows(2).all(|pair| pair[0] != pair[1]));
@@ -775,12 +776,15 @@ mod tests {
         assert!(!ApprovalDefinitionStatus::Draft.is_published());
         assert!(ApprovalDefinitionStatus::Published.is_published());
         assert!(!ApprovalDefinitionStatus::Retired.is_published());
+
         assert_eq!(ApprovalTransitionEvent::Reject.as_str(), "REJECT");
         assert_eq!(ApprovalTerminalResult::Approved.as_str(), "APPROVED");
         assert_eq!(ApprovalDecision::Approve.as_str(), "APPROVE");
+
         assert_eq!(ApprovalProcessInstanceStatus::Blocked.as_str(), "BLOCKED");
         assert!(!ApprovalProcessInstanceStatus::Running.is_terminal());
         assert!(ApprovalProcessInstanceStatus::Approved.is_terminal());
+
         assert!(ApprovalNodeExecutionStatus::Approved.is_ended());
         assert!(!ApprovalNodeExecutionStatus::Blocked.is_ended());
         assert_eq!(ApprovalExecutionEndReason::AssigneeRecovered.as_str(), "ASSIGNEE_RECOVERED");

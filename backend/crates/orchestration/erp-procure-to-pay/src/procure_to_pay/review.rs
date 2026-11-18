@@ -76,18 +76,22 @@ impl PurchaseOrderProcess {
             submission_id.as_ref(),
             actor.id(),
         )?;
+
         let submission = self.pending_submission(&submission_id).await?;
         let submission_lines =
             self.db.purchase_order().list_submission_lines(&submission_id, &mut NoTransaction).await?;
+
         let revision_no = self.domain().next_revision_no(&order).await?;
         let (revision, revision_lines) = self
             .domain()
             .build_effective_revision(&order, &submission, &submission_lines, revision_no)
             .await?;
+
         let payable =
             self.build_payable(&order, &submission, &submission_lines, &revision.base.id, actor.id()).await?;
         let cost_entries =
             self.build_confirmed_cost_entries(&submission, &submission_lines, revision_no).await?;
+
         let result = formalized_order_result(&order, &revision, &payable.1.base.id);
         Ok(PreparedFormalizedOrder {
             persist: FormalizedOrderPersist {
@@ -143,6 +147,7 @@ impl PurchaseOrderProcess {
                 super::adapters::payment_term::parse_snapshot,
             )
             .map_err(Error::Logic)?;
+
         Ok(erp_finance::service::payable::purchase_initial::prepare(
             erp_finance::service::payable::purchase_initial::InitialPurchasePayable {
                 order_id: &order.base.id,
@@ -180,6 +185,7 @@ impl PurchaseOrderProcess {
                 input_tax_rate: line.input_tax_rate,
             })
             .collect::<Vec<_>>();
+
         Ok(erp_finance::service::cost::purchase_initial::prepare(
             submission.purchase_order_id.as_ref(),
             &submission.supplier_id,
@@ -273,6 +279,7 @@ async fn create_receipt_draft_for_order(
             warehouse_id,
         },
     )?;
+
     let zero = Quantity::from_str("0").map_err(|error| Error::Internal(error.to_string()))?;
     let mut lines = Vec::with_capacity(revision_lines.len());
     for (index, line) in revision_lines.iter().enumerate() {
@@ -298,7 +305,9 @@ async fn create_receipt_draft_for_order(
             .map_err(Error::Logic)?,
         );
     }
+
     db.fulfillment().create_purchase_receipt_with_lines(&receipt, &lines, executor).await?;
+
     ensure_fulfillment_task(
         db,
         &ports.task_identity,
@@ -323,8 +332,10 @@ async fn create_delivery_draft_for_order(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let covered = create_api_delivery_drafts(db, &ports.task_identity, order, allocations, executor).await?;
+
     let delivery = prepare_direct_delivery(db, order).await?;
     let delivery_id = DeliveryId::new(delivery.base.id.clone());
+
     let zero = Quantity::from_str("0").map_err(|error| Error::Internal(error.to_string()))?;
     let mut lines = Vec::with_capacity(revision_lines.len());
     for (index, line) in revision_lines.iter().enumerate() {
@@ -359,7 +370,9 @@ async fn create_delivery_draft_for_order(
     if lines.is_empty() {
         return Ok(());
     }
+
     db.fulfillment().create_delivery_with_lines(&delivery, &lines, executor).await?;
+
     ensure_fulfillment_task(db, &ports.task_identity, FulfillmentTaskObject::Delivery(&delivery), executor)
         .await?;
     Ok(())
@@ -392,6 +405,7 @@ async fn create_service_fulfillment_draft_for_order(
         placeholder: "待填写".to_string(),
         actor_id,
     };
+
     for line in revision_lines {
         if line.line_type != PurchaseLineType::ItemService {
             continue;
@@ -483,12 +497,14 @@ impl FormalizedOrderPersist {
             cost_entries,
         } = persist;
         let actor_id = actor.id().to_string();
+
         revalidate_payment_subject(db, &submission.payment_subject, session).await?;
         erp_procurement::service::purchase_order::formalization::ensure_review_sources(
             &submission,
             &submission_lines,
         )?;
         validate_revision_delivery(db, &order, &revision_lines, session).await?;
+
         let allocations = prepare_current_sales_allocations(db, &order, &mut revision_lines, session).await?;
         let order_mut = erp_procurement::service::purchase_order::formalization::persist_formalized_order(
             db,
@@ -609,7 +625,6 @@ impl FormalizedPurchaseEffects {
             )
             .await?;
         }
-
         Ok(())
     }
 }
@@ -667,6 +682,7 @@ impl ServiceDraftContext<'_> {
             },
         )
         .map_err(Error::Logic)?;
+
         db.service_fulfillments().create(&record, executor).await?;
         ensure_fulfillment_task(
             db,

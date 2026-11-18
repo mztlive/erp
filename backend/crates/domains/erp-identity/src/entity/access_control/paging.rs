@@ -44,6 +44,7 @@ impl PageParams {
         if page == 0 || !(1..=100).contains(&page_size) {
             return Err(Error::ValidationError("页码必须大于0，分页大小必须在1-100之间".into()));
         }
+
         let (field, sort_dir) = normalize_sort(sort_by, sort_dir, &["created_at", "updated_at"])?;
         let sort_by = match field {
             "updated_at" => TimeSort::UpdatedAt,
@@ -59,11 +60,13 @@ mod tests {
     #[test]
     fn pagination_rejects_invalid_values_and_preserves_defaults() {
         assert_eq!(PageParams::parse(&None, &None, None, None).unwrap(), PageParams::default());
+
         for (page, size) in [(0, 20), (1, 0), (1, 101)] {
             assert!(PageParams::parse(&None, &None, Some(page), Some(size)).is_err());
         }
         assert!(PageParams::parse(&Some("actor_id".into()), &None, None, None).is_err());
         assert!(PageParams::parse(&None, &Some("invalid".into()), None, None).is_err());
+
         let parsed =
             PageParams::parse(&Some(" updated_at ".into()), &Some("asc".into()), Some(2), Some(100)).unwrap();
         assert_eq!(

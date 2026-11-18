@@ -50,6 +50,7 @@ impl SalesChangeProcess {
         let (access, scope) = SalesAccess::new(self.db.clone(), self.authorization.clone())
             .resolve(actor, &internal::SALES_CHANGE_DRAFT_READ, executor)
             .await?;
+
         let change = self
             .db
             .sales_change_orders()
@@ -65,6 +66,7 @@ impl SalesChangeProcess {
         if order.current_revision_id() != Some(change.base_revision_id.as_ref()) {
             return Err(Error::ConflictError("销售单当前版本已变化，请重新核对变更基准".into()));
         }
+
         let view = SalesReviewService::new(self.db.clone()).draft(id, executor).await?;
         access.validate(executor).await?;
         Ok(view)
@@ -97,6 +99,7 @@ impl SalesChangeProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     process.authorize_draft(&id, &actor, executor).await?;
+
                     let result = SalesReviewService::new(db.clone())
                         .save_draft(
                             &id,
@@ -106,6 +109,7 @@ impl SalesChangeProcess {
                             executor,
                         )
                         .await?;
+
                     let audit = actor.resource_log("sales_change_order.update", "sales_change_order", id)?;
                     persist_log(&db, &audit, executor).await?;
                     Ok(result)
@@ -119,6 +123,7 @@ impl SalesChangeProcess {
         self.authorization
             .require(actor, &sales_review::SALES_CHANGE_DRAFT, AccessTarget::Operation, executor)
             .await?;
+
         let change = self
             .db
             .sales_change_orders()

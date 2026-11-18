@@ -88,10 +88,12 @@ impl ReceivableProcess {
         let subject = customer_receipt_subject_ref(id)?;
         let binding = find_approval_binding(&self.db, id, executor).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
+
         let now = Instant::now();
         let snapshot_payload = build_customer_receipt_snapshot(&receipt, actor.id(), now)?;
         let organization_id = customer_receipt_responsible_org_id(&receipt)?;
         let _ = customer_receipt_object_readable(&organization_id, actor.id())?;
+
         let prepared = prepare_dispatch_start(
             &self.db,
             &self.rbac,
@@ -106,6 +108,7 @@ impl ReceivableProcess {
             executor,
         )
         .await?;
+
         Ok(CustomerReceiptStartPersistInput {
             resubmission_reason: req.resubmission_reason.clone(),
             receipt,
@@ -278,6 +281,7 @@ pub(super) async fn persist_receipt_submit(
     } else {
         apply_receipt_submit(db, rbac, input, &command, current, executor).await?
     };
+
     receipt_command_result(
         db,
         &rbac.authorization,
@@ -304,6 +308,7 @@ async fn apply_receipt_submit(
     }
     current.ensure_draft_editable()?;
     ensure_expected_version(current.base.version, input.receipt.base.version)?;
+
     let context = receipt_command_context(command, &input.actor)?;
     let receipt = persist_customer_receipt_start_apply(db, rbac, input, executor).await?;
     persist_receipt_command_success(&MongoReceiptCommandWrites { db }, command, &context, &receipt, executor)
@@ -427,6 +432,7 @@ pub(super) async fn require_allocation_sources(
             .ok_or_else(|| Error::NotFound("核销来源子账不存在".into()))?;
         sources.push(account.sales_order_id.to_string());
     }
+
     let candidate = ObjectFacts {
         resource: "customer_receipt".into(),
         owner_id: FactValue::Known(Some(receipt.created_by.clone())),
@@ -477,9 +483,11 @@ mod tests {
         };
         let command = submit_receipt("receipt", &request, "creator").unwrap();
         let fact = FinanceCommandReceipt::resource(&command, "receipt".into(), "audit-event".into()).unwrap();
+
         let replay = submit_receipt("receipt", &request, "creator").unwrap();
         assert_eq!(fact.resource_id(&replay).unwrap(), "receipt");
         assert!(ensure_committed_resource(&fact.resource_id(&replay).unwrap(), Some("other")).is_err());
+
         let mut changed_version = request.clone();
         changed_version.expected_version += 1;
         let mut changed_amount = request.clone();
@@ -492,6 +500,7 @@ mod tests {
             let command = submit_receipt("receipt", &changed, "creator").unwrap();
             assert!(matches!(fact.resource_id(&command), Err(FinanceError::ConflictError(_))));
         }
+
         let other_order = submit_receipt("other", &request, "creator").unwrap();
         assert!(matches!(fact.resource_id(&other_order), Err(FinanceError::ConflictError(_))));
         let other_actor = submit_receipt("receipt", &request, "other").unwrap();
@@ -582,6 +591,7 @@ mod tests {
                 changed_request.expected_version += 1;
             }
             let command = submit_receipt("receipt", &changed_request, "creator").unwrap();
+
             let result = replay_authorized_submit(&probe, "receipt", &command, &mut executor).await;
             if denied {
                 assert!(matches!(result, Err(Error::Forbidden(message)) if message == "原资格拒绝"));
@@ -630,6 +640,7 @@ mod tests {
             let error = recover_authorized_submit(&probe, "receipt", &command, &actor(), unknown_error())
                 .await
                 .unwrap_err();
+
             match error {
                 Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(source)) => {
                     assert_eq!(source.get_custom::<&str>(), Some(&"original submit unknown"));
@@ -648,6 +659,7 @@ mod tests {
                 calls: Mutex::new(0),
             };
             let command = submit_receipt("receipt", &request(), "creator").unwrap();
+
             let result =
                 recover_authorized_submit(&probe, "receipt", &command, &actor(), unknown_error()).await;
             if found {

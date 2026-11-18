@@ -144,6 +144,7 @@ mod tests {
         assert!(sources.contains("payable_entry_id"));
         assert!(sources.contains("allocation_action"));
         assert!(sources.contains("-1"));
+
         let gate = state().to_string();
         assert!(gate.contains("prepay_minimum_amount"));
         assert!(gate.contains("prepay_minimum_ratio"));

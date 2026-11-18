@@ -91,6 +91,7 @@ async fn finish(
 ) -> Result<()> {
     let remaining = port.refresh_sales(executor).await?;
     port.persist_task(remaining, executor).await?;
+
     port.business_audit(executor).await?;
     if mode != CompletionMode::Post {
         port.command_receipt(executor).await?;
@@ -185,6 +186,7 @@ impl AcceptanceCompletion for DatabaseCompletion<'_> {
         if receipt.actor_id() != self.actor.id() {
             return Err(Error::Forbidden("当前账号不能复用其他账号的操作号".to_string()));
         }
+
         let audit_event_id =
             self.audit_event_id.clone().ok_or_else(|| Error::Internal("验收成功事件未记录".to_string()))?;
         FulfillmentCommandReceiptService::new(self.db.clone())
@@ -353,6 +355,7 @@ mod tests {
         let expected = &mut executor as *mut TestExecutor as usize;
         assert!(!apply_projection(&mut sales, None, &mut executor).await.unwrap());
         assert!(sales.progress.is_empty());
+
         for remaining in [false, true] {
             let progress = AcceptanceProgress {
                 progress: erp_fulfillment::entity::facts::AcceptanceFulfillmentProgress::PartiallyFulfilled,
@@ -360,6 +363,7 @@ mod tests {
             };
             assert_eq!(apply_projection(&mut sales, Some(progress), &mut executor).await.unwrap(), remaining);
         }
+
         assert_eq!(sales.progress, vec![FulfillmentProgress::PartiallyFulfilled; 2]);
         assert_eq!(sales.executors, vec![expected; 2]);
     }
@@ -375,6 +379,7 @@ mod tests {
             (Local::PartiallyFulfilled, FulfillmentProgress::PartiallyFulfilled),
             (Local::Completed, FulfillmentProgress::Completed),
         ];
+
         for (local, sale) in cases {
             let projection = AcceptanceProgress { progress: local, has_remaining_eligible: true };
             assert!(apply_projection(&mut sales, Some(projection), &mut executor).await.unwrap());

@@ -72,9 +72,11 @@ impl JdVopCredentialProcess {
         let recovery = reauthorization_evidence
             .map(|evidence| reauthorization(expected_version, evidence.into(), "preview"))
             .transpose()?;
+
         let mut draft = current.clone();
         validate_import(&self.crypto, &mut draft, payload, expected_version, recovery.as_ref(), now)?;
         let draft = draft.ok_or_else(token_error)?;
+
         let mut status = JdVopCredentialStatus::from_record(current.as_ref().unwrap_or(&draft), now);
         status.version = current.as_ref().map_or(0, |record| record.base.version);
         status.expires_at = input.expires_at;

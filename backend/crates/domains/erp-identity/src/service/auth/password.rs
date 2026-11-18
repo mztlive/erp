@@ -131,6 +131,7 @@ fn verify_password_sync(secret: Option<Secret>, password: String) -> erp_core::R
         Secret::verify_password_or_dummy(None, password.as_str());
         return Ok(PasswordCheck::Mismatch);
     };
+
     let verification = Secret::verify_password_or_dummy(Some(&secret), password.as_str());
     match verification {
         PasswordVerification::Mismatch => Ok(PasswordCheck::Mismatch),
@@ -151,7 +152,6 @@ mod tests {
     #[tokio::test]
     async fn password_work_should_run_off_the_async_worker() {
         let async_thread = std::thread::current().id();
-
         let blocking_thread = run_hashing(|| Ok(std::thread::current().id())).await.unwrap();
 
         assert_ne!(async_thread, blocking_thread);
@@ -193,6 +193,7 @@ mod tests {
 
         let mismatch = verify_password(Some(secret.clone()), "wrong-password".into()).await.unwrap();
         assert!(matches!(mismatch, PasswordCheck::Mismatch));
+
         let result = verify_password(Some(secret), "password123".to_string()).await.unwrap();
         let PasswordCheck::Upgraded(secret) = result else {
             panic!("matching legacy credential should be upgraded");

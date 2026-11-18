@@ -224,12 +224,14 @@ impl SupplierCommercialProfileRevision {
             split_payment_term_fields(data.payment_term_snapshot, data.business_category)?;
         let payment_term = SupplierPaymentTerm::parse(&payment_term_snapshot)?;
         ensure_settlement_rules(payment_term, data.settlement_mode)?;
+
         let change_reason = normalize_required_text(
             data.change_reason,
             "变更原因不能为空",
             CHANGE_REASON_MAX_LEN,
             "变更原因过长",
         )?;
+
         let rates = normalize_invoice_tax_rates(data.invoice_tax_rates.as_deref(), data.invoice_tax_rate)?;
         let legacy_rate = (rates.len() == 1).then(|| rates[0]);
 
@@ -399,8 +401,10 @@ pub fn normalize_invoice_tax_rates(rates: Option<&[Rate]>, legacy: Option<Rate>)
     for rate in &values {
         ensure_tax_rate_valid(*rate)?;
     }
+
     values.sort_by_key(|rate| rate.to_decimal());
     values.dedup();
+
     if rates.is_some() && legacy.is_some_and(|rate| values != vec![rate]) {
         return Err(Error::from("常用进项税率与旧税率字段不一致"));
     }
@@ -614,6 +618,7 @@ mod tests {
             "payment_term_snapshot".to_string(),
             serde_json::Value::String("现结｜经营类目：礼盒".to_string()),
         );
+
         let loaded: SupplierCommercialProfileRevision = serde_json::from_value(doc).unwrap();
         assert_eq!(loaded.business_category, None);
         assert_eq!(loaded.effective_payment_term_code(), "CASH_ON_APPROVAL");
@@ -654,6 +659,7 @@ mod tests {
         json.as_object_mut().unwrap().remove("invoice_tax_rates");
         let legacy: SupplierCommercialProfileRevision = serde_json::from_value(json).unwrap();
         assert_eq!(legacy.tax_rates(), vec![Rate::from_str("0.13").unwrap()]);
+
         let data = SupplierCommercialProfileRevisionData {
             invoice_tax_rate: None,
             invoice_tax_rates: Some(vec![
@@ -671,6 +677,7 @@ mod tests {
             profile.tax_rates().iter().map(ToString::to_string).collect::<Vec<_>>(),
             vec!["0.09", "0.13"]
         );
+
         let empty = SupplierCommercialProfileRevisionData {
             invoice_tax_rate: None,
             invoice_tax_rates: Some(vec![]),
@@ -680,6 +687,7 @@ mod tests {
             SupplierCommercialProfileRevision::new(SupplierCommercialProfileRevisionId::new("p"), empty)
                 .unwrap();
         assert!(empty.tax_rates().is_empty());
+
         let conflict =
             SupplierCommercialProfileRevisionData { invoice_tax_rates: Some(vec![]), ..profile_data() };
         assert!(
@@ -704,6 +712,7 @@ mod tests {
             ReconciliationCycle::Yearly,
             ReconciliationCycle::None,
         ];
+
         for (mode, term) in terms {
             for cycle in cycles {
                 let data = SupplierCommercialProfileRevisionData {

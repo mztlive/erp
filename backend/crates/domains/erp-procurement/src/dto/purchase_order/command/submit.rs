@@ -50,6 +50,7 @@ impl SubmitPurchaseOrderRequest {
             self.expected_lock_version.to_string(),
             submit_request_shape(&self.payment_term_code, &self.line_patches),
         ]);
+
         match self.resubmission_reason.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
             Some(reason) => digest_parts([original, reason.to_string()]),
             None => original,

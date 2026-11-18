@@ -303,7 +303,9 @@ impl StockReservation {
             data.consumed_quantity,
             data.released_quantity,
         )?;
+
         let source_allocation_id = normalize_reservation_source(&data)?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             warehouse_id: data.warehouse_id,
@@ -341,6 +343,7 @@ impl StockReservation {
         let status = update.status.unwrap_or(self.status);
         ensure_non_negative_quantities(reserved, consumed, released, "预占、消耗与释放数量均不得为负")?;
         ensure_status_coherent(status, reserved, consumed, released)?;
+
         self.reserved_quantity = reserved;
         self.consumed_quantity = consumed;
         self.released_quantity = released;
@@ -472,6 +475,7 @@ impl StockReservationEntry {
             SOURCE_DOCUMENT_MAX_LEN,
             "来源单据过长",
         )?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             reservation_id: data.reservation_id,
@@ -564,6 +568,7 @@ mod tests {
                 Err(Error::LogicError(message)) if message == expected
             ));
         }
+
         let identity = "中".repeat(256);
         let valid = StockReservationData {
             source_type: StockReservationSourceType::ExistingStock,

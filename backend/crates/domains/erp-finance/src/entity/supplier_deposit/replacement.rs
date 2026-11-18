@@ -25,6 +25,7 @@ impl SupplierDepositReservation {
         if account.base.id != self.account_id || account.reconciliation_required {
             return Err(Error::from("原供应商资金仍待核对，不能替代采购执行"));
         }
+
         let mut net_debit = Amount::zero();
         let mut net_settlement = Amount::zero();
         let mut covered_consumption = Amount::zero();
@@ -44,12 +45,14 @@ impl SupplierDepositReservation {
                 .iter()
                 .try_fold(covered_consumption, |total, batch| add(total, batch.amount))?;
         }
+
         if covered_consumption != self.consumed_amount {
             return Err(Error::from("原执行资金批次使用与占用消耗不一致，不能替代执行"));
         }
         if net_debit != Amount::zero() || net_settlement != Amount::zero() {
             return Err(Error::from("原供应商扣款或核销尚未全部返还冲回，不能替代采购执行"));
         }
+
         let never_sent = !has_external_write
             && self.exposure == DepositExposure::NotSent
             && self.consumed_amount == Amount::zero()

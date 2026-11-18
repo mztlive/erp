@@ -45,6 +45,7 @@ pub(super) async fn capture(
         }
         files.extend(line.source_snapshot.allowed_attachment_ids.iter().cloned());
     }
+
     let mut displays = Vec::new();
     for source in sources.into_values() {
         let revision = db
@@ -60,6 +61,7 @@ pub(super) async fn capture(
         materials.extend(permitted.into_iter().filter(|file| files.contains(file.file_asset_id.as_ref())));
         displays.push(sales_display(source)?);
     }
+
     if materials.iter().map(|file| file.file_asset_id.to_string()).collect::<BTreeSet<_>>() != files {
         return Err(Error::ConflictError("付款申请来源允许文件与正式销售材料不一致".into()));
     }
@@ -101,6 +103,7 @@ fn sales_display(source: &PaymentRequestSalesSource) -> Result<ApprovalRelatedSa
         .get("lines")
         .and_then(|value| value.as_array())
         .ok_or_else(|| Error::ConflictError("付款申请销售预览缺少完整明细".into()))?;
+
     let mut sections = Vec::new();
     push_section(&mut sections, "我方结算主体", Some(&source.payer_party_name), false);
     let lines = all_lines
@@ -115,6 +118,7 @@ fn sales_display(source: &PaymentRequestSalesSource) -> Result<ApprovalRelatedSa
             due_label: None,
         })
         .collect();
+
     Ok(ApprovalRelatedSalesSnapshot {
         document_id: source.sales_order_id.clone(),
         document_no: document_no.into(),

@@ -66,13 +66,16 @@ pub async fn mark_ids(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let unique = ids.iter().map(String::as_str).collect::<BTreeSet<_>>().into_iter().collect::<Vec<_>>();
+
     for chunk in unique.chunks(MARK_CHUNK) {
         let filter = doc! { "_id": { "$in": chunk } };
         mongo_ops::update_many(collection, filter.clone(), mark_update(), executor).await?;
+
         let rows = collection.clone_with_type::<IdRow>();
         let options = FindOptions::builder().projection(doc! { "_id": 1 }).build();
         let existing = mongo_ops::find_many(&rows, filter, options, executor).await?;
         let existing = existing.into_iter().map(|row| row.id).collect::<BTreeSet<_>>();
+
         let missing = chunk.iter().copied().filter(|id| !existing.contains(*id)).collect::<Vec<_>>();
         insert_pending(collection, &missing, &pending, executor).await?;
     }
@@ -96,10 +99,12 @@ async fn insert_pending(
             document
         })
         .collect::<Vec<_>>();
+
     match mongo_ops::insert_many(collection, &documents, executor).await {
         Err(Error::DuplicateKey(_)) => {},
         other => return other,
     }
+
     for id in ids {
         let mut update = mark_update();
         update.insert("$setOnInsert", pending(id));

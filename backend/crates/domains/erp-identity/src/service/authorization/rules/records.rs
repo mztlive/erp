@@ -273,6 +273,7 @@ pub(crate) fn condition(permission: &Permission) -> Option<AccessRule> {
             AccessRule::Fact(AccessFact::AssignedTo).requiring(&BTreeSet::from([FactKind::Assignee])),
         );
     }
+
     if permission == &internal::APPROVAL_STARTED_LIST {
         return Some(owner());
     }
@@ -281,6 +282,7 @@ pub(crate) fn condition(permission: &Permission) -> Option<AccessRule> {
             AccessRule::Fact(AccessFact::AssignedTo).requiring(&BTreeSet::from([FactKind::Assignee])),
         );
     }
+
     match permission.resource() {
         "supplier_api_connection"
             if matches!(

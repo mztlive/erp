@@ -57,6 +57,7 @@ mod tests {
         assert_eq!(mongodb::Database::APPROVAL_SUBJECT_SNAPSHOTS, "approval_subject_snapshots");
         assert_eq!(mongodb::Database::APPROVAL_NOTIFICATION_OUTBOX, "approval_notification_outbox");
         assert_eq!(mongodb::Database::APPROVAL_COMMAND_RECEIPTS, "approval_command_receipts");
+
         assert_ne!(mongodb::Database::APPROVAL_SUBJECT_SNAPSHOTS, "approval_definitions");
         assert_ne!(mongodb::Database::APPROVAL_NOTIFICATION_OUTBOX, "approval_step_instances");
     }

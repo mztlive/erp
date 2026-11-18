@@ -17,6 +17,7 @@ pub(super) fn pool_rows(rows: &[Row], errors: &mut Vec<InquiryImportIssue>) -> R
     if rows.iter().filter(|row| row.number > 2).count() > INQUIRY_IMPORT_MAX_ROWS {
         return Err(Error::ValidationError("选品页每次不得超过 2000 个商品，请减少后重新导入".into()));
     }
+
     let Some(header) = rows.iter().find(|row| row.number == 2) else {
         return Err(Error::ValidationError("选品页第 2 行表头缺失，请使用公司商品池导出文件".into()));
     };
@@ -25,6 +26,7 @@ pub(super) fn pool_rows(rows: &[Row], errors: &mut Vec<InquiryImportIssue>) -> R
     }
     let names = header.cells.iter().map(|cell| cell.value.as_str()).collect::<Vec<_>>();
     let layout = PoolSelectionLayout::new(&names)?;
+
     let mut products = Vec::new();
     for row in rows.iter().filter(|row| row.number > 2) {
         validate_cells(row, layout.headers(), errors);
@@ -83,6 +85,7 @@ mod tests {
             Row { number: 3, cells: cells(&selected) },
             Row { number: 4, cells: cells(&unselected) },
         ];
+
         let mut errors = vec![];
         let products = pool_rows(&rows, &mut errors).unwrap();
         assert!(errors.is_empty());

@@ -377,6 +377,7 @@ mod tests {
         revision
             .ensure_customer_reference(&contract, &CustomerAccountId::new("customer-1"), Some("HT-2026-0088"))
             .unwrap();
+
         assert!(
             revision
                 .ensure_customer_reference(
@@ -393,6 +394,7 @@ mod tests {
                     .is_err()
             );
         }
+
         contract.base.id = "contract-other".into();
         assert!(
             revision
@@ -403,6 +405,7 @@ mod tests {
                 )
                 .is_err()
         );
+
         contract.base.id = "c-1".into();
         contract.contract_no = "HT-OTHER".into();
         assert!(

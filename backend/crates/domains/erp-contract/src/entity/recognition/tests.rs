@@ -57,10 +57,12 @@ fn required_fields_and_tax_validation_keep_their_order_and_values() {
         assert_eq!(fields.contract_no, "HT-1");
         assert_eq!(fields.tax_point, "13");
     }
+
     values.fields.insert(TaxPoint, "13%%".into());
     let error = values.validate_values().err().unwrap();
     assert_eq!(error.code, "UNMATCHED_TAX");
     assert_eq!(error.field, Some(TaxPoint));
+
     values.fields.remove(&ContractNo);
     let error = values.validate_values().err().unwrap();
     assert_eq!(error.code, "MISSING_FIELD");
@@ -89,6 +91,7 @@ fn draft_preserves_partial_values_and_nulls_conflicts_and_missing_fields() {
     extraction
         .fields
         .insert(InvoiceType, ExtractedField { value: "专票".into(), quote: "专票".into(), page: 1 });
+
     let draft = extraction.draft(&doc);
     assert_eq!(draft.fields.len(), 14);
     assert_eq!(draft.fields[&CustomerName].as_deref(), Some("客户有限公司"));
@@ -96,6 +99,7 @@ fn draft_preserves_partial_values_and_nulls_conflicts_and_missing_fields() {
     assert_eq!(draft.fields[&SignedAt].as_deref(), Some("2026-10-01"));
     assert!(draft.fields[&PaymentTerms].is_none());
     assert!(draft.fields[&TaxPoint].is_none());
+
     let json = serde_json::to_value(&draft).unwrap();
     assert!(json["fields"]["payment_terms"].is_null());
     assert_eq!(draft.warnings.len(), 1);
@@ -117,6 +121,7 @@ fn draft_allows_semantic_values_but_drops_unverifiable_evidence() {
     assert_eq!(draft.fields[&PaymentTerms].as_deref(), Some("先款 50%"));
     assert!(draft.fields[&CustomerName].is_none());
     assert_eq!(draft.fields[&ContractNo].as_deref(), Some("HT-1"));
+
     extraction.fields.clear();
     assert!(extraction.draft(&doc).fields.values().all(Option::is_none));
 }
@@ -132,6 +137,7 @@ fn confirmation_accepts_edits_but_requires_valid_business_values() {
     assert_eq!(values.contract_no, "人工补充编号");
     assert_eq!(values.payment_code, "PREPAY_50");
     assert_eq!(extraction.fields[&ContractNo].value, "HT-1");
+
     for (field, value) in [
         (TaxPoint, None),
         (PaymentTerms, Some("收到发票后30天".into())),
@@ -159,6 +165,7 @@ fn confirmation_allows_missing_or_empty_business_scope() {
         assert_eq!(validated.payment_code, "POSTPAY_NET30");
         assert!(!values.fields.contains_key(&BusinessScope));
     }
+
     command.fields.insert(ContractNo, None);
     let error = command.validate().err().unwrap();
     assert_eq!(error.code, "MISSING_FIELD");
@@ -173,6 +180,7 @@ fn confirmation_preserves_business_scope_and_enforces_length_limit() {
     command.fields.insert(BusinessScope, Some("  定制保温杯  ".into()));
     assert_eq!(command.validate().unwrap().1.fields[&BusinessScope], "定制保温杯");
     assert_eq!(extraction.fields[&BusinessScope].value, "年节礼包");
+
     command.fields.insert(BusinessScope, Some("x".repeat(4096)));
     assert_eq!(command.validate().unwrap().1.fields[&BusinessScope].len(), 4096);
     command.fields.insert(BusinessScope, Some("x".repeat(4097)));
@@ -198,6 +206,7 @@ fn customer_creation_requires_explicit_confirmation_and_preserves_legacy_wire_sh
     let mut command: ConfirmImport = serde_json::from_value(legacy.clone()).unwrap();
     assert!(!command.create_customer);
     assert_eq!(serde_json::to_value(&command).unwrap(), legacy);
+
     command.create_customer = true;
     let new = serde_json::to_value(&command).unwrap();
     assert_eq!(new["create_customer"], true);
@@ -268,9 +277,11 @@ fn task_replay_and_recovery_do_not_override_success() {
     let mut changed = task.command.clone();
     changed.expected_customer_id = Some("another".into());
     assert!(task.replay(&changed, "digest").is_err());
+
     assert!(task.begin(100).unwrap());
     assert!(task.begin(699).is_err());
     assert!(task.begin(700).unwrap());
+
     task.status = ImportStatus::Succeeded;
     assert!(!task.begin(1000).unwrap());
     assert_eq!(task.status, ImportStatus::Succeeded);
@@ -288,6 +299,7 @@ fn import_view_preserves_revision_target_and_server_recovery_deadline() {
     let target = view.revision_target.unwrap();
     assert_eq!(target.contract_id, "contract-a");
     assert_eq!(target.version, 7);
+
     let fresh = ImportView::from(self::task());
     assert!(fresh.revision_target.is_none());
     assert!(fresh.recoverable_at.is_none());
@@ -299,12 +311,14 @@ fn confirmation_rejects_stale_pending_and_changed_replays() {
     let command =
         ConfirmImport { create_customer: false, version: task.base.version, fields: BTreeMap::new() };
     assert!(task.check_confirmation(&command).is_err());
+
     task.status = ImportStatus::Review;
     assert!(task.check_confirmation(&command).unwrap());
     assert!(!task.begin(100).unwrap());
     let mut stale = command.clone();
     stale.version += 1;
     assert!(task.check_confirmation(&stale).is_err());
+
     task.status = ImportStatus::Succeeded;
     task.confirmation = Some(command.clone());
     assert!(!task.check_confirmation(&command).unwrap());
@@ -323,11 +337,13 @@ fn successful_recognition_waits_for_confirmation_without_archiving() {
     extraction.conflicts.push("payment_terms：需要用户确认".into());
     let mut task = task();
     assert!(task.finish_recognition(doc.clone(), extraction.clone()).is_err());
+
     task.begin(100).unwrap();
     task.finish_recognition(doc, extraction).unwrap();
     assert_eq!(task.status, ImportStatus::Review);
     assert!(task.result.is_none());
     assert!(task.confirmation.is_none());
+
     let view = ImportView::from(task);
     assert!(view.failure.is_none());
     assert!(view.draft.unwrap().fields[&PaymentTerms].is_none());
@@ -364,12 +380,14 @@ fn progress_only_advances_in_processing_and_retry_restarts_from_file() {
             }
         }
     }
+
     let mut task = task();
     task.begin(100).unwrap();
     task.advance(ImportStage::Ocr).unwrap();
     task.advance(ImportStage::AiExtract).unwrap();
     task.status = ImportStatus::Failed;
     assert_eq!(ImportView::from(task.clone()).stage, Some(ImportStage::AiExtract));
+
     task.begin(200).unwrap();
     assert_eq!(task.stage, Some(ImportStage::ReadingFile));
     task.advance(ImportStage::Ocr).unwrap();
@@ -385,6 +403,7 @@ fn legacy_tasks_have_unknown_progress_and_views_serialize_stage_names() {
     let restored: ContractImport = serde_json::from_value(legacy).unwrap();
     assert_eq!(restored.stage, None);
     assert_eq!(ImportView::from(restored).stage, None);
+
     task.begin(100).unwrap();
     task.advance(ImportStage::Ocr).unwrap();
     let view = serde_json::to_value(ImportView::from(task)).unwrap();

@@ -108,7 +108,6 @@ fn upgrade_result_is_rebuilt_from_strict_action_proof() {
         UpgradeBindingOutcome::Replay,
     )
     .expect("完整动作证明必须可回读");
-
     assert_eq!(view.document_type, DocumentType::StockAdjustment);
     assert_eq!(view.document_id, "adjustment-1");
     assert_eq!(view.original_business_object_version, "7");
@@ -250,6 +249,7 @@ fn business_document_registration_inventory() {
             "backend/services/src/returns/purchase_return.rs:90",
         ),
     ];
+
     assert_eq!(ROWS.len(), 20);
     let mut seen = std::collections::HashSet::new();
     for (document_type, status, entry) in ROWS {
@@ -265,6 +265,7 @@ fn business_document_registration_inventory() {
 fn draft_allows_empty_document_no() {
     let empty = new_registered_document("po-1", DocumentType::PurchaseOrder, "   ").unwrap();
     assert!(empty.document_no.is_empty());
+
     let numbered = new_registered_document("adj-1", DocumentType::StockAdjustment, " ADJ-1 ").unwrap();
     assert_eq!(numbered.document_no, "ADJ-1");
     assert_eq!(numbered.base.id, "adj-1");

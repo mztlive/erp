@@ -147,6 +147,7 @@ pub async fn persist_customer_refund_start(
     if replay_committed_start(db, rbac, &input, executor).await?.is_some() {
         return Ok(());
     }
+
     let CustomerRefundStartPersistInput {
         command_receipt,
         resubmission_reason,
@@ -162,10 +163,12 @@ pub async fn persist_customer_refund_start(
     let PreparedExecution::Apply(writes) = prepared else {
         return Err(Error::ConflictError("提交收据未包含原请求版本，请刷新后重试".into()));
     };
+
     let audit = actor.resource_log("customer_refund.submit", "customer_refund", id.clone())?;
     persist_start_guard(db, DocumentType::CustomerRefund, &writes, now, executor).await?;
     let mut refund = refund;
     ReturnsService::new(db.clone()).persist_customer_refund(&mut refund, executor).await?;
+
     persist_runtime_writes(
         resubmission_reason.as_deref(),
         db,
@@ -181,6 +184,7 @@ pub async fn persist_customer_refund_start(
         executor,
     )
     .await?;
+
     persist_submit_receipt(db, &command_receipt, id, &audit, executor).await?;
     Ok(())
 }
@@ -242,6 +246,7 @@ pub async fn persist_runtime_writes(
         executor,
     )
     .await?;
+
     snapshot.display = Some(
         erp_read_models::workbench::capture_approval_display(
             db,
@@ -261,5 +266,6 @@ pub async fn persist_runtime_writes(
     )
     .await?;
     rbac.runtime.persist_start_snapshot(db, snapshot, executor).await?;
+
     persist_start_tasks(db, writes, context, executor).await.map(|_| ()).map_err(Into::into)
 }

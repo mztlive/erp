@@ -44,6 +44,7 @@ impl ProcurementInquiryEligibility {
             .account(owner, executor)
             .await?
             .ok_or_else(|| Error::BusinessLogicError("询价责任采购账号已失效".into()))?;
+
         let actor = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
         let candidate = ObjectFacts {
             resource: "work_item".into(),
@@ -66,6 +67,7 @@ impl ProcurementInquiryEligibility {
                 )),
                 other => other.into(),
             })?;
+
         required_business_org(&self.db, owner, executor).await.map_err(Error::from)
     }
 
@@ -86,6 +88,7 @@ impl ProcurementInquiryEligibility {
         if permission.resource() != sales_inquiry::QUERY_PROCUREMENT_LIST.resource() {
             return Err(Error::ValidationError("询价采购资格不能使用其他资源权限".into()));
         }
+
         let permissions = [permission.clone()];
         let qualified = self
             .rbac

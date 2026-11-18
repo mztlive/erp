@@ -37,6 +37,7 @@ impl SupplierDepositService {
     ) -> Result<FundsScanCheckpoint> {
         require_transaction(executor)?;
         window.validate()?;
+
         let account = self.account(account_id, executor).await?;
         let id = scan_id(account_id, scan_key)?;
         if let Some(existing) = self.db.funds_scan_checkpoints().find_by_id(&id, executor).await? {
@@ -48,8 +49,10 @@ impl SupplierDepositService {
             }
             return Ok(existing);
         }
+
         let previous = funds_scan_checkpoint(&self.db, account_id, executor).await?;
         FundsScanCheckpoint::ensure_new_window(previous.as_ref(), window)?;
+
         let checkpoint = FundsScanCheckpoint {
             base: BaseModel::new(id),
             account_id: account_id.into(),
@@ -85,6 +88,7 @@ impl SupplierDepositService {
     ) -> Result<FundsScanCheckpoint> {
         require_transaction(executor)?;
         page.validate()?;
+
         let mut checkpoint = self.funds_checkpoint(checkpoint_id, executor).await?;
         let payload_fingerprint = fingerprint(&page)?;
         if let Some(previous) = &checkpoint.last_page
@@ -93,12 +97,14 @@ impl SupplierDepositService {
         {
             return Ok(checkpoint);
         }
+
         if checkpoint.base.version != expected_version {
             return Err(Error::ConflictError("资金查询检查点已被其他处理者推进".into()));
         }
         checkpoint.ensure_page(&page)?;
         self.ensure_funds_page_processed(&checkpoint, executor).await?;
         self.account(&checkpoint.account_id, executor).await?;
+
         let mut ids = BTreeSet::new();
         for observation in &page.observations {
             ids.insert(
@@ -108,6 +114,7 @@ impl SupplierDepositService {
                     .id,
             );
         }
+
         checkpoint.advance(&page, payload_fingerprint, ids.into_iter().collect())?;
         self.db.funds_scan_checkpoints().update(&mut checkpoint, executor).await?;
         Ok(checkpoint)
@@ -134,6 +141,7 @@ impl SupplierDepositService {
             return Err(Error::BusinessLogicError("资金查询尚未完整读取固定窗口".into()));
         }
         self.ensure_funds_page_processed(&checkpoint, executor).await?;
+
         checkpoint.finished = true;
         checkpoint.completed_through = Some(checkpoint.window.through);
         self.db.funds_scan_checkpoints().update(&mut checkpoint, executor).await?;
@@ -224,6 +232,7 @@ impl SupplierDepositService {
         let source_key = input.key()?;
         let id = format!("funds-evidence-{}", fingerprint(&(account, &source_key))?);
         let semantic_fingerprint = fingerprint(&input.semantic_result())?;
+
         if let Some(mut existing) = self.db.funds_evidence_inbox().find_by_id(&id, executor).await? {
             if existing.semantic_fingerprint != semantic_fingerprint {
                 self.persist_funds_conflict(&mut existing, input, semantic_fingerprint, executor).await?;
@@ -236,6 +245,7 @@ impl SupplierDepositService {
             }
             return Ok(existing);
         }
+
         let state = input.initial_state();
         let review_reason_code = input.initial_review_code();
         let observed_at = input.source_observed_at;
@@ -278,6 +288,7 @@ impl SupplierDepositService {
             };
             self.db.funds_evidence_conflicts().create(&conflict, executor).await?;
         }
+
         inbox.needs_review("SOURCE_FACT_CONFLICT")?;
         self.pause_funds_account(&inbox.account_id, executor).await?;
         self.db.funds_evidence_inbox().update(inbox, executor).await?;

@@ -344,6 +344,7 @@ impl LegacyImportRow {
                 error_detail,
             );
         }
+
         ensure_transition(self.parse_status, status)?;
         self.error_code = None;
         self.error_detail = None;
@@ -427,6 +428,7 @@ impl LegacyImportRow {
         Self::ensure_parseable(self)?;
         Self::ensure_mapped(self)?;
         ensure_transition(self.import_status, ImportStatus::Imported)?;
+
         self.import_status = ImportStatus::Imported;
         self.target_document_id = Some(normalize_required_text(
             target_document_id,
@@ -540,6 +542,7 @@ impl LegacyImportRow {
             self.mark_parse_result(ParseStatus::Valid, None, None)?;
         }
         Self::ensure_parseable(self)?;
+
         if self.mapping_status == MappingStatus::PendingMapping {
             let identity =
                 external_identity_map_id.ok_or_else(|| Error::from("待映射行必须提供来源稳定身份"))?;
@@ -635,6 +638,7 @@ impl LegacyImportRow {
         let error_code =
             normalize_required_text(error_code, "错误码不能为空", ERROR_CODE_MAX_LEN, "错误码过长")?;
         let error_detail = normalize_optional_text(error_detail, "错误明细", ERROR_DETAIL_MAX_LEN)?;
+
         *status = next;
         *error_code_slot = Some(error_code);
         *error_detail_slot = error_detail;
@@ -729,7 +733,6 @@ mod tests {
         row.mark_import_failed("TEMPORARY_FAILURE".to_string(), Some("可重试".to_string())).unwrap();
 
         row.prepare_failed_retry().unwrap();
-
         assert_eq!(row.import_status, ImportStatus::PendingImport);
         assert_eq!(row.parse_status, ParseStatus::Valid);
         assert_eq!(row.mapping_status, MappingStatus::Mapped);

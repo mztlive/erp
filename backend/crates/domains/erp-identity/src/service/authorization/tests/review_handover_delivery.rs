@@ -75,6 +75,7 @@ async fn settlement_handover_preserves_company_access_and_requires_complete_orig
         service.require(&actor(), &permission, owner_change(target.clone()), &mut executor).await,
         Err(Error::ValidationError(_))
     ));
+
     facts.objects.lock().unwrap().clear();
     assert!(matches!(
         service.require(&actor(), &permission, owner_change(target), &mut executor).await,
@@ -106,11 +107,13 @@ async fn configurable_owner_changes_apply_personal_limit_to_both_original_and_de
         let facts = Arc::new(Facts::new(vec![persisted(resource, "user", "allowed")]));
         let service = bound(identity, resource, facts.clone());
         let mut executor = SnapshotExecutor::default();
+
         service.require(&actor(), &permission, owner_change(legal.clone()), &mut executor).await.unwrap();
         assert!(matches!(
             service.require(&actor(), &permission, owner_change(outside), &mut executor).await,
             Err(Error::Forbidden(_))
         ));
+
         facts.objects.lock().unwrap()[0] = persisted(resource, "outside-owner", "outside");
         assert!(matches!(
             service.require(&actor(), &permission, owner_change(legal), &mut executor).await,

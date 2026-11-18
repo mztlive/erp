@@ -123,6 +123,7 @@ impl ActualProfitLossReadModel {
         export: bool,
     ) -> Result<ProfitLossView> {
         let (sources, query, context) = self.snapshot(query, actor).await?;
+
         let as_of = context.as_of.as_utc();
         let orders = calculation::calculate(&sources, as_of.timestamp(), access.can_drill_cost)?;
         let mut view = projection::project(
@@ -132,6 +133,7 @@ impl ActualProfitLossReadModel {
             export,
             "销售单当前授权范围；贡献按首次生效归属",
         )?;
+
         self.recheck(&query, actor, &context.scope_version).await?;
         view.scope.permission_version = context.scope_version.clone();
         view.scope_version = context.scope_version.clone();
@@ -151,6 +153,7 @@ impl ActualProfitLossReadModel {
                 Box::pin(async move {
                     let (context, scope) = this.authorized_scope(&actor, executor).await?;
                     context.ensure_current(executor)?;
+
                     let orders =
                         source::authorized_orders(&this.db, &query, query.validate()?, scope, executor)
                             .await?;
@@ -159,6 +162,7 @@ impl ActualProfitLossReadModel {
                 })
             })
             .await?;
+
         ensure_version(Some(expected), &current)
     }
 
@@ -178,7 +182,9 @@ impl ActualProfitLossReadModel {
                 Box::pin(async move {
                     let (mut context, scope) = this.authorized_scope(&actor, executor).await?;
                     context.ensure_current(executor)?;
+
                     let sources = source::Sources::load(&this.db, &query, bounds, scope, executor).await?;
+
                     context.validate(executor).await?;
                     context.map_read_version(|base| source::version(base, &sources.orders));
                     ensure_version(query.scope_version.as_deref(), &context.scope_version)?;

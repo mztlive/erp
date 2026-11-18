@@ -141,6 +141,7 @@ mod tests {
             .await
             .unwrap();
         }
+
         assert_eq!(
             auth.calls.lock().unwrap().as_slice(),
             &[

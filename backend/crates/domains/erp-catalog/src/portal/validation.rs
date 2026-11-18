@@ -55,6 +55,7 @@ impl NewProductInput {
         if self.skus.is_empty() {
             return Err(validation("新品至少需要一个 SKU"));
         }
+
         let mut signatures = SpecificationSignatureSet::new();
         let mut ordering_codes = HashSet::new();
         for sku in &self.skus {
@@ -82,6 +83,7 @@ impl NewProductInput {
         self.brand.ensure_resolved(&normalized.brand_id, normalized.brand_version, "品牌")?;
         self.category.ensure_resolved(&normalized.category_id, normalized.category_version, "分类")?;
         ensure_category_hierarchy(normalized, self.product_kind)?;
+
         if normalized.sku_mappings.len() != self.skus.len() {
             return Err(validation("审核映射必须完整包含本次全部 SKU"));
         }
@@ -122,8 +124,10 @@ impl NewProductInput {
         self.category.validate_storage("分类")?;
         optional_text(self.model.as_deref(), "型号", NAME_MAX_LEN)?;
         optional_text(self.description.as_deref(), "描述", 512)?;
+
         validate_assets(&self.image_asset_ids)?;
         validate_assets(&self.file_asset_ids)?;
+
         if self.skus.len() > MAX_SKUS {
             return Err(validation("一张新品提报最多包含 100 个 SKU"));
         }
@@ -202,6 +206,7 @@ impl DraftSku {
         if let Some(packaging) = &self.packaging {
             packaging.validate_storage()?;
         }
+
         if self.spec_entries.len() > 100 {
             return Err(validation("SKU 规格属性过多"));
         }
@@ -209,6 +214,7 @@ impl DraftSku {
             bounded(&entry.attribute_code, "规格名", 64)?;
             bounded(&entry.attribute_value_code, "规格值", 64)?;
         }
+
         if self.available_quantity.is_some_and(|quantity| quantity.to_decimal().is_sign_negative()) {
             return Err(validation("可供数量不能为负数"));
         }
@@ -223,6 +229,7 @@ impl DraftSku {
         required(&self.name, "SKU 名称", NAME_MAX_LEN)?;
         self.unit.validate_required("单位")?;
         required(&self.ordering_code, "订货编码", ID_MAX_LEN)?;
+
         for entry in &self.spec_entries {
             if entry.attribute_code.contains(['|', '=']) || entry.attribute_value_code.contains('|') {
                 return Err(validation(&format!(
@@ -231,6 +238,7 @@ impl DraftSku {
                 )));
             }
         }
+
         if let Some(quote_basis) = &self.quote_basis {
             required(quote_basis, "原始报价口径", 512)?;
         }
@@ -250,6 +258,7 @@ impl DraftSku {
         if let Some(confirmation) = &mapping.unit_synonym_confirmation {
             confirmation.ensure_for(&self.unit.raw_name)?;
         }
+
         if let Some(target) = &mapping.target_sku {
             validate_id(&target.sku_id, "匹配 SKU")?;
             validate_id(&target.revision_id, "匹配 SKU 修订")?;
@@ -284,6 +293,7 @@ fn ensure_category_hierarchy(normalized: &NormalizedProduct, kind: ProductKind) 
     if nodes.is_empty() || nodes.len() > 32 {
         return Err(validation("分类映射须冻结完整根到叶路径"));
     }
+
     let mut seen = HashSet::new();
     let mut parent_id = None;
     for node in nodes {
@@ -293,6 +303,7 @@ fn ensure_category_hierarchy(normalized: &NormalizedProduct, kind: ProductKind) 
         }
         parent_id = Some(node.id.as_str());
     }
+
     let leaf = nodes.last().ok_or_else(|| validation("分类映射路径缺失"))?;
     if leaf.id != normalized.category_id || leaf.version != normalized.category_version {
         return Err(validation("分类映射路径与所选叶分类不一致"));
@@ -326,6 +337,7 @@ pub(super) fn ensure_result(normalized: &NormalizedProduct, result: &CatalogDraf
     if result.skus.len() != normalized.sku_mappings.len() {
         return Err(validation("新品生效结果必须完整包含全部 SKU"));
     }
+
     let mut rows = HashSet::new();
     let mut sku_ids = HashSet::new();
     for sku in &result.skus {
@@ -336,6 +348,7 @@ pub(super) fn ensure_result(normalized: &NormalizedProduct, result: &CatalogDraf
         validate_id(&sku.revision_id, "结果 SKU 修订")?;
         let offering_id = sku.offering_id.as_deref().ok_or_else(|| validation("新品生效结果缺少供给"))?;
         validate_id(offering_id, "结果供给")?;
+
         let mapping = normalized
             .sku_mappings
             .iter()

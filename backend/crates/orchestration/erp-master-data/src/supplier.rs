@@ -76,10 +76,12 @@ mod tests {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("supplier_deletion");
         let access = SupplierAccess::new(db.clone(), unavailable_authorization());
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let error =
             delete_stage(&db, &access, "supplier", &actor, &mut ReadExecutor::default()).await.unwrap_err();
         assert!(matches!(error, Error::ValidationError(message)
             if message == "写入授权必须使用快照事务"));
+
         let error = delete_stage(&db, &access, "supplier", &actor, &mut SnapshotExecutor::default())
             .await
             .unwrap_err();

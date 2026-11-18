@@ -141,6 +141,7 @@ async fn execute_error_task_action(
 ) -> Result<ActionFact> {
     let mut task = load_error_task(db, &command.action.item_id, executor).await?;
     ensure_error_task_subject(&task, &command.expected_subject_version)?;
+
     let mut fact = error_action_fact(authority, &task, &command.action, actor_id, executor).await?;
     let summary = error_action_summary(&command.action, &fact)?;
     task.record_attempt(Instant::now(), Some(summary))?;
@@ -243,9 +244,11 @@ async fn execute_difference_task_action(
     let latest = latest_resolution(db, &command.action.item_id, executor).await?;
     ensure_difference_subject(latest.as_ref(), &command.expected_subject_version)?;
     ensure_difference_open(latest.as_ref())?;
+
     let fact =
         difference_action_fact(authority, &difference, &command.action, receipt_id, actor_id, executor)
             .await?;
+
     let next_subject_version =
         persist_appended_resolution(db, &difference, latest.as_ref(), &fact, receipt_id, actor_id, executor)
             .await?;

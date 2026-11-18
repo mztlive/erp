@@ -326,9 +326,11 @@ mod tests {
             ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
         );
         assert_eq!(adapter.subject_snapshot_builder, "build_customer_receipt_snapshot");
+
         assert_eq!(adapter.on_approval_start, ApprovalDomainAction::CustomerReceiptSubmit);
         assert_eq!(adapter.on_final_approve, ApprovalDomainAction::CustomerReceiptPost);
         assert_eq!(adapter.cancel_action, ApprovalDomainAction::CustomerReceiptCancelApproval);
+
         assert_eq!(adapter.owner_role, "customer_receipt_approver");
         assert_eq!(
             adapter.owner_organization_snapshot,
@@ -346,6 +348,7 @@ mod tests {
         start_customer_receipt_approval(&mut receipt, vec![one_allocation()]).unwrap();
         assert_eq!(receipt.status, CustomerReceiptStatus::InApproval);
         assert_eq!(receipt.approval_subject_version, 1);
+
         execute_customer_receipt_domain_action(
             &mut receipt,
             ApprovalDomainAction::CustomerReceiptCancelApproval,
@@ -394,6 +397,7 @@ mod tests {
         assert_eq!(payload.total_amount.unwrap().to_string(), "100");
         assert_eq!(payload.line_count, 1);
         assert!(payload.total_quantity.is_none());
+
         let mut empty = draft_receipt();
         empty.pending_allocations.clear();
         assert!(build_customer_receipt_snapshot(&empty, "user-1", Instant::from_unix_secs(10)).is_err());
@@ -412,6 +416,7 @@ mod tests {
         assert!(view.recent_history.is_empty());
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
         assert!(!view.allowed_actions.iter().any(|item| item.contains("DEFINITION")));
+
         let running = document_approval_view(Some(&binding), None, CustomerReceiptStatus::InApproval);
         assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
     }

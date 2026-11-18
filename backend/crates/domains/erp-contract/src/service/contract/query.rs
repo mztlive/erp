@@ -42,6 +42,7 @@ impl ContractService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
+
         let service = self.clone();
         let actor = actor.clone();
         let expected_version = params.scope_version.clone();
@@ -66,8 +67,10 @@ impl ContractService {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::ValidationError("合同列表必须使用快照事务".into()));
         }
+
         let snapshot = self.list_snapshot(query, actor, executor).await?;
         ensure_scope_version(expected_version, &snapshot.context.scope_version)?;
+
         let current = self.list_scope_version(query, actor, executor).await?;
         ensure_stable_snapshot(&snapshot.context.scope_version, &current)?;
         Ok(to_list_view(snapshot))
@@ -139,6 +142,7 @@ pub(super) async fn contract_rows(
         .into_iter()
         .map(|r| (r.base.id.clone(), ContractRevisionView::from(r)))
         .collect::<HashMap<_, _>>();
+
     let customers = customers.iter().map(|c| (c.id.as_str(), c)).collect::<HashMap<_, _>>();
     Ok(rows
         .into_iter()
@@ -208,6 +212,7 @@ mod tests {
         let customers = Customers { expected_ids: vec![], facts: vec![] };
         let rows = list_customer_facts_with(&customers, &[], &mut NoTransaction).await.unwrap();
         assert!(rows.is_empty());
+
         let error = list_customer_facts_with(&FailClosedCustomerFactsPort, &[], &mut NoTransaction)
             .await
             .unwrap_err();
@@ -222,18 +227,21 @@ mod tests {
             },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
+
         match ensure_scope_version(Some("scope-a"), "scope-b") {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));
             },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
+
         match ensure_stable_snapshot("scope-a", "scope-b") {
             Err(Error::ConflictError(message)) => {
                 assert!(message.starts_with("DATA_SCOPE_CHANGED："));
             },
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
+
         assert!(ensure_scope_version(Some("scope-a"), "scope-a").is_ok());
         assert!(ensure_stable_snapshot("scope-a", "scope-a").is_ok());
     }
@@ -293,11 +301,13 @@ mod list_snapshot_tests {
             .unwrap()
             .normalized()
             .unwrap();
+
         let result = service.list_stage(&query, &actor, None, &mut ReadExecutor::default()).await;
         assert!(matches!(
             result,
             Err(Error::ValidationError(message)) if message == "合同列表必须使用快照事务"
         ));
+
         let result = service.list_stage(&query, &actor, None, &mut SnapshotExecutor::default()).await;
         assert!(matches!(
             result,

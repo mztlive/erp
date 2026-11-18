@@ -173,6 +173,7 @@ impl QueryFilter for WorkItemFilter {
         if let Some(owner_user_id) = &self.owner_user_id {
             filter.insert("owner_user_id", owner_user_id);
         }
+
         let mut conjunctions = Vec::new();
         conjunctions.extend(source_link_filters(&self.sales_order_ids, &self.purchase_order_ids));
         if let Some(ids) = &self.managed_owner_ids {
@@ -335,6 +336,7 @@ mod tests {
                 .unwrap()
                 .contains(&Bson::Document(doc! { "owner_user_id": { "$in": &handlers } }))
         );
+
         let mut managed = WorkItemFilter {
             managed_owner_ids: Some(vec!["handler-b".into(), "other".into()]),
             ..Default::default()
@@ -346,6 +348,7 @@ mod tests {
         let before = managed.to_doc();
         managed.narrow_current_handlers(&[]);
         assert_eq!(managed.to_doc(), before);
+
         let mut history = WorkItemFilter { history_actor_id: Some("actor".into()), ..Default::default() };
         history.narrow_current_handlers(&handlers);
         assert_eq!(history.history_actor_id.as_deref(), Some("actor"));
@@ -359,6 +362,7 @@ mod tests {
             empty.get_array("$and").unwrap(),
             &vec![Bson::Document(doc! { "owner_user_id": { "$in": [] } })]
         );
+
         let managed =
             WorkItemFilter { managed_owner_ids: Some(vec!["member".into()]), ..Default::default() }.to_doc();
         assert_eq!(
@@ -366,8 +370,10 @@ mod tests {
             &vec![Bson::Document(doc! { "owner_user_id": { "$in": ["member"] } })]
         );
         assert!(!managed.contains_key("owner_organization_id"));
+
         let company = WorkItemFilter::default().to_doc();
         assert!(!company.contains_key("$and"));
+
         let history =
             WorkItemFilter { history_actor_id: Some("actor".into()), ..Default::default() }.to_doc();
         let alternatives =

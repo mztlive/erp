@@ -882,6 +882,7 @@ mod tests {
         };
         assert_eq!(policy.document_type, document_type);
         assert_eq!(policy.process_kind, process_kind_of(document_type));
+
         assert_eq!(
             policy.definition_admin_permission.to_string(),
             format!("{}:approval_definition_admin", document_type.as_str())
@@ -901,6 +902,7 @@ mod tests {
             _ => SeparationOfDutiesPolicy::ForbidSubmitterAsApprover,
         };
         assert_eq!(policy.separation_of_duties_policy, separation);
+
         assert_eq!(policy.required_node_purposes, expected.purposes);
         assert_eq!(policy.subject_version_source, expected.version);
         assert_eq!(policy.subject_snapshot_fields, expected.snapshot);
@@ -909,6 +911,7 @@ mod tests {
             policy.owner_organization_source,
             OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         );
+
         assert_eq!(policy.start_action, expected.start);
         assert_eq!(policy.final_approve_action, expected.approve);
         assert_eq!(policy.cancel_action, expected.cancel);
@@ -942,6 +945,7 @@ mod tests {
             };
             assert!(purposes.is_empty());
         }
+
         let sales = require_process_required(DocumentType::SalesOrder).expect("销售单");
         validate_required_purposes(&sales, &[]).expect("销售单无用途应通过");
         validate_required_purposes(&sales, &[None, None]).expect("销售单空用途应通过");
@@ -952,6 +956,7 @@ mod tests {
             &[Some(SALES_ORDER_PROCUREMENT_CONFIRMATION), Some(SALES_ORDER_PROCUREMENT_CONFIRMATION)],
         )
         .expect("销售单多个遗留采购确认用途应通过");
+
         assert!(validate_required_purposes(&sales, &[Some("WRONG_PURPOSE")]).is_err());
         assert!(
             validate_required_purposes(

@@ -38,7 +38,6 @@ pub async fn ensure_transaction_support(database: &Database) -> Result<()> {
     if topology_supports_transactions(&hello) {
         return Ok(());
     }
-
     Err(Error::UnsupportedDeployment("a replica set or transaction-capable sharded cluster is required"))
 }
 

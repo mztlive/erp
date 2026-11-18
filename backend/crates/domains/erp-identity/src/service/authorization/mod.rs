@@ -106,6 +106,7 @@ impl AuthorizationService {
             .mappings
             .get(permission)
             .ok_or_else(|| Error::ValidationError("缺少查询 Mapping 绑定".into()))?;
+
         let proof = self
             .resolve_target(
                 actor,
@@ -116,6 +117,7 @@ impl AuthorizationService {
                 executor,
             )
             .await?;
+
         compile(&proof, mapping, mapping.model(), executor).await
     }
 }

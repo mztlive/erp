@@ -68,11 +68,13 @@ impl SupplierCredential {
         {
             return Err(Error::ValidationError("刷新租期或原操作身份无效".into()));
         }
+
         let allowed = matches!(self.refresh, SupplierCredentialRefreshState::Ready)
             || matches!(self.refresh, SupplierCredentialRefreshState::Claimed { lease_until, .. } if lease_until <= claim.now);
         if !allowed {
             return Ok(false);
         }
+
         let until = claim
             .now
             .unix_secs()
@@ -106,6 +108,7 @@ impl SupplierCredential {
         if *lease_until <= now {
             return Err(Error::ConflictError("原刷新领取已到期，不能发送".into()));
         }
+
         let state = SupplierCredentialRefreshState::SentUnknown {
             owner_id: owner_id.clone(),
             operation_id: operation_id.clone(),
@@ -132,6 +135,7 @@ impl SupplierCredential {
         payload.validate(now)?;
         let operation_id = operation_id.clone();
         let base = self.next_base(now)?;
+
         self.encrypted_payload = payload.encrypted_payload;
         self.payload_fingerprint = payload.payload_fingerprint;
         self.expires_at = payload.expires_at;
@@ -154,6 +158,7 @@ impl SupplierCredential {
         else {
             return Err(Error::ConflictError("原刷新不允许标记授权失效".into()));
         };
+
         let state = SupplierCredentialRefreshState::ReauthorizationRequired {
             owner_id: owner_id.clone(),
             operation_id: operation_id.clone(),
@@ -207,12 +212,14 @@ impl SupplierCredential {
         {
             return replay_reauthorization(previous, recovery, &fingerprint);
         }
+
         payload.validate(now)?;
         self.require_version(recovery.expected_version)?;
         let operation = self.refresh.reauthorization_source(self.expires_at, now)?;
         if self.reauthorization_history.len() >= 256 {
             return Err(Error::BusinessLogicError("技术凭据授权恢复历史已达上限，需受控归档后处理".into()));
         }
+
         let base = self.next_base(now)?;
         self.reauthorization_history.push(SupplierCredentialReauthorizationEvent {
             operation_id: recovery.operation_id.clone(),
@@ -223,6 +230,7 @@ impl SupplierCredential {
             occurred_at: now,
             payload_fingerprint: fingerprint,
         });
+
         self.encrypted_payload = payload.encrypted_payload;
         self.payload_fingerprint = payload.payload_fingerprint;
         self.expires_at = payload.expires_at;

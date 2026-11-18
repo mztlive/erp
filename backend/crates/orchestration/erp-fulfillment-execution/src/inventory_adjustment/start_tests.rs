@@ -119,7 +119,6 @@ fn stock_adjustment_start_digest_covers_all_signed_fields() {
     let baseline = submit_request();
     let expected = stock_adjustment_start_digest(&baseline, "actor").unwrap();
     let mut variants = Vec::new();
-
     let mut value = baseline.clone();
     value.expected_version += 1;
     variants.push(value);
@@ -191,6 +190,7 @@ fn stock_start_identity_normalizes_order_and_signs_balance_version() {
         Timestamp::from_unix_secs(10).unwrap(),
     )
     .unwrap();
+
     let mut equivalent = req.clone();
     equivalent.lines.reverse();
     equivalent.balances.reverse();
@@ -217,6 +217,7 @@ fn stock_resubmission_identity_binds_reason_without_legacy_fallback() {
         Timestamp::from_unix_secs(10).unwrap(),
     )
     .unwrap();
+
     req.resubmission_reason = Some("已核实盘点数量".into());
     let normalized = stock_adjustment_start_identity("adj-1", &req, "actor", "def-1", 3).unwrap();
     assert!(matches!(normalized.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)));
@@ -225,6 +226,7 @@ fn stock_resubmission_identity_binds_reason_without_legacy_fallback() {
         let changed = stock_adjustment_start_identity("adj-1", &req, "actor", "def-1", 3).unwrap();
         assert_eq!(changed.classify(Some(&receipt)), ReceiptBranch::PayloadConflict);
     }
+
     let scopes = stock_adjustment_start_scopes("adj-1", req.expected_subject_version).unwrap();
     let mut legacy = receipt.clone();
     legacy.scope_id = scopes[1].clone();
@@ -265,6 +267,7 @@ fn start_notifications_reject_missing_duplicate_or_extra_intents() {
         (ApprovalNotificationEventKind::Entered, "entered:execution-1".to_string()),
     ];
     assert!(validate_start_notification_identities(&valid, "instance-1", "execution-1").is_ok());
+
     assert!(validate_start_notification_identities(&valid[..1], "instance-1", "execution-1").is_err());
     assert!(
         validate_start_notification_identities(
@@ -274,6 +277,7 @@ fn start_notifications_reject_missing_duplicate_or_extra_intents() {
         )
         .is_err()
     );
+
     let mut extra = valid.clone();
     extra.push((ApprovalNotificationEventKind::Completed, "completed:instance-1".to_string()));
     assert!(validate_start_notification_identities(&extra, "instance-1", "execution-1").is_err());

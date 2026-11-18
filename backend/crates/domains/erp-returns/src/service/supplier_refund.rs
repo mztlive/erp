@@ -96,6 +96,7 @@ pub fn new_supplier_refund_commit(
         },
         actor_id,
     )?;
+
     result.settlement_method = req.settlement_method;
     result.source_purchase_order_id = req.source_purchase_order_id.clone();
     result.settlement_decision_key = req.settlement_decision_key.clone();

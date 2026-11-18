@@ -171,6 +171,7 @@ impl CurrentSalesAllocationPlan {
             .iter()
             .map(|line| (line.sales_order_line_id.to_string(), line))
             .collect::<HashMap<_, _>>();
+
         let mut rebound_purchase_lines = purchase_lines.to_vec();
         let mut allocation_ids = allocation_ids.into_iter();
         let mut allocations = Vec::new();
@@ -184,6 +185,7 @@ impl CurrentSalesAllocationPlan {
             allocation_ids_by_purchase_line.insert(line.base.id.clone(), allocation_id);
             allocations.push(allocation);
         }
+
         if allocation_ids.next().is_some() {
             return Err(CurrentSalesAllocationPlanError::AllocationIdCountMismatch);
         }
@@ -225,6 +227,7 @@ fn build_current_sales_allocation(
     let current_sales_line = current_sales_by_stable_line
         .get(&stable_id)
         .ok_or(CurrentSalesAllocationPlanError::MissingCurrentSalesLine)?;
+
     let quantity = purchase_line.quantity.ok_or(CurrentSalesAllocationPlanError::MissingPurchaseQuantity)?;
     let allocated =
         purchase_line.allocated_quantity.ok_or(CurrentSalesAllocationPlanError::MissingAllocatedQuantity)?;
@@ -234,6 +237,7 @@ fn build_current_sales_allocation(
     if purchase_line.sku_id.as_ref() != Some(&current_sales_line.sku_id) {
         return Err(CurrentSalesAllocationPlanError::SkuMismatch);
     }
+
     let allocation_id =
         allocation_ids.next().ok_or(CurrentSalesAllocationPlanError::AllocationIdCountMismatch)?;
     purchase_line.sales_order_line_id = Some(current_sales_line.sales_order_line_id.clone());
@@ -501,6 +505,7 @@ mod tests {
             plan.rebound_purchase_lines[1].sales_order_revision_line_id.as_ref().unwrap().as_ref(),
             "current-fallback"
         );
+
         assert_eq!(plan.allocations[0].base.id, "alloc-1");
         assert_eq!(plan.allocations[1].base.id, "alloc-2");
         assert_eq!(plan.allocation_ids_by_purchase_line["porl-1"].as_ref(), "alloc-1");

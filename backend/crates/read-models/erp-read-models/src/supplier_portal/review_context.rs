@@ -97,6 +97,7 @@ impl SupplierPortalReadService {
         if !authorization.request_readable(actor, request_id, executor).await? {
             return Err(hidden_target());
         }
+
         if let Some(app) = self.db.portal_applications().find_by_id(request_id, executor).await? {
             let frozen =
                 app.submissions.last().map(|submission| &submission.snapshot).unwrap_or(&app.snapshot);
@@ -106,6 +107,7 @@ impl SupplierPortalReadService {
             if !authorization.offering_readable(actor, id, executor).await? {
                 return Err(hidden_target());
             }
+
             let mut facts = self.current_offering_facts(&app.supplier_id, id, executor).await?;
             facts["expected_offering_version"] = json!(expected_version);
             facts["expected_revision_no"] = json!(expected_revision_no);
@@ -169,6 +171,7 @@ impl SupplierPortalReadService {
             Some(query) => catalog.duplicate_candidates(query, actor, executor).await?,
             None => Vec::new(),
         };
+
         let draft =
             self.db.new_product_drafts().find_by_id(request_id, executor).await?.ok_or_else(hidden_target)?;
         let input = draft.frozen_input.as_ref().unwrap_or(&draft.draft);
@@ -208,11 +211,13 @@ impl SupplierPortalReadService {
         if !authorization.request_readable(actor, request_id, executor).await? {
             return Err(hidden_target());
         }
+
         let draft =
             self.db.new_product_drafts().find_by_id(request_id, executor).await?.ok_or_else(hidden_target)?;
         if draft.status != DraftStatus::Pending {
             return Ok(Vec::new());
         }
+
         let mut result = Vec::new();
         for row in &draft.submitted()?.skus {
             let candidates =
@@ -246,6 +251,7 @@ impl SupplierPortalReadService {
         if revision.supplier_offering_id.as_ref() != offering.base.id {
             return Err(Error::ConflictError("既有供给当前版本归属异常".into()));
         }
+
         let sku = self
             .db
             .skus()
@@ -258,6 +264,7 @@ impl SupplierPortalReadService {
             .current_sku_revision(&sku, executor)
             .await?
             .ok_or_else(|| Error::ConflictError("既有供给SKU资料缺失".into()))?;
+
         Ok(ExistingOfferingReviewCandidate {
             row_id: row_id.into(),
             offering_id: offering.base.id,
@@ -390,6 +397,7 @@ mod tests {
             service.read_new_product_context("request", Some("query"), &actor, &catalog, &mut executor).await,
             Err(Error::NotFound(_))
         ));
+
         assert_eq!(
             *authorization.calls.lock().unwrap(),
             vec![

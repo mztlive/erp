@@ -116,6 +116,7 @@ impl<'a> PartyDomainRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<(Vec<Party>, Vec<PartyRevision>)> {
         let parties = PartyRepository::new(self.db, PARTIES).list_by_ids(party_ids, executor).await?;
+
         let revision_ids: Vec<String> =
             parties.iter().filter_map(|party| party.stable.current_revision_id.clone()).collect();
         let revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
@@ -234,6 +235,7 @@ impl<'a> PartyDomainRepository<'a> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
+
         Ok(PartyRepository::new(self.db, PARTIES)
             .find_many(doc! { "current_revision_id": { "$in": ids } }, executor)
             .await?
@@ -276,6 +278,7 @@ impl<'a> PartyDomainRepository<'a> {
         if revision_ids.is_empty() {
             return Ok(HashMap::new());
         }
+
         let revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
             .list_by_ids(&revision_ids, executor)
             .await?;
@@ -285,6 +288,7 @@ impl<'a> PartyDomainRepository<'a> {
                 ((revision.party_id.as_ref(), revision.base.id.as_str()), revision.legal_name.as_str())
             })
             .collect();
+
         Ok(parties
             .into_iter()
             .filter_map(|party| {
@@ -328,6 +332,7 @@ impl<'a> PartyDomainRepository<'a> {
     ) -> Result<()> {
         mongo_ops::insert_one(&self.db.collection::<PartyRevision>(PARTY_REVISIONS), revision, executor)
             .await?;
+
         party.stable.current_revision_id = Some(revision.base.id.clone());
         party.stable.touch(updated_by);
         PartyRepository::new(self.db, PARTIES).update(party, executor).await
@@ -355,6 +360,7 @@ impl PartyDomainRepository<'_> {
         executor: &mut dyn Executor,
     ) -> Result<Vec<PartyId>> {
         let mut ids = self.matching_current_party_ids_by_name(keyword, executor).await?;
+
         let collection = self.db.collection::<mongodb::bson::Document>(PARTIES);
         let mut filter = doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON };
         persistence_core::insert_literal_regex_filter(&mut filter, "unified_credit_code", Some(keyword));
@@ -364,6 +370,7 @@ impl PartyDomainRepository<'_> {
                 .into_iter()
                 .filter_map(|id| id.as_str().map(|s| PartyId::new(s.to_owned()))),
         );
+
         ids.sort_by(|left, right| left.as_ref().cmp(right.as_ref()));
         ids.dedup();
         Ok(ids)

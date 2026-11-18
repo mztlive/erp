@@ -69,6 +69,7 @@ fn latest_definition_version_query_is_minimal_and_bounded() {
             "deleted_at": 0_i64,
         }
     );
+
     let options = latest_definition_version_options();
     assert_eq!(options.sort, Some(doc! { "definition_version": -1 }));
     assert_eq!(options.limit, Some(1));
@@ -87,6 +88,7 @@ fn definition_catalog_query_is_bounded_and_filters_retired() {
         ]),
         vec![ProcessKind::SalesOrder, ProcessKind::StockAdjustment]
     );
+
     let filter = definition_catalog_filter(&[ProcessKind::SalesOrder, ProcessKind::StockAdjustment]);
     assert_eq!(
         filter.get_document("process_kind").unwrap().get_array("$in").unwrap(),
@@ -97,6 +99,7 @@ fn definition_catalog_query_is_bounded_and_filters_retired() {
         &vec![Bson::String("DRAFT".into()), Bson::String("PUBLISHED".into())]
     );
     assert_eq!(filter.get_i64("deleted_at").unwrap(), 0);
+
     let options = definition_catalog_options(20);
     assert_eq!(options.limit, Some(80));
     assert_eq!(options.limit.unwrap(), MAX_CATALOG_STATUS_ROWS);
@@ -104,6 +107,7 @@ fn definition_catalog_query_is_bounded_and_filters_retired() {
         options.projection,
         Some(doc! { "process_kind": 1, "status": 1, "definition_version": 1, "_id": 0 })
     );
+
     let published_filter = published_kind_docs_filter(ProcessKind::StockAdjustment);
     assert_eq!(published_filter.get_str("status").unwrap(), "PUBLISHED");
     assert_eq!(published_filter.get_i64("deleted_at").unwrap(), 0);
@@ -175,6 +179,7 @@ fn definition_catalog_grouping_covers_status_matrix_and_duplicate_fail_closed() 
             },
         ]
     );
+
     assert!(
         group_definition_catalog_rows(
             &[ProcessKind::SalesOrder],
@@ -193,6 +198,7 @@ fn definition_catalog_grouping_covers_status_matrix_and_duplicate_fail_closed() 
         )
         .is_err()
     );
+
     assert!(
         group_definition_catalog_rows(
             &[ProcessKind::SalesOrder],
@@ -204,6 +210,7 @@ fn definition_catalog_grouping_covers_status_matrix_and_duplicate_fail_closed() 
         )
         .is_err()
     );
+
     assert!(unique_published_definition(Vec::new()).unwrap().is_none());
     let mut published_a = dummy_definition("a");
     published_a.publish(ParticipantId::new("admin").unwrap(), Timestamp::from_unix_secs(2).unwrap()).unwrap();
@@ -282,11 +289,13 @@ fn instance_and_execution_cas_filters_include_token_and_status() {
     assert_eq!(advance.get_i64("version").unwrap(), 4);
     assert_eq!(advance.get_str("current_node_execution_id").unwrap(), "exec-1");
     assert_eq!(advance.get_document("status").unwrap(), &doc! { "$in": ["RUNNING", "BLOCKED"] });
+
     let ended = execution_end_filter("exec-1", 2, ApprovalNodeExecutionStatus::Active).unwrap();
     assert_eq!(ended.get_str("status").unwrap(), "ACTIVE");
     let blocked = execution_end_filter("exec-1", 2, ApprovalNodeExecutionStatus::Blocked).unwrap();
     assert_eq!(blocked.get_str("status").unwrap(), "BLOCKED");
     assert_eq!(blocked.get_i64("version").unwrap(), 2);
+
     let current = current_execution_filter(&ApprovalProcessInstanceId::new("inst-1"));
     assert_eq!(current.get_document("status").unwrap(), &doc! { "$in": ["ACTIVE", "BLOCKED"] });
 }
@@ -324,6 +333,7 @@ fn cancelled_projection_and_write_guards_are_deterministic() {
     assert_eq!(projection.last_status_changed_at, Some(20));
     assert!(projection.current_node_key.is_none());
     assert!(projection.current_assignee_participant_id.is_none());
+
     assert_eq!(previous_version(instance.base.version).unwrap(), 1);
     assert!(previous_version(0).is_err());
     assert!(require_cas_applied(CasWriteOutcome::Applied(())).is_ok());
@@ -358,6 +368,7 @@ fn start_instance_insert_includes_bounded_list_projection() {
     assert_eq!(document.get_str("current_assignee_participant_id").unwrap(), "u1");
     assert_eq!(document.get_i64("last_status_changed_at").unwrap(), 10);
     assert_eq!(serialize_to_document(&projection).unwrap().get_str("current_node_name").unwrap(), "仓储复核");
+
     let mut merged = doc! { "id": "inst-1" };
     merge_documents(&mut merged, serialize_to_document(&projection).unwrap());
     assert_eq!(merged.get_str("current_assignee_name").unwrap(), "张三");
@@ -464,6 +475,7 @@ fn instance_list_views_use_matching_sort_and_scope() {
     let allowed = instance_list_filter_doc(&constrained);
     assert_eq!(allowed.get_document("id").unwrap(), &doc! { "$in": ["allowed-instance"] });
     assert!(allowed.contains_key("$or"), "scope IDs must intersect the cursor");
+
     let document = instance_list_filter_doc(&managed);
     assert_eq!(document.get_str("process_kind").unwrap(), "stock_adjustment");
     assert_eq!(document.get_str("status").unwrap(), "RUNNING");
@@ -561,6 +573,7 @@ fn instance_list_views_use_matching_sort_and_scope() {
     assert!(instance_list_scope_empty(&empty_scope));
     assert!(!instance_list_scope_empty(&started));
     assert_eq!(instance_list_sort(&empty_scope), doc! { "blocked_at": -1, "id": -1 });
+
     assert_eq!(clamp_limit(0, MAX_INSTANCE_PAGE), 1);
     assert_eq!(clamp_limit(50, MAX_INSTANCE_PAGE), 50);
     assert_eq!(clamp_limit(101, MAX_INSTANCE_PAGE), 101);
@@ -635,6 +648,7 @@ fn instance_list_text_query_is_literal_and_composes_with_cursor() {
     assert_eq!(alternatives.len(), 3);
     let regex = alternatives[0].get_document("subject.subject_id").unwrap().get_str("$regex").unwrap();
     assert_eq!(regex, r"SO\.\[1\]");
+
     let with_cursor = ApprovalInstanceListFilter {
         view: ApprovalInstanceListView::Started,
         process_kind: None,
@@ -673,6 +687,7 @@ fn execution_history_filter_and_limit_are_bounded() {
     let next_page = execution_history_filter(&instance_id, Some(7), ExecutionHistoryOrder::Asc);
     assert_eq!(next_page.get_document("execution_no").unwrap(), &doc! { "$gt": 7_i64 });
     assert_eq!(next_page.get_str("process_instance_id").unwrap(), "inst-1");
+
     assert_eq!(execution_history_limit(0), 1);
     assert_eq!(execution_history_limit(50), MAX_EXECUTION_HISTORY);
     assert_eq!(execution_history_limit(51), MAX_EXECUTION_HISTORY);
@@ -687,12 +702,14 @@ fn execution_history_descending_cursor_reads_strictly_earlier_rows() {
     assert_eq!(first_page.get_str("process_instance_id").unwrap(), "inst-1");
     assert_eq!(first_page.get_i64("deleted_at").unwrap(), 0);
     assert!(!first_page.contains_key("execution_no"));
+
     let next_page = execution_history_filter(&instance_id, Some(7), ExecutionHistoryOrder::Desc);
     assert_eq!(next_page.get_document("execution_no").unwrap(), &doc! { "$lt": 7_i64 });
     assert_eq!(execution_history_sort(ExecutionHistoryOrder::Desc), doc! { "execution_no": -1 });
     assert_eq!(execution_history_sort(ExecutionHistoryOrder::Asc), doc! { "execution_no": 1 });
     let boundary = execution_history_filter(&instance_id, Some(0), ExecutionHistoryOrder::Desc);
     assert_eq!(boundary.get_document("execution_no").unwrap(), &doc! { "$lt": 0_i64 });
+
     assert_eq!(execution_history_page_limit(0), 1);
     assert_eq!(execution_history_page_limit(51), 51);
     assert_eq!(execution_history_page_limit(101), 101);
@@ -707,6 +724,7 @@ fn definition_child_filter_batches_by_definition_id_with_graph_limits() {
     assert_eq!(filter.get_i64("deleted_at").unwrap(), 0);
     assert!(!filter.contains_key("node_key"));
     assert!(!filter.contains_key("id"));
+
     assert_eq!(MAX_DEFINITION_GRAPH_DOCS, 20);
     assert_eq!(definition_graph_transition_limit(), 40);
     assert_eq!(definition_graph_transition_limit(), MAX_DEFINITION_GRAPH_DOCS.saturating_mul(2));
@@ -756,6 +774,7 @@ fn instance_summary_projection_is_bounded_and_excludes_history() {
     ] {
         assert_eq!(projection.get_i32(field).unwrap(), 1);
     }
+
     assert!(!projection.contains_key("history"));
     assert!(!projection.contains_key("executions"));
     assert!(!projection.contains_key("execution_history"));

@@ -102,6 +102,7 @@ fn settlement_guard_builds_expected_guard() {
     let guard = settlement_guard("acct-1", &amount);
     assert_eq!(guard.get_str("id").unwrap(), "acct-1");
     assert_eq!(guard.get_i64("deleted_at").unwrap(), 0);
+
     let expr = guard.get_document("$expr").unwrap();
     let conditions = expr.get_array("$and").unwrap();
     let lte = conditions[0].as_document().unwrap().get_array("$lte").unwrap();
@@ -109,6 +110,7 @@ fn settlement_guard_builds_expected_guard() {
     assert_eq!(add[0], Bson::String("$settled_total".to_string()));
     assert!(matches!(add[1], Bson::Decimal128(_)));
     assert_eq!(lte[1], Bson::String("$gross_total".to_string()));
+
     let reserved = conditions[1].as_document().unwrap().get_array("$lte").unwrap();
     assert_eq!(reserved[0], amount);
     assert_eq!(reserved[1], doc! {"$subtract": ["$open_total", "$payment_request_reserved_total"]}.into());

@@ -32,6 +32,7 @@ impl SupplierApiOrderProcess {
                     if matches!(write, CancellationWrite::SendIntent) {
                         process.ensure_cancel_send(&saved, executor).await?;
                     }
+
                     let action_id = saved
                         .cancellation_action_id
                         .as_ref()
@@ -45,6 +46,7 @@ impl SupplierApiOrderProcess {
                     project_cancellation_action(&saved, &mut action)?;
                     db.supplier_api_order_executions().update(&mut saved, executor).await?;
                     db.supplier_order_actions().update(&mut action, executor).await?;
+
                     if let Some(mut tracking) =
                         db.supplier_order_tracking().find_by_id(&saved.base.id, executor).await?
                     {
@@ -76,6 +78,7 @@ impl SupplierApiOrderProcess {
         if connector.cancellations().is_none() {
             return Err(Error::BusinessLogicError("当前协议未实现原订单取消".into()));
         }
+
         let order = self
             .db
             .supplier_fulfillment_orders()
@@ -105,6 +108,7 @@ fn project_cancellation_action(
     } else {
         SupplierOrderActionStatus::Manual
     };
+
     let canceled = states.iter().filter(|state| **state == CancellationActionState::Canceled).count();
     let accepted = states.iter().filter(|state| **state == CancellationActionState::Accepted).count();
     action.update(SupplierOrderActionUpdate {

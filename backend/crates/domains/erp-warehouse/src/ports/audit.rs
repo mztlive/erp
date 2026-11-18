@@ -177,6 +177,7 @@ impl PreparedWarehouseAudit {
         if resource_id.trim().is_empty() {
             return Err(Error::ValidationError("资源ID不能为空".to_string()));
         }
+
         let context = AuditContext::from(actor);
         let id = id_generator::next_id();
         let base = BaseModel::new(id);

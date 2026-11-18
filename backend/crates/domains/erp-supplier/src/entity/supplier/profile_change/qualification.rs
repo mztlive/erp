@@ -54,6 +54,7 @@ pub fn new_capability(
         },
         actor_id,
     )?;
+
     let revision_key = revision_id.to_string();
     let revision = capability.snapshot_revision(revision_id, 1)?;
     capability.stable.current_revision_id = Some(revision_key);
@@ -166,6 +167,7 @@ pub fn new_qualification(
         revision_id,
         link_ids,
     } = params;
+
     let mut qualification = SupplierQualification::new(
         qualification_id.clone(),
         SupplierQualificationData {
@@ -182,6 +184,7 @@ pub fn new_qualification(
     )?;
     qualification.stable.current_revision_id = Some(revision_id.to_string());
     let revision = SupplierQualification::snapshot_revision(&qualification, revision_id, 1)?;
+
     let links = SupplierQualificationCapability::links_for_qualification(
         qualification_id,
         capability_codes,

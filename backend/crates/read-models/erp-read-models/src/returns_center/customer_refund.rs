@@ -60,6 +60,7 @@ impl ReturnsReadService {
         self.authorization
             .require(actor, &returns::CUSTOMER_REFUND_CUSTOMER_REFUND_LIST, AccessTarget::Operation, executor)
             .await?;
+
         params.validate()?;
         let query = params.normalized()?;
         let filter = CustomerRefundFilter {
@@ -71,9 +72,11 @@ impl ReturnsReadService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.customer_refunds().search_customer_refunds(&filter, executor).await?;
         let document_ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
         let documents = self.db.business_documents().find_documents_by_ids(&document_ids, executor).await?;
+
         let items = map_customer_refund_list_page(
             page.items.into_iter().map(CustomerRefundListFacts::from).collect(),
             documents,
@@ -110,6 +113,7 @@ impl ReturnsReadService {
                             executor,
                         )
                         .await?;
+
                     this.load_customer_refund_view(&id, executor).await
                 })
             })
@@ -143,6 +147,7 @@ impl ReturnsReadService {
     ) -> Result<CustomerRefundView> {
         Self::ensure_command_snapshot(executor)?;
         let id = id.to_owned();
+
         let refund = self
             .db
             .customer_refunds()
@@ -150,6 +155,7 @@ impl ReturnsReadService {
             .await?
             .ok_or_else(|| Error::NotFound("客户退款单不存在".to_string()))?;
         let binding = super::approval::optional_approval_binding(&self.db, &id, executor).await?;
+
         let mut view =
             customer_refund_view_from_facts(CustomerRefundListFacts::from_refund(&refund), binding.as_ref());
         view.approval = super::approval::load_runtime(

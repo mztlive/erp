@@ -285,9 +285,11 @@ mod tests {
         let action = action_command(" +0007 ");
         action.validate().unwrap();
         assert_eq!(PreparedWorkItemTarget::try_from(&action).unwrap().task_version, 7);
+
         let completion = completion_command(" +0007 ");
         completion.validate().unwrap();
         assert_eq!(PreparedWorkItemTarget::try_from(&completion).unwrap().task_version, 7);
+
         let direct = direct_command(" +0000 ");
         direct.validate().unwrap();
         assert_eq!(PreparedDirectDecisionTarget::try_from(&direct).unwrap().difference_version, 0);
@@ -298,6 +300,7 @@ mod tests {
         let mut command = action_command("bad");
         command.work_item_id = " ".into();
         command.action.item_id = " ".into();
+
         for expected in ["任务 ID不能为空", "任务版本必须为十进制整数字符串", "业务项 ID不能为空"]
         {
             assert_validation_error(command.validate().unwrap_err(), expected);
@@ -315,6 +318,7 @@ mod tests {
         let mut command = completion_command("bad");
         command.decision.evidence_policy_version = 0;
         command.decision.evidence_refs.clear();
+
         for expected in
             ["任务版本必须为十进制整数字符串", "证据策略版本必须大于 0", "完成任务必须提供终态证据引用"]
         {
@@ -333,6 +337,7 @@ mod tests {
         let mut command = direct_command("bad");
         command.difference_id = " ".into();
         command.operation_id = " ".into();
+
         for expected in ["差异 ID不能为空", "差异版本必须为十进制整数字符串", "操作 ID不能为空"]
         {
             assert_validation_error(command.validate().unwrap_err(), expected);

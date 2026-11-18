@@ -138,6 +138,7 @@ impl DifferenceListParams {
         check_scoped_version(&self.scope_version, &self.org_unit_ids, self.include_descendants)?;
         let (handler_user_ids, operator_user_ids) =
             normalize_handler_filters(&self.handler_user_ids, &self.operator_user_ids)?;
+
         Ok(DifferenceListQuery {
             q: normalized_text(self.q.as_deref()),
             business_object_type: normalized_text(self.business_object_type.as_deref()),
@@ -350,11 +351,13 @@ mod tests {
             sort_by: Some("created_at".to_string()),
             sort_dir: Some("desc".to_string()),
         };
+
         let query = params.normalized().unwrap();
         assert_eq!(query.q.as_deref(), Some("needle.[x]"));
         assert_eq!(query.business_object_type.as_deref(), Some("mall_order"));
         assert_eq!(query.business_object_id.as_deref(), Some("MO-1"));
         assert_eq!(query.created_at_to, Some(1_700_000_100));
+
         assert_eq!(query.paging.page, 3);
         assert_eq!(query.paging.page_size, 10);
     }
@@ -366,6 +369,7 @@ mod tests {
             ..DifferenceListParams::default()
         };
         assert!(handlers.normalized().is_err());
+
         let operators = DifferenceListParams {
             operator_user_ids: Some(serde_json::from_value(serde_json::json!("ME")).unwrap()),
             ..DifferenceListParams::default()

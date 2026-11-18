@@ -29,6 +29,7 @@ impl FundsAccess {
                     let (invoice, authorization) = this.invoice_detail_read(&id, &actor, executor).await?;
                     let invoice = invoice.data;
                     ensure_whole_invoice(invoice.permission_limited)?;
+
                     let attachments = this
                         .db
                         .document_attachments()
@@ -36,6 +37,7 @@ impl FundsAccess {
                         .await?;
                     let ids = attachments.into_iter().map(|row| row.file_asset_id).collect::<Vec<_>>();
                     let files = this.db.file_assets().find_by_ids(&ids, executor).await?;
+
                     let view = files
                         .into_iter()
                         .filter(readable_file)
@@ -47,6 +49,7 @@ impl FundsAccess {
                             )
                         })
                         .collect();
+
                     authorization.deliver(executor).await?;
                     Ok(view)
                 })

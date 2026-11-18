@@ -21,6 +21,7 @@ pub(super) fn current(view: CurrentQualityView) -> QualityExport {
         record(&["筛选", &view.filter_summary]),
         record(&["范围版本", &view.scope_version]),
     ];
+
     lines.push(record(&[
         "客户",
         "客户编号",
@@ -45,6 +46,7 @@ pub(super) fn current(view: CurrentQualityView) -> QualityExport {
             row.latest_effective_at.as_deref().unwrap_or(""),
         ])
     }));
+
     QualityExport {
         csv_content: lines.join("\r\n"),
         file_name: format!("客户经营质量-当前负责-{}-{}.csv", view.period.from, view.period.to),
@@ -72,6 +74,7 @@ pub(super) fn history(view: HistoryQualityView) -> QualityExport {
         record(&["筛选", &view.filter_summary]),
         record(&["范围版本", &view.scope_version]),
     ];
+
     lines.push(record(&[
         "历史分组",
         "首次生效归属销售",
@@ -90,6 +93,7 @@ pub(super) fn history(view: HistoryQualityView) -> QualityExport {
             &row.unpriced_count.to_string(),
         ])
     }));
+
     QualityExport {
         csv_content: lines.join("\r\n"),
         file_name: format!("客户经营质量-历史贡献-{}-{}.csv", view.period.from, view.period.to),
@@ -153,6 +157,7 @@ mod tests {
         );
         assert_eq!(lines[7], "\"'=客户\",\"C-1\",\"u-1\",\"org-1\",\"2\",\"-12.50\",\"1\",\"\",\"\"");
         assert_eq!(lines[8], "\"分组\"\"名\",\"\",\"\",\"\",\"0\",\"0.00\",\"0\",\"\",\"\"");
+
         assert_eq!(output.file_name, "客户经营质量-当前负责-2026-09-01-2026-09-30.csv");
         assert_eq!(output.generated_at, "2026-10-01");
         assert_eq!(output.row_count, 2);
@@ -205,6 +210,7 @@ mod tests {
             if !empty {
                 assert_eq!(lines[7], "\"历史分组\",\"frozen-user\",\"frozen-org\",\"0\",\"10.00\",\"0\"");
             }
+
             assert_eq!(output.file_name, "客户经营质量-历史贡献-2026-09-01-2026-09-30.csv");
             assert_eq!(output.generated_at, "2026-10-01");
             assert_eq!(output.row_count, usize::from(!empty));

@@ -40,6 +40,7 @@ mod tests {
             PermissionSet::new(catalog.iter().find(|item| item.id == id).unwrap().permissions.clone())
         };
         let has = |id: &str, code: &str| permissions(id).covers_one(&Permission::parse(code).unwrap());
+
         for code in [
             "payable_account:list",
             "payable_account:detail",
@@ -55,6 +56,7 @@ mod tests {
         ] {
             assert!(has("role-cashier", code), "{code}");
         }
+
         for code in [
             "receivable_account:list",
             "receivable_account:detail",
@@ -66,16 +68,19 @@ mod tests {
         ] {
             assert!(has("role-invoice-clerk", code), "{code}");
         }
+
         assert!(has("role-finance-director", "approval_instance:decide"));
         assert!(has("role-finance-director", "finance_responsibility:manage"));
         for id in ["role-cashier", "role-invoice-clerk"] {
             assert!(!has(id, "approval_instance:decide"));
             assert!(!has(id, "finance_responsibility:manage"));
         }
+
         assert!(!has("role-finance-director", "supplier_payment:commit"));
         assert!(!has("role-finance-director", "customer_receipt:create"));
         assert!(!has("role-cashier", "invoice:post"));
         assert!(!has("role-invoice-clerk", "supplier_payment:commit"));
+
         assert!(has("role-cashier", "purchase_payment_request:pay"));
         assert!(has("role-finance-director", "purchase_payment_request:close"));
         assert!(!has("role-finance-director", "purchase_payment_request:pay"));
@@ -87,6 +92,7 @@ mod tests {
         }
         assert!(has("role-procurement", "purchase_payment_request:submit"));
         assert!(!has("role-procurement", "purchase_payment_request:pay"));
+
         for id in ["role-finance", "role-finance-director", "role-cashier", "role-invoice-clerk"] {
             assert!(has(id, "finance_ledger:read"));
         }
@@ -98,13 +104,16 @@ mod tests {
         let catalog = builtin_role_templates().unwrap();
         assert_eq!(catalog.len(), 11);
         assert_eq!(catalog.iter().filter(|item| item.recommended).count(), 10);
+
         assert!(BuiltinRoleTemplate::select(&catalog, &[]).is_err());
         assert!(BuiltinRoleTemplate::select(&catalog, &["role-root".into()]).is_err());
         assert!(BuiltinRoleTemplate::select(&catalog, &["role-sales".into(), "role-sales".into()]).is_err());
+
         let selected =
             BuiltinRoleTemplate::select(&catalog, &["role-sales".into(), "role-cashier".into()]).unwrap();
         assert_eq!(selected[0].id, "role-sales");
         assert_eq!(selected[1].id, "role-cashier");
+
         for template in catalog {
             assert!(!template.permissions.iter().any(|permission| permission.resource() == "*"));
         }

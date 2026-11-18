@@ -44,6 +44,7 @@ impl TimelineRepository<'_> {
         let Some(row) = self.db.customer_refunds().find_by_id(id, executor).await? else {
             return Ok(sources);
         };
+
         if let Some(id) = row.original_receipt_id {
             sources.push((DocumentType::CustomerReceipt, id.to_string()));
         }
@@ -72,6 +73,7 @@ impl TimelineRepository<'_> {
         let Some(row) = self.db.supplier_refunds().find_by_id(id, executor).await? else {
             return Ok(sources);
         };
+
         if let Some(id) = row.original_payment_id {
             sources.push((DocumentType::SupplierPayment, id.to_string()));
         }

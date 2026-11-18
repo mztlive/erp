@@ -204,6 +204,7 @@ mod tests {
                 .iter()
                 .any(|index| name(index) == Some("uk_purchase_return_orders_no"))
         );
+
         assert!(sales_return_case_indexes().iter().any(|index| {
             name(index) == Some("idx_sales_return_cases_order_status")
                 && index.keys == doc! { "sales_order_id": 1, "status": 1 }
@@ -217,6 +218,7 @@ mod tests {
             name(index) == Some("idx_customer_refunds_original")
                 && index.keys == doc! { "original_receipt_id": 1, "original_receivable_entry_id": 1 }
         }));
+
         assert!(supplier_refund_indexes().iter().any(|index| name(index) == Some("uk_supplier_refunds_no")));
         assert!(
             receipt_reversal_indexes()
@@ -228,6 +230,7 @@ mod tests {
                 .iter()
                 .any(|index| { index.keys == doc! { "original_supplier_payment_id": 1, "status": 1 } })
         );
+
         assert!(
             sales_return_line_indexes()
                 .iter()
@@ -249,6 +252,7 @@ mod tests {
             super::payment_reversal_indexes(),
         ];
         assert_eq!(groups.each_ref().map(Vec::len), [4, 3, 3, 3, 6, 7, 3, 3]);
+
         let expected = [
             ("uk_sales_return_cases_id", doc! { "id": 1 }, true),
             ("uk_sales_return_cases_no", doc! { "return_no": 1 }, true),
@@ -303,6 +307,7 @@ mod tests {
                 false,
             ),
         ];
+
         let actual: Vec<IndexModel> = groups.into_iter().flatten().collect();
         assert_eq!(actual.len(), expected.len());
         for (index, (expected_name, keys, unique)) in actual.iter().zip(expected) {

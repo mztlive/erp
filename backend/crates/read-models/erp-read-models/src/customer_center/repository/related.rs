@@ -98,6 +98,7 @@ impl<'a> CustomerCenterRepository<'a> {
         if recent_limit == 0 {
             return Err(Error::EntityMetadataOutOfRange("customer_center_recent_limit"));
         }
+
         let denied = [doc! { "$match": { "$expr": false } }];
         let pipeline = related_pipeline(
             customer_id,
@@ -105,6 +106,7 @@ impl<'a> CustomerCenterRepository<'a> {
             contract_scope.unwrap_or(&denied),
             sales_scope.unwrap_or(&denied),
         );
+
         let collection = self.collection();
         let rows = persistence_core::aggregate::rows(
             &collection.clone_with_type::<CustomerCenterRelatedRow>(),

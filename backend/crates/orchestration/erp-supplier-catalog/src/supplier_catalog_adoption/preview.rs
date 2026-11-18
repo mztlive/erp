@@ -96,10 +96,12 @@ impl SupplierCatalogAdoptionProcess {
         for item in &items {
             source.ensure_offering_source(&item.supplier_id)?;
         }
+
         let encoded = serde_json::to_vec(&items).map_err(|_| Error::Internal("选品资料无法编码".into()))?;
         if encoded.len() > 8 * 1024 * 1024 {
             return Err(Error::ValidationError("本次选品资料过多，请缩小范围后分批预览".into()));
         }
+
         let total = items.len();
         let preview = CatalogAdoptionPreview {
             base: BaseModel::new(next_id()),
@@ -109,6 +111,7 @@ impl SupplierCatalogAdoptionProcess {
             items,
         };
         self.db.catalog_adoption_previews().create(&preview, executor).await?;
+
         let rows = preview.items.into_iter().map(AdoptionPreviewRow::from).collect();
         Ok(AdoptionPreviewView {
             preview_id: preview.base.id,
@@ -132,6 +135,7 @@ impl SupplierCatalogAdoptionProcess {
             }
             return Ok(items);
         }
+
         let filter = request.filter.ok_or_else(|| Error::ValidationError("缺少选品筛选条件".into()))?;
         let mut items = Vec::new();
         for page in 1..=5 {

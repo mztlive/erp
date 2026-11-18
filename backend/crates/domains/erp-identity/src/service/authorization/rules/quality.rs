@@ -143,6 +143,7 @@ mod tests {
                 .allows_object("actor", &order("other", customer("actor", false), false), &BTreeSet::new())
                 .unwrap()
         );
+
         let rule = self::rule(true, false);
         assert!(
             rule.allows_object("actor", &order("other", customer("actor", false), false), &BTreeSet::new())
@@ -177,11 +178,13 @@ mod tests {
             condition(&internal::CUSTOMER_QUALITY_CURRENT, &qualified, &[], AccessRule::Allow),
             Err(Error::Forbidden(_))
         ));
+
         let qualified = QualifiedPermissions::test_grants(&[("customers", &[customer::LIST])]);
         assert!(matches!(
             condition(&internal::CUSTOMER_QUALITY_CURRENT, &qualified, &[], AccessRule::Allow),
             Err(Error::ValidationError(_))
         ));
+
         let rule = rule(true, true);
         let mut root = order("actor", customer("other", false), false);
         root.relations.values_mut().next().unwrap().objects.clear();

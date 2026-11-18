@@ -63,6 +63,7 @@ pub fn plan_party_revision(params: PlanPartyRevisionParams<'_>) -> erp_core::Res
         actor_id,
     )?;
     party.stable.current_revision_id = Some(revision_id.to_string());
+
     PartyRevision::new(
         revision_id,
         PartyRevisionData {

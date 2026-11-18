@@ -132,6 +132,7 @@ mod wire_tests {
         let instance = DocumentApprovalInstanceView::new("inst-1".to_string(), "RUNNING".to_string());
         assert_eq!(instance.id, "inst-1");
         assert_eq!(instance.status, "RUNNING");
+
         let item = DocumentApprovalHistoryItemView::new(
             "exec-1".to_string(),
             "node-1".to_string(),

@@ -38,6 +38,7 @@ pub(crate) fn authorization(
     for (permission, mapping) in mappings {
         builder = builder.mapping(&permission, mapping)?;
     }
+
     let mut cache = Vec::new();
     let mut frozen = BTreeMap::new();
     for (permission, mapping) in builder.mappings {
@@ -46,6 +47,7 @@ pub(crate) fn authorization(
         validate_rule(&rule, mapping.as_ref(), 0)?;
         frozen.insert(permission, mapping);
     }
+
     Ok(Arc::new(AuthorizationService {
         facilities: builder.facilities,
         facts: builder.facts,
@@ -149,6 +151,7 @@ mod tests {
             .require(&actor, &party::LIST, AccessTarget::Operation, &mut SnapshotExecutor::default())
             .await
             .unwrap();
+
         let denied = authorization(&[], scope(), Vec::new(), Vec::new()).unwrap();
         assert!(matches!(
             denied

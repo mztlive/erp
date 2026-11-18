@@ -89,6 +89,7 @@ impl ApprovedExecutionBudget {
     ) -> Result<Self> {
         validate_sources(revision, execution, goods, expenses, groups)?;
         let approved_goods = goods_amount(execution, goods, groups)?;
+
         let mut allocations = Vec::new();
         let mut freight = Decimal::ZERO;
         for expense in expenses {
@@ -101,6 +102,7 @@ impl ApprovedExecutionBudget {
             freight = add(freight, share.amount.to_decimal())?;
             allocations.push(allocation);
         }
+
         Ok(Self {
             purchase_revision_id: revision.into(),
             execution_id: execution.into(),
@@ -130,6 +132,7 @@ fn validate_sources(
     {
         return Err(invalid("采购预算来源或执行组身份不完整、重复"));
     }
+
     for group in groups {
         if group.connection_id.trim().is_empty()
             || group.lines.is_empty()
@@ -142,6 +145,7 @@ fn validate_sources(
             return Err(invalid("接口预算明细不属于冻结采购或数量无效"));
         }
     }
+
     if goods
         .iter()
         .any(|good| good.quantity.to_decimal() <= Decimal::ZERO || good.amount.to_decimal() < Decimal::ZERO)
@@ -159,10 +163,12 @@ fn goods_shares(good: &ApprovedGoods, groups: &[BudgetGroup]) -> Result<Vec<Budg
             weights.insert(group.execution_id.clone(), quantity.to_decimal());
         }
     }
+
     let assigned = weights.values().try_fold(Decimal::ZERO, |sum, value| add(sum, *value))?;
     if assigned != good.quantity.to_decimal() {
         return Err(invalid("接口执行组未完整覆盖批准采购数量，不能分配费用"));
     }
+
     allocate(good.amount, &weights)
 }
 
@@ -171,6 +177,7 @@ fn goods_amount(execution: &str, goods: &[ApprovedGoods], groups: &[BudgetGroup]
         .iter()
         .find(|group| group.execution_id == execution)
         .ok_or_else(|| invalid("采购预算缺少执行组"))?;
+
     let mut total = Decimal::ZERO;
     for good in goods.iter().filter(|good| group.lines.iter().any(|(line, _)| line == &good.purchase_line_id))
     {
@@ -207,6 +214,7 @@ fn freight_allocation(
     if !expense.is_freight {
         return Err(invalid("本次接口履约涉及尚未支持的采购收费，请明确费用归属后处理"));
     }
+
     let weights = freight_weights(&candidates, groups)?;
     let connections: BTreeSet<_> = groups
         .iter()
@@ -216,6 +224,7 @@ fn freight_allocation(
     if connections.len() != 1 {
         return Err(invalid("批准运费涉及多个接口连接，须先明确各连接费用预算"));
     }
+
     Ok(Some(FreightAllocation {
         purchase_line_id: expense.purchase_line_id.clone(),
         expense_line_id: expense.expense_line_id.clone(),
@@ -242,6 +251,7 @@ fn allocate(total: Amount, weights: &BTreeMap<String, Decimal>) -> Result<Vec<Bu
     if denominator <= Decimal::ZERO || weights.values().any(|weight| *weight < Decimal::ZERO) {
         return Err(invalid("采购费用缺少可核验的正金额分配依据"));
     }
+
     let mut remaining = total.to_decimal();
     let mut shares = Vec::new();
     let last_positive = weights.iter().rev().find(|(_, weight)| **weight > Decimal::ZERO).map(|(id, _)| id);
@@ -320,12 +330,14 @@ mod tests {
         assert_eq!(budgets[0].approved_freight, "0".parse().unwrap());
         assert_eq!(budgets[2].approved_freight, "0.01".parse().unwrap());
         assert_eq!(budgets[0].freight_allocations, budgets[2].freight_allocations);
+
         let mut reverse = groups();
         reverse.reverse();
         assert_eq!(
             budgets[2],
             ApprovedExecutionBudget::freeze("revision", "c", &goods(), &[expense()], &reverse).unwrap()
         );
+
         let restored: ApprovedExecutionBudget =
             serde_json::from_str(&serde_json::to_string(&budgets[2]).unwrap()).unwrap();
         assert_eq!(restored, budgets[2]);
@@ -340,6 +352,7 @@ mod tests {
             amount: "10".parse().unwrap(),
         });
         assert!(ApprovedExecutionBudget::freeze("r", "a", &goods, &[expense()], &groups()).is_err());
+
         let mut groups = groups();
         groups[1].connection_id = "other".into();
         assert!(ApprovedExecutionBudget::freeze("r", "a", &goods[..1], &[expense()], &groups).is_err());
@@ -350,6 +363,7 @@ mod tests {
         different.sales_line_id = Some("different-sale".into());
         let budget = ApprovedExecutionBudget::freeze("r", "a", &goods(), &[different], &groups()).unwrap();
         assert_eq!(budget.approved_total, budget.approved_goods);
+
         let mut fee = expense();
         fee.is_freight = false;
         assert!(ApprovedExecutionBudget::freeze("r", "a", &goods(), &[fee], &groups()).is_err());

@@ -329,11 +329,13 @@ pub fn project_error_actions(input: ErrorActionProjection) -> (Vec<DecidedAction
             }],
         );
     }
+
     let mut actions = vec![DecidedAction::QueryOriginalResult, DecidedAction::AddEvidence];
     if input.can_replay {
         actions.push(DecidedAction::ReplayOriginal);
     }
     append_evidence_actions(&mut actions, &input.present);
+
     if input.policy.satisfied_by(&input.present) {
         actions.push(DecidedAction::Resolve);
         return (actions, Vec::new());
@@ -377,8 +379,10 @@ pub fn project_difference_actions(
     if input.terminal {
         return (Vec::new(), Vec::new());
     }
+
     let mut actions = vec![DecidedAction::QueryOriginalResult, DecidedAction::AddEvidence];
     append_evidence_actions(&mut actions, &input.present);
+
     if input.has_work_item {
         if input.policy.satisfied_by(&input.present) {
             actions.push(DecidedAction::Resolve);
@@ -393,6 +397,7 @@ pub fn project_difference_actions(
             }],
         );
     }
+
     actions.push(DecidedAction::ConfirmNoError);
     actions.push(DecidedAction::ConfirmValidDifference);
     (actions, Vec::new())
@@ -672,6 +677,7 @@ mod tests {
             RequiredEvidenceKind::ExternalCaseResult,
             RequiredEvidenceKind::BusinessObjectVerification,
         ];
+
         let error = project_error_actions(ErrorActionProjection {
             terminal: false,
             has_work_item: true,
@@ -685,6 +691,7 @@ mod tests {
             present,
             policy: difference_terminal_policy(&difference("amount_mismatch")),
         });
+
         for (actions, blockers) in [error, difference] {
             assert_eq!(
                 actions,
@@ -725,6 +732,7 @@ mod tests {
             });
             assert_eq!(difference, (vec![], vec![]));
         }
+
         let missing = project_error_actions(ErrorActionProjection {
             terminal: false,
             has_work_item: false,

@@ -144,6 +144,7 @@ pub(super) fn page_view(
         parties: by_id(bundle.parties),
         party_revisions: by_id(bundle.party_revisions),
     };
+
     let items = bundle
         .page
         .items
@@ -184,6 +185,7 @@ fn build_view(
     let party_revision = party
         .and_then(|party| party.stable.current_revision_id.as_deref())
         .and_then(|id| context.party_revisions.get(id));
+
     let mut view = SupplierOfferingView::from_row(row);
     view.sku_no = sku.map(|value| value.sku_no.clone());
     view.product_id = product.map(|value| value.base.id.clone());
@@ -192,9 +194,11 @@ fn build_view(
     view.specification = sku_revision.and_then(|value| value.specification.clone());
     view.supplier_no = supplier.map(|value| value.supplier_no.clone());
     view.supplier_name = party_revision.map(|value| value.legal_name.clone());
+
     if let Some(revision) = revision {
         view.apply_revision(revision);
     }
+
     if let Some(availability) = availability {
         view.availability_status = Some(availability.availability_status);
         view.available_quantity = availability.available_quantity.map(|value| value.to_string());
@@ -258,6 +262,7 @@ mod tests {
                 party_revisions: vec![],
                 delivery_templates: vec![],
             };
+
             let query = OfferingListQuery { page: 3, page_size: 15, ..Default::default() };
             let page = page_view(bundle, &query);
             assert_eq!((page.total, page.page, page.page_size), (37, 3, 15));

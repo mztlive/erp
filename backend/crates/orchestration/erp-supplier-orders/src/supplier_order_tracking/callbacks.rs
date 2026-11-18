@@ -42,6 +42,7 @@ impl SupplierOrderTrackingProcess {
                             if !tracking.can_refresh(retired, Instant::now()) {
                                 continue;
                             }
+
                             tracking.poll_after = Instant::now();
                             tracking.state = TrackingState::Polling;
                             db.supplier_order_tracking().update(&mut tracking, executor).await?;
@@ -78,6 +79,7 @@ impl SupplierOrderTrackingProcess {
                         if receipt.status != "received" {
                             return Ok::<(), Error>(());
                         }
+
                         if let Some(retired) = resolved_retired_count(&db, &receipt, executor).await? {
                             receipt.mark_orders_resolved(retired, Instant::now())?;
                         } else {
@@ -109,6 +111,7 @@ async fn resolved_retired_count(
             retired += 1;
             continue;
         }
+
         let Some(tracking) = db.supplier_order_tracking().find_by_id(&id, executor).await? else {
             return Ok(None);
         };

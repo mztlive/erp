@@ -153,6 +153,7 @@ impl QueryFilter for SupplierAccountFilter {
         if let Some(party_id) = &self.party_id {
             filter.insert("party_id", party_id.to_string());
         }
+
         match (self.keyword.as_deref(), self.party_ids.as_ref()) {
             (Some(keyword), Some(party_ids)) if !party_ids.is_empty() => {
                 let ids: Vec<String> = party_ids.iter().map(ToString::to_string).collect();
@@ -169,6 +170,7 @@ impl QueryFilter for SupplierAccountFilter {
             },
             (None, _) => {},
         }
+
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }
@@ -389,6 +391,7 @@ impl SupplierAccountRepositoryExt for Repository<'_, SupplierAccount> {
             executor,
         )
         .await?;
+
         Ok(rows.into_iter().map(|row| (row.id, row.supplier_no)).collect())
     }
 
@@ -468,6 +471,7 @@ impl SupplierAccountRepositoryExt for Repository<'_, SupplierAccount> {
             executor,
         )
         .await?;
+
         Ok(rows.into_iter().map(|row| SupplierAccountId::new(row.id)).collect())
     }
 }

@@ -237,6 +237,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(
             ServiceFulfillmentDraft::build(
                 ServiceFulfillmentId::new("sf-3"),
@@ -251,6 +252,7 @@ mod tests {
     fn fingerprints_are_distinct_typed_values() {
         assert!(ServiceRecipientFingerprint::from_precomputed("zz").is_err());
         assert!(ServiceLocationFingerprint::from_precomputed("zz").is_err());
+
         let entity = ServiceFulfillmentDraft::build(ServiceFulfillmentId::new("sf-4"), data()).unwrap();
         assert_eq!(entity.recipient_snapshot_fingerprint, "a".repeat(64));
         assert_eq!(entity.service_location_fingerprint, "b".repeat(64));

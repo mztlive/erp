@@ -49,12 +49,14 @@ impl SalesChangeReadService {
                     let access = SalesAccess::new(db.clone(), rbac.clone());
                     let (mut context, scope, filter) =
                         change_list_query(&access, &rbac, &params, &actor, executor).await?;
+
                     let page = db
                         .sales_change_orders()
                         .search_authorized_sales_change_orders(&filter, &scope, executor)
                         .await?;
                     let versions =
                         db.sales_change_orders().query_change_versions(&filter, &scope, executor).await?;
+
                     context.validate(executor).await?;
                     let version = change_scope_version(&context.scope_version, &versions)?;
                     context.scope_version = version;
@@ -95,6 +97,7 @@ impl SalesChangeReadService {
                     let access = SalesAccess::new(db.clone(), rbac.clone());
                     let (context, scope, filter) =
                         change_list_query(&access, &rbac, &params, &actor, executor).await?;
+
                     let versions =
                         db.sales_change_orders().query_change_versions(&filter, &scope, executor).await?;
                     context.validate(executor).await?;
@@ -202,6 +205,7 @@ mod tests {
             sort_by: None,
             sort_dir: None,
         };
+
         let result =
             change_list_query(&access, &authorization, &params, &actor, &mut SnapshotExecutor::default())
                 .await;
@@ -221,6 +225,7 @@ mod tests {
             sort_dir: None,
         };
         let first = change_list_filter(&params).unwrap();
+
         params.page = Some(2);
         params.page_size = Some(50);
         params.sort_dir = Some("asc".into());
@@ -229,6 +234,7 @@ mod tests {
         assert_eq!(next.sales_order_id, Some(SalesOrderId::new("so-1")));
         assert_eq!(next.status, Some(SalesChangeOrderStatus::Draft));
         assert_eq!((next.page, next.page_size, next.sort_ascending), (2, 50, true));
+
         params.sort_by = Some("arbitrary_field".into());
         assert!(matches!(change_list_filter(&params), Err(Error::ValidationError(_))));
     }
@@ -244,11 +250,14 @@ mod tests {
         versions.hash(&mut legacy);
         let first = change_scope_version("scope", &versions).unwrap();
         assert_eq!(first, format!("scope:{:x}", legacy.finish()));
+
         versions[1].version += 1;
         assert_ne!(first, change_scope_version("scope", &versions).unwrap());
+
         versions[1].version -= 1;
         versions[1].id = "change-3".into();
         assert_ne!(first, change_scope_version("scope", &versions).unwrap());
+
         assert_ne!(first, change_scope_version("new-scope", &versions).unwrap());
         assert_ne!(first, change_scope_version("scope", &[]).unwrap());
     }
@@ -260,6 +269,7 @@ mod tests {
             .map(|index| SalesChangeVersion { id: format!("change-{index:05}"), version: 1 })
             .collect();
         assert!(change_scope_version("scope", &versions).is_ok());
+
         versions.push(SalesChangeVersion { id: "change-over-limit".into(), version: 1 });
         assert!(matches!(
             change_scope_version("scope", &versions),

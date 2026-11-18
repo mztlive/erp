@@ -150,6 +150,7 @@ mod compile_probe_equivalence_tests {
                 "a34501e69937f7a41c7a14e46ae7da8e713b3b94ca3f2f16615826065f754b42",
             ),
         ];
+
         for (label, golden_payload, golden_hash) in cases {
             let (actor, order, mut request): (String, String, SubmitSalesOrderRequest) =
                 serde_json::from_str(golden_payload).unwrap();
@@ -165,6 +166,7 @@ mod compile_probe_equivalence_tests {
                 golden_hash,
                 "{label}: actual submission fingerprint"
             );
+
             if let Some(goods) = request.draft.lines[0].goods.as_mut() {
                 goods.pricing_mode = SalesPricingMode::Auto;
                 assert_ne!(sales_submission_fingerprint(&actor, &order, &request).unwrap(), golden_hash);
@@ -215,6 +217,7 @@ mod compile_probe_equivalence_tests {
         ] {
             assert_ne!(sales_handover_fingerprint("actor-1", "so-1", &altered).unwrap(), base_fingerprint);
         }
+
         assert_ne!(
             sales_handover_audit_id("actor-1", "so-1", "key-1"),
             sales_handover_audit_id("actor-1", "so-1", "key-2")

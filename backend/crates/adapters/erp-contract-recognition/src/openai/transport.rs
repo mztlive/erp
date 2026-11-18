@@ -98,6 +98,7 @@ impl HttpClientExt for BoundedHttp {
         let request =
             self.client.request(parts.method, parts.uri.to_string()).headers(parts.headers).body(body.into());
         let diagnostics = self.diagnostics.clone();
+
         async move {
             let response = request.send().await.map_err(|error| {
                 let failure = transport_error(error, TimeoutSource::ResponseHeaders);
@@ -148,6 +149,7 @@ async fn receive<U: From<Bytes> + Send + 'static>(
             String::new(),
         )));
     }
+
     let body: LazyBody<U> = Box::pin(async move {
         let body = read_body(response).await.map_err(|failure| {
             diagnostics.transport_failure(failure);
@@ -168,6 +170,7 @@ async fn read_body(mut response: HttpResponse) -> Result<Bytes, Failure> {
     if response.content_length().is_some_and(|length| length > MAX_RESPONSE as u64) {
         return Err(Failure::ResponseSize);
     }
+
     let mut bytes = Vec::new();
     while let Some(chunk) =
         response.chunk().await.map_err(|error| transport_error(error, TimeoutSource::ResponseBody))?
@@ -236,6 +239,7 @@ mod tests {
         })
         .await;
         assert_eq!(result.unwrap_err().code, "AI_REJECTED");
+
         let fields = &event(&logs, "contract_ai_finished")["fields"];
         assert_eq!(fields["http_status"], 400);
         assert_eq!(fields["provider_error_body_state"], "received");
@@ -264,6 +268,7 @@ mod tests {
             diagnostics.finish(Instant::now(), &result, None);
         })
         .await;
+
         let fields = &event(&logs, "contract_ai_finished")["fields"];
         assert_eq!(fields["provider_response_body"], body);
         assert_eq!(fields["http_status"], 200);
@@ -275,6 +280,7 @@ mod tests {
         let response = Response::builder().status(200).body("ok").unwrap();
         let response = receive::<Bytes>(response.into(), Diagnostics::default()).await.unwrap();
         assert_eq!(response.into_body().await.unwrap(), Bytes::from_static(b"ok"));
+
         let response = Response::builder().status(200).body(vec![b'x'; MAX_RESPONSE + 1]).unwrap();
         let response = receive::<Bytes>(response.into(), Diagnostics::default()).await.unwrap();
         assert!(response.into_body().await.is_err());

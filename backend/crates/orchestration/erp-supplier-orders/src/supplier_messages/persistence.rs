@@ -63,6 +63,7 @@ impl MongoSupplierMessageStore {
             connection,
         )?;
         ensure_binding(&db, &binding).await?;
+
         let now = Instant::now();
         let until = Instant::try_from_unix_secs(now.unix_secs().saturating_add(i64::from(lease_seconds)))?;
         let consumer = db
@@ -99,6 +100,7 @@ impl SupplierMessageStore for MongoSupplierMessageStore {
                     if !db.supplier_message_consumers().fence(&consumer, Instant::now(), executor).await? {
                         return Err(Error::ConflictError("供应商消息消费资格已失效".into()));
                     }
+
                     let repository = db.supplier_pulled_messages();
                     if let Some(mut existing) = repository
                         .by_source(&incoming.account_scope, &incoming.source_message_id, executor)
@@ -109,6 +111,7 @@ impl SupplierMessageStore for MongoSupplierMessageStore {
                         }
                         return Ok(existing);
                     }
+
                     repository.create(&incoming, executor).await?;
                     Ok(incoming)
                 })
@@ -147,6 +150,7 @@ impl SupplierMessageStore for MongoSupplierMessageStore {
                 })
             })
             .await?;
+
         *message = updated;
         Ok(())
     }

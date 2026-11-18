@@ -169,6 +169,7 @@ impl SalesSelectionProposal {
             return Err(Error::from("业务组织不能为空"));
         }
         let recipient = validate_participant(data.submit_mode, &data.participant_id, data.recipient)?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             proposal_no: proposal_no.to_string(),
@@ -236,6 +237,7 @@ where
     if choices.is_empty() {
         return Err(Error::from("未选任何陈列项，不能提交"));
     }
+
     let mut display_lines = Vec::new();
     let mut sku_lines = Vec::new();
     let mut display_total = Amount::zero();
@@ -247,6 +249,7 @@ where
             .ok_or_else(|| Error::from("选择了无效陈列项"))?;
         let (display_line, item_sku_lines) =
             lines_for_choice(proposal_id, submit_mode, choice, item, &mut next_id)?;
+
         if let Some(amount) = display_line.line_amount {
             display_total = super::pricing::try_add(display_total, amount)?;
         }
@@ -258,6 +261,7 @@ where
         display_lines.push(display_line);
         sku_lines.extend(item_sku_lines);
     }
+
     let total = match submit_mode {
         SubmitMode::ByQuantity | SubmitMode::PickupVoucher => {
             if display_total != sku_total {
@@ -298,6 +302,7 @@ where
     if submit_mode.requires_quantity() != quantity.is_some() {
         return Err(Error::from("提交方式与份数不一致"));
     }
+
     let unit_price = item.price();
     let line_amount = match quantity {
         Some(copies) => Some(try_mul_u32(unit_price, copies)?),
@@ -316,6 +321,7 @@ where
         unit_price,
         line_amount,
     };
+
     let sku_lines = sku_lines_for_item(proposal_id, item, quantity, next_id)?;
     Ok((display_line, sku_lines))
 }
@@ -346,6 +352,7 @@ where
         DisplayKind::SingleSku { sku } => slice::from_ref(sku),
         DisplayKind::Package { members, .. } => members.as_slice(),
     };
+
     let mut lines = Vec::with_capacity(members.len());
     for sku in members {
         let line_amount = match quantity {
@@ -430,10 +437,12 @@ mod tests {
                 format!("id-{seq}")
             })
             .unwrap();
+
         assert_eq!(total, Some(Amount::from_str("30.00").unwrap()));
         assert_eq!(display[0].line_amount, total);
         assert_eq!(sku_lines[0].quantity, Some(3));
         assert_eq!(sku_lines[0].line_amount, total);
+
         assert_eq!(seq, 2);
         assert_eq!(display[0].base.id, "id-1");
         assert_eq!(sku_lines[0].base.id, "id-2");
@@ -470,12 +479,15 @@ mod tests {
             SalesSelectionProposal::new(SalesSelectionProposalId::new("p1"), proposal_data()).unwrap();
         assert_eq!(proposal.participant_id, "person-1");
         assert_eq!(proposal.recipient.as_ref().unwrap().name, "张三");
+
         let mut data = proposal_data();
         data.recipient = None;
         assert!(SalesSelectionProposal::new(SalesSelectionProposalId::new("p2"), data).is_err());
+
         let mut data = proposal_data();
         data.participant_id = " ".into();
         assert!(SalesSelectionProposal::new(SalesSelectionProposalId::new("p3"), data).is_err());
+
         let mut data = proposal_data();
         data.submit_mode = SubmitMode::ByQuantity;
         assert!(SalesSelectionProposal::new(SalesSelectionProposalId::new("p4"), data).is_err());
@@ -506,6 +518,7 @@ mod tests {
             },
         )
         .unwrap();
+
         assert_eq!(total, Some("30.00".parse().unwrap()));
         assert_eq!(display[0].line_amount, total);
         assert_eq!(sku_lines[0].line_amount, total);
@@ -521,6 +534,7 @@ mod tests {
         let mut json = serde_json::to_value(proposal).unwrap();
         json.as_object_mut().unwrap().remove("participant_id");
         json.as_object_mut().unwrap().remove("recipient");
+
         let restored: SalesSelectionProposal = serde_json::from_value(json).unwrap();
         assert!(restored.participant_id.is_empty());
         assert!(restored.recipient.is_none());
@@ -568,6 +582,7 @@ mod tests {
             },
         )
         .unwrap();
+
         assert_eq!(total, Some("75.00".parse().unwrap()));
         assert_eq!(display_lines[0].quantity, Some(3));
         assert_eq!(display_lines[0].line_amount, total);
@@ -576,6 +591,7 @@ mod tests {
         assert_eq!(sku_lines[0].line_amount, Some("30.00".parse().unwrap()));
         assert_eq!(sku_lines[1].quantity, Some(3));
         assert_eq!(sku_lines[1].line_amount, Some("45.00".parse().unwrap()));
+
         assert_eq!(sequence, 3);
         assert_eq!(display_lines[0].base.id, "line-1");
         assert_eq!(sku_lines[0].base.id, "line-2");
@@ -596,6 +612,7 @@ mod tests {
         let mut package = package();
         let DisplayKind::Package { members, .. } = &mut package.kind else { panic!("expected package") };
         members.reverse();
+
         for item in [single, package] {
             let expected = match &item.kind {
                 DisplayKind::SingleSku { sku } => vec![sku.clone()],
@@ -609,6 +626,7 @@ mod tests {
                     format!("line-{calls}")
                 })
                 .unwrap();
+
                 assert_eq!(calls, expected.len());
                 assert_eq!(lines.len(), expected.len());
                 for (index, (line, snapshot)) in lines.iter().zip(&expected).enumerate() {
@@ -660,6 +678,7 @@ mod tests {
                 format!("line-{calls}")
             })
             .unwrap_err();
+
         assert_eq!(error.to_string(), "行金额超出可表示范围");
         assert!(matches!(error, Error::LogicError(_)));
         assert_eq!(calls, 1);

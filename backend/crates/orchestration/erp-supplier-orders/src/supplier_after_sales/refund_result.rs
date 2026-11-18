@@ -83,6 +83,7 @@ impl SupplierAfterSalesProcess {
         if let Some(fact_id) = &row.fact_id {
             return self.existing_refund(fact_id, executor).await;
         }
+
         let financial = self
             .db
             .supplier_fulfillment()
@@ -104,6 +105,7 @@ impl SupplierAfterSalesProcess {
         } else {
             RefundStatus::Partial
         })?;
+
         let message = refund_message(&row.connection_id, &row.base.id)?;
         let (fact, allocations) = SupplierFulfillmentService::new(self.db.clone()).build_refund_fact(
             &order,
@@ -111,6 +113,7 @@ impl SupplierAfterSalesProcess {
             &order.connection_id,
             &InboxMessageId::new(&message.base.id),
         )?;
+
         self.db.inbox_messages().create(&message, executor).await?;
         persist_refund_result(&self.db, &mut order, &fact, &allocations, executor).await?;
         self.complete_refund(&mut row, hash, &fact.base.id, actor, executor).await?;
@@ -132,6 +135,7 @@ impl SupplierAfterSalesProcess {
                 order.advance_refund(RefundStatus::RefundPending)?;
             }
         }
+
         let items = self
             .db
             .supplier_fulfillment_items()
@@ -154,6 +158,7 @@ impl SupplierAfterSalesProcess {
         row.fact_id = Some(fact_id.to_string());
         row.blocker = Some("供应商退款事实及分配已登记；现金到账与应付核销仍按财务流程确认".into());
         self.db.api_refunds().update(row, executor).await?;
+
         let mut action = self
             .db
             .supplier_order_actions()
@@ -162,6 +167,7 @@ impl SupplierAfterSalesProcess {
             .ok_or_else(|| Error::NotFound("原退款动作不存在".into()))?;
         project(row, &mut action)?;
         self.db.supplier_order_actions().update(&mut action, executor).await?;
+
         let audit = actor.clone().resource_log(
             "supplier_fulfillment.api_refund_apply",
             "supplier_refund_fact",

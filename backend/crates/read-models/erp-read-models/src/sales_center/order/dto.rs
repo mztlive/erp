@@ -384,10 +384,12 @@ mod wire_tests {
         assert_eq!(instance.id, "inst-1");
         assert_eq!(instance.status, "RUNNING");
         assert_eq!(instance.current_round_no, 3);
+
         let access = PurchaseCreationAccessView::default();
         assert!(!access.allowed);
         assert_eq!(access.task_count, 0);
         assert!(access.blocker.is_none());
+
         let item = DocumentApprovalHistoryItemView::new(
             "exec-1".to_string(),
             "node-1".to_string(),

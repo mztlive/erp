@@ -60,6 +60,7 @@ pub(super) fn progress_pipeline(
         doc! { "$subtract": ["$" .to_owned() + progress_field, amount] }
     };
     let new_balance = doc! { "$subtract": ["$" .to_owned() + total_field, &new_progress] };
+
     let mut set = doc! {
         progress_field: &new_progress,
         balance_field: &new_balance,
@@ -67,6 +68,7 @@ pub(super) fn progress_pipeline(
         "version": { "$add": ["$version", 1] },
         "updated_at": chrono::Local::now().timestamp(),
     };
+
     if progress_field == "settled_total" {
         set.insert(
             "status",

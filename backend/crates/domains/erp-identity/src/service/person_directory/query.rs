@@ -59,6 +59,7 @@ pub async fn list_page(
         executor,
     )
     .await?;
+
     let content = display_version(db, &mut display, &result, executor).await?;
     let mut version = Fingerprint::new("person-directory-query-v2");
     version.text(&content);
@@ -66,6 +67,7 @@ pub async fn list_page(
     version.optional(org_filter.as_ref(), |hash, ids| hash.unordered(ids, |hash, id| hash.text(id)));
     let version = version.finish();
     ensure_current_version(&request.scope_version, &version)?;
+
     let page = page_from_result(result, request.page, request.page_size, &display, version)?;
     authorization.validate(&access, executor).await?;
     Ok(page)
@@ -90,6 +92,7 @@ pub async fn selected_page(
         return Err(Error::ValidationError("已选人员须为 1 到 100 项".into()));
     }
     let page_size = ids.len() as u32;
+
     let (access, mut display) = authorize(db, authorization, actor, category, executor).await?;
     let result = directory_page(
         db,
@@ -105,6 +108,7 @@ pub async fn selected_page(
         executor,
     )
     .await?;
+
     let version = display_version(db, &mut display, &result, executor).await?;
     let page = page_from_result(result, 1, page_size, &display, version)?;
     authorization.validate(&access, executor).await?;
@@ -164,6 +168,7 @@ async fn display_version(
     display.organizations.memberships = OrganizationRepository::new(db)
         .directory_memberships(Some(&ids), None, display.as_of, executor)
         .await?;
+
     let mut version = Fingerprint::new("person-directory-display-v2");
     version.text(&content_version(&display.scope_version, result));
     version.unordered(&display.organizations.memberships, |hash, row| {
@@ -268,6 +273,7 @@ mod tests {
         };
         let empty = page_from_result(DirectoryResult::default(), 1, 20, &display, "scope".into()).unwrap();
         assert_eq!(empty.empty_reason, None);
+
         display.no_scope = true;
         let denied = page_from_result(DirectoryResult::default(), 1, 20, &display, "scope".into()).unwrap();
         assert_eq!(denied.empty_reason, Some("no_scope"));
@@ -320,6 +326,7 @@ mod tests {
                 }],
                 ..Default::default()
             };
+
             let page = page_from_result(result, 1, 20, &authorized, "scope".into()).unwrap();
             assert_eq!(page.items[0].primary_org_unit_id.as_deref(), expected);
             assert_eq!(page.items[0].org_label.as_deref(), expected.map(|_| "销售部"));
@@ -332,6 +339,7 @@ mod tests {
         let old = content_version("scope", &result);
         assert_ne!(old, content_version("scope", &version_fixture("乙", "active")));
         assert_ne!(old, content_version("scope", &version_fixture("甲", "suspended")));
+
         let empty = content_version("no-scope", &DirectoryResult::default());
         assert!(matches!(
             ensure_current_version(&Some(old.clone()), &empty),

@@ -66,9 +66,11 @@ impl PurchaseDeliveryAllocation {
         if kind != PurchaseLineType::ItemService || rows.len() > 100 {
             return Err(Error::from("交付安排仅适用于商品/服务行，最多100个地址"));
         }
+
         for row in rows.iter_mut() {
             row.region_name = row.region_code.full_name();
         }
+
         let mut total = Decimal::ZERO;
         let mut seen = BTreeMap::new();
         for row in rows.iter() {
@@ -87,6 +89,7 @@ impl PurchaseDeliveryAllocation {
             }
             total = total.checked_add(row.quantity.to_decimal()).ok_or("交付数量合计超出范围")?;
         }
+
         if quantity.map(|value| value.to_decimal()) != Some(total) {
             return Err(Error::from("各地址交付数量合计必须等于本次采购数量"));
         }
@@ -127,6 +130,7 @@ impl PurchaseDeliveryAllocation {
             return Err(Error::from("请确认本次采购承担的地址及交付数量"));
         }
         Self::validate(&mut rows.to_vec(), PurchaseLineType::ItemService, Some(quantity))?;
+
         let mut caps = BTreeMap::new();
         for row in source {
             *caps.entry(row.key()).or_insert(Decimal::ZERO) += row.quantity.to_decimal();
@@ -136,6 +140,7 @@ impl PurchaseDeliveryAllocation {
                 *cap -= row.quantity.to_decimal();
             }
         }
+
         for row in rows {
             ensure_sourcing_quantity(row.quantity, scale, unit)
                 .map_err(|error| Error::from(error.to_string()))?;
@@ -212,6 +217,7 @@ mod tests {
             )
             .is_ok()
         );
+
         assert!(
             PurchaseDeliveryAllocation::validate_source(
                 &[row("地址A", "2")],
@@ -224,6 +230,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(!format!("{:?}", row("秘密地址", "2")).contains("秘密地址"));
     }
 }

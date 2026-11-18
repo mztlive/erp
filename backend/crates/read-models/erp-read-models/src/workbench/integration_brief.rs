@@ -38,6 +38,7 @@ fn integration_error_brief_source(
     let resolved_at = task.resolved_at.map(brief::format_instant_datetime);
     let resolution_type = task.resolution_type.map(|value| value.label().to_string());
     let reference = labels.business_object_label.clone().or_else(|| labels.message_label.clone());
+
     let mut sections = Vec::new();
     brief::push_section(&mut sections, "错误分类", Some(task.error_class.label()), false);
     brief::push_section(&mut sections, "状态", Some(task.status.label()), false);
@@ -49,10 +50,12 @@ fn integration_error_brief_source(
     let message_label =
         labels.message_label.as_deref().or(task.message_id.as_ref().map(|_| "消息名称未维护"));
     brief::push_section(&mut sections, "关联消息", message_label, false);
+
     brief::push_section(&mut sections, "发生时间", occurred_at.as_deref(), false);
     brief::push_section(&mut sections, "重试记录", Some(attempt_count.as_str()), false);
     brief::push_section(&mut sections, "最近尝试", last_attempt_at.as_deref(), false);
     brief::push_section(&mut sections, "错误摘要", task.last_attempt_summary.as_deref(), false);
+
     let owner_role = task.owner_role.as_deref().map(role_label);
     brief::push_section(&mut sections, "责任角色", owner_role.as_deref(), false);
     brief::push_section(&mut sections, "责任人", task.owner_user_id.as_deref(), false);
@@ -62,10 +65,12 @@ fn integration_error_brief_source(
         Some(integration_error_next_step(task.error_class)),
         false,
     );
+
     brief::push_section(&mut sections, "解决方式", resolution_type.as_deref(), false);
     let resolution = evidence_category(task.resolution.as_deref());
     brief::push_section(&mut sections, "处理证据类别", resolution.as_deref(), false);
     brief::push_section(&mut sections, "完成时间", resolved_at.as_deref(), false);
+
     brief::ObjectBriefSource {
         customer: None,
         amount_label: None,
@@ -128,11 +133,13 @@ fn reconciliation_difference_brief_source(
     let object_label = object_label.or(external.as_deref()).unwrap_or("对象名称未维护");
     let left_evidence = evidence_category(difference.left_fact_reference.as_deref());
     let right_evidence = evidence_category(difference.right_fact_reference.as_deref());
+
     let mut sections = Vec::new();
     brief::push_section(&mut sections, "异常对象", Some(object_type), false);
     brief::push_section(&mut sections, "业务对象", Some(object_label), false);
     brief::push_section(&mut sections, "差异类型", Some(difference_type), false);
     brief::push_section(&mut sections, "发现时间", occurred_at.as_deref(), false);
+
     brief::push_section(&mut sections, "左侧证据类别", left_evidence.as_deref(), false);
     brief::push_section(&mut sections, "右侧证据类别", right_evidence.as_deref(), false);
     brief::push_section(
@@ -141,6 +148,7 @@ fn reconciliation_difference_brief_source(
         Some("两侧事实已核对，并引用正式处理结果或无需处理的证据"),
         false,
     );
+
     brief::ObjectBriefSource {
         customer: None,
         amount_label: None,
@@ -186,9 +194,11 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let tasks = self.facts_reader().read_integration_errors(&ids, executor).await?;
         let views = tasks.iter().cloned().map(ErrorTaskView::from).collect::<Vec<_>>();
         let mut labels = integration_error_labels(self.db, &views, executor).await?;
+
         for task in tasks {
             let mut fact =
                 WorkbenchObjectFact::from_authority(super::authority::command::integration_error_fact(&task));
@@ -211,9 +221,11 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let differences = self.facts_reader().read_reconciliation_differences(&ids, executor).await?;
         let views = differences.iter().cloned().map(DifferenceView::from).collect::<Vec<_>>();
         let labels = object_labels(self.db, &views, executor).await?;
+
         for difference in differences {
             let mut fact = WorkbenchObjectFact::from_authority(
                 super::authority::command::reconciliation_difference_fact(&difference),
@@ -269,7 +281,6 @@ mod integration_brief_tests {
                 message_label: None,
             },
         );
-
         assert!(brief.extra_sections.iter().any(|section| {
             section.label == "业务对象" && section.value == "供应商订单 SF-1001"
         }));
@@ -277,6 +288,7 @@ mod integration_brief_tests {
             brief.extra_sections.iter().any(|section| section.label == "重试记录" && section.value == "2 次")
         );
         assert!(brief.list_summary.contains("目标系统超时"));
+
         let missing_names = integration_error_brief_source(&task, &IntegrationTaskLabels::default());
         assert!(
             missing_names
@@ -305,7 +317,6 @@ mod integration_brief_tests {
         .unwrap();
 
         let brief = reconciliation_difference_brief_source(&difference, None);
-
         assert!(brief.extra_sections.iter().any(|section| section.label == "左侧证据类别"));
         assert!(brief.extra_sections.iter().any(|section| section.label == "右侧证据类别"));
         assert!(brief.list_summary.contains("2 侧证据"));

@@ -41,6 +41,7 @@ impl BoundScopeTarget {
                 _ => unreachable!("需要目标的范围已排除"),
             }));
         }
+
         let mode = binding.target_mode.ok_or_else(|| Error::from("组织范围必须指定目标模式"))?;
         if mode != ScopeTargetMode::Explicit && binding.target_dimension != ScopeDimension::InternalOrg {
             return Err(Error::from("动态范围仅支持内部组织"));
@@ -48,6 +49,7 @@ impl BoundScopeTarget {
         if (mode == ScopeTargetMode::Explicit) == targets.is_empty() {
             return Err(Error::from("显式模式必须指定目标，动态模式不得混入静态目标"));
         }
+
         let needs_descendants =
             binding.target_dimension == ScopeDimension::InternalOrg && mode != ScopeTargetMode::ManagedOrgs;
         if needs_descendants != binding.include_descendants.is_some() {

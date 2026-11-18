@@ -28,6 +28,7 @@ pub async fn load(
         .find_by_id(&account.sales_order_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("来源销售单不存在".into()))?;
+
     let party = PartyDomainRepository::new(db)
         .find_with_current_revision(&account.counterparty_party_id, executor)
         .await?;
@@ -38,6 +39,7 @@ pub async fn load(
         ),
         None => (String::new(), String::new()),
     };
+
     Ok(InvoiceRequestSource {
         effective: order.commercial_status == CommercialStatus::Effective
             && order.current_revision_id().is_some()

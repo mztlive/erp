@@ -73,6 +73,7 @@ impl PurchasePaymentRequestReadService {
         if !self.readable(&request, &scope, executor).await? {
             return Err(Error::NotFound("付款申请材料不存在或无权下载".into()));
         }
+
         let material = self.material(&request, asset_id, executor).await?;
         scope.deliver(executor).await?;
         Ok(material)
@@ -105,6 +106,7 @@ impl PurchasePaymentRequestReadService {
                     let (expected, access) = auth.authorize(&id, &actor_for_tx, executor).await?;
                     let request = this.task_request(&actor_for_tx, &id, &expected, executor).await?;
                     let material = this.material(&request, &asset_id, executor).await?;
+
                     this.rbac.validate(&access, executor).await?;
                     Ok::<_, Error>(material)
                 })
@@ -159,6 +161,7 @@ impl PurchasePaymentRequestReadService {
         self.rbac
             .require(actor, &payable_permissions::PAYMENT_RECIPIENT_REVEAL, AccessTarget::Operation, executor)
             .await?;
+
         let request = self.task_request(actor, input.work_item_id.as_ref(), fact, executor).await?;
         let task = self
             .db
@@ -169,6 +172,7 @@ impl PurchasePaymentRequestReadService {
         if request.base.id != id || task.base.version.to_string() != input.expected_task_version {
             return Err(Error::ConflictError("付款申请任务版本已变化".into()));
         }
+
         let snapshot =
             request.payee_account.ok_or_else(|| Error::ConflictError("付款申请未冻结收款账户".into()))?;
         self.validate_reveal_account(&snapshot, input, executor).await?;
@@ -192,6 +196,7 @@ impl PurchasePaymentRequestReadService {
             .party_bank_accounts()
             .list_current_on(&account.party_id, BusinessDate::today(), executor)
             .await?;
+
         if snapshot.account_id != input.expected_bank_account_id
             || snapshot.version != input.expected_bank_account_version
             || account.base.version != snapshot.version
@@ -219,6 +224,7 @@ impl PurchasePaymentRequestReadService {
         ) {
             files.extend(self.payment_receipts(request, executor).await?);
         }
+
         let file = files
             .into_iter()
             .find(|file| file.file_asset_id.as_ref() == asset_id)
@@ -263,6 +269,7 @@ impl PurchasePaymentRequestReadService {
             .iter()
             .chain(request.lines.iter().flat_map(|line| &line.source_snapshot.allowed_attachment_ids))
             .collect::<BTreeSet<_>>();
+
         let is_editable = matches!(
             request.status,
             PurchasePaymentRequestStatus::Draft
@@ -287,6 +294,7 @@ impl PurchasePaymentRequestReadService {
                 .filter(|file| ids.contains(&file.file_asset_id.to_string()))
                 .collect());
         }
+
         let mut files = Vec::new();
         for id in ids {
             let file = self
@@ -321,6 +329,7 @@ mod tests {
             .database("payment_request_material_qualification");
         let service = PurchasePaymentRequestReadService::new(db, unavailable_authorization());
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let result = service.material_read(&actor, "request", "file", &mut SnapshotExecutor::default()).await;
         assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
     }
@@ -346,10 +355,12 @@ mod tests {
             subject_version: "1".into(),
             allowed_actions: vec![],
         };
+
         let result = service.reveal_snapshot(&actor, "request", &input, &fact, &mut NoTransaction).await;
         assert!(
             matches!(result, Err(Error::ValidationError(reason)) if reason == "写入授权必须使用快照事务")
         );
+
         let result =
             service.reveal_snapshot(&actor, "request", &input, &fact, &mut SnapshotExecutor::default()).await;
         assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));

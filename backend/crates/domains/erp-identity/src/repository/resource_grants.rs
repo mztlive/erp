@@ -81,6 +81,7 @@ pub(crate) async fn for_recipient(
     if let Some(after) = after {
         filter.insert("id", doc! { "$gt": after });
     }
+
     let mut items: Vec<GrantSource> = page(db, SOURCES, filter, 101, executor).await?;
     let next_cursor = if items.len() > 100 {
         items.pop();
@@ -208,6 +209,7 @@ mod tests {
                     .unwrap(),
                 event.source.rule
             );
+
             let restored: GrantEvent = deserialize_from_document(document).unwrap();
             event.ensure_replay(&restored).unwrap();
         }

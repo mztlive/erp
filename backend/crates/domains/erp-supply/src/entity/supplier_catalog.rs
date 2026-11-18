@@ -109,6 +109,7 @@ impl SupplierCatalogItem {
         {
             return Err(Error::ConflictError("供应商商品身份不一致".into()));
         }
+
         self.base = previous.base;
         self.requires_identity_review = previous.requires_identity_review
             || (previous.offering_id.is_some()
@@ -119,6 +120,7 @@ impl SupplierCatalogItem {
         self.sku_no = previous.sku_no;
         self.company_product_id = previous.company_product_id;
         self.offering_id = previous.offering_id;
+
         if self.media_retry_at.is_none() && (self.images.is_none() || self.detail_images.is_none()) {
             self.media_retry_at = previous.media_retry_at;
             self.media_errors = previous.media_errors;
@@ -133,6 +135,7 @@ impl SupplierCatalogItem {
         self.brand_id = self.brand_id.take().or(previous.brand_id);
         self.brand_name = self.brand_name.take().or(previous.brand_name);
         self.source_service_regions = previous.source_service_regions;
+
         self.refresh_fingerprint()?;
         Ok(())
     }
@@ -160,6 +163,7 @@ impl SupplierCatalogItem {
         if self.base.version != expected_version {
             return Err(Error::ConflictError("商品目录已变化，请刷新后重新匹配".into()));
         }
+
         self.sku_id = Some(sku_id);
         self.sku_no = Some(sku_no);
         self.company_product_id = Some(product_id);
@@ -182,6 +186,7 @@ impl SupplierCatalogItem {
         if sku.spec_id.trim().is_empty() || name.trim().is_empty() {
             return Err(Error::ValidationError("供应商规格编号或商品名称缺失".into()));
         }
+
         let mut item = Self {
             base: BaseModel::new(catalog_item_id(connection, &product, &sku.spec_id)),
             connection_id: connection.into(),
@@ -252,6 +257,7 @@ impl SupplierCatalogItem {
         if self.base.version != expected_version {
             return Err(Error::ConflictError("商品目录已变化，请重新预览选品".into()));
         }
+
         self.sku_id = Some(sku_id);
         self.sku_no = Some(sku_no);
         self.company_product_id = Some(product_id);
@@ -310,12 +316,14 @@ impl SupplierCatalogItem {
         {
             return Err(Error::ValidationError("须确认同一实际销售项并填写核对原因".into()));
         }
+
         if !self.requires_identity_review {
             return Err(Error::BusinessLogicError("当前来源没有待核对的身份变化".into()));
         }
         if self.offering_id.is_none() || self.availability == CatalogAvailability::Withdrawn {
             return Err(Error::BusinessLogicError("当前来源未建立供给或已撤回，不能恢复使用".into()));
         }
+
         self.requires_identity_review = false;
         Ok(())
     }
@@ -335,11 +343,13 @@ impl SupplierCatalogItem {
         {
             return Err(Error::ConflictError("供应商商品身份不一致".into()));
         }
+
         let order = self.source_revision.compare(&previous.source_revision);
         let previous_fingerprint = previous.source_fingerprint.clone();
         if order == Some(Ordering::Less) {
             return Ok(false);
         }
+
         self.retain_match(previous)?;
         if self.source_fingerprint == previous_fingerprint {
             return Ok(false);
@@ -366,6 +376,7 @@ impl SupplierCatalogItem {
             },
             _ => {},
         }
+
         self.availability = CatalogAvailability::Withdrawn;
         self.available_quantity = None;
         self.quantity_unbounded = false;
@@ -387,6 +398,7 @@ impl SupplierCatalogItem {
         if let Some(terms) = &self.source_purchase_terms {
             terms.validate()?;
         }
+
         let details = OfferDetails {
             source_purchase_terms: self
                 .source_purchase_terms
@@ -527,6 +539,7 @@ impl SupplierCatalogRun {
             .skipped_count
             .checked_add(count)
             .ok_or_else(|| Error::ValidationError("异常数量超限".into()))?;
+
         self.skipped_samples.extend(skipped);
         let excess = self.skipped_samples.len().saturating_sub(100);
         self.skipped_samples.drain(..excess);
@@ -546,6 +559,7 @@ impl SupplierCatalogRun {
         {
             return Err(Error::BusinessLogicError("商品分页未前进或已超出同步上限，请联系管理员".into()));
         }
+
         self.observed_count = self
             .observed_count
             .checked_add(count)
@@ -613,14 +627,17 @@ mod tests {
         let restored: SupplierCatalogItem =
             serde_json::from_value(serde_json::to_value(&item).unwrap()).unwrap();
         assert_eq!(restored.source_purchase_terms, item.source_purchase_terms);
+
         let mut same = restored.clone();
         same.source_purchase_terms.as_mut().unwrap().quote_context.as_mut().unwrap().observed_at =
             Instant::from_unix_secs(200);
         same.refresh_fingerprint().unwrap();
         assert_eq!(same.source_fingerprint, item.source_fingerprint);
+
         same.source_purchase_terms.as_mut().unwrap().quantity_multiple = Some("3".parse().unwrap());
         same.refresh_fingerprint().unwrap();
         assert_ne!(same.source_fingerprint, item.source_fingerprint);
+
         let mut legacy = serde_json::to_value(item).unwrap();
         legacy.as_object_mut().unwrap().remove("source_purchase_terms");
         let legacy: SupplierCatalogItem = serde_json::from_value(legacy).unwrap();
@@ -633,17 +650,20 @@ mod tests {
         let mut prior = SupplierCatalogItem::observed("c", "supplier", "job", snapshot.clone()).unwrap();
         assert_eq!(prior.barcode.as_deref(), Some("0012345678905"));
         prior.offering_id = Some("offering".into());
+
         let mut missing = snapshot.clone();
         missing.value.details.barcode = None;
         let mut next = SupplierCatalogItem::observed("c", "supplier", "job", missing).unwrap();
         next.retain_match(prior.clone()).unwrap();
         assert_eq!(next.barcode, prior.barcode);
         assert!(!next.requires_identity_review);
+
         snapshot.value.details.barcode = Some("0012345678906".into());
         let mut changed = SupplierCatalogItem::observed("c", "supplier", "job", snapshot.clone()).unwrap();
         changed.retain_match(prior.clone()).unwrap();
         assert!(changed.requires_identity_review);
         assert_ne!(changed.source_fingerprint, prior.source_fingerprint);
+
         snapshot.value.details.barcode = Some("x".repeat(129));
         assert!(SupplierCatalogItem::observed("c", "supplier", "job", snapshot).is_err());
     }
@@ -689,9 +709,11 @@ mod tests {
         assert_eq!(fresh.market_price, Some("129.50".parse().unwrap()));
         assert_ne!(fresh.source_fingerprint, prior.source_fingerprint);
         assert!(fresh.purchase_price.is_none());
+
         let encoded = serde_json::to_value(&fresh).unwrap();
         let restored: SupplierCatalogItem = serde_json::from_value(encoded.clone()).unwrap();
         assert_eq!(restored.market_price, fresh.market_price);
+
         let mut legacy = encoded;
         legacy.as_object_mut().unwrap().remove("market_price");
         assert!(serde_json::from_value::<SupplierCatalogItem>(legacy).unwrap().market_price.is_none());
@@ -720,10 +742,12 @@ mod tests {
         assert!(prior.match_sku(prior.base.version + 1, "sku".into(), "SKU-1".into(), "p".into()).is_err());
         assert!(prior.match_sku(prior.base.version, "sku".into(), "SKU-1".into(), "p".into()).unwrap());
         assert!(!prior.match_sku(prior.base.version + 1, "sku".into(), "SKU-1".into(), "p".into()).unwrap());
+
         let mut fresh = SupplierCatalogItem::observed("c", "s", "j2", observation()).unwrap();
         fresh.retain_match(prior.clone()).unwrap();
         assert_eq!(fresh.sku_id.as_deref(), Some("sku"));
         assert_eq!(fresh.job_id, "j2");
+
         let mut other = SupplierCatalogItem::observed("other", "s", "j2", observation()).unwrap();
         assert!(other.retain_match(prior).is_err());
         assert!(other.sku_id.is_none());
@@ -749,9 +773,11 @@ mod tests {
         assert_eq!(run.skipped_count, 105);
         assert_eq!(run.skipped_samples.len(), 100);
         assert_eq!(run.skipped_samples[0], "异常 5");
+
         run.record_skipped(vec!["后续异常".into()]).unwrap();
         assert_eq!(run.skipped_count, 106);
         assert_eq!(run.skipped_samples.last().unwrap(), "后续异常");
+
         let mut legacy = serde_json::to_value(&run).unwrap();
         legacy.as_object_mut().unwrap().remove("skipped_count");
         legacy.as_object_mut().unwrap().remove("skipped_samples");
@@ -766,6 +792,7 @@ mod tests {
         assert!(!restored.resume_requested);
         assert!(!restored.restart_required);
         assert_eq!(restored.checkpoint_version, 0);
+
         run.skipped_count = u64::MAX;
         let samples = run.skipped_samples.clone();
         assert!(run.record_skipped(vec!["overflow".into()]).is_err());
@@ -779,6 +806,7 @@ mod tests {
         let previous = (run.cursor.clone(), run.observed_count, run.pages);
         assert!(run.advance(Some("2".into()), 7).is_err());
         assert_eq!((run.cursor.clone(), run.observed_count, run.pages), previous);
+
         run.advance(Some("3".into()), 0).unwrap();
         run.advance(None, 2).unwrap();
         assert!(run.finished);
@@ -794,14 +822,17 @@ mod tests {
         assert!(!run.supports_incremental(connection.technical_config_version, 7));
         run.succeeded = true;
         assert!(run.supports_incremental(connection.technical_config_version, 7));
+
         let mut previous_mapping = run.clone();
         previous_mapping.mapping_version = 6;
         assert!(!previous_mapping.supports_incremental(connection.technical_config_version, 7));
         assert!(!run.supports_incremental(connection.technical_config_version + 1, 7));
+
         let mut legacy = serde_json::to_value(&run).unwrap();
         legacy.as_object_mut().unwrap().remove("mapping_version");
         let restored: SupplierCatalogRun = serde_json::from_value(legacy).unwrap();
         assert!(!restored.supports_incremental(connection.technical_config_version, 7));
+
         run.record_skipped(vec!["来源字段错误".into()]).unwrap();
         assert!(!run.supports_incremental(connection.technical_config_version, 7));
     }
@@ -825,16 +856,19 @@ mod tests {
             )
             .unwrap();
         assert!(prior.match_sku(prior.base.version, "other-sku".into(), "O".into(), "other".into()).is_err());
+
         let mut fresh = SupplierCatalogItem::observed("c", "s", "j2", observation()).unwrap();
         fresh.retain_match(prior.clone()).unwrap();
         assert_eq!(fresh.offering_id.as_deref(), Some("offering"));
         assert_eq!(fresh.images, prior.images);
         assert!(!fresh.requires_identity_review);
+
         let mut changed = observation();
         changed.value.specification = "8寸".into();
         let mut changed = SupplierCatalogItem::observed("c", "s", "j3", changed).unwrap();
         changed.retain_match(fresh).unwrap();
         assert!(changed.requires_identity_review);
+
         let mut repeated = SupplierCatalogItem::observed("c", "s", "j4", observation()).unwrap();
         repeated.retain_match(changed).unwrap();
         assert!(repeated.requires_identity_review);
@@ -845,11 +879,14 @@ mod tests {
         let mut source = observation();
         source.stamp.revision = SourceRevision::Sequence { scope: "catalog".into(), value: 2 };
         let prior = SupplierCatalogItem::observed("c", "s", "j1", source.clone()).unwrap();
+
         let mut duplicate = SupplierCatalogItem::observed("c", "s", "j2", source.clone()).unwrap();
         assert!(!duplicate.merge_observation(prior.clone()).unwrap());
+
         source.value.name = "另一名称".into();
         let mut conflict = SupplierCatalogItem::observed("c", "s", "j3", source.clone()).unwrap();
         assert!(conflict.merge_observation(prior.clone()).is_err());
+
         source.stamp.revision = SourceRevision::Sequence { scope: "catalog".into(), value: 1 };
         let mut old = SupplierCatalogItem::observed("c", "s", "j4", source).unwrap();
         assert!(!old.merge_observation(prior.clone()).unwrap());
@@ -895,6 +932,7 @@ mod tests {
         )
         .unwrap();
         item.requires_identity_review = true;
+
         let mut request = ReviewCatalogIdentityRequest {
             expected_version: item.base.version,
             expected_sku_revision_id: "revision".into(),
@@ -908,9 +946,11 @@ mod tests {
         };
         assert!(item.confirm_identity_review(&request).is_err());
         assert!(item.requires_identity_review);
+
         request.confirm_same_identity = true;
         request.expected_version += 1;
         assert!(item.confirm_identity_review(&request).is_err());
+
         request.expected_version = item.base.version;
         item.confirm_identity_review(&request).unwrap();
         assert!(!item.requires_identity_review);
@@ -925,6 +965,7 @@ mod tests {
         item.unit = Some("盒".into());
         assert!(item.ensure_company_unit(&["piece", "件", "件"]).is_err());
         item.ensure_company_unit(&["box", "盒", "盒"]).unwrap();
+
         item.record_adoption(
             item.base.version,
             "sku".into(),

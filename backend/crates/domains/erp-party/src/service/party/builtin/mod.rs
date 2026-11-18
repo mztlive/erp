@@ -34,6 +34,7 @@ impl PartyService {
         };
         let actor = AuditActor::new(ACTOR.into(), ACTOR.into(), AccountKind::Admin);
         let today = BusinessDate::today();
+
         self.db
             .client()
             .with_transaction(move |executor| {
@@ -44,6 +45,7 @@ impl PartyService {
                             service.sync_company_identity(&seed, executor).await?;
                         let facts_changed =
                             service.sync_company_facts(&seed, &party, &codec, today, executor).await?;
+
                         if identity_changed || facts_changed {
                             let audit = service.audit.resource_log(
                                 actor.clone(),

@@ -48,6 +48,7 @@ impl SelectionOrderBasis {
         if lines.is_empty() {
             return Err(Error::ValidationError("销售方案没有可开单的商品明细".into()));
         }
+
         let lines = lines
             .into_iter()
             .map(|line| SelectionOrderLine::from_line(proposal, line))
@@ -213,6 +214,7 @@ mod tests {
         let encoded = serde_json::to_value(&order).unwrap();
         let restored: SalesOrder = serde_json::from_value(encoded.clone()).unwrap();
         assert_eq!(restored, order);
+
         let mut legacy = encoded;
         legacy.as_object_mut().unwrap().remove("selection_source");
         let legacy: SalesOrder = serde_json::from_value(legacy).unwrap();

@@ -53,6 +53,7 @@ async fn summary_from_store(
     };
     let id = ApprovalProcessInstanceId::new(instance.base.id.clone());
     let current = store.current(&id, executor).await?;
+
     let rows = store.history(&id, history_limit.saturating_add(1), executor).await?;
     let history = history_page_from(rows.iter().map(history_item_from_execution).collect(), history_limit);
     Ok(Some(ApprovalRuntimeSummary { instance, current, history }))

@@ -29,6 +29,7 @@ impl SupplierCatalogAdoptionProcess {
         if request.item_ids.iter().any(|id| !view.rows.iter().any(|row| row.source.base.id == *id)) {
             return Err(Error::ValidationError("原确认项不属于本批范围".into()));
         }
+
         let (process, source, batch_id, acting) =
             (self.clone(), connection.to_owned(), id.to_owned(), actor.clone());
         let status = self
@@ -56,6 +57,7 @@ impl SupplierCatalogAdoptionProcess {
         let fingerprint = request.unaccepted_fingerprint(id)?;
         let command = adoption_identity(&[connection, actor.id(), &request.idempotency_key]);
         let existing = self.db.catalog_adoption_commands().find_by_id(&command, executor).await?;
+
         if let Some(confirmation) = batch.confirmations.iter().find(|entry| entry.operation_id == command) {
             request.ensure_confirmation(confirmation, actor.id())?;
             if existing.is_none_or(|record| {
@@ -65,6 +67,7 @@ impl SupplierCatalogAdoptionProcess {
             }
             return Ok(BatchSubmissionStatus::Accepted);
         }
+
         if let Some(existing) = existing {
             if existing.base.is_deleted() || existing.fingerprint != fingerprint {
                 return Err(Error::ConflictError("原操作号已用于其他确认，请核对原请求".into()));

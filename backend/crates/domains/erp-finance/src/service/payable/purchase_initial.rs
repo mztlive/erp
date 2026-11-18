@@ -55,6 +55,7 @@ pub fn prepare(input: InitialPurchasePayable<'_>, actor_id: &str) -> Result<(Pay
     account.purchase_revision_id = Some(input.purchase_revision_id.to_owned());
     account.settlement_party_id = Some(input.settlement_party_id.to_owned());
     account.settlement_party_name = Some(input.settlement_party_name.to_owned());
+
     let entry = crate::entity::payable::PayableEntry::new(
         PayableEntryId::new(next_id()),
         crate::entity::payable::PayableEntryData {

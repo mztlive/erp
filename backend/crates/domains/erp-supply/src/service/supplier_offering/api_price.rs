@@ -93,6 +93,7 @@ impl SupplierOfferingService {
         if item.requires_identity_review || item.purchase_price.is_none() {
             return Ok(());
         }
+
         let id = offering
             .stable
             .current_revision_id
@@ -104,6 +105,7 @@ impl SupplierOfferingService {
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("API 供给当前条款不存在".into()))?;
+
         let current_no = self.current_revision_no(offering, executor).await?;
         let next_no = offering.next_revision_no(current_no, current_no)?;
         let Some(next) =
@@ -111,6 +113,7 @@ impl SupplierOfferingService {
         else {
             return Ok(());
         };
+
         offering.stable.current_revision_id = Some(next.base.id.clone());
         offering.stable.updated_by = actor.id().into();
         self.db.supplier_offering_repository().append_revision(offering, &next, executor).await?;

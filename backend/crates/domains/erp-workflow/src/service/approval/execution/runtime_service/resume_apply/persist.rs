@@ -42,17 +42,21 @@ pub(super) async fn persist_resume_writes(
         return Err(Error::Internal("原审批人恢复必须且只能创建一个新执行".to_string()));
     };
     verify_closed_resume_task(db, prepared.closed_task_guard.as_ref(), executor).await?;
+
     db.bpm_workflow()
         .insert_command_receipt(&prepared.writes.receipt, executor)
         .await
         .map_err(map_receipt_first_write_error)?;
+
     advance_resume_instance(db, prepared, executor).await?;
     end_replaced_execution(db, prepared, executor).await?;
     if !prepared.writes.created_assignees.is_empty() {
         return Err(Error::Internal("原审批人恢复不得修改实例审批人绑定".to_string()));
     }
     db.bpm_workflow().insert_execution(new_execution, executor).await?;
+
     persist_resume_tasks(db, prepared, executor).await?;
+
     persist_resume_notifications(
         db,
         &prepared.writes,

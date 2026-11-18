@@ -100,7 +100,6 @@ mod tests {
     #[test]
     fn cost_entry_identity_covers_the_full_business_key() {
         let indexes = cost_entry_indexes();
-
         let identity = indexes.iter().find(|index| name(index) == Some("uk_cost_entries_identity")).unwrap();
         assert_eq!(
             identity.keys,
@@ -122,7 +121,6 @@ mod tests {
     #[test]
     fn cost_allocation_indexes_cover_ownership_lookups() {
         let indexes = cost_allocation_indexes();
-
         assert!(indexes.iter().any(|index| name(index) == Some("idx_cost_allocations_entry")));
         assert!(indexes.iter().any(|index| {
             name(index) == Some("idx_cost_allocations_sales_order")

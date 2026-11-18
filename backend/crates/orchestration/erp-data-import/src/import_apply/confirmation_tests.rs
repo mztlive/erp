@@ -141,6 +141,7 @@ fn completion_requires_exact_task_subject_batch() {
     let batch = batch();
 
     validate_confirmation_completion(&command, &item, &confirmation, &batch).unwrap();
+
     let mut stale = command;
     stale.expected_trial_version = 3;
     assert!(validate_confirmation_completion(&stale, &item, &confirmation, &batch).is_err());
@@ -154,6 +155,7 @@ fn completion_preserves_version_snapshot_scope_identity_matrix_and_status_error_
     let mut task = work_item();
     let fact = confirmation();
     let mut batch = batch();
+
     command.expected_task_version += 1;
     command.expected_subject_version = "stale-subject".into();
     command.confirmation_scope = "UNKNOWN".into();
@@ -162,27 +164,33 @@ fn completion_preserves_version_snapshot_scope_identity_matrix_and_status_error_
         Err(Error::ConflictError(message))
             if message == "导入确认任务或批次版本已变化，请刷新后重试"
     ));
+
     command.expected_task_version = task.base.version;
     assert!(matches!(
         validate_confirmation_completion(&command, &task, &fact, &batch),
         Err(Error::ConflictError(message)) if message == "导入确认的批次或试算快照已变化"
     ));
+
     command.expected_subject_version = task.subject_version.clone();
     task.owner_role = "foreign".into();
     assert!(matches!(validate_confirmation_completion(&command, &task, &fact, &batch), Err(Error::Logic(_))));
+
     command.confirmation_scope = "SALES".into();
     batch.source_object_set = "SUPPLIER".into();
     assert!(matches!(
         validate_confirmation_completion(&command, &task, &fact, &batch),
         Err(Error::BusinessLogicError(message)) if message == "导入确认任务、责任范围或批次不匹配"
     ));
+
     task.owner_role = "role-sales".into();
     assert!(matches!(
         validate_confirmation_completion(&command, &task, &fact, &batch),
         Err(Error::BusinessLogicError(message)) if message == "当前确认范围已不属于批次必要矩阵"
     ));
+
     batch.source_object_set = "CUSTOMER".into();
     validate_confirmation_completion(&command, &task, &fact, &batch).unwrap();
+
     task.status = WorkItemStatus::Completed;
     assert!(matches!(
         validate_confirmation_completion(&command, &task, &fact, &batch),
@@ -298,6 +306,7 @@ fn superseded_closable_skips_closed_and_fails_closed_on_missing() {
             .unwrap();
         confirmation
     }
+
     let batch_id = LegacyImportBatchId::new("batch-1");
     let subject = LegacyImportConfirmation::subject_version(1, 1, "rule-1");
     let open = super::factories::confirmation_work_item(
@@ -323,12 +332,14 @@ fn superseded_closable_skips_closed_and_fails_closed_on_missing() {
             Instant::from_unix_secs(1_700_000_001),
         )
         .unwrap();
+
     let confirmations =
         vec![invalidated("c-1", "SALES", "work-item-1"), invalidated("c-2", "PROCUREMENT", "work-item-2")];
     let mut map = HashMap::new();
     map.insert(open.base.id.clone(), open);
     map.insert(closed.base.id.clone(), closed);
     let replacement = LegacyImportConfirmationId::new("c-new");
+
     let to_close = collect_superseded_closable_work_items(&confirmations, 3, &mut map, &replacement).unwrap();
     assert_eq!(to_close.len(), 1);
     assert_eq!(to_close[0].base.id, "work-item-1");
@@ -348,6 +359,7 @@ fn confirmation_outcome() -> (ImportConfirmationOutcome, LegacyImportConfirmatio
     task.complete_by_domain_command("user-1", at).unwrap();
     fact.base.version += 1;
     task.base.version += 1;
+
     let result = ImportConfirmationOutcome {
         confirmation_id: fact.base.id.clone(),
         confirmation_version: fact.base.version,
@@ -381,12 +393,14 @@ fn idempotency_receipt_rejects_same_key_with_different_command() {
     )
     .unwrap();
     assert!(fact.ensure_identity(&identity).is_ok());
+
     let mut changed = prepared;
     changed.comment = Some("不同确认".into());
     let identity = confirmation_command_identity("user-1", "legacy_import_confirmation.complete", &changed)
         .structured_receipt("legacy_import_confirmation")
         .unwrap();
     assert!(fact.ensure_identity(&identity).is_err());
+
     assert!(!fact.identity.command_id.contains("request-1"));
     let decoded: ImportCommandReceipt = serde_json::from_str(&serde_json::to_string(&fact).unwrap()).unwrap();
     assert_eq!(fact, decoded);
@@ -398,6 +412,7 @@ fn confirmation_replay_requires_original_decision_actor_and_task_terminal() {
     let (outcome, confirmation, task) = confirmation_outcome();
     assert!(validate_confirmation_replay(&outcome, &confirmation, &task, &prepared, "user-1").is_ok());
     assert!(validate_confirmation_replay(&outcome, &confirmation, &task, &prepared, "other").is_err());
+
     for case in 0..8 {
         let mut wrong = task.clone();
         match case {
@@ -412,6 +427,7 @@ fn confirmation_replay_requires_original_decision_actor_and_task_terminal() {
         }
         assert!(validate_confirmation_replay(&outcome, &confirmation, &wrong, &prepared, "user-1").is_err());
     }
+
     for case in 0..6 {
         let mut wrong = confirmation.clone();
         match case {

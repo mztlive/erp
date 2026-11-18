@@ -310,9 +310,7 @@ mod tests {
     #[test]
     fn super_admin_params_normalize_account_and_name_but_preserve_password() {
         let params = InitializeSuperAdminParams::new(" root ", " secret ", " Platform Admin ");
-
         let (account, password, name) = params.into_validated_parts().unwrap();
-
         assert_eq!(account.as_str(), "root");
         assert_eq!(password, " secret ");
         assert_eq!(name, "Platform Admin");
@@ -333,7 +331,6 @@ mod tests {
     fn reset_admin_password_params_preserve_password_and_reject_invalid_values() {
         let (account, password) =
             ResetAdminPasswordParams::new(" admin01 ", " secret ").into_validated_parts().unwrap();
-
         assert_eq!(account.as_str(), "admin01");
         assert_eq!(password, " secret ");
 
@@ -363,6 +360,7 @@ mod tests {
                 UpdateAdminParams { password: Some(password.clone()), ..UpdateAdminParams::new("admin-1") };
             assert_eq!(create.validate().is_ok(), valid);
             assert_eq!(update.validate().is_ok(), valid);
+
             let init =
                 InitializeSuperAdminParams::new("admin01", password.clone(), "Admin").into_validated_parts();
             let reset = ResetAdminPasswordParams::new("admin01", password.clone()).into_validated_parts();
@@ -373,6 +371,7 @@ mod tests {
                 assert_eq!(reset.unwrap().1, password);
             }
         }
+
         assert!(UpdateAdminParams::new("admin-1").validate().is_ok());
     }
 

@@ -31,8 +31,10 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                         .authorization
                         .query(&actor, &internal::APPROVAL_STARTED_LIST, executor)
                         .await?;
+
                     let count =
                         service.db.bpm_workflow().started_unread_count(actor.id(), &access, executor).await?;
+
                     service.authorization.validate(&access, executor).await?;
                     Ok(count)
                 })
@@ -75,6 +77,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         self.authorization
             .require(actor, &internal::APPROVAL_STARTED_LIST, AccessTarget::record(instance_id)?, executor)
             .await?;
+
         let repository = self.db.bpm_workflow();
         let instance = repository
             .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), executor)
@@ -86,6 +89,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             instance.started_by.as_str(),
             actor.id(),
         )?;
+
         repository.mark_progress_read(instance_id, actor.id(), viewed, executor).await?;
         Ok(())
     }

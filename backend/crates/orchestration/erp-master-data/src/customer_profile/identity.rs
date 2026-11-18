@@ -44,6 +44,7 @@ impl CustomerProfileProcess {
             executor,
         )
         .await?;
+
         if candidates.is_empty() {
             return Ok(CreationIdentity { party, revision, reused: false });
         }
@@ -78,6 +79,7 @@ impl CustomerProfileProcess {
                 "该企业已建立客户档案，请联系有权限的人员添加负责销售；停用或删除的客户须先恢复".into(),
             ));
         }
+
         let revision_id = party
             .stable
             .current_revision_id
@@ -92,6 +94,7 @@ impl CustomerProfileProcess {
         party
             .ensure_reusable_identity(&revision, name, credit)
             .map_err(|error| Error::ConflictError(error.to_string()))?;
+
         if !confirmed {
             return Err(Error::ConflictError("该企业已有主体资料但尚未建立客户档案。请勾选“复用已有企业资料”后提交，原有名称、信用代码和联系方式等资料将予以保留".into()));
         }

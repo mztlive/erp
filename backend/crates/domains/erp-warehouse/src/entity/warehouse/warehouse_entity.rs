@@ -209,12 +209,14 @@ impl Warehouse {
             ensure_transition(self.stable.status, status)?;
             self.stable.status = status;
         }
+
         if let Some(handler) = update.inbound_handler_user_id {
             self.inbound_handler_user_id = normalize_handler_user_id(handler)?;
         }
         if let Some(handler) = update.outbound_handler_user_id {
             self.outbound_handler_user_id = normalize_handler_user_id(handler)?;
         }
+
         self.stable.touch(updated_by);
         Ok(())
     }
@@ -279,6 +281,7 @@ impl Warehouse {
         if !self.is_active() {
             return Err(Error::from("目标仓库已停用，请先更换仓库"));
         }
+
         let handler = match operation {
             WarehouseFulfillmentOperation::Receipt => self.inbound_handler_user_id.as_deref(),
             WarehouseFulfillmentOperation::WarehouseShip => self.outbound_handler_user_id.as_deref(),

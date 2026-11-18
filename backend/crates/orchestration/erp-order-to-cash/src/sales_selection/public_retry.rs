@@ -88,6 +88,7 @@ mod tests {
     async fn aborted_conflicts_retry_with_same_command_until_success() {
         let attempts = Cell::new(0);
         let original_key = "person-command-key".to_string();
+
         let result = retry_public_write(|| {
             let count = attempts.get();
             attempts.set(count + 1);
@@ -96,6 +97,7 @@ mod tests {
         })
         .await
         .unwrap();
+
         assert_eq!(attempts.get(), 3);
         assert_eq!(result, (original_key, 7));
     }
@@ -108,6 +110,7 @@ mod tests {
             ready(Err(aborted_conflict()))
         })
         .await;
+
         assert_eq!(attempts.get(), 4);
         assert!(matches!(
             result,
@@ -141,6 +144,7 @@ mod tests {
                 ready(Err(failure.take().expect("nonretry error is consumed once")))
             })
             .await;
+
             assert!(result.is_err());
             assert_eq!(attempts.get(), 1);
         }

@@ -95,6 +95,7 @@ impl FulfillmentProcess {
         if req.packing.is_some() && req.tracking_entries.is_some() {
             return Err(Error::ValidationError("地址包裹与旧物流字段不能同时提交".into()));
         }
+
         let packing_context = PackingContext {
             codec: self.sensitive_data.clone(),
             key: self.fingerprint_key.clone(),
@@ -129,10 +130,12 @@ async fn apply_delivery_update(
     executor: &mut dyn Executor,
 ) -> Result<Delivery> {
     super::task::require_fulfillment_entry(db, task_identity, "delivery", id, actor, executor).await?;
+
     let service = FulfillmentService::new(db.clone());
     let (mut delivery, lines) = service.prepare_delivery_update(id, req, executor).await?;
     packing_context.apply(db, &mut delivery, &lines, false, executor).await?;
     super::delivery_tracking::ensure_tracking_sources(db, &delivery, &lines, executor).await?;
+
     service.persist_delivery(&mut delivery, executor).await?;
     super::task::record_fulfillment_activity(
         db,
@@ -142,6 +145,7 @@ async fn apply_delivery_update(
         executor,
     )
     .await?;
+
     let audit = actor.clone().resource_log("delivery.update", "delivery", id.to_owned())?;
     persist_log(db, &audit, executor).await?;
     Ok(delivery)
@@ -286,11 +290,13 @@ async fn persist_created_delivery(
                     )
                     .await?;
                 super::delivery_tracking::ensure_tracking_sources(&db, &delivery, &lines, executor).await?;
+
                 register_created_delivery_document(&db, workflow.as_ref(), &delivery, &actor, executor)
                     .await?;
                 erp_fulfillment::service::FulfillmentService::new(db.clone())
                     .persist_created_delivery(&delivery, &lines, executor)
                     .await?;
+
                 super::task::ensure_fulfillment_task(
                     &db,
                     &task_identity,
@@ -298,6 +304,7 @@ async fn persist_created_delivery(
                     executor,
                 )
                 .await?;
+
                 persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })

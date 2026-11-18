@@ -107,6 +107,7 @@ impl CustomerAssignmentService {
             .service
             .require(actor, &customer::ASSIGNMENT_LIST, AccessTarget::Operation, executor)
             .await?;
+
         params.validate()?;
         let (sort_by, sort_dir) =
             normalize_sort(&params.sort_by, &params.sort_dir, CUSTOMER_ASSIGNMENT_SORT_FIELDS)?;
@@ -124,9 +125,9 @@ impl CustomerAssignmentService {
             sort_by: Some(sort_by.to_string()),
             sort_ascending: matches!(sort_dir, SortDir::Asc),
         };
+
         let page = self.db.customer_assignments().search_customer_assignments(&filter, executor).await?;
         let items = page.items.into_iter().map(assignment_view).collect();
-
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
@@ -219,6 +220,7 @@ impl CustomerAssignmentService {
                         executor,
                     )
                     .await?;
+
                     persist_assign(&db, &customer_id_for_tx, &new_assignment, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<CustomerAssignment, crate::error::Error>(new_assignment)
@@ -261,6 +263,7 @@ impl CustomerAssignmentService {
                             executor,
                         )
                         .await?;
+
                     let ended =
                         persist_end(&db, &access, &actor_for_tx, &customer_id_for_tx, &command, executor)
                             .await?;
@@ -301,6 +304,7 @@ async fn require_assignment(
 ) -> Result<()> {
     access.service.require(actor, &customer::ASSIGNMENT_APPLY, AccessTarget::Operation, executor).await?;
     access.require_with(actor.clone(), &customer_permissions::UPDATE, customer_id, executor).await?;
+
     accounts
         .account(&assignment.user_id, executor)
         .await?
@@ -328,6 +332,7 @@ async fn persist_assign(
         .ok_or_else(|| Error::NotFound("客户不存在".into()))?;
     let existing = db.customer_assignments().list_for_customer(&customer_id, executor).await?;
     new_assignment.ensure_no_overlap(&existing).map_err(|error| Error::ConflictError(error.to_string()))?;
+
     db.customer_accounts().update(&mut customer, executor).await?;
     db.customer_assignments().create(new_assignment, executor).await?;
     Ok(())
@@ -343,6 +348,7 @@ async fn persist_end(
     executor: &mut dyn Executor,
 ) -> Result<CustomerAssignment> {
     access.require_with(actor.clone(), &customer_permissions::UPDATE, customer_id, executor).await?;
+
     let mut customer = db
         .customer_accounts()
         .find_customer(customer_id, executor)
@@ -357,6 +363,7 @@ async fn persist_end(
         .ensure_customer(&CustomerAccountId::new(customer_id))
         .map_err(|error| Error::NotFound(error.to_string()))?;
     assignment.ensure_version(command.version()).map_err(|error| Error::ConflictError(error.to_string()))?;
+
     let assignments =
         db.customer_assignments().list_for_customer(&CustomerAccountId::new(customer_id), executor).await?;
     let owners = assignment
@@ -365,8 +372,10 @@ async fn persist_end(
     for owners in owners {
         access.require_owner_set_change(actor, customer_id, &owners, executor).await?;
     }
+
     assignment.end_directly(command.valid_to()).map_err(|error| Error::ValidationError(error.to_string()))?;
     assignment.change_reason = command.change_reason().to_string();
+
     db.customer_accounts().update(&mut customer, executor).await?;
     db.customer_assignments().update(&mut assignment, executor).await?;
     Ok(assignment)
@@ -404,6 +413,7 @@ mod tests {
             CustomerAccountId::new("unread-customer"),
         )
         .unwrap();
+
         let error = require_assignment(
             &accounts,
             &access,
@@ -424,6 +434,7 @@ mod tests {
         let db = client.database("customer_assignment_end_authorization");
         let access = CustomerAccess::new(db.clone(), unavailable_authorization());
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         for version in [1, 999] {
             let command = EndCustomerAssignment::new(
                 "unread-assignment".into(),
@@ -455,11 +466,13 @@ mod tests {
         let service = CustomerAssignmentService::new(db, Arc::new(FailClosedAuditPort), access);
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         let params: CustomerAssignmentListParams = serde_json::from_value(serde_json::json!({})).unwrap();
+
         let error = service
             .assignment_page(&actor, "customer", &params, &mut SnapshotExecutor::default())
             .await
             .expect_err("功能授权失败必须停止");
         assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+
         let error = service
             .assignment_page(&actor, "customer", &params, &mut ReadExecutor::default())
             .await

@@ -261,6 +261,7 @@ impl CustomerAssignment {
         if self.assignment_role != AssignmentRole::Owner || self.valid_to.is_some_and(|end| at >= end) {
             return Ok(());
         }
+
         let mut owners = remaining
             .iter()
             .filter(|item| {
@@ -271,6 +272,7 @@ impl CustomerAssignment {
             })
             .collect::<Vec<_>>();
         owners.sort_by_key(|item| item.valid_from);
+
         let mut covered_until = at;
         for owner in owners {
             if owner.valid_from > covered_until {
@@ -304,6 +306,7 @@ impl CustomerAssignment {
         if self.assignment_role != AssignmentRole::Owner || self.valid_to == Some(at) {
             return Ok(Vec::new());
         }
+
         let owners = assignments
             .iter()
             .filter(|row| {
@@ -313,10 +316,12 @@ impl CustomerAssignment {
                     && row.assignment_role == AssignmentRole::Owner
             })
             .collect::<Vec<_>>();
+
         let boundaries = std::iter::once(at)
             .chain(owners.iter().flat_map(|row| std::iter::once(row.valid_from).chain(row.valid_to)))
             .filter(|date| *date >= at && self.valid_to.is_none_or(|end| *date < end))
             .collect::<BTreeSet<_>>();
+
         Ok(boundaries
             .into_iter()
             .map(|date| {
@@ -638,6 +643,7 @@ mod tests {
         assert_eq!(owner.valid_to, assignment_data().valid_to);
         assert!(new_owner.ensure_no_overlap(&[owner.clone()]).is_ok());
         assert!(owner.ensure_no_overlap(&[owner.clone()]).is_err());
+
         let at = BusinessDate::from_ymd(2026, 6, 1).unwrap();
         assert!(owner.ensure_owner_retained(&[new_owner], at).is_ok());
         assert!(owner.ensure_owner_retained(&[], at).is_err());
@@ -719,6 +725,7 @@ mod tests {
         assert_eq!(id.as_deref(), Some("sales-zhangsan"));
         assert_eq!(name.as_deref(), Some("张三"));
         assert_eq!(count, 1);
+
         let (empty_id, _, empty_count) = CustomerAssignment::owner_summary(&[], &names);
         assert_eq!(empty_id, None);
         assert_eq!(empty_count, 0);
@@ -772,6 +779,7 @@ mod tests {
         assert!(a.ensure_owner_retained(&[c.clone(), b.clone()], date(24)).is_ok());
         let late = window("late", 26, None);
         assert!(a.ensure_owner_retained(&[b.clone(), late], date(24)).is_err());
+
         let finite = window("finite", 1, Some(25));
         assert!(finite.ensure_owner_retained(&[b], date(24)).is_ok());
         assert!(finite.ensure_owner_retained(&[c], date(24)).is_err());
@@ -805,6 +813,7 @@ mod tests {
             window("b", 1, None),
             window("later", 25, None),
         ];
+
         assert_eq!(current.owners_after_end(&rows, date(24)).unwrap(), vec![["b".into()].into()]);
         assert!(current.owners_after_end(&rows, date(25)).unwrap().is_empty());
         assert!(current.owners_after_end(&rows, date(26)).is_err());

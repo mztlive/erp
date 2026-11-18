@@ -40,20 +40,24 @@ impl SalesSelectionService {
         if let Some(view) = self.replay_idempotency(operation, actor, &key, &hash, executor).await? {
             return Ok((view, false));
         }
+
         let mut book = self.load_booklet(id, executor).await?;
         book.ensure_version(req.expected_version)
             .map_err(|error| Error::selection_conflict(error.to_string()))?;
         if book.current_batch_id.as_deref() != Some(req.batch_id.as_str()) {
             return Err(Error::selection_conflict("准备批次已变化，请刷新后改价"));
         }
+
         let domain = SalesSelectionDomainRepository::new(&self.db);
         let mut pool = domain.list_pool_members(id, &req.batch_id, executor).await?;
         let mut items = domain.list_effective_items(id, &req.batch_id, executor).await?;
+
         req.change
             .apply(book.status, &mut pool, &mut items)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
         book.record_display_edit(actor)?;
         self.persist_prices(&mut book, &mut pool, &mut items, executor).await?;
+
         let view = self.detail_view(&book, None, executor).await?;
         self.store_idempotency(
             IdempotencyStoreInput {

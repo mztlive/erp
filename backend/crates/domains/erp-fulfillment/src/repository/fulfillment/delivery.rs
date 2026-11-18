@@ -227,6 +227,7 @@ mod tests {
             "列表投影必须精确等于 Row 字段集合"
         );
         assert_eq!(projection.get_i32("purchase_order_id").unwrap(), 1);
+
         assert!(!projection.contains_key("address_snapshot_encrypted"), "敏感履约地址不得进入发货列表投影");
         assert!(!projection.contains_key("address_snapshot_fingerprint"), "地址指纹不得进入发货列表投影");
     }

@@ -315,6 +315,7 @@ pub(crate) fn instance_list_filter_doc(filter: &ApprovalInstanceListFilter) -> D
     if let Some(started_by) = &filter.started_by {
         document.insert("started_by", started_by);
     }
+
     if let Some(subject_kind) = &filter.subject_kind {
         document.insert("subject.subject_kind", subject_kind);
     }
@@ -324,6 +325,7 @@ pub(crate) fn instance_list_filter_doc(filter: &ApprovalInstanceListFilter) -> D
     if let Some(ids) = &filter.authorized_instance_ids {
         document.insert("id", doc! { "$in": ids });
     }
+
     insert_list_disjunctions(&mut document, filter);
     document
 }
@@ -350,6 +352,7 @@ fn insert_list_disjunctions(document: &mut Document, filter: &ApprovalInstanceLi
     if let Some(text_query) = &filter.text_query {
         groups.push(doc! { "$or": instance_text_query_or(text_query) });
     }
+
     match groups.len() {
         0 => {},
         1 => {

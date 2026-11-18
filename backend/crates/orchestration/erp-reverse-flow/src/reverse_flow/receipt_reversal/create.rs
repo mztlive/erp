@@ -74,6 +74,7 @@ impl ReturnsProcess {
         let reversal = build_create(req, actor.id())?;
         persist_created_receipt_reversal(&self.db, &self.rbac, reversal.clone(), actor.clone(), executor)
             .await?;
+
         self.receipt_reversal_result_read(
             &reversal.base.id,
             actor,
@@ -106,6 +107,7 @@ async fn persist_created_receipt_reversal(
             executor,
         )
         .await?;
+
     let (organization_id, _) =
         load_receipt_reversal_context(db, &reversal.original_customer_receipt_id, executor).await?;
     let bind_command = BindPublishedDefinitionCommand {

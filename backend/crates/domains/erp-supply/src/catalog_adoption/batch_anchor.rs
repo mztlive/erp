@@ -48,6 +48,7 @@ impl BatchMatchAnchor {
         {
             return Err(Error::ConflictError("同源规格的公司商品依据不一致，请重新核对".into()));
         }
+
         let mut source = self.source.clone();
         // 依据规格可先完成新增供给；实际公司 SKU 归属由 ensure_target 再次核验。
         source.offering_id = current.offering_id.clone();
@@ -135,6 +136,7 @@ mod tests {
         candidate.spec_id = "10kg".into();
         candidate.base.id = "another-source-sku".into();
         anchor.ensure_source(&candidate, &anchor.source).unwrap();
+
         for field in ["connection", "supplier", "product"] {
             let mut foreign = candidate.clone();
             match field {
@@ -144,6 +146,7 @@ mod tests {
             }
             assert!(anchor.ensure_source(&foreign, &anchor.source).is_err());
         }
+
         let mut current = anchor.source.clone();
         current.purchase_price = Some("99".into());
         assert!(anchor.ensure_source(&candidate, &current).is_err());
@@ -157,6 +160,7 @@ mod tests {
         current_source.sku_id = Some("sku".into());
         anchor.ensure_source(&anchor.source, &current_source).unwrap();
         anchor.ensure_target(&anchor.target, false).unwrap();
+
         let mut current = anchor.target.clone();
         current.product_version += 1;
         assert!(anchor.ensure_target(&current, false).is_err());

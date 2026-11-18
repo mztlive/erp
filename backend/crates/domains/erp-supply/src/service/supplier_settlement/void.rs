@@ -45,16 +45,19 @@ async fn prepare_void_with<'a>(
 ) -> Result<(SupplierSettlementStatement, bool)> {
     req.validate()?;
     access.require_action(actor, SettlementAction::Void, id, executor).await?;
+
     let mut statement = load(executor).await?;
     if statement.is_voided() {
         return Ok((statement, true));
     }
+
     if !statement.is_editable() {
         return Err(Error::BusinessLogicError("只有经办人可以作废尚未提交复核的结算草稿".to_string()));
     }
     statement
         .ensure_version(req.version)
         .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
+
     statement.void_draft()?;
     Ok((statement, false))
 }
@@ -189,6 +192,7 @@ mod tests {
             )
             .await
             .unwrap();
+
             assert_eq!(already_voided, replay);
             assert_eq!(prepared.status, SettlementStatus::Voided);
             assert_eq!(prepared.base.version, 7);

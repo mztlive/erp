@@ -167,6 +167,7 @@ async fn product_projection_preserves_optional_fields_counts_and_page() {
     let params = serde_json::from_value(json!({"product_no":" P-1 ","page":2,"page_size":3})).unwrap();
     let filter = prepare_product_list(&params).unwrap();
     let page = query.product_page(&filter, &mut NoTransaction).await.unwrap();
+
     assert_eq!((filter.page, filter.page_size, page.total), (2, 3, 11));
     let row = &page.items[0];
     assert_eq!(row.maintainer_user_id, "user-1");
@@ -183,6 +184,7 @@ async fn sellable_query_keeps_normalized_filters_explicit_date_and_default_page(
     let mut executor = SnapshotExecutor::default();
     let boundary = executor.boundary().unwrap();
     let (page, supplier_ids) = sellable_sku_page(query.as_ref(), &params, &mut executor).await.unwrap();
+
     assert!(supplier_ids.is_empty());
     assert!(boundary.is_current(&executor));
     assert_eq!((page.page, page.page_size, page.total), (1, 20, 9));
@@ -209,6 +211,7 @@ async fn sellable_snapshot_rejects_non_snapshot_before_authorization_or_business
     let query = Arc::new(RecordingQuery::default());
     let service = sellable_service(query.clone()).await;
     let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
     let result = service
         .sellable_sku_list_with(&SellableSkuListParams::default(), &actor, &mut ReadExecutor::default())
         .await;
@@ -221,6 +224,7 @@ async fn sellable_snapshot_stops_before_business_reading_when_authorization_fail
     let query = Arc::new(RecordingQuery::default());
     let service = sellable_service(query.clone()).await;
     let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
     let result = service
         .sellable_sku_list_with(&SellableSkuListParams::default(), &actor, &mut SnapshotExecutor::default())
         .await;
@@ -285,9 +289,11 @@ async fn procurement_candidates_receive_complete_filters_and_preserve_paging() {
     }))
     .unwrap();
     let mut filter = prepare_product_list(&params).unwrap();
+
     scope::apply_procurement_filter(&query, &mut filter, &port, &params, &mut NoTransaction).await.unwrap();
     assert_eq!(filter.ids, Some(vec!["prod-b".to_string()]));
     assert_eq!((filter.page, filter.page_size), (7, 1));
+
     let recorded = query.candidate_filter.lock().unwrap();
     let recorded = recorded.as_ref().unwrap();
     assert_eq!(recorded.keyword.as_deref(), Some("礼盒.*"));
@@ -303,14 +309,17 @@ async fn procurement_candidates_keep_empty_results_and_reject_invalid_snapshots(
     let params = serde_json::from_value(json!({"procurement_owner_user_ids": "buyer"})).unwrap();
     let port = MapProductProcurementOwners { owners: [("outside".into(), "buyer".into())].into() };
     let mut filter = prepare_product_list(&params).unwrap();
+
     let empty = RecordingQuery { candidates: Some(Vec::new()), ..Default::default() };
     scope::apply_procurement_filter(&empty, &mut filter, &port, &params, &mut NoTransaction).await.unwrap();
     assert_eq!(filter.ids, Some(Vec::new()));
+
     let large = RecordingQuery { candidates: Some(vec!["id".into(); 10001]), ..Default::default() };
     assert!(matches!(
         scope::apply_procurement_filter(&large, &mut filter, &port, &params, &mut NoTransaction).await,
         Err(crate::Error::ValidationError(_))
     ));
+
     let failing = RecordingQuery { fail: true, ..Default::default() };
     assert!(
         scope::apply_procurement_filter(&failing, &mut filter, &port, &params, &mut NoTransaction)

@@ -309,6 +309,7 @@ impl FulfillmentRepository<'_> {
             executor,
         )
         .await?;
+
         lines.sort_by_key(|line: &PurchaseReceiptLine| (line.purchase_receipt_id.to_string(), line.line_no));
         Ok(lines)
     }
@@ -338,6 +339,7 @@ impl FulfillmentRepository<'_> {
             executor,
         )
         .await?;
+
         lines.sort_by_key(|line: &DeliveryLine| (line.delivery_id.to_string(), line.line_no));
         Ok(lines)
     }
@@ -367,6 +369,7 @@ impl FulfillmentRepository<'_> {
             executor,
         )
         .await?;
+
         lines.sort_by_key(|line: &CustomerAcceptanceLine| {
             (line.customer_acceptance_id.to_string(), line.line_no)
         });
@@ -423,6 +426,7 @@ impl FulfillmentRepository<'_> {
         if fulfillment_line_ids.is_empty() {
             return Ok(Vec::new());
         }
+
         let collection =
             self.db.collection::<AcceptanceFulfillmentAllocation>(ACCEPTANCE_FULFILLMENT_ALLOCATIONS);
         mongo_ops::find_many(
@@ -478,6 +482,7 @@ where
     if values.is_empty() {
         return Ok(Vec::new());
     }
+
     mongo_ops::find_many(
         &db.collection::<T>(collection_name),
         doc! {

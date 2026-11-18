@@ -43,6 +43,7 @@ pub(super) async fn status(
     require_snapshot(executor)?;
     let (compiled, connection) =
         connection(access, id, actor, &supplier_api::CONNECTION_DETAIL, executor).await?;
+
     let result = status_projection(access, engine, &connection, actor, operation_id, executor).await?;
     access.authorization.validate(&compiled, executor).await.map_err(ProcessError::from)?;
     Ok(result)
@@ -72,6 +73,7 @@ async fn status_projection(
     }
     let record = load_record(access, engine, executor).await;
     let mut status = engine.project_status(record, operation_id);
+
     let permitted = access
         .authorization
         .has_permission(actor, &supplier_api::JD_VOP_AUTHORIZE, executor)
@@ -97,9 +99,11 @@ pub(super) async fn authorization_command(
     let (compiled, connection) =
         connection(access, id, actor, &supplier_api::JD_VOP_AUTHORIZE, executor).await?;
     access.binding(&connection)?;
+
     let engine = engine?;
     let record = load_record(access, engine, executor).await?;
     let prepared = engine.prepare_authorization(request, actor, record.as_ref())?;
+
     access.authorization.validate(&compiled, executor).await.map_err(ProcessError::from)?;
     Ok(prepared)
 }
@@ -169,6 +173,7 @@ mod tests {
             "redirect_uri":"callback", "private_key":"key", "evidence_reference":null
         }))
         .unwrap();
+
         for executor in [
             &mut ReadExecutor::default() as &mut dyn Executor,
             &mut SnapshotExecutor::default() as &mut dyn Executor,

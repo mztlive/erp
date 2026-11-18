@@ -80,6 +80,7 @@ impl InquiryRequirementData {
         if self.note.chars().count() > 4000 {
             return Err(Error::ValidationError("需求说明过长".into()));
         }
+
         let mut line_ids = HashSet::new();
         let mut allocation_ids = HashSet::new();
         for line in &mut self.lines {
@@ -130,6 +131,7 @@ impl InquiryRequirementLine {
         if available_quantity > self.quantity {
             return Err(Error::ValidationError("专项报价可供量不得超过本行询价需求".into()));
         }
+
         if self.fulfillment_kind == InquiryFulfillmentKind::Physical && allocation_ids.is_empty() {
             return Err(Error::ValidationError("实物专项报价必须明确配送地址范围".into()));
         }
@@ -159,6 +161,7 @@ impl InquiryRequirementLine {
         if self.specification.chars().count() > 256 || self.delivery_terms.chars().count() > 2000 {
             return Err(Error::ValidationError("商品规格或交付条件过长".into()));
         }
+
         if self.quantity_scale > 6
             || self.quantity.to_decimal() <= Decimal::ZERO
             || self.quantity.to_decimal().normalize().scale() > self.quantity_scale
@@ -168,6 +171,7 @@ impl InquiryRequirementLine {
         if self.sales_reference_price_gross.is_some_and(|price| price.to_decimal() < Decimal::ZERO) {
             return Err(Error::ValidationError("销售参考价不得为负数".into()));
         }
+
         if self.allocations.len() > MAX_INQUIRY_ALLOCATIONS {
             return Err(Error::ValidationError("每条商品最多分配 100 个收货地址".into()));
         }
@@ -187,6 +191,7 @@ impl InquiryRequirementLine {
         {
             return Err(Error::ValidationError("地址数量合计不得少于需求数量".into()));
         }
+
         self.unit_code = self.unit_code.trim().to_string();
         Ok(())
     }
@@ -205,6 +210,7 @@ impl InquiryDeliveryAllocation {
         }
         self.region_code = RegionCode::parse_leaf(self.region_code.as_str())?;
         self.region_name = self.region_code.full_name();
+
         if self.quantity.to_decimal() <= Decimal::ZERO
             || self.quantity.to_decimal().normalize().scale() > quantity_scale
         {

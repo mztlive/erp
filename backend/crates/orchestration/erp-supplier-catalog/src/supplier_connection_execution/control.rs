@@ -70,10 +70,12 @@ mod tests {
         let first = control.claim().unwrap();
         let second = control.claim().unwrap();
         assert!(control.claim().is_none());
+
         control.request_stop();
         assert!(control.clone().stopping());
         assert!(control.claim().is_none());
         assert!(!control.drain(Duration::ZERO).await);
+
         drop(first);
         drop(second);
         assert!(control.drain(Duration::from_secs(1)).await);

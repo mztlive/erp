@@ -35,6 +35,7 @@ pub async fn validate_recipients(
         .collect::<std::collections::BTreeSet<_>>();
     let accounts =
         identity_service.directory().accounts(&ids.iter().cloned().collect::<Vec<_>>(), ex).await?;
+
     for rule in rules {
         rule.validate_accounts(&accounts)?;
     }
@@ -60,6 +61,7 @@ pub async fn save_config(
     let rules = ApprovalCopyRule::prepare(rules, graph.nodes.len())?;
     let ids = rules.iter().flat_map(|r| r.recipient_user_ids.iter().cloned()).collect::<Vec<_>>();
     let recipient_names = identity_service.directory().names(&ids, ex).await?.into_iter().collect();
+
     db.approval_copies()
         .save_config(
             &ApprovalCopyConfig {

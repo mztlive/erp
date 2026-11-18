@@ -50,6 +50,7 @@ pub(super) async fn ensure_evidence(
         ),
     })
     .map_err(|error| Error::ValidationError(error.to_string()))?;
+
     workflow.authorize_material_transfer(actor, &[asset], executor).await?;
     Ok(())
 }

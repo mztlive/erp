@@ -20,6 +20,7 @@ pub(super) fn apply(
         None
     };
     let rows = decoded.as_ref().and_then(|r| r["rows"].as_array());
+
     let mut success = 0;
     let mut failed = 0;
     for item in items {
@@ -33,6 +34,7 @@ pub(super) fn apply(
         if item.object_type.as_deref() == Some("data_transfer_row") && row.is_none() {
             return Err(Error::Internal("逐行回执缺失，须按原命令恢复".into()));
         }
+
         let status = row.and_then(|r| r["status"].as_str()).unwrap_or("SUCCEEDED");
         let ok = matches!(status, "SUCCEEDED" | "succeeded" | "replayed");
         let unknown = matches!(status, "UNKNOWN" | "unknown");
@@ -56,6 +58,7 @@ pub(super) fn apply(
             failed += 1;
         }
     }
+
     if success + failed != job.total_count {
         return Err(Error::Internal("任务结果行数不一致".into()));
     }

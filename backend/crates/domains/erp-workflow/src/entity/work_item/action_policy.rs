@@ -82,15 +82,18 @@ impl WorkItemActionPolicy<'_> {
     ) -> Vec<WorkItemAllowedAction> {
         let mut actions = vec![WorkItemAllowedAction::View];
         let owned = self.owner_user_id == Some(access.actor_id);
+
         if self.work_item_type == WorkItemType::ApprovalRework {
             if owned && self.status == WorkItemStatus::Open && permits(WorkItemActionRequirement::Execute) {
                 actions.extend([WorkItemAllowedAction::Process, WorkItemAllowedAction::AbandonRework]);
             }
             return actions;
         }
+
         if owned && permits(WorkItemActionRequirement::Execute) {
             actions.push(WorkItemAllowedAction::Process);
         }
+
         if self.work_item_type.is_document_approval()
             && self.status == WorkItemStatus::Open
             && self.has_approval_execution
@@ -100,6 +103,7 @@ impl WorkItemActionPolicy<'_> {
             actions.push(WorkItemAllowedAction::Approve);
             actions.push(WorkItemAllowedAction::Reject);
         }
+
         let approval_responsibility =
             self.work_item_type.is_document_approval() || self.has_approval_execution;
         if access.can_manage

@@ -72,11 +72,13 @@ impl ProductImportProcess {
     ) -> Result<PageView<ProductImportJobView>> {
         let service = &self.job_access.service;
         let access = service.query(actor, &internal::PRODUCT_IMPORT_JOB_READ, executor).await?;
+
         let page = authorized_background_page(&self.db, filter, &access, executor).await?;
         let ids = page.items.iter().map(|row| BackgroundJobId::new(row.id.clone())).collect::<Vec<_>>();
         let jobs = self.db.background_jobs().find_by_ids(&ids, executor).await?;
         let files = self.db.file_assets().find_by_ids(&source_file_ids(&jobs), executor).await?;
         let items = page_job_views(&ids, &jobs, &files)?;
+
         service.validate(&access, executor).await?;
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
@@ -255,12 +257,14 @@ mod tests {
         let second = job("second", Some("shared"));
         let jobs = vec![second, first];
         assert_eq!(source_file_ids(&jobs), vec![FileAssetId::new("shared")]);
+
         let views = page_job_views(
             &[BackgroundJobId::new("first"), BackgroundJobId::new("second")],
             &jobs,
             &[file("shared", "报价表.xlsx")],
         )
         .unwrap();
+
         assert_eq!(views.iter().map(|view| view.id.as_str()).collect::<Vec<_>>(), ["first", "second"]);
         assert_eq!(views[0].version, 9);
         assert_eq!(views[0].processed_count, 2);
@@ -276,6 +280,7 @@ mod tests {
         assert!(views.iter().all(|view| view.file_name.is_none()));
         assert!(page_job_views(&[], &[], &[]).unwrap().is_empty());
         assert!(source_file_ids(&[]).is_empty());
+
         assert!(matches!(
             page_job_views(&[BackgroundJobId::new("removed")], &jobs, &[]),
             Err(Error::NotFound(message)) if message == "导入任务不存在"

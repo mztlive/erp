@@ -37,6 +37,7 @@ pub fn mint_jwt(account_id: &str, secret: &str, exp_seconds: u64) -> Result<Stri
         return Err(Error::JwtSecretTooShort);
     }
     let key = Hmac::<Sha256>::new_from_slice(secret.as_bytes())?;
+
     // 1970 年前的时间戳没有合法的 `exp` 语义，显式饱和到 0 再加有效期，
     // 使边界行为可读（原 `unwrap_or_default` 隐含了同一语义）。
     let now_secs = Utc::now().timestamp().max(0) as u64;
@@ -54,6 +55,7 @@ pub fn mint_jwt(account_id: &str, secret: &str, exp_seconds: u64) -> Result<Stri
         ("account_kind".to_string(), Value::String("admin".to_string())),
         ("account_version".to_string(), Value::from(ACCOUNT_VERSION)),
     ]);
+
     Ok(claims.sign_with_key(&key)?)
 }
 

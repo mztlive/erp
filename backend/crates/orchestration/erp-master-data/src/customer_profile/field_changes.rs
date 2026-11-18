@@ -71,6 +71,7 @@ mod tests {
             "idempotency_key":"key", "legal_name":"客户", "effective_from":"2026-11-15", "change_reason":"修订"
         })).unwrap();
         assert!(permissions(&req, CustomerProfileOperation::Update).is_empty());
+
         req.contacts = Some(vec![]);
         assert_eq!(
             permissions(&req, CustomerProfileOperation::Update),

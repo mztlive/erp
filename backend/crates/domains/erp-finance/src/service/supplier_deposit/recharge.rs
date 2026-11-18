@@ -45,6 +45,7 @@ impl SupplierDepositService {
                 .await?
                 .ok_or_else(|| Error::Internal("原充值回执缺少到账批次".into()));
         }
+
         let mut account = self.account(account_id, executor).await?;
         let mut request = self.recharge_request(account_id, &evidence.approved_request_id, executor).await?;
         if request.status != DepositRechargeStatus::BankPaid
@@ -55,12 +56,14 @@ impl SupplierDepositService {
             return Err(Error::BusinessLogicError("充值申请尚未完成实际银行付款或到账依据不符".into()));
         }
         self.verify_recharge_payment(&account, amount, &evidence, executor).await?;
+
         let batch = SupplierDepositBatch::new(id.clone(), account_id.into(), amount, evidence.clone())?;
         let entry =
             recharge_ledger(&id, account_id, operation_key, payload_fingerprint, amount, &evidence, actor)?;
         account.credit(amount)?;
         request.status = DepositRechargeStatus::Received;
         request.received_batch_id = Some(batch.base.id.clone());
+
         self.db.supplier_deposit_accounts().update(&mut account, executor).await?;
         self.db.supplier_deposit_batches().create(&batch, executor).await?;
         self.db.supplier_deposit_ledger().create(&entry, executor).await?;

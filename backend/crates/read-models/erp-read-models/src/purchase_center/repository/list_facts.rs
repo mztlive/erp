@@ -79,18 +79,22 @@ pub async fn load_purchase_order_list_page(
     if page.items.is_empty() {
         return Ok((page, PurchaseOrderListFacts::default()));
     }
+
     let supplier_ids = unique_supplier_ids(&page);
     let payment_statuses = current_payment_statuses(db, &page, executor).await?;
     let supplier_names =
         super::supplier_names::current_legal_names_by_account_ids(db, &supplier_ids, executor).await?;
+
     let sales_ids = unique_sales_ids(&page);
     let sales_orders = db.sales_orders().find_orders_by_ids(&sales_ids, executor).await?;
     let sales_order_nos = sales_orders
         .into_iter()
         .map(|order| (order.base.id.clone(), order.order_no.clone()))
         .collect::<HashMap<_, _>>();
+
     let owner_ids = unique_owner_ids(&page);
     let owner_names = db.accounts().names_by_ids(&owner_ids, executor).await?;
+
     let (submission_keys, revision_keys) = split_pointer_ids(&page);
     let submission_ids =
         submission_keys.iter().cloned().map(PurchaseOrderSubmissionId::new).collect::<Vec<_>>();
@@ -101,6 +105,7 @@ pub async fn load_purchase_order_list_page(
         .into_iter()
         .map(|submission| (submission.base.id.clone(), submission))
         .collect::<HashMap<_, _>>();
+
     let revision_ids = revision_keys.iter().cloned().map(PurchaseOrderRevisionId::new).collect::<Vec<_>>();
     let revisions = db
         .purchase_order()
@@ -109,6 +114,7 @@ pub async fn load_purchase_order_list_page(
         .into_iter()
         .map(|revision| (revision.base.id.clone(), revision))
         .collect::<HashMap<_, _>>();
+
     Ok((
         page,
         PurchaseOrderListFacts {
@@ -242,6 +248,7 @@ pub(crate) async fn keyword_reference_ids(
 ) -> Result<(Vec<SalesOrderId>, Vec<SupplierAccountId>)> {
     use erp_party::PartyExt;
     use erp_supplier::SupplierExt;
+
     let Some(keyword) = keyword.filter(|value| !value.trim().is_empty()) else {
         return Ok((Vec::new(), Vec::new()));
     };

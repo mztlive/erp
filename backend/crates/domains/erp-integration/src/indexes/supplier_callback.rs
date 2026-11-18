@@ -22,6 +22,7 @@ pub(super) async fn ensure(db: &Database) -> Result<()> {
             IndexOptions::builder().name("ix_supplier_callback_receipts_order_queue".to_string()).build(),
         )
         .build();
+
     db.collection::<Document>(Database::SUPPLIER_CALLBACK_RECEIPTS)
         .create_indexes([unique, pending, order_queue])
         .await?;

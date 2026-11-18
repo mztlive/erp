@@ -31,6 +31,7 @@ impl SalesInquiry {
         if let Some(index) = self.fee_allocations.iter().position(|row| row.allocation_id == allocation_id) {
             return self.resize_fee_allocation(index, sales_order_id, round, fee_id, amount, now);
         }
+
         let fee = self.accepted_fee(round, fee_id, now)?;
         let previous = sum_decimal(
             self.fee_allocations.iter().filter(|row| row.fee_id == fee_id).map(|row| row.amount.to_decimal()),
@@ -42,6 +43,7 @@ impl SalesInquiry {
         {
             return Err(Error::BusinessLogicError("费用分摊合计超过来源金额".into()));
         }
+
         self.fee_allocations.push(InquiryFeeAllocation {
             allocation_id: allocation_id.into(),
             sales_order_id: sales_order_id.into(),
@@ -67,6 +69,7 @@ impl SalesInquiry {
         ] {
             validate_text(value, name, 128)?;
         }
+
         if let Some(existing) =
             self.fee_ledger.iter().find(|row| row.reservation_id == reservation.reservation_id)
         {
@@ -84,6 +87,7 @@ impl SalesInquiry {
         {
             return Err(Error::ConflictError("费用办理明细已登记来源".into()));
         }
+
         self.validate_fee_reservation(&reservation, None, now)?;
         self.fee_ledger.push(reservation);
         Ok(())
@@ -135,6 +139,7 @@ impl SalesInquiry {
         if adjusted.state == InquiryReservationState::Handled || amount.to_decimal() < Decimal::ZERO {
             return Err(Error::BusinessLogicError("已发生费用或负金额不能调整".into()));
         }
+
         let increased = amount > adjusted.amount || adjusted.state == InquiryReservationState::Released;
         let changed_round = round != adjusted.feedback_round;
         adjusted.amount = amount;
@@ -144,6 +149,7 @@ impl SalesInquiry {
         } else if changed_round {
             self.accepted_fee(round, &adjusted.fee_id, now)?;
         }
+
         adjusted.state = if amount.to_decimal() == Decimal::ZERO {
             InquiryReservationState::Released
         } else {
@@ -222,6 +228,7 @@ impl SalesInquiry {
         if existing.feedback_round == round && existing.amount == amount {
             return Ok(());
         }
+
         let used = sum_decimal(
             self.fee_ledger
                 .iter()
@@ -234,6 +241,7 @@ impl SalesInquiry {
         if amount.to_decimal() < used || amount.to_decimal() < Decimal::ZERO {
             return Err(Error::BusinessLogicError("费用分摊不得低于已有有效占用及办理金额".into()));
         }
+
         if round != existing.feedback_round {
             self.accepted_fee(round, fee_id, now)?;
         }
@@ -253,6 +261,7 @@ impl SalesInquiry {
                 return Err(Error::BusinessLogicError("费用分摊合计超过当前已接受金额".into()));
             }
         }
+
         self.fee_allocation_history.push(existing);
         self.fee_allocations[index].amount = amount;
         self.fee_allocations[index].feedback_round = round;
@@ -290,6 +299,7 @@ impl SalesInquiry {
             .iter()
             .find(|row| row.allocation_id == allocation_id && row.fee_id == fee_id)
             .ok_or_else(|| Error::BusinessLogicError("费用尚无有效销售金额归属".into()))?;
+
         let used = sum_decimal(
             self.fee_ledger
                 .iter()
@@ -327,6 +337,7 @@ impl SalesInquiry {
             .iter()
             .find(|row| row.fee_id == fee_id)
             .ok_or_else(|| Error::NotFound("已接受费用".into()))?;
+
         if self.status != InquiryStatus::Confirmed {
             let (has_active, affected) = self
                 .reinquiries
@@ -363,6 +374,7 @@ impl SalesInquiry {
                     && row.fee_id == reservation.fee_id
             })
             .ok_or_else(|| Error::BusinessLogicError("须先明确费用对销售单的金额分摊".into()))?;
+
         let allocated_used = sum_decimal(
             self.fee_ledger
                 .iter()

@@ -105,6 +105,7 @@ mod tests {
             binding: &binding,
             actor_id: "actor-1",
         };
+
         let mutations: [fn(&mut ApprovalProcessInstance); 8] = [
             |value| value.base.id = "instance-2".into(),
             |value| value.process_kind = ProcessKind::VoucherSalesOrder,

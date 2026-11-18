@@ -151,10 +151,12 @@ impl SupplierOrderStatusHistory {
             EXTERNAL_EVENT_ID_MAX_LEN,
             "外部事件ID过长",
         )?;
+
         if data.previous_status == data.new_status {
             return Err(Error::from("原状态与新状态不得相同"));
         }
         ensure_transition(data.previous_status, data.new_status)?;
+
         if data.received_at < data.occurred_at {
             return Err(Error::from("接收时间不得早于发生时间"));
         }
@@ -245,6 +247,7 @@ mod tests {
             external_event_id: " EVT-1001 ".into(),
         });
         assert_eq!(callback.source_type, SourceType::SupplierCallback);
+
         let history =
             SupplierOrderStatusHistory::new(SupplierOrderStatusHistoryId::new("history-1"), callback)
                 .unwrap();
@@ -271,6 +274,7 @@ mod tests {
         assert!(!history.matches_reject(&SupplierFulfillmentOrderId::new("order-2"), "v5", at));
         assert!(!history.matches_reject(&order, "v6", at));
         assert!(!history.matches_reject(&order, "v5", Instant::from_unix_secs(at.unix_secs() + 1)));
+
         history.new_status = FulfillmentStatus::Accepted;
         assert!(!history.matches_reject(&order, "v5", at));
     }

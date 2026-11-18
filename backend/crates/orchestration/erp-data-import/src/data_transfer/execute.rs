@@ -42,10 +42,10 @@ impl DataTransferProcess {
             return Ok(());
         }
         self.db.background_jobs().update(&mut job, &mut ReadExecutor::default()).await?;
+
         let result = self.execute_with_heartbeat(&mut job).await;
         match result {
             Ok(result) => self.complete(job, result).await,
-
             Err(error) => {
                 job.mark_failed(Some(safe_failure(&error)), Instant::now())?;
                 self.db.background_jobs().update(&mut job, &mut ReadExecutor::default()).await?;
@@ -58,9 +58,11 @@ impl DataTransferProcess {
         let actor = source.actor(&job.requested_by, &job.request_id)?;
         let work = self.handler.execute(source.kind, &source.input, &actor);
         tokio::pin!(work);
+
         let mut heartbeat = interval(Duration::from_secs(20));
         heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
         let mut owned = true;
+
         loop {
             tokio::select! {
                 result = &mut work => {
@@ -88,6 +90,7 @@ impl DataTransferProcess {
         let mut asset = self.save_private(&key, &result, &job.requested_by).await?;
         let source_expiry = self.source_expiry(&job).await?;
         asset.expires_at = asset.expires_at.map(|expires| expires.min(source_expiry));
+
         self.heartbeat(&mut job).await?;
         let mut items = self
             .db
@@ -99,6 +102,7 @@ impl DataTransferProcess {
             result_file_asset_id: Some(asset.base.id.clone().into()),
             result_expires_at: asset.expires_at,
         });
+
         let db = self.db.clone();
         db.client()
             .clone()

@@ -116,6 +116,7 @@ impl DefinitionNodeRequest {
     pub fn prepare(mut self) -> ModelResult<Self> {
         self.node_id = self.node_id.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
         self.node_name = ApprovalNodeDefinition::normalize_name(self.node_name)?;
+
         if self.assignee_source != AssigneeSource::Specified {
             if !self.assignee_user_id.trim().is_empty() || !self.additional_assignee_user_ids.is_empty() {
                 return Err(ModelError::InvalidField("负责人审批节点不得同时指定人员"));
@@ -123,12 +124,14 @@ impl DefinitionNodeRequest {
             self.assignee_user_id.clear();
             return Ok(self);
         }
+
         let assignee = self.assignee_user_id.trim().to_string();
         ParticipantId::new(assignee.clone()).map_err(|error| match error {
             BpmError::InvalidParticipantId(message) => ModelError::InvalidField(message),
             _ => ModelError::InvalidField("处理人引用不能为空"),
         })?;
         self.assignee_user_id = assignee;
+
         let mut seen = HashSet::from([self.assignee_user_id.clone()]);
         if self.additional_assignee_user_ids.len() > 49 {
             return Err(ModelError::InvalidField("每个节点最多配置 50 名审批人"));
@@ -345,6 +348,7 @@ mod tests {
             r#"{"document_type":"stock_adjustment","name":"库存","draft_source":"EMPTY","idempotency_key":"k1","extra":true}"#
         )
         .is_err());
+
         assert!(
             serde_json::from_str::<DefinitionNodeRequest>(
                 r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","node_key":"client"}"#
@@ -361,6 +365,7 @@ mod tests {
             )
             .is_err()
         );
+
         let replace = serde_json::from_str::<ReplaceDefinitionNodesRequest>(
             r#"{"definition_id":"d1","expected_definition_lock_version":1,"nodes":[],"idempotency_key":"replace-1"}"#,
         )
@@ -374,6 +379,7 @@ mod tests {
             r#"{"definition_id":"d1","expected_definition_lock_version":1,"nodes":[],"idempotency_key":"k1","resolver":"x"}"#
         )
         .is_err());
+
         assert!(
             serde_json::from_str::<DefinitionNodeRequest>(
                 r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","pool":"yes"}"#
@@ -416,6 +422,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(serde_json::from_str::<PublishDefinitionRequest>(
             r#"{"definition_id":"d1","expected_definition_lock_version":1,"idempotency_key":"k1","extra":true}"#
         )
@@ -502,6 +509,7 @@ mod tests {
         assert_eq!(request.clone().prepare().unwrap().additional_assignee_user_ids, ["u2", "u3"]);
         request.additional_assignee_user_ids.push("u1".into());
         assert!(request.prepare().is_err());
+
         let old: DefinitionNodeRequest =
             serde_json::from_str(r#"{"node_name":"复核","display_order":1,"assignee_user_id":"u1"}"#)
                 .unwrap();

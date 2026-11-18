@@ -163,6 +163,7 @@ impl ProcessKind {
         if code.is_empty() || code.len() > Self::MAX_LEN {
             return Err(Error::InvalidProcessKind);
         }
+
         Self::TABLE
             .iter()
             .find(|(_, known)| *known == code)
@@ -406,6 +407,7 @@ fn normalize_ref_field(value: impl Into<String>, empty_message: &'static str) ->
     if trimmed.len() > SUBJECT_REF_FIELD_MAX_LEN {
         return Err(Error::InvalidSubjectRef("业务对象引用字段过长"));
     }
+
     if trimmed.len() == value.len() { Ok(value) } else { Ok(trimmed.to_string()) }
 }
 
@@ -444,6 +446,7 @@ mod tests {
             ProcessKind::SalesReturnCase,
             ProcessKind::PurchaseReturnOrder,
         ];
+
         assert_eq!(kinds.len(), 22);
         for kind in kinds {
             assert!(!kind.as_str().is_empty());
@@ -468,6 +471,7 @@ mod tests {
     fn subject_ref_rejects_empty_fields() {
         assert!(SubjectRef::new(" ", "id-1").is_err());
         assert!(SubjectRef::new("kind", "   ").is_err());
+
         let subject = SubjectRef::new(" stock_adjustment ", "adj-1").unwrap();
         assert_eq!(subject.subject_kind(), "stock_adjustment");
         assert_eq!(subject.subject_id(), "adj-1");

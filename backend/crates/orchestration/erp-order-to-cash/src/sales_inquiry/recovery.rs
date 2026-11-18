@@ -35,6 +35,7 @@ impl SalesInquiryProcess {
             "sales-inquiry-command:",
             [actor.id(), action, "sales_inquiry", key].into_iter().map(str::to_string),
         )?;
+
         let this = self.clone();
         let actor = actor.clone();
         let action = action.to_string();
@@ -62,6 +63,7 @@ pub(super) async fn recover(
 ) -> Result<Option<InquiryMutationView>> {
     let Some(receipt) = source.receipt(command_id, executor).await? else { return Ok(None) };
     let view = recovery_result(&receipt, actor, action, id)?;
+
     if is_procurement_action(action) {
         source.procurement(actor, &sales_inquiry_permissions::RECOVERY_PROCUREMENT_RECOVER, executor).await?;
     } else {
@@ -83,6 +85,7 @@ fn recovery_result(
     if receipt.base.is_deleted() || receipt.actor_id != actor.id() || receipt.action != action {
         return Err(Error::ConflictError("询价命令回执身份不一致".into()));
     }
+
     let InquiryCommandResult::Mutation {
         inquiry_id,
         version,
@@ -97,6 +100,7 @@ fn recovery_result(
     if id != inquiry_id && !(action == "create" && id.is_empty()) {
         return Err(Error::ConflictError("询价命令回执不属于当前询价".into()));
     }
+
     Ok(InquiryMutationView {
         inquiry_id: inquiry_id.clone(),
         version: *version,

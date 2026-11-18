@@ -178,6 +178,7 @@ mod tests {
         assert!(
             matches!(error, Error::LogicError(message) if message == "分配含税金额必须等于不含税金额加税额")
         );
+
         let error =
             PurchaseInvoiceAllocation::new(PurchaseInvoiceAllocationId::new("pi-3"), zero_seq).unwrap_err();
         assert!(matches!(error, Error::LogicError(message) if message == "分配序号必须从 1 开始"));

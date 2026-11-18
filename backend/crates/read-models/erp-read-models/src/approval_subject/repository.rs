@@ -37,6 +37,7 @@ impl ApprovalManagementMapping {
         if base.model().resource != "approval_instance" || base.model().output != QueryOutput::Object {
             return Err(Error::ValidationError("审批管理必须绑定完整实例模型".into()));
         }
+
         let mut sources = BTreeMap::new();
         let mut references = BTreeMap::new();
         let mut complete = BTreeMap::new();
@@ -108,11 +109,13 @@ fn complete_source(resource: &str, mapping: Arc<dyn AccessMapping>) -> Result<Ar
     if mapping.model().output == QueryOutput::Object {
         return Ok(mapping);
     }
+
     if !matches!(resource, "customer_receipt" | "supplier_payment")
         || !matches!(mapping.model().output, QueryOutput::Existence { .. })
     {
         return Err(Error::ValidationError("审批来源必须是完整对象模型".into()));
     }
+
     let mut model = mapping.model().clone();
     model.key = QueryModelKey::parse(format!("approval_complete_{resource}"))?;
     model.output = QueryOutput::Object;
@@ -261,6 +264,7 @@ fn source_stages() -> Vec<Document> {
     ] {
         stages.push(source_lookup(collection, alias, "$subject.subject_id".into(), kind));
     }
+
     for (kind, collection, alias, source, field) in [
         (
             "customer_refund",
@@ -365,6 +369,7 @@ mod tests {
         let client = Client::with_uri_str("mongodb://127.0.0.1:27017").await.unwrap();
         let db = client.database("management_mapping_construction");
         let (_, base) = approval_instances::bindings(db.clone(), Arc::new(UnusedSubjects)).unwrap();
+
         let mut roots: BTreeMap<String, Arc<dyn AccessMapping>> = BTreeMap::new();
         roots.insert(
             "sales_order".into(),
@@ -389,6 +394,7 @@ mod tests {
         ] {
             roots.insert(resource.into(), Arc::new(FundsMapping::new(db.clone(), resource).unwrap()));
         }
+
         let management = ApprovalManagementMapping::new(base, &roots).unwrap();
         let relations = management.relations();
         assert_eq!(relations.len(), 15);
@@ -407,6 +413,7 @@ mod tests {
                 assert!(Arc::ptr_eq(&nested, &original.relations()[&key]));
             }
         }
+
         let direct = &relations[&RelationKey::parse("management_customer_receipt_customer_receipt").unwrap()];
         let refund = &relations[&RelationKey::parse("management_customer_refund_customer_receipt").unwrap()];
         assert!(Arc::ptr_eq(direct, refund));
@@ -501,8 +508,10 @@ mod tests {
             Bson::Array(vec!["real-order".into()])
         );
         assert_eq!(references("sales_order", "sales_order", &row), Bson::Array(vec![]));
+
         row.insert("_management_snapshot_exact", false);
         assert_eq!(references("sales_change_order", "sales_order", &row), Bson::Array(vec![]));
+
         row.insert("_management_snapshot_exact", true);
         for sources in
             [vec![], vec![doc! {}], vec![doc! {"sales_order_id": "one"}, doc! {"sales_order_id": "two"}]]
@@ -522,6 +531,7 @@ mod tests {
             Bson::Array(vec!["receipt".into()])
         );
         assert_eq!(references("customer_refund", "receivable_account", &row), Bson::Array(vec![]));
+
         row.insert("_management_customer_refund", vec![doc! {"original_receivable_entry_id": "entry"}]);
         assert_eq!(references("customer_refund", "receivable_account", &row), Bson::Array(vec![]));
         row.insert("_management_receivable_entry", vec![doc! {"receivable_account_id": "account"}]);
@@ -529,6 +539,7 @@ mod tests {
             references("customer_refund", "receivable_account", &row),
             Bson::Array(vec!["account".into()])
         );
+
         row.insert(
             "_management_customer_refund",
             vec![doc! {"original_receipt_id": "receipt", "original_receivable_entry_id": "entry"}],
@@ -551,6 +562,7 @@ mod tests {
         "subject": {"subject_kind": "sales_order", "subject_id": "order"},
         "_management_snapshot": snapshot.clone(), "_management_snapshots": [snapshot.clone()]};
         assert_eq!(evaluate(&expression, &row, &doc! {}), Bson::Boolean(true));
+
         row.insert("subject_version", 8);
         assert_eq!(evaluate(&expression, &row, &doc! {}), Bson::Boolean(false));
         row.insert("subject_version", 7);

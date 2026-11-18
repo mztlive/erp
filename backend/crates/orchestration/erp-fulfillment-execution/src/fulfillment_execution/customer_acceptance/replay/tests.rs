@@ -118,6 +118,7 @@ async fn commit_replay_uses_current_task_and_one_snapshot_without_replaying_writ
     let reader = reader();
     let mut executor = SnapshotExecutor::default();
     let pointer = &mut executor as *mut SnapshotExecutor as usize;
+
     let result = committed(&reader, &request(), &actor(), &receipt(), &mut executor).await.unwrap().unwrap();
     assert_eq!(result.base.id, "result");
     assert_eq!(
@@ -143,6 +144,7 @@ async fn commit_replay_stops_on_revoked_operation_source_or_task() {
         assert!(matches!(error, Error::Forbidden(_)));
         assert!(reader.steps().last().unwrap().starts_with(denied));
     }
+
     let reader = Reader { result: None, ..reader() };
     assert!(
         committed(&reader, &request(), &actor(), &receipt(), &mut SnapshotExecutor::default())
@@ -165,12 +167,14 @@ async fn commit_replay_rejects_changed_result_sales_or_unposted_receipt_result()
             "draft" => req.acceptance_id = Some("another-draft".into()),
             _ => result.reversal_of_acceptance_id = Some(CustomerAcceptanceId::new("another")),
         }
+
         let error = committed(&reader, &req, &actor(), &receipt(), &mut SnapshotExecutor::default())
             .await
             .unwrap_err();
         assert!(matches!(error, Error::ConflictError(_)));
         assert_eq!(reader.steps(), ["operation:customer_acceptance:post", "receipt", "acceptance:result"]);
     }
+
     let mut req = request();
     req.acceptance_id = Some("result".into());
     assert!(
@@ -187,6 +191,7 @@ async fn reverse_replay_requires_operation_and_real_original_source_in_the_same_
     let reader = &recording;
     let mut executor = SnapshotExecutor::default();
     let pointer = &mut executor as *mut SnapshotExecutor as usize;
+
     let result = reversed(reader, "original", &actor(), &receipt(), &mut executor).await.unwrap().unwrap();
     assert_eq!(result.reversal_of_acceptance_id.unwrap().as_ref(), "original");
     assert_eq!(
@@ -200,6 +205,7 @@ async fn reverse_replay_requires_operation_and_real_original_source_in_the_same_
         ]
     );
     assert!(reader.events.lock().unwrap().iter().all(|(_, seen)| *seen == pointer));
+
     let reader = Reader { denied: Some("operation"), ..self::reader() };
     assert!(matches!(
         reversed(&reader, "original", &actor(), &receipt(), &mut SnapshotExecutor::default()).await,
@@ -270,6 +276,7 @@ async fn known_command_failures_never_start_recovery_reads() {
         assert!(recover(original, lookup).await.is_err());
         assert!(!*visited.lock().unwrap());
     }
+
     for lookup in [Ok(None), Err(Error::Forbidden("revoked".into()))] {
         let result = recover::<&str>(
             Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(MongoError::custom(
@@ -282,6 +289,7 @@ async fn known_command_failures_never_start_recovery_reads() {
             matches!(result, Err(Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(source))) if source.get_custom::<&'static str>() == Some(&"original-commit"))
         );
     }
+
     assert_eq!(
         recover(
             Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(MongoError::custom(

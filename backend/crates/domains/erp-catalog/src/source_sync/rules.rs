@@ -174,6 +174,7 @@ impl ProductSource {
             });
         }
         Self::register_missing_fields(&mut fields, current, false);
+
         let mut source = Self {
             base: BaseModel::new(product.into()),
             product_id: product.into(),
@@ -264,6 +265,7 @@ impl ProductSource {
         observation: SourceObservation,
     ) -> Result<Vec<(SourceField, Option<String>, SourceValue)>> {
         self.record_company_edit(current);
+
         let mut changes = Vec::new();
         for (field, sku_id, value) in observation.values {
             let value = value.normalized();
@@ -278,6 +280,7 @@ impl ProductSource {
                 changes.push((field, sku_id, value));
             }
         }
+
         self.observed_at = observation.observed_at;
         self.refresh_pending();
         Ok(changes)
@@ -295,6 +298,7 @@ impl ProductSource {
             .find(|(f, s, _)| *f == field && *s == sku_id)
             .map(|(_, _, v)| v.clone())
             .unwrap_or_else(|| value.empty());
+
         let equivalent = company.equivalent(&value);
         let manual = !equivalent
             && match &company {
@@ -303,6 +307,7 @@ impl ProductSource {
             };
         let pending = !equivalent && (manual || value.application_blocker(field).is_some());
         let changed = !pending && !equivalent;
+
         self.fields.push(SourceFieldState {
             field,
             sku_id,
@@ -328,6 +333,7 @@ impl ProductSource {
         decisions: &[SourceDecision],
     ) -> Result<Vec<(SourceField, Option<String>, SourceValue)>> {
         self.validate_decisions(decisions)?;
+
         let mut changes = Vec::new();
         for decision in decisions {
             let edited = if decision.action == SourceDecisionAction::Edit {
@@ -345,6 +351,7 @@ impl ProductSource {
                 SourceDecisionAction::Adopt => state.latest.clone(),
                 SourceDecisionAction::Edit => edited.expect("编辑值已规范化"),
             };
+
             if !value.equivalent(&state.company) {
                 changes.push((state.field, state.sku_id.clone(), value.clone()));
                 state.company = value;
@@ -354,6 +361,7 @@ impl ProductSource {
             state.pending = false;
             state.manually_maintained = decision.action != SourceDecisionAction::Adopt;
         }
+
         self.refresh_pending();
         Ok(changes)
     }
@@ -362,6 +370,7 @@ impl ProductSource {
         if decisions.is_empty() || decisions.len() > 500 {
             return Err(Error::ValidationError("请选择需要确认的差异字段".into()));
         }
+
         let mut seen = BTreeSet::new();
         for d in decisions {
             if !seen.insert((d.field, d.sku_id.clone())) {
@@ -372,6 +381,7 @@ impl ProductSource {
                 .iter()
                 .find(|s| s.field == d.field && s.sku_id == d.sku_id && s.pending)
                 .ok_or_else(|| Error::ConflictError("差异已变化，请重新比较".into()))?;
+
             let value = match d.action {
                 SourceDecisionAction::Keep => None,
                 SourceDecisionAction::Adopt => Some(&state.latest),
@@ -381,6 +391,7 @@ impl ProductSource {
                         .ok_or_else(|| Error::ValidationError("编辑后确认必须填写内容".into()))?,
                 ),
             };
+
             if let Some(value) = value {
                 value.validate(d.field)?;
                 if let Some(reason) = value.company_capacity_blocker(d.field) {
@@ -389,6 +400,7 @@ impl ProductSource {
                 if d.action == SourceDecisionAction::Edit {
                     self.canonical_edit_value(value)?;
                 }
+
                 let missing_asset = matches!(value,SourceValue::Images(images) if images.iter().any(|i|i.file_asset_id.as_deref().is_none_or(str::is_empty)));
                 if (d.action == SourceDecisionAction::Adopt && value.verification_required()) || missing_asset
                 {
@@ -404,6 +416,7 @@ impl ProductSource {
     /// 将编辑图片限制为本商品当前图片或已核验来源图片，并丢弃客户端伪造元数据。
     fn canonical_edit_value(&self, value: &SourceValue) -> Result<SourceValue> {
         let SourceValue::Images(images) = value else { return Ok(value.normalized()) };
+
         let mut result = Vec::new();
         for image in images {
             let id = image
@@ -411,6 +424,7 @@ impl ProductSource {
                 .as_deref()
                 .filter(|id| !id.is_empty())
                 .ok_or_else(|| Error::ValidationError("编辑图片必须是当前可选的已归档素材".into()))?;
+
             let candidate = self
                 .fields
                 .iter()
@@ -490,6 +504,7 @@ impl SourceFieldState {
         if self.latest.equivalent(&value) {
             return None;
         }
+
         self.latest = value.clone();
         if self.company.equivalent(&value) {
             self.baseline = value;
@@ -501,10 +516,12 @@ impl SourceFieldState {
             self.pending = false;
             return None;
         }
+
         if self.manually_maintained || value.application_blocker(self.field).is_some() {
             self.pending = true;
             return None;
         }
+
         self.company = value.clone();
         self.baseline = value.clone();
         self.baseline_confirmed = true;
@@ -534,7 +551,6 @@ mod tests {
     #[test]
     fn empty_initial_content_and_manual_edit_leave_no_fields() {
         let mut source = ProductSource::new("p", "s", "c", "i", &[], SourceObservation::default()).unwrap();
-
         source.record_manual_edit(&[]);
 
         assert!(source.fields.is_empty());
@@ -599,6 +615,7 @@ mod tests {
             assert!(state.manually_maintained);
             assert!(!state.pending);
         }
+
         let fields = source.fields.clone();
         source.record_manual_edit(&current);
         source.record_manual_edit(&[]);

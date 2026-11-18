@@ -52,6 +52,7 @@ pub(super) fn record(
         result.brand_id.as_ref().map(|_| "product_brand".into()),
         result.brand_id,
     )?;
+
     job.record_import_result_batch(
         u64::from(status == ItemStatus::Success),
         u64::from(status == ItemStatus::Skipped),
@@ -137,6 +138,7 @@ mod tests {
         assert_eq!(job.processed_count, 1);
         assert!(execution.released);
         assert!(job.can_resume_import(Instant::now(), 120));
+
         items[0].status = Some(ItemStatus::Success);
         execute_rows(&mut execution, &mut job, items, budget(10)).await.unwrap();
         assert_eq!(execution.committed, [1, 2, 3]);
@@ -183,6 +185,7 @@ mod tests {
         assert_eq!((job.success_count, job.skipped_count, job.failed_count), (1, 1, 1));
         assert!(job.finished_at.is_some());
         assert!(!job.can_resume_import(Instant::now(), 120));
+
         let (mut job, _) = rows();
         assert!(!job.can_resume_import(Instant::from_unix_secs(1119), 120));
         assert!(job.can_resume_import(Instant::from_unix_secs(1120), 120));

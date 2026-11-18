@@ -184,7 +184,6 @@ fn normalize_optional_contact(
 ) -> Result<Option<String>> {
     let value = normalize_optional_text(value, label, max_len)
         .map_err(|error| Error::from(format!("{too_long_message}：{error}")))?;
-
     let Some(value) = value else {
         return Ok(None);
     };
@@ -192,7 +191,6 @@ fn normalize_optional_contact(
     if validate_format(value.as_str()).is_err() {
         return Err(Error::from(invalid_format_message));
     }
-
     Ok(Some(value))
 }
 
@@ -212,14 +210,12 @@ pub fn normalize_optional_text(value: Option<String>, label: &str, max_len: usiz
     let Some(value) = value else {
         return Ok(None);
     };
-
     let value = value.trim();
     if value.is_empty() {
         return Ok(None);
     }
 
     ensure_max_len(value, max_len, || format!("{label}长度不符合要求"))?;
-
     Ok(Some(value.to_owned()))
 }
 
@@ -313,6 +309,7 @@ mod tests {
         let input = "  商品  ".to_string();
         assert_eq!(normalize_required_text_ref(&input, "不能为空", 2, "过长").unwrap(), "商品");
         assert_eq!(normalize_required_text(input, "不能为空", 2, "过长").unwrap(), "商品");
+
         assert_eq!(
             normalize_required_text_ref("  ", "不能为空", 2, "过长").unwrap_err().to_string(),
             "不能为空"
@@ -339,6 +336,7 @@ mod tests {
     fn optional_text_preserves_blank_and_unicode_character_limits() {
         assert_eq!(normalize_optional_text(None, "备注", 0).unwrap(), None);
         assert_eq!(normalize_optional_text(Some("\u{3000}\t ".into()), "备注", 0).unwrap(), None);
+
         assert_eq!(
             normalize_optional_text(Some("\u{3000}商品🙂 \t".into()), "备注", 3).unwrap(),
             Some("商品🙂".into())
@@ -359,6 +357,7 @@ mod tests {
             normalize_optional_phone(Some("12345".into()), 3),
             Err(Error::LogicError(message)) if message == "手机号长度过长：手机号长度不符合要求"
         ));
+
         assert!(matches!(
             normalize_optional_email(Some("invalid".into()), 7),
             Err(Error::LogicError(message)) if message == "邮箱格式不正确"
@@ -371,6 +370,7 @@ mod tests {
             assert_eq!(normalize_optional_email_update(update.clone(), 0).unwrap(), update);
             assert_eq!(normalize_optional_phone_update(update.clone(), 0).unwrap(), update);
         }
+
         assert_eq!(
             normalize_optional_email_update(FieldUpdate::Set("\u{3000} ".into()), 0).unwrap(),
             FieldUpdate::Clear
@@ -379,6 +379,7 @@ mod tests {
             normalize_optional_phone_update(FieldUpdate::Set("\u{3000} ".into()), 0).unwrap(),
             FieldUpdate::Clear
         );
+
         assert_eq!(
             normalize_optional_email_update(FieldUpdate::Set(" user@example.com ".into()), 16).unwrap(),
             FieldUpdate::Set("user@example.com".into())
@@ -387,6 +388,7 @@ mod tests {
             normalize_optional_phone_update(FieldUpdate::Set(" 13900000000 ".into()), 11).unwrap(),
             FieldUpdate::Set("13900000000".into())
         );
+
         assert!(matches!(
             normalize_optional_phone_update(FieldUpdate::Set("12345".into()), 11),
             Err(Error::LogicError(message)) if message == "手机号格式不正确"

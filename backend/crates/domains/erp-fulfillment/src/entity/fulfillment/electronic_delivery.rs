@@ -253,6 +253,7 @@ impl ElectronicDeliveryData {
             normalize_recipient_snapshot(self.recipient_snapshot, self.recipient_snapshot_fingerprint)?;
         self.recorded_by =
             normalize_required_text(self.recorded_by, "记录人不能为空", ACTOR_MAX_LEN, "记录人过长")?;
+
         if self.recorded_at < self.occurred_at {
             return Err(Error::from("记录时间不得早于实际交付时间"));
         }
@@ -398,6 +399,7 @@ impl ElectronicDelivery {
     pub fn new(id: ElectronicDeliveryId, data: ElectronicDeliveryData) -> Result<Self> {
         let data = data.normalized()?;
         let source_reference = normalize_optional_source_reference(data.source_reference);
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             fact: FactBase::new(
@@ -518,6 +520,7 @@ impl ElectronicDelivery {
             return Err(Error::from("确认电子交付必须提供交付凭证"));
         }
         let data = data.normalized()?;
+
         self.recipient_snapshot = data.recipient_snapshot;
         self.recipient_snapshot_fingerprint = data.recipient_snapshot_fingerprint;
         self.result = data.result;
@@ -698,11 +701,13 @@ pub(crate) mod tests {
             record.apply_confirmation(submitted.clone()).unwrap_err().to_string(),
             "交付数量必须与采购销售分配数量一致"
         );
+
         submitted.quantity = record.quantity;
         assert_eq!(
             record.apply_confirmation(submitted.clone()).unwrap_err().to_string(),
             "确认电子交付必须提供交付凭证"
         );
+
         submitted.evidence_attachment_id = Some(FileAssetId::new("confirmed-evidence"));
         assert_eq!(
             record.apply_confirmation(submitted.clone()).unwrap_err().to_string(),
@@ -758,6 +763,7 @@ pub(crate) mod tests {
             "记录时间不得早于实际交付时间"
         );
         assert_eq!(record, original);
+
         submitted.recorded_at = submitted.occurred_at;
         assert_eq!(record.apply_confirmation(submitted).unwrap_err().to_string(), "交付数量必须为正数");
         assert_eq!(record, original);
@@ -797,6 +803,7 @@ pub(crate) mod tests {
                 })
                 .is_ok()
         );
+
         delivery.confirm().unwrap();
         // from == to 幂等迁移恒合法（state.rs 契约）；CONFIRMED 不可编辑由 update 把关。
         assert!(delivery.confirm().is_ok());
@@ -804,6 +811,7 @@ pub(crate) mod tests {
             delivery.update(ElectronicDeliveryUpdate { result: None, evidence_attachment_id: None }).is_err(),
             "已确认不可编辑"
         );
+
         assert!(delivery.reverse().is_ok());
         assert!(delivery.reverse().is_ok(), "REVERSED 幂等迁移合法，且无法迁移到其他状态");
 
@@ -831,6 +839,7 @@ pub(crate) mod tests {
         let mut delivery = ElectronicDelivery::new(ElectronicDeliveryId::new("ed-rule"), data()).unwrap();
         assert!(delivery.ensure_confirmable().is_ok());
         assert!(delivery.acceptance_quantity(&SalesOrderLineId::new("so-line-1")).is_err());
+
         delivery.confirm().unwrap();
         assert!(delivery.ensure_confirmable().is_err());
         assert_eq!(
@@ -838,6 +847,7 @@ pub(crate) mod tests {
             Quantity::from_str("2").unwrap()
         );
         assert!(delivery.acceptance_quantity(&SalesOrderLineId::new("other-line")).is_err());
+
         assert_eq!(delivery.registration_context_id().unwrap(), "so-line-1");
         let mut missing_context = delivery.clone();
         missing_context.sales_order_line_id = SalesOrderLineId::new("   ");

@@ -323,10 +323,12 @@ mod tests {
         assert_eq!(page.items.last().unwrap().execution_no, 2);
         assert_eq!(page.next_cursor.as_deref(), Some("2"));
         assert!(page.has_more);
+
         let tail = history_page_from(vec![history_item(1, "REJECTED", Some("资料不全"))], 50);
         assert_eq!(tail.items[0].execution_no, 1);
         assert!(!tail.has_more);
         assert!(tail.next_cursor.is_none());
+
         let empty = history_page_from(Vec::new(), 50);
         assert!(empty.items.is_empty());
         assert!(!empty.has_more);

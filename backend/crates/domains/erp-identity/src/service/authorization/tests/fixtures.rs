@@ -82,6 +82,7 @@ impl Facilities for Identity {
         if !state.active {
             return Ok(None);
         }
+
         let grants = state
             .grants
             .iter()
@@ -120,6 +121,7 @@ impl Facilities for Identity {
                     .collect(),
                 user_limit: None,
             });
+
         let mut organizations = OrganizationState::default();
         if let Some(deadline) = self.scope_deadlines.lock().unwrap().get(&context.permission) {
             organizations.memberships.push(OrgMembership {
@@ -131,6 +133,7 @@ impl Facilities for Identity {
                 reason: "test".into(),
             });
         }
+
         Ok(AuthorizedDataScope::test_fixture(DataScopeFacts {
             scope: scoped_roles.unwrap_or_else(|| {
                 self.scopes

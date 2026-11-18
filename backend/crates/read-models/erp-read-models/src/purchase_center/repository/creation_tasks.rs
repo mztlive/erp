@@ -131,6 +131,7 @@ mod tests {
             mapping.model().facts,
             [FactKind::Owner, FactKind::Organization, FactKind::Assignee].into()
         );
+
         let context = AccessContext {
             actor: AuditActor::new("buyer".into(), "buyer".into(), AccountKind::Admin),
             permission: purchase_order::CREATE,
@@ -144,6 +145,7 @@ mod tests {
             };
             assert_eq!(predicate, doc! { "owner_user_id": "buyer" });
         }
+
         let organizations = ["current-org".into()].into();
         let QueryFragment::Exists { bindings, pipeline, .. } =
             mapping.predicate(&AccessFact::OrganizationIn(organizations), &context, None).unwrap()
@@ -156,6 +158,7 @@ mod tests {
             &doc! { "$lte": 100_i64 }
         );
         assert_eq!(pipeline[3], doc! { "$match": { "count": 1, "org": { "$in": ["current-org"] } } });
+
         let QueryFragment::Match(records) = mapping.records(&context, None).unwrap() else {
             panic!("任务查询仅按真实开放任务收窄")
         };

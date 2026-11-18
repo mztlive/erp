@@ -99,6 +99,7 @@ impl WorkItemListParams {
         let priorities = parse_priorities(self.priorities.as_deref())?;
         ensure_supported_query(self)?;
         let (sort_by, sort_ascending) = normalize_sort(self.sort);
+
         Ok(WorkItemListQuery {
             filters: Default::default(),
             scope: self.scope,
@@ -319,6 +320,7 @@ fn parse_id_list(value: Option<&str>, label: &str) -> Result<Vec<String>> {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(Vec::new());
     };
+
     let mut ids = Vec::new();
     for part in value.split(',') {
         let id = part.trim();
@@ -332,6 +334,7 @@ fn parse_id_list(value: Option<&str>, label: &str) -> Result<Vec<String>> {
             ids.push(id.to_string());
         }
     }
+
     if ids.len() > 100 {
         return Err(Error::ValidationError(format!("{label}筛选最多 100 项")));
     }
@@ -368,6 +371,7 @@ impl WorkItemListQuery {
                 return Err(Error::ValidationError("筛选 ID 不能超过128字节".into()));
             }
         }
+
         for (ids, selected) in [
             (&mut self.handler_user_ids, &mut self.filters.handlers),
             (&mut self.sales_order_ids, &mut self.filters.sales_orders),
@@ -403,6 +407,7 @@ mod id_filter_tests {
         query.merge_filters().unwrap();
         assert_eq!(query.sales_order_ids, ["b"]);
         assert_eq!(query.filters.sales_orders, ["b"]);
+
         query.filters.sales_orders = vec!["other".into()];
         assert!(query.merge_filters().is_err());
     }

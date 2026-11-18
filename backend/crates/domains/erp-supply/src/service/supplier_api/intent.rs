@@ -30,6 +30,7 @@ impl SupplierApiService {
     ) -> Result<(SupplierApiConnection, Vec<SupplierApiCapability>)> {
         let connection = self.load_connection(id, executor).await?;
         ensure_version(connection.base.version, expected_version)?;
+
         let capabilities = Vec::new();
         let governance = SupplierConnectionGovernance {
             connection: &connection,

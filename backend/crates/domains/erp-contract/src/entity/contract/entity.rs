@@ -197,6 +197,7 @@ impl Contract {
         if users.len() > 100 {
             return Err(Error::from("一份合同最多共享给100名销售"));
         }
+
         let mut normalized = Vec::new();
         for user in users {
             let user = user.trim();
@@ -209,6 +210,7 @@ impl Contract {
         }
         normalized.sort();
         normalized.dedup();
+
         self.shared_sales_user_ids = normalized;
         Ok(())
     }

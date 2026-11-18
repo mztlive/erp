@@ -211,6 +211,7 @@ mod tests {
         assert!(
             matches!(Error::from(erp_supplier::Error::InvalidInput(issues.clone())), Error::InvalidInput(actual) if actual == issues)
         );
+
         let source = persistence_core::Error::CommitOutcomeUnknown(mongodb::error::Error::custom(
             "master-data-commit",
         ));

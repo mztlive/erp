@@ -53,6 +53,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
             ),
         ])
         .await?;
+
     db.collection::<Document>(
         <Database as PurchasePaymentRequestSnapshotExt>::PURCHASE_PAYMENT_REQUEST_SNAPSHOTS,
     )

@@ -42,6 +42,7 @@ impl super::WorkItemFactsReader {
             executor,
         )
         .await?;
+
         for receipt in receipts {
             let purchase_no = receipt_purchase_nos.get(receipt.purchase_order_id.as_ref());
             facts.insert(
@@ -63,6 +64,7 @@ impl super::WorkItemFactsReader {
             executor,
         )
         .await?;
+
         for delivery in deliveries {
             let sales_no = delivery_sales_nos.get(delivery.sales_order_id.as_ref());
             facts.insert(
@@ -89,6 +91,7 @@ impl super::WorkItemFactsReader {
             executor,
         )
         .await?;
+
         for delivery in electronics {
             let purchase_no = electronic_purchase_nos.get(delivery.purchase_order_id.as_ref());
             facts.insert(
@@ -110,6 +113,7 @@ impl super::WorkItemFactsReader {
             executor,
         )
         .await?;
+
         for fulfillment in services {
             let purchase_no = service_purchase_nos.get(fulfillment.purchase_order_id.as_ref());
             facts.insert(

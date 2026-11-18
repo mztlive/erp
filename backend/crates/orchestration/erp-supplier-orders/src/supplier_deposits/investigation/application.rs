@@ -116,6 +116,7 @@ async fn finish_application(
         application.settle(usage_id, executor).await?;
         application.payment_task(usage_id, executor).await?;
     }
+
     application.complete(&inbox.base.id, resource, executor).await?;
     Ok(FundsInvestigationRun { applied: 1, ..Default::default() })
 }

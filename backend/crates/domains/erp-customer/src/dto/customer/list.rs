@@ -382,6 +382,7 @@ mod tests {
         assert_eq!(params.scope_version.as_deref(), Some("v1"));
         assert_eq!(query.org_unit_ids.unwrap().as_slice(), &["org-1", "org-2"]);
         assert_eq!(query.include_descendants, Some(true));
+
         assert!(
             CustomerListParams {
                 include_descendants: Some(true),
@@ -450,6 +451,7 @@ mod tests {
         .unwrap();
         let tags = CustomerScope::tags_for(&[owner], Some("actor-1"), "actor-1", CustomerScope::Mine);
         assert_eq!(tags, vec![CustomerScope::Mine]);
+
         let tags = CustomerScope::tags_for(&[], None, "actor-1", CustomerScope::AllAuthorized);
         assert_eq!(tags, vec![CustomerScope::AllAuthorized]);
     }

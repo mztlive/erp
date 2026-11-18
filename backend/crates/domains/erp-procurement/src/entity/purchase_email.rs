@@ -133,6 +133,7 @@ mod tests {
             assert!(request.validate_source(status, 2, true).is_err());
             assert!(request.validate_source(status, 3, false).is_err());
         }
+
         for status in [
             PurchaseOrderStatus::Draft,
             PurchaseOrderStatus::InApproval,
@@ -150,6 +151,7 @@ mod tests {
             idempotency_key: "send-1".into(),
         };
         assert_eq!(request.recipient().unwrap(), "orders@example.com");
+
         for email in
             ["a@example.com\r\nBcc:x@example.com", "a@example.com,b@example.com", "@example.com", "missing"]
         {

@@ -20,6 +20,7 @@ impl RbacService {
                 let adapter = self.policy_store.clone();
                 let mut enforcer = Enforcer::new_raw(model, adapter).await?;
                 enforcer.enable_auto_save(false);
+
                 self.reload_enforcer(&mut enforcer).await?;
                 Ok(RwLock::new(enforcer))
             })

@@ -142,6 +142,7 @@ impl SalesReviewService {
             },
             actor.id(),
         )?;
+
         let revision_lines =
             self.db.sales_order_revision_lines().list_lines_by_revision(&base_revision_id, executor).await?;
         let revision_line_ids = revision_lines
@@ -153,6 +154,7 @@ impl SalesReviewService {
             .sales_order_goods_service_line_revisions()
             .list_by_revision_line_ids(&revision_line_ids, executor)
             .await?;
+
         let working_copy_id = SalesOrderWorkingCopyId::new(next_id());
         let (line_datas, lines) =
             build_change_working_copy_lines_from_revision(&working_copy_id, &revision_lines, &goods_lines)?;
@@ -182,6 +184,7 @@ impl SalesReviewService {
         if let Some(blocker) = order.sales_change_start_blocker() {
             return Err(Error::BusinessLogicError(blocker.to_string()));
         }
+
         let base_revision_id =
             SalesOrderRevisionId::new(order.current_revision_id().expect("实体规则已确认当前版本存在"));
         let base_revision = self
@@ -196,10 +199,10 @@ impl SalesReviewService {
                 req.expected_base_revision_no, base_revision.revision.revision_no
             )));
         }
+
         if self.has_in_progress_change(&req.sales_order_id, &base_revision_id, executor).await? {
             return Err(Error::ConflictError("同一基准版本已有进行中的销售变更单".to_string()));
         }
-
         Ok((order, base_revision))
     }
 
@@ -303,6 +306,7 @@ fn build_change_working_copy_lines_from_revision(
             )?;
         datas.push(line.to_goods_working_copy_data(goods)?);
     }
+
     let mut built = Vec::with_capacity(datas.len());
     for data in &datas {
         built.push(crate::entity::sales_order::SalesOrderWorkingCopyLine::new(

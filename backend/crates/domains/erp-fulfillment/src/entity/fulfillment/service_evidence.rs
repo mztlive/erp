@@ -131,6 +131,7 @@ mod tests {
             let error = ActualServiceLocation::parse(raw).unwrap_err();
             assert_eq!(error.to_string(), "服务地点不能为空");
         }
+
         for raw in [SERVICE_LOCATION_PLACEHOLDER, " 待填写 ", "\t待填写\n"] {
             let error = ActualServiceLocation::parse(raw).unwrap_err();
             assert_eq!(error.to_string(), "请填写实际服务地点");
@@ -183,6 +184,7 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.to_string(), "现场图片凭证必须按敏感文件保存");
+
         assert!(
             ServiceEvidencePolicy::validate(
                 "image/jpeg",

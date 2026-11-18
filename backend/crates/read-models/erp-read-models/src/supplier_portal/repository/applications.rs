@@ -171,6 +171,7 @@ impl<'a> PortalApplicationRepository<'a> {
         }
         pipeline.push(doc! {"$sort":{"sort_at":-1,"sort_id":-1,"domain":1}});
         pipeline.push(doc! {"$facet":{"items":[{"$skip":query.skip},{"$limit":i64::from(query.page_size)}],"count":[{"$count":"total"}]}});
+
         let page = aggregate::<ApplicationPage>(self.application_collection(), pipeline, executor)
             .await?
             .into_iter()
@@ -234,12 +235,14 @@ impl Application {
             Self::NewProduct(app) => value(app)?,
             Self::Cooperation(app) => value(app)?,
         };
+
         let external = self.external()?;
         let object = result.as_object_mut().ok_or_else(|| Error::Internal("申请记录不是对象".into()))?;
         object.insert("kind".into(), Value::String(external.kind));
         object.insert("status".into(), Value::String(external.status));
         object.insert("input".into(), external.input);
         object.insert("version".into(), Value::from(external.version));
+
         if let Self::NewProduct(app) = self {
             object.insert("work_item_id".into(), value(&app.task_id)?);
             object.insert("current_submission_id".into(), value(&app.current_submission_id)?);
@@ -266,6 +269,7 @@ fn application_pipeline(supplier_id: &str, query: &PortalQuery) -> Vec<Document>
     let mut pipeline = domain_pipeline(supplier_id, "offering");
     pipeline.push(doc! {"$unionWith":{"coll":<Database as CatalogPortalExt>::NEW_PRODUCT_DRAFTS,"pipeline":domain_pipeline(supplier_id,"new_product")}});
     pipeline.push(doc! {"$unionWith":{"coll":COOPERATION_APPLICATIONS,"pipeline":domain_pipeline(supplier_id,"cooperation")}});
+
     if let Some(status) = &query.status {
         pipeline.push(doc! {"$match":{"status":status}});
     }

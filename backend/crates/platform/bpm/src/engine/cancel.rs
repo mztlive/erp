@@ -45,9 +45,11 @@ pub fn cancel(
     if reason.is_empty() {
         return Err(EngineError::InvalidCommand("取消原因不能为空"));
     }
+
     let blocker = instance.blocker_code.or(current.blocker_code);
     current.cancel(command.now)?;
     instance.cancel(command.now)?;
+
     let execution_id = current.typed_id();
     let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Cancelled);
     let mut event =
@@ -59,6 +61,7 @@ pub fn cancel(
         event = event.with_blocker(code);
     }
     plan.events.push(event);
+
     if command.close_open_task {
         plan.task_intents.push(TaskIntent::CloseTask { execution_id, reason: TaskCloseReason::Cancelled });
     }
@@ -82,6 +85,7 @@ fn ensure_cancellable(
     if !matches!(current.status, ApprovalNodeExecutionStatus::Active | ApprovalNodeExecutionStatus::Blocked) {
         return Err(EngineError::Uncommittable("当前执行状态无法形成合法取消计划"));
     }
+
     let Some(current_id) = instance.current_node_execution_id.as_ref() else {
         return Err(EngineError::Uncommittable("实例缺少当前执行，无法形成合法取消计划"));
     };

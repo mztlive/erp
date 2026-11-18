@@ -28,6 +28,7 @@ impl DangaoshushuConnector {
             .await?;
         let products = value["product_list"].as_array().ok_or_else(mapping)?;
         let next = next_page(number, products.len(), scan.limit)?;
+
         let mut page =
             ScopedOfferPage { page: Page { items: vec![], next }, skipped: vec![], membership: None };
         let mut details = BTreeMap::new();
@@ -35,6 +36,7 @@ impl DangaoshushuConnector {
             let position = format!("第 {number} 页第 {} 个商品", index + 1);
             self.scan_product(product, &position, &mut page, &mut details).await?;
         }
+
         self.name_catalog_categories(&mut page.page.items).await?;
         Ok(page)
     }
@@ -60,11 +62,13 @@ impl DangaoshushuConnector {
             else {
                 continue;
             };
+
             // 同一商品详情只请求一次，映射失败也复用结果；网络失败不缓存为跳过。
             let product_id = offer.sku.product_id.as_deref().ok_or_else(mapping)?;
             if !details.contains_key(product_id) {
                 details.insert(product_id.to_owned(), self.product(&offer.sku, None).await);
             }
+
             let root = details.get(product_id).expect("当前商品已补查详情");
             let result =
                 root.as_ref().map_err(Clone::clone).and_then(|root| self.detail_observation(offer, root));
@@ -198,8 +202,10 @@ mod tests {
         assert!(page.page.items.is_empty());
         assert_eq!(page.skipped.len(), 1);
         assert_eq!(page.page.next.as_deref(), Some("136"));
+
         let (connector, _) = recording_connector(vec![Ok(json!({"unexpected":[]}))]);
         assert!(connector.scan_with_details(&scan(1)).await.is_err());
+
         for class in [
             SupplierFailureClass::AuthSignature,
             SupplierFailureClass::TransientFailure,

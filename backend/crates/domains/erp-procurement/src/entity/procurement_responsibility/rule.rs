@@ -197,6 +197,7 @@ impl ProcurementResponsibilityRule {
     ) -> Result<()> {
         let updated_by = normalize_actor(updated_by.into())?;
         let normalized = NormalizedRuleData::try_from(data)?;
+
         self.rule_type = normalized.rule_type;
         self.sku_id = normalized.sku_id;
         self.category_id = normalized.category_id;
@@ -400,6 +401,7 @@ mod tests {
         )
         .unwrap();
         let original = rule.clone();
+
         for (input, message) in [
             (data(ProcurementResponsibilityRuleType::Category, 3), "采购责任规则类型与选择器字段不一致"),
             (
@@ -414,6 +416,7 @@ mod tests {
                 if error == message));
             assert_eq!(rule, original);
         }
+
         rule.update(data(ProcurementResponsibilityRuleType::Category, 2), " other-admin ").unwrap();
         assert_eq!(rule.selector_key, "category:cat-1");
         assert_eq!(rule.sku_id, None);

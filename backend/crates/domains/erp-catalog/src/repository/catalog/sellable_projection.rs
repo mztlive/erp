@@ -278,6 +278,7 @@ impl<'a> SellableSkuProjectionStore<'a> {
     ) -> Result<()> {
         let mut fields = mongodb::bson::serialize_to_document(state)?;
         fields.remove("_id");
+
         let collection = self.db.collection::<Document>(STATE);
         let filter = doc! { "_id": &state.id };
         mongo_ops::update_one(&collection, filter, doc! { "$set": fields }, true, executor).await?;
@@ -309,6 +310,7 @@ impl<'a> SellableSkuProjectionStore<'a> {
         if let Some(date) = refreshed_on {
             max.insert("refreshed_on", date.to_string());
         }
+
         let collection = self.db.collection::<Document>(STATE);
         let filter = doc! { "_id": SellableSkuProjectionState::ID };
         mongo_ops::update_one(&collection, filter, doc! { "$max": max }, false, executor).await?;
@@ -355,12 +357,14 @@ impl<'a> SellableSkuProjectionStore<'a> {
         let mut sku_ids = find_values(&ids, filter.clone(), "id", |row| row.id, executor).await?;
         let revisions = self.db.collection::<SkuRefRow>(SKU_REVISIONS);
         sku_ids.extend(find_values(&revisions, filter.clone(), "sku_id", |row| row.sku_id, executor).await?);
+
         let products = self.db.collection::<StableIdRow>(PRODUCTS);
         let mut product_ids = find_values(&products, filter.clone(), "id", |row| row.id, executor).await?;
         let product_revisions = self.db.collection::<ProductRefRow>(PRODUCT_REVISIONS);
         product_ids.extend(
             find_values(&product_revisions, filter, "product_id", |row| row.product_id, executor).await?,
         );
+
         if !product_ids.is_empty() {
             let filter = doc! { "product_id": { "$in": product_ids.into_iter().collect::<Vec<_>>() } };
             sku_ids.extend(find_values(&ids, filter, "id", |row| row.id, executor).await?);
@@ -404,6 +408,7 @@ impl<'a> SellableSkuProjectionStore<'a> {
     ) -> Result<PageResult<SellableSkuRow>> {
         let query = projection_filter(filter, restrict);
         let total = mongo_ops::count_documents(&self.documents(), query.clone(), executor).await?;
+
         let options = FindOptions::builder()
             .sort(projection_sort(filter.sort))
             .skip(filter.page.saturating_sub(1) * u64::from(filter.page_size))
@@ -538,10 +543,12 @@ mod tests {
         let mut state = SellableSkuProjectionState::rebuilt(1_000, date("2026-10-14"));
         assert!(!SellableSkuProjectionState::needs_rebuild(Some(&state)));
         assert!(!state.serves_list());
+
         state.ready = true;
         assert!(state.serves_list());
         assert!(!state.needs_daily_refresh(date("2026-10-14")));
         assert!(state.needs_daily_refresh(date("2026-10-15")));
+
         state.version = SELLABLE_SKU_PROJECTION_VERSION - 1;
         assert!(SellableSkuProjectionState::needs_rebuild(Some(&state)));
         assert!(!state.serves_list());
@@ -576,12 +583,14 @@ mod tests {
         value.sales_price_min = Some(Amount::from_str("10.00").unwrap());
         let restrict = vec!["sku-1".to_string()];
         let query = projection_filter(&value, Some(&restrict));
+
         assert_eq!(query.get_document("_id").unwrap(), &doc! { "$in": ["sku-1"] });
         assert_eq!(query.get_str("row.product_kind").unwrap(), "PHYSICAL");
         assert_eq!(query.get_str("row.category_id").unwrap(), "cat-1");
         assert!(!query.contains_key("row.brand_id"));
         assert_eq!(query.get_str("row.supplier_ids").unwrap(), "supplier-1");
         assert_eq!(query.get_document("row.supplier_count").unwrap(), &doc! { "$lte": 1_i64 });
+
         let price = query.get_document("row.bulk_price_gross").unwrap();
         assert_eq!(price.get_str("$type").unwrap(), "decimal");
         assert!(matches!(price.get("$gte"), Some(Bson::Decimal128(_))));
@@ -612,6 +621,7 @@ mod tests {
             "effective_from": "2026-01-01", "supplier_count": 1
         }))
         .unwrap();
+
         let stored = persistence_core::persisted_document(&row).unwrap();
         assert!(matches!(stored.get("sales_visible_price_gross"), Some(Bson::Decimal128(_))));
         assert!(matches!(stored.get("bulk_price_gross"), Some(Bson::Decimal128(_))));
@@ -621,11 +631,13 @@ mod tests {
     #[test]
     fn sort_falls_back_to_sku_number_and_identity() {
         assert_eq!(projection_sort(SellableSort::default()), doc! { "row.sku_no": 1, "_id": 1 });
+
         let price = SellableSort { field: SellableSortField::DropshipPrice, descending: true };
         assert_eq!(
             projection_sort(price),
             doc! { "row.sales_visible_price_gross": -1, "row.sku_no": 1, "_id": 1 }
         );
+
         let sku_desc = SellableSort { field: SellableSortField::SkuNo, descending: true };
         assert_eq!(projection_sort(sku_desc), doc! { "row.sku_no": -1, "_id": 1 });
     }

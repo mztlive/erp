@@ -139,6 +139,7 @@ impl PreparedWorkflowAudit {
         if self.action != action || self.resource_type != resource || command_id.trim().is_empty() {
             return Err(Error::ValidationError("工作流审计动作或命令身份无效".to_string()));
         }
+
         self.operation = Some(operation);
         self.command_id = Some(command_id);
         Ok(self)
@@ -216,6 +217,7 @@ impl PreparedWorkflowAudit {
         if resource_id.trim().is_empty() {
             return Err(Error::ValidationError("资源ID不能为空".to_string()));
         }
+
         let context = AuditContext::from(actor);
         Ok(Self {
             id,

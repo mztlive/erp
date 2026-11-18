@@ -92,6 +92,7 @@ impl OrderTracking {
         {
             return Err(Error::ConflictError("订单跟踪观察已变化，请重新查询".into()));
         }
+
         if observation.cancellation == Some(CancelStatus::Canceled) && !self.applied_shipments.is_empty() {
             return Err(Error::BusinessLogicError("订单已经存在真实分批发货，请沿原履约流程处理取消".into()));
         }
@@ -119,6 +120,7 @@ impl OrderTracking {
         now: Instant,
     ) -> Result<()> {
         self.ensure_current_observation(observation)?;
+
         self.applied_observation_id = Some(observation.base.id.clone());
         self.state = if complete { TrackingState::Complete } else { TrackingState::Polling };
         self.last_error = None;
@@ -306,10 +308,12 @@ impl OrderObservation {
         {
             return Err(Error::ConflictError("来源订单树不属于原始根单".into()));
         }
+
         let shipments = value
             .shipments
             .map(|shipments| shipments.into_iter().map(OrderShipment::from_connector).collect::<Vec<_>>());
         validate_shipments(shipments.as_deref(), &tracking.source_lines)?;
+
         Ok(Self {
             base: BaseModel::new(id),
             order_id: tracking.base.id.clone(),

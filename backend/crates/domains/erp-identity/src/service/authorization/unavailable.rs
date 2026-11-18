@@ -123,6 +123,7 @@ mod tests {
             assert_eq!(mapping.model().resource, permission.resource());
             assert!(mapping.preparation().is_none());
             assert!(mapping.stages().is_empty());
+
             assert!(
                 matches!(authorization.query(&actor, permission, &mut SnapshotExecutor::default()).await,
                 Err(Error::Internal(reason)) if reason == "测试授权设施不可用"),
@@ -156,6 +157,7 @@ mod tests {
             model: Some(mapping.model().key.clone()),
             as_of: Instant::from_unix_secs(1),
         };
+
         assert!(
             matches!(mapping.key(&context, None), Err(Error::Internal(reason)) if reason == "测试查询映射不可执行")
         );

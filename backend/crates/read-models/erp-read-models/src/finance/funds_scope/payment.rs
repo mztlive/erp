@@ -70,6 +70,7 @@ impl FundsAccess {
         params.validate()?;
         let query = params.normalized().map_err(Error::from)?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
+
         let snapshot =
             self.checked_supplier_payments(params, &query, actor, params.scope_version.as_deref()).await?;
         Ok(snapshot)
@@ -184,13 +185,16 @@ impl FundsAccess {
     ) -> Result<FundsScopedPage<ScopedSupplierPaymentRow>> {
         let (_, authorization) =
             self.resolve_with_purchase(actor, &payable_permissions::SUPPLIER_PAYMENT_LIST, executor).await?;
+
         let condition = self.payment_condition(query, executor).await?;
         let filter = self.payment_filter(query, executor).await?;
         let snapshot =
             payment_repository::page(&self.db, query, &filter, &authorization, &condition, executor).await?;
+
         let total = snapshot.count()?;
         let version = flow::version(&authorization.context.scope_version, &snapshot.versions);
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
+
         let summary = flow::summary(&snapshot.summary, &version)?;
         let whole_ids = snapshot
             .versions
@@ -200,6 +204,7 @@ impl FundsAccess {
             .map(|(version, _)| version.id.clone())
             .collect::<BTreeSet<_>>();
         let items = self.payment_page(snapshot.items, &snapshot.versions, &whole_ids, executor).await?;
+
         authorization.deliver(executor).await?;
         Ok(FundsScopedPage {
             items,
@@ -248,6 +253,7 @@ impl FundsAccess {
                     let (_, authorization) = this
                         .resolve_with_purchase(&actor, &payable_permissions::SUPPLIER_PAYMENT_LIST, executor)
                         .await?;
+
                     let condition = this.payment_condition(&query, executor).await?;
                     let filter = this.payment_filter(&query, executor).await?;
                     let versions = payment_repository::versions(
@@ -264,6 +270,7 @@ impl FundsAccess {
                             "付款查询超过上限，请收窄组织或负责人条件".into(),
                         ));
                     }
+
                     authorization.deliver(executor).await?;
                     Ok(flow::version(&authorization.context.scope_version, &versions))
                 })
@@ -283,6 +290,7 @@ impl FundsAccess {
         let links = self.payment_matched_links(&ids, executor).await?;
         let source_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
         let facts = self.purchase_fact_map(&source_ids, executor).await?;
+
         let allowed =
             versions.iter().flat_map(|row| row.sources.iter().map(|source| source.id.clone())).collect();
         let expected = rows.len();
@@ -346,6 +354,7 @@ impl FundsAccess {
             .resolve_with_purchase(actor, &payable_permissions::SUPPLIER_PAYMENT_DETAIL, executor)
             .await?;
         self.require_visible_root(&authorization, id, executor).await?;
+
         let filter = SupplierPaymentFilter {
             keyword_ids: Some(vec![id.to_string()]),
             page_size: 1,
@@ -354,6 +363,7 @@ impl FundsAccess {
         let page = self.db.supplier_payments().search_supplier_payments(&filter, executor).await?;
         let row =
             page.items.into_iter().next().ok_or_else(|| Error::NotFound("供应商付款单不存在".into()))?;
+
         let links = self.payment_matched_links(std::slice::from_ref(&row.id), executor).await?;
         let order_ids = links.values().flatten().filter_map(|link| link.order.clone()).collect::<Vec<_>>();
         let facts = self.purchase_fact_map(&order_ids, executor).await?;
@@ -362,6 +372,7 @@ impl FundsAccess {
         if !linked_sources_exist(row_links.iter().map(|link| link.order.as_deref()), &facts) {
             return Err(Error::NotFound("供应商付款单不存在".into()));
         }
+
         let tuples = payment_tuples(&row, row_links, &facts);
         let matched = matched_orders(&tuples, &allowed);
         let whole = self
@@ -376,11 +387,13 @@ impl FundsAccess {
         if !whole && matched.is_empty() {
             return Err(Error::NotFound("供应商付款单不存在".into()));
         }
+
         let data = cut_payment_row(&row, row_links, &matched, whole);
         let mut parts = vec![format!("{}:{}", row.id, row.version)];
         for order in matched.iter().filter_map(|id| facts.get(id)) {
             parts.push(format!("{}:{:?}:{}", id, order.owner_user_id, order.version));
         }
+
         authorization.deliver(executor).await?;
         Ok(FundsScopedResult {
             data,
@@ -596,6 +609,7 @@ mod tests {
             partial.allocations.unwrap().iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
             vec!["a"]
         );
+
         let whole = cut_payment_row(&row, &links, &matched, true);
         assert_eq!(whole.visible_allocated_share, "60".parse().unwrap());
         assert_eq!(whole.amount, Some("120".parse().unwrap()));
@@ -616,6 +630,7 @@ mod tests {
             )
             .is_empty()
         );
+
         let readable = decide_payment_rows(
             vec![row("empty", "10")],
             &HashMap::new(),
@@ -624,6 +639,7 @@ mod tests {
             &BTreeSet::from(["empty".into()]),
         );
         assert_eq!(readable.len(), 1);
+
         let dangling = HashMap::from([("p".into(), vec![link("a", Some("missing"), "10")])]);
         assert!(
             decide_payment_rows(
@@ -635,6 +651,7 @@ mod tests {
             )
             .is_empty()
         );
+
         let missing_reference = HashMap::from([("p".into(), vec![link("a", None, "10")])]);
         assert!(
             decide_payment_rows(
@@ -677,9 +694,11 @@ mod tests {
                 )
             })
             .collect();
+
         let allowed = BTreeSet::from(["po-a".into()]);
         let decided = decide_payment_rows(vec![row("p", max)], &links, &facts, &allowed, &BTreeSet::new());
         assert_eq!(decided[0].1, ["po-a"]);
+
         let items = payment_page_items(&decided, &links, &BTreeSet::new());
         assert_eq!(items[0].visible_allocated_share, max.parse().unwrap());
         assert!(items[0].amount.is_none());

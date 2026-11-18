@@ -43,6 +43,7 @@ mod tests {
         assert_eq!(planned.name, "磅");
         assert_eq!(planned.quantity_scale, 0);
         assert_eq!(planned.base.id, UnitOfMeasure::from_source("磅", vec![], "other").unwrap().base.id);
+
         let existing = UnitOfMeasure::new(
             UnitOfMeasureId::new("old"),
             UnitOfMeasureData::new("LB", "磅", "lb").with_quantity_scale(3),

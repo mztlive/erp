@@ -73,6 +73,7 @@ pub(super) async fn execute_rows(
         if !execution.prepare(job).await? {
             return Ok(());
         }
+
         let outcome = execution.import(item.source_row_no.unwrap_or(item.item_no)).await;
         record_progress(job, &mut item, outcome, index + 1 == remaining)?;
         let should_yield = budget.after_row();
@@ -82,6 +83,7 @@ pub(super) async fn execute_rows(
             }
             return Err(error);
         }
+
         if should_yield {
             break;
         }
@@ -253,6 +255,7 @@ mod tests {
         let error = execute_rows(&mut execution, &mut job, items.clone(), row_budget(200)).await.unwrap_err();
         assert!(matches!(error, Error::Internal(message) if message == "progress unavailable"));
         assert!(!execution.events.contains(&("import", 4)));
+
         let mut restored_job = execution.saved_job.unwrap();
         let restored_items = items
             .into_iter()
@@ -265,6 +268,7 @@ mod tests {
                     .unwrap_or(item)
             })
             .collect();
+
         let mut resumed = RecordingRows::default();
         execute_rows(&mut resumed, &mut restored_job, restored_items, row_budget(200)).await.unwrap();
         assert_eq!(resumed.events, [("import", 3), ("persist", 3), ("import", 4), ("persist", 4)]);
@@ -284,6 +288,7 @@ mod tests {
         assert_eq!(execution.events, [("import", 1), ("persist", 1), ("import", 2), ("persist", 2)]);
         assert_eq!(job.processed_count, 2);
         assert!(job.finished_at.is_none());
+
         let resumed_items = items
             .into_iter()
             .map(|item| {
@@ -295,6 +300,7 @@ mod tests {
                     .unwrap_or(item)
             })
             .collect();
+
         let mut resumed = RecordingRows::default();
         execute_rows(&mut resumed, &mut job, resumed_items, row_budget(2)).await.unwrap();
         assert_eq!(resumed.events, [("import", 3), ("persist", 3), ("import", 4), ("persist", 4)]);
@@ -308,6 +314,7 @@ mod tests {
         let cache = ImportSourceCache::new(1024 * 1024);
         let mut loads = 0;
         let mut imported = Vec::new();
+
         for _ in 0..100 {
             cache.retain_jobs(&[job.clone()]).await;
             let source = cache
@@ -334,6 +341,7 @@ mod tests {
                 panic!("应为旧任务来源")
             };
             assert_eq!(parsed.rows.len(), 1000);
+
             let mut execution = RecordingRows::default();
             execute_rows(&mut execution, &mut job, items.clone(), row_budget(10)).await.unwrap();
             for saved in execution.saved_items {
@@ -344,6 +352,7 @@ mod tests {
             // 仓储逐行保存会改变版本；输入身份不应随版本失效。
             job.base.version += 10;
         }
+
         assert_eq!(loads, 1);
         assert_eq!(job.processed_count, 1000);
         assert!(job.finished_at.is_some());

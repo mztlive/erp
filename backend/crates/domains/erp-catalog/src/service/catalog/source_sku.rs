@@ -32,6 +32,7 @@ impl CatalogService {
     ) -> Result<Sku> {
         input.validate()?;
         ensure_source_input(&input)?;
+
         let mut product = self
             .access()
             .require_product(actor, &catalog_permissions::PRODUCT_PRODUCT_UPDATE, product_id, executor)
@@ -39,6 +40,7 @@ impl CatalogService {
         if !product.is_active() {
             return Err(Error::BusinessLogicError("来源对应公司商品已停用".into()));
         }
+
         let unit = self
             .db
             .unit_of_measures()
@@ -50,6 +52,7 @@ impl CatalogService {
         if self.db.catalog().sku_signature_exists(&ProductId::new(product_id), &signature, executor).await? {
             return Err(Error::ConflictError("该公司商品已存在相同规格，请明确匹配已有 SKU".into()));
         }
+
         let sku_id = SkuId::new(next_id());
         let existing = self.db.catalog().skus_for_product(&ProductId::new(product_id), executor).await?;
         ProductSkuInput::fill_blank_sku_nos(
@@ -71,6 +74,7 @@ impl CatalogService {
             actor.id(),
         )?;
         sku.attach_revision(&revision, actor.id())?;
+
         self.db.catalog().create_sku_with_revision(&sku, &revision, &[], executor).await?;
         product.stable.updated_by = actor.id().into();
         self.db.products().update(&mut product, executor).await?;
@@ -108,8 +112,10 @@ mod tests {
         assert_eq!(revision.bulk_price_gross, input.bulk_price_gross);
         assert_eq!(revision.bulk_min_quantity, input.bulk_min_quantity);
         assert_eq!(revision.market_price, input.market_price);
+
         input.market_price = Some("-1.00".parse().unwrap());
         assert!(sku_revision_for_input(SkuId::new("sku"), 1, BusinessDate::today(), None, &input).is_err());
+
         input.market_price = None;
         input.bulk_min_quantity = Some("0".parse().unwrap());
         assert!(sku_revision_for_input(SkuId::new("sku"), 1, BusinessDate::today(), None, &input).is_err());
@@ -122,6 +128,7 @@ mod tests {
         assert!(ensure_source_input(&input).is_ok());
         input.sales_visible_price_gross = Some("10.00".parse().unwrap());
         assert!(ensure_source_input(&input).is_ok());
+
         input.sku_no = "manual".into();
         assert!(ensure_source_input(&input).is_err());
         input.sku_no.clear();

@@ -68,6 +68,7 @@ impl IntegrationOpsService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, query.scope_version.as_deref())?;
+
         let scope = resolve_list_scope(
             &self.data_scope,
             actor,
@@ -78,6 +79,7 @@ impl IntegrationOpsService {
             executor,
         )
         .await?;
+
         let filter = error_task_filter(query, scope.owner_org_unit_ids);
         let page = self
             .db

@@ -172,6 +172,7 @@ mod tests {
         let matched = pipeline[0].get_document("$match").expect("过滤阶段");
         assert_eq!(matched.get_str("sales_order_id").unwrap(), "so-1");
         assert_eq!(matched.get_i64("deleted_at").expect("未删除条件"), 0);
+
         let group = pipeline[1].get_document("$group").expect("分组阶段");
         assert!(matches!(group.get("_id").expect("分组键"), Bson::Null));
         assert_eq!(group.get_document("settled_total").unwrap().get_str("$sum").unwrap(), "$settled_total");

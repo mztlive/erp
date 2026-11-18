@@ -44,6 +44,7 @@ impl EvidenceSubjectBindings {
                 Err(_) => unparsed_fact_references.push(raw.to_string()),
             }
         }
+
         Self {
             message_id: normalize_optional_identity(message_id),
             business_object_id: normalize_optional_identity(business_object_id),
@@ -160,6 +161,7 @@ mod tests {
         assert!(subject.associates_any(["order-123"]));
         assert!(subject.associates_any(["message-1"]));
         assert!(subject.associates_any(["object-1"]));
+
         assert!(!subject.associates_any(["order-12"]));
         assert!(!subject.associates_any(["v1"]));
         assert!(!subject.associates_any(["attributed"]));

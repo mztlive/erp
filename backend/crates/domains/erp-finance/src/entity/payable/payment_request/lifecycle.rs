@@ -61,6 +61,7 @@ impl PurchasePaymentRequest {
         self.ensure_editable()?;
         let data = data.normalize()?;
         let total = sum(data.lines.iter().map(|line| line.amount))?;
+
         self.supplier_id = data.supplier_id.clone();
         self.data = data;
         self.total_amount = total;
@@ -99,6 +100,7 @@ impl PurchasePaymentRequest {
         validate_submission(self, &submission)?;
         let version =
             self.submission_version.checked_add(1).ok_or_else(|| Error::from("付款申请提交版本已达上限"))?;
+
         self.assign_basis(submission);
         self.submission_version = version;
         self.approval_subject_version = version;
@@ -163,6 +165,7 @@ impl PurchasePaymentRequest {
             return Err(Error::from("只有已批准、部分付款或已付清申请可以关闭原付款授权"));
         }
         let reason = required(reason.to_owned(), "关闭原因", 2000)?;
+
         let released = self.remaining_allocations();
         for line in &mut self.lines {
             line.closed_amount = line.closed_amount.checked_add(line.remaining());
@@ -191,6 +194,7 @@ impl PurchasePaymentRequest {
     ) -> Result<()> {
         self.ensure_payable()?;
         self.validate_allocations(allocations, false)?;
+
         for allocation in allocations {
             let line = self
                 .lines
@@ -199,6 +203,7 @@ impl PurchasePaymentRequest {
                 .ok_or_else(|| Error::from("付款采购应付不在申请范围内"))?;
             line.paid_amount = line.paid_amount.checked_add(allocation.amount);
         }
+
         self.status = if self.remaining() == Amount::zero() {
             PurchasePaymentRequestStatus::Paid
         } else {
@@ -225,6 +230,7 @@ impl PurchasePaymentRequest {
             return Err(Error::from("付款申请没有可冲正的付款"));
         }
         self.validate_allocations(allocations, true)?;
+
         for allocation in allocations {
             let line = self
                 .lines
@@ -236,6 +242,7 @@ impl PurchasePaymentRequest {
                 line.closed_amount = line.closed_amount.checked_add(allocation.amount);
             }
         }
+
         if self.status != PurchasePaymentRequestStatus::Closed {
             self.status = if self.paid_amount() == Amount::zero() {
                 PurchasePaymentRequestStatus::Approved
@@ -378,6 +385,7 @@ impl PurchasePaymentRequest {
             if !seen.insert(&allocation.payable_account_id) {
                 return Err(Error::from("同一采购应付不得重复分配"));
             }
+
             let line = self
                 .lines
                 .iter()
@@ -406,6 +414,7 @@ fn validate_submission(
     required(submission.payer_party_id.clone(), "我方付款主体", 128)?;
     required(submission.payer_party_name.clone(), "我方付款主体名称", 256)?;
     request.validate_funding_submission(submission)?;
+
     if submission.lines.len() != request.data.lines.len() {
         return Err(Error::from("冻结采购范围与表单不一致"));
     }
@@ -416,6 +425,7 @@ fn validate_submission(
             return Err(Error::from("同一申请不得重复冻结采购应付"));
         }
     }
+
     if sum(submission.lines.iter().map(|line| line.requested_amount))? != request.total_amount {
         return Err(Error::from("冻结申请总额与逐采购表单不一致"));
     }
@@ -439,6 +449,7 @@ fn validate_submission_line(
     {
         return Err(Error::from("冻结金额与采购填写的申请金额不一致"));
     }
+
     required(line.purchase_order_id.clone(), "采购来源", 128)?;
     required(line.purchase_revision_id.clone(), "采购生效版本", 128)?;
     if line.gross_total < Amount::zero()
@@ -454,6 +465,7 @@ fn validate_submission_line(
     {
         return Err(Error::from("可申请付款余额不足或应付余额异常"));
     }
+
     if line.source_snapshot.sales_sources.is_empty() {
         return Err(Error::from("采购付款申请缺少正式销售来源"));
     }

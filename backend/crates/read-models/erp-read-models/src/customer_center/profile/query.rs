@@ -59,6 +59,7 @@ impl CustomerProfileReadService {
     ) -> Result<CustomerProfileDetailView> {
         let (context, _) = self.access.query(actor, &customer_permissions::DETAIL, executor).await?;
         let account = authorized_customer(&self.db, customer_id, &context, executor).await?;
+
         let party = self
             .db
             .parties()
@@ -68,6 +69,7 @@ impl CustomerProfileReadService {
         let revisions = self.db.party_revisions().list_revision_history(&account.party_id, executor).await?;
         let current_revision =
             party.current_revision(&revisions).map_err(|error| Error::Internal(error.to_string()))?.clone();
+
         let assignments = self
             .db
             .customer_assignments()
@@ -77,8 +79,10 @@ impl CustomerProfileReadService {
             assignments.iter().map(|assignment| assignment.user_id.clone()).collect();
         let account_names =
             AccountDirectoryService::new(self.db.clone()).names(&account_ids, executor).await?;
+
         let ProfileFacts { contacts, addresses, tax_profiles, bank_accounts, sensitive_fields, display } =
             self.visible_facts(customer_id, &account.party_id, actor, executor).await?;
+
         let mut detail = build_detail(
             ProfileDetailParts {
                 account,
@@ -95,6 +99,7 @@ impl CustomerProfileReadService {
             &account_names,
         );
         detail.allowed_actions = display.actions(detail.account.status.is_active());
+
         self.access.validate(&context, executor).await?;
         Ok(detail)
     }
@@ -109,6 +114,7 @@ impl CustomerProfileReadService {
     ) -> Result<ProfileFacts> {
         let (contacts, addresses, tax_profiles, bank_accounts) =
             self.db.party().load_current_facts(party_id, BusinessDate::today(), executor).await?;
+
         let display = ProfileDisplay(
             self.authorization
                 .permissions(actor, display::PERMISSIONS, executor)
@@ -120,6 +126,7 @@ impl CustomerProfileReadService {
         let addresses = display.filter(&party_permissions::ADDRESS_DETAIL, addresses);
         let tax_profiles = display.filter(&party_permissions::TAX_PROFILE_DETAIL, tax_profiles);
         let bank_accounts = display.filter(&party_permissions::BANK_ACCOUNT_DETAIL, bank_accounts);
+
         let sensitive_fields = self.sensitive_fields(
             customer_id,
             if display.reveal(SensitiveFieldKind::ContactMobile) { &contacts } else { &[] },
@@ -167,11 +174,13 @@ fn build_detail(parts: ProfileDetailParts, names: &HashMap<String, String>) -> C
         bank_accounts,
         sensitive_fields,
     } = parts;
+
     let mut customer = CustomerView::from(account);
     customer.party_no = Some(party.party_no.clone());
     customer.legal_name = Some(current_revision.legal_name.clone());
     customer.short_name = current_revision.short_name.clone();
     populate_owners(&mut customer, &assignments, names, BusinessDate::today());
+
     revisions.sort_by_key(|item| std::cmp::Reverse(item.revision.revision_no));
     let action_blockers = customer_status_blockers(customer.status);
     CustomerProfileDetailView {
@@ -270,6 +279,7 @@ mod tests {
             unbound_authorization(),
         );
         let actor = AuditActor::new("operator".into(), "operator".into(), AccountKind::Admin);
+
         let error =
             process.detail_snapshot("customer", &actor, &mut SnapshotExecutor::default()).await.unwrap_err();
         assert!(matches!(error, Error::ValidationError(message) if message == "缺少查询 Mapping 绑定"));
@@ -319,6 +329,7 @@ mod tests {
             },
         )
         .unwrap();
+
         let today = BusinessDate::today();
         let start = BusinessDate::from_ymd(2000, 1, 1).unwrap();
         let assignments = ["sales-b", "sales-a", "future", "ended", "deleted", "collaborator"]
@@ -352,6 +363,7 @@ mod tests {
             .collect();
         let names =
             [("sales-a".into(), "张三".into()), ("sales-b".into(), "李四".into())].into_iter().collect();
+
         let detail = build_detail(
             ProfileDetailParts {
                 account,
@@ -367,6 +379,7 @@ mod tests {
             },
             &names,
         );
+
         assert_eq!(
             detail.account.owners.iter().map(|owner| owner.user_id.as_str()).collect::<Vec<_>>(),
             vec!["sales-a", "sales-b"]
@@ -374,6 +387,7 @@ mod tests {
         assert_eq!(detail.account.owners[1].user_name.as_deref(), Some("李四"));
         assert_eq!(detail.account.owner_user_name.as_deref(), Some("张三"));
         assert_eq!(detail.account.collaborator_count, 1);
+
         let wire = serde_json::to_value(detail).unwrap();
         assert_eq!(wire["owners"].as_array().unwrap().len(), 2);
         assert_eq!(wire["owners"][0]["user_name"], "张三");

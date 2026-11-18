@@ -53,6 +53,7 @@ impl SupplierOfferingProcess {
                 })
             })
             .await;
+
         recovery::resolve(transaction_result, || self.created_result(recovery_request, recovery_actor)).await
     }
     /// 追加新的供给商业条款修订。
@@ -103,6 +104,7 @@ impl SupplierOfferingProcess {
                 })
             })
             .await;
+
         recovery::resolve(transaction_result, || {
             self.revised_result(recovery_id, recovery_request, recovery_actor)
         })
@@ -154,6 +156,7 @@ impl SupplierOfferingProcess {
                 })
             })
             .await;
+
         recovery::resolve(transaction_result, || {
             self.availability_result(recovery_id, recovery_request, recovery_actor)
         })

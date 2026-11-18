@@ -152,10 +152,12 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let changes = self.facts_reader().read_sales_changes(&ids, executor).await?;
         if changes.is_empty() {
             return Ok(());
         }
+
         let sales_order_ids = changes.iter().map(|item| item.sales_order_id.to_string()).collect::<Vec<_>>();
         let sales_nos = self
             .facts_reader()
@@ -165,11 +167,13 @@ impl WorkbenchFactsReader<'_> {
             .map(|order| (order.base.id, order.order_no))
             .collect::<HashMap<_, _>>();
         let context = self.sales_change_brief_context(&changes, executor).await?;
+
         for change in changes {
             let sales_no = sales_nos.get(&change.sales_order_id.to_string()).cloned();
             let base = context.base_revisions.get(&change.base_revision_id.to_string());
             let submission =
                 change.current_submission_id.as_ref().and_then(|id| context.submissions.get(&id.to_string()));
+
             let all_diff_lines = change_diff_lines(
                 context.base_lines.get(&change.base_revision_id.to_string()),
                 change
@@ -180,6 +184,7 @@ impl WorkbenchFactsReader<'_> {
             let more_count = all_diff_lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
             let mut lines = all_diff_lines;
             lines.truncate(BRIEF_LINE_LIMIT);
+
             let mut fact = WorkbenchObjectFact::from_authority(super::authority::changes::sales_change_fact(
                 &change,
                 sales_no.as_deref(),
@@ -223,10 +228,12 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let changes = self.facts_reader().read_purchase_changes(&ids, executor).await?;
         if changes.is_empty() {
             return Ok(());
         }
+
         let purchase_ids = changes.iter().map(|item| item.purchase_order_id.to_string()).collect::<Vec<_>>();
         let purchase_nos = self
             .facts_reader()
@@ -236,11 +243,13 @@ impl WorkbenchFactsReader<'_> {
             .map(|order| (order.base.id, order.purchase_no))
             .collect::<HashMap<_, _>>();
         let context = self.purchase_change_brief_context(&changes, executor).await?;
+
         for change in changes {
             let purchase_no = purchase_nos.get(&change.purchase_order_id.to_string()).cloned();
             let base = context.base_revisions.get(&change.base_revision_id.to_string());
             let submission =
                 change.current_submission_id.as_ref().and_then(|id| context.submissions.get(&id.to_string()));
+
             let all_diff_lines = change_diff_lines(
                 context.base_lines.get(&change.base_revision_id.to_string()),
                 change
@@ -251,6 +260,7 @@ impl WorkbenchFactsReader<'_> {
             let more_count = all_diff_lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
             let mut lines = all_diff_lines;
             lines.truncate(BRIEF_LINE_LIMIT);
+
             let mut fact =
                 WorkbenchObjectFact::from_authority(super::authority::changes::purchase_change_fact(
                     &change,
@@ -281,6 +291,7 @@ impl WorkbenchFactsReader<'_> {
     ) -> Result<SalesChangeBriefContext> {
         let base_ids = changes.iter().map(|change| change.base_revision_id.to_string()).collect::<Vec<_>>();
         let base_revisions = self.facts_reader().read_sales_revisions(&base_ids, executor).await?;
+
         let change_ids = changes
             .iter()
             .map(|change| erp_core::ids::SalesChangeOrderId::new(change.base.id.clone()))
@@ -291,6 +302,7 @@ impl WorkbenchFactsReader<'_> {
             .iter()
             .map(|row| erp_core::ids::SalesChangeSubmissionId::new(row.base.id.clone()))
             .collect::<Vec<_>>();
+
         let revision_ids = base_revisions
             .iter()
             .map(|revision| SalesOrderRevisionId::new(revision.base.id.clone()))
@@ -311,11 +323,13 @@ impl WorkbenchFactsReader<'_> {
             .sales_order_voucher_line_revisions()
             .list_by_revision_line_ids(&revision_line_ids, executor)
             .await?;
+
         let target_lines = self
             .db
             .sales_change_submission_lines()
             .list_lines_by_submissions(&submission_ids, executor)
             .await?;
+
         Ok(SalesChangeBriefContext {
             base_revisions: base_revisions
                 .into_iter()
@@ -338,6 +352,7 @@ impl WorkbenchFactsReader<'_> {
     ) -> Result<PurchaseChangeBriefContext> {
         let base_ids = changes.iter().map(|change| change.base_revision_id.to_string()).collect::<Vec<_>>();
         let base_revisions = self.facts_reader().read_purchase_revisions(&base_ids, executor).await?;
+
         let change_ids = changes
             .iter()
             .map(|change| erp_core::ids::PurchaseChangeOrderId::new(change.base.id.clone()))
@@ -348,6 +363,7 @@ impl WorkbenchFactsReader<'_> {
             .iter()
             .map(|row| erp_core::ids::PurchaseChangeSubmissionId::new(row.base.id.clone()))
             .collect::<Vec<_>>();
+
         let revision_ids = base_revisions
             .iter()
             .map(|revision| PurchaseOrderRevisionId::new(revision.base.id.clone()))
@@ -357,11 +373,13 @@ impl WorkbenchFactsReader<'_> {
             .purchase_order_revision_lines()
             .find_lines_by_revision_ids(&revision_ids, executor)
             .await?;
+
         let target_lines = self
             .db
             .purchase_change_submission_lines()
             .find_lines_by_submission_ids(&submission_ids, executor)
             .await?;
+
         Ok(PurchaseChangeBriefContext {
             base_revisions: base_revisions
                 .into_iter()

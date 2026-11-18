@@ -142,6 +142,7 @@ async fn load_settlement_facts(
     entry_ids.sort_by(|a, b| a.as_ref().cmp(b.as_ref()));
     entry_ids.dedup();
     let entries = db.payable_entries().find_entries_by_ids(&entry_ids, session).await?;
+
     let mut account_ids: Vec<PayableAccountId> =
         entries.iter().map(|entry| entry.payable_account_id.clone()).collect();
     account_ids.sort_by(|a, b| a.as_ref().cmp(b.as_ref()));
@@ -161,6 +162,7 @@ async fn apply_payment_settlement(
     session: &mut dyn Executor,
 ) -> Result<PaymentSettlement> {
     apply_payment_ledger(payment, pending, &mut ledger, facts.entries, facts.accounts)?;
+
     let settlement = db
         .payable_accounts()
         .apply_settlements_many(ledger.account_settlement_deltas(), actor_id, session)
@@ -183,6 +185,7 @@ fn apply_payment_ledger(
         entries.iter().map(|entry| (entry.base.id.as_str(), entry)).collect();
     let accounts_by_id: HashMap<&str, &PayableAccount> =
         accounts.iter().map(|account| (account.base.id.as_str(), account)).collect();
+
     let mut checked_accounts = HashSet::new();
     let allocation_ids: Vec<PaymentAllocationId> =
         (0..pending.len()).map(|_| PaymentAllocationId::new(next_id())).collect();
@@ -271,7 +274,6 @@ mod tests {
         let pending =
             [allocation("entry-2", "20.00"), allocation("entry-1", "10.00"), allocation("entry-2", "5.00")];
         let mut ledger = ledger(&payment, &pending);
-
         apply_payment_ledger(&payment, &pending, &mut ledger, &entries, &accounts).unwrap();
 
         let order = ledger

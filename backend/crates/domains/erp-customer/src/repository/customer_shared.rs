@@ -138,6 +138,7 @@ pub(crate) fn current_owner_pipeline(
     if let Some(ids) = owner_ids {
         filter.insert("user_id", doc! { "$in": ids });
     }
+
     vec![
         doc! { "$match": filter },
         doc! { "$lookup": { "from": <mongodb::Database as CustomerExt>::CUSTOMER_ACCOUNTS, "localField": "customer_id", "foreignField": "id", "as": "visible_customer" } },

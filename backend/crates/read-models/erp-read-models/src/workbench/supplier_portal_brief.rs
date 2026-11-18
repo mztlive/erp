@@ -47,6 +47,7 @@ impl WorkbenchReadService {
         if ids.is_empty() {
             return Ok(());
         }
+
         let offerings = self.db.portal_applications().list_active_by_ids(&ids, executor).await?;
         let products = self.db.new_product_drafts().list_active_by_ids(&ids, executor).await?;
         let cooperation = CooperationRepository::new(&self.db).list_active_by_ids(&ids, executor).await?;
@@ -57,6 +58,7 @@ impl WorkbenchReadService {
                 executor,
             )
             .await?;
+
         apply_offerings(facts, &offerings, &context);
         apply_products(facts, &products, &context);
         apply_cooperation(facts, &cooperation, &context);
@@ -185,6 +187,7 @@ fn apply(
     if !fact.authority.subject_versions.accepts(&subject) {
         return;
     }
+
     let supplier = context.suppliers.get(supplier_id).cloned();
     source.submitter_name = context.applicants.get(applicant_id).cloned();
     push_section(&mut source.extra_sections, "供应商", supplier.as_deref(), false);
@@ -215,6 +218,7 @@ fn offering_source(submission: &FrozenOfferingSubmission) -> ObjectBriefSource {
         &submission.reason,
         Some(submission.submitted_at),
     );
+
     let terms = match &submission.snapshot {
         OfferingApplicationSnapshot::ExistingQuote {
             supplier_sku_code,
@@ -236,6 +240,7 @@ fn offering_source(submission: &FrozenOfferingSubmission) -> ObjectBriefSource {
         OfferingApplicationSnapshot::TermsChange { terms, .. } => Some(terms),
         OfferingApplicationSnapshot::StopSupply { .. } => None,
     };
+
     if let Some(terms) = terms {
         push_section(
             &mut result.extra_sections,
@@ -293,6 +298,7 @@ fn product_source(submission: &DraftSubmission) -> ObjectBriefSource {
         Some("新建 SKU 未上架，销售定价及上架另行执行"),
         false,
     );
+
     result.lines = submission
         .input
         .skus
@@ -309,6 +315,7 @@ fn product_source(submission: &DraftSubmission) -> ObjectBriefSource {
         .collect();
     result.more_count =
         u32::try_from(submission.input.skus.len().saturating_sub(BRIEF_LINE_LIMIT)).unwrap_or(u32::MAX);
+
     result.list_summary = join_list_summary([
         Some("新品提报".into()),
         Some(submission.input.name.clone()),
@@ -400,6 +407,7 @@ mod tests {
                 .iter()
                 .any(|section| section.label == "销售上架" && section.value.contains("未上架"))
         );
+
         assert_eq!(source.lines.len(), BRIEF_LINE_LIMIT);
         assert_eq!(source.more_count, 1);
         assert_eq!(source.lines[0].quantity.as_deref(), Some("可供 0 瓶"));
@@ -419,9 +427,11 @@ mod tests {
         .unwrap();
         request.submissions.push(submission.clone());
         request.draft.name = "编辑后的草稿".into();
+
         let authority = new_product_request_fact(&request).unwrap().unwrap();
         assert!(authority.subject_versions.accepts("new_product:submission-1"));
         assert_eq!(authority.created_by, "external");
+
         let mut facts = WorkbenchObjectFactMap::from([(
             (ObjectKind::SupplierPortalRequest, "request".into()),
             WorkbenchObjectFact::from_authority(authority),
@@ -431,6 +441,7 @@ mod tests {
             applicants: HashMap::from([("external".into(), "供应商提交人".into())]),
         };
         apply_products(&mut facts, &[request], &context);
+
         let source = facts[&(ObjectKind::SupplierPortalRequest, "request".into())].display.subject_briefs["new_product:submission-1"].brief_source.as_ref().unwrap();
         assert!(source.list_summary.contains("供应商原稿饮料"));
         assert!(!source.list_summary.contains("编辑后的草稿"));

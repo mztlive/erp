@@ -82,13 +82,16 @@ impl PurchasePaymentRequestReadService {
         if !self.readable(&request, &scope, executor).await? {
             return Err(unavailable());
         }
+
         let allowed_actions = self.allowed_actions(actor, &request, executor).await?;
         let scope = self.source_scope(actor, &payment_permissions::DETAIL, executor).await?;
         if !self.readable(&request, &scope, executor).await? {
             return Err(unavailable());
         }
+
         let mut view = self.view(request, allowed_actions, executor).await?;
         view.review_lines = Some(self.review_lines(&view.request, executor).await?);
+
         scope.deliver(executor).await?;
         Ok(view)
     }
@@ -117,6 +120,7 @@ impl PurchasePaymentRequestReadService {
                 Box::pin(async move {
                     let (expected, access) = auth.authorize(&id, &actor_for_tx, executor).await?;
                     let request = this.task_request(&actor_for_tx, &id, &expected, executor).await?;
+
                     let mut view = this.view(request, Vec::new(), executor).await?;
                     view.review_lines = Some(this.review_lines(&view.request, executor).await?);
                     if expected.work_item_type == WorkItemType::SupplierPaymentExecution
@@ -125,6 +129,7 @@ impl PurchasePaymentRequestReadService {
                     {
                         view.allowed_actions.push("PAY".into());
                     }
+
                     this.rbac.validate(&access, executor).await?;
                     Ok::<_, Error>(view)
                 })
@@ -147,21 +152,25 @@ impl PurchasePaymentRequestReadService {
         if candidates.len() > 10_000 {
             return Err(Error::ValidationError("付款申请查询超过上限，请收窄筛选".into()));
         }
+
         let mut rows = Vec::new();
         for row in candidates {
             if self.readable(&row, &scope, executor).await? {
                 rows.push(row);
             }
         }
+
         let mut applicant_ids: Vec<_> = rows.iter().map(|row| row.created_by.clone()).collect();
         applicant_ids.sort();
         applicant_ids.dedup();
         let names = self.db.accounts().names_by_ids(&applicant_ids, executor).await?;
         let page = PaymentRequestList::page(rows, &names, query)?;
+
         let mut items = Vec::with_capacity(page.items.len());
         for row in page.items {
             items.push(self.view(row, Vec::new(), executor).await?);
         }
+
         scope.deliver(executor).await?;
         Ok(PageView { items, total: page.total, page: page.page, page_size: page.page_size })
     }
@@ -188,6 +197,7 @@ impl PurchasePaymentRequestReadService {
         if !task_material_actionable(fact) {
             return Err(Error::Forbidden("仅当前审批人或付款任务责任人可读取任务材料".into()));
         }
+
         let task = self.db.work_items().find_by_id(task_id, executor).await?.ok_or_else(unavailable)?;
         let request = self.load(&fact.business_object_id, executor).await?;
         if task.status != WorkItemStatus::Open
@@ -218,6 +228,7 @@ impl PurchasePaymentRequestReadService {
         executor: &mut dyn Executor,
     ) -> Result<PurchasePaymentRequestView> {
         let (purchases, sales) = frozen_previews(&request.lines, &request.payer_party_id)?;
+
         let created_by_name = self
             .db
             .accounts()
@@ -231,6 +242,7 @@ impl PurchasePaymentRequestReadService {
             .and_then(|value| value.as_str())
             .unwrap_or(&request.supplier_id)
             .to_string();
+
         let current_lines = self.current_lines(&request, executor).await?;
         let approval = self.approval(&request, &allowed_actions, executor).await?;
         let attachments = self.attachments(&request, executor).await?;
@@ -238,6 +250,7 @@ impl PurchasePaymentRequestReadService {
         let credit_uses =
             erp_finance::repository::supplier_credit::uses_by_request(&self.db, &request.base.id, executor)
                 .await?;
+
         Ok(PurchasePaymentRequestView {
             request,
             supplier_name,
@@ -274,6 +287,7 @@ impl PurchasePaymentRequestReadService {
                 .find_by_id(&line.purchase_order_id, executor)
                 .await?
                 .ok_or_else(|| Error::ConflictError("付款申请来源采购不存在".into()))?;
+
             lines.push(PaymentRequestCurrentLine {
                 payable_entries: self.payable_entries(&line.payable_account_id, executor).await?,
                 purchase_order_id: line.purchase_order_id.clone(),
@@ -311,6 +325,7 @@ impl PurchasePaymentRequestReadService {
             allowed_actions: Vec::new(),
         };
         view.allowed_actions = approval_actions(request.status, allowed_actions);
+
         if let Some(instance_id) = request.approval_instance_id.as_deref() {
             let runtime = load_document_runtime_for_instance(
                 &self.db,
@@ -417,10 +432,12 @@ mod tests {
         assert!(!task_material_actionable(&fact));
         fact.allowed_actions.push(WorkItemAllowedAction::Approve);
         assert!(task_material_actionable(&fact));
+
         fact.work_item_type = WorkItemType::SupplierPaymentExecution;
         assert!(!task_material_actionable(&fact));
         fact.allowed_actions = vec![WorkItemAllowedAction::Process];
         assert!(task_material_actionable(&fact));
+
         fact.work_item_type = WorkItemType::SalesInvoiceExecution;
         assert!(!task_material_actionable(&fact));
     }

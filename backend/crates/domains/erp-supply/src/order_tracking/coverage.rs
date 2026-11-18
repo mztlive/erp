@@ -36,6 +36,7 @@ pub fn complete_delivery_coverage(
             unmatched = true;
             continue;
         }
+
         let quantity = matching.iter().try_fold(Decimal::ZERO, |total, source| {
             total
                 .checked_add(source.quantity.to_decimal())
@@ -48,6 +49,7 @@ pub fn complete_delivery_coverage(
         }
         covered.extend(matching.into_iter().map(|source| source.fulfillment_item_id.clone()));
     }
+
     if !covered.is_empty() && unmatched {
         return Err(Error::BusinessLogicError("供应商子单只覆盖部分发货行，请拆分核对后处理".into()));
     }

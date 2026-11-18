@@ -19,6 +19,7 @@ pub(super) fn instance_events(
         event.actor_id = Some(instance.started_by.as_str().to_owned());
         events.push(event);
     }
+
     let (title, result) = match instance.status.as_str() {
         "APPROVED" => ("审批已通过", TimelineApprovalResult::Approved),
         "REJECTED" => ("审批已驳回", TimelineApprovalResult::Rejected),
@@ -54,6 +55,7 @@ pub(super) fn decision_event(
         "REJECTED" => ("驳回", TimelineApprovalResult::Rejected),
         _ => return None,
     };
+
     let mut event = document.event(
         format!("decision:{}", execution.base.id),
         time,

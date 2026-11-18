@@ -582,7 +582,6 @@ pub(crate) fn build_line_groups(
         },
         None => None,
     };
-
     let goods = goods.map(normalize_goods).transpose()?;
 
     Ok(BuiltLineGroups { goods, voucher, gross_amount, net_amount, tax_amount })
@@ -668,11 +667,13 @@ pub(crate) fn derive_voucher_amounts(
     if card_count == 0 {
         return Err(Error::from("卡券行卡张数必须为正整数"));
     }
+
     let face_value_total = face_value.to_decimal() * Decimal::from(card_count);
     let transaction_amount = round_to_cent(unit_price_gross.to_decimal() * Decimal::from(card_count));
     if transaction_amount.is_zero() {
         return Err(Error::from("成交金额为零时拒绝生效（配赠率无定义）"));
     }
+
     let gift_amount = face_value_total - transaction_amount;
     let gift_rate = Rate::try_from((gift_amount / transaction_amount).round_dp(6))?;
     Ok(VoucherAmounts {
@@ -724,6 +725,7 @@ pub(crate) fn validate_line_list(business_type: BusinessType, lines: &[LineSumma
             return Err(Error::from("稳定明细身份不能重复"));
         }
     }
+
     match business_type {
         BusinessType::Voucher => {
             if lines.len() != 1 || lines[0].line_type != LineType::Voucher {
@@ -823,6 +825,7 @@ mod tests {
             assert_eq!(scenario.as_str(), code);
             assert_eq!(serde_json::to_value(scenario).unwrap(), code);
         }
+
         for code in ["", "UNKNOWN"] {
             assert!(serde_json::from_value::<WelfareScenario>(serde_json::json!(code)).is_err());
         }
@@ -834,6 +837,7 @@ mod tests {
         assert!(BusinessType::GoodsService.is_goods_service());
         assert!(LineType::Voucher.belongs_to(BusinessType::Voucher));
         assert!(!LineType::Voucher.belongs_to(BusinessType::GoodsService));
+
         assert_eq!(ExternalIdentityResolution::from_matches(Vec::new()), ExternalIdentityResolution::Missing);
         assert_eq!(
             ExternalIdentityResolution::from_matches(vec!["external-1".to_string()]),
@@ -945,7 +949,6 @@ mod tests {
         payload["card_count"] = serde_json::Value::String("3".to_string());
 
         let parsed: VoucherLineDraft = serde_json::from_value(payload).unwrap();
-
         assert_eq!(parsed.card_count, 3);
     }
 

@@ -143,7 +143,6 @@ mod tests {
     #[test]
     fn active_fact_window_is_left_closed_and_right_open() {
         let as_of = BusinessDate::from_ymd(2026, 8, 27).expect("测试日期必须合法");
-
         let filter = active_fact_window_filter(as_of);
 
         assert_eq!(
@@ -154,6 +153,7 @@ mod tests {
                 .expect("开始日期必须包含当天"),
             "2026-08-27"
         );
+
         let valid_to = filter.get_array("$or").expect("必须包含结束日期分支")[1]
             .as_document()
             .expect("结束日期分支必须是文档")

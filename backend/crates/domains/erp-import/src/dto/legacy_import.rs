@@ -176,6 +176,7 @@ mod tests {
                 comment: Some(" 意见 ".to_string()),
             }
         }
+
         fn command(
             action: ConfirmationDecision,
             reason: Option<&str>,
@@ -188,6 +189,7 @@ mod tests {
                 idempotency_key: " request-1 ".to_string(),
             }
         }
+
         assert!(
             super::PreparedConfirmationCompletion::try_from(command(
                 ConfirmationDecision::ReturnForFix,
@@ -202,6 +204,7 @@ mod tests {
             ))
             .is_err()
         );
+
         let prepared = super::PreparedConfirmationCompletion::try_from(command(
             ConfirmationDecision::ReturnForFix,
             Some("REWORK"),
@@ -235,6 +238,7 @@ mod tests {
                 request_id: " request-1 ".to_string(),
             }
         }
+
         assert!(
             super::PreparedImportExecution::try_from(command(
                 super::ImportExecutionAction::StartApply,
@@ -259,6 +263,7 @@ mod tests {
             ))
             .is_err()
         );
+
         let prepared = super::PreparedImportExecution::try_from(command(
             super::ImportExecutionAction::RetryFailed,
             Some("2"),

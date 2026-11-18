@@ -313,6 +313,7 @@ pub async fn replay_committed_document_cancel(
         instance.base.version.checked_sub(1).ok_or_else(document_cancel_terminal_conflict)?;
     let expected_execution_version =
         ended_execution.base.version.checked_sub(1).ok_or_else(document_cancel_terminal_conflict)?;
+
     let identity = document_cancel_identity(DocumentCancelIdentityParams {
         idempotency_key: command.idempotency_key().clone(),
         instance_id: &instance.base.id,
@@ -324,6 +325,7 @@ pub async fn replay_committed_document_cancel(
         reason: command.reason(),
         actor_id: command.actor().as_str(),
     })?;
+
     let Some(receipt) = find_document_cancel_receipt(db, &identity, executor).await? else {
         return Ok(None);
     };
@@ -368,10 +370,12 @@ pub async fn claim_and_persist_document_cancel_runtime(
     {
         return Err(Error::Internal("业务单据撤回计划身份非法".to_string()));
     }
+
     db.bpm_workflow()
         .insert_command_receipt(&writes.receipt, executor)
         .await
         .map_err(map_receipt_first_write_error)?;
+
     db.bpm_workflow()
         .persist_cancelled_runtime_after_receipt(
             &writes.instance,
@@ -401,6 +405,7 @@ async fn cancelled_execution(
         if page.is_empty() {
             break;
         }
+
         let next_after = page.last().map(|row| row.execution_no);
         candidates.extend(
             page.iter()
@@ -412,6 +417,7 @@ async fn cancelled_execution(
                 })
                 .cloned(),
         );
+
         if page.len() < EXECUTION_HISTORY_PAGE_SIZE as usize {
             break;
         }
@@ -420,6 +426,7 @@ async fn cancelled_execution(
         }
         after_execution_no = next_after;
     }
+
     let [execution] = candidates.as_slice() else {
         return Err(document_cancel_terminal_conflict());
     };
@@ -583,6 +590,7 @@ fn prepare_cancel_with_document_version(
             }),
         }
     }?;
+
     match identity.classify(input.command.receipt.as_ref()) {
         ReceiptBranch::PayloadConflict => return Err(super::idempotency::payload_conflict_error()),
         ReceiptBranch::SamePayload(receipt) => {
@@ -590,6 +598,7 @@ fn prepare_cancel_with_document_version(
         },
         ReceiptBranch::Fresh => {},
     }
+
     let plan = cancel(
         input.instance,
         input.current,
@@ -601,6 +610,7 @@ fn prepare_cancel_with_document_version(
         },
     )
     .map_err(map_engine_error)?;
+
     let receipt = ApprovalCommandReceipt::new(
         input.receipt_id,
         identity.current(),

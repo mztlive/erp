@@ -31,6 +31,7 @@ impl IntegrationCenterReadService {
         let ids = items.iter().filter_map(|item| item.owner_user_id.clone()).collect::<Vec<_>>();
         let names = self.db.accounts().names_by_ids(&ids, executor).await?;
         let mut labels = integration_error_labels(&self.db, items, executor).await?;
+
         for item in items {
             item.owner_user_name = item.owner_user_id.as_ref().and_then(|id| names.get(id).cloned());
             if let Some(labels) = labels.remove(&item.id) {
@@ -60,6 +61,7 @@ impl IntegrationCenterReadService {
         let ids = items.iter().map(|item| item.owner_user_id.clone()).collect::<Vec<_>>();
         let names = self.db.accounts().names_by_ids(&ids, executor).await?;
         let labels = object_labels(&self.db, items, executor).await?;
+
         for item in items {
             item.owner_user_name = names.get(&item.owner_user_id).cloned();
             item.business_object_label =

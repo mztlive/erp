@@ -78,6 +78,7 @@ async fn reconcile_stock_reservation_source_indexes(db: &Database) -> Result<()>
     if !collection_names.iter().any(|name| name == STOCK_RESERVATIONS) {
         return Ok(());
     }
+
     let collection = db.collection::<Document>(STOCK_RESERVATIONS);
     collection
         .update_many(
@@ -85,6 +86,7 @@ async fn reconcile_stock_reservation_source_indexes(db: &Database) -> Result<()>
             doc! { "$set": { "source_type": "PURCHASE_RECEIPT" } },
         )
         .await?;
+
     let mut indexes = collection.list_indexes().await?;
     while let Some(index) = indexes.try_next().await? {
         let name = index.options.as_ref().and_then(|options| options.name.as_deref());
@@ -225,6 +227,7 @@ mod tests {
             .unwrap();
         assert_eq!(source.keys, doc! { "source_document_id": 1, "source_line_id": 1, "movement_type": 1 });
         assert_eq!(source.options.as_ref().unwrap().unique, Some(true));
+
         assert!(indexes.iter().any(|index| {
             index.keys == doc! { "warehouse_id": 1, "sku_id": 1, "occurred_at": 1, "id": 1 }
         }));
@@ -266,6 +269,7 @@ mod tests {
             purchase.options.as_ref().unwrap().partial_filter_expression,
             Some(doc! { "source_type": "PURCHASE_RECEIPT" })
         );
+
         let direct = indexes
             .iter()
             .find(|index| {
@@ -279,6 +283,7 @@ mod tests {
             direct.options.as_ref().unwrap().partial_filter_expression,
             Some(doc! { "source_type": "EXISTING_STOCK" })
         );
+
         assert!(
             indexes
                 .iter()

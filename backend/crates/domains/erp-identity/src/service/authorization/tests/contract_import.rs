@@ -25,16 +25,19 @@ async fn import_tasks_require_current_contract_creation_qualification_without_bu
             Err(Error::Forbidden(_))
         ));
     }
+
     identity.state.lock().unwrap().grants = vec![("role".into(), vec![contract::CREATE])];
     service
         .require(&actor(), &internal::CONTRACT_IMPORT, AccessTarget::Operation, &mut executor)
         .await
         .unwrap();
+
     identity.state.lock().unwrap().active = false;
     assert!(matches!(
         service.require(&actor(), &internal::CONTRACT_IMPORT, AccessTarget::Operation, &mut executor).await,
         Err(Error::Forbidden(_))
     ));
+
     identity.state.lock().unwrap().active = true;
     identity.state.lock().unwrap().fail = true;
     assert!(matches!(
@@ -99,6 +102,7 @@ async fn supplier_place_candidates_and_replays_share_qualification_and_current_o
         .require(&actor(), permission, AccessTarget::record("order").unwrap(), &mut executor)
         .await
         .unwrap();
+
     identity.state.lock().unwrap().grants.clear();
     for target in [
         AccessTarget::Candidate(candidate(permission.resource(), "user")),
@@ -133,11 +137,13 @@ async fn sales_sharing_uses_fixed_independent_qualification_and_the_contract_wri
             Err(Error::Forbidden(_))
         ));
     }
+
     identity.state.lock().unwrap().grants = vec![("writer".into(), vec![contract::TERMINATE])];
     service
         .require(&actor(), &contract::TERMINATE, target.clone(), &mut SnapshotExecutor::default())
         .await
         .unwrap();
+
     identity.state.lock().unwrap().grants =
         vec![("writer".into(), vec![contract::TERMINATE, customer::ASSIGNMENT_APPLY])];
     facts.objects.lock().unwrap()[0].owner_id = FactValue::Known(Some("other".into()));
@@ -145,6 +151,7 @@ async fn sales_sharing_uses_fixed_independent_qualification_and_the_contract_wri
         service.require(&actor(), permission, target.clone(), &mut SnapshotExecutor::default()).await,
         Err(Error::Forbidden(_))
     ));
+
     facts.objects.lock().unwrap()[0].owner_id = FactValue::Known(Some("user".into()));
     assert!(matches!(
         service.require(&actor(), permission, target, &mut ReadExecutor::default()).await,

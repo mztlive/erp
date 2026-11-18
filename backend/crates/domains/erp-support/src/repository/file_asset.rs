@@ -246,8 +246,10 @@ impl FileAssetRepositoryExt for persistence_core::Repository<'_, FileAsset> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
+
         let found = self.find_by_ids(ids, executor).await?;
         let existing = found.into_iter().map(|asset| asset.base.id).collect::<HashSet<_>>();
+
         let mut missing = Vec::new();
         let mut seen = HashSet::new();
         for id in ids {
@@ -386,7 +388,6 @@ mod tests {
         let repository = FileAssetRepository::new(&database, "file_assets");
 
         let assets = repository.find_by_ids(&[], &mut NoTransaction).await.unwrap();
-
         assert!(assets.is_empty());
     }
 

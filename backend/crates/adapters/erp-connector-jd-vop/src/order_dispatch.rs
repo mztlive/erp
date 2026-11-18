@@ -31,6 +31,7 @@ pub(super) fn shipments(
         if !matches!(order.order_type.as_ref().map(|value| value.0.as_str()), Some("1" | "5")) {
             return Err(mapping("京东发货订单类型尚未核实为普通实物或厂家直送，请核对原订单"));
         }
+
         shipments.push(Shipment {
             external_shipment_id: Some(format!("jd-order-dispatch:{}", leaf.external_order_no)),
             source_order_no: Some(leaf.external_order_no.clone()),

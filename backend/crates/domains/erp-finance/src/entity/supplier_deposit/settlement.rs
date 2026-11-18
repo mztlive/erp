@@ -70,6 +70,7 @@ impl DepositSettlementScope<'_> {
         {
             return Err(Error::from("预存款核销与原付款主体、供应商、采购或修订不一致"));
         }
+
         let line = self
             .request
             .lines
@@ -81,6 +82,7 @@ impl DepositSettlementScope<'_> {
         {
             return Err(Error::from("原付款批准采购版本与资金占用不一致"));
         }
+
         for entry in self.entries {
             if entry.payable_account_id.as_ref() != basis.payable_account_id
                 || entry.source_document_id != basis.purchase_order_id
@@ -106,6 +108,7 @@ impl DepositSettlementScope<'_> {
         for line in pending {
             positive(line.allocated_amount)?;
         }
+
         let available = subtract(self.usage.amount, self.usage.returned_amount)?;
         let source = PaymentAllocationSource::deposit_usage(&self.usage.base.id)?;
         PaymentAllocationLedger::for_source(source, available, existing, pending)
@@ -141,6 +144,7 @@ impl SupplierDepositUsage {
     /// 非正、超返或金额溢出时拒绝。
     pub fn return_batches(&self, amount: Amount) -> Result<Vec<DepositBatchAllocation>> {
         self.return_settlement_amount(amount)?;
+
         let mut offset = self.returned_amount;
         let mut remaining = amount;
         let mut batches = Vec::new();
@@ -179,6 +183,7 @@ impl SupplierDepositUsage {
                 AllocationAction::Reverse => subtract(total, allocation.allocated_amount)?,
             };
         }
+
         if total != subtract(self.settled_amount, self.reversed_settlement_amount)? {
             return Err(Error::from("预存款使用净核销与正式分配不一致"));
         }
@@ -232,6 +237,7 @@ pub(crate) fn ensure_deposit_entry_balances(
             .iter()
             .find(|entry| entry.base.id == line.payable_entry_id.as_ref())
             .ok_or_else(|| Error::from("原核销应付分录不存在"))?;
+
         let mut settled = Amount::zero();
         for allocation in existing.iter().filter(|row| row.payable_entry_id == line.payable_entry_id) {
             settled = match allocation.allocation_action {
@@ -239,6 +245,7 @@ pub(crate) fn ensure_deposit_entry_balances(
                 AllocationAction::Reverse => subtract(settled, allocation.allocated_amount)?,
             };
         }
+
         let decreased = offsets
             .iter()
             .filter(|row| row.increase_entry_id == line.payable_entry_id)
@@ -250,6 +257,7 @@ pub(crate) fn ensure_deposit_entry_balances(
                 add(sum, row.allocated_amount)
             },
         )?;
+
         if settled < Amount::zero() || add(add(settled, decreased)?, requested)? > entry.amount {
             return Err(Error::from("预存款核销超过原应付分录的正式开放余额"));
         }
@@ -497,6 +505,7 @@ mod tests {
         let scope = facts.scope();
         assert_ne!(facts.entries[0].source_revision_id, facts.reservation.basis.purchase_revision_id);
         scope.validate().unwrap();
+
         let pending = vec![pending("60")];
         ensure_deposit_entry_balances(&facts.entries, &pending, &[], &[]).unwrap();
         let mut ledger = scope.ledger(&[], &pending).unwrap();
@@ -508,6 +517,7 @@ mod tests {
                 Instant::from_unix_secs(2),
             )
             .unwrap();
+
         assert_eq!(ledger.new_allocations().len(), 1);
         assert_eq!(
             ledger.new_allocations()[0].source,

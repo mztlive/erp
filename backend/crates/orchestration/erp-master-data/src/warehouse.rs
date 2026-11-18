@@ -39,6 +39,7 @@ pub async fn create_warehouse_sku_policy(
     actor: AuditActor,
 ) -> Result<WarehouseSkuPolicyView> {
     req.validate()?;
+
     let id = WarehouseSkuPolicyId::new(next_id());
     let policy = WarehouseSkuPolicy::new(
         id.clone(),
@@ -51,6 +52,7 @@ pub async fn create_warehouse_sku_policy(
             effective_to: req.effective_to,
         },
     )?;
+
     let audit =
         actor.clone().resource_log("warehouse_sku_policy.create", "warehouse_sku_policy", id.to_string())?;
     let policy_for_tx = policy.clone();
@@ -70,6 +72,7 @@ async fn persist_policy(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     authorization.require(actor, &warehouse::SKU_POLICY_CREATE, AccessTarget::Operation, executor).await?;
+
     db.warehouse()
         .warehouse(policy.warehouse_id.as_ref(), executor)
         .await?
@@ -78,9 +81,11 @@ async fn persist_policy(
         .find_by_id(policy.sku_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("SKU不存在".to_string()))?;
+
     let existing =
         db.warehouse().sku_policies_for_dimensions(&policy.warehouse_id, &policy.sku_id, executor).await?;
     policy.ensure_no_overlap(&existing).map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+
     db.warehouse_sku_policies().create(policy, executor).await?;
     Ok(())
 }
@@ -115,6 +120,7 @@ mod tests {
             },
         )
         .unwrap();
+
         let error = persist_policy(
             &db,
             &unavailable_authorization(),

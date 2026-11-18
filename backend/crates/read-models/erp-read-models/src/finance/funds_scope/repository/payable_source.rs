@@ -115,6 +115,7 @@ impl FundsAccess {
             return Ok(false);
         };
         scope.validate(executor).await?;
+
         let mut pipeline = vec![doc! { "$match": { "id": id } }];
         pipeline.extend_from_slice(scope.stages());
         pipeline.push(doc! { "$project": { "id": 1 } });
@@ -124,6 +125,7 @@ impl FundsAccess {
             executor,
         )
         .await?;
+
         scope.validate(executor).await?;
         Ok(!rows.is_empty())
     }

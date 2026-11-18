@@ -88,6 +88,7 @@ async fn find_supplier_ids(
     filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
     let options = FindOptions::builder().projection(doc! { "supplier_id": 1, "_id": 0 }).build();
     let rows = mongo_ops::find_many(&collection, filter, options, executor).await?;
+
     let mut ids: Vec<SupplierAccountId> = rows.into_iter().map(|row| row.supplier_id).collect();
     ids.sort_by_key(ToString::to_string);
     ids.dedup();

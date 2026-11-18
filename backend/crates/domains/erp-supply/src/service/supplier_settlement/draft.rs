@@ -61,6 +61,7 @@ impl SupplierSettlementService {
     ) -> Result<StatementPreparation> {
         req.validate()?;
         let inputs = collect_draft_inputs(req)?;
+
         if let Some(existing) = self
             .db
             .supplier_settlement_statements()
@@ -79,6 +80,7 @@ impl SupplierSettlementService {
                 .await?,
             ));
         }
+
         let source = self
             .db
             .supplier_settlement_source_evidence()
@@ -90,7 +92,6 @@ impl SupplierSettlementService {
                 )
             })?;
         let prepared = assemble_statement(req, actor_id, business_org_unit_id, &source, inputs)?;
-
         Ok(StatementPreparation::Ready(prepared))
     }
     /// 重读当前明细和差异行数，组装草稿命令结果。
@@ -134,6 +135,7 @@ impl SupplierSettlementService {
         executor: &mut dyn Executor,
     ) -> Result<PreparedRefresh> {
         self.access().require_action(actor, SettlementAction::Refresh, id, executor).await?;
+
         let mut statement = self.load_statement(id, executor).await?;
         statement
             .ensure_version(req.expected_lock_version)
@@ -141,6 +143,7 @@ impl SupplierSettlementService {
         if statement.source_snapshot_hash != req.expected_source_snapshot_hash {
             return Err(Error::ConflictError("结算依据已变化，请刷新详情并重新核对结算明细".to_string()));
         }
+
         let source = self.refresh_source(&statement, executor).await?;
         let old_items = self.load_statement_items(id, executor).await?;
         let old_differences = self.load_statement_differences(&old_items, executor).await?;
@@ -154,6 +157,7 @@ impl SupplierSettlementService {
                 difference_count: old_differences.len(),
             });
         }
+
         let snapshot = SupplierSettlementDraftSnapshot::from_source(
             &SupplierSettlementStatementId::new(statement.base.id.clone()),
             &source,
@@ -171,6 +175,7 @@ impl SupplierSettlementService {
             has_difference: !snapshot.differences.is_empty(),
         })?;
         statement.update_subject_hash(statement.review_subject_hash(&snapshot.differences))?;
+
         let old_item_ids = old_items.iter().map(|item| item.base.id.clone()).collect::<Vec<_>>();
         let old_difference_ids =
             old_differences.iter().map(|difference| difference.base.id.clone()).collect::<Vec<_>>();
@@ -300,6 +305,7 @@ impl SupplierSettlementService {
         {
             return Err(Error::ConflictError("结算单或结算依据已更新，请刷新后重新核对结算明细".to_string()));
         }
+
         self.db
             .supplier_settlement()
             .replace_draft_snapshot(
@@ -375,6 +381,7 @@ fn assemble_statement(
         || SupplierSettlementItemId::new(next_id()),
         || SupplierSettlementDifferenceId::new(next_id()),
     )?;
+
     let now = Instant::now();
     let mut statement = SupplierSettlementStatement::new(
         statement_id,

@@ -26,6 +26,7 @@ impl SupplierFulfillmentOrder {
         {
             return Err(Error::BusinessLogicError("供应商取消与后续履约结果冲突，请核对原订单".into()));
         }
+
         let current = self.fulfillment_status;
         if observed == current {
             return Ok(false);
@@ -33,6 +34,7 @@ impl SupplierFulfillmentOrder {
         if current == FulfillmentStatus::Rejected || observed == FulfillmentStatus::Rejected {
             return self.apply_observed_rejection(observed);
         }
+
         let old =
             stage(current).ok_or_else(|| Error::BusinessLogicError("供应商订单异常须人工核对".into()))?;
         let new =
@@ -40,6 +42,7 @@ impl SupplierFulfillmentOrder {
         if new <= old {
             return Ok(false);
         }
+
         self.fulfillment_status = observed;
         if observed == FulfillmentStatus::Accepted {
             self.accepted_at = self.accepted_at.or(changed_at);
@@ -69,6 +72,7 @@ impl SupplierFulfillmentOrder {
         {
             return Err(Error::BusinessLogicError("供应商取消结果与当前订单事实冲突".into()));
         }
+
         self.cancel_status = observed;
         Ok(true)
     }
@@ -132,6 +136,7 @@ mod tests {
         assert_eq!(order.fulfillment_status, FulfillmentStatus::Completed);
         assert_eq!(order.completed_at, None);
         assert_eq!(order.accepted_at, None);
+
         assert!(!order.apply_observed_fulfillment(FulfillmentStatus::Accepted, None).unwrap());
         assert_eq!(order.fulfillment_status, FulfillmentStatus::Completed);
     }
@@ -142,6 +147,7 @@ mod tests {
         let time = Instant::from_unix_secs(30);
         order.apply_observed_fulfillment(FulfillmentStatus::Accepted, Some(time)).unwrap();
         assert_eq!(order.accepted_at, Some(time));
+
         assert!(
             !order
                 .apply_observed_fulfillment(FulfillmentStatus::Accepted, Some(Instant::from_unix_secs(90)))

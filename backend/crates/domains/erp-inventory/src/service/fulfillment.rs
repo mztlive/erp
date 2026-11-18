@@ -344,6 +344,7 @@ async fn post_receipt_stock_with_store(
 ) -> Result<String> {
     let balance_id =
         ensure_or_create_balance(store, executor, fact.warehouse_id, fact.sku_id, fact.quantity).await?;
+
     let movement = StockMovement::new(
         StockMovementId::new(next_id()),
         StockMovementData {
@@ -366,6 +367,7 @@ async fn post_receipt_stock_with_store(
         },
     )?;
     store.movement(&movement, executor).await?;
+
     // 余额记录最后流水（台账「最后变动」列），与数量增减同事务
     if !store.last_movement(&balance_id, &movement.base.id, executor).await? {
         return Err(Error::BusinessLogicError("库存余额行不存在".to_string()));
@@ -399,6 +401,7 @@ async fn ensure_or_create_balance(
         }
         return Ok(balance_id);
     }
+
     let balance = StockBalance::new(
         StockBalanceId::new(next_id()),
         StockBalanceData {
@@ -477,9 +480,11 @@ async fn establish_receipt_reservation_with_store(
         },
     )?;
     store.create_reservation(&reservation, executor).await?;
+
     if !store.reserve(fact.balance_id, fact.quantity, executor).await? {
         return Err(Error::BusinessLogicError("可用库存不足，无法建立销售预占".to_string()));
     }
+
     let entry = StockReservationEntry::new(
         StockReservationEntryId::new(next_id()),
         StockReservationEntryData {
@@ -664,6 +669,7 @@ mod receipt_store_tests {
             "actor-1",
         )
         .await?;
+
         establish_receipt_reservation_with_store(
             store,
             ex,
@@ -694,6 +700,7 @@ mod receipt_store_tests {
                 assert_eq!(balance.reserved_quantity, q("0"));
                 assert!(balance.last_movement_id.is_none());
             }
+
             let movement = store.movement.unwrap();
             assert_eq!(movement.source_document_id, "receipt-1");
             assert_eq!(movement.source_line_id.as_deref(), Some("receipt-line-1"));
@@ -707,6 +714,7 @@ mod receipt_store_tests {
             assert!(movement.reversal_of_movement_id.is_none());
             assert!(!movement.base.id.is_empty());
             assert!(!movement.fact.fact_no.is_empty());
+
             let reservation = store.reservation.unwrap();
             assert_eq!(reservation.sales_order_line_id.as_ref(), "sales-line-1");
             assert_eq!(
@@ -719,6 +727,7 @@ mod receipt_store_tests {
             assert_eq!(reservation.consumed_quantity, q("0"));
             assert_eq!(reservation.released_quantity, q("0"));
             assert_eq!(reservation.status, ReservationStatus::Active);
+
             let entry = store.entry.unwrap();
             assert_eq!(entry.reservation_id.as_ref(), reservation.base.id);
             assert_eq!(entry.entry_type, ReservationEntryType::Establish);

@@ -174,6 +174,7 @@ impl InboxMessageRepositoryExt for Repository<'_, InboxMessage> {
             .projection(inbox_message_projection())
             .build();
         let collection = self.collection().clone_with_type::<InboxMessageRow>();
+
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
 
@@ -249,6 +250,7 @@ impl IntegrationErrorTaskRepositoryExt for Repository<'_, IntegrationErrorTask> 
             Database::INTEGRATION_ERROR_TASKS,
             executor,
         )?;
+
         let options = FindOptions::builder()
             .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, ERROR_TASK_SORT_FIELDS))
             .skip(filter.skip())
@@ -256,6 +258,7 @@ impl IntegrationErrorTaskRepositoryExt for Repository<'_, IntegrationErrorTask> 
             .projection(integration_error_task_projection())
             .build();
         let collection = self.collection().clone_with_type::<IntegrationErrorTaskRow>();
+
         let items =
             aggregate::find(&collection, filter.to_doc(), options, access.stages().to_vec(), executor)
                 .await?;
@@ -334,6 +337,7 @@ impl ReconciliationDifferenceRepositoryExt for Repository<'_, ReconciliationDiff
             Database::RECONCILIATION_DIFFERENCES,
             executor,
         )?;
+
         let options = FindOptions::builder()
             .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending, DIFFERENCE_SORT_FIELDS))
             .skip(filter.skip())
@@ -341,6 +345,7 @@ impl ReconciliationDifferenceRepositoryExt for Repository<'_, ReconciliationDiff
             .projection(reconciliation_difference_projection())
             .build();
         let collection = self.collection().clone_with_type::<ReconciliationDifferenceRow>();
+
         let items =
             aggregate::find(&collection, filter.to_doc(), options, access.stages().to_vec(), executor)
                 .await?;
@@ -437,6 +442,7 @@ impl ReconciliationDifferenceResolutionRepositoryExt for Repository<'_, Reconcil
         if handled_by.is_empty() {
             return Ok(Vec::new());
         }
+
         let filter = doc! {
             "handled_by": { "$in": handled_by },
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
@@ -445,6 +451,7 @@ impl ReconciliationDifferenceResolutionRepositoryExt for Repository<'_, Reconcil
             FindOptions::builder().projection(doc! { "reconciliation_difference_id": 1, "id": 1 }).build();
         let collection = self.collection().clone_with_type::<Document>();
         let rows = mongo_ops::find_many(&collection, filter, options, executor).await?;
+
         let mut ids = rows
             .into_iter()
             .filter_map(|row| row.get_str("reconciliation_difference_id").ok().map(str::to_string))

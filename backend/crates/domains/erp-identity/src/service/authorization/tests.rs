@@ -63,12 +63,14 @@ fn builder_accepts_complete_bindings_and_rejects_missing_duplicate_unknown_and_m
     assert!(
         matches!(missing.build(), Err(Error::ValidationError(message)) if message.contains("缺少查询 Mapping"))
     );
+
     let facts = Arc::new(Facts::default());
     assert!(matches!(empty().facts("unknown", facts.clone()), Err(Error::ValidationError(_))));
     assert!(matches!(
         empty().facts("sales_inquiry", facts.clone()).unwrap().facts("sales_inquiry", facts),
         Err(Error::ValidationError(_))
     ));
+
     let map = mapping(&inquiry::QUERY_SALES_LIST);
     assert!(matches!(
         empty()
@@ -99,11 +101,13 @@ fn builder_checks_fact_capabilities_sources_and_output_before_any_request() {
     let mut builder = complete();
     builder.mappings.insert(permission.clone(), map);
     assert!(matches!(builder.build(), Err(Error::ValidationError(_))));
+
     let mut map = mapping(permission);
     Arc::get_mut(&mut map).unwrap().model.output = QueryOutput::Share { fields: ["id".into()].into() };
     let mut builder = complete();
     builder.mappings.insert(permission.clone(), map);
     assert!(matches!(builder.build(), Err(Error::ValidationError(_))));
+
     let permission = &receivable::CUSTOMER_RECEIPT_LIST;
     let mut map = mapping(permission);
     Arc::get_mut(&mut map).unwrap().relations.clear();
@@ -124,6 +128,7 @@ async fn require_checks_real_owner_and_missing_facts_and_stops_before_facts_with
         .unwrap();
     assert_eq!(port.calls.load(Ordering::SeqCst), 1);
     assert_eq!(identity.permissions_calls.load(Ordering::SeqCst), 1);
+
     port.objects.lock().unwrap()[0].owner_id = FactValue::Known(Some("other".into()));
     assert!(matches!(
         service
@@ -131,6 +136,7 @@ async fn require_checks_real_owner_and_missing_facts_and_stops_before_facts_with
             .await,
         Err(Error::Forbidden(_))
     ));
+
     port.objects.lock().unwrap()[0].owner_id = FactValue::Missing;
     assert!(matches!(
         service
@@ -138,6 +144,7 @@ async fn require_checks_real_owner_and_missing_facts_and_stops_before_facts_with
             .await,
         Err(Error::ValidationError(_))
     ));
+
     identity.state.lock().unwrap().grants = vec![];
     let calls = port.calls.load(Ordering::SeqCst);
     assert!(matches!(
@@ -147,6 +154,7 @@ async fn require_checks_real_owner_and_missing_facts_and_stops_before_facts_with
         Err(Error::Forbidden(_))
     ));
     assert_eq!(port.calls.load(Ordering::SeqCst), calls);
+
     assert!(matches!(
         service.require(&actor(), &inquiry::COMMANDS_SALES_SAVE, AccessTarget::Operation, &mut ex).await,
         Err(Error::ValidationError(_))
@@ -180,6 +188,7 @@ async fn candidates_and_ownership_change_check_server_destination_and_original()
         .await
         .unwrap();
     assert_eq!(port.calls.load(Ordering::SeqCst), 0);
+
     for (owner, allowed) in [("user", true), ("other", false)] {
         let target =
             AccessTarget::OwnershipChange { id: "one".into(), candidate: candidate("sales_inquiry", owner) };
@@ -190,6 +199,7 @@ async fn candidates_and_ownership_change_check_server_destination_and_original()
             assert!(matches!(result, Err(Error::Forbidden(_))));
         }
     }
+
     let mut forged = destination;
     forged.version = "persisted".into();
     assert!(matches!(
@@ -215,6 +225,7 @@ async fn exact_tasks_require_version_assignment_and_same_role_extra_permission()
     let service = builder.build().unwrap();
     let mut ex = SnapshotExecutor::default();
     let target = || AccessTarget::Task { id: "task".into(), version: "v1".into() };
+
     service.require(&actor(), &approval_instance::SUBMIT_DECISION, target(), &mut ex).await.unwrap();
     assert!(matches!(
         service
@@ -238,11 +249,13 @@ async fn exact_tasks_require_version_assignment_and_same_role_extra_permission()
             .await,
         Err(Error::ConflictError(_))
     ));
+
     port.objects.lock().unwrap()[0].assignee_id = FactValue::Known(Some("other".into()));
     assert!(matches!(
         service.require(&actor(), &approval_instance::SUBMIT_DECISION, target(), &mut ex).await,
         Err(Error::Forbidden(_))
     ));
+
     identity.state.lock().unwrap().grants = vec![
         ("decide".into(), vec![approval_instance::SUBMIT_DECISION]),
         ("read".into(), vec![approval_instance::INSTANCE_LIST]),
@@ -264,14 +277,17 @@ async fn query_compiles_owner_condition_and_validate_respects_snapshot_and_read_
     service.validate(&access, &mut ex).await.unwrap();
     assert_eq!(identity.permissions_calls.load(Ordering::SeqCst), calls);
     assert!(matches!(service.validate(&access, &mut ex).await, Err(Error::ValidationError(_))));
+
     let mut ex = ReadExecutor::default();
     let access = service.query(&actor(), &inquiry::QUERY_SALES_LIST, &mut ex).await.unwrap();
     service.validate(&access, &mut ex).await.unwrap();
+
     let access = service.query(&actor(), &inquiry::QUERY_SALES_LIST, &mut ex).await.unwrap();
     identity.revision.fetch_add(1, Ordering::SeqCst);
     assert!(
         matches!(service.validate(&access, &mut ex).await, Err(Error::ConflictError(message)) if message.starts_with("DATA_SCOPE_CHANGED"))
     );
+
     let access = service.query(&actor(), &inquiry::QUERY_SALES_LIST, &mut ex).await.unwrap();
     identity.state.lock().unwrap().active = false;
     assert!(matches!(service.validate(&access, &mut ex).await, Err(Error::ConflictError(_))));
@@ -355,19 +371,23 @@ async fn dynamic_mapping_revisions_and_expiry_are_checked_by_public_delivery_api
     builder.mappings.insert(inquiry::QUERY_SALES_LIST, map.clone());
     let service = builder.build().unwrap();
     assert_eq!(map.prepares.load(Ordering::SeqCst), 0);
+
     let mut ex = ReadExecutor::default();
     let access = service.query(&actor(), &inquiry::QUERY_SALES_LIST, &mut ex).await.unwrap();
     assert_eq!(map.prepares.load(Ordering::SeqCst), 1);
     service.validate(&access, &mut ex).await.unwrap();
     assert_eq!(map.prepares.load(Ordering::SeqCst), 2);
+
     let access = service.query(&actor(), &inquiry::QUERY_SALES_LIST, &mut ex).await.unwrap();
     map.revision.fetch_add(1, Ordering::SeqCst);
     assert!(matches!(service.validate(&access, &mut ex).await, Err(Error::ConflictError(_))));
+
     let mut snapshot = SnapshotExecutor::default();
     let access = service.query(&actor(), &inquiry::QUERY_SALES_LIST, &mut snapshot).await.unwrap();
     let calls = map.prepares.load(Ordering::SeqCst);
     service.validate(&access, &mut snapshot).await.unwrap();
     assert_eq!(map.prepares.load(Ordering::SeqCst), calls);
+
     *map.expires.lock().unwrap() = Some(Instant::from_unix_secs(1));
     assert!(matches!(
         service.query(&actor(), &inquiry::QUERY_SALES_LIST, &mut snapshot).await,
@@ -413,9 +433,11 @@ async fn whole_record_reads_require_functional_permission_and_revalidate_grant_r
         .require(&actor(), &sales_order::DETAIL, AccessTarget::record("one").unwrap(), &mut ex)
         .await
         .unwrap();
+
     let access = service.query(&actor(), &sales_order::LIST, &mut ex).await.unwrap();
     identity.grant_revision.fetch_add(1, Ordering::SeqCst);
     assert!(matches!(service.validate(&access, &mut ex).await, Err(Error::ConflictError(_))));
+
     identity.state.lock().unwrap().grants.clear();
     assert!(matches!(
         service.require(&actor(), &sales_order::DETAIL, AccessTarget::record("one").unwrap(), &mut ex).await,
@@ -442,15 +464,18 @@ async fn source_creation_loads_actual_references_and_rejects_missing_or_fabricat
         ..candidate(permission.resource(), "user")
     };
     let mut ex = SnapshotExecutor::default();
+
     service
         .require(&actor(), &permission, AccessTarget::Candidate(candidate.clone()), &mut ex)
         .await
         .unwrap();
+
     port.objects.lock().unwrap().clear();
     assert!(matches!(
         service.require(&actor(), &permission, AccessTarget::Candidate(candidate.clone()), &mut ex).await,
         Err(Error::Forbidden(_))
     ));
+
     let mut fabricated = candidate;
     fabricated.relations.values_mut().next().unwrap().objects.push(object(
         "purchase_order",
@@ -509,6 +534,7 @@ async fn independent_refund_origins_keep_their_own_scope_roles() {
     let service = builder.build().unwrap();
     let mut ex = SnapshotExecutor::default();
     service.require(&actor(), &permission, AccessTarget::record("refund").unwrap(), &mut ex).await.unwrap();
+
     identity.state.lock().unwrap().grants = vec![("entry".into(), vec![permission.clone()])];
     assert!(matches!(
         service.require(&actor(), &permission, AccessTarget::record("refund").unwrap(), &mut ex).await,
@@ -620,6 +646,7 @@ async fn existence_bindings_reject_payload_and_only_deliver_the_row_identity() {
         builder.mappings.insert(permission.clone(), map);
         assert!(matches!(builder.build(), Err(Error::ValidationError(_))));
     }
+
     let identity = Arc::new(Identity::default());
     identity.state.lock().unwrap().grants = vec![("viewer".into(), vec![permission.clone()])];
     let mut map = mapping(&permission);
@@ -662,6 +689,7 @@ async fn shared_write_permissions_support_queries_without_relaxing_task_or_trans
             .collect();
         builder.facts.insert(rules::task_facts_resource(&permission).into(), Arc::new(Facts::new(objects)));
         let service = builder.mapping(&permission, mapping(&permission)).unwrap().build().unwrap();
+
         let mut ex = ReadExecutor::default();
         let access = service.query(&actor(), &permission, &mut ex).await.unwrap();
         let members = task_members(&access, &samples);
@@ -672,6 +700,7 @@ async fn shared_write_permissions_support_queries_without_relaxing_task_or_trans
         };
         assert_eq!(members, expected);
         service.validate(&access, &mut ex).await.unwrap();
+
         for (id, ..) in samples {
             let target = || AccessTarget::Task { id: id.into(), version: "v1".into() };
             let result =
@@ -820,9 +849,11 @@ async fn nontransaction_revalidation_still_rejects_changed_facts_and_invalid_set
     let relation = references[0].relations.values_mut().next().unwrap();
     relation.expected_ids.remove("purchase_b");
     relation.objects.pop();
+
     for changed in [version, source_version, owner, references] {
         assert!(matches!(reloaded_requests(changed).await, Err(Error::ConflictError(_))));
     }
+
     let mut duplicate = payment_requests();
     let relation = duplicate[0].relations.values_mut().next().unwrap();
     relation.objects.push(relation.objects[0].clone());

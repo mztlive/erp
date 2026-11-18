@@ -227,6 +227,7 @@ fn normalize_package_members(members: Vec<SkuSnapshot>) -> Result<Vec<SkuSnapsho
         }
         normalized.push(member);
     }
+
     super::sku_snapshot::sort_by_sku_id(&mut normalized);
     Ok(normalized)
 }
@@ -256,6 +257,7 @@ pub fn ensure_publishable_display<'a>(
     if !form_is_package {
         return Ok(publishable);
     }
+
     for tier_id in tier_ids {
         let count = publishable
             .iter()

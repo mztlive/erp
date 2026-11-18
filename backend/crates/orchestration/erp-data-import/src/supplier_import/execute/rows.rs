@@ -73,14 +73,17 @@ pub(super) async fn execute_rows(
         if !execution.renew(job).await? {
             return Ok(());
         }
+
         let outcome = execution.import(&item).await;
         record(&mut item, outcome)?;
         record_progress(job, &item)?;
+
         let should_yield = budget.after_row();
         if should_yield && job.finished_at.is_none() {
             job.last_progress_at = None;
         }
         execution.persist(job, item).await?;
+
         if should_yield {
             break;
         }
@@ -178,12 +181,14 @@ mod tests {
         assert!(job.finished_at.is_none());
         assert!(execution.saved_job.as_ref().unwrap().last_progress_at.is_none());
         assert!(claimable(&job, Instant::now()));
+
         let remaining = items
             .into_iter()
             .map(|item| {
                 execution.saved.iter().find(|saved| saved.item_no == item.item_no).cloned().unwrap_or(item)
             })
             .collect();
+
         let mut resumed = RecordingRows::default();
         execute_rows(&mut resumed, &mut job, remaining, row_budget(2)).await.unwrap();
         assert_eq!(resumed.events, [("renew", 3), ("import", 3), ("persist", 3)]);

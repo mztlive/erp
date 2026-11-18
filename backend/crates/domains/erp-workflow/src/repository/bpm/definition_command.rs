@@ -39,6 +39,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         if !matches!(outcome, CasWriteOutcome::Applied(_)) {
             return Ok(outcome);
         }
+
         self.replace_graph_docs(&definition.base.id, nodes, transitions, executor).await?;
         Ok(outcome)
     }
@@ -74,6 +75,7 @@ impl<'a> BpmWorkflowRepository<'a> {
                 return Ok(retired);
             }
         }
+
         self.cas_write_definition(
             definition,
             expected_definition_lock_version,
@@ -104,6 +106,7 @@ impl<'a> BpmWorkflowRepository<'a> {
             executor,
         )
         .await?;
+
         mongo_ops::insert_many(
             &self.db.collection::<ApprovalNodeDefinition>(NODE_DEFINITIONS),
             nodes,

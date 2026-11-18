@@ -99,6 +99,7 @@ impl PurchaseApiExecutionView {
                         .is_some_and(|action| action.state == ConfirmationActionState::Confirmed)
             })
             .count();
+
         let blocker = match execution.stage {
             ApiOrderStage::CreationUnknown
             | ApiOrderStage::AddressUnknown
@@ -107,6 +108,7 @@ impl PurchaseApiExecutionView {
             ApiOrderStage::AwaitingSetup => Some("请补齐本采购的履约资料".into()),
             _ => execution.blocker.as_ref().map(|_| "执行条件待处理，请由有权限的采购或财务人员核对".into()),
         };
+
         Self {
             order_id: execution.base.id.clone(),
             order_no: order_no.into(),
@@ -163,6 +165,7 @@ impl PurchaseFulfillmentQuantityView {
         {
             return Err(Error::BusinessLogicError("采购履约数量或责任轨道不一致".into()));
         }
+
         let completed = match responsibility {
             FulfillmentResponsibility::Warehouse => inbound,
             FulfillmentResponsibility::SupplierDirect => shipped,
@@ -175,6 +178,7 @@ impl PurchaseFulfillmentQuantityView {
         } else {
             None
         };
+
         let remaining_quantity = match (line.quantity, completed) {
             (Some(ordered), Some(completed)) if !ambiguous && completed <= ordered => {
                 let remaining = ordered

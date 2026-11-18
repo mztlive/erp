@@ -49,6 +49,7 @@ impl SalesInquiry {
     ) -> Result<()> {
         validate_text(reservation_id, "来源占用身份", 128)?;
         validate_text(sales_order_id, "销售单身份", 128)?;
+
         if let Some(existing) =
             self.quantity_ledger.iter().find(|entry| entry.reservation_id == reservation_id)
         {
@@ -61,6 +62,7 @@ impl SalesInquiry {
             }
             return Err(Error::ConflictError("来源占用身份已用于其他内容".into()));
         }
+
         self.validate_quantity_selection(round, &selections, None, now)?;
         self.quantity_ledger.push(InquiryQuantityReservation {
             reservation_id: reservation_id.into(),
@@ -95,10 +97,12 @@ impl SalesInquiry {
         if old.state != InquiryReservationState::Reserved {
             return Err(Error::BusinessLogicError("只有销售草稿来源占用允许调整".into()));
         }
+
         self.validate_reserved_precision(old.requirement_version, &selections)?;
         if !is_reduction(&old.selections, &selections)? {
             self.validate_quantity_selection(old.feedback_round, &selections, Some(reservation_id), now)?;
         }
+
         self.quantity_ledger[index].selections = selections;
         if self.quantity_ledger[index].selections.is_empty() {
             self.quantity_ledger[index].state = InquiryReservationState::Released;
@@ -190,6 +194,7 @@ impl SalesInquiry {
                 .iter()
                 .find(|row| row.line_id == selection.line_id)
                 .ok_or_else(|| Error::ValidationError("转单行不属于已接受反馈".into()))?;
+
             let total = selected_quantity(selections, &selection.line_id, None)?;
             if total
                 .checked_add(self.used_quantity(&selection.line_id, None, exclude)?)
@@ -197,6 +202,7 @@ impl SalesInquiry {
             {
                 return Err(Error::BusinessLogicError("商品可转数量不足".into()));
             }
+
             if selection.price_id.is_none() && line.prices.len() != 1 {
                 return Err(Error::ValidationError("转单必须明确有效的供给报价".into()));
             }
@@ -273,6 +279,7 @@ impl SalesInquiry {
             .ok_or_else(|| Error::ValidationError("配送地址不属于询价需求".into()))?
             .quantity
             .to_decimal();
+
         let selected = selected_quantity(selections, &selection.line_id, Some(id))?;
         if selected
             .checked_add(self.used_quantity(&selection.line_id, Some(id), exclude)?)
@@ -294,6 +301,7 @@ impl SalesInquiry {
         if self.status == InquiryStatus::Confirmed {
             return Ok(());
         }
+
         let round = self.acceptances.last().map(|entry| entry.feedback_round);
         let (has_active, affected) = self
             .reinquiries

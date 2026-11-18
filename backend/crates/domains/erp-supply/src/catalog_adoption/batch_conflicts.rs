@@ -27,6 +27,7 @@ pub fn mark_product_mapping_conflicts(rows: &mut [CatalogAdoptionBatchItem]) -> 
             .or_default()
             .push(index);
     }
+
     for indices in groups.values() {
         let Some(reason) = conflict_reason(rows, indices) else { continue };
         for index in indices {
@@ -57,6 +58,7 @@ fn conflict_reason(rows: &[CatalogAdoptionBatchItem], indices: &[usize]) -> Opti
             new_product_classes.insert((row.mapping.category_id.as_str(), row.mapping.product_kind.as_str()));
         }
     }
+
     if products.len() > 1 {
         return Some("同一来源商品的规格匹配到不同公司商品，请核对来源身份；本商品全部规格暂不可入库");
     }
@@ -147,6 +149,7 @@ mod tests {
         }
         assert_eq!(rows[2].status, BatchItemStatus::Ready);
         assert_eq!(rows[2].preview_version, Some(2));
+
         mark_product_mapping_conflicts(&mut rows).unwrap();
         assert_eq!(rows[0].messages.len(), 1);
     }
@@ -197,6 +200,7 @@ mod tests {
         rows[1].mapping.product_kind = "VIRTUAL".into();
         mark_product_mapping_conflicts(&mut rows).unwrap();
         assert!(rows.iter().all(|row| row.status == BatchItemStatus::Draft));
+
         let first = row("rice", "5kg", "food");
         let mut duplicate = vec![first.clone(), first];
         assert!(mark_product_mapping_conflicts(&mut duplicate).is_err());

@@ -77,6 +77,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             return Err(Error::ValidationError("抄送查询条件无效".into()));
         }
         query.query = query.query.map(|q| q.trim().to_owned()).filter(|q| !q.is_empty());
+
         let db = self.db.clone();
         let authorization = self.authorization.clone();
         let actor = actor.clone();
@@ -138,7 +139,9 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         {
             return Err(Error::ValidationError("抄送资料读取必须使用快照事务".into()));
         }
+
         let (receipt, snapshot, instance, access) = self.copy_subject(actor, id, executor).await?;
+
         let mut display =
             snapshot.display.ok_or_else(|| Error::ConflictError("该审批未保存可预览资料".into()))?;
         if display.source.needs_submitter_name(&snapshot.payload.submitted_by) {
@@ -149,12 +152,14 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             );
         }
         display.validate()?;
+
         let executions = self
             .db
             .bpm_workflow()
             .list_execution_history(&snapshot.approval_process_instance_id, after, 101, executor)
             .await?;
         let history = history_page_from(executions.iter().map(history_item_from_execution).collect(), 100);
+
         let materials = ApprovalMaterialsView {
             document_no: snapshot.payload.document_no,
             document_type: snapshot.document_type.as_str().into(),
@@ -284,9 +289,11 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                             ex,
                         )
                         .await?;
+
                     for id in &ids {
                         service.copy_subject_facts(id, ex).await?;
                     }
+
                     Ok(service.db.approval_copies().mark_read(&ids, Utc::now().timestamp(), ex).await?)
                 })
             })
@@ -313,6 +320,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .authorized_receipt(id, &access, ex)
             .await?
             .ok_or_else(copy_not_found)?;
+
         let (receipt, snapshot, instance) = self.copy_subject_from_receipt(receipt, ex).await?;
         Ok((receipt, snapshot, instance, access))
     }

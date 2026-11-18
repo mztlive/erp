@@ -75,6 +75,7 @@ impl AccessFactsPort for FinancialFacts {
         if matches!(self.resource.as_str(), "receipt_reversal" | "payment_reversal") {
             return self.reversals(context, targets, executor).await;
         }
+
         let collection_name = collection(&self.resource)?;
         let mut pipeline = vec![
             doc! { "$match": { "id": { "$in": targets.ids().iter().collect::<Vec<_>>() }, "deleted_at": 0 } },
@@ -82,12 +83,14 @@ impl AccessFactsPort for FinancialFacts {
         pipeline.extend(source_projection(&self.resource)?);
         let rows: Vec<Document> =
             aggregate::rows(&self.db.collection(collection_name), pipeline, executor).await?;
+
         let mut result = Vec::new();
         for row in rows {
             invoice_result_state(&context.permission, &row)?;
             if !matches!(row.get_bool("__funds_sources_valid"), Ok(true)) {
                 return Err(IdentityError::ValidationError("财务实际来源引用不完整".into()));
             }
+
             let mut root = root_facts(&self.resource, &row)?;
             for (resource, relation, field) in [
                 ("sales_order", "sales_source", "__funds_sales_ids"),
@@ -132,6 +135,7 @@ impl FinancialFacts {
         ];
         let rows: Vec<Document> =
             aggregate::rows(&self.db.collection(collection), pipeline, executor).await?;
+
         let mut result = Vec::new();
         for row in rows {
             let ReversalSourceFacts { mut root, source_resource, relation, ids } =
@@ -158,6 +162,7 @@ impl FinancialFacts {
         ];
         let rows: Vec<Document> =
             aggregate::rows(&self.db.collection(collection), pipeline, executor).await?;
+
         let mut objects = Vec::new();
         for row in rows {
             let mut root = root_facts(&self.resource, &row)?;
@@ -200,6 +205,7 @@ impl FinancialFacts {
         let Some(id) = row.get_str(field).ok() else {
             return Ok(None);
         };
+
         let pipeline = vec![doc! { "$match": { "id": id, "deleted_at": 0 } }];
         let rows: Vec<Document> = aggregate::rows(&self.db.collection(entries), pipeline, executor).await?;
         rows.first()
@@ -336,6 +342,7 @@ mod tests {
             assert_eq!(facts.source_resource, source);
             assert_eq!(facts.relation, RelationKey::parse(relation).unwrap());
             assert_eq!(facts.ids, BTreeSet::from(["original-fund".into()]));
+
             row.remove("handled_by");
             assert_eq!(reversal_facts(resource, &row).unwrap().root.owner_id, FactValue::Known(None));
             for invalid in [Bson::Null, Bson::String(String::new()), Bson::String("  ".into())] {
@@ -373,11 +380,14 @@ mod tests {
         let draft = serialize_to_document(&invoice).unwrap();
         assert!(matches!(invoice_result_state(permission, &draft), Err(IdentityError::Forbidden(_))));
         invoice_result_state(&receivable::INVOICE_DETAIL, &draft).unwrap();
+
         invoice.mark_registered("issuer").unwrap();
         invoice_result_state(permission, &serialize_to_document(&invoice).unwrap()).unwrap();
+
         invoice.mark_red_invoiced("issuer").unwrap();
         let red = serialize_to_document(&invoice).unwrap();
         invoice_result_state(permission, &red).unwrap();
+
         for status in [Bson::String("unknown".into()), Bson::Null] {
             let mut invalid = red.clone();
             invalid.insert("status", status);
@@ -399,6 +409,7 @@ mod tests {
         assert_eq!(facts.id, "receipt");
         assert_eq!(facts.version, "7");
         assert_eq!(facts.owner_id, FactValue::Known(Some("clerk".into())));
+
         assert!(root_facts("customer_receipt", &doc! { "id": "receipt" }).is_err());
         assert!(root_facts("customer_receipt", &doc! { "version": 1 }).is_err());
     }

@@ -73,6 +73,7 @@ impl AuthorizationService {
         {
             return Err(Error::Forbidden("授权管理需要同角色完整资格和公司组织范围".into()));
         }
+
         let mut resolution = Resolution::default();
         resolution.include(&access);
         if resolution.valid_until.is_some_and(|until| until <= Instant::now()) {

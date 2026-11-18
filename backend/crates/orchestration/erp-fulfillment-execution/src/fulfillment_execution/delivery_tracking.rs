@@ -32,6 +32,7 @@ pub(super) async fn ensure_tracking_sources(
     if delivery.tracking_entries.is_empty() {
         return Ok(());
     }
+
     let purchase = if let Some(id) = &delivery.purchase_order_id {
         Some(
             db.purchase_orders()
@@ -42,6 +43,7 @@ pub(super) async fn ensure_tracking_sources(
     } else {
         None
     };
+
     let mut checked_lines = HashSet::new();
     for entry in &delivery.tracking_entries {
         if !checked_lines.insert(entry.sales_order_line_id.clone()) {
@@ -55,6 +57,7 @@ pub(super) async fn ensure_tracking_sources(
         entry
             .ensure_sales_order(&delivery.sales_order_id, &sales_line.sales_order_id)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
+
         if let Some(purchase) = &purchase {
             let line = lines
                 .iter()

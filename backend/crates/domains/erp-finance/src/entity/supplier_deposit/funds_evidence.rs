@@ -284,6 +284,7 @@ impl FundsEvidenceInbox {
         {
             return Err(Error::from("原资金证据不是可重新匹配的待核验记录"));
         }
+
         let mut updated = self.clone();
         updated.state = FundsEvidenceInboxState::Received;
         updated.apply(resource)?;
@@ -317,6 +318,7 @@ impl FundsEvidenceInbox {
         {
             return Err(Error::from("本次消息资金交易尚未形成可追溯结论"));
         }
+
         match &self.input.result {
             FundsEvidenceResult::Transaction {
                 stable_transaction_id, direction, external_order_id, ..
@@ -380,6 +382,7 @@ impl FundsEvidenceInbox {
         if self.state != FundsEvidenceInboxState::Received {
             return Err(Error::from("待核对资金证据不能自动应用"));
         }
+
         let direction = match &self.input.result {
             FundsEvidenceResult::Transaction { direction, amount, .. } if *amount > Amount::zero() => {
                 *direction
@@ -397,6 +400,7 @@ impl FundsEvidenceInbox {
             _ => Err(Error::from("财务应用类型与原资金交易方向不一致")),
         };
         valid?;
+
         self.state = FundsEvidenceInboxState::Applied;
         self.applied_resource = Some(resource);
         Ok(())

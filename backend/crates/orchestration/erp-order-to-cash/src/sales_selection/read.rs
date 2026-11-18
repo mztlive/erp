@@ -159,6 +159,7 @@ mod tests {
             let mut executor = SnapshotExecutor::default();
             let expected = &mut executor as *mut SnapshotExecutor as usize;
             let reader = authorization.clone();
+
             let result = checked(
                 authorization.as_ref(),
                 &actor,
@@ -175,6 +176,7 @@ mod tests {
             )
             .await
             .unwrap();
+
             assert_eq!(result, "complete-view");
             assert_eq!(*authorization.executor.lock().unwrap(), Some(expected));
             assert_eq!(*authorization.events.lock().unwrap(), ["query", "root", "display", "validate"]);
@@ -193,6 +195,7 @@ mod tests {
             });
             let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
             let reader = authorization.clone();
+
             let error = checked(
                 authorization.as_ref(),
                 &actor,
@@ -213,6 +216,7 @@ mod tests {
             )
             .await
             .unwrap_err();
+
             if expire {
                 assert!(
                     matches!(error, Error::ConflictError(message) if message.starts_with("DATA_SCOPE_CHANGED"))
@@ -235,6 +239,7 @@ mod tests {
         });
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         let reader = authorization.clone();
+
         let result: Result<String> = checked(
             authorization.as_ref(),
             &actor,
@@ -248,6 +253,7 @@ mod tests {
             },
         )
         .await;
+
         assert!(matches!(result, Err(Error::NotFound(message)) if message == "销售方案不存在或无权查看"));
         assert_eq!(*authorization.events.lock().unwrap(), ["query", "root"]);
     }

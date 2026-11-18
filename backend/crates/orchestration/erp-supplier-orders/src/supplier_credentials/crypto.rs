@@ -80,6 +80,7 @@ impl CredentialCrypto {
         if expires_at <= now {
             return Err(token_error());
         }
+
         let plain = CredentialPlaintext {
             schema_version: 1,
             credential_id: input.credential_id,
@@ -101,8 +102,10 @@ impl CredentialCrypto {
         if record.base.id != self.id {
             return Err(token_error());
         }
+
         let body = self.codec.decrypt(&record.encrypted_payload).map_err(|_| token_error())?;
         let plain: CredentialPlaintext = serde_json::from_str(&body).map_err(|_| token_error())?;
+
         if plain.schema_version != 1
             || plain.credential_id != self.id
             || plain.account_scope != record.account_scope
@@ -129,6 +132,7 @@ impl CredentialCrypto {
             plain.expires_at,
         ))
         .map_err(|_| token_error())?;
+
         let mut mac =
             Hmac::<Sha256>::new_from_slice(self.codec.fingerprint_key()).map_err(|_| token_error())?;
         mac.update(b"erp-jd-vop-credential-payload-v1\0");

@@ -22,6 +22,7 @@ pub(super) fn receive(
     if incoming.body.len() > 1024 * 1024 {
         return Err(Error::ValidationError("供应商消息正文超过接收上限".into()));
     }
+
     let content_fingerprint = hash(&[incoming.message_type.as_bytes(), &incoming.body]);
     let id = format!("spm-{}", hash(&[account.as_bytes(), incoming.source_id.as_bytes()]));
     let (refresh_hints, quarantine_reason) = match incoming.interpretation {
@@ -31,6 +32,7 @@ pub(super) fn receive(
         MessageInterpretation::Refresh(_) => (vec![], Some("EMPTY_MESSAGE_REFRESH_HINTS".into())),
         MessageInterpretation::Quarantine { reason_code } => (vec![], Some(reason_code)),
     };
+
     Ok(SupplierPulledMessage::received(SupplierMessageData {
         id,
         account_scope: account.into(),

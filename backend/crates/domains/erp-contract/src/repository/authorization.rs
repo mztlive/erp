@@ -40,6 +40,7 @@ pub fn bindings(
     if history_collection.trim().is_empty() || history_collection.contains('\0') {
         return Err(IdentityError::ValidationError("合同历史参与来源集合无效".into()));
     }
+
     let facts = Arc::new(ContractFacts { db, participants });
     let model = QueryModel {
         key: QueryModelKey::parse("contract_responsibility")?,
@@ -162,6 +163,7 @@ impl AccessFactsPort for ContractFacts {
         executor: &mut dyn Executor,
     ) -> IdentityResult<Vec<ObjectFacts>> {
         let rows=mongo_ops::find_many(&self.db.collection::<Document>(<Database as ContractExt>::CONTRACTS),doc!{"id":{"$in":ids.ids().iter().cloned().collect::<Vec<_>>()} ,"deleted_at":NOT_DELETED_TIMESTAMP_BSON},FindOptions::default(),executor).await?;
+
         let targets = ids.ids().iter().cloned().collect::<Vec<_>>();
         let responsibility = if matches!(context.permission.action(), "list" | "detail") {
             ContractResponsibility::Read
@@ -169,6 +171,7 @@ impl AccessFactsPort for ContractFacts {
             ContractResponsibility::Write
         };
         let history = responsibility.history(self.participants.as_ref(), context, &targets, executor).await?;
+
         let directory = OrganizationDirectoryService::new(self.db.clone());
         let mut organizations = BTreeMap::new();
         let mut objects = Vec::with_capacity(rows.len());
@@ -206,12 +209,14 @@ fn contract_object(
         .flatten()
         .filter_map(|v| v.as_str().map(str::to_owned))
         .collect();
+
     let read = responsibility == ContractResponsibility::Read;
     let owned = if read && shared.contains(context.actor.id()) {
         Some(context.actor.id().to_owned())
     } else {
         owner.clone()
     };
+
     let (org, valid_until) = organization;
     Ok(ObjectFacts {
         resource: "contract".into(),
@@ -375,6 +380,7 @@ mod tests {
         assert_eq!(mapping.model().collection, <Database as ContractExt>::CONTRACTS);
         assert_eq!(mapping.model().output, QueryOutput::Object);
         assert!(mapping.preparation().is_none());
+
         let QueryFragment::Match(ownership) =
             mapping.predicate(&AccessFact::Owned, &context(), None).unwrap()
         else {
@@ -396,6 +402,7 @@ mod tests {
             &doc! {"$lte": context().as_of.unix_secs()}
         );
         assert_eq!(memberships.last().unwrap(), &doc! {"$match": {"count": 1, "org": {"$in": ["org-a"]}}});
+
         let QueryFragment::Exists { collection, bindings: bound, pipeline } =
             mapping.predicate(&AccessFact::HistoryParticipant, &context(), None).unwrap()
         else {
@@ -407,6 +414,7 @@ mod tests {
             pipeline[0].get_document("$match").unwrap().get_str("participant_user_id").unwrap(),
             "sales-a"
         );
+
         assert!(matches!(
             bindings(db, Arc::new(EmptyContractParticipants), ""),
             Err(IdentityError::ValidationError(_))

@@ -203,6 +203,7 @@ mod tests {
         job.close_stalled_catalog(Instant::from_unix_secs(400)).unwrap();
         assert_eq!(job.status, JobStatus::Cancelled);
         assert!(!job.catalog_stalled(Instant::from_unix_secs(999)));
+
         let mut job = BackgroundJob::for_supplier_governance(job_spec(
             SupplierGovernanceJobKind::CatalogSync,
             "0123456789abcdef0123456789abcdef",

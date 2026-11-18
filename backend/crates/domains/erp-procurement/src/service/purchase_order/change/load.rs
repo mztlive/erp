@@ -31,6 +31,7 @@ impl PurchaseOrderService {
         order
             .ensure_expected_version(expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
+
         let base_revision_id =
             order.revision_id_for_change().map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         let base_revision = self

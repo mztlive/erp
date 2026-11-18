@@ -81,9 +81,11 @@ impl<'a> FinanceKeywordRepository<'a> {
         let invoice_ids = self
             .ids(<Database as ReceivableExt>::INVOICES, invoice_filter(&side, facts), "id", executor)
             .await?;
+
         let fund_accounts = self.fund_accounts(&side, &fund_ids, executor).await?;
         let invoice_accounts =
             self.related(side.invoices, "invoice_id", &invoice_ids, side.account_key, executor).await?;
+
         match target {
             FinanceSearchTarget::Receivable | FinanceSearchTarget::Payable => {
                 let condition = account_filter(

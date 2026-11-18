@@ -237,6 +237,7 @@ mod tests {
             .unwrap(),
         ];
         let original = lines.clone();
+
         let mut gain_adjustment = adjustment.clone();
         gain_adjustment.reason_type = AdjustmentReasonType::StockGain;
         assert!(gain_adjustment.apply_line_updates(&mut lines, &[], false).is_err());
@@ -248,6 +249,7 @@ mod tests {
         ];
         assert!(gain_adjustment.apply_line_updates(&mut lines, &gain_updates[..1], false).is_err());
         assert_eq!(lines, original, "未更新行的方向仍须与新原因一致");
+
         gain_adjustment.apply_line_updates(&mut lines, &gain_updates, true).unwrap();
         assert!(lines.iter().all(|line| line.direction == MovementDirection::Increase));
         assert_eq!(lines[0].quantity.to_string(), "3");
@@ -287,6 +289,7 @@ mod tests {
             .rev()
             .map(|index| StockAdjustmentLineUpdate::new(format!("al-{index}"), "3", None).unwrap())
             .collect::<Vec<_>>();
+
         let started = Stopwatch::now();
         for _ in 0..10 {
             let mut lines = original.clone();
@@ -335,6 +338,7 @@ mod tests {
             assert_eq!(error.to_string(), Error::from(message).to_string());
             assert_eq!(lines, original);
         }
+
         let mut empty = Vec::new();
         assert!(adjustment.apply_line_updates(&mut empty, &[], true).unwrap().is_empty());
     }

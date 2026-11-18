@@ -55,6 +55,7 @@ impl ProductImportProcess {
         if same_sku {
             return self.import_existing_with_images(product, cells, media_source, actor).await;
         }
+
         if let Some(barcode) = &row.barcode {
             let owners =
                 self.db.catalog().barcode_owner_sku_ids(barcode, &mut ReadExecutor::default()).await?;
@@ -64,6 +65,7 @@ impl ProductImportProcess {
                     .with_skipped(true));
             }
         }
+
         let media = resolve_row_media(&self.storage, &self.secret, cells, media_source).await?;
         let pending = media.pending.clone();
         let request = self.append_sku_request(&product, &row, &skus, media).await?;
@@ -121,6 +123,7 @@ fn append_request(
     media: RowMedia,
 ) -> Result<UpdateProductRequest> {
     sku_inputs.push(appended_sku_input(row, &sku_inputs, media.main_image)?);
+
     let mut carousel_media = media_inputs(existing_media, MediaRole::Carousel);
     let detail_media = media_inputs(existing_media, MediaRole::Detail);
     let mut next_order =
@@ -133,6 +136,7 @@ fn append_request(
         });
         next_order = next_order.saturating_add(1);
     }
+
     Ok(UpdateProductRequest {
         version: product.base.version,
         change_reason: Some(format!("产品报价表导入新增 SKU 第{}行", row.row_number)),
@@ -347,6 +351,7 @@ mod tests {
             carousel: vec![(FileAssetId::new("new-carousel-1"), 0), (FileAssetId::new("new-carousel-2"), 1)],
             pending: Vec::new(),
         };
+
         let request =
             append_request(&product, &row, revision.clone(), &media, vec![existing.clone()], uploaded)
                 .unwrap();
@@ -363,6 +368,7 @@ mod tests {
                 ("new-carousel-2", 7, Some("新增规格名称")),
             ]
         );
+
         assert_eq!(request.version, product.base.version);
         assert_eq!(request.name, revision.name);
         assert_eq!(request.description, revision.description);
@@ -371,6 +377,7 @@ mod tests {
         assert_eq!(request.brand_id, revision.brand_id);
         assert_eq!(request.effective_from, revision.effective_from);
         assert_eq!(request.effective_to, revision.effective_to);
+
         assert_eq!(request.skus.len(), 2);
         assert_eq!(serde_json::to_value(&request.skus[0]).unwrap(), serde_json::to_value(&existing).unwrap());
         let appended = &request.skus[1];
@@ -401,6 +408,7 @@ mod tests {
         .unwrap();
         assert_eq!(media_values(&request.detail_media), vec![("detail-1", 3, None)]);
         assert!(request.carousel_media.is_empty());
+
         let request = append_request(
             &product,
             &row,

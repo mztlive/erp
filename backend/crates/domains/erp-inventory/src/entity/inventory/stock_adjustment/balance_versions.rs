@@ -47,6 +47,7 @@ impl<'a> StockAdjustmentBalanceVersions<'a> {
         let required_skus = lines.iter().map(|line| line.sku_id.as_ref()).collect::<HashSet<_>>();
         let mut balance_ids = HashSet::with_capacity(expected.len());
         let mut covered_skus = HashSet::with_capacity(expected.len());
+
         for &(id, version) in expected {
             if !balance_ids.insert(id) {
                 return Err(Error::ValidationError("库存余额版本行不得重复".to_string()));
@@ -63,6 +64,7 @@ impl<'a> StockAdjustmentBalanceVersions<'a> {
             }
             covered_skus.insert(balance.sku_id.as_ref());
         }
+
         if required_skus.iter().any(|sku| !covered_skus.contains(sku)) {
             return Err(Error::ValidationError("提交缺少调整明细对应的库存余额版本".to_string()));
         }

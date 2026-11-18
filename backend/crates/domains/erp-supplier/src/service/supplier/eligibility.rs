@@ -145,6 +145,7 @@ async fn ensure_qualified_with_port<P: QualificationFactsPort>(
         .capability(supplier_id, revision.capability_code, executor)
         .await?
         .ok_or_else(|| Error::BusinessLogicError("供应商能力不存在".to_string()))?;
+
     ensure_qualified_domain(&supplier, &capability, &revision, on_date)
         .map_err(|violation| Error::BusinessLogicError(violation.to_string()))?;
 
@@ -260,6 +261,7 @@ mod provider_tests {
             second_disabled,
             contracts: vec![],
         };
+
         let result = ensure_offering_with_port(
             &port,
             &SupplierAccountId::new("supplier-1"),
@@ -297,6 +299,7 @@ mod provider_tests {
         let (result, calls) = invoke(None, false, true, false).await;
         assert!(matches!(result,Err(Error::BusinessLogicError(ref e)) if e=="供应商能力缺少当前版本"));
         assert_eq!(calls, ["capability"]);
+
         let (result, calls) = invoke(None, false, false, true).await;
         assert!(
             matches!(result,Err(Error::BusinessLogicError(ref e)) if e=="供应商能力已停用、过期或版本已变化")
@@ -330,6 +333,7 @@ mod provider_tests {
             second_disabled: false,
             contracts: vec![contract],
         };
+
         let result = ensure_offering_with_port(
             &port,
             &SupplierAccountId::new("supplier-1"),

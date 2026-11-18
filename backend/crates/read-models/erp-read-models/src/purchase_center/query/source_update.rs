@@ -41,6 +41,7 @@ pub(super) async fn purchase_source_update_view(
     if !outdated && !open {
         return Ok(None);
     }
+
     let ids = [Some(order.sales_order_revision_id.to_string()), current_revision.clone()]
         .into_iter()
         .flatten()
@@ -49,12 +50,14 @@ pub(super) async fn purchase_source_update_view(
     let revision_no = |id: &str| {
         revisions.iter().find(|revision| revision.base.id == id).map(|revision| revision.revision.revision_no)
     };
+
     let mut view = source_update_view(
         latest.as_ref(),
         outdated,
         revision_no(order.sales_order_revision_id.as_ref()),
         current_revision.as_deref().and_then(revision_no),
     );
+
     if open && order.stable.current_revision_id.is_some() && order.purchase_type == PurchaseType::Physical {
         view.return_handling = Some(direct_return_plan(db, order, executor).await?);
     }

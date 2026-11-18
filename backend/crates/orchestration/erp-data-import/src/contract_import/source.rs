@@ -107,6 +107,7 @@ impl ContractImportProcess {
             original.replay(&command, &digest.0)?;
             return Ok((original.into(), false));
         }
+
         if let Some(target) = &command.revision_target {
             self.services
                 .contract_access
@@ -114,6 +115,7 @@ impl ContractImportProcess {
                 .require_with(actor.clone(), &contract::TERMINATE, &target.contract_id, executor)
                 .await?;
         }
+
         let task = ContractImport::new(
             next_id(),
             actor.id().into(),
@@ -125,6 +127,7 @@ impl ContractImportProcess {
                 page_count: digest.1,
             },
         )?;
+
         self.db.file_assets().create(&asset, executor).await?;
         self.db.contract_imports().create(&task, executor).await?;
         Ok((task.into(), true))

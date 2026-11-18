@@ -45,6 +45,7 @@ impl PurchaseOrderService {
             Instant::now(),
             actor.id(),
         )?;
+
         let formal_id = PurchaseOrderSubmissionId::new(formal.base.id.clone());
         for line in draft_lines.iter_mut() {
             *line = PurchaseOrderSubmissionLine::freeze_from_draft(
@@ -77,9 +78,11 @@ impl PurchaseOrderService {
         actor: &AuditActor,
     ) -> Result<(PurchaseOrderSubmission, Vec<PurchaseOrderSubmissionLine>)> {
         let next_no = self.next_submission_no(order).await?;
+
         let mut inputs = SavePurchaseOrderLine::to_line_inputs(requested_lines)?;
         inherit_submission_sources(&mut inputs, draft_lines)?;
         let (gross, net, tax) = compute_request_totals(&inputs)?;
+
         let mut formal = PurchaseOrderSubmission::new(
             PurchaseOrderSubmissionId::new(next_id()),
             PurchaseOrderSubmissionData {
@@ -98,6 +101,7 @@ impl PurchaseOrderService {
             },
         )?;
         formal.submit(Instant::now(), actor.id())?;
+
         let lines = build_submission_lines(&formal.base.id.clone().into(), &inputs)?;
         Ok((formal, lines))
     }

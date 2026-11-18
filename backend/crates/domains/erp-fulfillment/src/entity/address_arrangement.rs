@@ -110,12 +110,14 @@ pub fn validate_arrangement(lines: &mut [ArrangementLine], capacities: &[Arrange
     if lines.iter().map(|line| line.allocations.len()).sum::<usize>() > 100 {
         return Err(Error::from("一次最多登记100条地址分配"));
     }
+
     for line in lines {
         let cap =
             capacities.iter().find(|cap| cap.line_id == line.line_id).ok_or("商品不属于当前收货安排")?;
         if !seen.insert(&line.line_id) {
             return Err(Error::from("商品重复"));
         }
+
         for row in &mut line.allocations {
             row.normalize()?;
         }
@@ -130,6 +132,7 @@ pub fn validate_arrangement(lines: &mut [ArrangementLine], capacities: &[Arrange
             }
         }
         line.allocations = merged.into_values().collect();
+
         if PackingItem::total(line.allocations.iter().map(|row| row.quantity))? > cap.quantity {
             return Err(Error::from("收货地址分配数量超过商品数量"));
         }
@@ -178,6 +181,7 @@ impl AddressPool {
                 left -= taken;
             }
         }
+
         if left > Decimal::ZERO {
             return Err(Error::from("已发货或其他任务已分配的地址数量不能减少，请只调整未发部分"));
         }
@@ -211,6 +215,7 @@ impl AddressPool {
                     left -= taken;
                 }
             }
+
             if left > Decimal::ZERO {
                 destinations
                     .entry("pending-address".into())
@@ -254,6 +259,7 @@ fn add_destination(
         pending_address: false,
         items: vec![],
     });
+
     if let Some(item) = destination.items.iter_mut().find(|item| item.delivery_line_id == line.base.id) {
         item.quantity = PackingItem::total([item.quantity, quantity])?;
     } else {
@@ -299,10 +305,12 @@ impl AddressPool {
             }
             result.push(retained);
         }
+
         for (snapshot, (_, lines)) in result.iter_mut().zip(tasks) {
             let remaining = unassigned_lines(snapshot, lines)?;
             let added = self.assign(&remaining, snapshot.source_version.clone(), key)?;
             merge_destinations(snapshot, added)?;
+
             snapshot.destinations.sort_by(|left, right| left.key.cmp(&right.key));
             for destination in &mut snapshot.destinations {
                 destination.items.sort_by(|left, right| left.delivery_line_id.cmp(&right.delivery_line_id));
@@ -377,6 +385,7 @@ pub fn requires_change_reason(previous: &[ArrangementLine], next: &[ArrangementL
         }
         Ok(result)
     }
+
     let previous = amounts(previous)?;
     let next = amounts(next)?;
     Ok(previous.iter().any(|(key, quantity)| next.get(key).is_none_or(|value| value < quantity)))
@@ -434,6 +443,7 @@ mod tests {
         )
         .unwrap();
         validate_arrangement(&mut plan("3"), &capacity("5")).unwrap();
+
         assert!(validate_arrangement(&mut plan("6"), &capacity("5")).is_err());
         let mut rows = plan("1");
         rows[0].line_id = "other".into();
@@ -452,6 +462,7 @@ mod tests {
             }
             assert!(row.normalize().is_err());
         }
+
         let mut row = address("1");
         row.quantity = "0".parse().unwrap();
         assert!(row.normalize().is_err());
@@ -515,6 +526,7 @@ mod tests {
             }],
         };
         packing.validate(&snapshot, &lines, true).unwrap();
+
         packing.dispatch.iter_mut().find(|row| row.destination_key == "pending-address").unwrap().items[0]
             .quantity = "1".parse().unwrap();
         assert!(packing.validate(&snapshot, &lines, false).is_err());
@@ -525,6 +537,7 @@ mod tests {
         let pending_lines = vec![line("pending", "3")];
         let known = AddressPool(plan("2")).assign(&known_lines, "v1".into(), b"test").unwrap();
         let pending = AddressPool(vec![]).assign(&pending_lines, "v1".into(), b"test").unwrap();
+
         // 待补任务先出现，也不得抢走另一任务已经录好的地址。
         let mut next = plan("3");
         next[0].allocations[0].address = "新增路2号".into();

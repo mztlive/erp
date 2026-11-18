@@ -116,6 +116,7 @@ impl<'a> FundsSummaryRepository<'a> {
         for row in &rows {
             row.required_ids(kind)?;
         }
+
         let entries = self.entries(kind, &rows, executor).await?;
         let accounts = self.accounts(kind, entries.values(), executor).await?;
         assemble_links(kind, rows, &entries, &accounts)

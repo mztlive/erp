@@ -174,6 +174,7 @@ async fn source_portions_keep_only_owned_live_sources_and_never_imply_whole_ledg
     Arc::get_mut(&mut root).unwrap().model.output = QueryOutput::Existence { fields: ["id".into()].into() };
     let (share, whole) = receipt_rules(false);
     let plan = plan(receivable::CUSTOMER_RECEIPT_LIST, share, Some(whole), root, &mut executor).await;
+
     let sales = vec![
         row("own", "user"),
         row("foreign", "other"),
@@ -183,11 +184,14 @@ async fn source_portions_keep_only_owned_live_sources_and_never_imply_whole_ledg
     let roots = vec![
         doc! {"id":"receipt","deleted_at":0,"sales_source":["own","foreign"],"purchase_source":[],"settlement_source":[],"amount":900},
     ];
+
     assert_eq!(execute(roots.clone(), plan.stages(), &sources, &doc! {}), vec![doc! {"id":"receipt"}]);
     assert!(execute(roots, plan.whole_stages().unwrap(), &sources, &doc! {}).is_empty());
+
     let relation = RelationKey::parse("sales_source").unwrap();
     assert_eq!(ids(execute(sales, plan.source_stages(&relation).unwrap(), &sources, &doc! {})), ["own"]);
     assert_eq!(plan.source_model(&relation).unwrap().resource, "sales_order");
+
     executor.next_read();
     assert!(matches!(plan.ensure_current(&mut executor), Err(Error::ValidationError(_))));
 }
@@ -199,11 +203,13 @@ async fn whole_ledger_requires_every_reference_and_keeps_real_zero_allocation_ro
     Arc::get_mut(&mut root).unwrap().model.output = QueryOutput::Existence { fields: ["id".into()].into() };
     let (share, whole) = receipt_rules(true);
     let plan = plan(receivable::CUSTOMER_RECEIPT_LIST, share, Some(whole), root, &mut executor).await;
+
     let roots = [
         ("complete",vec!["own"]), ("foreign",vec!["own","foreign"]),
         ("missing",vec!["own","missing"]), ("zero",vec![]),
     ].into_iter().map(|(id,sales)|doc! {"id":id,"deleted_at":0,"sales_source":sales,"purchase_source":[],"settlement_source":[]}).collect::<Vec<_>>();
     let sources = [("sales_order_rows".into(), vec![row("own", "user"), row("foreign", "other")])].into();
+
     assert_eq!(
         ids(execute(roots.clone(), plan.whole_stages().unwrap(), &sources, &doc! {})),
         ["complete", "zero"]
@@ -226,9 +232,11 @@ async fn valid_source_conditions_do_not_bypass_root_record_integrity() {
         &mut executor,
     )
     .await;
+
     let sales = vec![row("own", "user")];
     let sources = [("sales_order_rows".into(), sales.clone())].into();
     let roots = [false,true].map(|valid|doc! {"id":if valid {"valid"} else {"broken"},"deleted_at":0,"sources_valid":valid,"sales_source":["own"]});
+
     assert_eq!(ids(execute(roots.into(), plan.stages(), &sources, &doc! {})), ["valid"]);
     assert_eq!(
         ids(execute(
@@ -248,6 +256,7 @@ async fn independent_source_plan_uses_its_entry_context_and_reuses_exact_prepara
     Arc::get_mut(&mut child).unwrap().dynamic = true;
     let decorated =
         Arc::new(DecoratedMapping { entry_sensitive: true, ..DecoratedMapping::new(child.clone()) });
+
     let mut root = mapping(&receivable::CUSTOMER_RECEIPT_LIST);
     let mutable = Arc::get_mut(&mut root).unwrap();
     mutable.model.output = QueryOutput::Existence { fields: ["id".into()].into() };
@@ -260,6 +269,7 @@ async fn independent_source_plan_uses_its_entry_context_and_reuses_exact_prepara
     assert_eq!(child.prepares.load(Ordering::SeqCst), 1);
     assert_eq!(plan.dependencies.len(), 1);
     assert_eq!(plan.dependencies[0].context.permission, sales_order::DETAIL);
+
     let rows = vec![
         doc! {"id":"own","owner":"user","deleted_at":0,"entry":"sales_order:detail"},
         doc! {"id":"wrong","owner":"user","deleted_at":0,"entry":"customer_receipt:list"},
@@ -277,6 +287,7 @@ async fn independent_source_plan_uses_its_entry_context_and_reuses_exact_prepara
         )),
         ["own"]
     );
+
     child.revision.store(2, Ordering::SeqCst);
     assert!(matches!(plan.dependencies[0].validate(&mut executor).await, Err(Error::ConflictError(_))));
 }
@@ -303,10 +314,12 @@ async fn static_deadline_needs_no_preparation_and_expires_the_compiled_plan() {
             vec![(sales_order::DETAIL, root)],
         )
         .unwrap();
+
         let plan = service.query(&actor, &sales_order::DETAIL, &mut executor).await.unwrap();
         assert_eq!(plan.proof.valid_until, Some(deadline));
         assert!(plan.dependencies.is_empty());
         service.validate(&plan, &mut executor).await.unwrap();
+
         let plan = service.query(&actor, &sales_order::DETAIL, &mut executor).await.unwrap();
         AccessProof::set_test_time(deadline);
         assert!(matches!(
@@ -329,8 +342,10 @@ async fn dynamic_deadline_and_phase_changes_reject_delivery() {
             .await;
     assert_eq!(plan.proof.valid_until, Some(deadline));
     assert_eq!(root.prepares.load(Ordering::SeqCst), 1);
+
     *root.expires.lock().unwrap() = Some(Instant::from_unix_secs(1));
     assert!(matches!(plan.dependencies[0].validate(&mut executor).await, Err(Error::ConflictError(_))));
+
     executor.next_read();
     assert!(matches!(plan.ensure_current(&mut executor), Err(Error::ValidationError(_))));
 }
@@ -371,6 +386,7 @@ async fn fixed_lookup_preserves_missing_relations_and_is_immutable_after_binding
         )),
         ["own"]
     );
+
     root.fixed.lock().unwrap().clear();
     assert!(matches!(
         compile(&proof, &frozen, root.model(), &mut executor).await,
@@ -395,6 +411,7 @@ fn frozen_lookup_rejects_sort_key_reordering() {
         &ReadExecutor::default(),
     )
     .context;
+
     assert_eq!(original, reordered);
     *root.fixed.lock().unwrap() = vec![reordered];
     assert!(matches!(frozen.records(&context, None), Err(Error::ValidationError(_))));

@@ -124,6 +124,7 @@ impl CustomerCenterReadService {
                     this.customers
                         .require_with(actor.clone(), &customer_permissions::DETAIL, &customer_id, executor)
                         .await?;
+
                     let repository = super::repository::CustomerCenterRepository::new(&this.db);
                     let contracts = this.contracts.resolve(&actor, &contract::LIST, executor).await?;
                     let mut result = repository
@@ -137,6 +138,7 @@ impl CustomerCenterReadService {
                         .await?
                         .ok_or_else(|| Error::NotFound("客户不存在".into()))?;
                     contracts.validate(executor).await?;
+
                     let (sales_context, sales) = SalesAccess::new(this.db.clone(), this.rbac.clone())
                         .resolve(&actor, &sales_order_permissions::LIST, executor)
                         .await?;
@@ -151,12 +153,14 @@ impl CustomerCenterReadService {
                         .await?
                         .ok_or_else(|| Error::NotFound("客户不存在".into()))?;
                     sales_context.validate(executor).await?;
+
                     result.sales_orders = sales_result.sales_orders;
                     result.in_progress_sales_order_count = sales_result.in_progress_sales_order_count;
                     Ok::<_, Error>(result)
                 })
             })
             .await?;
+
         Ok(row.into())
     }
 
@@ -196,6 +200,7 @@ impl CustomerCenterReadService {
                 })
             })
             .await?;
+
         Ok(CustomerCenterReceivableView {
             receivable_balance: row.receivable_balance,
             overdue_amount: row.overdue_amount,

@@ -169,11 +169,13 @@ async fn persist_with_port(
 ) -> Result<Vec<PersistedStockAllocation>> {
     let pending =
         build_pending_allocations(plans, latest_groups, sales_order_id, command_id, request_fingerprint)?;
+
     for (balance_id, total) in &pending.totals {
         if !port.reserve_quantity(balance_id, *total, executor).await? {
             return Err(procurement_quantity_changed());
         }
     }
+
     port.create_reservations(&pending.reservations, executor).await?;
     port.create_entries(&pending.entries, executor).await?;
     Ok(pending.persisted)
@@ -220,6 +222,7 @@ fn build_pending_allocations(
         persisted: Vec::new(),
     };
     let mut sums: HashMap<String, Quantity> = HashMap::new();
+
     for plan in plans {
         let latest = latest_stock_group(latest_groups, &plan.group.balance.base.id)?;
         for requested in &plan.requested_lines {
@@ -237,6 +240,7 @@ fn build_pending_allocations(
             pending.persisted.push(built.4);
         }
     }
+
     let mut totals: Vec<(String, Quantity)> = sums.into_iter().collect();
     totals.sort_by(|left, right| left.0.cmp(&right.0));
     pending.totals = totals;
@@ -277,6 +281,7 @@ fn build_pending_line(
             requested.quantity.to_string(),
         ),
     )?;
+
     let reservation = StockReservation::new(
         StockReservationId::new(next_id()),
         StockReservationData {
@@ -293,6 +298,7 @@ fn build_pending_line(
             status: ReservationStatus::Active,
         },
     )?;
+
     let entry = StockReservationEntry::new(
         StockReservationEntryId::new(next_id()),
         StockReservationEntryData {
@@ -302,6 +308,7 @@ fn build_pending_line(
             source_document_id: command_id.to_string(),
         },
     )?;
+
     let result = ExistingStockReservationResult {
         stock_reservation_id: reservation.base.id.clone(),
         sales_order_line_id: requested.sales_order_line_id.clone(),
@@ -494,7 +501,6 @@ mod tests {
             &mut executor,
         )
         .await;
-
         (result, port.calls.into_inner().unwrap().steps)
     }
     /// 同一余额两行汇总一次 CAS 后批量写预占与分录，保持同一非零大小执行器。
@@ -503,6 +509,7 @@ mod tests {
         let (result, calls) = invoke(None, false).await;
         let persisted = result.unwrap();
         assert_eq!(calls, vec!["reserve", "reservations", "entries"]);
+
         assert_eq!(persisted.len(), 2);
         assert_eq!(persisted[0].result.sales_order_line_id, "line-1");
         assert_eq!(persisted[0].result.quantity, q("2").to_string());
@@ -525,6 +532,7 @@ mod tests {
     #[tokio::test]
     async fn stock_reservation_cas_miss_stops_before_persisting_reservation() {
         let (result, calls) = invoke(None, true).await;
+
         assert!(
             matches!(result,Err(Error::ConflictError(message)) if message=="可分配供给数量已更新，请刷新后重试")
         );

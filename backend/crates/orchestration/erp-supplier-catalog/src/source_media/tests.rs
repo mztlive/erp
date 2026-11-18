@@ -104,6 +104,7 @@ fn archived_selection_uses_only_verified_images_without_network() {
     verified.file_asset_id = Some("asset".into());
     let item = item(Some(vec![source("https://cdn.example/missing"), verified]), None);
     let prepared = PreparedSourceMedia::from_archived(&item);
+
     assert_eq!(prepared.carousel_media.len(), 1);
     assert_eq!(prepared.carousel_media[0].file_asset_id.as_ref(), "asset");
     assert_eq!(prepared.carousel_media[0].sort_order, 1);
@@ -115,6 +116,7 @@ async fn prepares_real_pending_assets_and_keeps_order_and_absent_groups() {
     let (preparer, _, stored) = preparer(vec![png(1), png(2)]);
     let mut item = item(Some(vec![source("https://cdn.example/a"), source("https://cdn.example/b")]), None);
     let prepared = preparer.prepare_source_media(&item, &actor()).await.unwrap();
+
     assert_eq!(stored.0.lock().unwrap().len(), 2);
     assert!(prepared.detail_images.is_none());
     assert_eq!(prepared.carousel_media.iter().map(|media| media.sort_order).collect::<Vec<_>>(), [0, 1]);
@@ -124,6 +126,7 @@ async fn prepares_real_pending_assets_and_keeps_order_and_absent_groups() {
     assert!(
         sources.iter().all(|source| !source.file_asset_id.as_ref().unwrap().starts_with("pending-file:"))
     );
+
     let mut used = HashSet::new();
     for (index, media) in prepared.carousel_media.iter().enumerate() {
         let mut id = media.file_asset_id.clone();
@@ -131,6 +134,7 @@ async fn prepares_real_pending_assets_and_keeps_order_and_absent_groups() {
         assert_eq!(Some(id.as_ref()), sources[index].file_asset_id.as_deref());
     }
     prepared.pending_assets.ensure_all_used(&used).unwrap();
+
     prepared.apply_to(&mut item).unwrap();
     assert_eq!(item.images.as_ref().unwrap()[0].file_asset_id, sources[0].file_asset_id);
 }
@@ -148,6 +152,7 @@ async fn source_disabled_images_are_retained_without_download_or_adoption() {
     active.source_sequence = Some(1);
     let item = item(Some(vec![disabled.clone(), active]), None);
     let prepared = preparer.prepare_source_media(&item, &actor()).await.unwrap();
+
     assert_eq!(transport.count.load(Ordering::Relaxed), 1);
     assert_eq!(prepared.images.as_ref().unwrap()[0], disabled);
     assert_eq!(prepared.images.as_ref().unwrap()[1].source_sequence, Some(1));
@@ -163,10 +168,12 @@ async fn same_url_changed_bytes_changes_fingerprint_and_same_content_reuses_asse
     let mut item = item(Some(vec![source("https://cdn.example/a")]), Some(Vec::new()));
     let first = preparer.prepare_source_media(&item, &actor()).await.unwrap();
     first.apply_to(&mut item).unwrap();
+
     let second = preparer.prepare_source_media(&item, &actor()).await.unwrap();
     assert!(second.pending_assets.is_empty());
     assert_eq!(first.images, second.images);
     assert_eq!(second.detail_images, Some(Vec::new()));
+
     let third = preparer.prepare_source_media(&item, &actor()).await.unwrap();
     assert_ne!(first.images, third.images);
     assert_eq!(transport.count.load(Ordering::Relaxed), 3);
@@ -179,8 +186,10 @@ async fn signed_url_changes_reuse_real_asset_when_content_is_identical() {
     let mut previous = item(Some(vec![source("https://cdn.example/a?signature=old")]), None);
     let first = preparer.prepare_source_media(&previous, &actor()).await.unwrap();
     first.apply_to(&mut previous).unwrap();
+
     let current = item(Some(vec![source("https://cdn.example/a?signature=new")]), None);
     let second = preparer.prepare_observation_media(&current, Some(&previous), &actor()).await.unwrap();
+
     assert!(second.pending_assets.is_empty());
     assert_eq!(stored.0.lock().unwrap().len(), 1);
     let old = &first.images.as_ref().unwrap()[0];
@@ -199,6 +208,7 @@ async fn observation_keeps_failed_image_unverified_and_prepares_other_images() {
         Some(vec![source("https://cdn.example/detail")]),
     );
     let result = preparer.prepare_observation_media(&current, None, &actor()).await.unwrap();
+
     assert_eq!(result.verification_errors.len(), 1);
     assert_eq!(stored.0.lock().unwrap().len(), 2);
     assert_eq!(result.images.as_ref().unwrap().len(), 2);
@@ -206,6 +216,7 @@ async fn observation_keeps_failed_image_unverified_and_prepares_other_images() {
     assert!(result.images.as_ref().unwrap()[1].file_asset_id.is_none());
     assert!(result.images.as_ref().unwrap()[1].content_fingerprint.is_none());
     assert!(result.detail_images.as_ref().unwrap()[0].file_asset_id.is_some());
+
     result.apply_to(&mut current).unwrap();
     assert_eq!(current.name, "name");
     assert_eq!(current.images.as_ref().unwrap()[1].url, "https://cdn.example/b");
@@ -221,8 +232,10 @@ async fn retries_only_unverified_images_and_preserves_completed_assets() {
     let first_id = current.images.as_ref().unwrap()[0].file_asset_id.clone();
     current.images.as_mut().unwrap()[1].file_asset_id = None;
     current.images.as_mut().unwrap()[1].content_fingerprint = None;
+
     let (retry, retry_transport, _) = preparer(vec![png(2)]);
     let result = retry.prepare_pending_media(&current, &actor()).await.unwrap();
+
     assert_eq!(transport.count.load(Ordering::Relaxed), 2);
     assert_eq!(retry_transport.count.load(Ordering::Relaxed), 1);
     assert_eq!(result.images.unwrap()[0].file_asset_id, first_id);
@@ -248,6 +261,7 @@ async fn strict_preparation_failure_discards_prior_uploads_and_preserves_origina
     let (preparer, _, stored) = preparer(vec![png(1), invalid]);
     let current = item(Some(vec![source("https://cdn.example/a"), source("https://cdn.example/b")]), None);
     let outcome = preparer.prepare_source_media(&current, &actor()).await;
+
     assert!(matches!(outcome, Err(Error::ValidationError(_))));
     assert_eq!(stored.0.lock().unwrap().len(), 1);
     let deleted = stored.1.lock().unwrap();
@@ -260,9 +274,11 @@ async fn rollback_cleanup_excludes_reused_assets() {
     let (preparer, _, stored) = preparer(vec![png(1), png(1)]);
     let mut previous = item(Some(vec![source("https://cdn.example/a")]), None);
     preparer.prepare_source_media(&previous, &actor()).await.unwrap().apply_to(&mut previous).unwrap();
+
     let prepared = preparer.prepare_source_media(&previous, &actor()).await.unwrap();
     let rollback: Result<()> = Err(Error::ConflictError("transaction rolled back".into()));
     prepared.cleanup_handle().after_transaction(&rollback).await;
+
     assert_eq!(stored.0.lock().unwrap().len(), 1);
     assert!(stored.1.lock().unwrap().is_empty());
 }
@@ -273,6 +289,7 @@ async fn empty_and_limit_checks_do_not_fetch_images() {
     let result = preparer.prepare_source_media(&item(None, Some(Vec::new())), &actor()).await.unwrap();
     assert!(result.images.is_none());
     assert_eq!(result.detail_images, Some(Vec::new()));
+
     let large = item(Some(vec![source("https://cdn.example/a"); 101]), None);
     assert!(preparer.prepare_source_media(&large, &actor()).await.is_err());
     assert_eq!(transport.count.load(Ordering::Relaxed), 0);
@@ -283,9 +300,11 @@ fn validation_rejects_mime_mismatch_and_oversized_decoded_dimensions() {
     let mut image = png(1);
     image.content_type = Some("image/jpeg".into());
     assert!(super::image::validate(image).is_err());
+
     let mut header_only = png(1);
     header_only.bytes.truncate(16);
     assert!(super::image::validate(header_only).is_err());
+
     let large = DynamicImage::new_rgb8(16385, 1);
     let mut bytes = Cursor::new(Vec::new());
     large.write_to(&mut bytes, ImageFormat::Png).unwrap();

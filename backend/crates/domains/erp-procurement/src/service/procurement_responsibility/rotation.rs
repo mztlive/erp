@@ -31,6 +31,7 @@ impl ProcurementResponsibilityService {
                 .await?
                 .filter(|rule| rule.is_active())
                 .ok_or_else(|| Error::ConflictError("采购责任规则已变化，请重新提交".into()))?;
+
             if rule
                 .strategy
                 .select(&rule.owner_user_ids, current.last_owner_user_id.as_deref())
@@ -39,6 +40,7 @@ impl ProcurementResponsibilityService {
             {
                 return Err(Error::ConflictError("负责人池分配顺序已变化，请重新提交".into()));
             }
+
             advance(&self.db, rule_id, &current, Some(owner), executor).await?;
         }
         Ok(())

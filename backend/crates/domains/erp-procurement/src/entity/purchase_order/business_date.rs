@@ -38,7 +38,6 @@ mod tests {
     #[test]
     fn converts_to_shanghai_calendar_date() {
         let date = business_date_of(Instant::from_unix_secs(1_699_977_600)).unwrap();
-
         assert_eq!(date.to_string(), "2023-11-15");
     }
 }

@@ -263,14 +263,12 @@ mod tests {
     #[test]
     fn optimistic_locking_error_maps_to_conflict() {
         let error = Error::from(persistence_core::Error::OptimisticLockingError);
-
         assert!(matches!(error, Error::ConflictError(_)));
     }
 
     #[test]
     fn duplicate_key_error_maps_to_conflict() {
         let error = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
-
         assert!(matches!(error, Error::ConflictError(_)));
         assert_eq!(error.to_string(), "数据冲突: 数据已存在，请勿重复提交");
     }
@@ -278,21 +276,18 @@ mod tests {
     #[test]
     fn known_party_duplicate_index_maps_to_field_message() {
         let message = duplicate_index_conflict_message(Some("uk_parties_party_no"));
-
         assert_eq!(message, "主体编号已存在");
     }
 
     #[test]
     fn fulfillment_open_task_duplicate_maps_to_refresh_message() {
         let message = duplicate_index_conflict_message(Some("uk_work_items_open_fulfillment_object"));
-
         assert_eq!(message, "该履约对象已存在开放任务，请刷新后重试");
     }
 
     #[test]
     fn customer_acceptance_open_task_duplicate_maps_to_refresh_message() {
         let message = duplicate_index_conflict_message(Some("uk_work_items_open_customer_acceptance_object"));
-
         assert_eq!(message, "该销售单已存在开放客户验收任务，请刷新后重试");
     }
 
@@ -321,7 +316,6 @@ mod tests {
     fn other_database_error_remains_repository_error() {
         let error =
             Error::from(persistence_core::Error::DatabaseError(MongoError::custom("connection failed")));
-
         assert!(matches!(error, Error::RepositoryError(_)));
     }
 
@@ -477,6 +471,7 @@ mod tests {
             (Error::RepositoryError(persistence_core::Error::EntityMetadataOutOfRange("x")), false),
             (Error::Coded(WorkflowErrorCode::ApprovalTaskVersionConflict), false),
         ];
+
         for (error, expected) in cases {
             assert_eq!(error.command_may_have_committed(), expected, "{error:?}");
         }
@@ -489,6 +484,7 @@ mod tests {
             matches!(&error, Error::ReceiptDuplicate(source) if source.duplicate_index_name() == Some("receipt-index"))
         );
         assert!(error.command_may_have_committed());
+
         let code = WorkflowErrorCode::ApprovalAlreadyStarted;
         assert!(
             matches!(Error::from(erp_read_models::Error::Coded(code)), Error::Coded(actual) if actual == code)

@@ -37,6 +37,7 @@ pub(crate) async fn payment_allocations_for_entries(
     allocations.sort_unstable_by(|left, right| {
         (left.allocated_at, &left.base.id).cmp(&(right.allocated_at, &right.base.id))
     });
+
     let views = allocations.iter().map(PaymentAllocationView::from).collect();
     let enriched = enrich_payment_allocation_views_batched_with_executor(db, vec![views], executor).await?;
     Ok(enriched.into_iter().flatten().collect())

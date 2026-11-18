@@ -150,6 +150,7 @@ impl SupplierSettlementSourceEvidenceLine {
         if self.quantity.to_decimal() <= Decimal::ZERO {
             return Err(Error::from("来源证据行数量必须大于零"));
         }
+
         self.source_fact_types.sort_by_key(|value| value.as_str());
         self.source_fact_types.dedup();
         if self.source_fact_types.is_empty() {
@@ -159,6 +160,7 @@ impl SupplierSettlementSourceEvidenceLine {
         if self.evidence_reference_ids.is_empty() {
             return Err(Error::from("来源证据行至少包含一个正式证据引用"));
         }
+
         for (value, field) in [
             (self.order_gross, "订单含税金额"),
             (self.order_net, "订单不含税金额"),
@@ -181,6 +183,7 @@ impl SupplierSettlementSourceEvidenceLine {
         ] {
             ensure_non_negative(value, field)?;
         }
+
         ensure_triple(self.order_gross, self.order_net, self.order_tax, "订单金额")?;
         ensure_triple(self.freight_gross, self.freight_net, self.freight_tax, "运费金额")?;
         ensure_triple(self.service_fee_gross, self.service_fee_net, self.service_fee_tax, "服务费金额")?;
@@ -192,6 +195,7 @@ impl SupplierSettlementSourceEvidenceLine {
             self.supplier_billed_tax,
             "供应商账单金额",
         )?;
+
         let expected_gross = self
             .order_gross
             .checked_add(self.freight_gross)

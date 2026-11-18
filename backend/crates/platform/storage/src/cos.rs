@@ -19,10 +19,12 @@ pub(crate) fn original_image_uri(uri: &str) -> Result<Option<String>> {
     if !is_cos {
         return Ok(None);
     }
+
     let extension = url.path().rsplit('.').next().unwrap_or_default();
     if !["jpg", "jpeg", "png", "gif", "webp"].iter().any(|image| extension.eq_ignore_ascii_case(image)) {
         return Ok(None);
     }
+
     url.query_pairs_mut().append_pair("ci-process", "originImage");
     Ok(Some(url.into()))
 }

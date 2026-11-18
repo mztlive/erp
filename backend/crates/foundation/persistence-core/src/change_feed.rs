@@ -80,12 +80,14 @@ fn pipeline<T: Serialize>(sources: &[ChangeSource<T>]) -> Result<Vec<Document>> 
         topics.push(
             doc! { "case": condition.clone(), "then": { "$literal": serialize_to_bson(&source.topic)? } },
         );
+
         let recipient = source
             .recipient_field
             .map(|field| Bson::String(format!("$fullDocument.{field}")))
             .unwrap_or(Bson::Null);
         recipients.push(doc! { "case": condition, "then": { "$ifNull": [recipient, Bson::Null] } });
     }
+
     Ok(vec![
         doc! { "$match": { "$or": [
             { "ns.coll": { "$in": collections }, "operationType": { "$in": ["insert", "update", "replace", "delete", "drop", "rename"] } },
@@ -112,6 +114,7 @@ mod tests {
         assert_eq!(projection.len(), 4);
         assert_eq!(projection.get_i32("_id").unwrap(), 1);
         assert!(!projection.contains_key("fullDocument"));
+
         let topics = projection.get_document("topic").unwrap().get_document("$switch").unwrap();
         let first = topics.get_array("branches").unwrap()[0].as_document().unwrap();
         assert_eq!(first.get_document("then").unwrap().get_str("$literal").unwrap(), "inbox");
@@ -123,6 +126,7 @@ mod tests {
             deserialize_from_document(doc! { "topic": "tasks", "recipient": null }).unwrap();
         assert_eq!(event.topic.as_deref(), Some("tasks"));
         assert_eq!(event.recipient, None);
+
         let reset: CommittedChange<String> =
             deserialize_from_document(doc! { "topic": null, "recipient": null }).unwrap();
         assert!(reset.topic.is_none());

@@ -45,6 +45,7 @@ impl WarehouseReceiptFacts {
                 add(&mut grouped, row.quantity)?;
             }
         }
+
         if grouped != approved {
             return Err(Error::BusinessLogicError(
                 "原采购行与全部接口执行数量不守恒，不能分配入库收货".into(),

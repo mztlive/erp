@@ -121,16 +121,20 @@ impl SalesOrderCommandProcess {
             .requested_contract_revision_id
             .as_ref()
             .ok_or_else(|| Error::ValidationError("有关同时必须选择合同版本".into()))?;
+
         let contract = access.load_contract(contract_id.as_ref(), executor).await?;
         ensure_contract_customer(&contract.customer_id, customer_id.as_ref())?;
         let revision = self.contract_sales_revision(&contract, revision_id, executor).await?;
+
         let customer = access.load_customer(contract.customer_id.as_ref(), executor).await?;
         if !customer.is_active() {
             return Err(Error::BusinessLogicError("客户已停用，禁止创建新销售单".to_string()));
         }
+
         let settlement_id =
             editable.settlement_party_id.clone().unwrap_or_else(|| contract.settlement_party_id.clone());
         let settlement_name = access.settlement_name(&settlement_id, executor).await?;
+
         let draft = SalesOrderDraftRequest {
             editor_user_id: editable.editor_user_id,
             customer_name: revision.customer_snapshot.customer_name,
@@ -165,6 +169,7 @@ impl SalesOrderCommandProcess {
         if contract.stable.current_revision_id.as_deref() != Some(revision_id.as_ref()) {
             return Err(Error::ConflictError("所选合同版本已不是当前可用版本，请刷新后重新选择".to_string()));
         }
+
         let revision = self
             .db
             .contract_revisions()
@@ -220,6 +225,7 @@ impl SalesOrderCommandProcess {
             .command_access(actor, sales_order_permissions::CREATE)
             .require_submit(req.intent == SalesOrderCreateIntent::Submit);
         let identity = CreationIdentity::new(&mut req, actor)?;
+
         if let Some(order_id) = self
             .replay_sales_order_creation(
                 &identity.audit_id,
@@ -232,6 +238,7 @@ impl SalesOrderCommandProcess {
         {
             return self.command_result(&order_id, actor, &internal::SALES_CREATED_RESULT_READ).await;
         }
+
         let this = self.clone();
         let request = req.clone();
         let reader = access.clone();
@@ -246,6 +253,7 @@ impl SalesOrderCommandProcess {
             })
             .await?;
         let plan = self.prepare_creation_plan(creation, req.intent, &identity, actor).await?;
+
         let detail_id = plan.order().base.id.clone();
         let context = self.creation_write_context(&plan, actor, &access, req.inquiry_source.clone())?;
         let transaction_result = self
@@ -253,6 +261,7 @@ impl SalesOrderCommandProcess {
             .client()
             .with_transaction(move |executor| Box::pin(persist_creation(context, plan, executor)))
             .await;
+
         let detail_id =
             self.creation_result(transaction_result, detail_id, &identity, actor, &access).await?;
         self.command_result(&detail_id, actor, &internal::SALES_CREATED_RESULT_READ).await
@@ -384,6 +393,7 @@ async fn replay_creation_with_executor(
     let SalesCommandResult::Created { sales_order_id } = receipt.result else {
         return Err(Error::Internal("销售建单回执结果种类无效".to_string()));
     };
+
     let order = db
         .sales_orders()
         .find_by_id(sales_order_id.as_ref(), executor)
@@ -424,12 +434,14 @@ mod tests {
             "draft": {"editor_user_id": "actor", "lines": []}
         }))
         .unwrap();
+
         let identity = CreationIdentity::new(&mut request, &actor).unwrap();
         assert_eq!(identity.idempotency_key, "request-key");
         assert_eq!(request.idempotency_key, "request-key");
         assert_eq!(identity.fingerprint, sales_order_create_fingerprint(actor.id(), &request).unwrap());
         let prepared = request.clone();
         assert_eq!(identity.fingerprint, sales_order_create_fingerprint(actor.id(), &prepared).unwrap());
+
         request.idempotency_key = " ".into();
         assert!(matches!(CreationIdentity::new(&mut request, &actor), Err(Error::ValidationError(_))));
     }

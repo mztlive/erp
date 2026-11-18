@@ -107,12 +107,14 @@ impl HistorySnapshot {
     ) -> Result<HistorySnapshot> {
         let orders = load_orders(db, order_filter, scope, executor).await?;
         let revision_gross = load_revision_gross(db, &orders, executor).await?;
+
         let customer_names = load_customer_names(
             db,
             &orders.iter().map(|o| o.customer_id.clone()).collect::<Vec<_>>(),
             executor,
         )
         .await?;
+
         let mut user_ids = BTreeSet::new();
         let mut org_ids = BTreeSet::new();
         for order in &orders {
@@ -126,6 +128,7 @@ impl HistorySnapshot {
         }
         let account_names = names_by_ids(db, &user_ids.into_iter().collect::<Vec<_>>(), executor).await?;
         let org_names = org_names_by_ids(db, &org_ids.into_iter().collect::<Vec<_>>(), executor).await?;
+
         Ok(HistorySnapshot { orders, revision_gross, customer_names, account_names, org_names })
     }
 }
@@ -153,12 +156,14 @@ async fn load_customer_facts(
     if ids.is_empty() {
         return Ok(Vec::new());
     }
+
     ids.sort();
     ids.dedup();
     let typed = ids.iter().map(|id| CustomerAccountId::new(id.clone())).collect::<Vec<_>>();
     let accounts = db.customer_accounts().find_accounts_by_ids(&typed, executor).await?;
     let party_ids: Vec<PartyId> = accounts.iter().map(|a| a.party_id.clone()).collect();
     let names = db.party().current_legal_names_by_party_ids(&party_ids, executor).await?;
+
     let active =
         db.customer_assignments().list_active_for_customers(&ids, today_shanghai(), executor).await?;
     let mut owners: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -167,6 +172,7 @@ async fn load_customer_facts(
     }
     let users = owners.values().flat_map(|ids| ids.iter().cloned()).collect();
     let orgs = owner_orgs(db, users, executor).await?;
+
     Ok(accounts
         .into_iter()
         .map(|account| {
@@ -201,6 +207,7 @@ async fn load_customer_names(
     if customer_ids.is_empty() {
         return Ok(BTreeMap::new());
     }
+
     let mut unique = customer_ids.to_vec();
     unique.sort();
     unique.dedup();
@@ -249,6 +256,7 @@ async fn names_for_current(
         user_ids.insert(order.sales_owner_user_id.clone());
         org_ids.insert(order.business_org_unit_id.clone());
     }
+
     let org_names = org_names_by_ids(db, &org_ids.into_iter().collect::<Vec<_>>(), executor).await?;
     let account_names = names_by_ids(db, &user_ids.into_iter().collect::<Vec<_>>(), executor).await?;
     Ok((org_names, account_names))

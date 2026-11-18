@@ -69,6 +69,7 @@ impl AccessFactsPort for CustomerFacts {
             doc! {"customer_id": {"$in": ids.ids().iter().collect::<Vec<_>>()}, "assignment_role": "OWNER"},
             executor,
         ).await?;
+
         let mut objects = Vec::new();
         for id in ids.ids() {
             let Some(account) = self.0.customer_accounts().find_by_id(id, executor).await? else {
@@ -100,6 +101,7 @@ fn responsibility(
         })
         .map(|row| row.user_id.clone())
         .collect();
+
     let history = rows
         .iter()
         .filter(|row| !row.base.is_deleted() && row.assignment_role == AssignmentRole::Owner)
@@ -176,6 +178,7 @@ mod tests {
         let (owners, history) = responsibility(&references, &context(customer::DETAIL)).unwrap();
         assert_eq!(owners, ["current-a".into(), "current-b".into()].into());
         assert_eq!(history, rows.iter().map(|row| row.user_id.clone()).collect());
+
         let (proposed, _) = responsibility(&references, &context(customer::CREATE)).unwrap();
         assert_eq!(proposed, history);
     }
@@ -203,6 +206,7 @@ mod tests {
 
         use crate::authorization::CustomerMapping;
         use crate::entity::customer::{CustomerAccountData, CustomerAccountStatus};
+
         let owner = assignment("current-owner", "1970-01-01", None);
         let mut legacy = assignment("legacy-helper", "1970-01-01", None);
         legacy.assignment_role = AssignmentRole::Collaborator;
@@ -229,6 +233,7 @@ mod tests {
         );
         let known = facts.collaborators.get().expect("协作事实必须已知，不能以Missing绕过完整性");
         assert!(known.is_empty());
+
         let mapping = CustomerMapping::new();
         assert!(mapping.model().facts.contains(&FactKind::Collaborators));
         let QueryFragment::Match(filter) =
@@ -237,6 +242,7 @@ mod tests {
             panic!("退役协作查询不得读取协作集合");
         };
         let query_allows = filter.get_bool("$expr").unwrap();
+
         let scope = ResolvedScope {
             role_clauses: vec![ScopeClause { collaborative: true, ..Default::default() }],
             user_limit: None,

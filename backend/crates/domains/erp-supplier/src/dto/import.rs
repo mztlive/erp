@@ -147,6 +147,7 @@ impl SupplierImportRow {
         if self.cells.iter().any(|s| s.len() > 4096) {
             return invalid("单元格内容过长");
         }
+
         for (index, label) in [(1, "供应商全称"), (9, "结算方式"), (18, "发票类型")] {
             if self.cell(index).is_empty() {
                 return invalid(&format!("缺少{label}"));
@@ -155,6 +156,7 @@ impl SupplierImportRow {
         if self.company_names().0.is_empty() {
             return invalid("公司签约主体和付款主体均缺失");
         }
+
         for (a, b, message) in
             [(2, 3, "联系人与联系方式必须同时填写"), (4, 5, "银行账号与开户行必须同时填写")]
         {
@@ -162,6 +164,7 @@ impl SupplierImportRow {
                 return invalid(message);
             }
         }
+
         if [13, 14, 16, 17].iter().any(|i| !self.cell(*i).is_empty()) {
             return invalid("附件列含文件引用，请在供应商资料中通过文件上传登记，不能仅导入文件名称");
         }
@@ -195,6 +198,7 @@ impl SupplierImportRow {
         self.validate()?;
         let maintainer_user_id = non_empty_trimmed(maintainer_user_id, "供应商维护人不能为空")
             .map_err(|error| Error::ValidationError(error.to_string()))?;
+
         let (settlement_mode, reconciliation_cycle, payment_term_snapshot) = import_settlement(self.cell(9))?;
         Ok(SaveSupplierProfileRequest {
             idempotency_key: self.command_key(),
@@ -274,6 +278,7 @@ impl SupplierImportRow {
         if (20..23).all(|i| self.cell(i).is_empty()) {
             return Ok(None);
         }
+
         let rating = match self.cell(21) {
             "A" => SupplierRating::A,
             "B" => SupplierRating::B,
@@ -324,6 +329,7 @@ pub fn import_tax_rates(raw: &str) -> Result<Vec<Rate>> {
     if raw.trim().is_empty() {
         return Ok(vec![]);
     }
+
     let mut rates = vec![];
     for part in raw.split(['、', ',', '，', ';', '；']).map(str::trim).filter(|s| !s.is_empty()) {
         let number = part.trim_end_matches(['%', '％']).trim();
@@ -336,6 +342,7 @@ pub fn import_tax_rates(raw: &str) -> Result<Vec<Rate>> {
     if rates.is_empty() {
         return invalid("发票税点格式无效");
     }
+
     crate::entity::supplier::supplier_commercial_profile_revision::normalize_invoice_tax_rates(
         Some(&rates),
         None,
@@ -423,9 +430,11 @@ mod tests {
         assert!(command.contact.is_none());
         assert!(command.rating.is_none());
         assert_eq!(command.maintainer_user_id.as_deref(), Some("buyer-1"));
+
         let mut reverse = row.clone();
         reverse.cells.swap(7, 8);
         assert_eq!(reverse.company_names(), row.company_names());
+
         reverse.cells[1] = " 示例供应商 (上海) 有限公司 ".into();
         reverse.cells[0] = "不同旧编号".into();
         assert_eq!(reverse.command_key(), row.command_key());
@@ -436,6 +445,7 @@ mod tests {
         let command = row.command(PartyId::new("signing"), PartyId::new("payment"), " buyer-2 ").unwrap();
         assert_eq!(command.maintainer_user_id.as_deref(), Some("buyer-2"));
         assert!(command.validate_contract().is_ok());
+
         for missing in ["", " \n\t "] {
             assert!(matches!(
                 row.command(PartyId::new("signing"), PartyId::new("payment"), missing),
@@ -450,11 +460,13 @@ mod tests {
             row.cells[index].clear();
             assert!(row.validate().is_err());
         }
+
         for index in [2, 3, 4, 5, 13, 14, 15, 16, 17] {
             let mut row = complete_row();
             row.cells[index] = "仅填写一项".into();
             assert!(row.validate().is_err());
         }
+
         let mut row = complete_row();
         row.parse_errors.push("公式".into());
         assert!(row.validate().is_err());
@@ -467,11 +479,13 @@ mod tests {
         row.cells[12] = "一年".into();
         assert!(row.qualifications()[0].valid_from.is_none());
         assert!(row.qualifications()[0].valid_to.is_none());
+
         row.cells[12] = "2027-12-31".into();
         assert_eq!(row.qualifications()[0].valid_to.unwrap().to_string(), "2027-12-31");
         row.cells[12] = "2025-12-31".into();
         assert!(row.validate().is_ok());
         assert_eq!(row.qualifications()[0].valid_to.unwrap().to_string(), "2025-12-31");
+
         row.cells[11].clear();
         assert!(row.validate().is_err());
     }

@@ -76,17 +76,19 @@ impl SalesOrderCommandProcess {
         if reason.is_empty() {
             return Err(Error::ValidationError("交接原因不能为空".to_string()));
         }
+
         let target = req.target_owner_user_id.trim().to_string();
         let audit_id = sales_handover_audit_id(actor.id(), id, &idempotency_key);
         let fingerprint = sales_handover_fingerprint(actor.id(), id, &req)?;
         let expected_key_hash = CommandFingerprint::from_parts([idempotency_key.clone()]);
+
         if let Some(existing) =
             self.replay_sales_handover(&audit_id, &fingerprint, &expected_key_hash, id, actor).await?
         {
             return Ok(existing);
         }
-        let access = self.command_access(actor, sales_order_permissions::HANDOVER);
 
+        let access = self.command_access(actor, sales_order_permissions::HANDOVER);
         let transaction_result = handover_transaction(
             self.db.clone(),
             SalesHandoverWrite {
@@ -103,6 +105,7 @@ impl SalesOrderCommandProcess {
             },
         )
         .await;
+
         match transaction_result {
             Ok(Some(view)) => Ok(view),
             Ok(None) => self
@@ -156,10 +159,12 @@ impl SalesOrderCommandProcess {
     ) -> Result<Vec<HandoverCandidateView>> {
         let access = self.command_access(actor, sales_order_permissions::HANDOVER);
         let order = access.current(id, executor).await?;
+
         let authorization = self.authorization.clone();
         let approvers = open_approval_assignees(&self.db, &order.base.id, executor).await?;
         let accounts = self.db.accounts().list_by_kind(AccountKind::Admin, executor).await?;
         let policy = require_process_required(DocumentType::SalesOrder)?;
+
         let mut candidates = Vec::new();
         for account in accounts {
             if account.base.id == order.sales_owner_user_id
@@ -172,11 +177,13 @@ impl SalesOrderCommandProcess {
             {
                 continue;
             }
+
             let Some(qualified) =
                 acceptance_qualification(&self.db, &authorization, &account.base.id, executor).await?
             else {
                 continue;
             };
+
             let mut planned = order.clone();
             planned.sales_owner_user_id = account.base.id.clone();
             if !target_can_read_order(&self.db, &authorization, &account.base.id, &planned, executor).await? {
@@ -188,6 +195,7 @@ impl SalesOrderCommandProcess {
                 account: qualified.login_account,
             });
         }
+
         candidates.sort_by(|left, right| {
             left.display_name
                 .cmp(&right.display_name)
@@ -289,6 +297,7 @@ async fn handover_transaction(
                 {
                     return Ok::<Option<HandoverSalesOrderView>, Error>(Some(view));
                 }
+
                 apply_handover(
                     &db,
                     &input.target_identity,
@@ -323,6 +332,7 @@ async fn apply_handover(
     executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
     let mut order = prepare_handover_order(db, target_identity, id, req, target, actor, executor).await?;
+
     let mut acceptance_tasks = open_acceptance_tasks(db, id, executor).await?;
     let at = Instant::now();
     let mut transferred = Vec::new();
@@ -332,7 +342,9 @@ async fn apply_handover(
         db.work_items().update(task, executor).await?;
         transferred.push(task.base.id.clone());
     }
+
     SalesOrderService::new(db.clone()).persist_order(&mut order, executor).await?;
+
     let audit = SalesCommandEvent::new(
         audit_id.to_string(),
         actor,
@@ -363,9 +375,11 @@ async fn prepare_handover_order(
     if target == order.sales_owner_user_id {
         return Err(Error::BusinessLogicError("目标已是当前负责人，无需交接".into()));
     }
+
     ensure_target_qualified(db, authorization, target, executor).await?;
     ensure_org_enabled(db, req.target_business_org_unit_id.as_deref(), executor).await?;
     ensure_handover_separation(db, id, target, executor).await?;
+
     let next_org = req
         .target_business_org_unit_id
         .as_deref()
@@ -373,6 +387,7 @@ async fn prepare_handover_order(
         .filter(|value| !value.is_empty())
         .map(str::to_string);
     order.handover(target.to_string(), next_org, actor.id())?;
+
     access.require_loaded(actor, &sales_order_permissions::HANDOVER, &order, executor).await?;
     if !target_can_read_order(db, authorization, target, &order, executor).await? {
         return Err(Error::Forbidden("接收人无权读取交接后的销售单，请核对数据范围和个人上限".into()));
@@ -406,6 +421,7 @@ async fn replay_handover_with_executor(
     if !matches!(receipt.result, SalesCommandResult::HandedOver { .. }) {
         return Err(Error::Internal("销售交接回执结果种类无效".to_string()));
     }
+
     let order = access.current(sales_order_id, executor).await?;
     let acceptance_ids = open_acceptance_task_ids(db, &order.base.id, executor).await?;
     let approval_assignees = open_approval_assignees(db, &order.base.id, executor).await?;
@@ -499,6 +515,7 @@ async fn acceptance_qualification(
         subject_source_resource: FactValue::Known(ACCEPTANCE_OBJECT_TYPE.into()),
         ..Default::default()
     };
+
     match authorization
         .require(
             &actor,
@@ -512,6 +529,7 @@ async fn acceptance_qualification(
         Err(IdentityError::Forbidden(_)) => return Ok(None),
         Err(error) => return Err(error.into()),
     }
+
     Ok(authorization.permissions(&actor, &[], executor).await?.map(|qualified| qualified.account().clone()))
 }
 
@@ -675,6 +693,7 @@ mod tests {
         assert_eq!(view.transferred_acceptance_task_ids, vec!["open-acceptance"]);
         assert_eq!(view.kept_approval_task_count, 2);
         assert_eq!(order.stable.created_by, "sales-a");
+
         order.handover("sales-c".into(), None, "manager").unwrap();
         let view = super::handover_view(&order, vec![], 1);
         assert_eq!(view.sales_owner_user_id, "sales-c");
@@ -697,6 +716,7 @@ mod tests {
         assert_eq!(order.business_org_unit_id, "org-a");
         assert!(order.attribution.is_none());
         assert_eq!(order.commercial_status, CommercialStatus::Draft);
+
         order.handover("sales-c".into(), Some("org-b".into()), "manager").unwrap();
         assert_eq!(order.business_org_unit_id, "org-b");
         assert!(order.attribution.is_none());
@@ -710,6 +730,7 @@ mod tests {
         let version = order.base.version;
         assert!(order.handover("sales-b".into(), Some("org-a".into()), "manager").is_err());
         assert!(order.handover("".into(), None, "manager").is_err());
+
         assert_eq!(order.sales_owner_user_id, "sales-b");
         assert_eq!(order.business_org_unit_id, "org-a");
         assert_eq!(order.base.version, version);
@@ -746,6 +767,7 @@ mod tests {
             reason: "交接".into(),
             idempotency_key: "handover".into(),
         };
+
         let error = super::prepare_handover_order(
             &db,
             &unavailable_authorization(),

@@ -52,6 +52,7 @@ impl FulfillmentProcess {
         self.task_identity
             .require(actor, &fulfillment::DELIVERY_DELIVERY_DETAIL, AccessTarget::Operation, executor)
             .await?;
+
         let mut view = self.domain().load_delivery_view(id, executor).await?;
         let delivery = self
             .db
@@ -61,6 +62,7 @@ impl FulfillmentProcess {
             .ok_or_else(|| Error::NotFound("发货单不存在".into()))?;
         let lines =
             self.db.fulfillment().delivery_lines_by_delivery_ids(&[DeliveryId::new(id)], executor).await?;
+
         view.address_snapshot = if delivery.is_editable() {
             address_source(&self.db, &self.sensitive_data, &self.fingerprint_key, &delivery, &lines, executor)
                 .await?
@@ -180,6 +182,7 @@ async fn collect_destinations(
             executor,
         )
         .await?;
+
     let ids = lines
         .iter()
         .filter_map(|line| line.purchase_line_sales_allocation_id.as_ref().map(ToString::to_string))
@@ -189,6 +192,7 @@ async fn collect_destinations(
         allocations.iter().map(|row| row.purchase_order_revision_line_id.to_string()).collect::<Vec<_>>();
     let purchase_lines =
         db.purchase_order_revision_lines().list_active_by_ids(&purchase_ids, executor).await?;
+
     let mut destinations = BTreeMap::new();
     for line in lines {
         if let Some(allocation_id) = &line.purchase_line_sales_allocation_id {
@@ -271,6 +275,7 @@ fn append_destinations(
     if total != line.quantity {
         return Ok(false);
     }
+
     for (recipient, phone, address, quantity) in rows {
         let identity = serde_json::to_string(&(recipient, phone, &address))
             .map_err(|_| Error::Internal("收件资料无法规范化".into()))?;
@@ -361,6 +366,7 @@ mod tests {
             )
             .unwrap()
         );
+
         assert_eq!(result.len(), 1);
         let address = result.values().next().unwrap();
         assert_eq!(address.items.len(), 1);

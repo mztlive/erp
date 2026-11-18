@@ -35,6 +35,7 @@ impl<'a> SupplierRepository<'a> {
         let Some(supplier) = self.account(supplier_id, executor).await? else {
             return Ok(None);
         };
+
         let party_id = supplier.party_id.clone();
         let capabilities = self.list_capabilities(supplier_id, executor).await?;
         let qualifications = self.list_qualifications(supplier_id, executor).await?;
@@ -46,9 +47,11 @@ impl<'a> SupplierRepository<'a> {
             SupplierQualificationCapabilityRepository::new(self.db, SUPPLIER_QUALIFICATION_CAPABILITIES)
                 .list_by_qualification_ids(&qualification_ids, executor)
                 .await?;
+
         let ratings = self.list_ratings_latest_first(supplier_id, executor).await?;
         let commercial_profiles = self.list_commercial_profiles_latest_first(supplier_id, executor).await?;
         let commercial_party_ids = commercial_party_ids(&commercial_profiles);
+
         Ok(Some(SupplierDetailBundle {
             supplier,
             party_id,

@@ -43,6 +43,7 @@ pub fn cooperation_command<T: Serialize>(
     if supplier_id.trim().is_empty() {
         return Err(Error::Forbidden("供应商绑定无效".into()));
     }
+
     let canonical = CommandReceipt::from_payload(
         "sp-cooperation-",
         actor.id(),

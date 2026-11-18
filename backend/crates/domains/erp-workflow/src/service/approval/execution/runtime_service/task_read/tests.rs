@@ -39,6 +39,7 @@ pub(super) fn fixture() -> (RuntimeReadSubject, WorkItem) {
     })
     .unwrap();
     instance.set_current_execution(execution_id.clone(), at).unwrap();
+
     let execution = ApprovalNodeExecution::new_active(NewNodeExecution {
         id: execution_id.clone(),
         process_instance_id: instance_id.clone(),
@@ -53,6 +54,7 @@ pub(super) fn fixture() -> (RuntimeReadSubject, WorkItem) {
         at,
     })
     .unwrap();
+
     let snapshot = ApprovalSubjectSnapshot::new(
         ApprovalSubjectSnapshotId::new("snapshot-1"),
         instance_id,
@@ -71,6 +73,7 @@ pub(super) fn fixture() -> (RuntimeReadSubject, WorkItem) {
         },
     )
     .unwrap();
+
     let task = WorkItem::new_document_approval(
         WorkItemId::new("task-1"),
         DocumentApprovalWorkItemData {
@@ -87,6 +90,7 @@ pub(super) fn fixture() -> (RuntimeReadSubject, WorkItem) {
         Instant::from_unix_secs(10),
     )
     .unwrap();
+
     (
         RuntimeReadSubject {
             instance,
@@ -187,13 +191,16 @@ fn or_sign_tasks_are_readable_for_each_frozen_member_and_duplicate_owners_fail()
     second.base.id = "task-2".into();
     second.owner_user_id = Some("owner-2".into());
     let tasks = vec![first.clone(), second.clone()];
+
     assert!(task_chain_matches_subject(&first, &subject, &tasks).unwrap());
     assert!(task_chain_matches_subject(&second, &subject, &tasks).unwrap());
+
     let mut corrupt = second.clone();
     corrupt.owner_user_id = Some("outsider".into());
     assert!(!task_chain_matches_subject(&corrupt, &subject, &[first.clone(), corrupt.clone()]).unwrap());
     corrupt.owner_user_id = first.owner_user_id.clone();
     assert!(!task_chain_matches_subject(&first, &subject, &[first.clone(), corrupt]).unwrap());
+
     let ended = WorkItem::end_all_for_approval_execution(
         tasks,
         &ApprovalNodeExecutionId::new("execution-1"),

@@ -78,11 +78,13 @@ async fn post_stock_adjustment_write(
         .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
     validate_post_runtime_context(db, context, actor, &adjustment, executor).await?;
     adjustment.ensure_approval_postable().map_err(|error| Error::ConflictError(error.to_string()))?;
+
     let lines = db
         .inventory()
         .adjustment_lines_by_adjustment_ids(std::slice::from_ref(&adjustment_id), executor)
         .await?;
     erp_inventory::apply_posted_adjustment(db, &mut adjustment, &lines, actor, executor).await?;
+
     let audit =
         actor.clone().resource_log("stock_adjustment.post", "stock_adjustment", adjustment_id.to_string())?;
     persist_log(db, &audit, executor).await?;
@@ -113,6 +115,7 @@ async fn validate_post_runtime_context(
     if subject_version != adjustment.approval_subject_version {
         return Err(Error::ConflictError("库存调整审批主题版本已变化".to_string()));
     }
+
     let execution_id = context
         .approval_node_execution_id()
         .filter(|value| !value.trim().is_empty())
@@ -121,9 +124,11 @@ async fn validate_post_runtime_context(
         .work_item_id()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| Error::ConflictError("库存调整最终动作缺少审批任务".to_string()))?;
+
     let snapshot =
         load_post_runtime_snapshot(db, context, actor, adjustment, subject_version, execution_id, executor)
             .await?;
+
     let task = db
         .work_items()
         .find_document_approval_by_id(work_item_id, executor)
@@ -164,6 +169,7 @@ async fn load_post_runtime_snapshot(
         .ok_or_else(|| Error::ConflictError("库存调整审批实例不存在".to_string()))?;
     let binding = load_approval_binding(db, &adjustment.base.id, executor).await?;
     let binding = require_frozen_binding(binding.as_ref())?;
+
     let snapshot = db
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, executor)
@@ -176,6 +182,7 @@ async fn load_post_runtime_snapshot(
             subject_version,
         )
         .map_err(|_| Error::ConflictError("库存调整审批冻结快照已变化".to_string()))?;
+
     let current_execution = instance.current_node_execution_id.as_ref().map(ToString::to_string);
     if instance.status != ApprovalProcessInstanceStatus::Running
         || instance.process_kind != process_kind_of(DocumentType::StockAdjustment)
@@ -188,6 +195,7 @@ async fn load_post_runtime_snapshot(
     {
         return Err(Error::ConflictError("库存调整审批实例上下文已变化".to_string()));
     }
+
     let execution = db
         .bpm_workflow()
         .find_execution_by_id(&ApprovalNodeExecutionId::new(execution_id), executor)

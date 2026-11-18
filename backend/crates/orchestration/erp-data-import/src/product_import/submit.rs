@@ -48,12 +48,14 @@ impl ProductImportProcess {
         actor: &AuditActor,
     ) -> Result<ProductImportJobView> {
         self.prepare_attachment_upload(actor).await?;
+
         let shared_bytes = Arc::new(bytes);
         let for_parse = shared_bytes.clone();
         let parsed = tokio::task::spawn_blocking(move || parse_product_quote_xlsx(&for_parse))
             .await
             .map_err(|_| Error::Internal("解析导入文件失败".into()))??;
         parsed.ensure_supply_template()?;
+
         let file_asset = FileAsset::new(FileAssetId::new(next_id()), registration.into_data(actor.id())?)?;
         self.create_job_from_parsed(file_asset, parsed, file_name, request_id, actor, shared_bytes).await
     }
@@ -86,6 +88,7 @@ impl ProductImportProcess {
         xlsx: Arc<Vec<u8>>,
     ) -> Result<ProductImportJobView> {
         let (job, items) = import_job(&parsed, &file_asset, &request_id, actor)?;
+
         let built = build_row_manifest(&self.storage, &self.secret, &request_id, &parsed, xlsx).await?;
         let (input, manifest_key) = match prepare_row_manifest(&self.storage, &built.manifest).await {
             Ok(prepared) => prepared,
@@ -94,6 +97,7 @@ impl ProductImportProcess {
                 return Err(error);
             },
         };
+
         let mut manifest_keys = built.uploaded_object_keys;
         manifest_keys.extend(manifest_key);
         match self.persist_job(file_asset, job, items, file_name, input, actor).await {
@@ -141,6 +145,7 @@ impl ProductImportProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     authorize(&authorization, &operator, executor).await?;
+
                     db.file_assets().create(&file_for_tx, executor).await.map_err(registration_error)?;
                     let registration = db
                         .bulk_job()
@@ -158,6 +163,7 @@ impl ProductImportProcess {
                 })
             })
             .await;
+
         match registration {
             Ok(BackgroundJobRegistration::Created) => Ok(job_view(&job, Some(file_name))),
             Ok(BackgroundJobRegistration::ReplaySame(existing)) => Ok(job_view(&existing, Some(file_name))),

@@ -218,6 +218,7 @@ impl PartyBankAccount {
             normalize_required_text(data.bank_name, "银行名称不能为空", BANK_NAME_MAX_LEN, "银行名称过长")?;
         let bank_branch_name =
             normalize_optional_text(data.bank_branch_name, "支行名称", BANK_BRANCH_NAME_MAX_LEN)?;
+
         let account_number =
             normalize_required_text(data.account_number, "账号不能为空", ACCOUNT_NUMBER_MAX_LEN, "账号过长")?;
         let normalized_account_number = normalize_account_number(&account_number);
@@ -418,15 +419,18 @@ mod tests {
         let mut account =
             PartyBankAccount::new(PartyBankAccountId::new("bank"), data, KEY, "creator").unwrap();
         assert_eq!(account.bank_routing_number.as_deref(), Some("001234567890"));
+
         let fingerprint = account.account_number_query_hmac.clone();
         for invalid in ["123", "12345678901A", "1234567890123", "１２３４５６７８９０１２"] {
             assert!(account.set_routing_number(Some(invalid.into()), "editor").is_err());
             assert_eq!(account.bank_routing_number.as_deref(), Some("001234567890"));
             assert_eq!(account.updated_by, "creator");
         }
+
         account.set_routing_number(Some("123456789012".into()), "editor").unwrap();
         assert_eq!(account.account_number_query_hmac, fingerprint);
         assert_eq!(account.updated_by, "editor");
+
         account.set_routing_number(Some(" ".into()), "editor").unwrap();
         assert_eq!(account.bank_routing_number, None);
     }
@@ -440,6 +444,7 @@ mod tests {
         json.as_object_mut().unwrap().remove("bank_routing_number");
         let account: PartyBankAccount = serde_json::from_value(json).unwrap();
         assert_eq!(account.bank_routing_number, None);
+
         let mut invalid = bank_account_data();
         invalid.bank_routing_number = Some("invalid".into());
         assert!(PartyBankAccount::new(PartyBankAccountId::new("bank"), invalid, KEY, "creator").is_err());
@@ -505,6 +510,7 @@ mod tests {
             )
             .unwrap();
         assert!(!account.is_active());
+
         account
             .update(
                 PartyBankAccountUpdate {

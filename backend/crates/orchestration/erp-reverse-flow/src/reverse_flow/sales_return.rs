@@ -222,9 +222,9 @@ async fn persist_created_sales_return_case(
 ) -> Result<SalesReturnCaseView> {
     let audit =
         actor.clone().resource_log("sales_return_case.create", "sales_return_case", case.base.id.clone())?;
+
     let db = db.clone();
     let rbac = rbac.clone();
-
     let client = db.client().clone();
     client
         .with_transaction(move |executor| {
@@ -237,6 +237,7 @@ async fn persist_created_sales_return_case(
                         executor,
                     )
                     .await?;
+
                 let mut creation = MongoCreation {
                     db: &db,
                     rbac: &rbac,
@@ -246,6 +247,7 @@ async fn persist_created_sales_return_case(
                     audit: &audit,
                 };
                 persist_creation(&mut creation, executor).await?;
+
                 rbac.identity
                     .require(
                         &actor,

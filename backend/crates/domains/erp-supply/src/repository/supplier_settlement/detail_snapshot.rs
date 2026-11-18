@@ -76,12 +76,14 @@ impl<'a> SupplierSettlementRepository<'a> {
         let Some(statement) = statement else {
             return Ok(None);
         };
+
         let items: Vec<SupplierSettlementItem> = SupplierSettlementItemRepository::new(
             self.db,
             <mongodb::Database as SupplierSettlementExt>::SUPPLIER_SETTLEMENT_ITEMS,
         )
         .find_many_sorted(doc! { "statement_id": statement_id }, doc! { "created_at": 1, "id": 1 }, executor)
         .await?;
+
         let item_ids = items.iter().map(|item| item.base.id.clone()).collect::<Vec<_>>();
         let differences: Vec<SupplierSettlementDifference> = if item_ids.is_empty() {
             Vec::new()
@@ -97,6 +99,7 @@ impl<'a> SupplierSettlementRepository<'a> {
             )
             .await?
         };
+
         let difference_ids =
             differences.iter().map(|difference| difference.base.id.clone()).collect::<Vec<_>>();
         let evidence: Vec<SupplierSettlementDifferenceEvidence> = if difference_ids.is_empty() {
@@ -116,6 +119,7 @@ impl<'a> SupplierSettlementRepository<'a> {
             )
             .await?
         };
+
         Ok(Some(SupplierSettlementStatementDetailSnapshot {
             statement,
             items,

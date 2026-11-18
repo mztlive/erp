@@ -170,6 +170,7 @@ impl QueryFilter for ReceivableAccountFilter {
             }
             filter.insert("$or", alternatives);
         }
+
         if let Some(account_id) = &self.account_id {
             filter.insert("id", account_id.to_string());
         }
@@ -185,6 +186,7 @@ impl QueryFilter for ReceivableAccountFilter {
         if let Some(sales_order_id) = &self.sales_order_id {
             filter.insert("sales_order_id", sales_order_id.to_string());
         }
+
         if let Some(ids) = &self.keyword_ids {
             let condition = doc! { "id": { "$in": ids } };
             return doc! { "$and": [filter, condition] };

@@ -79,10 +79,12 @@ mod tests {
                 .await,
             Err(Error::Forbidden(_))
         ));
+
         service(&[file_asset::UPLOAD])
             .upload_qualification(&actor(), &mut SnapshotExecutor::default())
             .await
             .unwrap();
+
         assert!(matches!(
             service(&[file_asset::UPLOAD]).upload_qualification(&actor(), &mut ReadExecutor::default()).await,
             Err(Error::ValidationError(_))

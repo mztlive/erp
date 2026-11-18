@@ -56,9 +56,11 @@ impl SupplierOfferingService {
             request.try_into_offering_data(maintainer, org)?,
             actor.id(),
         )?;
+
         self.access().require_create(actor, &offering, executor).await?;
         self.ensure_identity_available(&offering, executor).await?;
         self.ensure_source_connection(&offering, executor).await?;
+
         self.assign_requested_template(
             &mut offering,
             request.delivery_template_id.as_deref(),

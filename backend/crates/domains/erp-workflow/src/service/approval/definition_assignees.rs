@@ -77,11 +77,13 @@ impl ApprovalDefinitionService {
             executor,
         )
         .await?;
+
         let accounts = self
             .identity
             .directory()
             .active_backoffice(query.search.as_deref(), query.limit, executor)
             .await?;
+
         let mut items = Vec::new();
         for account in accounts {
             if !query.copies {

@@ -225,11 +225,13 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     {
         return vec![];
     }
+
     let mut required =
         READ_PERMISSIONS.iter().map(|(_, _, permission)| permission.clone()).collect::<Vec<_>>();
     required.extend(EXECUTION.iter().flat_map(|(_, _, required)| required.iter().cloned()));
     required.push(work_item::DETAIL);
     required.extend_from_slice(DECISION);
+
     if [work_item::DETAIL, internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT].contains(permission) {
         required.extend(super::approvals::qualifications(&internal::APPROVAL_MANAGEMENT_READ));
     }
@@ -299,6 +301,7 @@ fn candidate_requirements(object: &ObjectFacts) -> Result<&'static [Permission]>
     {
         return Err(Error::ValidationError("任务资格候选只能提供服务端种类和来源类型".into()));
     }
+
     let kind = object.subject_type.get()?.as_str();
     let source = object.subject_source_resource.get()?.as_str();
     requirements(kind, source)?;
@@ -319,6 +322,7 @@ impl AuthorizationService {
         let required = candidate_requirements(candidate)?;
         let boundary =
             executor.boundary().ok_or_else(|| Error::ValidationError("任务资格检查缺少原事务边界".into()))?;
+
         let qualified = self
             .permissions(actor, required, executor)
             .await?
@@ -326,6 +330,7 @@ impl AuthorizationService {
         if !required.is_empty() && !qualified.same_role(required) {
             return Err(Error::Forbidden("目标账号不具备同角色完整任务执行资格".into()));
         }
+
         if !boundary.is_current(executor) {
             return Err(Error::ValidationError("任务资格检查跨越执行阶段".into()));
         }
@@ -348,6 +353,7 @@ impl AuthorizationService {
         if ![internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT].contains(&proof.context.permission) {
             return Ok(SourceEvidence::default());
         }
+
         let mut sources = SourceEvidence::default();
         for object in facts.roots() {
             if object.subject_type.get()? == "DOCUMENT_APPROVAL" {
@@ -355,6 +361,7 @@ impl AuthorizationService {
                 sources.extend(self.approval_task_sources(proof, object, executor).await?);
                 continue;
             }
+
             if !execution_qualified(
                 object.subject_type.get()?,
                 object.subject_source_resource.get()?,
@@ -362,6 +369,7 @@ impl AuthorizationService {
             )? {
                 return Err(Error::Forbidden("当前账号不具备同角色完整任务办理资格".into()));
             }
+
             if let Some(resource) = order_resource(object.subject_source_resource.get()?) {
                 sources.proofs.push(self.work_item_order(proof, facts, object, resource, executor).await?);
             }
@@ -411,6 +419,7 @@ impl AuthorizationService {
             "cooperation" => [internal::PORTAL_MATERIAL_READ, internal::PORTAL_MATERIAL_REVIEW_COOPERATION],
             _ => return Err(Error::ValidationError("任务的真实供应商申请种类未登记".into())),
         };
+
         let mut sources = Vec::new();
         for permission in permissions {
             if !rules::qualified(&permission, &proof.qualified) {

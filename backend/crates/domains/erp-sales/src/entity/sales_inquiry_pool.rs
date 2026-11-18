@@ -153,6 +153,7 @@ impl<'a> PoolSelectionLayout<'a> {
         {
             return Err(Error::ValidationError(INVALID_POOL_HEADERS.into()));
         }
+
         let mapping = REQUIREMENT_HEADERS.map(|name| headers.iter().position(|header| *header == name));
         Ok(Self { headers, mapping })
     }

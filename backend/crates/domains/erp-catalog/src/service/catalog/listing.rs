@@ -77,6 +77,7 @@ impl CatalogService {
         if change.changed.is_empty() {
             return Ok(change.view);
         }
+
         self.write_product_listing_change(change, req.listing_status, actor, executor).await
     }
 
@@ -125,6 +126,7 @@ impl CatalogService {
         if !changed {
             return Ok(sku.into());
         }
+
         let sku = self.write_sku_listing_change(sku, req.listing_status, actor, executor).await?;
         Ok(sku.into())
     }
@@ -145,12 +147,14 @@ impl CatalogService {
         if target.is_listed() && !product.is_active() {
             return Err(Error::BusinessLogicError("停用的商品不能上架".to_string()));
         }
+
         let product_id = ProductId::new(product.base.id);
         let skus = self.db.skus().find_by_product_ids(std::slice::from_ref(&product_id), executor).await?;
         let active_count = skus.iter().filter(|sku| sku.is_active()).count();
         if target.is_listed() && active_count == 0 {
             return Err(Error::BusinessLogicError("商品下没有可上架的 SKU".to_string()));
         }
+
         let changed = changed_skus(skus, target, actor.id())?;
         let view = product_listing_view(product_id.as_ref(), active_count, target);
         Ok(ProductListingChange { product_id, changed, view })
@@ -177,7 +181,6 @@ impl CatalogService {
             self.db.skus().update(sku, executor).await?;
         }
         self.audit.persist(&audit, executor).await?;
-
         Ok(view)
     }
 
@@ -194,11 +197,13 @@ impl CatalogService {
         let Some(mut sku) = self.db.skus().find_by_id(sku_id, executor).await? else {
             return Err(Error::NotFound("SKU 不存在".to_string()));
         };
+
         let product = self.authorize_sku_listing_change(&sku, version, actor, executor).await?;
         product.ensure_has_responsibility()?;
         if target.is_listed() && !product.is_active() {
             return Err(Error::BusinessLogicError("停用商品下的 SKU 不能上架".to_string()));
         }
+
         let changed = sku.set_listing_status(target, actor.id())?;
         Ok((sku, changed))
     }
@@ -377,6 +382,7 @@ fn product_listing_views_from_summaries(
             listing_view_from_counts(&summary.product_id, summary.listed_sku_count, summary.sku_count),
         );
     }
+
     for product_id in product_ids {
         views
             .entry(product_id.to_string())
@@ -467,6 +473,7 @@ mod authorization_tests {
             actor.id(),
         )
         .unwrap();
+
         for version in [sku.base.version, sku.base.version + 1] {
             denied(
                 service

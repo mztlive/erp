@@ -57,8 +57,10 @@ fn final_submission_images_support_common_fallback_and_require_each_sku_source()
     let mut input = input();
     input.skus.push(DraftSku { row_id: "row-2".into(), image_asset_id: None, ..input.skus[0].clone() });
     assert!(input.ensure_submission_images().is_ok(), "公共图片可供所有 SKU 共同引用");
+
     input.image_asset_ids.clear();
     assert!(matches!(input.ensure_submission_images(), Err(Error::ValidationError(_))));
+
     input.skus[1].image_asset_id = Some("sku-2-image".into());
     assert!(input.ensure_submission_images().is_ok(), "逐 SKU 图片完整时不要求公共图");
     input.skus[1].image_asset_id = Some(" ".into());
@@ -218,6 +220,7 @@ fn supplier_confirmed_packaging_and_raw_quote_basis_are_preserved_without_conver
     let original = serde_json::to_value(&input).unwrap();
     assert!(input.validate_submission().is_ok());
     assert!(input.ensure_normalized(&normalized()).is_ok());
+
     let mut draft =
         NewProductDraft::new("draft-1".into(), "supplier-1".into(), "supplier-user".into(), input).unwrap();
     draft.submit(1, "submission-1".into(), "task-1".into(), "supplier-user".into(), Instant::now()).unwrap();
@@ -239,6 +242,7 @@ fn unconfirmed_packaging_can_be_saved_but_cannot_be_submitted_or_mapped() {
         NewProductDraft::new("draft-1".into(), "supplier-1".into(), "supplier-user".into(), input.clone())
             .unwrap();
     let original = snapshot(&draft);
+
     assert!(input.validate_submission().is_err());
     assert!(input.ensure_normalized(&normalized()).is_err());
     assert!(
@@ -256,12 +260,14 @@ fn packaging_requires_positive_count_and_the_exact_submitted_base_unit() {
         input.skus[0].packaging.as_mut().unwrap().units_per_package = Quantity::from_str(count).unwrap();
         assert!(matches!(input.validate_submission(), Err(Error::ValidationError(_))));
     }
+
     let mut input = packaged_input();
     input.skus[0].packaging.as_mut().unwrap().base_unit = "件".into();
     assert!(input.validate_submission().is_err());
     let mut input = packaged_input();
     input.skus[0].packaging.as_mut().unwrap().base_unit = " 瓶 ".into();
     assert!(input.validate_submission().is_err());
+
     let mut input = packaged_input();
     input.skus[0].packaging.as_mut().unwrap().units_per_package = Quantity::from_str("0.000001").unwrap();
     assert!(input.validate_submission().is_ok());
@@ -291,9 +297,11 @@ fn packaging_and_quote_basis_text_must_be_present_within_limits() {
     let mut changed = packaged_input();
     changed.skus[0].quote_basis = Some("长".repeat(513));
     cases.push(changed);
+
     for input in cases {
         assert!(input.validate_submission().is_err());
     }
+
     let mut input = packaged_input();
     input.skus[0].packaging.as_mut().unwrap().original_unit_price = "供应商原报价待供给Port校验".into();
     assert!(input.validate_submission().is_ok(), "商品领域不解析原报价数值或金额规则");
@@ -308,20 +316,24 @@ fn packaging_changes_require_supplier_resubmission_and_preserve_old_evidence() {
     draft.map(1, normalized()).unwrap();
     let original = serde_json::to_value(&draft.submissions[0].input).unwrap();
     assert_eq!(serde_json::to_value(draft.submitted().unwrap()).unwrap(), original);
+
     let mut changed = packaged_input();
     changed.skus[0].packaging.as_mut().unwrap().units_per_package = Quantity::from_str("6").unwrap();
     changed.skus[0].packaging.as_mut().unwrap().original_unit_price = "60.00".into();
     changed.skus[0].quote_basis = Some("60元每箱，每箱6瓶；重新确认".into());
     assert!(draft.update(1, changed.clone()).is_err());
+
     draft.return_to_supplier(1, "submission-1", "重新核对包装".into(), "buyer", Instant::now()).unwrap();
     draft.update(1, changed).unwrap();
     draft.submit(1, "submission-2".into(), "task-2".into(), "supplier-user".into(), Instant::now()).unwrap();
+
     assert!(draft.normalized_product.is_none());
     assert_eq!(serde_json::to_value(&draft.submissions[0].input).unwrap(), original);
     assert_eq!(
         draft.submissions[0].input.skus[0].packaging.as_ref().unwrap().original_unit_price,
         " 120.00 "
     );
+
     assert_eq!(draft.submitted().unwrap().skus[0].packaging.as_ref().unwrap().original_unit_price, "60.00");
     assert_eq!(
         draft.submitted().unwrap().skus[0].quote_basis.as_deref(),
@@ -337,6 +349,7 @@ fn internal_mapping_cannot_carry_packaging_or_quote_changes() {
     let mut encoded = serde_json::to_value(normalized()).unwrap();
     encoded["sku_mappings"][0]["quote_basis"] = json!("后台静默换算");
     assert!(serde_json::from_value::<NormalizedProduct>(encoded).is_err());
+
     let mut draft =
         NewProductDraft::new("draft-1".into(), "supplier-1".into(), "supplier-user".into(), packaged_input())
             .unwrap();
@@ -433,6 +446,7 @@ fn submission_rejects_missing_fields_and_nonobject_terms() {
     let mut changed = input();
     changed.skus.clear();
     cases.push(changed);
+
     for input in cases {
         assert!(matches!(input.validate_submission(), Err(Error::ValidationError(_))));
     }
@@ -446,10 +460,13 @@ fn submission_rejects_duplicate_rows_specifications_and_ordering_codes() {
     second.ordering_code = "SUP-2".into();
     original.skus.push(second);
     assert!(original.validate_submission().is_err(), "原始规格规范化后仍重复");
+
     original.skus[1].spec_entries[0].attribute_value_code = "蓝色".into();
     assert!(original.validate_submission().is_ok());
+
     original.skus[1].ordering_code = "SUP-1".into();
     assert!(original.validate_submission().is_err(), "订货编码按trim后判重");
+
     original.skus[1].ordering_code = "SUP-2".into();
     original.skus[1].row_id = "row-1".into();
     assert!(original.validate_submission().is_err());
@@ -544,6 +561,7 @@ fn mapping_requires_exact_rows_unique_targets_and_valid_target_versions() {
     changed.sku_mappings[0].target_sku =
         Some(ExistingSkuRef { sku_id: "sku-1".into(), revision_id: "revision-1".into(), version: 0 });
     assert!(input.ensure_normalized(&changed).is_err());
+
     let mut input = input;
     let mut second = input.skus[0].clone();
     second.row_id = "row-2".into();
@@ -569,6 +587,7 @@ fn mapping_cannot_replace_selected_dictionary_or_its_version() {
     input.skus[0].unit.selected_id = Some("unit-1".into());
     input.skus[0].unit.expected_version = Some(2);
     assert!(input.ensure_normalized(&normalized()).is_ok());
+
     let mut changed = normalized();
     changed.brand_version = 4;
     assert!(matches!(input.ensure_normalized(&changed), Err(Error::ConflictError(_))));
@@ -587,14 +606,17 @@ fn internal_mapping_is_separate_pending_data_and_new_submission_requires_recheck
     draft.map(1, normalized()).unwrap();
     assert_eq!(draft.normalized_product.as_ref().unwrap().name, "保温杯");
     assert_eq!(serde_json::to_value(draft.submitted().unwrap()).unwrap(), frozen);
+
     draft.return_to_supplier(1, "submission-1", "补充资料".into(), "buyer", Instant::now()).unwrap();
     assert!(draft.submissions[0].decision.as_ref().unwrap().normalized_product.is_some());
     assert!(draft.map(1, normalized()).is_err());
+
     draft.update(1, input()).unwrap();
     assert!(draft.normalized_product.is_none());
     draft.submit(1, "submission-2".into(), "task-2".into(), "supplier-user".into(), Instant::now()).unwrap();
     assert!(draft.normalized_product.is_none());
     assert!(draft.submissions[0].decision.as_ref().unwrap().normalized_product.is_some());
+
     let original = snapshot(&draft);
     assert!(draft.map(2, normalized()).is_err());
     let mut invalid = normalized();
@@ -623,6 +645,7 @@ fn status_matrix_only_allows_editable_submit_and_pending_decisions() {
             editable,
             "{status:?}提交"
         );
+
         assert_eq!(
             original.clone().withdraw(1, "submission-1", "supplier-user", Instant::now()).is_ok(),
             status == DraftStatus::Pending
@@ -652,6 +675,7 @@ fn return_edit_resubmit_retains_original_input_decision_and_task_history() {
     let at = Instant::from_unix_secs(1_700_000_100);
     draft.return_to_supplier(1, "submission-1", "  包装说明不足  ".into(), "buyer", at).unwrap();
     assert!(draft.task_id.is_none());
+
     let mut changed = input();
     changed.model = Some("M-2".into());
     draft.update(1, changed).unwrap();
@@ -664,6 +688,7 @@ fn return_edit_resubmit_retains_original_input_decision_and_task_history() {
             Instant::from_unix_secs(1_700_000_200),
         )
         .unwrap();
+
     assert_eq!(draft.submissions.len(), 2);
     assert_eq!(serde_json::to_value(&draft.submissions[0].input).unwrap(), original);
     assert_eq!(draft.submissions[0].task_id, "task-1");
@@ -671,6 +696,7 @@ fn return_edit_resubmit_retains_original_input_decision_and_task_history() {
     assert_eq!(decision.reason.as_deref(), Some("包装说明不足"));
     assert_eq!(decision.decided_by, "buyer");
     assert_eq!(decision.decided_at, at);
+
     assert!(draft.submissions[1].decision.is_none());
     assert_eq!(draft.submitted().unwrap().model.as_deref(), Some("M-2"));
     assert_eq!(draft.current_submission_id.as_deref(), Some("submission-2"));
@@ -717,12 +743,15 @@ fn effective_records_supplier_and_internal_facts_separately_and_keeps_new_sku_un
     let at = Instant::from_unix_secs(1_700_000_100);
     let mut command = effective_command(1, normalized(), result());
     command.reason = format!("\u{3000}{}\u{3000}", command.reason);
+
     draft.mark_effective("submission-1", command, at).unwrap();
+
     assert_eq!(draft.status, DraftStatus::Effective);
     assert!(draft.task_id.is_none());
     assert_eq!(serde_json::to_value(draft.frozen_input.as_ref().unwrap()).unwrap(), raw);
     assert_eq!(draft.submissions[0].submitted_by, "supplier-user");
     assert_eq!(draft.submissions[0].input.skus[0].reported_at, reported_at);
+
     let decision = draft.submissions[0].decision.as_ref().unwrap();
     assert_eq!(decision.decided_by, "buyer");
     assert_eq!(decision.decided_at, at);
@@ -730,6 +759,7 @@ fn effective_records_supplier_and_internal_facts_separately_and_keeps_new_sku_un
     assert_eq!(decision.normalized_product.as_ref().unwrap().name, "保温杯");
     assert_eq!(draft.result.as_ref().unwrap().skus[0].listing_status, ListingStatus::Unlisted);
     assert_eq!(decision.result.as_ref().unwrap().skus[0].offering_id.as_deref(), Some("offering-1"));
+
     let restored: NewProductDraft = serde_json::from_value(snapshot(&draft)).unwrap();
     assert_eq!(snapshot(&restored), snapshot(&draft));
 }
@@ -770,6 +800,7 @@ fn incomplete_foreign_reused_or_listed_new_sku_results_cannot_mark_effective() {
     let mut changed = result();
     changed.skus[0].sku_created = false;
     cases.push(changed);
+
     for result in cases {
         let mut draft = original.clone();
         assert!(
@@ -795,11 +826,13 @@ fn explicit_existing_sku_match_preserves_listing_status_and_identity() {
     result.skus[0].sku_id = "existing-sku".into();
     result.skus[0].revision_id = "existing-revision".into();
     result.skus[0].listing_status = ListingStatus::Listed;
+
     let mut draft = pending();
     draft
         .mark_effective("submission-1", effective_command(1, mapping.clone(), result.clone()), Instant::now())
         .unwrap();
     assert_eq!(draft.result.unwrap().skus[0].listing_status, ListingStatus::Listed);
+
     let mut other = pending();
     result.skus[0].sku_id = "unmatched-sku".into();
     assert!(
@@ -831,6 +864,7 @@ fn stable_status_codes_and_current_submission_corruption_fail_closed() {
         assert_eq!(status.as_str(), code);
         assert_eq!(serde_json::to_value(status).unwrap(), json!(code));
     }
+
     let mut draft = pending();
     draft.task_id = Some("other-task".into());
     assert!(draft.submitted().is_err());

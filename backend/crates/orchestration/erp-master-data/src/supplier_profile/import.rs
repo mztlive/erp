@@ -30,6 +30,7 @@ impl SupplierProfileProcess {
         if request.rows.is_empty() || request.rows.len() > 500 {
             return Err(Error::ValidationError("每次导入应为 1–500 行".into()));
         }
+
         let mut results = Vec::with_capacity(request.rows.len());
         for row in request.rows {
             let result = self.import_row(&row, actor).await;
@@ -53,6 +54,7 @@ impl SupplierProfileProcess {
                 Some(done.supplier_no),
             ));
         }
+
         let this = self.clone();
         let row_owned = row.clone();
         let actor_owned = actor.clone();
@@ -75,6 +77,7 @@ impl SupplierProfileProcess {
                             Some(existing.supplier_no),
                         )));
                     }
+
                     let (signing, payment) = row_owned.company_names();
                     let signing = this.import_company(signing, executor).await?;
                     let payment = this.import_company(payment, executor).await?;
@@ -82,6 +85,7 @@ impl SupplierProfileProcess {
                 })
             })
             .await?;
+
         let command = match reference {
             Ok(command) => command,
             Err(result) => return Ok(result),

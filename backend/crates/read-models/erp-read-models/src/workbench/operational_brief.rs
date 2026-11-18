@@ -70,6 +70,7 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let rows = self.db.supplier_fulfillment_orders().list_active_by_ids(&ids, executor).await?;
         let names = self
             .supplier_display_names(
@@ -77,6 +78,7 @@ impl WorkbenchFactsReader<'_> {
                 executor,
             )
             .await?;
+
         for row in rows {
             let Some(fact) = facts.get_mut(&(ObjectKind::SupplierFulfillmentOrder, row.base.id.clone()))
             else {
@@ -100,6 +102,7 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let rows = self.db.supplier_offerings().list_active_by_ids(&ids, executor).await?;
         let names = self
             .supplier_display_names(
@@ -107,6 +110,7 @@ impl WorkbenchFactsReader<'_> {
                 executor,
             )
             .await?;
+
         let offering_ids = rows
             .iter()
             .map(|row| erp_core::ids::SupplierOfferingId::new(row.base.id.clone()))
@@ -119,6 +123,7 @@ impl WorkbenchFactsReader<'_> {
             .into_iter()
             .map(|row| (row.supplier_offering_id.to_string(), row))
             .collect::<HashMap<_, _>>();
+
         for row in rows {
             let Some(fact) = facts.get_mut(&(ObjectKind::SupplierOffering, row.base.id.clone())) else {
                 continue;
@@ -171,6 +176,7 @@ fn offering_source(
         ("供给登记状态", Some(row.stable.status.label().into())),
         ("登记来源", Some(row.source_type.label().into())),
     ]);
+
     if let Some(availability) = availability {
         push_section(
             &mut source.extra_sections,

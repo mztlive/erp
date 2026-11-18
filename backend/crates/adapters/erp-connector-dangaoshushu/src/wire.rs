@@ -70,6 +70,7 @@ fn number(token: &str, field: Option<&str>) -> ConnectorResult<Value> {
     if token.contains(['.', 'e', 'E']) {
         return decimal(token).map(Value::String);
     }
+
     if let Ok(integer) = token.parse::<u64>() {
         return Ok(Value::Number(Number::from(integer)));
     }
@@ -102,6 +103,7 @@ fn decimal(token: &str) -> ConnectorResult<String> {
     let Some((mantissa, exponent)) = token.split_once(['e', 'E']) else {
         return Ok(token.to_owned());
     };
+
     let exponent: i32 = exponent.parse().map_err(|_| mapping())?;
     let negative = mantissa.starts_with('-');
     let unsigned = mantissa.strip_prefix('-').unwrap_or(mantissa);
@@ -124,6 +126,7 @@ fn expand(digits: &str, position: i32) -> ConnectorResult<String> {
         }
         return Ok(format!("0.{}{digits}", "0".repeat(padding)));
     }
+
     let position = usize::try_from(position).map_err(|_| mapping())?;
     if position >= digits.len() {
         if position > MAX_DECIMAL_LEN {
@@ -131,6 +134,7 @@ fn expand(digits: &str, position: i32) -> ConnectorResult<String> {
         }
         return Ok(format!("{digits}{}", "0".repeat(position - digits.len())));
     }
+
     let (integer, fraction) = digits.split_at(position);
     Ok(format!("{integer}.{fraction}"))
 }
@@ -233,6 +237,7 @@ mod tests {
         ] {
             assert!(parse(body).is_err());
         }
+
         let accepted = format!("{}0{}", "[".repeat(MAX_DEPTH), "]".repeat(MAX_DEPTH));
         assert!(parse(accepted.as_bytes()).is_ok());
         let too_deep = format!("[{accepted}]");

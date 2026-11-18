@@ -80,16 +80,19 @@ mod tests {
             action: "read".into(),
             active: true,
         };
+
         let mut delta = GrantRows::new(&source);
         let mut first = vec![row(ResourceKind::SalesOrder)];
         delta.refresh(&mut first);
         assert!(first[0].active);
         assert_eq!(first[0].source_version, 7);
+
         let mut second = vec![row(ResourceKind::PurchaseOrder)];
         delta.refresh(&mut second);
         assert!(!second[0].active);
         assert_eq!(second[0].source_version, 7);
         assert_eq!(delta.missing(), BTreeSet::from([added]));
+
         source.targets.clear();
         let mut empty = GrantRows::new(&source);
         empty.refresh(&mut first);

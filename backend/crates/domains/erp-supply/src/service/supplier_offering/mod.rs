@@ -149,14 +149,17 @@ impl SupplierOfferingService {
         if let recovery::Replay::Stored(result) = recovery::created(self, req, actor, executor).await? {
             return Ok(CommandPreparation::Replay(result));
         }
+
         let mut offering = self.prepare_initial_offering(req, actor, executor).await?;
         let offering_id = SupplierOfferingId::new(offering.base.id.clone());
         let revision = self.prepare_initial_revision(req, &offering, executor).await?;
         qualification
             .ensure_qualified(&offering.supplier_id, &offering.sku_id, revision.valid_from, executor)
             .await?;
+
         let availability = Self::prepare_initial_availability(req, offering_id, actor)?;
         offering.stable.current_revision_id = Some(revision.base.id.clone());
+
         let result = CreateSupplierOfferingResult {
             offering_id: offering.base.id.clone(),
             revision_id: revision.base.id.clone(),
@@ -233,6 +236,7 @@ impl SupplierOfferingService {
         if !offering.has_responsibility() {
             return Err(Error::BusinessLogicError("供给缺少维护人或主属组织，请先交接".into()).into());
         }
+
         let current_no = self.current_revision_no(&offering, executor).await?;
         let next_no = offering
             .next_revision_no(current_no, req.expected_revision_no)
@@ -245,12 +249,14 @@ impl SupplierOfferingService {
         let mut revision =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new(next_id()), revision_data)?;
         self.ensure_api_prices(&offering, &mut revision, executor).await?;
+
         let next_status = req.status.unwrap_or(offering.stable.status);
         if next_status == OfferingStatus::Active {
             qualification
                 .ensure_qualified(&offering.supplier_id, &offering.sku_id, revision.valid_from, executor)
                 .await?;
         }
+
         offering.update_status(next_status, actor.id())?;
         offering.stable.current_revision_id = Some(revision.base.id.clone());
         let expected_version = offering.next_persisted_version()?;
@@ -310,10 +316,12 @@ impl SupplierOfferingService {
                 offering.ok_or_else(|| Error::Internal("可供更新缺少已授权供给".into()))?
             },
         };
+
         offering.ensure_manual_availability_writable()?;
         if !offering.has_responsibility() {
             return Err(Error::BusinessLogicError("供给缺少维护人或主属组织，请先交接".into()));
         }
+
         let offering_id = SupplierOfferingId::new(id.trim());
         let mut availability = self
             .db
@@ -326,6 +334,7 @@ impl SupplierOfferingService {
                 .ensure_version(expected_version)
                 .map_err(|_| Error::ConflictError("可供状态已经变化，请刷新后重新保存".to_string()))?;
         }
+
         let received_at = Instant::now();
         let source_updated_at = dto::resolve_source_updated_at(req.source_updated_at, received_at);
         let availability_data = req.try_into_availability_data(
@@ -553,8 +562,10 @@ mod tests {
             },
         )
         .unwrap();
+
         stored.ensure_replayable(CREATE_OFFERING_COMMAND, &fingerprint).unwrap();
         assert!(stored.ensure_replayable(REVISE_OFFERING_COMMAND, &fingerprint).is_err());
+
         let result: CreateSupplierOfferingResult = stored.replay_result().unwrap();
         assert_eq!(result.offering_id, "offering-1");
         assert_eq!(result.revision_no, 1);
@@ -591,10 +602,12 @@ mod tests {
         use erp_core::ids::{SupplierOfferingId, SupplierOfferingRevisionId};
 
         use crate::entity::supplier_offering::SupplierOfferingRevision;
+
         let req = create_request();
         let data = req.terms.try_into_revision_data(SupplierOfferingId::new("offering-1"), 1).unwrap();
         let revision =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("revision-1"), data).unwrap();
+
         assert_eq!(revision.revision.revision_no, 1);
         assert_eq!(revision.dropship_supply_price_gross.to_string(), "10.00");
         assert_eq!(revision.bulk_minimum_order_quantity.unwrap().to_string(), "10");

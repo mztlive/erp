@@ -106,6 +106,7 @@ impl PaymentAllocationLedger {
         if existing.iter().any(|line| line.source != source) {
             return Err(Error::from("核销账本不得混用资金来源"));
         }
+
         let existing_net = existing
             .iter()
             .try_fold(zero_amount(), |sum, line| checked_add_amount(sum, signed_existing_delta(line)?))?;
@@ -116,6 +117,7 @@ impl PaymentAllocationLedger {
         if net_allocated_total > payment_amount {
             return Err(Error::from("核销合计超过付款金额"));
         }
+
         let mut entry_allocated: HashMap<String, Amount> = HashMap::new();
         for allocation in existing {
             let balance =
@@ -171,11 +173,13 @@ impl PaymentAllocationLedger {
         if entry.base.id != line.payable_entry_id.to_string() {
             return Err(Error::from("核销分录事实与付款行不一致"));
         }
+
         let current = self.entry_allocated.get(entry.base.id.as_str()).copied().unwrap_or_else(zero_amount);
         let next_balance = checked_add_amount(current, line.allocated_amount)?;
         if next_balance > entry.amount {
             return Err(Error::from("核销金额超过应付分录开放余额"));
         }
+
         let allocation = PaymentAllocation::new(
             allocation_id,
             PaymentAllocationData {
@@ -188,11 +192,13 @@ impl PaymentAllocationLedger {
                 reverses_allocation_id: None,
             },
         )?;
+
         let account_index = self.account_delta_index.get(entry.payable_account_id.as_ref()).copied();
         let next_account_total = match account_index {
             Some(index) => checked_add_amount(self.account_deltas[index].1, line.allocated_amount)?,
             None => line.allocated_amount,
         };
+
         self.entry_allocated.insert(entry.base.id.clone(), next_balance);
         match account_index {
             Some(index) => self.account_deltas[index].1 = next_account_total,
@@ -403,9 +409,11 @@ mod tests {
         assert_eq!(allocations[0].payable_entry_id, PayableEntryId::new("pe-1"));
         assert_eq!(allocations[0].allocation_action, AllocationAction::Apply);
         assert!(allocations[0].reverses_allocation_id.is_none());
+
         // 子账增量只聚合一次且金额守恒
         let deltas = ledger.account_settlement_deltas();
         assert_eq!(deltas, &[(PayableAccountId::new("acct-1"), Amount::from_str("500.00").unwrap())]);
+
         // 三方守恒：付款净额 = 既有净额 + 新分配合计；分录余额 = 分配净额
         let new_total = allocations.iter().fold(zero_amount(), |sum, a| sum.checked_add(a.allocated_amount));
         assert_eq!(ledger.net_allocated_total(), new_total);
@@ -429,6 +437,7 @@ mod tests {
         assert_eq!(allocations.len(), 1);
         assert_eq!(allocations[0].allocation_seq, 3);
         assert_eq!(allocations[0].allocated_amount, Amount::from_str("200.00").unwrap());
+
         // 三方守恒：付款净额 = 既有净额 + 新分配合计；分录占用 = 付款净额
         let existing_net = Amount::from_str("700.00").unwrap();
         let new_total = allocations[0].allocated_amount;
@@ -525,6 +534,7 @@ mod tests {
                 )
                 .unwrap();
         }
+
         let mut second = build_ledger("1000.00", &[], &pending);
         for (index, line) in pending.iter().enumerate() {
             second
@@ -536,6 +546,7 @@ mod tests {
                 )
                 .unwrap();
         }
+
         // 相同输入产出相同计划
         assert_eq!(first, second);
         // 行序决定序号与金额顺序
@@ -543,6 +554,7 @@ mod tests {
         assert_eq!(first.new_allocations()[0].allocation_seq, 1);
         assert_eq!(first.new_allocations()[1].allocated_amount, Amount::from_str("200.00").unwrap());
         assert_eq!(first.new_allocations()[1].allocation_seq, 2);
+
         // 超出待过账行数的 apply 被拒绝
         let err = first
             .apply(
@@ -606,6 +618,7 @@ mod tests {
         let err = PaymentAllocationLedger::new(SupplierPaymentId::new("sp-1"), max, &overflow_existing, &[])
             .unwrap_err();
         assert!(err.to_string().contains("溢出"));
+
         // 待过账合计溢出
         let mut overflow_pending = vec![pending_line("pe-1", "1.00"), pending_line("pe-2", "1.00")];
         overflow_pending[0].allocated_amount = max;
@@ -712,6 +725,7 @@ mod tests {
             ledger.account_settlement_deltas(),
             &[(PayableAccountId::new("acct-1"), "25".parse().unwrap())]
         );
+
         assert!(
             PaymentAllocationLedger::new(
                 SupplierPaymentId::new("bank-payment"),
@@ -730,6 +744,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(
             PaymentAllocationLedger::for_source(source, "24.99".parse().unwrap(), &[], &pending).is_err()
         );

@@ -102,6 +102,7 @@ impl ApprovalDefinitionService {
                 })
             })
             .await;
+
         self.recover_definition_command(
             outcome,
             &approval_process::REPLACE_DEFINITION_NODES,
@@ -165,6 +166,7 @@ async fn replace_nodes_tx(
     let graph = service
         .require_graph(&request.definition_id, actor, &approval_process::REPLACE_DEFINITION_NODES, executor)
         .await?;
+
     if let Some(view) = replay_prepared_definition_receipt(
         &service.db,
         identity,
@@ -175,6 +177,7 @@ async fn replace_nodes_tx(
     {
         return Ok(view);
     }
+
     ensure_draft_lock(&graph.definition, request.expected_definition_lock_version)?;
     apply_replacement(service, graph, request, actor, identity, executor).await
 }
@@ -193,6 +196,7 @@ async fn apply_replacement(
     let prepared =
         prepare_replacement(&service.authorization, db, identity_service, &graph, &request.nodes, executor)
             .await?;
+
     let repository = db.approval_copies();
     let rules = match request.copy_rules {
         Some(rules) => rules,
@@ -203,6 +207,7 @@ async fn apply_replacement(
         )?,
     };
     validate_recipients(identity_service, &rules, executor).await?;
+
     let result_ref = DefinitionCommandResultRef::from_graph(&prepared).encode();
     write_receipt(db, &identity.current, &result_ref, executor).await?;
     save_config(identity_service, db, &prepared, rules, executor).await?;
@@ -433,6 +438,7 @@ pub(super) fn apply_snapshots(
             refreshed.push(node);
             continue;
         }
+
         let account = accounts
             .get(node.assignee().map_err(map_model_error)?.as_str())
             .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
@@ -602,9 +608,11 @@ mod tests {
         assert_eq!(refreshed[0].assignee_label_snapshot, "初审人");
         assert_eq!(refreshed[0].additional_assignees[0].name, "或签人");
         assert_eq!(refreshed[1].assignee_label_snapshot, "复核人");
+
         accounts.remove("u3");
         assert!(matches!(apply_snapshots(graph.nodes.clone(), &accounts),
             Err(Error::ValidationError(message)) if message == "指定审批人账号不存在、已停用或任职失效"));
+
         accounts.insert("u3".into(), AccountSummary::new("u3", AccountKind::Admin, true));
         assert!(apply_snapshots(graph.nodes, &accounts).is_err());
     }

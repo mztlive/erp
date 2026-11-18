@@ -75,6 +75,7 @@ impl SupplierCredential {
         if command.expected_version.is_some() {
             return Err(Error::ConflictError("原令牌记录不存在，请刷新状态".into()));
         }
+
         let event = command.event(&payload, None, now);
         let mut record = Self::new(id, binding, payload, now)?;
         record.manually_configured = true;
@@ -97,6 +98,7 @@ impl SupplierCredential {
     ) -> Result<bool> {
         command.validate()?;
         payload.validate_shape()?;
+
         if let Some(event) =
             self.configuration_history.iter().find(|entry| entry.operation_id == command.operation_id)
         {
@@ -108,9 +110,11 @@ impl SupplierCredential {
             }
             return Ok(false);
         }
+
         self.require_version(command.expected_version.unwrap_or(0))?;
         payload.validate(now)?;
         self.require_configuration_slot(&command.operation_id, now)?;
+
         let base = self.next_base(now)?;
         self.configuration_history.push(command.event(&payload, Some(self), now));
         self.encrypted_payload = payload.encrypted_payload;
@@ -175,6 +179,7 @@ mod tests {
         let mut record = configured();
         assert!(record.manually_configured);
         assert!(record.account_identity_fingerprint.is_none());
+
         record
             .claim_refresh(
                 1,
@@ -188,9 +193,11 @@ mod tests {
             .unwrap();
         record.mark_refresh_sent(at(102)).unwrap();
         record.complete_refresh(payload('b'), at(103)).unwrap();
+
         let saved = record.clone();
         assert!(!record.configure_tokens(payload('a'), &command(None, "first"), at(104)).unwrap());
         assert_eq!(record, saved);
+
         let mut replay = command(None, "first");
         replay.actor_id = "another".into();
         assert!(record.configure_tokens(payload('a'), &replay, at(105)).is_err());
@@ -216,10 +223,12 @@ mod tests {
             )
             .unwrap();
         record.mark_refresh_sent(at(102)).unwrap();
+
         let saved = record.clone();
         let replacement = command(Some(record.base.version), "replace");
         assert!(record.configure_tokens(payload('b'), &replacement, at(130)).is_err());
         assert_eq!(record, saved);
+
         assert!(record.configure_tokens(payload('b'), &replacement, at(131)).unwrap());
         assert_eq!(record.base.version, saved.base.version + 1);
         assert_eq!(record.account_identity_fingerprint, saved.account_identity_fingerprint);
@@ -240,6 +249,7 @@ mod tests {
             sent_at: at(101),
             exchange_sent_at: None,
         };
+
         let replacement = command(Some(1), "replace");
         assert!(record.configure_tokens(payload('b'), &replacement, at(199)).is_err());
         assert!(record.configure_tokens(payload('b'), &replacement, at(200)).unwrap());

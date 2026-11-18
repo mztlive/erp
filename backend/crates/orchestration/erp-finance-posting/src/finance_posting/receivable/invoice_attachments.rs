@@ -69,6 +69,7 @@ pub(crate) async fn persist(
     pending.persist(db, executor).await?;
     let file_ids = ids.iter().map(AsRef::as_ref).collect::<Vec<&str>>();
     require_owned(authorization, actor, &file_ids, executor).await?;
+
     for id in ids {
         let asset = db
             .file_assets()
@@ -76,6 +77,7 @@ pub(crate) async fn persist(
             .await?
             .ok_or_else(|| Error::NotFound("发票附件不存在".into()))?;
         asset.ensure_invoice_evidence()?;
+
         let attachment = DocumentAttachment::new(
             DocumentAttachmentId::new(id_generator::next_id()),
             DocumentAttachmentData {
@@ -179,6 +181,7 @@ mod tests {
         let first = receipt(&req, actor.id(), &batch("a", "object-first")).unwrap();
         let retry = receipt(&req, actor.id(), &batch("a", "object-retry")).unwrap();
         let changed = receipt(&req, actor.id(), &batch("b", "object-changed")).unwrap();
+
         assert_eq!(first.fingerprint(), retry.fingerprint());
         assert_ne!(first.fingerprint(), changed.fingerprint());
         use erp_finance::{Error as FinanceError, FinanceCommandReceipt};

@@ -353,7 +353,6 @@ mod tests {
         let date = BusinessDate::from_ymd(2026, 8, 5).unwrap();
         assert_eq!(date.to_string(), "2026-08-05");
         assert_eq!(date.ymd(), (2026, 8, 5));
-
         assert!(BusinessDate::from_ymd(2026, 2, 30).is_none(), "2 月 30 日不存在");
 
         let parsed: BusinessDate = "2026-08-05".parse().unwrap();
@@ -383,7 +382,6 @@ mod tests {
 
         let json = serde_json::to_string(&instant).unwrap();
         assert_eq!(json, "1700000000");
-
         let back: Instant = serde_json::from_str(&json).unwrap();
         assert_eq!(back, instant);
 

@@ -416,9 +416,11 @@ impl BusinessDocumentRepositoryExt for Repository<'_, BusinessDocument> {
         {
             return Ok(false);
         }
+
         if document.approval_started_at.is_some() {
             return Ok(true);
         }
+
         if document.mark_approval_started(at).is_err() {
             return Ok(false);
         }
@@ -446,7 +448,6 @@ impl BusinessDocumentRepositoryExt for Repository<'_, BusinessDocument> {
         .await?
         .into_iter()
         .next();
-
         Ok(classify_approval_binding(row))
     }
 
@@ -467,6 +468,7 @@ impl BusinessDocumentRepositoryExt for Repository<'_, BusinessDocument> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
+
         let collection = self.collection().clone_with_type::<BusinessDocumentIdRow>();
         let options = FindOptions::builder().projection(doc! { "id": 1 }).build();
         let mut existing = mongo_ops::find_many(
@@ -482,6 +484,7 @@ impl BusinessDocumentRepositoryExt for Repository<'_, BusinessDocument> {
         .into_iter()
         .map(|row| row.id)
         .collect::<Vec<_>>();
+
         existing.sort_unstable();
         existing.dedup();
         Ok(existing)
@@ -543,6 +546,7 @@ impl BusinessDocumentRepositoryExt for Repository<'_, BusinessDocument> {
         if let Some(document) = updated {
             return Ok(AssignDocumentNoOutcome::Assigned(document));
         }
+
         let current = self.find_by_id(id, executor).await?;
         Ok(classify_assign_document_no_miss(
             current,
@@ -567,7 +571,6 @@ impl BusinessDocumentRepositoryExt for Repository<'_, BusinessDocument> {
         let collection = self.collection().clone_with_type::<BusinessDocumentRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 }

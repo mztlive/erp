@@ -36,12 +36,14 @@ impl BalanceChanges {
         if size != u64::from(limit.get()) || page != u64::from(requested_page) || page == 0 {
             return Err(mapping("京东资金分页与冻结请求不一致"));
         }
+
         let pages = total.checked_add(size - 1).ok_or_else(|| mapping("资金总页数超限"))? / size;
         if self.page_total.as_ref().is_some_and(|value| count(value).ok() != Some(pages))
             || (total > 0 && page > pages)
         {
             return Err(mapping("京东资金分页总数不一致"));
         }
+
         let offset = (page - 1).checked_mul(size).ok_or_else(|| mapping("资金分页位置超限"))?;
         let expected = total.saturating_sub(offset).min(size);
         if u64::try_from(self.items.len()).ok() != Some(expected) {
@@ -140,8 +142,10 @@ fn transaction(
     {
         return Err("JD_VOP_FUNDS_ACCOUNT_UNVERIFIED");
     }
+
     let id = candidate.transaction_id.clone().ok_or("JD_VOP_FUNDS_STABLE_ID_MISSING")?;
     let order_id = candidate.order_id.clone().ok_or("JD_VOP_FUNDS_ORDER_ID_MISSING")?;
+
     let code = candidate.business_code.as_ref().ok_or("JD_VOP_FUNDS_BUSINESS_CODE_MISSING")?;
     let rule = profile.trade_types.get(code).ok_or("JD_VOP_FUNDS_BUSINESS_CODE_UNKNOWN")?;
     let signed = candidate.signed_amount.ok_or("JD_VOP_FUNDS_AMOUNT_INVALID")?;
@@ -150,6 +154,7 @@ fn transaction(
         return Err("JD_VOP_FUNDS_AMOUNT_SIGN_UNVERIFIED");
     }
     let amount = Amount::try_from(amount.abs()).map_err(|_| "JD_VOP_FUNDS_AMOUNT_INVALID")?;
+
     let occurred_at = candidate.occurred_at.ok_or("JD_VOP_FUNDS_TIME_UNVERIFIED")?;
     if occurred_at < query.since || occurred_at > query.through {
         return Err("JD_VOP_FUNDS_TIME_OUTSIDE_WINDOW");
@@ -349,6 +354,7 @@ pub(super) mod tests {
         )
         .unwrap();
         assert_eq!(balance_amount(&valid).unwrap().to_decimal(), "128.10".parse().unwrap());
+
         let missing: Box<RawValue> =
             serde_json::from_str(r#"{"geiousInfo":{"geiousRemainLimit":"9999"}}"#).unwrap();
         assert!(balance_amount(&missing).is_err());
@@ -361,11 +367,13 @@ pub(super) mod tests {
         )
         .unwrap();
         assert!(valid.validate(1, NonZeroU32::new(1).unwrap()).unwrap());
+
         let missing: BalanceChanges = serde_json::from_str(
             r#"{"pageSize":"1","pageIndex":"1","pageItemTotal":"2","pageTotal":"2","items":[]}"#,
         )
         .unwrap();
         assert!(missing.validate(1, NonZeroU32::new(1).unwrap()).is_err());
+
         let empty: BalanceChanges = serde_json::from_str(
             r#"{"pageSize":"1","pageIndex":"1","pageItemTotal":"0","pageTotal":"0","items":[]}"#,
         )

@@ -98,6 +98,7 @@ pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<Normali
     if is_import_blank(&category_name) {
         return Err(Error::ValidationError("产品类别不能为空".into()));
     }
+
     let spec_raw = cell(8);
     let specification = if is_import_blank(spec_raw) {
         None
@@ -112,6 +113,7 @@ pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<Normali
         stable_code("PRD", &[&name, specification.as_deref().unwrap_or(""), barcode.as_deref().unwrap_or("")])
     });
     let spec_entries = import_spec_entries(coded_spu, specification.as_deref(), barcode.as_deref(), &name);
+
     let price_column: Option<usize> = match cells.len() {
         legacy::SUPPLY_COLUMNS => None,
         len if len == PRODUCT_IMPORT_HEADERS.len() => Some(16),
@@ -250,6 +252,7 @@ mod tests {
         cells[9] = "70.1234".into();
         cells[10] = "60.00".into();
         cells[11] = "12".into();
+
         for blank in ["", "-", "无"] {
             for cell in &mut cells[16..19] {
                 *cell = blank.into();
@@ -259,6 +262,7 @@ mod tests {
             assert!(row.bulk_price.is_none());
             assert!(row.bulk_min_quantity.is_none());
         }
+
         cells[16] = "92".into();
         cells[17] = "84".into();
         cells[18] = "30.5".into();
@@ -266,6 +270,7 @@ mod tests {
         assert_eq!(row.sales_price.unwrap().to_string(), "92");
         assert_eq!(row.bulk_price.unwrap().to_string(), "84");
         assert_eq!(row.bulk_min_quantity.unwrap().to_string(), "30.5");
+
         for (index, value) in [(16, "bad"), (17, "1.001"), (18, "0"), (18, "-1"), (18, "1.0000001")] {
             let mut invalid = cells.clone();
             invalid[index] = value.into();
@@ -326,6 +331,7 @@ mod tests {
         assert_eq!(row.bulk_price.unwrap().to_string(), "38.00");
         assert_eq!(row.bulk_min_quantity.unwrap().to_string(), "12.5");
         assert_eq!(row.market_price.unwrap().to_string(), "50.00");
+
         cells[10].clear();
         cells[11].clear();
         let unmaintained = normalize_import_row(2, &cells).unwrap();

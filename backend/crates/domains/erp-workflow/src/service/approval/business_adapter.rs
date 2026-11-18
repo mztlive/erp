@@ -349,6 +349,7 @@ mod tests {
                 },
             }
         }
+
         assert_eq!(required, 13);
         assert_eq!(no_approval, 9);
     }
@@ -360,6 +361,7 @@ mod tests {
         assert!(ensure_runtime_cut_over(DocumentType::SalesOrder).is_ok());
         assert!(ensure_runtime_cut_over(DocumentType::Delivery).is_ok());
         assert!(crate::entity::approval_integration::document_type_from_subject_kind("unknown").is_err());
+
         let sales = execute_policy_domain_action(
             DocumentType::SalesOrder,
             ApprovalDomainAction::SalesOrderStartApprovalSubmission,

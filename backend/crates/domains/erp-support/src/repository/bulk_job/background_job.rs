@@ -146,6 +146,7 @@ pub async fn authorized_background_page(
         return Err(crate::Error::ValidationError("后台任务分页要求完整后台任务模型".into()));
     }
     access.ensure_current(executor)?;
+
     let collection = db.background_jobs().collection().clone_with_type::<BackgroundJobRow>();
     let options = FindOptions::builder()
         .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
@@ -153,6 +154,7 @@ pub async fn authorized_background_page(
         .limit(filter.limit())
         .projection(background_job_projection())
         .build();
+
     let items = persistence_core::aggregate::find(
         &collection,
         filter.to_doc(),
@@ -452,6 +454,7 @@ mod tests {
             statuses.iter().map(Bson::as_str).collect::<Vec<_>>(),
             vec![Some("pending"), Some("running"), Some("partially_succeeded")]
         );
+
         let all = BackgroundJobFilter::default().to_doc();
         assert!(!all.contains_key("finished_at"));
         assert!(!all.contains_key("$and"));

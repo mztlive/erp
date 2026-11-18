@@ -36,6 +36,7 @@ pub(crate) async fn retention(
         .await?
         .ok_or_else(|| Error::Forbidden("admin 超管角色不存在，拒绝清空数据库".into()))?;
     ensure_reset_admin(actor, &account, &role)?;
+
     let mut kept = ResetRetention::default();
     kept.require(db, db.accounts().collection().name(), doc! { "id": &account.base.id }, executor).await?;
     kept.require(db, db.roles().collection().name(), doc! { "id": ROOT_ROLE_ID }, executor).await?;

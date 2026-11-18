@@ -225,8 +225,10 @@ where
     if !sender.is_ready() {
         return Ok(WorkerBatchOutcome::default());
     }
+
     let until = lease_until(now);
     let leased = store.lease_batch(worker_id, now, until, limit)?;
+
     let mut outcome = WorkerBatchOutcome::default();
     for mut item in leased {
         let attempt = sender.send_idempotent(&item.dedup_key);
@@ -349,6 +351,7 @@ impl ApprovalNotificationOutboxPort {
         if !self.is_ready() {
             return Ok(());
         }
+
         let now = Instant::now();
         let until = lease_until(now);
         let leased = self
@@ -356,6 +359,7 @@ impl ApprovalNotificationOutboxPort {
             .approval_notification_outbox()
             .lease_outbox_batch(worker_id, now, until, OUTBOX_BATCH_LIMIT, &mut NoTransaction)
             .await?;
+
         for item in leased {
             self.persist_attempt(worker_id, item).await?;
         }
@@ -376,6 +380,7 @@ impl ApprovalNotificationOutboxPort {
         };
         let attempt = sender.deliver(&item).await;
         let now = Instant::now();
+
         if attempt == DeliveryAttempt::Delivered {
             self.mark_delivered(&item.base.id, worker_id, now).await?;
             return Ok(());
@@ -501,6 +506,7 @@ mod tests {
         apply_delivery_attempt(&mut item, DeliveryAttempt::Retryable, now).unwrap();
         assert_eq!(item.delivery_status, ApprovalNotificationDeliveryStatus::Pending);
         assert_eq!(item.attempt_count, 1);
+
         item.acquire_lease(
             "worker-1",
             Instant::from_unix_secs(1_700_000_100),
@@ -519,6 +525,7 @@ mod tests {
         let original = item.clone();
         assert!(apply_delivery_attempt(&mut item, DeliveryAttempt::Fatal, now).is_err());
         assert_eq!(item, original);
+
         item.acquire_lease("worker-1", now, super::lease_until(now)).unwrap();
         apply_delivery_attempt(&mut item, DeliveryAttempt::Fatal, now).unwrap();
         assert_eq!(item.delivery_status, ApprovalNotificationDeliveryStatus::DeadLetter);
@@ -621,6 +628,7 @@ mod tests {
         assert_eq!(paused, WorkerBatchOutcome::default());
         assert_eq!(store.items, original);
         assert_eq!(store.lease_calls, 0);
+
         let outcome = process_outbox_batch(&mut store, &AlwaysOk, "worker-1", now, 10).unwrap();
         assert_eq!(outcome, WorkerBatchOutcome { delivered: 1, retried: 0, dead_lettered: 0 });
         assert_eq!(store.items[0].delivery_status, ApprovalNotificationDeliveryStatus::Delivered);

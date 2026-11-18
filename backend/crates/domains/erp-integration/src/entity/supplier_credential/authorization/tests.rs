@@ -57,15 +57,18 @@ fn first_authorization_persists_both_boundaries_before_confirming_candidate_and_
     assert_eq!(record.account_identity_fingerprint, None);
     assert_eq!(record.authorization_candidate_identity_fingerprint, Some("b".repeat(64)));
     assert_eq!(record.refresh.code(), "AUTHORIZATION_CLAIMED");
+
     let before = record.clone();
     assert!(!record.claim_refresh(1, &request("refresh", Some(1), 101).claim).unwrap());
     assert!(record.import(payload(), 1, at(101)).is_err());
     assert!(record.complete_authorization(payload(), None, at(101)).is_err());
     assert_eq!(record, before);
+
     record.mark_authorization_sent(at(101)).unwrap();
     assert!(record.complete_authorization(payload(), None, at(102)).is_err());
     record.mark_authorization_exchange_sent(at(102)).unwrap();
     assert!(record.reject_authorization(at(103)).is_err());
+
     record.complete_authorization(payload(), Some("c".repeat(64)), at(103)).unwrap();
     assert_eq!(record.base.version, 4);
     assert_eq!(record.account_identity_fingerprint, Some("b".repeat(64)));
@@ -88,16 +91,19 @@ fn only_explicit_pre_exchange_rejection_unlocks_first_candidate_and_same_operati
     assert_eq!(record.refresh.code(), "AUTHORIZATION_REJECTED");
     assert_eq!(record.authorization_candidate_identity_fingerprint, None);
     assert!(record.encrypted_payload.is_empty());
+
     let mut corrected = request("corrected", Some(3), 103);
     corrected.new_authorization = false;
     corrected.account_identity_fingerprint = "d".repeat(64);
     assert!(record.claim_authorization(&corrected).unwrap());
     assert_eq!(record.authorization_candidate_identity_fingerprint, Some("d".repeat(64)));
     assert_eq!(record.authorization_history[0].rejected_at, Some(at(102)));
+
     let before = record.clone();
     assert!(!record.claim_authorization(&request("first", None, 104)).unwrap());
     assert!(!record.claim_authorization(&corrected).unwrap());
     assert_eq!(record, before);
+
     let mut conflicting = corrected;
     conflicting.account_identity_fingerprint = "e".repeat(64);
     assert!(record.claim_authorization(&conflicting).is_err());
@@ -120,6 +126,7 @@ fn unknown_keeps_candidate_and_requires_new_operation_evidence_and_expired_deadl
     no_evidence.evidence_reference.clear();
     assert!(record.claim_authorization(&no_evidence).is_err());
     assert_eq!(record, before);
+
     assert!(record.claim_authorization(&request("recovery", Some(2), 130)).unwrap());
     assert_eq!(record.base.version, 3);
     assert_eq!(record.authorization_history[1].previous_operation_id.as_deref(), Some("first"));
@@ -138,6 +145,7 @@ fn exchange_unknown_never_releases_identity_or_automatically_retries_after_deadl
     assert!(!record.claim_authorization(&request("first", None, 500)).unwrap());
     assert!(!record.claim_refresh(3, &request("refresh", Some(3), 500).claim).unwrap());
     assert_eq!(record, before);
+
     let restored: SupplierCredential =
         serde_json::from_str(&serde_json::to_string(&record).unwrap()).unwrap();
     assert_eq!(restored, before);
@@ -155,6 +163,7 @@ fn confirmed_account_and_uid_cannot_change_and_old_operation_replay_never_reappl
     let before = record.clone();
     assert!(record.claim_authorization(&changed).is_err());
     assert_eq!(record, before);
+
     assert!(record.claim_authorization(&request("second", Some(4), 104)).unwrap());
     record.mark_authorization_sent(at(105)).unwrap();
     record.mark_authorization_exchange_sent(at(106)).unwrap();
@@ -162,7 +171,9 @@ fn confirmed_account_and_uid_cannot_change_and_old_operation_replay_never_reappl
     assert!(record.complete_authorization(payload(), None, at(107)).is_err());
     assert!(record.complete_authorization(payload(), Some("d".repeat(64)), at(107)).is_err());
     assert_eq!(record, before);
+
     record.complete_authorization(payload(), Some("c".repeat(64)), at(107)).unwrap();
+
     let before = record.clone();
     assert!(!record.claim_authorization(&request("first", None, 108)).unwrap());
     assert_eq!(record, before);
@@ -176,6 +187,7 @@ fn legacy_unverified_import_cannot_authorize_and_legacy_cli_cannot_replace_page_
     let before = imported.clone();
     assert!(imported.claim_authorization(&request("page", Some(1), 101)).is_err());
     assert_eq!(imported, before);
+
     let mut page = authorized();
     let before = page.clone();
     assert!(page.import(payload(), 4, at(104)).is_err());
@@ -197,6 +209,7 @@ fn refresh_and_authorization_exclude_each_other_and_only_expired_unsent_claim_ca
     let before = record.clone();
     assert!(record.claim_authorization(&request("reauthorize", Some(5), 133)).is_err());
     assert_eq!(record, before);
+
     assert!(record.claim_authorization(&request("reauthorize", Some(5), 134)).unwrap());
     assert_eq!(record.base.version, 6);
     assert!(!record.claim_refresh(6, &request("refresh-again", Some(6), 135).claim).unwrap());
@@ -219,6 +232,7 @@ fn missing_new_fields_decode_as_unverified_legacy_and_invalid_authorization_is_f
     }
     let restored: SupplierCredential = serde_json::from_value(value).unwrap();
     assert_eq!(restored, imported);
+
     assert!(
         SupplierCredential::reserve_authorization(
             "credential".into(),
@@ -227,6 +241,7 @@ fn missing_new_fields_decode_as_unverified_legacy_and_invalid_authorization_is_f
         )
         .is_err()
     );
+
     let mut record = reserved();
     let before = record.clone();
     assert!(record.mark_authorization_sent(at(130)).is_err());

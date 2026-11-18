@@ -117,6 +117,7 @@ impl ProductSkuInput {
     ) {
         let explicit = skus.iter().map(|sku| sku.sku_no.clone()).filter(|sku_no| !sku_no.trim().is_empty());
         let mut sequence = SkuNoSequence::new(product_no, existing.into_iter().chain(explicit));
+
         for sku in skus.iter_mut().filter(|sku| sku.sku_no.trim().is_empty()) {
             sku.sku_no = sequence.next_no();
         }

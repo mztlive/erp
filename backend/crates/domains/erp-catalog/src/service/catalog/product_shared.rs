@@ -46,6 +46,7 @@ impl CatalogService {
             .catalog()
             .catalog_reference_data(Some(category_id), brand_id, &unit_ids, executor)
             .await?;
+
         let category = references.category.ok_or_else(|| Error::NotFound("商品分类不存在".to_string()))?;
         if category.product_kind != product_kind {
             return Err(Error::BusinessLogicError("所选分类不允许该商品类型".to_string()));
@@ -54,6 +55,7 @@ impl CatalogService {
             return Err(Error::NotFound("商品品牌不存在".to_string()));
         }
         ensure_units_available(&unit_ids, &references.units)?;
+
         let asset_ids = skus
             .iter()
             .filter_map(|sku| sku.main_image_asset_id.as_ref())
@@ -114,6 +116,7 @@ impl CatalogService {
         if !self.file_assets.missing_ids(&asset_ids, executor).await?.is_empty() {
             return Err(Error::NotFound("媒体文件不存在".to_string()));
         }
+
         let rows = inputs
             .iter()
             .map(|input| {
@@ -157,6 +160,7 @@ pub(super) fn resolve_product_file_references(
     for media in carousel_media.iter_mut().chain(detail_media.iter_mut()) {
         pending_assets.resolve_id(&mut media.file_asset_id, &mut used)?;
     }
+
     for sku in skus {
         if let Some(asset_id) = sku.main_image_asset_id.as_mut() {
             pending_assets.resolve_id(asset_id, &mut used)?;

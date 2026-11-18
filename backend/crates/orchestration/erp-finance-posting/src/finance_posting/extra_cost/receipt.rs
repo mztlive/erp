@@ -26,6 +26,7 @@ pub(super) fn registration_receipt(
     input.evidence_attachment_id = FileAssetId::new("same-evidence-content");
     input.idempotency_key = input.idempotency_key.trim().to_string();
     input.description = input.description.trim().to_string();
+
     let manifest = pending.content_manifest();
     if manifest.len() != 1 {
         return Err(Error::ValidationError("财务费用登记必须有一份可核对真实内容的凭证".into()));
@@ -39,6 +40,7 @@ pub(super) fn registration_receipt(
             content_hmac: file.content_hmac,
         })
         .collect::<Vec<_>>();
+
     Ok(CommandReceipt::from_payload(
         "sales-extra-cost-command-",
         actor.id(),
@@ -110,6 +112,7 @@ mod tests {
         let command = registration_receipt(&actor(), "sales", &original, &pending).unwrap();
         let saved =
             FinanceCommandReceipt::resource(&command, "cost-entry".into(), "audit-event".into()).unwrap();
+
         let mut changes = Vec::new();
         let mut value = original.clone();
         value.input_tax_rate = "0.13".parse().unwrap();
@@ -129,10 +132,12 @@ mod tests {
         let mut value = original.clone();
         value.inquiry_source = None;
         changes.push(value);
+
         for changed in changes {
             let changed = registration_receipt(&actor(), "sales", &changed, &pending).unwrap();
             assert!(saved.resource_id(&changed).is_err());
         }
+
         let changed_file = files("pending-file:evidence", "second-object", &"cd".repeat(32));
         assert!(
             saved
@@ -147,6 +152,7 @@ mod tests {
         let first_request = request();
         let mut second_request = request();
         second_request.evidence_attachment_id = FileAssetId::new("pending-file:second");
+
         let first = registration_receipt(&actor(), "sales", &first_request, &first).unwrap();
         let second = registration_receipt(&actor(), "sales", &second_request, &second).unwrap();
         let saved =

@@ -72,12 +72,14 @@ impl CatalogFilter {
         if self.category_ids.len() > 500 || self.brand_ids.len() > 500 {
             return Err(Error::ValidationError("来源分类或品牌最多选择 500 项".into()));
         }
+
         if self.include_descendants {
             return Err(Error::ValidationError("来源未提供可靠分类层级，不能包含子分类".into()));
         }
         if self.only_unadopted && self.selection_status == Some(CatalogSelectionStatus::Selected) {
             return Err(Error::ValidationError("仅处理未入库项不能同时筛选已入库项".into()));
         }
+
         if self.price_min.is_some_and(|value| value.to_decimal().is_sign_negative())
             || self.price_max.is_some_and(|value| value.to_decimal().is_sign_negative())
             || matches!((self.price_min, self.price_max), (Some(min), Some(max)) if min > max)
@@ -236,6 +238,7 @@ mod tests {
         filter.validate().unwrap();
         assert_eq!(filter.categories(), ["a,b", "legacy", "second"]);
         assert_eq!(filter.brands(), ["first", "second"]);
+
         let round_trip: CatalogFilter =
             serde_json::from_value(serde_json::to_value(filter).unwrap()).unwrap();
         assert_eq!(round_trip.categories(), ["a,b", "legacy", "second"]);
@@ -271,6 +274,7 @@ mod tests {
             filter.ensure_cost_access(true).unwrap();
             assert!(filter.ensure_cost_access(false).is_err());
         }
+
         for json in [
             serde_json::json!({"price_min":"-0.0001"}),
             serde_json::json!({"price_min":"1.0001", "price_max":"1"}),
@@ -278,6 +282,7 @@ mod tests {
             let filter: CatalogFilter = serde_json::from_value(json).unwrap();
             assert!(filter.validate().is_err());
         }
+
         assert!(serde_json::from_value::<CatalogFilter>(serde_json::json!({"price_min":0})).is_err());
         CatalogFilter::default().ensure_cost_access(false).unwrap();
     }

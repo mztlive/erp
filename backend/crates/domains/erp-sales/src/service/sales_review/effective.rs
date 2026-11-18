@@ -62,6 +62,7 @@ async fn prepare_effective_change_write(
         .sales_change_submission_lines()
         .list_lines_by_submission(&submission.base.id.clone().into(), &mut NoTransaction)
         .await?;
+
     let order = db
         .sales_orders()
         .find_by_id(&change_order.sales_order_id, &mut NoTransaction)
@@ -73,6 +74,7 @@ async fn prepare_effective_change_write(
     if !change_order.base_revision_matches(current_revision_id) {
         return Err(Error::ConflictError("基准版本已不是销售单当前版本，请刷新后重新发起变更".to_string()));
     }
+
     prepare_effective_revision_write(db, change_order, order, submission, submission_lines, actor).await
 }
 
@@ -96,6 +98,7 @@ async fn prepare_effective_revision_write(
     let revision_no =
         crate::entity::sales_order::SalesOrderRevision::next_revision_no(current_revision_no.unwrap_or(0))?;
     let revision = build_change_revision(&order, &submission, &submission_lines, revision_no, now)?;
+
     let current_revision_id = order
         .current_revision_id()
         .ok_or_else(|| Error::BusinessLogicError("销售单缺少当前版本".to_string()))?;
@@ -104,6 +107,7 @@ async fn prepare_effective_revision_write(
         .find_by_id(current_revision_id, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::NotFound("销售单当前版本不存在".to_string()))?;
+
     let mut order_for_tx = order;
     order_for_tx.attach_revision(&revision.revision.base.id, actor.id());
     let mut change_for_tx = change_order;
@@ -192,6 +196,7 @@ impl EffectiveChangeWrite {
             session,
         )
         .await?;
+
         db.sales_order()
             .formalize_submission(
                 &mut self.order,

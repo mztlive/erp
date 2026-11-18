@@ -43,6 +43,7 @@ impl WorkItemScan {
         pipeline.extend(prefix(filter, executor)?);
         pipeline.push(doc! { "$sort": sort_doc(filter.sort_by.as_deref(), filter.sort_ascending) });
         pipeline.push(doc! { "$project": work_item_projection() });
+
         let cursor = RowCursor::open(&collection, pipeline, batch_size, executor).await?;
         Ok(Self { cursor })
     }

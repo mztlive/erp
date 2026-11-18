@@ -98,6 +98,7 @@ impl FulfillmentCommandReceipt {
     /// 异载荷返回稳定冲突；身份或结果损坏返回内部错误。
     pub fn resource_id(&self, command: &CommandReceipt) -> Result<String> {
         self.validate()?;
+
         match command.match_structured(&self.command) {
             StructuredReceiptMatch::SamePayload => Ok(self.result.id().to_string()),
             StructuredReceiptMatch::DifferentPayload => {
@@ -141,16 +142,20 @@ mod tests {
                 FulfillmentCommandReceipt::resource(&command, "result".to_string(), "audit".to_string())
                     .unwrap();
             assert_eq!(receipt.resource_id(&command).unwrap(), "result");
+
             let changed = test_command(action, resource_type, 20);
             assert!(matches!(receipt.resource_id(&changed), Err(Error::ConflictError(_))));
+
             let encoded = serde_json::to_string(&receipt).unwrap();
             assert_eq!(serde_json::from_str::<FulfillmentCommandReceipt>(&encoded).unwrap(), receipt);
+
             receipt.command.actor_id = "other".to_string();
             assert!(matches!(receipt.resource_id(&command), Err(Error::Internal(_))));
             receipt.command.actor_id = "actor".to_string();
             receipt.result_schema_version = 2;
             assert!(receipt.resource_id(&command).is_err());
         }
+
         let invalid =
             CommandReceipt::from_payload("receipt-", "actor", "unregistered", "other", "key", &10).unwrap();
         assert!(
@@ -182,6 +187,7 @@ mod tests {
             FulfillmentCommandReceipt::resource(&command, "original".to_string(), "audit".to_string())
                 .is_err()
         );
+
         let mut receipt =
             FulfillmentCommandReceipt::resource(&command, "reverse".to_string(), "audit".to_string())
                 .unwrap();

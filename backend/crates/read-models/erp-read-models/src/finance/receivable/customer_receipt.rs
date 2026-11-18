@@ -37,12 +37,14 @@ impl ReceivableReadService {
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
+
         let allocations = self
             .db
             .receipt_allocations()
             .find_allocations_by_receipts(&[receipt.base.id.clone().into()], executor)
             .await?;
         let (allocated_total, views) = allocation_view(&allocations);
+
         let binding = match find_approval_binding(&self.db, id, executor).await.map_err(crate::Error::from) {
             Ok(binding) => binding,
             Err(Error::NotFound(_)) => None,
@@ -55,6 +57,7 @@ impl ReceivableReadService {
             executor,
         )
         .await?;
+
         Ok(CustomerReceiptView {
             id: receipt.base.id.clone(),
             receipt_no: receipt.receipt_no,

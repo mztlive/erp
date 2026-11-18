@@ -140,11 +140,13 @@ impl AccessFactsPort for FinancialTaskFacts {
         {
             return Err(IdentityError::ValidationError("财务任务事实与权限资源错配".into()));
         }
+
         let task_context = AccessContext { resource: "work_item".into(), ..context.clone() };
         let mut facts = self.tasks.load(&task_context, targets, executor).await?;
         if facts.iter().any(|fact| fact.resource != "work_item") {
             return Err(IdentityError::ValidationError("任务 Facts 资源错配".into()));
         }
+
         let mut sources = self.sources.load(context, targets, executor).await?;
         for object in &mut facts {
             object.resource = context.resource.clone();
@@ -186,6 +188,7 @@ impl TaskSources for MongoTaskSources {
                 .find_by_id(id, executor)
                 .await?
                 .ok_or_else(|| IdentityError::NotFound("财务办理任务不存在".into()))?;
+
             let (resource, permission) = task_subject(&task, &context.permission)?;
             let source_context = AccessContext {
                 resource: resource.into(),
@@ -217,6 +220,7 @@ async fn source_relations(
     {
         return Err(IdentityError::ValidationError("财务任务的真实主题不存在或身份错配".into()));
     }
+
     if context.resource == "purchase_order" {
         return Ok([(
             RelationKey::parse("purchase_source")?,
@@ -363,6 +367,7 @@ mod tests {
             let tasks = tasks();
             let facts = FinancialTaskFacts { tasks: tasks.clone(), sources: Arc::new(Sources) };
             let context = context(permission.clone());
+
             let loaded = facts
                 .load(&context, &ResourceTargets::new(&["actual-task"]).unwrap(), &mut NoTransaction)
                 .await
@@ -373,12 +378,14 @@ mod tests {
             assert_eq!(loaded[0].version, "17");
             assert_eq!(loaded[0].assignee_id, FactValue::Known(Some("assignee".into())));
             assert_eq!(loaded[0].owner_id, loaded[0].assignee_id);
+
             let source = &loaded[0].relations[&RelationKey::parse("sales_source").unwrap()];
             assert_eq!(source.expected_ids, ["actual-sale".into()].into());
             assert_eq!(source.objects[0].id, "actual-sale");
             assert_eq!(source.objects[0].version, "source-v8");
             assert_eq!(source.objects[0].owner_id, FactValue::Known(Some("sales-owner".into())));
             assert_ne!(source.objects[0].owner_id, loaded[0].owner_id);
+
             let contexts = tasks.contexts.lock().unwrap();
             assert_eq!(contexts.len(), 1);
             assert_eq!(contexts[0].resource, "work_item");
@@ -403,6 +410,7 @@ mod tests {
             ));
         }
         assert!(tasks.contexts.lock().unwrap().is_empty());
+
         let incomplete = facts
             .load(
                 &context(purchase_payment_request::CREDIT_LIST),
@@ -453,6 +461,7 @@ mod tests {
     fn reveal_uses_function_qualification_and_other_financial_actions_keep_exact_task() {
         let mut task = approval_task();
         let actor = AuditActor::new("approver".into(), "approver".into(), AccountKind::Admin);
+
         assert!(matches!(TaskPurpose::Reveal.target(&actor, &task), Ok(AccessTarget::Operation)));
         for purpose in [TaskPurpose::Payment, TaskPurpose::Invoice] {
             assert!(matches!(
@@ -461,6 +470,7 @@ mod tests {
                     if id == task.base.id && version == task.base.version.to_string()
             ));
         }
+
         for owner in [Some("other".into()), None] {
             task.owner_user_id = owner;
             assert!(matches!(TaskPurpose::Reveal.target(&actor, &task), Err(Error::Forbidden(_))));
@@ -474,6 +484,7 @@ mod tests {
             task_subject(&task, &payable::PAYMENT_RECIPIENT_REVEAL).unwrap(),
             ("purchase_payment_request", purchase_payment_request::DETAIL),
         );
+
         for permission in [
             purchase_payment_request::CREDIT_LIST,
             purchase_payment_request::SUBMIT,
@@ -481,6 +492,7 @@ mod tests {
         ] {
             assert!(matches!(task_subject(&task, &permission), Err(IdentityError::ValidationError(_))));
         }
+
         task.business_object_type = "invoice".into();
         assert!(matches!(
             task_subject(&task, &payable::PAYMENT_RECIPIENT_REVEAL),
@@ -515,6 +527,7 @@ mod tests {
         let task = approval_task();
         let (resource, permission) = task_subject(&task, &payable::PAYMENT_RECIPIENT_REVEAL).unwrap();
         let context = AccessContext { resource: resource.into(), ..context(permission) };
+
         let related = BTreeMap::from([(
             RelationKey::parse("purchase_source").unwrap(),
             RelatedObjects {
@@ -535,6 +548,7 @@ mod tests {
             relations: related.clone(),
             ..Default::default()
         };
+
         let mut executor = ReadExecutor::default();
         let expected_executor = &mut executor as *mut ReadExecutor as usize;
         for objects in [
@@ -547,6 +561,7 @@ mod tests {
             let valid = objects.len() == 1 && objects[0] == root;
             let facts = Arc::new(SubjectFacts { objects, calls: Mutex::new(Vec::new()) });
             let ports = BTreeMap::from([(resource.into(), facts.clone() as Arc<dyn AccessFactsPort>)]);
+
             let loaded = source_relations(&ports, &task, &context, &mut executor).await;
             if valid {
                 assert_eq!(loaded.unwrap(), related);
@@ -600,9 +615,11 @@ mod tests {
                 },
             )
             .unwrap();
+
             assert_eq!(task_subject(&task, &permission).unwrap().0, resource);
             task.business_object_type = "unrelated".into();
             assert!(task_subject(&task, &permission).is_err());
+
             task.business_object_type = resource.into();
             task.work_item_type = WorkItemType::BusinessException;
             assert!(task_subject(&task, &permission).is_err());

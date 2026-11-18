@@ -68,6 +68,7 @@ pub(super) fn parse_row(
     let parsed = ParsedReply { line: original_line(row, layout, source)?, note: cell(row, layout.note) };
     // 先核验供应事实，再解释条款，保留原有首错顺序。
     let matched = parsed.match_supplier(supplier, source, prior)?;
+
     let terms = terms(row, matched.parsed.line, layout)?;
     if matched.parsed.note.chars().count() > 4000 || (terms.unavailable && matched.parsed.note.is_empty()) {
         return Err(invalid("报价备注最多 4000 字；无法供货须填写原因"));
@@ -83,6 +84,7 @@ impl<'a> ParsedReply<'a> {
             .flatten()
             .filter(|quote| quote["line_id"] == self.line["line_id"] && quote["supplier_id"] == supplier)
             .max_by_key(|quote| (quote["feedback_round"].as_u64(), quote["revision_no"].as_u64()));
+
         let candidates: Vec<_> = source["offerings"]
             .as_array()
             .into_iter()
@@ -93,6 +95,7 @@ impl<'a> ParsedReply<'a> {
                     && offering["status"] == "ACTIVE"
             })
             .collect();
+
         let offering = previous
             .and_then(|quote| {
                 candidates.iter().copied().find(|offering| offering["id"] == quote["supplier_offering_id"])
@@ -122,6 +125,7 @@ impl MatchedReply<'_> {
         } else {
             "新增"
         };
+
         let quote = ReplyQuote {
             quote_id: revision.map(|quote| text(quote, "quote_id")).unwrap_or_else(next_id),
             revision_no: revision.and_then(|quote| quote["revision_no"].as_u64()).unwrap_or(0) + 1,
@@ -157,6 +161,7 @@ fn original_line<'a>(row: &Row, layout: Layout, source: &'a Value) -> Result<&'a
         .flatten()
         .find(|product| product["sku_id"] == line["sku_id"])
         .ok_or_else(|| invalid("商品单位资料不可用"))?;
+
     if cell(row, 3) != text(line, "sku_code")
         || cell(row, 5) != text(product, "base_unit_name")
         || decimal(cell(row, 6), 6, "需求数量")? != decimal(required(line, "quantity")?, 6, "需求数量")?
@@ -186,6 +191,7 @@ pub(super) fn terms(row: &Row, line: &Value, layout: Layout) -> Result<ReplyTerm
             freight_gross: None,
         });
     }
+
     let price = decimal(cell(row, 10), 4, "含税单价")?;
     if !QuoteTerms::unit_cost_is_valid(price, false) {
         return Err(invalid("含税单价须为正数"));
@@ -194,6 +200,7 @@ pub(super) fn terms(row: &Row, line: &Value, layout: Layout) -> Result<ReplyTerm
     if !QuoteTerms::tax_rate_is_valid(tax) {
         return Err(invalid("税率不得超过 100%"));
     }
+
     let expected_delivery_date = match layout.delivery {
         DeliverySource::ReplyColumn(index) => parse_date(cell(row, index))?,
         DeliverySource::Requirement => due,

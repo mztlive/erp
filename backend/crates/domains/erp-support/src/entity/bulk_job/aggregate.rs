@@ -60,6 +60,7 @@ impl BulkSelectionSnapshotAggregate {
         if item_count == 0 {
             return Err(Error::from("冻结目标不能为空"));
         }
+
         let items = drafts
             .into_iter()
             .map(|draft| {
@@ -75,6 +76,7 @@ impl BulkSelectionSnapshotAggregate {
                 )
             })
             .collect::<Result<Vec<_>>>()?;
+
         let snapshot = BulkSelectionSnapshot::new(
             id,
             BulkSelectionSnapshotData {
@@ -163,6 +165,7 @@ impl BackgroundJobAggregate {
         if data.declared_total_count != total_count {
             return Err(Error::from("目标总数必须与逐项结果数量一致"));
         }
+
         let items = drafts
             .into_iter()
             .enumerate()
@@ -184,6 +187,7 @@ impl BackgroundJobAggregate {
                 )
             })
             .collect::<Result<Vec<_>>>()?;
+
         let mut job = BackgroundJob::new(
             id,
             BackgroundJobData {
@@ -232,6 +236,7 @@ fn background_job_fingerprint(job: &BackgroundJob, items: &[BackgroundJobItem]) 
     push_optional(&mut parts, job.domain_job_id.as_deref());
     push_optional(&mut parts, job.selection_snapshot_id.as_ref().map(AsRef::as_ref));
     push_optional(&mut parts, job.input_file_asset_id.as_ref().map(AsRef::as_ref));
+
     for item in items {
         parts.push("item".to_string());
         parts.push(item.item_no.to_string());
@@ -328,6 +333,7 @@ mod tests {
             source_row_no: None,
             source_column_name: None,
         };
+
         assert!(
             BackgroundJobAggregate::new(BackgroundJobId::new("job-empty"), data.clone(), vec![]).is_err()
         );
@@ -341,6 +347,7 @@ mod tests {
             )
             .is_err()
         );
+
         let aggregate = BackgroundJobAggregate::new(
             BackgroundJobId::new("job-1"),
             data.clone(),
@@ -351,6 +358,7 @@ mod tests {
         assert_eq!(job.total_count, 2);
         assert_eq!(items.iter().map(|item| item.item_no).collect::<Vec<_>>(), vec![1, 2]);
         assert!(items.iter().all(|item| item.background_job_id == BackgroundJobId::new("job-1")));
+
         let first_fingerprint = job.request_fingerprint.clone();
         let again = BackgroundJobAggregate::new(
             BackgroundJobId::new("job-2"),

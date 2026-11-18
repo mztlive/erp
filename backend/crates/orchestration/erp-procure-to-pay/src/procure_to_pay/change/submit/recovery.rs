@@ -25,6 +25,7 @@ pub(in crate::procure_to_pay) async fn replay_change_command(
     let receipt = PurchaseCommandReceipt::decode(record, identity, fingerprint)
         .map_err(|_| Error::ConflictError("幂等键已用于不同的采购变更提交请求或回执无效".into()))?
         .into_payload();
+
     let submission = db
         .purchase_change_submissions()
         .find_by_id(&receipt.submission_id, executor)

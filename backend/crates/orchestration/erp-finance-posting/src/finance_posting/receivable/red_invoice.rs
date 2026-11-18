@@ -66,9 +66,9 @@ impl ReceivableProcess {
     ) -> Result<InvoiceView> {
         req.validate()?;
         let prepared = RedInvoiceCommand::prepare(actor, id, &req)?;
+
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-
         let client = db.client().clone();
         client
             .with_transaction(move |executor| {
@@ -196,10 +196,12 @@ async fn apply_red_invoice(
     rbac.authorization
         .require(&command.actor, &receivable::INVOICE_RED_ISSUE, AccessTarget::Operation, executor)
         .await?;
+
     let receipts = FinanceCommandReceiptService::new(db.clone());
     if let Some(id) = receipts.committed_resource_id(&command.receipt, executor).await? {
         return Ok(id);
     }
+
     let original = db
         .invoices()
         .find_by_id(&command.original_id, executor)
@@ -208,6 +210,7 @@ async fn apply_red_invoice(
     if !original.is_registered() || original.invoice_kind != InvoiceKind::Blue {
         return Err(Error::BusinessLogicError("只有已登记的蓝票可以被红冲".to_string()));
     }
+
     let allocation_plan = load_red_invoice_plan(
         db,
         &original,
@@ -225,6 +228,7 @@ async fn apply_red_invoice(
         }
         return Ok(existing);
     }
+
     let red_mut =
         build_red_invoice(&original, &command.red_no, red_gross, red_net, red_tax, &command.actor_id)?;
     let mut original_mut = original;
@@ -232,6 +236,7 @@ async fn apply_red_invoice(
     let sales_ids =
         persist_red_invoice(db, &red_mut, &mut original_mut, &allocation_plan, &command.actor_id, executor)
             .await?;
+
     let invoices = RedPostingInvoices { red: &red_mut, original: &original_mut };
     complete_red_posting(db, rbac, command, invoices, &allocation_plan, &sales_ids, executor).await?;
     Ok(red_mut.base.id.clone())
@@ -442,6 +447,7 @@ async fn apply_red_invoice_fanout(
             .await?;
         }
     }
+
     let accounts = db.receivable_accounts().find_accounts_by_ids(&sorted, executor).await?;
     let mut order_ids = accounts.iter().map(|a| a.sales_order_id.to_string()).collect::<Vec<_>>();
     order_ids.sort();
@@ -507,6 +513,7 @@ async fn complete_red_posting(
         Some(command.reason.clone()),
     )?;
     persist_log(db, &audit, executor).await?;
+
     if original_mut.invoice_direction == InvoiceDirection::Sales {
         apply_red_invoice_fanout(db, sales_ids, &command.actor_id, executor).await?;
     } else {
@@ -518,6 +525,7 @@ async fn complete_red_posting(
         )
         .await?;
     }
+
     FinanceCommandReceiptService::new(db.clone())
         .save_resource(&command.receipt, red_mut.base.id.clone(), audit.base.id.clone(), executor)
         .await?;
@@ -540,11 +548,13 @@ mod result_tests {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("red_invoice_results");
         let authorization = unavailable_authorization();
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let error = red_invoice_result(&db, &authorization, &actor, "red", &mut ReadExecutor::default())
             .await
             .unwrap_err();
         assert!(matches!(error, Error::ValidationError(message)
             if message == "写入授权必须使用快照事务"));
+
         let error = red_invoice_result(&db, &authorization, &actor, "red", &mut SnapshotExecutor::default())
             .await
             .unwrap_err();

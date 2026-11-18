@@ -57,6 +57,7 @@ impl CustomerAcceptanceLineBatch {
         if specs.len() > ACCEPTANCE_LINE_BATCH_MAX {
             return Err(Error::from("验收行数必须在1-200之间"));
         }
+
         let mut lines = Vec::with_capacity(specs.len());
         // 行数已限制为 200，连续 u32 行号不会溢出。
         for (line_no, spec) in (1u32..).zip(specs) {

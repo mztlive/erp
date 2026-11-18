@@ -130,6 +130,7 @@ impl WorkItem {
             .responsibility_key()
             .ok_or_else(|| Error::from("履约任务缺少责任键"))
             .and_then(FulfillmentResponsibilityKey::parse)?;
+
         let matches = matches!(
             (self.business_object_type.as_str(), self.owner_role.as_str(), self.reason_code.as_deref(), &key,),
             (

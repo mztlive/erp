@@ -48,6 +48,7 @@ impl Sources {
                 executor,
             )
             .await?;
+
         let mut mapped = BTreeMap::new();
         for allocation in allocations {
             let source = rows
@@ -70,6 +71,7 @@ impl Sources {
                     .collect(),
             );
         }
+
         let external = external_deliveries(process, context, executor).await?;
         Ok(Self { versions, allocations: mapped, external })
     }
@@ -121,6 +123,7 @@ impl Sources {
                     .map(|row| row.allocations.clone())
                     .unwrap_or_default()
             };
+
             if allocations.len() == 1 && line.quantity <= allocations[0].quantity {
                 allocations[0].quantity = line.quantity;
             }

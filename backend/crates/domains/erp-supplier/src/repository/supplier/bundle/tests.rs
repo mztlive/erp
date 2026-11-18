@@ -14,6 +14,7 @@ fn qualification_constraint_kind_covers_all_branches() {
     assert_eq!(qualification_constraint_kind(&[], None), Unconstrained);
     // 仅按类型命中。
     assert_eq!(qualification_constraint_kind(&[QualificationType::FoodLicense], None), Included);
+
     // 各健康状态均走命中分支。
     for health in [
         SupplierQualificationHealthFilter::Valid,
@@ -32,6 +33,7 @@ fn qualification_constraint_kind_covers_all_branches() {
             "空类型下健康状态 {health:?} 仍应走命中分支"
         );
     }
+
     // 未登记资质走排除分支，命中集合为空。
     assert_eq!(
         qualification_constraint_kind(

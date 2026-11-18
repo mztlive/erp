@@ -75,9 +75,11 @@ fn order_stock_freight_and_target_queries_preserve_scope() {
         assert_eq!(value["getStockByIdGoodsReq"]["areaInfo"]["townId"], 0);
         assert_eq!(value["sourceType"], 3);
     }
+
     let value = payload(JdVopReadRequest::Freight { lines, area: address, payment_type: 4 });
     assert_eq!(value["freightQueryOpenReq"]["skuInfoList"], json!([{"skuId":123,"skuNum":17}]));
     assert_eq!(value["freightQueryOpenReq"]["paymentType"], 4);
+
     let order = payload(JdVopReadRequest::Order {
         merchant_order_no: Some("original".into()),
         external_order_no: None,
@@ -85,6 +87,7 @@ fn order_stock_freight_and_target_queries_preserve_scope() {
     assert_eq!(order["thirdOrderId"], "original");
     assert!(order.get("jdOrderId").is_none());
     assert_eq!(order["queryExt"], "qcjbylx,qyfwsp,kmjhyy,medicine");
+
     assert_eq!(
         payload(JdVopReadRequest::Logistics { external_order_no: "123".into() }),
         json!({"orderLogisticsBillOpenReq":{"jdOrderId":123,"sourceType":3}})
@@ -119,8 +122,10 @@ fn funds_and_messages_keep_top_level_filters_and_original_write_targets() {
         value,
         json!({"startDate":"start","endDate":"end","pageSize":100,"pageIndex":2,"sourceType":3})
     );
+
     let value = payload(JdVopReadRequest::Messages { types: vec![1, 5, 12], read_type: 2, source_type: 3 });
     assert_eq!(value, json!({"type":"1,5,12","readType":2,"sourceType":3}));
+
     for (request, reason) in [
         (
             JdVopWriteRequest::ConfirmReceipt {
@@ -155,6 +160,7 @@ fn funds_and_messages_keep_top_level_filters_and_original_write_targets() {
         }
         assert_eq!(value, expected);
     }
+
     let value: Value = from_str(
         write_payload(
             &JdVopWriteRequest::DeleteMessages {
@@ -257,6 +263,7 @@ fn invalid_identifiers_quantities_channels_and_batches_stop_encoding() {
     ] {
         assert!(read_payload(&request, &context()).is_err());
     }
+
     assert!(JdVopRequestContext::new(0).is_err());
     assert!(JdVopRequestContext::new(u32::MAX).is_err());
     assert!(JdVopRequestContext::new(u32::try_from(i32::MAX).unwrap()).is_ok());

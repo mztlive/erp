@@ -87,10 +87,12 @@ async fn updates_authorize_the_actual_adjustment_before_business_reads_or_versio
         let mut executor = SnapshotExecutor::default();
         let authorization =
             Authorization { rejection, boundary: executor.boundary().unwrap(), calls: AtomicUsize::new(0) };
+
         let result = adjustment_for_update(&db, &authorization, &actor, &id, 1, &mut NoTransaction).await;
         assert!(matches!(result, Err(Error::ValidationError(message))
             if message == "库存调整修改必须使用快照事务"));
         assert_eq!(authorization.calls.load(Ordering::SeqCst), 0);
+
         for version in [1, 999] {
             let result =
                 adjustment_for_update(&db, &authorization, &actor, &id, version, &mut executor).await;

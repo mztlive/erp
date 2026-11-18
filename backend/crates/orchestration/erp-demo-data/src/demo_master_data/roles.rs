@@ -54,10 +54,12 @@ impl DemoRole {
         for permission in required {
             permissions.push(Permission::parse(permission)?);
         }
+
         if foundation.approvals.iter().flat_map(|flow| &flow.nodes).any(|node| node.assignee == account.key) {
             permissions.push(approval_instance_permissions::INSTANCE_LIST);
             permissions.push(approval_instance_permissions::SUBMIT_DECISION);
         }
+
         Ok(Self {
             id: format!("role-demo-{}", account.account),
             request: CreateRoleParams {
@@ -84,6 +86,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     ) -> Result<()> {
         let foundation = spec::foundation_spec();
         self.ensure_builtin_roles(foundation, actor).await?;
+
         for account in &foundation.accounts {
             let role = DemoRole::for_account(foundation, account)?;
             let changed = self
@@ -108,6 +111,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             })
             .map(|template| template.template.id)
             .collect::<Vec<_>>();
+
         if !missing.is_empty() {
             self.identity
                 .generate_builtin_roles(
@@ -159,6 +163,7 @@ mod tests {
             assert!(ids.insert(role.id.clone()));
             assert_ne!(role.id, account.role_id);
             assert_eq!(role.account_role_ids(account), [account.role_id.clone(), role.id.clone()]);
+
             let permissions = PermissionSet::new(role.request.permissions);
             let baseline = PermissionSet::new(
                 catalog.iter().find(|template| template.id == account.role_id).unwrap().permissions.clone(),
@@ -168,6 +173,7 @@ mod tests {
                 assert!(permissions.covers_one(&Permission::parse(required).unwrap()), "{required}");
             }
             assert!(!permissions.covers_one(&admin_permissions::ROLE_CREATE_ROLE));
+
             if foundation
                 .approvals
                 .iter()
@@ -182,6 +188,7 @@ mod tests {
                 }
             }
         }
+
         let sales = DemoRole::for_account(foundation, &foundation.accounts[0]).unwrap();
         assert!(
             sales
@@ -204,6 +211,7 @@ mod tests {
         let invoice = permissions("invoice");
         let approve = approval_instance_permissions::SUBMIT_DECISION;
         let pay = purchase_payment_request_permissions::CREDIT_LIST;
+
         assert!(finance.covers_one(&approve));
         assert!(!finance.covers_one(&pay));
         assert!(cashier.covers_one(&pay));
@@ -219,6 +227,7 @@ mod tests {
             serde_json::from_str(include_str!("dev-foundation.json")).unwrap();
         foundation.accounts[0].role_id = "role-root".into();
         assert!(DemoRole::for_account(&foundation, &foundation.accounts[0]).is_err());
+
         foundation.accounts[0].role_id = "role-sales".into();
         foundation.required_permissions.remove("sales");
         assert!(DemoRole::for_account(&foundation, &foundation.accounts[0]).is_err());

@@ -190,6 +190,7 @@ impl AccessFactsPort for SelectionFacts {
                 let version = format!("{}:{}:{}", proposal.base.version, book.base.id, book.base.version);
                 (book, version)
             };
+
             let mut root = book_object(&context.resource, id, version, &book);
             let customer_id = book.customer_id.to_string();
             let source_context = AccessContext {
@@ -324,6 +325,7 @@ mod tests {
             panic!("册责任必须使用本行字段");
         };
         assert_eq!(owner, doc! { "sales_owner_user_id": "sales-a" });
+
         let QueryFragment::Match(org) =
             mapping.predicate(&AccessFact::OrganizationIn(["org-a".into()].into()), &context, facts).unwrap()
         else {
@@ -372,6 +374,7 @@ mod tests {
         assert_eq!(proposed.resource, "sales_selection_booklet");
         assert!(proposed.id.is_empty());
         assert!(proposed.version.is_empty());
+
         let relation = proposed.relations.get(&RelationKey::parse("customer").unwrap()).unwrap();
         assert_eq!(relation.expected_ids, ["customer".into()].into());
         assert!(relation.objects.is_empty());

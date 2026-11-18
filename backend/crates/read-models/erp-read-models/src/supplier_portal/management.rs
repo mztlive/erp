@@ -112,6 +112,7 @@ impl SupplierPortalReadService {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::ValidationError("内部门户读取必须使用快照事务".into()));
         }
+
         if supplier_id.trim().is_empty()
             || !self.internal_authorization()?.supplier_readable(actor, supplier_id, executor).await?
         {
@@ -185,6 +186,7 @@ mod tests {
         };
         let mut executor = SnapshotExecutor::default();
         let expected = &mut executor as *mut SnapshotExecutor as usize;
+
         assert!(matches!(
             service.account_page(&actor, &params, &mut executor).await,
             Err(Error::NotFound(_))
@@ -194,6 +196,7 @@ mod tests {
             *authorization.calls.lock().unwrap(),
             vec![("supplier", "supplier".into(), expected), ("supplier", "supplier".into(), expected),]
         );
+
         let mut unscoped = ReadExecutor::default();
         assert!(matches!(
             service.account_page(&actor, &params, &mut unscoped).await,
@@ -217,6 +220,7 @@ mod tests {
         };
         let (query, active) = management_query(&params).unwrap();
         assert_eq!((query.page, query.skip, query.q.as_deref(), active), (2, 20, Some("名称"), Some(false)));
+
         params.status = Some("SUSPENDED".into());
         assert!(management_query(&params).is_err());
     }

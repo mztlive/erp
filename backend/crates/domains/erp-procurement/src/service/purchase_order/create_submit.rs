@@ -37,6 +37,7 @@ pub async fn freeze_submission_from_created_draft(
 ) -> Result<(PurchaseOrderSubmission, Vec<PurchaseOrderSubmissionLine>)> {
     let existing =
         db.purchase_order().list_submissions_by_order(&order.base.id.clone().into(), session).await?;
+
     let formal = PurchaseOrderSubmission::freeze_from_draft(
         PurchaseOrderSubmissionId::new(next_id()),
         PurchaseOrderSubmission::next_submission_no(&existing)?,
@@ -44,6 +45,7 @@ pub async fn freeze_submission_from_created_draft(
         Instant::now(),
         actor.id(),
     )?;
+
     let formal_id = PurchaseOrderSubmissionId::new(formal.base.id.clone());
     let mut lines = Vec::with_capacity(draft_lines.len());
     for line in draft_lines {

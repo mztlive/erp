@@ -76,11 +76,13 @@ impl InvestigationReplay {
     ) -> Result<Option<SupplierOrderInvestigationResultView>> {
         let order = self.authorized_order(db, authorization, executor).await?;
         legacy::ensure(db, &order.base.id, executor).await?;
+
         let Some(stored) = db.supply_command_receipts().find_command(&self.command_id, executor).await?
         else {
             return Ok(None);
         };
         let receipt = self.receipt(stored, &order.base.id)?;
+
         let evidence = db
             .supplier_order_actions()
             .find_by_id(&receipt.evidence_id, executor)
@@ -249,8 +251,10 @@ mod tests {
             let receipt = replay.receipt(stored, "order").unwrap();
             assert_eq!(receipt.evidence_id, "evidence");
             assert_eq!(receipt.task_version, task.then_some(9));
+
             let (replay, stored) = fixture(task);
             assert!(matches!(replay.receipt(stored, "other-order"), Err(Error::Internal(_))));
+
             let (mut replay, stored) = fixture(task);
             replay.fingerprint = stable_digest("other-payload");
             assert!(matches!(replay.receipt(stored, "order"), Err(Error::ConflictError(_))));

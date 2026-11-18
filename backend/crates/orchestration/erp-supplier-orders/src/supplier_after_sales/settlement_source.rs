@@ -37,6 +37,7 @@ pub async fn link(
     if ids.len() > 1000 {
         return Err(Error::ValidationError("结算来源引用超过上限".into()));
     }
+
     let mut rows = Vec::new();
     for id in ids.keys() {
         let row = db
@@ -62,10 +63,12 @@ pub async fn link(
         {
             return Err(Error::ConflictError("结算来源的订单或技术账号不匹配".into()));
         }
+
         validate_refund_reference(db, source, &row, executor).await?;
         rows.push(row);
     }
     validate_settlement_source(source, &rows)?;
+
     for mut row in rows {
         if row.source_evidence_id.as_deref() == Some(&source.base.id) {
             continue;
@@ -96,6 +99,7 @@ async fn validate_refund_reference(
             reference.strip_prefix("supplier-refund://").and_then(|tail| tail.split('/').next())
         })
         .collect();
+
     for id in ids {
         if let Some(fact) = db.supplier_refund_facts().find_by_id(id, executor).await?
             && fact.connection_id.as_ref() == row.connection_id

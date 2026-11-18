@@ -75,6 +75,7 @@ impl CustomerAccess {
             valid_until,
             ..Default::default()
         };
+
         Ok(self
             .service
             .require(actor, &customer::CREATE, AccessTarget::Candidate(candidate), executor)
@@ -142,6 +143,7 @@ impl CustomerAccess {
                 valid_until = Some(valid_until.map_or(boundary, |current| current.min(boundary)));
             }
         }
+
         Ok(ObjectFacts {
             resource: "customer".into(),
             id: id.into(),
@@ -208,6 +210,7 @@ impl CustomerAccess {
         executor: &mut dyn Executor,
     ) -> Result<(CustomerResolvedScope, CustomerReadScope)> {
         let context = self.query_context(actor, permission, executor).await?;
+
         let assignments = self
             .db
             .customer_assignments()
@@ -442,6 +445,7 @@ mod tests {
     async fn creation_candidate_requires_owner_organization_current_facts_and_snapshot() {
         let access =
             access(&[customer::CREATE], scope(ScopeClause { company: true, ..Default::default() })).await;
+
         let missing = access
             .authorize_creation(&actor(), "new-customer", None, None, &mut SnapshotExecutor::default())
             .await
@@ -449,6 +453,7 @@ mod tests {
         assert!(
             matches!(missing, Error::ValidationError(message) if message == "请先维护负责人的有效主属组织")
         );
+
         let expired = access
             .authorize_creation(
                 &actor(),
@@ -460,6 +465,7 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(expired, Error::ConflictError(_)));
+
         let outside_snapshot = access
             .authorize_creation(&actor(), "new-customer", Some("org-a".into()), None, &mut NoTransaction)
             .await

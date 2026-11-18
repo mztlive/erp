@@ -29,6 +29,7 @@ pub(super) async fn validate_delivery(
     if edits.is_empty() {
         return Ok(());
     }
+
     let sales = db
         .sales_orders()
         .find_by_id(order.sales_order_id.as_ref(), executor)
@@ -43,6 +44,7 @@ pub(super) async fn validate_delivery(
         executor,
     )
     .await?;
+
     validate_edits(order, edits, &facts)
 }
 

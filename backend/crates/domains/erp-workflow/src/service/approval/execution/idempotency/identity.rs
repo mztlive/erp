@@ -158,6 +158,7 @@ impl PreparedCommandIdentity {
         {
             return ReceiptBranch::PayloadConflict;
         }
+
         if receipt.scope_id == self.current.scope().as_str() {
             return if receipt.payload_digest == self.current.digest().as_str() {
                 ReceiptBranch::SamePayload(receipt)
@@ -165,6 +166,7 @@ impl PreparedCommandIdentity {
                 ReceiptBranch::PayloadConflict
             };
         }
+
         if is_v3_hash(&receipt.scope_id) || is_v3_hash(&receipt.payload_digest) {
             return ReceiptBranch::PayloadConflict;
         }

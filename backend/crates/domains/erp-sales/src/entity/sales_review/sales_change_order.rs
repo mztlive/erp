@@ -424,12 +424,14 @@ impl SalesChangeOrder {
             });
         }
         ensure_transition(self.stable.status, SalesChangeOrderStatus::InApproval)?;
+
         let target_content_hash = normalize_required_text(
             target_content_hash.into(),
             "目标内容指纹不能为空",
             TARGET_HASH_MAX_LEN,
             "目标内容指纹过长",
         )?;
+
         self.current_submission_id = Some(submission_id);
         self.target_content_hash = Some(target_content_hash);
         self.stable.status = SalesChangeOrderStatus::InApproval;
@@ -537,6 +539,7 @@ mod tests {
         assert!(order.is_draft());
         assert!(order.base_revision_matches("rev-1"));
         assert!(order.required_current_submission_id().is_err());
+
         order.start_approval(SalesChangeSubmissionId::new("sub-1"), "hash-1", "admin-1").unwrap();
         assert!(!order.is_draft());
         assert_eq!(order.required_current_submission_id().unwrap().as_ref(), "sub-1");
@@ -643,11 +646,14 @@ mod tests {
         assert_eq!(change.current_submission_id, Some(SalesChangeSubmissionId::new("sub-1")));
         assert_eq!(change.base_revision_id, SalesOrderRevisionId::new("rev-1"));
         assert!(change.effective_revision_id.is_none());
+
         change.update(SalesChangeOrderUpdate::default(), "editor").unwrap();
         assert_eq!(change.stable.status, SalesChangeOrderStatus::Rejected);
+
         let mut abandoned = change.clone();
         abandoned.void("creator").unwrap();
         assert_eq!(abandoned.stable.status, SalesChangeOrderStatus::Voided);
+
         change.start_approval(SalesChangeSubmissionId::new("sub-2"), "hash-1", "submitter").unwrap();
         assert_eq!(change.current_submission_id, Some(SalesChangeSubmissionId::new("sub-2")));
         assert_eq!(change.stable.status, SalesChangeOrderStatus::InApproval);

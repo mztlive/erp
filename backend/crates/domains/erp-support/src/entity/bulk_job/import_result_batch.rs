@@ -52,9 +52,11 @@ impl BackgroundJob {
         if all_terminal && next_processed != self.total_count {
             return Err(Error::from("全部行终态时已处理数必须等于目标总数"));
         }
+
         if success > 0 || skipped > 0 || failed > 0 {
             self.record_progress(success, skipped, failed, at)?;
         }
+
         if !all_terminal {
             return self.mark_partial_if_failed();
         }
@@ -162,6 +164,7 @@ mod tests {
         assert_eq!(job.finished_at, Some(Instant::from_unix_secs(1_700_000_100)));
         assert_ne!(job.status, JobStatus::Succeeded);
         assert!(job.is_terminal());
+
         let snapshot = job.clone();
         assert!(
             job.record_import_result_batch(0, 0, 0, true, Instant::from_unix_secs(1_700_000_200)).is_err()

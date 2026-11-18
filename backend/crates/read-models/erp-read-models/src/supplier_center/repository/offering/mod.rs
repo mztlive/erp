@@ -72,6 +72,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         let party_revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
             .find_many(in_filter("id", party_revision_ids), executor)
             .await?;
+
         Ok(SupplierOfferingDisplayEntities {
             skus,
             sku_revisions,

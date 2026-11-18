@@ -83,6 +83,7 @@ async fn lock_receipt_accounts(
     let entries = db.receivable_entries().find_entries_by_ids(&entry_ids, executor).await?;
     let account_ids =
         entries.iter().map(|entry| entry.receivable_account_id.to_string()).collect::<BTreeSet<_>>();
+
     let mut accounts = Vec::with_capacity(account_ids.len());
     for id in account_ids {
         let mut account = db
@@ -115,6 +116,7 @@ async fn load(
         .collect::<Vec<_>>();
     let offsets = db.receivable_entry_offsets().find_offsets_by_decreases(&decreases, executor).await?;
     let reserved = db.customer_receipts().reserved_allocations(&ids, excluded_receipt, executor).await?;
+
     let accounts = accounts
         .into_iter()
         .map(|account| ReceiptAccountCapacity {

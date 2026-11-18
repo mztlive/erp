@@ -72,6 +72,7 @@ async fn complete_error_task(
 ) -> Result<TerminalFact> {
     let mut task = load_error_task(db, &command.decision.item_id, executor).await?;
     ensure_error_task_subject(&task, &command.expected_subject_version)?;
+
     let policy = error_evidence_policy(&task);
     ensure_completion_policy(
         &command.decision.evidence_policy_id,
@@ -80,11 +81,13 @@ async fn complete_error_task(
         &command.decision.evidence_refs,
         &policy,
     )?;
+
     let subject = EvidenceSubject::error(&task);
     let verified =
         verify_evidence_refs(authority, &subject, &command.decision.evidence_refs, actor_id, executor)
             .await?;
     let reference = verified_reference(&verified)?;
+
     let resolution = completion_resolution(command, &reference, actor_id);
     let resolution_type = ResolutionType::from_verified_evidence(
         verified.iter().any(|evidence| evidence.reference.kind == ControlledEvidenceKind::CompensationResult),
@@ -110,6 +113,7 @@ async fn complete_difference(
     let latest = latest_resolution(db, &command.decision.item_id, executor).await?;
     ensure_difference_subject(latest.as_ref(), &command.expected_subject_version)?;
     ensure_difference_open(latest.as_ref())?;
+
     let policy = difference_evidence_policy(&difference);
     ensure_completion_policy(
         &command.decision.evidence_policy_id,
@@ -118,11 +122,13 @@ async fn complete_difference(
         &command.decision.evidence_refs,
         &policy,
     )?;
+
     let subject = EvidenceSubject::difference(&difference);
     let verified =
         verify_evidence_refs(authority, &subject, &command.decision.evidence_refs, actor_id, executor)
             .await?;
     let reference = verified_reference(&verified)?;
+
     let typed = DirectConclusion::ConfirmValidDifference;
     let fact = DirectFact {
         action: typed.resolution_action(),
@@ -132,6 +138,7 @@ async fn complete_difference(
         business_result_reference: Some(reference.clone()),
         verified_evidence: verified.into_iter().map(|evidence| evidence.reference).collect(),
     };
+
     let next_subject_version = persist_appended_resolution(
         db,
         &difference,

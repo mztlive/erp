@@ -52,12 +52,15 @@ impl FulfillmentReadService {
             .boundary()
             .filter(|boundary| boundary.is_snapshot() && boundary.is_current(executor))
             .ok_or_else(|| Error::ValidationError("验收命令结果读取必须使用原授权快照".into()))?;
+
         let acceptance = self.domain.load_customer_acceptance(acceptance_id, executor).await?.acceptance;
         if acceptance.sales_order_id != sales_order_id.as_ref() {
             return Err(Error::ConflictError("验收命令结果与销售单不一致".into()));
         }
+
         let remaining_eligibility =
             self.load_acceptance_eligibility(sales_order_id.as_ref(), executor).await?;
+
         if !boundary.is_current(executor) {
             return Err(Error::ValidationError("验收命令结果读取跨越授权快照".into()));
         }

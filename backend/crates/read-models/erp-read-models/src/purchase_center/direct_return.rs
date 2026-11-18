@@ -105,8 +105,10 @@ async fn finance_tasks(
             )
         })
         .collect::<Vec<_>>();
+
     let owners = tasks.iter().filter_map(|task| task.owner_user_id.clone()).collect::<Vec<_>>();
     let accounts = db.accounts().list_work_item_party_accounts(&owners, executor).await?;
+
     Ok(tasks
         .into_iter()
         .map(|task| ReturnFinanceTask {
@@ -140,6 +142,7 @@ pub async fn direct_return_plan(
     for (id, qty) in shipped_rows(db, order, executor).await? {
         *shipped.entry(id).or_default() += qty.to_decimal();
     }
+
     let returns = confirmed_direct_returns(db, &order.base.id, executor).await?;
     let mut returned: HashMap<String, Decimal> = HashMap::new();
     for record in &returns {
@@ -149,6 +152,7 @@ pub async fn direct_return_plan(
             }
         }
     }
+
     let mut lines = Vec::new();
     let mut target_gross = Amount::zero();
     for line in &facts.base_lines {
@@ -165,6 +169,7 @@ pub async fn direct_return_plan(
             lines.push(option);
         }
     }
+
     Ok(DirectReturnPlan {
         finance_tasks: finance_tasks(db, &order.base.id, executor).await?,
         settlements: settlements(db, &order.base.id, executor).await?,
@@ -201,6 +206,7 @@ fn option_for_line(
     let cost = line.unit_cost_gross.ok_or_else(|| Error::BusinessLogicError("采购商品缺少单价".into()))?;
     let rate = line.input_tax_rate.ok_or_else(|| Error::BusinessLogicError("采购商品缺少税率".into()))?;
     let gross = line_amounts(cost, target, rate).0;
+
     let actual_return = returned.get(&bound.sales_order_line_id).copied().unwrap_or_default();
     if !bound.quantity_affected && actual_return.is_zero() {
         return Ok((None, gross));

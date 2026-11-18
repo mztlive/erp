@@ -56,6 +56,7 @@ pub(super) fn append_optional_filters(pipeline: &mut Vec<Document>, filter: &Ful
     if let Some(warehouse_id) = &filter.warehouse_id {
         matched.insert("operation.warehouse_id", warehouse_id);
     }
+
     if let Some(due_from) = filter.due_from {
         matched.insert("operation.due_at", doc! { "$gte": due_from });
     }
@@ -75,6 +76,7 @@ pub(super) fn append_optional_filters(pipeline: &mut Vec<Document>, filter: &Ful
     if !matched.is_empty() {
         pipeline.push(doc! { "$match": matched });
     }
+
     if let Some(query) = filter.query.as_deref() {
         let literal = regex::escape(query);
         pipeline.push(doc! {

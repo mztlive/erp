@@ -32,6 +32,7 @@ pub(super) async fn ensure(db: &Database) -> Result<()> {
             )
             .build(),
     ];
+
     db.collection::<Document>(<Database as CatalogExt>::SKU_BARCODE_CLAIMS).create_indexes(indexes).await?;
     Ok(())
 }

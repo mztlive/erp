@@ -105,10 +105,12 @@ async fn apply_quantity_observation(
     if pending.is_empty() {
         tracking.ensure_dispatch_quantities(observation)?;
     }
+
     for shipment in pending {
         let deliveries = application.dispatch(tracking, &shipment, executor).await?;
         tracking.record_shipment(&shipment, deliveries)?;
     }
+
     application.merge_tracking(tracking, observation, executor).await?;
     Ok(observation.fulfillment == Some(FulfillmentStatus::Completed)
         && tracking.quantities_fully_applied()?)
@@ -156,6 +158,7 @@ impl MongoQuantityDeliveryApplication<'_> {
             db.fulfillment().delivery_lines_by_delivery_ids(&[DeliveryId::new(draft_id)], executor).await?;
         let (lines, remaining) = split_lines(&original, sources, &id)?;
         delivery.merge_observed_tracking(package_tracking(shipment, &lines))?;
+
         db.fulfillment().create_delivery_with_lines(&delivery, &lines, executor).await?;
         ensure_fulfillment_task(db, self.task_identity, FulfillmentTaskObject::Delivery(&delivery), executor)
             .await?;
@@ -169,6 +172,7 @@ impl MongoQuantityDeliveryApplication<'_> {
             executor,
         )
         .await?;
+
         persist_remainder(db, task_identity, &mut draft, &original, remaining, actor, executor).await?;
         Ok(id)
     }
@@ -194,6 +198,7 @@ fn split_lines(
         if source.sales_order_line_id.as_deref() != Some(line.sales_order_line_id.as_ref()) {
             return Err(Error::ConflictError("来源包裹与销售分配不一致".into()));
         }
+
         let (shipped, rest) = line.split_quantity(
             DeliveryId::new(id),
             DeliveryLineId::new(format!("{id}-{}", source.fulfillment_item_id)),
@@ -226,6 +231,7 @@ async fn persist_remainder(
             _ => {},
         }
     }
+
     if remaining_lines.is_empty() {
         complete_fulfillment_task(db, task_identity, FulfillmentTaskObject::Delivery(draft), actor, executor)
             .await?;
@@ -419,6 +425,7 @@ mod tests {
             tracking_calls: Default::default(),
             fail: None,
         };
+
         assert!(
             apply_quantity_observation(
                 &application,
@@ -431,6 +438,7 @@ mod tests {
         );
         assert_eq!(*application.calls.lock().unwrap(), ["first", "second"]);
         assert_eq!(tracking.applied_shipments.len(), 2);
+
         apply_quantity_observation(
             &application,
             &mut tracking,
@@ -450,6 +458,7 @@ mod tests {
             tracking_calls: Default::default(),
             fail: Some("first".into()),
         };
+
         let over = quantity_observation(&tracking, "2", "2");
         assert!(
             apply_quantity_observation(
@@ -462,6 +471,7 @@ mod tests {
             .is_err()
         );
         assert!(application.calls.lock().unwrap().is_empty());
+
         let valid = quantity_observation(&tracking, "1", "2");
         assert!(
             apply_quantity_observation(
@@ -490,6 +500,7 @@ mod tests {
             tracking_calls: Default::default(),
             fail: None,
         };
+
         for _ in 0..2 {
             let error = apply_quantity_observation(
                 &application,
@@ -515,6 +526,7 @@ mod tests {
             tracking_calls: Default::default(),
             fail: None,
         };
+
         assert!(
             !apply_quantity_observation(
                 &application,
@@ -526,6 +538,7 @@ mod tests {
             .unwrap()
         );
         assert_eq!(*application.calls.lock().unwrap(), ["first"]);
+
         assert!(
             apply_quantity_observation(
                 &application,
@@ -536,6 +549,7 @@ mod tests {
             .await
             .is_err()
         );
+
         let complete = quantity_observation(&tracking, "1", "2");
         assert!(
             apply_quantity_observation(

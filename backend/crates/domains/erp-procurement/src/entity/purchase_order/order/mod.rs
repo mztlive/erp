@@ -177,6 +177,7 @@ impl PurchaseOrder {
     ) -> Result<Self> {
         let purchase_no = normalize_optional_text(Some(data.purchase_no), "采购单号", PURCHASE_NO_MAX_LEN)?
             .unwrap_or_default();
+
         let payment_term_code = normalize_required_text(
             data.payment_term_code,
             "付款条件不能为空",
@@ -184,6 +185,7 @@ impl PurchaseOrder {
             "付款条件过长",
         )?;
         let payment_term_code = resolve_term(&payment_term_code)?.canonical_code;
+
         let creation_basis_id = normalize_required_text(
             data.creation_basis_id,
             "采购创建依据不能为空",
@@ -197,6 +199,7 @@ impl PurchaseOrder {
             "采购单责任人过长",
         )?;
         ensure_target_warehouse(data.fulfillment_responsibility, data.target_warehouse_id.as_ref())?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             stable: StableBase::new(PurchaseOrderStatus::Draft, created_by),
@@ -447,6 +450,7 @@ impl PurchaseOrder {
         resolve_term: impl FnOnce(&str) -> Result<PaymentTermFact>,
     ) -> Result<()> {
         self.ensure_draft()?;
+
         self.apply_payment_term(update.payment_term_code, resolve_term)?;
         if let Some(purchase_type) = update.purchase_type {
             self.purchase_type = purchase_type;
@@ -519,6 +523,7 @@ impl PurchaseOrder {
         self.ensure_draft()?;
         let next =
             self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))?;
+
         self.approval_subject_version = next;
         self.current_submission_id = Some(current_submission_id.into());
         self.stable.status = PurchaseOrderStatus::InApproval;
@@ -565,6 +570,7 @@ impl PurchaseOrder {
         if self.stable.status != PurchaseOrderStatus::InApproval {
             return Err(Error::from("只有审批中的采购单可以驳回"));
         }
+
         self.stable.status = PurchaseOrderStatus::Rejected;
         self.stable.touch(updated_by);
         Ok(())
@@ -732,6 +738,7 @@ impl PurchaseOrder {
             OWNER_USER_ID_MAX_LEN,
             "采购单责任人过长",
         )?;
+
         self.owner_user_id = Some(owner_user_id);
         self.stable.touch(updated_by);
         Ok(())
@@ -836,6 +843,7 @@ mod tests {
     fn rejected_order_remains_editable_until_resubmission() {
         let mut order = new_order();
         assert!(order.reject_approval(1, "approver").is_err());
+
         order.start_approval("submission-1", "buyer").unwrap();
         let version = order.approval_subject_version;
         order.reject_approval(1, "approver").unwrap();
@@ -843,10 +851,12 @@ mod tests {
         assert_eq!(order.current_submission_id.as_deref(), Some("submission-1"));
         assert_eq!(order.approval_subject_version, version);
         assert!(order.reject_approval(1, "approver").is_err());
+
         order
             .update(PurchaseOrderUpdate::default(), "buyer", crate::entity::test_support::payment_term)
             .unwrap();
         assert_eq!(order.stable.status, PurchaseOrderStatus::Rejected);
+
         order.start_approval("submission-2", "buyer").unwrap();
         assert_eq!(order.approval_subject_version, version + 1);
         assert_eq!(order.stable.status, PurchaseOrderStatus::InApproval);
@@ -866,6 +876,7 @@ mod tests {
             "审批提交版本已变化，不得驳回历史提交"
         );
         assert_eq!(order, before);
+
         order.reject_approval(2, "approver").unwrap();
         assert_eq!(order.stable.status, PurchaseOrderStatus::Rejected);
     }
@@ -961,8 +972,10 @@ mod tests {
 
         order.start_approval("sub-1", "admin-1").unwrap();
         assert_eq!(order.submission_id_for_formalization().unwrap().as_ref(), "sub-1");
+
         order.formalize_with_revision(PurchaseOrderRevisionId::new("por-1"), "fin-1").unwrap();
         assert_eq!(order.revision_id_for_change().unwrap().as_ref(), "por-1");
+
         order.apply_change_revision(PurchaseOrderRevisionId::new("por-2"), "approver-1").unwrap();
         assert_eq!(order.revision_id_for_change().unwrap().as_ref(), "por-2");
         assert_eq!(order.stable.updated_by, "approver-1");
@@ -1028,7 +1041,6 @@ mod tests {
         let before = order.clone();
 
         order.ensure_can_formalize().unwrap();
-
         assert_eq!(order, before);
         assert!(order.submission_id_for_formalization().is_err());
     }
@@ -1191,6 +1203,7 @@ mod tests {
                 panic!("unchanged payment term must not invoke resolver")
             })
             .unwrap();
+
         order.stable.status = PurchaseOrderStatus::InApproval;
         let result = order.update(
             PurchaseOrderUpdate { payment_term_code: Some("NET-15".to_string()), ..Default::default() },

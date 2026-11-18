@@ -18,6 +18,7 @@ impl SupplierApiConnection {
         {
             return Ok(false);
         }
+
         self.bind_endpoint_reference(config.endpoint.clone(), actor)?;
         self.bind_credential_reference(config.credential.clone(), actor)?;
         Ok(true)

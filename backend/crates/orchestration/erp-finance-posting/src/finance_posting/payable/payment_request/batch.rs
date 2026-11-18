@@ -23,9 +23,9 @@ impl PurchasePaymentRequestProcess {
     ) -> Result<Vec<PurchasePaymentRequest>> {
         let req = req.normalize()?;
         let commands = batch_commands(&req, actor.id())?;
+
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-
         let writer = actor.clone();
         let recovery = commands.clone();
         let result = db
@@ -36,6 +36,7 @@ impl PurchasePaymentRequestProcess {
                     if let Some(rows) = recover(&db, &rbac, &commands, &writer, executor).await? {
                         return Ok(rows);
                     }
+
                     let mut rows = Vec::with_capacity(req.requests.len());
                     for (data, command) in req.requests.into_iter().zip(&commands) {
                         let row =
@@ -46,6 +47,7 @@ impl PurchasePaymentRequestProcess {
                 })
             })
             .await;
+
         let Err(error) = result else { return result };
         let db = self.db.clone();
         let rbac = self.rbac.clone();
@@ -127,9 +129,11 @@ mod tests {
         let receipt =
             FinanceCommandReceipt::resource(&commands[0], "request".into(), "audit".into()).unwrap();
         assert_eq!(receipt.resource_id(&batch_commands(&req, "buyer").unwrap()[0]).unwrap(), "request");
+
         req.requests[0].reason = "changed".into();
         assert!(receipt.resource_id(&batch_commands(&req, "buyer").unwrap()[0]).is_err());
         assert!(receipt.resource_id(&batch_commands(&req, "other").unwrap()[0]).is_err());
+
         req.requests.push(req.requests[0].clone());
         let changed = batch_commands(&req, "buyer").unwrap();
         assert_ne!(changed[0].id(), changed[1].id());
@@ -162,10 +166,12 @@ mod tests {
         let old = FinanceCommandReceipt::resource(&old_command, "draft".into(), "audit".into()).unwrap();
         assert_ne!(old_command.id(), commands[0].id());
         assert!(old.resource_id(&commands[0]).is_err());
+
         let receipt =
             FinanceCommandReceipt::resource(&commands[0], "request".into(), "audit".into()).unwrap();
         assert_eq!(receipt.resource_id(&batch_commands(&req, "buyer").unwrap()[0]).unwrap(), "request");
         assert_ne!(commands[0].id(), commands[1].id());
+
         req.requests.swap(0, 1);
         assert!(receipt.resource_id(&batch_commands(&req, "buyer").unwrap()[0]).is_err());
     }

@@ -230,6 +230,7 @@ impl ReceivableEntry {
             REVISION_ID_MAX_LEN,
             "来源修订ID过长",
         )?;
+
         if data.amount.to_decimal().is_sign_negative() || data.amount.to_decimal().is_zero() {
             return Err(Error::from("应收分录金额必须为正数"));
         }

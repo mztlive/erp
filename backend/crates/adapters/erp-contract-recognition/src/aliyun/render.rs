@@ -80,11 +80,13 @@ impl PdfFile {
                     "PDF 转图服务不可用，请联系管理员检查 Poppler 配置",
                 )
             })?;
+
         let output = child.stdout.take().ok_or_else(render_error)?;
         let bytes = bounded_image(output).await?;
         if !child.wait().await.map_err(|_| render_error())?.success() {
             return Err(render_error());
         }
+
         if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
             return Err(render_error());
         }
@@ -116,6 +118,7 @@ mod tests {
         let program = Path::new("unused-pdftoppm");
         let error = PdfFile::create(&[], program).await.err().unwrap();
         assert_eq!(error, render_error());
+
         for bytes in [b"pdf".to_vec(), vec![0; 20 * 1024 * 1024]] {
             let pdf = PdfFile::create(&bytes, program).await.unwrap();
             let path = pdf.path.clone();

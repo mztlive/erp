@@ -196,6 +196,7 @@ impl DocumentNumberGenerator {
     ) -> Result<String> {
         let in_transaction = executor.boundary().is_some_and(|boundary| boundary.is_snapshot());
         tracing::debug!(kind = %kind.counter_id_str(), in_transaction, "taking next document number");
+
         let seq = self.next_seq(kind, date).await?;
         Ok(format_number(kind, date, seq))
     }
@@ -231,6 +232,7 @@ impl DocumentNumberGenerator {
             .return_document(ReturnDocument::After)
             .await
             .map_err(DatabaseError::from)?;
+
         let Some(counter) = counter else {
             return Err(Error::CounterMissing { kind });
         };
@@ -271,6 +273,7 @@ mod tests {
             assert_eq!(kind.prefix(), prefix);
             assert_eq!(kind.counter_id_str(), name);
             assert_eq!(kind.to_string(), name);
+
             let stored = Bson::String(name.to_owned());
             assert_eq!(serialize_to_bson(&kind).unwrap(), stored);
             assert_eq!(deserialize_from_bson::<DocumentNumberKind>(stored).unwrap(), kind);
@@ -292,7 +295,6 @@ mod tests {
     #[test]
     fn format_number_expands_seq_beyond_width_without_truncation() {
         let date = NaiveDate::from_ymd_opt(2026, 12, 31).expect("valid date");
-
         assert_eq!(format_number(DocumentNumberKind::SalesOrder, date, 1_000_000), "SO20261231-1000000");
     }
 

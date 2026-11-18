@@ -47,6 +47,7 @@ impl WorkbenchReadService {
             if filters.date_field.is_none() {
                 filters.date_field = Some("created".into());
             }
+
             let this = self.clone();
             self.db
                 .client()
@@ -77,10 +78,12 @@ impl WorkbenchReadService {
         query.limit = 100;
         let mut options = SearchOptions::new();
         let mut counts = BTreeMap::new();
+
         loop {
             let (batch, next_cursor) = runtime.started_instance_page(actor, &query, executor).await?;
             let items = self.approval_list_summaries(batch, executor).await?;
             let documents = self.approval_search_documents(&items, executor).await?;
+
             for mut item in items {
                 let doc = enriched_document(&item, &documents);
                 collect_options(&mut options, &doc, filters);
@@ -94,11 +97,13 @@ impl WorkbenchReadService {
                 item.search_matches = hits;
                 collector.extend([item]);
             }
+
             let Some(next) = next_cursor else {
                 break;
             };
             query.cursor = Some(next);
         }
+
         let result = collector.finish();
         Ok(ApprovalListPage {
             items: result.items,
@@ -152,6 +157,7 @@ fn approval_document(item: &ApprovalListItem) -> SearchDocument {
             doc.facet("handlers", id, name);
         }
     }
+
     if let Some(summary) = &item.document_summary {
         if let Some(party) = &summary.counterparty_label {
             doc.facet("counterparties", party, party);

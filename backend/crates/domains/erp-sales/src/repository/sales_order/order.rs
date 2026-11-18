@@ -246,6 +246,7 @@ impl QueryFilter for SalesOrderFilter {
             filter.insert("contract_id", contract_id);
         }
         self.append_contract_presence(&mut filter);
+
         if let Some(origin_system) = self.origin_system {
             filter.insert("origin_system", origin_system.as_str());
         }
@@ -270,6 +271,7 @@ impl QueryFilter for SalesOrderFilter {
         if let Some(status) = self.close_status {
             filter.insert("close_status", status.as_str());
         }
+
         if self.created_from.is_some() || self.created_to.is_some() {
             let mut created_at = Document::new();
             if let Some(from) = self.created_from {
@@ -280,6 +282,7 @@ impl QueryFilter for SalesOrderFilter {
             }
             filter.insert("created_at", created_at);
         }
+
         if let Some(ids) = &self.owner_user_ids {
             filter.insert("sales_owner_user_id", doc! { "$in": ids.as_slice() });
         }
@@ -293,6 +296,7 @@ impl QueryFilter for SalesOrderFilter {
         if let Some(created_by) = &self.created_by {
             filter.insert("created_by", created_by);
         }
+
         match self.view {
             SalesOrderListView::All => {},
             SalesOrderListView::MyTodo => {
@@ -315,6 +319,7 @@ impl QueryFilter for SalesOrderFilter {
                 filter.insert("review_status", ReviewStatus::Rejected.as_str());
             },
         }
+
         self.append_keyword(&mut filter);
         filter
     }
@@ -530,6 +535,7 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
         executor: &mut dyn Executor,
     ) -> crate::Result<PageResult<SalesOrderRow>> {
         scope.ensure_current(executor)?;
+
         let options = FindOptions::builder()
             .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
             .skip(filter.skip())
@@ -564,6 +570,7 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<super::scope::SalesVersion>> {
         scope.ensure_current(executor)?;
+
         let rows = aggregate::find(
             &self.collection().clone_with_type::<super::scope::SalesVersion>(),
             filter.to_doc(),
@@ -576,6 +583,7 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
             executor,
         )
         .await?;
+
         scope.ensure_current(executor)?;
         Ok(rows)
     }
@@ -588,6 +596,7 @@ impl SalesOrderRepositoryExt for Repository<'_, SalesOrder> {
         if keyword.trim().is_empty() {
             return Ok(Vec::new());
         }
+
         let mut filter = undeleted_condition();
         insert_literal_regex_filter(&mut filter, "order_no", Some(keyword));
         let rows = mongo_ops::find_many(
@@ -683,6 +692,7 @@ impl<'a> SalesOrderDomainRepository<'a> {
         if unique.is_empty() {
             return Ok(Vec::new());
         }
+
         let id_strings = unique.iter().map(ToString::to_string).collect::<Vec<_>>();
         let rows = mongo_ops::find_many(
             &self.db.collection::<SalesOrderIdRow>(SALES_ORDERS),
@@ -964,6 +974,7 @@ mod keyword_regression_tests {
         };
         filter.customer_id = Some("selected-customer".into());
         filter.view = SalesOrderListView::MyTodo;
+
         let query = filter.to_doc();
         assert_eq!(query.get_str("customer_id").unwrap(), "selected-customer");
         assert!(query.contains_key("$or"), "待我处理 OR 必须保留");
@@ -990,6 +1001,7 @@ mod keyword_regression_tests {
         assert_eq!(intersection.len(), 2);
         let absent = intersection[0].as_document().unwrap().get_array("$or").unwrap();
         assert_eq!(absent[0].as_document().unwrap().get("contract_id"), Some(&Bson::Null));
+
         let present = SalesOrderFilter { has_contract: Some(true), ..Default::default() }.to_doc();
         assert!(
             present.get_array("$and").unwrap()[0]

@@ -64,6 +64,7 @@ impl Steps {
             review_reason_code: None,
             review_resolution: None,
         };
+
         let mut account = SupplierDepositAccount::new(
             "account".into(),
             DepositAccountIdentity {
@@ -76,6 +77,7 @@ impl Steps {
         .unwrap();
         account.credit("1000".parse().unwrap()).unwrap();
         account.reserve("100".parse().unwrap()).unwrap();
+
         Self {
             state: Mutex::new(State {
                 inbox,
@@ -166,6 +168,7 @@ async fn matched_debit_settles_and_updates_task_before_completion_and_terminal_r
         assert!(state.inbox.applied_resource.is_some());
         assert!(!state.account.reconciliation_required);
     }
+
     assert_eq!(steps.apply(ApplicationMode::Complete).await.unwrap(), FundsInvestigationRun::default());
     assert_eq!(steps.trace.lock().unwrap().len(), 4);
 }
@@ -204,6 +207,7 @@ async fn failed_normal_transaction_can_preserve_cash_without_settlement_or_false
         assert!(state.account.reconciliation_required);
         assert_eq!(state.inbox.state, FundsEvidenceInboxState::NeedsReview);
     }
+
     assert_eq!(steps.apply(ApplicationMode::PreserveDebit).await.unwrap(), FundsInvestigationRun::default());
     assert_eq!(steps.trace.lock().unwrap().len(), 2);
 }

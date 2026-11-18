@@ -54,9 +54,11 @@ impl IntegrationResolutionProcess {
         self.authorization
             .require(actor, &integration_ops::DIFFERENCE_CREATE, AccessTarget::Operation, executor)
             .await?;
+
         req.validate()?;
         let org =
             self.domain().access().require_handler_org(&req.owner_user_id, Instant::now(), executor).await?;
+
         let difference = prepare_difference(&req, org)?;
         let work_item = difference_work_item(&difference)?;
         self.store_difference(difference.clone(), work_item, actor, executor).await?;

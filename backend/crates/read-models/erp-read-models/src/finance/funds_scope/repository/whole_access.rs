@@ -35,6 +35,7 @@ impl WholeAccess {
         let Ok(stages) = access.whole_stages() else {
             return membership_stages(Vec::new());
         };
+
         let alias = "__funds_whole_view";
         let mut pipeline = vec![root_lookup(&access.model().collection, alias, stages.to_vec())];
         pipeline.extend(membership_stages(vec![alias.into()]));
@@ -84,6 +85,7 @@ fn root_lookup(collection: &str, alias: &str, authorized: Vec<Document>) -> Docu
         bindings.insert(&variable, format!("${field}"));
         fields.insert(*field, format!("$${variable}"));
     }
+
     let mut pipeline =
         vec![doc! { "$match": { "$expr": { "$eq": ["$id", "$$root_id"] } } }, doc! { "$set": fields }];
     pipeline.extend(authorized);

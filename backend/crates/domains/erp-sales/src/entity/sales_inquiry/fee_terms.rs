@@ -29,6 +29,7 @@ impl SalesInquiry {
             .iter()
             .find(|fee| fee.fee_id == fee_id)
             .ok_or_else(|| Error::NotFound("询价费用不存在".into()))?;
+
         let matches = self
             .quantity_ledger
             .iter()

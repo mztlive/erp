@@ -96,6 +96,7 @@ async fn terminal_query_discovers_after_query_on_same_injected_executor() {
     };
     let mut executor = TestExecutor::default();
     let identity = &mut executor as *mut TestExecutor as usize;
+
     let fact = query_action_fact(&authority, &subject(), &mut executor).await.unwrap();
     assert_eq!(fact.outcome, IntegrationActionOutcome::TerminalEvidenceFound);
     assert_eq!(fact.business_result_reference.as_deref(), Some("inbox_message:message-1"));
@@ -112,10 +113,12 @@ async fn authority_error_is_preserved_and_no_later_call_runs() {
         };
         let mut executor = TestExecutor::default();
         let identity = &mut executor as *mut TestExecutor as usize;
+
         let result = query_action_fact(&authority, &subject(), &mut executor).await;
         assert!(
             matches!(result,Err(Error::ConflictError(message)) if message == format!("authority:{step}"))
         );
+
         let expected = if step == "query" {
             vec![("query", identity)]
         } else {

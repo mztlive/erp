@@ -105,6 +105,7 @@ impl OrderTree {
     pub fn merge(&self, mut next: Self, frozen: &[OrderLine]) -> Result<Self> {
         preserve_unreported_tracks(self, &mut next);
         next.validate(frozen)?;
+
         if next.root_order_no != self.root_order_no || next.version < self.version {
             return Err(Error::ConflictError("供应商根单或订单关系版本不一致".into()));
         }
@@ -115,6 +116,7 @@ impl OrderTree {
                 Err(Error::ConflictError("同一订单关系版本返回不同内容".into()))
             };
         }
+
         let incoming = next.node_map()?;
         for old in &self.nodes {
             let current = incoming
@@ -129,6 +131,7 @@ impl OrderTree {
         if self.root_order_no.trim().is_empty() || self.version == 0 || self.nodes.is_empty() {
             return Err(Error::ValidationError("供应商订单关系尚不完整".into()));
         }
+
         let mut nodes = BTreeMap::new();
         for node in &self.nodes {
             if node.external_order_no.trim().is_empty()
@@ -151,6 +154,7 @@ impl OrderTree {
         if root.parent_order_no.is_some() {
             return Err(Error::ValidationError("供应商根单不能再有父单".into()));
         }
+
         let quantities = line_quantities(root, frozen)?;
         let expected = frozen.iter().map(|(id, line)| ((*id).to_string(), line.quantity)).collect();
         ensure_same_quantities(&quantities, &expected)
@@ -164,11 +168,13 @@ impl OrderTree {
     ) -> Result<()> {
         let quantities = line_quantities(node, frozen)?;
         self.ensure_connected(node, nodes)?;
+
         let children: Vec<_> = self
             .nodes
             .iter()
             .filter(|child| child.parent_order_no.as_deref() == Some(node.external_order_no.as_str()))
             .collect();
+
         match node.role {
             OrderNodeRole::ReservationRoot
                 if node.external_order_no == self.root_order_no
@@ -359,6 +365,7 @@ mod tests {
         let tree = split();
         tree.validate(&[line()]).unwrap();
         assert_eq!(tree.leaves().len(), 2);
+
         let mut next = tree.clone();
         next.version = 2;
         next.nodes[2].role = OrderNodeRole::Parent;
@@ -366,6 +373,7 @@ mod tests {
             node("b1", Some("b"), OrderNodeRole::Leaf, "1"),
             node("b2", Some("b"), OrderNodeRole::Leaf, "2"),
         ]);
+
         let merged = tree.merge(next, &[line()]).unwrap();
         assert_eq!(merged.nodes.len(), 5);
         assert_eq!(merged.leaves().len(), 3);
@@ -378,13 +386,16 @@ mod tests {
         let mut unresolved = split();
         unresolved.nodes[1].role = OrderNodeRole::Unresolved;
         assert!(unresolved.validate(&[line()]).is_err());
+
         let mut duplicate = split();
         duplicate.nodes.push(duplicate.nodes[1].clone());
         assert!(duplicate.validate(&[line()]).is_err());
+
         let mut cycle = split();
         cycle.nodes[1].parent_order_no = Some("b".into());
         cycle.nodes[2].parent_order_no = Some("a".into());
         assert!(cycle.validate(&[line()]).is_err());
+
         let mut missing = split();
         missing.nodes.pop();
         assert!(missing.validate(&[line()]).is_err());
@@ -395,9 +406,11 @@ mod tests {
         let mut over = split();
         over.nodes[1].lines[0].quantity = "2".parse().unwrap();
         assert!(over.validate(&[line()]).is_err());
+
         let mut wrong_sku = split();
         wrong_sku.nodes[1].lines[0].sku.spec_id = "unknown".into();
         assert!(wrong_sku.validate(&[line()]).is_err());
+
         let old = split();
         let replacement = OrderTree {
             root_order_no: "root".into(),
@@ -425,15 +438,18 @@ mod tests {
         original.nodes[1].confirmation = Some(ConfirmationState::Confirmed);
         original.nodes[1].fulfillment = Some(FulfillmentStatus::Accepted);
         original.nodes[1].cancellation = Some(CancelStatus::Canceled);
+
         let mut incoming = original.clone();
         incoming.version = 2;
         incoming.nodes[1].confirmation = None;
         incoming.nodes[1].fulfillment = None;
         incoming.nodes[1].cancellation = None;
+
         let merged = original.merge(incoming, &[line()]).unwrap();
         assert_eq!(merged.nodes[1].confirmation, Some(ConfirmationState::Confirmed));
         assert_eq!(merged.nodes[1].fulfillment, Some(FulfillmentStatus::Accepted));
         assert_eq!(merged.nodes[1].cancellation, Some(CancelStatus::Canceled));
+
         let mut conflicting = merged.clone();
         conflicting.version = 3;
         conflicting.nodes[1].confirmation = Some(ConfirmationState::Pending);

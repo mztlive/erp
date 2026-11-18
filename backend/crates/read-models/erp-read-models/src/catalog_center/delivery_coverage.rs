@@ -138,9 +138,11 @@ async fn delivery_snapshot(
     {
         return Err(Error::ValidationError("配送提示的商品或地址数量超出上限".into()));
     }
+
     let sku_ids = req.lines.iter().map(|line| SkuId::new(line.sku_id.trim())).collect::<Vec<_>>();
     let facts = load_creation_basis_facts(db, &sku_ids, executor).await?;
     let view = delivery_view(&req, &facts)?;
+
     if !boundary.is_current(executor) {
         return Err(Error::ValidationError("配送提示跨越授权快照".into()));
     }
@@ -215,6 +217,7 @@ async fn sku_delivery_inputs(
     let ids = sku_ids.iter().map(|id| SkuId::new(id.as_str())).collect::<Vec<_>>();
     let facts = load_creation_basis_facts(db, &ids, executor).await?;
     let restricted = restricted_skus(db, &ids, executor).await?;
+
     let mut supplies = effective_supply(&facts, today);
     Ok(sku_ids
         .iter()
@@ -250,6 +253,7 @@ async fn restricted_skus(
         .into_iter()
         .map(|product| (product.base.id.clone(), product.product_kind))
         .collect::<HashMap<_, _>>();
+
     Ok(skus
         .into_iter()
         .map(|sku| {
@@ -278,6 +282,7 @@ fn effective_supply(facts: &CreationBasisFacts, today: BusinessDate) -> HashMap<
         };
         let supply = supplies.entry(offering.sku_id.to_string()).or_default();
         supply.next_change_date = earliest(supply.next_change_date, next_validity_change(revision, today));
+
         let available = facts.availabilities.get(&offering.base.id).is_some_and(|availability| {
             availability.availability_status == AvailabilityStatus::Available
                 && availability
@@ -288,6 +293,7 @@ fn effective_supply(facts: &CreationBasisFacts, today: BusinessDate) -> HashMap<
         if !today.is_within(revision.valid_from, revision.valid_to) || !available {
             continue;
         }
+
         let mut policy = delivery.policy.clone();
         if revision.bulk_supply_price_gross.is_none() || revision.bulk_minimum_order_quantity.is_none() {
             policy.bulk = DeliveryRuleSet::uniform(DeliveryTerm::NotDeliverable);
@@ -340,11 +346,13 @@ mod tests {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         let authorization = unavailable_authorization();
         let req = DeliveryCoverageRequest { lines: Vec::new() };
+
         let result =
             delivery_snapshot(&db, req.clone(), &authorization, &actor, &mut ReadExecutor::default()).await;
         assert!(
             matches!(result, Err(Error::ValidationError(reason)) if reason == "商品读取必须使用快照事务")
         );
+
         let result =
             delivery_snapshot(&db, req, &authorization, &actor, &mut SnapshotExecutor::default()).await;
         assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
@@ -370,6 +378,7 @@ mod tests {
                 ("sku", "650102", DeliveryCoverageHint::None)
             ]
         );
+
         let invalid = DeliveryCoverageRequest {
             lines: vec![DeliveryCoverageLineInput {
                 sku_id: "sku".into(),
@@ -517,6 +526,7 @@ mod tests {
                 offer("expired-today", "supplier-e", "2026-10-01", Some("2026-10-14")),
             ];
             let facts = facts(&offers, &policy);
+
             let supplies = effective_supply(&facts, date("2026-10-14"));
             let supply = supplies.get("sku-1").unwrap();
             assert_eq!(supply.policies.len(), 2);
@@ -536,6 +546,7 @@ mod tests {
             let revision = facts.revisions.get_mut("api-terms").unwrap();
             revision.bulk_supply_price_gross = None;
             revision.bulk_minimum_order_quantity = None;
+
             let supplies = effective_supply(&facts, date("2026-10-14"));
             let policies = supplies.get("sku-1").unwrap().policies.iter().collect::<Vec<_>>();
             assert_eq!(

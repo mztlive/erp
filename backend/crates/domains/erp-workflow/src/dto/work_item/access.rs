@@ -127,6 +127,7 @@ mod tests {
                 .allowed_actions
                 .contains(&WorkItemAllowedAction::Reassign)
         );
+
         access.managed_task_ids.clear();
         assert!(
             !ViewAccess::from_fields(&first, WorkItemScope::Managed, &access)
@@ -161,6 +162,7 @@ mod tests {
                 .allowed_actions
                 .contains(&WorkItemAllowedAction::Process)
         );
+
         access.executable_task_ids.clear();
         assert!(
             !ViewAccess::from_fields(&first, WorkItemScope::Mine, &access)

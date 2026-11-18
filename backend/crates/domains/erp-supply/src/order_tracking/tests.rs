@@ -93,6 +93,7 @@ fn courier_contact_is_not_serialized_and_cross_order_packages_are_rejected() {
     let observation = OrderObservation::from_snapshot("obs".into(), &tracking(), source.clone()).unwrap();
     assert!(observation.shipments.as_ref().unwrap()[0].has_courier_contact);
     assert!(!serde_json::to_string(&observation).unwrap().contains("13800009999"));
+
     source.value.shipments.as_mut().unwrap()[0].line_ids = vec!["another-order-item".into()];
     assert!(OrderObservation::from_snapshot("bad".into(), &tracking(), source).is_err());
 }
@@ -106,6 +107,7 @@ fn purchase_change_retirement_prevents_callback_reactivation_and_preserves_evide
     tracking.lease_id = Some("in-flight-query".into());
     tracking.lease_until = Some(Instant::from_unix_secs(60));
     assert!(!tracking.can_refresh(false, now));
+
     tracking.stop_for_purchase_change();
     assert_eq!(tracking.state, TrackingState::Complete);
     assert_eq!(tracking.lease_id, None);
@@ -113,6 +115,7 @@ fn purchase_change_retirement_prevents_callback_reactivation_and_preserves_evide
     assert!(!tracking.can_refresh(true, now));
     assert_eq!(tracking.latest_observation_id.as_deref(), Some("old-observation"));
     assert_eq!(tracking.applied_observation_id.as_deref(), Some("old-applied"));
+
     // 正常完成且未被采购变更替代的订单仍须允许后续退款/取消刷新。
     assert!(tracking.can_refresh(false, now));
 }
@@ -141,6 +144,7 @@ fn protected_trajectory_requery_uses_content_identity_instead_of_random_cipherte
     value.value.shipments.as_mut().unwrap()[0].events[0].encrypted_description = Some("cipher-two".into());
     let repeated = OrderObservation::from_snapshot("second".into(), &tracking(), value.clone()).unwrap();
     assert!(first.same_content(&repeated));
+
     value.value.shipments.as_mut().unwrap()[0].events[0].content_fingerprint = Some("changed-content".into());
     let changed = OrderObservation::from_snapshot("third".into(), &tracking(), value).unwrap();
     assert!(!first.same_content(&changed));
@@ -153,6 +157,7 @@ fn completed_order_without_explicit_quantity_coverage_does_not_prove_whole_dispa
     let unknown = OrderObservation::from_snapshot("unknown".into(), &tracking(), value.clone()).unwrap();
     assert!(unknown.proves_dispatch());
     assert!(!unknown.proves_complete_coverage());
+
     value.value.complete_line_coverage = true;
     let proven = OrderObservation::from_snapshot("proven".into(), &tracking(), value).unwrap();
     assert!(proven.proves_complete_coverage());

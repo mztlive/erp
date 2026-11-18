@@ -67,6 +67,7 @@ impl InquiryListFilter {
                 parts.push(doc! { "status": status_string(status) });
             }
         }
+
         if let Some(q) = self.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
             let mut no = Document::new();
             let mut customer = Document::new();
@@ -148,6 +149,7 @@ impl<'a> SalesInquiryRepository<'a> {
         executor: &mut dyn Executor,
     ) -> SalesResult<PageResult<SalesInquiry>> {
         access_scope.ensure_current(executor)?;
+
         let document = filter.document();
         let size = u64::from(filter.page_size.clamp(1, 100));
         let skip = filter.page.max(1).saturating_sub(1).saturating_mul(size);
@@ -166,6 +168,7 @@ impl<'a> SalesInquiryRepository<'a> {
         .await?;
         let total =
             aggregate::count(&collection, document, access_scope.lookup_after(doc! {}), executor).await?;
+
         access_scope.ensure_current(executor)?;
         Ok(PageResult { items, total: i64::try_from(total).unwrap_or(i64::MAX) })
     }
@@ -233,6 +236,7 @@ mod tests {
                 &doc! { "status": { "$in": ["awaiting_procurement", "procurement_processing"] } }
             );
         }
+
         let filter = InquiryListFilter { status: Some(InquiryStatus::AwaitingSales), ..Default::default() };
         let query = filter.document();
         assert_eq!(

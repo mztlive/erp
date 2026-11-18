@@ -133,6 +133,7 @@ fn typed_results_preserve_original_versions_and_cost_delta() {
             difference_version: 2,
         }),
     ];
+
     for result in results {
         let encoded = serde_json::to_string(&result).unwrap();
         assert_eq!(serde_json::from_str::<SupplyCommandResult>(&encoded).unwrap(), result);
@@ -161,11 +162,13 @@ fn work_item_validation_requires_exact_three_versions_and_open_state() {
     assert!(
         validate_settlement_review_work_item(&item, &statement, item.base.version, &"0".repeat(64),).is_err()
     );
+
     item.status = WorkItemStatus::Completed;
     assert!(
         validate_settlement_review_work_item(&item, &statement, item.base.version, &statement.subject_hash,)
             .is_err()
     );
+
     item.status = WorkItemStatus::Open;
     item.owner_organization_id = "company".into();
     assert!(

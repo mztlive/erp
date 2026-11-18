@@ -39,8 +39,10 @@ pub async fn upload_contract(
 ) -> Result<UploadContractView> {
     req.validate()?;
     asset_req.validate()?;
+
     let file_name = asset_req.file_name.clone();
     let asset = FileAsset::new(FileAssetId::new(next_id()), asset_req.into_data(actor.id())?)?;
+
     let file_asset_id = FileAssetId::new(asset.base.id.clone());
     let planned = service.plan_upload(req, file_asset_id, actor.id())?;
     let (asset_audit, contract_audit) =
@@ -57,8 +59,10 @@ pub async fn upload_contract(
         .with_transaction(move |executor| {
             Box::pin(async move {
                 service.require_create(&actor_for_tx, &customer_id, executor).await?;
+
                 db_for_tx.file_assets().create(&asset_for_tx, executor).await?;
                 service.apply_create(&mut contract_for_tx, &revision, executor).await?;
+
                 persist_log(&db_for_tx, &asset_audit, executor).await?;
                 persist_log(&db_for_tx, &contract_audit, executor).await?;
                 Ok::<(), crate::Error>(())
@@ -110,6 +114,7 @@ mod audit_tests {
         let actor = AuditActor::new("actor-1".into(), "sales".into(), AccountKind::Admin);
         let (asset, contract) = upload_audits(&actor, "asset-1", "contract-1", "CT-1").unwrap();
         assert_ne!(asset.base.id, contract.base.id);
+
         let asset = asset.structured_event.unwrap();
         let contract = contract.structured_event.unwrap();
         assert!(asset.command_id.is_some());

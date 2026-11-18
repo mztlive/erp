@@ -41,6 +41,7 @@ impl OrderTracking {
         if let Some(tree) = &observation.topology {
             tree.validate_tracking(&self.source_lines)?;
         }
+
         let mut quantities = self.applied_quantities()?;
         let mut pending = Vec::new();
         let mut seen = HashSet::new();
@@ -48,6 +49,7 @@ impl OrderTracking {
         for applied in &self.applied_shipments {
             add_order_lines(&mut per_order, &applied.source_order_no, &applied.lines)?;
         }
+
         for shipment in observation.shipments.iter().flatten() {
             let Some(value) = shipment.quantity_evidence(&observation.external_order_no)? else {
                 continue;
@@ -58,11 +60,13 @@ impl OrderTracking {
             if self.applied_shipment(&value)?.is_some() {
                 continue;
             }
+
             add_order_lines(&mut per_order, &value.source_order_no, &value.lines)?;
             ensure_leaf_quantities(observation, &value, &per_order)?;
             add_lines(&mut quantities, &value.lines)?;
             pending.push(value);
         }
+
         self.ensure_shipment_totals(&quantities)?;
         Ok(pending)
     }
@@ -84,9 +88,11 @@ impl OrderTracking {
             }
             return Ok(());
         }
+
         let mut quantities = self.applied_quantities()?;
         add_lines(&mut quantities, &shipment.lines)?;
         self.ensure_shipment_totals(&quantities)?;
+
         self.applied_shipments.push(AppliedShipment {
             source_order_no: shipment.source_order_no.clone(),
             shipment_id: shipment.shipment_id.clone(),
@@ -125,6 +131,7 @@ impl OrderTracking {
             for shipment in &self.applied_shipments {
                 add_order_lines(&mut applied, &shipment.source_order_no, &shipment.lines)?;
             }
+
             tree.leaves().iter().any(|leaf| {
                 matches!(leaf.fulfillment, Some(FulfillmentStatus::Shipped | FulfillmentStatus::Completed))
                     && leaf.lines.iter().any(|line| {
@@ -203,6 +210,7 @@ impl OrderShipment {
         if source.trim().is_empty() || lines.is_empty() {
             return Err(Error::ValidationError("按量发货缺少来源订单或数量明细".into()));
         }
+
         let mut checked = BTreeMap::new();
         add_lines(&mut checked, lines)?;
         let mut lines = lines.clone();
@@ -265,6 +273,7 @@ fn ensure_leaf_quantities(
         .into_iter()
         .find(|node| node.external_order_no == shipment.source_order_no)
         .ok_or_else(|| Error::BusinessLogicError("包裹不属于当前已核实子单，请核对再次拆单".into()))?;
+
     for line in &shipment.lines {
         let allocation = node
             .lines
@@ -401,12 +410,14 @@ mod tests {
             nodes: vec![parent, node("child-a", "first", "3"), node("child-b", "second", "2")],
         });
         tracking.ensure_dispatch_quantities(&observation).unwrap();
+
         observation.topology.as_mut().unwrap().nodes[1].fulfillment = Some(FulfillmentStatus::Shipped);
         assert!(tracking.ensure_dispatch_quantities(&observation).is_err());
         let mut first = pending("first", "first", "3");
         first.source_order_no = "child-a".into();
         tracking.record_shipment(&first, vec!["d1".into()]).unwrap();
         tracking.ensure_dispatch_quantities(&observation).unwrap();
+
         observation.topology.as_mut().unwrap().nodes[2].fulfillment = Some(FulfillmentStatus::Completed);
         assert!(tracking.ensure_dispatch_quantities(&observation).is_err());
         let mut second = pending("second", "second", "2");
@@ -422,9 +433,11 @@ mod tests {
         tracking.record_shipment(&first, vec!["d1".into()]).unwrap();
         assert_eq!(tracking.applied_shipments.len(), 1);
         assert!(!tracking.quantities_fully_applied().unwrap());
+
         tracking.record_shipment(&pending("SF2", "first", "2"), vec!["d2".into()]).unwrap();
         tracking.record_shipment(&pending("SF3", "second", "2"), vec!["d3".into()]).unwrap();
         assert!(tracking.quantities_fully_applied().unwrap());
+
         assert!(tracking.record_shipment(&pending("SF4", "first", "1"), vec!["d4".into()]).is_err());
         assert_eq!(tracking.applied_shipments.len(), 3);
     }
@@ -471,6 +484,7 @@ mod tests {
         let mut shipment = pending("SF1", "first", "1");
         shipment.source_order_no = "root".into();
         tracking.record_shipment(&shipment, vec!["d1".into()]).unwrap();
+
         let mut observation = observation(&tracking);
         observation.shipments = Some(vec![OrderShipment {
             external_shipment_id: Some(shipment.shipment_id.clone()),
@@ -484,6 +498,7 @@ mod tests {
             events: Vec::new(),
         }]);
         assert!(tracking.pending_shipments(&observation).unwrap().is_empty());
+
         observation.shipments.as_mut().unwrap()[0].quantity_lines.as_mut().unwrap()[0].quantity =
             "2".parse().unwrap();
         assert!(matches!(
@@ -506,6 +521,7 @@ mod tests {
             events: Vec::new(),
         };
         assert_eq!(shipment.quantity_evidence("root").unwrap(), None);
+
         let mut json = serde_json::to_value(tracking()).unwrap();
         json.as_object_mut().unwrap().remove("applied_shipments");
         let old: OrderTracking = serde_json::from_value(json).unwrap();

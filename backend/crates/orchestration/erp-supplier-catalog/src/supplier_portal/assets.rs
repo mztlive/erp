@@ -158,12 +158,14 @@ impl SupplierPortalProcess {
         if !request_readable(&self.db, &self.authorization, actor, request_id, executor).await? {
             return Err(Error::NotFound("申请不存在或无权查看".into()));
         }
+
         let draft = self.catalog_portal().load(request_id, executor).await?;
         if !references(&draft.draft, file_id)
             && !draft.submissions.iter().any(|s| references(&s.input, file_id))
         {
             return Err(Error::NotFound("附件不存在或无权访问".into()));
         }
+
         self.db
             .file_assets()
             .find_by_id(file_id, executor)
@@ -188,6 +190,7 @@ impl SupplierPortalProcess {
         executor: &mut dyn Executor,
     ) -> Result<PortalCatalogAssetAccess> {
         let current = self.session_validate(actor, executor).await?;
+
         let service = PortalOfferingService::new(self.db.clone());
         let (target, offering_version) = match (offering_id, sku_id) {
             (Some(id), None) => {
@@ -202,12 +205,14 @@ impl SupplierPortalProcess {
             },
             _ => return Err(Error::NotFound("图片来源不存在或无权访问".into())),
         };
+
         let source = portal_sku_image_source(&self.db, &target, executor)
             .await?
             .ok_or_else(|| Error::NotFound("图片来源不存在".into()))?;
         if source.file_id != file_id {
             return Err(Error::NotFound("图片不存在或无权访问".into()));
         }
+
         let asset = self
             .db
             .file_assets()
@@ -237,6 +242,7 @@ impl SupplierPortalProcess {
         data.created_by = actor.account_id.clone();
         data.retention_class = RetentionClass::LongTerm;
         data.expires_at = None;
+
         let payload = asset_payload(request_id, expected_request_version, &data);
         let request_id = request_id.to_string();
         let (mut view, fresh) = self
@@ -249,6 +255,7 @@ impl SupplierPortalProcess {
                     Box::pin(async move {
                         let service = this.catalog_portal();
                         let draft = service.detail(&request_id, &actor.supplier_id, executor).await?;
+
                         let mut asset = FileAsset::new(FileAssetId::new(next_id()), data)?;
                         asset.mark_content_checked()?;
                         let mut input = draft.draft;
@@ -257,6 +264,7 @@ impl SupplierPortalProcess {
                         } else {
                             input.file_asset_ids.push(asset.base.id.clone());
                         }
+
                         this.db.file_assets().create(&asset, executor).await?;
                         let draft = service
                             .update(
@@ -281,6 +289,7 @@ impl SupplierPortalProcess {
                 },
             )
             .await?;
+
         view.assets_committed = fresh;
         Ok(view)
     }
@@ -303,6 +312,7 @@ impl SupplierPortalProcess {
         let current = self.session_validate(actor, &mut ReadExecutor::default()).await?;
         current.require_write()?;
         self.catalog_portal().detail(request_id, &current.supplier_id, &mut ReadExecutor::default()).await?;
+
         let command = scoped_command(
             &actor.account_id,
             &actor.supplier_id,
@@ -335,6 +345,7 @@ impl SupplierPortalProcess {
         let current = self.session_validate(actor, executor).await?;
         current.require_write()?;
         self.catalog_portal().detail(request_id, &current.supplier_id, executor).await?;
+
         let command = scoped_command(
             &actor.account_id,
             &actor.supplier_id,
@@ -396,6 +407,7 @@ impl SupplierPortalProcess {
         if !referenced {
             return Err(Error::NotFound("附件不存在或无权访问".into()));
         }
+
         let asset = self
             .db
             .file_assets()
@@ -437,6 +449,7 @@ impl SupplierPortalProcess {
         if assets.is_empty() {
             return Ok(());
         }
+
         let request_id =
             request_id.ok_or_else(|| Error::ValidationError("请先创建提报单，再上传关联素材".into()))?;
         let source = self.catalog_portal().detail(request_id, supplier_id, executor).await?;
@@ -446,6 +459,7 @@ impl SupplierPortalProcess {
             .into_iter()
             .map(|a| a.account_id)
             .collect();
+
         for id in assets {
             if !references(&source.draft, id) && !source.submissions.iter().any(|s| references(&s.input, id))
             {
@@ -465,6 +479,7 @@ impl SupplierPortalProcess {
                 input.image_asset_ids.contains(id)
                     || input.skus.iter().any(|sku| sku.image_asset_id.as_ref() == Some(id)),
             )?;
+
             if permanent && (asset.retention_class != RetentionClass::LongTerm || asset.expires_at.is_some())
             {
                 asset.retention_class = RetentionClass::LongTerm;
@@ -501,6 +516,7 @@ mod tests {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         let result = process.read_review_asset("request", "file", &actor, &mut NoTransaction).await;
         assert!(matches!(result, Err(Error::ValidationError(_))));
+
         let result =
             process.read_review_asset("request", "file", &actor, &mut SnapshotExecutor::default()).await;
         assert!(matches!(result, Err(Error::Internal(_))));
@@ -535,6 +551,7 @@ mod tests {
         assert!(PreparedPortalAsset::from_decoded_image(data("key"), 100, 100).is_ok());
         assert!(PreparedPortalAsset::from_decoded_image(data("key"), 0, 100).is_err());
         assert!(PreparedPortalAsset::from_decoded_image(data("key"), 8193, 100).is_err());
+
         let mut pdf = data("key");
         pdf.content_type = "application/pdf".into();
         assert!(PreparedPortalAsset::from_decoded_image(pdf.clone(), 100, 100).is_err());
@@ -542,6 +559,7 @@ mod tests {
         assert!(PreparedPortalAsset::from_checked_pdf(pdf.clone(), 0).is_err());
         assert!(PreparedPortalAsset::from_checked_pdf(pdf, 501).is_err());
         assert!(PreparedPortalAsset::from_checked_pdf(data("key"), 1).is_err());
+
         let mut large = data("key");
         large.byte_size = 5 * 1024 * 1024 + 1;
         assert!(PreparedPortalAsset::from_decoded_image(large, 100, 100).is_err());
@@ -558,13 +576,16 @@ mod tests {
             serde_json::from_str::<PortalAssetKind>("\"DOCUMENT\"").unwrap(),
             PortalAssetKind::Attachment
         );
+
         let document = PortalAssetKind::from_content_type("application/pdf").unwrap();
         assert!(document.ensure_slot(false).is_ok());
         assert!(document.ensure_slot(true).is_err());
+
         for mime in ["image/jpeg", "image/png", "image/webp"] {
             assert_eq!(PortalAssetKind::from_content_type(mime).unwrap(), PortalAssetKind::Image);
             assert!(PortalAssetKind::from_content_type(mime).unwrap().ensure_slot(true).is_ok());
         }
+
         for mime in ["application/javascript", "image/svg+xml", "application/octet-stream"] {
             assert!(PortalAssetKind::from_content_type(mime).is_err());
         }

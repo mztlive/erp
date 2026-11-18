@@ -118,9 +118,11 @@ impl ReceivableProcess {
             &req.idempotency_key,
             &req,
         )?;
+
         if let Some(view) = self.replay_committed_receipt(&command_receipt, actor).await? {
             return Ok(view);
         }
+
         let prepared = req.prepare()?;
         let pending_commit = prepare_customer_receipt_commit_candidate(prepared, actor.id())?;
         let allocations = pending_commit.allocations.clone();
@@ -220,6 +222,7 @@ impl ReceivableProcess {
         let request_actor = actor.clone();
         let request_id = id.to_owned();
         let request_command = command.clone();
+
         let result = self
             .db
             .client()
@@ -231,6 +234,7 @@ impl ReceivableProcess {
                     {
                         return Ok(view);
                     }
+
                     let adapter = customer_receipt_adapter()?;
                     let mut receipt =
                         authorized_receipt(&process.db, &process.rbac, &request_actor, &request_id, executor)
@@ -238,6 +242,7 @@ impl ReceivableProcess {
                     ensure_expected_version(receipt.base.version, req.expected_version)?;
                     let allocations = convert_allocations(&req.allocations)?;
                     start_customer_receipt_approval(&mut receipt, allocations)?;
+
                     let input = process
                         .prepare_receipt_submit_input(
                             &request_id,
@@ -252,6 +257,7 @@ impl ReceivableProcess {
                 })
             })
             .await;
+
         match result {
             Err(error) if error.command_may_have_committed() => {
                 self.recover_customer_receipt_submit(id, &command, actor, error).await
@@ -299,6 +305,7 @@ impl ReceivableProcess {
                             executor,
                         )
                         .await?;
+
                     let mut receipt = process.load_customer_receipt(&id, executor).await?;
                     ensure_expected_version(receipt.base.version, req.expected_version)?;
                     process
@@ -342,6 +349,7 @@ impl ReceivableProcess {
         let runtime =
             load_cancel_runtime(&self.db, &binding, &subject, receipt.approval_subject_version, executor)
                 .await?;
+
         let now = Instant::now();
         let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
         let input = build_customer_receipt_cancel_input(
@@ -353,12 +361,14 @@ impl ReceivableProcess {
             now,
         )?;
         let prepared = prepare_cancel(input)?;
+
         execute_customer_receipt_domain_action(receipt, adapter.cancel_action)?;
         let audit = actor.clone().resource_log(
             "customer_receipt.cancel_approval",
             "customer_receipt",
             id.to_string(),
         )?;
+
         persist_customer_receipt_cancel(
             &self.db,
             &self.rbac,
@@ -407,7 +417,6 @@ impl ReceivableProcess {
     /// * `BusinessLogicError` - 跨主体核销、超额核销或重复过账
     pub async fn post_customer_receipt(&self, id: &str, actor: &AuditActor) -> Result<CustomerReceiptView> {
         let db = self.db.clone();
-
         let client = db.client().clone();
         let actor_owned = actor.clone();
         let receipt_id = id.to_string();
@@ -423,7 +432,9 @@ impl ReceivableProcess {
                             executor,
                         )
                         .await?;
+
                     post_customer_receipt_apply(&db, &receipt_id, &actor_owned, executor).await?;
+
                     receipt_command_result(
                         &db,
                         &authorization,
@@ -527,6 +538,7 @@ mod result_tests {
             .database("receipt_command_results");
         let authorization = unavailable_authorization();
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         for (permission, target) in [
             (receivable::CUSTOMER_RECEIPT_CREATE, AccessTarget::Operation),
             (receivable::CUSTOMER_RECEIPT_CANCEL_APPROVAL, AccessTarget::Operation),
@@ -546,6 +558,7 @@ mod result_tests {
             .unwrap_err();
             assert!(matches!(no_snapshot, Error::ValidationError(message)
                 if message == "回款命令结果必须使用原授权快照"));
+
             let unavailable = receipt_command_result(
                 &db,
                 &authorization,

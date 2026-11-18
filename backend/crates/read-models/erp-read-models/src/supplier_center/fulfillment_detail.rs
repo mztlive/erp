@@ -163,6 +163,7 @@ impl SupplierFulfillmentDetailReadService {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::ValidationError("供应商履约详情读取必须使用快照事务".into()));
         }
+
         let (order, formal, access) =
             self.detail_authorization(id, params, actor, task_auth, executor).await?;
         let view = self.detail_view(order, formal.as_ref(), executor).await?;
@@ -182,6 +183,7 @@ impl SupplierFulfillmentDetailReadService {
         if let Some(task_id) = params.work_item_id.as_deref().map(str::trim).filter(|id| !id.is_empty()) {
             let (formal, access) = task_auth.authorize(task_id, actor, executor).await?;
             ensure_task_target(&formal, id)?;
+
             let order = self
                 .db
                 .supplier_fulfillment_orders()
@@ -193,6 +195,7 @@ impl SupplierFulfillmentDetailReadService {
             }
             return Ok((order, Some(formal), DetailReadAccess::Task(Box::new(access))));
         }
+
         let scope = FulfillmentOrderAccess::new(self.db.clone(), self.authorization.clone())
             .resolve(actor, &supplier_fulfillment::ORDER_DETAIL, executor)
             .await?;
@@ -218,10 +221,12 @@ impl SupplierFulfillmentDetailReadService {
             current_legal_names_by_account_ids(&self.db, std::slice::from_ref(&order.supplier_id), executor)
                 .await?
                 .remove(order.supplier_id.as_ref());
+
         let mut action_blockers = display_blockers(supplier_name.is_some());
         let projection = self
             .order_action_projection(&order, &facts.actions, formal, &mut action_blockers, executor)
             .await?;
+
         let display_items = self.item_display(facts.items, executor).await?;
         let connection_code = self
             .db
@@ -231,11 +236,13 @@ impl SupplierFulfillmentDetailReadService {
             .map(|connection| connection.connection_code);
         let (tracking_error, purchase_order_id, purchase_order_no) =
             self.api_tracking_context(id, executor).await?;
+
         let api_refunds = refunds_for_order(&self.db, id, executor)
             .await?
             .into_iter()
             .map(RefundExecutionView::try_from)
             .collect::<std::result::Result<Vec<_>, _>>()?;
+
         Ok(SupplierFulfillmentOrderDetailView {
             api_refunds,
             order: order.into(),
@@ -313,6 +320,7 @@ impl SupplierFulfillmentDetailReadService {
         if self.db.supplier_api_order_executions().find_by_id(&order.base.id, executor).await?.is_some() {
             return Ok(OrderActionProjection::automatic(blockers));
         }
+
         let target = actions.iter().find(|action| action.action_type != SupplierOrderActionType::Query);
         let latest = target.and_then(|target| {
             actions.iter().find_map(|candidate| {
@@ -320,6 +328,7 @@ impl SupplierFulfillmentDetailReadService {
                 (record.target_supplier_action_id() == target.base.id).then_some((candidate, record))
             })
         });
+
         let access = self.investigation_access(order, formal, blockers, executor).await?;
         let mut allowed_actions = Vec::new();
         if access.can_investigate {
@@ -341,6 +350,7 @@ impl SupplierFulfillmentDetailReadService {
                 );
             }
         }
+
         Ok(OrderActionProjection {
             target_supplier_action_id: target.map(|action| action.base.id.clone()),
             last_investigation: latest
@@ -365,6 +375,7 @@ impl SupplierFulfillmentDetailReadService {
             .into_iter()
             .next()
             .is_some();
+
         let can_investigate = if let Some(formal) = formal {
             if !formal.allowed_actions.contains(&WorkItemAllowedAction::Process) {
                 block_supplier_order_domain_actions(
@@ -640,10 +651,12 @@ mod authorization_tests {
         assert!(
             matches!(result, Err(Error::ValidationError(reason)) if reason == "供应商履约详情读取必须使用快照事务")
         );
+
         let result = service
             .detail_snapshot("order", &params, &actor, &DeniedTask, &mut SnapshotExecutor::default())
             .await;
         assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
+
         let params = SupplierFulfillmentOrderDetailParams { work_item_id: Some(" task ".into()) };
         let result = service
             .detail_snapshot("order", &params, &actor, &DeniedTask, &mut SnapshotExecutor::default())
@@ -662,9 +675,11 @@ mod authorization_tests {
         };
         ensure_task_target(&task, "order").unwrap();
         assert!(matches!(ensure_task_target(&task, "other"), Err(Error::BusinessLogicError(_))));
+
         let mut wrong = task.clone();
         wrong.business_object_type = "sales_order".into();
         assert!(matches!(ensure_task_target(&wrong, "order"), Err(Error::BusinessLogicError(_))));
+
         let mut wrong = task;
         wrong.work_item_type = WorkItemType::DocumentApproval;
         assert!(matches!(ensure_task_target(&wrong, "order"), Err(Error::BusinessLogicError(_))));

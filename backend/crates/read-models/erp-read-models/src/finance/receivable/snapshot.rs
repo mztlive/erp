@@ -43,6 +43,7 @@ pub async fn load_receivable_snapshot(
         .find_by_id(&current_sales_order_revision_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("来源销售单当前正式版本不存在".to_string()))?;
+
     let account_id = ReceivableAccountId::new(account.base.id.clone());
     let facts = db.receivable().receivable_snapshot_facts(&account_id, executor).await?;
     if facts.receipts.len() != facts.expected_receipt_count {
@@ -51,6 +52,7 @@ pub async fn load_receivable_snapshot(
     if facts.invoices.len() != facts.expected_invoice_count {
         return Err(Error::NotFound("应收账户引用的发票不存在".to_string()));
     }
+
     let entries = facts.entries;
     let receipt_allocations = facts.receipt_allocations;
     let invoice_allocations = facts.invoice_allocations;

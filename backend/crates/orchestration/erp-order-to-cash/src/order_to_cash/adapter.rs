@@ -115,6 +115,7 @@ fn build_approval_adapter(
     {
         return Err(Error::Internal(expected.mismatch_message.to_string()));
     }
+
     Ok(SalesOrderApprovalAdapter {
         document_type: spec.document_type,
         process_kind: spec.process_kind,
@@ -643,9 +644,11 @@ mod tests {
         assert_eq!(adapter.subject_ref_builder, "subject_ref_for(SalesOrder)");
         assert_eq!(adapter.subject_version_source, ApprovalSubjectVersionSource::SalesOrderSubmissionNo);
         assert_eq!(adapter.subject_snapshot_builder, "build_sales_order_snapshot");
+
         assert_eq!(adapter.on_approval_start, ApprovalDomainAction::SalesOrderStartApprovalSubmission);
         assert_eq!(adapter.on_final_approve, ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission);
         assert_eq!(adapter.cancel_action, ApprovalDomainAction::SalesOrderCancelApprovalSubmission);
+
         assert_eq!(adapter.owner_role, "sales_order_approver");
         assert_eq!(
             adapter.owner_organization_snapshot,
@@ -654,6 +657,7 @@ mod tests {
         assert_eq!(adapter.read_scope, AdapterReadScope::DocumentOrganizationAndCreator);
         assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
+
         assert_eq!(
             crate::order_to_cash::document_type_of_sales_business(BusinessType::GoodsService),
             DocumentType::SalesOrder
@@ -681,6 +685,7 @@ mod tests {
             "voucher_sales_order"
         );
         assert_eq!(adapter.subject_version_source, ApprovalSubjectVersionSource::SalesOrderSubmissionNo);
+
         assert_eq!(adapter.on_approval_start, ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission);
         assert_eq!(
             adapter.on_final_approve,
@@ -690,6 +695,7 @@ mod tests {
         assert_eq!(adapter.owner_role, "voucher_sales_order_approver");
         assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
+
         let ports = sales_approval_ports(BusinessType::Voucher).expect("端口必须可取");
         assert_eq!(ports.document_type, DocumentType::VoucherSalesOrder);
         assert_eq!(ports.owner_role, "voucher_sales_order_approver");
@@ -709,6 +715,7 @@ mod tests {
         assert_eq!(order.review_status, ReviewStatus::InApproval);
         assert_eq!(order.stable.updated_by, "submitter-9");
         assert!(order.transition_review(ReviewStatus::Rejected, "u").is_err());
+
         execute_sales_order_domain_action(
             &mut order,
             ApprovalDomainAction::SalesOrderCancelApprovalSubmission,
@@ -746,9 +753,11 @@ mod tests {
         assert!(encoded.get("assignee").is_none());
         assert_eq!(command.subject_kind, "sales_order");
         assert_eq!(command.subject_version, 1);
+
         let voucher =
             sales_order_start_command(DocumentType::VoucherSalesOrder, "so-1", 1, "user-1", "key-1");
         assert_eq!(voucher.subject_kind, "voucher_sales_order");
+
         assert!(require_frozen_binding(None).is_err());
     }
 
@@ -764,11 +773,13 @@ mod tests {
             Instant::from_unix_secs(10),
         )
         .unwrap();
+
         assert_eq!(payload.document_no, "SO-1");
         assert_eq!(payload.responsible_org_id, "party-1");
         assert_eq!(payload.submitted_by, "user-1");
         assert_eq!(payload.total_amount.unwrap().to_string(), "10");
         assert_eq!(payload.total_quantity.unwrap().to_string(), "2");
+
         assert!(
             build_sales_order_snapshot(&order, &submission(), &[], "user-1", Instant::from_unix_secs(10))
                 .is_err()
@@ -782,6 +793,7 @@ mod tests {
         order.business_type = BusinessType::Voucher;
         let line = voucher_line();
         assert!(line.quantity.is_none());
+
         let payload = build_sales_order_snapshot(
             &order,
             &voucher_submission(),
@@ -824,6 +836,7 @@ mod tests {
             "user-1",
         )
         .unwrap();
+
         assert!(
             execute_sales_order_domain_action(
                 &mut order,
@@ -854,10 +867,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(order.review_status, ReviewStatus::InApproval);
+
         let subject_version_before = 1_u32;
         assert!(order.transition_review(ReviewStatus::Rejected, "u").is_err());
         assert_eq!(order.review_status, ReviewStatus::InApproval);
         assert_eq!(subject_version_before, 1);
+
         execute_sales_order_domain_action(
             &mut order,
             ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission,
@@ -871,6 +886,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(order.commercial_status, CommercialStatus::Draft);
+
         assert!(
             execute_sales_order_domain_action(
                 &mut order,

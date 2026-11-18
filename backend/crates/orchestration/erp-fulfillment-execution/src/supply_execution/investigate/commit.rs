@@ -95,6 +95,7 @@ impl InvestigationCommit {
         if self.context.action == SupplierOrderInvestigationAction::Replay {
             ensure_replay_safe(db, &order, &target_action, executor).await?;
         }
+
         let original_order = order.clone();
         let original_target = target_action.clone();
         let finding = apply_prepared_investigation(
@@ -103,21 +104,25 @@ impl InvestigationCommit {
             &mut order,
             &mut target_action,
         )?;
+
         if order != original_order {
             persist_order(db, &mut order, executor).await?;
         }
         if target_action != original_target {
             persist_action(db, &mut target_action, executor).await?;
         }
+
         let (record, response_summary) =
             serialize_investigation_record(&self.context.subject(), &target_action, &finding)?;
         let evidence = self.finish_evidence(db, &record, response_summary, executor).await?;
+
         let task_executor = &mut *executor;
         let task_version = update_task(task, order.base.version, |mut item| async move {
             db.work_items().update(&mut item, task_executor).await?;
             Ok(item)
         })
         .await?;
+
         persist_investigation_result(
             InvestigationWrite {
                 db,
@@ -170,6 +175,7 @@ impl InvestigationCommit {
         if durable != self.prepared {
             return Err(Error::ConflictError("供应商调查结果已由同一命令的另一执行确定".to_string()));
         }
+
         finish_evidence(&mut evidence, record.outcome(), response_summary)?;
         persist_action(db, &mut evidence, executor).await?;
         Ok(evidence)
@@ -299,6 +305,7 @@ mod tests {
             NoWorkflowAuthorization,
             Arc::new(FailClosedAuditPort),
         ));
+
         let mut commit = InvestigationCommit::new(
             Arc::new(FulfillmentWorkflowServices::new(service, runtime)),
             authorization.clone(),
@@ -325,6 +332,7 @@ mod tests {
             PreparedInvestigation::PersistedTerminal(SupplierOrderResolution::OrderAccepted),
             &AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin),
         );
+
         for task in [true, false] {
             if !task {
                 commit.context.task = None;

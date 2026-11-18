@@ -221,6 +221,7 @@ mod tests {
         assert_eq!(json["action"], "approve");
         assert!(json.get("permission").is_none());
         assert_eq!(serde_json::from_value::<PermissionDefinition>(json.clone()).unwrap(), value);
+
         json["action"] = "invalid:action".into();
         assert!(serde_json::from_value::<PermissionDefinition>(json).is_err());
     }

@@ -44,8 +44,10 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         {
             return self.adopt_product(actor, step, &existing, &maintainer_id).await;
         }
+
         let request = product_request(template, records, &maintainer_id)?;
         let id = self.create_demo_product(request, actor).await?;
+
         let sku_ids = self.sku_ids(&id).await?;
         record::save(&self.db, step, id, sku_ids).await?;
         Ok(EnsureOutcome::Created)
@@ -62,11 +64,13 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let id = &product.base.id;
         record::ensure_owned(&self.db, &step.key, id).await?;
         let sku_ids = self.sku_ids(id).await?;
+
         let live = product.base.deleted_at == entity_core::NOT_DELETED_TIMESTAMP;
         if !live {
             lifecycle::restore_product_graph(&self.db, self.authorization.clone(), actor, id, &sku_ids)
                 .await?;
         }
+
         self.align_product_maintainer(actor, id, maintainer_id).await?;
         record::save(&self.db, step, id.to_string(), sku_ids).await?;
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
@@ -84,6 +88,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         let read_actor = actor.clone();
         let product_id = id.to_owned();
         let maintainer_id = maintainer_id.to_owned();
+
         let request = self
             .db
             .client()
@@ -103,6 +108,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                 })
             })
             .await?;
+
         if let Some(request) = request {
             handover_product(
                 self.db.clone(),
@@ -213,19 +219,23 @@ mod tests {
                 },
             );
         }
+
         let request = product_request(template, &records, "buyer-db-id").unwrap();
         assert_eq!(request.maintainer_user_id.as_deref(), Some("buyer-db-id"));
         assert_eq!(request.brand_id.as_ref(), "brand-db-id");
         assert_eq!(request.category_id.as_ref(), "category-db-id");
         assert_eq!(request.skus[0].base_unit_id.as_ref(), "unit-db-id");
         assert_eq!(request.skus[0].sales_visible_price_gross, template.skus[0].sales_visible_price_gross);
+
         let brand = records.get_mut(template.brand_id.as_ref()).unwrap();
         brand.removed = true;
         assert!(product_request(template, &records, "buyer-db-id").is_err());
+
         let brand = records.get_mut(template.brand_id.as_ref()).unwrap();
         brand.removed = false;
         brand.kind = DemoKind::Category.as_str().into();
         assert!(product_request(template, &records, "buyer-db-id").is_err());
+
         records.remove(template.brand_id.as_ref());
         assert!(product_request(template, &records, "buyer-db-id").is_err());
     }
@@ -240,6 +250,7 @@ mod tests {
         assert_eq!(request.idempotency_key, "demo-product-handover-7");
         let retry = product_handover_request(&product, "buyer-db-id", "procurement-org").unwrap();
         assert_eq!(serde_json::to_value(&request).unwrap(), serde_json::to_value(retry).unwrap());
+
         product.handover(request.target_user_id, request.target_org_unit_id, "admin").unwrap();
         assert_eq!(product.maintainer_user_id, "buyer-db-id");
         assert_eq!(product.business_org_unit_id, "procurement-org");

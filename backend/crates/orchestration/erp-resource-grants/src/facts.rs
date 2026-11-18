@@ -40,6 +40,7 @@ impl Facts {
         {
             return Err(conflict());
         }
+
         Ok(SourceUpdate {
             key: event.source.clone(),
             rule_version: 1,
@@ -108,12 +109,14 @@ impl Facts {
         if expected != event.evidence {
             return Err(conflict());
         }
+
         let request = db.sales_invoice_requests().find_for_task(task_id, ex).await?.ok_or_else(conflict)?;
         let subject = SubjectRef::new("sales_invoice_request", &request.base.id).map_err(|_| conflict())?;
         let approval = BpmWorkflowRepository::new(db)
             .find_latest_by_subject(&subject, ex)
             .await?
             .ok_or_else(conflict)?;
+
         let (target, _) = Self::invoice(db, event, &request.base.id, &approval.base.id, task_id, ex).await?;
         Ok((target, task.base.version))
     }
@@ -127,12 +130,9 @@ impl Facts {
         ex: &mut dyn Executor,
     ) -> Result<(GrantTarget, u64)> {
         let request = db.sales_invoice_requests().find_by_id(request_id, ex).await?.ok_or_else(conflict)?;
-
         let approval =
             db.approval_process_instances().find_by_id(approval_id, ex).await?.ok_or_else(conflict)?;
-
         let task = db.work_items().find_by_id(task_id, ex).await?.ok_or_else(conflict)?;
-
         let account = db
             .receivable_accounts()
             .find_by_id(request.receivable_account_id.as_ref(), ex)
@@ -181,6 +181,7 @@ impl Facts {
             db.approval_process_instances().find_by_id(instance_id, ex).await?.ok_or_else(conflict)?;
         let execution =
             db.approval_node_executions().find_by_id(assignment, ex).await?.ok_or_else(conflict)?;
+
         AssignmentEvidence {
             subject_kind: instance.subject.subject_kind(),
             subject_id: instance.subject.subject_id(),

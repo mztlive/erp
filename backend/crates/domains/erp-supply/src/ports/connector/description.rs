@@ -84,6 +84,7 @@ mod tests {
         assert_eq!(description.notification_mode, NotificationMode::Unavailable);
         assert_eq!(description.funding_requirement, OrderFundingRequirement::VerifiedSupplierDeposit);
         assert!(!description.funds_source);
+
         let value = serde_json::to_value(&description).unwrap();
         assert_eq!(value["funding_requirement"], "verified_supplier_deposit");
         assert_eq!(value["address_requirement"]["type"], "four_level");

@@ -98,6 +98,7 @@ pub(super) async fn revalidate_decision_approver(
     if spec.document_type != snapshot.document_type {
         return Err(hidden_not_found());
     }
+
     let actor = authenticated_actor
         .cloned()
         .unwrap_or_else(|| AuditActor::new(assignee_id.into(), assignee_id.into(), AccountKind::Admin));
@@ -106,6 +107,7 @@ pub(super) async fn revalidate_decision_approver(
     } else {
         ApprovalQualification::Inactive
     };
+
     let failure = match qualified {
         ApprovalQualification::Inactive => Some(AuthorizationFailure::AccountInactive),
         ApprovalQualification::MissingPermissions => Some(AuthorizationFailure::NotEligible),
@@ -274,6 +276,7 @@ pub(super) fn mine_runtime_chain_matches(
     if !runtime_chain_matches {
         return Ok(false);
     }
+
     let snapshot_owner_matches = snapshot
         .filter(|snapshot| snapshot.approval_process_instance_id.as_ref() == summary.id)
         .filter(|snapshot| {

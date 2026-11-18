@@ -22,6 +22,7 @@ pub(super) async fn validate_finance(
         .find_by_id(&row.request.order.merchant_order_no, executor)
         .await?
         .ok_or_else(|| Error::NotFound("原采购执行不存在".into()))?;
+
     for allocation in &request.allocations {
         validate_line(db, &execution, allocation, executor).await?;
     }
@@ -45,6 +46,7 @@ async fn validate_line(
         .await?
         .ok_or_else(|| Error::NotFound("原成本事实不存在".into()))?;
     validate_cost_line(db, source, &cost, executor).await?;
+
     let allocation = db
         .cost_allocations()
         .find_by_id(line.original_cost_allocation_id.as_ref(), executor)
@@ -60,6 +62,7 @@ async fn validate_line(
         .find_by_id(payable.payable_account_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("原应付账户不存在".into()))?;
+
     if cost.supplier_id.as_ref().map(|id| id.as_ref()) != Some(execution.supplier_id.as_str())
         || ![execution.base.id.as_str(), execution.purchase_order_id.as_str()]
             .contains(&cost.source_document_id.as_str())
@@ -74,6 +77,7 @@ async fn validate_line(
     {
         return Err(Error::ConflictError("退款财务分配不属于原采购成本、归属或应付范围".into()));
     }
+
     validate_payment(db, line, executor).await
 }
 

@@ -92,6 +92,7 @@ impl PurchaseOrderProcess {
         for patch in &req.line_patches {
             patch.validate()?;
         }
+
         let fingerprint = req.request_fingerprint(id);
         let identity = PurchaseCommandReceipt::<PurchaseSubmitReceipt>::identity(
             PURCHASE_SUBMIT_RECEIPT_PREFIX,
@@ -100,6 +101,7 @@ impl PurchaseOrderProcess {
             Some(id),
             &req.idempotency_key,
         )?;
+
         let command = PurchaseSubmitCommand {
             purchase_order_id: id,
             request: &req,
@@ -136,6 +138,7 @@ impl PurchaseOrderProcess {
                 })
             })
             .await;
+
         match result {
             Err(error) if error.command_may_have_committed() => {
                 let Some(subject_version) = frozen_subject.get().copied() else {
@@ -167,6 +170,7 @@ impl PurchaseOrderProcess {
         self.command_access(command.actor, &purchase_order_permissions::SUBMIT)
             .current(command.purchase_order_id, executor)
             .await?;
+
         if let Some(result) = self
             .replay_purchase_submit_in(
                 command.identity,
@@ -178,11 +182,14 @@ impl PurchaseOrderProcess {
         {
             return Ok(result);
         }
+
         let PreparedPurchaseSubmit { input, output, purchase_order_id, subject_version } =
             self.prepare_purchase_submit(command, executor).await?;
         let _ = frozen_subject.set(subject_version);
+
         let first_task = persist_purchase_order_start(&self.db, input, executor).await?;
         let (work_item_id, task_version) = first_task.unwrap_or((String::new(), 0));
+
         Ok(SubmitPurchaseOrderResult {
             purchase_order_id,
             purchase_no: output.purchase_no.clone(),
@@ -237,6 +244,7 @@ impl PurchaseOrderProcess {
             return Ok(None);
         };
         let receipt = decode_submit_receipt(record, identity, expected_fingerprint)?;
+
         let order = self
             .db
             .purchase_orders()
@@ -249,6 +257,7 @@ impl PurchaseOrderProcess {
             .find_by_id(&receipt.submission_id, executor)
             .await?
             .ok_or_else(|| Error::Internal("采购提交幂等回执引用的不可变提交不存在".to_string()))?;
+
         if submission.purchase_order_id.as_ref() != purchase_order_id
             || submission.submission_no != receipt.submission_no
             || order.purchase_no != receipt.purchase_no
@@ -256,6 +265,7 @@ impl PurchaseOrderProcess {
         {
             return Err(Error::Internal("采购提交幂等回执与领域结果事实不一致".to_string()));
         }
+
         Ok(Some(SubmitPurchaseOrderResult {
             purchase_order_id: purchase_order_id.to_string(),
             purchase_no: receipt.purchase_no.clone(),
@@ -334,11 +344,13 @@ impl PurchaseOrderProcess {
                     let order = access.current(&purchase_order_id, executor).await?;
                     let organization_id = purchase_order_responsible_org_id(&order)?;
                     let _ = purchase_order_object_readable(&organization_id, &actor_id)?;
+
                     let binding = find_approval_binding(&db, &purchase_order_id, executor)
                         .await
                         .map_err(Error::from)?;
                     let binding = require_frozen_binding(binding.as_ref())?;
                     let subject = purchase_order_subject_ref(&purchase_order_id)?;
+
                     replay_purchase_order_start_with_executor(
                         &db,
                         &subject,
@@ -410,6 +422,7 @@ mod tests {
     fn submit_receipt_decode_preserves_frozen_result() {
         let (identity, record, fingerprint) = receipt_fixture();
         let expected = record.payload().clone();
+
         let result = decode_submit_receipt(record, &identity, &fingerprint).unwrap();
         assert_eq!(result, expected);
         assert_eq!(result.work_item_id, "wi-9");
@@ -427,6 +440,7 @@ mod tests {
         assert!(
             matches!(identity_error, Error::Internal(message) if message == "采购提交幂等收据与业务对象不一致")
         );
+
         let payload_error = decode_submit_receipt(record, &identity, &"b".repeat(64)).unwrap_err();
         assert!(
             matches!(payload_error, Error::ConflictError(message) if message == "幂等键已用于不同的采购提交命令")
@@ -451,6 +465,7 @@ mod tests {
             "1".into(),
         )
         .with_versions(0, 2);
+
         let filled = receipt.clone().with_first_task(Some(&("wi-9".into(), 7)));
         assert_eq!(filled.work_item_id, "wi-9");
         assert_eq!(filled.task_version, 7);

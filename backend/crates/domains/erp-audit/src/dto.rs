@@ -109,7 +109,6 @@ mod tests {
             success: Some(true),
             ..Default::default()
         };
-
         let normalized = AuditLogFilter::from(&params);
 
         assert_eq!(normalized.actor_account.as_deref(), Some("admin01"));
@@ -183,7 +182,6 @@ mod tests {
     #[test]
     fn list_params_reject_unbounded_page_size_and_clamp_internal_normalization() {
         let params = AuditLogListParams { page: Some(1), page_size: Some(u32::MAX), ..Default::default() };
-
         assert!(params.validate().is_err());
         assert_eq!(AuditLogFilter::from(&params).page_size, 100);
     }

@@ -102,6 +102,7 @@ impl SelectionCatalogPort for CatalogAdapter {
             page: 1,
             page_size: 501,
         };
+
         let page = self
             .query
             .search_sellable_skus(&catalog_filter, &mut ReadExecutor::default())
@@ -192,10 +193,12 @@ impl SelectionImagePort for ImageAdapter {
         let Ok(bytes) = self.storage.read(&view.storage_object_key).await else {
             return Ok(None);
         };
+
         let new_key = format!("sales-selection/{booklet_id}/{batch_id}/{source_asset_id}");
         if self.storage.save_with_content_type(&new_key, &bytes, Some(&view.content_type)).await.is_err() {
             return Err(erp_sales::Error::selection_prepare_failed("图片快照保存失败，请重新准备"));
         }
+
         Ok(Some(ImageAssetSnapshot {
             file_asset_id: view.id,
             content_checksum: view.content_hmac,
@@ -244,6 +247,7 @@ fn to_fact(row: erp_catalog::repository::SellableSkuRow) -> SelectionSkuFact {
             .collect(),
         SpecificationSignatureRead::LegacyNonCanonical => Vec::new(),
     };
+
     SelectionSkuFact {
         sku_id: row.sku_id,
         sku_revision_id: row.sku_revision_id,

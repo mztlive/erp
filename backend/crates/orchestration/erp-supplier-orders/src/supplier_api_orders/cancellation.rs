@@ -55,6 +55,7 @@ impl SupplierApiOrderProcess {
         let Some(mut execution) = execution else {
             return Ok(None);
         };
+
         request.validate()?;
         let frozen = self.decode(&execution)?;
         let scope = CancellationScope::new(&request, &frozen.lines)?;
@@ -63,10 +64,12 @@ impl SupplierApiOrderProcess {
             .cancellation_action_id
             .clone()
             .unwrap_or_else(|| format!("api-cancel-{}", execution.base.id));
+
         if execution.prepare_cancellations(&scope, &action_id)? {
             self.cancellation_connector(&execution).await?;
             self.persist_cancel_intent(execution, &canonical, actor, access).await?;
         }
+
         read_action_result(&self.db, access, actor, id, ActionResult::Cancellation).await.map(Some)
     }
 
@@ -82,6 +85,7 @@ impl SupplierApiOrderProcess {
             execution.defer(error.to_string());
             return self.persist_cancellation(&mut execution, CancellationWrite::Progress).await;
         }
+
         let next = execution
             .cancellation_actions
             .iter()
@@ -92,6 +96,7 @@ impl SupplierApiOrderProcess {
             execution.next_run_at = Instant::from_unix_secs(Instant::now().unix_secs().saturating_add(60));
             return self.persist_cancellation(&mut execution, CancellationWrite::Progress).await;
         };
+
         let connector = match self.cancellation_connector(&execution).await {
             Ok(connector) => connector,
             Err(error) => {
@@ -171,8 +176,10 @@ impl SupplierApiOrderProcess {
         {
             return Err(Error::ConflictError("取消结果与原始供应商根单不一致".into()));
         }
+
         execution.apply_observed_tree(tree, frozen)?;
         execution.observe_cancellations()?;
+
         let tree = execution
             .order_tree
             .as_ref()

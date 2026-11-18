@@ -113,6 +113,7 @@ impl RedInvoiceAllocationPlan {
         if remaining_total <= Amount::zero() {
             return Err(RedInvoiceAllocationPlanError::NoRemainingAllocation);
         }
+
         let requested = validate_red_invoice_requested_amount(requested, remaining_total)?;
         let lines = build_red_invoice_allocation_lines(remaining, requested)?;
         Ok(Self { lines, fully_reversed: requested == remaining_total })
@@ -326,6 +327,7 @@ fn build_red_invoice_allocation_lines(
         });
         unplanned = unplanned.checked_sub(gross);
     }
+
     if unplanned != Amount::zero() {
         return Err(RedInvoiceAllocationPlanError::UncoveredRequest);
     }
@@ -379,6 +381,7 @@ mod tests {
         assert_eq!(plan.lines()[0].account_id, "account-target");
         assert_eq!(plan.totals().0, Amount::from_str("60").unwrap());
         assert!(!plan.is_full_reversal());
+
         assert!(
             RedInvoiceAllocationPlan::build_for_account(
                 InvoiceDirection::Purchase,
@@ -399,6 +402,7 @@ mod tests {
             )
             .is_err()
         );
+
         let prior = [red_reversal("first", "100", "90", "10")];
         assert!(
             RedInvoiceAllocationPlan::build_for_account(

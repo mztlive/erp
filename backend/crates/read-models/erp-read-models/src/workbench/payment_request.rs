@@ -67,10 +67,12 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let requests = self.db.purchase_payment_requests().list_active_by_ids(&ids, executor).await?;
         let history = request_history(self.db, &ids, executor).await?;
         let users = requests.iter().map(|request| request.created_by.clone()).collect::<Vec<_>>();
         let names = self.load_account_names(&users, executor).await?;
+
         for request in requests {
             let mut fact = WorkbenchObjectFact::from_authority(request_fact(
                 &request,
@@ -113,6 +115,7 @@ fn request_fact(
     for (instance_id, version) in history {
         fact.subject_versions.register_rework_history(instance_id, *version);
     }
+
     fact.counterparty_label = supplier_name(request);
     fact.impact_summary = Some(format!(
         "申请 {} · 待付 {}",
@@ -135,6 +138,7 @@ fn request_brief(request: &PurchasePaymentRequest, submitter_name: Option<String
     push_section(&mut sections, "申请金额", Some(&format_yuan(&request.total_amount)), true);
     push_section(&mut sections, "希望付款日", Some(&request.data.desired_payment_date.to_string()), false);
     push_section(&mut sections, "申请说明", Some(&request.data.reason), false);
+
     if let Some(account) = &request.payee_account {
         push_section(
             &mut sections,
@@ -146,6 +150,7 @@ fn request_brief(request: &PurchasePaymentRequest, submitter_name: Option<String
             false,
         );
     }
+
     let lines = request.lines.iter().take(BRIEF_LINE_LIMIT).map(brief_line).collect();
     ApprovalBriefSource {
         customer: None,
@@ -216,6 +221,7 @@ mod tests {
             "gross_total": "100.01", "settled_total": "30.01", "open_total": "70.00", "other_reserved_total": "0",
             "payment_terms": {}, "source_snapshot": {"purchase_preview": {}, "sales_sources": [], "allowed_attachment_ids": []}
         })).unwrap()];
+
         let brief = request_brief(&request, None);
         let field = brief.extra_sections.iter().find(|field| field.label == "待付金额").unwrap();
         assert_eq!(field.value, format_yuan(&"50.00".parse().unwrap()));
@@ -226,6 +232,7 @@ mod tests {
                 .iter()
                 .any(|field| field.label == "我方付款主体" && field.value == "付款公司")
         );
+
         request.lines[0].closed_amount = "70.00".parse().unwrap();
         let brief = request_brief(&request, None);
         assert_eq!(

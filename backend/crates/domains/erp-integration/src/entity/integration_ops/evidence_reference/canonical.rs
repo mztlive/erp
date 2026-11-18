@@ -62,6 +62,7 @@ impl CanonicalEvidenceReference {
             return Err(Error::from("证据记录 ID 必须使用 type:id 格式"));
         }
         ensure_encoded_len(value)?;
+
         if let Some((kind, id)) = value.split_once("://") {
             return Ok(Self {
                 kind: parse_kind(kind, "证据记录 ID 必须使用唯一的 type:id 格式")?,
@@ -70,6 +71,7 @@ impl CanonicalEvidenceReference {
                 status: None,
             });
         }
+
         let parts = value.split(':').collect::<Vec<_>>();
         let (kind, id, version, status) = match parts.as_slice() {
             [kind, id] => (*kind, *id, None, None),
@@ -209,6 +211,7 @@ mod tests {
         assert_eq!(scheme.id(), "f-1001");
         assert_eq!(scheme.version(), None);
         assert_eq!(scheme.status(), None);
+
         let hyphenated = CanonicalEvidenceReference::parse_stored("mall-snapshot:7").unwrap();
         assert_eq!(hyphenated.kind(), "mall-snapshot");
         assert_eq!(hyphenated.id(), "7");
@@ -253,6 +256,7 @@ mod tests {
             assert_eq!(reference.status(), status);
             assert_eq!(reference.to_string(), wire);
         }
+
         for wire in [
             "0invoice:document",
             "invoice:",

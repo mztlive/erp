@@ -64,6 +64,7 @@ impl FulfillmentReadService {
             .find_by_id(sales_order_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+
         let revision_id = so
             .stable
             .current_revision_id
@@ -87,6 +88,7 @@ impl FulfillmentReadService {
             .sales_order_goods_service_line_revisions()
             .list_by_revision_line_ids(&revision_line_ids, executor)
             .await?;
+
         let deliveries = self.db.fulfillment().list_acceptance_eligible_deliveries(&so_id, executor).await?;
         let delivery_ids: Vec<DeliveryId> =
             deliveries.iter().map(|delivery| delivery.base.id.clone().into()).collect();
@@ -106,6 +108,7 @@ impl FulfillmentReadService {
             .into_iter()
             .filter(ServiceFulfillment::is_acceptance_eligible)
             .collect::<Vec<_>>();
+
         let delivery_fact_ids: Vec<String> = delivery_lines.iter().map(|line| line.base.id.clone()).collect();
         let electronic_fact_ids: Vec<String> =
             electronic.iter().map(|record| record.base.id.clone()).collect();
@@ -133,7 +136,9 @@ impl FulfillmentReadService {
                 executor,
             )
             .await?;
+
         let history = self.db.fulfillment().list_customer_acceptance_history(&so_id, executor).await?;
+
         let sources = EligibilityGroupSources {
             revision_lines: &revision_lines,
             goods_service_lines: &goods_service_lines,
@@ -283,6 +288,7 @@ fn build_eligibility_views(
             ),
         );
     }
+
     let mut groups: Vec<AcceptanceSalesLineGroupView> = Vec::with_capacity(lines.len());
     for line in lines {
         let (line_no, item_snapshot, unit_code) =
@@ -690,6 +696,7 @@ mod acceptance_eligibility_rule_source_tests {
         let electronic = vec![electronic_delivery("ed-1", "ED-2026-001", "so-line-2", "1")];
         let service =
             vec![service_fulfillment("sf-1", "SF-2026-001", "so-line-2", "2", FulfillmentResult::Success)];
+
         let delivery_allocations = vec![apply_allocation(FulfillmentFactType::Delivery, "dl-1", "4")];
         let electronic_allocations =
             vec![apply_allocation(FulfillmentFactType::ElectronicDelivery, "ed-1", "0.5")];
@@ -714,6 +721,7 @@ mod acceptance_eligibility_rule_source_tests {
         assert_eq!(line_1.remaining_eligible_quantity, Quantity::from_str("1").unwrap());
         assert_eq!(line_1.facts.len(), 1);
         assert_eq!(line_1.facts[0].fulfillment_line_id, "dl-1");
+
         let line_2 = lines.iter().find(|line| line.sales_order_line_id == "so-line-2").unwrap();
         assert_eq!(line_2.required_quantity, Quantity::from_str("3").unwrap());
         assert_eq!(line_2.net_accepted_quantity, Quantity::from_str("2").unwrap());
@@ -765,6 +773,7 @@ mod acceptance_eligibility_rule_source_tests {
         assert_eq!(electronic_fact.eligible_quantity, Quantity::from_str("0.5").unwrap());
         assert_eq!(electronic_fact.delivery_type, None);
         assert!(electronic_fact.tracking_entries.is_empty());
+
         let service_fact = &groups[1].fulfillment_facts[1];
         assert_eq!(service_fact.fulfillment_fact_type, FulfillmentFactType::ServiceFulfillment);
         assert_eq!(service_fact.fulfillment_no, "SF-2026-001");
@@ -802,6 +811,7 @@ mod acceptance_eligibility_rule_source_tests {
         });
         let line_a = delivery_line("line-a", "dlv-1", 1, "same-sales-line", "1");
         let line_b = delivery_line("line-b", "dlv-1", 2, "same-sales-line", "1");
+
         assert_eq!(
             exact_delivery_tracking(Some(&record), &line_a)
                 .iter()
@@ -914,6 +924,7 @@ mod acceptance_eligibility_rule_source_tests {
             electronic_allocations: &[],
             service_allocations: &[],
         };
+
         let error =
             build_line_eligibilities(&sources).expect_err("净验收超过成功履约数量必须向上传递，禁止回退为零");
         assert!(error.to_string().contains("超过其净成功履约数量"));

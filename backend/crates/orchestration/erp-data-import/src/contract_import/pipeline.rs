@@ -52,10 +52,12 @@ impl RecognitionProviders {
                 "合同逐页 OCR 完成"
             );
             let document = attempt.ocr.insert(document);
+
             stage = ImportStage::AiExtract;
             stage_start = Instant::now();
             progress.advance(stage).await.map_err(StageFailure::Progress)?;
             let extraction = self.extractor.extract(document).await?;
+
             stage = ImportStage::PreparingReview;
             stage_start = Instant::now();
             progress.advance(stage).await.map_err(StageFailure::Progress)?;
@@ -70,6 +72,7 @@ impl RecognitionProviders {
             Ok::<(), StageFailure>(())
         })
         .await;
+
         attempt.failure = match result {
             Ok(Ok(())) => None,
             Ok(Err(StageFailure::Recognition(failure))) => Some(failure),

@@ -65,9 +65,11 @@ mod tests {
         let mut job = job();
         assert!(job.confirm_unknown_successes(3, Instant::from_unix_secs(102)).is_err());
         assert_eq!(job.failed_count, 2);
+
         job.confirm_unknown_successes(1, Instant::from_unix_secs(102)).unwrap();
         assert_eq!((job.success_count, job.failed_count, job.processed_count), (1, 1, 2));
         assert_eq!(job.status, JobStatus::PartiallySucceeded);
+
         job.confirm_unknown_successes(1, Instant::from_unix_secs(103)).unwrap();
         assert_eq!(job.status, JobStatus::Succeeded);
         assert_eq!(job.finished_at, Some(Instant::from_unix_secs(101)));

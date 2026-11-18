@@ -86,6 +86,7 @@ fn cancellation() -> (Application, OrderTracking, OrderObservation, ApiOrderExec
         },
     )
     .unwrap();
+
     let mut data = SupplierFulfillmentOrderData::submitting(
         "order",
         SupplierAccountId::new("supplier"),
@@ -100,9 +101,11 @@ fn cancellation() -> (Application, OrderTracking, OrderObservation, ApiOrderExec
     let mut order = SupplierFulfillmentOrder::new(SupplierFulfillmentOrderId::new("order"), data).unwrap();
     order.apply_observed_fulfillment(FulfillmentStatus::Accepted, None).unwrap();
     order.apply_observed_cancellation(observation.cancellation.unwrap()).unwrap();
+
     tracking.latest_observation_id = Some(observation.base.id.clone());
     tracking.last_error = Some("等待取消结果应用".into());
     tracking.lease_id = Some("query-lease".into());
+
     let mut execution = ApiOrderExecution::queued(
         "order".into(),
         "purchase".into(),
@@ -120,6 +123,7 @@ fn cancellation() -> (Application, OrderTracking, OrderObservation, ApiOrderExec
 async fn real_cancellation_application_finishes_checkpoint_and_enables_controlled_purchase_change() {
     let (application, mut tracking, observation, mut execution) = cancellation();
     assert_eq!(tracking.applied_observation_id, None);
+
     apply_current_observation(
         &application,
         &mut tracking,
@@ -135,6 +139,7 @@ async fn real_cancellation_application_finishes_checkpoint_and_enables_controlle
     assert_eq!(saved.last_error, None);
     assert_eq!(saved.state, TrackingState::Complete);
     assert_eq!(saved.lease_id, None);
+
     execution
         .stop_cancelled_for_purchase_change("replacement", &application.order, &saved, &observation)
         .unwrap();

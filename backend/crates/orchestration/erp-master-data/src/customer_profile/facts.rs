@@ -98,11 +98,13 @@ impl CustomerProfileProcess {
                 self.db.party_contacts().list_active_on(party_id, req.effective_from, executor).await?;
             changes.contacts = self.diff_contacts(existing, inputs, party_id, req.effective_from, actor)?;
         }
+
         if let Some(inputs) = &req.addresses {
             let existing =
                 self.db.party_addresses().list_active_on(party_id, req.effective_from, executor).await?;
             changes.addresses = self.diff_addresses(existing, inputs, party_id, req.effective_from, actor)?;
         }
+
         if let Some(inputs) = &req.bank_accounts {
             let existing =
                 self.db.party_bank_accounts().list_active_on(party_id, req.effective_from, executor).await?;
@@ -217,6 +219,7 @@ impl CustomerProfileProcess {
                 changes.created.push(self.new_contact(input, party_id, effective_from, actor)?);
                 continue;
             };
+
             let mut entity = take_existing(&mut current, existing_id, "联系人")?;
             if entity.matches_content(&self.contact_content_match(input)) {
                 if entity.is_default != input.is_default {
@@ -228,6 +231,7 @@ impl CustomerProfileProcess {
                 }
                 continue;
             }
+
             let mut replacement = input.clone();
             if replacement.mobile.as_deref().is_none_or(|value| value.trim().is_empty()) {
                 replacement.mobile = Some(self.sensitive_data.decrypt(&entity.mobile_ciphertext)?);
@@ -236,6 +240,7 @@ impl CustomerProfileProcess {
             changes.updated.push(entity);
             changes.created.push(self.new_contact(&replacement, party_id, effective_from, actor)?);
         }
+
         close_remaining(current, &mut changes.updated, |item| item.close_at(effective_from, actor))?;
         Ok(changes)
     }
@@ -391,6 +396,7 @@ impl CustomerProfileProcess {
                 changes.created.push(self.new_address(input, party_id, effective_from, actor)?);
                 continue;
             };
+
             let mut entity = take_existing(&mut current, existing_id, "地址")?;
             if entity.matches_content(&self.address_content_match(input)) {
                 if entity.is_default != input.is_default {
@@ -402,6 +408,7 @@ impl CustomerProfileProcess {
                 }
                 continue;
             }
+
             let mut replacement = input.clone();
             if replacement.address.as_deref().is_none_or(|value| value.trim().is_empty()) {
                 replacement.address = Some(self.sensitive_data.decrypt(&entity.address_ciphertext)?);
@@ -410,6 +417,7 @@ impl CustomerProfileProcess {
             changes.updated.push(entity);
             changes.created.push(self.new_address(&replacement, party_id, effective_from, actor)?);
         }
+
         close_remaining(current, &mut changes.updated, |item| item.close_at(effective_from, actor))?;
         Ok(changes)
     }
@@ -430,6 +438,7 @@ impl CustomerProfileProcess {
                 changes.created.push(self.new_bank_account(input, party_id, effective_from, actor)?);
                 continue;
             };
+
             let mut entity = take_existing(&mut current, existing_id, "银行账户")?;
             entity
                 .ensure_unmodified(&self.bank_account_content_match(input))
@@ -442,6 +451,7 @@ impl CustomerProfileProcess {
                 changes.updated.push(entity);
             }
         }
+
         close_remaining(current, &mut changes.updated, |item| item.close_at(effective_from, actor))?;
         Ok(changes)
     }
@@ -520,12 +530,14 @@ impl PartyFactChanges {
         for item in &self.contacts.created {
             db.party_contacts().create(item, executor).await?;
         }
+
         for item in &mut self.addresses.updated {
             db.party_addresses().update(item, executor).await?;
         }
         for item in &self.addresses.created {
             db.party_addresses().create(item, executor).await?;
         }
+
         for item in &mut self.bank_accounts.updated {
             db.party_bank_accounts().update(item, executor).await?;
         }

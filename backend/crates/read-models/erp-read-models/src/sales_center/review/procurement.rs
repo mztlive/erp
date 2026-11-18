@@ -65,6 +65,7 @@ impl SalesChangeReadService {
         if !visible {
             return Ok(procurement_view(&updates, None));
         }
+
         let ids = updates.iter().map(|update| update.purchase_order_id.clone()).collect::<Vec<_>>();
         let purchases = self.db.purchase_orders().list_active_by_ids(&ids, executor).await?;
         let labels = self.purchase_labels(&purchases, executor).await?;
@@ -86,6 +87,7 @@ impl SalesChangeReadService {
         if !visible {
             return Ok(predicted_view(&impacts, None));
         }
+
         let affected = purchases
             .into_iter()
             .filter(|purchase| impacts.iter().any(|impact| impact.purchase_order_id == purchase.base.id))

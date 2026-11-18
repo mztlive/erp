@@ -144,6 +144,7 @@ impl SupplierConnectionExecutionProcess {
         if job.is_terminal() {
             return Ok(());
         }
+
         match job.domain_job_type.as_deref() {
             Some(SUPPLIER_HEALTH_CHECK_JOB_TYPE) => self.process_health_job(job, actor).await,
             Some(SUPPLIER_CATALOG_SYNC_JOB_TYPE) => self.process_catalog_job(job, actor).await,

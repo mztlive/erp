@@ -21,10 +21,12 @@ impl SupplierCredentialRepository<'_> {
             mongo_ops::insert_one(&self.collection(), &record, executor).await?;
             return Ok((record, true));
         };
+
         let mut next = current.clone();
         if !next.claim_authorization(&request)? {
             return Ok((current, false));
         }
+
         let record = self
             .replace(filters::authorization_claim(&current, &request)?, &next, executor)
             .await?

@@ -34,6 +34,7 @@ impl PortalIdentityService {
         params.validate()?;
         let supplier_id =
             normalize_required_text(supplier_id.into(), "供应商标识不能为空", 128, "供应商标识过长")?;
+
         let secret = password::hash_secret(LoginAccount::new(params.account)?, params.password).await?;
         let account =
             AccountCore::new(id_generator::next_id(), AccountCoreData::supplier(secret, params.name))?;
@@ -58,6 +59,7 @@ impl PortalIdentityService {
         let PreparedPortalAccount { account, supplier_id, role } = prepared;
         ensure_account_available(&self.db, &LoginAccount::new(account.secret.account())?, None, executor)
             .await?;
+
         let binding = PortalBinding::new(
             id_generator::next_id(),
             account.base.id.clone(),
@@ -65,6 +67,7 @@ impl PortalIdentityService {
             role,
             actor.id().into(),
         )?;
+
         self.db.accounts().create(&account, executor).await?;
         self.db.portal_bindings().create(&binding, executor).await?;
         Ok(PortalAccountView::from_account(&account, &binding))
@@ -91,6 +94,7 @@ impl PortalIdentityService {
             .filter(|account| account.kind == AccountKind::Supplier)
             .map(|account| (account.base.id.clone(), account))
             .collect();
+
         let mut result = bindings
             .iter()
             .filter_map(|binding| {
@@ -140,8 +144,10 @@ impl PortalIdentityService {
         if account.base.version != update.expected_account_version {
             return Err(Error::ConflictError("供应商账号已变化，请刷新后重试".into()));
         }
+
         binding.update(update.expected_binding_version, update.role, update.active, actor.id().into())?;
         account.status = if update.active { AccountStatus::Active } else { AccountStatus::Suspended };
+
         self.db.accounts().update(&mut account, executor).await?;
         self.db.portal_bindings().update(&mut binding, executor).await?;
         Ok(PortalAccountView::from_account(&account, &binding))

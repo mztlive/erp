@@ -343,6 +343,7 @@ impl SupplierPayment {
         {
             return Err(Error::from("供应商付款缺少我方付款主体审核依据"));
         }
+
         if self.request_allocations.is_empty() {
             return Err(Error::from("供应商付款缺少逐申请采购付款分配"));
         }
@@ -440,6 +441,7 @@ impl SupplierPayment {
             return Err(Error::from("供应商付款已存在过账身份事实，禁止覆盖"));
         }
         ensure_transition(self.status, SupplierPaymentStatus::Posted)?;
+
         self.cash_source_fingerprint = self.cash_source_key();
         self.status = SupplierPaymentStatus::Posted;
         self.posted_by = Some(actor_id);
@@ -484,6 +486,7 @@ impl SupplierPayment {
         {
             return Err(Error::from("已有采购付款依据或已过账付款不得改为充值"));
         }
+
         let SupplierPaymentPurpose::SupplierDepositRecharge {
             recharge_request_id,
             deposit_account_id,
@@ -502,10 +505,12 @@ impl SupplierPayment {
         ] {
             normalize_required_text(value.into(), &format!("{label}不能为空"), 256, &format!("{label}过长"))?;
         }
+
         self.require_bank_receipt()?;
         if self.bank_reference.as_deref().is_none_or(|value| value.trim().is_empty()) {
             return Err(Error::from("充值必须登记真实银行流水"));
         }
+
         self.purpose = purpose;
         self.payer_party_id = Some(payer.into());
         self.payer_party_name = Some(payer_name.into());
@@ -675,6 +680,7 @@ mod tests {
             edit(&mut payment);
             cases.push(payment);
         }
+
         for mut payment in cases {
             let draft = payment.clone();
             assert!(payment.require_payment_request_basis().is_err());
@@ -682,6 +688,7 @@ mod tests {
                 payment.post_from_execution(&allocations, "executor", Instant::from_unix_secs(2)).is_err()
             );
             assert_eq!(payment, draft);
+
             payment.status = SupplierPaymentStatus::Posted;
             let posted = payment.clone();
             assert!(payment.record_reversal(Amount::from_str("1.00").unwrap()).is_err());
@@ -897,6 +904,7 @@ mod tests {
         let mut purchase = bound_payment();
         let pending = [PendingPaymentAllocation::new(PayableEntryId::new("entry"), purchase.amount).unwrap()];
         purchase.post_from_execution(&pending, "cashier", Instant::from_unix_secs(2)).unwrap();
+
         let mut recharge =
             SupplierPayment::new(SupplierPaymentId::new("recharge-payment"), data(), "requester").unwrap();
         recharge
@@ -912,6 +920,7 @@ mod tests {
                 Instant::from_unix_secs(2),
             )
             .unwrap();
+
         assert!(purchase.cash_source_fingerprint.is_some());
         assert_eq!(purchase.cash_source_fingerprint, recharge.cash_source_fingerprint);
         assert!(recharge.require_payment_request_basis().is_err());

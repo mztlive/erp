@@ -39,6 +39,7 @@ impl FundsAccess {
         if ids.is_empty() {
             return Ok(());
         }
+
         let orders = self.db.purchase_order().find_orders_by_ids(&ids, executor).await?;
         let revision_ids = orders
             .iter()
@@ -61,6 +62,7 @@ impl FundsAccess {
                     .then_some((order.base.id.as_str(), revision))
             })
             .collect::<HashMap<_, _>>();
+
         for row in rows {
             if !row.permission_limited && row.source_type == PayableSourceType::PurchaseOrder {
                 row.payment_guidance = by_order.get(row.source_document_id.as_str()).and_then(|revision| {
@@ -87,6 +89,7 @@ fn guidance(
     let term = SupplierPaymentTerm::parse(&code).ok();
     let requirement = snapshot.required_prepayment(gross);
     let valid = term.is_some_and(|term| term.prepay_gate() == snapshot.prepay_gate) && requirement.is_ok();
+
     let mut view = PaymentGuidanceView::from_requirement(
         term.map(SupplierPaymentTerm::label).unwrap_or_else(|| "付款条件待核对".into()),
         gross,
@@ -121,6 +124,7 @@ mod tests {
         assert_eq!(result.term_label, "先款 50%");
         assert_eq!(result.required_prepayment, Some("30".parse().unwrap()));
         assert_eq!(result.suggested_amount, Some("20".parse().unwrap()));
+
         let changed = guidance(&term, "100".parse().unwrap(), "10".parse().unwrap(), "90".parse().unwrap());
         assert_eq!(changed.suggested_amount, Some("40".parse().unwrap()));
     }

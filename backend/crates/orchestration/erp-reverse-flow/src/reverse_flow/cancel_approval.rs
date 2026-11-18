@@ -146,6 +146,7 @@ pub(super) async fn persist_customer_refund_cancel(
             executor,
         )
         .await?;
+
     super::cancel_write::persist(
         super::cancel_write::MongoCancelWrite {
             db,
@@ -261,6 +262,7 @@ pub(super) async fn persist_supplier_refund_cancel(
             executor,
         )
         .await?;
+
     super::cancel_write::persist(
         super::cancel_write::MongoCancelWrite {
             db,
@@ -383,6 +385,7 @@ pub(super) async fn persist_receipt_reversal_cancel(
             executor,
         )
         .await?;
+
     super::cancel_write::persist(
         super::cancel_write::MongoCancelWrite {
             db,
@@ -505,6 +508,7 @@ pub(super) async fn persist_payment_reversal_cancel(
             executor,
         )
         .await?;
+
     super::cancel_write::persist(
         super::cancel_write::MongoCancelWrite {
             db,

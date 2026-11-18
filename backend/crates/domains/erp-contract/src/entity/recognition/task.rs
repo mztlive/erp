@@ -193,6 +193,7 @@ impl ContractImport {
         {
             return Err(Error::ConflictError("合同正在识别，请稍后查看结果".into()));
         }
+
         self.status = ImportStatus::Processing;
         self.stage = Some(ImportStage::ReadingFile);
         self.started_at = Some(now);
@@ -234,6 +235,7 @@ impl ContractImport {
         if self.status != ImportStatus::Processing {
             return Err(Error::ConflictError("任务未在识别中，请刷新查看结果".into()));
         }
+
         self.ocr = Some(ocr);
         self.extraction = Some(extraction);
         self.failure = None;
@@ -256,6 +258,7 @@ impl ContractImport {
                 Err(Error::ConflictError("此任务已归档，确认内容不一致，请刷新查看结果".into()))
             };
         }
+
         if self.status != ImportStatus::Review || self.base.version != command.version {
             return Err(Error::ConflictError("识别结果或版本已变化，请刷新后确认".into()));
         }

@@ -57,6 +57,7 @@ impl AccessInspectionService {
         self.authorization
             .require(operator, &access_control::INSPECTION_INSPECT, AccessTarget::Operation, executor)
             .await?;
+
         let account = self
             .db
             .accounts()
@@ -66,6 +67,7 @@ impl AccessInspectionService {
         let Some(account) = account else {
             return Ok(denied("账号", "账号不存在或未启用，请核对人员账号状态。"));
         };
+
         let actor = AuditActor::new(account.base.id.clone(), account.secret.account().into(), account.kind);
         let permission = Permission::parse(format!("{}:{}", request.resource, request.action))?;
         match self.authorization.inspection_scope(&actor, &permission, executor).await {
@@ -102,6 +104,7 @@ impl AccessInspectionService {
             .person_data_scopes()
             .for_person(actor.id(), Some(source.resource()), Some(source.action()), executor)
             .await?;
+
         if configs.is_empty() && access.scope.has_role_scope() {
             view.push(
                 "人员数据范围",
@@ -182,10 +185,12 @@ mod tests {
             scope_version: "current".into(),
             as_of: Instant::from_unix_secs(100),
         });
+
         let result = inspected(actor.clone(), &request, Some(&access)).unwrap();
         assert!(result.actor.is_none());
         assert_eq!(result.view.scope_version.as_deref(), Some("current"));
         assert!(result.view.steps.iter().any(|step| step.layer == "对象上下文" && step.status == "review"));
+
         request.object_id = Some("order".into());
         let result = inspected(actor, &request, Some(&access)).unwrap();
         assert!(result.actor.is_some());

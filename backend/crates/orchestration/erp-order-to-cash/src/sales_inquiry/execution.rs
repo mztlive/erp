@@ -134,6 +134,7 @@ impl SalesInquiryProcess {
             command.key(),
             &(id, &command),
         )?;
+
         let this = self.clone();
         let actor = actor.clone();
         let id = id.to_string();
@@ -153,6 +154,7 @@ impl SalesInquiryProcess {
                 }
             })
             .await;
+
         match result {
             Err(error) if error.command_may_have_committed() => {
                 self.recovered_result(&actor, &id, &command, &receipt, error).await
@@ -202,10 +204,12 @@ impl SalesInquiryProcess {
         if let Some(result) = replay(self, actor, id, &command, &receipt, executor).await? {
             return Ok(result);
         }
+
         let (mut inquiry, tasks) = self.apply_command(actor, id, &command, executor).await?;
         if !matches!(command, InquiryCommand::Create(_)) {
             SalesInquiryService::new(self.db.clone()).save(&mut inquiry, executor).await?;
         }
+
         let result = mutation_view(&inquiry, tasks);
         self.persist_command(actor, &command, &receipt, &result, executor).await?;
         Ok(result)
@@ -225,6 +229,7 @@ impl SalesInquiryProcess {
             result.inquiry_id.clone(),
         )?;
         persist_log(&self.db, &audit, executor).await?;
+
         let record = InquiryCommandReceipt::new(
             receipt.id().to_string(),
             actor.id(),
@@ -325,6 +330,7 @@ async fn replay_receipt(
     if view.inquiry_id != id && !(matches!(command, InquiryCommand::Create(_)) && id.is_empty()) {
         return Err(Error::ConflictError("询价命令回执不属于当前询价".into()));
     }
+
     if command.task().is_some() {
         source.procurement(actor, &command.procurement_permission()?, executor).await?;
     } else {
@@ -516,6 +522,7 @@ mod tests {
         let source = Source::new(&command, "", "created-inquiry");
         let mut executor = SnapshotExecutor::default();
         let expected_executor = &mut executor as *mut SnapshotExecutor as usize;
+
         let result = replay(&source, &actor(), "", &command, &receipt, &mut executor).await.unwrap();
         assert_eq!(result, Some(frozen_result("created-inquiry")));
         assert_eq!(
@@ -539,6 +546,7 @@ mod tests {
         changed.data.draft.note = "修改需求".into();
         let changed = InquiryCommand::Create(changed);
         let receipt = command_receipt(&changed, "");
+
         let error = replay(&source, &actor(), "", &changed, &receipt, &mut SnapshotExecutor::default())
             .await
             .unwrap_err();
@@ -576,6 +584,7 @@ mod tests {
             source.calls.lock().unwrap()[1].0,
             sales_inquiry_permissions::COMMANDS_PROCUREMENT_PUBLISH.to_string()
         );
+
         let mismatched = Source::new(&command, "inquiry", "other-inquiry");
         let error =
             replay(&mismatched, &actor(), "inquiry", &command, &receipt, &mut SnapshotExecutor::default())
@@ -592,6 +601,7 @@ mod tests {
         let source = Source::new(&command, "", "created-inquiry");
         let mut executor = SnapshotExecutor::default();
         let expected_executor = &mut executor as *mut SnapshotExecutor as usize;
+
         let result =
             super::super::recovery::recover(&source, &actor(), "", "create", receipt.id(), &mut executor)
                 .await
@@ -647,6 +657,7 @@ mod tests {
             mutation_result(&result),
         )
         .unwrap();
+
         let replay = make("a");
         assert_eq!(receipt.id(), replay.id());
         assert_eq!(
@@ -656,12 +667,14 @@ mod tests {
             .unwrap(),
             result
         );
+
         let other = make("b");
         assert_eq!(receipt.id(), other.id());
         assert!(matches!(
             record.matches("buyer", "same-key", "publish", other.fingerprint().digest_hex()),
             Err(SalesError::ConflictError(_))
         ));
+
         let serialized = serde_json::to_string(&record).unwrap();
         assert!(!serialized.contains("same-key"));
     }

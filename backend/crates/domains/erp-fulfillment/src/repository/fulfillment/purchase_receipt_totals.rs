@@ -81,6 +81,7 @@ pub(super) async fn load_qualified_received_totals(
     if receipt_ids.is_empty() {
         return Ok(HashMap::new());
     }
+
     let rows = aggregate::rows(
         &db.collection::<QualifiedReceivedTotalRow>(super::PURCHASE_RECEIPT_LINES),
         qualified_received_totals_pipeline(&receipt_ids),
@@ -139,6 +140,7 @@ mod tests {
             &[Bson::String("receipt-1".to_string()), Bson::String("receipt-2".to_string())]
         );
         assert_eq!(match_stage.get_i64("deleted_at").expect("未删除条件"), 0);
+
         let group_stage = pipeline[1].get_document("$group").expect("分组阶段");
         assert_eq!(group_stage.get_str("_id").expect("分组键"), "$purchase_order_revision_line_id");
         assert_eq!(

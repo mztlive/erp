@@ -66,6 +66,7 @@ pub async fn persist_red_invoice(
             if !reverted.rejected.is_empty() {
                 return Err(Error::BusinessLogicError("红冲金额超过已开票进度".to_string()));
             }
+
             let mut new_allocations = Vec::with_capacity(allocation_plan.lines().len());
             for (index, line) in allocation_plan.lines().iter().enumerate() {
                 new_allocations.push(SalesInvoiceAllocation::new(
@@ -96,6 +97,7 @@ pub async fn persist_red_invoice(
             if !reverted.rejected.is_empty() {
                 return Err(Error::BusinessLogicError("红冲金额超过已收票进度".to_string()));
             }
+
             let mut new_allocations = Vec::with_capacity(allocation_plan.lines().len());
             for (index, line) in allocation_plan.lines().iter().enumerate() {
                 new_allocations.push(PurchaseInvoiceAllocation::new(

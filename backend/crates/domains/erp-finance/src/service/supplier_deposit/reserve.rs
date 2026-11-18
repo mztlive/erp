@@ -40,10 +40,12 @@ impl SupplierDepositService {
             replay(&payload_fingerprint, &existing.payload_fingerprint)?;
             return Ok(existing);
         }
+
         let amount = basis.total()?;
         let mut account = self.account(account_id, executor).await?;
         let mut request =
             self.request_for_reservation(account_id, &account.identity, &basis, executor).await?;
+
         let mut authorization = self
             .db
             .supplier_deposit_authorizations()
@@ -57,9 +59,11 @@ impl SupplierDepositService {
             basis.authorization_version,
             now,
         )?;
+
         request.reserve_deposit(&id, &basis.payable_account_id, basis.payment_request_version, amount)?;
         account.reserve(amount)?;
         let batches = self.reserve_batches(account_id, amount, executor).await?;
+
         let reservation = SupplierDepositReservation {
             base: BaseModel::new(id),
             account_id: account_id.into(),
@@ -75,6 +79,7 @@ impl SupplierDepositService {
             actor_id: checked_actor(actor)?,
             release_receipts: Default::default(),
         };
+
         self.db.supplier_deposit_accounts().update(&mut account, executor).await?;
         self.db.supplier_deposit_authorizations().update(&mut authorization, executor).await?;
         self.db.purchase_payment_requests().update(&mut request, executor).await?;

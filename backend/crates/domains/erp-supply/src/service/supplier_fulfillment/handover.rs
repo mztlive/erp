@@ -51,6 +51,7 @@ async fn persist_handover(
     if order.base.version != req.expected_version {
         return Err(Error::ConflictError("供应商履约订单责任或版本已变化，请刷新后重试".into()));
     }
+
     authorize_handover(access, &mut order, req, actor, executor).await?;
     db.supplier_fulfillment_orders().update(&mut order, executor).await?;
     Ok(handover_view(&order, Vec::new()))
@@ -179,6 +180,7 @@ mod tests {
         .unwrap();
         assert_eq!(changed.follow_up_user_id, "new-owner");
         assert_eq!(changed.business_org_unit_id, "new-org");
+
         let mut retained = order();
         authorize_handover(
             &access,
@@ -205,6 +207,7 @@ mod tests {
         )
         .await
         .unwrap();
+
         let destination_denied = authorize_handover(
             &allowed,
             &mut order(),
@@ -214,6 +217,7 @@ mod tests {
         )
         .await;
         assert!(matches!(destination_denied, Err(Error::Forbidden(_))));
+
         let denied = access(original("outside-org"), restricted()).await;
         let original_denied = authorize_handover(
             &denied,
@@ -224,6 +228,7 @@ mod tests {
         )
         .await;
         assert!(matches!(original_denied, Err(Error::Forbidden(_))));
+
         let no_snapshot =
             authorize_handover(&allowed, &mut order(), &request(None), &actor(), &mut NoTransaction).await;
         assert!(matches!(no_snapshot, Err(Error::ValidationError(_))));

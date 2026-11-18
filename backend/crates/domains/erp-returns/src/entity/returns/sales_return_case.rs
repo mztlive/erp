@@ -344,6 +344,7 @@ impl SalesReturnCase {
         if self.stable.status().is_terminal() {
             return Err(Error::from("已完成或作废的处理单不可编辑"));
         }
+
         if let Some(reason) = update.reason {
             self.reason = normalize_required_text(reason, "原因不能为空", REASON_MAX_LEN, "原因过长")?;
         }
@@ -356,6 +357,7 @@ impl SalesReturnCase {
         if let Some(status) = update.status {
             self.stable.status = status;
         }
+
         self.stable.touch(updated_by);
         Ok(())
     }
@@ -452,6 +454,7 @@ mod tests {
             serde_json::to_string(&SalesReturnCaseStatus::PendingFinance).unwrap(),
             "\"pending_finance\""
         );
+
         assert_eq!(CaseType::ServiceFailed.label(), "服务不通过");
         assert_eq!(ReturnRoute::CompanyWarehouse.label(), "退公司仓");
         assert_eq!(SalesReturnCaseStatus::Voided.label(), "作废");

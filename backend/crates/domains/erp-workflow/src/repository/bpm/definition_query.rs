@@ -193,6 +193,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         if unique_kinds.is_empty() {
             return Ok(Vec::new());
         }
+
         let options = definition_catalog_options(unique_kinds.len());
         let rows = mongo_ops::find_many(
             &self.db.collection::<DefinitionCatalogRow>(DEFINITIONS),
@@ -201,6 +202,7 @@ impl<'a> BpmWorkflowRepository<'a> {
             executor,
         )
         .await?;
+
         group_definition_catalog_rows(&unique_kinds, rows)
     }
 
@@ -235,6 +237,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         let Some(definition) = unique_published_definition(rows)? else {
             return Ok(None);
         };
+
         let definition_id = ApprovalProcessDefinitionId::new(definition.base.id.clone());
         let nodes = self.load_definition_nodes(&definition_id, executor).await?;
         let transitions = self.load_definition_transitions(&definition_id, executor).await?;
@@ -515,6 +518,7 @@ pub(super) fn group_definition_catalog_rows(
             },
         }
     }
+
     Ok(process_kinds
         .iter()
         .map(|process_kind| {

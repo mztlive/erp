@@ -79,6 +79,7 @@ impl SupplierApiReadService {
             return Err(Error::ValidationError("商品分页参数无效".into()));
         }
         query.filter.validate()?;
+
         let service = self.clone();
         let id = id.to_owned();
         let actor = actor.clone();
@@ -107,10 +108,12 @@ impl SupplierApiReadService {
         let (access, can_read_cost) = self.catalog_access(actor, executor).await?;
         let connection = authorized_connection(&self.db, id, &access, executor).await?;
         query.filter.ensure_cost_access(can_read_cost)?;
+
         let (items, total, product_total) = self.catalog_items(id, query, can_read_cost, executor).await?;
         let jobs = self.catalog_jobs(id, executor).await?;
         let filters = self.catalog_filters(id, executor).await?;
         let sync_mode = jobs.first().map_or(CatalogSyncMode::Full, |job| job.sync_mode);
+
         let support = self
             .gateway
             .as_ref()
@@ -119,6 +122,7 @@ impl SupplierApiReadService {
             .map_err(|error| Error::BusinessLogicError(error.summary))?
             .flatten()
             .map_or(IncrementalSupport::Unsupported, |policy| policy.incremental);
+
         let view = CatalogView {
             items,
             total,
@@ -132,6 +136,7 @@ impl SupplierApiReadService {
             coverage: if support == IncrementalSupport::Complete { "COMPLETE" } else { "PARTIAL" },
             incremental_supported: support != IncrementalSupport::Unsupported,
         };
+
         self.authorization.validate(&access, executor).await?;
         Ok(view)
     }
@@ -176,6 +181,7 @@ impl SupplierApiReadService {
         )
         .await?;
         let counts = supplier_catalog::filtered_counts(&self.db, id, &query.filter, executor).await?;
+
         if !can_read_cost {
             for item in &mut items {
                 item.purchase_price = None;
@@ -232,6 +238,7 @@ mod tests {
         assert_eq!(query.filter.price_min.unwrap().to_string(), "0.1001");
         assert_eq!(query.filter.selection_status, Some(CatalogSelectionStatus::Unselected));
         query.filter.validate().unwrap();
+
         let invalid: CatalogQuery =
             serde_json::from_value(serde_json::json!({"price_min":"2","price_max":"1"})).unwrap();
         assert!(invalid.filter.validate().is_err());

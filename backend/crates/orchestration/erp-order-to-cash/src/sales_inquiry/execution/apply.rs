@@ -30,6 +30,7 @@ impl SalesInquiryProcess {
         if let InquiryCommand::Renew(req) = command {
             return self.renew_work(actor, id, req, executor).await;
         }
+
         if let Some((task_id, version)) = command.task() {
             let permission = command.procurement_permission()?;
             let (mut inquiry, mut task) =
@@ -38,6 +39,7 @@ impl SalesInquiryProcess {
             let tasks = self.active_tasks(id, executor).await?.into_iter().map(|task| task.base.id).collect();
             return Ok((inquiry, tasks));
         }
+
         let permission = command.sales_permission()?;
         let mut inquiry = self.access().require_sales(actor, &permission, id, executor).await?;
         let tasks = self.apply_sales(actor, &mut inquiry, command, executor).await?;
@@ -63,6 +65,7 @@ impl SalesInquiryProcess {
                 self.require_customer(actor, &inquiry.customer_id, executor).await?;
                 normalize_requirement(&self.db, self.services.catalog.as_ref(), &mut inquiry.draft, executor)
                     .await?;
+
                 inquiry.submit(req.expected_version, actor.id(), req.reason.clone(), now)?;
                 return self.replace_tasks(actor, inquiry, executor).await;
             },
@@ -83,6 +86,7 @@ impl SalesInquiryProcess {
                     normalize_requirement(&self.db, self.services.catalog.as_ref(), requirement, executor)
                         .await?;
                 }
+
                 inquiry.reinquire(req.expected_version, actor.id(), data, now)?;
                 return self.replace_tasks(actor, inquiry, executor).await;
             },
@@ -135,6 +139,7 @@ impl SalesInquiryProcess {
             },
             _ => self.change_task(actor, inquiry, task, command, executor).await?,
         }
+
         self.db.work_items().update(task, executor).await?;
         Ok(())
     }
@@ -171,6 +176,7 @@ impl SalesInquiryProcess {
             },
             _ => return Err(Error::Internal("询价采购命令分派错误".into())),
         }
+
         task.record_activity(now)?;
         Ok(())
     }
@@ -191,6 +197,7 @@ impl SalesInquiryProcess {
                 "目标采购已负责本询价其他任务，请保持一人一组责任行".into(),
             ));
         }
+
         let account = AccountDirectoryService::new(self.db.clone())
             .account(&request.owner_user_id, executor)
             .await?
@@ -205,6 +212,7 @@ impl SalesInquiryProcess {
             )
             .await?;
         required_business_org(&self.db, &request.owner_user_id, executor).await?;
+
         let now = Instant::now();
         inquiry.reassign_work(
             request.expected_version,
@@ -236,6 +244,7 @@ impl SalesInquiryProcess {
             .collect::<Vec<_>>();
         let data = inquiry.merge_feedback_work(&responsibilities)?;
         inquiry.publish(version, actor.id(), data, Instant::now())?;
+
         self.complete_tasks(inquiry, executor).await
     }
 }

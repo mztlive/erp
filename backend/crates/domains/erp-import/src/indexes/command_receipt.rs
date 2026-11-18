@@ -21,6 +21,7 @@ pub(super) async fn ensure(db: &Database) -> Result<()> {
     ]
     .into_iter()
     .map(|(name, keys)| unique_index(name, keys));
+
     db.collection::<mongodb::bson::Document>(<Database as ImportCommandReceiptExt>::IMPORT_COMMAND_RECEIPTS)
         .create_indexes(indexes)
         .await?;

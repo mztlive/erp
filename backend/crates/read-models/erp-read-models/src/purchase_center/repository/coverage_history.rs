@@ -42,6 +42,7 @@ pub async fn load_source_baselines(
 ) -> Result<SourceBaselines> {
     let updates = list_by_sales_order(db, sales_order_id.as_ref(), executor).await?;
     let maintained = maintained_baselines(orders, &updates);
+
     let revisions = orders
         .iter()
         .map(|order| order.sales_order_revision_id.to_string())
@@ -82,6 +83,7 @@ pub async fn load_historical_sales_lines(
     if revisions.is_empty() {
         return Ok(HashMap::new());
     }
+
     let lines = db
         .sales_order_revision_lines()
         .list_lines_by_revisions(&revisions, executor)
@@ -98,6 +100,7 @@ pub async fn load_historical_sales_lines(
         .filter(|goods| goods.base.deleted_at == 0)
         .map(|goods| (goods.revision_line_id.to_string(), goods))
         .collect::<HashMap<_, _>>();
+
     Ok(lines
         .into_iter()
         .filter_map(|line| {

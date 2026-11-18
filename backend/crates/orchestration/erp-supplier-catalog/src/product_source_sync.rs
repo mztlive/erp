@@ -33,6 +33,7 @@ pub async fn initialize_source(
     let service = catalog;
     let current = service.source_company_content(product_id, executor).await?;
     let observation = observation(item)?;
+
     if let Some(mut source) = db.product_sources().find_by_id(product_id, executor).await? {
         if source.connection_id != item.connection_id || source.source_product_id != item.product_id {
             return Ok(());
@@ -55,6 +56,7 @@ pub async fn initialize_source(
         bind_sku(&mut source, item)?;
         db.product_sources().create(&source, executor).await?;
     }
+
     let audit = actor.clone().resource_log("product.source_sync.initialize", "product", product_id.into())?;
     persist_log(db, &audit, executor).await?;
     Ok(())
@@ -88,6 +90,7 @@ pub async fn apply_source_observation(
     {
         return Ok(());
     }
+
     let service = catalog;
     let current = service.source_company_content(product_id, executor).await?;
     let previous = source.fields.clone();
@@ -95,8 +98,10 @@ pub async fn apply_source_observation(
     if changes.is_empty() && previous == source.fields {
         return Ok(());
     }
+
     service.write_source_content(product_id, &changes, actor.id(), executor).await?;
     db.product_sources().update(&mut source, executor).await?;
+
     let audit = actor.clone().resource_log("product.source_sync.apply", "product", product_id.into())?;
     persist_log(db, &audit, executor).await?;
     Ok(())
@@ -125,6 +130,7 @@ fn observation(item: &SupplierCatalogItem) -> Result<SourceObservation> {
     if let Some(description) = &item.description {
         values.push((SourceField::Description, None, SourceValue::Text(Some(description.clone()))));
     }
+
     if let Some(images) = item.images.as_ref().filter(|images| images.len() <= 100) {
         let images = images
             .iter()
@@ -143,6 +149,7 @@ fn observation(item: &SupplierCatalogItem) -> Result<SourceObservation> {
             ));
         }
     }
+
     if let Some(images) = item.detail_images.as_ref().filter(|images| images.len() <= 100) {
         values.push((
             SourceField::DetailMedia,
@@ -159,6 +166,7 @@ fn observation(item: &SupplierCatalogItem) -> Result<SourceObservation> {
             ),
         ));
     }
+
     Ok(SourceObservation {
         values,
         observed_at: u64::try_from(item.observed_at.unix_secs())

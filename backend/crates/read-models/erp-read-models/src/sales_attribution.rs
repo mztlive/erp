@@ -37,6 +37,7 @@ pub async fn sales_attribution(
         .await?
         .filter(|a| a.is_active_backoffice())
         .ok_or_else(|| Error::BusinessLogicError("首次生效的负责销售已失效".into()))?;
+
     let state = OrganizationRepository::new(db).state(executor).await?;
     let tree = OrgTree::new(&state.units)?;
     let path = tree.path(&order.business_org_unit_id)?;
@@ -44,6 +45,7 @@ pub async fn sales_attribution(
         return Err(Error::BusinessLogicError("单据业务组织已停用，必须先完成交接".into()));
     }
     let org = path.last().ok_or_else(|| Error::BusinessLogicError("单据业务组织缺失".into()))?;
+
     let snapshot = SalesAttribution {
         attribution_user_id: account.base.id,
         attribution_user_name: account.name,

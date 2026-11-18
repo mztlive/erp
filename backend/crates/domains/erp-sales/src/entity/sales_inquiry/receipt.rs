@@ -58,6 +58,7 @@ impl InquiryCommandReceipt {
         if fingerprint.len() != 64 || !fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return Err(Error::ValidationError("命令载荷指纹非法".into()));
         }
+
         let receipt = Self {
             base: BaseModel::new(id),
             schema_version: 1,
@@ -95,6 +96,7 @@ impl InquiryCommandReceipt {
                     && task_ids.iter().all(|id| !id.trim().is_empty()),
             ),
         };
+
         if self.schema_version != 1
             || self.base.is_deleted()
             || self.base.id.trim().is_empty()
@@ -133,6 +135,7 @@ impl InquiryCommandReceipt {
         {
             return Err(Error::ConflictError("询价命令回执与当前命令不一致".into()));
         }
+
         if self.payload_fingerprint != fingerprint {
             return Err(Error::ConflictError("同一操作号已用于不同询价内容".into()));
         }

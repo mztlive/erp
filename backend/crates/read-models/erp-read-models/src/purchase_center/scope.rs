@@ -95,8 +95,10 @@ impl PurchaseOrderReadService {
                     let (mut context, scope, filter) =
                         list_query(&db, &access, &params, &actor, executor).await?;
                     let (page, facts) = load_purchase_order_list_page(&db, &filter, &scope, executor).await?;
+
                     let versions = db.purchase_orders().query_versions(&filter, &scope, executor).await?;
                     context.scope_version = list_scope_version(&context.scope_version, &versions)?;
+
                     scope.validate(executor).await?;
                     Ok(PurchaseSnapshot {
                         page,
@@ -172,10 +174,12 @@ async fn list_query(
     executor: &mut dyn Executor,
 ) -> Result<(PurchaseResolvedScope, PurchaseReadScope, PurchaseOrderFilter)> {
     let (context, scope) = access.resolve(actor, &purchase_order_permissions::LIST, executor).await?;
+
     params.validate()?;
     let query = params.normalized()?;
     let (keyword_sales_order_ids, keyword_supplier_ids) =
         keyword_reference_ids(db, query.q.as_deref(), executor).await?;
+
     let filter = PurchaseOrderFilter {
         owner_user_ids: query.owner_user_ids,
         keyword_sales_order_ids,
@@ -230,6 +234,7 @@ mod tests {
             list_scope_version("policy:org", &versions).unwrap(),
             format!("policy:org:{:x}", legacy.finish())
         );
+
         let empty = list_scope_version("policy:org", &[]).unwrap();
         assert_ne!(empty, list_scope_version("new-policy:org", &[]).unwrap());
         assert_ne!(empty, list_scope_version("policy:org", &versions).unwrap());
@@ -245,6 +250,7 @@ mod tests {
         let first = list_scope_version("scope", &versions).unwrap();
         versions[1].version += 1;
         assert_ne!(first, list_scope_version("scope", &versions).unwrap());
+
         versions[1].version -= 1;
         versions[1].id = "po-3".into();
         assert_ne!(first, list_scope_version("scope", &versions).unwrap());

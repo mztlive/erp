@@ -80,11 +80,13 @@ impl SalesInquiryProcess {
             .find_authorized(id, &scope, executor)
             .await?
             .ok_or_else(|| Error::NotFound("询价不存在或无权查看".into()))?;
+
         let ids =
             inquiry.quantity_ledger.iter().map(|row| row.sales_order_id.clone()).collect::<HashSet<_>>();
         if ids.len() > 200 {
             return Err(Error::BusinessLogicError("关联销售超过单次查询限制".into()));
         }
+
         let mut items = Vec::new();
         for id in ids {
             if let Some(order) = self.db.sales_orders().find_by_id(&id, executor).await? {
@@ -97,6 +99,7 @@ impl SalesInquiryProcess {
             }
         }
         items.sort_by(|a, b| (&a.order_no, &a.id).cmp(&(&b.order_no, &b.id)));
+
         scope.validate(executor).await?;
         Ok(items)
     }
@@ -111,11 +114,13 @@ impl SalesInquiryProcess {
         if request.allocations.is_empty() || request.allocations.len() > 100 {
             return Err(Error::ValidationError("费用分摊须为 1 至 100 项".into()));
         }
+
         let mut ids = HashSet::new();
         for allocation in &request.allocations {
             if !ids.insert(&allocation.allocation_id) {
                 return Err(Error::ValidationError("费用分摊身份重复".into()));
             }
+
             let order = self
                 .db
                 .sales_orders()
@@ -131,6 +136,7 @@ impl SalesInquiryProcess {
                 &allocation.sales_order_id,
                 Instant::now(),
             )?;
+
             inquiry.allocate_fee(
                 &allocation.allocation_id,
                 &allocation.sales_order_id,

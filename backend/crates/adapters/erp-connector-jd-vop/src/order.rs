@@ -40,15 +40,18 @@ impl Orders for JdVopConnector {
         let profile = self.profile.as_ref().ok_or_else(protocol_required)?;
         profile.ensure_confirmation_funds()?;
         let writer = self.writer.as_ref().ok_or_else(protocol_required)?;
+
         self.inspect(request).await?;
         self.validate_choice(request)?;
         let payload = submit(request, profile)?;
+
         let order: JdOrder = writer
             .send(JdVopWriteRequest::Submit { order: Box::new(payload), source_type: profile.source_type })
             .await?;
         if order.third_order_id != request.merchant_order_no {
             return Err(write_unknown());
         }
+
         let mut snapshot = summary(&order).map_err(|_| write_unknown())?;
         let codec = self.evidence_codec.as_ref().ok_or_else(write_unknown)?;
         let payload = serde_json::to_string(&order).map_err(|_| write_unknown())?;
@@ -95,6 +98,7 @@ impl OrderConfirmation for JdVopConnector {
         {
             return Err(mapping("京东原叶子确认动作资料缺失"));
         }
+
         let order = self.current_target(&request.order).await?;
         if order
             .order_state
@@ -109,6 +113,7 @@ impl OrderConfirmation for JdVopConnector {
             Some(ConfirmationState::Pending) => {},
             _ => return Err(mapping("京东原子单确认状态未知，请继续查询原结果")),
         }
+
         let writer = self.writer.as_ref().ok_or_else(protocol_required)?;
         writer
             .send_true(JdVopWriteRequest::Confirm {
@@ -138,6 +143,7 @@ impl Cancellations for JdVopConnector {
         {
             return Err(mapping("京东取消原动作身份或原因无效"));
         }
+
         let order = self.current_target(&request.order).await?;
         if order
             .order_state
@@ -156,6 +162,7 @@ impl Cancellations for JdVopConnector {
 
     async fn cancel(&self, request: &CancelOrder) -> ConnectorResult<ActionAccepted> {
         self.validate(request).await?;
+
         let profile = self.profile.as_ref().ok_or_else(protocol_required)?;
         let writer = self.writer.as_ref().ok_or_else(protocol_required)?;
         writer
@@ -178,6 +185,7 @@ impl Cancellations for JdVopConnector {
         if progress.jd_order_id.0 != order.external_order_no {
             return Err(mapping("京东取消进度不属于原子单"));
         }
+
         let status = match progress.cancel_process_code.0.as_str() {
             "1" | "2" => CancelStatus::CancelPending,
             "3" => CancelStatus::Canceled,
@@ -219,6 +227,7 @@ impl JdVopConnector {
         if matches.next().is_some() {
             return Err(mapping("京东原子单查询返回重复身份，请先核实原结果"));
         }
+
         if order.third_order_id != reference.merchant_order_no
             || !(order.is_reservation_root()
                 || (order.parent_type.0 == "0" && order.child_order_ids().is_empty()))
@@ -512,6 +521,7 @@ mod tests {
             codec.clone(),
         )
         .unwrap();
+
         let mut connection = SupplierApiConnection::new(
             SupplierApiConnectionId::new("connection"),
             SupplierApiConnectionData {
@@ -533,6 +543,7 @@ mod tests {
         connection.credential_reference_bound = true;
         connection.supplier_deposit_external_account_ref = Some("external-funds-account-1".into());
         let connector = runtime.tracking_connector(&connection).unwrap();
+
         let level = |id: &str| SupplierAddressLevel { code: id.into(), name: id.into() };
         let recipient = Recipient {
             name: "Buyer".into(),
@@ -571,6 +582,7 @@ mod tests {
             },
             approved_total: "32".parse().unwrap(),
         };
+
         request.delivery_context = connector
             .prepare(
                 &ActionKey { id: "address-action".into(), payload_hash: "address-hash".into() },
@@ -611,6 +623,7 @@ mod tests {
             connector.create(&create).await.err().unwrap().code,
             "JD_VOP_CONFIRMATION_FUNDS_POLICY_REQUIRED"
         );
+
         let request = ConfirmOrder {
             action: ActionKey { id: "original-confirm".into(), payload_hash: "original-payload".into() },
             order: OrderReference {
@@ -637,6 +650,7 @@ mod tests {
         assert!(connector.capabilities().contains(&SupplierApiCapabilityCode::Order));
         assert!(connector.payment_confirmation().is_none());
         assert_eq!(connector.funds_account_reference(), Some("external-funds-account-1"));
+
         let created = connector.create(&request).await.unwrap();
         assert_eq!(created.order.value.reference.external_order_no, "100");
         assert_eq!(created.next, CreationNext::ConfirmOrder);
@@ -660,6 +674,7 @@ mod tests {
             connector.create(&request).await.err().unwrap().class,
             SupplierFailureClass::ResultUnknown
         );
+
         let Lookup::Found(snapshot) = connector
             .order_with_lines(&OrderKey::Merchant(request.merchant_order_no.clone()), &request.lines)
             .await
@@ -673,6 +688,7 @@ mod tests {
         assert_eq!(reserved_tree.action_targets().len(), 1);
         assert_eq!(reserved_tree.action_targets()[0].external_order_no, "100");
         assert_eq!(snapshot.value.cancellation, None);
+
         connector
             .confirm_order(&ConfirmOrder {
                 action: ActionKey { id: "original-root-confirm".into(), payload_hash: "root-payload".into() },
@@ -681,6 +697,7 @@ mod tests {
             })
             .await
             .unwrap();
+
         let Lookup::Found(snapshot) = connector
             .order_with_lines(&OrderKey::Merchant(request.merchant_order_no.clone()), &request.lines)
             .await
@@ -695,6 +712,7 @@ mod tests {
         assert!(tree.leaves().iter().all(|leaf| leaf.lines.len() == 1));
         let evidence = snapshot.value.source_evidence.as_ref().unwrap();
         assert!(codec.decrypt(&evidence.encrypted_payload).unwrap().contains("999"));
+
         let shipments = snapshot.value.shipments.as_ref().unwrap();
         assert_eq!(shipments.len(), 2);
         assert!(shipments.iter().all(|shipment| shipment.quantity_lines.is_none()
@@ -723,10 +741,12 @@ mod tests {
             let (connector, transport, request, _) = prepared().await;
             let body=serde_json::to_vec(&json!({"jingdong_vop_order_submitOrder_responce":{"vopOrderRpcResult":{"success":false,"resultCode":code,"resultMessage":"unverified provider result"}}})).unwrap();
             transport.write_responses.lock().unwrap().push_back(Ok(body));
+
             let failure =
                 connector.create(&request).await.err().expect("unverified response is not a safe rejection");
             assert_eq!(failure.class, SupplierFailureClass::ResultUnknown, "{code}");
             assert_eq!(failure.code, format!("JD_VOP_{code}"));
+
             let Lookup::Found(original) = connector
                 .order_with_lines(&OrderKey::Merchant(request.merchant_order_no.clone()), &request.lines)
                 .await
@@ -756,12 +776,14 @@ mod tests {
             };
             let response = envelope("jingdong.vop.order.confirmOrder", "openRpcResult", result.clone());
             transport.write_responses.lock().unwrap().push_back(Ok(response));
+
             let failure = connector.confirm_order(&request).await.unwrap_err();
             let mut expected = write_unknown();
             if result.is_null() {
                 expected.code = "JD_VOP_MAPPING_INVALID".into();
             }
             assert_eq!(failure, expected);
+
             let writes = transport.writes.lock().unwrap();
             assert_eq!(writes.len(), 1);
             assert!(matches!(&writes[0], JdVopWriteRequest::Confirm {
@@ -785,6 +807,7 @@ mod tests {
             };
             let response = envelope("jingdong.vop.order.cancelOrder", "openRpcResult", result.clone());
             transport.write_responses.lock().unwrap().push_back(Ok(response));
+
             let outcome = connector.cancel(&request).await;
             if result == json!(true) || result == json!("true") {
                 assert_eq!(
@@ -798,6 +821,7 @@ mod tests {
                 }
                 assert_eq!(outcome.unwrap_err(), expected);
             }
+
             let writes = transport.writes.lock().unwrap();
             assert_eq!(writes.len(), 1);
             assert!(matches!(&writes[0], JdVopWriteRequest::Cancel {
@@ -846,6 +870,7 @@ mod tests {
                 confirmation_reads.iter().all(|request| matches!(request, JdVopReadRequest::Order { .. }))
             );
         }
+
         connector
             .cancel(&CancelOrder {
                 action,
@@ -865,6 +890,7 @@ mod tests {
         request.recipient.address = "changed address".into();
         assert!(connector.create(&request).await.is_err());
         assert!(transport.writes.lock().unwrap().is_empty());
+
         let (connector, transport, mut request, _) = prepared().await;
         request.approved_total = "31".parse().unwrap();
         assert!(connector.create(&request).await.is_err());
@@ -884,6 +910,7 @@ mod tests {
         let targets = observation.value.topology.as_ref().unwrap().action_targets();
         assert_eq!(targets.len(), 1);
         assert_eq!(targets[0].role, OrderNodeRole::ReservationRoot);
+
         connector
             .cancel(&CancelOrder {
                 action: ActionKey { id: "cancel-original-root".into(), payload_hash: "frozen-root".into() },
@@ -934,6 +961,7 @@ mod tests {
                 );
             }
         }
+
         for external in ["1", "9223372036854775807"] {
             let reference =
                 OrderReference { merchant_order_no: "x".repeat(100), external_order_no: external.into() };
@@ -981,6 +1009,7 @@ mod tests {
             } else {
                 assert_eq!(target.unwrap().jd_order_id.0, external);
             }
+
             transport.custom.lock().unwrap().push_back(source.clone());
             let received = OrderReceiptConfirmation::receipt_confirmation(&connector, &reference).await;
             if let Some(summary) = receipt_error {
@@ -991,6 +1020,7 @@ mod tests {
                 let Lookup::Found(state) = received.unwrap() else { panic!("original leaf visible") };
                 assert_eq!(state.value, ReceiptConfirmationState::NotRequired);
             }
+
             let reads = transport.reads.lock().unwrap();
             assert_eq!(reads.len(), before + 2);
             assert!(reads[before..].iter().all(|read| *read
@@ -1033,6 +1063,7 @@ mod tests {
         changed["childJdOrderIdList"] = json!([]);
         changed["skuInfoList"][0]["skuPrice"] = json!("11");
         changed["orderPrice"]["orderTotalPrice"] = json!("35");
+
         transport.custom.lock().unwrap().push_back(json!([changed.clone()]));
         assert!(
             connector
@@ -1040,6 +1071,7 @@ mod tests {
                 .await
                 .is_err()
         );
+
         transport.custom.lock().unwrap().push_back(json!([changed.clone()]));
         let Lookup::Found(original) = connector
             .cancellation_order(&OrderKey::Merchant(request.merchant_order_no.clone()), &request.lines)
@@ -1049,6 +1081,7 @@ mod tests {
             panic!("abnormal original order preserved")
         };
         assert_eq!(original.value.amounts.as_ref().unwrap().payable, "35".parse().unwrap());
+
         transport.custom.lock().unwrap().push_back(json!([changed]));
         connector
             .cancel(&CancelOrder {
@@ -1091,6 +1124,7 @@ mod tests {
             }],
         )
         .unwrap();
+
         for frozen in [request.lines.as_slice(), &[]] {
             transport.custom.lock().unwrap().push_back(json!([completed]));
             let Lookup::Found(snapshot) = connector

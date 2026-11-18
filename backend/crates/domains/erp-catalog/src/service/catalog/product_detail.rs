@@ -45,6 +45,7 @@ impl CatalogService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let scope = service.visible_product_scope(&actor, &product_id, executor).await?;
+
                     let params = ProductRevisionListParams {
                         product_id: Some(ProductId::new(product_id.to_string())),
                         status: None,
@@ -54,6 +55,7 @@ impl CatalogService {
                         sort_dir: Some("desc".to_string()),
                     };
                     let view = service.product_revision_rows(&params, executor).await?;
+
                     scope.validate(executor).await?;
                     Ok(view)
                 })
@@ -86,6 +88,7 @@ impl CatalogService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let scope = service.visible_product_scope(&actor, &product_id, executor).await?;
+
                     let params = SkuListParams {
                         q: None,
                         sku_no: None,
@@ -98,6 +101,7 @@ impl CatalogService {
                         sort_dir: None,
                     };
                     let view = service.sku_rows(&params, executor).await?;
+
                     scope.validate(executor).await?;
                     Ok(view)
                 })
@@ -133,11 +137,13 @@ impl CatalogService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let scope = service.visible_product_scope(&actor, &product_id, executor).await?;
+
                     let view = if let Some(sku_id) = sku_id {
                         service.product_sku_revisions(&product_id, &sku_id, executor).await?
                     } else {
                         service.merged_product_sku_revisions(&product_id, executor).await?
                     };
+
                     scope.validate(executor).await?;
                     Ok(view)
                 })
@@ -189,8 +195,10 @@ impl CatalogService {
         if skus.is_empty() {
             return Ok(PageView { items: Vec::new(), total: 0, page: 1, page_size: 100 });
         }
+
         let sku_ids = skus.iter().map(|sku| SkuId::new(sku.base.id.clone())).collect::<Vec<_>>();
         let mut revisions = self.db.sku_revisions().find_by_sku_ids(&sku_ids, executor).await?;
+
         let total = revisions.len() as i64;
         revisions.sort_by(|left, right| {
             right
@@ -200,6 +208,7 @@ impl CatalogService {
                 .then_with(|| right.base.created_at.cmp(&left.base.created_at))
         });
         revisions.truncate(MERGED_SKU_REVISION_LIMIT);
+
         let items = revisions.into_iter().map(SkuRevisionView::from).collect();
         Ok(PageView { items, total, page: 1, page_size: 100 })
     }

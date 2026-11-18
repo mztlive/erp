@@ -32,6 +32,7 @@ impl InquiryTaskAssignments {
         if expected.is_empty() || expected.len() != line_ids.len() || assignments.is_empty() {
             return Err(Error::from("询价必须完整分派有效需求行"));
         }
+
         let mut owners = BTreeSet::new();
         let mut actual = BTreeSet::new();
         for item in &mut assignments {
@@ -49,6 +50,7 @@ impl InquiryTaskAssignments {
             }
             item.line_ids.sort();
         }
+
         if actual != expected {
             return Err(Error::from("询价存在未分派的需求行"));
         }
@@ -192,14 +194,17 @@ mod tests {
         assert!(ensure_generic_work_item_mutation(&item).is_err());
         assert!(!item.inquiry_task_current("inquiry", 3, &lines));
         assert!(!item.inquiry_task_current("inquiry", 2, &["b".into()]));
+
         item.reassign("next", Instant::now()).unwrap();
         assert!(item.inquiry_task_current("inquiry", 2, &lines));
+
         item.complete_by_domain_command("next", Instant::now()).unwrap();
         assert!(!item.inquiry_task_current("inquiry", 2, &lines));
         assert!(item.completed_inquiry_current("inquiry", 2, &lines));
         assert!(!item.completed_inquiry_current("other", 2, &lines));
         assert!(!item.completed_inquiry_current("inquiry", 3, &lines));
         assert!(!item.completed_inquiry_current("inquiry", 2, &["b".into()]));
+
         item.status = WorkItemStatus::Closed;
         assert!(!item.completed_inquiry_current("inquiry", 2, &lines));
         item.status = WorkItemStatus::Completed;

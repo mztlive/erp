@@ -146,6 +146,7 @@ pub(crate) async fn persist_customer_receipt_cancel(
     rbac.authorization
         .require(&actor, &receivable::CUSTOMER_RECEIPT_CANCEL_APPROVAL, AccessTarget::Operation, executor)
         .await?;
+
     if let PreparedExecution::Apply(writes) = prepared {
         let actor_id = actor.id().to_string();
         let closed_tasks =
@@ -155,6 +156,7 @@ pub(crate) async fn persist_customer_receipt_cancel(
         db.customer_receipts().update(&mut receipt, executor).await?;
         persist_log(db, &audit, executor).await?;
     }
+
     receipt_command_result(
         db,
         &rbac.authorization,

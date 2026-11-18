@@ -44,6 +44,7 @@ impl DangaoshushuConnector {
         valid_id(&key.id)?;
         valid_id(&key.payload_hash)?;
         valid_id(&self.settings.user_id)?;
+
         let address = self.recipient_geocode(recipient)?;
         let fields = [
             ("user_id", &self.settings.user_id),
@@ -75,6 +76,7 @@ impl DangaoshushuConnector {
         if address.coordinate_system != CoordinateSystem::Bd09 {
             return Err(mapping());
         }
+
         let latitude: Decimal = address.latitude.parse().map_err(|_| mapping())?;
         let longitude: Decimal = address.longitude.parse().map_err(|_| mapping())?;
         if latitude < Decimal::from(-90)
@@ -84,6 +86,7 @@ impl DangaoshushuConnector {
         {
             return Err(mapping());
         }
+
         if !self.settings.city_regions.values().any(|region| region == &recipient.region) {
             return Err(mapping());
         }
@@ -108,6 +111,7 @@ impl DangaoshushuConnector {
             {
                 return Err(mapping());
             }
+
             if line.attributes.iter().any(|attribute| {
                 attribute.name != "口味" || attribute.value.contains(',') || attribute.value.trim().is_empty()
             }) || line.attributes.len() > 1
@@ -129,6 +133,7 @@ impl DangaoshushuConnector {
                     "供应商当前商品未包含所选规格",
                 ));
             }
+
             let rule = distribution_rule(&product)?;
             let brand = id(&product["brand"]["id"])?;
             let group: &mut (String, Vec<OrderLine>) =
@@ -166,6 +171,7 @@ impl DangaoshushuConnector {
                 "供应商不配送此地址或商品",
             ));
         }
+
         let mut choices = self.delivery_choices(&value)?;
         if flag(&value["can_take"])? {
             append_choices(&mut choices, self.pickup_choices(&value, rule, brand, &address.city_id).await?)?;
@@ -177,6 +183,7 @@ impl DangaoshushuConnector {
                 "供应商没有合法配送选项",
             ));
         }
+
         for choice in &mut choices {
             choice.reference = self.choice_reference(context, rule, lines, &value, choice)?;
         }
@@ -227,6 +234,7 @@ impl DangaoshushuConnector {
                 DeliveryChoice { method: DeliveryMethod::Courier, shipping_fee, reference: String::new() },
             )?;
         }
+
         if flag(&value["can_ship"])? {
             for day in value["validate_delivery_dates"].as_array().ok_or_else(mapping)? {
                 let date = field(day, "date")?.parse().map_err(|_| mapping())?;
@@ -260,6 +268,7 @@ impl DangaoshushuConnector {
         {
             return Err(mapping());
         }
+
         let mut choices = Vec::new();
         for day in value["validate_take_dates"].as_array().ok_or_else(mapping)? {
             let date = field(day, "date")?.parse().map_err(|_| mapping())?;
@@ -330,6 +339,7 @@ impl DeliverySource for DangaoshushuConnector {
             .transport
             .send(Request::Form { path: "/dsapi/addr/oprate_addr", parameters, write: true })
             .await?;
+
         let build = || {
             let city_id = id(&value["city_id"])?;
             if self.settings.city_regions.get(&city_id) != Some(&recipient.region)
@@ -372,6 +382,7 @@ impl DeliverySource for DangaoshushuConnector {
     async fn options(&self, query: &DeliveryQuery) -> ConnectorResult<Snapshot<DeliveryPlan>> {
         Self::valid_lines(&query.lines)?;
         let address = self.address_proof(&query.context)?;
+
         let mut groups = Vec::new();
         for (rule, (brand, lines)) in self.grouped_lines(&query.lines, &address.city_id).await? {
             let choices = self.group_choices(&query.context, &address, &rule, &brand, &lines).await?;
@@ -510,6 +521,7 @@ mod tests {
             assert!(matches!(choices[1].method, DeliveryMethod::LocalDelivery { .. }));
             assert!(choices.iter().all(|choice| choice.shipping_fee.to_string() == amount));
         }
+
         for amount in [Value::Null, json!("-0.01"), json!("1.001"), json!("invalid"), json!("")] {
             let courier = json!({"can_same":"1", "can_ship":"0",
                 "validate_same_row":{"delivery_amount":amount}});
@@ -528,6 +540,7 @@ mod tests {
             "date":"2026-10-10","delivery_amount":"0",
             "validate_delivery_times": vec!["10:00-12:00"; MAX_DELIVERY_CHOICES + 1]}]});
         assert!(connector.delivery_choices(&value).is_err());
+
         let choice = DeliveryChoice {
             method: DeliveryMethod::Courier,
             shipping_fee: "0".parse().unwrap(),
@@ -613,6 +626,7 @@ mod tests {
         duplicate.sku.spec_id = "spec-1".into();
         assert!(DangaoshushuConnector::valid_lines(&[line(1, "1"), duplicate]).is_err());
         assert!(DangaoshushuConnector::valid_lines(&[line(1, "1"), line(2, "2")]).is_ok());
+
         assert_eq!(distribution_rule(&product(1, "brand-1", json!(123))).unwrap(), "123");
         for value in [Value::Null, json!(""), json!("0"), json!(0)] {
             assert_eq!(distribution_rule(&product(1, "brand-1", value)).unwrap(), "fallback-rule");
@@ -639,10 +653,12 @@ mod tests {
         assert_eq!(plan.groups[0].line_ids, vec!["line-1", "line-2"]);
         let choice = &plan.groups[0].choices[0];
         assert_eq!(choice.shipping_fee.to_string(), "8");
+
         let proof: ChoiceProof = proof::decode(&settings().private_key, &choice.reference).unwrap();
         assert_eq!(proof.rule_id, "rule-1");
         assert_eq!(proof.lines_hash, proof::lines_hash(&settings().private_key, &query.lines).unwrap());
         assert_eq!(proof.method, "same");
+
         let requests = transport.requests.lock().unwrap();
         let Request::Multipart { parameters, write, .. } = &requests[2] else {
             panic!("配送规则只读 multipart")
@@ -660,6 +676,7 @@ mod tests {
             connector.grouped_lines(&[line(1, "1"), line(2, "1")], "2").await.err().unwrap().class,
             SupplierFailureClass::MappingError
         );
+
         let mut missing = product(1, "brand-1", json!("rule-1"));
         missing["specs"] = json!([]);
         let error = super::super::test_support::connector(vec![missing])
@@ -686,6 +703,7 @@ mod tests {
             .err()
             .unwrap();
         assert_eq!(error.code, "DGSS_NO_DELIVERY_SLOT");
+
         value["can_take"] = json!("1");
         value["validate_take_dates"] = json!([{"date":"2026-10-10","validate_take_times":["10:00-12:00"]}]);
         let stores = json!({"rule_id":"foreign-rule","brand_id":"brand-1","city":{"id":"2"},"shops":[]});

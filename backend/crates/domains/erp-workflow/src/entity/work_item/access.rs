@@ -66,6 +66,7 @@ impl TaskAccess {
                 WorkItemActionRequirement::Reassign | WorkItemActionRequirement::Close => can_control,
             },
         );
+
         actions.retain(|action| *action != WorkItemAllowedAction::AbandonRework);
         if policy.work_item_type == WorkItemType::ApprovalRework
             && policy.status == WorkItemStatus::Open

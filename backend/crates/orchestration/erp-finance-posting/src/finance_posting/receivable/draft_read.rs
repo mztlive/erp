@@ -97,6 +97,7 @@ pub(super) async fn receipt_view_with_actions(
 ) -> Result<CustomerReceiptView> {
     let mut view =
         ReceivableReadService::new(db.clone()).customer_receipt_view_with_executor(id, executor).await?;
+
     let authorization = &rbac.authorization;
     if view.approval.allowed_actions.iter().any(|action| action == "CANCEL")
         && !authorization

@@ -80,10 +80,12 @@ async fn post_with_store(
         input.quantity,
         input.warehouse_id.as_ref(),
     )?;
+
     let balance = store
         .balance(&warehouse_id, &reservation.sku_id, executor)
         .await?
         .ok_or_else(|| Error::BusinessLogicError("库存余额不存在，无法发货".to_string()))?;
+
     if !store.consume_reservation(&reservation.id, input.quantity, executor).await? {
         return Err(Error::BusinessLogicError("预占数量不足或状态不符，无法消耗".to_string()));
     }
@@ -97,6 +99,7 @@ async fn post_with_store(
         },
     )?;
     store.create_entry(&entry, executor).await?;
+
     // 先释放预占再扣可用：预占建立时已扣减 available（reserved += q / available -= q），
     // 消耗本单预占发货时 available 已不含这部分，必须先释放（available += q）才能扣减
     if !store.release_reserved(&balance, input.quantity, executor).await? {
@@ -105,6 +108,7 @@ async fn post_with_store(
     if !store.deduct_available(&balance, input.quantity, executor).await? {
         return Err(Error::BusinessLogicError("可用库存不足，无法发货".to_string()));
     }
+
     let movement = StockMovement::new(
         StockMovementId::new(next_id()),
         StockMovementData {
@@ -127,6 +131,7 @@ async fn post_with_store(
         },
     )?;
     store.movement(&movement, executor).await?;
+
     // 余额记录最后流水（台账「最后变动」列），与数量增减同事务
     if !store.last_movement(&balance, &movement.base.id, executor).await? {
         return Err(Error::BusinessLogicError("库存余额行不存在".to_string()));
@@ -364,11 +369,13 @@ mod tests {
         post_with_store(&mut store, &mut executor, &input(), occurred_at, "actor-1").await.unwrap();
         assert_eq!(store.calls, sequence());
         assert_eq!((store.available, store.reserved, store.on_hand), (0, 0, 0));
+
         let entry = store.entry.unwrap();
         assert_eq!(entry.reservation_id.as_ref(), "reservation-1");
         assert_eq!(entry.source_document_id, "delivery-1");
         assert_eq!(entry.entry_type, ReservationEntryType::Consume);
         assert_eq!(entry.quantity, quantity("2"));
+
         let movement = store.movement.unwrap();
         assert_eq!(movement.source_document_id, "delivery-1");
         assert_eq!(movement.source_line_id.as_deref(), Some("delivery-line-1"));
@@ -466,6 +473,7 @@ mod tests {
             } else {
                 line.warehouse_id = Some(WarehouseId::new("other-warehouse"));
             }
+
             let error =
                 post_with_store(&mut store, &mut executor, &line, Instant::from_unix_secs(10), "actor-1")
                     .await
@@ -486,6 +494,7 @@ mod tests {
             } else {
                 store.balance = None;
             }
+
             let error =
                 post_with_store(&mut store, &mut executor, &input(), Instant::from_unix_secs(10), "actor-1")
                     .await

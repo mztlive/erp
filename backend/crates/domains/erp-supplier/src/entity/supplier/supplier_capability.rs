@@ -381,6 +381,7 @@ impl SupplierCapability {
         if target == self.owner_user_id {
             return Err(Error::from("目标已是当前能力负责人，无需交接"));
         }
+
         self.owner_user_id = target;
         self.stable.touch(updated_by);
         Ok(())
@@ -582,9 +583,11 @@ mod tests {
         assert_eq!(capability.fulfillment_note.as_deref(), Some("常规履约"));
         assert_eq!(capability.capability_code, CapabilityCode::Physical);
         assert!(capability.is_active());
+
         assert!(capability.is_effective_on(BusinessDate::from_ymd(2026, 6, 1).unwrap()));
         assert!(!capability.is_effective_on(BusinessDate::from_ymd(2025, 12, 31).unwrap()));
         assert!(!capability.is_effective_on(BusinessDate::from_ymd(2027, 1, 1).unwrap()));
+
         assert_eq!(
             SupplierCapability::list_codes([&capability], BusinessDate::from_ymd(2026, 6, 1).unwrap()),
             vec![CapabilityCode::Physical]
@@ -670,6 +673,7 @@ mod tests {
                 .unwrap();
         capability.handover("buyer-2".into(), "manager").unwrap();
         assert_eq!(capability.owner_user_id, "buyer-2");
+
         assert!(capability.handover("buyer-2".into(), "manager").is_err());
         assert_eq!(capability.owner_user_id, "buyer-2");
     }
@@ -704,6 +708,7 @@ mod tests {
                 .unwrap();
         let overflow = RevisionBase::next_revision_no(Some(u32::MAX));
         assert!(overflow.is_err());
+
         // 溢出时不调用快照；正常序号仍可快照
         let rev = capability
             .snapshot_revision(erp_core::ids::SupplierCapabilityRevisionId::new("cap-rev-overflow"), 1)

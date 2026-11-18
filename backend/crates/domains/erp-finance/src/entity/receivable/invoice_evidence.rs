@@ -113,6 +113,7 @@ mod tests {
         assert!(invoice.invoice_no.is_none());
         assert!(invoice.invoice_date.is_none());
         assert!(invoice.tax_breakdown().is_err());
+
         let allocation = invoice
             .evidence_allocation(
                 SalesInvoiceAllocationId::new("allocation"),
@@ -122,6 +123,7 @@ mod tests {
         assert_eq!(allocation.allocated_gross_amount, invoice.gross_amount);
         assert!(allocation.allocated_net_amount.is_none());
         assert!(allocation.allocated_tax_amount.is_none());
+
         assert!(
             Invoice::from_evidence(InvoiceId::new("inv"), PartyId::new("party"), Amount::zero(), "actor")
                 .is_err()

@@ -375,7 +375,6 @@ impl<'de> Visitor<'de> for MoneyVisitor {
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> std::result::Result<Decimal, A::Error> {
         let mut value: Option<String> = None;
         let mut bytes: Option<Vec<u8>> = None;
-
         while let Some(key) = map.next_key::<String>()? {
             match key.as_str() {
                 "$numberDecimal" => value = Some(map.next_value()?),
@@ -471,8 +470,10 @@ mod tests {
             (gross.to_string(), net.to_string(), tax.to_string()),
             ("106.00".into(), "99.64".into(), "6.36".into())
         );
+
         let (_, net, tax) = fee_amounts(Amount::from_str("0.05").unwrap(), Rate::from_str("0.13").unwrap());
         assert_eq!(net.checked_add(tax), Amount::from_str("0.05").unwrap());
+
         let (_, net, tax) = fee_amounts(Amount::from_str("88.00").unwrap(), Rate::from_str("0").unwrap());
         assert_eq!((net, tax), (Amount::from_str("88.00").unwrap(), Amount::zero()));
     }
@@ -619,7 +620,6 @@ mod tests {
         use bson::Bson;
 
         let doc = sample_doc();
-
         let bytes = bson::serialize_to_vec(&doc).unwrap();
         let wire_doc: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
         assert!(matches!(wire_doc.get("amount"), Some(Bson::Decimal128(_))));

@@ -89,6 +89,7 @@ impl SupplierProfileProcess {
             .rbac
             .require(actor, &internal::SUPPLIER_PROFILE_COMMAND_READ, AccessTarget::Operation, executor)
             .await?;
+
         let command = self.command_record(key, executor).await?;
         self.command_result_view(command, actor, executor).await
     }
@@ -129,12 +130,14 @@ impl SupplierProfileProcess {
                 Box::pin(async move {
                     let target = SupplierCommandTarget::Create(actor.id().to_owned());
                     this.authorize_command(&target, &actor, executor).await?;
+
                     let Some(command) = this.command_record(&key, executor).await? else {
                         return Ok(None);
                     };
                     if command.operation != "create" {
                         return Err(Error::ConflictError("导入键已用于另一项供应商资料请求".into()));
                     }
+
                     this.authorize_imported_supplier(&command.supplier_id, &actor, executor).await?;
                     Ok(Some(command_view(command)))
                 })
@@ -285,12 +288,14 @@ mod tests {
             assert!(
                 matches!(error, Error::ValidationError(message) if message == "写入授权必须使用快照事务")
             );
+
             let error = process
                 .command_qualified(&target, org, &actor, &mut SnapshotExecutor::default())
                 .await
                 .unwrap_err();
             assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
         }
+
         let error = process
             .replay_command(
                 "key",
@@ -316,11 +321,13 @@ mod tests {
             access,
         );
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let error = process
             .command_result_snapshot("key", &actor, &mut SnapshotExecutor::default())
             .await
             .unwrap_err();
         assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+
         let result = process
             .resolve_transaction_result_with_assets(
                 Err(Error::Forbidden("revoked".into())),
@@ -362,11 +369,13 @@ mod tests {
             },
         )
         .unwrap();
+
         let error = process
             .command_result_view(Some(command), &actor, &mut SnapshotExecutor::default())
             .await
             .unwrap_err();
         assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+
         let missing =
             process.command_result_view(None, &actor, &mut SnapshotExecutor::default()).await.unwrap();
         assert!(missing.is_none());

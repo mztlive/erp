@@ -65,6 +65,7 @@ pub fn basis_groups_from_facts(
     if !order.is_effective {
         return Ok(Vec::new());
     }
+
     let responsibility_scope_ids =
         responsibility_scope_ids.iter().map(String::as_str).collect::<HashSet<_>>();
     let mut groups: Vec<BasisGroup> = Vec::new();
@@ -77,6 +78,7 @@ pub fn basis_groups_from_facts(
         let supplies = qualified_supplies_for_line(facts, line)?;
         append_line_supplies(&coverage.revision, line, supplies, facts, &mut groups)?;
     }
+
     for group in &mut groups {
         group.lines.sort_by(|left, right| stable_line_id(left).cmp(stable_line_id(right)));
     }
@@ -118,6 +120,7 @@ fn append_line_supplies(
         if max_create_quantity <= zero_quantity() {
             continue;
         }
+
         for &(fulfillment_responsibility, price_basis) in purchase_options(line.product_kind)? {
             if price_basis == purchase_order::SupplyPriceBasis::Bulk
                 && (supply.revision.bulk_supply_price_gross.is_none()
@@ -125,6 +128,7 @@ fn append_line_supplies(
             {
                 continue;
             }
+
             let scope = BasisScope {
                 inquiry_quote_revision_id: None,
                 supplier_id: supplier_id.clone(),
@@ -139,6 +143,7 @@ fn append_line_supplies(
                 supply: supply.clone(),
                 max_create_quantity,
             };
+
             if let Some(group) = groups.iter_mut().find(|group| group.scope == scope) {
                 group.lines.push(basis_line);
             } else {
@@ -253,6 +258,7 @@ fn qualified_supply(facts: &CreationBasisFacts, offering: &OfferingFact) -> Resu
     if !today.is_within(revision.valid_from, revision.valid_to) {
         return Ok(None);
     }
+
     let Some(availability) = facts.availabilities.get(&offering.base.id.to_string()) else {
         return Ok(None);
     };
@@ -265,6 +271,7 @@ fn qualified_supply(facts: &CreationBasisFacts, offering: &OfferingFact) -> Resu
     if availability.available_quantity.is_some_and(|quantity| quantity == zero_quantity()) {
         return Ok(None);
     }
+
     Ok(Some(LineSupply {
         offering: offering.clone(),
         revision: revision.clone(),
@@ -395,6 +402,7 @@ mod tests {
         let id = SupplierAccountId::new("supplier-1");
         let mut facts = CreationBasisFacts::default();
         assert_eq!(settlement_terms_for(&facts, &id), SupplierSettlementTerms::net30());
+
         facts.suppliers.insert(
             id.to_string(),
             SupplierRoleFact {
@@ -404,6 +412,7 @@ mod tests {
             },
         );
         assert_eq!(settlement_terms_for(&facts, &id), SupplierSettlementTerms::net30());
+
         facts.commercial_profiles.insert(
             "profile-1".to_string(),
             SupplierCommercialFact::new(String::new()).with_business_category("茶叶"),

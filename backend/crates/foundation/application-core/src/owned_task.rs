@@ -61,6 +61,7 @@ mod tests {
         let handle = tokio::spawn(std::future::pending::<()>());
         handle.abort();
         let join_error = handle.await.expect_err("aborted task must yield JoinError");
+
         let error = map_owned_join_error("测试", join_error);
         assert!(matches!(
             error,

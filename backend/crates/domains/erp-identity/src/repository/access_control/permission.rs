@@ -118,6 +118,7 @@ impl PermissionRepositoryExt for Repository<'_, PermissionDefinition> {
             .limit(filter.limit())
             .projection(permission_projection())
             .build();
+
         let collection = self.collection().clone_with_type::<PermissionView>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
@@ -167,6 +168,7 @@ mod tests {
         assert_eq!(document.get_str("resource").unwrap(), "salesorder");
         assert_eq!(document.get_str("action").unwrap(), "approve");
         assert!(!document.contains_key("permission"));
+
         let roundtrip: PermissionDefinition = bson::deserialize_from_document(document).unwrap();
         assert_eq!(roundtrip, permission);
     }

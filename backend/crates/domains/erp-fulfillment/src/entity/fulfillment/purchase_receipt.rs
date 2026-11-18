@@ -81,6 +81,7 @@ impl PurchaseFulfillmentEligibility {
         if snapshot.prepay_minimum_amount.is_none() && snapshot.prepay_minimum_ratio.is_none() {
             return Err(Error::from("该采购单的先款条件缺少冻结门槛，请先通过采购变更补齐"));
         }
+
         if snapshot
             .prepay_minimum_amount
             .is_some_and(|minimum| effective_paid.to_decimal() < minimum.to_decimal())
@@ -118,6 +119,7 @@ impl PurchaseFulfillmentEligibility {
         if !current_purchase_line_ids.contains(&allocation.purchase_order_revision_line_id) {
             return Err(Error::from("采购销售分配不属于当前生效版本"));
         }
+
         let Some((revision_line_id, sales_order_line_id)) = sales_revision_line else {
             return Err(Error::from("采购销售分配与销售明细不一致"));
         };
@@ -443,6 +445,7 @@ impl PurchaseReceipt {
             .iter()
             .filter_map(|line| received.get(&line.id))
             .fold(rust_decimal::Decimal::ZERO, |sum, quantity| sum + quantity.to_decimal());
+
         if total > rust_decimal::Decimal::ZERO && received_total >= total {
             ProgressStatus::Completed
         } else {
@@ -468,6 +471,7 @@ impl PurchaseReceipt {
         ensure_transition(self.status, PurchaseReceiptState::Posted)?;
         let posted_by =
             normalize_required_text(posted_by.into(), "仓储经办人不能为空", ACTOR_MAX_LEN, "仓储经办人过长")?;
+
         self.posted_at = Some(posted_at);
         self.posted_by = Some(posted_by);
         self.status = PurchaseReceiptState::Posted;
@@ -660,6 +664,7 @@ impl PurchaseReceiptLine {
         if total <= rust_decimal::Decimal::ZERO {
             return Err(Error::from("采购明细数量必须为正数"));
         }
+
         let qualified = self.qualified_quantity.to_decimal();
         let mut assigned = rust_decimal::Decimal::ZERO;
         let mut shares = Vec::with_capacity(allocation_quantities.len());
@@ -702,6 +707,7 @@ fn ensure_line_valid(data: &PurchaseReceiptLineData) -> Result<()> {
     {
         return Err(Error::from("合格与不合格数量合计不得超过到货数量"));
     }
+
     let expected = QualityResult::from_quantities(data.qualified_quantity, data.rejected_quantity);
     if data.quality_result != expected {
         return Err(Error::from("质量结果与合格、不合格数量不一致"));
@@ -787,10 +793,12 @@ pub(crate) mod tests {
         assert!(
             receipt.update(PurchaseReceiptUpdate { warehouse_id: Some(WarehouseId::new("wh-2")) }).is_ok()
         );
+
         receipt.mark_posted(Instant::from_unix_secs(1_700_000_000), "operator-1").unwrap();
         assert!(receipt.update(PurchaseReceiptUpdate { warehouse_id: None }).is_err(), "已过账不可编辑");
         // from == to 幂等迁移恒合法（state.rs 契约）；POSTED 不可编辑由 update 把关。
         assert!(receipt.mark_posted(Instant::from_unix_secs(1_700_000_100), "o2").is_ok());
+
         assert!(receipt.reverse().is_ok());
         assert!(receipt.reverse().is_ok(), "REVERSED 幂等迁移合法，且无法迁移到其他状态");
     }
@@ -865,8 +873,10 @@ pub(crate) mod tests {
     fn posting_rules_are_entity_owned() {
         let mut receipt = PurchaseReceipt::new(PurchaseReceiptId::new("receipt-1"), receipt_data()).unwrap();
         let line = PurchaseReceiptLine::new(PurchaseReceiptLineId::new("line-rule"), line_data()).unwrap();
+
         assert!(receipt.ensure_draft_version(receipt.base.version).is_ok());
         assert!(receipt.ensure_draft_version(receipt.base.version + 1).is_err());
+
         assert!(receipt.ensure_posting_lines(&[]).is_err());
         assert!(receipt.ensure_posting_lines(std::slice::from_ref(&line)).is_ok());
         let foreign_line = PurchaseReceiptLine::new(
@@ -916,6 +926,7 @@ pub(crate) mod tests {
             PurchaseReceipt::fulfillment_progress(std::slice::from_ref(&revision_line), &HashMap::new()),
             ProgressStatus::Partial,
         );
+
         receipt.mark_posted(Instant::from_unix_secs(1_700_000_000), "operator-1").unwrap();
         assert!(receipt.ensure_draft_version(receipt.base.version).is_err());
     }
@@ -951,6 +962,7 @@ pub(crate) mod tests {
             )
             .is_err()
         );
+
         let ratio_only = PaymentTermSnapshot {
             prepay_gate: true,
             prepay_minimum_amount: None,
@@ -964,6 +976,7 @@ pub(crate) mod tests {
             )
             .is_err()
         );
+
         let missing_threshold = PaymentTermSnapshot {
             prepay_gate: true,
             prepay_minimum_amount: None,
@@ -977,6 +990,7 @@ pub(crate) mod tests {
             )
             .is_err()
         );
+
         let gate_disabled = PaymentTermSnapshot {
             prepay_gate: false,
             prepay_minimum_amount: Some(Amount::from_str("100.00").unwrap()),
@@ -998,6 +1012,7 @@ pub(crate) mod tests {
         let purchase_line_ids = [PurchaseOrderRevisionLineId::new("po-line-1")];
         let sales_revision_line_id = SalesOrderRevisionLineId::new("sales-revision-line-1");
         let sales_order_line_id = SalesOrderLineId::new("sales-line-1");
+
         assert!(
             PurchaseFulfillmentEligibility::ensure_allocation_consistent(
                 &allocation,
@@ -1053,9 +1068,11 @@ pub(crate) mod tests {
         let mut received = HashMap::new();
         received.insert(PurchaseOrderRevisionLineId::new("line-a"), Quantity::from_str("10").unwrap());
         assert_eq!(PurchaseReceipt::fulfillment_progress(&lines, &received), ProgressStatus::Completed);
+
         received.insert(PurchaseOrderRevisionLineId::new("line-a"), Quantity::from_str("9.999999").unwrap());
         assert_eq!(PurchaseReceipt::fulfillment_progress(&lines, &received), ProgressStatus::Partial);
         assert_eq!(PurchaseReceipt::fulfillment_progress(&[], &received), ProgressStatus::Partial);
+
         let zero = [PurchaseOrderRevisionLine {
             id: PurchaseOrderRevisionLineId::new("line-a"),
             quantity: Some(Quantity::from_str("0").unwrap()),

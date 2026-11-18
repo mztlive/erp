@@ -132,10 +132,12 @@ pub(crate) async fn persist_purchase_order_start(
     if !matches!(&input.prepared, PreparedExecution::Apply(_)) {
         return Ok(None);
     }
+
     if let Some(scope) = &input.object_scope {
         scope.current(&input.order.base.id, executor).await?;
     }
     ensure_source_unaffected(db, &input.order, SUBMIT_SOURCE_AFFECTED, executor).await?;
+
     let mut posting = StartPosting { db, input, first_task: None };
     execute_start_steps(&mut posting, executor).await?;
     Ok(posting.first_task)
@@ -287,6 +289,7 @@ impl StartPosting<'_> {
                 guard.requested_lines.iter().map(SavePurchaseOrderLine::to_draft_edit).collect::<Vec<_>>();
             validate_draft_line_edits(&requested_edits, &guard.existing_lines, &coverage.lines)
                 .map_err(map_draft_edit_violation)?;
+
             validate_submission_delivery(
                 self.db,
                 &input.order,
@@ -416,6 +419,7 @@ async fn persist_runtime_writes(
         executor,
     )
     .await?;
+
     complete_resubmission(
         db,
         &mut snapshot,
@@ -425,6 +429,7 @@ async fn persist_runtime_writes(
         executor,
     )
     .await?;
+
     approval.persist_start_snapshot(db, snapshot, executor).await?;
     persist_start_tasks(db, writes, context, executor).await.map_err(Error::from)
 }

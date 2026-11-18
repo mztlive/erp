@@ -79,9 +79,11 @@ impl SupplierProfileProcess {
         if req.clear_contact || req.clear_address || req.clear_tax_profile || req.clear_bank_account {
             return Err(Error::ValidationError("创建供应商时不能提交清空既有资料的意图".to_string()));
         }
+
         let request_fingerprint = req.fingerprint()?;
         let key = req.idempotency_key.clone();
         let target = SupplierCommandTarget::Create(required_maintainer(&req)?);
+
         let this = self.clone();
         let actor_owned = actor.clone();
         let fingerprint = request_fingerprint.clone();
@@ -94,6 +96,7 @@ impl SupplierProfileProcess {
                 })
             })
             .await;
+
         self.resolve_transaction_result_with_assets(transaction, &key, &target, &request_fingerprint, actor)
             .await
     }
@@ -114,6 +117,7 @@ impl SupplierProfileProcess {
         {
             return Ok(SupplierProfileWithAssetsResult { view, assets_committed: false });
         }
+
         let references = self.prepare_creation_references(&mut req, &pending_assets, executor).await?;
         let prepared = self.prepare_create(req, references, fingerprint.to_owned(), actor, pending_assets)?;
         let view = prepared.result.clone();
@@ -130,6 +134,7 @@ impl SupplierProfileProcess {
     ) -> Result<CreationReferences> {
         let used = resolve_supplier_file_references(req, pending_assets.as_ref())?;
         pending_assets.ensure_all_used(&used)?;
+
         let party_no =
             SaveSupplierProfileRequest::required_create_identity(req.party_no.as_deref(), "主体编号")?;
         let supplier_no =
@@ -160,6 +165,7 @@ impl SupplierProfileProcess {
         let address = self.create_address(&req, &party_id, actor.id())?;
         let tax_profile = create_tax_profile(&req, &party_id, actor.id())?;
         let bank_account = self.create_bank_account(&req, &party_id, actor.id())?;
+
         let command = SupplierProfileCommand::new(
             next_id(),
             SupplierProfileCommandData {
@@ -176,6 +182,7 @@ impl SupplierProfileProcess {
             },
         )?;
         let result = command_view(command.clone());
+
         let audit = actor.clone().resource_log(
             "supplier_profile.create",
             "supplier_profile",
@@ -359,12 +366,14 @@ impl PreparedCreate {
     /// 将完整供应商资料与幂等结果写入同一事务。
     async fn persist(self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         self.pending_assets.persist(db, executor).await?;
+
         ensure_identity_available(db, &self.party, &self.party_revision, executor).await?;
         db.party_revisions().create(&self.party_revision, executor).await?;
         db.parties().create(&self.party, executor).await?;
         db.supplier()
             .create_supplier_with_initial_profile(&self.supplier, &self.commercial_profile, executor)
             .await?;
+
         if let Some(contact) = &self.contact {
             db.party_contacts().create(contact, executor).await?;
         }
@@ -377,12 +386,14 @@ impl PreparedCreate {
         if let Some(bank_account) = &self.bank_account {
             db.party_bank_accounts().create(bank_account, executor).await?;
         }
+
         for revision in &self.capability_revisions {
             db.supplier_capability_revisions().create(revision, executor).await?;
         }
         for capability in &self.capabilities {
             db.supplier_capabilities().create(capability, executor).await?;
         }
+
         for revision in &self.qualification_revisions {
             db.supplier_qualification_revisions().create(revision, executor).await?;
         }
@@ -392,9 +403,11 @@ impl PreparedCreate {
         for link in &self.qualification_links {
             db.supplier_qualification_capabilities().create(link, executor).await?;
         }
+
         if let Some(rating) = &self.rating {
             db.supplier_rating_revisions().create(rating, executor).await?;
         }
+
         db.supplier_profile_commands().create(&self.command, executor).await.map_err(command_insert_error)?;
         persist_log(db, &self.audit, executor).await?;
         Ok(())
@@ -462,6 +475,7 @@ fn allocate_creation_plan(
     business_org_unit_id: String,
 ) -> Result<(SupplierCreationIds, SupplierCreationInputs)> {
     let ids = allocate_creation_ids(req, party_id, supplier_id, profile_id);
+
     let qualifications = req
         .qualifications
         .iter()
@@ -481,6 +495,7 @@ fn allocate_creation_plan(
         current_score: input.current_score,
         valid_from: input.valid_from,
     });
+
     let inputs = SupplierCreationInputs {
         party_no,
         supplier_no,
@@ -633,6 +648,7 @@ fn allocate_creation_ids(
             (code, SupplierCapabilityId::new(next_id()), SupplierCapabilityRevisionId::new(next_id()))
         })
         .collect();
+
     let qualification_ids = req
         .qualifications
         .iter()
@@ -647,6 +663,7 @@ fn allocate_creation_ids(
         })
         .collect();
     let rating_id = req.rating.as_ref().map(|_| SupplierRatingRevisionId::new(next_id()));
+
     SupplierCreationIds {
         party_id: party_id.clone(),
         party_revision_id: PartyRevisionId::new(next_id()),

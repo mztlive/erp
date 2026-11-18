@@ -58,6 +58,7 @@ impl CustomerAcceptanceProcess {
             req.work_item_id.as_deref(),
             req.expected_task_version,
         )?;
+
         let posting = AcceptancePosting {
             acceptance_id: CustomerAcceptanceId::new(id.to_string()),
             actor: actor.clone(),
@@ -98,6 +99,7 @@ impl AcceptancePosting {
             executor,
         )
         .await?;
+
         FulfillmentService::persist_customer_acceptance_post(
             &self.db,
             &mut acceptance,
@@ -105,6 +107,7 @@ impl AcceptancePosting {
             executor,
         )
         .await?;
+
         complete_acceptance(
             &self.db,
             &self.authorization,
@@ -126,6 +129,7 @@ impl AcceptancePosting {
                 executor,
             )
             .await?;
+
         let mut acceptance =
             FulfillmentService::load_customer_acceptance_for_post(&self.db, &self.acceptance_id, executor)
                 .await?;
@@ -133,6 +137,7 @@ impl AcceptancePosting {
             evidence_attachment_id: self.request.evidence_attachment_id.clone(),
             ..Default::default()
         })?;
+
         ensure_evidence(
             &self.db,
             self.workflow.as_ref(),

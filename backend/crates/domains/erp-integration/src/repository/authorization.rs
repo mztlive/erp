@@ -190,6 +190,7 @@ mod tests {
         assert!(
             matches!(own, QueryFragment::Match(document) if document == doc! {"owner_user_id":"handler"})
         );
+
         let org =
             mapping.predicate(&AccessFact::OrganizationIn(["org".into()].into()), &context(), None).unwrap();
         assert!(
@@ -222,6 +223,7 @@ mod tests {
             );
             assert!(mapping.model().facts.contains(&kind));
         }
+
         assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context(), None).is_err());
     }
 }

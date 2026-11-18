@@ -43,6 +43,7 @@ impl SupplierApiReadService {
                             executor,
                         )
                         .await?;
+
                     let job = db
                         .background_jobs()
                         .find_supplier_connection_job(

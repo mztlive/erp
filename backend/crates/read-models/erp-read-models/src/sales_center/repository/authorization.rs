@@ -106,6 +106,7 @@ impl AccessFactsPort for SalesFacts {
         let targets = ids.ids().iter().cloned().collect::<Vec<_>>();
         let participants =
             self.0.document_participants().document_ids_in(context.actor.id(), &targets, executor).await?;
+
         let mut result = Vec::new();
         for id in ids.ids() {
             let Some(order) = self.0.sales_orders().find_by_id(id, executor).await? else { continue };

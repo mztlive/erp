@@ -95,6 +95,7 @@ impl SupplierConnectionCommandReceipt {
         if data.connection_version == 0 {
             return Err(Error::from("命令回执的连接版本必须大于零"));
         }
+
         Ok(Self {
             base: BaseModel::new(id.into()),
             connection_id: data.connection_id,

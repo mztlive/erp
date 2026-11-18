@@ -82,6 +82,7 @@ pub(super) async fn page_open_document_approval_owned_by(
     let pipeline =
         document_approval_page_pipeline(owner_user_id, business_object_type, query, cursor.as_ref(), limit)?;
     let pipeline = authorized_page_pipeline(pipeline, access, executor)?;
+
     let rows = aggregate_document_approval_page(collection, pipeline, executor).await?;
     let facet = rows.into_iter().next();
     if facet.as_ref().is_some_and(|facet| !facet.authorization_conflicts.is_empty()) {
@@ -105,6 +106,7 @@ fn authorized_page_pipeline(
         return Err(crate::Error::ValidationError("本人审批授权模型不匹配".into()));
     }
     access.ensure_current(executor)?;
+
     let mut facet = pipeline
         .pop()
         .and_then(|stage| stage.get_document("$facet").ok().cloned())
@@ -122,6 +124,7 @@ fn authorized_page_pipeline(
             doc! {"$count": "count"},
         ],
     );
+
     let mut instance = vec![doc! {"$match": {"$expr": {"$eq": ["$id", "$$instance"]}}}];
     instance.extend(access.stages().iter().cloned());
     instance.push(doc! {"$project": {"_id": 0, "id": 1}});
@@ -159,10 +162,12 @@ fn document_approval_page_pipeline(
     let mut pipeline = vec![doc! {
         "$match": document_approval_owner_filter(owner_user_id, business_object_type)
     }];
+
     let query = query.map(str::trim).filter(|value| !value.is_empty());
     if let Some(query) = query {
         pipeline.extend(document_approval_query_stages(query));
     }
+
     pipeline.push(doc! { "$sort": { "assigned_at": -1, "id": -1 } });
     pipeline.push(doc! {
         "$facet": document_approval_page_facets(cursor, overfetch, query.is_some())
@@ -310,6 +315,7 @@ fn document_approval_page_facets(
         "_mine_instance": 0,
         "_mine_snapshots": 0,
     }});
+
     doc! {
         "items": items,
         "total": [{ "$count": "count" }],
@@ -350,6 +356,7 @@ fn document_approval_duplicate_instance_stages(execution_already_loaded: bool) -
             "_mine_execution": { "$arrayElemAt": ["$_mine_executions", 0] }
         }});
     }
+
     stages.push(doc! { "$set": {
         "_mine_integrity_group_key": { "$ifNull": [
             "$_mine_execution.process_instance_id",
@@ -441,6 +448,7 @@ fn document_approval_integrity_conflicts(
             open_work_item_count: document_approval_integrity_count(duplicate.open_work_item_count)?,
         });
     }
+
     for duplicate in duplicate_instances {
         conflicts.push(DocumentApprovalWorkItemIntegrityConflict::MultipleOpenExecutionsForInstance {
             approval_process_instance_id: duplicate.approval_process_instance_id,
@@ -556,6 +564,7 @@ mod tests {
             &doc! { "assigned_at": -1, "id": -1 },
             "稳定排序必须位于 facet 前，由页索引承担"
         );
+
         let facets = pipeline[2].get_document("$facet").unwrap();
         let items = facets.get_array("items").unwrap();
         assert_eq!(
@@ -571,6 +580,7 @@ mod tests {
             &vec![Bson::Document(doc! { "$count": "count" })],
             "total facet 不得带 cursor"
         );
+
         let duplicate_instances = facets.get_array("duplicate_instances").unwrap();
         assert!(duplicate_instances[0].as_document().unwrap().contains_key("$lookup"));
         for branch in ["duplicate_executions", "duplicate_instances"] {
@@ -593,6 +603,7 @@ mod tests {
             pipeline[3].get_document("$lookup").unwrap().get_str("from").unwrap(),
             "approval_process_instances"
         );
+
         let snapshot_lookup = pipeline[5].get_document("$lookup").unwrap();
         assert_eq!(snapshot_lookup.get_str("from").unwrap(), "approval_subject_snapshots");
         let snapshot_contract = snapshot_lookup.to_string();
@@ -610,11 +621,13 @@ mod tests {
         ] {
             assert!(snapshot_contract.contains(required), "缺少精确快照约束 {required}");
         }
+
         let query_match = pipeline[6].get_document("$match").unwrap().to_string();
         assert!(query_match.contains(r"PO\.\[1\]"));
         assert!(query_match.contains("_mine_instance.current_node_name"));
         assert!(query_match.contains("_mine_instance.current_assignee_name"));
         assert!(query_match.contains("_mine_snapshots.payload.document_no"));
+
         let duplicate_instances =
             pipeline[8].get_document("$facet").unwrap().get_array("duplicate_instances").unwrap();
         assert!(

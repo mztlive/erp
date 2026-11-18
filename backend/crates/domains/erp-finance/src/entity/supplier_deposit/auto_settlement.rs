@@ -42,10 +42,12 @@ impl DepositAutomaticSettlementPlan {
         let amount = Self::unsettled_amount(usage, allocations)?;
         Self::validate_approval(usage, reservation, request, amount)?;
         Self::validate_records(reservation, entries, allocations, offsets)?;
+
         let mut ordered = entries.iter().collect::<Vec<_>>();
         ordered.sort_by(|left, right| {
             left.posted_at.cmp(&right.posted_at).then_with(|| left.base.id.cmp(&right.base.id))
         });
+
         let mut remaining = amount;
         let mut pending = Vec::new();
         for entry in ordered {
@@ -63,6 +65,7 @@ impl DepositAutomaticSettlementPlan {
             pending.push(PendingPaymentAllocation::new(PayableEntryId::new(&entry.base.id), allocated)?);
             remaining = subtract(remaining, allocated)?;
         }
+
         if remaining != Amount::zero() {
             return Err(Error::from("原批准采购的正式开放分录不足，真实扣款保留待核销"));
         }
@@ -102,6 +105,7 @@ impl DepositAutomaticSettlementPlan {
         {
             return Err(Error::from("自动核销不属于原批准付款申请及执行组"));
         }
+
         let line = request
             .lines
             .iter()
@@ -143,6 +147,7 @@ impl DepositAutomaticSettlementPlan {
                 return Err(Error::from("自动核销候选必须为本采购的唯一正式增加分录"));
             }
         }
+
         let mut allocation_ids = HashSet::new();
         for allocation in allocations {
             positive(allocation.allocated_amount)?;
@@ -152,6 +157,7 @@ impl DepositAutomaticSettlementPlan {
                 return Err(Error::from("自动核销分配重复或不属于候选应付分录"));
             }
         }
+
         let mut offset_ids = HashSet::new();
         for offset in offsets {
             positive(offset.offset_amount)?;
@@ -174,6 +180,7 @@ impl DepositAutomaticSettlementPlan {
                 AllocationAction::Reverse => subtract(settled, row.allocated_amount)?,
             };
         }
+
         let decreased = offsets
             .iter()
             .filter(|row| row.increase_entry_id.as_ref() == entry.base.id)
@@ -449,6 +456,7 @@ mod tests {
             offset_sequence: 1,
             offset_amount: amount("10"),
         }];
+
         let plan = facts.plan().unwrap();
         assert_eq!(plan.amount, amount("100"));
         assert_eq!(
@@ -458,6 +466,7 @@ mod tests {
                 PendingPaymentAllocation::new(PayableEntryId::new("newer"), amount("60")).unwrap()
             ]
         );
+
         facts.entries.reverse();
         assert_eq!(facts.plan().unwrap(), plan);
     }
@@ -504,6 +513,7 @@ mod tests {
         let plan = facts.plan().unwrap();
         assert_eq!(plan.allocations[0].payable_entry_id.as_ref(), "older");
         assert_eq!(plan.allocations[0].allocated_amount, amount("100"));
+
         facts.request.submission_version += 1;
         assert!(facts.plan().is_err());
     }
@@ -513,6 +523,7 @@ mod tests {
         let mut facts = fixture();
         facts.entries[0].source_document_id = "other-purchase".into();
         assert!(facts.plan().is_err());
+
         let mut facts = fixture();
         facts.request.deposit_reservations.get_mut("reservation").unwrap().amount = amount("99.99");
         assert!(facts.plan().is_err());
@@ -523,12 +534,15 @@ mod tests {
         let mut facts = fixture();
         facts.usage.settled_amount = amount("1");
         assert!(facts.plan().is_err());
+
         let mut facts = fixture();
         facts.usage.batches[0].amount = amount("99");
         assert!(facts.plan().is_err());
+
         let mut facts = fixture();
         facts.entries.push(facts.entries[0].clone());
         assert!(facts.plan().is_err());
+
         let mut facts = fixture();
         let row = allocation("bank-apply", "older", bank(), 1, AllocationAction::Apply, "1", None);
         facts.allocations = vec![row.clone(), row];
@@ -600,6 +614,7 @@ mod tests {
         )
         .unwrap();
         assert!(data.authorization(std::slice::from_ref(&manual), Instant::from_unix_secs(11)).is_err());
+
         let mut automatic = manual.clone();
         automatic.base.id = "automatic".into();
         automatic.mode = DepositAuthorizationMode::Automatic;
@@ -611,12 +626,14 @@ mod tests {
             "automatic"
         );
         assert_eq!(automatic.committed_amount, Amount::zero());
+
         let mut request = request();
         request.deposit_reservations.clear();
         assert!(data.basis(&request, &manual).is_err());
         let basis = data.basis(&request, &automatic).unwrap();
         assert_eq!(basis.execution_group_id, "execution");
         assert_eq!(basis.total().unwrap(), amount("200"));
+
         automatic.revoked = true;
         assert!(data.authorization(&[automatic], Instant::from_unix_secs(11)).is_err());
     }

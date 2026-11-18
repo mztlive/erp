@@ -55,6 +55,7 @@ impl IntegrationCenterReadService {
     ) -> Result<IntegrationErrorDetailView> {
         let access = self.access.resolve(actor, &integration_ops::ERROR_TASK_DETAIL, executor).await?;
         let task = authorized_error_task(&self.db, id, &access, executor).await?;
+
         let view = self.error_view(task, executor).await?;
         self.access.validate(&access, executor).await?;
         Ok(view)
@@ -68,17 +69,21 @@ impl IntegrationCenterReadService {
     ) -> Result<IntegrationErrorDetailView> {
         let resolution = task.resolution.clone();
         let work_item = self.find_task_work_item(&task.base.id, executor).await?;
+
         let subject = EvidenceSubject::error(&task);
         let linked_evidence = self.evidence.discover_evidence(&subject, executor).await?;
         let policy = error_evidence_policy(&task);
         let (allowed_actions, action_blockers) =
             error_action_projection(&task, work_item.is_some(), &linked_evidence);
         let resolution_evidence_policy = (!task.is_terminal() && work_item.is_some()).then_some(policy);
+
         let mut task = task.into();
         self.error_task_names(slice::from_mut(&mut task), executor).await?;
         let work_item_id = work_item.map(|item| item.base.id);
+
         let connection_failure = self.connection_failure(&task, executor).await?;
         let audit_history = self.error_audit_history(&task.id, work_item_id.as_deref(), executor).await?;
+
         let detail = ErrorTaskDetailView {
             task,
             resolution,

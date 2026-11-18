@@ -57,12 +57,14 @@ pub async fn receive_from(
         .map_err(|failure| Error::Unauthenticated(failure.summary))?;
     let callbacks =
         connector.callbacks().ok_or_else(|| Error::ValidationError("供应商未提供回调能力".into()))?;
+
     let scope = format!(
         "{}\0{}",
         connection.endpoint_reference,
         connection.credential_reference.as_deref().unwrap_or_default()
     );
     let (receipt, reply) = intake::prepare(callbacks, connector.connection_id(), &scope, codec, request)?;
+
     acknowledge_after_persistence(reply, persist_receipt(store, codec, &receipt)).await
 }
 

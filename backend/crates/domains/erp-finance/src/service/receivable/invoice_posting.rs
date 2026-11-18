@@ -49,6 +49,7 @@ pub async fn persist_sales_invoice_allocations(
         plan_lines,
         &allocation_ids,
     )?;
+
     let account_id_strs: Vec<String> =
         plan.account_invoicing_deltas().iter().map(|(id, _)| id.to_string()).collect();
     let accounts = db.receivable_accounts().find_accounts_by_ids(&account_id_strs, executor).await?;
@@ -62,6 +63,7 @@ pub async fn persist_sales_invoice_allocations(
             return Err(Error::BusinessLogicError("禁止跨往来主体开票".to_string()));
         }
     }
+
     let invoicing = db
         .receivable_accounts()
         .apply_invoicings_many(plan.account_invoicing_deltas(), actor_id, executor)
@@ -69,6 +71,7 @@ pub async fn persist_sales_invoice_allocations(
     if !invoicing.rejected.is_empty() {
         return Err(Error::BusinessLogicError("子账剩余可开票额度不足，开票被拒绝".to_string()));
     }
+
     invoice.mark_registered(actor_id)?;
     db.invoices().update(invoice, executor).await?;
     db.receivable().create_sales_invoice_allocations_many(plan.new_allocations(), executor).await?;
@@ -99,6 +102,7 @@ pub async fn persist_evidence_allocation(
     if account.counterparty_party_id != invoice.party_id {
         return Err(Error::BusinessLogicError("禁止跨往来主体开票".into()));
     }
+
     let result = db
         .receivable_accounts()
         .apply_invoicings_many(&[(account_id.clone(), invoice.gross_amount)], actor_id, executor)
@@ -106,6 +110,7 @@ pub async fn persist_evidence_allocation(
     if !result.rejected.is_empty() {
         return Err(Error::BusinessLogicError("子账剩余可开票额度不足，开票被拒绝".into()));
     }
+
     invoice.mark_registered(actor_id)?;
     db.invoices().update(invoice, executor).await?;
     db.receivable().create_sales_invoice_allocations_many(&[allocation], executor).await?;

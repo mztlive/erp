@@ -186,6 +186,7 @@ impl SensitiveDataCodec {
         let ciphertext = cipher
             .encrypt(&nonce, plaintext.as_bytes())
             .map_err(|_| Error::Internal("敏感数据加密失败".to_string()))?;
+
         Ok(format!(
             "{CIPHERTEXT_VERSION}.{}.{}",
             URL_SAFE_NO_PAD.encode(nonce.as_slice()),
@@ -206,6 +207,7 @@ impl SensitiveDataCodec {
     /// 解密器初始化失败时返回 `Internal`。认证失败、密钥不匹配或明文不是 UTF-8 时返回 `ValidationError`。
     pub fn decrypt(&self, encoded: &str) -> Result<String> {
         let (nonce, ciphertext) = parse_ciphertext(encoded)?;
+
         let cipher = Aes256Gcm::new_from_slice(&self.encryption_key)
             .map_err(|_| Error::Internal("敏感数据解密初始化失败".to_string()))?;
         let nonce = Nonce::<Aes256Gcm>::try_from(nonce.as_slice())
@@ -269,12 +271,14 @@ impl SensitiveDataCodec {
         let signature = URL_SAFE_NO_PAD
             .decode(signature)
             .map_err(|_| Error::ValidationError("敏感字段令牌格式非法".to_string()))?;
+
         verify_signature(&self.token_key, &payload, &signature)?;
         let claims: RevealClaims = serde_json::from_slice(&payload)
             .map_err(|_| Error::ValidationError("敏感字段令牌格式非法".to_string()))?;
         if claims.expires_at < now {
             return Err(Error::ValidationError("敏感字段查看权限已失效".to_string()));
         }
+
         Ok(SensitiveRevealScope {
             kind: claims.kind,
             record_id: claims.record_id,
@@ -310,6 +314,7 @@ fn parse_ciphertext(encoded: &str) -> Result<([u8; NONCE_LEN], Vec<u8>)> {
     if segments.next().is_some() || nonce.len() != NONCE_LEN {
         return Err(Error::ValidationError("敏感数据格式非法".to_string()));
     }
+
     let mut nonce_bytes = [0_u8; NONCE_LEN];
     nonce_bytes.copy_from_slice(&nonce);
     Ok((nonce_bytes, ciphertext))
@@ -353,6 +358,7 @@ mod tests {
             .unwrap();
         let scope = codec.verify_reveal_token(&token, 100).unwrap();
         assert_eq!(scope.record_id, "contact-1");
+
         assert!(codec.verify_reveal_token(&token, 201).is_err());
         assert!(codec.verify_reveal_token(&format!("{token}x"), 100).is_err());
     }

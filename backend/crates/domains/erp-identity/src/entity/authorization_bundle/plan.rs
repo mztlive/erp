@@ -89,6 +89,7 @@ impl PolicyPlan {
             bindings: vec![],
             scopes: vec![],
         };
+
         for role in &document.roles {
             plan.role(role, facts, actor_permissions)?;
         }
@@ -96,6 +97,7 @@ impl PolicyPlan {
         for scope in &document.data_scopes {
             plan.scope(scope, facts)?;
         }
+
         let payload = (
             actor_id,
             authorization_version,
@@ -127,10 +129,12 @@ impl PolicyPlan {
         } else if !requested.id.as_str().starts_with("policy-") {
             return Err(Error::ValidationError("新角色ID必须以 policy- 开头".into()));
         }
+
         let before_permissions =
             merge(PolicyMode::Replace, &[], current.map_or(&[], |role| role.permissions.as_slice()));
         let permissions = merge(requested.mode, &before_permissions, &requested.permissions);
         ensure_subset(actor, &permissions)?;
+
         let before = current
             .map(|r| json!({"name": r.role.name, "permissions": before_permissions}))
             .unwrap_or(Value::Null);
@@ -170,11 +174,13 @@ impl PolicyPlan {
                 ensure_role(&role.role)?;
                 ensure_subset(actor, &role.permissions)?;
             }
+
             let requested = binding.role_ids.clone();
             let role_ids = merge(binding.mode, &user.role_ids, &requested);
             for id in &role_ids {
                 ensure_subset(actor, self.role_permissions(id.as_str(), facts)?)?;
             }
+
             if role_ids != user.role_ids {
                 self.preview.changes.push(PolicyChange {
                     kind: "binding".into(),
@@ -203,10 +209,12 @@ impl PolicyPlan {
             permissions.extend_from_slice(self.role_permissions(id.as_str(), facts)?);
         }
         let permissions = PermissionSet::new(permissions);
+
         let request = scope.request(self.preview.policy_version)?;
         let existing =
             facts.scopes.iter().filter(|s| s.user_id == scope.user_id).cloned().collect::<Vec<_>>();
         request.ensure_legacy_conversion(&existing)?;
+
         for action in &scope.actions {
             let required = Permission::parse(format!("{}:{action}", scope.resource))?;
             if !permissions.covers_one(&required) {
@@ -215,6 +223,7 @@ impl PolicyPlan {
                     scope.user_id
                 )));
             }
+
             let current = existing.iter().find(|s| s.resource == scope.resource && s.action == *action);
             let expression = scope.canonical_expression(action, &request.expression(action))?;
             let previous = current.map(|s| scope.canonical_expression(action, &s.expression)).transpose()?;
@@ -223,6 +232,7 @@ impl PolicyPlan {
             {
                 continue;
             }
+
             self.preview.changes.push(PolicyChange {
                 kind: "data_scope".into(),
                 target: format!("{}/{}/{action}", scope.user_id, scope.resource),
@@ -386,6 +396,7 @@ mod tests {
             "data_scopes":[scope(&["list"])]
         }))
         .unwrap();
+
         let plan = plan(value, &facts).unwrap();
         assert_eq!(
             plan.preview.changes.iter().map(|c| c.kind.as_str()).collect::<Vec<_>>(),
@@ -409,6 +420,7 @@ mod tests {
         assert_eq!(plan.roles[0].permissions, vec![Permission::parse("sales_order:list").unwrap()]);
         assert_eq!(plan.preview.changes[0].affected_user_ids, ["alice"]);
         assert!(plan.bindings.is_empty());
+
         value.roles[0].mode = PolicyMode::Merge;
         assert!(super::tests::plan(value, &facts()).unwrap().preview.changes.is_empty());
     }
@@ -488,6 +500,7 @@ mod tests {
         row.expression = first.scopes[0].expression.clone();
         facts.scopes.push(row);
         assert!(plan(value.clone(), &facts).unwrap().preview.changes.is_empty());
+
         value.data_scopes[0].grants.clear();
         let cleared = plan(value, &facts).unwrap();
         assert!(cleared.scopes[0].expression.additive);
@@ -504,6 +517,7 @@ mod tests {
         let mut value = document();
         value.data_scopes.push(scope(&["list"]));
         assert!(matches!(plan(value.clone(), &facts), Err(Error::ValidationError(_))));
+
         value.data_scopes[0].replace_legacy = true;
         let result = plan(value, &facts).unwrap();
         assert_eq!(result.scopes.len(), 1);
@@ -517,6 +531,7 @@ mod tests {
         let facts = facts();
         let first = plan(value.clone(), &facts).unwrap().preview.review_hash;
         assert_eq!(first, plan(value.clone(), &facts).unwrap().preview.review_hash);
+
         let actor = PermissionSet::new(vec![Permission::parse("*:*").unwrap()]);
         for (who, version, organization) in
             [("other", 4, "organization-v1"), ("operator", 5, "organization-v1"), ("operator", 4, "changed")]
@@ -525,6 +540,7 @@ mod tests {
                 PolicyPlan::build(value.clone(), &facts, who, &actor, version, organization).unwrap();
             assert_ne!(first, result.preview.review_hash);
         }
+
         let mut changed = facts;
         changed.users.get_mut("alice").unwrap().version += 1;
         assert_ne!(first, plan(value, &changed).unwrap().preview.review_hash);
@@ -539,6 +555,7 @@ mod tests {
         let exported = facts.export(4).unwrap();
         assert_eq!(exported.document.bindings[0].role_ids[0].as_str(), "reader");
         assert!(plan(exported.document, &facts).unwrap().preview.changes.is_empty());
+
         facts.scopes[0].expression.additive = false;
         assert!(matches!(facts.export(4), Err(Error::ValidationError(_))));
     }
@@ -633,6 +650,7 @@ mod tests {
         assert!(exported.policy_notes.iter().any(|note| note.contains("alice/product/list")));
         assert!(exported.document.roles[0].permissions.contains(&Permission::parse("product:list").unwrap()));
         assert!(plan(exported.document, &facts).unwrap().preview.changes.is_empty());
+
         let mut invalid = document();
         let mut shared = scope(&["list"]);
         shared.resource = "product".into();

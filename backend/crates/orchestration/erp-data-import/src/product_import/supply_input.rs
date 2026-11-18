@@ -27,6 +27,7 @@ impl SupplyImportInput {
                 return Err(Error::ValidationError(format!("{label}不能为空")));
             }
         }
+
         let dropship = parse_unit_price(cell(9), "供应商代发成本价")?;
         let bulk = parse_unit_price(cell(10), "供应商集采成本价")?;
         if dropship.to_decimal() < Decimal::ZERO || bulk.to_decimal() < Decimal::ZERO {
@@ -36,6 +37,7 @@ impl SupplyImportInput {
         if minimum.to_decimal() <= Decimal::ZERO {
             return Err(Error::ValidationError("供应商集采起订量必须大于 0".into()));
         }
+
         let percent =
             cell(15).trim_end_matches('%').trim().parse::<Decimal>().map_err(|_| {
                 Error::ValidationError("进项税率须填写 0–100 的百分数，例如 13 表示 13%".into())
@@ -44,6 +46,7 @@ impl SupplyImportInput {
             return Err(Error::ValidationError("进项税率须在 0–100 之间".into()));
         }
         let rate = Rate::try_from(percent / Decimal::from(100))?;
+
         Ok(Self {
             supplier_no: cell(13).to_string(),
             supplier_sku_code: cell(14).to_string(),

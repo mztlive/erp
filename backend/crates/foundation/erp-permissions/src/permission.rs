@@ -58,6 +58,7 @@ impl Permission {
         if action.contains(':') {
             return Err(ParsePermissionError::ExtraSeparator);
         }
+
         validate_part(resource, "权限资源", true)?;
         validate_part(action, "权限动作", false)?;
         Ok(Self { resource: Cow::Owned(resource.into()), action: Cow::Owned(action.into()) })
@@ -114,6 +115,7 @@ const fn validate_part(
     if bytes.len() == 1 && bytes[0] == b'*' {
         return Ok(());
     }
+
     let mut index = 0;
     while index < bytes.len() {
         let ch = bytes[index];
@@ -186,9 +188,11 @@ mod tests {
         assert_eq!(UPDATE.cmp(&dynamic), std::cmp::Ordering::Equal);
         assert_eq!(HashSet::from([UPDATE, dynamic.clone()]).len(), 1);
         assert_eq!(BTreeSet::from([UPDATE, dynamic.clone()]).len(), 1);
+
         assert_eq!(serde_json::to_string(&UPDATE).unwrap(), "\"sales_inquiry:update\"");
         assert_eq!(serde_json::to_string(&dynamic).unwrap(), serde_json::to_string(&UPDATE).unwrap());
         assert_eq!(serde_json::from_str::<Permission>("\" Sales_Inquiry:UPDATE \"").unwrap(), UPDATE);
+
         assert!(matches!(UPDATE.resource, Cow::Borrowed(_)));
         assert!(matches!(dynamic.resource, Cow::Owned(_)));
     }
@@ -211,11 +215,13 @@ mod tests {
             assert_eq!(Permission::parse(raw), Err(expected), "{raw}");
             assert!(serde_json::from_value::<Permission>(raw.into()).is_err());
         }
+
         let limit = "a".repeat(128);
         assert_eq!(Permission::parse(format!("{limit}:{limit}")).unwrap().action(), limit);
         for raw in [format!("{limit}a:b"), format!("a:{limit}b")] {
             assert!(matches!(Permission::parse(raw), Err(ParsePermissionError::TooLong(_))));
         }
+
         assert!(serde_json::from_str::<Permission>("{}").is_err());
     }
 
@@ -232,6 +238,7 @@ mod tests {
             assert_eq!(grant.covers(&required), expected);
             assert_eq!(Permission::parse(grant.to_string()).unwrap().covers(&required), expected);
         }
+
         assert_eq!(Permission::new("a-b/c_1", "read").to_string(), "a-b/c_1:read");
     }
 

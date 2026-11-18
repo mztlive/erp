@@ -306,6 +306,7 @@ mod tests {
             configuration_status(ApprovalRequirement::NoApproval, None, None),
             DefinitionConfigurationStatus::NotApplicable
         );
+
         let facts = vec![
             DefinitionCatalogStatusFact {
                 process_kind: ProcessKind::SalesOrder,

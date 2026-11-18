@@ -327,8 +327,10 @@ impl CustomerProfileCommand {
         if !matches!(operation, "create" | "update") {
             return Err(Error::from("客户资料命令操作无效"));
         }
+
         let fingerprint = CustomerProfileRequestFingerprint::parse_compatible(&data.request_fingerprint)?;
         let request_fingerprint = fingerprint.digest_hex().to_string();
+
         let required = [
             data.initiated_by.as_str(),
             data.customer_id.as_str(),
@@ -340,6 +342,7 @@ impl CustomerProfileCommand {
         if required.iter().any(|value| value.trim().is_empty()) {
             return Err(Error::from("客户资料命令结果身份、请求指纹或变更原因不能为空"));
         }
+
         Ok(Self {
             base: BaseModel::new(id.into()),
             idempotency_key,
@@ -483,6 +486,7 @@ mod tests {
             first.as_str(),
             "sha256-json-v1:88bbb7a6b52992122ef2b8910ab733265e709a0ac511791e03baace7e4780670"
         );
+
         assert_eq!(
             CustomerProfileRequestFingerprint::parse_compatible(first.digest_hex()).unwrap().as_str(),
             first.as_str()
@@ -505,6 +509,7 @@ mod tests {
             replay_context(CustomerProfileOperation::Update, Some(" customer-1 "), "admin-1", ZERO_DIGEST,)
                 .is_err()
         );
+
         let update =
             replay_context(CustomerProfileOperation::Update, Some("customer-1"), "admin-1", ZERO_DIGEST)
                 .unwrap();
@@ -522,6 +527,7 @@ mod tests {
                 .unwrap();
 
         assert!(command.ensure_replay_matches(&matching).is_ok());
+
         assert!(
             command
                 .ensure_replay_matches(
@@ -529,6 +535,7 @@ mod tests {
                 )
                 .is_err()
         );
+
         assert!(
             command
                 .ensure_replay_matches(
@@ -542,6 +549,7 @@ mod tests {
                 )
                 .is_err()
         );
+
         assert!(
             command
                 .ensure_replay_matches(
@@ -555,6 +563,7 @@ mod tests {
                 )
                 .is_err()
         );
+
         assert!(
             command
                 .ensure_replay_matches(
@@ -621,6 +630,7 @@ mod tests {
         assert_eq!(legacy.request_fingerprint, ZERO_DIGEST);
         assert_eq!(prefixed.request_fingerprint, ZERO_DIGEST);
         assert!(legacy.ensure_replay_matches(&context).is_ok());
+
         let json = serde_json::to_value(&legacy).unwrap();
         assert_eq!(json["operation"], "update");
         assert_eq!(json["request_fingerprint"], ZERO_DIGEST);

@@ -50,6 +50,7 @@ fn interpret(
     if record.yn.as_ref().and_then(|value| scalar(value).ok()).as_deref() != Some("1") {
         return Err("JD_VOP_MESSAGE_VALIDITY_UNKNOWN");
     }
+
     let content = record.content.as_ref().ok_or("JD_VOP_MESSAGE_CONTENT_MISSING")?;
     if kind == 50 {
         return address_hints(content);
@@ -155,6 +156,7 @@ fn address_hints(raw: &RawValue) -> Result<Vec<MessageRefreshHint>, &'static str
     if records.is_empty() || records.len() > 100 {
         return Err("JD_VOP_ADDRESS_NOTICE_INVALID");
     }
+
     let mut ids = BTreeSet::new();
     for record in records {
         let mut fields = object(&record)?;
@@ -244,6 +246,7 @@ mod tests {
             assert!(matches!(result.interpretation, MessageInterpretation::Quarantine { .. }));
             assert!(!result.body.is_empty());
         }
+
         let raw =
             r#"{"id":"1","type":2,"yn":1,"content":{"id":"another","type":2,"content":{"skuId":"123"}}}"#;
         let raw: Box<RawValue> = serde_json::from_str(raw).unwrap();
@@ -284,6 +287,7 @@ mod tests {
             assert_eq!(hints[0].target, RefreshTarget::Address("123".into()));
             assert!(hints[0].funds_transaction_id.is_none());
         }
+
         for content in [
             r#"{"areaName":"未知编码"}"#,
             r#"{"areaId":"123","areaLevel":6}"#,

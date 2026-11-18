@@ -24,6 +24,7 @@ pub(in crate::sales_timeline) async fn numbers(
             document.number = row.document_no;
         }
     }
+
     for row in db
         .invoices()
         .find_many(doc! { "id": { "$in": sources.ids(DocumentType::Invoice) } }, executor)
@@ -39,6 +40,7 @@ pub(in crate::sales_timeline) async fn numbers(
             }
         }
     }
+
     super::submissions::append(db, sources, executor).await?;
     sources.check_size()?;
     Ok(())
@@ -57,9 +59,11 @@ pub(in crate::sales_timeline) async fn discover(
         let id = row.base.id;
         sources.add(DocumentType::PurchaseOrder, id.clone(), Some(sale), Some(&id));
     }
+
     fulfillment(db, sale, &mut sources, executor).await?;
     returns(db, sale, &mut sources, executor).await?;
     super::finance::discover(db, sale, &mut sources, executor).await?;
+
     sources.check_size()?;
     numbers(&mut sources, db, executor).await?;
     Ok(sources)
@@ -78,6 +82,7 @@ async fn fulfillment(
     for row in db.customer_acceptances().find_many(doc! { "sales_order_id": sale }, executor).await? {
         sources.add(DocumentType::CustomerAcceptance, row.base.id, Some(sale), None);
     }
+
     for row in db
         .purchase_receipts()
         .find_many(doc! { "purchase_order_id": { "$in": &purchases } }, executor)
@@ -136,6 +141,7 @@ async fn returns(
             Some(row.purchase_order_id.as_ref()),
         );
     }
+
     for row in db.sales_return_cases().find_many(doc! { "sales_order_id": sale }, executor).await? {
         sources.add(DocumentType::SalesReturnCase, row.base.id, Some(sale), None);
     }

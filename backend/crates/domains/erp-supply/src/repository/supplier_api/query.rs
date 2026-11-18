@@ -116,6 +116,7 @@ impl QueryFilter for SupplierApiConnectionFilter {
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }
+
         if let Some(q) = &self.q {
             let mut clauses = ["connection_code"]
                 .into_iter()
@@ -186,6 +187,7 @@ impl SupplierApiConnectionRepositoryExt for SupplierApiConnectionRepository<'_> 
             .projection(supplier_api_connection_projection())
             .build();
         let collection = self.collection().clone_with_type::<SupplierApiConnectionRow>();
+
         let items = aggregate::find(&collection, filter.to_doc(), options, Vec::new(), executor).await?;
         let total = aggregate::count(&collection, filter.to_doc(), Vec::new(), executor).await?;
         let total = i64::try_from(total).map_err(|_| Error::ValidationError("连接总数超限".into()))?;
@@ -380,9 +382,9 @@ impl SupplierApiCapabilityRepositoryExt for SupplierApiCapabilityRepository<'_> 
             .projection(supplier_api_capability_projection())
             .build();
         let collection = self.collection().clone_with_type::<SupplierApiCapabilityRow>();
+
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 

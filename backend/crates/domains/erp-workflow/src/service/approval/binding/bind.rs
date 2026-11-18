@@ -131,6 +131,7 @@ async fn bind_required_definition(
         executor,
     )
     .await?;
+
     let binding = binding_from_published(
         ApprovalProcessDefinitionId::new(graph.definition.base.id.clone()),
         graph.definition.definition_version,
@@ -178,6 +179,7 @@ async fn record_no_approval_policy(
         requirement = "NO_APPROVAL",
         "审批绑定政策：无需绑定"
     );
+
     let audit = PreparedWorkflowAudit::resource_with_message(
         actor.clone(),
         DEFINITION_POLICY_AUDIT_ACTION,

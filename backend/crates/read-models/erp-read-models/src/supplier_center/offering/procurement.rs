@@ -89,11 +89,13 @@ impl OfferingProcurementOwners for MongoOfferingProcurementOwners {
         if authorized_ids.is_empty() {
             return Ok(Vec::new());
         }
+
         let rules = self
             .db
             .procurement_responsibility_rules()
             .list_active_procurement_responsibility_rules(executor)
             .await?;
+
         let offerings = self.db.supplier_offerings().procurement_facts(authorized_ids, executor).await?;
         let sku_ids: Vec<String> = offerings.iter().map(|row| row.sku_id.clone()).collect();
         let skus = self.db.catalog().procurement_skus(&sku_ids, executor).await?;
@@ -105,9 +107,11 @@ impl OfferingProcurementOwners for MongoOfferingProcurementOwners {
             .collect::<Vec<_>>();
         let products = load_products(&self.db, &product_ids, executor).await?;
         let revisions = load_revisions(&self.db, &products, executor).await?;
+
         let rule_set = ProcurementResponsibilityRuleSet::new(&rules);
         let mut categories = prefetch_category_chains(&self.db, &revisions, executor).await;
         let sku_by_id: HashMap<_, _> = skus.iter().map(|sku| (sku.id.as_str(), sku)).collect();
+
         let mut matched = HashSet::new();
         for offering in offerings {
             let Some(sku) = sku_by_id.get(offering.sku_id.as_str()) else {

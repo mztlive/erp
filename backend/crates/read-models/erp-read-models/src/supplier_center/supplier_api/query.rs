@@ -79,8 +79,10 @@ impl SupplierApiReadService {
             .require(actor, &supplier_api::CONNECTION_LIST, AccessTarget::Operation, executor)
             .await?;
         validator::Validate::validate(params)?;
+
         let suppliers = keyword_supplier_ids(&self.db, params.q.as_deref(), executor).await?;
         let page = self.domain().connection_list(params, suppliers, executor).await?;
+
         let supplier_names = self.supplier_names_for_connections(&page.items, executor).await?;
         Ok(self.connection_list_view(page, &supplier_names))
     }
@@ -131,6 +133,7 @@ impl SupplierApiReadService {
         let party_ids =
             accounts.iter().map(|account| PartyId::new(account.party_id.to_string())).collect::<Vec<_>>();
         let (parties, revisions) = self.db.party().list_with_current_revisions(&party_ids, executor).await?;
+
         let revisions_by_id = revisions
             .into_iter()
             .map(|revision| (revision.base.id.clone(), revision.legal_name))
@@ -194,8 +197,10 @@ impl SupplierApiReadService {
     ) -> Result<SupplierApiConnectionDetailView> {
         let (access, permissions) = self.connection_detail_access(actor, executor).await?;
         let connection = authorized_connection(&self.db, id, &access, executor).await?;
+
         let context = self.governance_context(&connection, executor).await?;
         let view = self.detail_view(connection, context, &permissions, executor).await?;
+
         self.authorization.validate(&access, executor).await?;
         Ok(view)
     }
@@ -244,6 +249,7 @@ impl SupplierApiReadService {
         let deployment_ready = self.reference_registry.as_ref().is_some_and(|registry| {
             registry.deployment_config(&SupplierReferenceTarget::from(&connection)).is_ok()
         });
+
         Ok(SupplierApiConnectionDetailView {
             settlement_scan,
             settlement_evidence,
@@ -311,6 +317,7 @@ impl SupplierApiReadService {
             .reference_registry
             .as_ref()
             .and_then(|registry| registry.deployment_config(&SupplierReferenceTarget::from(connection)).ok());
+
         for action in SupplierConnectionAction::all() {
             if matches!(
                 action,

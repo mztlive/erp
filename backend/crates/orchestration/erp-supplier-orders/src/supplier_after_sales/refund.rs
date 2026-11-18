@@ -67,6 +67,7 @@ impl SupplierAfterSalesProcess {
                     {
                         return Ok(None);
                     }
+
                     request.validate()?;
                     process
                         .enqueue_refund(&order_id, &request, &command_actor, order, executor)
@@ -75,6 +76,7 @@ impl SupplierAfterSalesProcess {
                 })
             })
             .await?;
+
         match action_id {
             Some(action_id) => {
                 read_action_result(&self.db, access, actor, id, ActionResult::Refund(action_id))
@@ -104,6 +106,7 @@ impl SupplierAfterSalesProcess {
         {
             return Err(Error::ConflictError("退款原订单与执行身份不一致".into()));
         }
+
         let items = self
             .db
             .supplier_fulfillment_items()
@@ -123,16 +126,19 @@ impl SupplierAfterSalesProcess {
             request,
             &items,
         )?;
+
         if let Some(existing) = self.db.api_refunds().find_by_id(&row.base.id, executor).await? {
             existing.ensure_replay(&row)?;
             return Ok(existing.base.id);
         }
+
         self.ensure_refund_balance(&row, &items, executor).await?;
         if !self.supports_refund(&row, executor).await? {
             row.unsupported();
         } else if order.refund_status == RefundStatus::None {
             order.advance_refund(RefundStatus::RefundPending)?;
         }
+
         self.persist_refund_intent(&row, request, &mut order, actor, executor).await?;
         Ok(row.base.id)
     }
@@ -176,6 +182,7 @@ impl SupplierAfterSalesProcess {
         self.create_refund_action(row, request, executor).await?;
         self.db.api_refunds().create(row, executor).await?;
         self.db.supplier_fulfillment_orders().update(order, executor).await?;
+
         let audit = actor.clone().resource_log(
             "supplier_fulfillment.api_refund",
             "supplier_order_action",
@@ -202,6 +209,7 @@ impl SupplierAfterSalesProcess {
         )?;
         project(row, &mut action)?;
         let lines = SupplierFulfillmentService::new(self.db.clone()).build_action_lines(&action, input)?;
+
         self.db.supplier_order_actions().create(&action, executor).await?;
         for line in lines {
             self.db.supplier_order_action_lines().create(&line, executor).await?;

@@ -111,6 +111,7 @@ impl QueryFilter for CandidateFilter {
         if let Some(kind) = self.product_kind {
             filter.insert("product_kind", kind.as_str());
         }
+
         if let Some(query) = self.query.as_deref().map(str::trim).filter(|text| !text.is_empty()) {
             let clauses = self
                 .fields
@@ -288,6 +289,7 @@ impl CatalogPortalService {
         if !category.is_active() {
             return Err(Error::BusinessLogicError("商品分类已停用".into()));
         }
+
         let mut nodes = vec![CategoryHierarchyNode::from(category)];
         let mut parent_id = category.parent_category_id.clone();
         let mut seen = HashSet::from([category.base.id.clone()]);
@@ -310,6 +312,7 @@ impl CatalogPortalService {
             nodes.push(CategoryHierarchyNode::from(&parent));
             parent_id = parent.parent_category_id;
         }
+
         nodes.reverse();
         Ok(nodes)
     }
@@ -339,18 +342,21 @@ impl CatalogPortalService {
         };
         let mut ids = Vec::new();
         let mut seen = HashSet::new();
+
         for revision in self.db.product_revisions().search(&filter, executor).await?.items {
             let id = revision.product_id.to_string();
             if seen.insert(id.clone()) {
                 ids.push(id);
             }
         }
+
         filter.fields = vec!["product_no"];
         for product in self.db.products().search(&filter, executor).await?.items {
             if seen.insert(product.base.id.clone()) {
                 ids.push(product.base.id);
             }
         }
+
         filter.fields = vec!["name", "specification", "barcode"];
         for revision in self.db.sku_revisions().search(&filter, executor).await?.items {
             let Some(sku) = self.db.skus().find_by_id(revision.sku_id.as_ref(), executor).await? else {
@@ -364,6 +370,7 @@ impl CatalogPortalService {
                 }
             }
         }
+
         filter.fields = vec!["sku_no", "specification_signature"];
         for sku in self.db.skus().search(&filter, executor).await?.items {
             let id = sku.product_id.to_string();
@@ -393,6 +400,7 @@ impl CatalogPortalService {
         for sku in skus {
             candidates.push(self.duplicate_sku_candidate(sku, executor).await?);
         }
+
         Ok(DuplicateCandidate {
             product_id: product.base.id,
             version: product.base.version,
@@ -425,6 +433,7 @@ impl CatalogPortalService {
             .find_by_id(sku.base_unit_id.as_ref(), executor)
             .await?
             .ok_or_else(|| Error::ConflictError("候选SKU基础单位缺失".into()))?;
+
         let specification = revision.specification.or_else(|| {
             (!sku.specification_signature.is_empty()).then(|| sku.specification_signature.clone())
         });
@@ -472,6 +481,7 @@ impl DuplicateReader for CatalogPortalService {
         if !product.is_active() {
             return Ok(None);
         }
+
         let revision = self
             .db
             .catalog()
@@ -497,13 +507,16 @@ async fn read_duplicates(
     if q.trim().is_empty() {
         return Err(Error::ValidationError("重复匹配搜索不能为空".into()));
     }
+
     let scope = access.resolve(actor, &catalog_permissions::PRODUCT_PRODUCT_DETAIL, executor).await?;
+
     let mut result = Vec::new();
     for product_id in reader.product_ids(q, executor).await? {
         if let Some(candidate) = reader.candidate(&product_id, &scope, executor).await? {
             result.push(candidate);
         }
     }
+
     scope.validate(executor).await?;
     Ok(result)
 }
@@ -697,6 +710,7 @@ mod tests {
             assert!(matches!(result, Err(Error::Forbidden(_))));
         }
         assert!(reader.calls.lock().unwrap().is_empty());
+
         let access = access(&[catalog_permissions::PRODUCT_PRODUCT_DETAIL]).await;
         let result = read_duplicates(&reader, &access, "商品", &actor(), &mut SnapshotExecutor::default())
             .await

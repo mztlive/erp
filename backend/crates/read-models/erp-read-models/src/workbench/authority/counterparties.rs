@@ -193,6 +193,7 @@ mod tests {
         let ids = vec!["first".to_string(), "error".to_string(), "never".to_string()];
         assert!(numbers(&source, "SUPPLIER", &ids, &mut ex).await.unwrap().is_empty());
         assert!(source.seen.lock().unwrap().is_empty());
+
         let error = numbers(&source, "customer", &ids, &mut ex).await.unwrap_err();
         assert!(matches!(error,Error::ValidationError(message) if message=="number-read"));
         assert_eq!(

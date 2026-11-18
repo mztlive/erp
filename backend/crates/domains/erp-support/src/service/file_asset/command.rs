@@ -83,6 +83,7 @@ impl FileAssetService {
             asset.base.id.clone(),
         )?;
         let linked = self.prepare_attachment(&asset.base.id, target, actor)?;
+
         let this = self.clone();
         let actor = actor.clone();
         self.db
@@ -94,8 +95,10 @@ impl FileAssetService {
                     if let Some((attachment, _)) = &linked {
                         this.documents.ensure_registered(attachment.document_id.as_ref(), executor).await?;
                     }
+
                     this.db.file_assets().create(&asset, executor).await?;
                     this.audit.persist(&audit, executor).await?;
+
                     if let Some((attachment, audit)) = &linked {
                         this.db.document_attachments().create(attachment, executor).await?;
                         this.audit.persist(audit, executor).await?;
@@ -168,6 +171,7 @@ impl FileAssetService {
             "document_attachment",
             attachment.base.id.clone(),
         )?;
+
         let actor = actor.clone();
         let this = self.clone();
         self.db
@@ -178,6 +182,7 @@ impl FileAssetService {
                     this.require_operation(&actor, &file_asset::DOCUMENT_ATTACHMENT_CREATE, executor).await?;
                     this.documents.ensure_registered(attachment.document_id.as_ref(), executor).await?;
                     this.require_asset(attachment.file_asset_id.as_ref(), executor).await?;
+
                     this.db.document_attachments().create(&attachment, executor).await?;
                     this.audit.persist(&audit, executor).await?;
                     Ok(attachment.into())

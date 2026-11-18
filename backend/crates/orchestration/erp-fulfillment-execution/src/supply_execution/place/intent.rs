@@ -66,20 +66,24 @@ impl SupplierFulfillmentProcess {
             legacy::ensure(&self.db, &order.base.id, executor).await?;
             return Ok(PlaceIntent::Existing(Box::new(order)));
         }
+
         let (connection, offerings) = self.domain().ensure_placeable(req, executor).await?;
         let follow_up = resolve_follow_up(&self.db, &req.supplier_id, executor).await?;
         let (order, items, action) =
             self.domain().build_place_facts(req, &offerings, follow_up.user_id, follow_up.org_unit_id)?;
+
         self.identity
             .rbac
             .require(actor, &supplier_fulfillment::ORDER_SUBMIT, place_candidate(&order), executor)
             .await?;
+
         let message = build_action_message(&action, &connection, InboxMessageStatus::Received)?;
         let audit = actor.clone().resource_log(
             "supplier_fulfillment.submit",
             "supplier_fulfillment_order",
             order.base.id.clone(),
         )?;
+
         persist_place_facts(&self.db, &order, &items, &action, executor).await?;
         self.db.inbox_messages().create(&message, executor).await?;
         persist_log(&self.db, &audit, executor).await?;
@@ -130,6 +134,7 @@ mod tests {
         .unwrap();
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         let authorization = unavailable_authorization();
+
         let error = authorization
             .require(
                 &actor,
@@ -142,6 +147,7 @@ mod tests {
         assert!(
             matches!(error, IdentityError::ValidationError(message) if message == "写入授权必须使用快照事务")
         );
+
         let error = authorization
             .require(
                 &actor,

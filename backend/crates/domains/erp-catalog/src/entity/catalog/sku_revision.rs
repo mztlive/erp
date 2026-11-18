@@ -132,10 +132,13 @@ impl SkuRevision {
         let description = normalize_optional_text(data.description, "SKU描述", DESCRIPTION_MAX_LEN)?;
         let specification = normalize_optional_text(data.specification, "SKU规格", SPECIFICATION_MAX_LEN)?;
         let barcode = normalize_optional_text(data.barcode, "条码", BARCODE_MAX_LEN)?;
+
         ensure_revision_no(data.revision_no)?;
         ensure_effective_window(data.effective_from, data.effective_to)?;
+
         ensure_non_negative_quantity(data.weight_kg, "重量")?;
         ensure_non_negative_quantity(data.volume_m3, "体积")?;
+
         ensure_non_negative_amount(data.sales_visible_price_gross, "一件代发价")?;
         ensure_non_negative_amount(data.bulk_price_gross, "集采价")?;
         ensure_non_negative_amount(data.market_price, "市场价")?;
@@ -413,6 +416,7 @@ mod tests {
                 "集采起订数量必须大于零"
             );
         }
+
         let revision = SkuRevision::new(
             SkuRevisionId::new("rev-1"),
             SkuRevisionData { bulk_min_quantity: None, ..data() },
@@ -510,6 +514,7 @@ mod tests {
         let object = value.as_object_mut().unwrap();
         object.remove("bulk_price_gross");
         object.remove("bulk_min_quantity");
+
         let legacy: SkuRevision = serde_json::from_value(value).unwrap();
         assert_eq!(legacy.bulk_price_gross, None);
         assert_eq!(legacy.bulk_min_quantity, None);

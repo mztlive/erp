@@ -410,18 +410,21 @@ mod tests {
         let filter = outbox_lease_filter(Instant::from_unix_secs(1_000));
         let alternatives = filter.get_array("$or").unwrap();
         assert_eq!(alternatives.len(), 2);
+
         let pending = alternatives[0].as_document().unwrap();
         assert_eq!(
             pending.get_str("delivery_status").unwrap(),
             ApprovalNotificationDeliveryStatus::Pending.as_str()
         );
         assert_eq!(pending.get_document("next_attempt_at").unwrap(), &doc! { "$lte": 1_000_i64 });
+
         let inflight = alternatives[1].as_document().unwrap();
         assert_eq!(
             inflight.get_str("delivery_status").unwrap(),
             ApprovalNotificationDeliveryStatus::InFlight.as_str()
         );
         assert_eq!(inflight.get_document("lease_until").unwrap(), &doc! { "$lte": 1_000_i64 });
+
         let serialized = filter.to_string();
         assert!(!serialized.contains("DELIVERED"));
         assert!(!serialized.contains("DEAD_LETTER"));
@@ -463,6 +466,7 @@ mod tests {
         assert_eq!(set.get_i64("lease_until").unwrap(), 1_500);
         assert_eq!(set.get_i64("updated_at").unwrap(), 1_000);
         assert_eq!(set.get_document("version").unwrap(), &doc! { "$add": ["$version", 1_i64] });
+
         assert_eq!(lease_take_sort(), doc! { "next_attempt_at": 1, "id": 1 });
     }
 

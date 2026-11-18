@@ -51,6 +51,7 @@ impl PurchaseOfferingSource {
         {
             return Err(Error::from("采购供给选源与当前条款或可供归属不一致"));
         }
+
         let source = Self {
             supplier_offering_id: supply.offering.base.id.clone().into(),
             offering_version: supply.offering.version,
@@ -93,6 +94,7 @@ impl PurchaseOfferingSource {
         {
             return Err(Error::from("采购供给选源或版本已变化，请重新核对"));
         }
+
         if !on_date.is_within(supply.revision.valid_from, supply.revision.valid_to)
             || supply.availability.availability_status != AvailabilityStatus::Available
             || quantity.to_decimal() <= Decimal::ZERO
@@ -229,6 +231,7 @@ fn inherit_sources<'a>(
             return Err(Error::from("采购原行身份歧义，不能继承正式选源"));
         }
     }
+
     for input in &mut *inputs {
         (input.supplier_offering_source, input.delivery_allocations) =
             if input.line_type == PurchaseLineType::LogisticsFee {
@@ -245,6 +248,7 @@ fn inherit_sources<'a>(
                 (source.source.cloned(), source.delivery.to_vec())
             };
     }
+
     // 请求交付安排仅在所有行继承成功后恢复。
     for (input, delivery) in inputs.iter_mut().zip(requested) {
         if !delivery.is_empty() {
@@ -313,6 +317,7 @@ mod tests {
         assert_eq!(source.offering_version, 7);
         assert_eq!(source.revision_version, 3);
         assert_eq!(source.availability_version, 11);
+
         let mut wrong_terms = supply();
         wrong_terms.revision.supplier_offering_id = SupplierOfferingId::new("foreign");
         assert!(PurchaseOfferingSource::from_supply(&wrong_terms).is_err());
@@ -322,6 +327,7 @@ mod tests {
         let mut wrong_availability = supply();
         wrong_availability.availability.supplier_offering_id = SupplierOfferingId::new("foreign");
         assert!(PurchaseOfferingSource::from_supply(&wrong_availability).is_err());
+
         assert!(ensure_offering_source(PurchaseLineType::LogisticsFee, Some(&source), None, None).is_err());
         assert!(ensure_offering_source(PurchaseLineType::ItemService, None, None, None).is_ok());
     }
@@ -369,6 +375,7 @@ mod tests {
         let mut value = original;
         value.availability.supplier_offering_id = SupplierOfferingId::new("foreign");
         changed.push(value);
+
         for current in changed {
             assert!(
                 source
@@ -382,6 +389,7 @@ mod tests {
                     .is_err()
             );
         }
+
         assert_eq!(source.offering_version, 7);
         assert_eq!(source.revision_version, 3);
         assert_eq!(source.availability_version, 11);
@@ -400,6 +408,7 @@ mod tests {
             value.availability.available_quantity = Some(quantity.parse().unwrap());
             changed.push(value);
         }
+
         for expired_on in ["2026-10-03", "2026-10-04"] {
             let mut value = original.clone();
             value.revision.valid_to = Some(expired_on.parse().unwrap());
@@ -408,6 +417,7 @@ mod tests {
         let mut value = original;
         value.revision.valid_from = "2026-10-05".parse().unwrap();
         changed.push(value);
+
         for current in changed {
             assert!(
                 source

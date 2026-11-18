@@ -70,6 +70,7 @@ impl SupplierHandoverReceipt {
     /// schema、原结果、身份或展示关联缺失时返回内部错误。
     pub fn validate(&self) -> Result<()> {
         self.command.validate().map_err(|_| corrupted())?;
+
         let (action, resource, target, owner, supplier_id, version) = match &self.result {
             SupplierHandoverResult::Supplier(view) => (
                 SUPPLIER_HANDOVER_ACTION,
@@ -88,6 +89,7 @@ impl SupplierHandoverReceipt {
                 view.version,
             ),
         };
+
         if self.base.id != self.command.command_id
             || self.base.is_deleted()
             || self.result_schema_version != 1
@@ -188,10 +190,12 @@ mod tests {
                 Err(Error::ConflictError(_))
             ));
             assert!(matches!(receipt.ensure_matches(&command(!capability, "fp")), Err(Error::Internal(_))));
+
             let encoded = serde_json::to_string(&receipt).unwrap();
             let restored: SupplierHandoverReceipt = serde_json::from_str(&encoded).unwrap();
             assert!(restored.ensure_matches(&command(capability, "fp")).is_ok());
         }
+
         assert_ne!(command(true, "fp").id(), command(false, "fp").id());
     }
 
@@ -217,6 +221,7 @@ mod tests {
             view.supplier_id.clear();
         }
         cases.push(changed);
+
         for changed in cases {
             assert!(matches!(changed.ensure_matches(&command(true, "fp")), Err(Error::Internal(_))));
         }

@@ -100,6 +100,7 @@ impl SupplierCategoryMapping {
         require_text(&supplier_id, "供应商标识", 128)?;
         let original_category_path = source_path(&original_category_path)?.to_string();
         validate_confirmation(&confirmation, &original_category_path, product_kind)?;
+
         Ok(Self {
             base: BaseModel::new(id),
             supplier_id,
@@ -128,6 +129,7 @@ impl SupplierCategoryMapping {
         if self.confirmations.iter().any(|row| row.submission_id == confirmation.submission_id) {
             return Err(Error::ConflictError("本次提交已保存分类核对决定".into()));
         }
+
         self.confirmations.push(confirmation);
         Ok(())
     }
@@ -155,6 +157,7 @@ impl SupplierCategoryMapping {
         } else {
             CategoryMappingSuggestionStatus::RecheckRequired
         };
+
         Ok(CategoryMappingSuggestion {
             mapping_id: self.base.id.clone(),
             version: self.base.version,
@@ -206,6 +209,7 @@ fn validate_confirmation(
     if source_path(&confirmation.source_original_category_path)? != original_category_path {
         return Err(Error::ValidationError("分类核对不得改写原始完整路径".into()));
     }
+
     validate_hierarchy(&confirmation.hierarchy, kind)?;
     let leaf = confirmation.hierarchy.last().ok_or_else(|| Error::ValidationError("分类层级缺失".into()))?;
     if leaf.id != confirmation.category_id
@@ -214,6 +218,7 @@ fn validate_confirmation(
     {
         return Err(Error::ValidationError("分类核对目标与完整路径版本不一致".into()));
     }
+
     if confirmation.confirmed_at.unix_secs() < 0 {
         return Err(Error::ValidationError("分类核对时间非法".into()));
     }

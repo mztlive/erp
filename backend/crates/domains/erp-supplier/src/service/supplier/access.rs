@@ -152,6 +152,7 @@ impl SupplierAccess {
             .own_org(maintainer_user_id, Instant::now(), executor)
             .await?
             .ok_or_else(|| Error::ValidationError("请先维护负责人的有效主属组织".into()))?;
+
         self.authorization
             .require(
                 actor,
@@ -195,6 +196,7 @@ mod permission_tests {
             .await
             .unwrap()
             .database("supplier_read_authorization");
+
         let permissions = if granted { vec![supplier::LIST, supplier::DETAIL] } else { vec![] };
         let mapping = bindings(db.clone()).unwrap().1;
         let authorization = fixed_authorization(
@@ -232,12 +234,15 @@ mod permission_tests {
         assert!(!scope.stages().is_empty());
         scope.ensure_current(&mut executor).unwrap();
         scope.validate(&mut executor).await.unwrap();
+
         access.require_with(&actor(), &supplier::DETAIL, "visible-supplier", &mut executor).await.unwrap();
+
         let outside = access
             .require_with(&actor(), &supplier::DETAIL, "outside-supplier", &mut executor)
             .await
             .unwrap_err();
         assert!(matches!(outside, Error::Forbidden(_)));
+
         let absent = access
             .require_with(&actor(), &supplier::DETAIL, "absent-supplier", &mut executor)
             .await

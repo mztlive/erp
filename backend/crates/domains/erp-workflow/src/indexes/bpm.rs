@@ -243,6 +243,7 @@ mod tests {
             draft.options.as_ref().unwrap().partial_filter_expression,
             Some(doc! { "status": "DRAFT" })
         );
+
         assert_eq!(
             index_named(&indexes, "uk_approval_process_definitions_kind_version").keys,
             doc! { "process_kind": 1, "definition_version": 1 }
@@ -319,6 +320,7 @@ mod tests {
                 ]
             })
         );
+
         assert!(!indexes.iter().any(|index| {
             index.keys.contains_key("runtime_kind") || index.keys.contains_key("external_instance_id")
         }));
@@ -338,6 +340,7 @@ mod tests {
             index_named(&indexes, "idx_approval_process_instances_status_updated").keys,
             doc! { "status": 1, "updated_at": -1, "id": -1 }
         );
+
         assert_eq!(
             index_named(&indexes, "idx_approval_process_instances_subject_history").keys,
             doc! {
@@ -370,6 +373,7 @@ mod tests {
                 ]
             })
         );
+
         let history = index_named(&indexes, "idx_approval_node_executions_round_node");
         assert_ne!(history.options.as_ref().and_then(|options| options.unique), Some(true));
         assert_eq!(
@@ -381,6 +385,7 @@ mod tests {
                 "execution_no": 1,
             }
         );
+
         assert_eq!(
             index_named(&indexes, "uk_approval_node_executions_instance_no").keys,
             doc! { "process_instance_id": 1, "execution_no": 1 }
@@ -405,6 +410,7 @@ mod tests {
             index_named(&assignee_indexes(), "uk_approval_instance_assignees_instance_node").keys,
             doc! { "process_instance_id": 1, "node_key": 1 }
         );
+
         assert_eq!(
             index_named(&receipt_indexes(), APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX,).keys,
             doc! { "command_kind": 1, "scope_id": 1, "idempotency_key": 1 }

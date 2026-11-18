@@ -91,6 +91,7 @@ pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &Authorized
             return Err(Error::ValidationError("部门管理关系已停用，请在人员数据范围中设置授权".into()));
         },
     }
+
     if targets.into_iter().any(|id| !covers(access, id)) {
         return Err(Error::Forbidden("目标超出组织配置管理边界".into()));
     }
@@ -172,6 +173,7 @@ pub(crate) fn visible_state(mut state: OrganizationState, access: &AuthorizedDat
             unit.parent_id = None;
         }
     }
+
     state.memberships.retain(|m| ids.contains(&m.org_unit_id));
     state.management.retain(|m| ids.contains(&m.org_unit_id));
     state
@@ -231,6 +233,7 @@ pub(crate) fn prepare_organization_change(
     if let Some(receipt) = existing {
         return Ok((replay(receipt, &request, access)?, false));
     }
+
     ensure_targets(&request.change, access)?;
     let after = access.organizations.changed(&request, change_id, actor_id, at)?;
     let receipt = OrganizationChangeReceipt {
@@ -379,6 +382,7 @@ mod tests {
             state(),
         );
         assert!(matches!(ensure_targets(&change, &limited), Err(Error::Forbidden(_))));
+
         let access = company_access(state());
         let request = request(change);
         let (receipt, persist) = prepare_organization_change(
@@ -392,6 +396,7 @@ mod tests {
         )
         .unwrap();
         assert!(persist);
+
         let current = company_access(receipt.after.clone());
         let (_, persist) = prepare_organization_change(
             false,
@@ -404,6 +409,7 @@ mod tests {
         )
         .unwrap();
         assert!(!persist);
+
         let mut altered = request;
         if let OrganizationOperation::UpdatePersonProfile { profile } = &mut altered.change {
             profile.name = Some("另一个姓名".into());

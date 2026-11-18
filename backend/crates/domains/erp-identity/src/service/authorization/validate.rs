@@ -17,6 +17,7 @@ impl AuthorizationService {
         for dependency in &access.dependencies {
             dependency.validate(executor).await?;
         }
+
         access.ensure_current(executor)?;
         executor.next_read();
         Ok(())
@@ -31,6 +32,7 @@ impl AuthorizationService {
         if !proof.needs_revalidation(&self.token, executor)? {
             return Ok(());
         }
+
         let model = self
             .mappings
             .get(&proof.context.permission)
@@ -61,6 +63,7 @@ impl AuthorizationService {
             .await
         }
         .map_err(revalidation_error)?;
+
         if current.version != proof.version
             || current.rule != proof.rule
             || current.whole_rule != proof.whole_rule
@@ -100,6 +103,7 @@ mod tests {
                 matches!(revalidation_error(error), Error::ConflictError(message) if message.starts_with("DATA_SCOPE_CHANGED"))
             );
         }
+
         assert!(
             matches!(revalidation_error(Error::Internal("storage".into())), Error::Internal(message) if message == "storage")
         );

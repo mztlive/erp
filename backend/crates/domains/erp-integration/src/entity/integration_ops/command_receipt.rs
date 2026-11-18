@@ -131,6 +131,7 @@ impl IntegrationCommandReceipt {
             result,
             audit_event_id,
         };
+
         value.validate()?;
         if !identity.matches_receipt(
             &value.actor_id,
@@ -164,6 +165,7 @@ impl IntegrationCommandReceipt {
                 "integration.direct_reconciliation"
             },
         };
+
         if self.schema_version != 1
             || self.fingerprint_version != 1
             || self.base.is_deleted()
@@ -207,12 +209,14 @@ impl IntegrationCommandReceipt {
         {
             return Err(Error::ConflictError("幂等键已用于不同命令".to_string()));
         }
+
         self.validate()?;
         if self.fingerprint != identity.fingerprint()
             || self.idempotency_key_hash != identity.idempotency_key_hash()
         {
             return Err(Error::ConflictError("幂等键已用于不同命令".to_string()));
         }
+
         T::from_result(self.result.clone())
     }
 }
@@ -253,10 +257,12 @@ mod tests {
         let result: ActionReceiptResult = value.recover(&identity(b"payload"), "actor").unwrap();
         assert_eq!(result.outcome, IntegrationActionOutcome::ResultUnknown);
         assert_eq!(result.business_result_reference.as_deref(), Some("business-result"));
+
         let wire = serde_json::to_string(&value).unwrap();
         assert!(!wire.contains("\"same-key\""));
         let restored: IntegrationCommandReceipt = serde_json::from_str(&wire).unwrap();
         assert!(restored.recover::<ActionReceiptResult>(&identity(b"payload"), "actor").is_ok());
+
         assert!(matches!(
             value.recover::<ActionReceiptResult>(&identity(b"other"), "actor"),
             Err(Error::ConflictError(_))
@@ -271,11 +277,13 @@ mod tests {
             value.recover::<ActionReceiptResult>(&identity(b"payload"), "actor"),
             Err(Error::ConflictError(_))
         ));
+
         value.actor_id = "actor".to_string();
         assert!(matches!(
             value.recover::<ActionReceiptResult>(&identity(b"payload"), "actor"),
             Err(Error::Internal(_))
         ));
+
         let value = receipt();
         assert!(matches!(
             value.recover::<CompletionReceiptResult>(&identity(b"payload"), "actor"),
@@ -304,6 +312,7 @@ mod tests {
             value.recover::<CompletionReceiptResult>(&identity, "actor").unwrap().terminal_evidence_reference,
             "terminal:fact"
         );
+
         let identity = IntegrationCommandIdentity::new(
             "actor",
             "integration.direct_reconciliation",
@@ -326,6 +335,7 @@ mod tests {
         )
         .unwrap();
         assert!(value.recover::<DirectReceiptResult>(&identity, "actor").unwrap().is_terminal);
+
         let mut invalid = result;
         invalid.is_terminal = false;
         assert!(

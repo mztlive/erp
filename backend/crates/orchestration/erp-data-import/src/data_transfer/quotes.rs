@@ -69,6 +69,7 @@ impl BusinessTransfers {
         if lines.is_empty() || lines.len() > 200 {
             return Err(Error::ValidationError("每次生成 1 至 200 条商品".into()));
         }
+
         let mut products = Vec::new();
         let mut offerings = Vec::new();
         let mut seen = HashSet::new();
@@ -96,6 +97,7 @@ impl BusinessTransfers {
         let products = source["products"].as_array().ok_or_else(|| Error::Internal("商品资料缺失".into()))?;
         let images = self.images(products).await?;
         let authorization = self.workbook_evidence("source", &source, products).await?;
+
         let input = input.clone();
         let bytes = spawn_blocking(move || archive(&source, &input, &images))
             .await
@@ -111,6 +113,7 @@ fn archive(source: &Value, input: &Value, images: &HashMap<String, Vec<u8>>) -> 
     if selected_suppliers.is_empty() || selected_suppliers.len() > 200 {
         return Err(Error::ValidationError("每次选择 1 至 200 家供应商".into()));
     }
+
     let groups = groups(source, selected_lines, selected_suppliers)?;
     let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
     let mut size = 0;
@@ -120,6 +123,7 @@ fn archive(source: &Value, input: &Value, images: &HashMap<String, Vec<u8>>) -> 
         if size > 50 * 1024 * 1024 {
             return Err(Error::ValidationError("报价表文件包超过 50 MiB，请缩小范围".into()));
         }
+
         let name: String = name
             .chars()
             .map(|c| if c.is_control() || "\\/:*?\"<>|".contains(c) { '_' } else { c })
@@ -170,6 +174,7 @@ fn quote_book(
     }
     write_row(sheet, 3, &HEADERS.map(str::to_owned)).map_err(xlsx)?;
     quote_rows(sheet, rows, images)?;
+
     let meta = book.add_worksheet();
     meta.set_name("回导信息").map_err(xlsx)?.set_very_hidden(true);
     for (i, value) in [
@@ -185,6 +190,7 @@ fn quote_book(
     {
         meta.write_string(i as u32, 0, value).map_err(xlsx)?;
     }
+
     delivery(&mut book, rows)?;
     book.save_to_buffer().map_err(xlsx)
 }
@@ -259,6 +265,7 @@ fn quote_rows(sheet: &mut Worksheet, rows: &[Value], images: &HashMap<String, Ve
         ];
         values.extend(std::iter::repeat_n(String::new(), HEADERS.len() - 10));
         values.push(json!({"lineId":l["line_id"],"skuId":l["sku_id"]}).to_string());
+
         let n = u32::try_from(i + 4).map_err(|_| Error::ValidationError("商品数量超限".into()))?;
         write_row(sheet, n, &values).map_err(xlsx)?;
         sheet.set_row_height(n, 66).map_err(xlsx)?;
@@ -308,6 +315,7 @@ fn groups(
             .flatten()
             .find(|p| p["sku_id"] == line["sku_id"])
             .ok_or_else(|| Error::ConflictError("商品已不可售，请重新查询".into()))?;
+
         for offering in source["offerings"]
             .as_array()
             .into_iter()
@@ -320,6 +328,7 @@ fn groups(
             if group.1.iter().any(|r| r["line"]["line_id"] == line["line_id"]) {
                 continue;
             }
+
             let codes = source["offerings"]
                 .as_array()
                 .into_iter()
@@ -336,6 +345,7 @@ fn groups(
             group.1.push(json!({"line":line,"product":product,"codes":codes}));
         }
     }
+
     check_coverage(&groups, selected_lines, selected_suppliers)?;
     Ok(groups)
 }
@@ -382,6 +392,7 @@ mod tests {
         assert_eq!(zip.len(), 1);
         let mut xlsx = Vec::new();
         zip.by_index(0).unwrap().read_to_end(&mut xlsx).unwrap();
+
         let result = parse_files(
             &[json!({"file_name":"报价.xlsx","content_base64":STANDARD.encode(&xlsx)})],
             &source,
@@ -390,6 +401,7 @@ mod tests {
         .unwrap();
         assert_eq!(result["issues"], json!([]));
         assert_eq!(result["skipped"], 1);
+
         let mut workbook = ZipArchive::new(Cursor::new(xlsx)).unwrap();
         for i in 0..workbook.len() {
             let mut text = String::new();

@@ -49,8 +49,10 @@ impl SupplierSettlementService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
+
         context.ensure_permission(&supplier_settlement::STATEMENT_LIST, executor)?;
         ensure_scope_version(params.scope_version.as_deref(), &context.scope_version)?;
+
         let org_ids = expand_org_filter(
             &self.access(),
             query.org_unit_ids.as_ref().map(|ids| ids.as_slice()),
@@ -63,6 +65,7 @@ impl SupplierSettlementService {
         filter.authorized_scope = Some(context.clone());
         filter.handler_open_statement_ids = handler_open_statement_ids;
         filter.business_org_unit_ids = org_ids.map(|ids| ids.into_iter().collect());
+
         let mut view = self.load_statement_page(&filter, context, executor).await?;
         context.validate(executor).await?;
         view.empty_reason = None;
@@ -113,6 +116,7 @@ impl SupplierSettlementService {
             .supplier_settlement_statements()
             .aggregate_supplier_settlement_statement_stats(filter, executor)
             .await?;
+
         let items = page.items.into_iter().map(statement_row_view).collect::<Vec<_>>();
         Ok(list_view(items, page.total, filter, stats, context))
     }
@@ -307,6 +311,7 @@ fn extend_edit_actions(
         ));
         return;
     }
+
     if access.append_evidence {
         actions.push("APPEND_EVIDENCE".into());
     } else {
@@ -317,6 +322,7 @@ fn extend_edit_actions(
         ));
     }
     extend_preparer_actions(access, pending, actions, blockers);
+
     if access.resolve_difference {
         actions.push("RESOLVE_DIFFERENCE".into());
     } else {
@@ -345,6 +351,7 @@ fn extend_preparer_actions(
             ));
         }
     }
+
     if !access.submit {
         blockers.push(super::review::review_blocker(
             "SUBMIT_REVIEW",

@@ -91,6 +91,7 @@ impl OfferingHandoverReceipt {
     /// 异载荷保留稳定冲突，损坏身份返回内部错误。
     pub fn ensure_matches(&self, command: &CommandReceipt) -> Result<()> {
         self.validate()?;
+
         match command.match_structured(&self.command) {
             StructuredReceiptMatch::SamePayload => Ok(()),
             StructuredReceiptMatch::DifferentPayload => {
@@ -142,6 +143,7 @@ mod tests {
         let receipt = receipt();
         assert!(receipt.ensure_matches(&command("normalized-payload")).is_ok());
         assert!(matches!(receipt.ensure_matches(&command("other")), Err(Error::ConflictError(_))));
+
         let encoded = serde_json::to_string(&receipt).unwrap();
         assert!(!encoded.contains("\"key\""));
         let restored: OfferingHandoverReceipt = serde_json::from_str(&encoded).unwrap();
@@ -155,18 +157,23 @@ mod tests {
         let mut changed = original.clone();
         changed.command.actor_id = "other".into();
         cases.push(changed);
+
         let mut changed = original.clone();
         changed.result.offering_id = "other".into();
         cases.push(changed);
+
         let mut changed = original.clone();
         changed.result_schema_version = 2;
         cases.push(changed);
+
         let mut changed = original.clone();
         changed.result.version = 0;
         cases.push(changed);
+
         let mut changed = original;
         changed.audit_event_id.clear();
         cases.push(changed);
+
         for changed in cases {
             assert!(matches!(
                 changed.ensure_matches(&command("normalized-payload")),

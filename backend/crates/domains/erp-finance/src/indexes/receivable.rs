@@ -243,7 +243,6 @@ mod tests {
     #[test]
     fn receivable_account_identity_is_unique_and_aging_indexes_exist() {
         let indexes = receivable_account_indexes();
-
         let identity =
             indexes.iter().find(|index| name(index) == Some("uk_receivable_accounts_sales_order")).unwrap();
         assert_eq!(identity.keys, doc! { "sales_order_id": 1, "account_seq": 1 });
@@ -256,7 +255,6 @@ mod tests {
     #[test]
     fn receivable_entry_identity_covers_the_full_business_key() {
         let indexes = receivable_entry_indexes();
-
         let identity =
             indexes.iter().find(|index| name(index) == Some("uk_receivable_entries_identity")).unwrap();
         assert_eq!(
@@ -280,6 +278,7 @@ mod tests {
                 && index.keys == doc! { "pending_allocations.receivable_entry_id": 1, "deleted_at": 1 }
                 && index.options.as_ref().and_then(|options| options.unique) != Some(true)
         }));
+
         assert!(
             receipt_allocation_indexes()
                 .iter()
@@ -289,6 +288,7 @@ mod tests {
             name(index) == Some("idx_receipt_allocations_entry_time")
                 && index.keys == doc! { "receivable_entry_id": 1, "allocated_at": 1 }
         }));
+
         assert!(
             receivable_entry_offset_indexes()
                 .iter()
@@ -299,6 +299,7 @@ mod tests {
                 .iter()
                 .any(|index| index.keys == doc! { "increase_entry_id": 1 })
         );
+
         assert!(
             customer_receipt_indexes().iter().any(|index| name(index) == Some("uk_customer_receipts_no"))
         );

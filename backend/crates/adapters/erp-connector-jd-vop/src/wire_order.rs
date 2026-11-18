@@ -193,12 +193,15 @@ mod tests {
         let mut omitted_children = source.clone();
         omitted_children.as_object_mut().unwrap().remove("childJdOrderIdList");
         assert!(from_value::<JdOrder>(omitted_children).unwrap().is_reservation_root());
+
         let mut uncertain = source.clone();
         uncertain.as_object_mut().unwrap().remove("orderState");
         assert!(!from_value::<JdOrder>(uncertain).unwrap().is_reservation_root());
+
         let mut split = source.clone();
         split["childJdOrderIdList"] = json!([101]);
         assert!(!from_value::<JdOrder>(split).unwrap().is_reservation_root());
+
         let mut confirmed = source;
         confirmed["orderState"]["confirmState"] = json!(1);
         assert!(!from_value::<JdOrder>(confirmed).unwrap().is_reservation_root());
@@ -211,6 +214,7 @@ mod tests {
             source["orderExtInfo"] = json!({marker:1});
             assert!(from_value::<JdOrder>(source).unwrap().requires_special_fulfillment());
         }
+
         let mut ordinary = reservation();
         ordinary["orderExtInfo"] = json!({"kmjhyy":0});
         assert!(!from_value::<JdOrder>(ordinary).unwrap().requires_special_fulfillment());

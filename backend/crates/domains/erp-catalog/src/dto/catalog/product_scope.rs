@@ -179,6 +179,7 @@ impl ProductListParams {
     /// 销售价为负、下限高于上限、排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ProductListQuery> {
         validate_sales_price_range(self.sales_price_min, self.sales_price_max)?;
+
         Ok(ProductListQuery {
             owner_user_ids: self.owner_user_ids.clone(),
             procurement_owner_user_ids: self.procurement_owner_user_ids.clone(),

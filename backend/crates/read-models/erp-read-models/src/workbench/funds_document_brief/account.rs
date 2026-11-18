@@ -34,10 +34,12 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let accounts = self.funds_reader().read_receivable_accounts(&ids, executor).await?;
         if accounts.is_empty() {
             return Ok(());
         }
+
         let sales_order_ids = accounts.iter().map(|item| item.sales_order_id.to_string()).collect::<Vec<_>>();
         let sales_nos = self.sales_order_numbers(&sales_order_ids, executor).await?;
         let party_ids =
@@ -51,6 +53,7 @@ impl WorkbenchFactsReader<'_> {
             )
             .await?;
         let due_dates = self.receivable_account_due_dates(&accounts, executor).await?;
+
         for account in accounts {
             let sales_no = sales_nos.get(&account.sales_order_id.to_string()).cloned();
             let counterparty = party_names.get(&account.counterparty_party_id.to_string()).cloned();
@@ -61,6 +64,7 @@ impl WorkbenchFactsReader<'_> {
                 tax_profile_nos.get(&account.counterparty_party_id.to_string()).map(String::as_str),
             );
             let due_date = due_dates.get(&account.base.id).map(ToString::to_string);
+
             let mut fact = receivable_fact_display(
                 authority_mapping::receivable_account_fact(
                     &account,
@@ -91,11 +95,13 @@ impl WorkbenchFactsReader<'_> {
             );
             push_section(&mut sections, "开票抬头资料", Some(tax_profile_label.as_str()), false);
             push_section(&mut sections, "应收最早到期日", due_date.as_deref(), false);
+
             if let Some(voucher) = voucher {
                 push_section(&mut sections, "卡券有效期", voucher.expiry_label.as_deref(), false);
                 push_section(&mut sections, "面值结构", voucher.face_summary.as_deref(), true);
                 let total_count = (voucher.total_count > 0).then(|| format!("{} 张", voucher.total_count));
                 push_section(&mut sections, "卡券张数", total_count.as_deref(), true);
+
                 push_section(
                     &mut sections,
                     "票款金额",
@@ -140,6 +146,7 @@ impl WorkbenchFactsReader<'_> {
                 Some(format_yuan(&account.open_invoiceable_total)).as_deref(),
                 true,
             );
+
             let card_summary = voucher
                 .filter(|item| item.total_count > 0)
                 .map(|item| format!("卡券 {} 张", item.total_count));
@@ -187,10 +194,12 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let accounts = self.funds_reader().read_payable_accounts(&ids, executor).await?;
         let supplier_names = self.payable_supplier_names(&accounts, executor).await?;
         let purchase_nos = self.payable_purchase_numbers(&accounts, executor).await?;
         let due_dates = self.payable_due_dates(&accounts, executor).await?;
+
         for account in accounts {
             let supplier = supplier_names.get(&account.supplier_id.to_string()).cloned();
             let purchase_no = purchase_nos.get(&account.source_document_id).cloned();

@@ -51,6 +51,7 @@ pub fn apply_rule_list_facts(
     for view in views {
         view.owner_names =
             view.owner_user_ids.iter().map(|owner| facts.owner_names.get(owner).cloned()).collect();
+
         if let Some(sku_id) = view.sku_id.as_ref() {
             let key = sku_id.as_ref();
             if let Some(sku_no) = facts.sku_nos.get(key) {
@@ -58,6 +59,7 @@ pub fn apply_rule_list_facts(
             }
             view.sku_name = facts.sku_names.get(key).cloned();
         }
+
         if let Some(category_id) = view.category_id.as_ref() {
             view.category_name = facts.category_names.get(category_id.as_ref()).cloned();
         }

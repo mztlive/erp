@@ -150,10 +150,12 @@ impl DemoPersonScope {
         if actions.is_empty() {
             return Ok(None);
         }
+
         let term = Self::term(login, &business.resource, business.default_self, &business.dimensions)?;
         if business.default_self && term.scope_type == DataScopeType::SelfOwned {
             return Ok(None);
         }
+
         let request = SavePersonScopeRequest {
             resource: business.resource.clone(),
             actions: actions.clone(),
@@ -192,6 +194,7 @@ impl DemoPersonScope {
             !company && internal && default_self && defaults.self_accounts.iter().any(|value| value == login);
         let department =
             !company && internal && defaults.department_accounts.iter().any(|value| value == login);
+
         Ok(PersonScopeTerm {
             scope_type: if own {
                 DataScopeType::SelfOwned

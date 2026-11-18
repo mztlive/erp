@@ -35,6 +35,7 @@ pub async fn supersede_purchase_executions(
         prepare_execution_funds_replacement(db, execution, actor, executor).await?;
         prepare_replacement(db, execution, replacement_revision, executor).await?;
     }
+
     for execution in &mut existing {
         if purchase.fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect {
             retire_api_delivery_draft(db, purchase, execution, actor.id(), executor).await?;
@@ -42,6 +43,7 @@ pub async fn supersede_purchase_executions(
         stop_tracking(db, execution, executor).await?;
         db.supplier_api_order_executions().update(execution, executor).await?;
     }
+
     if !existing.is_empty() {
         let audit = actor.clone().resource_log(
             "purchase_order.api_execution_supersede",
@@ -119,6 +121,7 @@ async fn retire_api_delivery_draft(
     if delivery.base.deleted_at != 0 {
         return Err(Error::ConflictError("原 API 草稿已被其他操作退役，请核对执行关系后重试".into()));
     }
+
     close_api_delivery_task(db, &delivery, actor_id, executor).await?;
     db.deliveries().soft_delete(&mut delivery, executor).await?;
     Ok(())

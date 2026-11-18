@@ -545,10 +545,12 @@ mod tests {
         let documents = (1..=3)
             .map(|id| TracedDocument { id, visits: visits.clone(), fail: id == 2 })
             .collect::<Vec<_>>();
+
         let borrowed = insert_many(&collection, documents.as_slice(), &mut NoTransaction).await.unwrap_err();
         assert!(matches!(borrowed, Error::DatabaseError(_)));
         assert!(borrowed.to_string().contains("document-2-failed"));
         assert_eq!(*visits.lock().unwrap(), [1, 2]);
+
         visits.lock().unwrap().clear();
         let owned = insert_many(&collection, documents, &mut NoTransaction).await.unwrap_err();
         assert!(matches!(owned, Error::DatabaseError(_)));
@@ -561,8 +563,10 @@ mod tests {
         let collection = traced_collection();
         let mut executor = ReadExecutor::default();
         let before = executor.boundary().unwrap();
+
         insert_many(&collection, Vec::<TracedDocument>::new(), &mut executor).await.unwrap();
         assert!(before.is_current(&executor));
+
         let document = TracedDocument { id: 1, visits: Arc::default(), fail: true };
         let error = insert_many(&collection, vec![document], &mut executor).await.unwrap_err();
         assert!(matches!(error, Error::DatabaseError(_)));

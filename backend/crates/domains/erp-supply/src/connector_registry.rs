@@ -78,6 +78,7 @@ impl SupplierConnectorRegistry {
         if connection.connector_type != Some(kind) {
             return Err(invalid());
         }
+
         let connector = self.notification_connector(connection)?;
         if connector.connection_id().as_ref() != connection.base.id || connector.callbacks().is_none() {
             return Err(invalid());
@@ -110,6 +111,7 @@ impl SupplierConnectorRegistry {
                 summary: "登记协议与适配器实现不一致".into(),
             });
         }
+
         self.adapters.insert(kind, runtime);
         Ok(())
     }
@@ -469,6 +471,7 @@ mod tests {
         let mut connection = connection();
         assert!(registry.catalog_connector_types().is_empty());
         assert!(registry.catalog_policy(&connection).unwrap().is_none());
+
         let adapter = Arc::new(RecordingAdapter::default());
         registry.register(SupplierConnectorType::Dangaoshushu, adapter.clone()).unwrap();
         assert_eq!(registry.catalog_connector_types(), vec![SupplierConnectorType::Dangaoshushu]);
@@ -477,6 +480,7 @@ mod tests {
         assert_eq!(policy.sync_interval_seconds, 300);
         assert_eq!(policy.incremental, IncrementalSupport::Complete);
         assert_eq!(*adapter.0.lock().unwrap(), vec!["policy"]);
+
         connection.connector_type = None;
         assert!(registry.catalog_policy(&connection).unwrap().is_none());
         assert_eq!(*adapter.0.lock().unwrap(), vec!["policy"]);
@@ -534,6 +538,7 @@ mod tests {
             registry.health_check(&connection, SupplierHealthCheckType::Connectivity).await.unwrap_err().code,
             "SUPPLIER_CONNECTOR_UNAVAILABLE"
         );
+
         let first = Arc::new(RecordingAdapter::default());
         let replacement = Arc::new(RecordingAdapter::default());
         registry.register(SupplierConnectorType::Dangaoshushu, first.clone()).unwrap();
@@ -541,6 +546,7 @@ mod tests {
             registry.register(SupplierConnectorType::Dangaoshushu, replacement.clone()).unwrap_err().code,
             "SUPPLIER_CONNECTOR_DUPLICATE"
         );
+
         registry.health_check(&connection, SupplierHealthCheckType::Connectivity).await.unwrap();
         assert_eq!(*first.0.lock().unwrap(), ["health"]);
         assert!(replacement.0.lock().unwrap().is_empty());

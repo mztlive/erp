@@ -54,6 +54,7 @@ pub async fn load_creation_basis_facts(
     if sku_ids.is_empty() {
         return Ok(CreationBasisFacts::default());
     }
+
     let offerings = db
         .supplier_offerings()
         .find_many_sorted(
@@ -77,6 +78,7 @@ pub async fn load_creation_basis_facts(
         .collect::<Vec<_>>();
     let availabilities =
         db.supplier_offering_availabilities().find_by_offering_ids(&offering_ids, executor).await?;
+
     let supplier_ids = unique_supplier_ids(&offerings);
     let suppliers = db.supplier_accounts().find_accounts_by_ids(&supplier_ids, executor).await?;
     let profile_revision_ids = suppliers
@@ -88,7 +90,9 @@ pub async fn load_creation_basis_facts(
         db.supplier().list_commercial_profiles_by_ids(&profile_revision_ids, executor).await?;
     let supplier_names =
         super::supplier_names::current_legal_names_by_account_ids(db, &supplier_ids, executor).await?;
+
     let deliveries = delivery_facts(db, &offerings, &supplier_ids, executor).await?;
+
     Ok(CreationBasisFacts {
         source_inquiry_id: None,
         deliveries,
@@ -348,6 +352,7 @@ mod isolation_tests {
         db.party_revisions().create(&party_a_revision, &mut NoTransaction).await.expect("主体修订写入失败");
         db.parties().create(&party_b, &mut NoTransaction).await.expect("主体写入失败");
         db.party_revisions().create(&party_b_revision, &mut NoTransaction).await.expect("主体修订写入失败");
+
         let mut supplier_a = supplier("sup-a", "party-a");
         supplier_a.current_commercial_profile_revision_id =
             Some(SupplierCommercialProfileRevisionId::new("profile-a"));
@@ -364,6 +369,7 @@ mod isolation_tests {
             .create(&commercial_profile("profile-b", "sup-b"), &mut NoTransaction)
             .await
             .expect("商务资料写入失败");
+
         for (offering_id, sku_id, supplier_id) in [
             ("offering-1", "sku-1", "sup-a"),
             ("offering-2", "sku-1", "sup-b"),

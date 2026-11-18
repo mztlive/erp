@@ -37,6 +37,7 @@ pub struct LinearTransitionDraft {
 /// 节点为空、键非法或存在重复时返回错误。
 pub fn generate_linear_transitions(node_keys: &[String]) -> ModelResult<Vec<LinearTransitionDraft>> {
     let keys = normalize_keys(node_keys)?;
+
     let mut drafts = Vec::with_capacity(keys.len() * 2);
     for (index, from) in keys.iter().enumerate() {
         let next = keys.get(index + 1);
@@ -83,6 +84,7 @@ pub fn build_linear_transitions(
     if drafts.len() != transition_ids.len() {
         return Err(ModelError::InvalidField("线性连线身份数量不匹配"));
     }
+
     drafts
         .into_iter()
         .zip(transition_ids)
@@ -124,6 +126,7 @@ fn normalize_keys(node_keys: &[String]) -> ModelResult<Vec<&str>> {
     if node_keys.is_empty() {
         return Err(ModelError::InvalidField("线性流程至少需要一个节点"));
     }
+
     let mut seen = HashSet::with_capacity(node_keys.len());
     let mut keys = Vec::with_capacity(node_keys.len());
     for key in node_keys {
@@ -188,6 +191,7 @@ mod tests {
             generate_linear_transitions(&["界".repeat(NODE_KEY_MAX_LEN / 3 + 1)]),
             Err(ModelError::InvalidField("节点键过长"))
         );
+
         assert_eq!(
             generate_linear_transitions(&["\t 节点 \n".into(), "节点".into()]),
             Err(ModelError::InvalidField("节点键不能重复"))

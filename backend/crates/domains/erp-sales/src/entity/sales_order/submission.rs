@@ -290,12 +290,14 @@ impl SalesOrderSubmission {
         if data.working_copy_version == 0 {
             return Err(Error::from("草稿版本必须为正整数"));
         }
+
         let submitted_by =
             normalize_required_text(data.submitted_by, "提交人不能为空", SUBMITTER_MAX_LEN, "提交人过长")?;
         let snapshots = HeaderSnapshots::build(&data.snapshot)?;
         let project_name = normalize_optional_text(data.project_name, "项目名称", PROJECT_NAME_MAX_LEN)?;
         let business_remark =
             normalize_optional_text(data.business_remark, "业务备注", BUSINESS_REMARK_MAX_LEN)?;
+
         Self::validate_card_projection(
             data.business_type,
             data.voucher_category_sku_id.as_ref(),
@@ -441,6 +443,7 @@ impl SalesOrderSubmission {
                     return Err(Error::from("非卡券提交不得携带卡券字段"));
                 },
             };
+
         let submitted_date: BusinessDate = submitted_at.as_utc().date_naive().to_string().parse()?;
         if receivable_due_date < submitted_date {
             return Err(Error::from("应收到期日不得早于销售单提交日"));
@@ -615,6 +618,7 @@ impl SalesOrderSubmissionLine {
         )?;
         let spec_snapshot = normalize_optional_text(data.spec_snapshot, "规格", SPEC_MAX_LEN)?;
         let unit_snapshot = normalize_optional_text(data.unit_snapshot, "单位", UNIT_MAX_LEN)?;
+
         let built = build_line_groups(data.line_type, data.goods, data.voucher, data.sales_tax_rate)?;
         built.ensure_supply_price()?;
 
@@ -704,6 +708,7 @@ mod tests {
                     goods.pricing_mode = SalesPricingMode::Gift;
                     goods.unit_price_gross = price("0");
                 }
+
                 let result = SalesOrderSubmissionLine::new(
                     SalesOrderSubmissionLineId::new("sl-supply"),
                     SalesOrderSubmissionId::new("s-supply"),
@@ -889,6 +894,7 @@ mod tests {
                 data.voucher_expiry_at = (mask & 2 != 0).then_some(Instant::from_unix_secs(1_850_000_000));
                 data.receivable_due_date =
                     (mask & 4 != 0).then(|| BusinessDate::from_ymd(2026, 10, 31).unwrap());
+
                 let result = SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-card"), data);
                 match (business_type, mask) {
                     (BusinessType::Voucher, 7) | (BusinessType::GoodsService, 0) => {
@@ -929,6 +935,7 @@ mod tests {
         assert_eq!(SalesOrderSubmission::next_submission_no(0).unwrap(), 1);
         assert_eq!(SalesOrderSubmission::next_submission_no(7).unwrap(), 8);
         assert!(SalesOrderSubmission::next_submission_no(u32::MAX).is_err());
+
         assert!(submission.matches_receipt_identity("o-1", "sales-1"));
         assert!(!submission.matches_receipt_identity("o-2", "sales-1"));
         assert!(!submission.matches_receipt_identity("o-1", "sales-2"));
@@ -967,7 +974,6 @@ mod tests {
     fn status_machine_approve_reject_supersede() {
         let mut submission =
             SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), header_data()).unwrap();
-
         submission.reject("reviewer").unwrap();
         assert_eq!(submission.stable.status(), SubmissionStatus::Rejected);
         assert!(submission.approve("reviewer").is_err(), "驳回后不可通过");
@@ -981,6 +987,7 @@ mod tests {
         let mut superseded =
             SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-3"), header_data()).unwrap();
         superseded.mark_superseded("system").unwrap();
+
         assert!(SubmissionStatus::Approved.allowed_next().is_empty());
         assert!(SubmissionStatus::Superseded.allowed_next().is_empty());
         assert!(ensure_transition(SubmissionStatus::Rejected, SubmissionStatus::InReview).is_err());

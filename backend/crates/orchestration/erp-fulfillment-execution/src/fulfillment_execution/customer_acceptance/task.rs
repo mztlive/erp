@@ -163,6 +163,7 @@ async fn create_customer_acceptance_task(
     let owner_user_id = order.sales_owner_user_id.clone();
     let rbac = authorization.clone();
     ensure_customer_acceptance_owner_eligible(db, &rbac, &owner_user_id, executor).await?;
+
     let task = WorkItem::new_with_responsibility_key(
         erp_core::ids::WorkItemId::new(next_id()),
         WorkItemData {
@@ -271,6 +272,7 @@ async fn ensure_customer_acceptance_owner_eligible(
         },
         Err(error) => return Err(error.into()),
     }
+
     rbac.permissions(&actor, &[], executor)
         .await?
         .map(|qualified| qualified.account().clone())
@@ -388,6 +390,7 @@ mod tests {
         let order = order_owned_by("sales-1");
         assert!(ensure_task_identity(&task_owned_by("sales-1"), &order).is_ok());
         assert!(ensure_task_identity(&task_owned_by("creator-legacy"), &order).is_err());
+
         let moved = order_owned_by("sales-2");
         assert!(ensure_task_identity(&task_owned_by("sales-1"), &moved).is_err());
         assert!(ensure_task_identity(&task_owned_by("sales-2"), &moved).is_ok());

@@ -49,10 +49,12 @@ impl SalesSelectionService {
         {
             return Ok(replay);
         }
+
         let id = SalesSelectionBookletId::new(id_generator::next_id());
         let book = copy_booklet(source, req.expected_version, id.clone(), customer, actor_id)?;
         self.db.sales_selection_booklets().create(&book, executor).await?;
         self.copy_batch(source, &book, executor).await?;
+
         let view = self.detail_view(&book, None, executor).await?;
         self.store_idempotency(
             IdempotencyStoreInput {
@@ -95,6 +97,7 @@ impl SalesSelectionService {
                 )
             })
             .collect::<Vec<_>>();
+
         let items = domain
             .list_effective_items(&source.base.id, source_batch, executor)
             .await?
@@ -107,6 +110,7 @@ impl SalesSelectionService {
                 )
             })
             .collect::<Vec<_>>();
+
         domain.insert_members_and_items(&members, &items, executor).await?;
         Ok(())
     }

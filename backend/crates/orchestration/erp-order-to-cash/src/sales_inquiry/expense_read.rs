@@ -97,6 +97,7 @@ impl InquiryExpenseReadService {
                 executor,
             )
             .await?;
+
         let sources = ExpenseSourceReadService::new(self.db.clone(), self.authorization.clone());
         let order = sources.require_order(sales_id, actor, executor).await?;
         let view = self.procurement_candidate_view(sales_id, order.customer_id.as_ref(), executor).await?;
@@ -120,6 +121,7 @@ impl InquiryExpenseReadService {
         {
             return Err(Error::NotFound("询价费用来源不存在或不适用".into()));
         }
+
         let Some(round) = inquiry.acceptances.last().map(|acceptance| acceptance.feedback_round) else {
             return Ok(InquiryExpenseCandidates { items: vec![] });
         };
@@ -132,6 +134,7 @@ impl InquiryExpenseReadService {
             .fee_bases(&inquiry.base.id, feedback.requirement_version, round, executor)
             .await?;
         let items = build_candidates(&inquiry, sales_id, round, &bases, Instant::now())?;
+
         let latest = SalesInquiryService::new(self.db.clone()).require(&source.inquiry_id, executor).await?;
         if latest.base.version != inquiry.base.version {
             return Err(Error::ConflictError("询价费用或可用余额已变化，请重新查询".into()));
@@ -199,6 +202,7 @@ impl InquiryExpenseReadService {
         {
             return Err(Error::NotFound("询价费用来源不存在或不适用".into()));
         }
+
         let Some(round) = inquiry.acceptances.last().map(|acceptance| acceptance.feedback_round) else {
             return Ok(FinancialInquiryExpenseCandidates { items: vec![] });
         };
@@ -206,6 +210,7 @@ impl InquiryExpenseReadService {
             .into_iter()
             .map(FinancialInquiryExpenseCandidate::from)
             .collect();
+
         let latest = SalesInquiryService::new(self.db.clone()).require(&source.inquiry_id, executor).await?;
         if latest.base.version != inquiry.base.version {
             return Err(Error::ConflictError("询价费用或可用余额已变化，请重新查询".into()));
@@ -226,6 +231,7 @@ fn build_candidates(
         .iter()
         .find(|feedback| feedback.round == round)
         .ok_or_else(|| Error::Internal("询价费用快照缺失".into()))?;
+
     let mut items = Vec::new();
     for allocation in
         inquiry.fee_allocations.iter().filter(|allocation| allocation.sales_order_id == sales_id)
@@ -340,6 +346,7 @@ mod tests {
             payee_supplier_id: Some("internal-supplier".into()),
             payment_term_code: Some("internal-payment".into()),
         };
+
         let response = serde_json::to_value(FinancialInquiryExpenseCandidate::from(value)).unwrap();
         assert!(response.get("payee_supplier_id").is_none());
         assert!(response.get("payment_term_code").is_none());

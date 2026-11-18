@@ -97,6 +97,7 @@ async fn runtime_admin_preserves_same_role_management_and_independent_stock_deta
     ];
     grant(&identity, &[("manager", &required), ("stock-reader", &[inventory::STOCK_ADJUSTMENT_DETAIL])]);
     cancel(&service).await.unwrap();
+
     for missing in 0..required.len() {
         let partial = required
             .iter()
@@ -114,8 +115,10 @@ async fn runtime_admin_preserves_same_role_management_and_independent_stock_deta
         );
         assert!(matches!(cancel(&service).await, Err(Error::Forbidden(_))));
     }
+
     grant(&identity, &[("manager", &required)]);
     assert!(matches!(cancel(&service).await, Err(Error::Forbidden(_))));
+
     grant(&identity, &[("manager", &required), ("stock-reader", &[inventory::STOCK_ADJUSTMENT_DETAIL])]);
     identity.scopes.lock().unwrap().values_mut().next().unwrap().role_clauses[0].warehouse_ids =
         ["other-warehouse".into()].into();
@@ -145,6 +148,7 @@ async fn cancellation_rejects_missing_sources_wrong_types_and_unversioned_facts_
         *facts.objects.lock().unwrap() = vec![root];
         assert!(matches!(cancel(&service).await, Err(Error::ValidationError(_))), "{invalid}");
     }
+
     assert!(matches!(
         service
             .require(

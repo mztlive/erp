@@ -71,6 +71,7 @@ pub(in crate::supplier_deposits) async fn identity_facts(
     if !payer.is_active() || payer.company_profile.is_none() {
         return Err(IdentityError::BusinessLogicError("预存款付款主体必须是有效的我方公司".into()));
     }
+
     let supplier = db
         .supplier_accounts()
         .find_by_id(&identity.supplier_id, executor)
@@ -240,6 +241,7 @@ mod tests {
         assert!(
             matches!(payer, QueryFragment::Match(filter) if filter == doc! {"identity.payer_party_id": {"$in": ["payer"]}})
         );
+
         let organization =
             mapping.predicate(&AccessFact::OrganizationIn(["org".into()].into()), &context(), None).unwrap();
         let QueryFragment::Exists { collection, bindings, pipeline } = organization else {
@@ -286,10 +288,12 @@ mod tests {
         assert_eq!(bindings.get_str("payer").unwrap(), "$identity.payer_party_id");
         assert_eq!(bindings.get_str("supplier").unwrap(), "$identity.supplier_id");
         assert_eq!(bindings.get_str("account_deleted").unwrap(), "$deleted_at");
+
         let payer = pipeline[0].get_document("$match").unwrap();
         assert_eq!(payer.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(payer.get_str("status").unwrap(), PartyStatus::Active.as_str());
         assert_eq!(payer.get_document("company_profile").unwrap(), &doc! {"$type": "object"});
+
         let supplier = pipeline[1].get_document("$lookup").unwrap();
         assert_eq!(supplier.get_str("from").unwrap(), Database::SUPPLIER_ACCOUNTS);
         assert_eq!(supplier.get_document("let").unwrap(), &doc! {"supplier_id": "$$supplier"});

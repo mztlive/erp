@@ -183,6 +183,7 @@ impl PurchaseOrderSubmission {
         ensure_header_triple(data.gross_amount, data.net_amount, data.tax_amount, || {
             format!("提交表头金额三元组不守恒（{submission_no}）")
         })?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             purchase_order_id: data.purchase_order_id,
@@ -282,6 +283,7 @@ impl PurchaseOrderSubmission {
                 tax_amount: draft.tax_amount,
             },
         )?;
+
         formal.submit(submitted_at, submitted_by)?;
         Ok(formal)
     }
@@ -362,6 +364,7 @@ impl PurchaseOrderSubmission {
         if self.status != SubmissionStatus::Pending {
             return Err(Error::from("只有待审核的提交才能记录审核结论"));
         }
+
         let reviewed_by =
             normalize_required_text(reviewed_by.into(), "审核人不能为空", ACTOR_MAX_LEN, "审核人标识过长")?;
         let (status, reason_code, comment) = match decision {
@@ -381,6 +384,7 @@ impl PurchaseOrderSubmission {
                 normalize_optional_text(comment, "审核说明", REVIEW_COMMENT_MAX_LEN)?,
             ),
         };
+
         self.status = status;
         self.reviewed_at = Some(reviewed_at);
         self.reviewed_by = Some(reviewed_by);
@@ -459,6 +463,7 @@ impl PurchaseOrderSubmission {
             net = net.checked_add(line.net_amount);
             tax = tax.checked_add(line.tax_amount);
         }
+
         if gross != self.gross_amount || net != self.net_amount || tax != self.tax_amount {
             return Err(Error::from("采购提交表头金额与冻结明细汇总不一致"));
         }
@@ -637,6 +642,7 @@ mod tests {
             PurchaseOrderSubmission::next_submission_no(std::slice::from_ref(&numbered)).unwrap(),
             "SUB-000010"
         );
+
         let formal = PurchaseOrderSubmission::freeze_from_draft(
             PurchaseOrderSubmissionId::new("sub-10"),
             "SUB-000010".to_string(),
@@ -648,6 +654,7 @@ mod tests {
         assert_eq!(formal.status, SubmissionStatus::Pending);
         assert_eq!(formal.payment_subject, draft.payment_subject);
         assert_eq!(formal.content_source(), "SUBMISSION");
+
         assert!(!formal.reviewer_is_separated("buyer-1"));
         assert!(formal.reviewer_is_separated("finance-1"));
         formal.ensure_pending().unwrap();
@@ -661,6 +668,7 @@ mod tests {
         let source =
             PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new("line-1"), goods_line_data())
                 .unwrap();
+
         let frozen = PurchaseOrderSubmissionLine::freeze_from_draft(
             PurchaseOrderSubmissionLineId::new("line-2"),
             PurchaseOrderSubmissionId::new("draft-1"),
@@ -717,6 +725,7 @@ mod tests {
         assert_eq!(rejected.status, SubmissionStatus::Rejected);
         assert_eq!(rejected.review_reason_code.as_deref(), Some("COST_OR_TAX"));
         assert_eq!(rejected.review_comment.as_deref(), Some("税率需复核"));
+
         rejected.mark_superseded().unwrap();
         assert_eq!(rejected.status, SubmissionStatus::Superseded);
     }

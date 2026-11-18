@@ -58,6 +58,7 @@ pub(crate) fn same_role_permissions(permission: &Permission) -> Vec<Permission> 
     if let Some(required) = records::requirements(permission) {
         return required;
     }
+
     let mut required = vec![permission.clone()];
     if [
         sales_inquiry::COMMANDS_SALES_CREATE,
@@ -192,6 +193,7 @@ pub(super) fn ensure_target(permission: &Permission, kind: ActionKind, target: T
             Err(Error::ValidationError("此权限不支持该授权目标".into()))
         };
     }
+
     let allowed = match kind {
         ActionKind::Function => matches!(target, TargetForm::Operation),
         ActionKind::Task => {
@@ -405,6 +407,7 @@ pub(crate) fn binding_condition(permission: &Permission, output: &QueryOutput) -
             Some(&capability_scope(permission)?),
         )?);
     }
+
     match kind {
         ActionKind::Source => {
             let output =
@@ -466,6 +469,7 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     required.extend(work_items::qualifications(permission));
     required.extend(records::independent(permission));
     required.extend(records::optional(permission));
+
     required.sort();
     required.dedup();
     required
@@ -617,6 +621,7 @@ mod tests {
                       grants: &BTreeSet<(ResourceKind, String)>| {
             data_condition(permission, Some(scope)).unwrap().allows_object("user", &object, grants).unwrap()
         };
+
         assert!(allows(&sales_order::DETAIL, &scope, &BTreeSet::new()));
         scope.user_limit = Some(ScopeClause::default());
         assert!(!allows(&sales_order::DETAIL, &scope, &BTreeSet::new()));
@@ -633,6 +638,7 @@ mod tests {
                 .allows_object("user", &object, &BTreeSet::new())
                 .unwrap()
         );
+
         let company = ResolvedScope {
             role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
             user_limit: None,
@@ -655,8 +661,10 @@ mod tests {
         task.assignee_id = FactValue::Known(Some("user".into()));
         task.participants = FactValue::Known(BTreeSet::new());
         assert!(!rule.allows_object("user", &task, &BTreeSet::new()).unwrap());
+
         task.participants = FactValue::Known(["user".into()].into());
         assert!(rule.allows_object("user", &task, &BTreeSet::new()).unwrap());
+
         task.participants = FactValue::Missing;
         assert!(matches!(
             rule.allows_object("user", &task, &BTreeSet::new()),

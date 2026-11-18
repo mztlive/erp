@@ -68,6 +68,7 @@ impl<'a> ProcurementResponsibilityResolutionBatch<'a> {
         if lines.is_empty() || lines.len() > RESOLUTION_BATCH_MAX_LINES {
             return Err(Error::from("采购责任解析行数必须在1-200之间"));
         }
+
         let mut keys = HashSet::with_capacity(lines.len());
         for line in lines {
             let normalized = normalize_required_text_ref(
@@ -280,14 +281,17 @@ impl<'a> ProcurementResponsibilityRuleSet<'a> {
         })? {
             return Ok(rule);
         }
+
         if let Some(rule) = self.resolve_category_chain(&context.category_chain)? {
             return Ok(rule);
         }
+
         if let Some(rule) = self.unique_match(ProcurementResponsibilityRuleType::ProductKind, |rule| {
             rule.product_kind == Some(context.product_kind)
         })? {
             return Ok(rule);
         }
+
         self.unique_match(ProcurementResponsibilityRuleType::DefaultDispatcher, |_| true)?
             .ok_or_else(|| Error::from("采购责任解析失败：未配置具体默认调度人"))
     }
@@ -507,6 +511,7 @@ mod tests {
             ),
             rule("sku", ProcurementResponsibilityRuleType::Sku, Some("sku-1"), None, None, "sku-owner"),
         ];
+
         let set = ProcurementResponsibilityRuleSet::new(&rules);
         assert_eq!(set.resolve(&context()).unwrap().owner_user_ids[0], "sku-owner");
 
@@ -518,6 +523,7 @@ mod tests {
             ProcurementResponsibilityRuleSet::new(&kind_only).resolve(&context()).unwrap().owner_user_ids[0],
             "kind-owner"
         );
+
         assert_eq!(
             ProcurementResponsibilityRuleSet::new(&rules[..1]).resolve(&context()).unwrap().owner_user_ids[0],
             "default-owner"
@@ -537,6 +543,7 @@ mod tests {
                 .to_string()
                 .contains("多条")
         );
+
         assert!(
             ProcurementResponsibilityRuleSet::new(&[])
                 .resolve(&context())
@@ -544,6 +551,7 @@ mod tests {
                 .to_string()
                 .contains("默认调度人")
         );
+
         assert!(
             ProcurementResponsibilityContext::new(SkuId::new("sku-1"), Vec::new(), ProductKind::Physical,)
                 .is_err()

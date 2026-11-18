@@ -74,12 +74,14 @@ mod tests {
     fn public_catalog_has_unique_permissions_and_consistent_groups() {
         let mut permissions = HashMap::new();
         let mut groups = HashMap::new();
+
         for module in MODULES {
             for (name, definition) in module.entries {
                 let permission = definition.permission;
                 assert_eq!(Permission::parse(permission.to_string()).unwrap(), *permission);
                 assert!(permissions.insert(permission, (module.name, name)).is_none(), "{permission}");
                 assert!(!definition.description.is_empty(), "{permission}");
+
                 if let Some(previous) = groups.insert(definition.group.name, definition.group.description) {
                     assert_eq!(previous, definition.group.description);
                 }

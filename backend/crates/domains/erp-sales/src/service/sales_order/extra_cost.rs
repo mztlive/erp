@@ -44,6 +44,7 @@ pub async fn ensure_attributable_line(
         .iter()
         .find(|line| &line.sales_order_line_id == line_id && line.line_type == LineType::GoodsService)
         .ok_or_else(invalid_line)?;
+
     let goods = db
         .sales_order_goods_service_line_revisions()
         .list_by_revision_line_ids(&[SalesOrderRevisionLineId::new(line.base.id.clone())], executor)

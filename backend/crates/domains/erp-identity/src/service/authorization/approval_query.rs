@@ -59,6 +59,7 @@ impl AuthorizationService {
                 if !qualified.same_role(&required) {
                     continue;
                 }
+
                 let source_context = AccessContext { resource: source.resource().into(), ..context.clone() };
                 let rule = self
                     .approval_source_condition(

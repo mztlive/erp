@@ -127,6 +127,7 @@ impl InquiryImportValidation {
         let mut result = Self { data: InquiryRequirementData::default(), errors: vec![], merges: vec![] };
         let products = validate_products(products, skus, &mut result.errors);
         let groups = group_deliveries(deliveries, &products, &mut result.errors);
+
         for ((code, due, terms), rows) in groups {
             let Some(product) = products.get(code) else {
                 continue;
@@ -140,6 +141,7 @@ impl InquiryImportValidation {
                 result.data.lines.push(line);
             }
         }
+
         check_product_totals(&products, deliveries, &result.data, &mut result.errors);
         result.data.note = products
             .values()
@@ -147,6 +149,7 @@ impl InquiryImportValidation {
             .map(|product| format!("{}：{}", product.raw.sku_code, product.raw.note))
             .collect::<Vec<_>>()
             .join("\n");
+
         if result.errors.is_empty()
             && let Err(error) = result.data.normalize(true)
         {
@@ -174,6 +177,7 @@ fn validate_products<'a>(
             push_issue(errors, "商品清单", row.row_number, "SKU编码", "商品不存在或不可选用");
             continue;
         };
+
         if row.unit != sku.unit_code {
             push_issue(errors, "商品清单", row.row_number, "单位", "单位与当前公司商品不一致");
         }
@@ -223,6 +227,7 @@ fn group_deliveries<'a>(
             );
             continue;
         }
+
         if due_instant(&row.due_date).is_none() {
             push_issue(
                 errors,
@@ -276,6 +281,7 @@ fn build_line(
     } else {
         sum_quantities(allocations.iter().map(|allocation| allocation.quantity)).ok()?
     };
+
     Some(InquiryRequirementLine {
         line_id: old.map_or_else(&mut *new_id, |line| line.line_id.clone()),
         sku_id: product.sku.sku_id.clone(),
@@ -311,6 +317,7 @@ fn line_allocations(
                 continue;
             },
         };
+
         let key = allocation_key(&allocation);
         groups.entry(key.clone()).or_default().push(row.row_number);
         if let Some(existing) = allocations.iter_mut().find(|value| allocation_key(value) == key) {
@@ -324,6 +331,7 @@ fn line_allocations(
             allocations.push(allocation);
         }
     }
+
     add_merges(&product.raw.sku_code, &allocations, &groups, &mut result.merges);
     if allocations.len() > 100 {
         push_issue(
@@ -377,6 +385,7 @@ fn delivery_allocation(
     let region_code =
         resolve_region(&row.province, &row.city, &row.district).map_err(|error| ("区县", error))?;
     let quantity = positive_quantity(&row.quantity, scale).map_err(|error| ("配送数量", error))?;
+
     let mut allocation = InquiryDeliveryAllocation {
         allocation_id: String::new(),
         recipient: row.recipient.clone(),
@@ -409,6 +418,7 @@ fn check_product_totals(
         .filter(|row| invalid_deliveries.contains(&row.row_number))
         .map(|row| row.sku_code.as_str())
         .collect();
+
     for (code, product) in products {
         // 字段错误会使配送行无法形成完整需求，此时不把部分结果误报为数量不守恒。
         if invalid_products.contains(&product.raw.row_number) || incomplete_codes.contains(code.as_str()) {
@@ -515,6 +525,7 @@ fn resolve_region(province: &str, city: &str, district: &str) -> std::result::Re
             province_matches && city_matches
         })
         .filter_map(|node| RegionCode::parse_leaf(node.code).ok());
+
     match (candidates.next(), candidates.next()) {
         (Some(region), None) => Ok(region),
         _ => Err("省、市、区县无法唯一匹配，请填写完整标准名称或地区代码".into()),
@@ -604,6 +615,7 @@ impl InquiryImportReceipt {
         {
             return Err(Error::Internal("导入命令回执无效".into()));
         }
+
         if self.actor_id != actor
             || self.inquiry_id != inquiry
             || self.result.preview_id != preview_id
@@ -659,6 +671,7 @@ impl InquiryImportPreview {
         if self.expires_at <= now {
             return Err(Error::ConflictError("导入预览已过期，请重新预览".into()));
         }
+
         if !self.errors.is_empty() {
             return Err(Error::ValidationError("预览存在错误，修正或移除错误行后重新预览".into()));
         }
@@ -741,6 +754,7 @@ mod tests {
         assert_eq!(result.data.lines[0].product_name, "系统商品名");
         assert_eq!(result.data.lines[0].allocations[0].phone, "02100123456");
         assert_ne!(result.data.lines[0].line_id, result.data.lines[1].line_id);
+
         let again = validate(&[product()], &rows, &result.data);
         assert_eq!(again.data, result.data);
     }
@@ -828,6 +842,7 @@ mod tests {
         let result = validate(&[product()], &[missing_phone], &InquiryRequirementData::default());
         assert_eq!(result.errors.len(), 1, "{:?}", result.errors);
         assert_eq!(result.errors[0].message, "请填写联系电话");
+
         let mut missing_address = delivery(2, "3", "2026-11-01");
         missing_address.address.clear();
         let result = validate(&[product()], &[missing_address], &InquiryRequirementData::default());
@@ -965,6 +980,7 @@ mod tests {
         assert!(receipt.recover("command", "actor", "inquiry", "preview", &"b".repeat(64)).is_err());
         assert!(receipt.recover("command", "actor", "other-inquiry", "preview", &"a".repeat(64)).is_err());
         assert!(receipt.recover("command", "other-actor", "inquiry", "preview", &"a".repeat(64)).is_err());
+
         let mut invalid = receipt;
         invalid.result.inquiry_id = "other-inquiry".into();
         assert!(invalid.recover("command", "actor", "inquiry", "preview", &"a".repeat(64)).is_err());
@@ -978,6 +994,7 @@ mod tests {
         let mut preview = preview();
         let fingerprint = "a".repeat(64);
         assert!(preview.ensure_creatable("customer", &fingerprint, true, 100).is_err());
+
         preview.creation_customer_id = Some("customer".into());
         preview.inquiry_id.clear();
         preview.expected_version = 0;
@@ -987,6 +1004,7 @@ mod tests {
         assert!(preview.ensure_creatable("customer", &fingerprint, false, 100).is_err());
         assert!(preview.ensure_creatable("customer", &fingerprint, true, 200).is_err());
         assert!(preview.ensure_confirmable("inquiry", 1, &fingerprint, true, 100).is_err());
+
         preview.result = Some(InquiryImportResult {
             inquiry_id: "created".into(),
             preview_id: preview.base.id.clone(),
@@ -995,6 +1013,7 @@ mod tests {
             allocation_count: 1,
         });
         assert!(preview.ensure_creatable("customer", &fingerprint, true, 100).is_err());
+
         preview.result = None;
         push_issue(&mut preview.errors, "配送需求", 2, "配送数量", "数量非法");
         assert!(preview.ensure_creatable("customer", &fingerprint, true, 100).is_err());

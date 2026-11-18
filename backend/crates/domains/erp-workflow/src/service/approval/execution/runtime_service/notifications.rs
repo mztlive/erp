@@ -95,6 +95,7 @@ pub(super) async fn persist_cancel_notifications(
     {
         return Err(Error::Internal("受阻取消通知意图不匹配".to_string()));
     }
+
     let record = crate::entity::approval_integration::ApprovalNotificationOutbox::enqueue(
         erp_core::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
         intent.dedup_key.clone(),
@@ -175,6 +176,7 @@ pub(super) async fn runtime_admin_notification_recipients(
             Err(error) => return Err(error),
         }
     }
+
     recipients.sort();
     recipients.dedup();
     Ok(recipients)
@@ -226,6 +228,7 @@ pub(super) async fn persist_decision_notifications(
             ),
             _ => unreachable!("unsupported decision event was rejected above"),
         };
+
         let record = crate::entity::approval_integration::ApprovalNotificationOutbox::enqueue(
             erp_core::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
             intent.dedup_key.clone(),
@@ -346,12 +349,14 @@ pub(super) async fn persist_resume_notifications(
         if intent.dedup_key != expected_dedup {
             return Err(Error::Internal("原审批人恢复通知去重键不匹配".to_string()));
         }
+
         let primary = facts.new_execution.assignee_participant_id.as_str();
         let recipients = match intent.event_kind {
             EventKind::Entered => requested_recipients(writes, facts.new_execution),
             EventKind::Resumed => notification_recipients(primary, [facts.submitted_by]),
             _ => unreachable!("unsupported resume event was rejected above"),
         };
+
         let record = crate::entity::approval_integration::ApprovalNotificationOutbox::enqueue(
             erp_core::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
             intent.dedup_key.clone(),
@@ -379,6 +384,7 @@ fn decision_event_execution<'a>(
     intent: &NotificationIntent,
 ) -> Result<&'a ApprovalNodeExecution> {
     use crate::entity::approval_integration::ApprovalNotificationEventKind as EventKind;
+
     let event_execution = match intent.event_kind {
         EventKind::Entered | EventKind::NodeApproved | EventKind::NodeRejected | EventKind::Blocked => {
             let execution_id = intent
@@ -398,6 +404,7 @@ fn decision_event_execution<'a>(
         EventKind::Completed => facts.ended_execution,
         _ => return Err(Error::Internal("审批决定计划包含非决定通知事件".to_string())),
     };
+
     let expected_dedup = match intent.event_kind {
         EventKind::Entered => format!("entered:{}", event_execution.base.id),
         EventKind::NodeApproved => format!("approved:{}", event_execution.base.id),

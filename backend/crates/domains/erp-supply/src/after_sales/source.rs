@@ -36,6 +36,7 @@ pub fn validate_settlement_source(
             }
         }
     }
+
     let mut groups: BTreeMap<&str, Vec<&SettlementEvidence>> = BTreeMap::new();
     for row in rows {
         if !period.contains(row.evidence.value.occurred_at)
@@ -46,6 +47,7 @@ pub fn validate_settlement_source(
         }
         groups.entry(&row.evidence.value.order.merchant_order_no).or_default().push(row);
     }
+
     for (order, entries) in groups {
         let lines: Vec<_> =
             source.lines.iter().filter(|line| line.supplier_fulfillment_order_id.as_ref() == order).collect();
@@ -81,6 +83,7 @@ fn validate_totals(
             SettlementMovement::Refund { amount, .. } => refunds.push(*amount),
         }
     }
+
     let goods_total = sum_amounts(goods.into_iter())?;
     let freight_total = sum_amounts(freight.into_iter())?;
     let service_total = sum_amounts(service.into_iter())?;
@@ -91,6 +94,7 @@ fn validate_totals(
         .and_then(|value| value.checked_add(service_total.to_decimal()))
         .and_then(|value| value.checked_sub(refund_total.to_decimal()))
         .ok_or_else(|| Error::ValidationError("结算金额溢出".into()))?;
+
     if Amount::try_from(gross)? != sum_amounts(lines.iter().map(|l| l.supplier_billed_gross))?
         || freight_total != sum_amounts(lines.iter().map(|l| l.freight_gross))?
         || service_total != sum_amounts(lines.iter().map(|l| l.service_fee_gross))?
@@ -204,6 +208,7 @@ mod tests {
         let row = row();
         let source = source(&row);
         validate_settlement_source(&source, std::slice::from_ref(&row)).unwrap();
+
         for mode in 0..6 {
             let mut changed = row.clone();
             let mut source = source.clone();
@@ -217,6 +222,7 @@ mod tests {
             }
             assert!(validate_settlement_source(&source, &[changed]).is_err());
         }
+
         let mut linked = row;
         linked.source_evidence_id = Some(source.base.id.clone());
         validate_settlement_source(&source, &[linked]).unwrap();

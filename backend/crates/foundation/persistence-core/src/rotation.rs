@@ -61,6 +61,7 @@ pub async fn advance(
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::UnsupportedDeployment("游标写入必须加入调用方事务"));
     }
+
     let update = expected.update_document(last_owner_user_id)?;
     mongo_ops::update_one(
         &db.collection::<DispatchRotation>(collection),
@@ -141,6 +142,7 @@ mod tests {
             } else {
                 assert!(matches!(error, Error::UnsupportedDeployment("游标写入必须加入调用方事务")));
             }
+
             assert!(!before.is_current(&executor));
             let current = executor.boundary().unwrap();
             assert!(current.is_current(&executor));
@@ -156,12 +158,14 @@ mod tests {
         let assigned = assigned.get_document("$set").unwrap();
         assert_eq!(assigned.get_str("last_owner_user_id").unwrap(), "member-a");
         assert_eq!(assigned.get_i64("revision").unwrap(), 1);
+
         let current = DispatchRotation { last_owner_user_id: Some("member-a".into()), revision: 7 };
         let guarded = current.update_document(current.last_owner_user_id.as_deref()).unwrap();
         let guarded = guarded.get_document("$set").unwrap();
         assert_eq!(guarded.get_str("last_owner_user_id").unwrap(), "member-a");
         assert_eq!(guarded.get_i64("revision").unwrap(), 8);
         assert_eq!(current.revision, 7);
+
         let invalid = DispatchRotation { revision: i64::MAX, ..Default::default() };
         assert!(matches!(invalid.update_document(Some("member-b")), Err(Error::EntityMetadataOutOfRange(_))));
     }

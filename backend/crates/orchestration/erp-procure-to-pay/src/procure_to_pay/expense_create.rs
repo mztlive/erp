@@ -84,6 +84,7 @@ impl PurchaseOrderProcess {
             Some(sales_order_id),
             &req.idempotency_key,
         )?;
+
         let authorization = self.authorization.clone();
         let command = ExpenseCommand {
             sales_order_id: sales_order_id.to_string(),
@@ -135,9 +136,11 @@ async fn apply_expense_create(
     {
         return Ok(result);
     }
+
     let sales_order = load_expense_source(db, rbac, command, executor).await?;
     let (order, submission, lines) =
         prepare_expense_draft(db, ports, &sales_order, command, executor).await?;
+
     if lines.iter().any(|line| line.expense.as_ref().is_some_and(|fee| fee.inquiry_source.is_some())) {
         ProcurementInquiryEligibility::new(db.clone(), rbac.clone())
             .ensure_permission(
@@ -148,9 +151,11 @@ async fn apply_expense_create(
             .await?;
     }
     reserve_purchase(db, &order, &lines, &command.actor, executor).await?;
+
     let write =
         PreparedDraftWrite { order: &order, submission: &submission, lines: &lines, actor: &command.actor };
     let document = write_prepared_draft(db, ports, &write, executor).await?;
+
     let purchase_order_id = order.base.id.clone();
     let bundle = CreatedDraftBundle {
         order,
@@ -170,6 +175,7 @@ async fn apply_expense_create(
         executor,
     )
     .await?;
+
     let receipt = CreationReceipt {
         purchase_order_id,
         purchase_no: submitted.purchase_no,
@@ -216,6 +222,7 @@ async fn prepare_expense_draft(
         price_basis: SupplyPriceBasis::Dropship,
         inquiry_quote_revision_id: None,
     };
+
     let supplier_name = supplier_name(db, &command.req, executor).await?;
     let payment_subject =
         load_payment_subject(db, &order.sales_order_id, &order.sales_order_revision_id, executor).await?;
@@ -230,9 +237,11 @@ async fn prepare_expense_draft(
         executor,
     )
     .await?;
+
     let submission_id = PurchaseOrderSubmissionId::new(submission.base.id.clone());
     let lines = build_expense_draft_lines(&submission_id, &command.req.lines)?.lines;
     order.attach_draft_submission(submission_id)?;
+
     ports.access(db.clone()).ensure_create_and_submit(&command.actor, &order, executor).await?;
     Ok((order, submission, lines))
 }

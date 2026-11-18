@@ -24,6 +24,7 @@ impl BrandImportProcess {
         let job = self.job_access.snapshot(id, actor).await?;
         ensure_download(&job)?;
         let source = self.source(&job).await?;
+
         let db = self.db.clone();
         let access = self.job_access.clone();
         let actor = actor.clone();

@@ -54,12 +54,14 @@ pub fn rollup_by_stable_key(
         .iter()
         .map(|line| (line.base.id.as_str(), purchase_line_stable_key(line)))
         .collect::<HashMap<_, _>>();
+
     let mut totals: HashMap<String, Decimal> = HashMap::new();
     for (line_id, value) in by_revision_line {
         let key = keys.get(line_id.as_ref()).cloned().unwrap_or_else(|| line_id.to_string());
         let total = totals.entry(key).or_default();
         *total = total.checked_add(value.to_decimal()).ok_or_else(|| Error::from("累计数量超出范围"))?;
     }
+
     totals.into_iter().map(|(key, value)| Ok((key, Quantity::try_from(value)?))).collect()
 }
 
@@ -118,6 +120,7 @@ pub fn receipt_progress_after_change(
         total += ordered;
         reached += got.min(ordered);
     }
+
     if reached >= total {
         ProgressStatus::Completed
     } else if any_received {

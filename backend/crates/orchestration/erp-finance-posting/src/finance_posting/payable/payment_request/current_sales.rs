@@ -33,6 +33,7 @@ pub(super) async fn revalidate(
         .find_by_id(frozen.sales_order_revision_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::ConflictError("付款申请来源正式销售版本不存在".into()))?;
+
     let current_revision_id = sales.stable.current_revision_id.as_deref();
     let payment_paused = current_revision_id != Some(frozen.sales_order_revision_id.as_ref())
         && payment_paused_by_source_update(db, purchase_order_id, executor).await?;
@@ -133,6 +134,7 @@ mod tests {
             SalesOrderRevisionId::new("sales-2-v1"),
         )
         .unwrap();
+
         validate(&before, "company-a", current()).unwrap();
         validate(
             &after,
@@ -189,6 +191,7 @@ mod tests {
         let mut facts = current();
         facts.payer_party_name = None;
         variants.push(facts);
+
         for facts in variants {
             assert!(matches!(validate(&frozen(), "company-a", facts), Err(Error::ConflictError(_))));
         }

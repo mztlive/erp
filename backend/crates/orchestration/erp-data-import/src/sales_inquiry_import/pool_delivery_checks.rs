@@ -35,6 +35,7 @@ pub(super) fn strip_checks(
         {
             issue(errors, DELIVERY_SHEET, 1, "表头", "请保留数量核对列及原导出的隐藏核对列");
         }
+
         // 辅助列不进入业务数据；共享公式、软件改写和缓存均直接丢弃，不执行表达式。
         row.cells.truncate(business_columns);
     }

@@ -86,6 +86,7 @@ impl SupplierCatalogAdoptionProcess {
         if preview.expires_at <= Instant::now() {
             return self.replay_expired_batch(&request, actor).await;
         }
+
         let mut rows = Vec::with_capacity(request.rows.len());
         for row in request.rows {
             let item = preview
@@ -278,9 +279,11 @@ impl SupplierCatalogAdoptionProcess {
         {
             return Ok(result);
         }
+
         let prepared =
             self.prepare_row_with_anchor(frozen, row, actor, command, group_anchor.as_ref()).await?;
         let cleanup = prepared.media.cleanup_handle();
+
         let process = self.clone();
         let actor = actor.clone();
         let outcome = self
@@ -291,6 +294,7 @@ impl SupplierCatalogAdoptionProcess {
                 Box::pin(async move { process.commit_row(execution, prepared, &actor, executor).await })
             })
             .await;
+
         cleanup.after_transaction(&outcome).await;
         match outcome {
             Ok((result, used)) => {
@@ -329,6 +333,7 @@ impl SupplierCatalogAdoptionProcess {
         if let Some(result) = self.replay(&row.item_id, row, actor, executor).await? {
             return Ok((result, false));
         }
+
         let mut item = self.load_item(&preview.connection_id, &row.item_id, executor).await?;
         preview.ensure_current_item(&item)?;
         self.db.catalog().lock_match_name(&item.name, executor).await?;
@@ -343,7 +348,9 @@ impl SupplierCatalogAdoptionProcess {
         {
             *brand_id = prepared_brand.clone();
         }
+
         let sku = self.materialize_target(&item, &resolved_row, &mut prepared, actor, executor).await?;
+
         let per_item_command = adoption_identity(&[command, &row.item_id]);
         let req = offering_request(&item, row, &sku.base.id, &per_item_command)?;
         let service = &self.services.offerings;
@@ -356,6 +363,7 @@ impl SupplierCatalogAdoptionProcess {
             },
             CommandPreparation::Replay(result) => result,
         };
+
         let result = AdoptionResult {
             item_id: row.item_id.clone(),
             product_id: sku.product_id.to_string(),
@@ -370,6 +378,7 @@ impl SupplierCatalogAdoptionProcess {
             result.offering_id.clone(),
         )?;
         self.record_source(&mut item, prepared, &result, &resolved_row.target, actor, executor).await?;
+
         self.persist_result(&item.connection_id, &result, row, command, actor, executor).await?;
         Ok((result, true))
     }
@@ -390,6 +399,7 @@ impl SupplierCatalogAdoptionProcess {
         }
         item.refresh_fingerprint()?;
         self.db.supplier_catalog_items().update(item, executor).await?;
+
         let mut initial_source = item.clone();
         initial_source.images = prepared.materialized_item.images;
         initial_source.detail_images = prepared.materialized_item.detail_images;
@@ -429,6 +439,7 @@ impl SupplierCatalogAdoptionProcess {
             result: result.clone(),
         };
         self.db.catalog_adoption_receipts().create(&receipt, executor).await?;
+
         let audit =
             actor.clone().resource_log("supplier_catalog.adopt", "product", result.product_id.clone())?;
         persist_log(&self.db, &audit, executor).await?;

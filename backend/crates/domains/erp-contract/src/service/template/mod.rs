@@ -111,6 +111,7 @@ impl ContractTemplateService {
             "contract_template",
             template.base.id.clone(),
         )?;
+
         self.db
             .client()
             .with_transaction(move |executor| {
@@ -120,6 +121,7 @@ impl ContractTemplateService {
                         .require(&actor, &contract::TEMPLATES_CREATE, AccessTarget::Operation, executor)
                         .await?;
                     service.active_company(&template.company_id, executor).await?;
+
                     service.bind_group(&template, executor).await?;
                     service.db.contract_templates().create(&template, executor).await?;
                     service.audit.persist(&audit, executor).await?;
@@ -173,6 +175,7 @@ impl ContractTemplateService {
             "contract_template",
             id.clone(),
         )?;
+
         self.db
             .client()
             .with_transaction(move |executor| {
@@ -181,10 +184,12 @@ impl ContractTemplateService {
                         .authorization
                         .require(&actor, &contract::TEMPLATES_CREATE, AccessTarget::Operation, executor)
                         .await?;
+
                     let mut template = service.template(&id, executor).await?;
                     if template.base.version != request.version {
                         return Err(Error::ConflictError("模板已变化，请刷新后重试".into()));
                     }
+
                     template.enabled = request.enabled;
                     service.db.contract_templates().update(&mut template, executor).await?;
                     service.audit.persist(&audit, executor).await?;

@@ -38,8 +38,10 @@ impl WorkbenchReadService {
                 documents.insert(key.clone(), document);
             }
         }
+
         self.purchase_search_sources(keys, &mut documents, executor).await?;
         self.related_sales_search(keys, &mut documents, executor).await?;
+
         Ok(keys
             .iter()
             .filter_map(|key| {
@@ -62,6 +64,7 @@ impl WorkbenchReadService {
         if ids.is_empty() {
             return Ok(());
         }
+
         let submissions = self
             .db
             .sales_order_submissions()
@@ -81,9 +84,11 @@ impl WorkbenchReadService {
         if ids.is_empty() {
             return Ok(());
         }
+
         let lines = self.db.sales_order_submission_lines().list_lines_by_submissions(&ids, executor).await?;
         let sku_ids = lines.iter().filter_map(|l| l.sku_id.clone()).collect::<Vec<_>>();
         let codes = self.search_sku_codes(&sku_ids, executor).await?;
+
         let by_id = selected.iter().map(|s| (s.base.id.as_str(), *s)).collect::<HashMap<_, _>>();
         for line in lines {
             let Some(s) = by_id.get(line.submission_id.as_ref()) else {
@@ -115,6 +120,7 @@ impl WorkbenchReadService {
         if ids.is_empty() {
             return Ok(());
         }
+
         let submissions = self
             .db
             .purchase_order_submissions()
@@ -130,9 +136,11 @@ impl WorkbenchReadService {
                 ))
             })
             .collect::<Vec<_>>();
+
         let lines = self.facts_reader().purchase_submission_lines(&selected, executor).await?;
         let sku_ids = lines.iter().filter_map(|l| l.sku_id.clone()).collect::<Vec<_>>();
         let codes = self.search_sku_codes(&sku_ids, executor).await?;
+
         let by_id = selected.iter().map(|s| (s.base.id.as_str(), s)).collect::<HashMap<_, _>>();
         for line in lines {
             let Some(s) = by_id.get(line.purchase_order_submission_id.as_ref()) else {

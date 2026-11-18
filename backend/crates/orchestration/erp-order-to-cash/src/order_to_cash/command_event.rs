@@ -56,6 +56,7 @@ impl SalesCommandEvent {
                 ("sales_order.handover", "sales_order", "交接销售责任", sales_order_id.to_string())
             },
         };
+
         let action = AuditAction { code, resource_type, label, version: 1, allowed_fields: &[] };
         let context = BusinessEventContext::new(actor.clone(), action)?.with_command_id(Some(id.clone()))?;
         let receipt = SalesCommandReceipt::new(
@@ -66,6 +67,7 @@ impl SalesCommandEvent {
             result,
             context.event_id().to_string(),
         )?;
+
         let content = BusinessEventContent {
             target_id,
             target_number: Some(number),
@@ -192,6 +194,7 @@ pub(super) async fn replay_submission_with_executor(
     executor: &mut dyn Executor,
 ) -> Result<Option<SubmissionView>> {
     access.current(sales_order_id, executor).await?;
+
     let Some(receipt) = load_command_receipt(
         db,
         command_id,
@@ -208,6 +211,7 @@ pub(super) async fn replay_submission_with_executor(
     let SalesCommandResult::Submitted { submission_id, .. } = receipt.result else {
         return Err(Error::Internal("销售提交回执结果种类无效".to_string()));
     };
+
     let submission = db
         .sales_order_submissions()
         .find_by_id(submission_id.as_ref(), executor)
@@ -221,6 +225,7 @@ pub(super) async fn replay_submission_with_executor(
         &submission.base.id,
         &submission.submitted_by,
     )?;
+
     let lines =
         db.sales_order_submission_lines().list_lines_by_submissions(&[submission_id], executor).await?;
     Ok(Some(erp_sales::service::sales_order::mapper::submission_view(submission, lines)))
@@ -312,6 +317,7 @@ mod tests {
             .unwrap()
             .with_command_sequence("outer-command", sequence)
             .unwrap();
+
             let log = event.context.log(event.content.clone()).unwrap();
             let structured = log.structured_event.unwrap();
             assert_eq!(structured.command_id.as_deref(), Some("outer-command"));
@@ -355,6 +361,7 @@ mod tests {
                 "event".into(),
             )
             .unwrap();
+
             validate_command_replay(
                 &receipt,
                 "command",
@@ -377,6 +384,7 @@ mod tests {
                 ),
                 Err(Error::ConflictError(_))
             ));
+
             assert!(matches!(
                 validate_command_replay(
                     &receipt,
@@ -424,12 +432,14 @@ mod tests {
         };
         assert_eq!(recover_command(unknown(), Ok(Some("original"))).unwrap(), "original");
         assert!(matches!(recover_command::<String, _>(unknown(), Ok(None)), Err(Error::OutcomeUnknown(_))));
+
         let recovered =
             recover_command::<String, _>(unknown(), Err(Error::Internal("secondary".into()))).unwrap_err();
         let Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(source)) = recovered else {
             panic!("不得覆盖首次未知提交错误");
         };
         assert_eq!(source.get_custom::<&str>(), Some(&"first commit"));
+
         assert!(
             matches!(recover_command::<String, _>(Error::ConflictError("first".into()), Err(Error::Forbidden("current access".into()))), Err(Error::Forbidden(message)) if message == "current access")
         );
@@ -464,6 +474,7 @@ mod tests {
             .unwrap();
             PersistenceError::from(MongoError::from(ErrorKind::Write(WriteFailure::WriteError(write))))
         };
+
         assert!(matches!(
             receipt_write_error(duplicate("uk_sales_command_receipts_id")),
             Error::ReceiptDuplicate(_)
@@ -487,6 +498,7 @@ mod tests {
             "event".into(),
         )
         .unwrap();
+
         validate_command_replay(
             &receipt,
             "command",
@@ -497,6 +509,7 @@ mod tests {
             &expected_key_hash,
         )
         .unwrap();
+
         receipt.idempotency_key_hash = CommandFingerprint::from_parts(["other-key".into()]);
         receipt.validate().unwrap();
         for fingerprint in ["a".repeat(64), "b".repeat(64)] {

@@ -54,6 +54,7 @@ impl FulfillmentProcess {
         let mut used = HashSet::new();
         pending.resolve_id(&mut req.evidence_attachment_id, &mut used)?;
         pending.ensure_all_used(&used)?;
+
         let confirmation = Confirmation {
             encrypted_recipient: self.sensitive_data.encrypt(req.recipient_snapshot.trim())?,
             fingerprint: ElectronicDelivery::recipient_snapshot_fingerprint(
@@ -115,11 +116,13 @@ async fn confirm(
         executor,
     )
     .await?;
+
     let domain = FulfillmentService::new(db.clone());
     let mut record = domain.prepare_electronic_confirmation(id, executor).await?;
     if record.base.version != confirmation.request.version {
         return Err(Error::ConflictError("电子交付草稿版本已变化，请刷新后重试".into()));
     }
+
     let order = purchase_context(db, &record, executor).await?;
     super::service_confirm::ensure_service_evidence_asset(
         db,
@@ -128,9 +131,11 @@ async fn confirm(
         executor,
     )
     .await?;
+
     record.apply_confirmation(confirmation.data(&record, actor))?;
     pending.persist(db, executor).await?;
     domain.persist_electronic_confirmation(&mut record, executor).await?;
+
     finish(db, task_identity, &record, &order, actor, executor).await?;
     Ok(record)
 }
@@ -175,6 +180,7 @@ async fn finish(
         executor,
     )
     .await?;
+
     if record.result == FulfillmentResult::Success {
         post_actual_cost(
             db,
@@ -190,6 +196,7 @@ async fn finish(
         )
         .await?;
     }
+
     if record.result != FulfillmentResult::Failure {
         super::customer_acceptance::task::ensure_customer_acceptance_task(
             db,
@@ -200,6 +207,7 @@ async fn finish(
         )
         .await?;
     }
+
     let audit = actor.clone().resource_log(
         "electronic_delivery.confirm",
         "electronic_delivery",

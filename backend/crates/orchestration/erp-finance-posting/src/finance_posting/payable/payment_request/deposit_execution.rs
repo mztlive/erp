@@ -79,6 +79,7 @@ impl PurchasePaymentRequestProcess {
             &req.idempotency_key,
             [req.work_item_id.to_string(), req.task_version.clone(), req.expected_version.to_string()],
         )?;
+
         let db = self.db.clone();
         let process = Self::new(db.clone(), self.rbac.clone());
         let id = id.to_owned();
@@ -104,6 +105,7 @@ impl PurchasePaymentRequestProcess {
                 })
             })
             .await;
+
         match result {
             Ok(value) => Ok(value),
             Err(original) => self.recover_deposit_execution(recovery, original).await,
@@ -143,6 +145,7 @@ impl PurchasePaymentRequestProcess {
                 })
             })
             .await;
+
         match result {
             Ok(Some(value)) => Ok(value),
             Ok(None) => Err(original),
@@ -157,6 +160,7 @@ impl DepositExecutionWrite<'_> {
         if let Some(previous) = self.replay(executor).await? {
             return Ok(previous);
         }
+
         let request = load(self.db, self.request_id, executor).await?;
         ensure_version(&request, self.input.expected_version)?;
         let task_version = expected_task_version(&self.input.task_version)?;
@@ -171,6 +175,7 @@ impl DepositExecutionWrite<'_> {
         )
         .await?;
         source::revalidate(self.db, &request, executor).await?;
+
         let PaymentRequestExecutionMethod::SupplierDeposit { account_id } = &request.data.execution_method
         else {
             return Err(Error::ValidationError("原申请未选择供应商预存款方式".into()));
@@ -182,6 +187,7 @@ impl DepositExecutionWrite<'_> {
                 "本申请没有已补齐履约资料并绑定该账户的供应商执行组".into(),
             ));
         }
+
         task.record_activity(Instant::now())?;
         self.db.work_items().update(&mut task, executor).await?;
         let audit = self.actor.clone().resource_log(
@@ -206,6 +212,7 @@ impl DepositExecutionWrite<'_> {
         if id != self.request_id {
             return Err(Error::ConflictError("原余额执行回执不属于本付款申请".into()));
         }
+
         let task = self
             .db
             .work_items()
@@ -216,11 +223,13 @@ impl DepositExecutionWrite<'_> {
             return Err(Error::Forbidden("原余额执行任务不属于当前出纳".into()));
         }
         require_task(&self.process.rbac, self.actor, &task, TaskPurpose::Payment, executor).await?;
+
         let request = load(self.db, self.request_id, executor).await?;
         let PaymentRequestExecutionMethod::SupplierDeposit { account_id } = &request.data.execution_method
         else {
             return Err(Error::ConflictError("原余额执行缺少账户依据".into()));
         };
+
         let prefix = format!("{}:", self.command.id());
         let reservations =
             reservations_for_manual_command(self.db, account_id, self.request_id, &prefix, executor).await?;
@@ -273,6 +282,7 @@ impl DepositExecutionWrite<'_> {
         if !self.connection_matches(request, account_id, group, executor).await? {
             return Ok(None);
         }
+
         let budget = execution_budget(group, self.codec)?;
         let service = SupplierDepositService::new(self.db.clone());
         self.ensure_unfunded(request, account_id, group, &budget, executor).await?;
@@ -397,6 +407,7 @@ impl DepositExecutionWrite<'_> {
                 return Ok(grant);
             }
         }
+
         let grant = SupplierDepositAuthorization::manual(
             format!("manual-{}-{}", self.command.id(), group.base.id),
             ManualDepositAuthorizationData {

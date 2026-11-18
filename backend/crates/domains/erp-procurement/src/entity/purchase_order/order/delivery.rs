@@ -63,6 +63,7 @@ impl PurchaseOrder {
         {
             return Err(Error::from("该商品已标记供应商不收运费"));
         }
+
         let waiver = PurchaseFreightWaiver::new(sales_order_line_id.clone(), reason, actor, at)?;
         self.sourcing_delivery.freight_waivers.push(waiver);
         self.stable.touch(actor);
@@ -122,6 +123,7 @@ mod tests {
             vec![judgement("sol-1", true), judgement("sol-2", false)],
         );
         assert_eq!(order.unwaived_freight_lines(), [&SalesOrderLineId::new("sol-1")]);
+
         let line = SalesOrderLineId::new("sol-1");
         order.waive_freight(&line, "供应商承担".into(), "buyer", Instant::now()).unwrap();
         assert!(order.unwaived_freight_lines().is_empty());
@@ -152,6 +154,7 @@ mod tests {
         assert_eq!(json["delivery_judgements"][0]["freight_extra"], true);
         let restored: super::PurchaseOrder = serde_json::from_value(json.clone()).unwrap();
         assert_eq!(restored.sourcing_delivery, order.sourcing_delivery);
+
         let mut legacy = json;
         let object = legacy.as_object_mut().unwrap();
         object.remove("supply_price_basis");

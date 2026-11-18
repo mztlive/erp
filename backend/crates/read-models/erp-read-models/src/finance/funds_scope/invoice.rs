@@ -67,6 +67,7 @@ impl FundsAccess {
         params.validate()?;
         let query = params.normalized().map_err(Error::from)?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
+
         let snapshot = self.checked_invoices(params, &query, actor, params.scope_version.as_deref()).await?;
         Ok(snapshot)
     }
@@ -183,6 +184,7 @@ impl FundsAccess {
         let (authorization, snapshot) = self.invoice_projection(query, actor, true, executor).await?;
         let version = invoice_scope_version(&authorization, &snapshot.versions);
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
+
         let summary = snapshot.summary(&version)?.with_balance_access(authorization.ledger_read);
         let items = snapshot
             .items
@@ -199,6 +201,7 @@ impl FundsAccess {
                 )
             })
             .collect();
+
         authorization.deliver(executor).await?;
         Ok(FundsScopedPage {
             items,
@@ -224,6 +227,7 @@ impl FundsAccess {
     ) -> Result<(FundsAuthorization, InvoiceSnapshot)> {
         let (_, authorization) =
             self.resolve_dual(actor, &receivable_permissions::INVOICE_LIST, executor).await?;
+
         let target = match query.invoice_direction {
             Some(InvoiceDirection::Purchase) => FinanceSearchTarget::PurchaseInvoice,
             _ => FinanceSearchTarget::SalesInvoice,
@@ -364,6 +368,7 @@ impl FundsAccess {
                 .collect()
         };
         allocations.sort_by_key(|view| view.allocation_seq);
+
         let mut purchase_views: Vec<_> = if whole {
             purchase.iter().map(|link| link.view.clone()).collect()
         } else {
@@ -376,6 +381,7 @@ impl FundsAccess {
                 .collect()
         };
         purchase_views.sort_by_key(|view| view.allocation_seq);
+
         let allocated = sum_invoice_signed(sales, purchase);
         ScopedInvoiceRow {
             id: row.id.clone(),
@@ -434,10 +440,12 @@ impl FundsAccess {
         let (_access, authorization) =
             self.resolve_dual(actor, &receivable_permissions::INVOICE_DETAIL, executor).await?;
         self.require_visible_root(&authorization, id, executor).await?;
+
         let filter =
             InvoiceFilter { invoice_ids: Some(vec![id.to_string()]), page_size: 1, ..Default::default() };
         let page = self.db.invoices().search_invoices(&filter, executor).await?;
         let row = page.items.into_iter().next().ok_or_else(|| Error::NotFound("发票不存在".into()))?;
+
         let sales_links = self.sales_invoice_matched_links(std::slice::from_ref(&row.id), executor).await?;
         let purchase_links =
             self.purchase_invoice_matched_links(std::slice::from_ref(&row.id), executor).await?;
@@ -450,6 +458,7 @@ impl FundsAccess {
         {
             return Err(Error::NotFound("发票不存在".into()));
         }
+
         let sales_tuples = invoice_sales_tuples(&row, sales, &sales_facts);
         let purchase_tuples = invoice_purchase_tuples(&row, purchase, &purchase_facts);
         let sales_allowed = self
@@ -464,6 +473,7 @@ impl FundsAccess {
         let purchase_allowed = self.payable_targets(&authorization, &purchase_facts, executor).await?;
         let sales_matched = matched_orders(&sales_tuples, &sales_allowed);
         let purchase_matched = matched_orders(&purchase_tuples, &purchase_allowed);
+
         let whole = self
             .whole_allowed(
                 &authorization,
@@ -476,6 +486,7 @@ impl FundsAccess {
         if !whole && sales_matched.is_empty() && purchase_matched.is_empty() {
             return Err(Error::NotFound("发票不存在".into()));
         }
+
         let data = Self::cut_invoice_row(&row, sales, purchase, &sales_matched, &purchase_matched, whole);
         let parts =
             invoice_detail_parts(&row, &sales_matched, &purchase_matched, &sales_facts, &purchase_facts);
@@ -733,6 +744,7 @@ mod tests {
         assert_eq!(row.net_amount, invoice.net_amount);
         assert_eq!(row.tax_amount, invoice.tax_amount);
         assert!(!row.permission_limited);
+
         let json = serde_json::to_value(row).unwrap();
         assert_eq!(json["net_amount"], "1139.82");
         assert_eq!(json["tax_amount"], "148.18");
@@ -766,10 +778,12 @@ mod tests {
         let matched = vec!["so-a".into()];
         let whole = FundsAccess::cut_invoice_row(&invoice, &sales, &[], &matched, &[], true);
         assert_eq!(whole.original_invoice_id.as_deref(), Some("original"));
+
         let partial = FundsAccess::cut_invoice_row(&invoice, &sales, &[], &matched, &[], false);
         assert!(partial.permission_limited);
         assert_eq!(partial.visible_allocated_share, "60".parse().unwrap());
         assert_eq!(partial.allocations.as_ref().unwrap().len(), 1);
+
         let json = serde_json::to_value(partial).unwrap();
         for field in [
             "version",
@@ -795,6 +809,7 @@ mod tests {
         ];
         let matched = vec!["so-a".into()];
         assert_eq!(sum_invoice_matched(&sales, &[], &matched, &[]), "60".parse().unwrap());
+
         let summary = build_summary(
             &invoice_summary_inputs(&sales, &[], &matched, &[]),
             &HashMap::from([("so-a".into(), "a".into())]),

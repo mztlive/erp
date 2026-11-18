@@ -162,6 +162,7 @@ impl ApprovalSubjectSnapshot {
         if reason.is_some_and(|value| value.chars().count() > 1000) {
             return Err(Error::from("重新提交说明不能超过1000字"));
         }
+
         let mut rejected = None;
         if let Some(previous) = previous {
             if previous.subject.subject_id() != self.business_object_id
@@ -180,6 +181,7 @@ impl ApprovalSubjectSnapshot {
                 rejected = Some(previous.typed_id());
             }
         }
+
         self.resubmission_reason = reason.map(ToOwned::to_owned);
         Ok(rejected)
     }
@@ -219,11 +221,13 @@ impl ApprovalSubjectSnapshot {
         for file in &files {
             file.validate()?;
         }
+
         files.sort_by(|left, right| left.file_asset_id.as_ref().cmp(right.file_asset_id.as_ref()));
         if files.windows(2).any(|pair| pair[0].file_asset_id == pair[1].file_asset_id && pair[0] != pair[1]) {
             return Err(Error::from("同一审批材料存在不同文件版本"));
         }
         files.dedup();
+
         self.material_files = files;
         Ok(self)
     }
@@ -443,12 +447,14 @@ mod tests {
             Some(old.typed_id())
         );
         assert_eq!(snapshot.resubmission_reason.as_deref(), Some("已核实，沿用原内容"));
+
         snapshot.freeze_resubmission_display().unwrap();
         let display = snapshot.display.as_ref().unwrap();
         assert_eq!(display.source.extra_sections[0].label, "重新提交说明");
         assert_eq!(display.source.extra_sections[0].value, "已核实，沿用原内容");
         assert_eq!(old.status, ApprovalProcessInstanceStatus::Rejected);
         assert_eq!(old.subject_version, 1);
+
         let encoded = serde_json::to_value(&snapshot).unwrap();
         assert_eq!(encoded["resubmission_reason"].as_str(), Some("已核实，沿用原内容"));
     }
@@ -656,6 +662,7 @@ mod tests {
         ] {
             assert!(!snapshot.allows_runtime_material(instance, kind, document, version, file));
         }
+
         let mut legacy = serde_json::to_value(&snapshot).unwrap();
         legacy.as_object_mut().unwrap().remove("material_files");
         let legacy: ApprovalSubjectSnapshot = serde_json::from_value(legacy).unwrap();
@@ -666,6 +673,7 @@ mod tests {
             1,
             "proof-1"
         ));
+
         assert!(snapshot.clone().with_material_files(vec![material(" ")]).is_err());
         let mut changed = material("proof-1");
         changed.content_hmac = "b".repeat(64);

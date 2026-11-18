@@ -43,12 +43,14 @@ impl AuthorizationService {
             };
             return Err(Error::ValidationError(message.into()));
         }
+
         if permission == &internal::WORK_ITEM_EXECUTION_QUALIFICATION {
             return self.require_work_item_qualification(actor, &target, executor).await;
         }
         if form == rules::TargetForm::Candidate && definitions::entry(permission).is_some() {
             return self.require_definition(actor, permission, &target, executor).await;
         }
+
         if matches!(target, AccessTarget::Operation) {
             let boundary = executor.boundary();
             let qualified = self.qualify(actor, permission, executor).await?;
@@ -58,6 +60,7 @@ impl AuthorizationService {
             }
             return Ok(());
         }
+
         self.require_target(actor, permission, &target, executor).await
     }
 
@@ -79,14 +82,18 @@ impl AuthorizationService {
                 executor,
             )
             .await?;
+
         let facts =
             TargetFacts::load(&self.facts, &proof.context, &proof.rule, target.borrowed()?, executor).await?;
+
         let mut source_proofs = self.approval_sources(&proof, &facts, executor).await?;
         source_proofs.extend(self.approval_decision_sources(&proof, &facts, executor).await?);
         let sources = self.work_item_sources(&proof, &facts, executor).await?;
         source_proofs.extend(sources.proofs);
+
         let grants = self.target_grants(&proof.context, &proof.rule, &facts, executor).await?;
         facts.require(&proof.context, &proof.rule, &grants, executor)?;
+
         self.validate_proof(&proof, executor).await?;
         facts.revalidate(&self.facts, &proof.context, executor).await?;
         for (context, source_facts) in &sources.facts {
@@ -95,6 +102,7 @@ impl AuthorizationService {
         for source in &source_proofs {
             self.validate_proof(source, executor).await?;
         }
+
         facts.require(&proof.context, &proof.rule, &grants, executor)?;
         for (_, source_facts) in &sources.facts {
             source_facts.ensure_current()?;
@@ -116,6 +124,7 @@ impl AuthorizationService {
         let flattened = facts.flattened()?;
         let mut resources = BTreeSet::new();
         rule.grant_resources(&mut resources);
+
         let mut grants = BTreeSet::new();
         for resource in resources {
             let ids = flattened

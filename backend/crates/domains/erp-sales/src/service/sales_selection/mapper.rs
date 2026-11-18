@@ -400,6 +400,7 @@ fn display_item_view(item: &SalesSelectionDisplayItem, booklet: &SalesSelectionB
         booklet.tiers.iter().find(|tier| &tier.tier_id == tier_id).map(|tier| tier.name.clone())
     });
     let cover = item.cover_asset_id();
+
     DisplayItemView {
         reference_prices: None,
         price_comparison: Default::default(),
@@ -641,9 +642,11 @@ mod tests {
         SelectionPriceChange::Markup { percent: "10".parse().unwrap() }
             .apply(book.status, &mut pool, &mut items)
             .unwrap();
+
         let internal = display_item_view(&items[0], &book);
         assert_eq!(internal.sku_id.as_deref(), Some("sku"));
         assert_eq!(internal.price, "11.00".parse().unwrap());
+
         let public = public_item(&items[0], &book);
         assert_eq!(public.price, internal.price);
         let public_json = serde_json::to_value(public).unwrap();
@@ -737,6 +740,7 @@ mod tests {
             },
         )
         .unwrap();
+
         let list = serde_json::to_value(SalesSelectionService::proposal_list_item(&proposal)).unwrap();
         assert!(list.get("recipient").is_none());
         assert_eq!(list["participant_id"], "person-1");
@@ -745,6 +749,7 @@ mod tests {
         for value in recipient_json.as_object().unwrap().values() {
             assert!(!list_json.contains(value.as_str().unwrap()));
         }
+
         let detail = serde_json::to_value(SalesSelectionService::proposal_view(&proposal, &[], &[])).unwrap();
         assert_eq!(detail["recipient"], recipient_json);
     }

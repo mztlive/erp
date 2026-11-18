@@ -32,6 +32,7 @@ pub(super) async fn persist_open_approval_task(
     let next_version = next_task_version(expected_task_version)?;
     let mut set_doc = serialize_to_document(item)?;
     set_doc.insert("version", next_version);
+
     let matched = mongo_ops::update_one(
         &repo.collection(),
         approval_task_cas_filter(&item.base.id, expected_task_version, approval_node_execution_id)?,
@@ -46,6 +47,7 @@ pub(super) async fn persist_open_approval_task(
         applied.base_mut().version = expected_task_version.saturating_add(1);
         return Ok(CasWriteOutcome::Applied(applied));
     }
+
     let current = repo.find_by_id(&item.base.id, executor).await?;
     Ok(classify_cas_miss(current, expected_task_version, |row| {
         approval_task_still_open(row, approval_node_execution_id)
@@ -143,6 +145,7 @@ mod tests {
             }),
             CasWriteOutcome::StatusChanged(_)
         ));
+
         assert!(matches!(
             classify_cas_miss::<WorkItem>(None, 1, |item| approval_task_still_open(item, &execution)),
             CasWriteOutcome::NotFound

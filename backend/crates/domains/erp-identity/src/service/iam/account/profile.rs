@@ -73,6 +73,7 @@ impl AccountProfileService {
             account_kind,
             "管理员不存在",
         )?;
+
         let role_ids = self.rbac.role_ids(account.kind, account.base.id.as_str()).await?;
         let permissions = self.rbac.permissions(account.kind, account.base.id.as_str()).await?;
         let roles = self.db.roles().enabled_roles(&role_ids, &mut NoTransaction).await?;
@@ -85,9 +86,11 @@ impl AccountProfileService {
             .revision(&mut NoTransaction)
             .await?
             .map_or(0, |row| row.revision);
+
         if self.rbac.current_policy_revision().await? != policy_version {
             return Err(crate::Error::ConflictError("DATA_SCOPE_CHANGED：权限已变化，请刷新".into()));
         }
+
         let mut profile = Self::build_profile(
             account,
             role_ids.into_iter().map(|id| id.to_string()).collect(),
@@ -119,7 +122,6 @@ impl AccountProfileService {
     ) -> AccountProfile {
         let AccountCore { base, secret, name, phone, kind, .. } = account;
         let subject = crate::subject(kind, base.id.as_str());
-
         AccountProfile {
             user_id: base.id,
             policy_version: 0,

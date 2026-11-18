@@ -89,6 +89,7 @@ impl SalesReviewService {
             return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
         change_order.void(actor.id())?;
+
         let mut working_copy = self
             .db
             .sales_order_working_copies()

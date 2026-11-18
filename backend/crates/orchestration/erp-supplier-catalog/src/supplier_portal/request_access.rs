@@ -202,6 +202,7 @@ impl RequestFacts {
             supplier.business_org_unit_id,
         );
         let mut root = request_root(&target, supplier_facts)?;
+
         if let Some(id) = target.offering {
             let offering = self
                 .db
@@ -318,6 +319,7 @@ mod tests {
                 assert!(check_kind(&action.permission(kind), kind).is_ok());
             }
         }
+
         assert!(check_kind(&internal::PORTAL_MATERIAL_READ, RequestKind::OfferingUpdate).is_err());
         assert!(
             check_kind(&internal::PORTAL_MATERIAL_REVIEW_OFFERING_CREATE, RequestKind::NewProduct).is_err()

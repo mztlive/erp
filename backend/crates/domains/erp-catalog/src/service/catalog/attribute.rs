@@ -57,6 +57,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::SKU_ATTRIBUTE_LIST, AccessTarget::Operation, executor)
             .await?;
+
         params.validate()?;
         let query = params.normalized()?;
         let filter = SkuAttributeFilter {
@@ -69,6 +70,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.sku_attributes().search_sku_attributes(&filter, executor).await?;
         let items = page.items.into_iter().map(SkuAttributeView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
@@ -116,6 +118,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::SKU_ATTRIBUTE_UPDATE, AccessTarget::Operation, executor)
             .await?;
+
         req.validate()?;
         let mut attribute = self.load_attribute(id, executor).await?;
         ensure_version(attribute.base.version, req.version)?;
@@ -123,6 +126,7 @@ impl CatalogService {
             SkuAttributeUpdate { name: req.name, value_type: req.value_type, status: req.status },
             actor.id(),
         )?;
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "sku_attribute.update",
@@ -169,6 +173,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::SKU_ATTRIBUTE_DELETE, AccessTarget::Operation, executor)
             .await?;
+
         let mut attribute = self.load_attribute(id, executor).await?;
         let audit = self.audit.resource_log(
             actor.clone(),
@@ -223,6 +228,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::SKU_ATTRIBUTE_VALUE_LIST, AccessTarget::Operation, executor)
             .await?;
+
         params.validate()?;
         let query = params.normalized()?;
         let filter = SkuAttributeValueFilter {
@@ -235,6 +241,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.sku_attribute_values().search_sku_attribute_values(&filter, executor).await?;
         let items = page.items.into_iter().map(SkuAttributeValueView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
@@ -284,6 +291,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::SKU_ATTRIBUTE_VALUE_UPDATE, AccessTarget::Operation, executor)
             .await?;
+
         req.validate()?;
         let mut value = self.load_attribute_value(id, executor).await?;
         ensure_version(value.base.version, req.version)?;
@@ -295,6 +303,7 @@ impl CatalogService {
             },
             actor.id(),
         )?;
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "sku_attribute_value.update",
@@ -341,6 +350,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::SKU_ATTRIBUTE_VALUE_DELETE, AccessTarget::Operation, executor)
             .await?;
+
         let mut value = self.load_attribute_value(id, executor).await?;
         let audit = self.audit.resource_log(
             actor.clone(),
@@ -424,6 +434,7 @@ mod authorization_tests {
                     )
                     .await,
             );
+
             denied(service.sku_attribute_delete_stage("missing", &actor, &mut executor).await);
             denied(service.sku_attribute_value_delete_stage("missing", &actor, &mut executor).await);
         }

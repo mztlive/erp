@@ -56,6 +56,7 @@ impl SupplierFulfillmentService {
         }
         let capabilities = self.capabilities(&connection)?;
         ensure_capability(&capabilities, SupplierApiCapabilityCode::Order)?;
+
         let mut revision_ids =
             req.items.iter().map(|item| item.supplier_offering_revision_id.clone()).collect::<Vec<_>>();
         revision_ids.sort_by(|left, right| left.as_ref().cmp(right.as_ref()));
@@ -111,6 +112,7 @@ impl SupplierFulfillmentService {
             .with_follow_up(follow_up_user_id, business_org_unit_id),
         )?;
         order.ensure_follow_up().map_err(Error::from)?;
+
         let items = self.build_place_items(&order_id, req, offerings)?;
         let action = SupplierOrderAction::new(
             SupplierOrderActionId::new(next_id()),

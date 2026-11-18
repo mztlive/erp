@@ -42,6 +42,7 @@ impl SupplierApiGovernanceProcess {
         if let Some(result) = self.replay_command(id, &command, actor).await? {
             return Ok(result);
         }
+
         let identity = CommandIdentity::new(id, actor.id(), &command)?;
         let prepared = PreparedSupplierConnectionCommand::try_from_parts(
             command.action,
@@ -110,6 +111,7 @@ impl SupplierApiGovernanceProcess {
         } else {
             None
         };
+
         let authorization = self.authorization.clone();
         let db = self.db.clone();
         let client = db.client().clone();
@@ -121,6 +123,7 @@ impl SupplierApiGovernanceProcess {
                     authorization
                         .require(&actor, &action_permission(action), AccessTarget::Operation, executor)
                         .await?;
+
                     let domain = SupplierApiService::new(db.clone());
                     let mut connection = domain
                         .prepare_status_target(&connection_id_value, expected_version, executor)
@@ -130,6 +133,7 @@ impl SupplierApiGovernanceProcess {
                         connection.record_health(HealthCheckResult::Healthy, Instant::now());
                     }
                     domain.apply_status_change(&mut connection, action, actor.id(), executor).await?;
+
                     persist_command_receipt(
                         &db,
                         CommandReceiptWrite {

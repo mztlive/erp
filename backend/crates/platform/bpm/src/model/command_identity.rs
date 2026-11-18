@@ -453,6 +453,7 @@ fn encode_field(field: &CommandPayloadField<'_>, target: &mut Vec<u8>) {
     let length_offset = target.len();
     target.extend_from_slice(&[0; 8]);
     let value_start = target.len();
+
     match field {
         CommandPayloadField::Text(value) => target.extend_from_slice(value.as_bytes()),
         CommandPayloadField::U32(value) => target.extend_from_slice(&value.to_be_bytes()),
@@ -476,6 +477,7 @@ fn encode_field(field: &CommandPayloadField<'_>, target: &mut Vec<u8>) {
             }
         },
     }
+
     let value_len = u64::try_from(target.len() - value_start).expect("载荷字节长度不超过 u64");
     target[length_offset..value_start].copy_from_slice(&value_len.to_be_bytes());
 }
@@ -524,6 +526,7 @@ mod tests {
                     CommandPayloadField::OptionalText(None),
                 ]),
             ]));
+
         assert_eq!(
             encode(payload.as_bytes()),
             concat!(
@@ -572,6 +575,7 @@ mod tests {
                     .field(CommandPayloadField::Text("b\u{1f}c"))
             )
         );
+
         assert_ne!(
             digest(CanonicalCommandPayload::new().field(CommandPayloadField::OptionalText(None))),
             digest(CanonicalCommandPayload::new().field(CommandPayloadField::OptionalText(Some("NULL"))))
@@ -588,10 +592,12 @@ mod tests {
             digest(CanonicalCommandPayload::new().field(CommandPayloadField::OptionalU64(None))),
             digest(CanonicalCommandPayload::new().field(CommandPayloadField::OptionalU64(Some(0))))
         );
+
         assert_ne!(
             digest(CanonicalCommandPayload::new().field(CommandPayloadField::Text("é"))),
             digest(CanonicalCommandPayload::new().field(CommandPayloadField::Text("e\u{301}")))
         );
+
         assert_ne!(
             digest(CanonicalCommandPayload::new().field(CommandPayloadField::Sequence(vec![
                 CommandPayloadField::Text("a"),
@@ -656,6 +662,7 @@ mod tests {
         assert!(identity.scope().as_str().starts_with("v3:"));
         assert!(identity.digest().as_str().starts_with("v3:"));
         assert_ne!(identity.scope().as_str(), identity.digest().as_str());
+
         assert_eq!(
             identity.scope().as_str(),
             "v3:34861984440bd5616d9db6f015567756b53c9eccb21ea850d05e77996c803a3c"

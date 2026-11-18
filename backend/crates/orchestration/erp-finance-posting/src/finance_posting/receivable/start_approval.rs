@@ -163,10 +163,12 @@ pub(crate) fn build_document_start_input(input: DocumentStartInput<'_>) -> Resul
     if graph.definition.definition_version != binding.approval_definition_version {
         return Err(Error::ConflictError("客户回款单绑定定义版本与已加载定义不一致".to_string()));
     }
+
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
+
     let bindings = start_bindings_from_graph(&graph, organization_id)?;
     Ok(assemble_start_input(
         graph,
@@ -284,12 +286,15 @@ pub(crate) async fn persist_customer_receipt_start_apply(
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(receipt);
     };
+
     super::customer_receipt_submit::require_allocation_sources(db, rbac, &actor, &receipt, executor).await?;
+
     claim_receipt_start(db, &writes, now, executor).await?;
     reserve_receipt(db, &receipt, executor).await?;
     // 先在同一事务写入提交字段，快照读取才能包含本次核销安排。
     let mut receipt = receipt;
     db.customer_receipts().update(&mut receipt, executor).await?;
+
     persist_runtime_writes(
         db,
         rbac,
@@ -329,6 +334,7 @@ async fn claim_receipt_start(
         .insert_command_receipt(&writes.receipt, executor)
         .await
         .map_err(map_receipt_first_write_error)?;
+
     let guarded = db
         .business_documents()
         .mark_approval_started(
@@ -384,6 +390,7 @@ pub(crate) async fn persist_runtime_writes(
         organization_id,
         now,
     } = input;
+
     let mut snapshot = persist_start_runtime(
         db,
         &rbac.authorization,
@@ -394,6 +401,7 @@ pub(crate) async fn persist_runtime_writes(
         executor,
     )
     .await?;
+
     snapshot.display = Some(
         capture_approval_display(db, snapshot.document_type, &snapshot.business_object_id, executor).await?,
     );
@@ -407,6 +415,7 @@ pub(crate) async fn persist_runtime_writes(
     )
     .await?;
     rbac.runtime.persist_start_snapshot(db, snapshot, executor).await?;
+
     persist_start_tasks(
         db,
         writes,

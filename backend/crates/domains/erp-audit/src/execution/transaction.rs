@@ -40,6 +40,7 @@ where
 {
     let audit = prepare_business_log(&audit)?;
     let context = attempt_context(&audit)?;
+
     let audit_db = db.clone();
     let write_db = audit_db.clone();
     with_attempt(db, context, move |executor| {

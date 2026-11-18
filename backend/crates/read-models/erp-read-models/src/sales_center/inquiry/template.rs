@@ -43,6 +43,7 @@ impl InquiryTemplateProduct {
                 unit,
             });
         }
+
         if !issues.is_empty() {
             let count = issues.len();
             let details = issues.into_iter().take(5).collect::<Vec<_>>().join("；");

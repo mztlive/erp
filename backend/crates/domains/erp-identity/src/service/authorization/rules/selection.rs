@@ -55,6 +55,7 @@ pub(crate) fn condition(
         };
         return Ok(AccessRule::all(vec![base, customer_condition(scope, ownership)?]));
     }
+
     if !is_selection(permission) {
         return Ok(base);
     }
@@ -77,6 +78,7 @@ pub(crate) fn binding_condition(permission: &Permission, base: AccessRule) -> Re
             customer_condition(&scope, AccessRule::Fact(AccessFact::Owned))?,
         ]));
     }
+
     if !is_selection(permission) {
         return Ok(base);
     }
@@ -226,6 +228,7 @@ mod tests {
         let rule = condition(&permission, &ordinary, &scopes, AccessRule::Allow).unwrap();
         assert!(rule.allows_object("actor", &list_object("actor"), &BTreeSet::new()).unwrap());
         assert!(!rule.allows_object("actor", &list_object("other"), &BTreeSet::new()).unwrap());
+
         let all = QualifiedPermissions::test_grants(&[
             ("read", &[customer::LIST]),
             ("all", &[customer::ALL_AUTHORIZED_LIST]),
@@ -233,6 +236,7 @@ mod tests {
         let rule = condition(&permission, &all, &scopes, AccessRule::Allow).unwrap();
         assert!(rule.allows_object("actor", &list_object("other"), &BTreeSet::new()).unwrap());
         assert!(rule.allows_object("actor", &object("actor"), &BTreeSet::new()).is_err());
+
         let limited = [(customer::LIST, customer::LIST, scope(false))];
         let rule = condition(&permission, &all, &limited, AccessRule::Allow).unwrap();
         assert!(!rule.allows_object("actor", &list_object("other"), &BTreeSet::new()).unwrap());
@@ -264,6 +268,7 @@ mod tests {
         let scopes = [(customer::DETAIL, customer::DETAIL, customer_scope.clone())];
         let rule = condition(&selection::ADMIN_IMAGE, &qualified, &scopes, AccessRule::Allow).unwrap();
         assert!(rule.allows_object("actor", &root, &BTreeSet::new()).unwrap());
+
         customer_scope.user_limit = Some(ScopeClause::default());
         let scopes = [(customer::DETAIL, customer::DETAIL, customer_scope)];
         let rule = condition(&selection::ADMIN_IMAGE, &qualified, &scopes, AccessRule::Allow).unwrap();

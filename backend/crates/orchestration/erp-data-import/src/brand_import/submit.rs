@@ -38,6 +38,7 @@ impl BrandImportProcess {
         if json.len() > 5 * 1024 * 1024 {
             return Err(Error::ValidationError("导入内容不能超过 5 MB".into()));
         }
+
         let source = CommandFingerprint::from_parts([
             hex::encode(self.codec.fingerprint_key()),
             actor.id().to_string(),
@@ -49,6 +50,7 @@ impl BrandImportProcess {
         if let Some(existing) = self.replay(&job, actor).await? {
             return Ok(existing.into());
         }
+
         let encrypted = self.codec.encrypt(&json)?;
         self.storage
             .save_with_content_type(
@@ -58,6 +60,7 @@ impl BrandImportProcess {
             )
             .await
             .map_err(|_| Error::Internal("保存品牌导入文件失败，请重试".into()))?;
+
         self.persist(job, items, actor).await
     }
 
@@ -98,6 +101,7 @@ impl BrandImportProcess {
                 })
             })
             .await;
+
         match result {
             Ok(BackgroundJobRegistration::Created) => Ok(job.into()),
             Ok(BackgroundJobRegistration::ReplaySame(existing)) => {
@@ -273,6 +277,7 @@ pub(super) mod tests {
         let (proposed, _) = fixture();
         assert_eq!(existing.request_id, proposed.request_id);
         assert_ne!(existing.base.id, proposed.base.id);
+
         let replayed = checked_replay(Some(existing.clone()), &proposed).unwrap().unwrap();
         assert_eq!(replayed.base.id, existing.base.id);
         assert_eq!(replayed.base.version, 7);
@@ -297,11 +302,13 @@ pub(super) mod tests {
         let authorization = unavailable_authorization();
         let actor = AuditActor::new("actor-1".into(), "operator".into(), AccountKind::Admin);
         let (proposed, _) = fixture();
+
         let error =
             replay_registration(&db, &authorization, &actor, &proposed, &mut SnapshotExecutor::default())
                 .await
                 .expect_err("授权设施失败时不得读取回执");
         assert!(matches!(error, Error::Internal(reason) if reason == "测试授权设施不可用"));
+
         let error = replay_registration(&db, &authorization, &actor, &proposed, &mut ReadExecutor::default())
             .await
             .expect_err("回放必须使用同一快照授权和读取");
@@ -318,6 +325,7 @@ pub(super) mod tests {
         assert_eq!(items[0].object_type.as_deref(), Some("brand_import_row"));
         assert_eq!(job.total_count, 1);
         assert!(items[0].status.is_none());
+
         same.request_fingerprint = None;
         assert!(ensure_replay(&same, &job).is_err());
         let (mut changed, _) = fixture();
@@ -325,6 +333,7 @@ pub(super) mod tests {
         assert!(ensure_replay(&changed, &job).is_err());
         let (different, _) = build_job(&request(), "actor-1", &"b".repeat(64)).unwrap();
         assert!(ensure_replay(&different, &job).is_err());
+
         let mut with_errors = request();
         with_errors.rows[0].error = Some("公式需转成文本".into());
         let (_, items) = build_job(&with_errors, "actor-1", &"c".repeat(64)).unwrap();

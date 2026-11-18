@@ -22,6 +22,7 @@ impl PolicyFacts {
             bindings: vec![],
             data_scopes: vec![],
         };
+
         for (id, state) in &self.roles {
             ensure_role(&state.role)?;
             document.roles.push(PolicyRole {
@@ -31,6 +32,7 @@ impl PolicyFacts {
                 permissions: state.permissions.clone(),
             });
         }
+
         for (id, user) in &self.users {
             if user.role_ids.iter().any(|role| !self.roles.contains_key(role.as_str())) {
                 return Err(Error::ValidationError("人员绑定含失效角色，不能生成完整导出".into()));
@@ -41,6 +43,7 @@ impl PolicyFacts {
                 role_ids: user.role_ids.clone(),
             });
         }
+
         let mut notes = vec![
             "默认本人由业务当前负责人及资源登记计算；无追加项的有效动作显式导出空 grants。".into(),
             "来源继承、任务指派、审批节点、职责分离和业务状态继续执行服务端规则。".into(),
@@ -60,6 +63,7 @@ impl PolicyFacts {
                     .filter_map(|id| self.roles.get(id.as_str()))
                     .flat_map(|role| role.permissions.iter().cloned()),
             );
+
             for resource in scope_spec::resources() {
                 let mut missing = Vec::new();
                 for permission in scope_spec::actions(resource) {
@@ -74,6 +78,7 @@ impl PolicyFacts {
                         missing.push(action.to_owned());
                     }
                 }
+
                 if !missing.is_empty() {
                     document.data_scopes.push(PolicyScope {
                         user_id: user_id.clone(),
@@ -107,6 +112,7 @@ impl PolicyFacts {
                     scope.user_id, scope.resource, scope.action
                 )));
             }
+
             document.data_scopes.push(PolicyScope {
                 user_id: scope.user_id.clone(),
                 resource: scope.resource.clone(),

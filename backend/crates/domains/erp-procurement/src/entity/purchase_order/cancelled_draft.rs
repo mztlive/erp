@@ -44,6 +44,7 @@ impl PurchaseOrder {
         self.ensure_cancelled_draft_source(previous, source)?;
         source.ensure_line_totals(source_lines)?;
         ensure_new_draft_identities(source, source_lines, &draft_id, line_ids)?;
+
         let submission = reopened_header(source, draft_id.clone())?;
         let lines = source_lines
             .iter()
@@ -52,6 +53,7 @@ impl PurchaseOrder {
                 PurchaseOrderSubmissionLine::freeze_from_draft(id.clone(), draft_id.clone(), line)
             })
             .collect::<Result<Vec<_>>>()?;
+
         self.current_submission_id = Some(draft_id.to_string());
         Ok(CancelledPurchaseDraft { submission, lines })
     }
@@ -66,6 +68,7 @@ impl PurchaseOrder {
         {
             return Err(Error::from("采购单不是可恢复草稿的审批提交"));
         }
+
         let mut cancelled = previous.clone();
         if self.stable.status == PurchaseOrderStatus::Rejected {
             cancelled.reject_approval(previous.approval_subject_version, self.stable.updated_by.clone())?;
@@ -75,6 +78,7 @@ impl PurchaseOrder {
         if &cancelled != self {
             return Err(Error::from("采购单取消版本或内容已变化"));
         }
+
         if source.purchase_order_id.as_ref() != self.base.id
             || self.current_submission_id.as_deref() != Some(source.base.id.as_str())
             || source.supplier_id != self.supplier_id
@@ -198,6 +202,7 @@ mod tests {
             },
         )
         .unwrap();
+
         let mut logistics = item.clone();
         logistics.base = BaseModel { id: "old-logistics".into(), ..BaseModel::fake() };
         logistics.line_no = 2;
@@ -245,6 +250,7 @@ mod tests {
         )
         .unwrap();
         order.base = BaseModel { id: "po-1".into(), version: 3, ..BaseModel::fake() };
+
         let mut source = PurchaseOrderSubmission::new(
             PurchaseOrderSubmissionId::new("formal-1"),
             PurchaseOrderSubmissionData {
@@ -279,6 +285,7 @@ mod tests {
         source.base = BaseModel { id: "formal-1".into(), ..BaseModel::fake() };
         source.submit(Instant::from_unix_secs(1_700_000_000), "buyer-1").unwrap();
         order.start_approval(source.base.id.clone(), "buyer-1").unwrap();
+
         let mut cancelled = order.clone();
         cancelled.cancel_approval("buyer-1").unwrap();
         (order, cancelled, source, lines)
@@ -331,6 +338,7 @@ mod tests {
         assert_eq!(cancelled.purchase_no, previous.purchase_no);
         assert_eq!(cancelled.approval_subject_version, 1);
         assert_eq!(cancelled.draft_submission_id().unwrap().as_ref(), "draft-2");
+
         assert_eq!(draft.submission.status, SubmissionStatus::Draft);
         assert_eq!(draft.submission.submission_no, "DRAFT-draft-2");
         assert_eq!(draft.submission.supplier_revision_id, source.supplier_revision_id);
@@ -342,6 +350,7 @@ mod tests {
         assert!(draft.submission.reviewed_by.is_none());
         assert!(draft.submission.review_reason_code.is_none());
         assert!(draft.submission.review_comment.is_none());
+
         draft.submission.ensure_line_totals(&draft.lines).unwrap();
         for (old, new) in lines.iter().zip(&draft.lines) {
             let mut expected = old.clone();
@@ -350,6 +359,7 @@ mod tests {
             assert_eq!(new, &expected);
             assert_ne!(new.base.id, old.base.id);
         }
+
         assert_eq!(source, source_before);
         assert_eq!(lines, lines_before);
         assert!(source.ensure_draft().is_err());
@@ -369,6 +379,7 @@ mod tests {
             )
             .unwrap();
         let historical = source.clone();
+
         let draft = reopen(&mut cancelled, &previous, &source, &lines).unwrap();
         let formal = PurchaseOrderSubmission::freeze_from_draft(
             PurchaseOrderSubmissionId::new("formal-2"),
@@ -382,6 +393,7 @@ mod tests {
         assert_eq!(formal.status, SubmissionStatus::Pending);
         assert!(formal.review_reason_code.is_none());
         assert_eq!(cancelled.start_approval(formal.base.id.clone(), "buyer-1").unwrap(), 2);
+
         let next_previous = cancelled.clone();
         cancelled.cancel_approval("buyer-1").unwrap();
         let formal_lines = draft
@@ -409,6 +421,7 @@ mod tests {
                 ],
             )
             .unwrap();
+
         assert_eq!(cancelled.approval_subject_version, 2);
         assert_eq!(third_draft.submission.status, SubmissionStatus::Draft);
         assert_eq!(cancelled.current_submission_id.as_deref(), Some("draft-3"));
@@ -420,6 +433,7 @@ mod tests {
     fn reopened_draft_accepts_current_line_cost_edits_then_freezes_a_new_snapshot() {
         let (previous, mut cancelled, source, lines) = fixture();
         let draft = reopen(&mut cancelled, &previous, &source, &lines).unwrap();
+
         let patches = vec![
             SavePurchaseOrderLinePatch {
                 line_id: "draft-item".into(),
@@ -455,6 +469,7 @@ mod tests {
         assert_eq!(replacement.lines[0].unit_cost_gross, Some(UnitPrice::from_str("99").unwrap()));
         assert_eq!(replacement.lines[0].quantity, lines[0].quantity);
         assert_eq!(replacement.lines[0].sales_order_line_id, lines[0].sales_order_line_id);
+
         let formal = PurchaseOrderSubmission::freeze_from_draft(
             PurchaseOrderSubmissionId::new("formal-2"),
             "SUB-000002".into(),
@@ -465,6 +480,7 @@ mod tests {
         .unwrap();
         assert_eq!(formal.status, SubmissionStatus::Pending);
         assert_eq!(formal.gross_amount, Amount::from_str("208").unwrap());
+
         assert_eq!(source.gross_amount, Amount::from_str("210").unwrap());
         assert_eq!(lines[0].unit_cost_gross, Some(UnitPrice::from_str("100").unwrap()));
         assert!(
@@ -555,6 +571,7 @@ mod tests {
             assert_eq!(error.to_string(), "采购取消草稿必须使用独立的完整头行身份");
             assert_eq!(cancelled, before);
         }
+
         let (previous, mut cancelled, source, mut lines) = fixture();
         let before = cancelled.clone();
         lines[0].base.deleted_at = 1;
@@ -563,6 +580,7 @@ mod tests {
             "采购取消草稿必须使用独立的完整头行身份"
         );
         assert_eq!(cancelled, before);
+
         let (_, _, _, lines) = fixture();
         let error = cancelled
             .reopen_cancelled_draft(
@@ -619,6 +637,7 @@ mod tests {
             assert_eq!(error.to_string(), "采购单不是可恢复草稿的审批提交");
             assert_eq!(cancelled, before);
         }
+
         let (previous, mut cancelled, mut source, lines) = fixture();
         source.base.deleted_at = 1;
         let before = cancelled.clone();

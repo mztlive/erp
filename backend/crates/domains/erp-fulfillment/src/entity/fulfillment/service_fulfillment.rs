@@ -287,6 +287,7 @@ impl ServiceFulfillmentConfirmation {
         )?;
         ensure_positive_quantity(&params.quantity)?;
         ensure_service_window(params.service_started_at, params.service_ended_at)?;
+
         Ok(Self {
             result: params.result,
             completion_note,
@@ -474,6 +475,7 @@ impl ServiceFulfillment {
             normalize_required_text(data.recorded_by, "记录人不能为空", ACTOR_MAX_LEN, "记录人过长")?;
         let completion_note =
             normalize_optional_text(data.completion_note, "完成说明", COMPLETION_NOTE_MAX_LEN)?;
+
         if data.recorded_at < data.occurred_at {
             return Err(Error::from("记录时间不得早于实际服务时间"));
         }
@@ -656,6 +658,7 @@ impl ServiceFulfillment {
         if confirmation.quantity != self.quantity {
             return Err(Error::from("服务完成数量必须与采购销售分配数量一致"));
         }
+
         self.result = confirmation.result;
         self.completion_note = Some(confirmation.completion_note);
         self.evidence_attachment_id = Some(confirmation.evidence_attachment_id);
@@ -898,6 +901,7 @@ pub(crate) mod tests {
                 .is_ok(),
             "空完成说明视为清除"
         );
+
         fulfillment.confirm().unwrap();
         // from == to 幂等迁移恒合法（state.rs 契约）；CONFIRMED 不可编辑由 update 把关。
         assert!(fulfillment.confirm().is_ok());
@@ -905,6 +909,7 @@ pub(crate) mod tests {
             fulfillment.update(ServiceFulfillmentUpdate { result: None, completion_note: None }).is_err(),
             "已确认不可编辑"
         );
+
         assert!(fulfillment.reverse().is_ok());
         assert!(fulfillment.reverse().is_ok(), "REVERSED 幂等迁移合法，且无法迁移到其他状态");
 
@@ -950,11 +955,14 @@ pub(crate) mod tests {
         .unwrap();
         missing_evidence.apply_confirmation(confirmation).unwrap();
         assert_eq!(missing_evidence.evidence_attachment_id, Some(FileAssetId::new("file-confirm")));
+
         missing_evidence.confirm().unwrap();
         assert_eq!(missing_evidence.status, ServiceFulfillmentState::Confirmed);
         assert!(missing_evidence.ensure_draft_version(missing_evidence.base.version).is_err());
+
         missing_evidence.evidence_attachment_id = None;
         missing_evidence.confirm().unwrap();
+
         missing_evidence.reverse().unwrap();
         assert_eq!(missing_evidence.confirm().unwrap_err().to_string(), "只有草稿状态的服务履约记录可以确认");
         assert_eq!(missing_evidence.status, ServiceFulfillmentState::Reversed);
@@ -1018,6 +1026,7 @@ pub(crate) mod tests {
         let error = |params: &ServiceFulfillmentConfirmationParams| {
             ServiceFulfillmentConfirmation::new(params.clone()).unwrap_err().to_string()
         };
+
         assert_eq!(error(&params), "线下服务履约结果只能是成功或失败");
         params.result = FulfillmentResult::Failure;
         assert_eq!(error(&params), "完成说明不能为空");
@@ -1034,6 +1043,7 @@ pub(crate) mod tests {
         assert_eq!(error(&params), "服务数量必须为正数");
         params.quantity = Quantity::try_from(Decimal::MAX).unwrap();
         assert_eq!(error(&params), "服务结束时间不得早于开始时间");
+
         params.service_started_at = ended_at;
         let confirmation = ServiceFulfillmentConfirmation::new(params).unwrap();
         assert_eq!(confirmation.result, FulfillmentResult::Failure);
@@ -1050,6 +1060,7 @@ pub(crate) mod tests {
         let mut fulfillment = ServiceFulfillment::new(ServiceFulfillmentId::new("sf-rule"), data()).unwrap();
         assert!(fulfillment.ensure_confirmable().is_ok());
         assert!(fulfillment.acceptance_quantity(&SalesOrderLineId::new("so-line-1")).is_err());
+
         fulfillment.confirm().unwrap();
         assert!(fulfillment.ensure_confirmable().is_err());
         assert!(fulfillment.is_acceptance_eligible());
@@ -1058,6 +1069,7 @@ pub(crate) mod tests {
             Quantity::from_str("1").unwrap()
         );
         assert!(fulfillment.acceptance_quantity(&SalesOrderLineId::new("other-line")).is_err());
+
         assert_eq!(fulfillment.registration_context_id().unwrap(), "so-line-1");
         let mut missing_context = fulfillment.clone();
         missing_context.sales_order_line_id = SalesOrderLineId::new("   ");

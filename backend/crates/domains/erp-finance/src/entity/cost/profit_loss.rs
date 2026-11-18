@@ -124,6 +124,7 @@ impl CoverageEvidence<'_> {
                 message: "履约尚未完成，实际成本可能继续发生".into(),
             });
         }
+
         let whole_single_line = self.current_lines.len() == 1 && self.supplied_lines.contains("");
         let missing = self
             .current_lines
@@ -136,6 +137,7 @@ impl CoverageEvidence<'_> {
                 message: format!("{} 条销售明细缺少已分配的实际供货成本", missing.max(1)),
             });
         }
+
         if self
             .supplied_lines
             .iter()

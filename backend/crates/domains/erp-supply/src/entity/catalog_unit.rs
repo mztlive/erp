@@ -53,6 +53,7 @@ fn suggest(source: Option<&str>, specification: &str, name: &str) -> Option<Stri
     if let Some(unit) = source.map(str::trim).filter(|s| !s.is_empty()) {
         return Some(unit.into());
     }
+
     let (unit, found) = extract(specification);
     if found {
         return unit;
@@ -76,11 +77,13 @@ fn extract(text: &str) -> (Option<String>, bool) {
     if !packaging.is_empty() {
         return unique(packaging);
     }
+
     let packages: BTreeSet<_> =
         PACKAGES.iter().copied().filter(|unit| text.trim() == *unit || numbered(&text, unit)).collect();
     if !packages.is_empty() {
         return unique(packages);
     }
+
     let measures: BTreeSet<_> = MEASURES
         .iter()
         .filter_map(|(token, unit)| (text.trim() == *token || numbered(&text, token)).then_some(*unit))

@@ -328,7 +328,6 @@ mod tests {
     fn capability_new_trims_constraint_snapshot() {
         let capability =
             SupplierApiCapability::new(SupplierApiCapabilityId::new("cap-1"), capability_data()).unwrap();
-
         assert_eq!(capability.connection_id, SupplierApiConnectionId::new("conn-1"));
         assert_eq!(capability.capability_code, SupplierApiCapabilityCode::Order);
         assert_eq!(capability.constraint_snapshot.as_deref(), Some("单笔下单金额上限 50000 元"));
@@ -371,7 +370,6 @@ mod tests {
     fn capability_update_rejects_overlong_constraint_snapshot() {
         let mut capability =
             SupplierApiCapability::new(SupplierApiCapabilityId::new("cap-1"), capability_data()).unwrap();
-
         assert!(
             capability
                 .update(SupplierApiCapabilityUpdate {
@@ -386,6 +384,7 @@ mod tests {
     fn capability_enums_serialize_with_stable_codes_and_expose_labels() {
         assert_eq!(serde_json::to_string(&SupplierApiCapabilityCode::Settlement).unwrap(), "\"settlement\"");
         assert_eq!(serde_json::to_string(&SupplierApiCapabilityStatus::Disabled).unwrap(), "\"disabled\"");
+
         assert_eq!(SupplierApiCapabilityCode::Logistics.label(), "物流");
         assert_eq!(SupplierApiCapabilityCode::Callback.as_str(), "callback");
         assert_eq!(SupplierApiCapabilityStatus::Active.label(), "启用");

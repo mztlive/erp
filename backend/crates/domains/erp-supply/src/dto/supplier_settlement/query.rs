@@ -109,14 +109,17 @@ impl SupplierSettlementStatementListParams {
     /// 排序字段不在白名单或排序方向非法、期间日期非法、期间开始晚于结束，或人员筛选包含 `me` 时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<StatementListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, STATEMENT_SORT_FIELDS)?;
+
         let period_from = optional_business_date(self.period_from.as_deref(), "期间开始")?;
         let period_to = optional_business_date(self.period_to.as_deref(), "期间结束")?;
         if period_from.zip(period_to).is_some_and(|(from, to)| from > to) {
             return Err(crate::Error::ValidationError("期间开始不得晚于期间结束".to_string()));
         }
+
         reject_me_ids(self.owner_user_ids.as_ref())?;
         reject_me_ids(self.operator_user_ids.as_ref())?;
         reject_me_ids(self.handler_user_ids.as_ref())?;
+
         Ok(StatementListQuery {
             owner_user_ids: self.owner_user_ids.clone(),
             operator_user_ids: self.operator_user_ids.clone(),

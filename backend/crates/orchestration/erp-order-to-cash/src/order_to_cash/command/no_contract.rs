@@ -50,6 +50,7 @@ impl SalesOrderCommandProcess {
         editable.retain_settlement(&order.settlement_party_id, contract_id.is_some());
         let (customer_id, settlement_party_id, draft) =
             self.resolve_sales_command_draft(&access, &contract_id, &customer_id, editable, executor).await?;
+
         if require_editable {
             order
                 .ensure_first_submission_working_copy_editable()
@@ -84,6 +85,7 @@ impl SalesOrderCommandProcess {
                 .resolve_contract_sales_draft(access, contract_id, customer_id, editable, executor)
                 .await;
         }
+
         editable.validate()?;
         if editable.settlement_party_id.is_some() {
             return Err(Error::ValidationError("无合同销售单的结算主体必须填写在约定条款中".into()));
@@ -91,6 +93,7 @@ impl SalesOrderCommandProcess {
         if editable.requested_contract_revision_id.is_some() {
             return Err(Error::ValidationError("无合同销售单不得指定合同版本".into()));
         }
+
         let id =
             customer_id.as_ref().ok_or_else(|| Error::ValidationError("无合同销售单必须选择客户".into()))?;
         let customer = access.load_customer(id.as_ref(), executor).await?;
@@ -98,12 +101,14 @@ impl SalesOrderCommandProcess {
             return Err(Error::BusinessLogicError("客户已停用，禁止创建新销售单".into()));
         }
         let customer_name = access.party_name(&customer.party_id, executor).await?;
+
         let settlement_id = editable
             .no_contract_terms
             .as_ref()
             .and_then(|terms| terms.settlement_party_id.clone())
             .ok_or_else(|| Error::ValidationError("无合同销售单必须选择我方结算主体".into()))?;
         let settlement_name = access.settlement_name(&settlement_id, executor).await?;
+
         let draft = editable.into_no_contract_draft(customer_name, settlement_name)?;
         Ok((CustomerAccountId::new(customer.base.id), settlement_id, draft))
     }
@@ -129,6 +134,7 @@ impl SalesOrderCommandProcess {
             return Err(Error::ValidationError("销售建单凭证不存在或已删除".into()));
         }
         approvals.authorize_material_transfer(actor, &files, executor).await?;
+
         for file in files {
             SalesOrder::validate_creation_evidence_file(
                 &file.content_type,

@@ -25,6 +25,7 @@ impl OrderReceiptConfirmation for JdVopConnector {
         request: &ConfirmReceipt,
     ) -> ConnectorResult<Snapshot<ReceiptConfirmationState>> {
         validate_request(request)?;
+
         let Lookup::Found(order) = self.receipt_node(&request.order).await? else {
             return Err(mapping("京东原收货确认子单暂不可见，请继续查询原结果"));
         };
@@ -36,6 +37,7 @@ impl OrderReceiptConfirmation for JdVopConnector {
         if state == ReceiptConfirmationState::Confirmed {
             return Ok(observed(state));
         }
+
         let profile = self.profile.as_ref().ok_or_else(protocol_required)?;
         let writer = self.writer.as_ref().ok_or_else(protocol_required)?;
         let result: WireText = writer
@@ -99,6 +101,7 @@ fn receipt_state(order: &JdOrder) -> ConnectorResult<ReceiptConfirmationState> {
             ));
         },
     }
+
     let state = order.order_state.as_ref().ok_or_else(|| mapping("京东原子单收货状态尚未取得"))?;
     if state.cancel_order_state.as_ref().map(|value| value.0.as_str()) != Some("0") {
         return Err(mapping("京东原子单取消状态未核实或已经取消，已阻断收货通知"));
@@ -137,6 +140,7 @@ fn validate_received_lines(order: &JdOrder, lines: &[ReceiptLine]) -> ConnectorR
         identifier(&line.sku.spec_id)?;
         add_quantity(&mut received, &line.sku.spec_id, line.quantity.to_decimal())?;
     }
+
     let mut original = BTreeMap::<String, Decimal>::new();
     for line in &order.sku_info_list {
         match line.line_type.as_ref().map(|kind| kind.0.as_str()) {
@@ -147,6 +151,7 @@ fn validate_received_lines(order: &JdOrder, lines: &[ReceiptLine]) -> ConnectorR
         let quantity = line.sku_num.0.parse().map_err(|_| mapping("京东原子单商品数量格式无效"))?;
         add_quantity(&mut original, &line.sku_id.0, quantity)?;
     }
+
     if received != original || original.is_empty() {
         return Err(mapping("ERP实际收到范围与京东当前完整子单不一致，已阻断整单收货通知"));
     }
@@ -320,6 +325,7 @@ mod tests {
             ReceiptConfirmationState::Confirmed
         );
         assert_eq!(transport.writes.lock().unwrap().len(), 1);
+
         let Lookup::Found(result) = connector.receipt_confirmation(&request.order).await.unwrap() else {
             panic!("original factory direct order remains visible")
         };
@@ -359,6 +365,7 @@ mod tests {
                 connector.confirm_receipt(&request).await.err().unwrap().class,
                 SupplierFailureClass::ResultUnknown
             );
+
             transport.order.lock().unwrap()["orderState"]["jdOrderState"] = json!("19");
             for _ in 0..2 {
                 let Lookup::Found(result) = connector.receipt_confirmation(&request.order).await.unwrap()
@@ -384,16 +391,19 @@ mod tests {
         request.evidence_fingerprint.clear();
         assert!(connector.confirm_receipt(&request).await.is_err());
         assert_eq!(transport.reads.load(Ordering::SeqCst), 0);
+
         for quantity in ["2", "4", "1.5"] {
             let (connector, transport, mut request) = fixture();
             request.lines[0].quantity = quantity.parse().unwrap();
             assert!(connector.confirm_receipt(&request).await.is_err());
             assert!(transport.writes.lock().unwrap().is_empty());
         }
+
         let (connector, transport, request) = fixture();
         transport.order.lock().unwrap()["childJdOrderIdList"] = json!(["301", "302"]);
         assert!(connector.confirm_receipt(&request).await.is_err());
         assert!(transport.writes.lock().unwrap().is_empty());
+
         let (connector, transport, request) = fixture();
         transport.order.lock().unwrap()["thirdOrderId"] = json!("other-merchant");
         assert!(connector.confirm_receipt(&request).await.is_err());
@@ -415,6 +425,7 @@ mod tests {
             );
             assert!(transport.writes.lock().unwrap().is_empty());
         }
+
         for state in [Value::Null, json!("2"), json!("999")] {
             let (connector, transport, request) = fixture();
             transport.order.lock().unwrap()["orderState"]["deliveryState"] = state;

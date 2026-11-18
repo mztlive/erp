@@ -32,6 +32,7 @@ pub(in crate::demo_master_data) async fn update_request(
         .ok_or_else(|| Error::NotFound("演示商品当前修订不存在".into()))?;
     let media =
         db.product_revision_medias().find_many(doc! {"product_revision_id": revision_id}, executor).await?;
+
     let skus = db.skus().find_many(doc! {"product_id": product.base.id.as_str()}, executor).await?;
     let mut inputs = Vec::new();
     for sku in skus.into_iter().filter(|sku| sku.is_active()) {

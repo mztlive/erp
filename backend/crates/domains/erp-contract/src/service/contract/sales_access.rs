@@ -29,6 +29,7 @@ impl ContractService {
         actor: &AuditActor,
     ) -> Result<ContractDetailView> {
         request.validate()?;
+
         let service = self.clone();
         let actor = actor.clone();
         let contract_id = id.to_owned();
@@ -54,6 +55,7 @@ impl ContractService {
             .authorization
             .require(actor, &internal::CONTRACT_SALES_ACCESS, AccessTarget::record(id)?, executor)
             .await?;
+
         let mut contract = self
             .db
             .contracts()
@@ -63,13 +65,16 @@ impl ContractService {
         if !contract.matches_version(request.version) {
             return Err(Error::ConflictError("合同已被修改，请刷新后重新核对共享人员".into()));
         }
+
         contract.set_shared_sales(request.shared_sales_user_ids)?;
         contract.sales_access_change_reason = Some(request.change_reason.trim().to_string());
         contract.stable.updated_by = actor.id().to_owned();
         require_active_sales(&self.accounts, &contract.shared_sales_user_ids, executor).await?;
+
         let audit = self.audit.resource_log(actor.clone(), "contract.share", "contract", id.to_owned())?;
         self.db.contracts().update(&mut contract, executor).await?;
         self.audit.persist(&audit, executor).await?;
+
         self.detail_view(contract, executor).await
     }
 }
@@ -144,12 +149,14 @@ mod tests {
             shared_sales_user_ids: vec!["unread-account".into()],
             change_reason: "share".into(),
         };
+
         assert!(matches!(
             service
                 .sales_access_stage("unread-contract", request.clone(), &actor, &mut NoTransaction)
                 .await,
             Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务"
         ));
+
         assert!(matches!(
             service
                 .sales_access_stage("unread-contract", request, &actor, &mut SnapshotExecutor::default())

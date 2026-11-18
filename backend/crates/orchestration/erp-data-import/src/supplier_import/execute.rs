@@ -48,11 +48,13 @@ impl SupplierImportProcess {
         if !claimable(job, Instant::now()) {
             return Ok(());
         }
+
         if job.status == JobStatus::Pending {
             job.start(Instant::now())?;
         }
         job.last_progress_at = Some(Instant::now());
         self.db.background_jobs().update(job, &mut ReadExecutor::default()).await?;
+
         let request = match self.execution_source(job).await {
             Ok(request) => request,
             _ => {
@@ -61,6 +63,7 @@ impl SupplierImportProcess {
                 return Ok(());
             },
         };
+
         let result = self.execute_rows(job, &request).await;
         if job.finished_at.is_some() {
             self.sources.remove(&job.base.id).await;
@@ -107,6 +110,7 @@ impl SupplierImportProcess {
         if current.base.version != job.base.version || current.finished_at.is_some() {
             return Ok(false);
         }
+
         job.last_progress_at = Some(Instant::now());
         self.db.background_jobs().update(job, &mut ReadExecutor::default()).await?;
         Ok(true)
@@ -171,11 +175,13 @@ impl SupplierImportProcess {
             .read(super::submit::source_key(source))
             .await
             .map_err(|_| Error::Internal("读取供应商导入源文件失败".into()))?;
+
         let encoded = std::str::from_utf8(&bytes).map_err(|_| Error::Internal("导入源数据损坏".into()))?;
         let json = self.codec.decrypt(encoded)?;
         let request: SupplierImportJobRequest =
             serde_json::from_str(&json).map_err(|_| Error::Internal("导入源数据损坏".into()))?;
         request.validate()?;
+
         let expected = application_core::command::CommandFingerprint::from_parts([
             hex::encode(self.codec.fingerprint_key()),
             job.requested_by.clone(),
@@ -260,6 +266,7 @@ mod tests {
         job.start(at).unwrap();
         assert!(!claimable(&job, Instant::from_unix_secs(1119)));
         assert!(claimable(&job, Instant::from_unix_secs(1120)));
+
         job.status = JobStatus::PartiallySucceeded;
         job.finished_at = Some(at);
         assert!(!claimable(&job, Instant::from_unix_secs(2000)));
@@ -294,6 +301,7 @@ mod tests {
             }
             assert!(record(item, None).is_err());
         }
+
         let (_, mut items) = fixture();
         record(&mut items[0], None).unwrap();
         assert_eq!(items[0].result_code.as_deref(), Some("outcome_unknown"));

@@ -36,6 +36,7 @@ pub async fn enqueue_purchase(
         if offering.source_type != OfferingSourceType::Api {
             continue;
         }
+
         let connection = offering
             .source_connection_id
             .as_ref()
@@ -54,6 +55,7 @@ pub async fn enqueue_purchase(
             });
         }
     }
+
     persist_groups(db, order, groups, executor).await
 }
 
@@ -79,9 +81,11 @@ async fn persist_groups(
         for (index, row) in rows.iter_mut().enumerate() {
             row.fulfillment_item_id = format!("{id}-{}", index + 1);
         }
+
         if db.supplier_api_order_executions().find_by_id(&id, executor).await?.is_some() {
             continue;
         }
+
         let mut intent = ApiOrderExecution::queued(
             id,
             order.base.id.clone(),
@@ -116,6 +120,7 @@ fn allocations_for(
     if line.delivery_allocations.is_empty() {
         return Ok(vec![(u32::MAX, quantity, "warehouse-address".into())]);
     }
+
     let total =
         line.delivery_allocations.iter().try_fold(rust_decimal::Decimal::ZERO, |sum, allocation| {
             sum.checked_add(allocation.quantity.to_decimal())
@@ -124,6 +129,7 @@ fn allocations_for(
     if total != quantity.to_decimal() {
         return Err(Error::BusinessLogicError("采购冻结地址数量合计与采购行不一致".into()));
     }
+
     line.delivery_allocations
         .iter()
         .enumerate()

@@ -126,19 +126,23 @@ mod tests {
             href: None,
         };
         let target = Channel::External("test".into());
+
         service.notify(message.clone(), &target).await.unwrap();
         let recorded = channel.0.lock().unwrap().clone();
         assert_eq!(recorded[0].recipient_id, "u1");
         assert_eq!(recorded[0].dedup_key, "event");
         assert_eq!(recorded[0].title, "标题");
+
         assert!(matches!(
             service.notify(message.clone(), &Channel::External("missing".into())).await,
             Err(Error::ChannelUnavailable)
         ));
+
         let mut invalid = message.clone();
         invalid.title.clear();
         assert!(matches!(service.notify(invalid, &target).await, Err(Error::Invalid(_))));
         assert_eq!(channel.0.lock().unwrap().len(), 1);
+
         let mut retry = message;
         retry.dedup_key = "retry".into();
         assert!(matches!(service.notify(retry, &target).await, Err(Error::Retryable)));

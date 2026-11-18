@@ -32,6 +32,7 @@ pub(super) fn costs(mut rows: Vec<ScopedCostEntryView>, paging: PageParams) -> P
     if matches!(paging.sort_dir, SortDir::Desc) {
         rows.reverse();
     }
+
     page(rows, paging)
 }
 
@@ -65,10 +66,12 @@ pub(super) fn allocations(
             Ok((time, line))
         })
         .collect::<Result<Vec<_>>>()?;
+
     rows.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.id.cmp(&b.1.id)));
     if matches!(query.paging.sort_dir, SortDir::Desc) {
         rows.reverse();
     }
+
     Ok(page(rows.into_iter().map(|(_, row)| row).collect(), query.paging))
 }
 
@@ -115,10 +118,12 @@ mod tests {
         let result = allocations(rows.clone(), &times, &query).unwrap();
         assert_eq!(result.total, 2);
         assert_eq!(result.items[0].id, "a");
+
         let mut tie = times;
         tie.insert("b".into(), 20);
         let result = allocations(rows.clone(), &tie, &query).unwrap();
         assert_eq!(result.items[0].id, "b");
+
         tie.remove("b");
         assert!(allocations(rows, &tie, &query).is_err());
     }

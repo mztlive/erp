@@ -189,9 +189,9 @@ mod tests {
         assert_eq!(FulfillmentResponsibility::SupplierDirect.label(), "供应商直发");
         assert_eq!(FulfillmentResponsibility::Electronic.label(), "电子交付");
         assert_eq!(PurchaseLineType::LogisticsFee.label(), "费用");
+
         assert_eq!(PurchaseType::Expense.as_str(), "EXPENSE");
         assert_eq!(FulfillmentResponsibility::NotApplicable.as_str(), "NONE");
-
         assert_eq!(PurchaseType::Physical.as_str(), "PHYSICAL");
         assert_eq!(FulfillmentResponsibility::Warehouse.as_str(), "WAREHOUSE");
         assert_eq!(PurchaseLineType::ItemService.as_str(), "ITEM_SERVICE");

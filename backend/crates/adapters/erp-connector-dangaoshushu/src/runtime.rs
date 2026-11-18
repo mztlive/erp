@@ -183,6 +183,7 @@ impl DangaoshushuRuntime {
         if !connection.endpoint_reference_bound || !connection.credential_reference_bound {
             return Err(binding_error());
         }
+
         let fingerprint = proof::binding_hash(&self.settings, target)?;
         if connection.endpoint_reference != internal_reference("endpoint", &fingerprint)
             || connection.credential_reference.as_deref()
@@ -241,6 +242,7 @@ impl DangaoshushuRuntime {
     ) -> ConnectorResult<SupplierReferenceTickets> {
         let expires_at = now.unix_secs().checked_add(300).ok_or_else(mapping)?;
         let fingerprint = proof::binding_hash(&self.settings, target)?;
+
         let ticket = |kind: &str| {
             proof::encode(
                 &self.settings.private_key,
@@ -284,6 +286,7 @@ impl DangaoshushuRuntime {
                 "供应商技术引用票据无效或过期",
             ));
         }
+
         self.validate_target(target)?;
         Ok(ResolvedSupplierReference {
             internal_reference: internal_reference(expected, &ticket.fingerprint),
@@ -300,6 +303,7 @@ impl DangaoshushuRuntime {
         if self.validate_target(target).is_err() {
             return Ok(Vec::new());
         }
+
         let tickets = self.tickets(target, now)?;
         let (reference_id, alias) = match kind {
             SupplierReferenceKind::Endpoint => (tickets.endpoint_ticket, "蛋糕叔叔接口地址"),
@@ -534,6 +538,7 @@ mod tests {
         assert!(!connection.apply_deployment(&config, "actor").unwrap());
         assert_eq!(connection.technical_config_version, version);
         assert!(!connection.is_active());
+
         let page = runtime
             .catalog_page(
                 &connection,
@@ -544,6 +549,7 @@ mod tests {
         assert_eq!(page.items.len(), 1);
         assert!(page.next.is_none());
         assert_eq!(transport.requests.lock().unwrap().len(), 2);
+
         connection.record_health(HealthCheckResult::Healthy, Instant::now());
         let mut rotated_settings = settings();
         rotated_settings.private_key = "rotated-secret".into();
@@ -572,6 +578,7 @@ mod tests {
                 .resolve_ticket(SupplierReferenceKind::Credential, &tickets.endpoint_ticket, &target, now)
                 .is_err()
         );
+
         let mut changed_settings = settings();
         changed_settings.base_url = "https://other.dangaoss.cn".into();
         let changed = DangaoshushuRuntime::new(changed_settings).unwrap();
@@ -580,6 +587,7 @@ mod tests {
                 .resolve_ticket(SupplierReferenceKind::Endpoint, &tickets.endpoint_ticket, &target, now)
                 .is_err()
         );
+
         assert!(
             runtime
                 .resolve_ticket(
@@ -590,6 +598,7 @@ mod tests {
                 )
                 .is_err()
         );
+
         let wrong_connection = SupplierReferenceTarget {
             connection_id: SupplierApiConnectionId::new("connection-2"),
             ..target.clone()
@@ -604,6 +613,7 @@ mod tests {
                 )
                 .is_err()
         );
+
         let wrong_supplier =
             SupplierReferenceTarget { supplier_id: SupplierAccountId::new("supplier-2"), ..target };
         assert!(
@@ -616,6 +626,7 @@ mod tests {
                 )
                 .is_err()
         );
+
         let mut wrong = connection.clone();
         wrong.supplier_id = SupplierAccountId::new("other");
         assert!(runtime.validate_binding(&wrong, false).is_ok());
@@ -643,6 +654,7 @@ mod tests {
                 )
             );
         }
+
         for boundary in ["missing_type", "other_type", "connection", "supplier", "deleted"] {
             let mut invalid = valid.clone();
             match boundary {
@@ -692,6 +704,7 @@ mod tests {
         assert_eq!(error.class, SupplierFailureClass::CapabilityGap);
         assert_eq!(error.code, "DGSS_CAPABILITY_METADATA_UNSUPPORTED");
         assert!(transport.requests.lock().unwrap().is_empty());
+
         for check_type in [SupplierHealthCheckType::Connectivity, SupplierHealthCheckType::Authentication] {
             runtime.health_check(&connection, check_type).await.unwrap();
         }
@@ -731,11 +744,13 @@ mod tests {
             runtime.health_check(value, SupplierHealthCheckType::Authentication).await.unwrap();
         }
         assert_eq!(transport.requests.lock().unwrap().len(), 2);
+
         let first_client = runtime.tracking_connector(&first).unwrap();
         let second_client = runtime.tracking_connector(&second).unwrap();
         assert_eq!(second_client.connection_id.as_ref(), "created-in-backend-2");
         assert_ne!(first_client.binding, second_client.binding);
         assert!(Arc::ptr_eq(&first_client.transport, &second_client.transport));
+
         second.endpoint_reference = first.endpoint_reference;
         assert!(runtime.tracking_connector(&second).is_err());
     }
@@ -753,6 +768,7 @@ mod tests {
         connection.stable.status = SupplierApiConnectionStatus::Disabled;
         assert!(runtime.connector(&connection).is_err());
         assert!(runtime.tracking_connector(&connection).is_ok());
+
         for purpose in [
             ConnectorPurpose::Catalog,
             ConnectorPurpose::Notification,
@@ -765,6 +781,7 @@ mod tests {
             runtime.bind(&connection, ConnectorPurpose::Creation).err().unwrap().code,
             "DGSS_CONNECTION_DISABLED"
         );
+
         let description = runtime.description(&SupplierReferenceTarget::from(&connection)).unwrap();
         assert_eq!(
             description,
@@ -780,12 +797,14 @@ mod tests {
                 .unwrap()
                 .contains(&SupplierApiCapabilityCode::Order)
         );
+
         let mut changed_settings = settings();
         changed_settings.private_key = "rotated-secret".into();
         let changed = DangaoshushuRuntime::new(changed_settings).unwrap();
         assert!(changed.tracking_connector(&connection).is_err());
         bind_from_options(&changed, &mut connection).await;
         assert!(changed.tracking_connector(&connection).is_ok());
+
         connection.supplier_id = SupplierAccountId::new("other-supplier");
         assert!(changed.tracking_connector(&connection).is_err());
     }
@@ -814,6 +833,7 @@ mod tests {
                 .await
                 .is_err()
         );
+
         let target = SupplierReferenceTarget::from(&connection);
         assert!(runtime.options(SupplierReferenceKind::Endpoint, &target).await.unwrap().is_empty());
         assert!(
@@ -848,6 +868,7 @@ mod tests {
         bind_from_options(&runtime, &mut connection).await;
         assert!(!connection.is_active());
         assert_eq!(runtime.connector(&connection).err().unwrap().code, "DGSS_CONNECTION_DISABLED");
+
         let result =
             runtime.observe_order(&connection, &OrderKey::External("external-1".into())).await.unwrap();
         let Lookup::Found(result) = result else {

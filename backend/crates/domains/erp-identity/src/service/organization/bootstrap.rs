@@ -59,6 +59,7 @@ async fn persist_home_department(db: &Database, executor: &mut dyn Executor) -> 
     if repository.receipt(BOOTSTRAP_RECEIPT_ID, executor).await?.is_some() {
         return Ok(());
     }
+
     let before = repository.state(executor).await?;
     let accounts = db.accounts().list_by_kind(erp_core::AccountKind::Admin, executor).await?;
     let account_ids = accounts
@@ -69,6 +70,7 @@ async fn persist_home_department(db: &Database, executor: &mut dyn Executor) -> 
     let Some(after) = plan_home_department(&before, &account_ids, Instant::from_unix_secs(1))? else {
         return Ok(());
     };
+
     let mut receipt = OrganizationChangeReceipt {
         base: entity_core::BaseModel::new(BOOTSTRAP_RECEIPT_ID.to_string()),
         actor_id: BOOTSTRAP_ACTOR.into(),
@@ -110,6 +112,7 @@ fn plan_home_department(
     if !state.units.is_empty() {
         return Ok(None);
     }
+
     let unit_id = "org-home".to_string();
     let mut next = state.changed(
         &OrganizationChangeRequest {
@@ -126,6 +129,7 @@ fn plan_home_department(
         BOOTSTRAP_ACTOR,
         at,
     )?;
+
     for (index, account_id) in account_ids.iter().enumerate() {
         next = next.changed(
             &OrganizationChangeRequest {

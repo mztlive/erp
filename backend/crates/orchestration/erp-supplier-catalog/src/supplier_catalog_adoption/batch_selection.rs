@@ -42,6 +42,7 @@ impl SupplierCatalogAdoptionProcess {
         if let Some(batch) = self.selection_replay(connection, &id, &fingerprint, actor).await? {
             return Ok(batch_view(batch, vec![]));
         }
+
         let batch_no = DocumentNumberGenerator::new(self.db.clone())
             .next_number(
                 DocumentNumberKind::SupplierCatalogAdoption,
@@ -58,6 +59,7 @@ impl SupplierCatalogAdoptionProcess {
                 {
                     return Ok(batch_view(batch, vec![]));
                 }
+
                 let batch = process
                     .register_selection(
                         &connection,
@@ -123,6 +125,7 @@ impl SupplierCatalogAdoptionProcess {
     ) -> Result<CatalogAdoptionBatch> {
         let source = self.batch_access(connection, actor, executor).await?;
         self.ensure_source(&source)?;
+
         let ids = supplier_catalog::selection_ids(
             &self.db,
             connection,
@@ -138,6 +141,7 @@ impl SupplierCatalogAdoptionProcess {
         {
             return Err(Error::ValidationError("当前选择为空、来源不可访问或排除项不属于本次范围".into()));
         }
+
         let batch = selection_batch(
             connection,
             source.supplier_id.to_string(),
@@ -157,6 +161,7 @@ impl SupplierCatalogAdoptionProcess {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+
         self.db.catalog_adoption_batches().create(&batch, executor).await?;
         insert_selection_pages(&self.db, &pages, executor).await?;
         Ok(batch)

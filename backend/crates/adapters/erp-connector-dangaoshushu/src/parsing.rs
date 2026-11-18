@@ -120,6 +120,7 @@ mod tests {
             assert_eq!(non_negative_amount(&json!(text)).unwrap().to_string(), text);
         }
         assert_eq!(non_negative_amount(&json!(123)).unwrap().to_string(), "123");
+
         for value in [
             Value::Null,
             json!(true),
@@ -143,8 +144,10 @@ mod tests {
         assert!(id(&serde_json::json!(-1)).is_err());
         assert!(id(&serde_json::from_str::<Value>("1e3").unwrap()).is_err());
         assert_eq!(id(&serde_json::json!(123)).unwrap(), "123");
+
         let value = super::super::wire::parse(b"0.10000000000000000001").unwrap();
         assert!(fixed::<Amount>(&value).is_err());
+
         assert_eq!(source_time(&Value::Null).unwrap(), None);
         assert_eq!(
             source_time(&serde_json::json!("2024-01-01 08:00:00")).unwrap().unwrap().unix_secs(),

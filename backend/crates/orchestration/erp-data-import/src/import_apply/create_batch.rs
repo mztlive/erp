@@ -86,6 +86,7 @@ impl ImportApplyProcess {
         self.authorization
             .require(actor, &legacy_import::BATCH_CREATE, AccessTarget::Operation, executor)
             .await?;
+
         if let Some(existing) =
             self.db.legacy_import_batches().find_by_batch_no(&req.batch_no, executor).await?
         {
@@ -143,6 +144,7 @@ impl ImportApplyProcess {
         if ids.is_empty() {
             return Ok(());
         }
+
         let missing = self.db.file_assets().missing_file_asset_ids(&ids, executor).await?;
         if missing.is_empty() {
             return Ok(());

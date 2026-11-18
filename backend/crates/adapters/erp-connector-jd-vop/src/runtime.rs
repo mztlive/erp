@@ -211,6 +211,7 @@ impl JdVopRuntime {
         self.validate_target(target)?;
         let profile = self.profile.as_ref().map(|profile| profile.binding_content()).transpose()?;
         let body = to_vec(&json!({"gateway":self.settings.gateway_url,"app_key":self.settings.app_key,"account_scope":self.settings.account_scope,"credential_id":self.settings.credential_id,"source_type":self.settings.source_type,"image_base_url":self.settings.image_base_url,"connection":target.connection_id,"supplier":target.supplier_id,"execution_profile":profile})).map_err(|_| mapping("京东配置引用生成失败"))?;
+
         let mut mac = Hmac::<Sha256>::new_from_slice(self.settings.app_secret.as_bytes())
             .expect("HMAC接受任意长度密钥");
         mac.update(b"erp-jd-vop-configuration-binding-v1\0");
@@ -309,6 +310,7 @@ impl SupplierRuntime for JdVopRuntime {
                     "商品池读取不能代替完整接口授权核验",
                 )));
             }
+
             let reader = self.reader.as_ref().ok_or_else(|| classified(protocol_required()))?;
             let _: Pools = reader.read(JdVopReadRequest::Pools).await.map_err(classified)?;
             Ok(())
@@ -407,12 +409,14 @@ mod tests {
         assert!(connector.offers().is_none());
         assert!(connector.orders().is_none());
         assert!(connector.payment_confirmation().is_none());
+
         let description = runtime.description(&SupplierReferenceTarget::from(&connection)).unwrap();
         assert!(description.operations.is_empty());
         assert_eq!(description, ConnectorDescription::from_connector(&connector));
         assert!(!description.address_candidates);
         assert!(!description.funds_source);
         assert!(runtime.catalog_policy(&connection).unwrap().is_none());
+
         assert_eq!(
             runtime
                 .health_check(&connection, SupplierHealthCheckType::Authentication)
@@ -445,6 +449,7 @@ mod tests {
         assert!(connector.orders().is_none());
         assert_eq!(connector.connection_id().as_ref(), connection.base.id.as_str());
         assert_eq!(connector.binding, runtime.binding(&target).unwrap());
+
         connection.credential_reference = Some("stale".into());
         assert_eq!(runtime.tracking_connector(&connection).err().unwrap(), binding_error());
         let mut invalid = target;
@@ -458,6 +463,7 @@ mod tests {
         let mut connection = connection(&runtime);
         connection.supplier_id = SupplierAccountId::new("other-supplier");
         assert_eq!(runtime.tracking_connector(&connection).err().unwrap().code, "JD_VOP_BINDING_INVALID");
+
         let mut other = toml_config();
         other.account_scope = "other-account".into();
         assert!(JdVopRuntime::new(other).unwrap().tracking_connector(&connection).is_err());
@@ -470,6 +476,7 @@ mod tests {
         let mut settings = toml_config();
         settings.source_type = 4;
         assert!(JdVopRuntime::new(settings).unwrap().tracking_connector(&connection).is_err());
+
         let mut cipher_rotated = toml_config();
         cipher_rotated.credential_encryption_key = "another-offline-independent-test-key-at-least-32".into();
         assert!(JdVopRuntime::new(cipher_rotated).unwrap().tracking_connector(&connection).is_ok());

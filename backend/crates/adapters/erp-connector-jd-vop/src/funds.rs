@@ -117,6 +117,7 @@ impl JdVopConnector {
         mac.update(self.binding.as_bytes());
         mac.update(raw.get().as_bytes());
         let fingerprint = hex::encode(mac.finalize().into_bytes());
+
         let encrypted = self
             .evidence_codec
             .as_ref()
@@ -135,6 +136,7 @@ impl JdVopConnector {
         if query.since > query.through || query.limit > profile.maximum_page_size {
             return Err(mapping("京东资金查询窗口或分页上限无效"));
         }
+
         let Some(cursor) = &query.cursor else {
             return Ok(1);
         };
@@ -148,6 +150,7 @@ impl JdVopConnector {
         mac.update(&bytes);
         mac.verify_slice(&hex::decode(signature).map_err(|_| mapping("资金查询游标无效"))?)
             .map_err(|_| mapping("资金查询游标无效"))?;
+
         let cursor: FundsCursor = serde_json::from_slice(&bytes).map_err(|_| mapping("资金查询游标无效"))?;
         if cursor.binding != self.binding
             || cursor.since != query.since.unix_secs()
@@ -232,11 +235,13 @@ impl SupplierFundsSource for JdVopConnector {
             })
             .await?;
         let more = response.validate(page, query.limit)?;
+
         let mut items = Vec::with_capacity(response.items.len());
         for raw in response.items {
             let evidence = self.funds_evidence(&raw)?;
             items.push(observed(observation(&raw, profile, evidence, query)));
         }
+
         let next = if more {
             Some(
                 self.next_funds_page(query, page.checked_add(1).ok_or_else(|| mapping("资金页码超出范围"))?)?,
@@ -368,21 +373,25 @@ mod tests {
             response(request(1), page(1, "1209")),
             response(request(2), page(2, "9999")),
         ]);
+
         let balance = SupplierFundsSource::balance(&connector).await.unwrap();
         assert_eq!(balance.value.account_reference, "account-ref");
         assert_eq!(balance.value.amount, "100.00".parse().unwrap());
         assert!(codec.decrypt(&balance.value.evidence.body_encrypted).unwrap().contains("remainLimit"));
         assert_eq!(serde_json::to_value(&balance.stamp.revision).unwrap(), "Unversioned");
         assert!(balance.stamp.changed_at.is_none());
+
         let mut query = query();
         let first = connector.transactions(&query).await.unwrap();
         assert!(matches!(first.items[0].value.result, SupplierFundsObservationResult::Transaction(_)));
+
         let cursor = first.next.unwrap();
         query.cursor = Some(cursor.clone());
         let second = connector.transactions(&query).await.unwrap();
         assert!(second.next.is_none());
         assert!(matches!(second.items[0].value.result, SupplierFundsObservationResult::Unresolved(_)));
         assert_eq!(transport.requests.lock().unwrap().len(), 3);
+
         query.through = Instant::from_unix_secs(3601);
         assert!(connector.transactions(&query).await.is_err());
         assert_eq!(transport.requests.lock().unwrap().len(), 3);
@@ -393,6 +402,7 @@ mod tests {
         let (mut connector, transport, _) = connector(vec![(request(1), Err(mapping("upstream failed")))]);
         assert!(connector.transactions(&query()).await.is_err());
         assert_eq!(transport.requests.lock().unwrap().len(), 1);
+
         connector.profile = None;
         assert!(SupplierFundsSource::balance(&connector).await.is_err());
         assert!(connector.transactions(&query()).await.is_err());
@@ -407,11 +417,13 @@ mod tests {
         let mut resumed = query.clone();
         resumed.cursor = Some(cursor.clone());
         assert_eq!(connector.funds_page(&resumed).unwrap(), 2);
+
         resumed.cursor = Some(format!("{cursor}00"));
         assert!(connector.funds_page(&resumed).is_err());
         resumed.cursor = Some(cursor);
         connector.binding = "another-account".into();
         assert!(connector.funds_page(&resumed).is_err());
+
         for kind in ["10", "14", "15", "18"] {
             assert_eq!(connector.message_effect(kind), None);
         }

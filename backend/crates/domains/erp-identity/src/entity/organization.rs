@@ -189,6 +189,7 @@ impl<'a> OrgTree<'a> {
         if tree.nodes.len() != nodes.len() {
             return Err(Error::ValidationError("组织身份重复".into()));
         }
+
         for node in nodes {
             tree.validate_path(&node.base.id)?;
             if let Some(parent) = node.parent_id.as_deref() {
@@ -218,6 +219,7 @@ impl<'a> OrgTree<'a> {
             };
             node = self.nodes.get(parent).expect("构造时已验证完整祖先链，树不可变");
         }
+
         path.reverse();
         Ok(path)
     }
@@ -252,10 +254,12 @@ impl<'a> OrgTree<'a> {
         if target_path.iter().any(|node| !node.enabled) {
             return Ok(BTreeSet::new());
         }
+
         let mut result = BTreeSet::from([id.to_string()]);
         if !descendants {
             return Ok(result);
         }
+
         let mut pending = vec![id];
         while let Some(parent) = pending.pop() {
             if let Some(children) = self.children.get(parent) {
@@ -281,6 +285,7 @@ impl OrgUnit {
         if path.iter().any(|unit| !unit.enabled || unit.base.is_deleted()) {
             return Err(Error::ValidationError("申请人所属组织或上级组织已停用，请调整所属组织".into()));
         }
+
         let label = match kind {
             OrgUnitKind::Team => "团队",
             OrgUnitKind::Department => "部门",
@@ -288,6 +293,7 @@ impl OrgUnit {
         let unit = path.into_iter().find(|unit| unit.kind == kind).ok_or_else(|| {
             Error::ValidationError(format!("申请人没有所属{label}，请检查组织配置或审批流程"))
         })?;
+
         if unit.leader.as_ref().is_none_or(|leader| leader.assigned_at > at) {
             return Err(Error::ValidationError(format!(
                 "{}未配置有效负责人，请在组织与人员中设置负责人",
@@ -434,6 +440,7 @@ mod tests {
             tree.path("c").unwrap().iter().map(|n| n.base.id.as_str()).collect::<Vec<_>>(),
             ["a", "b", "c"]
         );
+
         nodes[1].enabled = false;
         assert_eq!(OrgTree::new(&nodes).unwrap().expand("a", true).unwrap(), BTreeSet::from(["a".into()]));
     }
@@ -476,6 +483,7 @@ mod tests {
             BTreeSet::from(["a".into(), "b".into(), "c".into(), "z".into()])
         );
         assert!(tree.expand("unknown", true).is_err());
+
         nodes[1].enabled = false;
         let tree = OrgTree::new(&nodes).unwrap();
         for descendants in [false, true] {

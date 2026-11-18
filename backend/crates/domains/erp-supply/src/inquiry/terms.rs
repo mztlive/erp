@@ -119,6 +119,7 @@ impl QuoteTerms {
         {
             return Err(Error::BusinessLogicError("专项报价采购数量或交期不满足，请重新确认".into()));
         }
+
         self.ensure_quantity(usage)?;
         self.ensure_addresses(usage)
     }
@@ -143,6 +144,7 @@ impl QuoteTerms {
         if self.address_limits.is_empty() || usage.addresses.is_empty() {
             return Err(Error::BusinessLogicError("专项报价适用地址缺失或变化，请重新确认".into()));
         }
+
         for address in &usage.addresses {
             if !self.address_limits.iter().any(|limit| {
                 limit.allocation_id == address.allocation_id
@@ -160,6 +162,7 @@ fn validate_addresses(rows: &[QuoteAddressLimit], quantity: Quantity, exact: boo
     if rows.len() > 100 {
         return Err(Error::ValidationError("专项报价每行最多100个地址".into()));
     }
+
     let mut total = Decimal::ZERO;
     let mut seen = BTreeSet::new();
     for row in rows {
@@ -176,6 +179,7 @@ fn validate_addresses(rows: &[QuoteAddressLimit], quantity: Quantity, exact: boo
             .checked_add(row.quantity.to_decimal())
             .ok_or_else(|| Error::ValidationError("专项报价地址数量超出范围".into()))?;
     }
+
     if !rows.is_empty() && (total < quantity.to_decimal() || (exact && total != quantity.to_decimal())) {
         return Err(Error::ValidationError("专项报价配送数量不足或与本次采用数量不匹配".into()));
     }

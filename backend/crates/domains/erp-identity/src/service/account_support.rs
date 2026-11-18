@@ -59,7 +59,6 @@ pub async fn ensure_account_available(
     if exclude_account_id.is_some_and(|id| existing.base.id == id) {
         return Ok(());
     }
-
     Err(crate::error::Error::ConflictError("账号已存在".into()))
 }
 
@@ -137,7 +136,6 @@ mod tests {
     #[test]
     fn missing_account_has_not_found_semantics() {
         let result = account_of_kind(None, AccountKind::Admin, "管理员不存在");
-
         assert!(matches!(result, Err(crate::error::Error::NotFound(_))));
     }
 }

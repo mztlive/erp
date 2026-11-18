@@ -76,14 +76,12 @@ mod tests {
     #[test]
     fn empty_update_is_valid_noop_payload() {
         let payload = UpdateRoleParams::default();
-
         assert!(payload.validate().is_ok());
     }
 
     #[test]
     fn update_rejects_too_short_role_name() {
         let payload = UpdateRoleParams { name: Some("a".to_string()), ..Default::default() };
-
         assert!(payload.validate().is_err());
     }
 

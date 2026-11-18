@@ -131,11 +131,9 @@ impl QueryFilter for AuditLogFilter {
         if let Some(resource_type) = &self.resource_type {
             filter.insert("resource_type", resource_type);
         }
-
         if let Some(success) = self.success {
             filter.insert("success", success);
         }
-
         filter
     }
 }
@@ -246,6 +244,7 @@ mod tests {
                 }],
             })
             .unwrap();
+
         let bytes = serialize_to_vec(&log).unwrap();
         let restored: AuditLog = deserialize_from_slice(&bytes).unwrap();
         assert_eq!(restored, log);

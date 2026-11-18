@@ -48,6 +48,7 @@ impl AcceptanceEvidencePolicy {
         if metadata.byte_size == 0 || metadata.byte_size > 5 * 1024 * 1024 {
             return Err(Error::from("签收单凭证必须为不超过 5 MB 的非空文件"));
         }
+
         if metadata.sensitivity == EvidenceSensitivity::General {
             return Err(Error::from("签收单凭证必须按敏感文件保存"));
         }

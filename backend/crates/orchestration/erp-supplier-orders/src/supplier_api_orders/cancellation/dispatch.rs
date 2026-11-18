@@ -53,8 +53,10 @@ pub(super) async fn send_once<P: CancellationDispatch>(
         port.persist_result(execution).await?;
         return Ok(false);
     }
+
     let Some(request) = execution.begin_cancellation(target)? else { return Ok(false) };
     port.persist_intent(execution).await?;
+
     match port.cancel(&request).await {
         Ok(accepted) => {
             if let Err(error) = execution.accept_cancellation(target, accepted) {
@@ -63,6 +65,7 @@ pub(super) async fn send_once<P: CancellationDispatch>(
         },
         Err(error) => execution.defer(error.summary),
     }
+
     execution.refresh_cancellation_stage();
     execution.next_run_at = Instant::from_unix_secs(Instant::now().unix_secs().saturating_add(60));
     port.persist_result(execution).await?;
@@ -184,6 +187,7 @@ mod tests {
             "supplier".into(),
             vec![],
         );
+
         execution
             .apply_order_tree(
                 OrderTree {
@@ -208,6 +212,7 @@ mod tests {
                 &[line],
             )
             .unwrap();
+
         execution
             .prepare_cancellations(
                 &CancellationScope { payload_hash: "payload".into(), reason_code: "reason".into() },
@@ -226,6 +231,7 @@ mod tests {
         assert_eq!(execution.cancellation_actions["root"].state, CancellationActionState::Accepted);
         assert_eq!(execution.stage, ApiOrderStage::CancellationUnknown);
         assert!(!execution.all_cancellations_confirmed());
+
         let mut recovered: ApiOrderExecution =
             serde_json::from_str(&serde_json::to_string(&execution).unwrap()).unwrap();
         assert!(!send_once(&port, &mut recovered, "root").await.unwrap());
@@ -252,6 +258,7 @@ mod tests {
             send_once(&port, &mut execution, "root").await.unwrap();
             assert_eq!(execution.cancellation_actions["root"].state, CancellationActionState::SentUnknown);
             assert!(execution.blocker.is_some());
+
             assert!(!send_once(&port, &mut execution, "root").await.unwrap());
             assert_eq!(port.state.lock().unwrap().trace, ["intent", "send", "result"]);
         }

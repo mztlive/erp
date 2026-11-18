@@ -288,6 +288,7 @@ impl StockReservationRepositoryExt for Repository<'_, StockReservation> {
         if result.matched_count == 0 {
             return Ok(false);
         }
+
         let exhausted = mongo_ops::update_one(
             &self.collection(),
             doc! { "id": id, "reserved_quantity": 0 },

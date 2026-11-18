@@ -186,6 +186,7 @@ pub async fn ensure_replay_safe(
             "仅结果未知的原下单请求可以在明确无结果后再次提交".to_string(),
         ));
     }
+
     let actions = db
         .supplier_order_actions()
         .list_by_order_and_type_newest(
@@ -278,6 +279,7 @@ pub fn validate_investigation_intent(
     {
         return Err(Error::ConflictError("调查意图身份与当前命令不一致".to_string()));
     }
+
     let intent: InvestigationIntentRecord = serde_json::from_str(
         evidence.request_summary.as_deref().ok_or_else(|| Error::Internal("调查意图摘要为空".to_string()))?,
     )
@@ -348,6 +350,7 @@ pub fn apply_prepared_investigation(
             summary: format!("已由当前供应商业务事实核实结果：{}", resolution.label()),
         });
     }
+
     match prepared {
         PreparedInvestigation::PersistedTerminal(resolution) => {
             if order.verified_resolution(target_action).map(Into::into) != Some(*resolution) {
@@ -507,6 +510,7 @@ pub fn verified_terminal_evidence(
     {
         return Err(Error::BusinessLogicError("结果证据不属于当前供应商履约订单".to_string()));
     }
+
     let record = parse_investigation_evidence(evidence)?;
     if record.outcome != SupplierOrderInvestigationOutcome::VerifiedTerminal
         || record.verified_resolution != Some(expected_resolution)

@@ -235,11 +235,13 @@ mod tests {
         assert_eq!(prepared.event_sequence, NonZeroU32::MIN);
         assert_eq!(prepared.actor_id, "actor");
         assert_eq!(prepared.resource_id.as_deref(), Some("object-1"));
+
         let unknown =
             PreparedPartyAudit::resource(actor(), "party.update", "party", "object-1".into()).unwrap();
         assert_eq!(unknown.actor_name_snapshot, None);
         assert_eq!(unknown.request_id, None);
         assert_eq!(unknown.event_sequence, NonZeroU32::MIN);
+
         assert!(PreparedPartyAudit::resource(actor(), "party.update", "party", " ".into(),).is_err());
     }
 }

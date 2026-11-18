@@ -385,6 +385,7 @@ impl IntegrationErrorTask {
         if data.message_id.is_none() && business_object_id.is_none() {
             return Err(Error::from("错误任务必须关联消息或业务对象"));
         }
+
         let owner_role = normalize_optional_text(data.owner_role, "责任角色", OWNER_ROLE_MAX_LEN)?;
         let owner_user_id = require_handler_user_id(data.owner_user_id)?;
         let owner_org_unit_id = require_handler_org_unit_id(data.owner_org_unit_id)?;
@@ -516,6 +517,7 @@ impl IntegrationErrorTask {
         if self.is_terminal() {
             return Err(Error::from("终态任务不允许再记录尝试"));
         }
+
         self.attempt_count += 1;
         self.last_attempt_at = Some(at);
         self.last_attempt_summary =
@@ -552,6 +554,7 @@ impl IntegrationErrorTask {
         at: Instant,
     ) -> Result<()> {
         ensure_transition(self.status, to)?;
+
         match to {
             ErrorTaskStatus::Resolved => self.apply_resolve(resolution_type, resolution, at)?,
             ErrorTaskStatus::Closed => self.apply_close(resolution_type, resolution, at)?,
@@ -561,6 +564,7 @@ impl IntegrationErrorTask {
                 }
             },
         }
+
         self.status = to;
         Ok(())
     }
@@ -713,6 +717,7 @@ impl IntegrationErrorTask {
         let resolution = resolution.ok_or_else(|| Error::from(missing_message))?;
         let resolution =
             normalize_required_text(resolution, missing_message, RESOLUTION_MAX_LEN, length_message)?;
+
         self.resolution_type = Some(resolution_type);
         self.resolution = Some(resolution);
         self.resolved_at = Some(at);
@@ -793,6 +798,7 @@ pub(crate) mod tests {
         assert!(IntegrationErrorTask::new(IntegrationErrorTaskId::new("task-owner"), missing).is_err());
         let me = IntegrationErrorTaskData { owner_user_id: Some("me".into()), ..task_data() };
         assert!(IntegrationErrorTask::new(IntegrationErrorTaskId::new("task-me"), me).is_err());
+
         let company = IntegrationErrorTaskData { owner_org_unit_id: "company".into(), ..task_data() };
         assert!(IntegrationErrorTask::new(IntegrationErrorTaskId::new("task-org"), company).is_err());
     }
@@ -844,6 +850,7 @@ pub(crate) mod tests {
                 Instant::from_unix_secs(NOW),
             )
             .unwrap();
+
         assert!(created.record_attempt(Instant::from_unix_secs(NOW), Some("retry".to_string())).is_err());
     }
 
@@ -1108,6 +1115,7 @@ pub(crate) mod tests {
                 Instant::from_unix_secs(NOW),
             )
             .unwrap();
+
         assert!(
             created
                 .transition(

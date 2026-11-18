@@ -118,6 +118,7 @@ pub async fn load_current_draft(
     if draft.status != SubmissionStatus::Draft {
         return Err(Error::BusinessLogicError("草稿提交已冻结，不能保存".to_string()));
     }
+
     let lines = db
         .purchase_order_submission_lines()
         .find_lines_by_submission_ids(std::slice::from_ref(&draft_id), executor)
@@ -151,6 +152,7 @@ pub fn build_draft_replacement(
     let mut inputs = SavePurchaseOrderLine::to_line_inputs(lines)?;
     inherit_submission_sources(&mut inputs, old_lines)?;
     let (gross, net, tax) = compute_request_totals(&inputs)?;
+
     let submission = PurchaseOrderSubmission::new(
         PurchaseOrderSubmissionId::new(next_id()),
         PurchaseOrderSubmissionData {
@@ -168,6 +170,7 @@ pub fn build_draft_replacement(
             tax_amount: tax,
         },
     )?;
+
     let lines = build_submission_lines(&submission.base.id.clone().into(), &inputs)?;
     Ok(DraftReplacement { submission, lines, gross, net, tax })
 }
@@ -229,6 +232,7 @@ pub async fn persist_replacement(
     for line in &replacement.lines {
         db.purchase_order_submission_lines().create(line, session).await?;
     }
+
     db.purchase_orders().update(order, session).await?;
     Ok(())
 }
@@ -289,7 +293,6 @@ mod tests {
         request.expected_lock_version = 1;
         let status = PurchaseOrderStatus::Voided;
         let result = ensure_save_target("creator-1", 99, status, request.expected_lock_version, "actor-2");
-
         assert!(matches!(result, Err(Error::NotFound(_))));
     }
 }

@@ -50,6 +50,7 @@ mod tests {
             assert_eq!(comparison.original_price, Some("100".parse().unwrap()));
             assert_eq!(comparison.markup_percent, Some(expected.parse().unwrap()));
         }
+
         let rounded = SelectionPriceComparison::new("1".parse().unwrap(), Some("3".parse().unwrap()));
         assert_eq!(rounded.markup_percent, Some("-66.67".parse().unwrap()));
     }
@@ -62,6 +63,7 @@ mod tests {
                 SelectionPriceComparison::default()
             );
         }
+
         let huge = Amount::try_from(Decimal::MAX).unwrap();
         let comparison = SelectionPriceComparison::new(huge, Some("0.01".parse().unwrap()));
         assert_eq!(comparison.original_price, Some("0.01".parse().unwrap()));

@@ -27,6 +27,7 @@ impl SupplierAddressSource for JdVopConnector {
                 parent_code: query.parent_code.clone(),
             })
             .await?;
+
         if query.depth == SupplierAddressDepth::Town && areas.area_info_list.is_empty() {
             return Ok(observed(vec![SupplierAddressCandidate {
                 depth: SupplierAddressDepth::Town,
@@ -35,6 +36,7 @@ impl SupplierAddressSource for JdVopConnector {
                 parent_code: query.parent_code.clone(),
             }]));
         }
+
         let mut seen = BTreeSet::new();
         let mut candidates = Vec::with_capacity(areas.area_info_list.len());
         for area in areas.area_info_list {
@@ -62,6 +64,7 @@ impl SupplierAddressSource for JdVopConnector {
         {
             return Err(mapping("京东地址与原连接或执行快照不符"));
         }
+
         let mut parent_code = None;
         for (depth, level) in [
             (SupplierAddressDepth::Province, &address.province),
@@ -79,6 +82,7 @@ impl SupplierAddressSource for JdVopConnector {
             }
             parent_code = Some(level.code.clone());
         }
+
         let reader = self.reader.as_ref().ok_or_else(protocol_required)?;
         let valid: WireText = reader
             .read(JdVopReadRequest::VerifyAddress {
@@ -244,6 +248,7 @@ mod tests {
             },
             json!(true),
         ));
+
         let (connector, transport) = connector(responses);
         assert!(SupplierAddressSource::validate(&connector, &address()).await.unwrap().value);
         assert_eq!(*transport.count.lock().unwrap(), 5);
@@ -290,6 +295,7 @@ mod tests {
             json!(true),
         ));
         let (connector, transport) = connector(responses);
+
         let candidate = connector
             .candidates(&AddressCandidateQuery {
                 depth: SupplierAddressDepth::Town,
@@ -301,6 +307,7 @@ mod tests {
             .remove(0);
         assert_eq!(candidate.code, "0");
         assert_eq!(candidate.parent_code.as_deref(), Some("3"));
+
         let mut address = address();
         address.town = SupplierAddressLevel { code: candidate.code, name: candidate.name };
         assert!(SupplierAddressSource::validate(&connector, &address).await.unwrap().value);

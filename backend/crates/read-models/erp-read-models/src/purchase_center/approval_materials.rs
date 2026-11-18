@@ -70,11 +70,13 @@ pub(crate) async fn extra_cost_summary(
     if order.purchase_type != PurchaseType::Expense {
         return Ok(None);
     }
+
     let sales_order_id = order.sales_order_id.to_string();
     let (entries, allocations) = order_costs(db, &sales_order_id, executor).await?;
     let mut items = SalesExtraCostView::registrations(&entries, &allocations);
     let facts = purchase_expense_facts(db, std::slice::from_ref(&sales_order_id), executor).await?;
     items.extend(purchase_expense_views(&facts));
+
     let list = SalesExtraCostListView::from_items(items);
     Ok(Some(ApprovalExtraCostSummary {
         sales_order_id,
@@ -113,6 +115,7 @@ pub(crate) async fn purchase_lines(
     if materials.display.source_sales.is_empty() {
         return Ok(None);
     }
+
     let submission = db
         .purchase_order_submissions()
         .find_by_order_and_submission_no(
@@ -132,6 +135,7 @@ pub(crate) async fn purchase_lines(
         submission.formal_sequence(),
         lines.len(),
     )?;
+
     let ids = lines
         .iter()
         .filter_map(|line| line.sales_order_revision_line_id.as_ref().map(ToString::to_string))
@@ -145,10 +149,12 @@ pub(crate) async fn purchase_lines(
             executor,
         )
         .await?;
+
     let mut views = lines
         .iter()
         .map(|line| comparison_line(line, &materials.display.source_sales, &sources, &goods))
         .collect::<Result<Vec<_>>>()?;
+
     let prices = revision_line_prices(db, &ids, executor).await?;
     for (view, line) in views.iter_mut().zip(&lines) {
         if let Some(source) = &mut view.source {
@@ -235,6 +241,7 @@ fn source_line(
     if line.line_type == PurchaseLineType::LogisticsFee {
         return Ok(None);
     }
+
     let source = line
         .sales_order_revision_line_id
         .as_ref()
@@ -251,6 +258,7 @@ fn source_line(
         .iter()
         .find(|goods| goods.revision_line_id.as_ref() == source.base.id)
         .ok_or_else(|| Error::ConflictError("来源销售版本明细缺少成交价".into()))?;
+
     Ok(Some(ApprovalPurchaseSourceLine {
         sales_prices: None,
         revision_id: source.sales_order_revision_id.to_string(),
@@ -373,6 +381,7 @@ mod tests {
         let view = comparison_line(&purchase_line(), &allowed(), &[sales_line()], &[sales]).unwrap();
         assert_eq!(view.quantity.as_deref(), Some("2"));
         assert_eq!(view.unit_cost_gross.as_deref(), Some("15"));
+
         let source = view.source.unwrap();
         assert_eq!(source.quantity, "10");
         assert_eq!(source.unit_price_gross, "20");
@@ -411,12 +420,15 @@ mod tests {
                 quantity: "1.5".parse().unwrap(),
             },
         ];
+
         let view = comparison_line(&line, &allowed(), &[sales_line()], &[goods()]).unwrap();
         assert_eq!(view.input_tax_rate.as_deref(), Some("0"));
         assert_eq!(view.delivery_allocations, line.delivery_allocations);
+
         let json = serde_json::to_value(&view).unwrap();
         assert_eq!(json["delivery_allocations"][0]["quantity"], "0.5");
         assert_eq!(json["delivery_allocations"][1]["address"], "测试路2号");
+
         line.input_tax_rate = None;
         line.delivery_allocations.clear();
         let legacy = comparison_line(&line, &allowed(), &[sales_line()], &[goods()]).unwrap();
@@ -430,9 +442,11 @@ mod tests {
         assert!(comparison_line(&purchase, &[], &[sales_line()], &[goods()]).is_err());
         assert!(comparison_line(&purchase, &allowed(), &[], &[goods()]).is_err());
         assert!(comparison_line(&purchase, &allowed(), &[sales_line()], &[]).is_err());
+
         let mut source = sales_line();
         source.sales_order_line_id = SalesOrderLineId::new("other-line");
         assert!(comparison_line(&purchase, &allowed(), &[source], &[goods()]).is_err());
+
         let mut source = sales_line();
         source.sales_order_revision_id = SalesOrderRevisionId::new("later-version");
         assert!(comparison_line(&purchase, &allowed(), &[source], &[goods()]).is_err());
@@ -445,10 +459,12 @@ mod tests {
         purchase.quantity = None;
         purchase.unit_cost_gross = None;
         purchase.product_name_snapshot = None;
+
         let view = comparison_line(&purchase, &allowed(), &[], &[]).unwrap();
         assert!(view.source.is_none());
         assert!(view.unit_cost_gross.is_none());
         assert_eq!(view.title, "费用");
+
         purchase.expense = Some(
             erp_procurement::entity::purchase_order::PurchaseExpenseDetail::new(
                 "exp-1".into(),
@@ -477,11 +493,13 @@ mod tests {
             display,
             attachments: vec![],
         };
+
         assert!(validate_submission(&materials, "purchase-order", Some(1), 3).is_ok());
         assert!(validate_submission(&materials, "other-order", Some(1), 3).is_err());
         assert!(validate_submission(&materials, "purchase-order", Some(2), 3).is_err());
         assert!(validate_submission(&materials, "purchase-order", None, 3).is_err());
         assert!(validate_submission(&materials, "purchase-order", Some(1), 1).is_err());
+
         materials.display.root_document_id = "other-order".into();
         assert!(validate_submission(&materials, "purchase-order", Some(1), 3).is_err());
     }

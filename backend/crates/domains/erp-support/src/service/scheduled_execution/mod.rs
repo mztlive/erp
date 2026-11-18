@@ -93,9 +93,11 @@ impl ScheduledExecutionProcess {
         if request.app != self.app {
             return Err(DispatchError::Identity);
         }
+
         if let Some(old) = self.store.find(&request.key()).await? {
             return same_request(&old, &request);
         }
+
         if request.job_id <= 0
             || request.log_id <= 0
             || request.log_time <= 0
@@ -104,6 +106,7 @@ impl ScheduledExecutionProcess {
         {
             return Err(DispatchError::Stale);
         }
+
         let run = ScheduledRun::accepted(request);
         if let Err(error) = self.store.insert(&run).await {
             if let Some(old) = self.store.find(&run.base.id).await? {
@@ -126,11 +129,13 @@ impl ScheduledExecutionProcess {
     /// 领取或结果保存失败必须终止当前执行循环，由重启沿原记录核实。
     pub async fn run_next(&self) -> Result<bool, DispatchError> {
         let Some(run) = self.store.claim(&self.app, &self.owner).await? else { return Ok(false) };
+
         let result = self.work.run(run.request.handler).await;
         let (code, message) = match result {
             Ok(count) => (200, format!("本轮扫描完成，处理 {count} 项；逐项业务结果请查看 ERP")),
             Err(message) => (500, message.to_string()),
         };
+
         self.store.finish(&run, code, &message).await?;
         Ok(true)
     }

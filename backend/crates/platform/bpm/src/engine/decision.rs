@@ -63,6 +63,7 @@ pub fn decide(
     if let Some(code) = command.current_eligibility.blocked_code() {
         return block_current(instance, current, code, command.now);
     }
+
     let edges = match require_decision_edges(graph, &current.node_key) {
         Ok(edges) => edges,
         Err(EngineError::GraphCorrupted) => {
@@ -75,6 +76,7 @@ pub fn decide(
         },
         Err(error) => return Err(error),
     };
+
     match command.decision {
         ApprovalDecision::Approve => apply_approve(instance, current, graph, edges.0, command),
         ApprovalDecision::Reject => apply_reject(instance, current, graph, edges.1, command),
@@ -114,6 +116,7 @@ fn ensure_actor(
     {
         return Err(EngineError::InvalidCommand("执行参与人必须匹配冻结定义"));
     }
+
     if !current.has_participant(command.actor.as_str())
         || command.current_eligibility.participant_ref() != &command.actor
         || matches!(command.current_eligibility, Eligibility::AnyOf { .. })
@@ -137,6 +140,7 @@ fn apply_approve(
     current.record_approve(command.actor.clone(), command.reason.take(), command.now)?;
     let mut plan =
         completed_current_plan(instance, current, command.actor.clone(), BpmEventKind::NodeApproved);
+
     if approve_edge.terminal_result == Some(ApprovalTerminalResult::Approved) {
         plan.instance.complete_approved(command.now)?;
         plan.commit = CommitRequired::TerminalApproved;
@@ -147,6 +151,7 @@ fn apply_approve(
         ));
         return Ok(plan);
     }
+
     let next_key = approve_edge.to_node_key.as_deref().ok_or(EngineError::GraphCorrupted)?;
     enter_after_decision(plan, graph, next_key, command)
 }
@@ -166,6 +171,7 @@ fn apply_reject(
         .filter(|value| !value.is_empty())
         .ok_or(EngineError::InvalidCommand("驳回原因不能为空"))?;
     ensure_reject_transition(graph, reject_edge)?;
+
     current.record_reject(command.actor.clone(), reason, command.now)?;
     instance.complete_rejected(command.now)?;
     Ok(completed_current_plan(instance, current, command.actor, BpmEventKind::NodeRejected))
@@ -241,6 +247,7 @@ pub fn block_current(
     ensure_current_token(&instance, &current)?;
     current.block(code, now)?;
     instance.enter_blocked(code, now)?;
+
     let execution_id = current.typed_id();
     let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Blocked);
     plan.events.push(

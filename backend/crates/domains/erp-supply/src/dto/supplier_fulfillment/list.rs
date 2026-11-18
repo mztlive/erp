@@ -483,6 +483,7 @@ mod tests {
         assert_eq!(query.view.as_deref(), Some("actionable"));
         assert!(query.aftersale_pending);
         assert_eq!(query.external_order_no.as_deref(), Some("SUP-1"));
+
         assert_eq!(query.paging.page, 1);
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");
@@ -497,12 +498,14 @@ mod tests {
             ..SupplierFulfillmentOrderListParams::default()
         };
         assert!(params.validate().is_err());
+
         assert!(
             serde_json::from_value::<SupplierFulfillmentOrderListParams>(serde_json::json!({
                 "owner": "张三"
             }))
             .is_err()
         );
+
         let unknown_view = SupplierFulfillmentOrderListParams {
             view: Some("mine".into()),
             ..SupplierFulfillmentOrderListParams::default()
@@ -527,6 +530,7 @@ mod tests {
         assert_eq!(query.handler_user_ids.as_ref().unwrap().as_slice(), ["handler-1"]);
         assert_eq!(query.org_unit_ids.as_ref().unwrap().as_slice(), ["org-a"]);
         assert_eq!(query.include_descendants, Some(true));
+
         assert_eq!(query.cancel_status, Some(CancelStatus::Failed));
         assert_eq!(query.refund_status, Some(RefundStatus::Manual));
     }

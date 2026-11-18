@@ -30,6 +30,7 @@ impl CatalogPortalService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.ensure_selected_product_dictionaries(input, executor).await?;
+
         for sku in &input.skus {
             if let Some((id, version)) = sku.unit.selected_id.as_deref().zip(sku.unit.expected_version) {
                 let mapped = NormalizedSku {
@@ -61,6 +62,7 @@ impl CatalogPortalService {
                 .ok_or_else(|| Error::BusinessLogicError("所选品牌不存在".into()))?;
             ensure_dictionary(&input.brand, id, version, brand.base.version, brand.is_active())?;
         }
+
         if let Some((id, version)) =
             input.category.selected_id.as_deref().zip(input.category.expected_version)
         {
@@ -98,6 +100,7 @@ impl CatalogPortalService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         input.ensure_normalized(mapped)?;
+
         let category = self
             .db
             .product_categories()
@@ -110,6 +113,7 @@ impl CatalogPortalService {
             .find_by_id(&mapped.brand_id, executor)
             .await?
             .ok_or_else(|| Error::BusinessLogicError("品牌尚未完成有效匹配".into()))?;
+
         ensure_dictionary(
             &input.category,
             &mapped.category_id,
@@ -124,6 +128,7 @@ impl CatalogPortalService {
             brand.base.version,
             brand.is_active(),
         )?;
+
         if input.brand.raw_name.trim() == "未知"
             || (input.brand.raw_name.trim() == "无品牌") != (brand.name.trim() == "无品牌")
         {
@@ -131,11 +136,13 @@ impl CatalogPortalService {
                 "未知品牌尚未匹配；无品牌必须明确且不能与已知品牌混用".into(),
             ));
         }
+
         if category.product_kind != input.product_kind {
             return Err(Error::BusinessLogicError("分类与商品类型不兼容".into()));
         }
         let actual_hierarchy = self.category_hierarchy(&category, executor).await?;
         ensure_frozen_hierarchy(&mapped.category_hierarchy, &actual_hierarchy)?;
+
         for sku in &input.skus {
             let mapped_sku = mapped
                 .sku_mappings
@@ -216,6 +223,7 @@ fn ensure_unit_meaning(sku: &DraftSku, mapped: &NormalizedSku, unit: &UnitOfMeas
             })?
             .ensure_for(&sku.unit.raw_name)?;
     }
+
     ensure_unit_precision(sku, unit)
 }
 
@@ -334,14 +342,17 @@ mod tests {
             unit_synonym_confirmation: None,
             target_sku: None,
         };
+
         assert!(ensure_unit_meaning(&sku, &mapped, &unit).is_ok());
         sku.available_quantity = Some(Quantity::from_str("0").unwrap());
         assert!(ensure_unit_meaning(&sku, &mapped, &unit).is_ok());
         sku.available_quantity = Some(Quantity::from_str("1.5").unwrap());
         assert!(matches!(ensure_unit_meaning(&sku, &mapped, &unit), Err(Error::ValidationError(_))));
+
         sku.available_quantity = None;
         sku.unit.raw_name = "箱".into();
         assert!(matches!(ensure_unit_meaning(&sku, &mapped, &unit), Err(Error::BusinessLogicError(_))));
+
         sku.unit.raw_name = "瓶".into();
         sku.packaging = Some(super::super::PackagingInput {
             original_unit: "箱".into(),
@@ -353,6 +364,7 @@ mod tests {
         assert!(matches!(ensure_unit_meaning(&sku, &mapped, &unit), Err(Error::ValidationError(_))));
         sku.packaging.as_mut().unwrap().units_per_package = Quantity::from_str("12").unwrap();
         assert!(ensure_unit_meaning(&sku, &mapped, &unit).is_ok());
+
         sku.unit.raw_name = "pcs".into();
         sku.packaging.as_mut().unwrap().base_unit = "pcs".into();
         assert!(matches!(ensure_unit_meaning(&sku, &mapped, &unit), Err(Error::BusinessLogicError(_))));
@@ -365,6 +377,7 @@ mod tests {
         let original = to_value(&sku).unwrap();
         assert!(ensure_unit_meaning(&sku, &mapped, &unit).is_ok());
         assert_eq!(to_value(&sku).unwrap(), original);
+
         mapped.unit_synonym_confirmation.as_mut().unwrap().same_unit_meaning_confirmed = false;
         assert!(matches!(ensure_unit_meaning(&sku, &mapped, &unit), Err(Error::ValidationError(_))));
         mapped.unit_synonym_confirmation.as_mut().unwrap().same_unit_meaning_confirmed = true;

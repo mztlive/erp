@@ -68,6 +68,7 @@ impl SupplierService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
+
         let service = self.clone();
         let actor = actor.clone();
         let expected_version = params.scope_version.clone();
@@ -92,8 +93,10 @@ impl SupplierService {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::ValidationError("供应商列表必须使用快照事务".into()));
         }
+
         let snapshot = self.run_list_snapshot(query, actor, true, executor).await?;
         ensure_scope_version(expected_version, &snapshot.context.scope_version)?;
+
         let current = self.run_list_snapshot(query, actor, false, executor).await?;
         ensure_stable_snapshot(&snapshot.context.scope_version, &current.context.scope_version)?;
         Ok(to_list_view(snapshot))
@@ -111,6 +114,7 @@ impl SupplierService {
         context.ensure_current(executor)?;
         let input = build_list_input(query, &context, self.party.as_ref(), executor).await?;
         fingerprint_scope(&self.db, &mut context, &input, executor).await?;
+
         if !hydrate {
             context.validate(executor).await?;
             return Ok(SupplierSnapshot {
@@ -121,6 +125,7 @@ impl SupplierService {
                 context,
             });
         }
+
         let bundle = self.db.supplier().load_supplier_list_bundle(&input, executor).await?;
         hydrate_snapshot(HydrateArgs {
             bundle,
@@ -312,10 +317,12 @@ struct HydrateArgs<'a> {
 async fn hydrate_snapshot(args: HydrateArgs<'_>) -> Result<SupplierSnapshot> {
     let HydrateArgs { bundle, party, accounts, context, page, page_size, executor } = args;
     let total = bundle.page.total;
+
     let (parties, revisions) = party.list_with_current_revisions(&bundle.party_ids, executor).await?;
     let entity_names = load_entity_names(party, &bundle.profiles, executor).await?;
     let maintainer_ids = unique_ids(bundle.page.items.iter().map(|row| row.maintainer_user_id.clone()));
     let names = accounts.names(&maintainer_ids, executor).await?;
+
     let items = assemble_supplier_views(SupplierViewAssembleInput {
         rows: bundle.page.items,
         parties,
@@ -327,6 +334,7 @@ async fn hydrate_snapshot(args: HydrateArgs<'_>) -> Result<SupplierSnapshot> {
         maintainer_names: names,
         as_of: erp_core::common::time::BusinessDate::today(),
     });
+
     context.validate(executor).await?;
     Ok(SupplierSnapshot { items, total, page, page_size, context })
 }
@@ -369,11 +377,13 @@ mod tests {
             .unwrap()
             .normalized()
             .unwrap();
+
         let result = service.list_stage(&query, &actor, None, &mut ReadExecutor::default()).await;
         assert!(matches!(
             result,
             Err(Error::ValidationError(message)) if message == "供应商列表必须使用快照事务"
         ));
+
         let result = service.list_stage(&query, &actor, None, &mut SnapshotExecutor::default()).await;
         assert!(matches!(
             result,
@@ -388,8 +398,10 @@ mod tests {
             Err(Error::ConflictError(message)) => assert!(message.starts_with("DATA_SCOPE_CHANGED：")),
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
+
         assert!(ensure_scope_version(Some("v1"), "v1").is_ok());
         assert!(ensure_scope_version(Some("v1"), "v2").is_err());
+
         assert!(ensure_stable_snapshot("v1", "v1").is_ok());
         assert!(ensure_stable_snapshot("v1", "v2").is_err());
     }
@@ -404,6 +416,7 @@ mod tests {
         let normalized = query.normalized().unwrap();
         assert_eq!(normalized.owner_user_ids.unwrap().as_slice(), &["buyer-a".to_string()]);
         assert_eq!(normalized.capability_owner_user_ids.unwrap().as_slice(), &["cap-b".to_string()]);
+
         assert!(serde_json::from_value::<SupplierListParams>(serde_json::json!({"owner": "张三"})).is_err());
     }
 }

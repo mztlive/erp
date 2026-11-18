@@ -107,6 +107,7 @@ impl QueryFilter for PartyFilter {
             }
             filter.insert("$or", clauses);
         }
+
         if let Some(party_kind) = self.party_kind {
             filter.insert("party_kind", party_kind.as_str());
         }
@@ -272,10 +273,10 @@ impl PartyRepositoryExt for Repository<'_, Party> {
             .limit(filter.limit())
             .projection(party_projection())
             .build();
+
         let collection = self.collection().clone_with_type::<PartyRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 
@@ -344,6 +345,7 @@ mod tests {
         let keyword = document.get_document("party_no").unwrap();
         assert_eq!(keyword.get_str("$regex").unwrap(), r"P\-20");
         assert_eq!(keyword.get_str("$options").unwrap(), "i");
+
         filter.matching_name_ids = vec![erp_core::ids::PartyId::new("party-name-match")];
         let named = filter.to_doc();
         assert_eq!(named.get_str("status").unwrap(), "active");
@@ -357,6 +359,7 @@ mod tests {
                 .as_str(),
             Some("party-name-match")
         );
+
         filter.matching_name_ids.clear();
         filter.keyword = None;
         assert!(!filter.to_doc().contains_key("$or"));

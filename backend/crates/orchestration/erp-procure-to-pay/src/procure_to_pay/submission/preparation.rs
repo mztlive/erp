@@ -87,9 +87,11 @@ impl PurchaseOrderProcess {
     ) -> Result<PreparedPurchaseSubmit> {
         let adapter = purchase_order_adapter()?;
         let subject = purchase_order_subject_ref(command.purchase_order_id)?;
+
         let draft = self.load_submit_draft(command, executor).await?;
         let mut context = self.prepare_submit_source(draft, command, executor).await?;
         self.freeze_submit_draft(&mut context, command).await?;
+
         let approval = self
             .prepare_submit_approval(&mut context, command, subject, adapter.owner_role, executor)
             .await?;
@@ -112,10 +114,12 @@ impl PurchaseOrderProcess {
         order
             .ensure_draft_for_submission()
             .map_err(|_| Error::ConflictError("采购单已提交或已生效，请勿重复提交".to_string()))?;
+
         let binding = find_approval_binding(&self.db, command.purchase_order_id, executor)
             .await
             .map_err(Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
+
         let draft_id =
             order.draft_submission_id().map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         let submission = self
@@ -144,6 +148,7 @@ impl PurchaseOrderProcess {
             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
         let organization_id = purchase_order_responsible_org_id(&draft.order)?;
         let _ = purchase_order_object_readable(&organization_id, command.actor.id())?;
+
         assign_formal_purchase_no(&mut draft.order)?;
         let mut document = find_registered_document(&self.db, command.purchase_order_id, executor)
             .await?
@@ -152,6 +157,7 @@ impl PurchaseOrderProcess {
         if document.document_no.is_empty() {
             document.assign_document_no(draft.order.purchase_no.clone(), now)?;
         }
+
         let mut superseded_draft = draft.submission.clone();
         superseded_draft.mark_superseded()?;
         Ok(PurchaseSubmitContext {
@@ -184,6 +190,7 @@ impl PurchaseOrderProcess {
             let existing_lines = draft.lines.clone();
             let requested_lines =
                 SavePurchaseOrderLinePatch::resolve_all(&command.request.line_patches, &existing_lines)?;
+
             let (submission, lines) = self
                 .domain()
                 .freeze_submission_from_lines(
@@ -195,6 +202,7 @@ impl PurchaseOrderProcess {
                 )
                 .await?;
             draft.lines = lines;
+
             context.procurement_guard = Some(PurchaseSubmitProcurementGuard {
                 requested_lines,
                 existing_lines,
@@ -221,6 +229,7 @@ impl PurchaseOrderProcess {
             &draft.submission.base.id,
             command.actor.id(),
         )?;
+
         let snapshot = build_purchase_order_snapshot(
             &draft.order,
             &context.sales_order,
@@ -229,6 +238,7 @@ impl PurchaseOrderProcess {
             command.actor.id(),
             context.now,
         )?;
+
         let graph = load_bound_definition_graph_with_executor(&self.db, &draft.binding, executor).await?;
         let receipt = erp_workflow::service::approval::read::start_receipt(
             &self.db,
@@ -248,6 +258,7 @@ impl PurchaseOrderProcess {
             executor,
         )
         .await?;
+
         let input = build_purchase_order_start_input(PurchaseOrderStartInput {
             resubmission_reason: command.request.resubmission_reason.clone(),
             graph,
@@ -283,6 +294,7 @@ impl PurchaseOrderProcess {
             )?
             .with_command_id(Some(command.identity.receipt_id().to_string()))?
             .with_resource_number(Some(draft.order.purchase_no.clone()))?;
+
         let output = PurchaseSubmitReceipt::new(
             draft.order.purchase_no.clone(),
             draft.submission.base.id.clone(),
@@ -293,6 +305,7 @@ impl PurchaseOrderProcess {
         .with_versions(0, draft.order.base.version);
         let purchase_order_id = draft.order.base.id.clone();
         let subject_version = draft.order.approval_subject_version;
+
         let input = PurchaseOrderStartPersistInput {
             resubmission_reason: command.request.resubmission_reason.clone(),
             ports: self.ports.clone(),

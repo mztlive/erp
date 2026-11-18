@@ -49,6 +49,7 @@ async fn complete_through_port(
         None,
         Some("确认".to_string()),
     )?;
+
     let mut executor = NoTransaction;
     port.persist_confirmation_and_work_item(&confirmation, true, &mut executor).await?;
     Ok((confirmation.status, true))
@@ -70,6 +71,7 @@ async fn write_port_failure_does_not_return_advanced_confirmation_or_work_item()
     )
     .unwrap();
     assert_eq!(confirmation.status, ConfirmationStatus::Pending);
+
     let result = complete_through_port(confirmation, &FailingConfirmationWrite).await;
     assert!(result.is_err(), "write failure must not produce a completed result");
     assert!(

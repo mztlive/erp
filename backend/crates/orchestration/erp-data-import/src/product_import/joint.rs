@@ -52,9 +52,11 @@ impl ProductImportProcess {
     ) -> Result<RowImportOutcome> {
         let input = SupplyImportInput::from_cells(cells, BusinessDate::today())?;
         self.import_supplier(&input, actor, &mut ReadExecutor::default()).await?;
+
         let row = normalize_import_row(row_number, cells)?;
         let media = resolve_row_media(&self.storage, &self.secret, cells, media_source).await?;
         let prepared = self.prepare_supply_product(&row, media, actor, cache).await?;
+
         let process = self.clone();
         let actor = actor.clone();
         self.db
@@ -120,9 +122,11 @@ impl ProductImportProcess {
         {
             return self.prepare_existing_supply_product(product, row, media, actor).await;
         }
+
         let unit = self.resolve_unit(cache).await?;
         let brand = self.resolve_brand(&row.brand_name, actor, cache).await?;
         let category = self.resolve_category(&row.category_name, actor, cache).await?;
+
         let pending = PendingFileAssets::prepare(media.pending, actor)?.into_catalog_batch();
         let carousel = media
             .carousel
@@ -158,6 +162,7 @@ impl ProductImportProcess {
                 &mut ReadExecutor::default(),
             )
             .await?;
+
         let skus = self
             .db
             .skus()
@@ -169,6 +174,7 @@ impl ProductImportProcess {
             let pending = PendingFileAssets::prepare(Vec::new(), actor)?.into_catalog_batch();
             return Ok(PreparedProduct { write: ProductWrite::Existing(product.base.id), pending });
         }
+
         let pending = PendingFileAssets::prepare(media.pending.clone(), actor)?.into_catalog_batch();
         let request = if same {
             self.update_request_with_images(&product, media).await?

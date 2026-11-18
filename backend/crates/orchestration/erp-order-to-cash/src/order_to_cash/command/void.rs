@@ -81,6 +81,7 @@ async fn void_order(
     if !order.matches_version(expected_version) {
         return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".into()));
     }
+
     order.void(actor.id())?;
     let order_id = SalesOrderId::new(order.base.id.clone());
     let mut working_copy = db
@@ -90,6 +91,7 @@ async fn void_order(
     if let Some(copy) = &mut working_copy {
         copy.abandon()?;
     }
+
     let audit = actor.clone().resource_log("sales_order.void", "sales_order", id.to_string())?;
     SalesOrderService::new(db.clone()).persist_void(&mut order, working_copy.as_mut(), executor).await?;
     complete_document_rework(
@@ -121,6 +123,7 @@ mod tests {
             .unwrap()
             .database("void_authorization");
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let error = void_order(
             &db,
             unavailable_authorization(),

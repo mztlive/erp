@@ -74,13 +74,16 @@ async fn commit_candidates_require_current_submit_and_full_real_source_without_l
         let service = builder.build().unwrap();
         let target = || AccessTarget::Candidate(commit_candidate(&permission, key, other));
         let mut executor = SnapshotExecutor::default();
+
         service.require(&actor(), &permission, target(), &mut executor).await.unwrap();
         assert_eq!(root.calls.load(Ordering::SeqCst), 0);
         assert_eq!(source.calls.load(Ordering::SeqCst), 1);
+
         assert!(matches!(
             service.require(&actor(), &permission, target(), &mut ReadExecutor::default()).await,
             Err(Error::ValidationError(_))
         ));
+
         let calls = source.calls.load(Ordering::SeqCst);
         identity.state.lock().unwrap().grants.remove(0);
         assert!(matches!(
@@ -88,18 +91,21 @@ async fn commit_candidates_require_current_submit_and_full_real_source_without_l
             Err(Error::Forbidden(_))
         ));
         assert_eq!(source.calls.load(Ordering::SeqCst), calls);
+
         identity.state.lock().unwrap().grants.push(("submitter".into(), vec![permission.clone()]));
         source.objects.lock().unwrap().clear();
         assert!(matches!(
             service.require(&actor(), &permission, target(), &mut executor).await,
             Err(Error::Forbidden(_))
         ));
+
         source.objects.lock().unwrap().push(origin(source_permission.resource()));
         identity.state.lock().unwrap().grants = vec![("submitter".into(), vec![permission.clone()])];
         assert!(matches!(
             service.require(&actor(), &permission, target(), &mut executor).await,
             Err(Error::Forbidden(_))
         ));
+
         identity.state.lock().unwrap().grants.push((
             "funds-reader".into(),
             vec![source_permission.clone(), policy_permission::FINANCE_LEDGER_READ],
@@ -112,6 +118,7 @@ async fn commit_candidates_require_current_submit_and_full_real_source_without_l
                 .await,
             Err(Error::Forbidden(_))
         ));
+
         let mut fabricated = commit_candidate(&permission, key, other);
         fabricated
             .relations
@@ -123,6 +130,7 @@ async fn commit_candidates_require_current_submit_and_full_real_source_without_l
             service.require(&actor(), &permission, AccessTarget::Candidate(fabricated), &mut executor).await,
             Err(Error::ValidationError(_))
         ));
+
         assert!(matches!(
             service.require(&actor(), &permission, AccessTarget::Operation, &mut executor).await,
             Err(Error::ValidationError(_))

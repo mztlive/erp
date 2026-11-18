@@ -293,9 +293,11 @@ impl Product {
         if next_org.is_empty() {
             return Err("维护人缺少有效主属组织，请先维护组织成员关系".into());
         }
+
         if target == self.maintainer_user_id && next_org == self.business_org_unit_id {
             return Err("目标已是当前维护人，无需交接".into());
         }
+
         self.maintainer_user_id = target;
         self.business_org_unit_id = next_org;
         self.stable.touch(updated_by);
@@ -375,6 +377,7 @@ mod tests {
         assert!(!product.has_responsibility());
         assert_eq!(product.stable.created_by, "admin-1");
         assert!(product.handover("user-2".into(), None, "admin-2").is_err());
+
         assert!(product.handover("user-2".into(), Some("org-2".into()), "admin-2").unwrap());
         assert_eq!(product.maintainer_user_id, "user-2");
         assert_eq!(product.business_org_unit_id, "org-2");
@@ -390,7 +393,9 @@ mod tests {
         assert_eq!(product.maintainer_user_id, "user-2");
         assert_eq!(product.business_org_unit_id, "org-1");
         assert_eq!(product.stable.updated_by, "admin-2");
+
         assert!(product.handover("user-2".into(), None, "admin-3").is_err());
+
         assert!(product.handover("user-3".into(), Some("org-2".into()), "admin-4").unwrap());
         assert_eq!(product.business_org_unit_id, "org-2");
         assert!(product.handover("user-3".into(), Some("  ".into()), "admin-5").is_err());
@@ -432,8 +437,10 @@ mod tests {
 
         assert!(product.has_version(1));
         assert!(!product.has_version(2));
+
         product.attach_revision(&revision, "admin-2").unwrap();
         assert_eq!(product.stable.current_revision_id.as_deref(), Some("rev-1"));
+
         product.disable("admin-3").unwrap();
         assert!(!product.is_active());
         assert!(product.disable("admin-4").is_err());

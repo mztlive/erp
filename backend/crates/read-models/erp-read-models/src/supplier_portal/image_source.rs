@@ -82,14 +82,17 @@ mod tests {
     #[test]
     fn missing_current_image_has_no_authorized_source_and_source_freezes_every_current_basis() {
         assert!(PortalSkuImageSource::from_catalog(current_view(None)).is_none());
+
         let source = PortalSkuImageSource::from_catalog(current_view(Some("image-1"))).unwrap();
         assert_eq!(source.file_id, "image-1");
         assert_eq!((source.sku_version, source.sku_revision_version), (2, 3));
         assert_eq!((source.product_version, source.product_revision_version, source.unit_version), (4, 5, 6));
         assert_eq!((source.sku_revision_id.as_str(), source.product_revision_id.as_str()), ("sr1", "pr1"));
+
         let mut current = source.clone();
         current.product_revision_id = "new-current-revision".into();
         assert_ne!(source, current);
+
         current = source.clone();
         current.unit_version += 1;
         assert_ne!(source, current);

@@ -68,10 +68,12 @@ impl SalesChangeReadService {
         let expected = params.scope_version.as_deref();
         crate::support::ensure_deep_page(params.page.unwrap_or(1), expected)?;
         params.validate()?;
+
         let snapshot = self.change_list_snapshot(params, actor).await?;
         if expected.is_some_and(|value| value != snapshot.scope_version) {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
+
         let current = self.change_scope_fingerprint(params, actor).await?;
         if current != snapshot.scope_version {
             return Err(crate::support::data_scope_changed("数据范围或业务单据已变化，请刷新"));
@@ -194,6 +196,7 @@ async fn load_change_snapshot(
     executor: &mut dyn Executor,
 ) -> Result<(SalesChangeOrderDetailView, String)> {
     rbac.require(actor, permission, AccessTarget::Operation, executor).await?;
+
     let change = db
         .sales_change_orders()
         .find_by_id(id, executor)
@@ -202,6 +205,7 @@ async fn load_change_snapshot(
     SalesAccess::new(db.clone(), rbac.clone())
         .require_object(actor, &sales_order_permissions::DETAIL, change.sales_order_id.as_ref(), executor)
         .await?;
+
     let binding = match find_approval_binding(db, id, executor).await.map_err(crate::Error::from) {
         Ok(binding) => binding,
         Err(Error::NotFound(_)) => None,
@@ -211,6 +215,7 @@ async fn load_change_snapshot(
     view.procurement = SalesChangeReadService::new(db.clone(), rbac.clone())
         .change_procurement(&view, actor, executor)
         .await?;
+
     // 按钮检查可能开始新的授权阶段；根查询在这些检查结束后签发并交付。
     let AuthorizedChange { context, version, .. } = load_change_facts(db, rbac, actor, id, executor).await?;
     context.validate(executor).await?;
@@ -242,6 +247,7 @@ async fn load_change_facts(
         .find_authorized(change.sales_order_id.as_ref(), &scope, executor)
         .await?
         .ok_or_else(|| Error::NotFound("销售变更单不存在或无权查看".to_string()))?;
+
     let version =
         format!("{}:{}:{}:{}", context.scope_version, order.base.id, order.base.version, change.base.version);
     Ok(AuthorizedChange { context, version })
@@ -289,6 +295,7 @@ async fn runtime_detail_view(
         executor,
     )
     .await?;
+
     let mut view = detail_view(change, binding);
     view.submitted_working_copy_content_hash = content_hash;
     view.approval = approval;
@@ -347,6 +354,7 @@ mod authorization_tests {
             .database("sales_change_entry_test");
         let authorization = unavailable_authorization();
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         for entry in [
             sales_review::SALES_CHANGE_ORDER_DETAIL,
             sales_review::SALES_CHANGE_ORDER_CREATE,

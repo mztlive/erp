@@ -92,6 +92,7 @@ impl CustomerAssignmentRequest {
         let user_id = require_field(self.user_id, "Assign 必须携带销售人员")?;
         let assignment_role = require_field(self.assignment_role, "Assign 必须携带归属角色")?;
         let valid_from = require_field(self.valid_from, "Assign 必须携带生效开始日期")?;
+
         Ok(CustomerAssignmentCommand::Assign(AssignCustomerAssignment::new(
             user_id,
             assignment_role,
@@ -118,6 +119,7 @@ impl CustomerAssignmentRequest {
         let assignment_id = require_field(self.assignment_id, "End 必须携带目标归属 ID")?;
         let valid_to = require_field(self.valid_to, "End 必须携带生效结束日期")?;
         let version = require_field(self.version, "End 必须携带乐观锁版本")?;
+
         Ok(CustomerAssignmentCommand::End(EndCustomerAssignment::new(
             assignment_id,
             valid_to,
@@ -249,6 +251,7 @@ mod tests {
             },
             CustomerAssignmentCommand::End(_) => panic!("assign 不得变成 End"),
         }
+
         let collaborator: CustomerAssignmentRequest = serde_json::from_value(json!({
             "action": "assign",
             "user_id": "admin-2",

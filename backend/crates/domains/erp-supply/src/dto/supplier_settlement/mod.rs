@@ -89,6 +89,7 @@ mod tests {
         let query = params.normalized().unwrap();
         assert_eq!(query.statement_no.as_deref(), Some("ST-2026"));
         assert_eq!(query.status, Some(SettlementStatus::PendingReview));
+
         assert_eq!(query.paging.page, 1);
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");

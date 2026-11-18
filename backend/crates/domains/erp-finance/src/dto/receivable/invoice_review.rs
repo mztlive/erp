@@ -54,6 +54,7 @@ impl InvoiceReviewAmounts {
                 view.other_approved = view.other_approved.checked_add(remaining);
             }
         }
+
         let balance = open
             .checked_sub(view.current_reserved)
             .checked_sub(view.other_pending)
@@ -97,6 +98,7 @@ mod tests {
         );
         assert_eq!(view.available, Amount::zero());
         assert_eq!(view.shortage, amount("20.01"));
+
         let empty = InvoiceReviewAmounts::from_entries(Amount::zero(), "missing", [].into_iter());
         assert_eq!(empty.current_reserved, Amount::zero());
         assert_eq!(empty.available, Amount::zero());

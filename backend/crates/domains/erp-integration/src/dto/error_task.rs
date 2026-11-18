@@ -114,6 +114,7 @@ impl ErrorTaskListParams {
         check_scoped_version(&self.scope_version, &self.org_unit_ids, self.include_descendants)?;
         let (handler_user_ids, operator_user_ids) =
             normalize_handler_filters(&self.handler_user_ids, &self.operator_user_ids)?;
+
         Ok(ErrorTaskListQuery {
             q: normalized_text(self.q.as_deref()),
             message_id: self.message_id.clone(),
@@ -285,6 +286,7 @@ mod tests {
             sort_by: Some("last_attempt_at".to_string()),
             sort_dir: Some("asc".to_string()),
         };
+
         let query = params.normalized().unwrap();
         assert_eq!(query.q.as_deref(), Some("needle.[x]"));
         assert_eq!(query.business_object_id.as_deref(), Some("so-2026-001"));
@@ -292,6 +294,7 @@ mod tests {
         assert_eq!(query.status, Some(ErrorTaskStatus::AutoRetrying));
         assert_eq!(query.owner_role.as_deref(), Some("ops"));
         assert_eq!(query.handler_user_ids, vec!["user-1".to_string(), "user-2".to_string()]);
+
         assert_eq!(query.paging.page, 2);
         assert_eq!(query.paging.page_size, 50);
         assert_eq!(query.paging.sort_by, "last_attempt_at");
@@ -305,6 +308,7 @@ mod tests {
             ..ErrorTaskListParams::default()
         };
         assert!(params.normalized().is_err());
+
         let operators = ErrorTaskListParams {
             operator_user_ids: Some(serde_json::from_value(serde_json::json!("ME")).unwrap()),
             ..ErrorTaskListParams::default()

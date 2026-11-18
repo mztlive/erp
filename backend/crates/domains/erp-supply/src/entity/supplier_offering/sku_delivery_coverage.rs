@@ -218,6 +218,7 @@ impl SkuDeliveryCoverageMemo {
         {
             return coverage.clone();
         }
+
         let coverage = input.coverage();
         self.entries.push((input.restricted, input.policies.clone(), coverage.clone()));
         coverage
@@ -280,6 +281,7 @@ mod tests {
         let physical = input(true, vec![xinjiang_closed()]);
         let first = memo.coverage(&physical);
         assert_eq!(memo.coverage(&physical), first);
+
         let service = input(false, vec![xinjiang_closed()]);
         assert_eq!(memo.coverage(&service).included.full, vec![NATIONWIDE_REGION_CODE.to_string()]);
         assert_eq!(memo.entries.len(), 2);
@@ -295,6 +297,7 @@ mod tests {
         assert!(!SkuDeliveryCoverageState::needs_rebuild(Some(&current)));
         let newer = SkuDeliveryCoverageState::new(SKU_DELIVERY_COVERAGE_VERSION + 1, marks);
         assert!(!SkuDeliveryCoverageState::needs_rebuild(Some(&newer)));
+
         assert_eq!(current.watermarks, ChangeWatermarks::starting_at(1_000));
         assert_eq!(current.advanced(1_002).watermarks, ChangeWatermarks::starting_at(1_000).advanced(1_002));
     }

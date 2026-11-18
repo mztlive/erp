@@ -59,6 +59,7 @@ impl SupplierCatalogAdoptionProcess {
         } else {
             self.preview_group_anchor_candidates(&rows, actor, Some((batch, token))).await?
         };
+
         if work.phase != BatchWorkPhase::Finalizing {
             let mut scanned = 0;
             let mut after = work.after.clone();
@@ -84,6 +85,7 @@ impl SupplierCatalogAdoptionProcess {
             }
             self.finish_review_scan(batch, token, scanned, &after, actor).await?;
         }
+
         self.persist_batch_conflicts(batch, token, &mut rows, actor).await?;
         self.publish_batch_preview(batch, token, rows, actor).await
     }
@@ -114,6 +116,7 @@ impl SupplierCatalogAdoptionProcess {
                     let mut current =
                         process.check_batch_draft(&connection, &id, &token, &actor, executor).await?;
                     process.ensure_source(&process.batch_access(&connection, &actor, executor).await?)?;
+
                     if let Err(error) = process
                         .preview_batch_item(&current, &mut row, generation, anchor.as_ref(), &actor, executor)
                         .await
@@ -123,6 +126,7 @@ impl SupplierCatalogAdoptionProcess {
                         row.preview_version = None;
                         row.frozen_row = None;
                     }
+
                     current
                         .work
                         .as_mut()
@@ -273,6 +277,7 @@ impl SupplierCatalogAdoptionProcess {
             row.messages = vec!["已完成入库，保留现有商品及供给".into()];
             return Ok(());
         }
+
         if batch_preview(batch, row).ensure_current_item(&current).is_err() {
             row.previous_source = Some(row.source.clone());
             if let Some(terms) = &mut row.terms {
@@ -285,6 +290,7 @@ impl SupplierCatalogAdoptionProcess {
                 "来源资料或接口采购报价已变化，请查看新旧信息后重新核对".into(),
             ));
         }
+
         row.source = current;
         row.apply_defaults(&batch.defaults, batch.fill_policy)?;
         let resolution =
@@ -311,6 +317,7 @@ impl SupplierCatalogAdoptionProcess {
             };
             values.apply(&batch.rules, batch.fill_policy, row.source.purchase_quote().ok(), false)?
         };
+
         let warnings = row.sales_prices.validate(row.source.purchase_quote().ok(), existing)?;
         let messages: Vec<_> = warnings.iter().map(|warning| warning.label().to_owned()).collect();
         if row.warnings != messages {
@@ -339,12 +346,14 @@ impl SupplierCatalogAdoptionProcess {
             sales_prices: Some(row.sales_prices.to_sales_prices()),
             delivery_template_id: row.delivery_template_id.clone(),
         };
+
         self.validate_batch_offering(&row.source, &frozen, executor).await?;
         if !matches!(resolution.kind, MatchKind::Existing) {
             let mut resolved = frozen.clone();
             resolved.target = resolution.target;
             product_request(&row.source, &resolved, &PreparedSourceMedia::empty())?;
         }
+
         row.resolution = Some(BatchResolution {
             kind: match resolution.kind {
                 MatchKind::Existing => "EXISTING",

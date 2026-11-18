@@ -94,6 +94,7 @@ impl ApprovalNodeDefinition {
             LABEL_MAX_LEN,
             "审批人显示名过长",
         )?;
+
         if let Some(rule) = &self.assignee_rule {
             if rule.trim().is_empty()
                 || rule.len() > 64
@@ -316,6 +317,7 @@ mod tests {
             })
             .is_err()
         );
+
         let node = ApprovalNodeDefinition::new(super::NewNodeDefinition {
             id: ApprovalNodeDefinitionId::new("n-id"),
             process_definition_id: ApprovalProcessDefinitionId::new("def"),

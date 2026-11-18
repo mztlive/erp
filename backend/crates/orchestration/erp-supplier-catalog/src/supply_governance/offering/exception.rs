@@ -67,6 +67,7 @@ impl SupplierOfferingProcess {
                     {
                         return Ok(result);
                     }
+
                     apply_exception_completion(&db, &transaction_target, executor).await
                 })
             })
@@ -98,6 +99,7 @@ impl SupplierOfferingProcess {
                 })
             })
             .await;
+
         recover_command(error, recovered)
     }
 }
@@ -162,6 +164,7 @@ async fn replay_completion<P: ExceptionReplayPort>(
     if committed.work_item_id != request.work_item_id.trim() {
         return Err(Error::ConflictError("同一操作号已用于其它供应停止任务".into()));
     }
+
     let task = port.task(&committed.work_item_id, executor).await?;
     ensure_committed_exception(&committed, &task, request)?;
     Ok(Some(supply_exception_completion_result(&task, request)))
@@ -217,6 +220,7 @@ impl ExceptionCompletionTarget {
             return Err(Error::ValidationError("任务 ID 与来源版本不能为空".into()));
         }
         let expected_task_version = expected_task_version(&req.expected_task_version)?;
+
         let command = CommandReceipt::from_payload(
             "supplier-supply-exception:",
             actor.id(),
@@ -251,6 +255,7 @@ async fn apply_exception_completion(
         .find_by_id(&target.request.work_item_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("供应停止任务不存在".to_string()))?;
+
     ensure_supply_exception_work_item(
         &work_item,
         &target.offering_id,
@@ -383,6 +388,7 @@ mod tests {
             SupplierSupplyExceptionDecision, SupplierSupplyExceptionDecisionType,
         };
         use persistence_core::testing::SnapshotExecutor;
+
         let actor = AuditActor::new("operator-1".into(), "operator".into(), AccountKind::Admin);
         let req = CompleteSupplierSupplyExceptionTaskRequest {
             work_item_id: "work-item-1".into(),
@@ -405,6 +411,7 @@ mod tests {
             &req,
         )
         .unwrap();
+
         for denied in [false, true] {
             let mut task = supply_exception_task();
             task.complete_by_domain_command(actor.id(), Instant::from_unix_secs(2)).unwrap();
@@ -577,6 +584,7 @@ async fn commit_exception_completion(
         }),
         decision_audit.base.id.clone(),
     )?;
+
     persist_completion(
         &mut MongoCompletionWrite {
             db: input.db,

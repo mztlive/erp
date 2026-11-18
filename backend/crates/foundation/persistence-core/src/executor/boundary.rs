@@ -79,9 +79,11 @@ mod tests {
         let first = scope.boundary();
         let copied = first.clone();
         assert!(first.is_snapshot());
+
         scope.advance();
         assert!(!first.is_snapshot());
         assert!(!copied.is_snapshot());
+
         let current = scope.boundary();
         assert!(current.is_snapshot());
         drop(scope);

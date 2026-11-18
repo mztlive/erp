@@ -135,6 +135,7 @@ pub fn build_procurement_coverage(facts: ProcurementCoverageFacts) -> Result<Sal
             )
             .collect();
     }
+
     let product_kinds = resolve_product_kinds(&targets, &facts.skus, &facts.products)?;
     let mut covered = HashMap::new();
     accumulate_submission_coverage(&targets, &facts.purchase_orders, &facts.submission_lines, &mut covered)?;
@@ -149,6 +150,7 @@ pub fn build_procurement_coverage(facts: ProcurementCoverageFacts) -> Result<Sal
         &mut covered,
     )?;
     accumulate_stock_coverage(&facts.reservations, &mut covered)?;
+
     build_coverage(revision, targets, covered, product_kinds, facts.quantity_scales)
 }
 
@@ -293,6 +295,7 @@ fn accumulate_revision_coverage(
         .filter(|(_, line)| line.line_type == PurchaseLineType::ItemService)
         .map(|(id, _)| *id)
         .collect::<HashSet<_>>();
+
     let mut allocated = HashSet::new();
     for allocation in sources.allocations {
         allocated.insert(allocation.purchase_order_revision_line_id.as_ref());
@@ -301,6 +304,7 @@ fn accumulate_revision_coverage(
             add_covered(covered, &stable_id, allocation.allocated_quantity)?;
         }
     }
+
     if allocated != expected {
         return Err(Error::from("采购当前版本商品行缺少唯一销售分配"));
     }
@@ -349,9 +353,11 @@ fn allocation_stable_line(
         .sales_order_revision_line_id
         .as_ref()
         .ok_or_else(|| Error::from("采购当前版本行缺少销售当前版本行"))?;
+
     let Some(current) = targets.get(&stable_id) else {
         return Ok(stable_id);
     };
+
     let bound_to_current = current == recorded.as_ref();
     let bound_to_history = historical
         .get(recorded.as_ref())
@@ -553,6 +559,7 @@ fn build_coverage(
             summary,
         });
     }
+
     let summary = ProcurementCoverageSummary::aggregate(lines.iter().map(|line| &line.summary))
         .map_err(|error| Error::from(format!("采购数量一致性错误: {error}")))?;
     Ok(SalesProcurementCoverage { revision, lines, summary })
@@ -710,7 +717,6 @@ mod tests {
         SalesGoodsLineFact {
             assigned_delivery_allocations: Vec::new(),
             delivery_allocations: Vec::new(),
-
             revision_line_id: SalesOrderRevisionLineId::new(revision_line_id),
             sku_id: SkuId::new(sku_id),
             sku_revision_id: erp_core::ids::SkuRevisionId::new(format!("skur-{sku_id}")),
@@ -892,7 +898,6 @@ mod tests {
     #[test]
     fn existing_stock_coverage_is_reserved_plus_consumed() {
         let reservation = reservation("rsv-direct-1", "line-1", "6", "4");
-
         assert_eq!(reservation_covered_quantity(&reservation).unwrap(), Quantity::from_str("10").unwrap());
     }
 
@@ -902,7 +907,6 @@ mod tests {
         let summary =
             coverage_summary(Quantity::from_str("1").unwrap(), Quantity::from_str("1.000001").unwrap())
                 .unwrap();
-
         assert_eq!(summary.remaining_quantity, Quantity::from_str("0").unwrap());
         assert_eq!(summary.excess_quantity, Quantity::from_str("0.000001").unwrap());
     }
@@ -1017,7 +1021,6 @@ mod tests {
         facts.reservations.clear();
 
         let coverage = build_procurement_coverage(facts).unwrap();
-
         assert_eq!(coverage.summary.covered_quantity, Quantity::from_str("2").unwrap());
         assert_eq!(coverage.lines[0].summary.remaining_quantity, Quantity::from_str("8").unwrap());
     }
@@ -1032,7 +1035,6 @@ mod tests {
         facts.reservations.clear();
 
         let coverage = build_procurement_coverage(facts).unwrap();
-
         assert_eq!(coverage.lines[0].summary.covered_quantity, Quantity::from_str("11").unwrap());
         assert_eq!(coverage.lines[0].summary.remaining_quantity, Quantity::from_str("0").unwrap());
         assert_eq!(coverage.summary.excess_quantity, Quantity::from_str("1").unwrap());
@@ -1056,7 +1058,6 @@ mod tests {
         .collect();
 
         let coverage = build_procurement_coverage(facts).unwrap();
-
         assert_eq!(coverage.lines[0].summary.covered_quantity, Quantity::from_str("7").unwrap());
     }
 
@@ -1078,7 +1079,6 @@ mod tests {
         .collect();
 
         let error = build_procurement_coverage(facts).unwrap_err().to_string();
-
         assert_eq!(error, "采购正式分配未绑定来源销售版本行");
     }
 
@@ -1151,7 +1151,6 @@ mod tests {
         let goods = goods_line("sorl-1", "sku-1", "2");
         let summary =
             ProcurementCoverageSummary::new(goods.quantity, Quantity::from_str("1").unwrap()).unwrap();
-
         assert_eq!(revision_line.sales_order_line_id.to_string(), "sol-1");
         assert_eq!(summary.remaining_quantity, Quantity::from_str("1").unwrap());
     }

@@ -37,6 +37,7 @@ fn allows(permission: &Permission, object: &ObjectFacts, qualified: &QualifiedPe
     if object.resource != "approval_process" || !object.id.is_empty() || !object.version.is_empty() {
         return Err(Error::ValidationError("审批定义必须使用服务端确认的主体类型候选".into()));
     }
+
     let subject = object.subject_type.get()?;
     let (_, definition, runtime) = approval_admin::TYPES
         .iter()
@@ -71,6 +72,7 @@ impl AuthorizationService {
         for (_, definition, runtime) in approval_admin::TYPES {
             requested.extend([definition.clone(), runtime.clone()]);
         }
+
         let boundary = executor
             .boundary()
             .filter(ExecutionBoundary::is_snapshot)
@@ -79,6 +81,7 @@ impl AuthorizationService {
         if !qualified.as_ref().map(|q| allows(permission, object, q)).transpose()?.unwrap_or(false) {
             return Err(Error::Forbidden("账号缺少审批定义动作或该主体类型的管理资格".into()));
         }
+
         if !boundary.is_current(executor) || object.valid_until.is_some_and(|until| until <= Instant::now()) {
             return Err(Error::ConflictError("DATA_SCOPE_CHANGED：审批定义授权目标或执行阶段已失效".into()));
         }

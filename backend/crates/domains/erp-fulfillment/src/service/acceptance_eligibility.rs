@@ -53,6 +53,7 @@ pub struct EligibilitySources<'a> {
 pub fn build_line_eligibilities(sources: &EligibilitySources<'_>) -> Result<Vec<AcceptanceLineEligibility>> {
     let mut facts_by_line = group_facts_by_line(sources)?;
     let line_inputs = group_revision_quantities(sources);
+
     let mut lines = Vec::with_capacity(line_inputs.len());
     for (sales_order_line_id, required_quantity) in line_inputs {
         let facts = facts_by_line.remove(&sales_order_line_id).unwrap_or_default();
@@ -77,15 +78,18 @@ fn group_facts_by_line(
     let delivery_allocations = AcceptanceAllocationIndex::new(sources.delivery_allocations);
     let electronic_allocations = AcceptanceAllocationIndex::new(sources.electronic_allocations);
     let service_allocations = AcceptanceAllocationIndex::new(sources.service_allocations);
+
     let mut facts_by_line: HashMap<String, Vec<AcceptanceFactEligibility>> = HashMap::new();
     for revision_line in sources.revision_lines {
         facts_by_line.insert(revision_line.sales_order_line_id.to_string(), Vec::new());
     }
+
     for line in sources.delivery_lines {
         if let Some(facts) = facts_by_line.get_mut(line.sales_order_line_id.as_ref()) {
             facts.push(delivery_allocations.fact(&line.base.id, line.quantity)?);
         }
     }
+
     for record in sources.electronic {
         // 无效电子交付事实已被领域判定为不可验收：跳过该事实并保留其他有效事实。
         if record.acceptance_quantity(&record.sales_order_line_id).is_err() {
@@ -95,6 +99,7 @@ fn group_facts_by_line(
             facts.push(electronic_allocations.fact(&record.base.id, record.quantity)?);
         }
     }
+
     for record in sources.service {
         if let Some(facts) = facts_by_line.get_mut(record.sales_order_line_id.as_ref()) {
             facts.push(service_allocations.fact(&record.base.id, record.quantity)?);
@@ -121,6 +126,7 @@ fn group_revision_quantities(sources: &EligibilitySources<'_>) -> Vec<(String, Q
         .iter()
         .map(|goods| (goods.revision_line_id.as_ref(), goods.quantity))
         .collect();
+
     let zero = Quantity::from_str("0").expect("字面量 0 必然合法");
     let mut line_index: HashMap<&str, usize> = HashMap::new();
     let mut line_inputs: Vec<(String, Quantity)> = Vec::new();
@@ -199,6 +205,7 @@ mod tests {
                 quantity: Quantity::from_str(amount).unwrap(),
             })
             .collect::<Vec<_>>();
+
         let result = build_line_eligibilities(&sources(&lines, &quantities)).unwrap();
         assert_eq!(
             result.iter().map(|line| line.sales_order_line_id.as_str()).collect::<Vec<_>>(),
@@ -272,6 +279,7 @@ mod tests {
         input.delivery_lines = &deliveries;
         input.delivery_allocations = &allocations;
         let one = Quantity::from_str("1").unwrap();
+
         let started = Stopwatch::now();
         for _ in 0..10 {
             let result = build_line_eligibilities(&input).unwrap();
@@ -306,6 +314,7 @@ mod tests {
         let mut input = sources(&lines, &[]);
         input.delivery_lines = &deliveries;
         input.delivery_allocations = &allocations;
+
         let result = build_line_eligibilities(&input).unwrap();
         assert_eq!(
             result[0].facts.iter().map(|fact| fact.fulfillment_line_id.as_str()).collect::<Vec<_>>(),
@@ -324,6 +333,7 @@ mod tests {
         reversed.allocation_action = AllocationAction::Reverse;
         reversed.reverses_allocation_id = Some(AcceptanceFulfillmentAllocationId::new("original"));
         let allocations = [allocation("excess", "3"), reversed];
+
         for (deliveries, message) in [
             ([delivery("negative", "s1"), delivery("excess", "s1")], "履约事实的净验收数量不得为负"),
             (
@@ -358,6 +368,7 @@ mod tests {
         ];
         let service =
             [ServiceFulfillment::new(ServiceFulfillmentId::new("shared-id"), service_data()).unwrap()];
+
         let delivery_allocations = [allocation("shared-id", "0.5")];
         let mut electronic_allocation = allocation("shared-id", "1");
         electronic_allocation.fulfillment_fact_type = FulfillmentFactType::ElectronicDelivery;
@@ -365,6 +376,7 @@ mod tests {
         let mut service_allocation = allocation("shared-id", "0.25");
         service_allocation.fulfillment_fact_type = FulfillmentFactType::ServiceFulfillment;
         let service_allocations = [service_allocation];
+
         let mut input = sources(&lines, &[]);
         input.delivery_lines = &deliveries;
         input.electronic = &electronic;
@@ -372,6 +384,7 @@ mod tests {
         input.delivery_allocations = &delivery_allocations;
         input.electronic_allocations = &electronic_allocations;
         input.service_allocations = &service_allocations;
+
         let result = build_line_eligibilities(&input).unwrap();
         assert_eq!(result[0].facts.len(), 3);
         assert_eq!(

@@ -133,11 +133,13 @@ impl SupplierDepositAccount {
         if covered < Amount::zero() || covered > amount || covered > self.reserved_amount {
             return Err(Error::from("扣款归属占用金额无效"));
         }
+
         let balance = subtract(self.book_balance, amount)?;
         let reserved = subtract(self.reserved_amount, covered)?;
         if covered < amount || balance < Amount::zero() {
             self.flag_reconciliation_risk(Instant::now())?;
         }
+
         self.book_balance = balance;
         self.reserved_amount = reserved;
         Ok(())

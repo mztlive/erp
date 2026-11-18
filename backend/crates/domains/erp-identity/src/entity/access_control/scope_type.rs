@@ -109,6 +109,7 @@ pub(crate) fn normalize_scope_targets(
     if targets.len() > MAX_TARGETS {
         return Err(Error::from(format!("范围目标数量不能超过 {MAX_TARGETS}")));
     }
+
     let mut seen = HashSet::new();
     let mut normalized = Vec::with_capacity(targets.len());
     for target in targets {

@@ -41,11 +41,13 @@ impl SelectionPriceChange {
         if status != BookletStatus::PendingPublish {
             return Err(Error::from("只有待发布的选品册可以改价"));
         }
+
         let prices = self.prices(pool)?;
         let mut updated = items.to_vec();
         for item in &mut updated {
             item.apply_prices(&prices)?;
         }
+
         for member in pool {
             if let Some(price) = prices.get(member.sku.sku_id_str()) {
                 member.sku.sales_visible_price_gross = *price;
@@ -95,6 +97,7 @@ impl SalesSelectionDisplayItem {
                 sku.sales_visible_price_gross = *price;
             }
         }
+
         if let Some(price) = package_total {
             *price = package_price(members)?;
         }
@@ -153,6 +156,7 @@ mod tests {
                 sales_visible_price_gross: amount(price),
             })
             .collect();
+
         let pool = skus
             .iter()
             .map(|sku| {
@@ -164,6 +168,7 @@ mod tests {
                 )
             })
             .collect();
+
         let single = SalesSelectionDisplayItem::single_sku(
             SalesSelectionDisplayItemId::new("single"),
             SalesSelectionBookletId::new("book"),
@@ -194,9 +199,11 @@ mod tests {
         let source = pool[0].sku.clone();
         let refs = items[1].sellable_refs();
         let cover = items[1].cover_asset_id().unwrap().to_string();
+
         SelectionPriceChange::Single { sku_id: "a".into(), price: amount("9.99") }
             .apply(BookletStatus::PendingPublish, &mut pool, &mut items)
             .unwrap();
+
         assert_eq!(source.sales_visible_price_gross, amount("10.05"));
         assert_eq!(pool[0].sku.sales_visible_price_gross, amount("9.99"));
         assert_eq!(pool[0].sku.reference_prices, source.reference_prices);
@@ -207,6 +214,7 @@ mod tests {
         assert_eq!(pool[1].sku.sales_visible_price_gross, amount("20.15"));
         assert_eq!(items[0].price(), amount("9.99"));
         assert_eq!(items[1].price(), amount("30.14"));
+
         assert_eq!(items[1].sellable_refs(), refs);
         assert_eq!(items[1].cover_asset_id(), Some(cover.as_str()));
     }
@@ -216,9 +224,11 @@ mod tests {
         let (mut pool, mut items) = fixture();
         let original_single = items[0].clone();
         let original_member = pool[0].clone();
+
         SelectionPriceChange::Single { sku_id: "b".into(), price: amount("25") }
             .apply(BookletStatus::PendingPublish, &mut pool, &mut items)
             .unwrap();
+
         assert_eq!(items[0], original_single);
         assert_eq!(pool[0], original_member);
         assert_eq!(pool[1].sku.sales_visible_price_gross, amount("25"));
@@ -237,9 +247,11 @@ mod tests {
         };
         let original_members = members.clone();
         *price = amount("1");
+
         for item in &mut items {
             item.apply_prices(&BTreeMap::new()).unwrap();
         }
+
         assert_eq!(items[0], original_single);
         let DisplayKind::Package { members, price, .. } = &items[1].kind else { panic!("expected package") };
         assert_eq!(members, &original_members);
@@ -253,9 +265,11 @@ mod tests {
         members.clear();
         let original_pool = pool.clone();
         let original_items = items.clone();
+
         let error = SelectionPriceChange::Single { sku_id: "a".into(), price: amount("15") }
             .apply(BookletStatus::PendingPublish, &mut pool, &mut items)
             .unwrap_err();
+
         assert_eq!(error.to_string(), "套餐必须包含成员 SKU");
         assert!(matches!(error, Error::LogicError(_)));
         assert_eq!(pool, original_pool);
@@ -271,9 +285,11 @@ mod tests {
         assert_eq!(items[0].price(), amount("11.06"));
         assert_eq!(pool[1].sku.sales_visible_price_gross, amount("22.16"));
         assert_eq!(items[1].price(), amount("33.22"));
+
         change.apply(BookletStatus::PendingPublish, &mut pool, &mut items).unwrap();
         assert_eq!(items[0].price(), amount("12.17"));
         assert_eq!(items[1].price(), amount("36.55"));
+
         // 重生成从本批次池取出的快照仍使用新客户售价。
         let regenerated = SalesSelectionDisplayItem::single_sku(
             SalesSelectionDisplayItemId::new("regenerated"),
@@ -291,6 +307,7 @@ mod tests {
         SelectionPriceChange::Single { sku_id: "a".into(), price: amount("15") }
             .apply(BookletStatus::PendingPublish, &mut pool, &mut items)
             .unwrap();
+
         let choices = vec![SessionChoice {
             display_item_id: SalesSelectionDisplayItemId::new("package"),
             quantity: Some(2),
@@ -325,6 +342,7 @@ mod tests {
         ] {
             assert!(valid.apply(status, &mut pool.clone(), &mut items.clone()).is_err());
         }
+
         for invalid in [
             SelectionPriceChange::Single { sku_id: "missing".into(), price: amount("1") },
             SelectionPriceChange::Single { sku_id: "a".into(), price: amount("0") },
@@ -337,6 +355,7 @@ mod tests {
             assert_eq!(next_pool, pool);
             assert_eq!(next_items, items);
         }
+
         assert!(valid.apply(BookletStatus::PendingPublish, &mut [], &mut []).is_err());
     }
 
@@ -353,6 +372,7 @@ mod tests {
         assert!(matches!(error, Error::LogicError(_)));
         assert_eq!(pool, original_pool);
         assert_eq!(items, original_items);
+
         pool[0].sku.sales_visible_price_gross = huge;
         let original_pool = pool.clone();
         assert!(

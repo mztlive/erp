@@ -56,6 +56,7 @@ impl SupplierDepositService {
             reservation.basis.authorization_version,
             Instant::now(),
         )?;
+
         self.db.supplier_deposit_accounts().update(&mut account, executor).await?;
         self.db.purchase_payment_requests().update(&mut request, executor).await?;
         self.db.supplier_deposit_authorizations().update(&mut authorization, executor).await?;
@@ -88,6 +89,7 @@ impl SupplierDepositService {
             replay(&payload, &previous.payload_fingerprint)?;
             return Ok(reservation);
         }
+
         if actor.trim().is_empty() || reservation.release_receipts.len() >= 1000 {
             return Err(Error::ValidationError("释放操作人缺失或历史释放次数超限".into()));
         }
@@ -98,11 +100,13 @@ impl SupplierDepositService {
             actor_id: actor.into(),
             verification: None,
         };
+
         if let Some(evidence) = clearance {
             reservation.clear_exposure(evidence)?;
         }
         let previous_offset = reservation.consumed_amount.checked_add(reservation.released_amount);
         reservation.release(amount)?;
+
         let mut account = self.account(&reservation.account_id, executor).await?;
         let mut request = self
             .db
@@ -113,6 +117,7 @@ impl SupplierDepositService {
         request.release_deposit(id, amount)?;
         account.release(amount)?;
         self.release_batches(&reservation, previous_offset, amount, executor).await?;
+
         self.db.supplier_deposit_accounts().update(&mut account, executor).await?;
         self.db.purchase_payment_requests().update(&mut request, executor).await?;
         reservation.release_receipts.insert(key, receipt);
@@ -148,6 +153,7 @@ impl SupplierDepositService {
             self.db.supplier_deposit_batches().update(&mut batch, executor).await?;
             remaining = remaining.checked_sub(released);
         }
+
         if remaining != Amount::zero() {
             return Err(Error::Internal("原占用批次金额不守恒".into()));
         }

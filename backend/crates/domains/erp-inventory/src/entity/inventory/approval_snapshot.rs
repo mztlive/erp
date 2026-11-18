@@ -63,6 +63,7 @@ impl StockAdjustmentApprovalSnapshot {
         if submitted_by.trim().is_empty() {
             return Err(Error::from("提交人不能为空"));
         }
+
         Ok(StockAdjustmentSnapshotFact {
             document_no: adjustment.adjustment_no.clone(),
             responsible_org_id: adjustment.warehouse_id.to_string(),
@@ -188,6 +189,7 @@ mod tests {
             Instant::from_unix_secs(10),
         )
         .is_err());
+
         let huge = Quantity::try_from(rust_decimal::Decimal::MAX).unwrap();
         let overflow = StockAdjustmentLine::new(
             StockAdjustmentLineId::new("huge-2"),

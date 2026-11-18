@@ -83,6 +83,7 @@ impl SupplierMessageWorker {
             cursor.clear();
             return Ok(0);
         }
+
         let mut acknowledged = 0;
         for connection in connections {
             *cursor = connection.base.id.clone();
@@ -106,6 +107,7 @@ impl SupplierMessageWorker {
         if connector.connection_id().as_ref() != connection.base.id {
             return Err(Error::Forbidden("供应商消息能力与当前连接归属不一致".into()));
         }
+
         if !self.polls.lock().await.claim(source.account_scope(), source.poll_interval(), Instant::now()) {
             return Ok(0);
         }
@@ -120,6 +122,7 @@ impl SupplierMessageWorker {
         else {
             return Ok(0);
         };
+
         let applier = SupplierMessageRefresh::new(
             self.db.clone(),
             self.registry.clone(),
@@ -132,6 +135,7 @@ impl SupplierMessageWorker {
             .await;
         store.release().await?;
         let result = outcome?;
+
         if result.quarantined + result.deferred + result.acknowledgement_unknown > 0 {
             tracing::warn!(connection_id = %connection.base.id, quarantined = result.quarantined,
                 deferred = result.deferred, ack_unknown = result.acknowledgement_unknown,

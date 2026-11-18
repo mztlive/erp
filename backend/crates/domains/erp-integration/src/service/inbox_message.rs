@@ -59,6 +59,7 @@ impl IntegrationOpsService {
             .service
             .require(actor, &integration_ops::INBOX_MESSAGE_LIST, AccessTarget::Operation, executor)
             .await?;
+
         let query = params.normalized()?;
         let filter = InboxMessageFilter {
             source_system_id: query.source_system_id,
@@ -73,6 +74,7 @@ impl IntegrationOpsService {
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
         let page = self.db.inbox_messages().search_inbox_messages(&filter, executor).await?;
+
         let items = page
             .items
             .into_iter()
@@ -91,7 +93,6 @@ impl IntegrationOpsService {
                 created_at: row.created_at,
             })
             .collect();
-
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
@@ -130,6 +131,7 @@ impl IntegrationOpsService {
             .service
             .require(actor, &integration_ops::INBOX_MESSAGE_DETAIL, AccessTarget::Operation, executor)
             .await?;
+
         let message = self
             .db
             .inbox_messages()
@@ -167,7 +169,6 @@ pub fn prepare_registered_inbox_message(
             received_at,
         },
     )?;
-
     Ok(message)
 }
 /// 应用已准备的 processed 结果，不写入数据库。
@@ -236,7 +237,6 @@ pub fn prepare_failed_message_task(
     if attempt_summary.is_some() {
         task.record_attempt(attempt_at, attempt_summary)?;
     }
-
     Ok(task)
 }
 
@@ -321,6 +321,7 @@ mod authorization_tests {
         let service = IntegrationOpsService::new(db, access);
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
         let params = serde_json::from_value::<InboxMessageListParams>(serde_json::json!({})).unwrap();
+
         let errors = [
             service
                 .inbox_page(&params, &actor, &mut SnapshotExecutor::default())

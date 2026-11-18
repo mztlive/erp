@@ -156,6 +156,7 @@ impl SupplierRefundFact {
             SOURCE_EVENT_ID_MAX_LEN,
             "来源事件ID过长",
         )?;
+
         if data.refund_amount.to_decimal() <= Decimal::ZERO {
             return Err(Error::from("退款金额必须大于零"));
         }
@@ -227,6 +228,7 @@ impl SupplierRefundFact {
                 total = total.checked_add(allocation.gross_amount);
             }
         }
+
         if total != self.refund_amount {
             return Err(Error::from("各 APPLY 分配含税金额合计必须等于退款头金额"));
         }
@@ -335,12 +337,14 @@ impl SupplierRefundAllocation {
         ensure_non_negative(data.tax_amount, "税额冲减金额不得为负")?;
         ensure_non_negative(data.payable_reduction_amount, "未付应付冲减金额不得为负")?;
         ensure_non_negative(data.cash_refund_amount, "现金退款金额不得为负")?;
+
         if data.gross_amount.to_decimal() != data.net_amount.to_decimal() + data.tax_amount.to_decimal() {
             return Err(Error::from("含税金额必须等于不含税金额加税额"));
         }
         if data.payable_reduction_amount.checked_add(data.cash_refund_amount) != data.gross_amount {
             return Err(Error::from("未付应付冲减与现金退款拆分合计必须等于含税金额"));
         }
+
         let is_reverse = data.allocation_action == AllocationAction::Reverse;
         if is_reverse && data.reverses_allocation_id.is_none() {
             return Err(Error::from("REVERSE 分配必须引用原 APPLY 分配"));
@@ -446,6 +450,7 @@ mod tests {
         let order = SupplierFulfillmentOrderId::new("order-1");
         let amount = fact.refund_amount;
         let at = fact.refunded_at;
+
         assert!(fact.matches_result(&order, amount, at, " EVT-2001 "));
         assert!(!fact.matches_result(&SupplierFulfillmentOrderId::new("order-2"), amount, at, "EVT-2001"));
         assert!(!fact.matches_result(&order, Amount::from_str("1.00").unwrap(), at, "EVT-2001"));

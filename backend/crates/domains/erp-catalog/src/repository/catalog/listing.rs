@@ -70,6 +70,7 @@ impl<'a> CatalogRepository<'a> {
         if product_ids.is_empty() {
             return Ok(Vec::new());
         }
+
         let unique_ids = unique_product_ids(product_ids);
         let rows =
             aggregate_listing_summaries(&self.db.collection::<Document>(SKUS), &unique_ids, executor).await?;
@@ -233,6 +234,7 @@ mod tests {
         assert!(json.contains("active"));
         assert!(json.contains("deleted_at"));
         assert!(json.contains("listed_sku_count"));
+
         assert!(listed.contains("$ifNull"));
         assert!(listed.contains("listing_status"));
         assert!(listed.contains("listed"));

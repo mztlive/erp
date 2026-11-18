@@ -51,6 +51,7 @@ impl SalesOrderService {
                 {
                     return Err(Error::ConflictError("销售草稿归属不一致，请刷新后重试".into()));
                 }
+
                 Ok(ContractBindingBasis {
                     terms: ContractTerms {
                         payment: copy.payment_term_snapshot.clone(),
@@ -108,6 +109,7 @@ impl SalesOrderService {
         {
             return Err(Error::ConflictError("销售提交归属或审批状态不一致，请刷新后重试".into()));
         }
+
         Ok(ContractBindingBasis {
             terms: ContractTerms {
                 payment: submission.payment_term_snapshot,

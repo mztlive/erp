@@ -92,6 +92,7 @@ impl PurchaseChangePayableWrite {
         account.purchase_revision_id = Some(self.input.revision_id.to_string());
         account.settlement_party_id = Some(self.input.settlement_party_id.clone());
         account.settlement_party_name = Some(self.input.settlement_party_name.clone());
+
         let entry = PayableEntry::new(
             self.entry_id.clone(),
             PayableEntryData {
@@ -333,6 +334,7 @@ mod tests {
             let error = prepared("100", target).build_posting(Some(account(settled, invoiced))).unwrap_err();
             assert!(matches!(error, Error::BusinessLogicError(ref actual) if actual == message));
         }
+
         let (updated, _) = prepared("100", "60").build_posting(Some(account("60", "60"))).unwrap();
         assert_eq!(updated.open_total, amount("0"));
         assert_eq!(updated.open_invoiceable_total, amount("0"));
@@ -388,6 +390,7 @@ mod tests {
         assert_eq!(first.1.amount, second.1.amount);
         assert_eq!(first.1.due_date, second.1.due_date);
         assert_eq!(first.1.posted_at, second.1.posted_at);
+
         let replay_on_changed = write.build_posting(Some(first.0)).unwrap_err();
         assert!(matches!(replay_on_changed, Error::BusinessLogicError(ref message)
             if message == "应付总额与采购变更基准版本不一致"));
@@ -424,6 +427,7 @@ mod tests {
         .unwrap();
         let change = prepared("2350", "1000");
         assert!(change.build_posting(Some(original.clone())).is_err());
+
         // 原付款部分退款只回冲已核销金额；不改采购金额。
         original
             .sync_totals(
@@ -433,6 +437,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(original.gross_total, amount("2350"));
+
         let (settled, delta) = change.build_posting(Some(original)).unwrap();
         assert_eq!(delta.amount, amount("1350"));
         assert_eq!(settled.gross_total, amount("1000"));

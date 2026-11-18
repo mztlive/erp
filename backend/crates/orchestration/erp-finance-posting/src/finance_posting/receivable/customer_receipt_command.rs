@@ -446,6 +446,7 @@ mod tests {
             }
             let request = command(if case == 1 { 50 } else { 100 });
             let expected = if case == 3 { Some("other") } else { None };
+
             let result = replay_receipt_command(&probe, &request, expected, &mut executor).await;
             if case == 0 {
                 assert_eq!(result.unwrap(), None);
@@ -483,9 +484,11 @@ mod tests {
                 3 => probe.fail_result = true,
                 _ => {},
             }
+
             let request = command(if case == 4 { 50 } else { 100 });
             let result = replay_receipt_command(&probe, &request, None, &mut executor).await;
             let error = recover_receipt_command(result, unknown_error()).unwrap_err();
+
             assert_original_unknown(error);
             assert!(probe.written_receipts.lock().unwrap().is_empty());
             assert!(probe.logs.lock().unwrap().is_empty());
@@ -526,9 +529,11 @@ mod tests {
         let probe = Probe::new(&mut executor);
         let command = command(100);
         let context = receipt_command_context(&command, &actor()).unwrap();
+
         persist_receipt_command_success(&probe, &command, &context, &committed_receipt(), &mut executor)
             .await
             .unwrap();
+
         assert_eq!(*probe.calls.lock().unwrap(), ["save_receipt", "save_event"]);
         let receipts = probe.written_receipts.lock().unwrap();
         let logs = probe.logs.lock().unwrap();
@@ -536,11 +541,13 @@ mod tests {
         assert_eq!(logs.len(), 1);
         assert_eq!(receipts[0].audit_event_id, logs[0].base.id);
         assert_eq!(receipts[0].resource_id(&command).unwrap(), "receipt");
+
         let event = logs[0].structured_event.as_ref().unwrap();
         assert_eq!(event.command_id.as_deref(), Some(command.id()));
         assert_eq!(event.resource_number_snapshot.as_deref(), Some("HK202610040001"));
         assert_eq!(event.action_label, "登记并提交客户回款");
         assert_eq!(event.facts.len(), 2);
+
         let message = logs[0].message.as_ref().unwrap();
         assert!(message.contains("到账金额：100.00元"));
         assert!(message.contains("回款状态：审批中"));
@@ -554,6 +561,7 @@ mod tests {
             let mut probe = Probe::new(&mut executor);
             probe.fail_receipt_write = fail_receipt;
             probe.fail_audit_write = !fail_receipt;
+
             let command = command(100);
             let context = receipt_command_context(&command, &actor()).unwrap();
             let error = persist_receipt_command_success(
@@ -565,6 +573,7 @@ mod tests {
             )
             .await
             .unwrap_err();
+
             if fail_receipt {
                 assert!(matches!(error, Error::ConflictError(message) if message == "原回执写入错误"));
                 assert_eq!(*probe.calls.lock().unwrap(), ["save_receipt"]);

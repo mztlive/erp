@@ -137,6 +137,7 @@ impl InquiryQuoteTermsInput {
                 line.allocations.iter().map(|row| row.allocation_id.clone()).collect::<Vec<_>>();
             line.validate_quote_scope(self.available_quantity, &allocation_ids)?;
         }
+
         let terms = QuoteTerms {
             unavailable: self.unavailable,
             freight_gross: self.freight_gross,
@@ -254,6 +255,7 @@ impl SalesInquiryProcess {
             .suppliers
             .require_with(actor, &supplier::DETAIL, input.supplier_id.as_ref(), executor)
             .await?;
+
         let quote = ResolvedInquiryQuote::new(input, line)?;
         self.append_resolved_quote(actor, inquiry, quote, executor).await
     }
@@ -295,11 +297,13 @@ impl SalesInquiryProcess {
             .suppliers
             .require_with(actor, &supplier::DETAIL, req.basis.payee_supplier_id.as_ref(), executor)
             .await?;
+
         let service = InquirySupplyService::new(self.db.clone());
         let round = next_round(inquiry)?;
         let prior = service
             .fee_basis(&inquiry.base.id, inquiry.requirement_version, round, &req.basis.fee_id, executor)
             .await?;
+
         let id = prior.as_ref().map(|basis| basis.base.id.clone()).unwrap_or_else(next_id);
         let mut basis = InquiryFeeBasis::new(
             id.clone(),
@@ -318,6 +322,7 @@ impl SalesInquiryProcess {
         if let Some(prior) = prior {
             basis.base = prior.base;
         }
+
         self.attach_internal_files(actor, &id, &req.basis.attachment_ids, executor).await?;
         Ok(service.save_fee_basis(&basis, executor).await?)
     }
@@ -340,6 +345,7 @@ impl SalesInquiryProcess {
             .map(String::as_str)
             .collect::<Vec<_>>();
         require_owned(&self.authorization, actor, &new_files, executor).await?;
+
         for id in ids {
             let linked = links.iter().any(|link| link.file_asset_id.as_ref() == id);
             let asset = self
@@ -354,6 +360,7 @@ impl SalesInquiryProcess {
             if linked {
                 continue;
             }
+
             let attachment = DocumentAttachment::new(
                 DocumentAttachmentId::new(next_id()),
                 DocumentAttachmentData {
@@ -480,6 +487,7 @@ mod tests {
         let resolved = ResolvedInquiryQuote::new(&input, &line).unwrap();
         assert!(resolved.matches_prior_reply(from_ref(&quote), &inquiry, 4));
         assert!(!resolved.matches_prior_reply(from_ref(&quote), &inquiry, 5));
+
         let mut changed = quote.clone();
         changed.data.scope.requirement_version += 1;
         assert!(!resolved.matches_prior_reply(from_ref(&changed), &inquiry, 4));
@@ -504,12 +512,14 @@ mod tests {
             ResolvedInquiryQuote::new(&input, &line),
             Err(Error::ValidationError(message)) if message == "专项报价可供量不得超过本行询价需求"
         ));
+
         input.terms.available_quantity = "10".parse().unwrap();
         line.allocations.clear();
         assert!(matches!(
             ResolvedInquiryQuote::new(&input, &line),
             Err(Error::ValidationError(message)) if message == "实物专项报价必须明确配送地址范围"
         ));
+
         input.terms.unavailable = true;
         input.terms.unit_cost_gross = "0".parse().unwrap();
         input.terms.available_quantity = "0".parse().unwrap();
@@ -527,6 +537,7 @@ mod tests {
         second.allocation_id = "second".into();
         second.address = "另一地址".into();
         line.allocations.push(second);
+
         let mut input = terms();
         input.available_quantity = "5".parse().unwrap();
         let quote = input.for_requirement(&line).unwrap();
@@ -558,6 +569,7 @@ mod tests {
         input.unit_cost_gross = "0".parse().unwrap();
         input.available_quantity = "0".parse().unwrap();
         assert!(input.for_requirement(&line).unwrap().unavailable);
+
         input.available_quantity = "1".parse().unwrap();
         assert!(input.for_requirement(&line).is_err());
     }

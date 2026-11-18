@@ -41,6 +41,7 @@ impl AccessFactsPort for ConnectionFacts {
             let Some(connection) = self.db.supplier_api_connections().find_by_id(id, executor).await? else {
                 continue;
             };
+
             let supplier = self.db.supplier_accounts().find_by_id(&connection.supplier_id, executor).await?;
             let sources = supplier
                 .map(|supplier| ObjectFacts {

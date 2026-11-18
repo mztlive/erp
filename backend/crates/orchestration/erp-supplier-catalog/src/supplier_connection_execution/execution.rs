@@ -142,6 +142,7 @@ mod tests {
             assert_eq!(actor.id(), "actor-1");
             assert!(!trace.transaction_active);
             assert_eq!(trace.calls.last(), Some(&"gateway"));
+
             trace.transaction_active = true;
             trace.calls.push("finish.begin");
             trace.settled = Some(outcome);
@@ -170,6 +171,7 @@ mod tests {
     #[tokio::test]
     async fn gateway_is_between_committed_start_and_new_result_transaction() {
         let port = port(None, Ok(()));
+
         execute(&port, 41, &actor()).await.unwrap();
         let trace = port.trace.lock().unwrap();
         assert_eq!(trace.calls, ["start.begin", "start.commit", "gateway", "finish.begin", "finish.commit"]);
@@ -185,6 +187,7 @@ mod tests {
             summary: "结果未知".into(),
         };
         let port = port(None, Err(failure.clone()));
+
         execute(&port, 41, &actor()).await.unwrap();
         let trace = port.trace.lock().unwrap();
         assert_eq!(trace.settled, Some(Err(failure)));

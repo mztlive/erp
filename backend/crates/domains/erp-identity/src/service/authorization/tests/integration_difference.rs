@@ -41,6 +41,7 @@ async fn direct_difference_decision_requires_current_handler_and_complete_qualif
             Err(Error::Forbidden(_))
         ));
     }
+
     facts.objects.lock().unwrap()[0] = difference(Some("user"));
     facts.objects.lock().unwrap()[0].assignee_id = FactValue::Missing;
     assert!(matches!(
@@ -74,6 +75,7 @@ async fn direct_difference_decision_rejects_fake_tasks_and_nontransaction_preche
             .await,
         Err(Error::ValidationError(_))
     ));
+
     assert!(matches!(
         service
             .require(

@@ -45,6 +45,7 @@ impl PolicyReceipt {
         {
             return Err(Error::ConflictError("操作号已被不同配置使用或回执损坏".into()));
         }
+
         let mut result = self.result.clone();
         result.replayed = true;
         Ok(result)
@@ -84,6 +85,7 @@ mod tests {
         assert!(result.replayed);
         assert_eq!(result.policy_version, 9);
         assert_eq!(result.change_count, 3);
+
         assert!(matches!(receipt.replay(&command("operator", "modified")), Err(Error::ConflictError(_))));
         assert!(matches!(receipt.replay(&command("another", "original")), Err(Error::ConflictError(_))));
         let mut corrupted = receipt;

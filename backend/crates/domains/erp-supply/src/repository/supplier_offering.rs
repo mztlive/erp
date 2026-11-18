@@ -186,6 +186,7 @@ impl QueryFilter for SupplierOfferingFilter {
         if let Some(ids) = &self.maintainer_user_ids {
             filter.extend(in_filter("maintainer_user_id", ids.iter().cloned()));
         }
+
         if let Some(sku_id) = &self.sku_id {
             filter.insert("sku_id", sku_id.to_string());
         }
@@ -195,12 +196,14 @@ impl QueryFilter for SupplierOfferingFilter {
         if let Some(supplier_id) = &self.supplier_id {
             filter.insert("supplier_id", supplier_id.to_string());
         }
+
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }
         if let Some(source_type) = self.source_type {
             filter.insert("source_type", source_type.as_str());
         }
+
         match (self.supplier_sku_code.as_deref(), self.keyword_sku_ids.as_ref()) {
             (Some(code), Some(sku_ids)) => {
                 let mut code_filter = Document::new();
@@ -360,8 +363,10 @@ impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
             .build();
         let collection = self.collection().clone_with_type::<SupplierOfferingRow>();
         let prefix = filter.scope.as_ref().map_or_else(Vec::new, |scope| scope.stages().to_vec());
+
         let items = aggregate::find(&collection, filter.to_doc(), options, prefix.clone(), executor).await?;
         let total = aggregate::count(&self.collection(), filter.to_doc(), prefix, executor).await?;
+
         if let Some(scope) = &filter.scope {
             scope.ensure_model("supplier_offering", executor)?;
         }
@@ -425,6 +430,7 @@ impl SupplierOfferingRepositoryExt for SupplierOfferingRepository<'_> {
             executor,
         )
         .await?;
+
         scope.ensure_model("supplier_offering", executor)?;
         Ok(rows.into_iter().map(|row| row.id).collect())
     }
@@ -684,6 +690,7 @@ impl<'a> SupplierOfferingDomainRepository<'a> {
         let revisions = SupplierOfferingRevisionRepository::new(self.db, OFFERING_REVISIONS)
             .list_by_ids(&revision_ids, executor)
             .await?;
+
         Ok(revisions
             .into_iter()
             .filter_map(|revision| {
@@ -966,6 +973,7 @@ mod tests {
                 delivery_template_id: None,
             },
         ];
+
         let current_by_revision = rows
             .iter()
             .filter_map(|row| {
@@ -974,6 +982,7 @@ mod tests {
             .collect::<std::collections::HashMap<_, _>>();
         assert!(!current_by_revision.contains_key("offering-1"));
         assert_eq!(current_by_revision.get("missing-revision").map(String::as_str), Some("offering-2"));
+
         let stored_ids = ["revision-9"];
         let mapped =
             stored_ids.iter().filter_map(|id| current_by_revision.get(*id).cloned()).collect::<Vec<_>>();

@@ -248,6 +248,7 @@ impl S3Storage {
     ) -> Result<()> {
         let key = self.object_key(path.as_ref())?;
         self.invalidate_content(&key);
+
         let started = Instant::now();
         let mut request =
             self.client.put_object().bucket(&self.bucket).key(&key).body(ByteStream::from(content));
@@ -255,6 +256,7 @@ impl S3Storage {
             request = request.content_type(content_type);
         }
         let result = request.send().await.map_err(s3_error);
+
         self.invalidate_content(&key);
         record_operation("put_object", started, result.is_ok());
         result?;
@@ -292,6 +294,7 @@ impl S3Storage {
     /// 对象路径无效时返回 `Error::PathError`；`public_base_url` 不能作为分层 URL 时返回 `Error::InvalidConfig`。
     pub fn public_url<P: AsRef<Path>>(&self, path: P) -> Result<String> {
         let key = self.object_key(path.as_ref())?;
+
         let mut url = self.public_base_url.clone();
         let mut segments = url
             .path_segments_mut()
@@ -324,6 +327,7 @@ impl S3Storage {
 
     async fn read_key(&self, key: String) -> Result<Vec<u8>> {
         let stream = self.read_key_stream(key).await?;
+
         let started = Instant::now();
         let body = stream.collect().await.map_err(s3_error);
         record_operation("get_object_body", started, body.is_ok());
@@ -360,6 +364,7 @@ impl S3Storage {
             tracing::info!(operation = "immutable_content", cache_hit = true, "storage content read");
             return Ok(bytes);
         }
+
         let bytes = self.read_key(key.clone()).await?;
         // 缓存锁中毒不改变原对象读取的成功结果。
         if let Ok(mut cache) = self.content_cache.lock() {
@@ -430,6 +435,7 @@ impl S3Storage {
         if let Some(content_type) = content_type {
             request = request.content_type(content_type);
         }
+
         let response = request.send().await.map_err(s3_error)?;
         response
             .upload_id()
@@ -464,6 +470,7 @@ impl S3Storage {
         let key = self.object_key(path.as_ref())?;
         let config = PresigningConfig::expires_in(expires_in)
             .map_err(|error| Error::S3(format!("预签名有效期非法: {error}")))?;
+
         let presigned = self
             .client
             .upload_part()
@@ -504,6 +511,7 @@ impl S3Storage {
         validate_complete_parts(upload_id, &parts)?;
         let key = self.object_key(path.as_ref())?;
         self.invalidate_content(&key);
+
         let started = Instant::now();
         let completed = parts
             .into_iter()
@@ -512,6 +520,7 @@ impl S3Storage {
             })
             .collect::<Vec<_>>();
         let upload = CompletedMultipartUpload::builder().set_parts(Some(completed)).build();
+
         let result = self
             .client
             .complete_multipart_upload()
@@ -522,6 +531,7 @@ impl S3Storage {
             .send()
             .await
             .map_err(s3_error);
+
         self.invalidate_content(&key);
         record_operation("complete_multipart_upload", started, result.is_ok());
         result?;
@@ -566,6 +576,7 @@ impl S3Storage {
     pub async fn delete<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let key = self.object_key(path.as_ref())?;
         self.invalidate_content(&key);
+
         match self.client.head_object().bucket(&self.bucket).key(&key).send().await {
             Ok(_) => {},
             Err(error) if error.as_service_error().is_some_and(HeadObjectError::is_not_found) => {
@@ -576,6 +587,7 @@ impl S3Storage {
 
         let result =
             self.client.delete_object().bucket(&self.bucket).key(&key).send().await.map_err(s3_error);
+
         self.invalidate_content(&key);
         result?;
         Ok(())
@@ -691,6 +703,7 @@ fn public_base_url(value: &str) -> Result<Url> {
             "S3 public_base_url 必须是不含 query/fragment 的 HTTP(S) URL".to_string(),
         ));
     }
+
     let path = url.path().trim_end_matches('/').to_string();
     url.set_path(&path);
     Ok(url)
@@ -832,6 +845,7 @@ mod tests {
         let request = request_receiver.expect_request();
         assert_eq!(request.method(), "GET");
         assert_eq!(storage.read_immutable("images/private.png", "current-hmac").await?, Vec::<u8>::new());
+
         let rejected = storage.read_immutable("../images/private.png", "current-hmac").await;
         assert!(matches!(rejected, Err(Error::PathError(_))));
         Ok(())
@@ -843,9 +857,11 @@ mod tests {
         let (storage, request_receiver) = test_storage_with_prefix();
         let key = storage.object_key(Path::new("images/private.png"))?;
         storage.content_cache.lock().unwrap().insert(key.clone(), "old".into(), b"old", Instant::now());
+
         storage
             .save_owned_with_content_type("images/private.png", b"new".to_vec(), Some("image/png"))
             .await?;
+
         let request = request_receiver.expect_request();
         assert_eq!(request.method(), "PUT");
         assert_eq!(request.body().bytes(), Some(b"new".as_slice()));
@@ -859,7 +875,6 @@ mod tests {
         let (storage, _) = test_storage(TEST_BUCKET, Some(TEST_PREFIX), "https://cdn.example.com/assets/");
 
         let url = storage.public_url("images/中 文.png")?;
-
         assert_eq!(url, "https://cdn.example.com/assets/tenant-a/uploads/images/%E4%B8%AD%20%E6%96%87.png");
         Ok(())
     }
@@ -868,9 +883,7 @@ mod tests {
     #[tokio::test]
     async fn rejects_parent_directory_object_key() -> Result<()> {
         let (storage, _) = test_storage_without_prefix();
-
         let result = storage.save_with_content_type("../escaped.txt", b"escaped", None).await;
-
         assert!(matches!(result, Err(Error::PathError(_))));
         Ok(())
     }
@@ -902,6 +915,7 @@ mod tests {
         .with_endpoint("https://s3.example.com")
         .with_key_prefix(TEST_PREFIX)
         .with_force_path_style(true);
+
         assert_eq!(config.bucket, TEST_BUCKET);
         assert_eq!(config.endpoint.as_deref(), Some("https://s3.example.com"));
         assert_eq!(config.key_prefix.as_deref(), Some(TEST_PREFIX));
@@ -983,7 +997,6 @@ mod tests {
     async fn rejects_complete_with_empty_parts() -> Result<()> {
         let (storage, _) = test_storage_without_prefix();
         let result = storage.complete_multipart_upload("imports/req-1.xlsx", "upload-id", vec![]).await;
-
         assert!(matches!(result, Err(Error::S3(_))));
         Ok(())
     }
@@ -994,7 +1007,6 @@ mod tests {
         let (storage, _) = test_storage_without_prefix();
         let result =
             storage.presign_upload_part("imports/req-1.xlsx", "upload-id", 0, Duration::from_secs(60)).await;
-
         assert!(matches!(result, Err(Error::S3(_))));
         Ok(())
     }

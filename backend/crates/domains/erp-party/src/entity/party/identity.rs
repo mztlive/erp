@@ -23,12 +23,14 @@ impl Party {
         if self.base.is_deleted() || !self.is_active() || self.company_profile.is_some() {
             return Err(Error::from("已有主体不可复用，请先核对其启停状态和主体类型"));
         }
+
         if revision.base.is_deleted()
             || revision.party_id != PartyId::new(&self.base.id)
             || self.stable.current_revision_id.as_deref() != Some(revision.base.id.as_str())
         {
             return Err(Error::from("已有主体的当前资料不完整，请先修复主体资料"));
         }
+
         if revision.legal_name != name
             || credit.is_some_and(|value| self.unified_credit_code.as_deref() != Some(value))
         {
@@ -84,6 +86,7 @@ mod tests {
         let (party, mut revision) = identity();
         assert!(party.ensure_reusable_identity(&revision, "其他企业", None).is_err());
         assert!(party.ensure_reusable_identity(&revision, "共享企业", Some("91310000123456789B")).is_err());
+
         revision.party_id = PartyId::new("other-party");
         assert!(party.ensure_reusable_identity(&revision, "共享企业", None).is_err());
         revision.party_id = PartyId::new(&party.base.id);
@@ -96,9 +99,11 @@ mod tests {
         let (mut party, mut revision) = identity();
         party.stable.status = PartyStatus::Disabled;
         assert!(party.ensure_reusable_identity(&revision, "共享企业", None).is_err());
+
         party.stable.status = PartyStatus::Active;
         party.base.deleted_at = 1;
         assert!(party.ensure_reusable_identity(&revision, "共享企业", None).is_err());
+
         party.base.deleted_at = 0;
         revision.base.deleted_at = 1;
         assert!(party.ensure_reusable_identity(&revision, "共享企业", None).is_err());

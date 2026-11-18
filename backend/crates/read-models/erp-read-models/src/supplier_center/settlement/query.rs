@@ -94,6 +94,7 @@ impl SupplierSettlementReadService {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::ValidationError("供应商结算详情读取必须使用快照事务".into()));
         }
+
         let prepared = self.authorized_snapshot(id, actor, executor).await?;
         let presentation = self.detail_actions(id, &prepared, actor, executor).await?;
         self.detail_read(id, actor, presentation, executor).await
@@ -114,6 +115,7 @@ impl SupplierSettlementReadService {
             settlement_object_actions(&snapshot.statement, &snapshot.differences, &access);
         let cost_delta = snapshot.statement.accepted_cost_delta(&snapshot.items, &snapshot.differences)?;
         let cost_adjustment_ready = cost_delta.is_zero();
+
         let (review_work_item, review_action_blockers, review_domain_actions) =
             self.settlement_review_work_item_view(&snapshot.statement, actor, executor).await?;
         allowed_actions.extend(
@@ -161,6 +163,7 @@ impl SupplierSettlementReadService {
             .find_authorized(id, &scope, executor)
             .await?
             .ok_or_else(|| Error::NotFound("供应商结算单不存在或无权查看".into()))?;
+
         let snapshot = self
             .db
             .supplier_settlement()
@@ -181,6 +184,7 @@ impl SupplierSettlementReadService {
             action_blockers: presentation.action_blockers,
         };
         let view = self.detail_display_view(detail, executor).await?;
+
         scope.validate(executor).await?;
         Ok(view)
     }
@@ -199,6 +203,7 @@ impl SupplierSettlementReadService {
         if !statement.is_pending_review() {
             return Ok((None, Vec::new(), Vec::new()));
         }
+
         let mut items = self
             .db
             .work_items()
@@ -224,6 +229,7 @@ impl SupplierSettlementReadService {
                 "复核任务与当前结算主题不一致，已禁止决定",
             ));
         }
+
         let (domain_actions, action_blockers) =
             self.review_actions(statement, actor, &item, executor).await?;
         Ok((
@@ -349,6 +355,7 @@ mod tests {
             .database("settlement_detail_authorization");
         let service = SupplierSettlementReadService::new(db, unavailable_authorization());
         let actor = AuditActor::new("actor".into(), "操作人".into(), AccountKind::Admin);
+
         let error = service
             .detail("statement", &actor, &mut ReadExecutor::default())
             .await
@@ -356,6 +363,7 @@ mod tests {
         assert!(
             matches!(error, Error::ValidationError(reason) if reason == "供应商结算详情读取必须使用快照事务")
         );
+
         let error = service
             .detail("statement", &actor, &mut SnapshotExecutor::default())
             .await

@@ -49,6 +49,7 @@ pub fn validate_portal_terms(terms: &SupplierOfferingTermsWrite, on_date: Busine
     terms.validate()?;
     let data = terms.try_into_revision_data(SupplierOfferingId::new("validation-only"), 1)?;
     let revision = SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("validation-only"), data)?;
+
     if !on_date.is_within(revision.valid_from, revision.valid_to) {
         return Err(Error::BusinessLogicError("申请条款尚未生效或已经过期".into()));
     }
@@ -202,9 +203,11 @@ impl PortalOfferingService {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::Internal("门户可供命令必须使用调用方事务".into()));
         }
+
         let (before, mut availability) =
             self.prepare_availability(supplier_id, actor, id, req, executor).await?;
         self.db.supplier_offering_availabilities().update(&mut availability, executor).await?;
+
         let after = PortalAvailabilityFact::from_availability(&availability);
         Ok(PortalAvailabilityUpdateResult {
             before,
@@ -247,8 +250,10 @@ impl PortalOfferingService {
     ) -> Result<(PortalAvailabilityFact, SupplierOfferingAvailability)> {
         ensure_text(&req.reason, "变更原因")?;
         ensure_text(&req.idempotency_key, "操作号")?;
+
         let offering = self.require_owned_offering(supplier_id, actor, id, executor).await?;
         Self::ensure_portal_writable(&offering)?;
+
         let offering_id = SupplierOfferingId::new(id);
         let mut availability = self
             .db
@@ -259,6 +264,7 @@ impl PortalOfferingService {
         availability
             .ensure_version(req.expected_version)
             .map_err(|_| Error::ConflictError("可供状态已变化，请保留输入并重新核对".into()))?;
+
         let before = PortalAvailabilityFact::from_availability(&availability);
         let now = Instant::now();
         let data = UpdateSupplierOfferingAvailabilityRequest {
@@ -368,6 +374,7 @@ impl PortalOfferingService {
                 {
                     return Err(Error::ConflictError("供给版本已经变化，请重新核对".into()));
                 }
+
                 if let OfferingApplicationSnapshot::TermsChange { terms, .. } = &target {
                     validate_portal_terms(terms, on_date)?;
                 }
@@ -398,9 +405,11 @@ impl PortalOfferingService {
                 "首次报价内容不完整或已失效，请重新核对商品和供货条款后提交".into(),
             ));
         };
+
         ensure_text(&sku_id, "公司SKU")?;
         ensure_text(&supplier_sku_code, "供应商订货编码")?;
         validate_portal_terms(&terms, on_date)?;
+
         if let Some(offering) =
             self.ordering_identity(supplier_id, &sku_id, &supplier_sku_code, executor).await?
         {
@@ -413,6 +422,7 @@ impl PortalOfferingService {
                 terms,
             });
         }
+
         self.ensure_quote_access(supplier_id, &sku_id, executor).await?;
         parse_optional_quantity(available_quantity.as_deref())?;
         validate_portal_reported_at(availability_reported_at, Instant::now())?;

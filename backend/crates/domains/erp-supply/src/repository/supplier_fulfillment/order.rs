@@ -131,6 +131,7 @@ impl QueryFilter for SupplierFulfillmentOrderFilter {
         if let Some(supplier_id) = &self.supplier_id {
             filter.insert("supplier_id", supplier_id.to_string());
         }
+
         if let Some(fulfillment_status) = self.fulfillment_status {
             filter.insert("fulfillment_status", fulfillment_status.as_str());
         }
@@ -140,10 +141,12 @@ impl QueryFilter for SupplierFulfillmentOrderFilter {
         if let Some(refund_status) = self.refund_status {
             filter.insert("refund_status", refund_status.as_str());
         }
+
         insert_literal_regex_filter(&mut filter, "external_order_no", self.external_order_no.as_deref());
         insert_id_in(&mut filter, "follow_up_user_id", self.follow_up_user_ids.as_deref());
         insert_id_in(&mut filter, "business_org_unit_id", self.business_org_unit_ids.as_deref());
         insert_id_in(&mut filter, "id", self.handler_order_ids.as_deref());
+
         if let Some(q) = &self.q {
             let clauses = ["fulfillment_order_no", "external_order_no"]
                 .into_iter()
@@ -155,6 +158,7 @@ impl QueryFilter for SupplierFulfillmentOrderFilter {
                 .collect::<Vec<_>>();
             filter.insert("$or", clauses);
         }
+
         and_optional(&mut filter, view_clause(self.view.as_deref()));
         if self.aftersale_pending {
             and_optional(&mut filter, Some(aftersale_pending_clause()));
@@ -276,6 +280,7 @@ impl SupplierFulfillmentOrderRepositoryExt for SupplierFulfillmentOrderRepositor
         executor: &mut dyn Executor,
     ) -> crate::Result<Option<SupplierFulfillmentOrder>> {
         scope.ensure_model("supplier_fulfillment_order", executor)?;
+
         let rows = aggregate::find(
             &self.collection(),
             doc! { "id": id },
@@ -284,6 +289,7 @@ impl SupplierFulfillmentOrderRepositoryExt for SupplierFulfillmentOrderRepositor
             executor,
         )
         .await?;
+
         scope.ensure_model("supplier_fulfillment_order", executor)?;
         Ok(rows.into_iter().next())
     }

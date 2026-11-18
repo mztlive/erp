@@ -77,6 +77,7 @@ impl SupplierDepositUsage {
         {
             return Err(Error::from("预存款正式核销超过真实扣款或缺少分配记录"));
         }
+
         self.settled_amount = settled;
         self.payment_allocation_ids.extend(allocation_ids);
         Ok(())
@@ -101,6 +102,7 @@ impl SupplierDepositUsage {
         {
             return Err(Error::from("预存款返款或冲回超过原使用及核销"));
         }
+
         self.returned_amount = returned;
         self.reversed_settlement_amount = reversed;
         Ok(())

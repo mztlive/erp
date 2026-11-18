@@ -112,6 +112,7 @@ mod tests {
         let mut missing = sample_order();
         missing.follow_up_user_id.clear();
         assert!(create(WorkItemId::new("formal-1"), &missing, WorkItemType::BusinessException).is_err());
+
         let mut company = sample_order();
         company.business_org_unit_id = "company".into();
         assert!(create(WorkItemId::new("formal-2"), &company, WorkItemType::BusinessException).is_err());
@@ -126,12 +127,14 @@ mod tests {
         order.base.version = 7;
         let mut task = create(WorkItemId::new("formal-1"), &order, WorkItemType::BusinessException).unwrap();
         let version = task.base.version;
+
         assert!(validate_w26_task(&task, "order-1", version, "7").is_ok());
         assert!(ensure_task_subject_matches_order(&task, "7", 7).is_ok());
         assert!(validate_w26_task(&task, "order-2", version, "7").is_err());
         assert!(validate_w26_task(&task, "order-1", version + 1, "7").is_err());
         assert!(validate_w26_task(&task, "order-1", version, "6").is_err());
         assert!(ensure_task_subject_matches_order(&task, "7", 8).is_err());
+
         task.status = WorkItemStatus::Completed;
         assert!(validate_w26_task(&task, "order-1", version, "7").is_err());
     }

@@ -212,6 +212,7 @@ async fn apply_reserve(
     {
         return Err(Error::BusinessLogicError("执行组连接与当前资金账户归属不一致".into()));
     }
+
     let purchase = db
         .purchase_orders()
         .find_by_id(&execution.purchase_order_id, executor)
@@ -222,10 +223,12 @@ async fn apply_reserve(
     {
         return Err(Error::ConflictError("采购生效版本或执行组已变化".into()));
     }
+
     let basis = reservation_basis(&db, &account, &command, &execution, &codec, executor).await?;
     let result = SupplierDepositService::new(db.clone())
         .reserve(&account, &command.operation_key, basis, actor.id(), Instant::now(), executor)
         .await?;
+
     execution.next_run_at = Instant::now();
     execution.blocker = None;
     db.supplier_api_order_executions().update(&mut execution, executor).await?;
@@ -266,6 +269,7 @@ async fn apply_record_debit(
             "扣款订单尚未与原采购执行组核实关联，请按账户未决资金证据登记".into(),
         ));
     }
+
     let result = SupplierDepositService::new(db.clone())
         .record_debit(
             &command.reservation_id,
@@ -294,6 +298,7 @@ async fn apply_settle_usage(
         .await?
         .filter(|source| source.account_id == account)
         .ok_or_else(|| Error::NotFound("原预存款使用不存在".into()))?;
+
     let result = SupplierDepositService::new(db.clone())
         .settle_usage(&usage, &command.operation_key, &command.allocations, actor.id(), executor)
         .await?;
@@ -315,6 +320,7 @@ async fn apply_return_usage(
         .await?
         .filter(|usage| usage.account_id == account)
         .ok_or_else(|| Error::NotFound("原资金使用不存在".into()))?;
+
     let result = SupplierDepositService::new(db.clone())
         .return_usage(
             &command.usage_id,
@@ -346,6 +352,7 @@ async fn apply_bind_connection(
     if connection.supplier_id.as_ref() != source.identity.supplier_id {
         return Err(Error::Forbidden("资金账户与接口连接不属于同一供应商".into()));
     }
+
     connection.bind_supplier_deposit(account.clone(), source.identity.external_account_ref, actor.id())?;
     db.supplier_api_connections().update(&mut connection, executor).await?;
     audit(&db, &actor, "bind", &account, executor).await
@@ -373,10 +380,12 @@ async fn reservation_basis(
                 && line.purchase_revision_id == execution.purchase_order_revision_id
         })
         .ok_or_else(|| Error::BusinessLogicError("执行采购不在原批准付款申请范围内".into()))?;
+
     let budget = execution_budget(execution, codec)?;
     if budget.approved_other != Amount::zero() {
         return Err(Error::BusinessLogicError("当前余额执行尚不支持其他收费项目".into()));
     }
+
     let authorization = db
         .supplier_deposit_authorizations()
         .find_by_id(&command.authorization_id, executor)

@@ -107,6 +107,7 @@ mod tests {
             .unwrap_err();
             assert!(matches!(error, Error::ValidationError(message)
                 if message == "写入授权必须使用快照事务"));
+
             denied(
                 ensure_replay_authorized(
                     &process.db,

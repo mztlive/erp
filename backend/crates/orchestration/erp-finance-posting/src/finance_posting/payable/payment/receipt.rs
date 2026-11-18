@@ -174,6 +174,7 @@ mod tests {
         resolve_payment_receipt(&mut req, &pending).unwrap();
         let id = FileAssetId::new(req.payment.bank_receipt_asset_id.to_string());
         assert!(pending.contains_id(&id));
+
         let error = resolve_payment_receipt(&mut req, &pending).unwrap_err();
         assert!(matches!(error, Error::ValidationError(message) if message.contains("不得引用既有")));
     }
@@ -184,6 +185,7 @@ mod tests {
         let original = command_receipt(&req);
         let receipt =
             FinanceCommandReceipt::resource(&original, "payment-1".into(), "event-1".into()).unwrap();
+
         let pending = batch(&["pending-file:receipt"]);
         let mut prepared_req = req.clone();
         resolve_payment_receipt(&mut prepared_req, &pending).unwrap();
@@ -205,6 +207,7 @@ mod tests {
             "event-1".into(),
         )
         .unwrap();
+
         let foreign_req = command("another-payment-receipt");
         assert!(receipt.resource_id(&command_receipt(&foreign_req)).is_err());
     }

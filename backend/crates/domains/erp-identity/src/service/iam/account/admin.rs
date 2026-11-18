@@ -113,6 +113,7 @@ impl AdminService {
     ) -> Result<()> {
         let access = ManagementAccess::new(authorization, actor.clone(), &admin::ACCOUNT_CREATE_ADMIN);
         access.preflight(&self.db).await?;
+
         params.validate()?;
         let account = LoginAccount::new(params.account)?;
         ensure_account_available(&self.db, &account, None, &mut NoTransaction).await?;
@@ -122,11 +123,11 @@ impl AdminService {
         let id = id_generator::next_id();
         let data = AccountCoreData::admin(secret, params.name);
         let account = AccountCore::new(id, data)?;
+
         let grant = self.rbac.authorize_role_assignment(&actor, role_ids).await?;
         let audit =
             self.rbac.prepare_resource_log(actor, "admin.create", "admin", account.base.id.clone())?;
         self.create_account_with_roles(account, grant, audit, access).await?;
-
         Ok(())
     }
 
@@ -146,10 +147,10 @@ impl AdminService {
         params: InitializeSuperAdminParams,
     ) -> Result<InitializeSuperAdminResult> {
         let (account, password, name) = params.into_validated_parts()?;
+
         crate::service::iam::ensure_root_role(&self.rbac).await?;
         let initialization = self.ensure_super_admin(account.clone(), password, name).await?;
         let (admin, created, reactivated, root_role_bound) = initialization.into_parts();
-
         Ok(InitializeSuperAdminResult {
             admin_id: admin.base.id,
             account: account.into_string(),
@@ -183,10 +184,12 @@ impl AdminService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     access.require(executor).await?;
+
                     let admins = db.accounts().list_by_kind(AccountKind::Admin, executor).await?;
                     let account_ids =
                         admins.iter().map(|account| account.base.id.clone()).collect::<Vec<_>>();
                     let mut role_ids = rbac.account_roles(AccountKind::Admin, &account_ids, executor).await?;
+
                     let items = admins
                         .into_iter()
                         .map(|account| {
@@ -197,6 +200,7 @@ impl AdminService {
                             )
                         })
                         .collect();
+
                     access.require(executor).await?;
                     Ok(items)
                 })
@@ -227,10 +231,12 @@ impl AdminService {
     ) -> Result<()> {
         let access = ManagementAccess::new(authorization, actor.clone(), &admin::ACCOUNT_UPDATE_ADMIN);
         access.preflight(&self.db).await?;
+
         params.validate()?;
         let context = self.prepare_admin_update(params, &actor).await?;
         let resource_id = context.account.base.id.clone();
         let policy_revision = context.authorization.policy_revision();
+
         match context.authorization.into_role_grant() {
             Some(grant) => {
                 let audit = self.rbac.prepare_resource_log(actor, "admin.update", "admin", resource_id)?;
@@ -265,6 +271,7 @@ impl AdminService {
             .rbac
             .authorize_target_management(actor, AccountKind::Admin, account.base.id.as_str(), role_ids)
             .await?;
+
         account = apply_account_update(account, AccountCoreUpdate { name, password, status }).await?;
         Ok(AdminUpdateContext { account, authorization })
     }
@@ -308,6 +315,7 @@ impl AdminService {
     ) -> Result<()> {
         let access = ManagementAccess::new(authorization, actor.clone(), &admin::ACCOUNT_UPDATE_ADMIN_ROLE);
         access.preflight(&self.db).await?;
+
         params.validate()?;
         let account = account_of_kind(
             self.db.accounts().find_by_id(&params.id, &mut NoTransaction).await?,
@@ -323,6 +331,7 @@ impl AdminService {
         let grant = authorization
             .into_role_grant()
             .ok_or_else(|| crate::error::Error::Internal("管理员角色授权上下文缺少角色集合".to_string()))?;
+
         let policy_revision = grant.policy_revision();
         let account_id = account.base.id;
         let audit =
@@ -357,6 +366,7 @@ impl AdminService {
     ) -> Result<()> {
         let access = ManagementAccess::new(authorization, actor.clone(), &admin::ACCOUNT_DELETE_ADMIN);
         access.preflight(&self.db).await?;
+
         let account = account_of_kind(
             self.db.accounts().find_by_id(&id, &mut NoTransaction).await?,
             AccountKind::Admin,
@@ -367,6 +377,7 @@ impl AdminService {
             .rbac
             .authorize_target_management(&actor, AccountKind::Admin, account.base.id.as_str(), None)
             .await?;
+
         let audit = self.rbac.prepare_resource_log(actor, "admin.delete", "admin", id)?;
         self.delete_account_with_roles(account, audit, authorization.policy_revision(), access).await
     }
@@ -585,10 +596,12 @@ impl AdminService {
                 "账号存在但不属于系统管理员，无法初始化为超级管理员".to_string(),
             ));
         }
+
         let state =
             ExistingSuperAdminState::from_state(current.base.is_deleted(), current.status.is_active());
         let role_ids = self.rbac.role_ids(AccountKind::Admin, current.base.id.as_str()).await?;
         let has_root_role = role_ids.iter().any(|role_id| role_id.as_str() == crate::ROOT_ROLE_ID);
+
         let current = apply_account_update(
             current,
             AccountCoreUpdate {
@@ -599,6 +612,7 @@ impl AdminService {
         )
         .await?;
         let current = self.repair_system_account(current, state).await?;
+
         Ok(SuperAdminInitialization::Existing {
             account: current,
             reactivated: state.reactivates(),

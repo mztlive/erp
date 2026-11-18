@@ -286,6 +286,7 @@ impl DirectoryListRequest {
     ) -> Result<Self> {
         let search = normalize_search(search)?;
         let scope_version = normalize_scope_version(scope_version)?;
+
         let page = page.unwrap_or(1);
         let page_size = page_size.unwrap_or(20);
         if page > 1 && scope_version.is_none() {
@@ -297,9 +298,11 @@ impl DirectoryListRequest {
         if page_size == 0 || page_size > 100 {
             return Err(Error::ValidationError("页大小必须在 1 到 100 之间".into()));
         }
+
         if include_descendants && org_unit_ids.is_empty() {
             return Err(Error::ValidationError("只有指定组织时才能包含下级".into()));
         }
+
         Ok(Self {
             search,
             page,
@@ -404,10 +407,12 @@ mod tests {
         assert!(should_insert_grant(ExistingGrant::Absent));
         assert!(!should_insert_grant(ExistingGrant::Active));
         assert!(!should_insert_grant(ExistingGrant::Terminated));
+
         let mut grant =
             PersonQueryQualification::grant("q1", "sales-a", PersonDirectoryCategory::Sales).unwrap();
         assert_eq!(grant.status, PersonQueryStatus::Active);
         assert_eq!(grant.grant_role_id.as_deref(), Some("role-sales"));
+
         grant.terminate(Instant::from_unix_secs(10)).unwrap();
         assert!(grant.terminate(Instant::from_unix_secs(11)).is_err());
         assert_eq!(grant.status, PersonQueryStatus::Terminated);
@@ -470,12 +475,14 @@ mod tests {
             DirectoryListRequest::parse(Some(&"人".repeat(201)), Some(1), Some(20), &[], false, None)
                 .is_err()
         );
+
         assert!(DirectoryListRequest::parse(None, Some(2), Some(20), &[], false, None).is_err());
         assert!(DirectoryListRequest::parse(None, Some(2), Some(20), &[], false, Some(" ")).is_err());
         assert!(DirectoryListRequest::parse(None, Some(2), Some(20), &[], false, Some("v1")).is_ok());
         assert!(DirectoryListRequest::parse(None, Some(0), Some(20), &[], false, None).is_err());
         assert!(DirectoryListRequest::parse(None, Some(1), Some(101), &[], false, None).is_err());
         assert!(DirectoryListRequest::parse(None, Some(1), Some(20), &[], true, None).is_err());
+
         let request =
             DirectoryListRequest::parse(None, None, None, &["org-1".to_string()], true, None).unwrap();
         assert_eq!(request.page, 1);

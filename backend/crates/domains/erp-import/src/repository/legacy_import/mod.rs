@@ -152,6 +152,7 @@ impl QueryFilter for LegacyImportBatchFilter {
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }
+
         match (self.baseline_date_from, self.baseline_date_to) {
             (Some(from), Some(to)) => {
                 filter.insert("baseline_date", doc! { "$gte": from.to_string(), "$lte": to.to_string() });
@@ -744,6 +745,7 @@ impl<'a> LegacyImportRepository<'a> {
             executor,
         )
         .await?;
+
         mongo_ops::insert_many(&self.db.collection::<LegacyImportRow>(LEGACY_IMPORT_ROWS), rows, executor)
             .await?;
         Ok(())
@@ -773,6 +775,7 @@ mod tests {
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(document.get_str("source_system_id").unwrap(), "sys-mall");
         assert_eq!(document.get_str("status").unwrap(), "completed");
+
         let range = document.get_document("baseline_date").unwrap();
         assert_eq!(range.get_str("$gte").unwrap(), "2026-01-01");
         assert_eq!(range.get_str("$lte").unwrap(), "2026-12-31");

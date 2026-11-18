@@ -141,11 +141,13 @@ pub async fn cancel_order_approval(
         .current_submission_id
         .clone()
         .ok_or_else(|| Error::ConflictError("采购单缺少当前审批提交".to_string()))?;
+
     adapter::execute_purchase_order_domain_action(&mut order, action, submission_id.as_ref(), actor.id())?;
     erp_procurement::service::purchase_order::cancel_approval::persist_cancelled_order(
         db, &mut order, executor,
     )
     .await?;
+
     let audit =
         actor.clone().resource_log("purchase_order.cancel_approval", "purchase_order", id.to_string())?;
     persist_log(db, &audit, executor).await?;
@@ -178,8 +180,10 @@ pub async fn cancel_change_approval_apply(
         .find_by_id(id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("采购变更单不存在".to_string()))?;
+
     change_adapter::execute_purchase_change_domain_action(&mut change, action, actor.id())?;
     db.purchase_change_orders().update(&mut change, executor).await?;
+
     let audit = actor.clone().resource_log(
         "purchase_change_order.cancel_approval",
         "purchase_change_order",

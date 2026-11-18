@@ -244,6 +244,7 @@ mod runtime_instance_list_query_tests {
     fn limit_defaults_and_rejects_outside_closed_range() {
         let default = prepare(RuntimeInstanceListView::Managed, None).expect("默认 limit");
         assert_eq!(default.limit, DEFAULT_RUNTIME_INSTANCE_LIST_LIMIT);
+
         for limit in [1, MAX_RUNTIME_INSTANCE_LIST_LIMIT] {
             let query = RuntimeInstanceListQuery::prepare(
                 RuntimeInstanceListView::Managed,
@@ -256,6 +257,7 @@ mod runtime_instance_list_query_tests {
             .expect("闭区间端点");
             assert_eq!(query.limit, limit);
         }
+
         for limit in [0, MAX_RUNTIME_INSTANCE_LIST_LIMIT + 1] {
             assert!(
                 RuntimeInstanceListQuery::prepare(
@@ -323,6 +325,7 @@ mod runtime_instance_list_query_tests {
             assert_eq!(cursor.sort_time, sort_time);
             assert_eq!(cursor.id, "inst-1");
         }
+
         let max_id = "a".repeat(RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN);
         assert!(
             RuntimeInstanceListQuery::prepare(
@@ -335,6 +338,7 @@ mod runtime_instance_list_query_tests {
             )
             .is_ok()
         );
+
         for id in ["   ".to_string(), "a".repeat(RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN + 1)] {
             assert!(
                 RuntimeInstanceListQuery::prepare(

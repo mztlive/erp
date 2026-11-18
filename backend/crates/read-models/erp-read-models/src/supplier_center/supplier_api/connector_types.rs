@@ -92,6 +92,7 @@ mod tests {
             denied.connector_types_snapshot(&actor(), &mut SnapshotExecutor::default()).await,
             Err(Error::Forbidden(_))
         ));
+
         let allowed = service(&[supplier_api::CONNECTION_CREATE]).await;
         assert!(matches!(
             allowed.connector_types_snapshot(&actor(), &mut ReadExecutor::default()).await,

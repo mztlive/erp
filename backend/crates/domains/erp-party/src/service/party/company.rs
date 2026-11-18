@@ -43,6 +43,7 @@ impl PartyService {
         self.authorization
             .require(actor, &party::COMPANY_COMPANY_LIST, AccessTarget::Operation, executor)
             .await?;
+
         let page = self.db.parties().companies(params, executor).await?;
         Ok(PageView {
             items: page.items.into_iter().map(CompanyView::try_from).collect::<Result<_>>()?,
@@ -145,6 +146,7 @@ impl PartyService {
             }
             return Err(Error::ConflictError("公司编号已被使用，请刷新后重试".into()));
         }
+
         let command = CreatePartyRequest {
             party_no: req.party_no,
             party_kind: Some(PartyKind::Enterprise),
@@ -157,6 +159,7 @@ impl PartyService {
         let result = self
             .create_party_record(command, Some(profile), actor, &party::COMPANY_COMPANY_CREATE, executor)
             .await?;
+
         self.company_result(actor, &party::COMPANY_COMPANY_CREATE, &result.id, executor).await
     }
 
@@ -204,6 +207,7 @@ impl PartyService {
         if req.party_no != existing.party_no {
             return Err(Error::ValidationError("公司编号不可修改".into()));
         }
+
         let mut profile = req.profile()?;
         profile.bank_name = existing.bank_name.clone();
         if req.version.is_some_and(|version| version < existing.version)
@@ -215,6 +219,7 @@ impl PartyService {
         {
             return Ok(existing);
         }
+
         let command = UpdatePartyRequest {
             version: req
                 .version
@@ -227,6 +232,7 @@ impl PartyService {
         };
         self.update_stage(id, command, Some(&profile), actor, &party::COMPANY_COMPANY_UPDATE, executor)
             .await?;
+
         self.company_result(actor, &party::COMPANY_COMPANY_UPDATE, id, executor).await
     }
 }
@@ -258,6 +264,7 @@ impl PartyService {
             return Err(Error::ValidationError("公司回读必须使用快照事务".into()));
         }
         self.authorization.require(actor, permission, AccessTarget::Operation, executor).await?;
+
         Ok(match lookup {
             CompanyLookup::Id(id) => self.db.parties().find_party(&PartyId::new(id), executor).await?,
             CompanyLookup::Number(number) => {

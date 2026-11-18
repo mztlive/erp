@@ -113,6 +113,7 @@ async fn denied_contract_or_foreign_revision_never_reads_or_audits_the_asset() {
         matches!(read(&denied, "contract", "file", &actor(), true, &mut SnapshotExecutor::default()).await, Err(Error::Forbidden(value)) if value == "contract-denied")
     );
     assert_eq!(denied.steps(), ["query"]);
+
     let foreign = Reads { bound: false, ..Default::default() };
     assert!(
         matches!(read(&foreign, "contract", "file", &actor(), true, &mut SnapshotExecutor::default()).await, Err(Error::NotFound(value)) if value == "合同附件不存在或无权查看")
@@ -127,6 +128,7 @@ async fn asset_audit_failure_or_invalid_delivery_discards_the_unreleased_result(
         matches!(read(&unavailable, "contract", "file", &actor(), true, &mut SnapshotExecutor::default()).await, Err(Error::Internal(value)) if value == "asset-unavailable")
     );
     assert_eq!(unavailable.steps(), ["query", "revision-binding", "preview-and-audit"]);
+
     for port in [
         Reads { advance_during_asset: true, ..Default::default() },
         Reads { fail_delivery: true, ..Default::default() },
@@ -136,6 +138,7 @@ async fn asset_audit_failure_or_invalid_delivery_discards_the_unreleased_result(
         );
         assert_eq!(port.steps(), ["query", "revision-binding", "metadata", "validate"]);
     }
+
     let port = Reads::default();
     assert!(matches!(
         read(&port, "contract", "file", &actor(), false, &mut NoTransaction).await,

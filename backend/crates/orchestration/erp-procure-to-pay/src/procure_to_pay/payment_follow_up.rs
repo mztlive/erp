@@ -51,6 +51,7 @@ impl PurchaseOrderProcess {
             &req.idempotency_key,
             [id.to_string(), req.expected_version.to_string(), req.follow_up_date.to_string()],
         )?;
+
         let db = self.db.clone();
         let id = id.to_owned();
         let actor = actor.clone();
@@ -81,10 +82,12 @@ async fn schedule(
         return Err(Error::Forbidden("只能安排本人负责的采购付款跟进".into()));
     }
     access::require_assigned(db, rbac, actor, &task, executor).await?;
+
     if let Some(receipt) = db.work_item_command_receipts().find_command(command.id(), executor).await? {
         receipt.committed_task(command)?;
         return Ok(());
     }
+
     let facts = arrangement_facts(db, id, executor).await?;
     if !facts.state.needs_task()
         || facts.task.as_ref().map(|item| item.base.id.as_str()) != Some(req.task_id.as_str())
@@ -94,11 +97,13 @@ async fn schedule(
     if task.base.version != req.expected_version {
         return Err(Error::ConflictError("付款安排已更新，请刷新后重新安排".into()));
     }
+
     task.schedule_payment_follow_up(req.follow_up_date, BusinessDate::today(), Instant::now())?;
     db.work_items().update(&mut task, executor).await?;
     let audit =
         actor.clone().resource_log("work_item.payment_follow_up", "work_item", task.base.id.clone())?;
     persist_log(db, &audit, executor).await?;
+
     let receipt = WorkItemCommandReceipt::new(
         command,
         WorkItemCommandResult::PaymentFollowUp {

@@ -65,6 +65,7 @@ impl LegacyImportRowApplyScopeExt for persistence_core::Repository<'_, LegacyImp
         if unique_ids.is_empty() {
             return Ok(LegacyImportApplyScope::default());
         }
+
         let keys: Vec<Bson> = unique_ids.iter().map(|id| id.to_string().into()).collect();
         let found = self
             .find_many_sorted(
@@ -75,6 +76,7 @@ impl LegacyImportRowApplyScopeExt for persistence_core::Repository<'_, LegacyImp
             .await?;
         let rows: HashMap<_, _> = found.into_iter().map(|row| (row.base.id.clone(), row)).collect();
         let missing_row_ids = missing_row_ids(unique_ids, &rows);
+
         let pending_outside_request =
             mongo_ops::count_documents(&self.collection(), pending_outside_filter(batch_id, keys), executor)
                 .await?;
@@ -169,6 +171,7 @@ mod tests {
         assert_eq!(filter.get_str("batch_id").unwrap(), "batch-apply");
         assert_eq!(filter.get_str("import_status").unwrap(), "pending_import");
         assert_eq!(filter.get_i64("deleted_at").unwrap(), NOT_DELETED_TIMESTAMP_BSON);
+
         let nin = filter.get_document("id").unwrap().get_array("$nin").unwrap();
         assert_eq!(nin.len(), 2);
         assert!(nin.contains(&mongodb::bson::Bson::String("row-pending".to_string())));

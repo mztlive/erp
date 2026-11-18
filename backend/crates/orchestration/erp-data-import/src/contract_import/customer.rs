@@ -45,6 +45,7 @@ impl ContractImportProcess {
             .map(|value| value.trim())
             .filter(|value| !value.is_empty())
             .map(str::to_ascii_uppercase);
+
         let candidates = guarded_candidates(&self.db, name, credit.as_deref(), executor).await?;
         let identity = identity_from_candidates(name, credit.as_deref(), &candidates)?;
         if let Some(identity) = identity {
@@ -62,10 +63,12 @@ impl ContractImportProcess {
                 }
                 return Ok((customer, identity));
             }
+
             self.require_customer_creation(task, allow_create, actor, executor).await?;
             let customer = self.create_customer(&identity.id, actor, executor).await?;
             return Ok((customer, identity));
         }
+
         self.require_customer_creation(task, allow_create, actor, executor).await?;
         self.new_customer(values, actor, executor).await
     }
@@ -85,6 +88,7 @@ impl ContractImportProcess {
             executor,
         )
         .await?;
+
         let customer = self.create_customer(&party.base.id, actor, executor).await?;
         Ok((
             customer,
@@ -123,6 +127,7 @@ impl ContractImportProcess {
     ) -> Result<CustomerAccount> {
         let (customer, owner) = customer_records(party_id, actor.id())?;
         self.services.customer_access.require_candidate(actor, &customer.base.id, executor).await?;
+
         self.db.customer_accounts().create(&customer, executor).await?;
         self.db.customer_assignments().create(&owner, executor).await?;
         persist_log(

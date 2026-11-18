@@ -307,6 +307,7 @@ impl MongoCasbinAdapter {
             executor,
         )
         .await?;
+
         Self::group_subject_policies(rows)
     }
 
@@ -328,6 +329,7 @@ impl MongoCasbinAdapter {
                 _ => return Err(PersistenceError::EntityMetadataOutOfRange("Casbin subject policy")),
             }
         }
+
         for policy in grouped.values_mut() {
             policy.roles.sort();
             policy.roles.dedup();
@@ -387,6 +389,7 @@ impl MongoCasbinAdapter {
             executor,
         )
         .await?;
+
         let mut permissions = Vec::new();
         for row in rows {
             let [_, resource, action] = row.values.as_slice() else {
@@ -456,6 +459,7 @@ impl MongoCasbinAdapter {
             executor,
         )
         .await?;
+
         if result.matched_count == 0 && result.upserted_id.is_none() {
             return Err(PersistenceError::OptimisticLockingError);
         }
@@ -624,6 +628,7 @@ impl Adapter for MongoCasbinAdapter {
                 );
             }
         }
+
         self.run_policy_write(move |adapter, session| {
             Box::pin(async move {
                 adapter.replace_all_rules(rules, session).await?;
@@ -641,6 +646,7 @@ impl Adapter for MongoCasbinAdapter {
             })
         })
         .await?;
+
         self.filtered = false;
         Ok(())
     }
@@ -652,6 +658,7 @@ impl Adapter for MongoCasbinAdapter {
     async fn add_policy(&mut self, sec: &str, ptype: &str, rule: Vec<String>) -> casbin::Result<bool> {
         let rule = CasbinRule::new(sec, ptype, rule);
         let rule_doc = serialize_to_document(&rule).map_err(Self::adapter_error)?;
+
         self.run_policy_write(move |adapter, session| {
             Box::pin(async move {
                 let result = mongo_ops::update_one(
@@ -692,6 +699,7 @@ impl Adapter for MongoCasbinAdapter {
                 if existing > 0 {
                     return Ok((false, false));
                 }
+
                 mongo_ops::insert_many(&adapter.collection(), rules, session).await?;
                 Ok((true, true))
             })
@@ -721,6 +729,7 @@ impl Adapter for MongoCasbinAdapter {
         if rules.is_empty() {
             return Ok(false);
         }
+
         let ids = rules.iter().map(|rule| CasbinRule::id(sec, ptype, rule)).collect::<Vec<_>>();
         let expected_count = rules.len() as u64;
         self.run_policy_write(move |adapter, session| {

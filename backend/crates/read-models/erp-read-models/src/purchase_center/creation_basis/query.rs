@@ -68,12 +68,14 @@ impl PurchaseOrderReadService {
     ) -> Result<Vec<CreationBasisView>> {
         let access = self.rbac.query(actor, &purchase_order::CREATE, executor).await?;
         let tasks = read_creation_tasks(&self.db, &filter, &access, executor).await?;
+
         let mut views = if tasks.is_empty() {
             Vec::new()
         } else {
             BasisList::load(self, tasks, executor).await?.views(&self.db, executor).await?
         };
         self.fill_basis_prices(&mut views, executor).await?;
+
         self.rbac.validate(&access, executor).await?;
         Ok(views)
     }
@@ -87,11 +89,13 @@ impl PurchaseOrderReadService {
         if views.is_empty() {
             return Ok(());
         }
+
         let ids = views
             .iter()
             .flat_map(|view| view.lines.iter().map(|line| line.sales_order_revision_line_id.clone()))
             .collect::<Vec<_>>();
         let prices = revision_line_prices(&self.db, &ids, executor).await?;
+
         for line in views.iter_mut().flat_map(|view| &mut view.lines) {
             line.sales_prices = prices.get(&line.sales_order_revision_line_id).cloned();
         }
@@ -127,6 +131,7 @@ impl BasisList {
             )
             .await?;
         let orders = orders.into_iter().map(|order| (order.base.id.clone(), order)).collect();
+
         let (coverages, sku_ids) =
             load_coverages(&service.db, &orders, &tasks, &task_indexes, executor).await?;
         let facts = load_creation_basis_facts(&service.db, &sku_ids, executor).await?;
@@ -145,6 +150,7 @@ impl BasisList {
                 .ok_or_else(|| Error::ConflictError("销售覆盖资料已变化，请重新加载".into()))?;
             let inquiry = InquiryBasis::load(db, order, executor).await?;
             let owner_name = self.owner_names.get(&order.stable.created_by).cloned();
+
             for &index in indexes {
                 let task = &self.tasks[index];
                 let groups = inquiry.groups(
@@ -163,6 +169,7 @@ impl BasisList {
                         &self.warehouses,
                     )?);
                 }
+
                 let stock_groups =
                     stock_basis_groups_for_order(db, order, task.responsibility_scope_ids(), executor)
                         .await?;

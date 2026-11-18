@@ -158,12 +158,14 @@ impl WorkItemAuthorizationExt for Repository<'_, WorkItem> {
         access
             .ensure_current(executor)
             .map_err(|_| RepositoryError::UnsupportedDeployment("工作项授权阶段已失效"))?;
+
         if ids.is_empty() {
             return Ok(vec![]);
         }
         if ids.len() > 1000 {
             return Err(RepositoryError::EntityMetadataOutOfRange("任务授权批次超过 1000 项"));
         }
+
         let mut pipeline = vec![doc! { "$match": { "id": { "$in": ids } } }];
         pipeline.extend_from_slice(
             access
@@ -217,6 +219,7 @@ mod tests {
             panic!("owner must use task responsibility")
         };
         assert_eq!(owner, doc! { "owner_user_id": "reader" });
+
         let orgs = ["dept".into()].into();
         let QueryFragment::Exists { bindings, pipeline, .. } =
             mapping.predicate(&AccessFact::OrganizationIn(orgs), &context, facts).unwrap()

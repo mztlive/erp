@@ -264,6 +264,7 @@ impl ApprovalNotificationOutbox {
         if lease_until.unix_secs() <= now.unix_secs() {
             return Err(Error::from("租约截止必须晚于当前时间"));
         }
+
         self.lease_owner = Some(normalize_required_text(
             worker_id.into(),
             "租约持有者不能为空",
@@ -310,6 +311,7 @@ impl ApprovalNotificationOutbox {
         if self.delivery_status != ApprovalNotificationDeliveryStatus::InFlight {
             return Err(Error::from("只有投递中的消息可以记录失败"));
         }
+
         self.last_error_class = Some(normalize_required_text(
             error_class.into(),
             "错误分类不能为空",
@@ -318,13 +320,16 @@ impl ApprovalNotificationOutbox {
         )?);
         self.attempt_count =
             self.attempt_count.checked_add(1).ok_or_else(|| Error::from("投递尝试次数溢出"))?;
+
         self.lease_owner = None;
         self.lease_until = None;
+
         if self.attempt_count >= MAX_DELIVERY_ATTEMPTS {
             self.delivery_status = ApprovalNotificationDeliveryStatus::DeadLetter;
             self.dead_lettered_at = Some(failed_at);
             return Ok(());
         }
+
         self.delivery_status = ApprovalNotificationDeliveryStatus::Pending;
         self.next_attempt_at = next_attempt_at(self.attempt_count, failed_at)?;
         Ok(())
@@ -357,6 +362,7 @@ fn normalize_recipients(recipient_user_ids: Vec<String>) -> Result<Vec<String>> 
     if recipient_user_ids.is_empty() {
         return Err(Error::from("收件人不能为空"));
     }
+
     let mut normalized = Vec::with_capacity(recipient_user_ids.len());
     for recipient in recipient_user_ids {
         let recipient =
@@ -518,6 +524,7 @@ mod tests {
                 now += delay;
             }
         }
+
         assert_eq!(item.delivery_status, ApprovalNotificationDeliveryStatus::DeadLetter);
         assert!(item.dead_lettered_at.is_some());
         assert!(

@@ -105,6 +105,7 @@ impl QueueContextIdentity {
     pub fn new(namespace: &str, fields: impl IntoIterator<Item = QueueContextField>) -> Self {
         let mut fields = fields.into_iter().collect::<Vec<_>>();
         fields.sort_by(|left, right| left.name.cmp(&right.name));
+
         let mut bytes = Vec::new();
         push_component(&mut bytes, b"queue-context-v1");
         push_component(&mut bytes, namespace.as_bytes());
@@ -115,6 +116,7 @@ impl QueueContextIdentity {
                 push_component(&mut bytes, value.as_bytes());
             }
         }
+
         Self(format!("qctx-v1-{}", hex::encode(Sha256::digest(bytes))))
     }
 

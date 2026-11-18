@@ -48,11 +48,13 @@ mod tests {
         assert_eq!(update.amount.unwrap().to_string(), "50");
         assert_eq!(update.received_at.unwrap().unix_secs(), 1700000000);
         assert_eq!(update.bank_reference.as_deref(), Some("BANK-1"));
+
         for key in ["receipt_no", "counterparty_party_id", "customer_id", "created_by"] {
             let mut forged = valid.clone();
             forged[key] = json!("forged");
             assert!(serde_json::from_value::<UpdateCustomerReceiptRequest>(forged).is_err());
         }
+
         let invalid: UpdateCustomerReceiptRequest = serde_json::from_value(json!({"version": 0})).unwrap();
         assert!(invalid.validate().is_err());
     }

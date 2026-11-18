@@ -65,6 +65,7 @@ impl SourceUpdateSync<'_> {
             .filter(|update| update.status == PurchaseSourceUpdateStatus::Open)
             .map(|update| (update.purchase_order_id.clone(), update))
             .collect::<HashMap<_, _>>();
+
         for purchase in &self.state.facts.purchase_orders {
             let impact = self.state.impact_of(&purchase.base.id);
             let update = open.remove(&purchase.base.id);
@@ -79,9 +80,11 @@ impl SourceUpdateSync<'_> {
                 (SyncAction::Close, _, Some(update)) => self.close(update, executor).await?,
                 _ => {},
             }
+
             sync_return_finance(self.db, self.responsibility, &purchase.base.id, executor).await?;
             super::sync_payment_arrangement(self.db, &purchase.base.id, false, executor).await?;
         }
+
         for update in open.into_values() {
             self.close(update, executor).await?;
         }
@@ -107,6 +110,7 @@ impl SourceUpdateSync<'_> {
             trigger_sales_change_order_id: self.trigger,
         };
         let mut update = PurchaseSourceUpdate::open(next_id(), opening);
+
         if let Some(owner) = purchase.owner_user_id.as_deref() {
             let item = self.work_item(purchase, owner, &update)?;
             self.db.work_items().create(&item, executor).await?;
@@ -144,6 +148,7 @@ impl SourceUpdateSync<'_> {
     /// 保存仍开放的记录，并同步待办摘要。
     async fn save_open(&self, mut update: PurchaseSourceUpdate, executor: &mut dyn Executor) -> Result<()> {
         purchase_source_updates(self.db).update(&mut update, executor).await?;
+
         let Some(mut item) = self.open_work_item(&update, executor).await? else {
             return Ok(());
         };
@@ -164,6 +169,7 @@ impl SourceUpdateSync<'_> {
         let (resolution, document) = derive_resolution(&update, purchase, self.revision_id());
         update.resolve(resolution, document, self.now).map_err(Error::Logic)?;
         purchase_source_updates(self.db).update(&mut update, executor).await?;
+
         if let Some(mut item) = self.open_work_item(&update, executor).await? {
             item.complete_when_source_updated(self.now).map_err(Error::Logic)?;
             self.db.work_items().update(&mut item, executor).await?;
@@ -274,6 +280,7 @@ fn derive_resolution(
     let Some(purchase) = purchase else {
         return (PurchaseSourceResolution::Voided, None);
     };
+
     let submitted = matches!(
         purchase.stable.status,
         PurchaseOrderStatus::PendingFinanceReview | PurchaseOrderStatus::InApproval
@@ -327,6 +334,7 @@ mod tests {
             |_| Ok(PaymentTermFact::new("POSTPAY_NET30").with_days_after_delivery(30)),
         )
         .unwrap();
+
         order.stable.status = status;
         order.current_submission_id = Some("sub-2".into());
         order.stable.current_revision_id = Some("por-2".into());
@@ -344,6 +352,7 @@ mod tests {
                 kind: SourceImpactKind::Zeroed { baseline_quantity: Quantity::from_str("4").unwrap() },
             }],
         };
+
         let mut update = PurchaseSourceUpdate::open(
             "psu-1".into(),
             SourceUpdateOpening {

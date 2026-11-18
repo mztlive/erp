@@ -53,6 +53,7 @@ impl ReturnsProcess {
         if let Some(alternate) = alternate {
             candidate.relations.insert(RelationKey::parse(alternate)?, RelatedObjects::default());
         }
+
         self.rbac.identity.require(actor, &permission, AccessTarget::Candidate(candidate), executor).await?;
         Ok(())
     }
@@ -98,6 +99,7 @@ impl ReturnsProcess {
         if !error.command_may_have_committed() {
             return Err(error);
         }
+
         let this = self.clone();
         let receipt = receipt.clone();
         let actor = actor.clone();
@@ -112,6 +114,7 @@ impl ReturnsProcess {
                 })
             })
             .await;
+
         recovered_resource(error, recovered)
     }
 }

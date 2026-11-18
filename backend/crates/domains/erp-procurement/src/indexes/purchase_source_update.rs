@@ -26,8 +26,10 @@ pub(super) async fn ensure(db: &Database) -> Result<()> {
         .unique(true)
         .partial_filter_expression(doc! { "status": PurchaseSourceUpdateStatus::Open.as_str() })
         .build();
+
     create(&collection, doc! { "id": 1 }, unique("uk_purchase_source_update_id")).await?;
     create(&collection, doc! { "purchase_order_id": 1 }, open_only).await?;
+
     create(
         &collection,
         doc! { "purchase_order_id": 1, "created_at": -1, "id": -1 },

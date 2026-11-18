@@ -106,10 +106,12 @@ fn legacy_expiry_is_ignored_but_changed_address_and_early_delivery_are_rejected(
     let mut expired = usage("10");
     expired.on_date = "2026-11-01".parse().unwrap();
     quote.ensure_applicable(&expired).unwrap();
+
     let mut changed = usage("10");
     changed.addresses[0].address_fingerprint = "b".repeat(64);
     assert!(quote.ensure_applicable(&changed).is_err());
     quote.ensure_applicable(&usage("5")).unwrap();
+
     let mut early = usage("10");
     early.expected_delivery_date = "2026-10-21".parse().unwrap();
     assert!(quote.ensure_applicable(&early).is_err());
@@ -133,11 +135,13 @@ fn simplified_terms_reject_invalid_price_tax_quantity_and_retired_fields() {
         let terms: QuoteTerms = serde_json::from_value(data).unwrap();
         assert!(terms.validated().is_err());
     }
+
     for key in ["minimum_order_quantity", "valid_from", "payment_term_code", "allow_cumulative_batches"] {
         let mut data = value.clone();
         data[key] = "legacy".into();
         assert!(serde_json::from_value::<QuoteTerms>(data).is_err());
     }
+
     let mut data = value;
     data.as_object_mut().unwrap().remove("valid_to");
     let terms: QuoteTerms = serde_json::from_value(data).unwrap();
@@ -149,9 +153,11 @@ fn aggregate_supply_and_address_quantity_are_conserved() {
     let mut value = usage("10");
     value.consumed_quantity = "11".parse().unwrap();
     assert!(quote.ensure_applicable(&value).is_err());
+
     let mut value = usage("10");
     value.addresses[0].quantity = "9".parse().unwrap();
     assert!(quote.ensure_applicable(&value).is_err());
+
     let mut data = quote.data.clone();
     data.terms.address_limits.push(address("1"));
     assert!(InquiryQuote::new("new".into(), data).is_err());
@@ -174,6 +180,7 @@ fn internal_fee_basis_requires_precise_scope_and_payment_identity() {
     document.insert("_id", ObjectId::new());
     let restored: InquiryFeeBasis = deserialize_from_document(document).unwrap();
     assert_eq!(serde_json::to_value(&restored).unwrap(), serde_json::to_value(&basis).unwrap());
+
     let mut invalid = data.clone();
     invalid.feedback_round = 0;
     assert!(InquiryFeeBasis::new("basis".into(), invalid).is_err());
@@ -188,10 +195,12 @@ fn stable_quote_balance_prevents_cross_sales_and_cross_revision_reset() {
     let mut balance = InquiryQuoteBalance::empty(quote.data.quote_id.clone()).unwrap();
     balance.reserve(&quote, &usage("10")).unwrap();
     assert_eq!(balance.reserved_quantity.to_string(), "10");
+
     quote.data.revision_no = 2;
     let before = serde_json::to_value(&balance).unwrap();
     assert!(balance.reserve(&quote, &usage("15")).is_err());
     assert_eq!(serde_json::to_value(&balance).unwrap(), before);
+
     balance.reserve(&quote, &usage("10")).unwrap();
     assert_eq!(balance.reserved_quantity.to_string(), "20");
     assert!(balance.reserve(&quote, &usage("10")).is_err());
@@ -244,9 +253,11 @@ fn pending_change_does_not_release_original_supply_and_effective_change_resizes_
         addresses: first.addresses.clone(),
         history: vec![],
     };
+
     let pending = balance.resized(&quote, &usage("5"), &original, true).unwrap();
     assert_eq!(balance.reserved_quantity.to_string(), "10");
     assert_eq!(pending.quantity.to_string(), "10");
+
     let effective = balance.resized(&quote, &usage("5"), &pending, false).unwrap();
     assert_eq!(balance.reserved_quantity.to_string(), "5");
     assert_eq!(effective.quantity.to_string(), "5");
@@ -294,9 +305,11 @@ fn legacy_expiry_does_not_prevent_restoring_existing_formal_exposure() {
         addresses: initial.addresses.clone(),
         history: vec![],
     };
+
     let held = balance.resized(&quote, &usage("15"), &original, true).unwrap();
     quote.data.terms.valid_to = Some("2026-10-21".parse().unwrap());
     quote.ensure_applicable(&initial).unwrap();
+
     let restored = balance.restore_existing_usage(&held, initial.quantity, &initial.addresses).unwrap();
     assert_eq!(restored.quantity.to_string(), "10");
     assert_eq!(restored.addresses, initial.addresses);
@@ -323,11 +336,14 @@ fn restoration_rejects_increase_new_address_and_other_quote_without_mutating_bal
         addresses: initial.addresses.clone(),
         history: vec![],
     };
+
     let before = serde_json::to_value(&balance).unwrap();
     assert!(balance.restore_existing_usage(&original, "11".parse().unwrap(), &[address("11")]).is_err());
+
     let mut changed = address("10");
     changed.address_fingerprint = "b".repeat(64);
     assert!(balance.restore_existing_usage(&original, initial.quantity, &[changed]).is_err());
+
     let mut other = original.clone();
     other.quote_id = "other-quote".into();
     assert!(balance.restore_existing_usage(&other, initial.quantity, &initial.addresses).is_err());
@@ -342,12 +358,14 @@ fn partial_supply_covers_all_demand_addresses_without_expanding_total_balance() 
     second.allocation_id = "address-2".into();
     data.terms.address_limits = vec![address("10"), second.clone()];
     let quote = InquiryQuote::new("partial".into(), data).unwrap();
+
     let mut value = usage("5");
     second.quantity = "5".parse().unwrap();
     value.addresses = vec![second];
     let mut balance = InquiryQuoteBalance::empty(quote.data.quote_id.clone()).unwrap();
     balance.reserve(&quote, &value).unwrap();
     assert!(balance.reserve(&quote, &usage("1")).is_err());
+
     let mut invalid = quote.data.clone();
     invalid.terms.address_limits = vec![address("4")];
     assert!(InquiryQuote::new("invalid".into(), invalid).is_err());
@@ -377,12 +395,14 @@ fn freight_and_unavailable_reply_preserve_cost_semantics() {
     assert!(value.clone().validated().is_err());
     value.freight_gross = Some("0".parse().unwrap());
     value.clone().validated().unwrap();
+
     value.unavailable = true;
     assert!(value.clone().validated().is_err());
     value.available_quantity = "0".parse().unwrap();
     value.unit_cost_gross = "0".parse().unwrap();
     value.clone().validated().unwrap();
     assert!(value.ensure_applicable(&usage("1")).is_err());
+
     let mut data = quote().data;
     data.terms = value;
     data.internal_note.clear();
@@ -415,6 +435,7 @@ fn duplicate_reply_requires_same_round_scope_supplier_terms_and_note() {
             &candidate.internal_note,
         )
     };
+
     assert!(matches(data));
     for field in 0..8 {
         let mut changed = data.clone();

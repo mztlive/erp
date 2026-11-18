@@ -130,6 +130,7 @@ impl<'a> SupplierRepository<'a> {
             executor,
         )
         .await?;
+
         mongo_ops::insert_many(
             &self.db.collection::<SupplierQualificationCapability>(SUPPLIER_QUALIFICATION_CAPABILITIES),
             links,

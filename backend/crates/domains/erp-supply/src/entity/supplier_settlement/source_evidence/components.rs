@@ -149,6 +149,7 @@ impl SettlementPeriod {
             .single()
             .expect("固定时区本地时刻无歧义")
             .timestamp();
+
         let end_exclusive = end
             .as_naive_date()
             .succ_opt()

@@ -110,6 +110,7 @@ async fn apply_authorize(
     let DepositManagementContext { db, authorization, account, actor, .. } = context;
 
     account_access(&db, &authorization, &account, &actor, "authorize", executor).await?;
+
     let id = operation_id(&account, "authorize", &command.operation_key)?;
     let authorization = SupplierDepositAuthorization {
         base: BaseModel::new(id),
@@ -155,6 +156,7 @@ async fn apply_reconcile(
     let DepositManagementContext { db, authorization, account, actor, .. } = context;
 
     account_access(&db, &authorization, &account, &actor, "reconcile", executor).await?;
+
     let id = operation_id(&account, "reconcile", &command.operation_key)?;
     let record = SupplierDepositReconciliation {
         base: BaseModel::new(id),

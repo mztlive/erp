@@ -106,11 +106,13 @@ impl PurchaseOrderProcess {
                         .access(service.db.clone())
                         .require_entry(&actor, &internal::PURCHASE_CHANGE_CREATE_SOURCE, &id, executor)
                         .await?;
+
                     let (order, base_revision) = service
                         .domain()
                         .load_changeable_order(order, req.expected_lock_version, executor)
                         .await?;
                     service.domain().ensure_no_in_progress_change(&id, executor).await?;
+
                     let change = new_change(&order, &base_revision, &req.reason, actor.id())?;
                     service.persist_started_change(&order, &change, &actor, executor).await?;
                     Ok(StartPurchaseChangeResult {
@@ -153,6 +155,7 @@ impl PurchaseOrderProcess {
         req.validate()?;
         let identity = req.command_identity(change_id, actor.id())?;
         let fingerprint = req.request_fingerprint(change_id)?;
+
         let service = self.clone();
         let change_id = change_id.to_string();
         let recovery_actor = actor.clone();
@@ -176,6 +179,7 @@ impl PurchaseOrderProcess {
                             executor,
                         )
                         .await?;
+
                     if let Some(result) = replay_change_command(
                         &service.db,
                         &transaction_identity,
@@ -186,11 +190,13 @@ impl PurchaseOrderProcess {
                     {
                         return Ok(result);
                     }
+
                     let change = lock_draft_change(change, req.expected_lock_version)?;
                     service.start_change_approval(&change_id, change, req, &actor, adapter, executor).await
                 })
             })
             .await;
+
         match result {
             Err(error) if error.command_may_have_committed() => {
                 self.recover_purchase_change_start(&identity, &fingerprint, &recovery_actor, error).await
@@ -294,6 +300,7 @@ impl PurchaseOrderProcess {
                             executor,
                         )
                         .await?;
+
                     change
                         .ensure_expected_version(req.expected_lock_version)
                         .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".into()))?;
@@ -321,6 +328,7 @@ impl PurchaseOrderProcess {
             .find_by_id(&order.sales_order_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
+
         let bind_command = BindPublishedDefinitionCommand {
             document_type: DocumentType::PurchaseChangeOrder,
             business_object_id: change.base.id.clone(),
@@ -340,6 +348,7 @@ impl PurchaseOrderProcess {
             "purchase_change_order",
             change.base.id.clone(),
         )?;
+
         persist_created_change_order(
             &self.db,
             ports.as_ref(),
@@ -378,6 +387,7 @@ impl PurchaseOrderProcess {
             .find_by_id(&order.sales_order_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
+
         apply_change_reason(&mut change, req.reason.as_deref(), actor.id())?;
         let mut prepared = self.prepare_change_target(&change, &order, &req, actor, executor).await?;
         prepared.submission.submit(Instant::now(), actor.id())?;
@@ -387,6 +397,7 @@ impl PurchaseOrderProcess {
             prepared.content_hash.clone(),
             actor.id(),
         )?;
+
         self.dispatch_change_start(
             ChangeStartDispatch { id, change, sales_order, prepared, adapter },
             actor,
@@ -421,6 +432,7 @@ impl PurchaseOrderProcess {
                 normalized_request.payment_term_code = Some(previous.payment_term_code);
             }
         }
+
         let supplier_name = self.change_supplier_name(order, executor).await?;
         let submission = self
             .build_change_submission(
@@ -432,6 +444,7 @@ impl PurchaseOrderProcess {
                 executor,
             )
             .await?;
+
         let enriched_lines = self
             .enrich_change_lines_with_current_sales_revision(order, &normalized_request.lines, executor)
             .await?;
@@ -439,7 +452,9 @@ impl PurchaseOrderProcess {
         let source_lines =
             self.db.purchase_order().list_revision_lines(&change.base_revision_id, executor).await?;
         inherit_revision_sources(&mut inputs, &source_lines)?;
+
         check_change_inputs(&self.db, order, &inputs, submission.gross_amount, executor).await?;
+
         let lines = build_change_submission_lines(&submission.base.id.clone(), &inputs)?;
         Ok(FrozenChangeSubmission {
             submission,
@@ -505,6 +520,7 @@ impl PurchaseOrderProcess {
         let subject = purchase_change_order_subject_ref(dispatch.id)?;
         let binding = find_approval_binding(&self.db, dispatch.id, executor).await.map_err(Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
+
         let now = Instant::now();
         let snapshot = build_purchase_change_snapshot(
             &dispatch.change,
@@ -545,6 +561,7 @@ impl PurchaseOrderProcess {
             executor,
         )
         .await?;
+
         let start_input = build_purchase_change_start_input(PurchaseChangeStartInput {
             resubmission_reason: dispatch.prepared.resubmission_reason.clone(),
             graph,
@@ -657,6 +674,7 @@ impl PurchaseOrderProcess {
         let runtime =
             load_cancel_runtime(&self.db, &binding, &subject, change.approval_subject_version, executor)
                 .await?;
+
         let now = Instant::now();
         let input = build_purchase_change_cancel_input(
             &runtime,
@@ -667,12 +685,14 @@ impl PurchaseOrderProcess {
             now,
         )?;
         let prepared = prepare_cancel(input)?;
+
         execute_purchase_change_domain_action(change, adapter.cancel_action, actor.id())?;
         let audit = actor.clone().resource_log(
             "purchase_change_order.cancel_approval",
             "purchase_change_order",
             id.to_string(),
         )?;
+
         persist_purchase_change_cancel(
             &self.db,
             PurchaseChangeCancelPersistInput {
@@ -760,6 +780,7 @@ async fn persist_created_change_order(
             executor,
         )
         .await?;
+
     persist_bound_change_document(db, ports, &mut document, &bind_command, &actor, executor).await?;
     db.purchase_change_orders().create(&change_order, executor).await?;
     persist_log(db, &audit, executor).await?;

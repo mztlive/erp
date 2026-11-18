@@ -49,6 +49,7 @@ impl PurchaseReceiptLineBatch {
         if specs.is_empty() {
             return Err(Error::from("采购入库单至少需要一行"));
         }
+
         let mut lines = Vec::with_capacity(specs.len());
         for (index, spec) in specs.into_iter().enumerate() {
             let line_no = u32::try_from(index + 1).map_err(|_| Error::from("入库行号溢出"))?;
@@ -109,6 +110,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(pass[0].quality_result, QualityResult::Passed);
+
         let reject = PurchaseReceiptLineBatch::build(
             PurchaseReceiptId::new("r-1"),
             vec![PurchaseReceiptLineSpec {
@@ -134,6 +136,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(PurchaseReceiptLineBatch::build(PurchaseReceiptId::new("r-1"), vec![]).is_err());
     }
 }

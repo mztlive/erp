@@ -96,6 +96,7 @@ impl SupplierDeliveryTemplate {
         if name == self.name && content.is_default == self.is_default && policy == self.policy {
             return Ok(false);
         }
+
         self.name = name;
         self.is_default = content.is_default;
         self.policy = policy;
@@ -251,9 +252,11 @@ pub fn resolve_delivery(
     if let Some(template) = assigned {
         return ResolvedDelivery::from_template(DeliveryTemplateSource::Assigned, template);
     }
+
     if let Some(template) = templates.iter().filter(same_supplier).find(|template| template.is_default) {
         return ResolvedDelivery::from_template(DeliveryTemplateSource::SupplierDefault, template);
     }
+
     ResolvedDelivery {
         source: DeliveryTemplateSource::Unset,
         template_id: None,
@@ -339,6 +342,7 @@ mod tests {
             content("  "),
             "buyer",
         );
+
         assert!(blank.is_err());
         let mut invalid = content("常温");
         invalid.dropship.default_term = DeliveryTerm::FreightExtra;
@@ -356,6 +360,7 @@ mod tests {
         let mut template = template();
         assert!(!template.replace_content(content("常温"), "other").unwrap());
         assert_eq!(template.updated_by, "buyer");
+
         let mut changed = content("常温");
         changed.bulk.default_term = DeliveryTerm::NotDeliverable;
         assert!(template.replace_content(changed, "other").unwrap());
@@ -412,9 +417,11 @@ mod tests {
         let assigned = resolve_offering_delivery(&offering("supplier-1", Some("cold")), &templates);
         assert_eq!(assigned.source, DeliveryTemplateSource::Assigned);
         assert_eq!(assigned.display_name(), "cold");
+
         let fallback = resolve_offering_delivery(&offering("supplier-1", None), &templates);
         assert_eq!(fallback.source, DeliveryTemplateSource::SupplierDefault);
         assert_eq!(fallback.display_name(), "供应商默认（normal）");
+
         let unset = resolve_offering_delivery(&offering("supplier-2", None), &templates);
         assert_eq!(unset.source, DeliveryTemplateSource::Unset);
         assert_eq!(unset.display_name(), "未设置（全国配送、包邮）");

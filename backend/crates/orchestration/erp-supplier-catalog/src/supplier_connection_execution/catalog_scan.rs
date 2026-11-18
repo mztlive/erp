@@ -54,6 +54,7 @@ impl SupplierConnectionExecutionProcess {
     ) -> std::result::Result<(), ClassifiedError> {
         let policy = self.catalog_policy(connection)?;
         self.prepare_scan(connection, &job.base.id, policy).await.map_err(classify)?;
+
         loop {
             let run = self
                 .db
@@ -66,6 +67,7 @@ impl SupplierConnectionExecutionProcess {
                 self.reconcile_catalog_memberships(&run, actor).await?;
                 return Ok(());
             }
+
             if self.control.stopping() {
                 return Err(ClassifiedError {
                     class: SupplierFailureClass::TransientFailure,
@@ -73,11 +75,13 @@ impl SupplierConnectionExecutionProcess {
                     summary: "服务发布交接，将从已保存页面继续".into(),
                 });
             }
+
             let current = SupplierApiService::new(self.db.clone())
                 .load_connection(&connection.base.id, &mut NoTransaction)
                 .await
                 .map_err(|_| storage_error())?;
             verify_connection(&current, &run).map_err(classify)?;
+
             let scan = Scan {
                 window: run.scan_since.map_or(ScanWindow::Full, |since| ScanWindow::Changes {
                     since,
@@ -88,6 +92,7 @@ impl SupplierConnectionExecutionProcess {
             };
             let page = self.gateway.catalog_page(&current, &scan).await?;
             let prepared = self.prepare_page(&current, &run.base.id, page).await.map_err(classify)?;
+
             self.save_catalog_page(current, run, prepared, actor).await.map_err(classify)?;
         }
     }
@@ -110,6 +115,7 @@ impl SupplierConnectionExecutionProcess {
         if run.pages != 0 || run.scan_since.is_some() {
             return Ok(());
         }
+
         let latest = supplier_catalog::successful_run(
             &self.db,
             &connection.base.id,
@@ -128,6 +134,7 @@ impl SupplierConnectionExecutionProcess {
             &mut NoTransaction,
         )
         .await?;
+
         run.plan(policy, latest.as_ref(), full.as_ref());
         self.db.supplier_catalog_runs().update(&mut run, &mut NoTransaction).await?;
         Ok(())
@@ -149,6 +156,7 @@ impl SupplierConnectionExecutionProcess {
             count,
             skipped: page.skipped,
         };
+
         for snapshot in page.items {
             self.heartbeat_catalog_job(job).await?;
             match snapshot.value {
@@ -186,6 +194,7 @@ impl SupplierConnectionExecutionProcess {
             .and_then(|seconds| i64::try_from(seconds).ok())
             .and_then(|seconds| item.observed_at.unix_secs().checked_add(seconds))
             .map(Instant::from_unix_secs);
+
         if item.images.as_ref().is_some_and(|images| !images.is_empty())
             || item.detail_images.as_ref().is_some_and(|images| !images.is_empty())
         {
@@ -204,6 +213,7 @@ impl SupplierConnectionExecutionProcess {
         if job.status != JobStatus::Running {
             return Err(Error::ConflictError("同步任务已停止".into()));
         }
+
         job.record_progress(0, 0, 0, Instant::now())?;
         self.db.background_jobs().update(&mut job, &mut NoTransaction).await?;
         Ok(())
@@ -227,11 +237,13 @@ impl SupplierConnectionExecutionProcess {
                     authorization
                         .require(&actor, &supplier_api::ADOPTIONS_PREVIEW, AccessTarget::Operation, executor)
                         .await?;
+
                     let mut current = SupplierApiService::new(db.clone())
                         .load_connection(&connection.base.id, executor)
                         .await?;
                     verify_connection(&current, &run)?;
                     SupplierApiService::new(db.clone()).persist_connection(&mut current, executor).await?;
+
                     let mut checkpoint = db
                         .supplier_catalog_runs()
                         .find_by_id(&run.base.id, executor)
@@ -248,6 +260,7 @@ impl SupplierConnectionExecutionProcess {
                     if job.status != JobStatus::Running {
                         return Err(Error::ConflictError("同步任务已停止".into()));
                     }
+
                     save_page_items(&db, &catalog, &current, &mut checkpoint, page, &actor, executor).await?;
                     job.record_progress(0, 0, 0, Instant::now())?;
                     db.background_jobs().update(&mut job, executor).await?;
@@ -271,6 +284,7 @@ async fn save_page_items(
     save_membership_page(db, connection, checkpoint, &page, executor).await?;
     checkpoint.advance(page.next, page.count)?;
     checkpoint.record_skipped(page.skipped)?;
+
     for item in page.items {
         save_observation(db, catalog, item, actor, executor).await?;
     }
@@ -278,6 +292,7 @@ async fn save_page_items(
         apply_withdrawal(db, &checkpoint.connection_id, &checkpoint.base.id, withdrawal, actor, executor)
             .await?;
     }
+
     db.supplier_catalog_runs().update(checkpoint, executor).await?;
     Ok(())
 }
@@ -302,6 +317,7 @@ async fn save_membership_page(
     if proof.scan_finished != page.next.is_none() {
         return Err(Error::ConflictError("目录池完成证据与本页检查点不一致".into()));
     }
+
     let scan = memberships::record_page(
         db,
         &connection.base.id,
@@ -346,6 +362,7 @@ pub(crate) async fn save_observation(
     } else {
         repository.create(&item, executor).await?;
     }
+
     super::catalog_supply::apply_source_supply(db, &item, actor, executor).await?;
     crate::product_source_sync::apply_source_observation(db, catalog, &item, actor, executor).await?;
     Ok(())
@@ -363,6 +380,7 @@ async fn apply_withdrawal(
         withdrawal.sku.product_id.ok_or_else(|| Error::ValidationError("撤回记录缺少商品身份".into()))?;
     let id = SupplierCatalogItem::source_id(connection, &product, &withdrawal.sku.spec_id);
     let Some(mut item) = db.supplier_catalog_items().find_by_id(&id, executor).await? else { return Ok(()) };
+
     if item.withdraw(withdrawal.stamp.revision, withdrawal.stamp.observed_at, job)? {
         item.source_updated_at = withdrawal.stamp.changed_at;
         db.supplier_catalog_items().update(&mut item, executor).await?;

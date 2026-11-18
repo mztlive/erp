@@ -57,15 +57,19 @@ impl PurchaseOrderReadService {
         let expected = params.scope_version.as_deref();
         crate::support::ensure_deep_page(params.page.unwrap_or(1), expected)?;
         params.validate()?;
+
         let snapshot = self.list_snapshot(params, actor).await?;
         if expected.is_some_and(|value| value != snapshot.context.scope_version) {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
+
         let items = map_list_items(snapshot.page.items, &snapshot.facts)?;
+
         let current = self.scope_fingerprint(params, actor).await?;
         if current != snapshot.context.scope_version {
             return Err(crate::support::data_scope_changed("数据范围或业务单据已变化，请刷新"));
         }
+
         Ok(PurchaseListView {
             scope_version: snapshot.context.scope_version,
             policy_version: snapshot.context.policy_version,
@@ -248,18 +252,21 @@ fn map_list_items(
             let supplier_id = row.supplier_id.as_ref();
             let supplier_name =
                 supplier_display(supplier_id, facts.supplier_names.get(supplier_id).map(String::as_str));
+
             let totals = list_row_totals(
                 row.current_submission_id.as_deref(),
                 row.current_revision_id.as_deref(),
                 &facts.submissions,
                 &facts.revisions,
             );
+
             let owner_user_id = row.owner_user_id.filter(|owner| !owner.trim().is_empty());
             let owner_id = owner_user_id.as_deref();
             let owner_name = owner_display(
                 owner_id,
                 facts.owner_names.get(owner_id.unwrap_or_default()).map(String::as_str),
             );
+
             let payment_progress = payment_progress(facts.payment_statuses.get(&row.id).copied());
             Ok(PurchaseOrderListItemView {
                 id: row.id,
@@ -473,6 +480,7 @@ mod query_mapping_tests {
         facts.submissions.insert("sub-1".to_string(), submission("sub-1", "10.00"));
         let mut second = list_row("po-1");
         second.owner_user_id = Some("  ".to_string());
+
         let items = map_list_items(vec![list_row("po-2"), second], &facts).unwrap();
         assert_eq!(items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), ["po-2", "po-1"]);
         assert_eq!(items[0].purchase_no, "PO-po-2");
@@ -484,6 +492,7 @@ mod query_mapping_tests {
         assert_eq!(items[0].owner_user_id.as_deref(), Some("buyer-1"));
         assert_eq!(items[0].owner_name, "张三");
         assert_eq!((items[0].version, items[0].created_at), (2, 1_700_000_000));
+
         assert_eq!(items[1].owner_user_id, None);
         assert_eq!(items[1].owner_name, "未指定");
     }
@@ -514,6 +523,7 @@ mod query_mapping_tests {
         .unwrap();
         let mut facts = PurchaseOrderListFacts::default();
         facts.sales_order_nos.insert("so-1".to_string(), "SO-1".into());
+
         for (paid, expected) in [
             ("0", ProgressStatus::None),
             ("30", ProgressStatus::Partial),
@@ -528,6 +538,7 @@ mod query_mapping_tests {
             let items = map_list_items(vec![row], &facts).unwrap();
             assert_eq!(items[0].payment_progress, expected, "paid={paid}");
         }
+
         facts.payment_statuses.clear();
         let items = map_list_items(vec![list_row("po-1")], &facts).unwrap();
         assert_eq!(items[0].payment_progress, ProgressStatus::None);

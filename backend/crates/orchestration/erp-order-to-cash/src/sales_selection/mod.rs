@@ -82,6 +82,7 @@ impl SalesSelectionProcess {
     ) -> Result<SalesSelectionBookletView> {
         let fingerprint = self.crypto.request_fingerprint(IdempotencyOperation::Create, &req)?;
         let password_hash = public_access::password_hash(req.access_password.clone()).await?;
+
         let db = self.db.clone();
         let customer = CustomerAdapter { service: self.services.customers.clone() };
         let selection = self.services.selections.clone();
@@ -109,6 +110,7 @@ impl SalesSelectionProcess {
                         executor,
                     )
                     .await?;
+
                     SalesSelectionService::new(db, access.authorization())
                         .create(req, &creator, password_hash, fingerprint, &customer, executor)
                         .await
@@ -251,6 +253,7 @@ impl SalesSelectionProcess {
                                     .find_authorized_booklet(&id, scope, executor)
                                     .await?
                                     .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+
                                 let token = SalesSelectionService::new(db, authorization)
                                     .copy_link(&book.base.id, &crypto, executor)
                                     .await?;
@@ -456,6 +459,7 @@ impl SalesSelectionProcess {
         if !ok {
             return Err(Error::BusinessLogicError("请求过于频繁，请稍后重试".into()));
         }
+
         let Some(token) = token else {
             return Ok(());
         };
@@ -472,6 +476,7 @@ impl SalesSelectionProcess {
         {
             return Ok(());
         }
+
         let token_key = format!("token:{kind}:{hash}");
         let ok = self.db.sales_selection_rate().admit(&token_key, limit, window).await?;
         if !ok {

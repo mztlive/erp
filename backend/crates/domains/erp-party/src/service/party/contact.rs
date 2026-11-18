@@ -111,6 +111,7 @@ impl PartyContactService {
             executor,
         )
         .await?;
+
         let paging = normalize_paging(
             &params.sort_by,
             &params.sort_dir,
@@ -129,6 +130,7 @@ impl PartyContactService {
             sort_by: Some(paging.sort_by.to_string()),
             sort_ascending: matches!(paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.party_contacts().search_party_contacts(&filter, executor).await?;
         let items = page
             .items
@@ -149,7 +151,6 @@ impl PartyContactService {
                 created_at: row.created_at,
             })
             .collect();
-
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
@@ -226,6 +227,7 @@ impl PartyContactService {
     ) -> Result<PartyContactView> {
         self.authorization.require(actor, &party::CONTACT_CREATE, AccessTarget::Operation, executor).await?;
         super::ensure_new_fact_guards(&self.db, self.supplier_roles.as_ref(), party_id, executor).await?;
+
         let contact = self.prepare_record(party_id, req, actor)?;
         let audit = self.audit.resource_log(
             actor.clone(),
@@ -233,6 +235,7 @@ impl PartyContactService {
             "party_contact",
             contact.base.id.clone(),
         )?;
+
         if contact.is_default {
             self.db.party_contacts().clear_other_default_marks(&contact.party_id, None, executor).await?;
         }
@@ -290,6 +293,7 @@ impl PartyContactService {
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &contact.party_id, executor)
             .await?;
         super::map_version_conflict(contact.ensure_version(req.version))?;
+
         contact.update(
             PartyContactUpdate {
                 status: req.status,
@@ -304,6 +308,7 @@ impl PartyContactService {
             "party_contact",
             contact.base.id.clone(),
         )?;
+
         if contact.is_default {
             self.db
                 .party_contacts()

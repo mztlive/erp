@@ -33,6 +33,7 @@ impl PurchasePaymentRequestProcess {
     ) -> Result<PaymentRecipientRevealView> {
         req.validate()?;
         let task_version = expected_task_version(&req.expected_task_version)?;
+
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let actor = actor.clone();
@@ -77,6 +78,7 @@ async fn reveal(
     let request = load(db, id, executor).await?;
     authorize_reveal_task(db, rbac, &request, req, task_version, actor, executor).await?;
     source::revalidate(db, &request, executor).await?;
+
     let frozen = request
         .payee_account
         .as_ref()
@@ -86,12 +88,14 @@ async fn reveal(
     {
         return Err(Error::ConflictError("页面账户与申请审核快照不一致".into()));
     }
+
     let account = db
         .party_bank_accounts()
         .find_by_id(&frozen.account_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("收款账户不存在".into()))?;
     let account_number = codec.decrypt(&account.account_number_ciphertext)?;
+
     let audit = actor.clone().resource_log(
         "purchase_payment_request.account.reveal",
         "purchase_payment_request",
@@ -130,6 +134,7 @@ async fn authorize_reveal_task(
     {
         return Err(Error::Forbidden("只有当前付款申请任务责任人可以查看收款账号".into()));
     }
+
     require_task(rbac, actor, &task, TaskPurpose::Reveal, executor).await?;
     match task.work_item_type {
         WorkItemType::SupplierPaymentExecution => {

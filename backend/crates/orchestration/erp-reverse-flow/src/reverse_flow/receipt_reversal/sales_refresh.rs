@@ -120,6 +120,7 @@ mod tests {
             RecordingPosting { allocations: vec![SalesOrderId::new("stale-sales")], ..Default::default() };
         let mut executor = TestExecutor::default();
         let expected = &mut executor as *mut TestExecutor as usize;
+
         post(&mut port, &mut executor).await.unwrap();
         assert_eq!(
             port.events,
@@ -132,6 +133,7 @@ mod tests {
     async fn allocation_reload_failure_stops_before_any_sales_refresh() {
         let mut port = RecordingPosting { fail: Some("load_allocations"), ..Default::default() };
         let mut executor = TestExecutor::default();
+
         let error = post(&mut port, &mut executor).await.unwrap_err();
         assert!(matches!(error, Error::ConflictError(message) if message == "load_allocations"));
         assert_eq!(port.events, ["finance", "returns", "audit", "load_allocations"]);
@@ -142,6 +144,7 @@ mod tests {
         let mut port = RecordingPosting { fail: Some("sales-2"), ..Default::default() };
         let mut executor = TestExecutor::default();
         let expected = &mut executor as *mut TestExecutor as usize;
+
         let error = post(&mut port, &mut executor).await.unwrap_err();
         assert!(matches!(error, Error::ConflictError(message) if message == "sales-2"));
         assert_eq!(port.events, ["finance", "returns", "audit", "load_allocations", "sales-1", "sales-2"]);

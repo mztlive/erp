@@ -96,6 +96,7 @@ impl ReceivableFacts {
                 grouped.entry((*account).to_owned()).or_default().push(allocation);
             }
         }
+
         let mut fallback = BTreeSet::new();
         for account in account_ids {
             let allocations = grouped.remove(account).unwrap_or_default();
@@ -163,6 +164,7 @@ impl FundsAccess {
                 chunk.iter().filter_map(|account| ids.get(account)).flatten().cloned().collect::<Vec<_>>();
             let allocations =
                 self.db.receipt_allocations().find_allocations_by_entries(&keys, executor).await?;
+
             let decreases = entries
                 .iter()
                 .filter(|entry| entry.direction == EntryDirection::Decrease)
@@ -172,6 +174,7 @@ impl FundsAccess {
                 self.db.receivable_entry_offsets().find_offsets_by_decreases(&decreases, executor).await?;
             facts.overdue_total =
                 facts.overdue_total.checked_add(overdue::total(&entries, &allocations, &offsets, today));
+
             let fallback = facts.append_batch_allocations(chunk, &entries, allocations);
             for account in chunk.iter().filter(|account| fallback.contains(*account)) {
                 let keys = ids.get(account).map(Vec::as_slice).unwrap_or_default();
@@ -179,6 +182,7 @@ impl FundsAccess {
                     self.db.receipt_allocations().find_allocations_by_entries(keys, executor).await?;
                 facts.append_allocations(account, original);
             }
+
             facts.append_entries(entries, display_ids);
         }
         Ok(facts)
@@ -295,6 +299,7 @@ mod tests {
             ],
         );
         facts.append_entries(vec![entry("a-1", "a", 1)], &BTreeSet::from(["a".into()]));
+
         let page_rows = rows
             .iter()
             .map(|row| {
@@ -322,11 +327,13 @@ mod tests {
                 open_total: row.open_total,
             })
             .collect::<Vec<_>>();
+
         let page = receivable_page_rows(&page_rows[..1], &mut facts);
         let mut rest = ReceivableFacts::default();
         rest.append_allocations("b", vec![allocation("b-1", AllocationAction::Apply, "20.02")]);
         facts.extend(rest);
         let summary = receivable_summary(&summary_rows, &facts, "v").unwrap();
+
         assert_eq!(page.len(), 1);
         assert_eq!(page[0].id, "a");
         assert_eq!(page[0].sales_order_no, "SO-so-a");
@@ -334,6 +341,7 @@ mod tests {
         assert_eq!(page[0].visible_settled_share, "50.01".parse().unwrap());
         assert_eq!(page[0].gross_total, Some("100".parse().unwrap()));
         assert_eq!(page[0].entries.len(), 1);
+
         assert_eq!(summary.grouped[0].visible_share, "70.03".parse().unwrap());
         assert_eq!(summary.whole_total, Some("160".parse().unwrap()));
         assert_eq!(summary.scope_version, "v");
@@ -403,6 +411,7 @@ mod tests {
         );
         assert_eq!(facts.share("a"), "50.02".parse().unwrap());
         assert_eq!(facts.share("b"), "40".parse().unwrap());
+
         let entries = facts.take_entries("a");
         assert_eq!(
             entries.iter().map(|entry| entry.id.as_str()).collect::<Vec<_>>(),
@@ -449,6 +458,7 @@ mod tests {
         let fallback = facts.append_batch_allocations(&["a".into()], &[entry("e", "a", 1)], extreme);
         assert_eq!(fallback, BTreeSet::from(["a".into()]));
         assert!(!facts.shares.contains_key("a"));
+
         assert!(guard_for_test(&[]));
         assert!(guard_for_test(&[
             allocation("e", AllocationAction::Apply, "12.3400"),
@@ -472,6 +482,7 @@ mod tests {
         facts.append_allocations("empty", Vec::new());
         facts.append_entries(Vec::new(), &BTreeSet::new());
         assert_eq!(facts.share("empty"), Amount::zero());
+
         facts.append_allocations(
             "a",
             vec![
@@ -525,6 +536,7 @@ mod tests {
     #[test]
     fn overdue_balance_respects_due_day_settlements_reversals_and_offsets() {
         use erp_finance::entity::receivable::ReceivableEntryOffset;
+
         let today: BusinessDate = "2026-10-12".parse().unwrap();
         let mut old = entry("old", "account", 1);
         old.due_date = "2026-10-11".parse().unwrap();
@@ -535,6 +547,7 @@ mod tests {
         let mut decrease = entry("decrease", "account", 4);
         decrease.direction = EntryDirection::Decrease;
         decrease.due_date = old.due_date;
+
         let offsets = vec![ReceivableEntryOffset {
             base: BaseModel::fake(),
             decrease_entry_id: ReceivableEntryId::new("decrease"),
@@ -579,6 +592,7 @@ mod tests {
         let result = receivable_summary(&rows, &facts, "v").unwrap();
         assert_eq!(result.balance_total, Some("140.01".parse().unwrap()));
         assert_eq!(result.overdue_total, Some("60".parse().unwrap()));
+
         assert_eq!(
             receivable_summary(&[], &ReceivableFacts::default(), "v").unwrap().balance_total,
             Some(Amount::zero())

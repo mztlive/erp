@@ -110,6 +110,7 @@ impl ApiOrderExecution {
                 Err(Error::ConflictError("原收货通知已登记，请查询原结果，不能改换目标或重复发送".into()))
             };
         }
+
         let tree = self
             .order_tree
             .as_ref()
@@ -120,6 +121,7 @@ impl ApiOrderExecution {
             .find(|node| node.external_order_no == request.order.external_order_no)
             .filter(|node| node.role == OrderNodeRole::Leaf)
             .ok_or_else(|| Error::BusinessLogicError("收货通知只能指向已核实的当前物流子单".into()))?;
+
         let expected = node
             .lines
             .iter()
@@ -138,6 +140,7 @@ impl ApiOrderExecution {
         {
             return Err(Error::ConflictError("收货通知的原单、叶子数量、拓扑或实际收到依据不一致".into()));
         }
+
         self.receipt_actions.insert(
             request.order.external_order_no.clone(),
             ReceiptAction {
@@ -166,6 +169,7 @@ impl ApiOrderExecution {
         if state == ReceiptConfirmationState::Unverified {
             return Ok(());
         }
+
         let next = if state == ReceiptConfirmationState::Confirmed {
             ReceiptActionState::Confirmed
         } else {

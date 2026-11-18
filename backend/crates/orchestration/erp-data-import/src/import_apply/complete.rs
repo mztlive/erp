@@ -52,9 +52,11 @@ impl ImportApplyProcess {
         let identity =
             confirmation_command_identity(actor.id(), "legacy_import_confirmation.complete", &prepared)
                 .structured_receipt("legacy_import_confirmation")?;
+
         if let Some(result) = self.replay_confirmation_completion(&identity, &prepared, actor).await? {
             return Ok(result);
         }
+
         let context = import_event_context(
             actor,
             "legacy_import_confirmation.complete",
@@ -131,6 +133,7 @@ impl ImportApplyProcess {
                             executor,
                         )
                         .await?;
+
                     let command = ConfirmationWrite {
                         db: &db,
                         identity: &identity,
@@ -176,6 +179,7 @@ impl AuditedCommand for ConfirmationWrite<'_> {
         {
             return Ok(AuditedWrite::Replayed(result));
         }
+
         let source = load_confirmation_source(self, executor).await?;
         let result = apply_confirmation_completion(self, source, executor).await?;
         Ok(AuditedWrite::Fresh { content: import_event_content(result.confirmation.id.clone()), result })
@@ -209,6 +213,7 @@ async fn load_confirmation_source(
         .find_by_id(confirmation.batch_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("导入批次不存在".into()))?;
+
     validate_confirmation_completion(command.prepared, &work_item, &confirmation, &batch)?;
     command.work_items.require_assigned(command.actor, &work_item.base.id, executor).await?;
     command.work_items.ensure_domain_decision_access(command.actor, &work_item, executor).await?;
@@ -227,6 +232,7 @@ async fn apply_confirmation_completion(
         .legacy_import_confirmations()
         .list_by_batch(&source.confirmation.batch_id, executor)
         .await?;
+
     source.confirmation.decide(
         prepared.decision,
         command.actor.id().to_string(),
@@ -236,6 +242,7 @@ async fn apply_confirmation_completion(
     )?;
     source.work_item.record_activity(command.at)?;
     source.work_item.complete_by_domain_command(command.actor.id().to_string(), command.at)?;
+
     replace_confirmation_in_matrix(&mut matrix, &source.confirmation);
     let current = LegacyImportConfirmation::current_matrix(
         &matrix,
@@ -248,6 +255,7 @@ async fn apply_confirmation_completion(
         &current,
         &source.batch.required_confirmation_scopes()?,
     ));
+
     source.batch.update_summaries(
         source.batch.failure_code_summary.clone(),
         Some(LegacyImportConfirmation::matrix_summary(source.confirmation.trial_version, &current)),
@@ -255,6 +263,7 @@ async fn apply_confirmation_completion(
     if next_step == ImportBusinessConfirmationNextStep::StartApply {
         source.batch.advance(LegacyImportBatchStatus::ReadyToApply)?;
     }
+
     persist_confirmation_result(command, source, next_step, executor).await
 }
 
@@ -275,6 +284,7 @@ async fn persist_confirmation_result(
     db.legacy_import_batches().update(&mut source.batch, executor).await?;
     db.work_items().update(&mut source.work_item, executor).await?;
     db.workflow_actions().create(&workflow_action, executor).await?;
+
     let receipt = ConfirmationCompletionReceipt {
         result_status: confirmation_result_status(command.prepared.decision),
         task_version: source.work_item.base.version,
@@ -298,6 +308,7 @@ async fn persist_confirmation_result(
         command.event_id.to_string(),
     )?;
     db.import_command_receipts().create(&fact, executor).await?;
+
     Ok(completion_result(
         ConfirmationCompletionTransactionResult {
             confirmation: source.confirmation,
@@ -324,6 +335,7 @@ async fn replay_confirmation_step(
     let ImportCommandResult::Confirmation(outcome) = &fact.result else {
         return Err(Error::ConflictError("导入确认回执结果类型不一致".into()));
     };
+
     let confirmation = db
         .legacy_import_confirmations()
         .find_by_work_item(&prepared.work_item_id, executor)
@@ -334,6 +346,7 @@ async fn replay_confirmation_step(
         .find_by_id(prepared.work_item_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::Internal("导入确认回执对应任务缺失".into()))?;
+
     validate_confirmation_replay(outcome, &confirmation, &work_item, prepared, actor.id())?;
     work_items.ensure_domain_decision_access(actor, &work_item, executor).await?;
     Ok(Some(completion_result(
@@ -422,6 +435,7 @@ pub(super) fn validate_confirmation_completion(
     {
         return Err(Error::ConflictError("导入确认任务或批次版本已变化，请刷新后重试".to_string()));
     }
+
     let expected_subject = LegacyImportConfirmation::subject_version(
         confirmation.batch_version,
         confirmation.trial_version,
@@ -433,6 +447,7 @@ pub(super) fn validate_confirmation_completion(
     {
         return Err(Error::ConflictError("导入确认的批次或试算快照已变化".to_string()));
     }
+
     let command_scope = ConfirmationScope::parse(&command.confirmation_scope)?;
     let task_matches = work_item.matches_import_confirmation(ImportConfirmationTaskIdentity {
         business_object_type: IMPORT_CONFIRMATION_OBJECT_TYPE,
@@ -448,6 +463,7 @@ pub(super) fn validate_confirmation_completion(
     if !task_matches || !fact_matches {
         return Err(Error::BusinessLogicError("导入确认任务、责任范围或批次不匹配".to_string()));
     }
+
     if !batch.required_confirmation_scopes()?.contains(&command_scope) {
         return Err(Error::BusinessLogicError("当前确认范围已不属于批次必要矩阵".to_string()));
     }

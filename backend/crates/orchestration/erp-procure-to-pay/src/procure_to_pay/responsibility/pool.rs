@@ -72,6 +72,7 @@ impl ProcurementResponsibilityProcess {
             let candidates = self.resolve_candidates(inputs, executor).await?;
             return Ok(self.authorize_candidates(candidates, executor).await?.views());
         }
+
         let candidates = self.resolve_inquiry_candidates(inputs, executor).await?;
         let access = ProcurementInquiryEligibility::new(self.db.clone(), self.rbac.clone());
         let mut checked = HashSet::new();
@@ -80,6 +81,7 @@ impl ProcurementResponsibilityProcess {
                 access.assignment_owner(&candidate.owner_user_id, executor).await?;
             }
         }
+
         Ok(candidates
             .into_iter()
             .map(|candidate| ProcurementResponsibilityResolutionView {

@@ -29,7 +29,6 @@ impl CumulativeAmountLimit {
         if posted_before.checked_add(current) > source {
             return Err(Error::from("累计金额不得超过原金额"));
         }
-
         Ok(())
     }
 }

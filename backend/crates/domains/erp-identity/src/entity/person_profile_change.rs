@@ -72,6 +72,7 @@ impl PersonProfileChange {
         if !self.remove_management_ids.is_empty() || !self.add_management.is_empty() {
             return Err(Error::ValidationError("部门管理关系已停用，请在人员数据范围中设置授权".into()));
         }
+
         let mut operations = Vec::new();
         if let Some(org_unit_id) = &self.org_unit_id {
             operations.push(OrganizationOperation::TransferMember {
@@ -152,10 +153,12 @@ mod tests {
         assert!(value.operations().is_err());
         value.name = Some("新姓名".into());
         assert!(value.operations().unwrap().is_empty());
+
         value.remove_management_ids.push("legacy".into());
         assert!(value.operations().is_err());
         let encoded = serde_json::to_string(&value).unwrap();
         assert_eq!(serde_json::from_str::<PersonProfileChange>(&encoded).unwrap(), value);
+
         value.remove_management_ids.clear();
         value.add_management.push(PersonManagementChange {
             role_id: "old".into(),

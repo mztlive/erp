@@ -91,6 +91,7 @@ async fn persist_cancel_step(
         executor,
     )
     .await?;
+
     let closed_tasks = WorkItem::close_all_for_approval_cancellation(
         open_tasks,
         input.actor.id(),
@@ -99,6 +100,7 @@ async fn persist_cancel_step(
     )?;
     let audit = cancel_audit(&input, &authorization)?;
     let fact = prepare_cancellation_fact(db, &input, &closed_tasks, &audit.base.id, executor).await?;
+
     apply_cancel_writes(db, input, authorization, closed_tasks, fact, audit, executor).await
 }
 
@@ -119,6 +121,7 @@ async fn revalidate_cancel_source(
     {
         return Err(Error::ConflictError("库存调整单事务内版本或审批状态已变化".into()));
     }
+
     let instance = db
         .bpm_workflow()
         .find_instance_by_id(&ApprovalProcessInstanceId::new(&input.authorization_instance.base.id), executor)
@@ -135,6 +138,7 @@ async fn revalidate_cancel_source(
     if binding != &input.binding || instance != input.authorization_instance {
         return Err(Error::ConflictError("库存调整撤回事务内运行事实已变化".into()));
     }
+
     input.workflow.as_ref().authorize_stock_adjustment_cancel(&instance, &input.actor, executor).await
 }
 
@@ -188,6 +192,7 @@ async fn apply_cancel_writes(
         .insert_command_receipt(&input.writes.receipt, executor)
         .await
         .map_err(map_receipt_first_write_error)?;
+
     db.stock_adjustments().update(&mut input.adjustment, executor).await?;
     db.bpm_workflow()
         .persist_cancelled_runtime_after_receipt(
@@ -199,6 +204,7 @@ async fn apply_cancel_writes(
         .await?;
     db.work_items().persist_cancelled_approval_tasks(&closed_tasks, executor).await?;
     db.stock_adjustment_cancellations().create(&fact, executor).await?;
+
     input.workflow.persist_cancel_copies(&input.writes, executor).await?;
     persist_stock_adjustment_cancel_notifications(
         db,
@@ -273,6 +279,7 @@ pub(crate) async fn revalidate_cancel_open_tasks(
         return Err(Error::ConflictError("库存调整审批执行已变化".to_string()));
     }
     ensure_cancel_execution_identity(instance, &current_execution, policy)?;
+
     let tasks = db.work_items().open_approval_tasks_for_execution(execution_id, executor).await?;
     current_execution
         .ensure_cancellation_tasks(policy, tasks.len())
@@ -336,6 +343,7 @@ pub(crate) async fn persist_stock_adjustment_cancel_notifications(
     let [intent] = input.writes.notifications.as_slice() else {
         return Err(Error::Internal("库存调整普通撤回必须产生唯一取消通知意图".to_string()));
     };
+
     let mut recipients =
         vec![input.current_approver_id.to_string(), input.authorization.submitted_by.clone()];
     if input.authorization.authority == CancelAuthority::RuntimeAdmin {
@@ -343,12 +351,14 @@ pub(crate) async fn persist_stock_adjustment_cancel_notifications(
     }
     recipients.sort();
     recipients.dedup();
+
     let expected_dedup_key =
         format!("cancelled:{}:{}", input.writes.instance.base.id, input.writes.instance.current_round_no);
     if intent.event_kind != ApprovalNotificationEventKind::Cancelled || intent.dedup_key != expected_dedup_key
     {
         return Err(Error::Internal("库存调整普通撤回通知意图与持久化合同不一致".to_string()));
     }
+
     let record = ApprovalNotificationOutbox::enqueue(
         ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
         intent.dedup_key.clone(),
@@ -419,8 +429,10 @@ pub async fn cancel_stock_adjustment_approval_apply(
         return Err(Error::ConflictError("库存调整审批主题版本已变化".to_string()));
     }
     validate_blocked_cancel_runtime_context(db, context, actor, subject_version, executor).await?;
+
     execute_stock_adjustment_domain_action(&mut adjustment, action)?;
     db.stock_adjustments().update(&mut adjustment, executor).await?;
+
     let audit = actor.clone().resource_log(
         "stock_adjustment.cancel_approval",
         "stock_adjustment",
@@ -463,6 +475,7 @@ pub(crate) async fn validate_blocked_cancel_runtime_context(
         .ok_or_else(|| Error::ConflictError("库存调整审批实例不存在".to_string()))?;
     let binding = load_approval_binding(db, context.business_object_id(), executor).await?;
     let binding = require_frozen_binding(binding.as_ref())?;
+
     let snapshot = db
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, executor)
@@ -475,6 +488,7 @@ pub(crate) async fn validate_blocked_cancel_runtime_context(
             subject_version,
         )
         .map_err(|_| Error::ConflictError("库存调整受阻实例冻结快照已变化".to_string()))?;
+
     if instance.status != ApprovalProcessInstanceStatus::Blocked
         || instance.process_kind != process_kind_of(DocumentType::StockAdjustment)
         || instance.process_definition_id != binding.approval_process_definition_id
@@ -486,6 +500,7 @@ pub(crate) async fn validate_blocked_cancel_runtime_context(
     {
         return Err(Error::ConflictError("库存调整受阻实例上下文已变化".to_string()));
     }
+
     validate_blocked_execution(db, context, actor, &instance, execution_id, executor).await
 }
 
@@ -514,6 +529,7 @@ async fn validate_blocked_execution(
     {
         return Err(Error::ConflictError("库存调整受阻执行上下文已变化".to_string()));
     }
+
     if !db.work_items().open_approval_tasks_for_execution(&execution_id, executor).await?.is_empty() {
         return Err(Error::ConflictError("受阻库存调整执行不得存在开放审批任务".to_string()));
     }

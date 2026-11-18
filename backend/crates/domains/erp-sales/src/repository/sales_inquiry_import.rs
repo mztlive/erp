@@ -117,9 +117,11 @@ mod tests {
         let stored = StoredInquiryImportPreview::new(&preview(1234)).unwrap();
         let document = persisted_document(&stored).unwrap();
         assert_eq!(document.get_datetime("expires_at_date").unwrap().timestamp_millis(), 1_234_000);
+
         let bytes = bson::serialize_to_vec(&stored).unwrap();
         let loaded: StoredInquiryImportPreview = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(loaded.preview.expires_at, 1234);
+
         let wire = serde_json::to_value(&loaded.preview).unwrap();
         assert!(wire.get("expires_at_date").is_none());
         assert_eq!(wire["inquiry_id"], "inquiry");

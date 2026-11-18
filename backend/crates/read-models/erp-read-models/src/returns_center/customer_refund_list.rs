@@ -183,6 +183,7 @@ pub fn customer_refund_view_from_facts(
     if binding.is_none() {
         approval.allowed_actions = Vec::new();
     }
+
     CustomerRefundView {
         id: facts.id,
         refund_no: facts.refund_no,
@@ -304,6 +305,7 @@ mod tests {
             version: refund.base.version,
             created_at: refund.base.created_at,
         };
+
         assert_eq!(CustomerRefundListFacts::from_refund(&refund), from_row);
         assert_eq!(from_row.amount, refund.amount);
         assert_eq!(from_row.occurred_at, refund.occurred_at);
@@ -318,6 +320,7 @@ mod tests {
             Instant::from_unix_secs(1),
         )
         .expect("绑定必须可构造");
+
         let view = customer_refund_view_from_facts(facts(), Some(&binding));
         let definition = view.approval.definition.expect("绑定必须投影定义");
         assert_eq!(view.approval.requirement, "PROCESS_REQUIRED");
@@ -363,6 +366,7 @@ mod tests {
         let first = facts();
         let mut second = facts();
         second.id = "crf-2".into();
+
         let views = map_customer_refund_list_page(vec![first, second], Vec::new());
         assert_eq!(views.len(), 2);
         assert_eq!(views[0].id, "crf-1");

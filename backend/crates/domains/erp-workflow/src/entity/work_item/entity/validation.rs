@@ -290,6 +290,7 @@ impl WorkItem {
     ) -> Result<Self> {
         let normalized = NormalizedWorkItemData::try_from(data)?;
         normalized.ensure_creation_contract(responsibility_key.as_deref(), &responsibility_scope_ids)?;
+
         let responsibility_actor_ids = vec![normalized.owner_user_id.clone()];
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -366,10 +367,12 @@ impl WorkItem {
         if self.status == WorkItemStatus::Open {
             return Err(Error::from("开放供给分配任务不能创建释放后继任务"));
         }
+
         let responsibility_key =
             self.responsibility_key().ok_or_else(|| Error::from("历史供给分配任务缺少责任键"))?.to_string();
         let owner_user_id =
             self.owner_user_id.clone().ok_or_else(|| Error::from("历史供给分配任务缺少具体责任人"))?;
+
         Self::new_with_responsibility_scope(
             id,
             WorkItemData {
@@ -457,6 +460,7 @@ impl NormalizedWorkItemData {
         if self.work_item_type == WorkItemType::DocumentApproval {
             return Err(Error::from("单据审批任务必须使用专用构造路径"));
         }
+
         if self.work_item_type == WorkItemType::SupplierPortalReview
             && (self.business_object_type != "supplier_portal_request"
                 || responsibility_key
@@ -464,6 +468,7 @@ impl NormalizedWorkItemData {
         {
             return Err(Error::from("供应商申请确认任务必须冻结申请身份和责任键"));
         }
+
         if self.work_item_type == WorkItemType::PurchaseSourceUpdate
             && (self.business_object_type != "purchase_order"
                 || responsibility_key
@@ -478,6 +483,7 @@ impl NormalizedWorkItemData {
         {
             return Err(Error::from("付款安排任务必须冻结采购单身份和责任键"));
         }
+
         if self.work_item_type == WorkItemType::ApprovalRework
             && (self.work_item_type.brief_relation(&self.business_object_type).is_none()
                 || !responsibility_key
@@ -486,6 +492,7 @@ impl NormalizedWorkItemData {
         {
             return Err(Error::from("驳回待处理必须冻结原审批实例、单据和提交人责任"));
         }
+
         self.ensure_scope_contract(responsibility_key, scope_ids)?;
         if matches!(
             self.work_item_type,
@@ -499,7 +506,6 @@ impl NormalizedWorkItemData {
         {
             return Err(Error::from("执行任务必须冻结责任键"));
         }
-
         Ok(())
     }
     fn ensure_scope_contract(&self, responsibility_key: Option<&str>, scope_ids: &[String]) -> Result<()> {
@@ -694,7 +700,6 @@ mod tests {
     fn source_update_completion_rejects_other_types() {
         let mut item =
             WorkItem::new_at(WorkItemId::new("wi-1"), direct_data(), Instant::from_unix_secs(100)).unwrap();
-
         assert!(item.complete_when_source_updated(Instant::from_unix_secs(120)).is_err());
     }
 
@@ -711,6 +716,7 @@ mod tests {
         assert_eq!(item.responsibility_scope_ids(), &["line-a".to_string(), "line-b".to_string()]);
         item.update_impact_summary(Some(" 剩余 6 件待采购 ".to_string())).unwrap();
         assert_eq!(item.impact_summary.as_deref(), Some("剩余 6 件待采购"));
+
         item.complete_when_requirement_satisfied(Instant::from_unix_secs(120)).unwrap();
         assert_eq!(item.status, WorkItemStatus::Completed);
         assert_eq!(item.completed_by.as_deref(), Some("__system__"));

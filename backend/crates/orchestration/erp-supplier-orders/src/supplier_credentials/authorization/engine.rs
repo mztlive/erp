@@ -135,11 +135,13 @@ impl AuthorizationEngine {
         let parameters = tokio::task::spawn_blocking(move || http.prepare(&request, &app_key))
             .await
             .map_err(|_| AuthorizationError::InvalidInput)??;
+
         command.claim.now = self.clock.now();
         let context = CommandContext { connection_id: id.into(), actor: actor.clone() };
         let operation_id = command.claim.operation_id.clone();
         let (record, changed) = self.store.reserve(command, context.clone()).await?;
         let status = operation_projection(&record, &self.crypto, self.clock.now(), Some(&operation_id));
+
         if changed {
             let engine = self.clone();
             tokio::spawn(async move {
@@ -170,12 +172,14 @@ impl AuthorizationEngine {
         if event.is_none() && unknown && input.evidence_reference.is_none() {
             return Err(AuthorizationError::InvalidInput);
         }
+
         let new_authorization = event.map(|event| event.new_authorization).unwrap_or_else(|| {
             current.is_some_and(|record| {
                 !(record.encrypted_payload.is_empty()
                     && matches!(record.refresh, SupplierCredentialRefreshState::AuthorizationRejected { .. }))
             })
         });
+
         let fingerprint = self
             .crypto
             .identity_fingerprint("username", &input.username)
@@ -191,6 +195,7 @@ impl AuthorizationEngine {
         {
             return Err(AuthorizationError::IdentityMismatch);
         }
+
         Ok(SupplierCredentialAuthorizationRequest {
             expected_version: input.expected_version,
             claim: SupplierCredentialRefreshClaim {
@@ -235,6 +240,7 @@ impl AuthorizationEngine {
                 },
                 _ => return Err(AuthorizationError::Unknown),
             };
+
         let exchange = self
             .store
             .exchange(sent, self.clock.now(), context.clone())
@@ -248,6 +254,7 @@ impl AuthorizationEngine {
             timeout(Duration::from_secs(self.settings.timeout_seconds), self.http.exchange(parameters))
                 .await
                 .map_err(|_| AuthorizationError::Unknown)??;
+
         self.save_grant(exchange, grant, context).await
     }
 
@@ -271,6 +278,7 @@ impl AuthorizationEngine {
             .crypto
             .replacement(access, refresh, expires, now)
             .map_err(|_| AuthorizationError::Unknown)?;
+
         self.store
             .complete(exchange, payload, uid, now, context)
             .await?

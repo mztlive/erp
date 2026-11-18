@@ -121,6 +121,7 @@ mod tests {
             super::legacy::legacy_start_digest("def-1", 7, 3, "u1"),
             "bc0d394485a1923f96cf171776c20eaa1c048cfb1849fe4c2972afc59e599202"
         );
+
         assert_eq!(
             super::legacy::legacy_decision_digest("wi-1", "REJECT", Some("资料不全"), 5, "u1"),
             "17eed8c1056c213f4ba7f4413ee94a96569c0ac7d28d9ddacbeb74466b386fe2"
@@ -129,6 +130,7 @@ mod tests {
             super::legacy::legacy_decision_digest_v2("wi-1", "REJECT", Some("资料不全"), 5, "u1"),
             "v2:033257875c9f5c66821f5806a7b0368294ea231a50e6835b1c3dcd3dfb679487"
         );
+
         assert_eq!(
             super::legacy::legacy_cancel_digest(3, 11, 13, Some(17), "撤回", "u1"),
             "c870d2579b4a9c9a017d8e30577b9c34b24f55a8e408a8ac21a473754c904f4a"
@@ -137,10 +139,12 @@ mod tests {
             super::legacy::legacy_document_cancel_digest(3, 7, 11, 13, Some(17), "撤回", "u1"),
             "acb3b94957c7c60ff44e8c54ef57d354ddb09061e8a05332253ebb0d7245954e"
         );
+
         assert_eq!(
             super::legacy::legacy_resume_digest(11, 13, 17, Some(19), "admin"),
             "bb6ce99d9f5c838095e8809fcf7567ada07a99b3af28287154e6c107385d053b"
         );
+
         assert_eq!(
             super::legacy::legacy_cancel_blocked_digest("GRAPH_CORRUPTED", 11, 13, None, "人工终止", "admin",),
             "18876a51ff88dc5bcd565918c78ed06240011f3cf5b56acedb745f354fe8da08"

@@ -70,6 +70,7 @@ impl ProcurementCoverageFacts {
                         != Some(line.purchase_order_submission_id.as_ref())
             })
             .flat_map(|line| line.delivery_allocations.iter().cloned());
+
         let revisions = self
             .purchase_revision_lines
             .iter()
@@ -79,6 +80,7 @@ impl ProcurementCoverageFacts {
                         != Some(line.purchase_order_revision_id.as_ref())
             })
             .flat_map(|line| line.delivery_allocations.iter().cloned());
+
         submissions.chain(revisions).collect()
     }
 }
@@ -102,6 +104,7 @@ pub fn remaining_delivery_capacity(
     for row in assigned {
         *used.entry(row.key()).or_default() += row.quantity.to_decimal();
     }
+
     let mut remaining: Vec<(&PurchaseDeliveryAllocation, Decimal)> = Vec::new();
     for row in source {
         match remaining.iter_mut().find(|(seen, _)| seen.key() == row.key()) {
@@ -109,6 +112,7 @@ pub fn remaining_delivery_capacity(
             None => remaining.push((row, row.quantity.to_decimal())),
         }
     }
+
     remaining
         .into_iter()
         .map(|(row, total)| {
@@ -245,6 +249,7 @@ pub fn delivery_edits<'a>(
                 || before.is_none_or(|old| {
                     old.delivery_allocations != line.delivery_allocations || old.quantity != line.quantity
                 });
+
             let edit = DeliveryEdit {
                 sales_order_line_id: line.sales_order_line_id,
                 quantity: line.quantity,
@@ -276,6 +281,7 @@ impl ProcurementCoverageFacts {
             let Some((line, goods)) = self.current_goods_line(edit.sales_order_line_id) else {
                 continue;
             };
+
             if let Some(expected) = edit.expected_delivery_date {
                 let due = business_date_of(goods.fulfillment_due_at)?;
                 if expected > due {
@@ -285,6 +291,7 @@ impl ProcurementCoverageFacts {
                     )));
                 }
             }
+
             if let Some(rows) = edit.delivery_allocations.filter(|rows| !rows.is_empty()) {
                 PurchaseDeliveryAllocation::validate_source(
                     rows,

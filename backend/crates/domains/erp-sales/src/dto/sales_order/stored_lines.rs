@@ -147,6 +147,7 @@ mod tests {
             SalesOrderSubmissionLineData::from_working_copy_line(&working).unwrap(),
         )
         .unwrap();
+
         // 历史冻结金额与当前构造规则的结果不同，展示仍须原样读取。
         submitted.net_amount = "27.00".parse().unwrap();
         submitted.tax_amount = "2.97".parse().unwrap();
@@ -171,9 +172,11 @@ mod tests {
             gift_rate: None,
             card_form: CardForm::Electronic,
         });
+
         let (working, mut submitted) = views(data);
         submitted.id = working.id.clone();
         assert_eq!(submitted, working);
+
         let value = serde_json::to_value(working).unwrap();
         assert_eq!(value["line_type"], "VOUCHER");
         assert_eq!(value["face_value"], "100.00");

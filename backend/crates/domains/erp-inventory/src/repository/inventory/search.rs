@@ -92,6 +92,7 @@ impl InventoryRepository<'_> {
         if let Some(id) = id {
             search.insert("id", id);
         }
+
         match availability {
             Some(StockAvailability::Zero) => {
                 search.insert("available_quantity", doc! { "$eq": 0 });
@@ -149,6 +150,7 @@ impl InventoryRepository<'_> {
         if search.is_empty() {
             return Ok(InventorySearch(filter));
         }
+
         let mut line_filter = search;
         line_filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
         let rows = mongo_ops::find_many(
@@ -158,6 +160,7 @@ impl InventoryRepository<'_> {
             executor,
         )
         .await?;
+
         let ids = rows
             .into_iter()
             .map(|r| r.stock_adjustment_id)
@@ -185,6 +188,7 @@ mod tests {
             filter.get_array("$and").unwrap()[0].as_document().unwrap(),
             &doc! { "sku_id": { "$in": [] } }
         );
+
         let matched = InventorySearch::skus(Some(vec![SkuId::new("sku-101")]), Some(&SkuId::new("sku-101")));
         assert_eq!(matched.0, doc! { "sku_id": { "$in": ["sku-101"] } });
     }

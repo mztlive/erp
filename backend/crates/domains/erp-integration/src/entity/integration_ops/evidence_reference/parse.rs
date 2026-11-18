@@ -41,6 +41,7 @@ pub(super) fn encode_set(
     if reject_empty && encoded.is_empty() {
         return Err(Error::from(length_message));
     }
+
     let value = encoded.join(&separator.to_string());
     if value.len() > ENCODED_MAX_LEN {
         return Err(Error::from(length_message));
@@ -203,6 +204,7 @@ mod tests {
             assert_eq!(parse_kind(value, "类型非法").unwrap(), value);
             assert_eq!(parse_status(value).unwrap(), value);
         }
+
         for value in ["", "0kind", "_kind", "a b", "a:kind", "é", "a中", &"a".repeat(65)] {
             assert_eq!(parse_kind(value, "类型非法").unwrap_err().to_string(), "类型非法");
             assert_eq!(
@@ -216,7 +218,9 @@ mod tests {
     fn encoded_sets_preserve_empty_policy_order_deduplication_and_byte_limit() {
         assert_eq!(encode_set([], ',', false, "集合非法").unwrap(), "");
         assert_eq!(encode_set([], ';', true, "集合非法").unwrap_err().to_string(), "集合非法");
+
         assert_eq!(encode_set(["b".into(), "a".into(), "b".into()], ';', true, "集合非法").unwrap(), "a;b",);
+
         assert_eq!(encode_set(["a".repeat(512)], ';', true, "集合非法").unwrap().len(), 512);
         assert_eq!(encode_set(["a".repeat(513)], ';', true, "集合非法").unwrap_err().to_string(), "集合非法",);
         assert!(encode_set(["中".repeat(171)], ';', true, "集合非法").is_err());

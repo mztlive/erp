@@ -165,10 +165,12 @@ mod tests {
         assert!(input_bytes(doc! { "format": "format-v1", "payload": [1, 2] }, "format-v1").is_none());
         let input = BackgroundJobInput::new("format-v1", vec![1]).unwrap();
         assert!(input_bytes(input_document(&BackgroundJobId::new("job"), &input), "other").is_none());
+
         let oversized = doc! { "format": "format-v1", "payload": Bson::Binary(Binary {
             subtype: BinarySubtype::Generic, bytes: vec![0; BACKGROUND_JOB_INPUT_LIMIT],
         }) };
         assert!(input_bytes(oversized, "format-v1").is_none());
+
         let wrong_binary = doc! { "format": "format-v1", "payload": Bson::Binary(Binary {
             subtype: BinarySubtype::Uuid, bytes: vec![0; 16],
         }) };

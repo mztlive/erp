@@ -216,6 +216,7 @@ impl LegacyImportBatch {
             normalize_optional_text(data.failure_code_summary, "错误码摘要", SUMMARY_MAX_LEN)?;
         let confirmation_status_summary =
             normalize_optional_text(data.confirmation_status_summary, "确认状态摘要", SUMMARY_MAX_LEN)?;
+
         Self::ensure_counts(data.total_rows, data.success_rows, data.failed_rows)?;
 
         Ok(Self {
@@ -614,7 +615,6 @@ mod tests {
         batch.advance(LegacyImportBatchStatus::ReadyToApply).unwrap();
         batch.advance(LegacyImportBatchStatus::Importing).unwrap();
         batch.advance(LegacyImportBatchStatus::Completed).unwrap();
-
         assert!(batch.advance(LegacyImportBatchStatus::Failed).is_err(), "完成态为终态");
 
         let mut failed = LegacyImportBatch::new(LegacyImportBatchId::new("b-8"), batch_data()).unwrap();
@@ -650,6 +650,7 @@ mod tests {
             ensure_transition(LegacyImportBatchStatus::PartialFailed, LegacyImportBatchStatus::ReadyToApply)
                 .is_ok()
         );
+
         assert!(
             ensure_transition(LegacyImportBatchStatus::PendingValidation, LegacyImportBatchStatus::Completed)
                 .is_err(),
@@ -671,11 +672,13 @@ mod tests {
         assert!(!batch.is_terminal());
         assert!(batch.has_version(1));
         assert!(batch.has_rule_version(" v1 "));
+
         batch.prepare_confirmation().unwrap();
         assert_eq!(batch.status, LegacyImportBatchStatus::PendingConfirmation);
         assert!(batch.accepts_confirmation_decision());
         assert!(!batch.is_ready_to_apply());
         assert!(batch.required_confirmation_scopes().unwrap().contains(&ConfirmationScope::Sales));
+
         batch.advance(LegacyImportBatchStatus::ReadyToApply).unwrap();
         assert!(batch.is_ready_to_apply());
         assert!(batch.accepts_pending_cancellation());
@@ -683,6 +686,7 @@ mod tests {
         assert!(batch.accepts_pending_cancellation());
         batch.advance(LegacyImportBatchStatus::PartialFailed).unwrap();
         assert!(batch.accepts_failed_retry());
+
         assert_eq!(LegacyImportBatch::application_outcome(0, 0), LegacyImportBatchStatus::Completed);
         assert_eq!(LegacyImportBatch::application_outcome(0, 1), LegacyImportBatchStatus::PartialFailed);
         assert_eq!(LegacyImportBatch::application_outcome(1, 0), LegacyImportBatchStatus::Importing);

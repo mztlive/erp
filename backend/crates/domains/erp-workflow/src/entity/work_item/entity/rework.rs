@@ -147,11 +147,13 @@ mod tests {
         ] {
             assert!(!item.is_open_rework_for(instance, kind, document, version, actor));
         }
+
         item.abandon_approval_rework("submitter", "不再办理", Instant::from_unix_secs(100)).unwrap();
         assert!(!item.is_open_rework_for("instance", "sales_order", "order", 1, "submitter"));
         let mut completed = task();
         completed.complete_approval_rework("submitter", Instant::from_unix_secs(100)).unwrap();
         assert!(!completed.is_open_rework_for("instance", "sales_order", "order", 1, "submitter"));
+
         let mut malformed = task();
         malformed.owner_role = "other".into();
         assert!(!malformed.is_open_rework_for("instance", "sales_order", "order", 1, "submitter"));
@@ -167,6 +169,7 @@ mod tests {
         assert!(item.reassign("other", now).is_err());
         assert!(item.complete_by_domain_command("submitter", now).is_err());
         assert_eq!(item, before);
+
         item.abandon_approval_rework("submitter", "不再办理", now).unwrap();
         assert_eq!(item.status, WorkItemStatus::Closed);
         assert_eq!(item.close_reason.as_deref(), Some("不再办理"));

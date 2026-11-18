@@ -154,6 +154,7 @@ mod tests {
                 &ids.iter().cloned().map(Bson::String).collect::<Vec<_>>()
             );
         }
+
         let offsets = overdue_offsets();
         let lookup = offsets.get_document("$lookup").unwrap();
         let group =

@@ -110,6 +110,7 @@ impl SalesChangeProcess {
             .command_access(actor, &sales_order::HANDOVER)
             .current(request.sales_order_id.as_ref(), executor)
             .await?;
+
         let sales_write =
             SalesReviewService::new(self.db.clone()).prepare_creation(request, actor, executor).await?;
         let change_id = sales_write.change_id().to_string();
@@ -153,6 +154,7 @@ impl SalesChangeProcess {
             &req.idempotency_key,
             req.resubmission_reason.as_deref(),
         )?;
+
         let this = self.clone();
         let actor_copy = actor.clone();
         let id_copy = id.to_string();
@@ -167,12 +169,14 @@ impl SalesChangeProcess {
                 })
             })
             .await;
+
         if let Err(error) = result {
             if !error.command_may_have_committed() {
                 return Err(error);
             }
             self.recover_sales_change_start(&command, actor, error).await?;
         }
+
         SalesChangeReadService::new(self.db.clone(), self.authorization.clone())
             .command_detail(id, actor, &sales_review::SALES_CHANGE_DRAFT)
             .await
@@ -191,6 +195,7 @@ impl SalesChangeProcess {
         {
             return Ok(());
         }
+
         let change = SalesReviewService::new(self.db.clone())
             .load_for_submission(id, request.version, executor)
             .await?;
@@ -264,6 +269,7 @@ impl SalesChangeProcess {
                 Box::pin(async move { this.cancel_change_stage(&id_copy, req, &actor_copy, executor).await })
             })
             .await?;
+
         SalesChangeReadService::new(self.db.clone(), self.authorization.clone())
             .command_detail(id, actor, &sales_review::SALES_CHANGE_DRAFT)
             .await
@@ -286,6 +292,7 @@ impl SalesChangeProcess {
                 executor,
             )
             .await?;
+
         let preview = self
             .db
             .sales_change_orders()
@@ -295,6 +302,7 @@ impl SalesChangeProcess {
         self.command_access(actor, &sales_order::CANCEL_APPROVAL)
             .current(preview.sales_order_id.as_ref(), executor)
             .await?;
+
         let change_order = SalesReviewService::new(self.db.clone())
             .load_for_cancellation(id, req.expected_version, executor)
             .await?;
@@ -317,11 +325,13 @@ impl SalesChangeProcess {
         let subject = sales_change_order_subject_ref(id)?;
         let subject_version = latest_change_submission_no(&self.db, id, executor).await?;
         let runtime = load_cancel_runtime(&self.db, &binding, &subject, subject_version, executor).await?;
+
         let now = Instant::now();
         let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
         let input =
             build_sales_change_cancel_input(&runtime, &req.reason, actor.id(), &idempotency_key, None, now)?;
         let prepared = prepare_cancel(input)?;
+
         execute_sales_change_domain_action(&mut change_order, adapter.cancel_action, actor.id())?;
         let audit = actor.clone().resource_log(
             "sales_change_order.cancel_approval",
@@ -382,6 +392,7 @@ impl SalesChangeProcess {
         let subject = sales_change_order_subject_ref(id)?;
         let binding = find_approval_binding(&self.db, id, executor).await.map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
+
         let sales_write = SalesReviewService::new(self.db.clone())
             .prepare_submission(change_order, actor, executor)
             .await?;
@@ -460,6 +471,7 @@ impl SalesChangeProcess {
         let existing_receipt =
             load_start_receipt(&self.db, &context.subject, subject_version, idempotency_key, executor)
                 .await?;
+
         let graph = resolve_start_approvers(
             &self.db,
             &self.authorization,
@@ -469,6 +481,7 @@ impl SalesChangeProcess {
             executor,
         )
         .await?;
+
         let start_input = build_sales_change_start_input(SalesChangeStartInput {
             resubmission_reason: context.resubmission_reason.clone(),
             graph,
@@ -588,10 +601,12 @@ async fn void_change(
     erp_read_models::sales_center::access::SalesAccess::new(db.clone(), authorization.clone())
         .require_object(actor, &sales_order::HANDOVER, change.sales_order_id.as_ref(), executor)
         .await?;
+
     let mut sales_write =
         SalesReviewService::new(db.clone()).prepare_void(id, request, actor, executor).await?;
     sales_write.persist(db, executor).await?;
     complete_document_rework(db, "sales_change_order", id, actor.id(), Instant::now(), executor).await?;
+
     let audit = actor.clone().resource_log("sales_change_order.void", "sales_change_order", id.into())?;
     persist_log(db, &audit, executor).await?;
     Ok(())
@@ -697,6 +712,7 @@ mod authorization_tests {
             .unwrap()
             .database("sales_change_void_test");
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let error = void_change(
             &db,
             &unavailable_authorization(),
@@ -708,6 +724,7 @@ mod authorization_tests {
         .await
         .unwrap_err();
         assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+
         let error = void_change(
             &db,
             &unavailable_authorization(),

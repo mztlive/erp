@@ -338,6 +338,7 @@ pub(crate) fn validate_catalog() -> Result<()> {
         seen.push(key);
         validate_scope(spec)?;
     }
+
     for entry in catalog::FIXED_ACTIONS.iter() {
         if find(&entry.permission).is_some() {
             return Err(Error::ValidationError(format!("{} 同时声明了范围和无范围动作", entry.permission)));
@@ -346,6 +347,7 @@ pub(crate) fn validate_catalog() -> Result<()> {
             return Err(Error::ValidationError(format!("{} 的无范围分类无效", entry.permission)));
         }
     }
+
     validate_sources_acyclic(raw_specs())
 }
 
@@ -357,12 +359,14 @@ fn validate_scope(spec: &ScopeSpec) -> Result<()> {
     if spec.required_dimensions.iter().any(|dimension| !spec.supported_dimensions.contains(dimension)) {
         return Err(Error::ValidationError(format!("{} 的必需维度超出支持维度", spec.permission)));
     }
+
     if spec.default_self && !matches!(&spec.source, ScopeSource::Current) {
         return Err(Error::ValidationError(format!("{} 不能声明本人基础", spec.permission)));
     }
     if spec.default_self && spec.required_dimensions != [ScopeDimension::InternalOrg] {
         return Err(Error::ValidationError(format!("{} 的本人基础只能使用内部组织", spec.permission)));
     }
+
     if spec.allows_history
         && !matches!(
             spec.permission.action(),
@@ -380,6 +384,7 @@ fn validate_scope(spec: &ScopeSpec) -> Result<()> {
     if spec.allows_history && spec.required_dimensions != [ScopeDimension::InternalOrg] {
         return Err(Error::ValidationError(format!("{} 的历史读取只能使用内部组织", spec.permission)));
     }
+
     let source = runtime_source(spec)?;
     if let ScopeSource::Permission(_) = &spec.source
         && source.supported_dimensions.iter().any(|dimension| !spec.supported_dimensions.contains(dimension))
@@ -389,6 +394,7 @@ fn validate_scope(spec: &ScopeSpec) -> Result<()> {
             spec.permission, source.permission
         )));
     }
+
     validate_scope_types(spec)
 }
 
@@ -485,6 +491,7 @@ mod tests {
     fn catalog_sources_are_unique_current_and_acyclic() {
         validate_catalog().unwrap();
         assert!(specs().len() > 100);
+
         let contract = find_action("contract", "detail").unwrap();
         let source = runtime_source(contract).unwrap();
         assert_eq!(source.permission(), &erp_permissions::customer::LIST);
@@ -493,6 +500,7 @@ mod tests {
         assert!(!contract.default_self());
         let proposal = find_action("sales_selection_proposal", "get").unwrap();
         assert_eq!(runtime_source(proposal).unwrap().permission().action(), "get");
+
         assert!(find_action("approval_instance", "decide").is_none());
         assert_eq!(action_kind("approval_instance", "decide"), Some(ActionKind::Task));
         assert!(require_action("unknown", "list").is_err());
@@ -506,13 +514,16 @@ mod tests {
         const MISSING: Permission = Permission::new("scope_cycle_missing", "list");
         let org: &[ScopeDimension] = &[ScopeDimension::InternalOrg];
         let types: &[DataScopeType] = &[DataScopeType::Company];
+
         let cycle = [
             scope(&LEFT, ScopeSource::Permission(RIGHT.clone()), false, types, org, false),
             scope(&RIGHT, ScopeSource::Permission(LEFT.clone()), false, types, org, false),
         ];
         assert!(validate_sources_acyclic(&cycle).is_err());
+
         let missing = [scope(&LEFT, ScopeSource::Permission(MISSING.clone()), false, types, org, false)];
         assert!(validate_sources_acyclic(&missing).is_err());
+
         let chained = scope(
             &LEFT,
             ScopeSource::Permission(erp_permissions::contract::LIST.clone()),
@@ -531,6 +542,7 @@ mod tests {
         assert!(configurable_action("sales_order", "list").unwrap().default_self());
         assert!(!configurable_action("work_item", "manage").unwrap().default_self());
         assert!(configurable_action("work_item", "list").unwrap().default_self());
+
         for (resource, action) in [
             ("product", "list"),
             ("supplier", "list"),
@@ -545,16 +557,19 @@ mod tests {
         ] {
             assert!(configurable_action(resource, action).is_err(), "{resource}:{action}");
         }
+
         assert!(matches!(
             require_runtime(&erp_permissions::purchase_order::LIST).unwrap().source(),
             ScopeSource::Company
         ));
         assert!(require_runtime(&erp_permissions::contract::LIST).is_err());
+
         assert!(validate_scope_type("warehouse", DataScopeType::Organization).is_ok());
         assert!(validate_scope_type("warehouse", DataScopeType::SelfOwned).is_err());
         assert!(validate_scope_type("sales_person", DataScopeType::Collaborative).is_err());
         assert!(validate_scope_type("sales_person", DataScopeType::SelfOwned).is_ok());
         assert!(validate_scope_type("customer", DataScopeType::Collaborative).is_ok());
+
         let normalized = Permission::parse("SALES_ORDER:DETAIL").unwrap();
         assert_eq!(find(&normalized).unwrap().permission(), &erp_permissions::sales_order::DETAIL);
     }

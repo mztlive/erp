@@ -63,6 +63,7 @@ impl SalesOrderReadService {
                     this.authorization
                         .require(&actor, &sales_order::DETAIL, AccessTarget::record(&id)?, executor)
                         .await?;
+
                     let order = this
                         .db
                         .sales_orders()
@@ -70,6 +71,7 @@ impl SalesOrderReadService {
                         .await?
                         .ok_or_else(|| Error::NotFound("销售单不存在或无权查看".into()))?;
                     let view = this.detail_view(order, &actor, executor).await?;
+
                     let (context, scope) = SalesAccess::new(this.db.clone(), this.authorization.clone())
                         .resolve(&actor, &sales_order_permissions::DETAIL, executor)
                         .await?;
@@ -106,6 +108,7 @@ impl SalesOrderReadService {
             return Err(Error::ValidationError("销售结果读取必须使用对应权限和快照事务".into()));
         }
         self.authorization.require(actor, permission, AccessTarget::record(id)?, executor).await?;
+
         let order = self
             .db
             .sales_orders()
@@ -113,6 +116,7 @@ impl SalesOrderReadService {
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在或无权查看".into()))?;
         let view = self.detail_view(order, actor, executor).await?;
+
         self.authorization.require(actor, permission, AccessTarget::record(id)?, executor).await?;
         Ok(view)
     }
@@ -128,6 +132,7 @@ impl SalesOrderReadService {
         let presentation = self.detail_presentation(&order, &facts, Some(actor), executor).await?;
         let inquiry_source = inquiry_sources(&self.db).find_by_id(&order.base.id, executor).await?;
         let current_work = self.current_work(&order, executor).await?;
+
         let mut view = SalesOrderDetailView::from_facts(order, facts, presentation);
         view.inquiry_source = inquiry_source;
         view.current_work = current_work;
@@ -164,6 +169,7 @@ impl SalesOrderReadService {
         let purchase_creation_access =
             self.purchase_creation_access(order, &purchase_coverage, actor, executor).await?;
         let freight_follow_ups = self.freight_follow_ups(order, actor, executor).await?;
+
         let active_card_sales_approval = match (actor, facts.submissions.first()) {
             (Some(actor), Some(submission)) => {
                 self.resolve_active_card_sales_approval(
@@ -177,10 +183,12 @@ impl SalesOrderReadService {
             },
             _ => None,
         };
+
         let (owner_user_name, stage) = self.detail_stage(order, executor).await?;
         let active_change = self.has_active_sales_change(order, executor).await?;
         let (can_start_sales_change_order, change_order_blocker) =
             compute_can_start_sales_change(order.origin_system, stage.code, stage.label, active_change);
+
         let approval = load_document_approval(
             &self.db,
             order.business_type,
@@ -191,6 +199,7 @@ impl SalesOrderReadService {
             executor,
         )
         .await?;
+
         Ok(DetailPresentation {
             evidence_files: self.evidence_files(order, executor).await?,
             owner_user_name,
@@ -225,6 +234,7 @@ impl SalesOrderReadService {
         }
         let names = self.account_names(&name_ids, executor).await?;
         let owner_user_name = owner_user_id.as_ref().and_then(|id| names.get(id).cloned());
+
         let (code, label, tone) = stage_code_label_tone(
             order.commercial_status,
             order.review_status,
@@ -340,6 +350,7 @@ mod tests {
             .await
             .expect_err("非快照不能读取结果");
         assert!(matches!(error, Error::ValidationError(_)));
+
         let error = service
             .command_detail("order", &actor, &customer::DETAIL, &mut SnapshotExecutor::default())
             .await

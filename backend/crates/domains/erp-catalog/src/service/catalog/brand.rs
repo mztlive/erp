@@ -61,6 +61,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::PRODUCT_BRAND_LIST, AccessTarget::Operation, executor)
             .await?;
+
         params.validate()?;
         let query = params.normalized()?;
         let filter = ProductBrandFilter {
@@ -73,6 +74,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.product_brands().search_product_brands(&filter, executor).await?;
         let items = page.items.into_iter().map(ProductBrandView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
@@ -142,6 +144,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::PRODUCT_BRAND_CREATE, AccessTarget::Operation, executor)
             .await?;
+
         req.validate()?;
         let mut used = HashSet::new();
         if let Some(asset_id) = req.logo_file_asset_id.as_mut() {
@@ -149,6 +152,7 @@ impl CatalogService {
         }
         pending_assets.ensure_all_used(&used)?;
         self.ensure_brand_logo_exists(req.logo_file_asset_id.as_ref(), &pending_assets, executor).await?;
+
         req.brand_code = self.brand_code(req.brand_code, executor).await?;
         let id = ProductBrandId::new(next_id());
         let brand = ProductBrand::new(
@@ -163,6 +167,7 @@ impl CatalogService {
             },
             actor.id(),
         )?;
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "product_brand.create",
@@ -256,6 +261,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::PRODUCT_BRAND_UPDATE, AccessTarget::Operation, executor)
             .await?;
+
         req.validate()?;
         let mut used = HashSet::new();
         if let Some(Some(asset_id)) = req.logo_file_asset_id.as_mut() {
@@ -268,6 +274,7 @@ impl CatalogService {
             executor,
         )
         .await?;
+
         let mut brand = self.load_brand(id, executor).await?;
         ensure_version(brand.base.version, req.version)?;
         brand.update(
@@ -278,6 +285,7 @@ impl CatalogService {
             },
             actor.id(),
         )?;
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "product_brand.update",
@@ -345,6 +353,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::PRODUCT_BRAND_DELETE, AccessTarget::Operation, executor)
             .await?;
+
         let mut brand = self.load_brand(id, executor).await?;
         let audit = self.audit.resource_log(
             actor.clone(),

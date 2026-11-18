@@ -95,6 +95,7 @@ pub(crate) fn handover_content(value: HandoverEventFacts) -> BusinessEventConten
     if value.organization_changed {
         facts.push(AuditFact { field: "business_org".into(), value: AuditValue::Changed });
     }
+
     BusinessEventContent {
         target_id: value.target_id,
         target_number: value.target_number,
@@ -156,6 +157,7 @@ pub(crate) async fn qualified_candidates(
             });
         }
     }
+
     candidates.sort();
     Ok(candidates)
 }
@@ -196,6 +198,7 @@ mod tests {
             },
         )
         .unwrap();
+
         let log = context
             .log(handover_content(HandoverEventFacts {
                 target_id: "product-1".into(),
@@ -204,6 +207,7 @@ mod tests {
                 organization_changed: false,
             }))
             .unwrap();
+
         let event = log.structured_event.unwrap();
         assert_eq!(event.command_id.as_deref(), Some(command.id()));
         assert_eq!(event.facts[0].field_label, "交接结果");

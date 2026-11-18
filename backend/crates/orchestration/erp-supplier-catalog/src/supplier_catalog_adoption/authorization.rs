@@ -93,6 +93,7 @@ mod tests {
         };
         preview.base.version = 7;
         let facts = preview_facts(preview);
+
         assert_eq!(facts.id, "preview");
         assert_eq!(facts.version, "7");
         assert_eq!(facts.owner_id, FactValue::Known(Some("owner".into())));

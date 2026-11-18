@@ -20,6 +20,7 @@ impl SupplierCredential {
         if request.expected_version.is_some() || request.new_authorization {
             return Err(Error::ConflictError("首次授权不能携带原版本或冒充原授权恢复".into()));
         }
+
         let timestamp = u64::try_from(request.claim.now.unix_secs())
             .map_err(|_| Error::ValidationError("技术凭据时间无效".into()))?;
         let mut base = BaseModel::new(id);
@@ -65,6 +66,7 @@ impl SupplierCredential {
             event.require_replay(request)?;
             return Ok(false);
         }
+
         let expected = request
             .expected_version
             .ok_or_else(|| Error::ConflictError("原凭据授权必须指定所见版本".into()))?;
@@ -77,6 +79,7 @@ impl SupplierCredential {
         if self.authorization_history.len() >= 256 {
             return Err(Error::BusinessLogicError("授权操作历史已达上限，需受控处理".into()));
         }
+
         let base = self.next_base(request.claim.now)?;
         self.authorization_history
             .push(SupplierCredentialAuthorizationEvent::new(request, previous_operation));
@@ -108,6 +111,7 @@ impl SupplierCredential {
             return Err(Error::ConflictError("授权领取已到期，禁止发送".into()));
         }
         let index = self.authorization_event_index(owner_id, operation_id)?;
+
         let state = SupplierCredentialRefreshState::AuthorizationSentUnknown {
             owner_id: owner_id.clone(),
             operation_id: operation_id.clone(),
@@ -144,6 +148,7 @@ impl SupplierCredential {
             return Err(Error::ConflictError("授权发送期限已到，禁止兑换".into()));
         }
         let index = self.authorization_event_index(owner_id, operation_id)?;
+
         let base = self.next_base(now)?;
         let SupplierCredentialRefreshState::AuthorizationSentUnknown { exchange_sent_at, .. } =
             &mut self.refresh
@@ -176,6 +181,7 @@ impl SupplierCredential {
         let index = self.authorization_event_index(owner_id, operation_id)?;
         let operation_id = operation_id.clone();
         let base = self.next_base(now)?;
+
         if self.account_identity_fingerprint.is_none() && self.encrypted_payload.is_empty() {
             self.authorization_candidate_identity_fingerprint = None;
         }
@@ -217,14 +223,17 @@ impl SupplierCredential {
             .ok_or_else(|| Error::ConflictError("原授权候选身份缺失".into()))?;
         self.require_authorization_identity(&candidate)?;
         self.require_authorization_uid(uid.as_deref())?;
+
         let base = self.next_base(now)?;
         self.authorization_history[index].completed_at = Some(now);
         self.authorization_history[index].payload_fingerprint = Some(payload.payload_fingerprint.clone());
         self.authorization_history[index].authorized_uid_fingerprint = uid.clone();
+
         self.account_identity_fingerprint = Some(candidate);
         self.manually_configured = false;
         self.authorization_candidate_identity_fingerprint = None;
         self.authorized_uid_fingerprint = uid.or_else(|| self.authorized_uid_fingerprint.clone());
+
         self.encrypted_payload = payload.encrypted_payload;
         self.payload_fingerprint = payload.payload_fingerprint;
         self.expires_at = payload.expires_at;
@@ -272,6 +281,7 @@ impl SupplierCredential {
         if !request.new_authorization && !initial_rejected {
             return Err(Error::ConflictError("原授权恢复必须明确登记新授权及核验依据".into()));
         }
+
         match &self.refresh {
             SupplierCredentialRefreshState::Ready if self.account_identity_fingerprint.is_some() => Ok(None),
             SupplierCredentialRefreshState::ReauthorizationRequired { operation_id, .. }

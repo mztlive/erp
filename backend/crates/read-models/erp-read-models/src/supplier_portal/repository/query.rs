@@ -39,10 +39,12 @@ impl PortalQuery {
             .checked_mul(u64::from(page_size))
             .and_then(|skip| i64::try_from(skip).ok())
             .ok_or_else(|| Error::ValidationError("分页范围过大".into()))?;
+
         let q = params.q.as_deref().map(str::trim).filter(|value| !value.is_empty()).map(str::to_string);
         if q.as_ref().is_some_and(|value| value.chars().count() > 128) {
             return Err(Error::ValidationError("搜索文本过长".into()));
         }
+
         let status = params
             .status
             .as_deref()
@@ -57,6 +59,7 @@ impl PortalQuery {
         }) {
             return Err(Error::ValidationError("申请状态无效".into()));
         }
+
         Ok(Self {
             page,
             page_size,
@@ -110,6 +113,7 @@ mod tests {
         assert_eq!((query.page, query.page_size, query.skip), (2, 10, 10));
         assert_eq!(query.q.as_deref(), Some("茶杯"));
         assert_eq!(query.status.as_deref(), Some("SUBMITTED"));
+
         for size in [0, 101] {
             assert!(matches!(
                 PortalQuery::new(&PortalListParams { page_size: Some(size), ..Default::default() }),

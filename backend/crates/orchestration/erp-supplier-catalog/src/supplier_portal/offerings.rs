@@ -99,6 +99,7 @@ impl SupplierPortalProcess {
                             executor,
                         )
                         .await?;
+
                     let is_new = id.is_none();
                     let mut app = match id {
                         None => OfferingApplication::new(
@@ -156,10 +157,12 @@ impl SupplierPortalProcess {
                     let mut app = service.load_application(&id, executor).await?;
                     app.ensure_owned(&actor.supplier_id, &actor.audit_actor(), input.expected_version)?;
                     this.validate_snapshot(&actor, &app.snapshot, executor).await?;
+
                     let (owner, org) = this.application_owner(&app, &actor, executor).await?;
                     let task_id = next_id();
                     app.submit(&actor.audit_actor(), &owner, &task_id, 1, Instant::now())?;
                     service.save_application(&mut app, false, executor).await?;
+
                     this.services
                         .work_items
                         .create_supplier_portal_review(
@@ -208,11 +211,13 @@ impl SupplierPortalProcess {
                     let service = PortalOfferingService::new(this.db.clone());
                     let mut app = service.load_application(&id, executor).await?;
                     app.ensure_owned(&actor.supplier_id, &actor.audit_actor(), input.expected_version)?;
+
                     let task =
                         app.submissions.last().ok_or_else(|| Error::ConflictError("申请尚未提交".into()))?;
                     let subject = offering_subject(&app)?;
                     this.withdraw_task(&id, &subject, &task.work_item_id, &actor.account_id, executor)
                         .await?;
+
                     app.withdraw(&actor.audit_actor())?;
                     service.save_application(&mut app, false, executor).await?;
                     Ok(app)
@@ -273,16 +278,19 @@ impl SupplierPortalProcess {
         app.decision_submission(actor, input.expected_version, &input.work_item_id, input.work_item_version)?;
         let subject = offering_subject(&app)?;
         self.validate_task(id, &subject, input, actor, executor).await?;
+
         if let Some((offering_id, _, _)) = app.snapshot.target() {
             self.services
                 .offering_access
                 .require_offering(actor, &supplier_offering::REVISE, offering_id, executor)
                 .await?;
         }
+
         let result = match input.decision {
             PortalDecision::Return => None,
             PortalDecision::Approve => Some(self.approve_offering(&app, input, actor, executor).await?),
         };
+
         self.complete_task(id, &subject, input, actor, executor).await?;
         app.decide(actor, result, review_comment(input)?, Instant::now())?;
         service.save_application(&mut app, false, executor).await?;
@@ -305,6 +313,7 @@ impl SupplierPortalProcess {
             executor,
         )
         .await?;
+
         let (owner, org) = self.confirmed_offering_owner(app, input, actor, executor).await?;
         let permission = if app.snapshot.target().is_some() {
             supplier_offering::REVISE
@@ -312,6 +321,7 @@ impl SupplierPortalProcess {
             supplier_offering::CREATE
         };
         self.services.offering_access.ensure_writable(actor, &permission, executor).await?;
+
         Ok(service
             .apply_application(
                 ConfirmedOfferingInput {
@@ -340,6 +350,7 @@ impl SupplierPortalProcess {
             let existing = access.require_offering(actor, &supplier_offering::REVISE, id, executor).await?;
             return Ok((existing.maintainer_user_id, existing.business_org_unit_id));
         }
+
         let owner = input
             .maintainer_user_id
             .as_deref()
@@ -406,6 +417,7 @@ impl SupplierPortalProcess {
                     .await?;
             },
         }
+
         self.validate_snapshot_units(snapshot, executor).await?;
         Ok(())
     }
@@ -479,6 +491,7 @@ impl SupplierPortalProcess {
         if !unit.is_active() {
             return Err(Error::BusinessLogicError("SKU基础单位已停用".into()));
         }
+
         validate_portal_quantities(terms, quantity, unit.quantity_scale)?;
         Ok(())
     }
@@ -521,6 +534,7 @@ impl SupplierPortalProcess {
         if !unit.is_active() {
             return Err(Error::BusinessLogicError("SKU基础单位已停用".into()));
         }
+
         validate_portal_available_quantity(input.available_quantity.as_deref(), unit.quantity_scale)?;
         Ok(())
     }

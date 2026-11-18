@@ -48,6 +48,7 @@ impl SupplierOrderTrackingProcess {
                     {
                         return Ok(None);
                     }
+
                     tracking.lease_id = Some(next_id());
                     tracking.lease_until = Some(later(300));
                     db.supplier_order_tracking().update(&mut tracking, executor).await?;
@@ -81,6 +82,7 @@ impl SupplierOrderTrackingProcess {
             self.db.supplier_order_observations().create(&observation, &mut NoTransaction).await?;
             observation.base.id.clone()
         };
+
         let (db, claimed) = (self.db.clone(), claimed.clone());
         self.db
             .client()
@@ -94,8 +96,10 @@ impl SupplierOrderTrackingProcess {
                         None
                     };
                     ensure_source_progress(previous.as_ref(), &observation)?;
+
                     persist_topology(&db, &current, &observation, executor).await?;
                     apply_supplier_state(&db, &current.base.id, &observation, executor).await?;
+
                     current.latest_observation_id = Some(id.clone());
                     current.last_verified_at = Some(observation.observed_at);
                     db.supplier_order_tracking().update(&mut current, executor).await?;
@@ -244,6 +248,7 @@ async fn apply_supplier_state(
         .find_by_id(order_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("供应商订单不存在".into()))?;
+
     let mut changed = false;
     if let Some(status) = observation.fulfillment {
         changed |= order.apply_observed_fulfillment(status, observation.source_updated_at)?;
@@ -251,6 +256,7 @@ async fn apply_supplier_state(
     if let Some(status) = observation.cancellation {
         changed |= order.apply_observed_cancellation(status)?;
     }
+
     if changed {
         db.supplier_fulfillment_orders().update(&mut order, executor).await?;
         let actor = AuditActor::new(
@@ -285,6 +291,7 @@ async fn persist_topology(
         }
         return Ok(());
     };
+
     let tree = match &execution.order_tree {
         Some(previous) => previous.merge_tracking(next.clone(), &tracking.source_lines)?,
         None => {
@@ -294,6 +301,7 @@ async fn persist_topology(
             first
         },
     };
+
     if execution.order_tree.as_ref() != Some(&tree) || execution.pending_order_tree.is_some() {
         execution.order_tree = Some(tree);
         execution.pending_order_tree = None;

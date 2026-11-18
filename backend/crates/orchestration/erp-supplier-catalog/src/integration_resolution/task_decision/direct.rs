@@ -82,6 +82,7 @@ impl IntegrationResolutionProcess {
         if command.difference_id != path_id {
             return Err(Error::ValidationError("路径差异 ID 与命令不一致".to_string()));
         }
+
         let receipt = command_identity(
             actor.id(),
             DIRECT_DECISION_AUDIT,
@@ -90,6 +91,7 @@ impl IntegrationResolutionProcess {
             &command.idempotency_key,
             &command,
         )?;
+
         super::execution::execute_with_receipt(
             || self.replay_direct_decision(&receipt, &command, actor),
             || self.transact_direct_decision(command.clone(), actor.clone(), receipt.clone()),
@@ -106,6 +108,7 @@ impl IntegrationResolutionProcess {
         let attempt_context = super::audit_context(&actor, &receipt)?;
         let evidence = std::sync::Arc::clone(&self.evidence);
         let access = self.data_scope.clone();
+
         let result = self
             .run_audited(move |db, executor| {
                 Box::pin(async move {
@@ -126,6 +129,7 @@ impl IntegrationResolutionProcess {
                 })
             })
             .await;
+
         erp_audit::execution::finish_attempt(
             result,
             &attempt_context,

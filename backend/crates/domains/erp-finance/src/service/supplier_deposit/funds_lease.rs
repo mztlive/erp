@@ -29,6 +29,7 @@ impl SupplierDepositService {
         require_transaction(executor)?;
         validate_funds_lease_owner(owner)?;
         let expires_at = funds_lease_expiration(now, ttl_secs)?;
+
         self.account(account_id, executor).await?;
         let id = lease_id(account_id)?;
         if let Some(mut lease) = self.db.funds_scan_leases().find_by_id(&id, executor).await? {
@@ -38,6 +39,7 @@ impl SupplierDepositService {
             self.db.funds_scan_leases().update(&mut lease, executor).await?;
             return Ok(Some(lease));
         }
+
         let lease = FundsScanLease {
             base: BaseModel::new(id),
             account_id: account_id.into(),

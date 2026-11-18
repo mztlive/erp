@@ -107,6 +107,7 @@ mod tests {
             Error::from(IdentityError::Rbac("unavailable".into())),
             Error::Internal(reason) if reason == "unavailable"
         ));
+
         let source = persistence_core::Error::DuplicateKey(MongoError::custom("identity-source"));
         let error = Error::from(IdentityError::ReceiptDuplicate(source));
         assert_eq!(error.class(), ErrorClass::Conflict);
@@ -124,6 +125,7 @@ mod tests {
         assert!(matches!(error, Error::ReceiptDuplicate(_)));
         assert_eq!(error.class(), ErrorClass::Conflict);
         assert_eq!(error.to_string(), "数据冲突: 数据已存在，请勿重复提交");
+
         let source = error.source().unwrap().downcast_ref::<persistence_core::Error>().unwrap();
         let persistence_core::Error::DuplicateKey(mongo) = source else {
             panic!("审计回执必须保留唯一键 source 类型");

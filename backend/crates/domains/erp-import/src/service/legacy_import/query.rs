@@ -42,6 +42,7 @@ impl LegacyImportService {
         self.authorization
             .require(actor, &legacy_import::BATCH_LIST, AccessTarget::Operation, executor)
             .await?;
+
         let query = params.normalized()?;
         let filter = LegacyImportBatchFilter {
             batch_no: query.batch_no,
@@ -55,8 +56,8 @@ impl LegacyImportService {
             sort_ascending: query.paging.sort_ascending(),
         };
         let page = self.db.legacy_import_batches().search_legacy_import_batches(&filter, executor).await?;
-        let items = page.items.into_iter().map(LegacyImportBatchListItem::from).collect();
 
+        let items = page.items.into_iter().map(LegacyImportBatchListItem::from).collect();
         Ok(page_view(items, page.total, filter.page, filter.page_size))
     }
 
@@ -82,12 +83,14 @@ impl LegacyImportService {
         self.authorization
             .require(actor, &legacy_import::BATCH_DETAIL, AccessTarget::Operation, executor)
             .await?;
+
         let batch = self
             .db
             .legacy_import_batches()
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
+
         self.batch_view_of(batch, executor).await
     }
 
@@ -114,6 +117,7 @@ impl LegacyImportService {
         let batch_id = batch_id.to_owned();
         let params = params.clone();
         let actor = actor.clone();
+
         self.db
             .client()
             .clone()
@@ -136,6 +140,7 @@ impl LegacyImportService {
             .require(actor, &legacy_import::ROW_LIST, AccessTarget::Operation, executor)
             .await?;
         self.ensure_batch_exists(batch_id, executor).await?;
+
         let query = params.normalized()?;
         let filter = LegacyImportRowFilter {
             batch_id: Some(LegacyImportBatchId::new(batch_id.to_string())),
@@ -149,8 +154,8 @@ impl LegacyImportService {
             sort_ascending: query.paging.sort_ascending(),
         };
         let page = self.db.legacy_import_rows().search_legacy_import_rows(&filter, executor).await?;
-        let items = page.items.into_iter().map(LegacyImportRowView::from).collect();
 
+        let items = page.items.into_iter().map(LegacyImportRowView::from).collect();
         Ok(page_view(items, page.total, filter.page, filter.page_size))
     }
 
@@ -172,6 +177,7 @@ impl LegacyImportService {
     ) -> Result<LegacyImportBatchView> {
         let background_job_id =
             self.bulk_jobs.background_job_id_by_request_id(&batch.batch_no, executor).await?;
+
         let mut view: LegacyImportBatchView = batch.into();
         view.background_job_id = background_job_id;
         Ok(view)
@@ -300,6 +306,7 @@ mod tests {
             unavailable_authorization(),
         );
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+
         let errors = [
             service
                 .batch_list(&LegacyImportBatchListParams::default(), &actor, &mut ReadExecutor::default())
@@ -310,6 +317,7 @@ mod tests {
                 .await
                 .expect_err("非快照必须拒绝"),
         ];
+
         for error in errors {
             assert!(
                 matches!(error, Error::ValidationError(reason) if reason == "导入批次读取必须使用快照事务")
@@ -339,6 +347,7 @@ mod tests {
         );
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
         let rows: LegacyImportRowListParams = serde_json::from_value(serde_json::json!({})).unwrap();
+
         let errors = [
             service
                 .batch_list(&LegacyImportBatchListParams::default(), &actor, &mut SnapshotExecutor::default())
@@ -353,6 +362,7 @@ mod tests {
                 .await
                 .expect_err("必须拒绝"),
         ];
+
         for error in errors {
             assert!(matches!(error,Error::Internal(ref reason) if reason=="测试授权设施不可用"));
         }

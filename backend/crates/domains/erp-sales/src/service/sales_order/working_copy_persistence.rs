@@ -62,6 +62,7 @@ pub(super) async fn replace_working_copy_lines(
         .await?;
     existing.sort_by_key(|row| row.line_no);
     validate_expected_rows(expected, &existing)?;
+
     let changes = plan_changes(copy_id, &existing, lines)?;
     persist_changes(&mut RepositoryWriter { repository }, changes, executor).await
 }
@@ -106,6 +107,7 @@ fn plan_changes(
         };
         replacements.push(RowChange { kind, row });
     }
+
     let mut changes = existing
         .iter()
         .filter(|row| !row.base.is_deleted() && !selected.contains(&row.sales_order_line_id))
@@ -264,6 +266,7 @@ mod tests {
         let changes =
             plan_changes(&SalesOrderWorkingCopyId::new("copy-1"), &[existing], &[incoming]).unwrap();
         assert_eq!(changes[0].kind, ChangeKind::Restored);
+
         let mut writer = RecordingWriter { calls: Vec::new(), fail_at: None };
         let mut executor = ReadExecutor::default();
         let pointer = &mut executor as *mut ReadExecutor as usize;
@@ -289,9 +292,11 @@ mod tests {
             row("new-1", 1, SalesPricingMode::Manual, "125"),
             row("new-3", 3, SalesPricingMode::Auto, "119"),
         ];
+
         let changes = plan_changes(&SalesOrderWorkingCopyId::new("copy-1"), &existing, &incoming).unwrap();
         let mut writer = RecordingWriter { calls: Vec::new(), fail_at: None };
         persist_changes(&mut writer, changes, &mut NoTransaction).await.unwrap();
+
         assert_eq!(
             writer.calls.iter().map(|call| (call.0, call.1.as_str())).collect::<Vec<_>>(),
             [

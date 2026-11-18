@@ -77,9 +77,11 @@ mod tests {
         let all = vec![Permission::parse("*:*").unwrap()];
         let mut role = Role::new(RoleId::parse("sales").unwrap(), RoleData::new("销售")).unwrap();
         assert!(RoleWorkbench::available(&[role.clone()], &all).is_empty());
+
         role.workbenches.insert(RoleWorkbench::Sales);
         assert_eq!(RoleWorkbench::available(&[role.clone()], &all), BTreeSet::from([RoleWorkbench::Sales]));
         assert!(RoleWorkbench::available(&[role.clone()], &[]).is_empty());
+
         role.disabled = true;
         assert!(RoleWorkbench::available(&[role], &all).is_empty());
     }
@@ -90,6 +92,7 @@ mod tests {
         json.as_object_mut().unwrap().remove("workbenches");
         let mut legacy: Role = serde_json::from_value(json).unwrap();
         assert!(legacy.workbenches.is_empty());
+
         legacy
             .update(super::super::role::RoleUpdate {
                 workbenches: Some(RoleWorkbench::recommended("role-sales")),
@@ -100,6 +103,7 @@ mod tests {
         assert!(RoleWorkbench::available(&[legacy.clone()], &partial).is_empty());
         let all = [Permission::parse("*:*").unwrap()];
         assert_eq!(RoleWorkbench::available(&[legacy.clone(), legacy.clone()], &all).len(), 1);
+
         legacy
             .update(super::super::role::RoleUpdate {
                 workbenches: Some(BTreeSet::new()),
@@ -107,6 +111,7 @@ mod tests {
             })
             .unwrap();
         assert!(RoleWorkbench::available(&[legacy], &all).is_empty());
+
         assert!(RoleWorkbench::recommended("role-root").is_empty());
         assert!(RoleWorkbench::recommended("role-sysadmin").is_empty());
     }

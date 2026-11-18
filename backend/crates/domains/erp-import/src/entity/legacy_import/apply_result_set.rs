@@ -153,6 +153,7 @@ impl ApplyResultSet {
             return Err(Error::from("行结果数量必须在1-1000之间"));
         }
         ensure_unique_row_ids(&drafts)?;
+
         let mut items = Vec::with_capacity(drafts.len());
         for draft in drafts {
             items.push(ApplyResultItem::try_from_draft(draft)?);
@@ -210,6 +211,7 @@ impl ApplyResultItem {
             error_code,
             error_detail,
         } = draft;
+
         match outcome {
             ApplyResultOutcome::Imported => {
                 ensure_absent(error_code.as_deref(), "导入成功结果不得携带失败错误码")?;
@@ -346,6 +348,7 @@ mod tests {
         let set = ApplyResultSet::try_from_drafts(vec![imported("row-1"), failed("row-2"), skipped("row-3")])
             .unwrap();
         assert_eq!(set.row_ids().len(), 3);
+
         match &set.items()[0] {
             ApplyResultItem::Imported { target_document_id, target_object_reference, .. } => {
                 assert_eq!(target_document_id, "SO-1");
@@ -353,6 +356,7 @@ mod tests {
             },
             other => panic!("expected imported, got {other:?}"),
         }
+
         match &set.items()[1] {
             ApplyResultItem::Failed { error_code, error_detail, .. } => {
                 assert_eq!(error_code, "TEMPORARY");
@@ -360,6 +364,7 @@ mod tests {
             },
             other => panic!("expected failed, got {other:?}"),
         }
+
         match &set.items()[2] {
             ApplyResultItem::Skipped { error_code, .. } => {
                 assert_eq!(error_code, "DUPLICATE");

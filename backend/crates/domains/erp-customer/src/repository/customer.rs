@@ -126,6 +126,7 @@ impl QueryFilter for CustomerAccountFilter {
             }
             filter.insert("$or", alternatives);
         }
+
         if let Some(party_id) = &self.party_id {
             filter.insert("party_id", party_id.to_string());
         }
@@ -295,6 +296,7 @@ impl CustomerAccountRepositoryExt for Repository<'_, CustomerAccount> {
         if customer_ids.is_empty() {
             return Ok(HashMap::new());
         }
+
         let ids = customer_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
         let collection = self.collection().clone_with_type::<CustomerNumberRow>();
         let rows = mongo_ops::find_many(
@@ -307,6 +309,7 @@ impl CustomerAccountRepositoryExt for Repository<'_, CustomerAccount> {
             executor,
         )
         .await?;
+
         Ok(rows.into_iter().map(|row| (row.id, row.customer_no)).collect())
     }
 
@@ -335,7 +338,6 @@ impl CustomerAccountRepositoryExt for Repository<'_, CustomerAccount> {
         let collection = self.collection().clone_with_type::<CustomerAccountRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 
@@ -776,9 +778,9 @@ impl CustomerAssignmentRepositoryExt for Repository<'_, CustomerAssignment> {
             .projection(customer_assignment_projection())
             .build();
         let collection = self.collection().clone_with_type::<CustomerAssignmentRow>();
+
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 
@@ -864,6 +866,7 @@ mod tests {
             filter.get_array("$or").unwrap()[1],
             mongodb::bson::Bson::Document(doc! { "valid_to": { "$gt": "2026-09-13" } })
         );
+
         assert_eq!(
             pipeline[2],
             doc! { "$match": { "visible_customer": { "$elemMatch": { "deleted_at": 0_i64 } } } }
@@ -892,6 +895,7 @@ mod tests {
         let document = filter.to_doc();
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(document.get_str("status").unwrap(), "active");
+
         let keyword = document
             .get_array("$or")
             .unwrap()
@@ -919,7 +923,6 @@ mod tests {
     #[test]
     fn active_customer_user_assignment_filter_preserves_scope_and_half_open_window() {
         let as_of = BusinessDate::from_str("2026-08-31").unwrap();
-
         let filter = active_customer_user_assignment_filter("customer-1", "user-1", as_of);
 
         assert_eq!(filter.get_str("customer_id").unwrap(), "customer-1");
@@ -928,6 +931,7 @@ mod tests {
             filter.get_document("assignment_role").unwrap().get_array("$in").unwrap(),
             &vec!["OWNER".into(), "COLLABORATOR".into()]
         );
+
         assert_eq!(filter.get_document("valid_from").unwrap().get_str("$lte").unwrap(), "2026-08-31");
         let valid_to = filter.get_array("$or").unwrap();
         assert!(valid_to[0].as_document().unwrap().get("valid_to").unwrap().as_null().is_some());
@@ -1022,12 +1026,14 @@ mod tests {
             },
         )
         .unwrap();
+
         let document = mongodb::bson::serialize_to_document(&command).unwrap();
         assert_eq!(document.get_str("operation").unwrap(), "update");
         assert_eq!(document.get_str("request_fingerprint").unwrap(), digest);
         assert_eq!(document.get_str("customer_id").unwrap(), "customer-1");
         assert!(!document.contains_key("request"));
         assert!(!document.contains_key("mobile"));
+
         let roundtrip: CustomerProfileCommand =
             mongodb::bson::deserialize_from_document(document).expect("历史命令 BSON 必须可回读");
         assert_eq!(roundtrip, command);

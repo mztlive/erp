@@ -163,6 +163,7 @@ impl ProcurementResponsibilityProcess {
         let candidates = self.resolve_candidates(inputs, executor).await?;
         super::authorization::revalidate_candidates(&self.db, &self.rbac, &candidates, expected, executor)
             .await?;
+
         ProcurementResponsibilityService::new(self.db.clone()).claim_pools(&candidates, executor).await?;
         Ok(())
     }
@@ -367,6 +368,7 @@ mod tests {
         assert_eq!(line.identity.owner_user_id, "owner-1");
         assert_eq!(line.identity.rule_id, "rule-1");
         assert_eq!(line.owner_name, "张三");
+
         let plan = AuthorizedResolutionPlan { lines: vec![line], policy_revision: 7 };
         let views = plan.views();
         assert_eq!(views.len(), 1);
@@ -457,6 +459,7 @@ mod tests {
             plan_identities(std::slice::from_ref(&category)).unwrap(),
             "规则类型变化必须拒绝"
         );
+
         let expected =
             AuthorizedResolutionPlan { lines: vec![authorized_line(sku).unwrap()], policy_revision: 7 };
         let actual = plan_identities(std::slice::from_ref(&test_candidate_with_type(

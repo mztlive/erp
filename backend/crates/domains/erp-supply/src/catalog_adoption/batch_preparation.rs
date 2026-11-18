@@ -78,6 +78,7 @@ impl BatchPreparation {
         }
         let next_page =
             self.next_page.checked_add(1).ok_or_else(|| Error::ValidationError("准备分块数量超限".into()))?;
+
         self.completed = completed.expect("已校验累计数量有效");
         self.next_page = next_page;
         self.status =
@@ -135,10 +136,12 @@ mod tests {
         let mut task = BatchPreparation::new("key".into(), "request".into());
         task.advance(200, 201).unwrap();
         assert_eq!(task.status, PreparationStatus::Preparing);
+
         task.fail("interrupted".into()).unwrap();
         task.apply(PreparationAction::Retry).unwrap();
         assert_eq!((task.completed, task.next_page), (200, 1));
         assert!(task.error.is_none());
+
         task.advance(1, 201).unwrap();
         assert_eq!(task.status, PreparationStatus::Ready);
         assert!(task.apply(PreparationAction::Cancel).is_err());
@@ -151,6 +154,7 @@ mod tests {
         assert!(task.advance(0, 20).is_err());
         assert!(task.advance(21, 20).is_err());
         assert_eq!(task.completed, 0);
+
         task.advance(10, 20).unwrap();
         task.apply(PreparationAction::Cancel).unwrap();
         task.apply(PreparationAction::Cancel).unwrap();

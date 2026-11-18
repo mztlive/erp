@@ -175,6 +175,7 @@ mod tests {
                 },
             }],
         };
+
         PurchaseSourceUpdate::open(
             "psu-1".into(),
             SourceUpdateOpening {
@@ -207,7 +208,6 @@ mod tests {
         document.remove("awaiting_submission");
 
         let back: PurchaseSourceUpdate = deserialize_from_document(document).unwrap();
-
         assert!(!back.awaiting_submission);
     }
 }

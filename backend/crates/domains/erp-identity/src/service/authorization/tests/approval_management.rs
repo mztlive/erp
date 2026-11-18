@@ -83,6 +83,7 @@ async fn management_rejects_split_role_admin_and_a_different_subject_type_admin(
             .await,
         Err(Error::Forbidden(_))
     ));
+
     let mut wrong = grants();
     wrong[2] = approval_admin::PURCHASE_ORDER_RUNTIME;
     let (service, _) = setup(vec![("wrong".into(), wrong)], instance());
@@ -131,6 +132,7 @@ async fn management_uses_admin_source_scope_without_adding_source_menu_qualifica
         )
         .await
         .unwrap();
+
     let (service, identity) = setup(vec![("manager".into(), grants())], instance());
     identity.state.lock().unwrap().denied_scope = true;
     assert!(matches!(
@@ -169,6 +171,7 @@ async fn unsubmitted_upgrade_hydrates_real_sources_and_rejects_caller_objects() 
         .await
         .unwrap();
     assert_eq!(identity.permissions_calls.load(Ordering::SeqCst), 1);
+
     candidate.relations.values_mut().next().unwrap().objects.push(object("sales_order", "order", "user"));
     assert!(matches!(
         service
@@ -200,6 +203,7 @@ async fn non_transactional_management_revalidates_the_original_admin_scope_conte
         )
         .await
         .unwrap();
+
     identity.scopes.lock().unwrap().insert(
         (internal::APPROVAL_MANAGEMENT_READ, sales_order::DETAIL),
         ResolvedScope { role_clauses: vec![], user_limit: None },
@@ -246,6 +250,7 @@ async fn receipt_management_keeps_ledger_in_the_same_admin_role_and_requires_who
         RelationKey::parse("subject_source").unwrap(),
         RelatedObjects { expected_ids: ["receipt".into()].into(), objects: vec![receipt] },
     );
+
     let split = vec![
         ("manager".into(), base.clone()),
         ("ledger".into(), vec![policy_permission::FINANCE_LEDGER_READ]),
@@ -262,6 +267,7 @@ async fn receipt_management_keeps_ledger_in_the_same_admin_role_and_requires_who
             .await,
         Err(Error::Forbidden(_))
     ));
+
     let mut combined = base;
     combined.push(policy_permission::FINANCE_LEDGER_READ);
     let (service, _) = setup(vec![("complete".into(), combined.clone())], root.clone());
@@ -274,6 +280,7 @@ async fn receipt_management_keeps_ledger_in_the_same_admin_role_and_requires_who
         )
         .await
         .unwrap();
+
     root.relations.values_mut().next().unwrap().objects[0]
         .relations
         .get_mut(&RelationKey::parse("sales_source").unwrap())
@@ -397,6 +404,7 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
                 deadline,
                 purchase_reads: AtomicU64::new(0),
             });
+
             let mut sales = instance();
             sales.id = "a-sales".into();
             let mut purchase = instance();
@@ -407,6 +415,7 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
             builder.facilities = facilities.clone();
             builder.facts.insert("approval_instance".into(), Arc::new(Facts::new(vec![sales, purchase])));
             let service = builder.build().unwrap();
+
             let result = service
                 .require(
                     &actor(),
@@ -527,6 +536,7 @@ async fn ordinary_instance_management_fallback_keeps_source_grants_and_rejects_m
         }
         let mut root = expanded.clone();
         root.relations.clear();
+
         let identity = Arc::new(Identity::default());
         {
             let mut state = identity.state.lock().unwrap();
@@ -541,6 +551,7 @@ async fn ordinary_instance_management_fallback_keeps_source_grants_and_rejects_m
         builder.facilities = identity;
         builder.facts.insert("approval_instance".into(), Arc::new(ConditionalFacts { root, expanded }));
         let service = builder.build().unwrap();
+
         let result = service
             .require(
                 &actor(),

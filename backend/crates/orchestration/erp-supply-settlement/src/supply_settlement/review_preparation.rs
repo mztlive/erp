@@ -90,6 +90,7 @@ fn execute(
             }
         },
     };
+
     work_item.record_activity(input.at)?;
     work_item.complete_by_domain_command(input.actor_id, input.at)?;
     Ok(prepared)
@@ -117,6 +118,7 @@ fn prepare_confirmation(
         net: cost_delta.net,
         tax: cost_delta.tax,
     })?;
+
     statement.record_review(
         SettlementReviewDecision::Confirm {
             payable_account_id: account.base.id.clone().into(),
@@ -181,6 +183,7 @@ mod tests {
     ) -> (SupplierSettlementStatement, WorkItem, Vec<SupplierSettlementItem>, Vec<SupplierSettlementDifference>)
     {
         let mut statement = sample_statement();
+
         let item = SupplierSettlementItem::new(
             SupplierSettlementItemId::new("item-1"),
             SupplierSettlementItemData {
@@ -201,6 +204,7 @@ mod tests {
             },
         )
         .unwrap();
+
         let mut difference = SupplierSettlementDifference::new(
             SupplierSettlementDifferenceId::new("difference-1"),
             SupplierSettlementDifferenceData {
@@ -223,6 +227,7 @@ mod tests {
         difference
             .record_conclusion(&conclusion, "finance-1", Instant::from_unix_secs(1_700_000_100))
             .unwrap();
+
         let differences = if nonzero { vec![difference] } else { Vec::new() };
         statement.update_subject_hash(statement.review_subject_hash(&differences)).unwrap();
         statement.status = SettlementStatus::PendingReview;
@@ -269,6 +274,7 @@ mod tests {
         let task_before = serde_json::to_value(&task).unwrap();
         let req = request(&statement, false);
         let mut finance = RecordingFinance::default();
+
         let result = execute(
             &mut finance,
             &mut statement,
@@ -282,11 +288,13 @@ mod tests {
                 at: Instant::from_unix_secs(1700000100),
             },
         );
+
         assert!(
             matches!(result, Err(Error::BusinessLogicError(ref value)) if value == "ERP_ACCEPTED 成本差额暂缺权威原成本、税率与消费分配链，禁止伪造 CostEntry")
         );
         assert_eq!(finance.calls, ["payable", "cost"]);
         assert!(finance.account_id.is_some());
+
         assert_eq!(serde_json::to_value(&statement).unwrap(), statement_before);
         assert_eq!(serde_json::to_value(&task).unwrap(), task_before);
     }
@@ -296,6 +304,7 @@ mod tests {
         let req = request(&statement, false);
         let mut finance = RecordingFinance::default();
         let at = Instant::from_unix_secs(1700000100);
+
         let result = execute(
             &mut finance,
             &mut statement,
@@ -305,6 +314,7 @@ mod tests {
             ReviewInput { request: &req, reject_reason: None, actor_id: "reviewer-1", at },
         )
         .unwrap();
+
         assert_eq!(finance.calls, ["payable", "cost"]);
         assert!(result.cost_entries.is_empty());
         assert_eq!(statement.status, SettlementStatus::Confirmed);
@@ -318,6 +328,7 @@ mod tests {
             let (mut statement, mut task, items, differences) = fixture(has_differences);
             let req = request(&statement, true);
             let mut finance = RecordingFinance::default();
+
             let result = execute(
                 &mut finance,
                 &mut statement,
@@ -332,6 +343,7 @@ mod tests {
                 },
             )
             .unwrap();
+
             assert!(finance.calls.is_empty());
             assert!(result.payable.is_none());
             assert_eq!(

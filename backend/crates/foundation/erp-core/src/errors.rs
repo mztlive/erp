@@ -66,7 +66,6 @@ mod tests {
     fn string_conversions_should_preserve_error_text() {
         let borrowed = Error::from("业务错误");
         let owned = Error::from("业务错误".to_string());
-
         assert_eq!(borrowed.to_string(), "业务错误");
         assert_eq!(owned.to_string(), "业务错误");
     }

@@ -125,6 +125,7 @@ impl PurchasePaymentRequestRepositoryExt for Repository<'_, PurchasePaymentReque
             return Err(crate::Error::ValidationError("付款申请授权查询模型不匹配".into()));
         }
         access.ensure_current(executor)?;
+
         let options = FindOptions::builder().sort(doc! {"created_at": -1, "id": -1}).limit(10_001).build();
         let rows = aggregate::find(
             &self.collection(),
@@ -134,6 +135,7 @@ impl PurchasePaymentRequestRepositoryExt for Repository<'_, PurchasePaymentReque
             executor,
         )
         .await?;
+
         access.ensure_current(executor)?;
         Ok(rows)
     }
@@ -169,6 +171,7 @@ impl PurchasePaymentRequestRepositoryExt for Repository<'_, PurchasePaymentReque
             .skip(skip)
             .limit(i64::try_from(size).unwrap_or(100))
             .build();
+
         let filter = query_doc(query);
         let items = mongo_ops::find_many(&self.collection(), filter.clone(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter, executor).await?;
@@ -205,6 +208,7 @@ fn query_doc(query: &PurchasePaymentRequestQuery) -> Document {
             filter.insert(field, value);
         }
     }
+
     for (field, value) in [
         ("request_no", &query.request_no),
         ("lines.0.source_snapshot.purchase_preview.supplier_name", &query.supplier_name),
@@ -213,6 +217,7 @@ fn query_doc(query: &PurchasePaymentRequestQuery) -> Document {
     ] {
         insert_literal_regex_filter(&mut filter, field, value.as_deref().map(str::trim));
     }
+
     if let Some(view) = query.view {
         let statuses = match view {
             PaymentRequestListView::Draft => vec!["draft", "rejected", "withdrawn"],
@@ -225,6 +230,7 @@ fn query_doc(query: &PurchasePaymentRequestQuery) -> Document {
     if let Some(status) = query.status {
         filter.insert("status", status.as_str());
     }
+
     if let Some(q) = query.q.as_deref().filter(|q| !q.trim().is_empty()) {
         let mut terms = Vec::new();
         for field in ["request_no", "data.reason", "payer_party_name"] {
@@ -254,6 +260,7 @@ mod tests {
         let filter = query_doc(&query);
         assert_eq!(filter.get_str("supplier_id").unwrap(), "supplier-1");
         assert_eq!(filter.get_str("payer_party_id").unwrap(), "party-1");
+
         let cleared = PurchasePaymentRequestQuery {
             supplier_id: Some(" ".into()),
             payer_party_id: Some("".into()),
@@ -294,6 +301,7 @@ mod tests {
             &doc! {"$regex": r"CG\[1\]", "$options": "i"}
         );
         assert_eq!(filter.get_str("status").unwrap(), "closed");
+
         let views = filter.get_array("$and").unwrap()[0]
             .as_document()
             .unwrap()

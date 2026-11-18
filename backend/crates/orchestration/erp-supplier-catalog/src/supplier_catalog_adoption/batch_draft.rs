@@ -108,6 +108,7 @@ impl SupplierCatalogAdoptionProcess {
         self.prepare_batch_changes(&mut desired, &mut rows, request)?;
         let pending =
             rows.into_iter().zip(before).filter(|(row, _)| row.base.id > work.after).collect::<Vec<_>>();
+
         for chunk in pending.chunks(200) {
             let changed = chunk
                 .iter()
@@ -127,6 +128,7 @@ impl SupplierCatalogAdoptionProcess {
             )
             .await?;
         }
+
         self.finish_saved_work(&batch, &desired, token, actor).await
     }
 
@@ -178,6 +180,7 @@ impl SupplierCatalogAdoptionProcess {
                     let mut batch =
                         process.check_batch_draft(&connection, &id, &token, &actor, executor).await?;
                     process.ensure_batch_rows_access(&actor, &rows, executor).await?;
+
                     batch
                         .work
                         .as_mut()
@@ -219,12 +222,14 @@ impl SupplierCatalogAdoptionProcess {
                     if work.completed != work.total {
                         return Err(Error::ConflictError("草稿保存尚未完成".into()));
                     }
+
                     batch.rules = desired.rules;
                     batch.inactive_pricing = desired.inactive_pricing;
                     batch.fill_policy = desired.fill_policy;
                     batch.defaults = desired.defaults;
                     batch.step = desired.step;
                     batch.excluded_ids = desired.excluded_ids;
+
                     if work.review_after_save {
                         work.start_review()?;
                     } else {
@@ -256,6 +261,7 @@ impl SupplierCatalogAdoptionProcess {
         {
             batch.invalidate_preview();
         }
+
         for row in rows.iter_mut() {
             if changed_rules && row.editable() && row.status != BatchItemStatus::Excluded {
                 row.invalidate_preview()?;
@@ -272,6 +278,7 @@ impl SupplierCatalogAdoptionProcess {
                 }
             }
         }
+
         let row_indices: HashMap<_, _> =
             rows.iter().enumerate().map(|(index, row)| (row.source.base.id.clone(), index)).collect();
         let mut edited = HashSet::new();
@@ -299,6 +306,7 @@ impl SupplierCatalogAdoptionProcess {
         }) {
             return Err(Error::ConflictError("本批正在执行，请完成后处理剩余项".into()));
         }
+
         if let Some(rules) = &request.rules {
             batch.rules = rules.clone();
         }
@@ -336,6 +344,7 @@ impl SupplierCatalogAdoptionProcess {
         if unique.len() != excluded.len() || excluded.iter().any(|id| !ids.contains(id.as_str())) {
             return Err(Error::ValidationError("排除项必须属于本批且不能重复".into()));
         }
+
         batch.excluded_ids = excluded.to_vec();
         for row in rows {
             if unique.contains(&row.source.base.id) {
@@ -363,12 +372,14 @@ impl SupplierCatalogAdoptionProcess {
         if content_changed {
             row.invalidate_preview()?;
         }
+
         if let Some(mapping) = edit.mapping {
             row.edit_mapping(mapping)?;
         }
         if let Some(terms) = edit.terms {
             row.edit_terms(terms)?;
         }
+
         if let Some(prices) = edit.sales_edit {
             row.sales_prices = row.sales_prices.edit(&prices, existing)?;
         }
@@ -379,6 +390,7 @@ impl SupplierCatalogAdoptionProcess {
                 row.resolution.as_ref().is_some_and(|value| value.kind == "EXISTING"),
             )?;
         }
+
         match edit.delivery_template_id {
             BatchValuePatch::Keep => {},
             BatchValuePatch::Set(value) => {

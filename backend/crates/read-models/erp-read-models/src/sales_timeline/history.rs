@@ -48,9 +48,11 @@ async fn audit(
             targets
         })
         .collect::<Vec<_>>();
+
     let mut cursor = bound(query.cursor()?.as_ref(), "audit:");
     let mut result = Vec::new();
     let limit = usize::try_from(query.limit()?).expect("分页上限可转换");
+
     loop {
         let rows = db
             .audit_logs()
@@ -81,6 +83,7 @@ pub(super) fn audit_event(
     if event.action_code.starts_with("workflow_action.") || event.action_code.starts_with("approval.") {
         return None;
     }
+
     let document = documents.get(&event.resource_id)?;
     let actor =
         event.actor_name_snapshot.filter(|name| !name.trim().is_empty()).unwrap_or(event.actor_account);
@@ -89,6 +92,7 @@ pub(super) fn audit_event(
     if let Some(number) = event.resource_number_snapshot {
         row.document_number = number;
     }
+
     // 跨销售单资金事件的金额只能来自本单分配，不展示整笔资金的审计金额。
     if !financial(document.kind) {
         row.details.extend(
@@ -111,6 +115,7 @@ async fn approvals(
     let mut cursor = bound(query.cursor()?.as_ref(), "workflow:");
     let mut result = Vec::new();
     let limit = usize::try_from(query.limit()?).expect("分页上限可转换");
+
     loop {
         let rows = db
             .workflow_actions()
@@ -226,6 +231,7 @@ mod tests {
     fn historical_decisions_keep_results_without_inventing_missing_rounds() {
         let document = TimelineDocument::new(DocumentType::SalesOrder, "sale".into());
         let documents = BTreeMap::from([("sale".into(), document)]);
+
         for (action_type, to_status, expected) in [
             (WorkflowActionType::Approve, "EFFECTIVE", Some(TimelineApprovalResult::Approved)),
             (WorkflowActionType::Reject, "DRAFT", Some(TimelineApprovalResult::Rejected)),

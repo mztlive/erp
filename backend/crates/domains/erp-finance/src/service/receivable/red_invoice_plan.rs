@@ -326,6 +326,7 @@ mod red_invoice_reversal_tests {
         assert_eq!(deltas[0].1, Amount::from_str("130.00").unwrap());
         assert_eq!(deltas[1].0, "acc-b");
         assert_eq!(deltas[1].1, Amount::from_str("50.00").unwrap());
+
         let plan_total: Amount =
             lines.iter().fold(Amount::from_str("0").unwrap(), |sum, line| sum.checked_add(line.gross));
         let delta_total =

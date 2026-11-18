@@ -37,6 +37,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if let Some(supplier_id) = self.supplier_command(&step.key).await? {
             return self.adopt_supplier(actor, step, &supplier_id, notices).await;
         }
+
         let Some(maintainer) = self.role_actor(&spec::foundation_spec().supplier_maintainer_account).await?
         else {
             return Ok(EnsureOutcome::Notice("没有可用的采购账号，未生成供应商".to_string()));
@@ -54,6 +55,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             },
             Err(error) => return Err(error),
         };
+
         self.remember_created_supplier(actor, step, &view.supplier_id).await
     }
 
@@ -71,11 +73,13 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             .await?
             .ok_or_else(|| Error::NotFound("演示供应商创建后未能读回".to_string()))?;
         let created = supplier.base.deleted_at == entity_core::NOT_DELETED_TIMESTAMP;
+
         lifecycle::restore_party(&self.db, self.authorization.clone(), actor, supplier.party_id.as_ref())
             .await?;
         if !created {
             lifecycle::restore_supplier(&self.db, self.authorization.clone(), actor, supplier_id).await?;
         }
+
         record::save(&self.db, step, supplier_id.to_string(), vec![supplier.party_id.to_string()]).await?;
         Ok(if created { EnsureOutcome::Created } else { EnsureOutcome::Restored })
     }
@@ -122,6 +126,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         {
             return Ok(());
         }
+
         let request = HandoverSupplierRequest {
             expected_version: supplier.base.version,
             target_user_id: maintainer.id().to_string(),

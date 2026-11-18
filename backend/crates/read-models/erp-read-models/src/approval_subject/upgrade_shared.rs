@@ -248,6 +248,7 @@ pub(crate) fn build_facts(
     ensure_exact_nonempty_fact(creator_id, "强业务对象不可变创建人缺失或非法")?;
     ensure_exact_nonempty_fact(source.0, "强业务授权来源资源缺失或非法")?;
     ensure_exact_nonempty_fact(source.1, "强业务授权来源主键缺失或非法")?;
+
     Ok(ApprovalUpgradeSubjectFacts {
         document_type,
         document_id: actual_id.to_string(),

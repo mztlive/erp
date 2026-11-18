@@ -47,8 +47,10 @@ pub async fn reject_order_approval(
         executor,
     )
     .await?;
+
     order.reject_approval(expected_subject_version, actor.id())?;
     persist_cancelled_order(db, &mut order, executor).await?;
+
     let audit = actor.clone().resource_log("purchase_order.reject", "purchase_order", id.to_string())?;
     persist_log(db, &audit, executor).await?;
     Ok(())
@@ -96,9 +98,11 @@ pub async fn reject_change_approval(
         .await?
         .ok_or_else(|| Error::NotFound("采购变更审批提交不存在".into()))?;
     change.ensure_current_approval_submission(&submission)?;
+
     change.reject_approval(expected_subject_version, actor.id())?;
     super::inquiry_supply::restore_current_quotes(db, change.purchase_order_id.as_ref(), executor).await?;
     db.purchase_change_orders().update(&mut change, executor).await?;
+
     let audit = actor.clone().resource_log(
         "purchase_change_order.reject",
         "purchase_change_order",

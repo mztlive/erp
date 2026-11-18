@@ -44,6 +44,7 @@ async fn bank_reveal_rejects_non_snapshot_and_record_or_task_targets_before_iden
             Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务"
         ));
     }
+
     for target in [
         AccessTarget::record("account").unwrap(),
         AccessTarget::Task { id: "task".into(), version: "1".into() },
@@ -53,5 +54,6 @@ async fn bank_reveal_rejects_non_snapshot_and_record_or_task_targets_before_iden
             Err(Error::ValidationError(message)) if message == "此权限不支持该授权目标"
         ));
     }
+
     assert_eq!(identity.permissions_calls.load(Ordering::SeqCst), 0);
 }

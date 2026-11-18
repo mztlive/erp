@@ -56,10 +56,12 @@ fn catalog_pipeline(supplier_id: &str, query: &PortalQuery) -> Vec<Document> {
     ];
     pipeline.extend(join(<Database as CatalogExt>::SKUS, "sku_id", "sku"));
     pipeline.extend(current_catalog_facts());
+
     if let Some(q) = &query.q {
         let regex = regex::escape(q);
         pipeline.push(doc! {"$match":{"$or":[{"sku.sku_no":{"$regex":&regex,"$options":"i"}},{"revision.name":{"$regex":&regex,"$options":"i"}},{"sku.specification_signature":{"$regex":regex,"$options":"i"}}]}});
     }
+
     pipeline.push(own_offering(supplier_id));
     pipeline.push(catalog_projection());
     pipeline.push(doc! {"$sort":{"sku_no":1,"id":1}});

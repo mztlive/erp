@@ -46,6 +46,7 @@ pub async fn approve(
     }
     source::revalidate(db, &request, executor).await?;
     request.approve()?;
+
     let responsibility = rbac
         .tasks
         .resolve_finance_responsibility(
@@ -73,8 +74,10 @@ pub async fn approve(
     task.set_links(
         work_item_links::capture(db, "purchase_payment_request", &request.base.id, executor).await?,
     )?;
+
     db.work_items().create(&task, executor).await?;
     db.purchase_payment_requests().update(&mut request, executor).await?;
+
     let audit = actor.clone().resource_log(
         "purchase_payment_request.approve",
         "purchase_payment_request",
@@ -121,6 +124,7 @@ pub(crate) async fn authorize_payment_result(
     if payment.payment_request_id.as_deref() != Some(request_id) || payment.created_by != actor.id() {
         return Err(Error::Forbidden("付款命令结果不属于当前操作人或申请".into()));
     }
+
     let task = db
         .work_items()
         .find_by_id(task_id, executor)
@@ -130,6 +134,7 @@ pub(crate) async fn authorize_payment_result(
         return Err(Error::Forbidden("原付款任务责任资格已变化".into()));
     }
     require_task(rbac, actor, &task, TaskPurpose::Payment, executor).await?;
+
     let version = task
         .subject_version
         .parse::<u32>()
@@ -170,10 +175,12 @@ pub(crate) async fn record_payment_execution(
         allocations,
         actor,
     } = input;
+
     let mut request = load(db, request_id, executor).await?;
     ensure_version(&request, version)?;
     let mut task = authorize_task(db, rbac, &request, task_id, task_version, actor, executor).await?;
     source::revalidate(db, &request, executor).await?;
+
     let snapshot =
         request.payee_account.as_ref().ok_or_else(|| Error::ConflictError("批准申请缺少账户".into()))?;
     if payment.supplier_id.as_ref() != request.supplier_id
@@ -181,6 +188,7 @@ pub(crate) async fn record_payment_execution(
     {
         return Err(Error::ConflictError("实际付款供应商或收款账户与申请不一致".into()));
     }
+
     let ids = request.lines.iter().map(|l| PayableAccountId::new(&l.payable_account_id)).collect::<Vec<_>>();
     let entries = db.payable_entries().find_entries_by_accounts(&ids, executor).await?;
     let request_allocations = allocations_by_account(&entries, allocations)?;
@@ -195,13 +203,16 @@ pub(crate) async fn record_payment_execution(
         }
     }
     let accounts = db.payable_accounts().find_accounts_by_ids(&ids, executor).await?;
+
     payment.payment_request_id = Some(request.base.id.clone());
     payment.payer_party_id = Some(request.payer_party_id.clone());
     payment.payer_party_name = Some(request.payer_party_name.clone());
     payment.request_allocations = request_allocations;
+
     task.record_activity(Instant::now())?;
     db.work_items().update(&mut task, executor).await?;
     db.purchase_payment_requests().update(&mut request, executor).await?;
+
     audit_payment(db, &request.base.id, actor, executor).await?;
     Ok(PaymentRequestExecutionFacts { accounts, entries })
 }
@@ -276,6 +287,7 @@ pub(super) async fn authorize_loaded_task(
     {
         return Err(Error::ConflictError("此任务没有当前有效的已批准付款申请".into()));
     }
+
     tasks.ensure_domain_decision_access(actor, task, executor).await?;
     Ok(())
 }
@@ -298,6 +310,7 @@ fn allocations_by_account(
                 .ok_or_else(|| Error::Logic("付款分配汇总溢出".into()))?,
         )?;
     }
+
     Ok(amounts
         .into_iter()
         .map(|(payable_account_id, amount)| PaymentRequestAllocation { payable_account_id, amount })
@@ -328,6 +341,7 @@ pub async fn sync_task(db: &Database, id: &str, executor: &mut dyn Executor) -> 
     if task.status != WorkItemStatus::Open {
         return Ok(());
     }
+
     if request.remaining() == Amount::zero() {
         task.complete_when_payment_request_paid(Instant::now())?;
     } else {
@@ -365,6 +379,7 @@ pub async fn restore_reversed_payment(
         payment.require_payment_request_basis().map_err(|error| Error::ConflictError(error.to_string()))?;
     let mut request = load(db, id, executor).await?;
     basis::revalidate(db, payment, &request, allocations, executor).await?;
+
     let was_closed = request.status == PurchasePaymentRequestStatus::Closed;
     request.reverse_payment(allocations)?;
     if !was_closed {
@@ -384,6 +399,7 @@ pub async fn restore_reversed_payment(
             }
         }
     }
+
     db.purchase_payment_requests().update(&mut request, executor).await?;
     if !was_closed {
         reopen_task(db, rbac, &mut request, executor).await?;
@@ -426,6 +442,7 @@ async fn require_current_task_owner(
         .await?
         .filter(|account| account.is_active_backoffice())
         .ok_or_else(|| Error::Forbidden("原付款申请任务的当前出纳账号已失效".into()))?;
+
     // 仅作为当前任务责任人的资格事实；冲正审计仍使用真实冲正操作人。
     let actor = AuditActor::new(owner.base.id, owner.secret.account().to_string(), owner.kind);
     rbac.tasks.ensure_domain_decision_access(&actor, task, executor).await?;
@@ -465,6 +482,7 @@ async fn create_reopened_task(
     task.set_links(
         work_item_links::capture(db, "purchase_payment_request", &request.base.id, executor).await?,
     )?;
+
     db.work_items().create(&task, executor).await?;
     db.purchase_payment_requests().update(request, executor).await?;
     Ok(())
@@ -637,6 +655,7 @@ mod tests {
                 "mutation {mutation}"
             );
         }
+
         assert_eq!(tasks.calls.load(Ordering::Relaxed), 0);
     }
 
@@ -648,6 +667,7 @@ mod tests {
         assert!(!completed.is_owned_by("cashier-1"));
         assert!(matches_payment_result_task(&completed, "request-1"));
         assert!(!matches_payment_result_task(&completed, "request-2"));
+
         let mut closed = request_task();
         closed
             .close(
@@ -666,13 +686,16 @@ mod tests {
         let mut task = request_task();
         assert_eq!(task.responsibility_key(), Some("finance:SUPPLIER_PAYMENT:rule-1:request:request-1"));
         assert!(restored_task_matches(&task, "request-1", 2));
+
         task.reassign("cashier-2", Instant::from_unix_secs(150)).unwrap();
         assert!(restored_task_matches(&task, "request-1", 2));
         assert_eq!(task.owner_user_id.as_deref(), Some("cashier-2"));
         assert_eq!(task.responsibility_key(), Some("finance:SUPPLIER_PAYMENT:rule-1:request:request-1"));
+
         for (request, version) in [("request-2", 2), ("request-1", 3)] {
             assert!(!restored_task_matches(&task, request, version));
         }
+
         let mut completed = task;
         completed.complete_when_payment_request_paid(Instant::from_unix_secs(200)).unwrap();
         assert!(!restored_task_matches(&completed, "request-1", 2));

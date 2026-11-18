@@ -76,7 +76,6 @@ mod tests {
             sort_by: None,
             sort_ascending: false,
         };
-
         let document = filter.to_doc();
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(document.get_str("document_type").unwrap(), "sales_order");
@@ -96,7 +95,6 @@ mod tests {
             sort_by: None,
             sort_ascending: false,
         };
-
         let document = filter.to_doc();
         assert_eq!(document.get_str("document_id").unwrap(), "order-1");
         assert_eq!(document.get_str("action_type").unwrap(), "approve");
@@ -139,6 +137,7 @@ mod tests {
         let set = pipeline[0].get_document("$set").unwrap();
         assert_eq!(set.get_str("document_no").unwrap(), "SO-1");
         assert_eq!(set.get_i64("document_no_assigned_at").unwrap(), 99);
+
         assert!(matches!(
             classify_assign_document_no_miss(
                 Some((1_u64, "SO-1".to_string())),

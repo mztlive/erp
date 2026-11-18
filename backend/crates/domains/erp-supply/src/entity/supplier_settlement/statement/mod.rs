@@ -242,6 +242,7 @@ impl SupplierSettlementStatement {
             STATEMENT_NO_MAX_LEN,
             "结算单号过长",
         )?;
+
         let external_bill_no =
             normalize_optional_text(data.external_bill_no, "外部账单号", EXTERNAL_BILL_NO_MAX_LEN)?;
         let external_bill_version =
@@ -249,6 +250,7 @@ impl SupplierSettlementStatement {
         if external_bill_no.is_some() != external_bill_version.is_some() {
             return Err(Error::from("外部账单号与版本必须同时提供或同时省略"));
         }
+
         if data.period_end < data.period_start {
             return Err(Error::from("结算期间结束不得早于开始"));
         }
@@ -256,6 +258,7 @@ impl SupplierSettlementStatement {
         ensure_amount_non_negative(data.supplier_amount, "供应商结算金额不得为负")?;
         let subject_hash = normalize_sha256(data.subject_hash, "主题摘要")?;
         let source_snapshot_hash = normalize_sha256(data.source_snapshot_hash, "来源快照摘要")?;
+
         let period_policy_id = normalize_required_text(
             data.period_policy_id,
             "结算期间策略不能为空",
@@ -274,6 +277,7 @@ impl SupplierSettlementStatement {
             POLICY_VALUE_MAX_LEN,
             "结算期间策略时区过长",
         )?;
+
         let refresh_cutoff_policy_id = normalize_required_text(
             data.refresh_cutoff_policy_id,
             "刷新截止策略不能为空",
@@ -400,6 +404,7 @@ impl SupplierSettlementStatement {
         ) {
             return Err(Error::from("当前结算状态禁止刷新来源快照"));
         }
+
         let external_bill_no = normalize_required_text(
             update.external_bill_no,
             "外部账单号不能为空",
@@ -414,6 +419,7 @@ impl SupplierSettlementStatement {
         )?;
         ensure_amount_non_negative(update.erp_amount, "ERP 结算金额不得为负")?;
         ensure_amount_non_negative(update.supplier_amount, "供应商结算金额不得为负")?;
+
         self.external_bill_no = Some(external_bill_no);
         self.external_bill_version = Some(external_bill_version);
         self.erp_amount = update.erp_amount;
@@ -422,6 +428,7 @@ impl SupplierSettlementStatement {
         self.source_as_of = update.source_as_of;
         self.source_snapshot_at = update.source_snapshot_at;
         self.source_snapshot_hash = normalize_sha256(update.source_snapshot_hash, "来源快照摘要")?;
+
         self.status = if update.has_difference {
             SettlementStatus::HasDifference
         } else {
@@ -451,6 +458,7 @@ impl SupplierSettlementStatement {
             return Err(Error::from("提交复核与确认必须使用供应商结算强类型领域命令"));
         }
         ensure_status_move(self.status, target_status)?;
+
         if let Some(erp_amount) = update.erp_amount {
             ensure_amount_non_negative(erp_amount, "ERP 结算金额不得为负")?;
             self.erp_amount = erp_amount;
@@ -460,6 +468,7 @@ impl SupplierSettlementStatement {
             self.supplier_amount = supplier_amount;
         }
         self.difference_amount = self.supplier_amount.checked_sub(self.erp_amount);
+
         if let Some(reviewed_by) = update.reviewed_by {
             self.apply_reviewed_by(reviewed_by)?;
         }
@@ -657,6 +666,7 @@ mod tests {
                 ..Default::default()
             })
             .unwrap();
+
         statement.submit_review().unwrap();
         statement
             .record_review(
@@ -770,6 +780,7 @@ mod tests {
         let mut statement =
             SupplierSettlementStatement::new(SupplierSettlementStatementId::new("statement-1"), data)
                 .unwrap();
+
         let item = SupplierSettlementItem::new(
             SupplierSettlementItemId::new("item-1"),
             SupplierSettlementItemData {
@@ -790,6 +801,7 @@ mod tests {
             },
         )
         .unwrap();
+
         let mut difference = SupplierSettlementDifference::new(
             SupplierSettlementDifferenceId::new("difference-1"),
             SupplierSettlementDifferenceData {
@@ -819,6 +831,7 @@ mod tests {
         assert_eq!(delta.gross, Amount::from_str("1.00").unwrap());
         assert_eq!(delta.net, Amount::from_str("0.87").unwrap());
         assert_eq!(delta.tax, Amount::from_str("0.13").unwrap());
+
         assert!(statement.ensure_version(statement.base.version).is_ok());
         assert!(statement.ensure_version(statement.base.version + 1).is_err());
 

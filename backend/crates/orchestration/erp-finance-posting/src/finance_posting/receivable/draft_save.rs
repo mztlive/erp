@@ -72,6 +72,7 @@ impl ReceivableProcess {
         req.validate()?;
         req.receipt.validate()?;
         req.validate_identity()?;
+
         let command = receipt_files::receipt(&req, actor, pending.as_ref())?;
         receipt_files::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
         let process = Self::new(self.db.clone(), self.rbac.clone());
@@ -102,10 +103,12 @@ impl ReceivableProcess {
                 assets_committed: false,
             });
         }
+
         let mut receipt = self.prepare_saved_draft(&req, actor, executor).await?;
         receipt.save_allocations(convert_allocations(&req.allocations)?)?;
         self.validate_draft_sources(&receipt, executor).await?;
         self.db.customer_receipts().update(&mut receipt, executor).await?;
+
         ensure_receipt_edit_authorized(&self.rbac, actor, &receipt.base.id, executor).await?;
         receipt_files::persist(
             &self.db,
@@ -116,9 +119,11 @@ impl ReceivableProcess {
             executor,
         )
         .await?;
+
         let audit = draft_audit(actor, &receipt.base.id, req.receipt_id.as_deref())?;
         persist_log(&self.db, &audit, executor).await?;
         receipts.save_resource(command, receipt.base.id.clone(), audit.base.id, executor).await?;
+
         Ok(ReceiptDraftWithAssets {
             view: receipt_view_with_actions(&self.db, &self.rbac, actor, &receipt.base.id, executor).await?,
             assets_committed: !pending.is_empty(),
@@ -143,6 +148,7 @@ impl ReceivableProcess {
             {
                 return Err(Error::ValidationError("保存草稿不得改变原单身份或往来主体".into()));
             }
+
             receipt.update(CustomerReceiptUpdate {
                 amount: Some(data.amount),
                 received_at: Some(data.received_at),
@@ -150,6 +156,7 @@ impl ReceivableProcess {
             })?;
             return Ok(receipt);
         }
+
         self.create_saved_draft(data, actor, executor).await
     }
 
@@ -163,6 +170,7 @@ impl ReceivableProcess {
             .authorization
             .require(actor, &receivable::CUSTOMER_RECEIPT_CREATE, AccessTarget::Operation, executor)
             .await?;
+
         let receipt = CustomerReceipt::new(
             CustomerReceiptId::new(next_id()),
             CustomerReceiptData {
@@ -201,6 +209,7 @@ impl ReceivableProcess {
         if entries.len() != ids.len() {
             return Err(Error::ValidationError("核销应收分录不存在".into()));
         }
+
         let ids = entries.iter().map(|entry| entry.receivable_account_id.to_string()).collect::<Vec<_>>();
         let accounts = self.db.receivable_accounts().find_accounts_by_ids(&ids, executor).await?;
         for entry in entries {
@@ -236,6 +245,7 @@ mod tests {
         let actor = AuditActor::new("actor".into(), "fukuan".into(), AccountKind::Admin);
         let created = draft_audit(&actor, "receipt", None).unwrap();
         let updated = draft_audit(&actor, "receipt", Some("receipt")).unwrap();
+
         assert_eq!(created.action, "customer_receipt.create");
         assert_eq!(updated.action, "customer_receipt.update");
         assert_eq!(created.resource_id.as_deref(), Some("receipt"));

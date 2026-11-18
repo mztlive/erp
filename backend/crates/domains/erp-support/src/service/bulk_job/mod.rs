@@ -127,6 +127,7 @@ impl BulkJobService {
             .service
             .require(actor, &bulk_job::BULK_SELECTION_SNAPSHOT_LIST, AccessTarget::Operation, executor)
             .await?;
+
         params.validate()?;
         let query = params.normalized()?;
         let (page, page_size, sort_by, sort_ascending) = query.paging.into_filter_parts();
@@ -139,9 +140,9 @@ impl BulkJobService {
             sort_by,
             sort_ascending,
         };
+
         let page = self.db.bulk_selection_snapshots().search_snapshots(&filter, executor).await?;
         let items = page.items.into_iter().map(BulkSelectionSnapshotView::from).collect();
-
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
@@ -168,6 +169,7 @@ impl BulkJobService {
         actor: &AuditActor,
     ) -> Result<BulkSelectionSnapshotView> {
         req.validate()?;
+
         let snapshot_id = BulkSelectionSnapshotId::new(next_id());
         let drafts = req
             .items
@@ -195,6 +197,7 @@ impl BulkJobService {
             drafts,
         )?;
         let (snapshot, items) = aggregate.into_parts();
+
         let service = self.clone();
         let actor = actor.clone();
         let snapshot = self
@@ -204,7 +207,6 @@ impl BulkJobService {
                 Box::pin(async move { service.persist_snapshot(snapshot, items, &actor, executor).await })
             })
             .await?;
-
         Ok(snapshot.into())
     }
 
@@ -221,6 +223,7 @@ impl BulkJobService {
             .require(actor, &bulk_job::BULK_SELECTION_SNAPSHOT_CREATE, AccessTarget::Operation, executor)
             .await?;
         Self::ensure_items_registered(self.documents.as_ref(), &items, executor).await?;
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "bulk_selection_snapshot.create",
@@ -373,6 +376,7 @@ impl BulkJobService {
         if page == 0 {
             return Err(Error::ValidationError("页码必须大于0".to_string()));
         }
+
         let snapshot_id = BulkSelectionSnapshotId::new(snapshot_id);
         let result = self
             .db
@@ -380,7 +384,6 @@ impl BulkJobService {
             .search_items(&snapshot_id, result_status, page, page_size, executor)
             .await?;
         let items = result.items.into_iter().map(BulkSelectionItemView::from).collect();
-
         Ok(PageView { items, total: result.total, page, page_size })
     }
 
@@ -405,6 +408,7 @@ impl BulkJobService {
     ) -> Result<PageView<BackgroundJobView>> {
         params.validate()?;
         let filter = BackgroundJobFilter::from(params.normalized()?);
+
         let authorization = self.authorization.clone();
         let actor = actor.clone();
         let db = self.db.clone();
@@ -415,6 +419,7 @@ impl BulkJobService {
                     let access = authorization.query(&actor, executor).await?;
                     let page = authorized_background_page(&db, &filter, &access, executor).await?;
                     authorization.service.validate(&access, executor).await?;
+
                     Ok(PageView {
                         items: page.items.into_iter().map(Into::into).collect(),
                         total: page.total,
@@ -524,6 +529,7 @@ impl BulkJobService {
             "background_job",
             job.base.id.clone(),
         )?;
+
         let db = self.db.clone();
         let client = db.client().clone();
         let job_for_tx = job.clone();
@@ -541,6 +547,7 @@ impl BulkJobService {
                             executor,
                         )
                         .await?;
+
                     db.bulk_job()
                         .create_job_with_items(&job_for_tx, items, executor)
                         .await
@@ -597,6 +604,7 @@ impl BulkJobService {
             .service
             .require(actor, &bulk_job::BACKGROUND_JOB_CREATE, AccessTarget::Operation, executor)
             .await?;
+
         match self.db.bulk_job().registration_by_request_id(job, executor).await? {
             Some(BackgroundJobRegistration::ReplaySame(existing)) => Ok(existing.into()),
             Some(BackgroundJobRegistration::ConflictDifferentPayload(_)) => Err(Error::ConflictError(
@@ -644,6 +652,7 @@ impl BulkJobService {
                         .await?;
                     check_expected_version(job.base.version, req.version)?;
                     job.cancel(Instant::now())?;
+
                     let audit =
                         service.audit.resource_log(actor, "background_job.cancel", "background_job", id)?;
                     service.db.background_jobs().update(&mut job, executor).await?;
@@ -681,6 +690,7 @@ impl BulkJobService {
         if page == 0 {
             return Err(Error::ValidationError("页码必须大于0".into()));
         }
+
         let db = self.db.clone();
         let authorization = self.authorization.clone();
         let job_id = job_id.to_owned();
@@ -696,6 +706,7 @@ impl BulkJobService {
                             Error::NotFound(_) => Error::NotFound("后台任务不存在".into()),
                             error => error,
                         })?;
+
                     let result = db
                         .background_job_items()
                         .search_job_items(
@@ -740,6 +751,7 @@ impl BulkJobService {
             .filter(|id| seen.insert(id.as_str()))
             .cloned()
             .collect::<Vec<_>>();
+
         let registered_ids =
             documents.find_registered_ids(&document_ids, executor).await?.into_iter().collect::<HashSet<_>>();
         if document_ids.iter().any(|id| !registered_ids.contains(id)) {
@@ -758,6 +770,7 @@ impl BulkJobService {
         executor: &mut dyn Executor,
     ) -> Result<BulkSelectionSnapshotView> {
         self.authorization.service.require(actor, &permission, AccessTarget::Operation, executor).await?;
+
         let mut snapshot = self
             .db
             .bulk_selection_snapshots()
@@ -770,6 +783,7 @@ impl BulkJobService {
             "expire" => snapshot.expire()?,
             _ => return Err(Error::ValidationError("未知选择快照动作".into())),
         }
+
         let audit = self.audit.resource_log(
             actor.clone(),
             &format!("bulk_selection_snapshot.{}", permission.action()),
@@ -812,6 +826,7 @@ fn build_job_parts(
             source_column_name: item.source_column_name,
         })
         .collect();
+
     let aggregate = BackgroundJobAggregate::new(
         job_id,
         BackgroundJobAggregateData {
@@ -915,11 +930,13 @@ mod tests {
             },
         )
         .unwrap();
+
         let error = service
             .creation_replay(&job, &actor, &mut SnapshotExecutor::default())
             .await
             .expect_err("原创建资格失效不得返回竞争结果");
         assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+
         let error = service
             .creation_replay(&job, &actor, &mut NoTransaction)
             .await

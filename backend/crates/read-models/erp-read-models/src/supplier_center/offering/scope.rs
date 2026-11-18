@@ -69,6 +69,7 @@ impl SupplierOfferingReadService {
             return Err(Error::ValidationError("供给列表读取必须使用快照事务".into()));
         }
         crate::support::ensure_deep_page(params.page.unwrap_or(1), params.scope_version.as_deref())?;
+
         let snapshot = build_snapshot(
             self.db.clone(),
             self.access.clone(),
@@ -78,6 +79,7 @@ impl SupplierOfferingReadService {
             executor,
         )
         .await?;
+
         if params.scope_version.as_deref().is_some_and(|value| value != snapshot.scope_version) {
             return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
@@ -114,6 +116,7 @@ async fn build_snapshot(
     context.ensure_current(executor)?;
     let mut query = super::prepare_list_query(&params)?;
     query.scope = Some(context.clone());
+
     let filter = apply_procurement_filter(&db, &query, procurement.as_ref(), &params, executor).await?;
     let bundle = match filter {
         Some(filter) => {
@@ -123,15 +126,18 @@ async fn build_snapshot(
         },
         None => super::repository_page(&db, &query, executor).await?,
     };
+
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
     bundle.page.total.hash(&mut fingerprint);
     context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
+
     let mut view = super::page_view(bundle, &query);
     let ids = view.items.iter().map(|row| row.maintainer_user_id.clone()).collect::<Vec<_>>();
     let names = db.accounts().names_by_ids(&ids, executor).await?;
     for row in &mut view.items {
         row.maintainer_user_name = names.get(&row.maintainer_user_id).cloned();
     }
+
     context.validate(executor).await?;
     Ok(OfferingSnapshot {
         page: view,
@@ -214,10 +220,12 @@ mod tests {
         );
         let params = SupplierOfferingListParams::default();
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let result = service.list_with(&params, &actor, &mut ReadExecutor::default()).await;
         assert!(
             matches!(result, Err(Error::ValidationError(reason)) if reason == "供给列表读取必须使用快照事务")
         );
+
         let result = service.list_with(&params, &actor, &mut SnapshotExecutor::default()).await;
         assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
     }
@@ -259,6 +267,7 @@ mod tests {
         let port = MapOfferingProcurementOwners {
             owners: [("off-b".into(), "buyer".into()), ("outside".into(), "buyer".into())].into(),
         };
+
         apply_candidate_filter(
             &mut filter,
             &["off-a".into(), "off-b".into()],
@@ -271,6 +280,7 @@ mod tests {
         assert_eq!(filter.to_doc(), expected.to_doc());
         assert_eq!((filter.page, filter.page_size, filter.sort_ascending), (7, 1, true));
         assert_eq!(filter.sort_by.as_deref(), Some("supplier_sku_code"));
+
         apply_candidate_filter(&mut filter, &[], &port, &["buyer".into()], &mut NoTransaction).await.unwrap();
         assert_eq!(filter.offering_ids, Some(Vec::new()));
         assert!(

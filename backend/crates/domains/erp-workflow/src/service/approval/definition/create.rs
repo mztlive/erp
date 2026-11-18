@@ -68,7 +68,6 @@ impl ApprovalDefinitionService {
     ) -> Result<DefinitionDetailView> {
         let authorization = self.authorization.clone();
         let db = self.db.clone();
-
         let identity_service = self.identity.clone();
         let audit = std::sync::Arc::clone(&self.audit);
         let transaction_actor = actor.clone();
@@ -95,6 +94,7 @@ impl ApprovalDefinitionService {
                 .await
             })
         });
+
         self.recover_definition_command(
             outcome.await,
             &approval_process::CREATE_DEFINITION_DRAFT,
@@ -172,6 +172,7 @@ async fn create_draft_tx(
         executor,
     )
     .await?;
+
     if let Some(view) = replay_prepared_definition_receipt(
         db,
         identity,
@@ -182,11 +183,14 @@ async fn create_draft_tx(
     {
         return Ok(view);
     }
+
     ensure_no_active_draft(db.bpm_workflow().find_active_draft(policy.process_kind, executor).await?)?;
     let graph = build_new_draft(authorization, identity_service, db, &input, executor).await?;
+
     let result_ref = DefinitionCommandResultRef::from_graph(&graph).encode();
     write_receipt(db, &identity.current, &result_ref, executor).await?;
     persist_new_draft(db, &graph, executor).await?;
+
     if request.draft_source == DraftSource::CurrentPublished {
         let source = db
             .bpm_workflow()
@@ -272,6 +276,7 @@ async fn copy_published_draft(
         db.bpm_workflow().load_published_definition_graph(policy.process_kind, session).await?,
     )?;
     source.validate_published_linear().map_err(map_model_error)?;
+
     let definition_id = ApprovalProcessDefinitionId::new(next_id());
     let at = now()?;
     let identities = next_copied_node_identities(source.nodes.len());
@@ -425,6 +430,7 @@ mod authorization_tests {
             actor.id(),
         )
         .unwrap();
+
         let error = create_draft_tx(
             &service.authorization,
             &service.identity,

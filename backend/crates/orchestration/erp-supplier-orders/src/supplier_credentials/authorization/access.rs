@@ -34,6 +34,7 @@ impl ConnectionAccess {
             .await
             .map_err(ProcessError::from)
             .map_err(conceal_missing)?;
+
         let connection = SupplierApiService::new(self.db.clone())
             .load_connection(id, executor)
             .await

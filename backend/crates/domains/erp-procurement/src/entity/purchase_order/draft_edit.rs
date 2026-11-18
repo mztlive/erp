@@ -156,6 +156,7 @@ pub fn validate_rebased_draft_line_edits(
         return Err(DraftLineEditViolation::NoPurchasableLine);
     }
     let kept = context.check_requested(&requested_items)?;
+
     for (stable_id, old_line) in &context.existing {
         if !kept.contains(stable_id) && !context.capacity(stable_id, old_line)?.is_zero() {
             return Err(DraftLineEditViolation::RemovedLineStillPurchasable);
@@ -193,6 +194,7 @@ impl<'a> DraftEditContext<'a> {
                 Ok((line_id, line))
             })
             .collect::<Result<HashMap<_, _>, _>>()?;
+
         let coverage = coverage_lines
             .iter()
             .map(|line| (line.revision_line.sales_order_line_id.to_string(), line))
@@ -216,6 +218,7 @@ impl<'a> DraftEditContext<'a> {
             }
             let old_line = self.existing.get(&stable_id).ok_or(DraftLineEditViolation::RewrittenSalesLine)?;
             old_line.ensure_source_references_unchanged(requested_line)?;
+
             let quantity = parse_required_quantity(
                 requested_line.quantity.as_deref(),
                 DraftLineEditViolation::MissingQuantity,
@@ -227,6 +230,7 @@ impl<'a> DraftEditContext<'a> {
             if quantity != allocated {
                 return Err(DraftLineEditViolation::QuantityAllocationMismatch);
             }
+
             if quantity.to_decimal() > self.capacity(&stable_id, old_line)? {
                 return Err(DraftLineEditViolation::ExceedsAvailableQuantity);
             }
@@ -418,7 +422,6 @@ mod tests {
             goods_line: SalesOrderGoodsServiceLineRevision {
                 assigned_delivery_allocations: Vec::new(),
                 delivery_allocations: Vec::new(),
-
                 revision_line_id: SalesOrderRevisionLineId::new(format!("sorl-{stable_line_id}")),
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("skur-1"),
@@ -561,6 +564,7 @@ mod tests {
             validate_draft_line_edits(&requested, &existing, &coverage),
             Err(DraftLineEditViolation::MissingQuantity)
         );
+
         let requested = vec![edit("sol-1", Some("5"), None, "sku-1", "sorl-1", Some("sosl-1"))];
         assert_eq!(
             validate_draft_line_edits(&requested, &existing, &coverage),
@@ -591,6 +595,7 @@ mod tests {
             validate_draft_line_edits(&requested, &existing, &coverage),
             Err(DraftLineEditViolation::InvalidQuantity("数量必须大于0".to_string()))
         );
+
         let requested = vec![edit("sol-1", Some("abc"), Some("abc"), "sku-1", "sorl-1", Some("sosl-1"))];
         let error = validate_draft_line_edits(&requested, &existing, &coverage).unwrap_err();
         assert!(matches!(error, DraftLineEditViolation::InvalidQuantity(_)));
@@ -644,6 +649,7 @@ mod tests {
             validate_draft_line_edits(&requested, &[no_stable], &coverage),
             Err(DraftLineEditViolation::MissingSalesStableLine)
         );
+
         let mut no_allocated = draft_line("sol-1", "2", "sku-1", "sorl-1", Some("sosl-1"));
         no_allocated.allocated_quantity = None;
         assert_eq!(

@@ -75,6 +75,7 @@ async fn record_grant_management_uses_the_complete_shared_scope_qualification() 
     );
     grants(&identity, &[("manager", &required)]);
     manager.authorize_manager(&actor(), &mut SnapshotExecutor::default()).await.unwrap();
+
     for roles in [
         vec![("legacy-manager", &required[..2])],
         vec![("scope", &required[..2]), ("directory", &required[2..])],
@@ -85,6 +86,7 @@ async fn record_grant_management_uses_the_complete_shared_scope_qualification() 
             Err(Error::Forbidden(_))
         ));
     }
+
     grants(&identity, &[("manager", &required)]);
     identity.scopes.lock().unwrap().get_mut(&source).unwrap().user_limit =
         Some(ScopeClause { self_owned: true, ..Default::default() });
@@ -119,6 +121,7 @@ async fn person_scope_entry_checks_same_role_company_boundary_in_unified_service
             .require(&actor(), &entry, AccessTarget::Operation, &mut SnapshotExecutor::default())
             .await
             .unwrap();
+
         grants(&identity, &[("entry", &required[..3]), ("organization", &required[3..])]);
         assert!(matches!(
             service
@@ -126,6 +129,7 @@ async fn person_scope_entry_checks_same_role_company_boundary_in_unified_service
                 .await,
             Err(Error::Forbidden(_))
         ));
+
         grants(&identity, &[("manager", &required)]);
         identity.scopes.lock().unwrap().get_mut(&(entry.clone(), source)).unwrap().user_limit =
             Some(ScopeClause { self_owned: true, ..Default::default() });
@@ -135,6 +139,7 @@ async fn person_scope_entry_checks_same_role_company_boundary_in_unified_service
                 .await,
             Err(Error::Forbidden(_))
         ));
+
         assert!(matches!(
             service.require(&actor(), &entry, AccessTarget::Operation, &mut ReadExecutor::default()).await,
             Err(Error::ValidationError(_))
@@ -224,6 +229,7 @@ async fn runtime_admin_can_read_a_definition_but_cannot_edit_or_choose_definitio
             .await,
         Err(Error::Forbidden(_))
     ));
+
     grants(
         &identity,
         &[
@@ -369,6 +375,7 @@ async fn transfer_prechecks_use_fixed_independent_qualifications_without_interna
         )
         .await
         .unwrap();
+
     identity.state.lock().unwrap().grants.pop();
     assert!(matches!(
         service

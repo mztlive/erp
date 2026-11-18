@@ -36,12 +36,14 @@ pub(crate) async fn resolve<S: ResolutionStore>(
     req: ResolveSourceDiffRequest,
 ) -> Result<ProductSourceDiffView> {
     store.authorize().await?;
+
     if let Some(receipt) = store.receipt(&req.idempotency_key).await? {
         if receipt.product_id != product_id || receipt.request != req || receipt.base.deleted_at != 0 {
             return Err(Error::ConflictError("差异确认操作号已被不同请求使用".into()));
         }
         return Ok(receipt.result);
     }
+
     let ResolutionFacts { product_version, mut source, current } = store.facts().await?;
     if product_version != req.expected_product_version || source.base.version != req.expected_source_version {
         return Err(Error::ConflictError("商品或来源资料已变化，请重新比较".into()));

@@ -38,6 +38,7 @@ impl ApprovalMaterialTarget<'_> {
             }
             return Ok(runtime.copy_material_reference(actor, id, self.file_id).await?);
         }
+
         match self.source_revision_id {
             Some(revision) => {
                 Ok(invoice_sales_reference(db, runtime, actor, self.instance_id, revision, self.file_id)
@@ -73,6 +74,7 @@ pub async fn authorize_attachment(
     let db = db.clone();
     let actor = actor.clone();
     let file_id = file_id.to_owned();
+
     db.client()
         .clone()
         .with_transaction(move |executor| {
@@ -148,6 +150,7 @@ async fn checked<A: WorkflowAuthorizationPort>(
         ReadPhase::Initial => files.preview_asset(target.file_id, actor, &mut ReadExecutor::default()).await,
         ReadPhase::Revalidate => files.asset_view(target.file_id, &mut ReadExecutor::default()).await,
     }?;
+
     let current = ApprovalMaterialFile {
         file_asset_id: FileAssetId::new(&view.id),
         file_name: view.file_name.clone(),
@@ -159,11 +162,13 @@ async fn checked<A: WorkflowAuthorizationPort>(
     if !frozen.matches_current(&current) {
         return Err(Error::ConflictError("审批附件已变化，请重新核对提交资料".into()));
     }
+
     if view.destroyed_at.is_some()
         || matches!(view.security_scan_status, SecurityScanStatus::Rejected | SecurityScanStatus::Quarantined)
     {
         return Err(Error::Forbidden("审批附件当前不可读取".into()));
     }
+
     // 读取文件和写审计后重验任务资格，撤权不能借第一次检查继续读取。
     let latest = target.reference(db, runtime, actor).await?;
     if latest != frozen {

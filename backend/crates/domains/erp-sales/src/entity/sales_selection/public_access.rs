@@ -45,6 +45,7 @@ impl SelectionGrant {
         if session.booklet_id.as_ref() != book.base.id {
             return Err(Error::from("选品授权无效"));
         }
+
         let hash =
             book.access_password_hash.as_deref().ok_or_else(|| Error::from("选品册尚未设置访问密码"))?;
         let expires_at =
@@ -56,6 +57,7 @@ impl SelectionGrant {
             session_id: session.base.id.clone(),
             expires_at: book.link_expires_at.map_or(expires_at, |at| at.unix_secs().min(expires_at)),
         };
+
         let encoded = serde_json::to_string(&grant).map_err(|_| Error::from("选品授权签发失败"))?;
         crypto.encrypt(&encoded)
     }
@@ -224,17 +226,20 @@ mod tests {
         let (book, session, crypto, now) = fixtures();
         let encoded = SelectionGrant::issue(&book, &session, now, &crypto).unwrap();
         let grant = SelectionGrant::decode(&encoded, &crypto).unwrap();
+
         let mut changed = book.clone();
         changed.access_password_hash = Some("new-salted-password-hash".into());
         assert!(grant.ensure_current(&changed, &session, now).is_err());
         changed.access_password_hash = None;
         assert!(grant.ensure_current(&changed, &session, now).is_err());
+
         changed = book.clone();
         changed.link_token_version += 1;
         assert!(grant.ensure_current(&changed, &session, now).is_err());
         changed = book.clone();
         changed.base.id = "book-2".into();
         assert!(grant.ensure_current(&changed, &session, now).is_err());
+
         let mut other_session = session.clone();
         other_session.base.id = "session-2".into();
         assert!(grant.ensure_current(&book, &other_session, now).is_err());
@@ -253,6 +258,7 @@ mod tests {
         assert_eq!(grant.expires_at, 150);
         assert!(grant.ensure_current(&book, &session, Instant::from_unix_secs(149)).is_ok());
         assert!(grant.ensure_current(&book, &session, Instant::from_unix_secs(150)).is_err());
+
         book.link_expires_at = None;
         let encoded = SelectionGrant::issue(&book, &session, now, &crypto).unwrap();
         let grant = SelectionGrant::decode(&encoded, &crypto).unwrap();
@@ -265,6 +271,7 @@ mod tests {
         let (mut book, session, crypto, now) = fixtures();
         book.access_password_hash = None;
         assert!(SelectionGrant::issue(&book, &session, now, &crypto).is_err());
+
         let encrypted = crypto.encrypt("{invalid json}").unwrap();
         assert!(SelectionGrant::decode(&encrypted, &crypto).is_err());
         let encrypted = crypto.encrypt(r#"{"session_id":"s1","expires_at":9223372036854775808}"#).unwrap();

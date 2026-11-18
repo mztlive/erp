@@ -388,6 +388,7 @@ mod tests {
         let mut executor = ReadExecutor::default();
         let correct = compiled(mapping().0, &mut executor).await;
         correct.ensure_current(&mut executor).unwrap();
+
         let wrong =
             compiled(QueryModel { collection: "other_warehouses".into(), ..mapping().0 }, &mut executor)
                 .await;
@@ -400,6 +401,7 @@ mod tests {
             authorized_ids_in(&db, &wrong.compiled, &["warehouse".into()], &mut executor).await,
             Err(IdentityError::ValidationError(_))
         ));
+
         executor.next_read();
         assert!(matches!(correct.ensure_current(&mut executor), Err(IdentityError::ValidationError(_))));
         assert!(matches!(
@@ -449,6 +451,7 @@ mod tests {
                     .unwrap();
                 let facts = WarehouseFacts::object(&context, row);
                 assert_eq!(facts.collaborators, FactValue::Known(Default::default()));
+
                 let mut clauses = vec![ScopeClause { collaborative: true, ..Default::default() }];
                 if has_warehouse_scope {
                     clauses.push(ScopeClause {
@@ -465,6 +468,7 @@ mod tests {
                 )
                 .unwrap();
                 let mut executor = SnapshotExecutor::default();
+
                 let result = authorization
                     .require(
                         &context.actor,
@@ -478,6 +482,7 @@ mod tests {
                 } else {
                     assert!(matches!(result, Err(IdentityError::Forbidden(_))));
                 }
+
                 let access = authorization.query(&context.actor, &entry, &mut executor).await.unwrap();
                 warehouse_model(access.model()).unwrap();
                 authorization.validate(&access, &mut executor).await.unwrap();

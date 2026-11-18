@@ -388,6 +388,7 @@ impl CostEntry {
             return Err(Error::from("进项税率不得为负"));
         }
         validate_basis(data.cost_scope, data.cost_basis)?;
+
         let source = SourceKey::normalize(
             data.source_fact_type,
             data.source_document_id,

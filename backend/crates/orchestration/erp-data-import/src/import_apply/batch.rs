@@ -111,6 +111,7 @@ impl ImportApplyProcess {
         self.authorization
             .require(actor, &legacy_import::BATCH_APPLY, AccessTarget::Operation, executor)
             .await?;
+
         let mut batch = self
             .db
             .legacy_import_batches()
@@ -125,6 +126,7 @@ impl ImportApplyProcess {
             return Err(Error::BusinessLogicError("批次尚未进入导入阶段，禁止应用".to_string()));
         }
         let job = self.load_running_import_job(&batch, executor).await?;
+
         let scope_batch_id = LegacyImportBatchId::new(batch_id.to_string());
         let mut scope = self
             .db
@@ -132,6 +134,7 @@ impl ImportApplyProcess {
             .apply_row_scope(&scope_batch_id, &result_set.row_ids(), executor)
             .await?;
         ensure_no_missing_apply_rows(&scope.missing_row_ids)?;
+
         let party_ok = self.customer_import_party_ok(&result_set, &scope.rows, executor).await?;
         let deltas = collect_apply_deltas(&result_set, &mut scope.rows, &party_ok)?;
         let pending_rows = scope.pending_outside_request;
@@ -139,6 +142,7 @@ impl ImportApplyProcess {
         if deltas.rows.is_empty() && !all_terminal {
             return self.batch_view_of(batch, executor).await;
         }
+
         advance_batch_counts(&mut batch, &deltas, pending_rows)?;
         self.persist_apply_batch(batch, job, deltas, all_terminal, actor, executor).await
     }
@@ -196,6 +200,7 @@ impl ImportApplyProcess {
         if targets.is_empty() {
             return Ok(HashMap::new());
         }
+
         let mut seen_targets = std::collections::HashSet::new();
         let mut party_ids = Vec::new();
         for (_, target) in &targets {
@@ -203,6 +208,7 @@ impl ImportApplyProcess {
                 party_ids.push(PartyId::new(target.clone()));
             }
         }
+
         let found = self.db.parties().find_parties_by_ids(&party_ids, executor).await?;
         Ok(map_customer_party_ok(&targets, &found))
     }
@@ -239,6 +245,7 @@ impl ImportApplyProcess {
         let mut rows = deltas.rows;
         let mut batch = batch;
         let mut job = job;
+
         let updated_batch = persist_apply_transaction(
             PersistApplyWrite {
                 db: &self.db,
@@ -514,6 +521,7 @@ async fn persist_apply_transaction(
         write.db.legacy_import_rows().update(row, executor).await?;
     }
     write.db.legacy_import_batches().update(write.batch, executor).await?;
+
     write.job.record_import_result_batch(
         write.success,
         write.skipped,
@@ -522,6 +530,7 @@ async fn persist_apply_transaction(
         write.now,
     )?;
     write.db.background_jobs().update(write.job, executor).await?;
+
     persist_log(write.db, write.audit, executor).await?;
     Ok(write.batch.clone())
 }
@@ -686,14 +695,17 @@ mod tests {
         assert_eq!(deltas.success, 1);
         assert_eq!(deltas.failed, 0);
         assert_eq!(deltas.skipped, 0);
+
         let imported = rows.get("row-imported").unwrap();
         assert_eq!(imported.import_status, ImportStatus::Imported);
         assert_eq!(imported.target_document_id.as_deref(), Some("SO-OLD"));
         assert_eq!(imported.base.version, imported_version);
         assert_eq!(imported.base.updated_at, imported_updated_at);
+
         let failed = rows.get("row-failed").unwrap();
         assert_eq!(failed.import_status, ImportStatus::Failed);
         assert_eq!(failed.base.version, failed_version);
+
         let skipped = rows.get("row-skipped").unwrap();
         assert_eq!(skipped.import_status, ImportStatus::Skipped);
         assert_eq!(skipped.base.version, skipped_version);
@@ -747,10 +759,12 @@ mod tests {
             .into_iter()
             .map(|row| (row.base.id.clone(), row))
             .collect::<HashMap<_, _>>();
+
         let targets = collect_customer_import_targets(&set, &rows);
         assert_eq!(targets.len(), 2);
         assert!(targets.contains(&("row-customer".to_string(), "party-shared".to_string())));
         assert!(targets.contains(&("row-customer-dup".to_string(), "party-shared".to_string())));
+
         let ok = map_customer_party_ok(&targets, &[]);
         assert_eq!(ok.get("row-customer"), Some(&false));
         assert_eq!(ok.get("row-customer-dup"), Some(&false));
@@ -772,11 +786,13 @@ mod tests {
             rows.insert(row.base.id.clone(), row);
             drafts.push(imported_draft(&id, &target));
         }
+
         let set = ApplyResultSet::try_from_drafts(drafts).unwrap();
         let targets = collect_customer_import_targets(&set, &rows);
         assert_eq!(targets.len(), 300);
         let unique_targets = targets.iter().map(|(_, target)| target.clone()).collect::<HashSet<_>>();
         assert_eq!(unique_targets.len(), 10);
+
         let ok = map_customer_party_ok(&targets, &[]);
         assert_eq!(ok.len(), 300);
         assert!(ok.values().all(|exists| !exists));

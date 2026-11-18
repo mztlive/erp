@@ -224,7 +224,9 @@ pub(super) async fn replace_snapshot<S: DraftSnapshotStore>(
         store.delete_differences(old_item_ids, executor).await?;
     }
     store.delete_items(&statement.base.id, executor).await?;
+
     store.update_statement(statement, executor).await?;
+
     store.insert_items(items, executor).await?;
     if !differences.is_empty() {
         store.insert_differences(differences, executor).await?;

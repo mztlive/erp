@@ -161,6 +161,7 @@ impl ApprovalDisplaySnapshot {
         for sales in &self.source_sales {
             sales.validate()?;
         }
+
         validate_display(
             &self.root_document_id,
             &self.source,
@@ -179,6 +180,7 @@ fn validate_display(
     if document_id.trim().is_empty() || source.extra_sections.len() > 128 || source.lines.len() > 100 {
         return Err(Error::from("审批展示快照超出允许范围"));
     }
+
     let texts = [document_id, source.list_summary.as_str()]
         .into_iter()
         .chain(counterparty_label)
@@ -267,6 +269,7 @@ mod tests {
                 .unwrap(),
             display
         );
+
         display.source.extra_sections[0].value = "字".repeat(8193);
         assert!(display.validate().is_err());
         display.source.extra_sections.clear();
@@ -280,6 +283,7 @@ mod tests {
         let legacy = serde_json::to_value(&display).unwrap();
         assert!(legacy.get("source_sales").is_none());
         assert!(serde_json::from_value::<ApprovalDisplaySnapshot>(legacy).unwrap().source_sales.is_empty());
+
         let source = related_sales();
         display.source_sales.push(source.clone());
         display.validate().unwrap();

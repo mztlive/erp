@@ -42,6 +42,7 @@ impl SupplierDepositService {
         {
             return Err(Error::BusinessLogicError("采购修订或批准预算已变化，请核实原资金执行".into()));
         }
+
         let account = self.account(&reservation.account_id, executor).await?;
         if !account.enabled || account.reconciliation_required {
             return Err(Error::BusinessLogicError("预存款账户停用或资金待对账".into()));
@@ -60,6 +61,7 @@ impl SupplierDepositService {
             reservation.basis.authorization_version,
             now,
         )?;
+
         let usages = usages_for_reservation(&self.db, &reservation.base.id, executor).await?;
         let net_debits = usages.iter().try_fold(Amount::zero(), |total, usage| {
             let value = total

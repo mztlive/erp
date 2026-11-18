@@ -45,6 +45,7 @@ impl PurchasePaymentRequestReadService {
         if !self.readable(request, &scope, executor).await? {
             return Ok(false);
         }
+
         for snapshot in
             self.db.purchase_payment_request_snapshots().find_for_request(&request.base.id, executor).await?
         {
@@ -52,6 +53,7 @@ impl PurchasePaymentRequestReadService {
                 return Ok(false);
             }
         }
+
         scope.deliver(executor).await?;
         Ok(true)
     }

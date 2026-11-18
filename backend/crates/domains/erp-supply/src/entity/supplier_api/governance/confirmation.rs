@@ -100,6 +100,7 @@ impl BusinessCapabilityConfirmation {
         if data.evidence_references.len() > MAX_EVIDENCE_REFERENCES {
             return Err(Error::from("业务确认的证据引用不能超过20条"));
         }
+
         let applicability_reference =
             normalize_optional_text(data.applicability_reference, "适用范围引用", REFERENCE_MAX_LEN)?;
         let mut evidence_references = Vec::with_capacity(data.evidence_references.len());
@@ -110,6 +111,7 @@ impl BusinessCapabilityConfirmation {
                 evidence_references.push(normalized);
             }
         }
+
         Ok(Self {
             base: BaseModel::new(id.into()),
             connection_id: data.connection_id,

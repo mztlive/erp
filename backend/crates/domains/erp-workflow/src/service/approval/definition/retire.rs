@@ -72,6 +72,7 @@ impl ApprovalDefinitionService {
                 .await
             })
         });
+
         self.recover_definition_command(
             outcome.await,
             &approval_process::RETIRE_DEFINITION,
@@ -135,6 +136,7 @@ async fn retire_tx(
     let graph = service
         .require_graph(&request.definition_id, actor, &approval_process::RETIRE_DEFINITION, executor)
         .await?;
+
     let db = &service.db;
     if let Some(view) = replay_prepared_definition_receipt(
         db,
@@ -146,6 +148,7 @@ async fn retire_tx(
     {
         return Ok(view);
     }
+
     apply_retirement(service, graph, request, actor, identity, executor).await
 }
 
@@ -166,10 +169,12 @@ async fn apply_retirement(
     let expected = retired.definition_lock_version();
     retired.retire(participant(actor)?, now()?).map_err(map_model_error)?;
     graph.definition = retired;
+
     let result_ref = DefinitionCommandResultRef::from_graph(&graph).encode();
     write_receipt(db, &identity.current, &result_ref, executor).await?;
     graph.definition.base.version = expected;
     db.approval_process_definitions().update(&mut graph.definition, executor).await?;
+
     write_definition_audit(
         service.audit.as_ref(),
         actor,
@@ -263,6 +268,7 @@ mod tests {
             Err(Error::Coded(ErrorCode::ApprovalDefinitionVersionConflict))
         ));
         assert_eq!(retire_target(Some(published.clone()), &published.base.id, lock).unwrap(), published);
+
         assert_eq!(
             configuration_status(ApprovalRequirement::ProcessRequired, None, None),
             DefinitionConfigurationStatus::MissingConfiguration

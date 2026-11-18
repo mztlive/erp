@@ -25,6 +25,7 @@ impl SupplierPortalProcess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.services.work_items.require_result_access(actor, task_id, executor).await?;
+
         let task = self
             .db
             .work_items()

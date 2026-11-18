@@ -79,6 +79,7 @@ pub fn apply_plan(
             TaskIntent::CloseTask { execution_id, reason } => close_tasks.push((execution_id, reason)),
         }
     }
+
     PlannedWrites {
         instance: plan.instance,
         created_executions: plan.created_executions,
@@ -146,6 +147,7 @@ mod tests {
             execution_id: ApprovalNodeExecutionId::new("e0"),
             reason: TaskCloseReason::ApprovalRuntimeBlocked,
         });
+
         let identity = decision_identity(
             normalize_idempotency_key("key").unwrap(),
             "e1",
@@ -163,6 +165,7 @@ mod tests {
             Timestamp::from_unix_secs(1).unwrap(),
         )
         .unwrap();
+
         let missing = apply_plan(plan.clone(), receipt.clone(), None);
         assert!(!final_approve_requires_domain_action(&missing));
         let writes = apply_plan(plan, receipt, Some(DomainActionKind::FinalApprove));

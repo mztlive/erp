@@ -65,6 +65,7 @@ impl PurchasePaymentRequestReadService {
     ) -> Result<Vec<PurchasePaymentRequestCandidate>> {
         let access = Arc::new(self.rbac.query(actor, &internal::PAYMENT_REQUEST_CANDIDATES, executor).await?);
         let scope = PurchaseReadScope::from_compiled(access, self.rbac.clone());
+
         let filter = PurchaseOrderFilter {
             supplier_id: supplier_id.map(SupplierAccountId::new),
             ..Default::default()
@@ -73,6 +74,7 @@ impl PurchasePaymentRequestReadService {
         if versions.len() > 10_000 {
             return Err(Error::ValidationError("付款申请候选超过上限，请选择供应商".into()));
         }
+
         let ids = versions.into_iter().map(|row| row.id).collect::<Vec<_>>();
         let orders = self.db.purchase_orders().list_active_by_ids(&ids, executor).await?;
         let accounts = self
@@ -83,6 +85,7 @@ impl PurchasePaymentRequestReadService {
             .into_iter()
             .map(|row| (row.source_document_id.clone(), row))
             .collect::<HashMap<_, _>>();
+
         let mut result = Vec::new();
         for order in orders {
             if !matches!(
@@ -97,6 +100,7 @@ impl PurchasePaymentRequestReadService {
             if account.open_total.checked_sub(account.payment_request_reserved_total) <= Amount::zero() {
                 continue;
             }
+
             let Some(revision_id) = &order.stable.current_revision_id else { continue };
             let revision = self
                 .db
@@ -109,6 +113,7 @@ impl PurchasePaymentRequestReadService {
             }
             result.push(self.candidate_view(&order, &revision, account, executor).await?);
         }
+
         scope.validate(executor).await?;
         Ok(result)
     }
@@ -158,12 +163,14 @@ impl PurchasePaymentRequestReadService {
     ) -> Result<PurchasePaymentRequestCandidate> {
         let bank_accounts = self.candidate_accounts(order, executor).await?;
         let deposit_accounts = self.candidate_deposit_accounts(order, revision, executor).await?;
+
         let lines = self
             .db
             .purchase_order()
             .list_revision_lines(&PurchaseOrderRevisionId::new(&revision.base.id), executor)
             .await?;
         let purchase_summary = PurchasePaymentRequestCandidate::summary_from_lines(&lines);
+
         let prepayment_gap = revision
             .payment_term_snapshot
             .required_prepayment(account.gross_total)?

@@ -125,6 +125,7 @@ impl CatalogService {
                 executor,
             )
             .await?;
+
         params.validate()?;
         let query = params.normalized()?;
         let filter = VoucherCategoryProfileRevisionFilter {
@@ -135,6 +136,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.catalog().voucher_profile_page(&filter, executor).await?;
         Ok(PageView {
             items: page.items.into_iter().map(VoucherCategoryProfileView::from).collect(),
@@ -190,6 +192,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::PRODUCT_VOUCHER_CATEGORY_UPDATE, AccessTarget::Operation, executor)
             .await?;
+
         req.validate()?;
         let draft = self.build_voucher_category_update_draft(sku_id, req, actor, executor).await?;
         let revision = self.write_voucher_category_update_draft(draft, actor, executor).await?;
@@ -236,6 +239,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::PRODUCT_VOUCHER_CATEGORY_CREATE, AccessTarget::Operation, executor)
             .await?;
+
         req.validate()?;
         let draft = self.build_voucher_category_draft(req, actor, executor).await?;
         let revision = self.write_voucher_category_draft(draft, actor, executor).await?;
@@ -291,6 +295,7 @@ impl CatalogService {
             effective_from,
             effective_to,
         } = req;
+
         let (category_id, new_category) =
             self.resolve_voucher_category(category_id, new_category, actor, executor).await?;
         let brand_id = match brand_id {
@@ -307,6 +312,7 @@ impl CatalogService {
             },
         };
         self.ensure_brand_and_unit_ok(&brand_id, std::iter::once(&sku.base_unit_id), executor).await?;
+
         self.assemble_voucher_category_draft(
             ResolvedVoucherCategoryInput {
                 voucher_no,
@@ -364,6 +370,7 @@ impl CatalogService {
                     executor,
                 )
                 .await?;
+
                 let category = ProductCategory::new(
                     category_id.clone(),
                     ProductCategoryData {
@@ -413,10 +420,12 @@ impl CatalogService {
             effective_from,
             effective_to,
         } = input;
+
         let effective_from = effective_from.unwrap_or_else(BusinessDate::today);
         let product_status = status.unwrap_or(EnableStatus::Active);
         let (product_id, mut product) =
             self.new_voucher_product(voucher_no.clone(), product_status, actor, executor).await?;
+
         let sku_item = self
             .build_new_sku_item(
                 NewSkuContext {
@@ -429,6 +438,7 @@ impl CatalogService {
                 executor,
             )
             .await?;
+
         let revision = ProductRevision::new(
             ProductRevisionId::new(next_id()),
             ProductRevisionData {
@@ -445,6 +455,7 @@ impl CatalogService {
             },
         )?;
         product.attach_revision(&revision, actor.id())?;
+
         let voucher_revision = new_voucher_profile(&sku_item.sku.base.id, description, product_status)?;
         Ok(VoucherCategoryDraft { new_category, product, revision, sku_item, voucher_revision })
     }
@@ -507,6 +518,7 @@ impl CatalogService {
             },
             actor.id(),
         )?;
+
         self.access().require_create(actor, &product, executor).await?;
         Ok((product_id, product))
     }
@@ -540,6 +552,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::PRODUCT_VOUCHER_CATEGORY_CREATE, AccessTarget::Operation, executor)
             .await?;
+
         if let Some(category) = &new_category {
             self.db.product_categories().create(category, executor).await?;
         }
@@ -581,8 +594,10 @@ impl CatalogService {
             return Err(Error::BusinessLogicError("目标 SKU 不属于卡券类目商品".to_string()));
         }
         ensure_version(product.base.version, req.version)?;
+
         let typed_sku_id = SkuId::new(sku_id);
         let current = self.load_voucher_update_currents(&sku, &product, &typed_sku_id, executor).await?;
+
         let effective_from = req.effective_from.unwrap_or_else(BusinessDate::today);
         let product_revision = self
             .next_voucher_product_revision(
@@ -639,6 +654,7 @@ impl CatalogService {
             .current_voucher_profile_revision(sku_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("卡券类目扩展修订不存在".to_string()))?;
+
         Ok(VoucherUpdateCurrents { product: product_revision, sku: sku_revision, voucher: voucher_revision })
     }
 
@@ -789,6 +805,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::PRODUCT_VOUCHER_CATEGORY_UPDATE, AccessTarget::Operation, executor)
             .await?;
+
         self.db.products().update(&mut product, executor).await?;
         self.db.catalog().create_product_revision_with_media(&product_revision, &[], executor).await?;
         self.db.skus().update(&mut sku, executor).await?;
@@ -875,6 +892,7 @@ mod authorization_tests {
             )
             .await
             .unwrap();
+
         assert_eq!(product.base.id, id.to_string());
         assert_eq!(product.product_no, "V-1");
         assert_eq!(product.product_kind, ProductKind::Voucher);
@@ -922,6 +940,7 @@ mod authorization_tests {
                 .await,
             Err(Error::Forbidden(_))
         ));
+
         let service = candidate_service(
             &[catalog::PRODUCT_PRODUCT_CREATE],
             ScopeClause { company: true, ..Default::default() },

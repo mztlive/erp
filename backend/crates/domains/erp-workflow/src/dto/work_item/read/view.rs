@@ -133,6 +133,7 @@ impl WorkItemView {
     pub(crate) fn from_fields(fields: WorkItemFields, queue_context_id: String) -> Result<Self> {
         let WorkItemFields { inner, .. } = fields;
         let route = handler_route(inner.work_item_type, &inner.business_object_type, &inner.owner_role)?;
+
         Ok(Self {
             search_matches: fields.search_matches,
             id: inner.id,
@@ -304,6 +305,7 @@ pub(crate) fn handler_route(
     owner_role: &str,
 ) -> Result<HandlerRoute> {
     let (handler_key, destination_workspace_id) = handler_destination(work_item_type, business_object_type)?;
+
     let mut route_context = if work_item_type == WorkItemType::ImportBusinessConfirmation {
         let scope = w18_confirmation_scope(owner_role)
             .ok_or_else(|| Error::ValidationError("IMPORT_CONFIRMATION_SCOPE_UNMAPPED".to_string()))?;
@@ -317,6 +319,7 @@ pub(crate) fn handler_route(
             ..Default::default()
         });
     }
+
     Ok(HandlerRoute { handler_key, destination_workspace_id, route_context })
 }
 

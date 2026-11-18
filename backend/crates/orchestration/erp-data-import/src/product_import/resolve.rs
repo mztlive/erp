@@ -43,6 +43,7 @@ impl ProductImportProcess {
         if let Some(unit_id) = cache.unit_id.clone() {
             return Ok(unit_id);
         }
+
         let mut tx = NoTransaction;
         let by_code =
             self.db.unit_of_measures().find_enabled_by_code(PRODUCT_IMPORT_UNIT_CODE, &mut tx).await?;
@@ -55,6 +56,7 @@ impl ProductImportProcess {
                 .await?
                 .ok_or_else(|| Error::BusinessLogicError("请先维护计量单位「件」后再导入商品".into()))?,
         };
+
         let unit_id = UnitOfMeasureId::new(unit.base.id);
         cache.unit_id = Some(unit_id.clone());
         Ok(unit_id)
@@ -81,18 +83,21 @@ impl ProductImportProcess {
         if let Some(id) = cache.brands.get(name) {
             return Ok(id.clone());
         }
+
         let mut tx = NoTransaction;
         if let Some(existing) = self.db.product_brands().find_enabled_by_exact_name(name, &mut tx).await? {
             let id = ProductBrandId::new(existing.base.id);
             cache.brands.insert(name.to_string(), id.clone());
             return Ok(id);
         }
+
         let brand_code = stable_code("BRD", &[name]);
         if let Some(existing) = self.db.product_brands().find_enabled_by_code(&brand_code, &mut tx).await? {
             let id = ProductBrandId::new(existing.base.id);
             cache.brands.insert(name.to_string(), id.clone());
             return Ok(id);
         }
+
         let created = self
             .services
             .catalog
@@ -133,6 +138,7 @@ impl ProductImportProcess {
         if let Some(id) = cache.categories.get(name) {
             return Ok(id.clone());
         }
+
         let mut tx = NoTransaction;
         if let Some(existing) = self.db.product_categories().find_enabled_by_exact_name(name, &mut tx).await?
         {
@@ -143,6 +149,7 @@ impl ProductImportProcess {
             cache.categories.insert(name.to_string(), id.clone());
             return Ok(id);
         }
+
         let category_code = stable_code("CAT", &[name]);
         if let Some(existing) =
             self.db.product_categories().find_enabled_by_code(&category_code, &mut tx).await?
@@ -151,6 +158,7 @@ impl ProductImportProcess {
             cache.categories.insert(name.to_string(), id.clone());
             return Ok(id);
         }
+
         let created = create_product_category(
             self.db.clone(),
             self.job_access.service.clone(),

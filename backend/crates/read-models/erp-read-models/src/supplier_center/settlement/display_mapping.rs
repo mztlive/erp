@@ -266,6 +266,7 @@ mod tests {
         assert!(view.supplier_order_no.is_none());
         assert!(view.external_order_no.is_none());
         assert!(view.product_name.is_none());
+
         let facts = ItemDisplayFacts {
             item_names: HashMap::from([(
                 "fulfillment-item-1".to_string(),
@@ -289,6 +290,7 @@ mod tests {
                 ("reviewer-1".to_string(), "复核人员".to_string()),
             ]),
         };
+
         let view = facts.statement(statement.clone());
         assert_eq!(view.supplier_name.as_deref(), Some("供应商公司"));
         assert_eq!(view.prepared_by_name.as_deref(), Some("对账人员"));
@@ -296,6 +298,7 @@ mod tests {
         assert_eq!(view.reviewed_by_name.as_deref(), Some("复核人员"));
         assert_eq!(view.payable_no.as_deref(), Some("ST-2026-001"));
         assert_eq!(view.statement, statement);
+
         let json = serde_json::to_value(view).unwrap();
         assert_eq!(json["supplier_id"], "supplier-1");
         assert_eq!(json["supplier_name"], "供应商公司");
@@ -331,10 +334,12 @@ mod tests {
             user_names: HashMap::from([("preparer-1".to_string(), "记录人员".to_string())]),
             ..Default::default()
         };
+
         let view = facts.evidence(evidence.clone());
         assert_eq!(view.provided_by_name.as_deref(), Some("记录人员"));
         assert_eq!(view.evidence_reference_labels, vec!["补证材料 1", "补证材料 2"]);
         assert_eq!(view.evidence, evidence);
+
         let mut empty = evidence;
         empty.evidence_reference_ids.clear();
         empty.provided_by = "missing".to_string();
@@ -353,12 +358,14 @@ mod tests {
             item_count: 4,
             difference_count: 2,
         };
+
         let display = StatementDisplayFacts::default().statement(result.statement.clone());
         let view = result.with_statement(display);
         assert_eq!(view.result_status, "CREATED");
         assert_eq!(view.request_id, "request-1");
         assert_eq!(view.item_count, 4);
         assert_eq!(view.difference_count, 2);
+
         let json = serde_json::to_value(view).unwrap();
         assert_eq!(json["statement"]["statement_no"], "ST-2026-001");
         assert!(json["statement"].get("statement").is_none());

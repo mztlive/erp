@@ -74,6 +74,7 @@ mod tests {
             validate_additional(&primary, slice::from_ref(&person)),
             Err(ModelError::InvalidField("审批人显示名不能为空"))
         );
+
         person.participant_id = primary.clone();
         assert_eq!(
             validate_additional(&primary, &[person]),

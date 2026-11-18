@@ -96,6 +96,7 @@ async fn replay<T: OfferingResult, P: CommandResultPort>(
         port.qualify_create(actor, executor).await?;
         None
     };
+
     let Some(command) = port.command(identity.key, executor).await? else {
         return Ok(Replay::Absent(object));
     };
@@ -103,6 +104,7 @@ async fn replay<T: OfferingResult, P: CommandResultPort>(
         .ensure_replayable(identity.operation, identity.fingerprint)
         .map_err(|e| Error::ConflictError(e.to_string()))?;
     let result: T = command.replay_result().map_err(|e| Error::Internal(e.to_string()))?;
+
     if let Some(id) = identity.target {
         if result.offering_id() != id {
             return Err(Error::Internal("供给命令回执与目标不匹配".into()));
@@ -351,6 +353,7 @@ mod tests {
         assert_eq!(actual.availability_id, "availability");
         assert_eq!(actual.revision_no, 1);
         assert_eq!(actual.status, OfferingStatus::Active);
+
         assert!(matches!(invoke(&recorder, "actor", Some("other-offering"), &mut executor).await,
             Err(Error::Internal(reason)) if reason == "供给命令回执与目标不匹配"));
     }

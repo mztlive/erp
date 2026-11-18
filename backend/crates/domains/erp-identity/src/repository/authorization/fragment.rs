@@ -57,6 +57,7 @@ impl Fragment {
             stages.push(doc! { "$lookup": lookup });
             aliases.push(alias);
         }
+
         stages.push(doc! { "$match": self.filter });
         if !aliases.is_empty() {
             stages.push(doc! { "$unset": aliases });
@@ -92,10 +93,12 @@ mod tests {
                 "from": "sources", "let": {}, "pipeline": [{ "$sort": sort }, { "$limit": 1 }]
             }
         };
+
         let first = fragment.lookup(lookup(doc! { "priority": 1, "created_at": 1 })).unwrap();
         let second = fragment.lookup(lookup(doc! { "created_at": 1, "priority": 1 })).unwrap();
         assert_ne!(first, second);
         assert_eq!(fragment.lookup(lookup(doc! { "priority": 1, "created_at": 1 })).unwrap(), first);
+
         assert!(matches!(
             fragment.lookup(lookup(doc! { "invalid\0field": 1 })),
             Err(Error::ValidationError(_))
@@ -112,6 +115,7 @@ mod tests {
                 "user": user, "$expr": { "$eq": ["$target", "$$target"] }
             } }],
         };
+
         let first = fragment.fact(fact("participants", "$id", "u")).unwrap();
         let duplicate = fragment.fact(fact("participants", "$id", "u")).unwrap();
         let other_binding = fragment.fact(fact("participants", "$other", "u")).unwrap();
@@ -121,6 +125,7 @@ mod tests {
             combine("$and", vec![first, duplicate, other_binding, other_user, other_collection]);
         let stages = fragment.finish();
         assert_eq!(stages.iter().filter(|stage| stage.contains_key("$lookup")).count(), 4);
+
         let rows = (1..=4).map(|i| doc! { "id": format!("r{i}"), "other": format!("a{i}") }).collect();
         let participants = [
             ("r1", "u"),
@@ -139,6 +144,7 @@ mod tests {
         .collect();
         let approvers = (1..=3).map(|i| doc! { "target": format!("r{i}"), "user": "u" }).collect();
         let collections = [("participants".into(), participants), ("approvers".into(), approvers)].into();
+
         assert_eq!(execute(rows, &stages, &collections, &doc! {}), vec![doc! { "id": "r1", "other": "a1" }]);
     }
 }

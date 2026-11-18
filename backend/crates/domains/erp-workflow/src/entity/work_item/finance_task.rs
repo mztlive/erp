@@ -241,6 +241,7 @@ pub fn new_approved_sales_invoice_task(
     if request_id.trim().is_empty() || request_no.trim().is_empty() {
         return Err(Error::from("批准的开票申请身份不能为空"));
     }
+
     let remaining = spec.open_invoiceable_total;
     spec.reason = SalesInvoiceTaskReason::ApprovedInvoiceRequest;
     let mut task = new_sales_invoice_task(id, spec, format!("{responsibility_key}:request:{request_id}"))?;
@@ -567,8 +568,10 @@ mod tests {
         assert_eq!(task.business_object_id, "request-1");
         assert_eq!(task.subject_version, "5");
         assert!(task.impact_summary.as_deref().unwrap().contains("FK-001"));
+
         task.complete_when_payment_request_paid(Instant::from_unix_secs(200)).unwrap();
         assert_eq!(task.status, WorkItemStatus::Completed);
+
         let mut no_balance = supplier_spec();
         no_balance.open_total = Amount::zero();
         assert!(
@@ -581,6 +584,7 @@ mod tests {
             )
             .is_err()
         );
+
         let old_task = supplier_task();
         assert!(!matches_purchase_payment_request_identity(&old_task, "request-1"));
     }
@@ -628,6 +632,7 @@ mod tests {
         let mut wrong_reason = task.clone();
         wrong_reason.reason_code = Some("UNKNOWN".to_string());
         assert!(!matches_sales_invoice_identity(&wrong_reason, "ra-1"), "reason 不符");
+
         let wrong_key = WorkItem::new_with_responsibility_key(
             WorkItemId::new("wi-2"),
             WorkItemData {
@@ -737,6 +742,7 @@ mod tests {
         let mut wrong_reason = task.clone();
         wrong_reason.reason_code = Some("UNKNOWN".to_string());
         assert!(!matches_supplier_payment_identity(&wrong_reason, "pa-1"), "reason 不符");
+
         let reopened = new_supplier_payment_task(
             WorkItemId::new("wi-2"),
             SupplierPaymentTaskSpec {

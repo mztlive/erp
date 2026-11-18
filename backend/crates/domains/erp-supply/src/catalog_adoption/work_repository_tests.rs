@@ -52,6 +52,7 @@ fn chunk_updates_use_per_row_cas_literal_data_and_preserve_internal_identity() {
     let versions = filter.get_array("$or").unwrap();
     assert_eq!(versions.len(), 2);
     assert_eq!(versions[0].as_document().unwrap().get_i64("version").unwrap(), 1);
+
     let merge = pipeline[0].get_document("$replaceWith").unwrap().get_array("$mergeObjects").unwrap();
     assert_eq!(merge[0].as_str(), Some("$$ROOT"));
     let branches =
@@ -71,13 +72,16 @@ fn chunk_rejects_duplicate_cross_batch_deleted_and_unbounded_updates() {
     assert!(draft_chunk_update(&[], 1).is_err());
     assert!(draft_chunk_update(&[row.clone(), row.clone()], 1).is_err());
     assert!(draft_chunk_update(&vec![row.clone(); 201], 1).is_err());
+
     let mut other = row.clone();
     other.base.id = "two".into();
     other.batch_id = "other".into();
     assert!(draft_chunk_update(&[row.clone(), other], 1).is_err());
+
     let mut deleted = row.clone();
     deleted.base.deleted_at = 1;
     assert!(draft_chunk_update(&[deleted], 1).is_err());
+
     let mut overflow = row;
     overflow.base.version = i64::MAX as u64;
     assert!(draft_chunk_update(&[overflow], 1).is_err());

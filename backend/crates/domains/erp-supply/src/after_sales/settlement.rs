@@ -107,6 +107,7 @@ impl SettlementScan {
             }
             self.seen_cursors.push(cursor.clone());
         }
+
         self.complete = next.is_none();
         self.query.cursor = next;
         self.next_run_at =
@@ -171,6 +172,7 @@ impl SettlementEvidence {
         {
             return Err(Error::ValidationError("结算流水身份或时间窗口不匹配".into()));
         }
+
         match &row.movement {
             SettlementMovement::Charge { goods, shipping, service }
                 if *goods >= Amount::zero() && *shipping >= Amount::zero() && *service >= Amount::zero() => {
@@ -182,6 +184,7 @@ impl SettlementEvidence {
                     && *amount > Amount::zero() => {},
             _ => return Err(Error::ValidationError("结算流水费用或退款身份无效".into())),
         }
+
         let payload =
             serde_json::to_string(row).map_err(|_| Error::ValidationError("结算来源无法冻结".into()))?;
         let id = identity(&[&scan.base.id, &row.external_entry_id]);
@@ -239,9 +242,11 @@ mod tests {
         scan.resume(Instant::now()).unwrap();
         assert_eq!(scan.query.window, window);
         assert_eq!(scan.query.cursor.as_deref(), Some("page-2"));
+
         assert!(scan.advance(Some("page-2".into()), Instant::now()).is_err());
         scan.advance(Some("page-3".into()), Instant::now()).unwrap();
         assert!(scan.advance(Some("page-2".into()), Instant::now()).is_err());
+
         scan.advance(None, Instant::from_unix_secs(201)).unwrap();
         assert!(scan.complete);
         scan.resume(Instant::from_unix_secs(600)).unwrap();
@@ -256,9 +261,11 @@ mod tests {
         let repeated = SettlementEvidence::new(&scan(), repeated).unwrap();
         assert_eq!(one.base.id, repeated.base.id);
         assert_eq!(one.payload_hash, repeated.payload_hash);
+
         let mut other = scan();
         other.base.id = "other".into();
         assert_ne!(one.base.id, SettlementEvidence::new(&other, evidence()).unwrap().base.id);
+
         let mut changed = evidence();
         changed.value.movement =
             SettlementMovement::Refund { external_refund_no: "refund".into(), amount: "10".parse().unwrap() };

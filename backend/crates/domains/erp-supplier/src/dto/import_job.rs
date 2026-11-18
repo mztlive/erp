@@ -37,6 +37,7 @@ impl SupplierImportJobRequest {
         if self.file_name.len() > 255 || !self.file_name.to_ascii_lowercase().ends_with(".xlsx") {
             return Err(Error::ValidationError("请选择供应商 Excel 文件（.xlsx）".into()));
         }
+
         if self.rows.is_empty() || self.rows.len() > 500 {
             return Err(Error::ValidationError("每次导入应为 1–500 行".into()));
         }
@@ -87,18 +88,23 @@ mod tests {
         let mut req = request();
         req.rows.clear();
         assert!(req.validate().is_err());
+
         req = request();
         req.rows.push(req.rows[0].clone());
         assert!(req.validate().is_err());
+
         req = request();
         req.rows = vec![req.rows[0].clone(); 501];
         assert!(req.validate().is_err());
+
         req = request();
         req.request_id = "../key".into();
         assert!(req.validate().is_err());
+
         req = request();
         req.file_name = "supplier.csv".into();
         assert!(req.validate().is_err());
+
         req = request();
         req.rows[0].row_number = 1;
         assert!(req.validate().is_err());

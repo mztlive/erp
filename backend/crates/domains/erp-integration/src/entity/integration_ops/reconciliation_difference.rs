@@ -136,6 +136,7 @@ impl ReconciliationDifference {
             DIFFERENCE_TYPE_MAX_LEN,
             "差异分类过长",
         )?;
+
         let left_fact_reference =
             normalize_optional_text(data.left_fact_reference, "左侧证据引用", FACT_REFERENCE_MAX_LEN)?;
         let right_fact_reference =
@@ -143,6 +144,7 @@ impl ReconciliationDifference {
         if left_fact_reference.is_none() && right_fact_reference.is_none() {
             return Err(Error::from("差异必须至少提供一侧不可变证据引用"));
         }
+
         let owner_user_id = require_handler_user_id(data.owner_user_id)?;
         let owner_org_unit_id = require_handler_org_unit_id(data.owner_org_unit_id)?;
 
@@ -245,6 +247,7 @@ pub(crate) mod tests {
         );
         let me = ReconciliationDifferenceData { owner_user_id: "me".into(), ..difference_data() };
         assert!(ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-me"), me).is_err());
+
         let company =
             ReconciliationDifferenceData { owner_org_unit_id: "company".into(), ..difference_data() };
         assert!(ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-org"), company).is_err());

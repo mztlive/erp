@@ -44,7 +44,9 @@ impl FulfillmentService {
         if delivery.base.version != expected_version {
             return Err(Error::ConflictError("发货单版本已变化，请刷新后重试".to_string()));
         }
+
         delivery.update(update).map_err(|error| Error::ValidationError(error.to_string()))?;
+
         let lines = self
             .db
             .fulfillment()

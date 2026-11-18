@@ -95,6 +95,7 @@ impl SupplierCallbackReceipt {
         {
             return Err(Error::ValidationError("供应商推送接收意图无效".into()));
         }
+
         Ok(Self {
             base: BaseModel::new(id),
             connection_id,
@@ -142,6 +143,7 @@ impl SupplierCallbackReceipt {
         }) {
             return Err(Error::ValidationError("推送仍包含未应用的非订单变化".into()));
         }
+
         self.status = if retired_intents == self.refresh_hints.len() {
             "ignored_retired"
         } else if retired_intents > 0 {
@@ -181,6 +183,7 @@ mod tests {
         .unwrap();
         assert!(hint.funds_transaction_id.is_none());
         assert!(serde_json::to_value(&hint).unwrap().get("funds_transaction_id").is_none());
+
         let mut verified = hint;
         verified.funds_transaction_id = Some("real-transaction".into());
         let restored: SupplierRefreshHint =
@@ -205,9 +208,11 @@ mod tests {
             vec![hint],
         )
         .unwrap();
+
         assert_eq!(receipt.source_event_id, None);
         assert_eq!(receipt.status, "received");
         assert!(!format!("{receipt:?}").contains("encrypted-sensitive-body"));
+
         assert!(
             SupplierCallbackReceipt::received(
                 "local-2".into(),
@@ -239,9 +244,11 @@ mod tests {
             vec![hint],
         )
         .unwrap();
+
         receipt.mark_orders_applied(Instant::from_unix_secs(20)).unwrap();
         assert_eq!(receipt.status, "applied");
         assert_eq!(receipt.processed_at, Some(Instant::from_unix_secs(20)));
+
         let mut mixed = receipt.clone();
         mixed.refresh_hints.push(SupplierRefreshHint {
             topic: "product".into(),
@@ -274,12 +281,14 @@ mod tests {
             vec![hint.clone()],
         )
         .unwrap();
+
         receipt.next_attempt_at = Some(Instant::from_unix_secs(90));
         receipt.mark_orders_resolved(1, Instant::from_unix_secs(20)).unwrap();
         assert_eq!(receipt.status, "ignored_retired");
         assert_eq!(receipt.body_encrypted, "encrypted-original-evidence");
         assert_eq!(receipt.next_attempt_at, None);
         assert_eq!(receipt.refresh_hints, vec![hint.clone()]);
+
         let mut mixed = receipt.clone();
         mixed.refresh_hints.push(hint);
         mixed.mark_orders_resolved(1, Instant::from_unix_secs(21)).unwrap();

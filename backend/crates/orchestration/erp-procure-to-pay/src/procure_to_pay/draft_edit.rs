@@ -84,6 +84,7 @@ impl PurchaseOrderProcess {
         let ports = self.ports.clone();
         req.validate()?;
         req.ensure_shape()?;
+
         let fingerprint = req.request_fingerprint(id)?;
         let receipt_identity = PurchaseCommandReceipt::<SaveDraftReceipt>::identity(
             SAVE_RECEIPT_PREFIX,
@@ -93,6 +94,7 @@ impl PurchaseOrderProcess {
             &req.idempotency_key,
         )?;
         let receipt_id = receipt_identity;
+
         execute_save_draft_transaction(
             DraftSaveServices { service: self, ports: ports.as_ref() },
             id,
@@ -140,6 +142,7 @@ async fn execute_save_draft_transaction(
     let transaction_receipt_id = receipt_id.clone();
     let transaction_fingerprint = fingerprint.clone();
     let ports = (*ports).clone();
+
     let transaction_result = db
         .client()
         .clone()
@@ -157,6 +160,7 @@ async fn execute_save_draft_transaction(
             })
         })
         .await;
+
     recover_saved_draft(transaction_result, service, &receipt_id, &fingerprint, purchase_order_id, actor)
         .await
 }
@@ -194,6 +198,7 @@ async fn save_draft_apply(
     {
         return Ok(result);
     }
+
     let mut order = load_purchase_order(db, command.purchase_order_id, executor).await?;
     ensure_save_target(
         &order.stable.created_by,
@@ -205,6 +210,7 @@ async fn save_draft_apply(
     order
         .ensure_payment_term_unchanged(command.request.payment_term_code.as_deref())
         .map_err(map_draft_edit_violation)?;
+
     replace_current_draft(db, ports, &mut order, command, executor).await
 }
 
@@ -234,12 +240,14 @@ async fn replace_current_draft(
 ) -> Result<SavePurchaseOrderDraftResult> {
     let (mut old_draft, old_lines) = load_current_draft(db, order, executor).await?;
     let coverage = advance_guard_and_load_coverage(db, order, command.actor.id(), executor).await?;
+
     let requested_lines = command.request.resolve_lines(&old_lines)?;
     let (requested_lines, payment_subject) =
         prepare_draft_lines(order, &old_draft, &old_lines, requested_lines, &coverage)?;
     let replacement =
         build_draft_replacement(order, &old_draft, &old_lines, &requested_lines, payment_subject)?;
     validate_submission_delivery(db, order, &replacement.lines, &old_lines, executor).await?;
+
     super::inquiry_supply::resize_quotes(
         db,
         order,
@@ -248,6 +256,7 @@ async fn replace_current_draft(
         executor,
     )
     .await?;
+
     order.update(Default::default(), command.actor.id(), super::adapters::payment_term::parse)?;
     old_draft.mark_superseded()?;
     order.current_submission_id = Some(replacement.submission.base.id.clone());
@@ -285,10 +294,12 @@ fn prepare_draft_lines(
         validate_draft_line_edits(&edits, old_lines, &coverage.lines).map_err(map_draft_edit_violation)?;
         return Ok((requested, old_draft.payment_subject.clone()));
     }
+
     let mut requested = drop_cleared_item_lines(requested);
     let edits = requested.iter().map(SavePurchaseOrderLine::to_draft_edit).collect::<Vec<_>>();
     validate_rebased_draft_line_edits(&edits, old_lines, &coverage.lines)
         .map_err(map_draft_edit_violation)?;
+
     rebind_draft_lines(&mut requested, coverage)?;
     let subject = rebased_payment_subject(&old_draft.payment_subject, current)?;
     order.sales_order_revision_id = SalesOrderRevisionId::new(current);
@@ -367,6 +378,7 @@ async fn persist_draft_replacement(
         .collect::<Vec<_>>();
     crate::procure_to_pay::inquiry_expense::resize_purchase(db, order, &fees, command.actor.id(), executor)
         .await?;
+
     persist_replacement(db, order, old_draft, replacement, executor).await?;
     sync_procurement_tasks_for_sales_order(
         db,
@@ -375,6 +387,7 @@ async fn persist_draft_replacement(
         executor,
     )
     .await?;
+
     let receipt = SaveDraftReceipt::from_saved(
         order,
         replacement.gross.to_string(),
@@ -443,6 +456,7 @@ async fn replay_saved_draft(
                 return Err(Error::Internal(message));
             },
         };
+
     if receipt.payload().purchase_order_id != purchase_order_id {
         return Err(Error::ConflictError("采购草稿保存收据与业务资源不一致".to_string()));
     }
@@ -488,6 +502,7 @@ async fn recover_saved_draft(
             let identity = receipt_id.clone();
             let fingerprint = fingerprint.to_string();
             let actor = actor.clone();
+
             let recovered = service
                 .db
                 .client()

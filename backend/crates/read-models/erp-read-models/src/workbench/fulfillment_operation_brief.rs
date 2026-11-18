@@ -36,6 +36,7 @@ impl WorkbenchFactsReader<'_> {
     ) -> Result<()> {
         let mut loaded = erp_workflow::ports::ObjectFactMap::new();
         self.facts_reader().load_fulfillment_operation_facts(keys, &mut loaded, executor).await?;
+
         let source_keys = loaded
             .iter()
             .filter_map(|((kind, _), fact)| {
@@ -44,11 +45,13 @@ impl WorkbenchFactsReader<'_> {
             .collect();
         let mut briefs = self.fulfillment_sales_briefs(&source_keys, executor).await?;
         briefs.extend(self.fulfillment_purchase_briefs(&source_keys, executor).await?);
+
         facts.extend(loaded.into_iter().map(|(key, authority)| {
             let mut fact = WorkbenchObjectFact::from_authority(authority);
             apply_source_brief(key.0, &mut fact, &briefs);
             (key, fact)
         }));
+
         self.load_fulfillment_details(keys, facts, executor).await
     }
 }
@@ -87,6 +90,7 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
+
         let orders = self.facts_reader().read_sales_orders(&ids, executor).await?;
         let ids =
             orders.iter().filter_map(|order| order.stable.current_revision_id.clone()).collect::<Vec<_>>();
@@ -113,6 +117,7 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
+
         let orders = self.facts_reader().read_purchase_orders(&ids, executor).await?;
         let ids =
             orders.iter().filter_map(|order| order.stable.current_revision_id.clone()).collect::<Vec<_>>();
@@ -233,6 +238,7 @@ mod tests {
         let brief =
             source_brief(ObjectKind::SalesOrder, "source", "SO-1", "客户甲", &"12.50".parse().unwrap());
         let sources = HashMap::from([((ObjectKind::SalesOrder, "source".into()), brief)]);
+
         apply_source_brief(ObjectKind::Delivery, &mut fact, &sources);
         assert_eq!(fact.display.counterparty_label.as_deref(), Some("客户甲"));
         assert!(fact.display.brief_source.is_some());
@@ -256,6 +262,7 @@ mod tests {
             apply_source_brief(kind, &mut fact, &sources);
             assert!(fact.display.brief_source.is_none());
         }
+
         for kind in
             [ObjectKind::PurchaseReceipt, ObjectKind::ElectronicDelivery, ObjectKind::ServiceFulfillment]
         {

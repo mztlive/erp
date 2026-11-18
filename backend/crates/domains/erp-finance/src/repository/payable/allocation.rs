@@ -249,6 +249,7 @@ impl PurchaseInvoiceAllocationRepositoryExt for persistence_core::Repository<'_,
             .skip(filter.skip())
             .limit(filter.limit())
             .build();
+
         let items = mongo_ops::find_many(&self.collection(), filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
         Ok(PageResult { items, total: total as i64 })

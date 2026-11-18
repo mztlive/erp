@@ -117,6 +117,7 @@ impl PendingFileReferenceSet {
         let Some(reference) = PendingFileReference::from_file_asset_id(id)? else {
             return Ok(false);
         };
+
         let target = self.targets.get(&reference).ok_or_else(|| Error::from("业务命令引用了未上传的文件"))?;
         if !used.insert(reference.as_str().to_string()) {
             return Err(Error::from("同一临时文件不能重复消费"));

@@ -36,9 +36,11 @@ pub async fn ensure(db: &Database) -> Result<()> {
             .options(IndexOptions::builder().name("idx_supplier_new_product_drafts_task".to_string()).build())
             .build(),
     ];
+
     db.collection::<Document>(<Database as CatalogPortalExt>::NEW_PRODUCT_DRAFTS)
         .create_indexes(indexes)
         .await?;
+
     ensure_category_mappings(db).await?;
     Ok(())
 }
@@ -65,6 +67,7 @@ async fn ensure_category_mappings(db: &Database) -> Result<()> {
             )
             .build(),
     ];
+
     db.collection::<Document>(<Database as CatalogPortalExt>::SUPPLIER_CATEGORY_MAPPINGS)
         .create_indexes(indexes)
         .await?;

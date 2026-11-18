@@ -125,7 +125,6 @@ fn goods_line(revision_line_id: &str) -> SalesOrderGoodsServiceLineRevision {
     SalesOrderGoodsServiceLineRevision {
         assigned_delivery_allocations: Vec::new(),
         delivery_allocations: Vec::new(),
-
         revision_line_id: SalesOrderRevisionLineId::new(revision_line_id),
         sku_id: SkuId::new("sku-1"),
         sku_revision_id: erp_core::ids::SkuRevisionId::new("skur-1"),
@@ -289,7 +288,6 @@ fn assignment(
 ) -> SourcingAssignment {
     SourcingAssignment {
         delivery_allocations: Vec::new(),
-
         sales_order_line_id: line_id.to_string(),
         basis_id: basis_id.to_string(),
         source_type,
@@ -1011,6 +1009,7 @@ fn sourcing_plan_enforces_unit_precision_for_purchase_and_stock() {
     stock.lines[0].coverage.quantity_scale = Some(0);
     let purchase_id = basis_id_for(&order, &purchase, "wi-1", None);
     let stock_id = stock_basis_id_for(&order, &stock, "wi-1");
+
     for (basis_id, source) in
         [(&purchase_id, SupplySourceType::Purchase), (&stock_id, SupplySourceType::ExistingStock)]
     {
@@ -1021,6 +1020,7 @@ fn sourcing_plan_enforces_unit_precision_for_purchase_and_stock() {
             Err(SourcingPlanError::QuantityContract(_))
         ));
     }
+
     stock.lines[0].coverage.quantity_scale = Some(1);
     let selected = SourcingAssignmentSet::normalize(&[assignment(
         "line-1",
@@ -1031,6 +1031,7 @@ fn sourcing_plan_enforces_unit_precision_for_purchase_and_stock() {
     )])
     .unwrap();
     let plan = SourcingPlan::plan(&order, &[], &[stock.clone()], "wi-1", &selected).unwrap();
+
     stock.lines[0].coverage.quantity_scale = Some(0);
     assert!(matches!(
         plan.validate_against_latest_stock(&[stock]),
@@ -1058,6 +1059,7 @@ fn split_suppliers_cannot_double_allocate_an_address() {
         group.lines[0].coverage.goods_line.delivery_allocations =
             vec![delivery("A", "6"), delivery("B", "4")];
     }
+
     let mut assignments = groups
         .iter()
         .map(|group| {
@@ -1072,6 +1074,7 @@ fn split_suppliers_cannot_double_allocate_an_address() {
             row
         })
         .collect::<Vec<_>>();
+
     assert!(
         SourcingPlan::plan(
             &order,
@@ -1082,6 +1085,7 @@ fn split_suppliers_cannot_double_allocate_an_address() {
         )
         .is_err()
     );
+
     assignments[1].delivery_allocations = vec![delivery("B", "4")];
     let result = SourcingPlan::plan(
         &order,

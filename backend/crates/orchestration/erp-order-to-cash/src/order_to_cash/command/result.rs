@@ -66,6 +66,7 @@ impl SalesOrderCommandProcess {
                     if copy.sales_order_id != order_id {
                         return Err(Error::ConflictError("工作副本归属已变化".into()));
                     }
+
                     let view = SalesOrderService::new(db).working_copy_view(&copy, executor).await?;
                     access.current(order_id.as_ref(), executor).await?;
                     Ok(view)

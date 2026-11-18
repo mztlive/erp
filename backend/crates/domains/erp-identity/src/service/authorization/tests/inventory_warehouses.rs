@@ -71,6 +71,7 @@ async fn warehouse_entries_reuse_original_inventory_permissions_and_scope_withou
                 .await,
             Err(Error::Forbidden(_))
         ));
+
         let before = facts.calls.load(Ordering::SeqCst);
         identity.state.lock().unwrap().grants = vec![("role".into(), vec![entry.clone()])];
         assert!(matches!(
@@ -112,6 +113,7 @@ async fn adjustment_warehouse_checks_preserve_same_role_detail_and_reject_missin
             authorization.query(&actor(), &entry, &mut executor).await,
             Err(Error::Forbidden(_))
         ));
+
         identity.state.lock().unwrap().grants =
             vec![("role".into(), vec![source, inventory::STOCK_ADJUSTMENT_DETAIL])];
         authorization
@@ -210,10 +212,12 @@ async fn warehouse_delivery_then_inventory_query_uses_a_new_nontransaction_read_
     let mut executor = ReadExecutor::default();
     let warehouse = authorization.query(&actor(), &entry, &mut executor).await.unwrap();
     authorization.validate(&warehouse, &mut executor).await.unwrap();
+
     let inventory =
         authorization.query(&actor(), &inventory::STOCK_BALANCE_LIST, &mut executor).await.unwrap();
     assert!(matches!(warehouse.ensure_current(&mut executor), Err(Error::ValidationError(_))));
     authorization.validate(&inventory, &mut executor).await.unwrap();
+
     executor.next_read();
     assert!(matches!(inventory.ensure_current(&mut executor), Err(Error::ValidationError(_))));
 }

@@ -67,12 +67,14 @@ impl WorkbenchFactsReader<'_> {
         self.delivery_sales_context(rows, &mut context, executor).await?;
         self.delivery_purchase_context(rows, &mut context, executor).await?;
         self.delivery_expected_dates(lines, &mut context, executor).await?;
+
         for row in rows {
             let Some(fact) = facts.get_mut(&(ObjectKind::Delivery, row.base.id.clone())) else { continue };
             let mut visible =
                 lines.iter().filter(|l| l.delivery_id.as_ref() == row.base.id).collect::<Vec<_>>();
             visible.sort_by_key(|line| line.line_no);
             fact.display.delivery_lines = visible.iter().map(|line| task_line(row, line, &context)).collect();
+
             let source = fact.display.brief_source.get_or_insert_with(Default::default);
             source
                 .extra_sections
@@ -95,6 +97,7 @@ impl WorkbenchFactsReader<'_> {
         let orders = self.db.sales_orders().list_active_by_ids(&ids, executor).await?;
         let owners = orders.iter().map(|row| row.sales_owner_user_id.clone()).collect::<Vec<_>>();
         let names = self.load_account_names(&owners, executor).await?;
+
         let revisions = orders
             .iter()
             .filter_map(|row| row.stable.current_revision_id.clone().map(Into::into))
@@ -112,6 +115,7 @@ impl WorkbenchFactsReader<'_> {
             .into_iter()
             .map(|line| (line.revision_line_id.to_string(), format_instant_date(line.fulfillment_due_at)))
             .collect::<HashMap<_, _>>();
+
         for line in lines {
             context.sales.insert(
                 line.sales_order_line_id.to_string(),
@@ -123,6 +127,7 @@ impl WorkbenchFactsReader<'_> {
                 },
             );
         }
+
         for order in orders {
             let sections = context.sections.entry(order.base.id).or_default();
             push_section(
@@ -156,6 +161,7 @@ impl WorkbenchFactsReader<'_> {
             .into_iter()
             .map(|row| (row.base.id.clone(), row))
             .collect::<HashMap<_, _>>();
+
         for order in orders {
             let sections = context.sections.entry(order.base.id.clone()).or_default();
             push_document_section(sections, "关联采购单", Some(&order.purchase_no), Some(&order.base.id));
@@ -194,6 +200,7 @@ impl WorkbenchFactsReader<'_> {
             .into_iter()
             .map(|row| (row.base.id, row.purchase_order_id.to_string()))
             .collect::<HashMap<_, _>>();
+
         let dates = purchase_lines
             .into_iter()
             .filter_map(|line| {
@@ -206,6 +213,7 @@ impl WorkbenchFactsReader<'_> {
                 ))
             })
             .collect::<HashMap<_, _>>();
+
         for allocation in allocations {
             if let Some(date) = dates.get(allocation.purchase_order_revision_line_id.as_ref()) {
                 context.expected.insert(allocation.base.id, date.clone());
@@ -330,6 +338,7 @@ mod tests {
         let view = task_line(&row, &line(), &context);
         assert_eq!(view.customer_due_date.as_deref(), Some("2026-10-12"));
         assert_eq!(view.expected_delivery_date.as_deref(), Some("2026-10-11"));
+
         context.expected.insert("allocation".into(), ("other".into(), "2026-10-01".into()));
         assert_eq!(task_line(&row, &line(), &context).expected_delivery_date, None);
     }
@@ -345,6 +354,7 @@ mod tests {
         append_delivery_sections(&mut fields, &row, &[first, second]);
         assert!(fields.iter().any(|field| field.label == "最早客户交付日" && field.value == "2026-10-10"));
         assert!(!serde_json::to_string(&fields).unwrap().contains("private-cipher"));
+
         row.address_snapshot_encrypted = None;
         fields.clear();
         append_delivery_sections(&mut fields, &row, &[]);

@@ -34,6 +34,7 @@ impl SupplierApiGovernanceProcess {
                 Box::pin(async move { process.activation_target(&id, version, &operator, executor).await })
             })
             .await?;
+
         let gateway =
             self.gateway.as_ref().ok_or_else(|| Error::BusinessLogicError("供应商连接检查未配置".into()))?;
         gateway
@@ -53,10 +54,12 @@ impl SupplierApiGovernanceProcess {
         self.authorization
             .require(actor, &internal::CONNECTION_ENABLE, AccessTarget::Operation, executor)
             .await?;
+
         let mut connection = self.domain().load_connection(id, executor).await?;
         if connection.base.version != version {
             return Err(Error::ConflictError("连接已变化，请刷新后重试".into()));
         }
+
         let capabilities = self
             .reference_registry
             .capabilities(&SupplierReferenceTarget::from(&connection))
@@ -64,6 +67,7 @@ impl SupplierApiGovernanceProcess {
         if !capabilities.contains(&SupplierApiCapabilityCode::Order) {
             return Err(Error::BusinessLogicError("该供应商接口不支持自动下单".into()));
         }
+
         let deployment = self.deployment(&connection)?;
         deployment.apply(&mut connection, actor.id())?;
         Ok((connection, deployment))

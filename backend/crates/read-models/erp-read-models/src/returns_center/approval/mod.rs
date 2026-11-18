@@ -193,8 +193,10 @@ mod tests {
         assert_eq!(draft.requirement, "PROCESS_REQUIRED");
         assert!(draft.definition.is_none());
         assert_eq!(draft.allowed_actions, vec!["SUBMIT".to_string()]);
+
         let running = process_required_view(None, None, false, true);
         assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
+
         let other = process_required_view(None, None, false, false);
         assert!(other.allowed_actions.is_empty());
         assert!(other.recent_history.len() <= RECENT_HISTORY_LIMIT);
@@ -223,6 +225,7 @@ mod tests {
             assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);
             assert!(!view.allowed_actions.iter().any(|item| item.contains("DEFINITION")));
         }
+
         assert_eq!(
             document_approval_view(Some(&binding), None, CustomerRefundStatus::InApproval).allowed_actions,
             vec!["CANCEL".to_string()]

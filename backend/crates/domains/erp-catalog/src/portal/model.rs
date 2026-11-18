@@ -247,6 +247,7 @@ impl NewProductDraft {
         validate_id(&supplier_id, "供应商")?;
         validate_id(&created_by, "创建人")?;
         draft.validate_storage()?;
+
         Ok(Self {
             base: BaseModel::new(id),
             supplier_id,
@@ -274,6 +275,7 @@ impl NewProductDraft {
     pub fn update(&mut self, expected_version: u64, draft: NewProductInput) -> Result<()> {
         self.ensure_editable(expected_version)?;
         draft.validate_storage()?;
+
         self.draft = draft;
         self.normalized_product = None;
         Ok(())
@@ -302,6 +304,7 @@ impl NewProductDraft {
         self.ensure_editable(expected_version)?;
         self.draft.validate_submission()?;
         self.draft.ensure_submission_images()?;
+
         validate_id(&submission_id, "提交")?;
         validate_id(&task_id, "确认任务")?;
         validate_id(&submitted_by, "提交人")?;
@@ -312,6 +315,7 @@ impl NewProductDraft {
         {
             return Err(Error::ConflictError("提交标识或确认任务已被使用".into()));
         }
+
         self.submissions.push(DraftSubmission {
             id: submission_id.clone(),
             input: self.draft.clone(),
@@ -320,6 +324,7 @@ impl NewProductDraft {
             task_id: task_id.clone(),
             decision: None,
         });
+
         self.frozen_input = Some(self.draft.clone());
         self.current_submission_id = Some(submission_id);
         self.task_id = Some(task_id);
@@ -433,11 +438,14 @@ impl NewProductDraft {
         self.ensure_version(command.expected_version)?;
         let reason = required(&command.reason, "匹配与建档核对说明", 500)?;
         let index = self.pending_index(submission_id)?;
+
         self.submitted()?.ensure_normalized(&command.normalized)?;
         ensure_result(&command.normalized, &command.result)?;
+
         let mut decision = decision(DraftStatus::Effective, Some(reason.to_owned()), &command.actor_id, at)?;
         decision.normalized_product = Some(command.normalized.clone());
         decision.result = Some(command.result.clone());
+
         self.normalized_product = Some(command.normalized);
         self.finish(index, decision);
         self.result = Some(command.result);
@@ -480,6 +488,7 @@ impl NewProductDraft {
         {
             return Err(Error::ConflictError("本次新品提交不再待确认".into()));
         }
+
         let index = self
             .submissions
             .iter()

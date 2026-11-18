@@ -101,9 +101,11 @@ impl CatalogCenterReadService {
         executor: &mut dyn Executor,
     ) -> Result<PageView<SellableSkuView>> {
         let boundary = require_sellable_read(&self.authorization, actor, executor).await?;
+
         let (mut view, supplier_ids) = sellable_sku_page(self.query.as_ref(), params, executor).await?;
         let numbers = self.supplier_numbers(&supplier_ids, executor).await?;
         supplier_codes::apply_supplier_codes(&mut view.items, &supplier_ids, &numbers);
+
         if !boundary.is_current(executor) {
             return Err(Error::ValidationError("商品读取跨越授权快照".into()));
         }

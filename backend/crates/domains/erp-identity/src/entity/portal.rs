@@ -232,12 +232,14 @@ mod tests {
         assert!(binding.identity(&account, "supplier01", 2, 1).is_err());
         assert!(binding.identity(&account, "supplier01", 1, 2).is_err());
         assert!(binding.identity(&account, "other", 1, 1).is_err());
+
         let mut disabled = account.clone();
         disabled.status = AccountStatus::Suspended;
         assert!(binding.identity(&disabled, "supplier01", 1, 1).is_err());
         disabled = account.clone();
         disabled.kind = AccountKind::Admin;
         assert!(binding.identity(&disabled, "supplier01", 1, 1).is_err());
+
         let mut revoked = binding.clone();
         revoked.active = false;
         assert!(revoked.identity(&account, "supplier01", 1, 1).is_err());
@@ -251,6 +253,7 @@ mod tests {
         let mut binding = binding();
         assert!(binding.update(2, PortalRole::ReadOnly, false, "manager".into()).is_err());
         assert!(binding.active);
+
         binding.update(1, PortalRole::ReadOnly, false, "manager".into()).unwrap();
         assert_eq!(binding.supplier_id, "supplier-1");
         assert_eq!(binding.created_by, "buyer-1");
@@ -270,6 +273,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(
             PortalBinding::new(
                 "id".into(),

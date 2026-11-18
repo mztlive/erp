@@ -33,6 +33,7 @@ impl PortalIdentityService {
                 &mut NoTransaction,
             )
             .await?;
+
         let account = self
             .db
             .accounts()
@@ -43,6 +44,7 @@ impl PortalIdentityService {
         if !check.is_match() {
             return Err(Error::Unauthenticated("原密码错误".into()));
         }
+
         let secret =
             password::hash_secret(LoginAccount::new(&current.account)?, input.new_password.clone()).await?;
         Ok(PreparedPortalPassword { actor: current, secret })
@@ -70,10 +72,12 @@ impl PortalIdentityService {
             executor,
         )
         .await?;
+
         let mut account =
             self.db.accounts().find_by_id(&actor.account_id, executor).await?.ok_or_else(invalid_session)?;
         account.secret = secret;
         self.db.accounts().update(&mut account, executor).await?;
+
         self.validate_session(
             &actor.account_id,
             &actor.account,

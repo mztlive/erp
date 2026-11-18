@@ -47,6 +47,7 @@ fn summary_pipeline(ids: &[String]) -> Vec<Document> {
     books.insert("$and", undeleted.clone());
     items.insert("$and", undeleted.clone());
     proposals.insert("$and", undeleted);
+
     vec![
         doc! { "$match": books },
         doc! { "$lookup": { "from": ITEMS, "let": { "book": "$id", "batch": "$current_batch_id" },

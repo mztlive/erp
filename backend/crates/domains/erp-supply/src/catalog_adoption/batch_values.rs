@@ -173,6 +173,7 @@ impl BatchSalesValues {
             return Ok(self.preserved());
         }
         self.ensure_new_sku_values()?;
+
         let mut next = self.clone();
         match pricing {
             BatchPricing::DropshipOnly { dropship } => {
@@ -191,6 +192,7 @@ impl BatchSalesValues {
                 next.bulk_linked = false;
             },
         }
+
         next.validate_values()?;
         Ok(next)
     }
@@ -230,6 +232,7 @@ impl BatchSalesValues {
         if (existing_sku || self.has_preserved_values()) && edit.has_changes() {
             return Err(Error::ValidationError("已存在公司 SKU 保留原价，不能在本批修改".into()));
         }
+
         let mut next = Self {
             dropship: self.dropship.edit(&edit.dropship),
             bulk: self.bulk.edit(&edit.bulk),
@@ -240,6 +243,7 @@ impl BatchSalesValues {
         if next.bulk_linked {
             next.apply_linked_bulk(FillPolicy::default())?;
         }
+
         next.validate_values()?;
         Ok(next)
     }
@@ -297,6 +301,7 @@ impl BatchSalesValues {
         if source.to_decimal().is_sign_negative() {
             return Err(Error::ValidationError("接口采购报价不能为负数，请核实来源报价".into()));
         }
+
         if existing_sku {
             return Ok(Vec::new());
         }
@@ -468,10 +473,12 @@ mod tests {
         assert_eq!(draft.dropship.value, Some("115.00".parse().unwrap()));
         assert_eq!(draft.bulk.value, draft.dropship.value);
         assert!(draft.bulk_linked);
+
         let manual_drop = draft.edit(&manual(Some("118.00"), None), false).unwrap();
         assert_eq!(manual_drop.dropship.origin, ValueOrigin::Manual);
         assert_eq!(manual_drop.bulk.value, Some("118.00".parse().unwrap()));
         assert_eq!(manual_drop.bulk.origin, ValueOrigin::Rule);
+
         let exception = manual_drop.edit(&manual(None, Some("115.00")), false).unwrap();
         assert!(!exception.bulk_linked);
         let next = exception.edit(&manual(Some("119.00"), None), false).unwrap();
@@ -503,6 +510,7 @@ mod tests {
             };
             assert_eq!(original.apply(Some("99.00".parse().unwrap()), FillPolicy::default()), original);
         }
+
         let original = BatchValue::<Amount>::default();
         let applied = original.apply(Some("99.00".parse().unwrap()), FillPolicy::default());
         assert_eq!(applied.value, Some("99.00".parse().unwrap()));
@@ -517,6 +525,7 @@ mod tests {
         assert_eq!(retained.dropship.value, Some("118.00".parse().unwrap()));
         assert_eq!(retained.bulk.value, Some("112.00".parse().unwrap()));
         assert!(!retained.bulk_linked);
+
         let overwrite = FillPolicy { overwrite: true, preserve_manual: false };
         let replaced = draft.apply(&same(), overwrite, source("100"), false).unwrap();
         assert_eq!(replaced.dropship.value, Some("115.00".parse().unwrap()));
@@ -539,6 +548,7 @@ mod tests {
         assert_eq!(draft.bulk.origin, ValueOrigin::Cleared);
         assert_eq!(draft.minimum_quantity.origin, ValueOrigin::Cleared);
         assert!(!draft.bulk_linked);
+
         let result = draft.apply(&same(), FillPolicy::default(), source("100"), false).unwrap();
         assert_eq!(result, draft);
         assert!(draft.validate(source("100"), false).is_ok());
@@ -739,10 +749,12 @@ mod tests {
         assert_eq!(reset.minimum_quantity, BatchValue::default());
         let result = reset.apply(&same(), FillPolicy::default(), source("200"), false).unwrap();
         assert_eq!(result.bulk.value, Some("118.00".parse().unwrap()));
+
         let rule_draft = apply_same().reset_rule_values();
         let result = rule_draft.apply(&same(), FillPolicy::default(), source("200"), false).unwrap();
         assert_eq!(result.dropship.value, Some("230.00".parse().unwrap()));
         assert_eq!(result.bulk.value, result.dropship.value);
+
         let cleared = draft
             .edit(
                 &BatchSalesEdit {

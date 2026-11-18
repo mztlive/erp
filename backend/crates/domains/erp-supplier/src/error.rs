@@ -126,6 +126,7 @@ mod tests {
         let generic = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
         assert_eq!(generic.class(), ErrorClass::Conflict);
         assert_eq!(generic.to_string(), "数据冲突: 数据已存在，请勿重复提交");
+
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_supplier_accounts_party")),
             "该主体已绑定供应商角色"
@@ -148,6 +149,7 @@ mod tests {
             assert_eq!(super::known_duplicate_index_message(&format!(" {index}")), None);
             assert_eq!(super::known_duplicate_index_message(&index.to_ascii_uppercase()), None);
         }
+
         assert_eq!(super::known_duplicate_index_message(""), None);
         assert_eq!(super::known_duplicate_index_message("unknown_index"), None);
     }

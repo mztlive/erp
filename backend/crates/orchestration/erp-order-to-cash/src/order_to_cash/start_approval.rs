@@ -165,6 +165,7 @@ pub(super) fn build_sales_order_start_input(input: SalesOrderStartInput<'_>) -> 
     if graph.definition.definition_version != binding.approval_definition_version {
         return Err(Error::ConflictError("销售单绑定定义版本与已加载定义不一致".to_string()));
     }
+
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
@@ -323,6 +324,7 @@ impl SalesOrderStartPersistInput {
         {
             return Ok::<Option<SubmissionView>, crate::Error>(Some(view));
         }
+
         access.revalidate(&self.order.base.id, expected_order_version, executor).await?;
         let current = access.current(&self.order.base.id, executor).await?;
         SalesOrderCommandProcess::check_first_contract_binding(
@@ -334,7 +336,6 @@ impl SalesOrderStartPersistInput {
             executor,
         )
         .await?;
-
         Ok(None)
     }
 
@@ -352,6 +353,7 @@ impl SalesOrderStartPersistInput {
         let PreparedExecution::Apply(writes) = self.prepared else {
             return Err(Error::Internal("销售提交启动收据缺少领域命令结果".to_string()));
         };
+
         db.bpm_workflow()
             .insert_command_receipt(&writes.receipt, executor)
             .await
@@ -364,6 +366,7 @@ impl SalesOrderStartPersistInput {
                 executor,
             )
             .await?;
+
         SalesOrderService::new(db.clone())
             .persist_submission_start(
                 &mut self.order,
@@ -375,6 +378,7 @@ impl SalesOrderStartPersistInput {
             )
             .await?;
         db.workflow_actions().create(&self.workflow_action, executor).await?;
+
         persist_runtime_writes(
             db,
             &writes,
@@ -391,8 +395,8 @@ impl SalesOrderStartPersistInput {
             executor,
         )
         .await?;
-        self.audit.persist(db, executor).await?;
 
+        self.audit.persist(db, executor).await?;
         Ok(None)
     }
 }
@@ -490,6 +494,7 @@ pub(super) async fn persist_runtime_writes(
         organization_id,
         now,
     } = input;
+
     let mut snapshot = persist_start_runtime(
         db,
         identity,
@@ -500,6 +505,7 @@ pub(super) async fn persist_runtime_writes(
         executor,
     )
     .await?;
+
     complete_resubmission(
         db,
         &mut snapshot,
@@ -510,6 +516,7 @@ pub(super) async fn persist_runtime_writes(
     )
     .await?;
     approvals.persist_start_snapshot(db, snapshot, executor).await?;
+
     persist_start_tasks(
         db,
         writes,

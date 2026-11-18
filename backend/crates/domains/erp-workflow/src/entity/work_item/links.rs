@@ -100,12 +100,14 @@ impl WorkItem {
         if self.status != super::WorkItemStatus::Open {
             return Err(Error::from("终态任务不能修改关联链路"));
         }
+
         links.push(WorkItemLink::new(&self.business_object_type, &self.business_object_id)?);
         links.sort();
         links.dedup();
         if links.len() > 1000 {
             return Err(Error::from("任务关联对象最多1000个"));
         }
+
         self.links = links;
         Ok(())
     }
@@ -190,10 +192,12 @@ mod tests {
         item.set_links(vec![sales.clone(), purchase.clone(), sales]).unwrap();
         assert_eq!(item.links().len(), 3);
         assert!(item.links().contains(&purchase));
+
         item.subject_version = "2".into();
         item.set_links(vec![WorkItemLink::new("sales_order", "replacement").unwrap()]).unwrap();
         assert_eq!(item.links().len(), 2);
         assert!(!item.links().contains(&purchase));
+
         let before = item.clone();
         assert!(
             item.set_links(
@@ -202,6 +206,7 @@ mod tests {
             .is_err()
         );
         assert_eq!(item, before);
+
         item.status = WorkItemStatus::Completed;
         let before = item.clone();
         assert!(item.set_links(Vec::new()).is_err());

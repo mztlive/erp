@@ -58,10 +58,12 @@ impl DataTransferProcess {
         if let Some(context) = &reader.context {
             return Ok(context.clone());
         }
+
         let job = &reader.job;
         let id = job.input_file_asset_id.as_ref().ok_or_else(|| Error::NotFound("任务输入缺失".into()))?;
         let (source, asset): (Envelope, _) = self.reader_private(job, id.as_ref(), actor).await?;
         let expires = asset.expires_at.ok_or_else(|| Error::NotFound("任务输入不存在或不可读取".into()))?;
+
         let context = ContextInput::new(&source, expires);
         self.qualify_context(job, &context, actor).await?;
         Ok(context)

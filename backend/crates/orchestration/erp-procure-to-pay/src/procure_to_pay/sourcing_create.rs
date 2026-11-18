@@ -105,6 +105,7 @@ impl PurchaseOrderProcess {
         req.validate()?;
         let assignments = req.sourcing_assignments()?;
         let request_fingerprint = req.request_fingerprint(assignments.assignments())?;
+
         let sales_order_id = SalesOrderId::new(req.sales_order_id.trim().to_string());
         let receipt_identity = PurchaseCommandReceipt::<SourcingReceipt>::identity(
             CREATE_SOURCING_RECEIPT_PREFIX,
@@ -113,6 +114,7 @@ impl PurchaseOrderProcess {
             Some(sales_order_id.as_ref()),
             &req.idempotency_key,
         )?;
+
         let authorization = self.authorization.clone();
         let command = SourcingTransactionInput {
             req: &req,
@@ -121,6 +123,7 @@ impl PurchaseOrderProcess {
             request_fingerprint: &request_fingerprint,
             actor,
         };
+
         let transaction_result = self.sourcing_transaction(command, assignments, authorization).await;
         match transaction_result {
             Ok(result) => Ok(result),
@@ -273,6 +276,7 @@ async fn create_stock_delivery_drafts(
             .or_default()
             .push(&allocation.reservation);
     }
+
     for (warehouse_id, reservations) in by_warehouse {
         ensure_stock_delivery_for_warehouse(
             db,
@@ -308,6 +312,7 @@ async fn ensure_stock_delivery_for_warehouse(
         .await?;
         return Ok(());
     }
+
     // 本步骤仅由已通过原事务供给任务授权的选源写入调用；计数器按永不回收合同独立提交。
     let delivery_id = DeliveryId::new(next_id());
     let delivery = Delivery::new(
@@ -323,8 +328,10 @@ async fn ensure_stock_delivery_for_warehouse(
             address_snapshot_fingerprint: None,
         },
     )?;
+
     let lines = build_stock_delivery_lines(&delivery_id, reservations, 1)?;
     db.fulfillment().create_delivery_with_lines(&delivery, &lines, executor).await?;
+
     ensure_fulfillment_task(db, &ports.task_identity, FulfillmentTaskObject::Delivery(&delivery), executor)
         .await
         .map_err(Error::from)
@@ -340,6 +347,7 @@ async fn append_stock_delivery_lines(
     let delivery_id = DeliveryId::new(delivery.base.id.clone());
     let existing =
         db.fulfillment().delivery_lines_by_delivery_ids(std::slice::from_ref(&delivery_id), executor).await?;
+
     let existing_reservations = existing
         .iter()
         .filter_map(|line| line.stock_reservation_id.as_ref().map(ToString::to_string))
@@ -350,6 +358,7 @@ async fn append_stock_delivery_lines(
         .filter(|reservation| !existing_reservations.contains(&reservation.base.id))
         .collect::<Vec<_>>();
     let next_line_no = existing.iter().map(|line| line.line_no).max().unwrap_or(0) + 1;
+
     for line in build_stock_delivery_lines(&delivery_id, &pending, next_line_no)? {
         db.delivery_lines().create(&line, executor).await?;
     }
@@ -416,6 +425,7 @@ async fn write_sourcing_receipt(
         &sales_order.order_no,
         event_sequence,
     )?;
+
     let record = PurchaseCommandReceipt::new(
         input.receipt_identity,
         input.request_fingerprint,
@@ -512,6 +522,7 @@ async fn replay_sourcing(
         },
     }
     .into_payload();
+
     if receipt_identity.actor_id != actor.id()
         || receipt_identity.scope_id.as_deref() != Some(sales_order_id.as_ref())
     {

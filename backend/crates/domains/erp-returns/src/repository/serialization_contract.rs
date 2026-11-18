@@ -106,10 +106,12 @@ mod wire {
         let bytes = bson::serialize_to_vec(value).unwrap();
         let back: T = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(&back, value);
+
         let json = serde_json::to_value(value).unwrap();
         assert_eq!(json["amount"], "1000.00");
         assert_eq!(json["occurred_at"], 1_700_000_000);
         assert!(json["evidence_attachment_id"].is_null());
+
         let document: Document = bson::deserialize_from_slice(&bytes).unwrap();
         assert!(matches!(document.get("amount"), Some(Bson::Decimal128(_))));
         assert_eq!(document.get_i64("occurred_at").unwrap(), 1_700_000_000);
@@ -144,6 +146,7 @@ mod wire {
             "creator",
         )
         .unwrap();
+
         assert_eq!(roundtrip(&customer).get_str("original_receipt_id").unwrap(), "cr-1");
         assert_eq!(roundtrip(&supplier).get_str("original_payment_id").unwrap(), "sp-1");
         assert_eq!(roundtrip(&receipt).get_str("original_customer_receipt_id").unwrap(), "cr-1");

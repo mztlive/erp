@@ -52,6 +52,7 @@ impl FulfillmentService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
+
         super::map_search_page(
             self.db.deliveries().search_deliveries(&filter, executor),
             |row| DeliveryView {
@@ -107,6 +108,7 @@ impl FulfillmentService {
             .fulfillment()
             .delivery_lines_by_delivery_ids(&[delivery.base.id.clone().into()], executor)
             .await?;
+
         Ok(DeliveryDetailView {
             packing_unavailable_reason: None,
             packing: delivery.packing.clone(),
@@ -128,6 +130,7 @@ impl FulfillmentService {
     /// 请求、表头或发货类型与行归属不合法时返回原错误，不执行持久化。
     pub fn prepare_delivery(&self, req: CreateDeliveryRequest) -> Result<(Delivery, Vec<DeliveryLine>)> {
         req.validate()?;
+
         let id = DeliveryId::new(next_id());
         let delivery = Delivery::new(
             id.clone(),
@@ -143,6 +146,7 @@ impl FulfillmentService {
             },
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
+
         let lines = DeliveryLineBatch::build(id, delivery.delivery_type, 1, delivery_line_specs(&req.lines))
             .map_err(Error::Logic)?;
         delivery.ensure_tracking_lines(&lines).map_err(|error| Error::ValidationError(error.to_string()))?;
@@ -168,6 +172,7 @@ impl FulfillmentService {
         executor: &mut dyn Executor,
     ) -> Result<(Delivery, Vec<DeliveryLine>)> {
         req.validate()?;
+
         let mut delivery = self
             .db
             .deliveries()
@@ -180,9 +185,11 @@ impl FulfillmentService {
         if !delivery.is_editable() {
             return Err(Error::ConflictError("只有草稿状态的发货单可以修改包裹".into()));
         }
+
         delivery
             .update(DeliveryUpdate { tracking_entries: req.tracking_entries })
             .map_err(|error| Error::ValidationError(error.to_string()))?;
+
         let lines = self
             .db
             .fulfillment()
@@ -307,6 +314,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(ok.len(), 1);
+
         let wrong = DeliveryLineBatch::build(
             DeliveryId::new("d-2"),
             DeliveryType::WarehouseShip,

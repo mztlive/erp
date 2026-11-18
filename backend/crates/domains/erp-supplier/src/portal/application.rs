@@ -77,6 +77,7 @@ impl CooperationApplication {
         let id = normalize_required_text(id, "申请编号不能为空", 128, "申请编号过长")?;
         let supplier_id =
             normalize_required_text(supplier_id.to_string(), "供应商绑定不能为空", 128, "供应商绑定过长")?;
+
         Ok(Self {
             base: BaseModel::new(id),
             supplier_id,
@@ -137,12 +138,14 @@ impl CooperationApplication {
     ) -> Result<()> {
         self.ensure_supplier(supplier_id, version, actor)?;
         self.ensure_editable()?;
+
         let owner = normalize_required_text(owner_id.into(), "采购处理人不能为空", 128, "处理人过长")?;
         let task = normalize_required_text(task_id.into(), "采购任务不能为空", 128, "采购任务过长")?;
         let submission_no = u32::try_from(self.submissions.len())
             .ok()
             .and_then(|n| n.checked_add(1))
             .ok_or_else(|| Error::ConflictError("提交次数超限".into()))?;
+
         let proposal = self.proposal.clone().normalized()?;
         self.submissions.push(FrozenSubmission {
             submission_no,
@@ -209,6 +212,7 @@ impl CooperationApplication {
     pub fn activate(&mut self, version: u64, actor: &AuditActor, result: CooperationResult) -> Result<()> {
         self.ensure_version(version)?;
         self.ensure_confirmer(actor)?;
+
         if result.confirmed_by != actor.id()
             || result.profile_id.trim().is_empty()
             || result.profile_revision_no == 0
@@ -217,6 +221,7 @@ impl CooperationApplication {
         {
             return Err(Error::ValidationError("合作条款确认结果无效".into()));
         }
+
         self.finish(CooperationStatus::Effective, actor, None, result.confirmed_at)?;
         self.result = Some(result);
         Ok(())
@@ -262,6 +267,7 @@ impl CooperationApplication {
         {
             return Err(Error::ConflictError("供应商归属及已提交历史不可修改".into()));
         }
+
         self.ensure_history_transition(before)
     }
 
@@ -331,6 +337,7 @@ impl CooperationApplication {
         if !allowed || (self.result.is_some() != (self.status == CooperationStatus::Effective)) {
             return Err(Error::ConflictError("合作条款申请状态与历史不一致".into()));
         }
+
         if self.status == CooperationStatus::Submitted {
             self.pending_submission()?;
         }

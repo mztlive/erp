@@ -30,6 +30,7 @@ async fn scoped_inspection_requires_complete_same_role_qualification() {
             Err(Error::Forbidden(_))
         ));
     }
+
     identity.state.lock().unwrap().grants = vec![("creator".into(), complete)];
     let scope = service
         .inspection_scope(&actor(), &permission, &mut SnapshotExecutor::default())
@@ -84,6 +85,7 @@ async fn contextual_inspection_qualifies_all_permissions_without_object_approval
                 .is_none()
         );
     }
+
     identity.state.lock().unwrap().grants =
         vec![("inspector".into(), vec![access_control::INSPECTION_INSPECT])];
     assert!(matches!(
@@ -92,6 +94,7 @@ async fn contextual_inspection_qualifies_all_permissions_without_object_approval
             .await,
         Err(Error::Forbidden(_))
     ));
+
     identity.state.lock().unwrap().grants = vec![(
         "inspector".into(),
         vec![
@@ -120,11 +123,13 @@ async fn inspection_preserves_identity_denials_and_facility_errors() {
         service.inspection_scope(&actor(), &contract::DETAIL, &mut SnapshotExecutor::default()).await,
         Err(Error::Forbidden(_))
     ));
+
     identity.state.lock().unwrap().fail = true;
     assert!(matches!(
         service.inspection_scope(&actor(), &contract::DETAIL, &mut SnapshotExecutor::default()).await,
         Err(Error::Internal(_))
     ));
+
     let unknown = Permission::parse("unknown:list").unwrap();
     identity.state.lock().unwrap().active = true;
     identity.state.lock().unwrap().fail = false;

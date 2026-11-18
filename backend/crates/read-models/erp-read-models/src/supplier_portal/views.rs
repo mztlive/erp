@@ -74,6 +74,7 @@ impl PortalApplicationView {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+
         let decisions = app
             .decisions
             .iter()
@@ -88,6 +89,7 @@ impl PortalApplicationView {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+
         Ok(Self {
             id: app.base.id.clone(),
             kind: offering_kind(app.kind).into(),
@@ -133,6 +135,7 @@ impl PortalApplicationView {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+
         let decisions = app
             .submissions
             .iter()
@@ -148,6 +151,7 @@ impl PortalApplicationView {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+
         Ok(Self {
             id: app.base.id.clone(),
             kind: "NEW_PRODUCT".into(),
@@ -190,6 +194,7 @@ impl PortalApplicationView {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+
         let decisions = app
             .decisions
             .iter()
@@ -204,6 +209,7 @@ impl PortalApplicationView {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+
         Ok(Self {
             id: app.base.id.clone(),
             kind: "COOPERATION".into(),
@@ -302,6 +308,7 @@ mod tests {
         };
         let mut app = CooperationApplication::new("app1".into(), "supplier1", request, &actor).unwrap();
         app.submit("supplier1", 1, "internal-buyer", "internal-task", &actor, 12).unwrap();
+
         let public = serde_json::to_value(PortalApplicationView::from_cooperation(&app).unwrap()).unwrap();
         assert_eq!(public["kind"], "COOPERATION");
         assert_eq!(public["status"], "SUBMITTED");
@@ -338,6 +345,7 @@ mod tests {
                         {"id":"internal-category","version":1,"name":"杯具","parent_id":"internal-root","product_kind":"PHYSICAL"}
                     ],"sku_mappings":[]},"result":null}
         }]));
+
         let app: NewProductDraft = serde_json::from_value(record).unwrap();
         let public = serde_json::to_value(PortalApplicationView::from_new_product(&app).unwrap()).unwrap();
         assert_eq!(public["input"]["brand"]["raw_name"], "品牌建议");

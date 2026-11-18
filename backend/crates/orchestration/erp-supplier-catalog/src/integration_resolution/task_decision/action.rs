@@ -116,6 +116,7 @@ impl IntegrationResolutionProcess {
             &command.idempotency_key,
             &command,
         )?;
+
         super::execution::execute_with_receipt(
             || self.replay_task_action(&receipt, &command, actor),
             || self.transact_task_action(command.clone(), actor.clone(), receipt.clone()),
@@ -134,6 +135,7 @@ impl IntegrationResolutionProcess {
         let prepared = PreparedWorkItemTarget::try_from(&command)?;
         let evidence = std::sync::Arc::clone(&self.evidence);
         let authorization = self.authorization.clone();
+
         let result = self
             .run_audited(move |db, executor| {
                 Box::pin(async move {
@@ -161,6 +163,7 @@ impl IntegrationResolutionProcess {
                 })
             })
             .await;
+
         erp_audit::execution::finish_attempt(
             result,
             &attempt_context,
@@ -181,6 +184,7 @@ impl IntegrationResolutionProcess {
         else {
             return Ok(None);
         };
+
         let fact = ActionFact {
             outcome: message.outcome,
             business_result_reference: message.business_result_reference,

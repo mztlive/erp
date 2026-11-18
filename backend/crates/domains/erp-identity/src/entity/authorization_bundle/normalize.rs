@@ -19,6 +19,7 @@ impl PolicyDocument {
         if self.roles.len() > 100 || self.bindings.len() > 100 || self.data_scopes.len() > 200 {
             return Err(Error::ValidationError("单文件最多100个角色、100个人员绑定和200项业务范围".into()));
         }
+
         let mut roles = BTreeSet::new();
         for role in &mut self.roles {
             if role.id.as_str() == ROOT_ROLE_ID || !roles.insert(role.id.clone()) {
@@ -31,6 +32,7 @@ impl PolicyDocument {
             role.permissions.sort();
             role.permissions.dedup();
         }
+
         let mut users = BTreeSet::new();
         for binding in &mut self.bindings {
             binding.user_id = normalize_id(&binding.user_id)?;
@@ -43,7 +45,9 @@ impl PolicyDocument {
                 return Err(Error::ValidationError("系统角色不能通过策略文件分配".into()));
             }
         }
+
         self.normalize_scopes()?;
+
         self.roles.sort_by(|a, b| a.id.cmp(&b.id));
         self.bindings.sort_by(|a, b| a.user_id.cmp(&b.user_id));
         self.data_scopes.sort_by(|a, b| {
@@ -217,9 +221,11 @@ mod tests {
         let mut value = document();
         value.roles.push(value.roles[0].clone());
         assert!(matches!(value.normalized(), Err(Error::ValidationError(_))));
+
         let mut value = serde_json::to_value(document()).unwrap();
         value["bindings"][0]["effective_to"] = json!(10);
         assert!(serde_json::from_value::<PolicyDocument>(value).is_err());
+
         let mut value = serde_json::to_value(document()).unwrap();
         value["roles"][0]["effect"] = json!("deny");
         assert!(serde_json::from_value::<PolicyDocument>(value).is_err());
@@ -247,6 +253,7 @@ mod tests {
         value.data_scopes =
             vec![serde_json::from_value(scope.clone()).unwrap(), serde_json::from_value(scope).unwrap()];
         assert!(matches!(value.normalized(), Err(Error::ValidationError(_))));
+
         let mut value = document();
         value.data_scopes = vec![serde_json::from_value(json!({
             "user_id":"alice","resource":"approval_instance","actions":["decide"],"mode":"replace","grants":[]
@@ -259,9 +266,11 @@ mod tests {
         let mut value = document();
         value.roles[0].id = RoleId::parse("role-root").unwrap();
         assert!(matches!(value.normalized(), Err(Error::ValidationError(_))));
+
         let mut value = document();
         value.bindings[0].user_id = "x".repeat(129);
         assert!(matches!(value.normalized(), Err(Error::ValidationError(_))));
+
         let mut value = document();
         value.roles = vec![value.roles[0].clone(); 101];
         assert!(matches!(value.normalized(), Err(Error::ValidationError(_))));

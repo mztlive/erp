@@ -250,6 +250,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                 "finance_responsibility_rule",
                 rule.base.id.clone(),
             )?;
+
             let db = self.db.clone();
             let rbac = self.auth.clone();
             let facts = Arc::clone(&self.facts);
@@ -279,6 +280,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                                 executor,
                             )
                             .await?;
+
                         service.validate_finance_rule_data(&data, true, true, executor).await?;
                         db.finance_responsibility_rules().create(&rule, executor).await?;
                         audit_port.persist(&audit, executor).await?;
@@ -321,6 +323,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                 "finance_responsibility_rule",
                 id.to_string(),
             )?;
+
             let db = self.db.clone();
             let rbac = self.auth.clone();
             let facts = Arc::clone(&self.facts);
@@ -350,6 +353,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                                 executor,
                             )
                             .await?;
+
                         let rule =
                             service.update_finance_rule(&id, version, data, updated_by, executor).await?;
                         audit_port.persist(&audit, executor).await?;
@@ -381,6 +385,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         if rule.base.version != version {
             return Err(Error::ConflictError("财务责任规则版本已变化".to_string()));
         }
+
         let probe = self.validate_finance_rule_data(&data, false, false, executor).await?;
         let counterparty_must_be_eligible = probe.status.is_active()
             || probe.operation != rule.operation
@@ -396,6 +401,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             executor,
         )
         .await?;
+
         let current = finance_rotation::rotation(&self.db, id, executor).await?;
         finance_rotation::advance(&self.db, id, &current, current.last_owner_user_id.as_deref(), executor)
             .await?;
@@ -443,6 +449,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                 executor,
             )
             .await?;
+
         let accounts = self.identity.directory().accounts_by_kind(AccountKind::Admin, executor).await?;
         let mut options = Vec::new();
         for account in accounts {
@@ -464,6 +471,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                 sales_invoice_eligible,
             });
         }
+
         options.sort_by(|left, right| {
             left.display_name.cmp(&right.display_name).then_with(|| left.user_id.cmp(&right.user_id))
         });
@@ -489,6 +497,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         executor: &mut dyn Executor,
     ) -> Result<ResolvedFinanceResponsibility> {
         self.ensure_counterparty(operation, counterparty_id, executor).await?;
+
         let rules = self
             .db
             .finance_responsibility_rules()
@@ -497,6 +506,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         let rule = FinanceResponsibilityRuleSet::new(&rules)
             .resolve(operation, counterparty_id)
             .map_err(|error| Error::BusinessLogicError(format!("{}，请先维护财务责任配置", error)))?;
+
         let current = finance_rotation::rotation(&self.db, &rule.base.id, executor).await?;
         let owner = rule
             .strategy
@@ -672,6 +682,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
     ) -> Result<Vec<FinanceResponsibilityRuleView>> {
         let owner_ids = rules.iter().flat_map(|rule| rule.owner_user_ids.iter().cloned()).collect::<Vec<_>>();
         let owner_names = self.identity.directory().names(&owner_ids, executor).await?;
+
         let supplier_ids = rules
             .iter()
             .filter(|rule| rule.operation == FinanceResponsibilityOperation::SupplierPayment)
@@ -690,6 +701,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             .collect::<Vec<_>>();
         let supplier_numbers = self.facts.counterparty_numbers("supplier", &supplier_ids, executor).await?;
         let customer_numbers = self.facts.counterparty_numbers("customer", &customer_ids, executor).await?;
+
         let mut views = Vec::with_capacity(rules.len());
         for rule in rules {
             let counterparty_no =

@@ -124,6 +124,7 @@ pub(super) async fn build_row_manifest(
     let writer = StoredManifestImages { storage, secret, request_id };
     let mut rows = Vec::with_capacity(parsed.rows.len());
     let mut uploaded_object_keys = Vec::new();
+
     for row in &parsed.rows {
         let mut entry =
             RowManifestRow { row_number: row.row_number, cells: row.cells.clone(), ..Default::default() };
@@ -144,6 +145,7 @@ pub(super) async fn build_row_manifest(
         };
         rows.push(entry);
     }
+
     Ok(BuiltRowManifest {
         manifest: RowManifest { version: ROW_MANIFEST_VERSION, request_id: request_id.to_string(), rows },
         uploaded_object_keys,
@@ -229,6 +231,7 @@ pub(super) fn decode_row_manifest(bytes: &[u8], request_id: &str) -> Result<RowM
     if ![1, 2, 3, ROW_MANIFEST_VERSION].contains(&manifest.version) || manifest.request_id != request_id {
         return Err(Error::Internal("行清单版本不一致".to_string()));
     }
+
     if manifest.version == 1 {
         for row in &mut manifest.rows {
             row.cells = legacy::compact_cells(&row.cells);
@@ -359,6 +362,7 @@ impl ManifestImageWriter for StoredManifestImages<'_> {
             .save_with_content_type(&object_key, &image.bytes, Some(image.content_type))
             .await
             .map_err(|error| Error::Internal(format!("保存预提图片失败: {error}")))?;
+
         let registration = RegisterFileAssetRequest {
             storage_object_key: object_key.clone(),
             file_name: format!("product-import.{ext}"),
@@ -389,12 +393,14 @@ async fn upload_manifest_row(
         let Some(image) = image else {
             continue;
         };
+
         let slot = format!("carousel-{sort_order}");
         let result = writer.put(entry.row_number, &slot, &image).await;
         if !record_manifest_upload(entry, result, Some(sort_order), uploaded_keys) {
             break;
         }
         sort_order += 1;
+
         if column == 2 {
             let result = writer.put(entry.row_number, "main", &image).await;
             if !record_manifest_upload(entry, result, None, uploaded_keys) {
@@ -612,6 +618,7 @@ mod tests {
                 media_error: None,
             }],
         };
+
         let bytes = serde_json::to_vec(&manifest).unwrap();
         let decoded = decode_row_manifest(&bytes, "req-1").unwrap();
         assert_eq!(decoded.version, ROW_MANIFEST_VERSION);

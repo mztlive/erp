@@ -46,6 +46,7 @@ impl SupplierFulfillmentService {
                 inbox_message_id: inbox_message_id.clone(),
             },
         )?;
+
         let allocations = req
             .allocations
             .iter()
@@ -108,6 +109,7 @@ impl SupplierFulfillmentService {
         if total_after > order_total {
             return Err(Error::BusinessLogicError("累计净退款金额不得超过订单成本余额".to_string()));
         }
+
         order.advance_refund(if total_after == order_total {
             RefundStatus::Refunded
         } else {

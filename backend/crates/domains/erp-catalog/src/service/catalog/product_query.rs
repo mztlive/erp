@@ -72,6 +72,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.catalog().product_revision_page(&filter, executor).await?;
         let items = page.items.into_iter().map(ProductRevisionView::from).collect();
         Ok(PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size })
@@ -134,6 +135,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.catalog().sku_page(keyword.as_deref(), &filter, executor).await?;
         let items = page.items.into_iter().map(SkuView::from).collect();
         Ok(PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size })
@@ -198,6 +200,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.catalog().sku_revision_page(&filter, executor).await?;
         let items = page.items.into_iter().map(SkuRevisionView::from).collect();
         Ok(PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size })

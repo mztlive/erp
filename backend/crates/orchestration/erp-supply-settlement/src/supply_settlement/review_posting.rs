@@ -157,6 +157,7 @@ async fn persist_review_result<A: WorkflowAuthorizationPort>(
         payable_account_id: input.payable.map(|account| account.base.id.clone()),
         cost_delta: input.cost_delta,
     };
+
     persist_supply_receipt(
         input.db,
         &review_audit(input)?,
@@ -244,6 +245,7 @@ mod tests {
                 executor: &mut ex as *mut ReadExecutor as usize,
                 fail: Some(fail),
             };
+
             let error = execute(&mut steps, &mut ex).await.unwrap_err();
             assert!(matches!(error, Error::ConflictError(ref value) if value == "原复核事务冲突"));
             assert_eq!(steps.calls, ORDER[..=index]);

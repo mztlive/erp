@@ -63,6 +63,7 @@ pub(in crate::supplier_portal) async fn current_purchase_sources(
             submissions.insert(id, order.base.id);
         }
     }
+
     let revision_ids = revisions.keys().cloned().map(Into::into).collect::<Vec<_>>();
     let submission_ids = submissions.keys().cloned().map(Into::into).collect::<Vec<_>>();
     let revision_lines =
@@ -72,6 +73,7 @@ pub(in crate::supplier_portal) async fn current_purchase_sources(
     if revision_lines.len() + submission_lines.len() > 10_000 {
         return Err(Error::ValidationError("采购提示选源行超过一万行".into()));
     }
+
     for line in revision_lines {
         if line.line_type == PurchaseLineType::ItemService
             && let Some(id) = revisions.get(&line.purchase_order_revision_id.to_string())

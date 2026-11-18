@@ -397,11 +397,13 @@ impl SupplierOrderAction {
         if let Some(status) = update.status {
             self.status = status;
         }
+
         if let Some(external_request_id) = update.external_request_id {
             self.apply_external_request_id(external_request_id)?;
         }
         apply_summary(&mut self.request_summary, update.request_summary, "请求摘要")?;
         apply_summary(&mut self.response_summary, update.response_summary, "响应摘要")?;
+
         if let Some(attempt_count) = update.attempt_count {
             self.attempt_count = attempt_count;
         }
@@ -732,6 +734,7 @@ mod tests {
                 ..Default::default()
             })
             .unwrap();
+
         assert_eq!(action.status, SupplierOrderActionStatus::Succeeded);
         assert_eq!(action.external_request_id.as_deref(), Some("REQ-1"));
         assert_eq!(action.request_summary.as_deref(), Some("summary"));

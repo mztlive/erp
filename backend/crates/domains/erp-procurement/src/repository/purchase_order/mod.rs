@@ -155,6 +155,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
             executor,
         )
         .await?;
+
         PurchaseOrderRepository::new(self.db, PURCHASE_ORDERS).update(order, executor).await?;
         Ok(())
     }
@@ -238,6 +239,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
             executor,
         )
         .await?;
+
         PurchaseChangeOrderRepository::new(self.db, PURCHASE_CHANGE_ORDERS)
             .update(change_order, executor)
             .await?;

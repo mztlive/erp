@@ -100,6 +100,7 @@ impl ProductImportProcess {
         if cells.len() == PRODUCT_IMPORT_HEADERS.len() || cells.len() == legacy::SUPPLY_COLUMNS {
             return self.import_with_supply(row_number, cells, media_source, actor, cache).await;
         }
+
         let row = normalize_import_row(row_number, cells)?;
         if let Some(existing) =
             self.db.products().find_by_product_no(&row.product_no, &mut ReadExecutor::default()).await?
@@ -109,6 +110,7 @@ impl ProductImportProcess {
             }
             return self.import_existing_with_images(existing, cells, media_source, actor).await;
         }
+
         if let Some(barcode) = &row.barcode {
             let owners =
                 self.db.catalog().barcode_owner_sku_ids(barcode, &mut ReadExecutor::default()).await?;
@@ -117,9 +119,11 @@ impl ProductImportProcess {
                     .with_skipped(true));
             }
         }
+
         let unit_id = self.resolve_unit(cache).await?;
         let brand_id = self.resolve_brand(&row.brand_name, actor, cache).await?;
         let category_id = self.resolve_category(&row.category_name, actor, cache).await?;
+
         let media = resolve_row_media(&self.storage, &self.secret, cells, media_source).await?;
         let carousel_media = media
             .carousel
@@ -132,6 +136,7 @@ impl ProductImportProcess {
             .collect();
         let request =
             imported_product_request(row, unit_id, brand_id, category_id, media.main_image, carousel_media);
+
         let created = product_create_with_assets(
             self.services.scoped_catalog.clone(),
             request,

@@ -25,6 +25,7 @@ impl SupplierImportProcess {
         let job = self.job_access.snapshot(id, actor).await?;
         ensure_download(&job)?;
         let source = self.source(&job).await?;
+
         let db = self.db.clone();
         let access = self.job_access.clone();
         let actor = actor.clone();
@@ -34,6 +35,7 @@ impl SupplierImportProcess {
                 Box::pin(async move {
                     let current = access.reload(&job, &actor, executor).await?;
                     ensure_download(&current)?;
+
                     let items = db
                         .background_job_items()
                         .list_entities_by_job(&BackgroundJobId::new(&current.base.id), executor)

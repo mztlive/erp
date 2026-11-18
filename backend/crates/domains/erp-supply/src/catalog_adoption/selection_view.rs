@@ -49,6 +49,7 @@ pub async fn selection_view(
     let rows = mongo_ops::find_many(&db.collection::<SelectionRow>("supplier_catalog_adoption_batch_items"),
         doc! {"batch_id":&batch.base.id,"deleted_at":0_i64},
         FindOptions::builder().projection(doc! {"_id":0,"source.id":1,"source.product_id":1,"source.name":1,"source.specification":1,"source.spec_id":1}).sort(doc! {"id":1}).build(), executor).await?;
+
     let excluded: HashSet<_> = batch.excluded_ids.iter().collect();
     let product_count = rows
         .iter()

@@ -57,6 +57,7 @@ impl SupplierConnectionExecutionProcess {
                             executor,
                         )
                         .await?;
+
                     let mut job = db
                         .background_jobs()
                         .find_by_id(&job.base.id, executor)
@@ -75,6 +76,7 @@ impl SupplierConnectionExecutionProcess {
                         .connection(&run.connection_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
+
                     let at = Instant::now();
                     job.start(at)?;
                     run.start(at)?;
@@ -115,6 +117,7 @@ impl SupplierConnectionExecutionProcess {
                         .connection(&run.connection_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
+
                     let at = Instant::now();
                     let config_changed = connection.technical_config_version != run.technical_config_version;
                     let service = SupplierApiService::new(db.clone());
@@ -140,6 +143,7 @@ impl SupplierConnectionExecutionProcess {
                         connection.stable.touch(actor.id());
                         service.persist_connection(&mut connection, executor).await?;
                     }
+
                     persist_health_result(&db, connection, &mut job, &mut run, &actor, executor).await
                 })
             })
@@ -157,6 +161,7 @@ async fn persist_health_result(
 ) -> Result<()> {
     db.background_jobs().update(job, executor).await?;
     SupplierApiService::new(db.clone()).persist_health_run(run, executor).await?;
+
     let audit = actor.clone().resource_log_with_id(
         format!("w20-health-audit-{}", digest(&[&job.base.id])),
         "supplier_api_connection.health_check.settle",
@@ -273,6 +278,7 @@ mod tests {
             },
         )
         .unwrap();
+
         job.start(Instant::now()).unwrap();
         run.start(Instant::now()).unwrap();
         (connection, job, run)
@@ -301,6 +307,7 @@ mod tests {
                 assert!(outcome.is_ok());
             }
         }
+
         assert_eq!(
             *gateway.0.lock().unwrap(),
             [

@@ -260,6 +260,7 @@ impl PreparedSupplierConnectionCommand {
         if expected_version == 0 {
             return Err(SupplierCommandShapeRejection::InvalidExpectedVersion);
         }
+
         match action {
             SupplierConnectionAction::UpdateBusinessProfile => Ok(Self::UpdateBusinessProfile {
                 expected_version,
@@ -544,6 +545,7 @@ mod tests {
                     Err(expected),
                 );
             }
+
             let prepared = PreparedSupplierConnectionCommand::try_from_parts(
                 action,
                 u64::MAX,
@@ -600,6 +602,7 @@ mod tests {
                 Err(expected)
             );
         }
+
         assert_eq!(
             PreparedSupplierConnectionCommand::try_from_parts(action, 1, None, Some(" 操作停用 "), None)
                 .unwrap(),
@@ -722,6 +725,7 @@ mod tests {
             SupplierCommandShapeRejection::TechnicalReferenceOnCreate.to_string(),
             "创建连接只建立身份；技术引用必须通过不透明引用绑定命令提交"
         );
+
         let error: erp_core::Error = rejection.into();
         assert_eq!(error.to_string(), "连接版本必须大于0");
     }

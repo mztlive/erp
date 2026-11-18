@@ -295,6 +295,7 @@ impl SupplierQualificationRepositoryExt for Repository<'_, SupplierQualification
         if ids.is_empty() {
             return Ok(vec![]);
         }
+
         self.find_many(doc! { "id": { "$in": ids }, "supplier_id": supplier_id.to_string(), "qualification_type": "contract" }, executor).await
     }
 }

@@ -110,6 +110,7 @@ mod tests {
             assert_eq!(cent_coefficient(normalized.to_decimal()), Some(expected));
             assert!(order_independent([original, normalized]));
         }
+
         assert_eq!(cent_coefficient(Decimal::from_str("12.3400").unwrap()), Some(1234));
         assert_eq!(cent_coefficient(Decimal::from_str("12.3401").unwrap()), None);
         assert_eq!(cent_coefficient(Decimal::from_str("-0.001").unwrap()), None);

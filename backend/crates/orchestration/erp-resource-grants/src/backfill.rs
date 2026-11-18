@@ -58,6 +58,7 @@ impl ResourceGrantProcess {
     /// 权限或基础设施错误中止整页；未知提交结果不自动重试。
     pub async fn backfill(&self, actor: &AuditActor, request: BackfillRequest) -> Result<BackfillReport> {
         validate_cursor(request.after.as_deref())?;
+
         let this = self.clone();
         let actor = actor.clone();
         self.db
@@ -81,6 +82,7 @@ impl ResourceGrantProcess {
             ..Default::default()
         };
         let mut planned = BTreeSet::new();
+
         for entry in entries {
             let prepared = match self.prepare_history(&entry, &planned, ex).await {
                 Ok(value) => value,
@@ -90,6 +92,7 @@ impl ResourceGrantProcess {
                 },
                 Err(error) => return Err(error),
             };
+
             report.existing += prepared.existing;
             report.terminated += prepared.terminated;
             report.eligible += prepared.events.len();
@@ -117,8 +120,10 @@ impl ResourceGrantProcess {
                 prepared.terminated += 1;
                 continue;
             }
+
             let update = Facts::compute(&self.db, &event, ex).await?;
             validate_targets(&self.db, &update.targets, ex).await?;
+
             if planned.contains(&event.source.id()?)
                 || self.queue.source_event(&event.source, ex).await?.is_some()
             {
@@ -146,6 +151,7 @@ impl ResourceGrantProcess {
                 let task_id = request.work_item_id.as_deref().ok_or_else(invalid)?;
                 let task = self.db.work_items().find_by_id(task_id, ex).await?.ok_or_else(invalid)?;
                 let recipient = task.responsibility_actor_ids.first().ok_or_else(invalid)?.clone();
+
                 Ok(vec![GrantEventEvidence {
                     payload: GrantEventPayload::InvoiceApproved {
                         invoice_request_id: request.base.id.clone(),
@@ -167,6 +173,7 @@ impl ResourceGrantProcess {
                     .find_by_id(execution.process_instance_id.as_ref(), ex)
                     .await?
                     .ok_or_else(invalid)?;
+
                 let mut events = Vec::new();
                 for event in assignment_events(&instance, execution) {
                     if grant_history::assigned_to(&self.db, &execution.base.id, &event.recipient, ex).await? {
@@ -216,6 +223,7 @@ fn assignment_events(
         },
         _ => return Vec::new(),
     };
+
     let recipients = std::iter::once(execution.assignee_participant_id.as_str())
         .chain(execution.additional_assignees.iter().map(|assignee| assignee.participant_id.as_str()))
         .collect::<BTreeSet<_>>();
@@ -293,6 +301,7 @@ mod tests {
                 participant_id: ParticipantId::new("second").unwrap(),
                 name: "另一审批人".into(),
             });
+
             let events = assignment_events(&instance, &execution);
             assert_eq!(
                 events.iter().map(|event| event.recipient.as_str()).collect::<Vec<_>>(),
@@ -304,6 +313,7 @@ mod tests {
             assert_eq!(first.evidence.fact_version, 7);
             assert_eq!(first.evidence.occurred_at, 11);
             first.ensure_replay(&GrantEvent::new(events[0].clone()).unwrap()).unwrap();
+
             instance.subject = SubjectRef::new("unrelated", "S001").unwrap();
             assert!(assignment_events(&instance, &execution).is_empty());
         }

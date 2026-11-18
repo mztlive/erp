@@ -66,6 +66,7 @@ impl SalesSelectionService {
             _ => return Err(Error::Internal("非法选品生命周期命令".into())),
         };
         self.authorize_booklet(actor, id, permission, tx).await?;
+
         let actor_id = actor.id();
         let key = normalize_idempotency_key(&req.idempotency_key)?;
         let hash =
@@ -73,6 +74,7 @@ impl SalesSelectionService {
         if let Some(view) = self.replay_idempotency(operation, actor_id, &key, &hash, tx).await? {
             return Ok(view);
         }
+
         let mut book = self.load_booklet(id, tx).await?;
         book.ensure_version(req.expected_version)
             .map_err(|error| Error::selection_conflict(error.to_string()))?;
@@ -91,6 +93,7 @@ impl SalesSelectionService {
             _ => return Err(Error::Internal("非法链接命令".into())),
         }
         self.db.sales_selection_booklets().update(&mut book, tx).await?;
+
         let view = self.detail_view(&book, None, tx).await?;
         self.store_idempotency(
             IdempotencyStoreInput {

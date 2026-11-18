@@ -33,6 +33,7 @@ pub async fn persist_cancelled_order(
     previous
         .ensure_expected_version(order.base.version)
         .map_err(|_| Error::ConflictError("采购单取消版本已变化".to_string()))?;
+
     let source_id = order.draft_submission_id()?;
     let source = db
         .purchase_order_submissions()
@@ -40,6 +41,7 @@ pub async fn persist_cancelled_order(
         .await?
         .ok_or_else(|| Error::NotFound("采购单取消来源提交不存在".to_string()))?;
     let source_lines = db.purchase_order().list_submission_lines(&source_id, executor).await?;
+
     let line_ids =
         source_lines.iter().map(|_| PurchaseOrderSubmissionLineId::new(next_id())).collect::<Vec<_>>();
     let draft = order
@@ -51,6 +53,7 @@ pub async fn persist_cancelled_order(
             &line_ids,
         )
         .map_err(|error| Error::ConflictError(error.to_string()))?;
+
     db.purchase_order_submissions().create(&draft.submission, executor).await?;
     for line in &draft.lines {
         db.purchase_order_submission_lines().create(line, executor).await?;

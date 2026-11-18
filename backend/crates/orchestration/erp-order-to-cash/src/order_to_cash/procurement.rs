@@ -31,6 +31,7 @@ impl SalesOrderCommandProcess {
         if order.business_type != BusinessType::GoodsService {
             return Ok(());
         }
+
         let inputs = erp_sales::service::sales_order::procurement::working_copy_inputs(lines)?
             .into_iter()
             .map(resolution_input)

@@ -33,10 +33,12 @@ impl ReturnsProcess {
         let subject = customer_refund_subject_ref(id)?;
         let binding = find_approval_binding(&self.db, id, executor).await.map_err(crate::Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
+
         let now = Instant::now();
         let organization_id =
             load_customer_responsible_org_id(&self.db, &refund.customer_id, executor).await?;
         let snapshot = build_customer_refund_snapshot(&refund, &organization_id, actor.id(), now)?;
+
         let existing_receipt = load_start_receipt(
             &self.db,
             &subject,
@@ -60,6 +62,7 @@ impl ReturnsProcess {
             receipt: existing_receipt,
             now,
         })?)?;
+
         persist_customer_refund_start(
             &self.db,
             &self.rbac,
@@ -108,6 +111,7 @@ impl ReturnsProcess {
         let runtime =
             load_cancel_runtime(&self.db, &binding, &subject, refund.approval_subject_version, executor)
                 .await?;
+
         let now = Instant::now();
         let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
         let input = build_customer_refund_cancel_input(
@@ -119,12 +123,14 @@ impl ReturnsProcess {
             now,
         )?;
         let prepared = prepare_cancel(input)?;
+
         execute_customer_refund_domain_action(refund, adapter.cancel_action)?;
         let audit = actor.clone().resource_log(
             "customer_refund.cancel_approval",
             "customer_refund",
             id.to_string(),
         )?;
+
         persist_customer_refund_cancel(
             &self.db,
             &self.rbac,

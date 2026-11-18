@@ -70,6 +70,7 @@ mod tests {
         assert_eq!(first.get_str("supplier_offering_id").unwrap(), "offering-a");
         assert_eq!(first.get_i64("deleted_at").unwrap(), NOT_DELETED_TIMESTAMP_BSON);
         assert!(!first.contains_key("revision_no"));
+
         let next = history_filter(&id, Some(21));
         assert_eq!(next.get_str("supplier_offering_id").unwrap(), "offering-a");
         assert_eq!(next.get_document("revision_no").unwrap().get_i64("$lt").unwrap(), 21);

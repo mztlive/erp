@@ -65,6 +65,7 @@ impl MongoFundsInvestigationStore {
         {
             return Err(Error::Forbidden("资金读取账号与当前连接或财务账户归属不一致".into()));
         }
+
         let lease_db = db.clone();
         let lease_account = account_id.clone();
         let owner = next_id();
@@ -173,6 +174,7 @@ impl FundsInvestigationStore for MongoFundsInvestigationStore {
         for evidence in pending {
             report.merge(self.apply_received(evidence).await?);
         }
+
         self.finish_checkpoint().await?;
         Ok(report)
     }
@@ -195,6 +197,7 @@ impl FundsInvestigationStore for MongoFundsInvestigationStore {
                         }
                         return Ok(checkpoint.clone());
                     }
+
                     let account = store
                         .db
                         .supplier_deposit_accounts()
@@ -211,6 +214,7 @@ impl FundsInvestigationStore for MongoFundsInvestigationStore {
                 })
             })
             .await?;
+
         if checkpoint.finished {
             return Err(Error::BusinessLogicError("当前资金窗口已完成读取，请等待下一采样时点".into()));
         }
@@ -246,6 +250,7 @@ impl FundsInvestigationStore for MongoFundsInvestigationStore {
             source_revision: None,
             observations: page.items.into_iter().map(convert::observation).collect(),
         };
+
         let store = self.clone();
         self.db
             .client()

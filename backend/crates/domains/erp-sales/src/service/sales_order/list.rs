@@ -139,6 +139,7 @@ mod tests {
         let search = SalesOrderSearch { q: Some("客户".into()), ..Default::default() };
         let orgs = Some(vec!["org-1".into(), "org-child".into()]);
         let first = list_filter(&params, search.clone(), orgs.clone()).unwrap();
+
         params.page = Some(2);
         params.page_size = Some(50);
         params.sort_by = Some("order_no".into());

@@ -131,6 +131,7 @@ impl ContentCache {
         if fingerprint.is_empty() || bytes.len() > MAX_OBJECT_BYTES {
             return;
         }
+
         while self.entries.len() >= MAX_ENTRIES || self.total_bytes + bytes.len() > MAX_TOTAL_BYTES {
             let Some(oldest) =
                 self.entries.iter().min_by_key(|(_, entry)| entry.stored_at).map(|(key, _)| key.clone())
@@ -139,6 +140,7 @@ impl ContentCache {
             };
             self.remove(&oldest);
         }
+
         self.total_bytes += bytes.len();
         self.entries.insert(key, Entry { fingerprint, bytes: bytes.to_vec(), stored_at: now });
     }
@@ -172,6 +174,7 @@ mod tests {
         cache.insert("key".into(), "first".into(), b"private", now);
         assert_eq!(cache.read("key", "first", now + Duration::from_secs(29)), Some(b"private".to_vec()));
         assert_eq!(cache.read("key", "first", now + TTL), None);
+
         cache.insert("key".into(), "first".into(), b"private", now);
         assert_eq!(cache.read("key", "changed", now), None);
         assert_eq!(cache.total_bytes, 0);
@@ -185,6 +188,7 @@ mod tests {
         cache.insert("large".into(), "hash".into(), &vec![0; MAX_OBJECT_BYTES + 1], now);
         cache.insert("empty".into(), String::new(), b"private", now);
         assert_eq!(cache.total_bytes, 0);
+
         cache.insert("key".into(), "hash".into(), b"private", now);
         cache.remove("key");
         assert_eq!(cache.read("key", "hash", now), None);
@@ -206,6 +210,7 @@ mod tests {
         }
         assert_eq!(cache.total_bytes, MAX_TOTAL_BYTES);
         assert_eq!(cache.read("0", "hash", now + Duration::from_secs(17)), None);
+
         let mut small = ContentCache::default();
         for index in 0..257 {
             small.insert(index.to_string(), "hash".into(), b"x", now + Duration::from_millis(index));
@@ -224,11 +229,14 @@ mod tests {
         let during_write = cache.generation();
         cache.insert_if_current(before_write, "key".into(), "hash".into(), b"old", now);
         assert_eq!(cache.read("key", "hash", now), None);
+
         cache.invalidate("key");
         cache.insert_if_current(during_write, "key".into(), "hash".into(), b"old", now);
         assert_eq!(cache.read("key", "hash", now), None);
+
         cache.insert_if_current(cache.generation(), "key".into(), "hash".into(), b"current", now);
         assert_eq!(cache.read("key", "hash", now), Some(b"current".to_vec()));
+
         cache.generation = Some(u64::MAX);
         cache.invalidate("key");
         cache.insert_if_current(None, "key".into(), "hash".into(), b"old", now);

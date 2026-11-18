@@ -144,6 +144,7 @@ impl ContractCounter {
     /// 年份越界时拒绝。
     pub fn initial(group: NumberGroup, year: i32) -> Result<Self> {
         validate_year(year)?;
+
         let last_sequence = if year == 2026 {
             match group {
                 NumberGroup::FSY => 452,
@@ -266,6 +267,7 @@ mod tests {
                 format!("{}-S-270001", group.prefix())
             );
         }
+
         let mut counter = ContractCounter::initial(NumberGroup::FSY, 2026).unwrap();
         assert!(counter.advance_to(451).is_err());
         assert!(counter.advance_to(10000).is_err());

@@ -44,6 +44,7 @@ impl super::WorkItemFactsReader {
         if orders.is_empty() {
             return Ok(());
         }
+
         let displays = self.purchase_review_displays(&orders, executor).await?;
         insert_purchase_order_facts(facts, &orders, &displays);
         Ok(())
@@ -168,6 +169,7 @@ fn purchase_order_fact(
         order.stable.created_by.clone(),
     );
     fact.order_scope_source = Some(OrderTaskSource::Purchase(order.base.id.clone()));
+
     for (submission_id, display) in displays {
         if display.purchase_order_id != order.base.id {
             continue;
@@ -225,6 +227,7 @@ pub(in crate::workbench) fn previous_formal_submission_ids(
             .or_default()
             .push((sequence, submission.base.id.clone()));
     }
+
     let mut previous = HashMap::new();
     for mut values in grouped.into_values() {
         values.sort_by_key(|(sequence, _)| *sequence);

@@ -58,6 +58,7 @@ impl PackagingInput {
         required(&self.original_unit, "原包装单位", 64)?;
         required(&self.base_unit, "包装基础单位", 64)?;
         required(&self.original_unit_price, "原包装报价", 64)?;
+
         let quantity = self.units_per_package.to_decimal();
         if quantity.is_zero() || quantity.is_sign_negative() {
             return Err(validation("每个包装的基础单位数量必须大于零"));

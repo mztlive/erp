@@ -170,6 +170,7 @@ pub async fn reject_approval(
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::Internal("退款冲正驳回缺少运行时事务".into()));
     }
+
     let expected = match document_type {
         DocumentType::CustomerRefund => ApprovalDomainAction::CustomerRefundReject,
         DocumentType::SupplierRefund => ApprovalDomainAction::SupplierRefundReject,
@@ -180,6 +181,7 @@ pub async fn reject_approval(
     if action != expected {
         return Err(Error::ValidationError("单据与驳回动作不匹配".into()));
     }
+
     persist_approval_outcome(
         db,
         ApprovalOutcome {
@@ -210,6 +212,7 @@ mod boundary_tests {
         let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
         let mut executor = ReadExecutor::default();
         let boundary = executor.boundary().unwrap();
+
         let result = reject_approval(
             &db,
             DocumentType::CustomerRefund,

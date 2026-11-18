@@ -60,12 +60,14 @@ impl IntegrationCenterReadService {
     ) -> Result<DifferenceDetailView> {
         let access = self.access.resolve(actor, &integration_ops::DIFFERENCE_DETAIL, executor).await?;
         let difference = authorized_difference(&self.db, id, &access, executor).await?;
+
         let history = self
             .db
             .reconciliation_difference_resolutions()
             .search_resolutions(&ReconciliationDifferenceId::new(difference.base.id.clone()), executor)
             .await?;
         let view = self.assemble_difference_detail(difference, history, executor).await?;
+
         self.access.validate(&access, executor).await?;
         Ok(view)
     }
@@ -84,16 +86,20 @@ impl IntegrationCenterReadService {
             view.version = u64::from(latest.resolution_no);
         }
         let mut resolutions = resolution_views(history);
+
         let terminal = view.status.is_some_and(|status| status.is_terminal());
         let has_work_item = self.has_difference_work_item(&view.id, executor).await?;
         let linked_evidence = self.evidence.discover_evidence(&subject, executor).await?;
+
         self.difference_names(slice::from_mut(&mut view), executor).await?;
         view.left_fact_label = evidence_label(view.left_fact_reference.as_deref(), &linked_evidence);
         view.right_fact_label = evidence_label(view.right_fact_reference.as_deref(), &linked_evidence);
         self.resolution_names(&mut resolutions, &linked_evidence, executor).await?;
+
         let policy = difference_evidence_policy(&difference);
         let (allowed_actions, action_blockers) =
             difference_action_projection(&difference, terminal, has_work_item, &linked_evidence);
+
         Ok(DifferenceDetailView {
             difference: view,
             resolutions,

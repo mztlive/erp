@@ -92,6 +92,7 @@ fn new_confirmation_appends_immutable_history() {
     next.hierarchy[1].version = 5;
     next.category_version = 5;
     next.confirmed_by = "buyer-2".into();
+
     mapping.confirm(1, next).unwrap();
     assert_eq!(mapping.confirmations.len(), 2);
     assert_eq!(serde_json::to_value(&mapping.confirmations[0]).unwrap(), original);
@@ -113,6 +114,7 @@ fn unchanged_history_still_requires_explicit_confirmation() {
     let suggestion = mapping().suggestion(Some((candidate(&nodes), nodes))).unwrap();
     assert_eq!(suggestion.status, CategoryMappingSuggestionStatus::ConfirmationRequired);
     assert!(suggestion.requires_confirmation);
+
     let safe = serde_json::to_value(suggestion).unwrap();
     for internal in ["supplier_id", "confirmed_by", "reason", "draft_id", "submission_id", "hierarchy"] {
         assert!(safe.get(internal).is_none());
@@ -134,6 +136,7 @@ fn target_or_ancestor_change_requires_recheck() {
         assert_eq!(suggestion.status, CategoryMappingSuggestionStatus::RecheckRequired);
         assert!(suggestion.requires_confirmation);
     }
+
     let unavailable = mapping().suggestion(None).unwrap();
     assert_eq!(unavailable.status, CategoryMappingSuggestionStatus::RecheckRequired);
     assert!(unavailable.category.is_none());
@@ -145,9 +148,11 @@ fn confirmation_rejects_changed_original_path_and_invalid_hierarchy() {
     let mut changed_raw = confirmation("submission-2");
     changed_raw.source_original_category_path = "其他供应商路径 > 杯具".into();
     assert!(mapping.confirm(1, changed_raw).is_err());
+
     let mut changed_parent = confirmation("submission-2");
     changed_parent.hierarchy[1].parent_id = Some("other-root".into());
     assert!(mapping.confirm(1, changed_parent).is_err());
+
     let mut changed_kind = confirmation("submission-2");
     changed_kind.hierarchy[0].product_kind = ProductKind::Virtual;
     assert!(mapping.confirm(1, changed_kind).is_err());

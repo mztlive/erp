@@ -38,6 +38,7 @@ impl ReceiptCapacityRepositoryExt for Repository<'_, CustomerReceipt> {
         if entry_ids.is_empty() {
             return Ok(Vec::new());
         }
+
         let ids = entry_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
         let mut filter = doc! {
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
@@ -47,6 +48,7 @@ impl ReceiptCapacityRepositoryExt for Repository<'_, CustomerReceipt> {
         if let Some(id) = excluded_receipt {
             filter.insert("id", doc! { "$ne": id });
         }
+
         let pipeline = vec![
             doc! { "$match": filter },
             doc! { "$unwind": "$pending_allocations" },
@@ -55,6 +57,7 @@ impl ReceiptCapacityRepositoryExt for Repository<'_, CustomerReceipt> {
             "allocated_amount": { "$sum": "$pending_allocations.allocated_amount" } } },
             doc! { "$project": { "_id": 0, "receivable_entry_id": "$_id", "allocated_amount": 1 } },
         ];
+
         let collection = self.collection();
         aggregate::rows(&collection.clone_with_type::<PendingReceiptAllocation>(), pipeline, executor).await
     }

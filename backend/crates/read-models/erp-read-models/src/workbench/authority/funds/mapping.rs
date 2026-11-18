@@ -319,6 +319,7 @@ mod tests {
             "reason_code": null, "reason_text": "纠错原因", "handled_by": "current-handler",
             "reviewed_by": "current-reviewer", "evidence_attachment_id": null
         });
+
         let object = value.as_object_mut().unwrap();
         object.extend(serde_json::to_value(BaseModel::fake()).unwrap().as_object().unwrap().clone());
         if let Some(creator) = creator {

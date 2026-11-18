@@ -30,6 +30,7 @@ impl ResourceGrantProcess {
         if self.source_readiness(&initial, executor).await? == GrantReadiness::NotReady {
             return Ok(true);
         }
+
         let Some(request) = self.db.sales_invoice_requests().find_by_id(request_id, executor).await? else {
             return Ok(false);
         };
@@ -73,6 +74,7 @@ impl ResourceGrantProcess {
         let Some(event) = self.queue.event(&expected, executor).await? else {
             return Ok(GrantReadiness::Absent);
         };
+
         let update = Facts::compute(&self.db, &event, executor).await?;
         let source = self.queue.source(&event.source, executor).await?;
         Ok(match source {

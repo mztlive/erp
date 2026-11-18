@@ -48,9 +48,11 @@ impl ReceivableProcess {
                             executor,
                         )
                         .await?;
+
                     let view = ReceivableService::new(db.clone())
                         .invoice_detail_with_executor(&id, executor)
                         .await?;
+
                     rbac.authorization
                         .require(
                             &actor,
@@ -71,11 +73,13 @@ async fn invoice_sources(db: &Database, id: &str, executor: &mut dyn Executor) -
     let invoice =
         db.invoices().find_by_id(id, executor).await?.ok_or_else(|| Error::NotFound("发票不存在".into()))?;
     ensure_sales_invoice(&invoice)?;
+
     let allocations =
         db.sales_invoice_allocations().find_allocations_by_invoices(&[InvoiceId::new(id)], executor).await?;
     let mut accounts =
         allocations.into_iter().map(|line| line.receivable_account_id.to_string()).collect::<BTreeSet<_>>();
     let mut sources = BTreeSet::new();
+
     if let Some(request_id) = invoice.sales_invoice_request_id {
         let request = db
             .sales_invoice_requests()
@@ -85,6 +89,7 @@ async fn invoice_sources(db: &Database, id: &str, executor: &mut dyn Executor) -
         accounts.insert(request.receivable_account_id.to_string());
         sources.insert(request.sales_order_id.to_string());
     }
+
     for account_id in accounts {
         let account = db
             .receivable_accounts()

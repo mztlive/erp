@@ -45,6 +45,7 @@ impl FundsMapping {
             ),
         ]
         .into();
+
         let model = query_model(resource)?;
         Ok(Self {
             model,
@@ -181,6 +182,7 @@ pub(super) fn source_projection(resource: &str) -> Result<Vec<Document>> {
     let mut stages = vec![
         doc! { "$set": { "__funds_sales_ids": [], "__funds_purchase_ids": [], "__funds_settlement_ids": [], "__funds_sources_valid": true } },
     ];
+
     match resource {
         "receivable_account" | "cost_allocation" => {
             stages.push(doc! { "$set": { "__funds_sales_ids": single("$sales_order_id"), "__funds_sources_valid": { "$ne": [{ "$ifNull": ["$sales_order_id", ""] }, ""] } } })
@@ -323,6 +325,7 @@ mod tests {
             }
             assert!(fields.get_bool("__funds_sources_valid").unwrap());
         }
+
         assert!(source_projection("unknown").is_err());
         assert!(collection("unknown").is_err());
     }
@@ -342,6 +345,7 @@ mod tests {
             assert_eq!(model.id_field, "id");
             model.validate().unwrap();
         }
+
         assert_eq!(query_model("cost_allocation").unwrap().collection, "cost_entries");
         assert_eq!(collection("cost_allocation").unwrap(), "cost_allocations");
         assert_eq!(query_model("receivable_account").unwrap().output, QueryOutput::Object);
@@ -355,6 +359,7 @@ mod tests {
                 "$setEquals": [{ "$ifNull": ["$entry_ids", []] }, "$entries.id"]
             })
         );
+
         let stage = array_lookup("receivable_entries", "$entry_ids".into(), "entries");
         let lookup = stage.get_document("$lookup").unwrap();
         assert_eq!(lookup.get_document("let").unwrap().get_str("sources").unwrap(), "$entry_ids");

@@ -112,6 +112,7 @@ impl SupplierPortalProcess {
         if actor.kind() != AccountKind::Admin {
             return Err(Error::Forbidden("供应商身份不能操作内部审核".into()));
         }
+
         let current = AccountDirectoryService::new(self.db.clone())
             .account(actor.id(), executor)
             .await?
@@ -207,6 +208,7 @@ impl SupplierPortalProcess {
         if !qualified.permissions().covers(&PermissionSet::new(permissions.to_vec())) {
             return Err(Error::Forbidden("当前账号缺少供应商门户管理或确认权限".into()));
         }
+
         let account = qualified.account();
         Ok(AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind))
     }

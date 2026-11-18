@@ -61,10 +61,12 @@ pub(crate) async fn sources(
         .sales_order_revision_lines()
         .list_lines_by_revisions(&ids.iter().map(SalesOrderRevisionId::new).collect::<Vec<_>>(), executor)
         .await?;
+
     let mut commercial = commercial_lines(db, &lines, executor).await?;
     enrich_line_prices(db, &mut commercial, executor).await?;
     let order_ids = revisions.iter().map(|revision| revision.sales_order_id.to_string()).collect::<Vec<_>>();
     enrich_inquiry_prices(db, &mut commercial, &order_ids, executor).await?;
+
     allowed
         .iter()
         .map(|source| {
@@ -90,6 +92,7 @@ fn source_view(
         .collect::<Vec<_>>();
     validate_source(source, revision.sales_order_id.as_ref(), revision.revision.revision_no, rows.len())?;
     rows.sort_by_key(|line| line.line_no);
+
     let details = rows
         .iter()
         .map(|line| {

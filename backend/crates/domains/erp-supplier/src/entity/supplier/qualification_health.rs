@@ -59,6 +59,7 @@ impl SupplierQualification {
         if self.stable.status == QualificationStatus::Disabled {
             return None;
         }
+
         let expired_by_date = self.valid_to.is_some_and(|end| end < as_of);
         if self.stable.status == QualificationStatus::Expired || expired_by_date {
             return Some(QualificationHealth::Expired);
@@ -66,6 +67,7 @@ impl SupplierQualification {
         if self.valid_from.is_some_and(|start| start > as_of) {
             return None;
         }
+
         let expiring = self
             .valid_to
             .is_some_and(|end| Self::expiry_cutoff(as_of, 30).map(|cutoff| end <= cutoff).unwrap_or(false));
@@ -196,6 +198,7 @@ mod tests {
             Some((2026, 1, 1)),
             Some((2026, 12, 31)),
         );
+
         assert_eq!(unverified.health_on(as_of()), Some(QualificationHealth::Unverified));
         assert_eq!(disabled.health_on(as_of()), None);
         assert_eq!(
@@ -228,6 +231,7 @@ mod tests {
             Some((2026, 1, 1)),
             Some((2027, 12, 31)),
         );
+
         assert_eq!(expired_status.health_on(as_of()), Some(QualificationHealth::Expired));
         assert_eq!(expired_date.health_on(as_of()), Some(QualificationHealth::Expired));
         assert_eq!(
@@ -260,9 +264,11 @@ mod tests {
             Some((2026, 10, 1)),
             Some((2027, 10, 1)),
         );
+
         assert_eq!(expiring.health_on(as_of()), Some(QualificationHealth::Expiring30));
         assert_eq!(valid.health_on(as_of()), Some(QualificationHealth::Valid));
         assert_eq!(future.health_on(as_of()), None);
+
         assert_eq!(
             SupplierQualification::rollup_health([&valid, &expiring], as_of()),
             QualificationHealth::Expiring30
@@ -297,6 +303,7 @@ mod tests {
             Some((2026, 1, 1)),
             Some((2026, 12, 31)),
         );
+
         assert_eq!(
             SupplierQualification::registered_types([&license, &duplicate, &contract]),
             vec![QualificationType::Contract, QualificationType::FoodLicense]

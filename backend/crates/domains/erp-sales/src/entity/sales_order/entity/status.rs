@@ -327,6 +327,7 @@ impl CollectionProgress {
             all_settled &= open_total.to_decimal() == rust_decimal::Decimal::ZERO && settled;
             any_settled |= settled;
         }
+
         match (has_account, all_settled, any_settled) {
             (true, true, _) => Self::Settled,
             (_, _, true) => Self::PartiallyCollected,
@@ -408,6 +409,7 @@ impl InvoiceProgress {
             all_invoiced &= open_invoiceable_total.to_decimal() == rust_decimal::Decimal::ZERO && invoiced;
             any_invoiced |= invoiced;
         }
+
         match (has_account, all_invoiced, any_invoiced) {
             (true, true, _) => Self::Completed,
             (_, _, true) => Self::PartiallyInvoiced,

@@ -125,6 +125,7 @@ pub fn start_identity(params: StartIdentityParams<'_>) -> Result<PreparedCommand
         if reason.is_some() { "STANDARD_RESUBMISSION" } else { "STANDARD" },
         fields,
     )?;
+
     if reason.is_some() {
         return Ok(current);
     }

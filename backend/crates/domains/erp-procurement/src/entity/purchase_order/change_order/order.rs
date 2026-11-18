@@ -332,6 +332,7 @@ impl PurchaseChangeOrder {
         {
             return Err(Error::from("只有草稿状态的采购变更单可以编辑内容"));
         }
+
         if let Some(reason) = update.reason {
             self.reason =
                 normalize_required_text(reason, "采购变化原因不能为空", REASON_MAX_LEN, "采购变化原因过长")?;
@@ -388,6 +389,7 @@ impl PurchaseChangeOrder {
             CONTENT_HASH_MAX_LEN,
             "目标内容指纹过长",
         )?;
+
         self.approval_subject_version = next;
         self.current_submission_id = Some(submission_id);
         self.target_content_hash = Some(target_content_hash);
@@ -541,11 +543,13 @@ mod tests {
         let mut order =
             PurchaseChangeOrder::new(PurchaseChangeOrderId::new("change"), change_data(), "buyer").unwrap();
         assert!(order.reject_approval(1, "approver").is_err());
+
         order.start_approval(PurchaseChangeSubmissionId::new("first"), "hash", "buyer").unwrap();
         order.reject_approval(1, "approver").unwrap();
         assert_eq!(order.stable.status, PurchaseChangeOrderStatus::Rejected);
         assert_eq!(order.current_submission_id.as_ref().unwrap().as_ref(), "first");
         assert!(order.reject_approval(1, "approver").is_err());
+
         order.update_submission_reason(Some("补充变更理由"), "buyer").unwrap();
         assert_eq!(order.stable.status, PurchaseChangeOrderStatus::Rejected);
         order.start_approval(PurchaseChangeSubmissionId::new("second"), "hash", "buyer").unwrap();
@@ -567,6 +571,7 @@ mod tests {
             "审批提交版本已变化，不得驳回历史提交"
         );
         assert_eq!(order, before);
+
         order.reject_approval(2, "approver").unwrap();
         assert_eq!(order.stable.status, PurchaseChangeOrderStatus::Rejected);
     }
@@ -603,11 +608,13 @@ mod tests {
             PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-1"), change_data(), "admin-1").unwrap();
         order.ensure_expected_version(order.base.version).unwrap();
         assert!(order.ensure_expected_version(order.base.version.saturating_add(1)).is_err());
+
         order.ensure_draft_for_submission().unwrap();
         assert!(order.submission_id_for_effect(None).is_err());
         order.start_approval(PurchaseChangeSubmissionId::new("pcs-1"), "hash-1", "admin-1").unwrap();
         assert_eq!(order.submission_id_for_effect(Some("pcs-1")).unwrap().as_ref(), "pcs-1");
         assert!(order.submission_id_for_effect(Some("pcs-old")).is_err());
+
         order.ensure_base_revision_current(Some("por-1")).unwrap();
         assert!(order.ensure_base_revision_current(Some("por-2")).is_err());
     }
@@ -735,6 +742,7 @@ mod tests {
                 order.update_submission_reason(reason, "submitter").unwrap();
                 assert_eq!(order, before);
             }
+
             if status != PurchaseChangeOrderStatus::Draft {
                 let error = order.update_submission_reason(Some("新原因"), "submitter").unwrap_err();
                 assert_eq!(error.to_string(), "只有草稿状态的采购变更单可以编辑内容");
@@ -750,6 +758,7 @@ mod tests {
         order.update_submission_reason(Some(" 新原因 "), "submitter").unwrap();
         assert_eq!(order.reason, "新原因");
         assert_eq!(order.stable.updated_by, "submitter");
+
         let too_long = "因".repeat(501);
         let before = order.clone();
         assert_eq!(
@@ -757,6 +766,7 @@ mod tests {
             "采购变化原因过长"
         );
         assert_eq!(order, before);
+
         order.stable.status = PurchaseChangeOrderStatus::InApproval;
         assert_eq!(
             order.update_submission_reason(Some(&too_long), "other").unwrap_err().to_string(),

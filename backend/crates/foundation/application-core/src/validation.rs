@@ -77,6 +77,7 @@ fn rule_message(error: &ValidationError) -> String {
     if let Some(message) = &error.message {
         return message.to_string();
     }
+
     match error.code.as_ref() {
         "required" | "non_blank" | "non_empty" => "不能为空".into(),
         "email" => "请填写有效的邮箱地址".into(),
@@ -107,6 +108,7 @@ mod tests {
         error.add_param("value".into(), &"secret-input");
         let mut errors = ValidationErrors::new();
         errors.add("bank_name", error);
+
         let issues = ValidationIssues::from(errors).at("bank_accounts[1]");
         assert_eq!(issues.fields()["bank_accounts[1].bank_name"], "长度或数量不能小于 1");
         assert!(!format!("{issues:?}").contains("secret-input"));
@@ -118,6 +120,7 @@ mod tests {
         let mut error = ValidationError::new("required");
         error.message = Some("姓名不能为空".into());
         child.add("name", error);
+
         let errors = ValidationErrors(std::collections::HashMap::from([(
             "contacts".into(),
             ValidationErrorsKind::List(BTreeMap::from([(2, Box::new(child))])),

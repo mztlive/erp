@@ -115,6 +115,7 @@ mod tests {
             ConsumerError::from(Error::ValidationError("required".into())),
             ConsumerError::ValidationError(message) if message == "required"
         ));
+
         let issues = ValidationIssues::field("lines[1].quantity", "数量必须大于零");
         let ConsumerError::InvalidInput(actual) = ConsumerError::from(Error::InvalidInput(issues.clone()))
         else {
@@ -130,6 +131,7 @@ mod tests {
         issue.message = Some("编号不能为空".into());
         issue.add_param("value".into(), &"private-input");
         errors.add("code", issue);
+
         let ConsumerError::InvalidInput(issues) = ConsumerError::from(errors) else {
             panic!("validator 错误必须保留为 InvalidInput");
         };

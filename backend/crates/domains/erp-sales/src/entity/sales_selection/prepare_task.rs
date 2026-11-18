@@ -262,10 +262,12 @@ mod tests {
         let mut task = task();
         assert_eq!(task.deadline_at, Instant::from_unix_secs(280));
         assert!(task.ensure_writable_run(1, Instant::from_unix_secs(101)).is_err());
+
         task.mark_running(Instant::from_unix_secs(270)).unwrap();
         assert!(task.ensure_writable_run(1, Instant::from_unix_secs(279)).is_ok());
         assert!(task.ensure_writable_run(2, Instant::from_unix_secs(279)).is_err());
         assert!(task.ensure_writable_run(1, Instant::from_unix_secs(280)).is_err());
+
         task.mark_failed("expired".into(), vec![], Instant::from_unix_secs(280));
         assert!(!task.status.is_active());
         assert!(task.ensure_writable_run(1, Instant::from_unix_secs(281)).is_err());
@@ -277,10 +279,12 @@ mod tests {
         task.request_json = "{\"kind\":\"FIRST_PREPARE\"}".into();
         task.actor_id = "sales".into();
         task.mark_running(Instant::from_unix_secs(110)).unwrap();
+
         let mut restored: SalesSelectionPrepareTask =
             serde_json::from_str(&serde_json::to_string(&task).unwrap()).unwrap();
         assert_eq!(restored.request_json, task.request_json);
         assert_eq!(restored.actor_id, "sales");
+
         restored.mark_succeeded("batch".into(), vec![], Instant::from_unix_secs(120));
         assert_eq!(restored.result_batch_id.as_deref(), Some("batch"));
         assert!(!restored.status.is_active());

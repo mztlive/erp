@@ -33,6 +33,7 @@ impl InventoryMapping {
         if warehouse.model().resource != "warehouse" {
             return Err(Error::ValidationError("库存来源必须绑定真实仓库资源".into()));
         }
+
         let permission = action.permission();
         let collection = match action {
             InventoryAction::BalanceList => <Database as InventoryExt>::STOCK_BALANCES,
@@ -41,6 +42,7 @@ impl InventoryMapping {
             InventoryAction::AdjustmentList => <Database as InventoryExt>::STOCK_ADJUSTMENTS,
             _ => return Err(Error::ValidationError("库存查询必须使用列表动作".into())),
         };
+
         Ok(Arc::new(Self {
             model: QueryModel {
                 key: QueryModelKey::parse(format!("{}_rows", permission.resource()))?,
@@ -180,6 +182,7 @@ mod tests {
             panic!("仓库范围应使用本行字段")
         };
         assert_eq!(warehouse, doc! {"warehouse_id": {"$in": ["w1"]}});
+
         let QueryFragment::Match(assigned) =
             mapping.predicate(&AccessFact::AssignedTo, &context(), None).unwrap()
         else {
@@ -224,6 +227,7 @@ mod tests {
                 matches!(mapping.records(&context(), None).unwrap(), QueryFragment::Match(filter) if filter == doc! {"deleted_at":0})
             );
         }
+
         for action in [
             InventoryAction::BalanceDetail,
             InventoryAction::AdjustmentDetail,

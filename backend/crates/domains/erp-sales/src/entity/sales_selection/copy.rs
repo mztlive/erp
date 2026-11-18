@@ -35,6 +35,7 @@ impl SalesSelectionBooklet {
         if id.as_ref() == self.base.id {
             return Err(Error::from("复制选品册必须使用新的身份"));
         }
+
         let mut copied = Self::new(
             id,
             SalesSelectionBookletData {
@@ -53,6 +54,7 @@ impl SalesSelectionBooklet {
                 created_by: actor_id.to_owned(),
             },
         )?;
+
         if self.current_batch_id.is_some() {
             copied.status = BookletStatus::PendingPublish;
             copied.current_batch_id = Some(format!("copy-{}", copied.base.id));
@@ -137,12 +139,14 @@ mod tests {
             },
         )
         .unwrap();
+
         book.base = BaseModel::fake();
         book.base.id = "source".into();
         book.status = BookletStatus::Submitted;
         book.current_batch_id = Some("old-batch".into());
         book.eligibility_as_of = Some(BusinessDate::today());
         book.prepared_at = Some(Instant::now());
+
         book.link_token_hash = Some("old-token-hash".into());
         book.link_token_ciphertext = Some("old-token-cipher".into());
         book.link_token_version = 7;
@@ -180,7 +184,9 @@ mod tests {
             let mut original = source();
             original.status = status;
             let before = serde_json::to_value(&original).unwrap();
+
             let copied = copy(&original).unwrap();
+
             assert_eq!(copied.customer_id.as_ref(), "new-customer");
             assert_eq!(copied.customer_no, "C002");
             assert_eq!(copied.customer_name, "新客户");
@@ -199,6 +205,7 @@ mod tests {
             assert_eq!(copied.current_batch_id.as_deref(), Some("copy-target"));
             assert_eq!(copied.created_by, "copy-operator");
             assert_eq!(copied.updated_by, "copy-operator");
+
             assert!(copied.link_token_hash.is_none());
             assert!(copied.link_token_ciphertext.is_none());
             assert_eq!(copied.link_token_version, 0);
@@ -213,6 +220,7 @@ mod tests {
             assert!(copied.active_task_id.is_none());
             assert!(copied.pre_prepare_status.is_none());
             assert!(copied.last_prepare_failure.is_none());
+
             assert_eq!(serde_json::to_value(&original).unwrap(), before);
         }
     }
@@ -233,6 +241,7 @@ mod tests {
             Some(vec![SkuId::new("sku-2"), SkuId::new("sku-1")]),
         )
         .unwrap();
+
         let copied = copy(&original).unwrap();
         assert_eq!(copied.status, BookletStatus::Draft);
         assert!(copied.current_batch_id.is_none());
@@ -249,6 +258,7 @@ mod tests {
         original.status = BookletStatus::PendingPublish;
         original.active_task_id = Some("active-task".into());
         assert!(copy(&original).is_err());
+
         original.active_task_id = None;
         assert!(
             original
@@ -261,6 +271,7 @@ mod tests {
                 )
                 .is_err()
         );
+
         assert!(
             original
                 .copied(
@@ -322,6 +333,7 @@ mod tests {
         )
         .unwrap();
         package.remove().unwrap();
+
         for original in [single, package] {
             let mut copied = original.copied(
                 SalesSelectionDisplayItemId::new(format!("copy-{}", original.base.id)),
@@ -335,6 +347,7 @@ mod tests {
             assert_eq!(copied.booklet_id.as_ref(), "target");
             assert_eq!(copied.batch_id, "new-batch");
             assert_ne!(copied.public_item_id, original.public_item_id);
+
             if let DisplayKind::SingleSku { sku } = &mut copied.kind {
                 sku.name = "副本商品".into();
             }

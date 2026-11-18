@@ -156,6 +156,7 @@ async fn executes_real_pipeline_and_stops_before_ai_on_missing_page() {
         let provider = Arc::new(TestProvider { calls: calls.clone(), missing_page });
         let providers = RecognitionProviders { ocr: provider.clone(), extractor: provider };
         let mut stages = Vec::new();
+
         let result = providers
             .run(
                 b"pdf",
@@ -167,6 +168,7 @@ async fn executes_real_pipeline_and_stops_before_ai_on_missing_page() {
             )
             .await
             .unwrap();
+
         let expected = if missing_page {
             vec![(ImportStage::Ocr, 0)]
         } else {
@@ -219,6 +221,7 @@ async fn partial_extraction_and_conflicts_do_not_fail_recognition() {
     };
     let attempt = providers.run(b"pdf", 1, &mut TestProgress(|_| Ok(()))).await.unwrap();
     assert!(attempt.failure.is_none());
+
     let draft = attempt.extraction.unwrap().draft(&attempt.ocr.unwrap());
     assert!(draft.fields[&ContractField::ContractNo].is_none());
     assert!(draft.fields[&ContractField::PaymentTerms].is_none());
@@ -232,6 +235,7 @@ async fn progress_write_failure_stops_before_next_provider() {
         let calls = Arc::new(AtomicUsize::new(0));
         let provider = Arc::new(TestProvider { calls: calls.clone(), missing_page: false });
         let providers = RecognitionProviders { ocr: provider.clone(), extractor: provider };
+
         let result = providers
             .run(
                 b"pdf",
@@ -245,6 +249,7 @@ async fn progress_write_failure_stops_before_next_provider() {
                 }),
             )
             .await;
+
         assert!(matches!(result, Err(Error::Internal(message)) if message == "progress write failed"));
         let expected_calls = match fail_at {
             ImportStage::Ocr => 0,
@@ -263,6 +268,7 @@ async fn failed_extraction_keeps_ocr_and_does_not_report_preparing_review() {
         ..RecognitionProviders::default()
     };
     let mut stages = Vec::new();
+
     let attempt = providers
         .run(
             b"pdf",
@@ -274,6 +280,7 @@ async fn failed_extraction_keeps_ocr_and_does_not_report_preparing_review() {
         )
         .await
         .unwrap();
+
     assert_eq!(stages, vec![ImportStage::Ocr, ImportStage::AiExtract]);
     let document = attempt.ocr.unwrap();
     assert_eq!(document.provider, "unit-test");

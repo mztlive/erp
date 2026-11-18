@@ -117,6 +117,7 @@ impl ContractImportProcess {
                 .fail(task, actor, ImportFailure::new("SOURCE_CHANGED", "原文件内容已变化，请重新上传"))
                 .await;
         }
+
         let attempt = self
             .providers
             .run(
@@ -130,6 +131,7 @@ impl ContractImportProcess {
                 },
             )
             .await?;
+
         task.ocr = attempt.ocr;
         task.extraction = attempt.extraction;
         if let Some(failure) = attempt.failure {

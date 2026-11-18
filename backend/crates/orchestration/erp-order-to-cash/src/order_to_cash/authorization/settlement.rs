@@ -51,6 +51,7 @@ impl SalesCommandAccess {
             .await?
             .filter(|party| party.is_active() && party.party_kind == PartyKind::Enterprise)
             .ok_or_else(|| Error::ValidationError("主体不存在或已停用，请重新选择".into()))?;
+
         let revision_id = party
             .stable
             .current_revision_id

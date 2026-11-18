@@ -79,6 +79,7 @@ impl BackgroundJobItemRepositoryExt for persistence_core::Repository<'_, Backgro
         if let Some(status) = status {
             filter.insert("status", status.as_str());
         }
+
         let options = FindOptions::builder()
             .sort(doc! { "item_no": 1 })
             .skip((page.max(1) - 1) * u64::from(page_size))
@@ -86,9 +87,9 @@ impl BackgroundJobItemRepositoryExt for persistence_core::Repository<'_, Backgro
             .projection(job_item_projection())
             .build();
         let collection = self.collection().clone_with_type::<BackgroundJobItemRow>();
+
         let items = mongo_ops::find_many(&collection, filter.clone(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter, executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 }

@@ -102,12 +102,14 @@ impl InquiryQuoteBalance {
         if self.base.id != reservation.quote_id || reservation.released {
             return Err(Error::ConflictError("专项报价释放依据无效".into()));
         }
+
         let remaining = self
             .reserved_quantity
             .to_decimal()
             .checked_sub(reservation.quantity.to_decimal())
             .filter(|value| *value >= Decimal::ZERO)
             .ok_or_else(|| Error::ConflictError("专项报价采用余额损坏".into()))?;
+
         let mut addresses = self.address_quantities.clone();
         for requested in &reservation.addresses {
             let row = addresses
@@ -126,6 +128,7 @@ impl InquiryQuoteBalance {
             row.quantity = Quantity::try_from(value)?;
         }
         addresses.retain(|row| !row.quantity.to_decimal().is_zero());
+
         self.reserved_quantity = Quantity::try_from(remaining)?;
         self.address_quantities = addresses;
         Ok(())
@@ -161,6 +164,7 @@ impl InquiryQuoteBalance {
         }) {
             return Err(Error::ConflictError("恢复专项采用的地址不属于原保留范围".into()));
         }
+
         let mut result = reservation.clone();
         if quantity == result.quantity && addresses == result.addresses {
             return Ok(result);
@@ -175,10 +179,12 @@ impl InquiryQuoteBalance {
         if delta.to_decimal().is_zero() {
             return Ok(result);
         }
+
         let mut released = result.clone();
         released.quantity = delta;
         released.addresses = restoration_difference(&result.addresses, addresses)?;
         self.release(&released)?;
+
         result.history.push(QuoteReservationHistory {
             quantity: result.quantity,
             addresses: mem::replace(&mut result.addresses, addresses.to_vec()),
@@ -209,6 +215,7 @@ impl InquiryQuoteBalance {
             target = held_usage(target, reservation)?;
         }
         next.reserve(quote, &target)?;
+
         let mut result = reservation.clone();
         if result.quantity != target.quantity || result.addresses != target.addresses {
             result.history.push(QuoteReservationHistory {
@@ -239,9 +246,11 @@ impl InquiryQuoteBalance {
         if self.base.id != quote.data.quote_id {
             return Err(Error::ConflictError("专项报价余额归属不一致".into()));
         }
+
         let mut usage = usage.clone();
         usage.consumed_quantity = self.reserved_quantity;
         quote.ensure_applicable(&usage)?;
+
         let mut next = self.address_quantities.clone();
         for address in &usage.addresses {
             let prior = next.iter_mut().find(|row| {
@@ -253,6 +262,7 @@ impl InquiryQuoteBalance {
                 None => next.push(address.clone()),
             }
         }
+
         for address in &next {
             if !quote.data.terms.address_limits.iter().any(|limit| {
                 limit.allocation_id == address.allocation_id
@@ -262,6 +272,7 @@ impl InquiryQuoteBalance {
                 return Err(Error::BusinessLogicError("专项报价同一地址累计采用超量或地址已变化".into()));
             }
         }
+
         let total = add(self.reserved_quantity, usage.quantity)?;
         self.address_quantities = next;
         self.reserved_quantity = total;
@@ -286,6 +297,7 @@ fn held_usage(mut usage: InquiryQuoteUse, reservation: &InquiryQuoteReservation)
             usage.addresses.push(prior.clone());
         }
     }
+
     usage.quantity = if usage.addresses.is_empty() {
         usage.quantity.max(reservation.quantity)
     } else {
@@ -312,6 +324,7 @@ fn validate_quantity_rows(quantity: Quantity, rows: &[QuoteAddressLimit], positi
             .checked_add(row.quantity.to_decimal())
             .ok_or_else(|| Error::ConflictError("专项报价采用地址数量溢出".into()))?;
     }
+
     if !rows.is_empty() && total != quantity.to_decimal() {
         return Err(Error::ConflictError("专项报价采用地址数量不守恒".into()));
     }

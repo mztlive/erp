@@ -76,6 +76,7 @@ impl SupplierDepositService {
     ) -> Result<SupplierDepositUsage> {
         require_transaction(executor)?;
         validate_deposit_actor(actor)?;
+
         let mut usage = self.usage(usage_id, executor).await?;
         let id = identity(&usage.account_id, operation_key)?;
         let payload_fingerprint = fingerprint(&(usage_id, pending))?;
@@ -83,6 +84,7 @@ impl SupplierDepositService {
             replay(&payload_fingerprint, &receipt.payload_fingerprint)?;
             return Ok(usage);
         }
+
         let entry_ids = pending.iter().map(|line| line.payable_entry_id.clone()).collect::<Vec<_>>();
         let mut context = self.settlement_context(&usage, &entry_ids, executor).await?;
         usage.settlement_total(&context.allocations)?;
@@ -94,6 +96,7 @@ impl SupplierDepositService {
             &context.offsets,
         )?;
         self.fill_usage_ledger(&mut ledger, pending, &context.entries)?;
+
         let amount = SupplierDepositSettlement::allocation_total(ledger.new_allocations())?;
         context.request.settle_deposit(&usage.reservation_id, amount)?;
         let allocation_ids =
@@ -110,6 +113,7 @@ impl SupplierDepositService {
             actor_id: actor.into(),
             occurred_at: Instant::now(),
         };
+
         self.persist_usage_settlement(&mut usage, &mut context, &ledger, &receipt, executor).await?;
         Ok(usage)
     }
@@ -135,6 +139,7 @@ impl SupplierDepositService {
         require_transaction(executor)?;
         validate_deposit_actor(actor)?;
         evidence.validate()?;
+
         let mut usage = self.usage(usage_id, executor).await?;
         let id = identity(&usage.account_id, operation_key)?;
         let payload_fingerprint = fingerprint(&(usage_id, amount, &evidence))?;
@@ -142,10 +147,12 @@ impl SupplierDepositService {
             replay(&payload_fingerprint, &entry.payload_fingerprint)?;
             return Ok(usage);
         }
+
         let debit = self.usage_debit(&usage, executor).await?;
         if debit.evidence.external_order_id != evidence.external_order_id {
             return Err(Error::BusinessLogicError("返款未关联原扣款供应商订单".into()));
         }
+
         let batches = usage.return_batches(amount)?;
         let reversal = self.return_reversal(&usage, amount, actor, executor).await?;
         let reversed = reversal.as_ref().map_or(Amount::zero(), |plan| plan.amount);
@@ -155,10 +162,12 @@ impl SupplierDepositService {
         if reversed < amount || SupplierDepositSettlement::batch_total(&batches)? < amount {
             account.flag_reconciliation_risk(Instant::now())?;
         }
+
         if let Some(plan) = reversal {
             self.persist_return_reversal(plan, actor, executor).await?;
         }
         self.persist_return_batches(&usage.account_id, &batches, executor).await?;
+
         let entry = SupplierDepositLedgerEntry {
             base: BaseModel::new(id),
             account_id: usage.account_id.clone(),
@@ -172,6 +181,7 @@ impl SupplierDepositService {
             evidence,
             actor_id: actor.into(),
         };
+
         self.db.supplier_deposit_accounts().update(&mut account, executor).await?;
         self.db.supplier_deposit_usages().update(&mut usage, executor).await?;
         self.db.supplier_deposit_ledger().create(&entry, executor).await?;
@@ -225,6 +235,7 @@ impl SupplierDepositService {
             .find_by_id(&reservation.basis.payable_account_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("原采购应付账户不存在".into()))?;
+
         let entries = self.db.payable_entries().find_entries_by_ids(entry_ids, executor).await?;
         let allocations = self
             .db
@@ -234,6 +245,7 @@ impl SupplierDepositService {
         let entry_allocations =
             self.db.payment_allocations().find_allocations_by_entries(entry_ids, executor).await?;
         let offsets = self.db.payable_entry_offsets().find_offsets_by_increases(entry_ids, executor).await?;
+
         Ok(SettlementContext {
             reservation,
             account,
@@ -280,6 +292,7 @@ impl SupplierDepositService {
         {
             return Err(Error::ConflictError("原付款申请占用或采购应付余额不足".into()));
         }
+
         self.db.purchase_payment_requests().update(&mut context.request, executor).await?;
         self.db.payable().create_payment_allocations_many(ledger.new_allocations(), executor).await?;
         self.db.supplier_deposit_usages().update(usage, executor).await?;
@@ -298,6 +311,7 @@ impl SupplierDepositService {
         if reversed == Amount::zero() {
             return Ok(None);
         }
+
         let existing = self
             .db
             .payment_allocations()
@@ -315,6 +329,7 @@ impl SupplierDepositService {
         }) {
             return Ok(None);
         }
+
         let allocations = build_return_allocations(&existing, reversed)?;
         let restore_request = context.request.status != PurchasePaymentRequestStatus::Closed;
         if context
@@ -389,6 +404,7 @@ impl SupplierDepositService {
         {
             return Err(Error::ConflictError("无法恢复原付款申请批准额度".into()));
         }
+
         self.db.purchase_payment_requests().update(&mut plan.request, executor).await?;
         self.db.payable().create_payment_allocations_many(&plan.allocations, executor).await?;
         Ok(())

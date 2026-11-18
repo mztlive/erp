@@ -241,6 +241,7 @@ impl ExtraCostRegistration {
                 description: Some(input.description),
             },
         )?;
+
         let allocation = allocation_for(&entry, sales_order_id, input.sales_order_line_id, gross, net)?;
         Ok((entry, allocation))
     }
@@ -364,6 +365,7 @@ impl ExtraCostReduction {
         if self.input.gross_amount > remaining_gross {
             return Err(Error::from(format!("冲减金额不能超过原费用剩余金额 {remaining_gross}")));
         }
+
         let (gross, net, tax) = if self.input.gross_amount == remaining_gross {
             let net = original.net_amount.checked_sub(reduced.net);
             (remaining_gross, net, remaining_gross.checked_sub(net))
@@ -393,6 +395,7 @@ impl ExtraCostReduction {
                 description: Some(self.input.description),
             },
         )?;
+
         let sales_order_id = allocation.sales_order_id.clone().ok_or("附加费用缺少归属销售单")?;
         let allocation =
             allocation_for(&entry, sales_order_id, allocation.sales_order_line_id.clone(), gross, net)?;
@@ -473,6 +476,7 @@ impl PurchaseExpenseCostFact {
                 description: Some(self.description),
             },
         )?;
+
         let (gross, net) = (entry.gross_amount, entry.net_amount);
         let allocation = allocation_for(&entry, self.sales_order_id, self.sales_order_line_id, gross, net)?;
         Ok((entry, allocation))
@@ -676,6 +680,7 @@ mod tests {
         assert!(
             reduction("56.01").into_facts(CostEntryId::new("xc-3"), &original, &allocation, reduced).is_err()
         );
+
         let (last, _) =
             reduction("56.00").into_facts(CostEntryId::new("xc-3"), &original, &allocation, reduced).unwrap();
         assert_eq!(last.source_line_id, "xc-1#2");
@@ -720,6 +725,7 @@ mod tests {
         );
         assert_eq!(allocation.sales_order_id, Some(SalesOrderId::new("so-1")));
         assert!(!is_registered_extra_cost(&entry));
+
         let rebate = PurchaseExpenseCostFact { category: ExtraCostCategory::Rebate, ..fact };
         assert!(rebate.into_facts().is_err());
     }

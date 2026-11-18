@@ -50,10 +50,12 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let orders = self.facts_reader().read_sales_orders(&ids, executor).await?;
         if orders.is_empty() {
             return Ok(());
         }
+
         let submissions = self.facts_reader().sales_submissions_for_orders(&orders, executor).await?;
         let lines_by_submission = self.sales_submission_brief_lines(&submissions, executor).await?;
         insert_sales_order_facts(facts, &orders, &submissions, &lines_by_submission);
@@ -83,6 +85,7 @@ impl WorkbenchFactsReader<'_> {
         if submission_ids.is_empty() {
             return Ok(HashMap::new());
         }
+
         let mut grouped: HashMap<String, Vec<(u32, SalesOrderSubmissionLine)>> = HashMap::new();
         for line in self
             .db
@@ -92,6 +95,7 @@ impl WorkbenchFactsReader<'_> {
         {
             grouped.entry(line.submission_id.to_string()).or_default().push((line.line_no, line));
         }
+
         Ok(grouped
             .into_iter()
             .map(|(submission_id, mut rows)| {
@@ -158,6 +162,7 @@ fn sales_order_fact(
         fact.display.subject_briefs.insert(submission.submission_no.to_string(), brief.clone());
         fact.display.subject_briefs.insert(submission.base.id.clone(), brief);
     }
+
     let Some(submission) = preferred_submission(&order.base.id, submissions) else {
         return fact;
     };
@@ -226,11 +231,13 @@ fn sales_order_sections(submission: &SalesOrderSubmission) -> Vec<BriefSection> 
         submission.contract_snapshot.as_ref().map(|item| item.contract_no.as_str()),
         false,
     );
+
     push_section(&mut sections, "含税金额", Some(format_yuan(&submission.gross_amount)).as_deref(), true);
     push_section(&mut sections, "不含税金额", Some(format_yuan(&submission.net_amount)).as_deref(), true);
     if !submission.tax_amount.to_decimal().is_zero() {
         push_section(&mut sections, "税额", Some(format_yuan(&submission.tax_amount)).as_deref(), true);
     }
+
     push_section(
         &mut sections,
         "付款条件",

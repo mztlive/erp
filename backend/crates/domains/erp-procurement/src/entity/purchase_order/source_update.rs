@@ -202,6 +202,7 @@ impl PurchaseSourceUpdate {
             || self.awaiting_submission
             || self.sales_order_revision_id != sales_order_revision_id
             || trigger.is_some_and(|value| self.trigger_sales_change_order_id.as_deref() != Some(value));
+
         self.reasons = impact.reasons.clone();
         self.blocks_payment = impact.blocks_payment();
         self.awaiting_submission = false;
@@ -299,6 +300,7 @@ impl PurchaseSourceUpdate {
             MAINTAIN_NOTE_MAX_LEN,
             "维持原采购的原因不能超过 500 字",
         )?;
+
         self.finish(PurchaseSourceResolution::Maintained, actor_id, at);
         self.maintain_note = Some(note);
         Ok(())
@@ -515,6 +517,7 @@ mod tests {
         let mut update = opened();
 
         assert!(!update.refresh(&impact(reduced()), "rev-2", None).unwrap());
+
         let later = impact(SourceImpactKind::DueEarlier {
             current_due: BusinessDate::from_str("2026-10-10").unwrap(),
             expected_delivery_date: BusinessDate::from_str("2026-10-15").unwrap(),
@@ -549,12 +552,12 @@ mod tests {
 
         assert!(update.await_submission("rev-2").unwrap());
         assert!(!update.await_submission("rev-2").unwrap());
-
         assert_eq!(update.status, PurchaseSourceUpdateStatus::Open);
         assert!(!update.blocks_payment);
         assert_eq!(update.reasons.len(), 1);
         assert_eq!(update.impact_summary("SO-9"), "销售单 SO-9 已变更，采购已按新销售版本修改，请提交审批");
         assert!(update.maintain("供应商不接受减量", "buyer", Instant::from_unix_secs(1)).is_err());
+
         assert!(update.refresh(&impact(reduced()), "rev-3", None).unwrap());
         assert!(!update.awaiting_submission);
         assert!(update.blocks_payment);
@@ -571,10 +574,10 @@ mod tests {
         update
             .resolve(PurchaseSourceResolution::Changed, Some("pco-1".into()), Instant::from_unix_secs(2))
             .unwrap();
-
         assert_eq!(update.status, PurchaseSourceUpdateStatus::Resolved);
         assert_eq!(update.resolved_by.as_deref(), Some("__system__"));
         assert_eq!(update.resolution_document_id.as_deref(), Some("pco-1"));
+
         assert!(update.resolve(PurchaseSourceResolution::Voided, None, Instant::from_unix_secs(3)).is_err());
         assert!(update.refresh(&impact(reduced()), "rev-2", None).is_err());
         assert!(update.await_submission("rev-2").is_err());

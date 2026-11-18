@@ -90,6 +90,7 @@ fn authorized_projection_keeps_actual_type_status_and_existing_action_rules() {
         assert_eq!(view.owner_user_id.as_deref(), Some("owner-user"));
         assert_eq!(view.allowed_actions, ["VIEW", "PROCESS", "CONFIRM_SCOPE", "RETURN_FOR_FIX"]);
         assert_eq!(view.action_blockers, ["original blocker"]);
+
         let wire = serde_json::to_value(view).unwrap();
         assert_eq!(wire["work_item_type"], "BUSINESS_EXCEPTION");
         assert_eq!(wire["status"], status_wire);
@@ -124,6 +125,7 @@ fn authorized_projection_uses_registered_destinations_and_preserves_route_errors
         authorized_work_item_view(authorized(unmapped), ConfirmationStatus::Pending),
         Err(crate::Error::ValidationError(message)) if message == "WORK_ITEM_HANDLER_UNMAPPED"
     ));
+
     let mut unknown_scope = task(WorkItemType::ImportBusinessConfirmation);
     unknown_scope.owner_role = "unmapped-role".to_string();
     assert!(matches!(
@@ -137,6 +139,7 @@ fn authorized_projection_uses_registered_destinations_and_preserves_route_errors
 async fn confirmation_list_stops_before_records_when_identity_is_unavailable() {
     let (service, actor) = super::super::testing::fixture().await;
     let params = serde_json::from_value(serde_json::json!({})).unwrap();
+
     let error = service
         .confirmation_list_stage(&params, &actor, &mut ReadExecutor::default())
         .await
@@ -144,6 +147,7 @@ async fn confirmation_list_stops_before_records_when_identity_is_unavailable() {
     assert!(
         matches!(error, crate::Error::ValidationError(message) if message == "无对象操作及其业务读取必须使用快照事务")
     );
+
     let error = service
         .confirmation_list_stage(&params, &actor, &mut SnapshotExecutor::default())
         .await

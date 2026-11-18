@@ -49,6 +49,7 @@ impl PurchasePaymentRequestProcess {
         let result = client
             .with_transaction(move |executor| Box::pin(async move { operation.execute(executor).await }))
             .await;
+
         self.finish_command(result, &recovery, actor, "withdraw", id).await
     }
 
@@ -82,17 +83,21 @@ impl PurchasePaymentRequestProcess {
                 Box::pin(async move {
                     let mut request =
                         authorized_request(&db, &rbac.authorization, &id, &actor, "close", executor).await?;
+
                     let receipts = FinanceCommandReceiptService::new(db.clone());
                     if let Some(id) = receipts.committed_resource_id(&command, executor).await? {
                         return authorized_request(&db, &rbac.authorization, &id, &actor, "close", executor)
                             .await;
                     }
+
                     ensure_version(&request, req.expected_version)?;
                     require_sources(&db, &rbac, &request, &actor, "close", executor).await?;
+
                     release_remaining(&db, &request, actor.id(), executor).await?;
                     request.close(&req.reason)?;
                     close_execution_task(&db, &request, &actor, &req.reason, executor).await?;
                     db.purchase_payment_requests().update(&mut request, executor).await?;
+
                     let audit = actor.resource_log(
                         "purchase_payment_request.close",
                         "purchase_payment_request",
@@ -104,6 +109,7 @@ impl PurchasePaymentRequestProcess {
                 })
             })
             .await;
+
         self.finish_command(result, &recovery, &response_actor, "close", &response_id).await
     }
 }
@@ -131,19 +137,23 @@ impl PaymentWithdrawal {
             executor,
         )
         .await?;
+
         let receipts = FinanceCommandReceiptService::new(self.db.clone());
         if receipts.committed_resource_id(&self.command, executor).await?.is_some() {
             return Ok(request);
         }
+
         let Some((writes, closed)) =
             prepare_withdraw(&self.db, &request, &self.request, &self.actor, executor).await?
         else {
             return Ok(request);
         };
+
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let actor = self.actor.clone();
         let id = self.persist(writes, closed, executor).await?;
+
         authorized_request(&db, &rbac.authorization, &id, &actor, "withdraw", executor).await
     }
 
@@ -168,12 +178,15 @@ impl PaymentWithdrawal {
         .await?;
         require_sources(&self.db, &self.rbac, &request, &self.actor, "withdraw", executor).await?;
         ensure_version(&request, self.request.expected_version)?;
+
         claim_and_persist_document_cancel_runtime(&self.db, &writes, &closed, self.actor.id(), executor)
             .await?;
         self.rbac.runtime.persist_cancel_copies(&self.db, &writes, executor).await?;
+
         release_remaining(&self.db, &request, self.actor.id(), executor).await?;
         request.withdraw(&self.request.reason)?;
         self.db.purchase_payment_requests().update(&mut request, executor).await?;
+
         let audit = self.actor.clone().resource_log(
             "purchase_payment_request.withdraw",
             "purchase_payment_request",
@@ -255,6 +268,7 @@ async fn stop_approval(
         request.withdraw(reason)?;
     }
     db.purchase_payment_requests().update(&mut request, executor).await?;
+
     let code = if rejected { "purchase_payment_request.reject" } else { "purchase_payment_request.withdraw" };
     let audit = actor.clone().resource_log(code, "purchase_payment_request", id.to_owned())?;
     persist_log(db, &audit, executor).await?;
@@ -281,6 +295,7 @@ async fn prepare_withdraw(
         executor,
     )
     .await?;
+
     let now = Instant::now();
     let key = normalize_idempotency_key(&req.idempotency_key)?;
     let PreparedExecution::Apply(writes) =
@@ -295,6 +310,7 @@ async fn prepare_withdraw(
     else {
         return Ok(None);
     };
+
     let closed =
         WorkItem::close_all_for_approval_cancellation(runtime.open_tasks, actor.id(), &req.reason, now)?;
     Ok(Some((*writes, closed)))

@@ -81,6 +81,7 @@ impl JdVopAuthorizationRequest {
         {
             return Err(AuthorizationError::InvalidInput);
         }
+
         callback_uri(&self.redirect_uri)?;
         Ok(())
     }

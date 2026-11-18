@@ -84,6 +84,7 @@ async fn rig_sends_all_pages_as_data_and_decodes_typed_evidence() {
     assert!(extraction.version.starts_with("protocol=responses;"));
     assert!(extraction.version.contains("reported=contract-model-20261007"));
     assert!(extraction.version.ends_with("prompt=contract-v4"));
+
     let calls = http.requests();
     assert_eq!(calls.len(), 1);
     assert_eq!(calls[0].uri, "https://gateway.example/compatible/v1/responses");
@@ -105,6 +106,7 @@ async fn rig_sends_all_pages_as_data_and_decodes_typed_evidence() {
         assert!(request.get(key).is_none(), "unexpected request field: {key}");
     }
     assert!(request["instructions"].as_str().unwrap().contains(include_str!("prompt.txt").trim()));
+
     let messages = request["input"].as_array().unwrap();
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0]["role"], "user");
@@ -122,10 +124,12 @@ async fn rig_derives_strict_submit_schema_and_preserves_configured_openai_model(
     extractor.model = "openai/gpt-6-luna".into();
     extractor.base_url = "https://api.openai.com/v1".into();
     extractor.extract_with(&document, http.clone(), Diagnostics::default()).await.unwrap();
+
     let calls = http.requests();
     let request: Value = serde_json::from_slice(&calls[0].body).unwrap();
     assert_eq!(calls[0].uri, "https://api.openai.com/v1/responses");
     assert_eq!(request["model"], "openai/gpt-6-luna");
+
     let tool = &request["tools"][0];
     assert_eq!(tool["strict"], true);
     let schema = &tool["parameters"];
@@ -160,11 +164,13 @@ async fn preserves_configured_provider_in_serialized_evidence_across_service_swi
         .extract_with(&document, RecordingHttpClient::new(raw.to_string()), Diagnostics::default())
         .await
         .unwrap();
+
     let mut second = extractor();
     second.provider_id = "gateway-b".into();
     second.base_url = "https://other.example/v1".into();
     let http = RecordingHttpClient::new(raw.to_string());
     let second = second.extract_with(&document, http.clone(), Diagnostics::default()).await.unwrap();
+
     assert_eq!(first.provider, "gateway-a");
     assert_eq!(second.provider, "gateway-b");
     assert_eq!(first.version, second.version);
@@ -216,6 +222,7 @@ async fn local_validation_enforces_limits_removed_from_wire_schema() {
             "AI_INVALID_OUTPUT"
         );
     }
+
     for conflicts in [json!(vec!["conflict"; 33]), json!(["x".repeat(2049)])] {
         let mut invalid = output.clone();
         invalid["conflicts"] = conflicts;
@@ -225,6 +232,7 @@ async fn local_validation_enforces_limits_removed_from_wire_schema() {
             "AI_INVALID_OUTPUT"
         );
     }
+
     let mut empty_quote = output;
     empty_quote["fields"][0]["quote"] = json!("");
     let http = RecordingHttpClient::new(response(&empty_quote.to_string(), "completed"));
@@ -239,6 +247,7 @@ async fn refuses_truncation_refusal_malformed_duplicate_and_unknown_fields() {
         let http = RecordingHttpClient::new(response(&output.to_string(), reason));
         assert!(extractor().extract_with(&document, http, Diagnostics::default()).await.is_err());
     }
+
     let mut duplicate = output.clone();
     duplicate["fields"].as_array_mut().unwrap().push(output["fields"][0].clone());
     let mut unknown = output.clone();
@@ -291,6 +300,7 @@ async fn rejects_schema_metadata_and_duplicate_payment_terms_from_provider() {
         assert_eq!(http.requests().len(), 1);
         output.as_object_mut().unwrap().remove("additionalProperties");
     }
+
     output["fields"] = json!([]);
     output["conflicts"] = json!(["payment_terms：第2页有两种付款约定，无法确定其关系"]);
     let http = RecordingHttpClient::new(response(&output.to_string(), "completed"));
@@ -421,12 +431,14 @@ async fn rejects_exhausted_reasoning_budget_without_retry() {
     let (result, logs) =
         capture(extractor().extract_with(&document, http.clone(), Diagnostics::default())).await;
     assert_eq!(result.unwrap_err().code, "AI_INVALID_OUTPUT");
+
     let fields = &event(&logs, "contract_ai_finished")["fields"];
     assert_eq!(fields["provider_finish_reason"], "Length");
     assert_eq!(fields["provider_response_status"], "incomplete");
     assert!(fields["output_validation_error"].as_str().unwrap().contains("finish_reason"));
     let usage: Value = serde_json::from_str(fields["provider_usage"].as_str().unwrap()).unwrap();
     assert_eq!(usage["output_tokens_details"]["reasoning_tokens"], 8192);
+
     let calls = http.requests();
     assert_eq!(calls.len(), 1);
     let request: Value = serde_json::from_slice(&calls[0].body).unwrap();
@@ -452,6 +464,7 @@ async fn rejects_inconsistent_completion_and_unexpected_output() {
         let error = extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap_err();
         assert_eq!(error.code, "AI_INVALID_OUTPUT", "{pointer}");
     }
+
     for item in [
         json!({"type": "function_call", "id": "fc-1", "call_id": "call-1", "name": "save_contract", "arguments": "{}", "status": "completed"}),
         json!({"type": "web_search_call", "id": "ws-1", "status": "completed"}),
@@ -555,6 +568,7 @@ async fn cancels_pending_request_at_deadline_without_retry() {
             ready(Err(http_client::Error::instance(Failure::Unsupported)))
         }
     }
+
     let (document, _) = sample();
     let calls = Arc::new(AtomicUsize::new(0));
     let dropped = Arc::new(AtomicBool::new(false));
@@ -563,12 +577,14 @@ async fn cancels_pending_request_at_deadline_without_retry() {
     extractor.timeout = Duration::from_millis(20);
     let (result, logs) = capture(extractor.extract_with(&document, http, Diagnostics::default())).await;
     assert_eq!(result.unwrap_err(), ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试"));
+
     let finished = event(&logs, "contract_ai_finished");
     assert_eq!(finished["level"], "WARN");
     assert_eq!(finished["fields"]["timeout_source"], "application_deadline");
     assert_eq!(finished["fields"]["error_code"], "AI_TIMEOUT");
     assert!(finished["fields"].get("http_status").is_none());
     assert!(serde_json::to_string(&logs).unwrap().contains("sdk-private-payload"));
+
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert!(dropped.load(Ordering::SeqCst));
 }
@@ -616,6 +632,7 @@ async fn invalid_output_logs_original_response_and_specific_validation_failure()
     let mut bad_page = output.clone();
     bad_page["fields"][0]["page"] = json!(0);
     let bad_page: Value = serde_json::from_str(&response(&bad_page.to_string(), "completed")).unwrap();
+
     for (raw, expected) in [
         (incomplete, "output_item"),
         (malformed, "DeserializationError"),
@@ -630,6 +647,7 @@ async fn invalid_output_logs_original_response_and_specific_validation_failure()
         let (result, logs) = capture(extractor().extract_with(&document, http.clone(), diagnostics)).await;
         assert_eq!(result.unwrap_err().code, "AI_INVALID_OUTPUT");
         assert_eq!(http.requests().len(), 1);
+
         let fields = &event(&logs, "contract_ai_finished")["fields"];
         assert_eq!(fields["provider_response_body"], body);
         assert_eq!(fields["provider_response_status"], "completed");
@@ -659,6 +677,7 @@ async fn successful_call_logs_model_endpoint_and_task_context() {
     })
     .await;
     assert!(result.is_ok());
+
     let started = event(&logs, "contract_ai_started");
     assert_eq!(started["span"]["provider_id"], "gateway-a");
     assert_eq!(started["span"]["page_count"], 3);
@@ -669,6 +688,7 @@ async fn successful_call_logs_model_endpoint_and_task_context() {
     assert_eq!(started["span"]["extraction_method"], "rig_extractor");
     assert_eq!(started["span"]["output_tool"], "submit");
     assert_eq!(started["span"]["prompt_version"], "contract-v4");
+
     let finished = event(&logs, "contract_ai_finished");
     assert_eq!(finished["fields"]["outcome"], "succeeded");
     assert_eq!(finished["fields"]["http_status"], 200);
@@ -708,6 +728,7 @@ fn diagnostic_read_deadline_preserves_known_http_rejections() {
     let (result, source) = deadline_failure(&Diagnostics::default());
     assert_eq!(result, ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试"));
     assert_eq!(source, Some("application_deadline"));
+
     for (status, code, message, source) in [
         (400, "AI_REJECTED", "字段提取请求被拒绝，请检查模型、上下文容量及结构化输出支持", None),
         (401, "AI_UNAUTHORIZED", "字段提取服务凭据无效或未授权，请联系管理员", None),
@@ -747,6 +768,7 @@ fn transport_timeouts_keep_distinct_sources_and_the_existing_business_code() {
         assert_eq!(result, ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试"));
         assert_eq!(timeout_source, Some(expected));
     }
+
     let error = ProviderError::from(HttpError::instance(Failure::Unavailable));
     let (failure, timeout_source) = provider_failure(&error);
     assert_eq!(failure, ImportFailure::new("AI_UNAVAILABLE", "字段提取服务暂不可用，请稍后重试"));

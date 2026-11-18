@@ -44,7 +44,6 @@ pub(super) fn object_key_path(path: &Path) -> Result<String> {
     if key.is_empty() {
         return Err(Error::PathError("存储路径不能为空".to_string()));
     }
-
     Ok(key)
 }
 
@@ -129,6 +128,7 @@ mod tests {
             normalize_prefix(Some("tenant-a/uploads".to_string()))?.as_deref(),
             Some("tenant-a/uploads")
         );
+
         assert!(matches!(normalize_prefix(Some("/tenant-a".to_string())), Err(Error::InvalidConfig(_))));
         assert!(matches!(
             normalize_prefix(Some("tenant-a/../escape".to_string())),

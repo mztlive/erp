@@ -52,6 +52,7 @@ impl SupplierApiOrderProcess {
             ),
         )?;
         let lines = SupplierFulfillmentService::new(self.db.clone()).build_action_lines(&action, request)?;
+
         let db = self.db.clone();
         let client = db.client().clone();
         let actor = actor.clone();
@@ -93,12 +94,14 @@ impl CancellationIntent {
         } else if order.cancel_status != CancelStatus::CancelPending {
             return Err(Error::BusinessLogicError("原订单已有明确取消结果，请查询原结果".into()));
         }
+
         db.supplier_api_order_executions().update(execution, executor).await?;
         db.supplier_order_actions().create(&self.action, executor).await?;
         for line in &self.lines {
             db.supplier_order_action_lines().create(line, executor).await?;
         }
         db.supplier_fulfillment_orders().update(&mut order, executor).await?;
+
         let audit = actor.clone().resource_log(
             "supplier_fulfillment.api_cancel",
             "supplier_order_action",

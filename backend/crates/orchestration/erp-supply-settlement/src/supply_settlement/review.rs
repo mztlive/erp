@@ -85,6 +85,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
                 )
             })
             .await;
+
         let Err(error) = result else { return result };
         let process = self.clone();
         let actor = actor.clone();
@@ -100,6 +101,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
                         &id,
                         &req.idempotency_key,
                     );
+
                     process
                         .data_scope
                         .require_action(&actor, SettlementAction::Submit, &id, executor)
@@ -131,7 +133,9 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         req.validate()?;
         let replay_key = req.idempotency_key.clone();
         ensure_same_id(id, &req.statement_id, "结算单")?;
+
         self.domain().access().require_action(actor, SettlementAction::Submit, id, executor).await?;
+
         let fingerprint = submit_review_fingerprint(&req);
         let audit_id =
             command_audit_id(actor.id(), "supplier_settlement.submit_review", id, &req.idempotency_key);
@@ -141,8 +145,10 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         {
             return Ok(result);
         }
+
         let statement = self.domain().load_statement(id, executor).await?;
         validate_submission_command(&statement, &req)?;
+
         reviewers::ensure_reviewer(
             &self.authorization,
             &self.work_items.identity,
@@ -151,6 +157,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             executor,
         )
         .await?;
+
         let work_item =
             create_review_work_item(WorkItemId::new(next_id()), &statement, &req.reviewer_user_id)?;
         let (statement, work_item) = self
@@ -162,6 +169,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
                 executor,
             )
             .await?;
+
         Ok(SubmitSettlementReviewResult {
             result_status: dto::SettlementReviewSubmissionStatus::Submitted,
             message: "结算主题已冻结并提交财务复核".to_string(),
@@ -198,9 +206,11 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             executor,
         )
         .await?;
+
         current.submit_review()?;
         domain.persist_statement(&mut current, executor).await?;
         self.db.work_items().create(&prepared.work_item, executor).await?;
+
         persist_review_submission(
             ReviewSubmissionWrite {
                 db: &self.db,
@@ -253,6 +263,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
                 )
             })
             .await;
+
         let Err(error) = result else { return result };
         let process = self.clone();
         let actor = actor.clone();
@@ -294,6 +305,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         ensure_same_id(id, &req.decision.statement_id, "结算单")?;
         let reject_reason = req.decision.parsed_reject_reason()?;
         let expected_task_version = parse_expected_version(&req.expected_task_version, "待办版本")?;
+
         let action = review_action(req.decision.action);
         let fingerprint = review_decision_fingerprint(&req);
         let audit_id = command_audit_id(actor.id(), action, id, &req.idempotency_key);
@@ -310,8 +322,10 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         {
             return Ok(result);
         }
+
         let prepared =
             self.prepare_decision(id, &req, actor, expected_task_version, reject_reason, executor).await?;
+
         let operation_id = req.decision.operation_id.clone();
         let input = DecisionCommit::new(self, &req, actor, prepared, (&audit_id, &fingerprint, action));
         let (statement, work_item, receipt) = input.persist(executor).await?;
@@ -334,6 +348,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let items = self.domain().load_statement_items(id, executor).await?;
         let differences = self.domain().load_statement_differences(&items, executor).await?;
         ensure_current_subject_and_resolved_differences(&statement, &differences)?;
+
         let now = Instant::now();
         let financial = review_preparation::prepare(
             &mut statement,
@@ -342,7 +357,6 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             &differences,
             ReviewInput { request: req, reject_reason, actor_id: actor.id(), at: now },
         )?;
-
         Ok(PreparedDecision { statement, work_item, financial })
     }
 
@@ -360,6 +374,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         statement
             .ensure_version(req.decision.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
+
         let work_item = self
             .db
             .work_items()
@@ -400,6 +415,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let SupplyCommandResult::ReviewSubmission(receipt) = stored.result else {
             return Err(Error::Internal("提交复核回执类型非法".to_string()));
         };
+
         let statement = self.domain().load_statement(statement_id, executor).await?;
         ensure_submission_statement(&statement, &receipt)?;
         let work_item = self
@@ -409,6 +425,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .await?
             .ok_or_else(|| Error::Internal("提交复核收据引用的任务不存在".to_string()))?;
         ensure_submission_task(&statement, &work_item, &receipt)?;
+
         Ok(Some(SubmitSettlementReviewResult {
             result_status: dto::SettlementReviewSubmissionStatus::Submitted,
             message: "结算主题已冻结并提交财务复核".to_string(),
@@ -444,6 +461,7 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         let SupplyCommandResult::ReviewDecision(receipt) = stored.result else {
             return Err(Error::Internal("结算复核决定回执类型非法".to_string()));
         };
+
         let statement = self.domain().load_statement(statement_id, executor).await?;
         let work_item = self
             .db
@@ -451,11 +469,13 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
             .find_by_id(work_item_id, executor)
             .await?
             .ok_or_else(|| Error::Internal("复核决定收据引用的任务不存在".to_string()))?;
+
         if statement.is_prepared_by(actor.id()) {
             return Err(Error::Forbidden("所选人员不能复核本单，请重新选择".into()));
         }
         require_reviewer(&self.db, &self.authorization, actor, &work_item, executor).await?;
         ensure_decision_replay(&statement, &work_item, &receipt)?;
+
         Ok(Some(review_decision_result(statement, work_item, receipt.operation_id.clone(), receipt)))
     }
 }
@@ -586,6 +606,7 @@ pub fn validate_settlement_review_work_item(
     if expected_subject_version != statement.subject_hash || item.subject_version != statement.subject_hash {
         return Err(Error::ConflictError("结算复核主题已变化，请刷新后重试".to_string()));
     }
+
     if !statement.is_pending_review() || !review_work_item_binds_statement(item, statement) {
         return Err(Error::BusinessLogicError("待办与当前供应商结算复核不匹配".to_string()));
     }
@@ -758,6 +779,7 @@ async fn persist_review_submission(
         )?
         .with_command_id(Some(input.command_id.to_string()))?
         .with_resource_number(Some(input.statement.statement_no.clone()))?;
+
     persist_supply_receipt(
         input.db,
         &audit,
@@ -807,12 +829,14 @@ mod replay_tests {
             work_item_id: task.base.id.clone(),
             task_version: 2,
         };
+
         for version in [1, 2, 3] {
             statement.base.version = version;
             task.base.version = version;
             assert_eq!(ensure_submission_statement(&statement, &receipt).is_ok(), version >= 2);
             assert_eq!(ensure_submission_task(&statement, &task, &receipt).is_ok(), version >= 2);
         }
+
         task.subject_version = "c".repeat(64);
         assert!(ensure_submission_task(&statement, &task, &receipt).is_err());
     }
@@ -823,9 +847,11 @@ mod replay_tests {
         assert_eq!(item.owner_organization_id, "org-finance");
         assert_eq!(item.owner_role, SETTLEMENT_REVIEW_OWNER_ROLE);
         assert!(review_work_item_binds_statement(&item, &statement));
+
         let mut company = sample_statement();
         company.business_org_unit_id = "company".into();
         assert!(create_review_work_item(WorkItemId::new("work-item-2"), &company, "reviewer-1").is_err());
+
         let mut mismatched = sample_work_item(&statement);
         mismatched.owner_organization_id = "company".into();
         assert!(!review_work_item_binds_statement(&mismatched, &statement));
@@ -846,6 +872,7 @@ mod replay_tests {
             payable_account_id: Some("payable-1".into()),
             cost_delta: None,
         };
+
         for statement_version in [1, 2, 3] {
             for task_version in [1, 2, 3] {
                 statement.base.version = statement_version;
@@ -856,10 +883,12 @@ mod replay_tests {
                 );
             }
         }
+
         statement.base.version = 2;
         task.base.version = 2;
         task.status = WorkItemStatus::Open;
         assert!(ensure_decision_replay(&statement, &task, &receipt).is_err());
+
         task.status = WorkItemStatus::Completed;
         statement.payable_account_id = None;
         assert!(ensure_decision_replay(&statement, &task, &receipt).is_err());

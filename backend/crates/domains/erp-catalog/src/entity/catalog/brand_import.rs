@@ -93,6 +93,7 @@ mod tests {
             .unwrap();
         assert!(row.automatic_code);
         assert_eq!(row.brand.name, "品牌");
+
         let mut existing = row.brand.clone();
         existing.brand_code = "BR-001".into();
         assert!(row.ensure_matches(&existing).is_ok());
@@ -103,6 +104,7 @@ mod tests {
         assert!(row.ensure_matches(&existing).is_ok());
         existing.base.deleted_at = 1;
         assert!(row.ensure_matches(&existing).is_err());
+
         existing.base.deleted_at = NOT_DELETED_TIMESTAMP;
         existing.name = "其他品牌".into();
         for name in [String::new(), " ".into(), "字".repeat(129)] {
@@ -113,6 +115,7 @@ mod tests {
                 .unwrap();
         assert_eq!(coded.brand.brand_code, "B");
         assert!(coded.ensure_matches(&existing).is_err());
+
         assert!(
             PreparedBrandImport::new(ProductBrandId::new("test"), "品牌".into(), "x".repeat(65), "user")
                 .is_err()

@@ -31,11 +31,13 @@ impl FundsAccess {
             .rbac
             .has_permission(actor, &erp_permissions::policy_permission::FINANCE_LEDGER_READ, executor)
             .await?;
+
         let access = Arc::new(self.rbac.query(actor, permission, executor).await?);
         let sales = SourceQuery::new(access.clone(), "sales_source")?;
         let purchase_scope = SourceQuery::new(access.clone(), "purchase_source")?;
         let settlement = SourceQuery::new(access.clone(), "settlement_source")?;
         let whole = WholeAccess::new(access.clone());
+
         let context = FundsReadContext {
             resource: permission.resource().into(),
             scope_version: access.version(),

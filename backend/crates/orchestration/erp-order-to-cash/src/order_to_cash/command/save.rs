@@ -56,6 +56,7 @@ impl SalesOrderCommandProcess {
         let read_actor = actor.clone();
         let order_id = id.to_string();
         let copy_version = req.version;
+
         let (order, draft) = self
             .db
             .client()
@@ -65,6 +66,7 @@ impl SalesOrderCommandProcess {
                 })
             })
             .await?;
+
         let expected_order_version = order.base.version;
         self.sales().ensure_sellable_draft_lines(&draft.lines, &self.catalog()).await?;
         let (mut working_copy, stable, opened_new) =
@@ -82,6 +84,7 @@ impl SalesOrderCommandProcess {
             .sales_order_working_copy_lines()
             .list_lines_by_working_copy(&working_copy.base.id.clone().into(), &mut ReadExecutor::default())
             .await?;
+
         let audit = actor.clone().resource_log("sales_order.save_draft", "sales_order", id.to_string())?;
         let write = SavedWorkingCopyWrite {
             db: self.db.clone(),
@@ -141,6 +144,7 @@ impl SavedWorkingCopyWrite {
     async fn persist(mut self, executor: &mut dyn Executor) -> Result<SalesOrderWorkingCopy> {
         self.access.related_order(&self.order, executor).await?;
         self.access.revalidate(&self.order.base.id, self.expected_order_version, executor).await?;
+
         SalesOrderCommandProcess::persist_first_contract_binding(
             &self.db,
             &self.access,
@@ -149,6 +153,7 @@ impl SavedWorkingCopyWrite {
             executor,
         )
         .await?;
+
         SalesOrderService::new(self.db.clone())
             .ensure_sellable_refs(
                 &self.sellable_refs,
@@ -156,6 +161,7 @@ impl SavedWorkingCopyWrite {
                 executor,
             )
             .await?;
+
         SalesOrderService::new(self.db.clone())
             .persist_saved_working_copy(
                 &self.created_stable_lines,

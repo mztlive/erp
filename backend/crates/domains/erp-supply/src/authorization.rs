@@ -409,6 +409,7 @@ mod tests {
         let authorization = Authorization::new(service, "supplier_settlement_statement").unwrap();
         let actor = AuditActor::new("responsible".into(), "login".into(), AccountKind::Admin);
         let mut executor = SnapshotExecutor::default();
+
         let list = authorization.resolve(&actor, &permissions[0], &mut executor).await.unwrap();
         assert!(list.ensure_permission(&permissions[0], &mut executor).is_ok());
         let detail = authorization.resolve(&actor, &permissions[1], &mut executor).await.unwrap();
@@ -416,6 +417,7 @@ mod tests {
             detail.ensure_permission(&permissions[0], &mut executor),
             Err(erp_identity::Error::ValidationError(_))
         ));
+
         executor.restart();
         assert!(list.ensure_permission(&permissions[0], &mut executor).is_err());
     }
@@ -444,6 +446,7 @@ mod tests {
             assert_eq!(object.version, "7");
             assert_eq!(object.owner_id, FactValue::Known(Some("responsible".into())));
             assert_eq!(object.org_unit_id, FactValue::Known(Some("internal_org".into())));
+
             let mapping = mapping(resource).unwrap();
             for (fact, kind) in [
                 (AccessFact::Owned, FactKind::Owner),

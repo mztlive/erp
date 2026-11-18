@@ -46,6 +46,7 @@ impl SalesChangeSubmissionCommand {
         {
             return Err(Error::ValidationError("销售变更提交命令身份或载荷无效".into()));
         }
+
         let key_hash = CommandFingerprint::from_parts([key.to_string()]);
         let id = format!(
             "sales-change-submit:{}",
@@ -149,9 +150,11 @@ impl SalesChangeSubmissionReceipt {
         {
             return Err(Error::ConflictError("销售变更提交回执无效".into()));
         }
+
         if &self.command != expected {
             return Err(Error::ConflictError("同一操作号已用于不同的销售变更提交请求".into()));
         }
+
         if &self.submission != persisted
             || persisted.change_id != expected.change_id
             || persisted.source_version != Some(expected.source_version)
@@ -186,6 +189,7 @@ mod tests {
             )
             .is_err()
         );
+
         fact.source_version = Some(4);
         let receipt = SalesChangeSubmissionReceipt::new(
             command.clone(),
@@ -198,6 +202,7 @@ mod tests {
             serde_json::from_value(serde_json::to_value(&receipt).unwrap()).unwrap();
         restored.validate(&command, &fact).unwrap();
         assert_eq!(restored, receipt);
+
         for (actor, version, reason) in [("other", 4, "说明"), ("actor", 5, "说明"), ("actor", 4, "改说明")]
         {
             let other =

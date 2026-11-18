@@ -57,6 +57,7 @@ pub(crate) fn rows(xml: &str, shared: &[String], limits: SheetLimits) -> Result<
     if root.tag_name().name() != "worksheet" && root.tag_name().name() != "sheetData" {
         return Err(invalid("工作表 XML 结构无效"));
     }
+
     let namespace = root.tag_name().namespace();
     let mut rows: BTreeMap<u32, BTreeMap<usize, Cell>> = BTreeMap::new();
     for node in doc.descendants().filter(|node| {
@@ -74,12 +75,14 @@ pub(crate) fn rows(xml: &str, shared: &[String], limits: SheetLimits) -> Result<
             return Err(invalid("工作表存在重复单元格坐标"));
         }
     }
+
     let merges = doc
         .descendants()
         .filter(|node| node.is_element() && node.tag_name().name() == "mergeCell")
         .map(|node| merge_range(node, limits))
         .collect::<Result<_>>()?;
     let hyperlinks = doc.descendants().any(|node| node.is_element() && node.tag_name().name() == "hyperlink");
+
     let rows = rows
         .into_iter()
         .map(|(number, mut cells)| {
@@ -97,6 +100,7 @@ fn read_cell(node: Node<'_, '_>, shared: &[String]) -> Result<Cell> {
     let numeric = matches!(kind, None | Some("n"));
     let formula_node = node.children().find(|child| child.is_element() && child.tag_name().name() == "f");
     let raw = node.children().find(|child| child.is_element() && child.tag_name().name() == "v").map(text);
+
     let value = match kind {
         Some("inlineStr") => rich_text(node),
         Some("s") => {
@@ -109,6 +113,7 @@ fn read_cell(node: Node<'_, '_>, shared: &[String]) -> Result<Cell> {
         },
         _ => raw.unwrap_or_default(),
     };
+
     let formula_text = formula_node.filter(|node| node.first_child().is_some()).map(text);
     Ok(Cell { value, text: text_cell, numeric, formula: formula_node.is_some(), formula_text })
 }

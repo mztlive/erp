@@ -98,6 +98,7 @@ impl WorkbookMedia {
         if let Some((_, image)) = self.cache.iter().find(|(cached, _)| cached == path) {
             return image.clone();
         }
+
         let image = self.archive.as_mut().and_then(|archive| prepare_image(archive, path)).map(Arc::new);
         let byte_size = image.as_ref().map_or(0, |image| image.bytes.len());
         if byte_size <= MEDIA_CACHE_BYTES {
@@ -147,6 +148,7 @@ fn prepare_image(archive: &mut ZipArchive<Cursor<WorkbookBytes>>, path: &str) ->
     let mut file = archive.by_name(path).ok()?;
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes).ok()?;
+
     let (content_type, extension) = detect_image(&bytes)?;
     let digest = hex::encode(Sha256::digest(&bytes));
     Some(PreparedImage { bytes, content_type, extension, digest })
@@ -203,6 +205,7 @@ mod tests {
         assert_eq!(first.bytes, png);
         assert_eq!(first.digest, hex::encode(Sha256::digest(&png)));
         assert_eq!(first.content_type, "image/png");
+
         let (_, second) = reader.read("xl/media/a.png".into()).await.unwrap();
         assert!(Arc::ptr_eq(&first, &second.unwrap()));
         assert_eq!(Arc::strong_count(&source), 1);
@@ -219,6 +222,7 @@ mod tests {
         assert!(invalid.is_none());
         let (_, valid) = reader.read("good".into()).await.unwrap();
         assert_eq!(valid.unwrap().extension, "gif");
+
         let reader = WorkbookMedia::open(Arc::new(b"not-zip".to_vec())).await.unwrap();
         let (_, invalid) = reader.read("good".into()).await.unwrap();
         assert!(invalid.is_none());
@@ -240,6 +244,7 @@ mod tests {
         ]))
         .await
         .unwrap();
+
         let (mut reader, image) = reader.read("large".into()).await.unwrap();
         let image = image.unwrap();
         let weak = Arc::downgrade(&image);
@@ -247,11 +252,13 @@ mod tests {
         assert!(reader.cache.is_empty());
         drop(image);
         assert!(weak.upgrade().is_none());
+
         for index in 0..MEDIA_CACHE_ENTRIES + 5 {
             (reader, _) = reader.read(format!("missing-{index}")).await.unwrap();
             assert!(reader.cache.len() <= MEDIA_CACHE_ENTRIES);
             assert!(reader.cached_bytes <= MEDIA_CACHE_BYTES);
         }
+
         let (reader, medium) = reader.read("medium-a".into()).await.unwrap();
         let weak = Arc::downgrade(&medium.unwrap());
         let (reader, _) = reader.read("medium-b".into()).await.unwrap();

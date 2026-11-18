@@ -623,6 +623,7 @@ pub(crate) fn handler_option_views(
     facts.sort_by(|left, right| {
         left.display_name.cmp(&right.display_name).then_with(|| left.user_id.cmp(&right.user_id))
     });
+
     facts
         .into_iter()
         .map(|fact| WarehouseFulfillmentHandlerOptionView {
@@ -684,6 +685,7 @@ fn build_warehouse_revision(
     let address = SensitiveText::new(input.address, address_fingerprint)?;
     let contact_fingerprint = fingerprint.content_fingerprint(&input.contact, fingerprint_key);
     let contact = SensitiveText::new(input.contact, contact_fingerprint)?;
+
     let region_code = RegionCode::parse_leaf(&input.region_code)
         .map_err(|error| Error::ValidationError(error.to_string()))?;
     Ok(WarehouseRevision::new(
@@ -765,6 +767,7 @@ mod tests {
             fact("u-disabled", "王五", false, true, true),
             fact("u-none", "赵六", true, false, false),
         ]);
+
         assert_eq!(
             options.iter().map(|item| item.user_id.as_str()).collect::<Vec<_>>(),
             vec!["u-org-a", "u-org-b"]
@@ -930,6 +933,7 @@ mod tests {
             FINGERPRINT_KEY,
         )
         .unwrap();
+
         assert_eq!(
             revision.address.fingerprint_value(),
             SupportFingerprint.content_fingerprint(&address, FINGERPRINT_KEY)

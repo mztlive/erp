@@ -43,6 +43,7 @@ impl QueryModel {
                 return Err(Error::ValidationError("授权查询模型非法".into()));
             }
         }
+
         if let QueryOutput::Share { fields } | QueryOutput::Existence { fields } = &self.output
             && (!fields.contains(&self.id_field)
                 || fields.iter().any(|field| !field.split('.').all(valid_segment)))
@@ -110,8 +111,10 @@ mod tests {
             facts: BTreeSet::new(),
         };
         assert!(model.validate().is_ok());
+
         model.output = QueryOutput::Existence { fields: ["amount".into()].into() };
         assert!(model.validate().is_err());
+
         for field in ["a..b", "$field", "nested.__identity_temp", ""] {
             model.output = QueryOutput::Share { fields: ["id".into(), field.into()].into() };
             assert!(model.validate().is_err());
@@ -126,6 +129,7 @@ mod tests {
         assert!(facts.validate(true, now).is_ok());
         facts.version = Some(String::new());
         assert!(facts.validate(true, now).is_err());
+
         facts.version = Some("v1".into());
         facts.valid_until = Some(Instant::from_unix_secs(11));
         assert!(facts.validate(false, now).is_ok());

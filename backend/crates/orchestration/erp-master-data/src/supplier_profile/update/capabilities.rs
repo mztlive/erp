@@ -53,6 +53,7 @@ impl SupplierProfileProcess {
                 .ids
                 .insert(cap.capability_code.as_str().to_string(), SupplierCapabilityId::new(&cap.base.id));
         }
+
         self.prepare_capability_toggles(
             plan.capability_toggles,
             &mut existing_by_code,
@@ -61,6 +62,7 @@ impl SupplierProfileProcess {
             executor,
         )
         .await?;
+
         for code in plan.capability_creates {
             let capability_id = SupplierCapabilityId::new(next_id());
             let revision_id = SupplierCapabilityRevisionId::new(next_id());

@@ -107,6 +107,7 @@ impl SourceQuery {
         if ids.is_empty() {
             return Ok(vec![]);
         }
+
         let mut pipeline = vec![doc! {"$match": {&self.model.id_field: {"$in": ids}}}];
         pipeline.extend_from_slice(self.stages());
         pipeline.extend([
@@ -116,6 +117,7 @@ impl SourceQuery {
         let result =
             aggregate::rows(&db.collection::<SourceVersion>(&self.model.collection), pipeline, executor)
                 .await?;
+
         self.validate(executor).await?;
         Ok(result)
     }
@@ -137,6 +139,7 @@ impl SourceQuery {
             return Err(Error::ValidationError("资金销售来源模型错配".into()));
         }
         self.validate(executor).await?;
+
         let mut pipeline = vec![doc! {"$match": {&self.model.id_field:id}}];
         pipeline.extend_from_slice(self.stages());
         pipeline.extend([sales_fact_projection(), doc! {"$limit":1}]);
@@ -145,6 +148,7 @@ impl SourceQuery {
                 .await?
                 .into_iter()
                 .next();
+
         self.validate(executor).await?;
         Ok(result)
     }
@@ -166,6 +170,7 @@ mod tests {
         let row = doc! {"id":"sale", "version":2_i64,"owner_user_id":"sales", "business_org_unit_id":"org", "document_no":"SO1"};
         let fact = deserialize_from_document::<SalesSourceFact>(row.clone()).unwrap();
         assert_eq!((fact.id.as_str(), fact.version, fact.document_no.as_str()), ("sale", 2, "SO1"));
+
         let mut missing = row;
         missing.remove("version");
         assert!(deserialize_from_document::<SalesSourceFact>(missing).is_err());

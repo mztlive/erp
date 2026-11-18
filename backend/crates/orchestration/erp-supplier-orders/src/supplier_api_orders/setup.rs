@@ -104,6 +104,7 @@ impl ExecutionSetupRequest {
             ))
             .map_err(|_| Error::ValidationError("配送补充资料无效".into()))?,
         ));
+
         let receipt = ApiOrderSetupReceipt {
             base: BaseModel::new(format!(
                 "setup-{}",
@@ -263,6 +264,7 @@ fn apply_setup(
     if snapshot.recipient.phone.is_empty() {
         return Err(Error::ValidationError("请补齐来源收货仓联系电话".into()));
     }
+
     if let Some(geocode) = request.geocode.clone() {
         if snapshot.context.is_some() {
             return Err(Error::ConflictError("供应商地址已准备，不能直接更改坐标".into()));
@@ -270,6 +272,7 @@ fn apply_setup(
         snapshot.recipient.geocoded_address = Some(geocode.try_into()?);
         execution.stage = ApiOrderStage::PrepareAddress;
     }
+
     if let Some(index) = request.choice_index {
         let choice = snapshot
             .choices
@@ -281,6 +284,7 @@ fn apply_setup(
         snapshot.selected_choice = Some(index);
         execution.stage = ApiOrderStage::PlanDelivery;
     }
+
     if request.geocode.is_none()
         && request.choice_index.is_none()
         && request.supplier_address_ticket.is_none()
@@ -401,11 +405,13 @@ mod tests {
         validate_request(&original).unwrap();
         let (hash, receipt) = original.receipt("execution").unwrap();
         receipt.ensure_replay("execution", &hash).unwrap();
+
         let mut changed = original.clone();
         changed.supplier_address_ticket = Some("other-town-ticket".into());
         let (other_hash, other_receipt) = changed.receipt("execution").unwrap();
         assert_eq!(receipt.base.id, other_receipt.base.id);
         assert!(receipt.ensure_replay("execution", &other_hash).is_err());
+
         changed.choice_index = Some(0);
         assert!(validate_request(&changed).is_err());
         let mut empty = original;
@@ -447,6 +453,7 @@ mod tests {
         view.without_costs();
         assert_eq!(view.choices[0].shipping_fee, None);
         assert_eq!(view.blocker.as_deref(), Some("供应商运费需要核对，请由有权限的采购经办人处理"));
+
         execution.stage = ApiOrderStage::ConfirmationUnknown;
         let mut unknown = ExecutionSetupView::from_execution(&execution, None, None, None, vec![]);
         unknown.without_costs();

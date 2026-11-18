@@ -25,6 +25,7 @@ impl PortalQuoteQualificationPort for MongoOfferingQualification {
             .find_by_id(&sku.product_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("公司商品不存在".into()))?;
+
         let (sku_revision_id, product_revision_id) = target_revision_ids(&sku, &product)?;
         let sku_revision = self
             .db
@@ -40,6 +41,7 @@ impl PortalQuoteQualificationPort for MongoOfferingQualification {
             .await?
             .filter(|revision| revision.product_id.as_ref() == product.base.id && revision.is_active())
             .ok_or_else(|| Error::BusinessLogicError("公司商品当前修订无效".into()))?;
+
         let unit = self
             .db
             .unit_of_measures()
@@ -47,6 +49,7 @@ impl PortalQuoteQualificationPort for MongoOfferingQualification {
             .await?
             .filter(|unit| unit.is_active())
             .ok_or_else(|| Error::BusinessLogicError("SKU基础单位不存在或已停用".into()))?;
+
         Ok(QuoteTargetVersion {
             sku_version: sku.base.version,
             sku_revision_id: sku_revision.base.id,
@@ -102,6 +105,7 @@ mod tests {
         )
         .unwrap();
         product.stable.current_revision_id = Some("product-revision".into());
+
         let mut sku = Sku::new(
             SkuId::new("sku"),
             SkuData {
@@ -123,9 +127,11 @@ mod tests {
     fn quote_uses_current_formal_pointers_and_rejects_disabled_product_or_wrong_owner() {
         let (sku, product) = targets();
         assert_eq!(target_revision_ids(&sku, &product).unwrap(), ("sku-revision", "product-revision"));
+
         let mut stopped = product.clone();
         stopped.stable.status = EnableStatus::Disabled;
         assert!(target_revision_ids(&sku, &stopped).is_err());
+
         let mut foreign = product.clone();
         foreign.base.id = "other".into();
         assert!(target_revision_ids(&sku, &foreign).is_err());
@@ -136,6 +142,7 @@ mod tests {
         let (mut sku, mut product) = targets();
         product.stable.current_revision_id = None;
         assert!(target_revision_ids(&sku, &product).is_err());
+
         product.stable.current_revision_id = Some("product-revision".into());
         sku.stable.current_revision_id = None;
         assert!(target_revision_ids(&sku, &product).is_err());

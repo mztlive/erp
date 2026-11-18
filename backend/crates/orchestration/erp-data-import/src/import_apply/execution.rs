@@ -56,12 +56,14 @@ impl ImportApplyProcess {
         if prepared.batch_id.as_ref() != batch_id {
             return Err(Error::ValidationError("路径批次与执行命令批次不一致".into()));
         }
+
         let identity =
             import_execution_command_identity(actor.id(), "legacy_import_batch.execute", &prepared)
                 .structured_receipt("legacy_import_batch")?;
         if let Some(result) = self.replay_import_execution(&identity, &prepared, actor).await? {
             return Ok(result);
         }
+
         let context = import_event_context(
             actor,
             "legacy_import_batch.execute",
@@ -154,6 +156,7 @@ impl AuditedCommand for ImportExecutionWrite<'_> {
         if let Some(result) = replay_execution_step(self.db, self.identity, self.prepared, executor).await? {
             return Ok(AuditedWrite::Replayed(result));
         }
+
         let result = execute_import_command_transaction(self.db, self.prepared, executor).await?;
         let fact = ImportCommandReceipt::new(
             self.identity.clone(),
@@ -186,6 +189,7 @@ async fn replay_execution_step(
     let ImportCommandResult::Execution { receipt, .. } = &fact.result else {
         return Err(Error::ConflictError("导入执行回执结果类型不一致".into()));
     };
+
     let batch = db
         .legacy_import_batches()
         .find_by_id(prepared.batch_id.as_ref(), executor)
@@ -229,25 +233,30 @@ async fn execute_import_command_transaction(
     if !batch.has_version(prepared.expected_batch_version) {
         return Err(Error::ConflictError("导入批次版本已变化，请刷新后重试".to_string()));
     }
+
     let mut job = db
         .background_jobs()
         .find_by_request_id(&batch.batch_no, executor)
         .await?
         .ok_or_else(|| Error::Internal("导入批次后台任务缺失".to_string()))?;
     validate_import_background_job(&batch, &job)?;
+
     let confirmations = db.legacy_import_confirmations().list_by_batch(&prepared.batch_id, executor).await?;
     let trial_version = validate_import_execution_trial(prepared, &batch, &confirmations)?;
+
     let mut rows = if prepared.action == ImportExecutionAction::RetryFailed {
         db.legacy_import_rows().list_failed_by_batch(&prepared.batch_id, executor).await?
     } else {
         Vec::new()
     };
     let outcome = apply_import_execution_action(prepared, &mut batch, &mut job, &mut rows)?;
+
     if prepared.action == ImportExecutionAction::RetryFailed {
         db.legacy_import_rows().persist_failed_retry_rows(&mut rows, executor).await?;
     }
     db.legacy_import_batches().update(&mut batch, executor).await?;
     db.background_jobs().update(&mut job, executor).await?;
+
     let receipt = ImportExecutionReceipt {
         action: prepared.action,
         result_status: outcome.result_status,
@@ -343,6 +352,7 @@ fn start_import_application(
     if affected_items == 0 {
         return Err(Error::BusinessLogicError("当前批次没有待应用项".to_string()));
     }
+
     batch.advance(LegacyImportBatchStatus::Importing)?;
     job.start(Instant::now())?;
     Ok(ImportExecutionActionOutcome {
@@ -369,6 +379,7 @@ fn cancel_pending_import(
     if affected_items == 0 {
         return Err(Error::BusinessLogicError("没有可取消的未应用项".to_string()));
     }
+
     job.cancel(Instant::now())?;
     let outcome = if job.processed_count > 0 {
         LegacyImportBatchStatus::PartialFailed
@@ -418,6 +429,7 @@ fn prepare_failed_import_retry(
     if retry_row_ids.len() as u64 != batch.failed_rows {
         return Err(Error::Internal("批次失败计数与失败行快照不一致".to_string()));
     }
+
     for row in rows.iter_mut().filter(|row| retry_row_ids.contains(&row.base.id)) {
         row.prepare_failed_retry()?;
     }
@@ -655,6 +667,7 @@ mod tests {
         let mut failed = applicable_row("failed");
         failed.mark_import_failed("TEMPORARY".to_string(), None).unwrap();
         let mut rows = vec![imported, skipped, failed];
+
         let mut import_batch = batch();
         import_batch.status = LegacyImportBatchStatus::PartialFailed;
         import_batch.total_rows = 3;
@@ -669,9 +682,11 @@ mod tests {
         assert_eq!(import_batch.status, LegacyImportBatchStatus::ReadyToApply);
         assert_eq!(import_batch.success_rows, 1);
         assert_eq!(import_batch.failed_rows, 0);
+
         assert_eq!(rows[0].import_status, ImportStatus::Imported);
         assert_eq!(rows[1].import_status, ImportStatus::Skipped);
         assert_eq!(rows[2].import_status, ImportStatus::PendingImport);
+
         assert_eq!(job.status, JobStatus::Pending);
         assert_eq!(job.processed_count, 2);
         assert_eq!(job.success_count, 1);
@@ -813,6 +828,7 @@ mod tests {
         let command = execution_command(ImportExecutionAction::StartApply);
         let fact = execution_fact(&command, started_receipt(), "job-1");
         assert!(fact.ensure_identity(&fact.identity).is_ok());
+
         let mut changed = command;
         changed.expected_batch_version += 1;
         let identity = import_execution_command_identity("user-1", "legacy_import_batch.execute", &changed)
@@ -820,6 +836,7 @@ mod tests {
             .unwrap();
         assert!(fact.ensure_identity(&identity).is_err());
         assert!(!fact.identity.command_id.contains("execution-1"));
+
         let decoded: ImportCommandReceipt =
             serde_json::from_str(&serde_json::to_string(&fact).unwrap()).unwrap();
         assert_eq!(decoded, fact);
@@ -840,11 +857,13 @@ mod tests {
         let receipt = started_receipt();
         let fact = execution_fact(&command, receipt, &job.base.id);
         assert!(validate_import_execution_replay(&fact, &import_batch, &job, &receipt, &command).is_ok());
+
         let mut foreign_job = job.clone();
         foreign_job.base.id = "different-job".into();
         assert!(
             validate_import_execution_replay(&fact, &import_batch, &foreign_job, &receipt, &command).is_err()
         );
+
         let mut regressed = job;
         regressed.base.version = 1;
         assert!(

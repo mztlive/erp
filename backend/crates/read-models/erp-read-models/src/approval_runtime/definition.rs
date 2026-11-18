@@ -57,6 +57,7 @@ pub async fn binding_route(
         .await?
         .filter(|graph| graph.definition.definition_version == binding.approval_definition_version)
         .ok_or_else(|| Error::ConflictError("单据绑定的审批流程版本不存在，请联系管理员".into()))?;
+
     let nodes = graph
         .ordered_nodes()
         .map_err(|e| Error::ValidationError(e.to_string()))?

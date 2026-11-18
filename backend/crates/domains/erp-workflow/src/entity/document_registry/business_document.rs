@@ -373,6 +373,7 @@ impl BusinessDocument {
                 i64::try_from(base.created_at).map_err(|_| Error::from("创建时间无法表示为编号分配时间"))?,
             ))
         };
+
         Ok(Self {
             base,
             document_type: data.document_type,
@@ -407,6 +408,7 @@ impl BusinessDocument {
             DOCUMENT_NO_MAX_LEN,
             "单据编号过长",
         )?;
+
         self.document_no = document_no;
         self.document_no_assigned_at = Some(at);
         Ok(())
@@ -666,6 +668,7 @@ mod tests {
             )
             .is_err()
         );
+
         doc.upgrade_approval_binding(
             ApprovalProcessDefinitionId::new("def-2"),
             2,
@@ -683,6 +686,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(
             ApprovalDefinitionBinding::new(
                 ApprovalProcessDefinitionId::new("def-0"),

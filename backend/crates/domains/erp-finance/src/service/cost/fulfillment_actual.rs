@@ -53,6 +53,7 @@ pub fn prepare(fact: FulfillmentCostFact) -> Result<Option<PreparedCostEntry>> {
     if incomplete_or_zero_cost(&fact)? {
         return Ok(None);
     }
+
     let tax_amount = Amount::try_from(
         fact.gross_amount
             .to_decimal()
@@ -152,9 +153,11 @@ mod tests {
         let mut partial = fact();
         partial.fulfilled_quantity = Quantity::from_str("1").unwrap();
         assert!(prepare(partial).unwrap().is_none());
+
         let mut excess = fact();
         excess.fulfilled_quantity = Quantity::from_str("4").unwrap();
         assert!(prepare(excess).is_err());
+
         let mut invalid = fact();
         invalid.net_amount = Amount::from_str("10.02").unwrap();
         assert!(prepare(invalid).is_err());

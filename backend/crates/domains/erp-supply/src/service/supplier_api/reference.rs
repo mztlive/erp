@@ -67,6 +67,7 @@ impl SupplierApiService {
         if connection.stable.status == SupplierApiConnectionStatus::Active {
             return Err(Error::BusinessLogicError("连接启用期间不能变更配置，请先停用连接".to_string()));
         }
+
         match action {
             SupplierConnectionAction::UpdateBusinessProfile => {
                 connection.update_business_profile(resolved.internal_reference, actor_id)?
@@ -79,6 +80,7 @@ impl SupplierApiService {
             },
             _ => return Err(Error::Internal("引用命令分派错误".to_string())),
         }
+
         self.db.supplier_api_connections().update(&mut connection, executor).await?;
         Ok(connection)
     }

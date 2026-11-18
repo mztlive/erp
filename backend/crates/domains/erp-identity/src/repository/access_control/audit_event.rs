@@ -126,6 +126,7 @@ impl QueryFilter for AuditEventFilter {
         if let Some(id) = &self.trace_id {
             filter.insert("$or", vec![doc! { "trace_id": id }, doc! { "request_id": id }]);
         }
+
         insert_time_range(&mut filter, self.created_from, self.created_before);
         insert_keyword_clauses(&mut filter, self.q.as_deref(), self.keyword_actions.as_deref());
         filter
@@ -250,6 +251,7 @@ impl AuditEventRepositoryExt for Repository<'_, AuditEvent> {
             .limit(filter.limit())
             .projection(audit_event_projection())
             .build();
+
         let collection = self.collection().clone_with_type::<AuditEventRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;

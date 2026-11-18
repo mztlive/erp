@@ -59,6 +59,7 @@ pub(super) async fn load(
         .await?
         .filter(|row| row.sales_order_id == request.sales_order_id)
         .ok_or_else(|| Error::ConflictError("来源销售版本不匹配".into()))?;
+
     let display = display(db, &order, &revision, executor).await?;
     Ok((order, revision, display))
 }
@@ -74,6 +75,7 @@ async fn display(
         .list_lines_by_revision(&SalesOrderRevisionId::new(&revision.base.id), executor)
         .await?;
     lines.sort_by_key(|line| line.line_no);
+
     let ids = lines
         .iter()
         .take(BRIEF_LINE_LIMIT)
@@ -82,6 +84,7 @@ async fn display(
     let goods =
         db.sales_order_goods_service_line_revisions().list_by_revision_line_ids(&ids, executor).await?;
     let vouchers = db.sales_order_voucher_line_revisions().list_by_revision_line_ids(&ids, executor).await?;
+
     let brief = lines
         .iter()
         .take(BRIEF_LINE_LIMIT)

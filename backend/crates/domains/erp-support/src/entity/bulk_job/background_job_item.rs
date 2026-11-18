@@ -159,9 +159,11 @@ impl BackgroundJobItem {
         if data.item_no == 0 {
             return Err(Error::from("逐项序号必须从 1 开始"));
         }
+
         let object_type = normalize_optional_text(data.object_type, "对象类型", OBJECT_TYPE_MAX_LEN)?;
         let object_id = normalize_optional_text(data.object_id, "对象ID", OBJECT_ID_MAX_LEN)?;
         ensure_paired(object_type.is_some(), object_id.is_some(), "对象类型与对象ID必须同时提供或同时省略")?;
+
         let expected_version = normalize_optional_text(data.expected_version, "预期版本", VERSION_MAX_LEN)?;
         let expected_hash = normalize_optional_text(data.expected_hash, "内容摘要", HASH_MAX_LEN)?;
         ensure_paired(
@@ -169,10 +171,12 @@ impl BackgroundJobItem {
             expected_hash.is_some(),
             "预期版本与内容摘要必须同时提供或同时省略",
         )?;
+
         let worksheet_name =
             normalize_optional_text(data.worksheet_name, "工作表名", WORKSHEET_NAME_MAX_LEN)?;
         let source_column_name =
             normalize_optional_text(data.source_column_name, "源列名", COLUMN_NAME_MAX_LEN)?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             background_job_id: data.background_job_id,
@@ -220,6 +224,7 @@ impl BackgroundJobItem {
         if self.status.is_some() {
             return Err(Error::from("逐项结果只能记录一次"));
         }
+
         let result_code = normalize_optional_text(result_code, "结果代码", RESULT_CODE_MAX_LEN)?;
         if status == ItemStatus::Failed && result_code.is_none() {
             return Err(Error::from("失败项必须记录脱敏原因代码"));
@@ -233,6 +238,7 @@ impl BackgroundJobItem {
             result_object_id.is_some(),
             "结果对象类型与结果对象ID必须同时提供或同时省略",
         )?;
+
         self.status = Some(status);
         self.result_code = result_code;
         self.result_summary = result_summary;

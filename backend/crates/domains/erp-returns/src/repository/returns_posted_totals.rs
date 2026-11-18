@@ -225,14 +225,12 @@ mod tests {
         let pipeline =
             posted_total_pipeline(posted_total_filter("original_receipt_id", "rcpt-1", "refund-9"));
         let matched = pipeline[0].get_document("$match").expect("过滤阶段");
-
         assert_eq!(matched.get_str("original_receipt_id").unwrap(), "rcpt-1");
         assert_eq!(matched.get_str("status").unwrap(), "posted");
         assert_eq!(matched.get_document("id").unwrap().get_str("$ne").unwrap(), "refund-9");
         assert_eq!(matched.get_i64("deleted_at").expect("未删除条件"), 0);
 
         let group = pipeline[1].get_document("$group").expect("分组阶段");
-
         assert_eq!(group.get_document("total").unwrap().get_str("$sum").unwrap(), "$amount");
     }
 
@@ -245,7 +243,6 @@ mod tests {
             "original_supplier_payment_id",
         ] {
             let matched = posted_total_filter(field, "orig-1", "cur-1");
-
             assert_eq!(matched.get_str(field).unwrap(), "orig-1");
             assert_eq!(matched.get_str("status").unwrap(), "posted");
         }
@@ -259,6 +256,7 @@ mod tests {
             filter.get_document("settlement_method").unwrap().get_str("$ne").unwrap(),
             "SUPPLIER_CREDIT"
         );
+
         assert!(
             !posted_total_filter("original_receipt_id", "receipt-1", "refund-1")
                 .contains_key("settlement_method")

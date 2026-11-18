@@ -83,6 +83,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                 Err(Error::Forbidden("审批任务责任链不匹配".into()))
             };
         }
+
         let policy = item
             .work_item_type
             .brief_relation(&item.business_object_type)
@@ -148,6 +149,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
 pub fn task_facts_current(item: &WorkItem, facts: &ObjectFactMap) -> bool {
     let Some(policy) = item.work_item_type.brief_relation(&item.business_object_type) else { return false };
     let Some(fact) = facts.get(&(policy.object_kind, item.business_object_id.clone())) else { return false };
+
     if item.work_item_type == WorkItemType::SalesInquiryProcessing {
         let Some(ids) = fact.responsibility_scope_ids.as_ref() else { return false };
         let Some(version) =
@@ -159,6 +161,7 @@ pub fn task_facts_current(item: &WorkItem, facts: &ObjectFactMap) -> bool {
             return false;
         }
     }
+
     fact.subject_versions.accepts_task(item.work_item_type, item.status, &item.base.id, &item.subject_version)
 }
 

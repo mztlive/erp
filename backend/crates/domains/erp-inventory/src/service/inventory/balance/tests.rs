@@ -142,6 +142,7 @@ async fn balance_authorization(executor: &mut dyn Executor) -> InventoryAuthoriz
         vec![(permission.clone(), mapping)],
     )
     .unwrap();
+
     let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
     let compiled = service.query(&actor, &permission, executor).await.unwrap();
     InventoryAuthorization::new(
@@ -204,6 +205,7 @@ async fn balance_page_delivers_main_read_before_starting_independent_buttons() {
     };
     let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
     let ids = vec!["allowed".into(), "other".into()];
+
     let buttons = finish_balance_page(&main, &port, &actor, &ids, &mut executor).await.unwrap();
     assert_eq!(buttons, BTreeSet::from(["allowed".into()]));
     assert_eq!(port.calls.load(Ordering::SeqCst), 1);
@@ -219,6 +221,7 @@ async fn failed_main_delivery_stops_before_independent_buttons() {
         calls: AtomicUsize::new(0),
     };
     let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
     executor.next_read();
     let result = finish_balance_page(&main, &port, &actor, &["allowed".into()], &mut executor).await;
     assert!(matches!(result, Err(Error::ValidationError(_))));
@@ -255,6 +258,7 @@ fn balance_view_keeps_stock_facts_and_requires_existing_warehouse_for_action() {
                 WarehouseRevisionFact { id: "revision".into(), name: "一号仓".into() },
             );
         }
+
         let view = enrich_balance_view(
             StockBalanceRow {
                 id: "balance".into(),
@@ -282,6 +286,7 @@ fn balance_view_keeps_stock_facts_and_requires_existing_warehouse_for_action() {
         assert!(view.last_movement_at.is_none());
         assert!(view.last_movement_type.is_none());
         assert!(view.has_active_reservation);
+
         assert!(view.sku_code.is_empty());
         assert!(view.sku_name.is_empty());
         assert_eq!(view.warehouse_code, if has_warehouse { "WH-1" } else { "" });

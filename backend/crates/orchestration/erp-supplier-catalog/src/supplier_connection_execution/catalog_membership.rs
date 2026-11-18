@@ -48,6 +48,7 @@ impl SupplierConnectionExecutionProcess {
         if !scan.can_reconcile() {
             return Err(classify(Error::ConflictError("商品池范围未完整闭合，不能执行缺项核对".into())));
         }
+
         reconcile(&MembershipReconciliation { process: self, run, scan: &scan, actor }, &scan.scope).await
     }
 
@@ -67,6 +68,7 @@ impl SupplierConnectionExecutionProcess {
                     authorization
                         .require(&actor, &supplier_api::ADOPTIONS_PREVIEW, AccessTarget::Operation, executor)
                         .await?;
+
                     let connection = SupplierApiService::new(db.clone())
                         .load_connection(&run.connection_id, executor)
                         .await?;
@@ -82,6 +84,7 @@ impl SupplierConnectionExecutionProcess {
                     if job.status != JobStatus::Running {
                         return Err(Error::ConflictError("目录同步任务已停止，不能继续撤回来源".into()));
                     }
+
                     let members =
                         memberships::reconciliation_candidates(&db, &scan, None, 100, executor).await?;
                     if members.is_empty() {
@@ -92,6 +95,7 @@ impl SupplierConnectionExecutionProcess {
                         memberships::retire_member(&db, &scan, &member, executor).await?;
                         withdraw_missing_member(&db, &scan, &member, &actor, executor).await?;
                     }
+
                     job.record_progress(0, 0, 0, Instant::now())?;
                     db.background_jobs().update(&mut job, executor).await?;
                     Ok(false)
@@ -108,6 +112,7 @@ impl SupplierConnectionExecutionProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     memberships::abort_scan(&db, &run.base.id, executor).await?;
+
                     let mut checkpoint = db
                         .supplier_catalog_runs()
                         .find_by_id(&run.base.id, executor)
@@ -134,6 +139,7 @@ async fn withdraw_missing_member(
     if memberships::has_current_membership(db, scan, &member.sku.spec_id, executor).await? {
         return Ok(());
     }
+
     let items =
         memberships::catalog_items_for_spec(db, &scan.connection_id, &member.sku.spec_id, executor).await?;
     if items.len() > 1 {
@@ -146,6 +152,7 @@ async fn withdraw_missing_member(
     if item.availability == CatalogAvailability::Withdrawn {
         return Ok(());
     }
+
     let at = scan.completed_at.ok_or_else(|| Error::ConflictError("目录池缺少完整读取时点".into()))?;
     if item.withdraw(
         SourceRevision::EqualityToken(format!("catalog-pool-scan:{}", scan.base.id)),
@@ -177,6 +184,7 @@ async fn reconcile<P: MembershipReconciliationPort>(
                 summary: "服务发布交接，将从已保存的目录池核对进度继续".into(),
             });
         }
+
         let scope = port.scope().await?.ok_or_else(|| ClassifiedError {
             class: SupplierFailureClass::CapabilityGap,
             code: "CATALOG_SCOPE_PROOF_REQUIRED".into(),
@@ -186,6 +194,7 @@ async fn reconcile<P: MembershipReconciliationPort>(
             port.invalidate().await?;
             return Ok(());
         }
+
         if port.apply_batch().await? {
             return Ok(());
         }
@@ -288,6 +297,7 @@ mod tests {
         let changed = port(vec![Ok(Some(scope(&["one"])))], vec![]);
         reconcile(&changed, &expected).await.unwrap();
         assert_eq!(*changed.calls.lock().unwrap(), ["scope", "invalidate"]);
+
         let missing = port(vec![Ok(None)], vec![]);
         assert_eq!(reconcile(&missing, &expected).await.unwrap_err().code, "CATALOG_SCOPE_PROOF_REQUIRED");
         assert_eq!(*missing.calls.lock().unwrap(), ["scope"]);
@@ -299,6 +309,7 @@ mod tests {
         let unreadable = port(vec![Err(failure())], vec![]);
         assert!(reconcile(&unreadable, &expected).await.is_err());
         assert_eq!(*unreadable.calls.lock().unwrap(), ["scope"]);
+
         let failed = port(vec![Ok(Some(expected.clone()))], vec![Err(failure())]);
         assert!(reconcile(&failed, &expected).await.is_err());
         assert_eq!(*failed.calls.lock().unwrap(), ["scope", "apply"]);

@@ -148,6 +148,7 @@ impl PurchaseChangeSubmissionLineData {
             input_tax_rate: self.input_tax_rate,
         };
         fields.normalize_and_validate(self.line_no, true)?;
+
         self.ensure_allocation()?;
         ensure_offering_source(
             self.line_type,

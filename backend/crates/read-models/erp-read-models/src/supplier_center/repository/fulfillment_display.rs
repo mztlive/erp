@@ -44,6 +44,7 @@ pub(crate) async fn item_names(
     if items.is_empty() {
         return Ok(ItemNames::default());
     }
+
     let ids = items.iter().map(|item| item.supplier_offering_revision_id.to_string()).collect::<Vec<_>>();
     let revisions = db.supplier_offering_revisions().list_by_ids(&ids, executor).await?;
     let offering_ids = revisions.iter().map(|item| item.supplier_offering_id.clone()).collect::<Vec<_>>();
@@ -56,6 +57,7 @@ pub(crate) async fn item_names(
     let sku_revisions =
         db.sku_revisions().find_many(doc! { "id": { "$in": revision_ids } }, executor).await?;
     let units = db.unit_of_measures().find_many(doc! { "id": { "$in": unit_ids } }, executor).await?;
+
     let names = ItemNames {
         revisions: revisions
             .into_iter()

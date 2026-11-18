@@ -96,11 +96,13 @@ pub(crate) async fn sales_basis(
         .await?
         .ok_or_else(|| Error::ConflictError("申请绑定的应收不存在".into()))?;
     source::validate_binding(&request, &account)?;
+
     let (_, revision, source) = source::load(db, &request, executor).await?;
     let sales_order = sources(db, std::slice::from_ref(&source), executor)
         .await?
         .pop()
         .ok_or_else(|| Error::ConflictError("来源销售版本不存在".into()))?;
+
     let (files, unavailable_reason) = match revision_materials(db, &revision, executor).await {
         Ok(materials) => (materials.files, None),
         Err(error) => {
@@ -108,6 +110,7 @@ pub(crate) async fn sales_basis(
             (vec![], Some("销售版本关联的合同或凭证暂不可读取，请联系销售核对归档资料".into()))
         },
     };
+
     Ok(InvoiceSalesBasis {
         source,
         sales_order,
@@ -170,6 +173,7 @@ mod tests {
         let selected =
             reference("revision-1", std::slice::from_ref(&file), "revision-1", "contract-pdf").unwrap();
         assert_eq!(selected, file);
+
         let visible = serde_json::to_value(ApprovalMaterialView::from(&selected)).unwrap();
         assert_eq!(visible["file_name"], "合同.pdf");
         assert!(visible.get("content_hmac").is_none());

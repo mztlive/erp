@@ -37,6 +37,7 @@ impl SupplierDepositService {
         {
             return Err(Error::ValidationError("自动核销原操作身份无效".into()));
         }
+
         let usage = self
             .db
             .supplier_deposit_usages()
@@ -49,6 +50,7 @@ impl SupplierDepositService {
             receipt.require_automatic_usage(&usage, &operation)?;
             return Ok(usage);
         }
+
         let reservation = self.reservation(&usage.reservation_id, executor).await?;
         let account = self.account(&usage.account_id, executor).await?;
         let request = self
@@ -58,6 +60,7 @@ impl SupplierDepositService {
             automatic_settlement_entries(&self.db, &reservation.basis.payable_account_id, executor).await?;
         let allocations = automatic_settlement_allocations(&self.db, &entries, executor).await?;
         let offsets = automatic_settlement_offsets(&self.db, &entries, executor).await?;
+
         let plan = DepositAutomaticSettlementPlan::from_facts(
             &usage,
             &reservation,

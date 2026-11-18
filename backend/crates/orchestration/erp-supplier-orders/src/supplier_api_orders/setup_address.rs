@@ -87,6 +87,7 @@ impl AddressTicket {
         {
             return Err(Error::ConflictError("地址候选已失效或不属于当前订单，请重新选择".into()));
         }
+
         for (index, candidate) in self.path.iter().enumerate() {
             let parent = index.checked_sub(1).map(|previous| self.path[previous].code.as_str());
             if depth_index(candidate.depth) != index
@@ -140,6 +141,7 @@ impl SupplierApiOrderProcess {
         if connector.address_requirement() != AddressRequirement::FourLevel {
             return Err(Error::ValidationError("当前供应商不使用四级地址选择".into()));
         }
+
         let path = self.parent_address_path(&execution, &query)?;
         let parent_code = path.last().map(|parent| parent.code.clone());
         let source = connector.address_source().ok_or_else(|| missing_capability("供应商地址候选查询"))?;
@@ -149,6 +151,7 @@ impl SupplierApiOrderProcess {
             .map_err(|error| Error::BusinessLogicError(error.summary))?
             .value;
         validate_candidates(&candidates, query.level, parent_code.as_deref())?;
+
         let (fresh, _) = self.address_context(id, actor).await?;
         if fresh.base.version != execution.base.version {
             return Err(Error::ConflictError("执行资料已变化，请重新选择地址".into()));
@@ -227,6 +230,7 @@ impl SupplierApiOrderProcess {
         if connector.address_requirement() != AddressRequirement::FourLevel {
             return Err(Error::ValidationError("当前供应商不使用四级地址选择".into()));
         }
+
         let valid = connector
             .address_source()
             .ok_or_else(|| missing_capability("四级地址有效性核验"))?
@@ -236,6 +240,7 @@ impl SupplierApiOrderProcess {
         if !valid.value {
             return Err(Error::BusinessLogicError("供应商不接受所选收货地址，请重新选择".into()));
         }
+
         snapshot.recipient.supplier_address = Some(address);
         snapshot.recipient.ensure_address_ready(
             AddressRequirement::FourLevel,
@@ -352,6 +357,7 @@ mod tests {
         let now = Instant::now();
         let ticket = AddressTicket::for_execution(&execution, path(), now).unwrap();
         ticket.validate(&execution, now).unwrap();
+
         let mut other = execution.clone();
         other.connection_id = "other".into();
         assert!(ticket.validate(&other, now).is_err());
@@ -362,6 +368,7 @@ mod tests {
         other.address_fingerprint = Some("changed".into());
         assert!(ticket.validate(&other, now).is_err());
         assert!(ticket.validate(&execution, ticket.expires_at).is_err());
+
         let address = ticket.into_address().unwrap();
         address.validate_binding("c", "e", "address").unwrap();
     }
@@ -378,8 +385,10 @@ mod tests {
                 .validate(&execution, now)
                 .is_err()
         );
+
         let ticket = AddressTicket::for_execution(&execution, path()[..3].to_vec(), now).unwrap();
         assert!(ticket.into_address().is_err());
+
         let codec = SensitiveDataCodec::from_secret(b"unit-test-only");
         let ticket = codec.encrypt("candidate proof").unwrap();
         assert_eq!(codec.decrypt(&ticket).unwrap(), "candidate proof");

@@ -104,6 +104,7 @@ pub fn confirmation_workflow_action(
             return Err(erp_core::Error::from("导入确认动作缺少领域决策"));
         },
     };
+
     WorkflowAction::new(
         id,
         WorkflowActionData {
@@ -186,6 +187,7 @@ mod tests {
             assert_eq!(item.responsibility_key(), Some(scope));
             assert_eq!(item.owner_organization_id, "company");
         }
+
         assert!(
             confirmation_work_item(
                 WorkItemId::new("work-item-1"),
@@ -196,6 +198,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(
             confirmation_work_item(
                 WorkItemId::new("work-item-1"),

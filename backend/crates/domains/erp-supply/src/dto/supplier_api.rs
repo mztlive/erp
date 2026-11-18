@@ -713,10 +713,12 @@ mod tests {
         request.validate().unwrap();
         let expected = to_value(request).unwrap();
         assert!(expected.get("environment").is_none());
+
         let mut legacy = payload.clone();
         legacy["environment"] = "production".into();
         let request: CreateSupplierApiConnectionRequest = from_value(legacy).unwrap();
         assert_eq!(to_value(request).unwrap(), expected);
+
         let mut missing_supplier = payload;
         missing_supplier.as_object_mut().unwrap().remove("supplier_id");
         assert!(from_value::<CreateSupplierApiConnectionRequest>(missing_supplier).is_err());

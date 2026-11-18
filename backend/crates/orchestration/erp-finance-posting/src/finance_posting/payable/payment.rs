@@ -94,6 +94,7 @@ impl PayableProcess {
         actor: &AuditActor,
     ) -> Result<SupplierPaymentBankReceiptSnapshot> {
         let snapshot = self.bank_receipt_snapshot(id, actor).await?;
+
         let audit = actor.clone().resource_log(
             "supplier_payment.bank_receipt.preview",
             "supplier_payment",
@@ -151,12 +152,14 @@ impl PayableProcess {
                 Box::pin(async move {
                     let qualification =
                         funds.supplier_payment_full_read_qualification(&id, &actor, executor).await?;
+
                     let payment = db
                         .supplier_payments()
                         .find_by_id(&id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))?;
                     let asset_id = payment.require_bank_receipt()?;
+
                     let asset = db
                         .file_assets()
                         .find_by_id(asset_id.as_ref(), executor)
@@ -194,6 +197,7 @@ impl PayableProcess {
             return Err(Error::ValidationError("本次付款只允许一份已批准申请".into()));
         }
         req.validate()?;
+
         let command_receipt = CommandReceipt::from_payload(
             "supplier-payment-commit-",
             actor.id(),
@@ -216,12 +220,14 @@ impl PayableProcess {
             actor: actor.clone(),
             command_receipt: command_receipt.clone(),
         };
+
         let result = self
             .db
             .client()
             .clone()
             .with_transaction(move |executor| Box::pin(transaction.execute(executor)))
             .await;
+
         self.committed_payment_view(result, &command_receipt, has_pending_assets, &authority).await
     }
 
@@ -241,6 +247,7 @@ impl PayableProcess {
                     .committed_resource_id(command_receipt, &mut NoTransaction)
                     .await;
                 let recovered = recovered_resource(error, recovered.map_err(Error::from))?;
+
                 return Ok(read_payment_result(
                     self.authorized_payment_detail(&recovered.id, authority),
                     has_pending_assets && assets_may_be_committed,
@@ -249,6 +256,7 @@ impl PayableProcess {
                 .await);
             },
         };
+
         Ok(read_payment_result(
             self.authorized_payment_detail(&payment.base.id, authority),
             has_pending_assets && fresh,
@@ -287,6 +295,7 @@ impl PayableProcess {
                         executor,
                     )
                     .await?;
+
                     read.supplier_payment_detail_with_executor(&id, executor).await.map_err(Error::from)
                 })
             })
@@ -390,6 +399,7 @@ impl SupplierPaymentCommand {
             executor,
         )
         .await?;
+
         let receipts = FinanceCommandReceiptService::new(self.db.clone());
         if let Some(id) = receipts.committed_resource_id(&self.command_receipt, executor).await? {
             let payment = self
@@ -400,6 +410,7 @@ impl SupplierPaymentCommand {
                 .ok_or_else(|| Error::Internal("付款命令回执引用不存在".into()))?;
             return Ok((payment, false));
         }
+
         SupplierPaymentTransaction {
             prepared: PreparedSupplierPayment::prepare(
                 self.req,
@@ -433,6 +444,7 @@ impl SupplierPaymentTransaction {
         let receipts = FinanceCommandReceiptService::new(self.db.clone());
         let context = BusinessEventContext::new(self.actor.clone(), PAYMENT_COMMIT)?
             .with_command_id(Some(self.command_receipt.id().to_string()))?;
+
         let request = payment_request::load(&self.db, &self.prepared.payment_request_id, executor).await?;
         let recipient = request
             .payee_account
@@ -443,10 +455,12 @@ impl SupplierPaymentTransaction {
         {
             return Err(Error::ConflictError("实际付款账户与申请冻结账户不一致".into()));
         }
+
         let supplier = self.load_supplier(executor).await?;
         self.persist_document(&supplier, executor).await?;
         self.persist_payment(executor).await?;
         self.finish_payment(&context, executor).await?;
+
         receipts
             .save_resource(
                 &self.command_receipt,
@@ -479,6 +493,7 @@ impl SupplierPaymentTransaction {
             executor,
         )
         .await?;
+
         post_supplier_payment(
             &self.db,
             &mut self.prepared.payment,
@@ -489,6 +504,7 @@ impl SupplierPaymentTransaction {
             executor,
         )
         .await?;
+
         payment_request::execution::sync_task(&self.db, &self.prepared.payment_request_id, executor).await?;
         Ok(())
     }
@@ -504,6 +520,7 @@ impl SupplierPaymentTransaction {
         {
             return Err(Error::ConflictError("付款单号已存在，请刷新后重试".to_string()));
         }
+
         self.db
             .supplier_accounts()
             .find_by_id(self.prepared.payment.supplier_id.as_ref(), executor)
@@ -546,6 +563,7 @@ impl SupplierPaymentTransaction {
         self.pending_assets.persist(&self.db, executor).await?;
         ensure_bank_receipt_asset(&self.db, payment.require_bank_receipt()?, &self.pending_assets, executor)
             .await?;
+
         self.db.supplier_payments().create(payment, executor).await?;
         Ok(())
     }

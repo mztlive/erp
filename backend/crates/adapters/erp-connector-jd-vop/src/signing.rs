@@ -161,6 +161,7 @@ mod tests {
         let expected = encode(parameters(), &json!({}), SECRET).unwrap();
         assert_eq!(expected.as_str(), BASIC_ENCODED);
         assert_eq!(decoded(&expected)["sign"], BASIC_SIGNATURE);
+
         let mut reversed = parameters().into_iter().rev().collect::<BTreeMap<_, _>>();
         reversed.insert("sign".into(), "old%26signature&must=not-participate".into());
         assert_eq!(encode(reversed, &json!({}), SECRET).unwrap().into_string(), BASIC_ENCODED);
@@ -206,6 +207,7 @@ mod tests {
         assert_eq!(values["empty"], "");
         assert_eq!(values["sign"], "081B484C03B40D50DE2B00A0614F587F");
         assert_eq!(values[BUSINESS_PARAMETER], r#"{"skuId":"123"}"#);
+
         let changed = encode(extended, &json!({"skuId":"456"}), SECRET).unwrap();
         assert_eq!(decoded(&changed)[BUSINESS_PARAMETER], r#"{"skuId":"456"}"#);
         assert_ne!(values["sign"], decoded(&changed)["sign"]);
@@ -221,6 +223,7 @@ mod tests {
             blank.insert(key.into(), " ".into());
             assert!(encode(blank, &json!({}), SECRET).is_err());
         }
+
         for key in ["app_secret", "appSecret", "APP_SECRET", BUSINESS_PARAMETER] {
             let mut injected = parameters();
             injected.insert(key.into(), "never-include-this-private-value".into());
@@ -228,6 +231,7 @@ mod tests {
             assert!(!error.summary.contains("never-include"));
             assert!(!error.summary.contains(SECRET));
         }
+
         assert!(encode(parameters(), &json!({}), "").is_err());
         let mut xml = parameters();
         xml.insert("format".into(), "xml".into());

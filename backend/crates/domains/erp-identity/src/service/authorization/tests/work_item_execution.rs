@@ -54,11 +54,13 @@ async fn approval_execution_keeps_complete_decision_qualification_and_terminal_o
     let mut instance = object("approval_instance", "instance", "user");
     instance.subject_type = FactValue::Known("sales_order".into());
     related(&mut instance, "subject_source", object("sales_order", "order", "user"));
+
     let mut builder = complete();
     builder.facilities = identity.clone();
     builder.facts.insert("work_item".into(), facts.clone());
     builder.facts.insert("approval_instance".into(), Arc::new(Facts::new(vec![instance])));
     let service = builder.build().unwrap();
+
     for decision in [
         vec![],
         vec![("history", vec![approval_instance::COPIES_HISTORY])],
@@ -88,6 +90,7 @@ async fn approval_execution_keeps_complete_decision_qualification_and_terminal_o
             assert!(matches!(result, Err(Error::Forbidden(_))), "{result:?}");
         }
     }
+
     facts.objects.lock().unwrap()[0].completed = FactValue::Known(true);
     grant(&identity, &[("reader", &[work_item::DETAIL, approval_instance::COPIES_HISTORY])]);
     service
@@ -99,6 +102,7 @@ async fn approval_execution_keeps_complete_decision_qualification_and_terminal_o
         )
         .await
         .unwrap();
+
     facts.objects.lock().unwrap()[0].subject_source_resource = FactValue::Known("unknown".into());
     assert!(matches!(
         service
@@ -120,6 +124,7 @@ async fn task_execution_requires_exact_task_identity_and_version() {
     let service = bound(identity.clone(), facts);
     grant(&identity, &[("executor", &[work_item::DETAIL, legacy_import::BATCH_DETAIL])]);
     let mut executor = SnapshotExecutor::default();
+
     assert!(matches!(
         service
             .require(
@@ -142,6 +147,7 @@ async fn task_execution_requires_exact_task_identity_and_version() {
             .await,
         Err(Error::ConflictError(message)) if message == "任务版本已改变"
     ));
+
     service
         .require(
             &actor(),
@@ -168,6 +174,7 @@ async fn terminal_replay_retains_full_qualification_without_inventing_current_as
         )
         .await
         .unwrap();
+
     grant(&identity, &[("task-reader", &[work_item::DETAIL])]);
     assert!(matches!(
         service
@@ -180,6 +187,7 @@ async fn terminal_replay_retains_full_qualification_without_inventing_current_as
             .await,
         Err(Error::Forbidden(_))
     ));
+
     assert!(matches!(
         service
             .require(
@@ -191,6 +199,7 @@ async fn terminal_replay_retains_full_qualification_without_inventing_current_as
             .await,
         Err(Error::ValidationError(_))
     ));
+
     assert!(matches!(
         service
             .require(
@@ -222,6 +231,7 @@ async fn task_execution_cannot_split_the_original_complete_permissions_between_r
         )
         .await
         .unwrap();
+
     for missing in 0..full.len() {
         let partial = full
             .iter()
@@ -270,6 +280,7 @@ async fn task_execution_preserves_purchase_history_scope_and_exact_read_grants()
         )
         .await
         .unwrap();
+
     facts.objects.lock().unwrap()[0].relations.values_mut().next().unwrap().objects[0].history_participants =
         FactValue::Known(Default::default());
     assert!(matches!(
@@ -283,6 +294,7 @@ async fn task_execution_preserves_purchase_history_scope_and_exact_read_grants()
             .await,
         Err(Error::Forbidden(_))
     ));
+
     identity.record_grants.lock().unwrap().insert((ResourceKind::PurchaseOrder, "purchase".into()));
     service
         .require(
@@ -293,6 +305,7 @@ async fn task_execution_preserves_purchase_history_scope_and_exact_read_grants()
         )
         .await
         .unwrap();
+
     facts.objects.lock().unwrap()[0].relations.clear();
     assert!(matches!(
         service
@@ -312,6 +325,7 @@ async fn task_execution_rejects_unknown_missing_or_mismatched_persisted_subjects
     let identity = Arc::new(Identity::default());
     let facts = Arc::new(Facts::new(vec![task("IMPORT_BUSINESS_CONFIRMATION", "LEGACY_IMPORT_BATCH")]));
     let service = bound(identity, facts.clone());
+
     for broken in [
         task("UNKNOWN_TASK", "LEGACY_IMPORT_BATCH"),
         task("IMPORT_BUSINESS_CONFIRMATION", "purchase_order"),
@@ -366,6 +380,7 @@ async fn portal_task_requires_original_independent_sources_and_real_supplier_sco
         )
         .await
         .unwrap();
+
     {
         let mut objects = facts.objects.lock().unwrap();
         let source = &mut objects[0].relations.values_mut().next().unwrap().objects[0];
@@ -383,6 +398,7 @@ async fn portal_task_requires_original_independent_sources_and_real_supplier_sco
             .await,
         Err(Error::Forbidden(_))
     ));
+
     {
         let mut objects = facts.objects.lock().unwrap();
         let source = &mut objects[0].relations.values_mut().next().unwrap().objects[0];
@@ -427,6 +443,7 @@ async fn offering_update_material_checks_both_independent_source_ranges_and_comp
     builder.facts.insert("supplier_portal_material".into(), facts.clone());
     let service = builder.build().unwrap();
     let target = || AccessTarget::record("material").unwrap();
+
     assert!(matches!(
         service
             .require(
@@ -438,6 +455,7 @@ async fn offering_update_material_checks_both_independent_source_ranges_and_comp
             .await,
         Err(Error::Forbidden(_))
     ));
+
     facts.objects.lock().unwrap()[0]
         .relations
         .get_mut(&RelationKey::parse("offering").unwrap())
@@ -453,6 +471,7 @@ async fn offering_update_material_checks_both_independent_source_ranges_and_comp
         )
         .await
         .unwrap();
+
     facts.objects.lock().unwrap()[0]
         .relations
         .get_mut(&RelationKey::parse("offering").unwrap())
@@ -519,6 +538,7 @@ async fn supplier_exception_tasks_keep_all_outer_execution_requirements_in_one_r
             )
             .await
             .unwrap();
+
         for missing in 0..full.len() {
             let partial = full
                 .iter()
@@ -542,6 +562,7 @@ async fn supplier_exception_tasks_keep_all_outer_execution_requirements_in_one_r
                 "{kind}/{source} 缺少 {} 必须拒绝",
                 full[missing]
             );
+
             grant(
                 &identity,
                 &[
@@ -604,6 +625,7 @@ async fn financial_execution_tasks_require_every_original_action_in_one_role() {
             )
             .await
             .unwrap();
+
         for missing in 0..full.len() {
             let partial = full
                 .iter()
@@ -627,6 +649,7 @@ async fn financial_execution_tasks_require_every_original_action_in_one_role() {
                 "{kind}缺少{}必须拒绝",
                 full[missing]
             );
+
             grant(
                 &identity,
                 &[
@@ -691,6 +714,7 @@ async fn offering_update_task_requires_both_independent_read_and_review_ranges()
         )
         .await
         .unwrap();
+
     for (role, permission) in
         [("offering-reader", supplier_offering::LIST), ("offering-editor", supplier_offering::REVISE)]
     {
@@ -716,6 +740,7 @@ async fn offering_update_task_requires_both_independent_read_and_review_ranges()
         );
         identity.role_scopes.lock().unwrap().insert((role.into(), permission), company.clone());
     }
+
     for missing in [supplier_offering::LIST, supplier_offering::REVISE] {
         let supplied = [supplier_offering::LIST, supplier_offering::REVISE]
             .into_iter()

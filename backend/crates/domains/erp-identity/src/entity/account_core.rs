@@ -184,7 +184,6 @@ impl AccountCore {
         self.apply_name(update.name)?;
         self.apply_password(update.password)?;
         self.apply_status(update.status);
-
         Ok(())
     }
 
@@ -307,7 +306,6 @@ impl AccountCore {
         if let Some(name) = name {
             self.name = normalize_required_text(name, "账号名称不能为空", NAME_MAX_LEN, "账号名称过长")?;
         }
-
         Ok(())
     }
 
@@ -322,7 +320,6 @@ impl AccountCore {
         if let Some(password) = password {
             self.secret.change_password(password)?;
         }
-
         Ok(())
     }
 
@@ -346,7 +343,6 @@ fn backoffice_login_account(account: impl Into<String>) -> Result<LoginAccount> 
     if account.as_str().chars().count() > LoginAccount::BACKOFFICE_MAX_LEN {
         return Err(Error::from("账号长度不符合要求"));
     }
-
     Ok(account)
 }
 
@@ -389,10 +385,12 @@ mod tests {
         let mut account = sample_account(AccountKind::Admin, AccountStatus::Active);
         assert!(account.is_authorization_actor(AccountKind::Admin));
         assert!(!account.is_authorization_actor(AccountKind::Supplier));
+
         for status in [AccountStatus::Suspended, AccountStatus::Archived] {
             account.status = status;
             assert!(!account.is_authorization_actor(AccountKind::Admin));
         }
+
         account.status = AccountStatus::Active;
         account.base.deleted_at = 1;
         assert!(!account.is_authorization_actor(AccountKind::Admin));
@@ -401,7 +399,6 @@ mod tests {
     #[test]
     fn is_kind_should_match_only_expected_kind() {
         let account = sample_account(AccountKind::Admin, AccountStatus::Active);
-
         assert!(account.is_kind(AccountKind::Admin));
     }
 
@@ -466,6 +463,7 @@ mod tests {
         account.email = Some("old@example.com".into());
         account.phone = Some("13900000000".into());
         account.avatar = Some("https://example.com/avatar.png".into());
+
         account
             .update(AccountCoreUpdate {
                 name: Some("New Name".into()),
@@ -473,6 +471,7 @@ mod tests {
                 status: Some(AccountStatus::Suspended),
             })
             .unwrap();
+
         assert_eq!(account.name, "New Name");
         assert!(!account.can_login());
         assert_eq!(account.email.as_deref(), Some("old@example.com"));

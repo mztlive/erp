@@ -109,6 +109,7 @@ mod tests {
         let generic = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
         assert_eq!(generic.class(), ErrorClass::Conflict);
         assert_eq!(generic.to_string(), "数据冲突: 数据已存在，请勿重复提交");
+
         assert_eq!(
             super::duplicate_index_conflict_message(Some("uk_sales_return_cases_no")),
             "数据已存在，请勿重复提交"
@@ -151,9 +152,11 @@ mod tests {
         ] {
             assert_eq!(error.class(), ErrorClass::BusinessRule);
         }
+
         for error in [Error::Forbidden("禁".to_string()), Error::Unauthenticated("未认证".to_string())] {
             assert_eq!(error.class(), ErrorClass::Forbidden);
         }
+
         assert_eq!(Error::Internal("内部".to_string()).class(), ErrorClass::Internal);
     }
 }

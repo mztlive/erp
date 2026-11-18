@@ -86,6 +86,7 @@ impl ApprovalProcessDefinition {
         if definition_version == 0 {
             return Err(ModelError::InvalidField("定义版本必须从 1 开始"));
         }
+
         Ok(Self {
             base: base_model_at(id.to_string(), at)?,
             process_kind,
@@ -277,6 +278,7 @@ impl ApprovalProcessDefinition {
             },
             None => None,
         };
+
         self.publish(actor, at)?;
         Ok((self, previous))
     }
@@ -296,6 +298,7 @@ impl ApprovalProcessDefinition {
         if self.status != ApprovalDefinitionStatus::Published {
             return Err(ModelError::InvalidStatus("只有已发布定义可以退役"));
         }
+
         self.status = ApprovalDefinitionStatus::Retired;
         self.retired_by = Some(actor);
         self.retired_at = Some(at);
@@ -339,6 +342,7 @@ mod tests {
     fn definition_helpers_are_deterministic_and_fail_closed() {
         assert_eq!(ApprovalProcessDefinition::normalize_name(" 库存调整 ").unwrap(), "库存调整");
         assert!(ApprovalProcessDefinition::normalize_name("   ").is_err());
+
         assert_eq!(ApprovalProcessDefinition::next_version_after(0).unwrap(), 1);
         assert_eq!(ApprovalProcessDefinition::next_version_after(7).unwrap(), 8);
         assert!(ApprovalProcessDefinition::next_version_after(u32::MAX).is_err());

@@ -588,6 +588,7 @@ mod tests {
         ] {
             assert!(finance_actor().resource_log(code, "supplier_deposit", "account".into()).is_err());
         }
+
         assert!(
             finance_actor()
                 .resource_log(

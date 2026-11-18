@@ -37,13 +37,16 @@ pub async fn load_procurement_rule_list_facts(
     if rules.is_empty() {
         return Ok(ProcurementRuleListDisplayFacts::default());
     }
+
     let (owner_ids, sku_ids, category_ids) = collect_rule_list_ids(rules);
     let mut facts = ProcurementRuleListDisplayFacts::default();
+
     if !owner_ids.is_empty() {
         let owners = db.accounts().list_procurement_responsibility_owners(&owner_ids, executor).await?;
         facts.owner_names =
             owners.into_iter().map(|account| (account.base.id, account.name)).collect::<HashMap<_, _>>();
     }
+
     if !sku_ids.is_empty() {
         let skus = db.skus().list_procurement_responsibility_skus(&sku_ids, executor).await?;
         let revision_ids: Vec<SkuRevisionId> = unique_ids(
@@ -68,6 +71,7 @@ pub async fn load_procurement_rule_list_facts(
             }
         }
     }
+
     if !category_ids.is_empty() {
         let categories = db
             .product_categories()

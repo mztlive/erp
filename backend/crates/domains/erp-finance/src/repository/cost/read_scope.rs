@@ -137,6 +137,7 @@ impl CostEntryReadScopeExt for persistence_core::Repository<'_, CostEntry> {
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<CostEntryRow>> {
         let prefix = authorized_membership(access, self.collection().name(), executor)?;
+
         let mut document = filter.to_doc();
         if let Some(id) = id {
             document.insert("id", id);
@@ -154,6 +155,7 @@ impl CostEntryReadScopeExt for persistence_core::Repository<'_, CostEntry> {
             executor,
         )
         .await?;
+
         access.ensure_current(executor)?;
         Ok(rows)
     }
@@ -166,6 +168,7 @@ impl CostEntryReadScopeExt for persistence_core::Repository<'_, CostEntry> {
         executor: &mut dyn Executor,
     ) -> crate::Result<Vec<CostEntryScopeVersion>> {
         let prefix = authorized_membership(access, self.collection().name(), executor)?;
+
         let mut document = filter.to_doc();
         if let Some(id) = id {
             document.insert("id", id);
@@ -183,6 +186,7 @@ impl CostEntryReadScopeExt for persistence_core::Repository<'_, CostEntry> {
             executor,
         )
         .await?;
+
         access.ensure_current(executor)?;
         Ok(rows)
     }

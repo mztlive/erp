@@ -21,6 +21,7 @@ impl Callbacks for DangaoshushuConnector {
         if request.method != "POST" || request.body.len() > 256 * 1024 {
             return Err(mapping());
         }
+
         let value: Value = from_slice(request.body).map_err(|_| mapping())?;
         let timestamp = field(&value, "timestamp")?;
         let seconds = timestamp_seconds(&timestamp)?;
@@ -37,6 +38,7 @@ impl Callbacks for DangaoshushuConnector {
                 "供应商推送渠道、签名或时间窗口无效",
             ));
         }
+
         let path = request.path_and_query.split_once('?').map_or(request.path_and_query, |(path, _)| path);
         let kind = path.rsplit_once('/').map_or(path, |(_, kind)| kind);
         let notices = notices(kind, &value)?;
@@ -85,12 +87,14 @@ fn notices(kind: &str, value: &Value) -> ConnectorResult<Vec<ChangeNotice>> {
         "price" => ChangeTopic::Price,
         _ => return Err(mapping()),
     };
+
     if kind == "order" {
         return Ok(vec![notice(
             RefreshTarget::Order(OrderKey::Merchant(id(&value["out_order_no"])?)),
             topic,
         )]);
     }
+
     if kind == "price" {
         let notices = value["data"]
             .as_array()
@@ -111,6 +115,7 @@ fn notices(kind: &str, value: &Value) -> ConnectorResult<Vec<ChangeNotice>> {
         }
         return Ok(notices);
     }
+
     let identifier = id(&value["id"])?;
     let target = if kind == "product" {
         RefreshTarget::Product(identifier)
@@ -169,6 +174,7 @@ mod tests {
             received_at: Instant::from_unix_secs(1700000000),
         };
         let expected = connector.verify(&request).unwrap();
+
         for path in [
             "order",
             "/order",
@@ -180,6 +186,7 @@ mod tests {
             let actual = connector.verify(&request).unwrap();
             assert!(actual == expected, "{path}");
         }
+
         for path in [
             "",
             "/",
@@ -205,6 +212,7 @@ mod tests {
             received_at: Instant::from_unix_secs(1700000000),
         };
         assert_eq!(connector.verify(&request).err().unwrap().class, SupplierFailureClass::AuthSignature);
+
         assert!(notices("unknown", &Value::Null).is_err());
         assert_eq!(timestamp_seconds("1700000000123").unwrap(), 1700000000);
         assert!(timestamp_seconds("-1700000000").is_err());
@@ -268,6 +276,7 @@ mod tests {
         let identity = callbacks.reception_id(&request).unwrap();
         assert!(identity.starts_with("dgss-"));
         assert_eq!(callbacks.reception_id(&request).as_deref(), Some(identity.as_str()));
+
         assert_eq!(verified.integrity, CallbackIntegrity::EnvelopeOnly);
         assert_eq!(verified.notices.len(), 1);
         let notice = &verified.notices[0];
@@ -275,9 +284,11 @@ mod tests {
         assert_eq!(notice.target, RefreshTarget::Order(OrderKey::Merchant("order-1".into())));
         assert!(notice.source_event_id.is_none());
         assert!(notice.observation.is_none());
+
         assert_eq!(verified.durable_ack.status, 200);
         assert_eq!(verified.durable_ack.content_type, "application/json");
         assert_eq!(verified.durable_ack.body, br#"{"code":200,"message":"success"}"#);
+
         let invalid = serde_json::to_vec(&serde_json::json!({
             "channel_no": "test-channel", "timestamp": 1700000000,
             "sign": "00000000000000000000000000000000", "out_order_no": "order-1"

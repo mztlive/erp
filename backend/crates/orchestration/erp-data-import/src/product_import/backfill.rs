@@ -39,10 +39,12 @@ impl ProductImportProcess {
         if self.product_has_images(&product).await? {
             return Ok(already_imported(product.base.id));
         }
+
         let media = resolve_row_media(&self.storage, &self.secret, cells, media_source).await?;
         if media.pending.is_empty() {
             return Ok(already_imported(product.base.id));
         }
+
         let pending = media.pending.clone();
         let request = self.update_request_with_images(&product, media).await?;
         match product_update_with_assets(
@@ -74,6 +76,7 @@ impl ProductImportProcess {
         if !snapshot.media.is_empty() {
             return Ok(true);
         }
+
         let skus = self
             .db
             .skus()
@@ -97,6 +100,7 @@ impl ProductImportProcess {
         let revision = snapshot
             .current_revision
             .ok_or_else(|| Error::BusinessLogicError("商品缺少当前资料，无法补图".into()))?;
+
         let skus = self
             .db
             .skus()
@@ -104,6 +108,7 @@ impl ProductImportProcess {
             .await?;
         let revisions = self.db.catalog().current_sku_revisions(&skus, &mut ReadExecutor::default()).await?;
         let sku_inputs = sku_inputs_with_main_image(&skus, &revisions, media.main_image)?;
+
         Ok(UpdateProductRequest {
             version: product.base.version,
             change_reason: Some("产品报价表导入补齐图片".into()),
@@ -189,6 +194,7 @@ pub(super) fn sku_inputs_with_main_image(
             spec_entries,
         });
     }
+
     if inputs.is_empty() {
         return Err(Error::BusinessLogicError("商品没有可补图的 SKU".into()));
     }

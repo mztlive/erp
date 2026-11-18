@@ -119,11 +119,13 @@ impl ExpenseSourceReadService {
             return Err(Error::ValidationError("页码须大于零，搜索内容不能超过 100 字".into()));
         }
         ensure_deep_page(page, params.scope_version.as_deref())?;
+
         let (access, scope) = self.scope(actor, executor).await?;
         let version = access.scope_version.clone();
         if params.scope_version.as_ref().is_some_and(|expected| expected != &version) {
             return Err(data_scope_changed("数据范围已变化，请从第一页刷新"));
         }
+
         let sales = SalesOrderReadService::new(self.db.clone(), self.rbac.clone());
         let filter = SalesOrderFilter {
             search: sales.keyword_search(params.q.as_deref(), executor).await?,
@@ -134,6 +136,7 @@ impl ExpenseSourceReadService {
             ..Default::default()
         };
         let result = self.db.sales_orders().search_sales_orders(&filter, &scope, executor).await?;
+
         let names = sales
             .customer_names_batch(
                 &result.items.iter().map(|row| row.customer_id.clone()).collect::<Vec<_>>(),
@@ -148,6 +151,7 @@ impl ExpenseSourceReadService {
                 summary(row, name)
             })
             .collect();
+
         access.validate(executor).await?;
         Ok(ExpenseSourceList {
             items,
@@ -223,10 +227,12 @@ impl ExpenseSourceReadService {
     ) -> Result<ExpenseSourceDetail> {
         let (access, scope) = self.scope(actor, executor).await?;
         let order = self.authorized_order(id, &scope, executor).await?;
+
         let lines = self.detail_lines(&order, executor).await?;
         let names = SalesOrderReadService::new(self.db.clone(), self.rbac.clone())
             .customer_names_batch(&[order.customer_id.to_string()], executor)
             .await?;
+
         access.validate(executor).await?;
         Ok(ExpenseSourceDetail {
             summary: ExpenseSourceSummary {
@@ -255,12 +261,14 @@ impl ExpenseSourceReadService {
             .sales_order_revision_lines()
             .list_lines_by_revision(&SalesOrderRevisionId::new(revision), executor)
             .await?;
+
         let ids = lines.iter().map(|line| SalesOrderRevisionLineId::new(&line.base.id)).collect::<Vec<_>>();
         let goods = self
             .db
             .sales_order_goods_service_line_revisions()
             .list_by_revision_line_ids(&ids, executor)
             .await?;
+
         Ok(lines
             .into_iter()
             .filter(|line| {
@@ -301,6 +309,7 @@ mod tests {
         let db = client.database("expense_source_authorization");
         let service = ExpenseSourceReadService::new(db, unbound_authorization());
         let actor = AuditActor::new("buyer".into(), "buyer".into(), AccountKind::Admin);
+
         let errors = [
             service
                 .detail_view("sales", &actor, &mut SnapshotExecutor::default())

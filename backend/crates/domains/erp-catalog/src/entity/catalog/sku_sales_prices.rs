@@ -71,11 +71,13 @@ mod tests {
             bulk_min_quantity: None,
         };
         assert_eq!(prices.reference_price(quantity), prices.sales_visible_price_gross);
+
         for minimum in ["0.000000", "-1.000000"] {
             let invalid =
                 SkuSalesPrices { bulk_min_quantity: Some(Quantity::from_str(minimum).unwrap()), ..prices };
             assert_eq!(invalid.reference_price(quantity), prices.sales_visible_price_gross);
         }
+
         let missing_bulk =
             SkuSalesPrices { bulk_price_gross: None, bulk_min_quantity: Some(quantity), ..prices };
         assert_eq!(missing_bulk.reference_price(quantity), prices.sales_visible_price_gross);

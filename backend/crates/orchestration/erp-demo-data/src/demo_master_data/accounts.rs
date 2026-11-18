@@ -54,10 +54,12 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                     renamed += 1;
                 }
             }
+
             let id = self.account_id(&spec.account).await?;
             prepared.by_key.insert(spec.key.clone(), id.clone());
             prepared.by_login.insert(spec.account.clone(), id);
         }
+
         if report.accounts_created > 0 {
             let password = &spec::foundation_spec().password;
             report
@@ -108,6 +110,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if missing.is_empty() {
             return Ok(());
         }
+
         role_ids.extend(missing);
         AdminService::new(self.db.clone(), self.identity.clone())
             .update_admin_role(
@@ -130,6 +133,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if existing.name == spec.name {
             return Ok(false);
         }
+
         AdminService::new(self.db.clone(), self.identity.clone())
             .update_admin(
                 UpdateAdminParams {

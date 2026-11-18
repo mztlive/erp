@@ -78,6 +78,7 @@ impl SupplierDepositService {
         if !candidate.resolve(resolution.clone())? {
             return Ok(record);
         }
+
         ensure_version(record.base.version, version)?;
         let owner = self.resolution_fence(account, &resolution.operation_key, executor).await?;
         let basis = self.reconciliation(account, &resolution.balanced_reconciliation_id, executor).await?;
@@ -86,12 +87,15 @@ impl SupplierDepositService {
         ensure_account_risk_covered(&self.db, account, &basis, executor).await?;
         self.recover_reviewed_funds(account, &resolution, &basis, executor).await?;
         self.ensure_resolution_funds(account, &basis, executor).await?;
+
         record.resolve(resolution)?;
         self.db.supplier_deposit_reconciliations().update(&mut record, executor).await?;
+
         let unresolved = unresolved_reconciliations(&self.db, account, executor).await?;
         let mut funds = self.account(account, executor).await?;
         funds.reconciliation_required = !unresolved.is_empty();
         self.db.supplier_deposit_accounts().update(&mut funds, executor).await?;
+
         self.release_resolution_fence(account, &owner, executor).await?;
         Ok(record)
     }
@@ -128,6 +132,7 @@ impl SupplierDepositService {
             ensure_release_replay(receipt, &verification, actor)?;
             return Ok(reservation);
         }
+
         ensure_version(reservation.base.version, version)?;
         let owner = self.resolution_fence(account, operation, executor).await?;
         let basis = self.reconciliation(account, &verification.reconciliation_id, executor).await?;
@@ -135,6 +140,7 @@ impl SupplierDepositService {
         self.account(account, executor).await?.ensure_reconciliation_risk_observed(basis.observed_at)?;
         ensure_account_risk_covered(&self.db, account, &basis, executor).await?;
         self.ensure_resolution_funds(account, &basis, executor).await?;
+
         let usages = usages_for_reservation(&self.db, id, executor).await?;
         let amount = reservation.verified_release_amount(&usages, verification.reason)?;
         let started = i64::try_from(reservation.base.created_at)
@@ -143,6 +149,7 @@ impl SupplierDepositService {
             return Err(Error::BusinessLogicError("资金核对未覆盖原占用开始后的完整风险范围".into()));
         }
         self.ensure_release_cutoff(&usages, &basis, last_external_fact_at, executor).await?;
+
         let reference = format!("risk-verification:{}", fingerprint(&(id, operation, &verification))?);
         let mut result =
             self.release_reservation(id, operation, amount, Some(reference), actor, executor).await?;
@@ -152,6 +159,7 @@ impl SupplierDepositService {
             .ok_or_else(|| Error::Internal("风险释放缺少原命令回执".into()))?
             .verification = Some(verification);
         self.db.supplier_deposit_reservations().update(&mut result, executor).await?;
+
         self.release_resolution_fence(account, &owner, executor).await?;
         Ok(result)
     }
@@ -165,6 +173,7 @@ impl SupplierDepositService {
         ensure_account_funds_resolved(&self.db, account, executor).await?;
         ensure_funds_window_covered(&self.db, account, basis.covered_from, basis.covered_until, executor)
             .await?;
+
         let cutoff = ledger_balance_at(&self.db, account, basis.covered_until, executor).await?;
         let current = ledger_balance_at(&self.db, account, Instant::now(), executor).await?;
         let funds = self.account(account, executor).await?;
@@ -176,6 +185,7 @@ impl SupplierDepositService {
                 .ok_or_else(|| Error::BusinessLogicError("账户占用重建金额溢出".into()))?;
             Amount::try_from(sum).map_err(Error::from)
         })?;
+
         if cutoff != basis.local_balance_at_cutoff
             || current != funds.book_balance
             || reserved != funds.reserved_amount

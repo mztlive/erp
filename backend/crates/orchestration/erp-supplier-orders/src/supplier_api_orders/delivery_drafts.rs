@@ -37,6 +37,7 @@ pub async fn create_api_delivery_drafts(
     for execution in executions {
         let mut delivery = prepare_direct_delivery(db, order).await?;
         delivery.base.id = format!("{}-delivery", execution.base.id);
+
         let mut lines = Vec::new();
         for (index, source) in execution.source_lines.iter().enumerate() {
             let allocation = allocations
@@ -61,6 +62,7 @@ pub async fn create_api_delivery_drafts(
             )?);
             covered.insert(source.purchase_order_revision_line_id.clone());
         }
+
         db.fulfillment().create_delivery_with_lines(&delivery, &lines, executor).await?;
         ensure_fulfillment_task(db, task_identity, FulfillmentTaskObject::Delivery(&delivery), executor)
             .await?;

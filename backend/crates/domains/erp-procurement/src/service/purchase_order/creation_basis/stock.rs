@@ -81,6 +81,7 @@ pub fn stock_groups_from_facts(
             })
         })
         .collect::<Vec<_>>();
+
     for group in &mut groups {
         group.lines.sort_by(|left, right| {
             left.coverage

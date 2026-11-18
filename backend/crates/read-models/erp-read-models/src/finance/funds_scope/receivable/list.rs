@@ -120,6 +120,7 @@ pub(super) fn receivable_summary(
             owner_of.insert(row.order_id.clone(), owner.clone());
         }
     }
+
     let mut summary = build_summary(&triples, &owner_of, Some(whole_sum), version, false)?;
     summary.balance_total = Some(
         rows.iter()

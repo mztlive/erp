@@ -194,6 +194,7 @@ mod tests {
                 approved_total: funds.amount,
             }]
         );
+
         let failure = Funds { failure: true, ..funds };
         assert!(matches!(require_coverage(&failure, &execution(), failure.amount, &mut NoTransaction).await,
             Err(Error::ConflictError(message)) if message == "原资金占用已变化"));

@@ -141,6 +141,7 @@ impl OrganizationChangeRequest {
             },
             _ => {},
         }
+
         if self.idempotency_key.is_empty()
             || self.idempotency_key.len() > 128
             || !self.idempotency_key.bytes().all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
@@ -179,10 +180,13 @@ impl OrganizationState {
         if request.expected_version != self.version {
             return Err(Error::ConflictError("组织范围已变化，请刷新后重试".into()));
         }
+
         let mut next = self.clone();
         next.apply(&request.change, id, actor, request.reason.trim(), at)?;
+
         OrgTree::new(&next.units)?;
         next.validate_memberships()?;
+
         next.version = self.version.checked_add(1).ok_or_else(|| Error::Internal("组织版本溢出".into()))?;
         Ok(next)
     }
@@ -209,6 +213,7 @@ impl OrganizationState {
         for m in &members {
             m.validity.validate()?;
         }
+
         if members
             .windows(2)
             .any(|pair| pair[0].user_id == pair[1].user_id && pair[0].validity.overlaps(&pair[1].validity))
@@ -323,6 +328,7 @@ impl OrganizationState {
             .iter_mut()
             .find(|u| u.base.id == id)
             .expect("ensure_enabled 已确认节点存在，且组织集合尚未修改");
+
         unit.changed_by = actor.into();
         unit.reason = reason.into();
         Ok(unit)
@@ -338,6 +344,7 @@ impl OrganizationState {
         if pending_members || children {
             return Err(Error::ConflictError("组织仍有成员或有效下级，请先完成交接".into()));
         }
+
         self.unit_mut(id, actor, reason)?.enabled = false;
         Ok(())
     }
@@ -356,6 +363,7 @@ impl OrganizationState {
         if self.own_org(user, at)? == Some(org) {
             return Err(Error::ConflictError("用户已属于该组织".into()));
         }
+
         self.end_membership(user, actor, reason, at)?;
         self.memberships.push(OrgMembership {
             base: BaseModel::new(id.into()),
@@ -413,6 +421,7 @@ mod tests {
         assert_eq!(first.units[0].leader.as_ref().unwrap().user_id, "manager");
         assert_eq!(first.memberships, before.memberships);
         assert_eq!(first.management, before.management);
+
         let mut next = request(OrganizationOperation::SetLeader {
             org_unit_id: "one".into(),
             user_id: Some("next".into()),
@@ -505,6 +514,7 @@ mod tests {
             .unwrap();
         assert_eq!(moved.units[1].parent_id.as_deref(), Some("one"));
         assert_eq!(moved.units[1].changed_by, "operator");
+
         let renamed = before
             .changed(
                 &request(OrganizationOperation::RenameUnit {
@@ -518,6 +528,7 @@ mod tests {
             .unwrap();
         assert_eq!(renamed.units[1].name, "新名称");
         assert_eq!(renamed.units[1].changed_by, "operator");
+
         assert_eq!(before.units.len(), 2);
         assert_eq!(before.units[1].name, "二部");
         assert_eq!(before.units[1].parent_id, None);
@@ -566,6 +577,7 @@ mod tests {
         assert_eq!(after.version, before.version + 1);
         assert_eq!(after.own_org("sales", Instant::from_unix_secs(10)).unwrap(), Some("two"));
         assert!(after.management.is_empty());
+
         let mut invalid = profile;
         invalid.org_unit_id = Some("missing".into());
         assert!(
@@ -645,16 +657,19 @@ mod tests {
         let before = state();
         let mut change = request(OrganizationOperation::DisableUnit { org_unit_id: "one".into() });
         assert!(before.changed(&change, "id", "admin", Instant::from_unix_secs(10)).is_err());
+
         change.expected_version = 0;
         assert!(matches!(
             before.changed(&change, "id", "admin", Instant::from_unix_secs(10)),
             Err(Error::ConflictError(_))
         ));
+
         let cycle = request(OrganizationOperation::MoveUnit {
             org_unit_id: "one".into(),
             parent_id: Some("one".into()),
         });
         assert!(before.changed(&cycle, "id", "admin", Instant::from_unix_secs(10)).is_err());
+
         assert_eq!(before.version, 1);
         assert!(before.units[0].enabled);
         assert_eq!(before.units[0].parent_id, None);
@@ -699,9 +714,11 @@ mod tests {
             granted_by: "admin".into(),
             reason: "历史".into(),
         });
+
         let snapshot = serde_json::to_value(&before).unwrap();
         assert_eq!(snapshot["management"].as_array().unwrap().len(), 1);
         let before: OrganizationState = serde_json::from_value(snapshot).unwrap();
+
         let after = before
             .changed(
                 &request(OrganizationOperation::DisableUnit { org_unit_id: "two".into() }),
@@ -733,6 +750,7 @@ mod tests {
         duplicate.org_unit_id = "two".into();
         before.memberships.push(duplicate);
         assert!(before.own_org("sales", Instant::from_unix_secs(10)).is_err());
+
         let mut invalid = request(OrganizationOperation::EndMembership { user_id: "sales".into() });
         invalid.idempotency_key = " ".into();
         assert!(invalid.validate().is_err());

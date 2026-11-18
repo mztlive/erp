@@ -71,6 +71,7 @@ impl SupplierFulfillmentProcess {
         if let Some(view) = self.replayed_refund_result(id, req, &connection_id, actor, executor).await? {
             return Ok(view);
         }
+
         self.domain().advance_refund_result(id, &mut order, req.refund_amount, executor).await?;
         let message = build_refund_message(&order, req, &connection_id, InboxMessageStatus::Received)?;
         let (fact, allocations) = self.domain().build_refund_fact(
@@ -84,6 +85,7 @@ impl SupplierFulfillmentProcess {
             "supplier_refund_fact",
             fact.base.id.clone(),
         )?;
+
         super::refund_writes::persist(&self.db, &message, &mut order, &fact, &allocations, &audit, executor)
             .await?;
         Ok(refund_fact_view(&fact, &allocations))
@@ -116,6 +118,7 @@ impl SupplierFulfillmentProcess {
             ) {
                 return Err(Error::ConflictError("外部退款身份已用于不同订单或退款结果".into()));
             }
+
             tracing::info!(account = %actor.id(), order_id = %id, "退款结果幂等命中");
             let fact_id = SupplierRefundFactId::new(existing.base.id.as_str());
             let allocations = self

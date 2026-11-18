@@ -154,6 +154,7 @@ mod tests {
             executor: &mut executor as *mut TestExecutor as usize,
             fail_at: None,
         };
+
         execute(&mut steps, &mut executor).await.unwrap();
         assert_eq!(
             steps.calls,
@@ -184,6 +185,7 @@ mod tests {
                 executor: &mut executor as *mut TestExecutor as usize,
                 fail_at: Some(step),
             };
+
             let error = execute(&mut steps, &mut executor).await.unwrap_err();
             assert!(matches!(error,Error::ConflictError(message) if message=="原采购过账冲突"));
             assert_eq!(steps.calls, &order[..=index]);

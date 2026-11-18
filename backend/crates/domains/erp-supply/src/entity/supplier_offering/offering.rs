@@ -126,6 +126,7 @@ impl SupplierOffering {
         )?;
         let supplier_product_code =
             normalize_optional_text(data.supplier_product_code, "供应商商品编码", SUPPLIER_CODE_MAX_LEN)?;
+
         let maintainer_user_id =
             normalize_required_text(data.maintainer_user_id, "供给维护人不能为空", 128, "供给维护人过长")?;
         let business_org_unit_id = normalize_required_text(
@@ -135,6 +136,7 @@ impl SupplierOffering {
             "供给业务组织过长",
         )?;
         ensure_source_connection(data.source_type, data.source_connection_id.is_some())?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             stable: StableBase::new(OfferingStatus::Active, created_by),
@@ -316,6 +318,7 @@ impl SupplierOffering {
         if target == self.maintainer_user_id && next_org == self.business_org_unit_id {
             return Err(Error::from("目标已是当前维护人，无需交接"));
         }
+
         self.maintainer_user_id = target;
         self.business_org_unit_id = next_org;
         self.stable.touch(updated_by);
@@ -481,6 +484,7 @@ impl SupplierOfferingRevision {
             normalize_list(data.product_capabilities, CAPABILITY_MAX_LEN, MAX_CAPABILITIES, "商品能力")?;
         let prefill_source_refs = normalize_prefill_refs(data.prefill_source_refs)?;
         ensure_validity_window(data.valid_from, data.valid_to)?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             revision: RevisionBase::new(data.revision_no),
@@ -549,6 +553,7 @@ impl SupplierOfferingRevision {
         if critical_changed {
             return OfferingRevisionImpact::CriticalSupplyChanged;
         }
+
         let cost_changed = prior.dropship_supply_price_gross != self.dropship_supply_price_gross
             || prior.dropship_supply_price_net != self.dropship_supply_price_net
             || prior.bulk_supply_price_gross != self.bulk_supply_price_gross
@@ -635,6 +640,7 @@ fn normalize_list(
     if values.len() > max_count {
         return Err(Error::from(format!("{label}最多 {max_count} 项")));
     }
+
     let mut normalized = Vec::with_capacity(values.len());
     for value in values {
         if let Some(value) = normalize_optional_text(Some(value), label, item_max_len)?
@@ -717,9 +723,11 @@ mod tests {
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("r"), data.clone()).unwrap();
         assert_eq!(revision.dropship_supply_price_gross, "11.30".parse().unwrap());
         assert!(revision.bulk_supply_price_gross.is_none());
+
         let stored = serde_json::to_value(&revision).unwrap();
         let restored: SupplierOfferingRevision = serde_json::from_value(stored).unwrap();
         assert_eq!(restored, revision);
+
         data.bulk_minimum_order_quantity = Some("1".parse().unwrap());
         assert!(SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("bad"), data).is_err());
     }
@@ -733,14 +741,17 @@ mod tests {
         let restored: SupplierOfferingRevision = serde_json::from_value(stored).unwrap();
         assert_eq!(restored.bulk_supply_price_gross, Some("9.04".parse().unwrap()));
         assert!(restored.ensure_api_prices_unchanged(&revision).is_ok());
+
         let mut data = revision_data();
         data.dropship_supply_price_gross = "22.60".parse().unwrap();
         data.dropship_supply_price_net = net_price(data.dropship_supply_price_gross, data.input_tax_rate);
         let edited = SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("edited"), data).unwrap();
         assert!(edited.ensure_api_prices_unchanged(&revision).is_err());
+
         let mut changed = restored;
         changed.bulk_minimum_order_quantity = Some("999".parse().unwrap());
         assert!(changed.ensure_api_prices_unchanged(&revision).is_err());
+
         changed.bulk_minimum_order_quantity = revision.bulk_minimum_order_quantity;
         changed.bulk_supply_price_gross = None;
         assert!(changed.ensure_api_prices_unchanged(&revision).is_err());
@@ -829,11 +840,13 @@ mod tests {
         .unwrap();
         assert!(!offering.has_responsibility());
         assert_eq!(offering.stable.created_by, "admin-1");
+
         assert!(offering.handover("user-2".into(), None, "admin-2").is_err());
         assert!(offering.handover("user-2".into(), Some("org-2".into()), "admin-2").unwrap());
         assert_eq!(offering.maintainer_user_id, "user-2");
         assert_eq!(offering.business_org_unit_id, "org-2");
         assert_ne!(offering.stable.created_by, offering.maintainer_user_id);
+
         assert!(offering.handover("user-2".into(), Some("org-2".into()), "admin-3").is_err());
     }
 

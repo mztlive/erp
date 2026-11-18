@@ -46,6 +46,7 @@ impl SalesInquiryProcess {
                 executor,
             )
             .await?;
+
         let (mut inquiry, task) = self
             .access()
             .require_read_task(
@@ -62,6 +63,7 @@ impl SalesInquiryProcess {
         {
             return Err(Error::ConflictError("询价需求或任务已变化，请从采购询价列表刷新后重试".into()));
         }
+
         let assignments = self.resolve_assignments(&inquiry, executor).await?;
         if !assignments.iter().any(|(assignment, _)| assignment.owner_user_id == actor.id())
             && !self.renewal_dispatcher(&inquiry, actor.id(), executor).await?
@@ -69,6 +71,7 @@ impl SalesInquiryProcess {
             return Err(Error::Forbidden("当前已不负责该询价商品，不能发起新一轮报价".into()));
         }
         self.access().assignment_owner(actor.id(), executor).await?;
+
         inquiry.renew_quote(request.expected_version, actor.id(), request.reason.clone(), Instant::now())?;
         let tasks = self.replace_tasks(actor, &mut inquiry, executor).await?;
         Ok((inquiry, tasks))
@@ -138,9 +141,11 @@ mod tests {
             rule_id: "rule-a".into(),
             rule_type: ProcurementResponsibilityRuleType::DefaultDispatcher,
         }];
+
         assert!(dispatcher_can_renew("buyer-a", &candidates, std::slice::from_ref(&rule)));
         assert!(!dispatcher_can_renew("removed-buyer", &candidates, std::slice::from_ref(&rule)));
         assert!(!dispatcher_can_renew("buyer-a", &candidates, &[]));
+
         candidates[0].rule_id = "different-pool".into();
         assert!(!dispatcher_can_renew("buyer-a", &candidates, &[rule]));
     }

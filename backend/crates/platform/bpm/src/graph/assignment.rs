@@ -21,6 +21,7 @@ impl DefinitionGraph {
         {
             return Err(ModelError::InvalidField("实例指派与定义不匹配"));
         }
+
         for node in &mut self.nodes {
             let mut matches = bindings.iter().filter(|binding| binding.node_key == node.node_key);
             let (Some(binding), None) = (matches.next(), matches.next()) else {
@@ -30,6 +31,7 @@ impl DefinitionGraph {
             if binding.process_instance_id != instance.typed_id() {
                 return Err(ModelError::InvalidField("实例指派归属不一致"));
             }
+
             if let Some(rule) = &node.assignee_rule {
                 let resolution = binding
                     .resolution
@@ -44,6 +46,7 @@ impl DefinitionGraph {
             {
                 return Err(ModelError::InvalidField("指定审批人与实例绑定不一致"));
             }
+
             if node.additional_assignees != binding.additional_assignees {
                 return Err(ModelError::InvalidField("实例审批人集合不一致"));
             }

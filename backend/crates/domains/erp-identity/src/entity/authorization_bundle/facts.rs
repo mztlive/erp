@@ -27,6 +27,7 @@ impl PolicyRoleState {
             }
             return Ok(None);
         };
+
         if subjects.len() > 1000 {
             return Err(Error::ValidationError("角色影响超过1000个人员，请分批治理后再使用文件入口".into()));
         }

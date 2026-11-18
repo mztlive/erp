@@ -256,6 +256,7 @@ impl<'a> ReceivableRepository<'a> {
             receipt_ids = Some(posted);
             pending_entry_ids = entries;
         }
+
         let filter = CustomerReceiptFilter {
             keyword_ids: query.keyword_ids.clone(),
             receipt_ids,
@@ -300,6 +301,7 @@ impl<'a> ReceivableRepository<'a> {
         } else {
             Some(self.invoice_ids_for_scope(&query.scope, executor).await?)
         };
+
         let filter = InvoiceFilter {
             keyword_ids: query.keyword_ids.clone(),
             invoice_ids,
@@ -331,12 +333,14 @@ impl<'a> ReceivableRepository<'a> {
         if entry_ids.is_empty() {
             return Ok((Vec::new(), Vec::new()));
         }
+
         let allocations: Vec<ReceiptAllocation> = ReceiptAllocationRepository::new(
             self.db,
             <mongodb::Database as ReceivableExt>::RECEIPT_ALLOCATIONS,
         )
         .find_many(doc! { "receivable_entry_id": { "$in": &entry_ids } }, executor)
         .await?;
+
         let mut receipt_ids = allocations
             .into_iter()
             .map(|allocation| allocation.customer_receipt_id.to_string())
@@ -358,6 +362,7 @@ impl<'a> ReceivableRepository<'a> {
         if account_ids.is_empty() {
             return Ok(Vec::new());
         }
+
         let entries: Vec<ReceivableEntry> =
             ReceivableEntryRepository::new(self.db, <mongodb::Database as ReceivableExt>::RECEIVABLE_ENTRIES)
                 .find_many(doc! { "receivable_account_id": { "$in": account_ids } }, executor)
@@ -365,6 +370,7 @@ impl<'a> ReceivableRepository<'a> {
         if entries.is_empty() {
             return Ok(Vec::new());
         }
+
         let mut entry_ids = entries.into_iter().map(|entry| entry.base.id).collect::<Vec<_>>();
         entry_ids.sort();
         entry_ids.dedup();
@@ -383,12 +389,14 @@ impl<'a> ReceivableRepository<'a> {
         if account_ids.is_empty() {
             return Ok(Vec::new());
         }
+
         let allocations: Vec<SalesInvoiceAllocation> = SalesInvoiceAllocationRepository::new(
             self.db,
             <mongodb::Database as ReceivableExt>::SALES_INVOICE_ALLOCATIONS,
         )
         .find_many(doc! { "receivable_account_id": { "$in": account_ids } }, executor)
         .await?;
+
         let mut invoice_ids =
             allocations.into_iter().map(|allocation| allocation.invoice_id.to_string()).collect::<Vec<_>>();
         invoice_ids.sort();
@@ -409,6 +417,7 @@ impl<'a> ReceivableRepository<'a> {
             self.db,
             <mongodb::Database as ReceivableExt>::RECEIVABLE_ACCOUNTS,
         );
+
         if let Some(account_id) = &scope.receivable_account_id {
             let account = accounts.find_by_id(account_id.as_ref(), executor).await?;
             let Some(account) = account else {
@@ -421,6 +430,7 @@ impl<'a> ReceivableRepository<'a> {
             }
             return Ok(vec![account.base.id]);
         }
+
         if let Some(sales_order_id) = &scope.sales_order_id {
             let rows = accounts.find_many(doc! { "sales_order_id": sales_order_id }, executor).await?;
             return Ok(rows.into_iter().map(|row| row.base.id).collect());

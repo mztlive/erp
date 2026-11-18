@@ -60,6 +60,7 @@ async fn commit_with_retry(session: &mut ClientSession) -> Result<()> {
         let Err(error) = session.commit_transaction().await else {
             return Ok(());
         };
+
         let label = if error.contains_label(UNKNOWN_TRANSACTION_COMMIT_RESULT) {
             CommitErrorLabel::UnknownResult
         } else {
@@ -77,6 +78,7 @@ async fn commit_with_retry(session: &mut ClientSession) -> Result<()> {
 async fn start_transaction_session(client: &Client) -> Result<ClientSession> {
     let session_options = SessionOptions::builder().causal_consistency(true).build();
     let mut session = client.start_session().with_options(session_options).await?;
+
     let txn_options = transaction_options();
     session.start_transaction().with_options(txn_options).await?;
     Ok(session)
@@ -146,6 +148,7 @@ impl Transactional for Client {
         let mut session = start_transaction_session(self).await?;
 
         let outcome = f(&mut TransactionExecutor::new(&mut session)).await;
+
         match outcome {
             Ok(result) => {
                 commit_with_retry(&mut session).await?;
@@ -172,23 +175,19 @@ mod tests {
     #[test]
     fn unknown_commit_result_retries_before_timeout() {
         let elapsed = COMMIT_RETRY_TIMEOUT - Duration::from_millis(1);
-
         let action = commit_error_action(CommitErrorLabel::UnknownResult, elapsed);
-
         assert_eq!(action, CommitErrorAction::Retry);
     }
 
     #[test]
     fn unknown_commit_result_reports_unknown_at_timeout() {
         let action = commit_error_action(CommitErrorLabel::UnknownResult, COMMIT_RETRY_TIMEOUT);
-
         assert_eq!(action, CommitErrorAction::OutcomeUnknown);
     }
 
     #[test]
     fn commit_error_without_unknown_label_is_definite_failure() {
         let action = commit_error_action(CommitErrorLabel::Definite, Duration::ZERO);
-
         assert_eq!(action, CommitErrorAction::DefiniteFailure);
     }
 

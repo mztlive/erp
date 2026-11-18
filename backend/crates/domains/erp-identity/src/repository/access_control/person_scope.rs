@@ -42,6 +42,7 @@ impl PersonDataScopeRepositoryExt for Repository<'_, PersonDataScope> {
         if let Some(action) = action {
             filter.insert("action", action);
         }
+
         self.find_many_sorted(filter, doc! { "resource": 1, "action": 1 }, executor).await
     }
 }

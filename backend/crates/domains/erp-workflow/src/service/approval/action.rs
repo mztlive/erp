@@ -248,6 +248,7 @@ impl ApprovalActionContext {
             }
             return Err(Error::ValidationError("受阻取消不得携带空审批任务".to_string()));
         }
+
         let reason = required_id(params.reason, "取消原因")?;
         Ok(Self {
             approval_process_instance_id: required_id(params.approval_process_instance_id, "审批流程实例")?,
@@ -571,6 +572,7 @@ mod tests {
             idempotency_key: "request-1".to_string(),
         })
         .expect("合法决定上下文");
+
         let error = FailClosedApprovalActionPort
             .execute(
                 ApprovalDomainAction::StockAdjustmentSubmit,

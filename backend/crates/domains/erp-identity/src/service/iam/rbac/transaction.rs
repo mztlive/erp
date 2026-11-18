@@ -155,6 +155,7 @@ impl RbacService {
             let _policy_write = policy_write;
             rbac.ensure_policy_consistency_known()?;
             let policy_store = rbac.policy_store.clone();
+
             let result = client
                 .with_transaction(move |executor| {
                     Box::pin(async move {
@@ -171,6 +172,7 @@ impl RbacService {
                     })
                 })
                 .await;
+
             rbac.finish_policy_transaction(result).await
         })
         .await

@@ -69,6 +69,7 @@ impl SupplierCatalogTaskAdapter {
             cursor.clear();
             return Ok(0);
         }
+
         let mut scheduled = 0;
         let mut failed = false;
         for connection in connections {
@@ -82,6 +83,7 @@ impl SupplierCatalogTaskAdapter {
                 },
             }
         }
+
         if failed {
             return Err(Error::BusinessLogicError("本页部分目录计划未确认，请核对原连接任务".into()));
         }
@@ -96,6 +98,7 @@ impl SupplierCatalogTaskAdapter {
         else {
             return Ok(None);
         };
+
         let active =
             self.db.background_jobs().active_catalog_jobs(&connection.base.id, &mut NoTransaction).await?;
         if let Some(pending) =
@@ -107,6 +110,7 @@ impl SupplierCatalogTaskAdapter {
         if active.iter().any(|job| !job.catalog_stalled(Instant::now())) {
             return Ok(None);
         }
+
         let history =
             self.db.background_jobs().recent_catalog_jobs(&connection.base.id, &mut NoTransaction).await?;
         let Some(latest) = history.first() else { return Ok(None) };
@@ -122,6 +126,7 @@ impl SupplierCatalogTaskAdapter {
         if active.is_empty() && !handoff {
             return Ok(None);
         }
+
         self.create_job(connection, latest).await
     }
 
@@ -137,6 +142,7 @@ impl SupplierCatalogTaskAdapter {
         else {
             return Ok(None);
         };
+
         if !self
             .db
             .background_jobs()
@@ -146,12 +152,14 @@ impl SupplierCatalogTaskAdapter {
         {
             return Ok(None);
         }
+
         let history =
             self.db.background_jobs().recent_catalog_jobs(&connection.base.id, &mut NoTransaction).await?;
         let Some(latest) = history.first() else { return Ok(None) };
         if !latest.catalog_schedule_due(Instant::now().unix_secs(), policy.sync_interval_seconds) {
             return Ok(None);
         }
+
         self.create_job(connection, latest).await
     }
 
@@ -203,6 +211,7 @@ impl BackgroundTaskAdapter for SupplierCatalogTaskAdapter {
         if self.control.stopping() {
             return Ok(0);
         }
+
         let mut cursor = self.cursor.lock().await;
         let kinds = self.execution.catalog_connector_types();
         let connections = polling_result(
@@ -212,6 +221,7 @@ impl BackgroundTaskAdapter for SupplierCatalogTaskAdapter {
             cursor.clear();
             return Ok(0);
         }
+
         let mut claimed = 0;
         for connection in connections {
             let Some(permit) = self.control.claim() else { break };

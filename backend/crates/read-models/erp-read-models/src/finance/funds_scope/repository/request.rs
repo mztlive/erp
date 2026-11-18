@@ -21,6 +21,7 @@ impl FundsAccess {
         let result: crate::Result<_> = async {
         let condition = self.request_condition(query, executor).await?;
         let filter = super::linked_condition_document(&condition, "sales_owner_user_id");
+
         let mut stages = authorization.guard_stages();
         stages.extend(super::source_stages(
             <Database as SalesOrderExt>::SALES_ORDERS,
@@ -32,6 +33,7 @@ impl FundsAccess {
             &authorization.sales_stages(),
         ));
         stages.push(doc! { "$match": { "_source_allowed": true } });
+
         if let Some(ids) = condition.operator_user_ids {
             stages.push(doc! { "$match": { "created_by": { "$in": ids } } });
         }
@@ -39,11 +41,12 @@ impl FundsAccess {
             stages.push(doc! { "$lookup": { "from": "work_items", "localField": "work_item_id", "foreignField": "id", "as": "_task", "pipeline": [{ "$match": handler_filter(&ids) }] } });
             stages.push(doc! { "$match": { "_task.0": { "$exists": true } } });
         }
+
         super::super::request::bounded_request_candidates(
             self.db.sales_invoice_requests().scope_candidates(query, stages, executor).await?,
         )
-
     }.await;
+
         let result = result?;
         authorization.validate(executor).await?;
         Ok(result)
@@ -71,6 +74,7 @@ mod tests {
         let operands = filter.get_document("$expr").unwrap().get_array("$in").unwrap();
         assert_eq!(operands[0], Bson::Document(doc! { "$ifNull": ["$owner_user_id", "$completed_by"] }));
         assert_eq!(operands[1], Bson::Array(vec![Bson::String("handler".into())]));
+
         let empty = handler_filter(&[]);
         assert!(
             empty.get_document("$expr").unwrap().get_array("$in").unwrap()[1].as_array().unwrap().is_empty()

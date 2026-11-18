@@ -62,6 +62,7 @@ impl ReturnsProcess {
                             executor,
                         )
                         .await?;
+
                     let mut order = db
                         .purchase_orders()
                         .find_by_id(&id, executor)
@@ -70,8 +71,10 @@ impl ReturnsProcess {
                     if !save_settlement_decision(&db, &order, &decision, executor).await? {
                         return Ok(());
                     }
+
                     db.purchase_orders().update(&mut order, executor).await?;
                     sync_return_finance(&db, rbac.finance_responsibility.as_ref(), &id, executor).await?;
+
                     let log = actor.resource_log("purchase_return_finance.sync", "purchase_order", id)?;
                     persist_log(&db, &log, executor).await?;
                     Ok(())
@@ -113,18 +116,22 @@ impl ReturnsProcess {
                             executor,
                         )
                         .await?;
+
                     let order = db
                         .purchase_orders()
                         .find_by_id(&id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("采购单不存在".into()))?;
+
                     let number = format!("PR-{}", req.idempotency_key);
                     if let Some(existing) = direct_return_command(&db, &number, executor).await? {
                         ensure_replay(&existing, &id, &req, &actor)?;
                         return Ok(existing.base.id);
                     }
+
                     let plan = prepare(&db, &order, &req, &actor, executor).await?;
                     let (return_order, sales_case) = build_heads(&order, &req, &plan, &actor, number)?;
+
                     register_direct_return_documents(
                         &db,
                         &rbac,
@@ -135,6 +142,7 @@ impl ReturnsProcess {
                     )
                     .await?;
                     persist(&db, &return_order, &sales_case, &plan, &req, &actor, executor).await?;
+
                     sync_return_finance(&db, rbac.finance_responsibility.as_ref(), &id, executor).await?;
                     Ok(return_order.base.id)
                 })
@@ -183,6 +191,7 @@ async fn prepare(
     if order.base.version != req.expected_version {
         return Err(Error::ConflictError("采购版本已变化，请刷新后重新核对退货".into()));
     }
+
     let update = find_open_for_purchase(db, &order.base.id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("本采购没有待处理的销售依据更新".into()))?;
@@ -193,6 +202,7 @@ async fn prepare(
     let limits =
         plan.lines.iter().map(|l| (l.purchase_line_id.as_str(), l.max_direct_return)).collect::<Vec<_>>();
     req.check_limits(&limits)?;
+
     // 与销售变更和采购改单共同竞争来源销售 guard，防止并发超退。
     let mut sales = db
         .sales_orders()
@@ -228,6 +238,7 @@ fn build_heads(
         actor.id(),
     )?;
     sales_case.stable.status = SalesReturnCaseStatus::PendingFinance;
+
     let mut purchase = PurchaseReturnOrder::new(
         PurchaseReturnOrderId::new(next_id()),
         PurchaseReturnOrderData {
@@ -239,6 +250,7 @@ fn build_heads(
         actor.id(),
     )?;
     purchase.stable.status = PurchaseReturnStatus::Returned;
+
     let returned_lines = req
         .lines
         .iter()
@@ -270,6 +282,7 @@ async fn persist(
 ) -> Result<()> {
     db.sales_return_cases().create(case, executor).await?;
     db.purchase_return_orders().create(order, executor).await?;
+
     for requested in &req.lines {
         let option = plan
             .lines
@@ -299,6 +312,7 @@ async fn persist(
         db.sales_return_lines().create(&sales_line, executor).await?;
         db.purchase_return_lines().create(&purchase_line, executor).await?;
     }
+
     let audit = actor.clone().resource_log(
         "purchase_return_order.confirm_direct",
         "purchase_return_order",
@@ -339,11 +353,13 @@ async fn save_settlement_decision(
             ));
         }
     }
+
     let plan = direct_return_plan(db, order, executor).await?;
     if !plan.pending_settlement || plan.lines.iter().any(|line| !line.required_return.to_decimal().is_zero())
     {
         return Err(Error::ConflictError("请先确认供应商已收到本次应退货物".into()));
     }
+
     let account = db
         .payable_accounts()
         .find_by_purchase_order(&order.base.id.clone().into(), executor)
@@ -351,6 +367,7 @@ async fn save_settlement_decision(
         .ok_or_else(|| Error::NotFound("采购应付不存在".into()))?;
     let excess = ReturnSettlementDecision::excess(account.settled_total, plan.target_gross);
     decision.validate(&plan.sales_revision_id, plan.target_gross, excess)?;
+
     if let Some(previous) = update.return_settlement.replace(decision.clone()) {
         update.return_settlement_history.push(previous);
     }
@@ -397,12 +414,15 @@ mod tests {
             sales_revision_id: "sr2".into(),
             returned_lines: vec![],
         });
+
         ensure_replay(&order, "po", &req, &actor).unwrap();
         order.stable.status = PurchaseReturnStatus::Completed;
         ensure_replay(&order, "po", &req, &actor).unwrap();
+
         assert!(ensure_replay(&order, "other", &req, &actor).is_err());
         let other = AuditActor::new("other".into(), "他人".into(), AccountKind::Admin);
         assert!(ensure_replay(&order, "po", &req, &other).is_err());
+
         let mut changed = req.clone();
         changed.receipt_reference = "另一回单".into();
         assert!(ensure_replay(&order, "po", &changed, &actor).is_err());

@@ -189,6 +189,7 @@ impl AuditEvent {
         )?;
         let actor_role =
             normalize_required_text(data.actor_role, "责任角色不能为空", ACTOR_ROLE_MAX_LEN, "责任角色过长")?;
+
         let action_type =
             normalize_required_text(data.action_type, "动作不能为空", ACTION_TYPE_MAX_LEN, "动作过长")?;
         let object_type = normalize_required_text(
@@ -199,6 +200,7 @@ impl AuditEvent {
         )?;
         let object_id = normalize_optional_text(data.object_id, "对象ID", OBJECT_ID_MAX_LEN)?;
         let object_label = normalize_optional_text(data.object_label, "对象标题", OBJECT_LABEL_MAX_LEN)?;
+
         let request_id = normalize_optional_text(data.request_id, "请求追踪号", TRACE_ID_MAX_LEN)?;
         let trace_id = normalize_optional_text(data.trace_id, "链路追踪号", TRACE_ID_MAX_LEN)?;
         let changed_field_names = normalize_field_names(data.changed_field_names)?;
@@ -206,6 +208,7 @@ impl AuditEvent {
         let source_ip = normalize_optional_text(data.source_ip, "来源IP", SOURCE_IP_MAX_LEN)?;
         let device_context =
             normalize_optional_text(data.device_context, "设备上下文", DEVICE_CONTEXT_MAX_LEN)?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             actor_id,
@@ -240,6 +243,7 @@ fn normalize_field_names(field_names: Vec<String>) -> Result<Vec<String>> {
     if field_names.len() > MAX_CHANGED_FIELDS {
         return Err(Error::from(format!("变更字段名数量不能超过 {MAX_CHANGED_FIELDS}")));
     }
+
     let mut seen = HashSet::new();
     let mut normalized = Vec::with_capacity(field_names.len());
     for name in field_names {

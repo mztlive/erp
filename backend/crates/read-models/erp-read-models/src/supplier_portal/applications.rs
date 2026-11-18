@@ -92,6 +92,7 @@ impl SupplierPortalReadService {
             page: params.page,
             page_size: params.page_size,
         })?;
+
         let ids = PortalApplicationRepository::new(&self.db)
             .application_ids(&params.supplier_id, &query, executor)
             .await?;
@@ -101,6 +102,7 @@ impl SupplierPortalReadService {
                 allowed.push(item);
             }
         }
+
         let (records, total) = PortalApplicationRepository::new(&self.db)
             .application_page(&params.supplier_id, &query, Some(&allowed), executor)
             .await?;
@@ -142,9 +144,11 @@ impl SupplierPortalReadService {
         if !self.internal_authorization()?.request_readable(actor, id, executor).await? {
             return Err(hidden_target());
         }
+
         let mut data =
             PortalApplicationRepository::new(&self.db).any_application(id, executor).await?.internal()?;
         data["current"] = self.current_application_facts(id, actor, executor).await?;
+
         if data.get("kind").and_then(Value::as_str) == Some("NEW_PRODUCT") {
             let candidates = self.existing_offering_review_candidates(id, actor, executor).await?;
             data["existing_offerings"] =
@@ -194,6 +198,7 @@ mod tests {
         };
         let mut executor = SnapshotExecutor::default();
         let expected = &mut executor as *mut SnapshotExecutor as usize;
+
         assert!(matches!(
             service.admin_application_page(&actor, &params, &mut executor).await,
             Err(Error::NotFound(_))
@@ -202,6 +207,7 @@ mod tests {
             service.admin_application_detail(&actor, "application", &mut executor).await,
             Err(Error::NotFound(message)) if message == "申请不存在或无权查看"
         ));
+
         assert_eq!(
             *authorization.calls.lock().unwrap(),
             vec![("supplier", "supplier".into(), expected), ("request", "application".into(), expected),]

@@ -681,6 +681,7 @@ where
     let Some(raw) = raw else {
         return Ok(None);
     };
+
     let mut ids = match raw {
         serde_json::Value::String(text) => {
             text.split(',').map(str::trim).filter(|item| !item.is_empty()).map(str::to_string).collect()
@@ -707,6 +708,7 @@ where
             return Err(serde::de::Error::custom(format!("人员或组织条件非法: {other}")));
         },
     };
+
     ids.sort();
     ids.dedup();
     if ids.len() > 100 {

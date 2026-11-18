@@ -74,6 +74,7 @@ impl SupplierCatalogCallbackProcess {
     ) -> Result<SupplierCallbackReceipt> {
         guard_catalog_refresh(&self.db, connection, actor, &self.authorization, executor).await?;
         let mut current = load_claimed(&self.db, receipt, executor).await?;
+
         advance_after_apply(&mut current, async {
             if let Some(update) = update {
                 let id = update.id().to_owned();
@@ -84,6 +85,7 @@ impl SupplierCatalogCallbackProcess {
             }
         })
         .await?;
+
         current.next_attempt_at = Some(after(300));
         self.db.supplier_callback_receipts().update(&mut current, executor).await?;
         Ok(current)
@@ -166,6 +168,7 @@ async fn apply_update(
                 .ok_or_else(|| Error::NotFound("城市回调对应目录已不存在，请先同步目录".into()))?;
             item.apply_service_regions(regions)?;
             db.supplier_catalog_items().update(&mut item, executor).await?;
+
             let audit =
                 actor.clone().resource_log("supplier_catalog.regions.apply", "supplier_catalog_item", id)?;
             persist_log(db, &audit, executor).await?;
@@ -229,6 +232,7 @@ mod tests {
             authorization,
             catalog,
         );
+
         let connection = SupplierApiConnection::new(
             SupplierApiConnectionId::new("connection"),
             SupplierApiConnectionData {
@@ -243,6 +247,7 @@ mod tests {
             "actor",
         )
         .unwrap();
+
         let receipt = SupplierCallbackReceipt::received(
             "receipt".into(),
             SupplierApiConnectionId::new("connection"),
@@ -259,6 +264,7 @@ mod tests {
         )
         .unwrap();
         let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+
         assert!(matches!(
             process.save_step_stage(&receipt, &connection, &actor, None, &mut SnapshotExecutor::default()).await,
             Err(Error::Internal(message)) if message == "测试授权设施不可用"
@@ -286,9 +292,11 @@ mod tests {
             }],
         )
         .unwrap();
+
         assert!(advance_after_apply(&mut receipt, async { Ok(None) }).await.is_err());
         advance_after_apply(&mut receipt, async { Ok(Some("item-1".into())) }).await.unwrap();
         let saved = receipt.catalog_progress.clone();
+
         assert!(
             advance_after_apply(&mut receipt, async {
                 Err(Error::ConflictError("business write failed".into()))
@@ -298,6 +306,7 @@ mod tests {
         );
         assert_eq!(receipt.catalog_progress, saved);
         assert_eq!(receipt.status, "received");
+
         advance_after_apply(&mut receipt, async { Ok(Some("item-2".into())) }).await.unwrap();
         advance_after_apply(&mut receipt, async { Ok(None) }).await.unwrap();
         assert!(receipt.settle_catalog(Instant::from_unix_secs(3)).unwrap());

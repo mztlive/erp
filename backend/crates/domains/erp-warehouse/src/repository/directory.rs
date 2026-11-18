@@ -46,10 +46,10 @@ pub(crate) async fn snapshot(
 /// 在关联修订前落实对象范围，回显 ID 仅收窄授权集合。
 fn pipeline(authorization: &[Document], query: &DirectoryQuery) -> Vec<Document> {
     let mut filter = doc! { "deleted_at": 0 };
-
     if let Some(ids) = &query.ids {
         filter.insert("$and", vec![doc! { "id": { "$in": ids.as_slice() } }]);
     }
+
     let mut pipeline = vec![doc! { "$match": filter }];
     pipeline.extend_from_slice(authorization);
     pipeline.extend([
@@ -61,6 +61,7 @@ fn pipeline(authorization: &[Document], query: &DirectoryQuery) -> Vec<Document>
             "name": { "$ifNull": [{ "$arrayElemAt": ["$directory_revision.name", 0] }, "$warehouse_code"] }
         } },
     ]);
+
     if let Some(q) = &query.q {
         let mut name = Document::new();
         let mut code = Document::new();
@@ -68,6 +69,7 @@ fn pipeline(authorization: &[Document], query: &DirectoryQuery) -> Vec<Document>
         insert_literal_regex_filter(&mut code, "code", Some(q));
         pipeline.push(doc! { "$match": { "$or": [name, code] } });
     }
+
     pipeline.extend([doc! { "$sort": { "id": 1 } }, doc! { "$limit": 10001 }]);
     pipeline
 }
@@ -91,6 +93,7 @@ pub(crate) async fn warehouses(
     let items =
         aggregate::find(&collection, doc! {}, warehouse_options(filter), prefix.clone(), executor).await?;
     let total = aggregate::count(&collection, doc! {}, prefix, executor).await?;
+
     scope.ensure_current(executor)?;
     let total = i64::try_from(total).map_err(|_| Error::ValidationError("仓库总数超过上限".into()))?;
     Ok(PageResult { items, total })
@@ -165,6 +168,7 @@ pub(crate) async fn authorized_ids_in(
     pipeline.extend_from_slice(access.stages());
     pipeline.push(doc! {"$project":{"_id":0,"id":1}});
     let rows = aggregate::rows(&collection, pipeline, executor).await?;
+
     ensure_warehouse_query(access, executor)?;
     rows.into_iter()
         .map(|row| {
@@ -196,6 +200,7 @@ mod tests {
             ids: Some(serde_json::from_value(serde_json::json!("allowed,outside")).unwrap()),
             ..Default::default()
         };
+
         let stages = pipeline(&authorization, &query);
         let filter = stages[0].get_document("$match").unwrap();
         assert_eq!(
@@ -247,11 +252,13 @@ mod tests {
         assert_eq!(lookup.get_str("localField").unwrap(), "current_revision_id");
         assert!(prefix[5].get_document("$match").unwrap().contains_key("$or"));
         assert!(prefix.iter().all(|stage| !stage.contains_key("$limit") && !stage.contains_key("$skip")));
+
         let options = warehouse_options(&filter);
         assert_eq!(options.sort, Some(doc! { "warehouse_code": 1, "id": 1 }));
         assert_eq!(options.skip, Some(10));
         assert_eq!(options.limit, Some(10));
         assert_eq!(options.projection, Some(warehouse_projection()));
+
         let unknown =
             warehouse_options(&WarehouseFilter { sort_by: Some("unknown".into()), ..Default::default() });
         assert_eq!(unknown.sort, Some(doc! { "created_at": -1, "id": -1 }));

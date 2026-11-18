@@ -242,6 +242,7 @@ impl ProductRepositoryExt for persistence_core::Repository<'_, Product> {
             executor,
         )
         .await?;
+
         scope.ensure_current(executor)?;
         Ok(rows.into_iter().map(|row| row.id).collect())
     }
@@ -568,6 +569,7 @@ impl<'a> CatalogRepository<'a> {
             self.db.product_revisions().find_by_product_ids(&[ProductId::new(product_id)], executor).await?;
         let latest_revision_no = revisions.iter().map(|row| row.revision.revision_no).max();
         let current_revision = select_current_product_revision(&product, &revisions).cloned();
+
         let media = self.media_for_current_product_revision(current_revision.as_ref(), executor).await?;
         Ok(Some(ProductDisableSnapshot { product, current_revision, media, latest_revision_no }))
     }
@@ -694,6 +696,7 @@ impl<'a> CatalogRepository<'a> {
         executor: &mut dyn Executor,
     ) -> crate::Result<()> {
         self.lock_match_name(&revision.name, executor).await?;
+
         mongo_ops::insert_one(&self.db.collection::<ProductRevision>(PRODUCT_REVISIONS), revision, executor)
             .await?;
         mongo_ops::insert_many(

@@ -57,6 +57,7 @@ pub fn parse_completion_evidence(action: &SupplierOrderAction) -> Result<Complet
     {
         return Err(Error::Internal("W26 任务完成证据身份非法".to_string()));
     }
+
     let record: CompletionEvidenceRecord = serde_json::from_str(
         action
             .response_summary

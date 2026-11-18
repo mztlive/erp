@@ -134,6 +134,7 @@ mod tests {
         let mut record = confirmed_record(FulfillmentResult::Failure);
         let log = context.log(confirmed_service_content(&record)).unwrap();
         record.fulfillment_no = "SF-renamed-after-event".to_string();
+
         let event = log.structured_event.as_ref().unwrap();
         assert!(log.success);
         assert_eq!(event.result, BusinessEventResult::Succeeded);
@@ -146,6 +147,7 @@ mod tests {
             AuditValue::Code { code: "FAILURE".to_string(), label: "失败".to_string() }
         );
         assert_eq!(event.facts[1].value, AuditValue::Quantity { value: Quantity::from_str("1.25").unwrap() });
+
         let serialized = serde_json::to_string(&log).unwrap();
         for secret in ["secret-", "sensitive-completion-note", "SF-renamed-after-event"] {
             assert!(!serialized.contains(secret));

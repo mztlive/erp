@@ -40,9 +40,11 @@ impl RefundStore for MongoRefundStore<'_> {
                         .await?
                         .ok_or_else(|| Error::NotFound("原退款订单不存在".into()))?;
                     saved.ensure_order(&order)?;
+
                     project(&saved, &mut action)?;
                     db.api_refunds().update(&mut saved, executor).await?;
                     db.supplier_order_actions().update(&mut action, executor).await?;
+
                     let actor = AuditActor::new(
                         "system:supplier-after-sales".into(),
                         "供应商售后处理器".into(),

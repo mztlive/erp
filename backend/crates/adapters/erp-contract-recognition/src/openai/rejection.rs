@@ -112,6 +112,7 @@ mod tests {
             assert_eq!(result.body_state, Some("received"));
             assert_eq!(result.code, None);
         }
+
         let result = Rejection::parse(r#"{"code":"custom-code","message":"原始消息","param":null}"#.into());
         assert_eq!(result.code.as_deref(), Some("custom-code"));
         assert_eq!(result.message.as_deref(), Some("原始消息"));

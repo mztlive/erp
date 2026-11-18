@@ -166,6 +166,7 @@ impl AcceptanceLineEligibility {
                 .checked_add(fact.eligible_quantity.to_decimal())
                 .ok_or_else(|| Error::from("剩余可验收数量汇总溢出"))?;
         }
+
         let net_accepted_quantity = Quantity::try_from(net_accepted)
             .map_err(|error| Error::from(format!("净验收数量超出统一精度：{error}")))?;
         let remaining_eligible_quantity = Quantity::try_from(remaining_eligible)
@@ -254,6 +255,7 @@ impl AcceptanceProgress {
         if lines.is_empty() {
             return None;
         }
+
         let mut all_fulfilled = true;
         let mut any_accepted = false;
         let mut has_remaining_eligible = false;
@@ -262,6 +264,7 @@ impl AcceptanceProgress {
             any_accepted |= line.has_acceptance();
             has_remaining_eligible |= line.has_remaining_eligible();
         }
+
         let progress = if all_fulfilled {
             FulfillmentProgress::Completed
         } else if any_accepted {
@@ -348,6 +351,7 @@ mod tests {
             (0..1000).map(|index| apply_allocation(&format!("fact-{index}"), "1")).collect::<Vec<_>>();
         let successful = Quantity::from_str("2").unwrap();
         let one = Quantity::from_str("1").unwrap();
+
         let started = Stopwatch::now();
         for _ in 0..10 {
             for index in 0..1000 {
@@ -368,6 +372,7 @@ mod tests {
         let reversed = reverse_allocation("dl-1", "1.5", &first);
         let allocations = [first, apply_allocation("dl-2", "2"), reversed, apply_allocation("dl-1", "0.5")];
         let index = AcceptanceAllocationIndex::new(&allocations);
+
         for id in ["dl-1", "dl-2", "missing"] {
             let successful = Quantity::from_str("5").unwrap();
             assert_eq!(
@@ -375,6 +380,7 @@ mod tests {
                 AcceptanceFactEligibility::from_fact(id, successful, &allocations).unwrap()
             );
         }
+
         for id in ["dl-1", "dl-2"] {
             let successful = Quantity::from_str("1").unwrap();
             assert_eq!(

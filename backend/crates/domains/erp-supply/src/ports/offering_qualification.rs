@@ -126,6 +126,7 @@ mod tests {
         let expected = target();
         let mut port = TargetPort { pointer: &mut executor as *mut Marker as usize, current: target() };
         port.ensure_quote_target(&SkuId::new("sku"), &expected, &mut executor).await.unwrap();
+
         port.current.product_version = 2;
         let error = port.ensure_quote_target(&SkuId::new("sku"), &expected, &mut executor).await.unwrap_err();
         assert!(matches!(error, Error::ConflictError(_)));

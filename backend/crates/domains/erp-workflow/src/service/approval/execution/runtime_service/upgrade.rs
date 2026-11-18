@@ -74,6 +74,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             action_id: WorkflowActionId::new(next_id()),
             receipt_id: ApprovalCommandReceiptId::new(next_id()),
         };
+
         let commit_command = prepared.clone();
         commit_or_recover(
             || self.commit_upgrade_binding(actor, commit_command),
@@ -92,7 +93,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let db = self.db.clone();
         let rbac = self.auth.clone();
         let identity_service = self.identity.clone();
-
         let upgrade = Arc::clone(&self.upgrade);
         let audit = Arc::clone(&self.audit);
         let actor = actor.clone();

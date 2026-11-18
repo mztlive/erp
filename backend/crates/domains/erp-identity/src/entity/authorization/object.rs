@@ -75,6 +75,7 @@ impl AccessRule {
                 allowed.insert(child.id.clone());
             }
         }
+
         Ok(match mode {
             RelationMatch::Any => !allowed.is_empty(),
             RelationMatch::AllNonEmpty => !related.expected_ids.is_empty() && allowed == related.expected_ids,
@@ -129,6 +130,7 @@ impl ObjectFacts {
         for object in objects.iter() {
             object.flatten(&mut flattened, 0)?;
         }
+
         Self::sort(objects);
         Ok(())
     }
@@ -152,6 +154,7 @@ impl ObjectFacts {
         if self.valid_until.is_some_and(|until| Instant::now() >= until) {
             return Err(Error::ConflictError("DATA_SCOPE_CHANGED：对象责任关系已到期".into()));
         }
+
         output.push(self);
         for related in self.relations.values() {
             related.validate()?;
@@ -227,11 +230,14 @@ mod tests {
         let grants = BTreeSet::new();
         let all = rule(RelationMatch::AllNonEmpty);
         let any = rule(RelationMatch::Any);
+
         let missing = root(vec![source("s1", "u")]);
         assert!(!all.allows_object("u", &missing, &grants).unwrap());
         assert!(any.allows_object("u", &missing, &grants).unwrap());
+
         let denied = root(vec![source("s1", "u"), source("s2", "other")]);
         assert!(!all.allows_object("u", &denied, &grants).unwrap());
+
         let complete = root(vec![source("s1", "u"), source("s2", "u")]);
         assert!(all.allows_object("u", &complete, &grants).unwrap());
         assert!(!all.allows_object("u", &root(vec![]), &grants).unwrap());
@@ -253,8 +259,10 @@ mod tests {
         let mut object = root(vec![]);
         object.relations.values_mut().next().unwrap().expected_ids.clear();
         assert!(!rule(RelationMatch::AllNonEmpty).allows_object("u", &object, &BTreeSet::new()).unwrap());
+
         object.relations.clear();
         assert!(rule(RelationMatch::Any).allows_object("u", &object, &BTreeSet::new()).is_err());
+
         object.valid_until = Some(Instant::from_unix_secs(1));
         assert!(object.flatten(&mut Vec::new(), 0).is_err());
     }
@@ -284,11 +292,13 @@ mod tests {
         let grants = BTreeSet::from([(ResourceKind::SalesOrder, "s1".into())]);
         assert!(read.allows_object("u", &object, &grants).unwrap());
         assert!(!read.allows_object("u", &object, &BTreeSet::new()).unwrap());
+
         let limited =
             AccessRule::all(vec![read, AccessRule::Fact(AccessFact::WarehouseIn(["w".into()].into()))]);
         assert!(!limited.allows_object("u", &object, &grants).unwrap());
         object.warehouse_id = FactValue::Known(Some("w".into()));
         assert!(limited.allows_object("u", &object, &grants).unwrap());
+
         object.id = "s2".into();
         assert!(!limited.allows_object("u", &object, &grants).unwrap());
         object.id = "s1".into();

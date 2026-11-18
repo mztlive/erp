@@ -91,12 +91,14 @@ impl DataScopeService {
         if roles.is_empty() {
             return Err(Error::Forbidden("没有启用角色提供本操作的完整权限".into()));
         }
+
         let load = scope_spec::organization_load(spec);
         let state = self.scope_organizations(context.actor.id(), load, context.as_of, executor).await?;
         let target = (context.permission.resource(), context.permission.action());
         let origin = (source.resource(), source.action());
         let scope =
             self.resolved(context.actor.id(), &roles, origin, &state, context.as_of, executor).await?;
+
         let scope_version = scope_version(
             context.actor.id(),
             target,
@@ -277,6 +279,7 @@ mod tests {
                 false
             ));
         }
+
         let sales = scope_spec::require_runtime_action("sales_order", "list").unwrap();
         let denied =
             resolve_configured_scope(sales, &roles, async { Ok(PersonDataScope::denied()) }).await.unwrap();
@@ -333,8 +336,10 @@ mod tests {
         let scope = resolve_scope(&roles, async { Ok(expected.clone()) }).await.unwrap();
         assert_eq!(scope, expected);
         assert!(!scope.role_clauses.iter().any(|clause| clause.company));
+
         let denied = resolve_scope(&roles, async { Ok(PersonDataScope::denied()) }).await.unwrap();
         assert_eq!(denied, PersonDataScope::denied());
+
         let failed = resolve_scope(&roles, async { Err(Error::Forbidden("范围读取失败".into())) }).await;
         assert!(matches!(failed, Err(Error::Forbidden(message)) if message == "范围读取失败"));
     }
@@ -350,6 +355,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(scope, PersonDataScope::denied());
+
         root.disabled = false;
         root.base.deleted_at = 1;
         let scope = resolve_scope(&[root], async { Ok(PersonDataScope::denied()) }).await.unwrap();
@@ -372,6 +378,7 @@ mod tests {
         let version = scope_version("finance", target, source, (2, 3), &roles, &state, &scope);
         assert_eq!(version, "fd4cfc9427c3662ca4f5922dbf4bf64c");
         assert_eq!(version, scope_version("finance", target, source, (2, 3), &roles, &state, &scope));
+
         for (user, changed_target, changed_source, versions) in [
             ("other", target, source, (2, 3)),
             ("finance", ("invoice", "detail"), source, (2, 3)),
@@ -384,12 +391,15 @@ mod tests {
                 scope_version(user, changed_target, changed_source, versions, &roles, &state, &scope)
             );
         }
+
         roles[0].base.version += 1;
         assert_ne!(version, scope_version("finance", target, source, (2, 3), &roles, &state, &scope));
         roles[0].base.version -= 1;
+
         state.version += 1;
         assert_ne!(version, scope_version("finance", target, source, (2, 3), &roles, &state, &scope));
         state.version -= 1;
+
         let denied = ResolvedScope { role_clauses: vec![], user_limit: None };
         assert_ne!(version, scope_version("finance", target, source, (2, 3), &roles, &state, &denied));
     }
@@ -416,6 +426,7 @@ mod tests {
         let mut reversed = scope.clone();
         reversed.role_clauses.reverse();
         assert_eq!(original, hash(&roles.into_iter().rev().collect::<Vec<_>>(), &reversed));
+
         let roles = Vec::new();
         let original = hash(&roles, &scope);
         let clauses = [

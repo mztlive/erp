@@ -38,18 +38,21 @@ pub async fn prepare_execution_funds_replacement(
     {
         return Err(Error::ConflictError("原资金占用与采购执行版本不一致".into()));
     }
+
     let mut account = db
         .supplier_deposit_accounts()
         .find_by_id(&reservation.account_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("原预存款账户不存在".into()))?;
     let usages = usages_for_reservation(db, &reservation.base.id, executor).await?;
+
     let order = db.supplier_fulfillment_orders().find_by_id(&execution.base.id, executor).await?;
     let has_write = execution.original_result_query_allowed()
         || order.as_ref().is_some_and(|order| order.external_order_no.is_some());
     let external_orders =
         order_ids(execution, order.as_ref().and_then(|order| order.external_order_no.as_deref()))?;
     ensure_evidence_clear(db, &reservation, &external_orders, executor).await?;
+
     let release = reservation.replacement_release_amount(has_write, &account, &usages)?;
     if release > Amount::zero() {
         SupplierDepositService::new(db.clone())

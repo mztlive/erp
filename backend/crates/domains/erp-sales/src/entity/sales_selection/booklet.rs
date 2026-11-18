@@ -170,9 +170,11 @@ impl SalesSelectionBooklet {
         let owner =
             normalize_required_text(data.sales_owner_user_id, "销售负责人不能为空", 64, "销售负责人过长")?;
         let org = normalize_required_text(data.business_org_unit_id, "业务组织不能为空", 64, "业务组织过长")?;
+
         validate_voucher_settings(data.submit_mode, data.per_person_budget, data.voucher_count)?;
         validate_password_hash(data.access_password_hash.as_deref())?;
         let tiers = normalize_form_tiers(data.form, data.tiers)?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             customer_id: data.customer_id,
@@ -234,6 +236,7 @@ impl SalesSelectionBooklet {
         if pool_source.kind != self.pool_source.kind {
             return Err(Error::from("商品池来源类型创建后不可修改"));
         }
+
         self.tiers = normalize_form_tiers(self.form, tiers)?;
         self.pool_source = pool_source;
         self.touch(actor_id)?;
@@ -290,6 +293,7 @@ impl SalesSelectionBooklet {
             return Err(Error::from("待发布请使用重生成或整册重新准备"));
         }
         ensure_transition(self.status, BookletStatus::Preparing)?;
+
         self.pre_prepare_status = Some(self.status);
         self.status = BookletStatus::Preparing;
         self.active_task_id = Some(task_id.to_string());
@@ -373,12 +377,14 @@ impl SalesSelectionBooklet {
             return Err(Error::from("没有可发布的准备批次"));
         }
         ensure_transition(self.status, BookletStatus::Published)?;
+
         self.status = BookletStatus::Published;
         self.link_token_hash = Some(token_hash);
         self.link_token_ciphertext = Some(token_ciphertext);
         self.link_token_version = self.link_token_version.saturating_add(1);
         self.link_expires_at = Some(add_days(published_at, LINK_TTL_DAYS));
         self.link_revoked = false;
+
         self.published_by = Some(normalize_actor(actor_id, "发布人不能为空")?);
         self.published_at = Some(published_at);
         self.touch(actor_id)
@@ -487,6 +493,7 @@ impl SalesSelectionBooklet {
             }
             return Ok(());
         }
+
         if self.proposal_id.is_some() {
             return Err(Error::from("一本选品册只能有一份销售方案"));
         }
@@ -515,6 +522,7 @@ impl SalesSelectionBooklet {
         }
         validate_password_hash(Some(&hash))?;
         let actor = normalize_actor(actor_id, "操作人不能为空")?;
+
         self.access_password_hash = Some(hash);
         self.updated_by = actor;
         Ok(())
@@ -848,6 +856,7 @@ mod tests {
         booklet.begin_prepare("task-1", PrepareKind::FirstPrepare, "u1").unwrap();
         booklet.complete_prepare("batch-1", BusinessDate::today(), Instant::now(), "u1").unwrap();
         booklet.publish("hash".into(), "cipher".into(), Instant::now(), "u1").unwrap();
+
         booklet.link_expires_at = Some(Instant::from_unix_secs(1));
         assert!(booklet.is_expired(Instant::now()));
         assert!(booklet.ensure_public_write("hash", Instant::now()).is_err());
@@ -863,6 +872,7 @@ mod tests {
         object.remove("access_password_hash");
         object.remove("per_person_budget");
         object.remove("voucher_count");
+
         let restored: SalesSelectionBooklet =
             serde_json::from_value(value).expect("legacy booklet deserializes");
         assert!(restored.access_password_hash.is_none());
@@ -881,6 +891,7 @@ mod tests {
         booklet.complete_prepare("batch-1", BusinessDate::today(), Instant::now(), "u1").unwrap();
         booklet.publish("hash".into(), "cipher".into(), Instant::now(), "u1").unwrap();
         booklet.mark_submitted(SalesSelectionProposalId::new("p1"), Instant::now()).unwrap();
+
         assert!(booklet.close(Instant::now(), "u1").is_err());
         assert!(booklet.revoke_access("u1").is_ok());
         assert_eq!(booklet.status, BookletStatus::Submitted);
@@ -890,9 +901,11 @@ mod tests {
         let positive = "100.00".parse().unwrap();
         assert!(validate_voucher_settings(SubmitMode::PickupVoucher, Some(positive), Some(1)).is_ok());
         assert!(validate_voucher_settings(SubmitMode::PickupVoucher, Some(positive), Some(1000)).is_ok());
+
         for budget in [None, Some(Amount::zero()), Some("-1.00".parse().unwrap())] {
             assert!(validate_voucher_settings(SubmitMode::PickupVoucher, budget, Some(1)).is_err());
         }
+
         for count in [None, Some(0), Some(1001)] {
             assert!(validate_voucher_settings(SubmitMode::PickupVoucher, Some(positive), count).is_err());
         }
@@ -912,6 +925,7 @@ mod tests {
         assert_eq!(booklet.status, BookletStatus::Published);
         assert!(booklet.proposal_id.is_none());
         assert!(booklet.submitted_at.is_none());
+
         assert!(booklet.ensure_participant_total("100.00".parse().unwrap()).is_ok());
         assert!(booklet.ensure_participant_total("100.01".parse().unwrap()).is_err());
         assert!(booklet.ensure_participant_total("-0.01".parse().unwrap()).is_err());
@@ -936,7 +950,6 @@ mod tests {
                 expected.updated_by = "u2".into();
 
                 booklet.set_access_password_hash("new-hash".into(), "u2").unwrap();
-
                 assert_eq!(booklet, expected);
             }
         }
@@ -960,7 +973,6 @@ mod tests {
             let original = booklet.clone();
 
             let error = booklet.set_access_password_hash("new-hash".into(), "u2").unwrap_err();
-
             assert!(error.to_string().contains("准备任务"));
             assert_eq!(booklet, original);
         }
@@ -1024,6 +1036,7 @@ mod tests {
         assert_eq!(booklet.tiers.len(), 1);
         assert!(booklet.ensure_participant_total("100.00".parse().unwrap()).is_ok());
         assert!(booklet.ensure_participant_total("100.01".parse().unwrap()).is_err());
+
         let mut no_tiers = data;
         no_tiers.tiers.clear();
         assert!(

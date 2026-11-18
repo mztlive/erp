@@ -63,6 +63,7 @@ pub(super) fn decode<T: DeserializeOwned>(body: &[u8], method: &str, rpc: &str) 
         return Err(gateway_error(failure.get())?);
     }
     validate_gateway_code(&root)?;
+
     let key = method.replace('.', "_");
     let wrapped = root
         .remove(&format!("{key}_responce"))
@@ -71,6 +72,7 @@ pub(super) fn decode<T: DeserializeOwned>(body: &[u8], method: &str, rpc: &str) 
     let mut method_result: BTreeMap<String, Box<RawValue>> =
         serde_json::from_str(wrapped.get()).map_err(|_| mapping("京东方法响应格式无效"))?;
     validate_gateway_code(&method_result)?;
+
     let result = method_result.remove(rpc).ok_or_else(|| mapping("京东方法 RPC 响应键缺失"))?;
     let envelope: RpcResult =
         serde_json::from_str(result.get()).map_err(|_| mapping("京东业务响应格式无效"))?;
@@ -95,6 +97,7 @@ fn decode_result<T: DeserializeOwned>(envelope: RpcResult, method: &str) -> Conn
     if envelope.success.0 != "true" || !success_code {
         return Err(classify_code(&envelope.code.0));
     }
+
     let result = match envelope.result.as_deref() {
         Some(result) => result.get(),
         None if method == "jingdong.vop.message.queryTransByVopNormal" => "[]",
@@ -292,13 +295,16 @@ mod tests {
                 assert!(records.is_empty());
             }
         }
+
         let body = br#"{"jingdong_vop_message_queryTransByVopNormal_responce":{"openRpcResult":{"success":false,"resultCode":"1003"}}}"#;
         assert_eq!(
             decode::<Vec<Box<RawValue>>>(body, method, "openRpcResult").unwrap_err().code,
             "JD_VOP_1003"
         );
+
         let body = br#"{"jingdong_vop_message_queryTransByVopNormal_responce":{"openRpcResult":{"success":true,"resultCode":"0000","result":{}}}}"#;
         assert!(decode::<Vec<Box<RawValue>>>(body, method, "openRpcResult").is_err());
+
         let body = br#"{"jingdong_vop_goods_getSkuPoolInfo_responce":{"openRpcResult":{"success":true,"resultCode":"0000"}}}"#;
         assert!(
             decode::<Vec<Box<RawValue>>>(body, "jingdong.vop.goods.getSkuPoolInfo", "openRpcResult").is_err()
@@ -322,6 +328,7 @@ mod tests {
             let pools: Pools = decode(&to_vec(&success).unwrap(), method, "openRpcResult").unwrap();
             assert!(pools.sku_pool_list.is_empty());
         }
+
         for (code, expected) in [
             (json!(2002), classify_code("2002")),
             (json!("2010"), classify_code("2010")),
@@ -340,6 +347,7 @@ mod tests {
                 expected
             );
         }
+
         for (body, expected) in [
             (json!({"error_response":{"code":"2002"},"code":"2010"}), classify_code("2002")),
             (json!({"code":"2010",key:{"code":"2002"}}), classify_code("2010")),
@@ -379,6 +387,7 @@ mod tests {
         let error = decode::<Pools>(body, "jingdong.vop.goods.getSkuPoolInfo", "openRpcResult").unwrap_err();
         assert_eq!(error.class, SupplierFailureClass::AuthSignature);
         assert!(!error.summary.contains("secret"));
+
         let body = br#"{"jingdong_vop_goods_getSkuPoolInfo_responce":{"openRpcResult":{"success":false,"resultCode":"FUTURE_99","resultMessage":"secret"}}}"#;
         let error = decode::<Pools>(body, "jingdong.vop.goods.getSkuPoolInfo", "openRpcResult").unwrap_err();
         assert_eq!(error.code, "JD_VOP_FUTURE_99");

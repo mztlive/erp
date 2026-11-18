@@ -189,6 +189,7 @@ impl SalesOrderService {
             executor,
         )
         .await?;
+
         for line in stable {
             self.db.sales_order_lines().create(line, executor).await?;
         }
@@ -252,6 +253,7 @@ impl SalesOrderService {
         for line in stable {
             self.db.sales_order_lines().create(line, executor).await?;
         }
+
         reconcile_inquiry(
             &self.db,
             copy.sales_order_id.as_ref(),
@@ -260,6 +262,7 @@ impl SalesOrderService {
             executor,
         )
         .await?;
+
         replace_working_copy_lines(&self.db, &copy.base.id.clone().into(), &old_lines, lines, executor)
             .await?;
         self.db.sales_order_working_copies().update(copy, executor).await?;
@@ -301,6 +304,7 @@ impl SalesOrderService {
             executor,
         )
         .await?;
+
         match plan {
             SalesOrderWorkingCopyPersistPlan::ReplaceExisting {
                 created_stable_lines,
@@ -326,6 +330,7 @@ impl SalesOrderService {
                 self.create_submission(submission, lines, executor).await?;
             },
         }
+
         self.db.sales_orders().update(order, executor).await?;
         Ok(())
     }
@@ -388,6 +393,7 @@ impl SalesOrderService {
             &draft.lines,
         )?;
         let (gross, net, tax) = SalesOrderWorkingCopyLine::amount_totals(&lines);
+
         let next_version = working_copy.draft_version + 1;
         working_copy.update(
             SalesOrderWorkingCopyUpdate {
@@ -412,7 +418,6 @@ impl SalesOrderService {
             SalesContentHash::draft(&working_copy.base.id, next_version)?.into_wire(),
             draft.editor_user_id.clone(),
         )?;
-
         Ok(lines)
     }
 }
@@ -475,12 +480,14 @@ impl SalesOrderService {
         if !working_copy.matches_version(version) {
             return Err(Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()));
         }
+
         let order_id = SalesOrderId::new(order.base.id.clone());
         let copy_id = SalesOrderWorkingCopyId::new(working_copy.base.id.clone());
         let old_lines =
             self.db.sales_order_working_copy_lines().list_lines_by_working_copy(&copy_id, executor).await?;
         let copy_lines = build_working_copy_lines(&order_id, &copy_id, &stable.all, &draft.lines)?;
         Self::update_submission_copy(order, &mut working_copy, draft, &copy_lines, actor)?;
+
         let plan = SalesOrderWorkingCopyPersistPlan::ReplaceExisting {
             created_stable_lines: stable.created,
             old_working_copy_lines: old_lines,
@@ -563,6 +570,7 @@ mod tests {
             },
             error => panic!("unexpected error class: {error}"),
         }
+
         order.commercial_status = CommercialStatus::PendingReview;
         order.review_status = ReviewStatus::InApproval;
         assert!(order.attribution.is_none());

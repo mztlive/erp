@@ -124,6 +124,7 @@ impl ApprovalProcessInstance {
         if input.definition_version == 0 {
             return Err(ModelError::InvalidField("定义版本必须从 1 开始"));
         }
+
         Ok(Self {
             base: base_model_at(input.id.to_string(), input.at)?,
             process_definition_id: input.process_definition_id,
@@ -239,6 +240,7 @@ impl ApprovalProcessInstance {
         if self.status != ApprovalProcessInstanceStatus::Running {
             return Err(ModelError::InvalidStatus("只有运行中的实例可以进入下一轮"));
         }
+
         self.current_round_no = self.current_round_no.checked_add(1).ok_or(ModelError::Overflow("轮次"))?;
         self.current_node_execution_id = None;
         touch_base(&mut self.base, at)?;
@@ -280,6 +282,7 @@ impl ApprovalProcessInstance {
         if self.status != ApprovalProcessInstanceStatus::Blocked {
             return Err(ModelError::InvalidStatus("只有受阻实例可以恢复运行"));
         }
+
         self.status = ApprovalProcessInstanceStatus::Running;
         self.clear_blocker_projection();
         touch_base(&mut self.base, at)
@@ -316,6 +319,7 @@ impl ApprovalProcessInstance {
         if self.status != ApprovalProcessInstanceStatus::Running {
             return Err(ModelError::InvalidStatus("只有运行中的实例可以最终驳回"));
         }
+
         self.status = ApprovalProcessInstanceStatus::Rejected;
         self.current_node_execution_id = None;
         self.clear_blocker_projection();
@@ -426,6 +430,7 @@ mod tests {
         .unwrap();
         assert_eq!(inst.next_round(Timestamp::from_unix_secs(12).unwrap()).unwrap(), 2);
         assert!(inst.current_node_execution_id.is_none());
+
         inst.enter_blocked(
             ApprovalBlockerCode::ApproverAccountInactive,
             Timestamp::from_unix_secs(13).unwrap(),
@@ -442,9 +447,11 @@ mod tests {
         inst.enter_blocked(ApprovalBlockerCode::ApproverNotEligible, at).unwrap();
         assert_eq!(inst.status, ApprovalProcessInstanceStatus::Blocked);
         assert_eq!(inst.blocker_code, Some(ApprovalBlockerCode::ApproverNotEligible));
+
         inst.exit_blocked(Timestamp::from_unix_secs(21).unwrap()).unwrap();
         assert_eq!(inst.status, ApprovalProcessInstanceStatus::Running);
         assert!(inst.blocker_code.is_none());
+
         inst.complete_approved(Timestamp::from_unix_secs(22).unwrap()).unwrap();
         assert_eq!(inst.status, ApprovalProcessInstanceStatus::Approved);
         assert!(inst.current_node_execution_id.is_none());
@@ -533,8 +540,10 @@ mod tests {
             inst.ensure_assignee_recovery_allowed(),
             Err(ModelError::InvalidStatus("结构性或一致性阻塞不得恢复原审批人"))
         );
+
         inst.blocker_code = Some(ApprovalBlockerCode::ApproverAccountInactive);
         assert!(inst.ensure_assignee_recovery_allowed().is_ok());
+
         inst.complete_approved(Timestamp::from_unix_secs(31).unwrap()).unwrap();
         assert_eq!(
             inst.ensure_assignee_recovery_allowed(),

@@ -131,6 +131,7 @@ pub async fn resolve_list_scope(
     } else {
         access.expand_org_units(org_unit_ids, include_descendants, executor).await?.into_iter().collect()
     };
+
     let meta = ScopedIntegrationList::from_access(&read_scope);
     ensure_scope_version(scope_version, &meta.scope_version)?;
     Ok(ResolvedListScope { read_scope, owner_org_unit_ids, meta })

@@ -143,6 +143,7 @@ impl QueryFilter for InvoiceFilter {
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }
+
         if let Some(ids) = &self.keyword_ids {
             let condition = doc! { "id": { "$in": ids } };
             return doc! { "$and": [filter, condition] };
@@ -246,10 +247,10 @@ impl InvoiceRepositoryExt for persistence_core::Repository<'_, Invoice> {
             .limit(filter.limit())
             .projection(invoice_projection())
             .build();
+
         let collection = self.collection().clone_with_type::<InvoiceRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 

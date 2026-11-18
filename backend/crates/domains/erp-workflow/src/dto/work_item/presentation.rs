@@ -133,10 +133,12 @@ pub fn purchase_review_impact_summary(
     if let Some(amount) = gross_amount {
         scale.push(format_yuan(amount));
     }
+
     if !scale.is_empty() {
         summary.push_str(" · ");
         summary.push_str(&scale.join(" / "));
     }
+
     if prepay_gate {
         summary.push_str(" · 先款后货");
     }

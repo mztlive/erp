@@ -110,6 +110,7 @@ mod tests {
             .error_list_snapshot(&ErrorTaskListParams::default(), &actor, &mut SnapshotExecutor::default())
             .await;
         assert!(matches!(errors, Err(Error::ValidationError(reason)) if reason == "缺少查询 Mapping 绑定"));
+
         let differences = service
             .difference_list_snapshot(
                 &DifferenceListParams::default(),

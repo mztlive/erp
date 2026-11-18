@@ -233,6 +233,7 @@ mod tests {
                 == Some("uk_supplier_fulfillment_orders_order_no")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
+
         let external = indexes
             .iter()
             .find(|index| {
@@ -245,6 +246,7 @@ mod tests {
             external.options.as_ref().unwrap().partial_filter_expression,
             Some(doc! { "external_order_no": { "$type": "string" } })
         );
+
         assert!(indexes.iter().any(|index| {
             index.keys == doc! { "supplier_id": 1, "fulfillment_status": 1, "created_at": -1 }
         }));
@@ -254,6 +256,7 @@ mod tests {
                 .iter()
                 .any(|index| { index.keys == doc! { "follow_up_user_id": 1, "created_at": -1, "id": -1 } })
         );
+
         assert!(
             indexes.iter().any(|index| {
                 index.keys == doc! { "business_org_unit_id": 1, "created_at": -1, "id": -1 }

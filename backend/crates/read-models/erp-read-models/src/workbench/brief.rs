@@ -58,6 +58,7 @@ pub(crate) fn assemble_brief(source: &ObjectBriefSource, reason_code: Option<&st
     let mut sections = Vec::new();
     push_section(&mut sections, "客户", source.customer.as_deref(), false);
     sections.extend(source.extra_sections.iter().cloned());
+
     if !has_section(&sections, "含税金额") {
         push_section(&mut sections, "含税金额", source.amount_label.as_deref(), true);
     }
@@ -67,6 +68,7 @@ pub(crate) fn assemble_brief(source: &ObjectBriefSource, reason_code: Option<&st
     if !has_section(&sections, "提交人") {
         push_section(&mut sections, "提交人", source.submitter_name.as_deref(), false);
     }
+
     AssembledBrief {
         sections,
         lines: source.lines.clone(),
@@ -332,6 +334,7 @@ mod tests {
         assert_eq!(format_instant_date(noon_utc), "2026-08-23");
         assert_eq!(format_instant_due_label(noon_utc), "8/23 交");
         assert_eq!(format_instant_datetime(noon_utc), "2026-08-23 12:00");
+
         assert_eq!(join_list_summary([Some("甲".into()), None, Some("¥1".into())]), "甲 · ¥1");
         assert_eq!(non_empty("  ").as_deref(), None);
         assert_eq!(non_empty(" 客户 ").as_deref(), Some("客户"));

@@ -96,6 +96,7 @@ pub fn stock_basis_id_for(order: &SalesOrder, group: &StockBasisGroup, work_item
             line.max_create_quantity,
         )
     }));
+
     format!("{}:{}", order.base.id, digest_parts(parts))
 }
 

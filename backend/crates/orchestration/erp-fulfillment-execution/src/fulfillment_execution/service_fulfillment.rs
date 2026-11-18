@@ -216,6 +216,7 @@ async fn persist_created_service_fulfillment(
                         executor,
                     )
                     .await?;
+
                 register_created_service_fulfillment_document(
                     &db,
                     workflow.as_ref(),
@@ -227,6 +228,7 @@ async fn persist_created_service_fulfillment(
                 FulfillmentService::new(db.clone())
                     .persist_created_service_fulfillment(&record, executor)
                     .await?;
+
                 super::task::ensure_fulfillment_task(
                     &db,
                     &task_identity,
@@ -234,6 +236,7 @@ async fn persist_created_service_fulfillment(
                     executor,
                 )
                 .await?;
+
                 persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())
             })

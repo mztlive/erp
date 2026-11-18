@@ -234,6 +234,7 @@ mod tests {
         )
         .unwrap();
         assert!(reject.validate_shape().is_ok());
+
         let mut rejected = ApprovalTransitionDefinition::to_rejected(
             ApprovalTransitionDefinitionId::new("t5"),
             def_id(),
@@ -243,6 +244,7 @@ mod tests {
         .unwrap();
         assert!(rejected.validate_shape().is_ok());
         assert_eq!(rejected.terminal_result, Some(ApprovalTerminalResult::Rejected));
+
         rejected.event = ApprovalTransitionEvent::Approve;
         assert!(rejected.validate_shape().is_err());
         rejected.event = ApprovalTransitionEvent::Reject;

@@ -100,6 +100,7 @@ pub async fn basis_groups_and_facts(
     if order.commercial_status != CommercialStatus::Effective {
         return Ok((Vec::new(), CreationBasisFacts::default()));
     }
+
     let coverage = load_sales_procurement_coverage(db, order, executor).await?;
     basis_groups_and_facts_from_coverage(db, order, responsibility_scope_ids, &coverage, executor).await
 }
@@ -137,10 +138,12 @@ pub async fn sourcing_groups_for_order(
     if order.commercial_status != CommercialStatus::Effective {
         return Ok((Vec::new(), Vec::new()));
     }
+
     let coverage = load_sales_procurement_coverage(db, order, executor).await?;
     let (groups, _) =
         basis_groups_and_facts_from_coverage(db, order, responsibility_scope_ids, &coverage, executor)
             .await?;
+
     let stock = stock_groups_from_coverage(db, responsibility_scope_ids, &coverage, executor).await?;
     Ok((groups, stock))
 }
@@ -217,6 +220,7 @@ async fn stock_groups_from_coverage(
     let physical_lines = physical_stock_lines(coverage, responsibility_scope_ids);
     let sku_ids = physical_lines.iter().map(|line| line.goods_line.sku_id.clone()).collect::<Vec<_>>();
     let balances = db.inventory().available_balances_for_skus(&sku_ids, executor).await?;
+
     let warehouse_ids = balances
         .iter()
         .map(|balance| balance.warehouse_id.to_string())
@@ -228,6 +232,7 @@ async fn stock_groups_from_coverage(
         warehouses.into_iter().filter(|warehouse| warehouse.is_active()).collect::<Vec<_>>();
     let active_warehouse_ids =
         active_warehouses.iter().map(|warehouse| warehouse.base.id.clone()).collect::<HashSet<_>>();
+
     let revision_ids = active_warehouses
         .iter()
         .filter_map(|warehouse| warehouse.stable.current_revision_id.clone())
@@ -246,6 +251,7 @@ async fn stock_groups_from_coverage(
             (warehouse.base.id, name)
         })
         .collect::<HashMap<_, _>>();
+
     Ok(stock_groups_from_facts(
         coverage,
         &physical_lines,

@@ -49,6 +49,7 @@ impl FundsAccess {
             },
             _ => return Err(Error::ValidationError("不支持的财务来源类型".into())),
         };
+
         match result {
             Err(Error::NotFound(_) | Error::Forbidden(_)) => Ok(false),
             other => other,

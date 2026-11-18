@@ -28,6 +28,7 @@ async fn draft_read_requires_both_independent_entries_and_never_adds_historical_
             Err(Error::Forbidden(_))
         ));
     }
+
     identity.state.lock().unwrap().grants = vec![
         ("source".into(), vec![sales_order::HANDOVER]),
         ("entry".into(), vec![sales_review::SALES_CHANGE_DRAFT]),
@@ -37,12 +38,14 @@ async fn draft_read_requires_both_independent_entries_and_never_adds_historical_
     assert_eq!(inquiry_members(&access), ["one"]);
     service.validate(&access, &mut executor).await.unwrap();
     assert!(matches!(access.ensure_current(&mut executor), Err(Error::ValidationError(_))));
+
     assert!(matches!(
         service
             .require(&actor(), &permission, AccessTarget::record("historical").unwrap(), &mut executor)
             .await,
         Err(Error::Forbidden(_))
     ));
+
     let mut expiring = service.query(&actor(), &permission, &mut executor).await.unwrap();
     expiring.proof.valid_until = Some(Instant::from_unix_secs(1));
     assert!(matches!(service.validate(&expiring, &mut executor).await, Err(Error::ConflictError(_))));

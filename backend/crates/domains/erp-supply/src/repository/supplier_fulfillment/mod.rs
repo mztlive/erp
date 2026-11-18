@@ -138,10 +138,12 @@ impl<'a> SupplierFulfillmentRepository<'a> {
         if revision_ids.is_empty() {
             return Ok(HashMap::new());
         }
+
         let revision_id_strings = revision_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
         let revisions = SupplierOfferingRevisionRepository::new(self.db, SUPPLIER_OFFERING_REVISIONS)
             .list_by_ids(&revision_id_strings, executor)
             .await?;
+
         let offering_ids =
             revisions.iter().map(|revision| revision.supplier_offering_id.clone()).collect::<Vec<_>>();
         let offerings = SupplierOfferingRepository::new(self.db, SUPPLIER_OFFERINGS)
@@ -150,6 +152,7 @@ impl<'a> SupplierFulfillmentRepository<'a> {
             .into_iter()
             .map(|offering| (offering.base.id.clone(), offering))
             .collect::<HashMap<_, _>>();
+
         Ok(revisions
             .into_iter()
             .filter_map(|revision| {
@@ -201,6 +204,7 @@ impl<'a> SupplierFulfillmentRepository<'a> {
             executor,
         )
         .await?;
+
         mongo_ops::insert_one(
             &self.db.collection::<SupplierOrderAction>(SUPPLIER_ORDER_ACTIONS),
             action,
@@ -323,11 +327,13 @@ impl<'a> SupplierFulfillmentRepository<'a> {
         if facts.is_empty() {
             return Ok(Vec::new());
         }
+
         let fact_ids: Vec<SupplierRefundFactId> =
             facts.iter().map(|fact| SupplierRefundFactId::new(fact.base.id.as_str())).collect();
         let allocations = SupplierRefundAllocationRepository::new(self.db, SUPPLIER_REFUND_ALLOCATIONS)
             .find_allocations_by_fact_ids(&fact_ids, executor)
             .await?;
+
         Ok(group_refund_allocations(facts, allocations))
     }
 }
@@ -465,6 +471,7 @@ fn group_refund_allocations(
     for allocation in allocations {
         by_fact.entry(allocation.supplier_refund_fact_id.to_string()).or_default().push(allocation);
     }
+
     facts
         .into_iter()
         .map(|fact| {
@@ -685,12 +692,14 @@ mod snapshot_tests {
         let match_stage = pipeline[0].get_document("$match").expect("过滤阶段");
         assert_eq!(match_stage.get_str("supplier_fulfillment_order_id").unwrap(), "order-1");
         assert_eq!(match_stage.get_i64("deleted_at").expect("未删除条件"), 0);
+
         let group_stage = pipeline[1].get_document("$group").expect("分组阶段");
         assert!(matches!(group_stage.get("_id").expect("分组键"), Bson::Null));
         assert_eq!(
             group_stage.get_document("total").expect("求和字段").get_str("$sum").expect("求和表达式"),
             "$cost_snapshot_total_gross"
         );
+
         let project_stage = pipeline[2].get_document("$project").expect("投影阶段");
         assert_eq!(project_stage.get_i32("_id").expect("移除分组键"), 0);
     }

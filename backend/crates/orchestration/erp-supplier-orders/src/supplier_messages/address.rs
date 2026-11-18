@@ -30,10 +30,12 @@ pub(super) async fn refresh_address_notice(
     {
         return Err(Error::ValidationError("供应商地址变更提示身份无效".into()));
     }
+
     let observed = source
         .candidates(&AddressCandidateQuery { depth: SupplierAddressDepth::Province, parent_code: None })
         .await
         .map_err(|_| Error::BusinessLogicError("供应商地址已更新，请稍后重试读取最新地址".into()))?;
+
     let mut seen = BTreeSet::new();
     if observed.stamp.observed_at < received_at
         || observed.value.is_empty()
@@ -47,6 +49,7 @@ pub(super) async fn refresh_address_notice(
     {
         return Err(Error::BusinessLogicError("供应商最新地址尚未完整核实，保留原更新提示".into()));
     }
+
     // 无本地地址库或跨请求候选缓存。设置地址和新创建步骤仍逐级重读5680并调用5710；
     // 原票据不会绕过即时核验。本提示与处理时间由消息完成回执持久化后才远端ACK。
     Ok(())

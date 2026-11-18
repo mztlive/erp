@@ -50,6 +50,7 @@ impl ReceivableProcess {
             actor: actor.clone(),
             command,
         };
+
         let recover = operation.command.clone();
         let client = operation.db.client().clone();
         let evidence = ReplayEvidence::default();
@@ -59,6 +60,7 @@ impl ReceivableProcess {
                 Box::pin(async move { operation.execute(&observed, executor).await })
             })
             .await;
+
         match evidence.finish(result) {
             Ok(view) => Ok(view),
             Err(error) if error.command_may_have_committed() => {
@@ -90,6 +92,7 @@ impl ReceivableProcess {
             executor,
         )
         .await?;
+
         let now = Instant::now();
         let key = normalize_idempotency_key(&req.idempotency_key)?;
         let prepared = prepare_cancel(cancel_approval::build_customer_receipt_cancel_input(
@@ -103,6 +106,7 @@ impl ReceivableProcess {
         let PreparedExecution::Apply(writes) = prepared else {
             return Ok(None);
         };
+
         let closed =
             WorkItem::close_all_for_approval_cancellation(runtime.open_tasks, actor.id(), &req.reason, now)?;
         Ok(Some(PreparedInvoiceRequestCancel { writes, closed }))
@@ -132,6 +136,7 @@ impl InvoiceCancellation {
             evidence.observe(&Some(()));
             return Ok(view);
         }
+
         let request = self.authorized_request(executor).await?;
         let process = ReceivableProcess::new(self.db.clone(), self.rbac.clone());
         if let Some(prepared) =
@@ -139,6 +144,7 @@ impl InvoiceCancellation {
         {
             self.persist(prepared, executor).await?;
         }
+
         access.result(&self.actor, &self.id, RequestAction::Cancel, executor).await
     }
 
@@ -156,6 +162,7 @@ impl InvoiceCancellation {
         let receipts = FinanceCommandReceiptService::new(self.db.clone());
         let access = MongoAccess { db: &self.db, rbac: &self.rbac };
         authorize(&access, &self.actor, &self.id, RequestAction::Cancel, executor).await?;
+
         claim_and_persist_document_cancel_runtime(
             &self.db,
             &prepared.writes,
@@ -165,6 +172,7 @@ impl InvoiceCancellation {
         )
         .await?;
         self.rbac.runtime.persist_cancel_copies(&self.db, &prepared.writes, executor).await?;
+
         let current = load(&self.db, &self.id, executor).await?;
         ensure_expected_version(current.base.version, self.request.expected_version)?;
         let event_id =
@@ -218,6 +226,7 @@ async fn cancel_and_record(
     lock_account(db, request.receivable_account_id.as_ref(), executor).await?;
     request.cancel_approval()?;
     db.sales_invoice_requests().update(&mut request, executor).await?;
+
     let audit = super::command::event(actor, &request, super::command::CANCEL, command)?;
     persist_log(db, &audit, executor).await?;
     Ok(audit.base.id)
@@ -246,9 +255,11 @@ pub async fn reject(
     if request.approval_subject_version != expected_subject_version {
         return Err(Error::ConflictError("审批主题版本已变化，请刷新后重试".into()));
     }
+
     lock_account(db, request.receivable_account_id.as_ref(), executor).await?;
     request.reject()?;
     db.sales_invoice_requests().update(&mut request, executor).await?;
+
     let audit =
         actor.clone().resource_log("sales_invoice_request.reject", "sales_invoice_request", id.to_owned())?;
     persist_log(db, &audit, executor).await?;
@@ -270,15 +281,18 @@ mod tests {
             reason: "更正资料".into(),
             idempotency_key: "key".into(),
         };
+
         let first = cancel_receipt("request-1", &req, &actor).unwrap();
         let other = cancel_receipt("request-2", &req, &actor).unwrap();
         assert_ne!(first.id(), other.id());
         assert_eq!(first.resource_type(), "sales_invoice_request");
+
         let saved = FinanceCommandReceipt::resource(&first, "request-1".into(), "event-1".into()).unwrap();
         assert_eq!(
             saved.resource_id(&cancel_receipt("request-1", &req, &actor).unwrap()).unwrap(),
             "request-1"
         );
+
         let mut changed = req;
         changed.expected_version = 8;
         let changed = cancel_receipt("request-1", &changed, &actor).unwrap();

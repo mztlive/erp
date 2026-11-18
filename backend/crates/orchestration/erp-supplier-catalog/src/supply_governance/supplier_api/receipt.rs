@@ -56,6 +56,7 @@ pub(super) async fn persist_command_receipt(
         connection.base.id.clone(),
         Some(format!("request_sha256={}", identity.fingerprint)),
     )?;
+
     let job_no =
         persist_receipt(&MongoReceiptWrite(db), &receipt, &audit, job_id.as_deref(), executor).await?;
     Ok(SupplierConnectionCommandResult {
@@ -166,6 +167,7 @@ mod tests {
             fail_at: None,
             calls: Mutex::new(Vec::new()),
         };
+
         assert_eq!(
             persist_receipt(&port, &1, &2, Some("job-1"), &mut executor).await.unwrap().as_deref(),
             Some("JOB-001")

@@ -46,6 +46,7 @@ impl ContractService {
         executor: &mut dyn Executor,
     ) -> Result<ContractSnapshot> {
         let context = self.data_scope.resolve(actor, &contract::LIST, executor).await?;
+
         let (filter, search, versions) = load_list_filter_and_search(
             &self.db,
             &self.data_scope,
@@ -56,6 +57,7 @@ impl ContractService {
             executor,
         )
         .await?;
+
         context.ensure_current(executor)?;
         finish_list_snapshot(&self.db, filter, search, versions, context, executor)
             .await
@@ -86,6 +88,7 @@ impl ContractService {
             executor,
         )
         .await?;
+
         context.scope_version = fingerprint_version(&context.scope_version, &versions, &search)?;
         context.validate(executor).await?;
         Ok(context.scope_version)
@@ -124,17 +127,21 @@ async fn load_list_filter_and_search(
     filter.assigned_user_id =
         (query.scope == ContractListScope::Assigned).then(|| context.user_id().to_owned());
     filter.owner_user_ids = requested_contract_owners(data_scope, context, query, executor).await?;
+
     let versions = db.contract().query_versions(&filter, executor).await?;
     if versions.len() > 10_000 {
         return Err(Error::ValidationError(
             "合同基础范围超过上限，请收窄客户、组织、合同号或状态条件".into(),
         ));
     }
+
     let ids = db.contract().list_customer_ids(&filter, executor).await?;
     let customer_facts = super::query::list_customer_facts_with(customers, &ids, executor).await?;
     filter.require_existing_customers(customer_facts.iter().map(|fact| fact.id.clone()).collect());
+
     let owner_ids = db.contract().list_owner_ids(&filter, executor).await?;
     let owner_names = accounts.names(&owner_ids, executor).await?;
+
     let search = ContractSearch {
         q: query.q.clone(),
         metric: query.metric,
@@ -174,6 +181,7 @@ async fn finish_list_snapshot(
     let total = result.total();
     let items =
         super::query::contract_rows(db, result.items, &search.customers, &search.owners, executor).await?;
+
     let view = ContractListView {
         ownership_basis: "contract_sales_owner",
         scope_version: String::new(),
@@ -185,6 +193,7 @@ async fn finish_list_snapshot(
         page: PageView { items, total, page: filter.page, page_size: filter.page_size },
         metrics: result.metrics.into_iter().next().unwrap_or_default(),
     };
+
     context.validate(executor).await?;
     Ok((view, context))
 }
@@ -196,6 +205,7 @@ fn fingerprint_version(
     search: &ContractSearch,
 ) -> Result<String> {
     let mut fingerprint = super::fingerprint::version_fingerprint_input(versions);
+
     let mut customers = search
         .customers
         .iter()
@@ -347,6 +357,7 @@ async fn requested_contract_owners(
     if query.include_descendants == Some(true) && org_ids.as_slice().is_empty() {
         return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
     }
+
     let organization = data_scope.organization();
     let expanded = organization
         .expand_org_units(org_ids.as_slice(), query.include_descendants.unwrap_or(false), executor)
@@ -381,6 +392,7 @@ mod tests {
         let initial = version(&versions, &search);
         assert_eq!(initial, version(&versions, &search));
         assert_ne!(initial, fingerprint_version("authorization-v2", &versions, &search).unwrap());
+
         search.customers[0].number = "C-2".into();
         assert_ne!(initial, version(&versions, &search));
         let changed = [ContractVersion { id: "contract-a".into(), version: 2 }];

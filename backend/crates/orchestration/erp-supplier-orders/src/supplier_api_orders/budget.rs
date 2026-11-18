@@ -38,6 +38,7 @@ impl SupplierApiOrderProcess {
                     .collect(),
             })
             .collect::<Vec<_>>();
+
         let goods = lines
             .iter()
             .filter(|line| line.line_type == PurchaseLineType::ItemService)
@@ -49,6 +50,7 @@ impl SupplierApiOrderProcess {
             .filter(|line| line.line_type == PurchaseLineType::LogisticsFee)
             .map(approved_expense)
             .collect::<Result<Vec<_>>>()?;
+
         Ok(ApprovedExecutionBudget::freeze(
             &execution.purchase_order_revision_id,
             &execution.base.id,

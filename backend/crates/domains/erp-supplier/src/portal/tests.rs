@@ -72,23 +72,28 @@ fn full_state_matrix_separates_edit_submit_and_final_decisions() {
             status,
             CooperationStatus::Draft | CooperationStatus::Returned | CooperationStatus::Withdrawn
         );
+
         let mut app = state(status);
         assert_eq!(app.edit("supplier-1", 1, request(), &supplier_actor()).is_ok(), editable);
+
         let mut app = state(status);
         assert_eq!(
             app.submit("supplier-1", 1, "buyer", "task-new", &supplier_actor(), 300).is_ok(),
             editable
         );
+
         let mut app = state(status);
         assert_eq!(
             app.withdraw("supplier-1", 1, &supplier_actor(), 300).is_ok(),
             status == CooperationStatus::Submitted
         );
+
         let mut app = state(status);
         assert_eq!(
             app.return_to_supplier(1, &confirmer(), "原因".into(), 300).is_ok(),
             status == CooperationStatus::Submitted
         );
+
         let mut app = state(status);
         assert_eq!(app.activate(1, &confirmer(), result()).is_ok(), status == CooperationStatus::Submitted);
     }
@@ -101,9 +106,11 @@ fn supplier_identity_binding_and_application_version_fail_closed() {
     assert!(app.edit("supplier-2", 1, request(), &supplier_actor()).is_err());
     assert!(app.edit("supplier-1", 2, request(), &supplier_actor()).is_err());
     assert!(app.edit("supplier-1", 1, request(), &confirmer()).is_err());
+
     let before = app.clone();
     assert!(app.submit("supplier-1", 1, "", "task", &supplier_actor(), 100).is_err());
     assert_eq!(app, before);
+
     let mut app = submitted();
     assert!(app.activate(1, &supplier_actor(), result()).is_err());
     assert!(app.return_to_supplier(1, &confirmer(), "   ".into(), 200).is_err());
@@ -114,11 +121,13 @@ fn resubmission_preserves_original_snapshot_and_records_actors_separately() {
     let mut app = submitted();
     let original = app.submissions[0].clone();
     app.return_to_supplier(1, &confirmer(), "请核对".into(), 200).unwrap();
+
     let returned = app.clone();
     let mut edited = request();
     edited.payment_term = "NET-15".into();
     app.edit("supplier-1", 1, edited, &supplier_actor()).unwrap();
     app.ensure_history_preserved(&returned).unwrap();
+
     app.submit("supplier-1", 1, "buyer", "task-2", &supplier_actor(), 300).unwrap();
     assert_eq!(app.submissions[0], original);
     assert_eq!(app.submissions[1].submission_no, 2);
@@ -126,6 +135,7 @@ fn resubmission_preserves_original_snapshot_and_records_actors_separately() {
     assert_eq!(app.submissions[1].submitted_by, "external-user");
     assert_eq!(app.decisions[0].actor_id, "buyer");
     assert_eq!(app.decisions[0].actor_kind, AccountKind::Admin);
+
     app.activate(1, &confirmer(), result()).unwrap();
     assert_eq!(app.result.as_ref().unwrap().confirmed_by, "buyer");
     assert_eq!(app.created_by, "external-user");
@@ -137,9 +147,11 @@ fn repository_invariant_rejects_rewritten_submission_and_illegal_direct_state_ch
     let mut changed = before.clone();
     changed.submissions[0].proposal.reason = "伪造".into();
     assert!(changed.ensure_history_preserved(&before).is_err());
+
     let mut changed = before.clone();
     changed.status = CooperationStatus::Returned;
     assert!(changed.ensure_history_preserved(&before).is_err());
+
     let before = draft();
     let mut changed = before.clone();
     changed.status = CooperationStatus::Effective;
@@ -155,6 +167,7 @@ fn allowlist_rejects_supplier_result_and_internal_party_injection() {
         injected[field] = serde_json::json!("forged");
         assert!(serde_json::from_value::<CooperationRequest>(injected).is_err());
     }
+
     let app = submitted();
     let view = serde_json::to_value(CooperationView::from_application(&app)).unwrap();
     assert!(view.get("supplier_id").is_none());
@@ -168,15 +181,19 @@ fn invalid_business_terms_and_empty_reason_are_rejected_before_mutation() {
     let mut value = request();
     value.payment_term = "先用后付".into();
     assert!(value.normalized().is_err());
+
     let mut value = request();
     value.settlement_mode = SettlementMode::Prepayment;
     assert!(value.normalized().is_err());
+
     let mut value = request();
     value.reason = " ".into();
     assert!(value.normalized().is_err());
+
     let mut value = request();
     value.expected_supplier_version = 0;
     assert!(value.normalized().is_err());
+
     let mut value = request();
     value.payment_term = "PERIOD_MONTH_367".into();
     value.settlement_mode = SettlementMode::Monthly;
@@ -203,6 +220,7 @@ fn cooperation_terms_preserve_independent_reconciliation_frequency() {
         assert_eq!(normalized.payment_term, term);
         assert_eq!(normalized.reconciliation_cycle, ReconciliationCycle::Monthly);
     }
+
     let mut invalid = serde_json::to_value(request()).unwrap();
     invalid["reconciliation_cycle"] = serde_json::json!("fortnightly");
     assert!(serde_json::from_value::<CooperationRequest>(invalid).is_err());
@@ -225,6 +243,7 @@ fn formal_facts() -> (SupplierAccount, SupplierCommercialProfileRevision) {
         "internal-creator",
     )
     .unwrap();
+
     let profile = SupplierCommercialProfileRevision::new(
         SupplierCommercialProfileRevisionId::new("profile-1"),
         SupplierCommercialProfileRevisionData {
@@ -259,12 +278,14 @@ fn confirmation_creates_profile_without_overwriting_other_commercial_fields() {
         200,
     )
     .unwrap();
+
     assert_eq!(planned.profile.payment_term_snapshot, "POSTPAY_NET30");
     assert_eq!(planned.profile.revision.revision_no, 2);
     assert_eq!(planned.profile.business_category, profile.business_category);
     assert_eq!(planned.profile.invoice_type, profile.invoice_type);
     assert_eq!(planned.profile.signing_entity_party_id, profile.signing_entity_party_id);
     assert_eq!(planned.profile.payment_entity_party_id, profile.payment_entity_party_id);
+
     assert_eq!(supplier.current_commercial_profile_revision_id.unwrap().to_string(), "profile-1");
     assert_eq!(planned.supplier.current_commercial_profile_revision_id.unwrap().to_string(), "profile-2");
     assert_eq!(planned.result.confirmed_by, "buyer");
@@ -285,16 +306,20 @@ fn confirmation_rejects_current_supplier_or_profile_drift_and_disabled_supplier(
             200,
         )
     };
+
     let mut changed = supplier.clone();
     changed.base.version = 2;
     assert!(plan(&changed, &profile).is_err());
+
     let mut changed = supplier.clone();
     changed.current_commercial_profile_revision_id =
         Some(SupplierCommercialProfileRevisionId::new("profile-new"));
     assert!(plan(&changed, &profile).is_err());
+
     let mut changed = supplier.clone();
     changed.stable.status = SupplierAccountStatus::Disabled;
     assert!(plan(&changed, &profile).is_err());
+
     let mut changed = profile.clone();
     changed.supplier_id = SupplierAccountId::new("supplier-2");
     assert!(plan(&supplier, &changed).is_err());
@@ -322,6 +347,7 @@ fn confirmation_rejects_invalid_frozen_history_before_checking_current_facts() {
     let mut app = submitted();
     app.submissions.clear();
     assert_eq!(plan(&app, &confirmer()), "系统内部错误: 申请缺少冻结提交");
+
     let mut app = submitted();
     app.proposal.reason = "被改写的申请".into();
     assert_eq!(plan(&app, &confirmer()), "数据冲突: 待确认提交内容不得修改");
@@ -341,6 +367,7 @@ fn command_replay_preserves_original_result_and_detects_payload_identity_conflic
     .unwrap();
     let receipt = CooperationReceipt::new(&command, &app).unwrap();
     receipt.ensure_replayable(&command, "supplier-1").unwrap();
+
     let mut changed = request();
     changed.reason = "其他请求".into();
     let conflict =
@@ -349,6 +376,7 @@ fn command_replay_preserves_original_result_and_detects_payload_identity_conflic
     assert_eq!(command.id(), conflict.id());
     assert!(receipt.ensure_replayable(&conflict, "supplier-1").is_err());
     assert!(receipt.ensure_replayable(&command, "supplier-2").is_err());
+
     let stored = serde_json::to_string(&receipt).unwrap();
     assert!(!stored.contains("same-key"));
     assert_eq!(receipt.status, CooperationStatus::Submitted);

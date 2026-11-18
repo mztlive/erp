@@ -119,6 +119,7 @@ impl SalesSelectionSession {
         if voucher_code_hash.trim().is_empty() || voucher_code_ciphertext.trim().is_empty() {
             return Err(Error::from("提货券代码哈希与密文不能为空"));
         }
+
         let mut session = Self::new(id, booklet_id);
         session.participant_id = participant_id;
         session.voucher_code_hash = Some(voucher_code_hash);
@@ -189,6 +190,7 @@ impl SalesSelectionSession {
         if !submit_mode.requires_quantity() {
             return Ok(None);
         }
+
         let mut total = Amount::zero();
         for choice in &self.choices {
             let quantity = choice.quantity.ok_or_else(|| Error::from("按份采购必须填写份数"))?;
@@ -330,6 +332,7 @@ mod tests {
             "cipher-2".into(),
         )
         .unwrap();
+
         let item = SalesSelectionDisplayItemId::new("d1");
         first
             .save(
@@ -339,9 +342,11 @@ mod tests {
                 std::slice::from_ref(&item),
             )
             .unwrap();
+
         assert_eq!(first.session_version, 2);
         assert_eq!(second.session_version, 1);
         assert!(second.choices.is_empty());
+
         assert!(
             normalize_choices(
                 vec![SessionChoice { display_item_id: item.clone(), quantity: None }],
@@ -366,6 +371,7 @@ mod tests {
             SalesSelectionSessionId::new("s1"),
             SalesSelectionBookletId::new("book-1"),
         );
+
         let mut json = serde_json::to_value(session).unwrap();
         let object = json.as_object_mut().unwrap();
         for field in
@@ -373,6 +379,7 @@ mod tests {
         {
             object.remove(field);
         }
+
         let restored: SalesSelectionSession = serde_json::from_value(json).unwrap();
         assert!(restored.participant_id.is_empty());
         assert!(restored.voucher_code_hash.is_none());

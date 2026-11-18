@@ -36,6 +36,7 @@ pub(super) async fn ensure(db: &Database) -> Result<()> {
             ],
         ),
     ];
+
     for (collection, indexes) in definitions {
         db.collection::<Document>(collection).create_indexes(indexes).await?;
     }

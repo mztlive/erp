@@ -101,6 +101,7 @@ impl SalesCommandReceipt {
         if key.trim().is_empty() {
             return Err(Error::ValidationError("操作号不能为空".to_string()));
         }
+
         let receipt = Self {
             base: BaseModel::new(id),
             schema_version: 1,
@@ -190,6 +191,7 @@ impl SalesCommandReceipt {
         {
             return Err(Error::Internal("销售命令回执与业务对象不一致".to_string()));
         }
+
         if self.fingerprint != fingerprint {
             return Err(Error::ConflictError("同一操作号已用于不同的销售命令".to_string()));
         }
@@ -228,6 +230,7 @@ mod tests {
                     &CommandFingerprint::from_parts(["raw-key".into()]),
                 )
                 .unwrap();
+
             assert!(matches!(
                 receipt.matches(
                     "command",
@@ -239,6 +242,7 @@ mod tests {
                 ),
                 Err(Error::ConflictError(_))
             ));
+
             assert!(
                 receipt
                     .matches(
@@ -289,6 +293,7 @@ mod tests {
                         .is_err()
                 );
             }
+
             let serialized = serde_json::to_string(&receipt).unwrap();
             assert!(!serialized.contains("raw-key"));
             assert_eq!(serde_json::from_str::<SalesCommandReceipt>(&serialized).unwrap(), receipt);
@@ -335,6 +340,7 @@ mod tests {
             receipt
                 .matches("command", "actor", &receipt.action, scope, &"a".repeat(64), &expected_key_hash)
                 .unwrap();
+
             receipt.idempotency_key_hash = CommandFingerprint::from_parts(["different-key".into()]);
             receipt.validate().unwrap();
             for fingerprint in ["a".repeat(64), "b".repeat(64)] {

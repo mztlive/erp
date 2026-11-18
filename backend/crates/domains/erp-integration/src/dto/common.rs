@@ -127,6 +127,7 @@ pub(crate) fn normalize_handler_filters(
     let handler = handler_user_ids.as_ref().map(application_core::QueryIds::as_slice).unwrap_or(&[]).to_vec();
     let operator =
         operator_user_ids.as_ref().map(application_core::QueryIds::as_slice).unwrap_or(&[]).to_vec();
+
     reject_me_ids(&handler, "当前处理人")?;
     reject_me_ids(&operator, "历史处理人")?;
     Ok((handler, operator))

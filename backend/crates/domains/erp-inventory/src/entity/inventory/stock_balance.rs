@@ -94,6 +94,7 @@ impl StockBalance {
         {
             return Err(Error::from("可用数量必须等于账面现存减去有效预占"));
         }
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             warehouse_id: data.warehouse_id,
@@ -130,6 +131,7 @@ impl StockBalance {
             available,
             "账面现存、有效预占与可用数量均不得为负",
         )?;
+
         self.on_hand_quantity = on_hand;
         self.reserved_quantity = reserved;
         self.available_quantity = available;

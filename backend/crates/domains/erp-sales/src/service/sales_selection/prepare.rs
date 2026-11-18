@@ -45,6 +45,7 @@ impl SalesSelectionService {
             .sales_selection_booklets()
             .list_filtered(None, None, Some("PUBLISHED"), None, &mut executor)
             .await?;
+
         let mut handled = 0_u32;
         let mut skipped_legacy = 0_u32;
         for mut booklet in published {
@@ -55,10 +56,12 @@ impl SalesSelectionService {
             if !booklet.is_expired(now) {
                 continue;
             }
+
             booklet.close(now, "system")?;
             self.db.sales_selection_booklets().update(&mut booklet, &mut executor).await?;
             handled = handled.saturating_add(1);
         }
+
         if skipped_legacy > 0 {
             tracing::warn!(skipped_legacy, "跳过缺少销售负责人或业务组织的历史选品册");
         }
@@ -108,9 +111,11 @@ impl SalesSelectionService {
         if kind.reuses_current_batch() {
             return self.load_batch_pool(booklet).await;
         }
+
         let as_of = BusinessDate::today();
         let facts = self.collect_facts(booklet, catalog, as_of).await?;
         ensure_pool_size(&facts)?;
+
         self.prepare_progress(booklet, PrepareStage::Images, 0).await?;
         self.snapshot_facts(facts, &booklet.base.id, batch_id, images).await
     }
@@ -244,6 +249,7 @@ impl SalesSelectionService {
         if !req.kind.reuses_current_batch() {
             members = pool_members_of(&booklet.base.id, batch_id, snapshots, booklet);
         }
+
         if !booklet.form.is_package() {
             return Ok((single_items(booklet, batch_id, snapshots)?, members, Vec::new()));
         }
@@ -278,6 +284,7 @@ pub(super) fn apply_reprepare_request(
     } else {
         booklet.pool_source.clone()
     };
+
     let tiers = if req.tiers.is_empty() {
         booklet.tiers.clone()
     } else {
@@ -294,6 +301,7 @@ pub(super) fn apply_reprepare_request(
             })
             .collect()
     };
+
     Ok(booklet.apply_reprepare_rules(pool_source, tiers)?)
 }
 
@@ -477,11 +485,13 @@ async fn package_items(
         .await
         .map_err(|_| Error::selection_prepare_failed("套餐搜索执行异常"))?
         .map_err(|error| Error::selection_prepare_failed(error.to_string()))?;
+
         occupied.extend(generated.iter().map(|package| package.combination_key()));
         packages.extend(generated);
         reports.append(&mut report);
         service.prepare_progress(booklet, PrepareStage::Search, reports.len() as u32).await?;
     }
+
     let booklet_id = SalesSelectionBookletId::new(booklet.base.id.clone());
     let mut items = Vec::with_capacity(packages.len());
     for package in packages {

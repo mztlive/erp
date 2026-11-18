@@ -51,6 +51,7 @@ impl CurrentWorkRepository<'_> {
                 executor,
             )
             .await?;
+
         Ok(CurrentWorkTasks {
             tasks: self.current_approvals(tasks, &mut approval_nodes, executor).await?,
             approval_nodes,
@@ -73,6 +74,7 @@ impl CurrentWorkRepository<'_> {
         if order.current_revision_id().is_none() {
             return Ok(objects);
         }
+
         let purchases =
             self.db.purchase_orders().find_many(doc! { "sales_order_id": sale }, executor).await?;
         let purchase_ids = purchases.into_iter().map(|row| row.base.id).collect::<Vec<_>>();
@@ -80,6 +82,7 @@ impl CurrentWorkRepository<'_> {
         let deliveries = self.db.deliveries().find_many(doc! { "sales_order_id": sale }, executor).await?;
         objects.push(object_filter("delivery", deliveries.into_iter().map(|row| row.base.id).collect()));
         self.fulfillment_objects(&purchase_ids, &mut objects, executor).await?;
+
         let accounts =
             self.db.receivable_accounts().find_many(doc! { "sales_order_id": sale }, executor).await?;
         objects

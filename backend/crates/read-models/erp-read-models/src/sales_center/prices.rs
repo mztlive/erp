@@ -60,6 +60,7 @@ pub(crate) async fn enrich_line_prices(
     }
     let revisions = db.sku_revisions().find_by_ids(&ids.into_iter().collect::<Vec<_>>(), executor).await?;
     let revisions = revisions.into_iter().map(|revision| (revision.base.id.clone(), revision)).collect();
+
     for line in lines {
         line.reference_prices = line
             .sku_id
@@ -98,6 +99,7 @@ pub(crate) async fn revision_line_prices(
             executor,
         )
         .await?;
+
     let mut views = lines
         .iter()
         .map(|line| {
@@ -110,6 +112,7 @@ pub(crate) async fn revision_line_prices(
         })
         .collect::<Result<Vec<_>>>()?;
     enrich_line_prices(db, &mut views, executor).await?;
+
     let revision_ids =
         lines.iter().map(|line| line.sales_order_revision_id.to_string()).collect::<HashSet<_>>();
     let revisions = db
@@ -119,6 +122,7 @@ pub(crate) async fn revision_line_prices(
     let order_ids =
         revisions.iter().map(|revision| revision.sales_order_id.to_string()).collect::<HashSet<_>>();
     enrich_inquiry_prices(db, &mut views, &order_ids.into_iter().collect::<Vec<_>>(), executor).await?;
+
     Ok(views.iter().map(|line| (line.id.clone(), SalesLinePrices::from(line))).collect())
 }
 
@@ -138,6 +142,7 @@ pub(crate) async fn enrich_inquiry_prices(
     if order_ids.is_empty() || !lines.iter().any(|line| line.procurement_price_basis.is_none()) {
         return Ok(());
     }
+
     let sources = inquiry_sources_by_orders(db, order_ids, executor).await?;
     for line in lines {
         if let Some(price) = inquiry_price(
@@ -238,6 +243,7 @@ mod tests {
         data.sales_visible_price_gross = Some(Amount::from_str("99.00").unwrap());
         let current = SkuRevision::new(SkuRevisionId::new("current"), data).unwrap();
         let revisions = [(old.base.id.clone(), old), (current.base.id.clone(), current)].into();
+
         let prices = reference_prices_for(&sku, &locked, &revisions).unwrap();
         assert_eq!(prices.sales_visible_price_gross.unwrap().to_string(), "10.00");
         assert_eq!(prices.bulk_price_gross.unwrap().to_string(), "8.00");
@@ -258,6 +264,7 @@ mod tests {
         assert_eq!(original_price(Some(&prices), Some(Dropship)), prices.sales_visible_price_gross);
         assert_eq!(original_price(Some(&prices), None), None);
         assert_eq!(original_price(None, Some(Bulk)), None);
+
         prices.bulk_price_gross = None;
         assert_eq!(original_price(Some(&prices), Some(Bulk)), None);
         prices.bulk_price_gross = Some("0".parse().unwrap());
@@ -270,6 +277,7 @@ mod tests {
         use erp_core::ids::{CustomerAccountId, SalesOrderLineId};
         use erp_sales::entity::sales_inquiry::InquirySupplyPrice;
         use erp_sales::entity::sales_order::inquiry_source::InquirySalesLineBinding;
+
         let sku = SkuId::new("sku");
         let revision = SkuRevisionId::new("locked");
         let other_sku = SkuId::new("other");
@@ -300,6 +308,7 @@ mod tests {
                 allocations: Vec::new(),
             }],
         };
+
         let read = |line, sku, revision, basis, source: &SalesOrderInquirySource| {
             inquiry_price(line, sku, revision, basis, std::slice::from_ref(source))
         };
@@ -314,11 +323,13 @@ mod tests {
             read("line", Some(&sku), Some(&revision), Some(SalesProcurementPriceBasis::Bulk), &source),
             None
         );
+
         source.lines[0].price.unit_price_gross = Some("0".parse().unwrap());
         assert_eq!(
             read("line", Some(&sku), Some(&revision), None, &source),
             source.lines[0].price.unit_price_gross
         );
+
         source.lines[0].price.unit_price_gross = None;
         assert_eq!(read("line", Some(&sku), Some(&revision), None, &source), None);
     }

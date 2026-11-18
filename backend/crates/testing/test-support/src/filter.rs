@@ -78,6 +78,7 @@ mod tests {
     fn conjunction_and_disjunction_keep_empty_sets_distinct() {
         assert!(matches_filter(&doc! {}, &json!({"id":"a"})));
         assert!(!matches_filter(&doc! {"$expr":false}, &json!({"id":"a"})));
+
         let query = doc! {"$and":[{"id":{"$in":["a","b"]}}, {"$or":[{"org":"one"},{"owner":"me"}]}]};
         assert!(matches_filter(&query, &json!({"id":"a","owner":"me"})));
         assert!(!matches_filter(&query, &json!({"id":"c","owner":"me"})));

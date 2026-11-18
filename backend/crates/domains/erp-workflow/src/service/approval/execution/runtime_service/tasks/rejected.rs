@@ -90,11 +90,13 @@ async fn close_instance_tasks(
             return Ok(());
         }
         let ids = page_execution_ids(&executions, instance_id, cursor)?;
+
         let tasks = store.open_tasks(&ids, executor).await?;
         let ended = close_page_tasks(tasks, &ids, actor_id, now)?;
         if !ended.is_empty() {
             store.persist(&ended, executor).await?;
         }
+
         cursor = executions.last().map(|execution| execution.execution_no);
     }
 }
@@ -306,6 +308,7 @@ mod tests {
         )
         .await
         .unwrap();
+
         let tasks = store.tasks.lock().unwrap().clone();
         assert_eq!(tasks[0].status, WorkItemStatus::Completed);
         for task in &tasks[1..3] {
@@ -315,12 +318,14 @@ mod tests {
         }
         assert_eq!(tasks[3].status, WorkItemStatus::Open, "同单据的兄弟实例不能关闭");
         assert_eq!(tasks[4].status, WorkItemStatus::Open, "非审批任务不能关闭");
+
         let calls = store.calls.lock().unwrap().clone();
         assert_eq!(
             calls.iter().map(|(name, _)| *name).collect::<Vec<_>>(),
             ["page", "read", "persist", "page", "read", "persist", "page"]
         );
         assert!(calls.iter().all(|(_, identity)| *identity == executor_id));
+
         close_instance_tasks(
             &store,
             &ApprovalProcessInstanceId::new("rejected"),

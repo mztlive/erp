@@ -82,6 +82,7 @@ impl IntegrationCenterReadService {
         if let Some(id) = work_item_id {
             targets.push(TimelineTarget { resource_type: "work_item".into(), resource_id: id.to_string() });
         }
+
         let events = self.db.audit_logs().timeline_events(&targets, None, 50, executor).await?;
         Ok(events.into_iter().filter_map(IntegrationAuditView::from_log).collect())
     }
@@ -161,8 +162,10 @@ mod tests {
         .unwrap()
         .into();
         assert!(matches_failure(&task, &job));
+
         task.business_object_id = Some("another-connection".into());
         assert!(!matches_failure(&task, &job));
+
         task.business_object_id = Some("conn-1".into());
         task.id = "another-task".into();
         assert!(!matches_failure(&task, &job));
@@ -175,6 +178,7 @@ mod tests {
         job.start(Instant::from_unix_secs(10)).unwrap();
         job.mark_failed(Some("JD_VOP_TOKEN_UNAVAILABLE: 授权令牌已过期".into()), Instant::from_unix_secs(12))
             .unwrap();
+
         let view = ConnectionFailureView::from_job("conn-1", &job);
         assert_eq!(view.operation_label, "接口健康检查");
         assert_eq!(view.job_number.as_deref(), Some(job.job_no.as_str()));
@@ -194,10 +198,12 @@ mod tests {
                 Some("job_id=private-id".into()),
             )
             .unwrap();
+
         let view = IntegrationAuditView::from_log(log.clone()).unwrap();
         assert_eq!(view.action, "创建集成异常待办");
         let json = serde_json::to_string(&view).unwrap();
         assert!(!json.contains("private-id"));
+
         let mut legacy = log;
         legacy.structured_event = None;
         assert!(IntegrationAuditView::from_log(legacy).is_none());
@@ -227,6 +233,7 @@ mod tests {
             connection_failure: None,
             audit_history: vec![],
         };
+
         let json = serde_json::to_value(view).unwrap();
         assert_eq!(json["id"], "error-1");
         assert_eq!(json["error_class"], "auth_signature");

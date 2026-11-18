@@ -30,9 +30,7 @@ mod tests {
         let unix_secs = chrono::DateTime::parse_from_rfc3339("2026-08-23T00:00:00+08:00")
             .expect("测试时间合法")
             .timestamp();
-
         let date = business_date_of(Instant::from_unix_secs(unix_secs)).expect("业务日期合法");
-
         assert_eq!(date.to_string(), "2026-08-23");
     }
     /// 新依据 ID 只接受销售单加 SHA-256，不兼容旧供应商拼接形式。

@@ -32,6 +32,7 @@ impl OrderTree {
     pub fn merge_tracking(&self, next: Self, sources: &[TrackingSourceLine]) -> Result<Self> {
         let lines = self.tracking_lines(sources)?;
         self.validate(&lines)?;
+
         let mut next = next;
         next.version = if self.nodes == next.nodes && self.root_order_no == next.root_order_no {
             self.version
@@ -67,6 +68,7 @@ impl OrderTree {
             .iter()
             .find(|node| node.external_order_no == self.root_order_no)
             .ok_or_else(|| Error::ValidationError("供应商订单缺少原根节点".into()))?;
+
         let mut seen = BTreeMap::new();
         for source in sources {
             let line = root

@@ -65,6 +65,7 @@ pub async fn append(
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::Internal("参与记录必须使用活动事务".into()));
     }
+
     mongo_ops::update_one(
         &db.collection::<Document>(REVISIONS),
         doc! { "_id": &participant.participant_user_id },

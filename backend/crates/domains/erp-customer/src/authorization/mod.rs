@@ -83,6 +83,7 @@ impl AccessMapping for CustomerMapping {
         if fact == &AccessFact::Collaborating {
             return Ok(QueryFragment::Match(doc! {"$expr": false}));
         }
+
         let date = business_date(context.as_of)
             .map_err(|error| IdentityError::ValidationError(error.to_string()))?;
         let mut filter = doc! {
@@ -95,6 +96,7 @@ impl AccessMapping for CustomerMapping {
         {
             filter = active_window_filter(&date, Some(filter));
         }
+
         let mut pipeline = Vec::new();
         match fact {
             AccessFact::Owned | AccessFact::HistoryParticipant => {

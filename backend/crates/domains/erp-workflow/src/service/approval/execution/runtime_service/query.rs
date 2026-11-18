@@ -266,6 +266,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     ) -> Result<RuntimeHistoryPage> {
         self.ensure_ordinary_runtime_read_stage(actor, instance_id, executor).await?;
         let subject = self.load_runtime_read_subject_stage(instance_id, executor).await?;
+
         let fetch_limit = limit.saturating_add(1);
         let rows = self
             .db
@@ -278,6 +279,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
                 executor,
             )
             .await?;
+
         let items = rows.iter().map(history_item_from_execution).collect();
         let mut page = history_page_from(items, limit);
         if after_execution_no.is_none() {
@@ -326,6 +328,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     ) -> Result<RuntimeRecoveryOptionsView> {
         self.ensure_management_runtime_read_stage(actor, instance_id, executor).await?;
         let subject = self.load_runtime_read_subject_stage(instance_id, executor).await?;
+
         let blocked = subject.instance.status == ApprovalProcessInstanceStatus::Blocked;
         let candidates = recovery_options_for(blocked, subject.instance.blocker_code);
         let actions = authorized_recovery_actions(
@@ -337,6 +340,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             executor,
         )
         .await?;
+
         let hints = self.resume_version_hints(&subject, executor).await?;
         Ok(RuntimeRecoveryOptionsView {
             instance_id: instance_id.to_string(),
@@ -437,6 +441,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .find_by_process_instance_id(instance_id.as_ref(), executor)
             .await?
             .ok_or_else(hidden_not_found)?;
+
         let document_type = crate::entity::approval_integration::resolve_runtime_document_type(
             instance.subject.subject_kind(),
             instance.process_kind,
@@ -453,6 +458,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         {
             return Err(hidden_not_found());
         }
+
         let current_execution = self.db.bpm_workflow().find_current_execution(&instance_id, executor).await?;
         if !current_execution_matches_instance(&instance, current_execution.as_ref()) {
             return Err(hidden_not_found());

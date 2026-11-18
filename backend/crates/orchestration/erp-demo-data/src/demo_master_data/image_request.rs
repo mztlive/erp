@@ -125,6 +125,7 @@ mod tests {
             effective_from: BusinessDate::today(),
             effective_to: None,
         };
+
         let input = sku_input(&sku, &revision).unwrap();
         assert_eq!(input.sku_id.as_ref().map(AsRef::as_ref), Some("sku"));
         assert_eq!(
@@ -148,6 +149,7 @@ mod tests {
             )
         );
         assert_eq!(input.spec_entries[0].attribute_value_code, "蓝色");
+
         sku.specification_signature = "broken|signature".into();
         assert!(sku_input(&sku, &revision).is_err());
     }

@@ -21,6 +21,7 @@ impl DangaoshushuConnector {
             .transport
             .send(Request::Read { path: "/dsapi/product/get_cats_info", parameters: vec![] })
             .await?;
+
         let mut names = BTreeMap::new();
         for category in value.as_array().ok_or_else(mapping)? {
             let category_id = id(&category["id"])?;
@@ -52,6 +53,7 @@ impl DangaoshushuConnector {
         ) {
             return Ok(());
         }
+
         let names = self.category_names().await?;
         for item in items {
             if let OfferChange::Upsert(offer) = &mut item.value {
@@ -121,11 +123,13 @@ mod tests {
             assert_eq!(offer.details.category_name.as_deref(), Some("下午茶甜品"));
         }
         assert_eq!(transport.requests.lock().unwrap().len(), 3);
+
         let OfferChange::Upsert(offer) = &page.page.items[0].value else { panic!("商品观察") };
         let Lookup::Found(current) = connector.offer(&offer.sku).await.unwrap() else {
             panic!("商品详情")
         };
         assert_eq!(current.value.details, offer.details);
+
         let requests = transport.requests.lock().unwrap();
         for index in [2, 4] {
             let Request::Read { path, parameters } = &requests[index] else { panic!("只读请求") };
@@ -169,6 +173,7 @@ mod tests {
                 SupplierFailureClass::MappingError
             );
         }
+
         let failure = error(SupplierFailureClass::TransientFailure, "TEST_NETWORK", "分类读取失败");
         let (connector, _) = recording_connector(vec![Ok(listed()), Ok(detail()), Err(failure.clone())]);
         assert_eq!(connector.scan_with_details(&scan()).await.unwrap_err(), failure);

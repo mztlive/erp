@@ -99,6 +99,7 @@ impl InquiryProcurementView {
                     && row.published_at <= completed_at
             })?
             .clone();
+
         let draft = requirement_view(&requirement.data);
         Some(Self {
             base: inquiry.base.clone(),

@@ -108,14 +108,17 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         if current.base.version != context.expected_task_version {
             return Err(Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string()));
         }
+
         let allow_current_owner = current.owner_user_id.as_deref() == Some(context.target_user_id.as_str());
         self.check_reassignment(&context, &current, allow_current_owner, executor).await?;
         let current = self.move_reassignment(&context, current, executor).await?;
         self.check_reassignment(&context, &current, true, executor).await?;
+
         if let Some(audit) = &context.purchase_order_audit {
             self.audit.persist(audit, executor).await?;
         }
         self.audit.persist(&context.audit, executor).await?;
+
         let committed = WorkItemCommandReceipt::new(
             &context.receipt,
             WorkItemCommandResult::Reassigned {
@@ -127,6 +130,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             context.audit.id,
         )?;
         self.db.work_item_command_receipts().create(&committed, executor).await?;
+
         if let Some(evidence) = committed.invoice_grant(&current)? {
             append_event(&self.db, evidence, executor).await?;
         }
@@ -173,6 +177,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             )
             .await;
         }
+
         current.reassign(context.target_user_id.clone(), Instant::now())?;
         self.facts.reassign_integration_handler(&mut current, &context.target_user_id, executor).await?;
         self.db.work_items().update(&mut current, executor).await.map_err(|error| match error {

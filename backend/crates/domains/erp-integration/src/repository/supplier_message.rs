@@ -181,6 +181,7 @@ impl SupplierMessageConsumerRepositoryExt for Repository<'_, SupplierMessageCons
         {
             return Ok(None);
         }
+
         mongo_ops::find_one_and_update_pipeline(
             &self.collection(),
             doc! {

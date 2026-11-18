@@ -118,6 +118,7 @@ impl CatalogPortalService {
         executor: &mut dyn Executor,
     ) -> Result<NewProductDraft> {
         self.validate_for_submission(&draft.draft, terms, executor).await?;
+
         draft.submit(
             command.expected_version,
             command.submission_id,
@@ -125,6 +126,7 @@ impl CatalogPortalService {
             command.actor_id,
             Instant::now(),
         )?;
+
         self.db.new_product_drafts().update(&mut draft, executor).await?;
         Ok(draft)
     }
@@ -144,6 +146,7 @@ impl CatalogPortalService {
     ) -> Result<()> {
         input.validate_submission()?;
         self.ensure_selected_dictionaries(input, executor).await?;
+
         for sku in &input.skus {
             terms.validate(&sku.supply_terms, executor).await?;
             if let Some(packaging) = &sku.packaging {
@@ -212,6 +215,7 @@ impl CatalogPortalService {
         let mut draft = self.load(&command.draft_id, executor).await?;
         let submission = current_submission_id(&draft)?;
         draft.mark_effective(&submission, command, Instant::now())?;
+
         self.record_category_mapping(&draft, executor).await?;
         self.db.new_product_drafts().update(&mut draft, executor).await?;
         Ok(draft)

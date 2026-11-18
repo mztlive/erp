@@ -113,10 +113,12 @@ mod tests {
                 assert_eq!(ScopeVersion::new(None, empty).require_for_page(page), Ok(()));
                 assert_eq!(ScopeVersion::new(Some(""), empty).require_for_page(page), Ok(()));
             }
+
             assert_eq!(ScopeVersion::new(None, empty).require_for_page(2), Err(ScopeVersionError::Missing));
             assert_eq!(ScopeVersion::new(Some("v1"), empty).require_for_page(2), Ok(()));
             assert_eq!(ScopeVersion::new(Some(" "), empty).require_for_page(2), Ok(()));
         }
+
         assert_eq!(
             ScopeVersion::new(Some(""), EmptyScopeVersion::Missing).require_for_page(2),
             Err(ScopeVersionError::Missing)
@@ -132,6 +134,7 @@ mod tests {
             assert_eq!(ScopeVersion::new(Some("v0"), empty).verify("v1"), Err(ScopeVersionError::Changed));
             assert_eq!(ScopeVersion::new(Some(" v1 "), empty).verify("v1"), Err(ScopeVersionError::Changed));
         }
+
         assert_eq!(ScopeVersion::new(Some(""), EmptyScopeVersion::Missing).verify("v1"), Ok(()));
         assert_eq!(
             ScopeVersion::new(Some(""), EmptyScopeVersion::Provided).verify("v1"),

@@ -41,6 +41,7 @@ impl PurchasePaymentRequestSubmissionSnapshot {
         {
             return Err(Error::from("只有来源和审批完整的付款申请提交可以冻结材料"));
         }
+
         Ok(Self {
             base: BaseModel::new(format!(
                 "payment-request-submission-{}-{}",

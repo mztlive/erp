@@ -93,6 +93,7 @@ mod tests {
         let mut json = serde_json::to_value(&account).unwrap();
         json.as_object_mut().unwrap().remove("last_reconciliation_risk_at");
         let mut legacy: SupplierDepositAccount = serde_json::from_value(json).unwrap();
+
         legacy.retain_legacy_reconciliation_risk().unwrap();
         legacy.base.updated_at = 50;
         assert!(legacy.ensure_reconciliation_risk_observed(Instant::from_unix_secs(20)).is_err());

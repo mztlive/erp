@@ -28,6 +28,7 @@ pub(super) async fn fulfillment_views(
     let Some(current_revision) = order.stable.current_revision_id.as_deref() else {
         return Ok((vec![], vec![]));
     };
+
     let lines = all_revision_lines(db, &PurchaseOrderId::new(&order.base.id), executor).await?;
     let current = lines
         .iter()
@@ -38,6 +39,7 @@ pub(super) async fn fulfillment_views(
     if order.purchase_type != PurchaseType::Physical {
         return Ok((api, vec![]));
     }
+
     let inbound = db
         .fulfillment()
         .qualified_received_totals_by_purchase_revision_line(&PurchaseOrderId::new(&order.base.id), executor)
@@ -47,6 +49,7 @@ pub(super) async fn fulfillment_views(
         return Err(Error::BusinessLogicError("已过账收货存在未定位的采购版本行，请核对原记录".into()));
     }
     let inbound = rollup_by_stable_key(&lines, &inbound).map_err(Error::Logic)?;
+
     let mut shipped = HashMap::<String, Decimal>::new();
     for (line, quantity) in shipped_rows(db, order, executor).await? {
         let total = shipped.entry(line).or_default();
@@ -58,6 +61,7 @@ pub(super) async fn fulfillment_views(
         .into_iter()
         .map(|(line, value)| Quantity::try_from(value).map(|quantity| (line, quantity)).map_err(Error::Logic))
         .collect::<Result<HashMap<_, _>>>()?;
+
     let quantities = quantity_views(&current, order.fulfillment_responsibility, &inbound, &shipped)?;
     Ok((api, quantities))
 }
@@ -73,6 +77,7 @@ async fn execution_views(
     if executions.is_empty() {
         return Ok(vec![]);
     }
+
     let root_ids = executions.iter().map(|execution| execution.base.id.clone()).collect::<Vec<_>>();
     let connections =
         executions.iter().map(|execution| execution.connection_id.clone()).collect::<HashSet<_>>();
@@ -86,6 +91,7 @@ async fn execution_views(
         .into_iter()
         .map(|connection| (connection.base.id.clone(), connection))
         .collect::<HashMap<_, _>>();
+
     let mut views = Vec::with_capacity(executions.len());
     for execution in executions {
         let connection = connections
@@ -112,6 +118,7 @@ fn quantity_views(
     for line in current.iter().filter(|line| line.line_type == PurchaseLineType::ItemService) {
         *occurrences.entry(purchase_line_stable_key(line)).or_default() += 1;
     }
+
     let zero = Quantity::try_from(Decimal::ZERO).map_err(Error::Logic)?;
     current
         .iter()
@@ -329,6 +336,7 @@ mod tests {
             execution.stage = stage;
             assert!(matches!(execution_view(&execution, None), Err(Error::NotFound(_))));
         }
+
         for evidence in ["request", "address", "create", "setup", "cancel", "superseded"] {
             let mut execution = execution();
             match evidence {
@@ -361,6 +369,7 @@ mod tests {
             }
             assert!(matches!(execution_view(&execution, None), Err(Error::Forbidden(_))));
         }
+
         for mismatch in ["order", "connection", "supplier"] {
             let mut root = root();
             match mismatch {
@@ -386,6 +395,7 @@ mod tests {
         });
         let mut expense = line("fee", "fee", "1");
         expense.line_type = PurchaseLineType::LogisticsFee;
+
         let views = quantity_views(
             &[manual, api, expense],
             FulfillmentResponsibility::SupplierDirect,
@@ -393,10 +403,12 @@ mod tests {
             &HashMap::from([("sales-a".into(), qty("2")), ("sales-b".into(), qty("4"))]),
         )
         .unwrap();
+
         assert_eq!(views.len(), 2);
         assert_eq!(views[0].line_id, "manual");
         assert_eq!(views[0].shipped_quantity, Some(qty("2")));
         assert_eq!(views[0].remaining_quantity, Some(qty("3")));
+
         assert_eq!(views[1].line_id, "api");
         assert_eq!(views[1].shipped_quantity, Some(qty("4")));
         assert_eq!(views[1].remaining_quantity, Some(qty("3")));
@@ -434,6 +446,7 @@ mod tests {
         assert!(views.iter().all(|view| view.shipped_quantity.is_none()
             && view.remaining_quantity.is_none()
             && view.blocker.is_some()));
+
         let mut missing = line("missing", "sales", "3");
         missing.quantity = None;
         let view = quantity_views(

@@ -112,6 +112,7 @@ impl CustomerService {
     ) -> Result<CustomerView> {
         req.validate()?;
         let (account, assignment) = prepare_new_customer(&req, actor.id())?;
+
         let service = self.clone();
         let actor = actor.clone();
         self.db
@@ -131,6 +132,7 @@ impl CustomerService {
         executor: &mut dyn Executor,
     ) -> Result<CustomerView> {
         self.access.require_candidate(actor, &account.base.id, executor).await?;
+
         self.accounts
             .account(actor.id(), executor)
             .await?
@@ -146,6 +148,7 @@ impl CustomerService {
         {
             return Err(Error::NotFound("主体不存在".into()));
         }
+
         let audit =
             self.audit.resource_log(actor.clone(), "customer.create", "customer", account.base.id.clone())?;
         self.persist_new_account(&account, &assignment, executor).await?;
@@ -220,6 +223,7 @@ impl CustomerService {
         executor: &mut dyn Executor,
     ) -> Result<CustomerView> {
         self.access.require_with(actor.clone(), &customer_permissions::UPDATE, id, executor).await?;
+
         let mut account = self
             .db
             .customer_accounts()
@@ -227,6 +231,7 @@ impl CustomerService {
             .await?
             .ok_or_else(|| Error::NotFound("客户不存在".into()))?;
         account.ensure_version(req.version).map_err(|error| Error::ConflictError(error.to_string()))?;
+
         account.update(
             CustomerAccountUpdate {
                 default_payment_term_id: FieldUpdate::from_optional_text(req.default_payment_term_id),
@@ -234,6 +239,7 @@ impl CustomerService {
             },
             actor.id(),
         )?;
+
         let audit = self.audit.resource_log(actor.clone(), "customer.update", "customer", id.to_owned())?;
         self.db.customer_accounts().update(&mut account, executor).await?;
         self.audit.persist(&audit, executor).await?;
@@ -314,6 +320,7 @@ pub(super) fn assemble_customer_views(
                 actor_user_id,
                 requested_scope,
             );
+
             let mut view = CustomerView::from_account_parts(
                 row.id,
                 row.party_id,
@@ -327,6 +334,7 @@ pub(super) fn assemble_customer_views(
             view.party_no = identity.map(|fact| fact.party_no.clone());
             view.legal_name = identity.and_then(|fact| fact.legal_name.clone());
             view.short_name = identity.and_then(|fact| fact.short_name.clone());
+
             view.owners = CustomerAssignment::owner_ids(assignments)
                 .into_iter()
                 .map(|user_id| CustomerOwnerView { user_name: account_names.get(&user_id).cloned(), user_id })
@@ -431,6 +439,7 @@ mod tests {
             },
         )
         .unwrap();
+
         let views = assemble_customer_views(
             vec![row],
             vec![identity],
@@ -439,6 +448,7 @@ mod tests {
             CustomerScope::Mine,
             [("actor-1".to_string(), "张三".to_string())].into_iter().collect(),
         );
+
         assert_eq!(views[0].party_no.as_deref(), Some("P-1"));
         assert_eq!(views[0].legal_name.as_deref(), Some("示例"));
         assert_eq!(views[0].owner_user_name.as_deref(), Some("张三"));

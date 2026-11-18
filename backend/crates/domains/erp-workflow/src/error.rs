@@ -398,6 +398,7 @@ mod tests {
             assert_eq!(super::known_duplicate_index_message(&format!(" {index}")), None);
             assert_eq!(super::known_duplicate_index_message(&index.to_ascii_uppercase()), None);
         }
+
         assert_eq!(super::known_duplicate_index_message(""), None);
         assert_eq!(super::known_duplicate_index_message("unknown_index"), None);
     }

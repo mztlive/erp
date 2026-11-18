@@ -52,6 +52,7 @@ impl SupplierApiOrderProcess {
             .load_connection(&execution.connection_id, &mut NoTransaction)
             .await?;
         let frozen = self.decode(execution)?;
+
         let result = self
             .runtime
             .observe_order_with_lines(
@@ -67,6 +68,7 @@ impl SupplierApiOrderProcess {
         if observed.value.reference.merchant_order_no != execution.base.id {
             return Err(Error::ConflictError("供应商订单与原采购执行身份不一致".into()));
         }
+
         let tree = observed
             .value
             .topology
@@ -83,10 +85,12 @@ impl SupplierApiOrderProcess {
         {
             return Err(Error::ConflictError("供应商当前根单与原创建单号不一致，已阻断确认".into()));
         }
+
         let budget = frozen.approved_budget.as_ref().ok_or_else(|| {
             Error::BusinessLogicError("原执行组缺少可核实的批准运费和商品预算，已阻断确认".into())
         })?;
         validate_leaf_budget(&tree, budget)?;
+
         let mut updated = execution.clone();
         updated.apply_observed_tree(tree, &frozen.lines)?;
         apply_confirmation_observations(&mut updated)?;
@@ -111,6 +115,7 @@ fn next_confirmation(execution: &mut ApiOrderExecution) -> Result<ConfirmOrder> 
         .ok_or_else(|| {
             Error::BusinessLogicError("当前没有已经核实且可首次确认的子单，请查询原结果".into())
         })?;
+
     let order = OrderReference {
         merchant_order_no: execution.base.id.clone(),
         external_order_no: target.external_order_no.clone(),
@@ -134,6 +139,7 @@ fn apply_confirmation_observations(execution: &mut ApiOrderExecution) -> Result<
             execution.observe_confirmation(&target, state)?;
         }
     }
+
     execution.stage =
         if execution.confirmations.values().any(|action| action.state == ConfirmationActionState::Rejected) {
             ApiOrderStage::Stopped
@@ -189,6 +195,7 @@ fn validate_leaf_budget(tree: &OrderTree, budget: &ApprovedExecutionBudget) -> R
             return Err(Error::BusinessLogicError("供应商子单费用不守恒，已阻断确认".into()));
         }
     }
+
     let approved =
         [budget.approved_goods, budget.approved_freight, budget.approved_other, budget.approved_total];
     if total.iter().zip(approved).any(|(actual, allowed)| *actual > allowed.to_decimal()) {
@@ -237,6 +244,7 @@ mod tests {
             approved_unit_price: "10".parse().unwrap(),
             attributes: vec![],
         };
+
         let root = OrderNode {
             external_order_no: "root".into(),
             parent_order_no: None,
@@ -263,6 +271,7 @@ mod tests {
             leaf.amounts = Some(amounts("10", "1", "0", "11"));
             nodes.push(leaf);
         }
+
         let mut execution = ApiOrderExecution::queued(
             "group".into(),
             "purchase".into(),
@@ -283,8 +292,10 @@ mod tests {
         let (execution, _) = fixture();
         let mut tree = execution.order_tree.unwrap();
         validate_leaf_budget(&tree, &budget()).unwrap();
+
         tree.nodes[0].amounts = Some(amounts("2000", "200", "0", "2200"));
         validate_leaf_budget(&tree, &budget()).unwrap();
+
         tree.nodes[1].amounts = Some(amounts("9", "2", "0", "11"));
         let error = validate_leaf_budget(&tree, &budget()).unwrap_err();
         assert!(error.to_string().contains("对应批准范围"));
@@ -297,6 +308,7 @@ mod tests {
         let mut missing = original.clone();
         missing.nodes[1].amounts = None;
         assert!(validate_leaf_budget(&missing, &budget()).is_err());
+
         for field in ["goods", "freight", "service"] {
             let mut tree = original.clone();
             let amount = tree.nodes[1].amounts.as_mut().unwrap();
@@ -307,6 +319,7 @@ mod tests {
             }
             assert!(validate_leaf_budget(&tree, &budget()).is_err());
         }
+
         for amount in
             [amounts("9", "1", "1", "11"), amounts("10", "1", "0", "10"), amounts("-1", "1", "0", "0")]
         {
@@ -322,6 +335,7 @@ mod tests {
         let first = next_confirmation(&mut execution).unwrap();
         assert_eq!(first.order.external_order_no, "child-a");
         assert!(execution.begin_confirmation(&first).unwrap());
+
         let mut recovered: ApiOrderExecution =
             serde_json::from_str(&serde_json::to_string(&execution).unwrap()).unwrap();
         apply_confirmation_observations(&mut recovered).unwrap();
@@ -329,12 +343,14 @@ mod tests {
         assert_eq!(recovered.confirmations["child-a"].state, ConfirmationActionState::SentUnknown);
         let second = next_confirmation(&mut recovered).unwrap();
         assert_eq!(second.order.external_order_no, "child-b");
+
         recovered.order_tree.as_mut().unwrap().nodes[1].confirmation = Some(ConfirmationState::Confirmed);
         apply_confirmation_observations(&mut recovered).unwrap();
         assert_eq!(recovered.stage, ApiOrderStage::ConfirmOrder);
         assert_eq!(recovered.confirmations["child-a"].request, first);
         assert!(recovered.begin_confirmation(&second).unwrap());
         assert!(next_confirmation(&mut recovered).is_err());
+
         recovered.order_tree.as_mut().unwrap().nodes[2].confirmation = Some(ConfirmationState::Confirmed);
         apply_confirmation_observations(&mut recovered).unwrap();
         assert_eq!(recovered.stage, ApiOrderStage::Observe);

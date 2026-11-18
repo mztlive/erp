@@ -253,9 +253,11 @@ impl QueryFilter for IntegrationErrorTaskFilter {
         if let Some(owner_role) = &self.owner_role {
             filter.insert("owner_role", owner_role);
         }
+
         insert_id_in(&mut filter, "owner_user_id", &self.handler_user_ids);
         insert_id_in(&mut filter, "completed_by", &self.operator_user_ids);
         insert_id_in(&mut filter, "owner_org_unit_id", &self.owner_org_unit_ids);
+
         keyword_filter(
             &mut filter,
             self.q.as_deref(),
@@ -365,11 +367,13 @@ impl QueryFilter for ReconciliationDifferenceFilter {
             filter.insert("difference_type", difference_type);
         }
         insert_time_range(&mut filter, "created_at", self.created_at_from, self.created_at_to);
+
         insert_id_in(&mut filter, "owner_user_id", &self.handler_user_ids);
         insert_id_in(&mut filter, "owner_org_unit_id", &self.owner_org_unit_ids);
         if let Some(ids) = &self.operator_difference_ids {
             filter.insert("id", doc! { "$in": ids });
         }
+
         keyword_filter(
             &mut filter,
             self.q.as_deref(),
@@ -498,6 +502,7 @@ fn error_label_filter(filter: &mut Document, q: Option<&str>) {
     let Some(q) = q else {
         return;
     };
+
     let aliases = [
         (ErrorClass::CapabilityGap, "能力不足"),
         (ErrorClass::MappingError, "参数/映射错误"),
@@ -513,6 +518,7 @@ fn error_label_filter(filter: &mut Document, q: Option<&str>) {
         .filter(|(class, label)| label.contains(q) || class.label().contains(q))
         .map(|(class, _)| class.as_str())
         .collect::<Vec<_>>();
+
     if let Ok(clauses) = filter.get_array_mut("$or") {
         clauses.push(doc! { "error_class": { "$in": codes } }.into());
     }
@@ -631,10 +637,12 @@ mod keyword_tests {
             sort_by: None,
             sort_ascending: false,
         };
+
         let document = filter.to_doc();
         assert_eq!(document.get_str("status").unwrap(), "pending");
         assert!(document.contains_key("deleted_at"));
         assert!(document.contains_key("owner_user_id"));
+
         let clauses = document.get_array("$or").unwrap();
         assert!(
             clauses.iter().any(|clause| clause.as_document().unwrap().contains_key("last_attempt_summary"))
@@ -662,6 +670,7 @@ mod keyword_tests {
             sort_by: None,
             sort_ascending: false,
         };
+
         let document = filter.to_doc();
         assert_eq!(
             document.get_document("owner_user_id").unwrap().get_array("$in").unwrap()[0].as_str(),

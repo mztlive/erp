@@ -42,6 +42,7 @@ pub async fn load_customer_acceptance_progress(
     if order.business_type != BusinessType::GoodsService {
         return Ok(None);
     }
+
     let revision_id = order
         .stable
         .current_revision_id
@@ -62,6 +63,7 @@ pub async fn load_customer_acceptance_progress(
         .sales_order_goods_service_line_revisions()
         .list_by_revision_line_ids(&revision_line_ids, session)
         .await?;
+
     let deliveries = db.fulfillment().list_acceptance_eligible_deliveries(sales_order_id, session).await?;
     let delivery_ids: Vec<erp_core::ids::DeliveryId> =
         deliveries.iter().map(|delivery| delivery.base.id.clone().into()).collect();
@@ -76,6 +78,7 @@ pub async fn load_customer_acceptance_progress(
         .into_iter()
         .filter(ServiceFulfillment::is_acceptance_eligible)
         .collect::<Vec<_>>();
+
     let delivery_allocations = db
         .fulfillment()
         .allocations_by_fulfillment_fact(
@@ -100,6 +103,7 @@ pub async fn load_customer_acceptance_progress(
             session,
         )
         .await?;
+
     let lines = build_line_eligibilities(&EligibilityGroupSources {
         revision_lines: &revision_lines,
         goods_service_lines: &goods_service_lines,

@@ -204,6 +204,7 @@ fn job_domain(permission: &Permission) -> IdentityResult<Option<&'static str>> {
             return Ok(Some(domain));
         }
     }
+
     if [
         bulk_job::BACKGROUND_JOB_LIST,
         bulk_job::BACKGROUND_JOB_DETAIL,
@@ -254,11 +255,13 @@ mod tests {
             },
         )
         .unwrap();
+
         let facts = job_facts(&job, "background_job");
         assert_eq!(facts.owner_id, FactValue::Known(Some("owner".into())));
         assert_eq!(facts.id, job.base.id);
         assert_eq!(facts.version, job.base.version.to_string());
         assert_eq!(facts.resource, "background_job");
+
         let predicate = JobMapping(model()).predicate(&AccessFact::Owned, &context("owner"), None).unwrap();
         let QueryFragment::Match(document) = predicate else {
             panic!("本人范围应为真实发起人条件")
@@ -287,6 +290,7 @@ mod tests {
             assert_eq!(records.get_str("domain_job_type").unwrap(), domain);
             assert_eq!(job_domain(&context.permission).unwrap(), Some(domain));
         }
+
         let QueryFragment::Match(records) = JobMapping(model()).records(&context("reader"), None).unwrap()
         else {
             panic!("固定资料过滤必须为字段条件")

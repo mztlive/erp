@@ -92,6 +92,7 @@ impl NodeReplacementDraft {
         }
         let new_node_key =
             normalize_required(new_node_key, "节点键不能为空", NODE_KEY_MAX_LEN, "节点键过长")?;
+
         Ok(Self {
             existing_node_id,
             new_node_id,
@@ -245,6 +246,7 @@ impl DefinitionGraph {
         };
         let edge = self.unique_transition(current_node_key, event)?;
         edge.validate_shape()?;
+
         if decision == ApprovalDecision::Reject {
             if edge.to_node_key.as_deref().is_some_and(|key| key != self.definition.entry_node_key) {
                 return Err(ModelError::InvalidTransition("历史驳回连线必须指向入口"));
@@ -304,6 +306,7 @@ impl DefinitionGraph {
     ) -> ModelResult<Vec<ApprovalNodeDefinition>> {
         self.definition.ensure_mutable()?;
         let drafts = ordered_by_display_order(drafts, |draft| draft.display_order)?;
+
         let existing = self.nodes.iter().map(|node| (node.base.id.as_str(), node)).collect::<HashMap<_, _>>();
         let mut seen_existing = HashSet::new();
         let mut planned = Vec::with_capacity(drafts.len());
@@ -326,6 +329,7 @@ impl DefinitionGraph {
                 .with_rule(draft.assignee_rule.clone())?,
             );
         }
+
         ensure_unique_node_identities(&planned)?;
         Ok(planned)
     }
@@ -356,12 +360,14 @@ impl DefinitionGraph {
         let entry = ordered[0].node_key.clone();
         let mut definition = definition.clone();
         definition.set_entry_node_draft(entry, at)?;
+
         let transitions = build_linear_transitions(
             &ApprovalProcessDefinitionId::new(definition.base.id.clone()),
             &nodes,
             transition_ids,
             at,
         )?;
+
         let graph = Self { definition, nodes, transitions };
         graph.validate_linear()?;
         Ok(graph)
@@ -401,6 +407,7 @@ impl DefinitionGraph {
             created_by,
             at,
         )?;
+
         Self::rebuild_draft(&definition, nodes, transition_ids, at)
     }
 }
@@ -480,6 +487,7 @@ pub fn copy_nodes_for_definition(
     if ordered.len() != identities.len() {
         return Err(ModelError::InvalidField("复制节点身份数量不匹配"));
     }
+
     let mut copied = Vec::with_capacity(ordered.len());
     for (node, identity) in ordered.into_iter().zip(identities) {
         copied.push(
@@ -498,6 +506,7 @@ pub fn copy_nodes_for_definition(
             .with_rule(node.assignee_rule.clone())?,
         );
     }
+
     ensure_unique_node_identities(&copied)?;
     Ok(copied)
 }
@@ -553,6 +562,7 @@ fn replacement_identity(
     if !seen_existing.insert(existing_id.as_ref().to_string()) {
         return Err(ModelError::InvalidField("节点ID不能重复"));
     }
+
     let node = existing
         .get(existing_id.as_ref())
         .ok_or(ModelError::InvalidField("节点不属于当前草稿，不能跨定义引用或改写已删除节点"))?;
@@ -747,6 +757,7 @@ mod tests {
                 .plan_replacement_nodes(&[duplicate, second], Timestamp::from_unix_secs(2).unwrap(),)
                 .is_err()
         );
+
         assert!(
             graph
                 .plan_replacement_nodes(
@@ -825,6 +836,7 @@ mod tests {
             )
             .is_err()
         );
+
         let draft = NodeReplacementDraft::new(
             None,
             ApprovalNodeDefinitionId::new("id2"),

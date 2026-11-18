@@ -158,6 +158,7 @@ impl QueryFilter for ContractFilter {
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "contract_no", self.contract_no.as_deref());
+
         match (&self.customer_id, &self.customer_ids) {
             (Some(id), Some(ids)) => {
                 filter.insert(
@@ -173,6 +174,7 @@ impl QueryFilter for ContractFilter {
             },
             (None, None) => {},
         }
+
         if let Some(user) = &self.assigned_user_id {
             filter = doc! { "$and": [filter, { "$or": [
                 { "sales_owner_user_id": user }, { "shared_sales_user_ids": user }
@@ -275,6 +277,7 @@ impl ContractRepositoryExt for persistence_core::Repository<'_, Contract> {
         if let Some(scope) = &filter.access {
             scope.ensure_current(executor)?;
         }
+
         let result: persistence_core::Result<_> = async {
             let options = FindOptions::builder()
                 .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
@@ -298,11 +301,11 @@ impl ContractRepositoryExt for persistence_core::Repository<'_, Contract> {
                 executor,
             )
             .await?;
-
             Ok(PageResult { items, total: total as i64 })
         }
         .await;
         let result = result?;
+
         if let Some(scope) = &filter.access {
             scope.ensure_current(executor)?;
         }
@@ -660,6 +663,7 @@ mod tests {
         };
         let miss = miss.to_doc();
         assert!(miss.get_document("customer_id").unwrap().get_array("$in").unwrap().is_empty());
+
         let empty_candidates = ContractFilter {
             customer_id: Some("cust-1".into()),
             customer_ids: Some(Vec::new()),
@@ -752,6 +756,7 @@ mod tests {
             revision_doc.get_document("payment_term_snapshot").unwrap().get_str("payment_term_code").unwrap(),
             "NET30"
         );
+
         let contract_roundtrip: Contract =
             mongodb::bson::deserialize_from_document(document.clone()).unwrap();
         assert_eq!(contract_roundtrip, contract);
@@ -765,6 +770,7 @@ mod tests {
         let mut company = ContractFilter::default();
         company.require_existing_customers(vec!["existing-unassigned-customer".into()]);
         assert_eq!(company.customer_ids, Some(vec!["existing-unassigned-customer".into()]));
+
         let mut restricted =
             ContractFilter { customer_ids: Some(vec!["allowed".into()]), ..Default::default() };
         restricted.require_existing_customers(vec!["outside".into()]);

@@ -229,7 +229,6 @@ mod tests {
     #[test]
     fn connection_code_index_is_globally_unique() {
         let indexes = supplier_api_connection_indexes();
-
         let code_index = indexes
             .iter()
             .find(|index| {
@@ -244,7 +243,6 @@ mod tests {
     #[test]
     fn connection_supplier_status_index_covers_the_required_query() {
         let indexes = supplier_api_connection_indexes();
-
         assert!(indexes.iter().any(|index| {
             index.keys == doc! { "supplier_id": 1, "status": 1 }
                 && index.options.as_ref().and_then(|options| options.name.as_deref())
@@ -255,7 +253,6 @@ mod tests {
     #[test]
     fn capability_connection_capability_index_is_unique() {
         let indexes = supplier_api_capability_indexes();
-
         let capability_index = indexes
             .iter()
             .find(|index| {
@@ -274,11 +271,13 @@ mod tests {
             index.keys == doc! { "connection_id": 1, "operation_id": 1 }
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
+
         let health = health_check_run_indexes();
         assert!(health.iter().any(|index| index.keys
             == doc! {
                 "connection_id": 1, "created_at": -1, "id": -1
             }));
+
         let receipts = command_receipt_indexes();
         assert_eq!(receipts[0].options.as_ref().and_then(|options| options.unique), Some(true));
     }

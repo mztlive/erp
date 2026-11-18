@@ -71,6 +71,7 @@ impl EffectiveChangeIdentity {
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
         let state = load_purchase_source_state(db, &order, executor).await?;
+
         SalesChangeWithdrawal {
             approval: services.approvals.as_ref(),
             sales_change_order_id: &self.change_id,
@@ -79,6 +80,7 @@ impl EffectiveChangeIdentity {
         }
         .withdraw_affected(db, &state, executor)
         .await?;
+
         sync_procurement_after_sales_change(
             db,
             services.finance_responsibility.as_ref(),

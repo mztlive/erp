@@ -204,6 +204,7 @@ fn fixture(
             sent_delay_seconds: 0,
         }),
     });
+
     let oauth = Arc::new(FakeOAuth {
         reply,
         calls: AtomicUsize::new(0),
@@ -212,6 +213,7 @@ fn fixture(
         started: Notify::new(),
         release: Notify::new(),
     });
+
     let provider = provider(store.clone(), oauth.clone(), clock.clone());
     let process = JdVopCredentialProcess {
         crypto: CredentialCrypto::new(&settings()).unwrap(),
@@ -248,12 +250,14 @@ async fn read_before_refresh_window_is_read_only_then_due_refresh_rotates_once()
         "old-access"
     );
     assert_eq!(store.state.lock().await.writes, 0);
+
     due(&clock);
     let token = provider.access_token("credential").await.unwrap();
     assert_eq!(token.value_for("account", clock.now()).unwrap(), "new-access");
     assert_eq!(token.version(), "4");
     assert_eq!(oauth.calls.load(Ordering::SeqCst), 1);
     assert_eq!(process.status().await.unwrap().refresh_stage, "READY");
+
     assert!(provider.access_token("credential").await.is_ok());
     assert_eq!(oauth.calls.load(Ordering::SeqCst), 1);
 }
@@ -267,6 +271,7 @@ async fn independent_process_owners_share_one_refresh_and_sent_unknown_blocks_ol
     oauth.started.notified().await;
     assert!(second.access_token("credential").await.is_err());
     assert_eq!(oauth.calls.load(Ordering::SeqCst), 1);
+
     oauth.release.notify_one();
     assert!(task.await.unwrap().is_ok());
     assert!(second.access_token("credential").await.is_ok());
@@ -282,11 +287,13 @@ async fn cancelling_business_waiter_does_not_cancel_refresh_save_and_shutdown_wa
     oauth.started.notified().await;
     waiter.abort();
     assert!(waiter.await.is_err());
+
     let stopping = provider.clone();
     let settle = tokio::spawn(async move { stopping.settle_refresh().await });
     tokio::task::yield_now().await;
     assert!(!settle.is_finished());
     assert_eq!(process.status().await.unwrap().refresh_stage, "SENT_UNKNOWN");
+
     oauth.release.notify_one();
     settle.await.unwrap().unwrap();
     assert_eq!(process.status().await.unwrap().refresh_stage, "READY");
@@ -301,6 +308,7 @@ async fn network_unknown_never_reuses_old_access_or_resends_even_after_lease_and
     due(&clock);
     assert!(provider.access_token("credential").await.is_err());
     assert_eq!(process.status().await.unwrap().refresh_stage, "SENT_UNKNOWN");
+
     for time in [30_000, 100_000] {
         clock.0.store(time, Ordering::SeqCst);
         assert!(provider.access_token("credential").await.is_err());
@@ -322,6 +330,7 @@ async fn failed_save_remains_unknown_but_unknown_commit_recovers_only_persisted_
             assert_eq!(result.unwrap().value_for("account", clock.now()).unwrap(), "new-access");
             assert_eq!(process.status().await.unwrap().refresh_stage, "READY");
         }
+
         let _ = provider.access_token("credential").await;
         assert_eq!(oauth.calls.load(Ordering::SeqCst), 1);
     }
@@ -358,6 +367,7 @@ async fn expired_authorization_is_zero_http_including_expired_unsent_claim() {
                 )
                 .unwrap();
         }
+
         clock.0.store(input().expires_at, Ordering::SeqCst);
         assert!(provider.access_token("credential").await.is_err());
         assert!(process.status().await.unwrap().reauthorization_required);
@@ -395,14 +405,17 @@ async fn import_preview_is_zero_write_and_apply_requires_original_binding_and_ve
     assert!(process.preview(&input(), Some(1), None).await.is_ok());
     assert!(process.preview(&input(), None, None).await.is_err());
     assert_eq!(store.state.lock().await.writes, 0);
+
     let mut wrong = input();
     wrong.account_scope = "other".into();
     assert!(process.import(wrong, Some(1), None, &actor()).await.is_err());
     assert_eq!(store.state.lock().await.writes, 0);
+
     let status = process.import(input(), Some(1), None, &actor()).await.unwrap();
     assert_eq!(status.version, 2);
     assert_eq!(oauth.calls.load(Ordering::SeqCst), 0);
     assert!(process.import(input(), Some(1), None, &actor()).await.is_err());
+
     let mut invalid = input();
     invalid.expires_at = i64::MAX;
     assert!(process.preview(&invalid, Some(2), None).await.is_err());
@@ -417,9 +430,11 @@ async fn explicit_new_authorization_after_deadline_fences_old_refresh_response()
     let running = provider.clone();
     let task = tokio::spawn(async move { running.access_token("credential").await });
     oauth.started.notified().await;
+
     let status = process.status().await.unwrap();
     assert!(process.preview(&input(), Some(status.version), None).await.is_err());
     assert!(process.preview(&input(), Some(status.version), Some("new-authorization")).await.is_err());
+
     clock.0.store(status.refresh_deadline.unwrap() + 1, Ordering::SeqCst);
     assert!(process.preview(&input(), Some(status.version), Some("invalid\nevidence")).await.is_err());
     let mut imported = input();
@@ -428,6 +443,7 @@ async fn explicit_new_authorization_after_deadline_fences_old_refresh_response()
         .import(imported, Some(status.version), Some("new-authorization".into()), &actor())
         .await
         .unwrap();
+
     oauth.release.notify_one();
     let token = task.await.unwrap().unwrap();
     assert_eq!(token.value_for("account", clock.now()).unwrap(), "reauthorized-access");
@@ -440,12 +456,14 @@ async fn explicit_new_authorization_after_deadline_fences_old_refresh_response()
 async fn ciphertext_identity_and_expiry_substitution_fail_before_http_without_secret_output() {
     let (provider, process, store, oauth, clock) = fixture(Reply::Success, false);
     assert!(provider.access_token("other-reference").await.is_err());
+
     store.state.lock().await.record.as_mut().unwrap().expires_at = Instant::from_unix_secs(90_000);
     due(&clock);
     let error = provider.access_token("credential").await.err().unwrap();
     for secret in ["old-access", "old-refresh", "app-secret", "unit-only-independent"] {
         assert!(!error.summary.contains(secret));
     }
+
     let status: JdVopCredentialStatus = process.status().await.unwrap();
     let output = serde_json::to_string(&status).unwrap();
     assert_eq!(status.account_scope, "[REDACTED]");
@@ -462,6 +480,7 @@ fn encryption_uses_random_nonce_and_stable_secret_hmac_for_same_authorization() 
     assert_ne!(first.encrypted_payload, second.encrypted_payload);
     assert_eq!(first.payload_fingerprint, second.payload_fingerprint);
     assert!(!first.encrypted_payload.contains("old-access"));
+
     let mut record = SupplierCredential::new(
         "credential".into(),
         crypto.binding.clone(),
@@ -470,6 +489,7 @@ fn encryption_uses_random_nonce_and_stable_secret_hmac_for_same_authorization() 
     )
     .unwrap();
     assert!(crypto.open(&record).is_ok());
+
     record.account_scope = "other".into();
     assert!(crypto.open(&record).is_err());
 }
@@ -481,6 +501,7 @@ fn semantic_reauthorization_replay_accepts_new_nonce_without_changing_version_or
     let original = crypto.seal(input(), now).unwrap();
     let mut record =
         SupplierCredential::new("credential".into(), crypto.binding.clone(), original, now).unwrap();
+
     record
         .claim_refresh(
             1,
@@ -493,6 +514,7 @@ fn semantic_reauthorization_replay_accepts_new_nonce_without_changing_version_or
         )
         .unwrap();
     record.mark_refresh_sent(now).unwrap();
+
     let recovery = SupplierCredentialReauthorization {
         expected_version: record.base.version,
         new_authorization: true,
@@ -504,6 +526,7 @@ fn semantic_reauthorization_replay_accepts_new_nonce_without_changing_version_or
     let first = crypto.seal(input(), after).unwrap();
     assert!(record.reauthorize(first, &recovery, after).unwrap());
     let version = record.base.version;
+
     let repeated = crypto.seal(input(), Instant::from_unix_secs(1003)).unwrap();
     assert!(!record.reauthorize(repeated, &recovery, Instant::from_unix_secs(1003)).unwrap());
     assert_eq!(record.base.version, version);
@@ -543,6 +566,7 @@ async fn page_authorization_claim_send_exchange_and_rejection_never_deliver_old_
                 record.reject_authorization(clock.now()).unwrap();
             }
         }
+
         assert!(provider.access_token("credential").await.is_err());
         assert!(provider.current().await.is_err());
         assert_eq!(oauth.calls.load(Ordering::SeqCst), 0);
@@ -576,24 +600,29 @@ async fn configured_tokens_are_used_and_rotated_in_same_record_without_replay_ro
         .unwrap()
         .configure_tokens(payload.clone(), &command, clock.now())
         .unwrap();
+
     assert_eq!(
         reader.access_token("credential").await.unwrap().value_for("account", clock.now()).unwrap(),
         "page-access"
     );
     assert_eq!(oauth.calls.load(Ordering::SeqCst), 0);
+
     due(&clock);
     let rotated = reader.access_token("credential").await.unwrap();
     assert_eq!(*oauth.refresh_tokens.lock().await, vec!["page-refresh".to_string()]);
     assert_eq!(rotated.value_for("account", clock.now()).unwrap(), "new-access");
+
     let mut state = store.state.lock().await;
     let record = state.record.as_mut().unwrap();
     let plain = crypto.open(record).unwrap();
     assert_eq!(plain.refresh_token, "new-refresh");
     assert_eq!(record.expires_at.unix_secs(), plain.expires_at);
     assert!(record.manually_configured);
+
     assert!(!record.configure_tokens(payload, &command, clock.now()).unwrap());
     assert_eq!(crypto.open(record).unwrap().access_token, "new-access");
     drop(state);
+
     let restarted = provider(store, oauth.clone(), clock.clone());
     assert_eq!(
         restarted.access_token("credential").await.unwrap().value_for("account", clock.now()).unwrap(),

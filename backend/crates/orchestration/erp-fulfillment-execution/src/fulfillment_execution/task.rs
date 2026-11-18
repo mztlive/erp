@@ -418,6 +418,7 @@ pub async fn ensure_fulfillment_owner_eligible(
     ) {
         return Err(Error::Internal("履约对象未登记完整执行权限，请联系管理员修复后重试".into()));
     }
+
     let actor = AuditActor::new(owner_user_id.into(), owner_user_id.into(), AccountKind::Admin);
     let candidate = ObjectFacts {
         resource: "work_item".into(),
@@ -458,6 +459,7 @@ mod tests {
 
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
         let authorization = unavailable_authorization();
+
         let error = super::ensure_fulfillment_owner_eligible(
             &db,
             &authorization,
@@ -468,6 +470,7 @@ mod tests {
         .await
         .unwrap_err();
         assert!(matches!(error, crate::Error::ValidationError(_)));
+
         let error = super::ensure_fulfillment_owner_eligible(
             &db,
             &authorization,

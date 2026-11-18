@@ -23,6 +23,7 @@ impl CatalogRepository<'_> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::Internal("商品匹配写入必须使用事务".into()));
         }
+
         mongo_ops::update_one(
             &self.db.collection::<Document>("catalog_match_guards"),
             doc! {"_id": match_text(name)},
@@ -74,6 +75,7 @@ impl CatalogRepository<'_> {
         if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
             return Err(Error::Internal("商品匹配锁定必须使用事务".into()));
         }
+
         let result = mongo_ops::update_one(
             &self.db.collection::<Document>(collection),
             doc! {"id": id, "version": version, "deleted_at": NOT_DELETED_TIMESTAMP_BSON},
@@ -120,6 +122,7 @@ impl CatalogRepository<'_> {
         if self.db.product_revisions().exists(doc! {"match_name": null}, executor).await? {
             return Err(Error::ConflictError("商品匹配索引尚未初始化，请先执行商品名称回填后再入库".into()));
         }
+
         let revisions: Vec<ProductRevision> = mongo_ops::find_many(
             &self.db.product_revisions().collection(),
             doc! {"match_name": match_text(name), "deleted_at": NOT_DELETED_TIMESTAMP_BSON},
@@ -130,6 +133,7 @@ impl CatalogRepository<'_> {
         if revisions.len() > 1000 {
             return Err(Error::ConflictError("同名商品资料过多，请先整理公司商品".into()));
         }
+
         let ids: Vec<_> = revisions.iter().map(|r| r.product_id.to_string()).collect();
         let products: Vec<Product> = mongo_ops::find_many(
             &self.db.products().collection(),
@@ -141,6 +145,7 @@ impl CatalogRepository<'_> {
         if products.len() > 200 {
             return Err(Error::ConflictError("同名公司商品超过 200 项，请先整理重复商品".into()));
         }
+
         let current = self.current_product_revisions(&products, executor).await?;
         let key = match_text(name);
         let mut matches = Vec::new();
@@ -188,6 +193,7 @@ impl CatalogRepository<'_> {
         if let Some(claim) = self.db.sku_barcode_claims().find_by_id(barcode, executor).await? {
             ids.push(claim.sku_id);
         }
+
         let revisions = mongo_ops::find_many(
             &self.db.sku_revisions().collection(),
             doc! {"barcode": barcode},
@@ -198,6 +204,7 @@ impl CatalogRepository<'_> {
         if revisions.len() > 1000 {
             return Err(Error::ConflictError("条码历史资料过多，请先核对归属".into()));
         }
+
         ids.extend(revisions.into_iter().map(|r| r.sku_id.to_string()));
         ids.sort();
         ids.dedup();

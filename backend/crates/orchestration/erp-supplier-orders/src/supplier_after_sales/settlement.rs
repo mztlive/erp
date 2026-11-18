@@ -41,9 +41,11 @@ pub(super) async fn collect(
         }
         return Ok(0);
     };
+
     scan.resume(Instant::now())?;
     scan.next_run_at = Instant::from_unix_secs(Instant::now().unix_secs().saturating_add(300));
     store.save_scan(scan).await?;
+
     let page = source
         .entries(&scan.query)
         .await
@@ -71,6 +73,7 @@ impl SettlementStore for MongoSettlementStore<'_> {
             .into_iter()
             .map(|item| SettlementEvidence::new(scan, item))
             .collect::<std::result::Result<Vec<_>, _>>()?;
+
         let mut saved = scan.clone();
         saved.advance(page.next, Instant::now())?;
         let db = self.0.db.clone();
@@ -91,6 +94,7 @@ impl SettlementStore for MongoSettlementStore<'_> {
                             count += 1;
                         }
                     }
+
                     let actor = AuditActor::new(
                         "system:supplier-after-sales".into(),
                         "供应商售后处理器".into(),
@@ -106,6 +110,7 @@ impl SettlementStore for MongoSettlementStore<'_> {
                 })
             })
             .await?;
+
         *scan = checkpoint;
         Ok(count)
     }
@@ -132,6 +137,7 @@ impl SupplierAfterSalesProcess {
             cursor.clear();
             return Ok(0);
         }
+
         let mut total = 0;
         for connection in connections {
             *cursor = connection.base.id.clone();
@@ -172,6 +178,7 @@ impl SupplierAfterSalesProcess {
         if scan.next_run_at > Instant::now() {
             return Ok(0);
         }
+
         let result = collect(&MongoSettlementStore(self), connector.settlements(), &mut scan).await;
         if result.is_err() {
             scan.state = SettlementScanState::Blocked;
@@ -268,6 +275,7 @@ mod tests {
         assert_eq!(collect(&store, Some(&source), &mut scan).await.unwrap(), 0);
         assert!(!scan.complete);
         assert_eq!(scan.query.cursor.as_deref(), Some("next"));
+
         let mut recovered: SettlementScan =
             serde_json::from_str(&serde_json::to_string(&scan).unwrap()).unwrap();
         collect(&store, Some(&source), &mut recovered).await.unwrap();

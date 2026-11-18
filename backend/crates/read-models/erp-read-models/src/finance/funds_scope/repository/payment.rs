@@ -42,6 +42,7 @@ pub(in crate::finance::funds_scope) async fn full_read_qualification(
         full_read_version(&authorization.context.scope_version, rows)
     }
     .await;
+
     let result = result?;
     authorization.validate(executor).await?;
     Ok(result)
@@ -102,6 +103,7 @@ pub(in crate::finance::funds_scope) async fn page(
         if payment_count(&snapshot)? == 0 {
             return Ok(snapshot);
         }
+
         let mut stages = pipeline(filter, authorization, condition);
         stages.extend(flow::header_stages(sort(query)));
         let headers: Vec<FlowHeader> =
@@ -111,6 +113,7 @@ pub(in crate::finance::funds_scope) async fn page(
         finish_page(snapshot, headers, links)
     }
     .await;
+
     let result = result?;
     authorization.validate(executor).await?;
     Ok(result)
@@ -146,6 +149,7 @@ pub(in crate::finance::funds_scope) async fn versions(
         aggregate(db.collection(Database::SUPPLIER_PAYMENTS), stages, executor).await
     }
     .await;
+
     let result = result?;
     authorization.validate(executor).await?;
     Ok(result)
@@ -183,6 +187,7 @@ fn pipeline(
     let mut stages = vec![doc! { "$match": filter.to_doc() }];
     stages.extend(operator_stages(condition));
     stages.extend(authorization.guard_stages());
+
     stages.push(allocation_lookup(authorization, condition));
     stages.push(super::whole_facts::fields(Bson::Array(vec![]), "$scope_links.order".into(),
         doc! { "$allElementsTrue": [{ "$map": { "input": "$scope_links", "as": "link", "in": "$$link.exists" } }] }.into()));
@@ -243,6 +248,7 @@ fn source_lookups(authorization: &FundsAuthorization, condition: &FundsLinkedCon
         "statement_no",
         authorization.settlement.as_ref().map_or(&[], |scope| scope.stages()),
     ));
+
     stages.push(doc! { "$set": {
         "scope_source": { "$cond": [{ "$eq": ["$scope_source_type", "supplier_settlement"] }, "$scope_settlement", "$scope_purchase"] },
         "scope_source_allowed": { "$cond": [{ "$eq": ["$scope_source_type", "supplier_settlement"] }, "$scope_settlement_allowed", "$scope_purchase_allowed"] },
@@ -298,6 +304,7 @@ mod tests {
             SupplierPaymentFilter { keyword_ids: Some(vec!["payment".into()]), ..Default::default() };
         assert_eq!(stages[0], doc! { "$match": filter.to_doc() });
         assert_eq!(stages[stages.len() - 2], doc! { "$match": { "scope_whole": true } });
+
         let project = stages.last().unwrap().get_document("$project").unwrap();
         assert!(project.contains_key("sources"));
         assert!(!project.contains_key("amount"));
@@ -307,6 +314,7 @@ mod tests {
     #[test]
     fn full_read_version_rejects_missing_and_binds_all_current_versions() {
         assert!(matches!(full_read_version("scope", vec![]), Err(Error::NotFound(_))));
+
         let row = |payment_version, source_version| FlowVersion {
             id: "payment".into(),
             version: payment_version,
@@ -341,6 +349,7 @@ mod tests {
                 .unwrap(),
             Database::PAYMENT_ALLOCATIONS
         );
+
         let unrestricted =
             pipeline(&SupplierPaymentFilter::default(), &authorization(), &FundsLinkedCondition::default());
         assert_eq!(
@@ -406,6 +415,7 @@ mod tests {
             link("hidden", "purchase", PayableSourceType::SupplierSettlement, "40", AllocationAction::Apply),
             link("reverse", "purchase", PayableSourceType::PurchaseOrder, "10", AllocationAction::Reverse),
         ];
+
         let result = finish_page(page(2), headers, links).unwrap();
         assert!(result.items.is_empty());
         assert_eq!(result.versions.len(), 2);
@@ -414,6 +424,7 @@ mod tests {
             result.summary[0].links.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
             ["apply", "reverse"]
         );
+
         let summary = flow::summary(&result.summary, "scope").unwrap();
         assert_eq!(
             summary
@@ -441,6 +452,7 @@ mod tests {
             result.summary[0].links.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
             ["apply-max", "reverse-one", "apply-one"]
         );
+
         let summary = flow::summary(&result.summary, "scope").unwrap();
         assert_eq!(summary.grouped[0].visible_share, max.parse().unwrap());
         assert_eq!(summary.whole_total, Some(max.parse().unwrap()));
@@ -452,6 +464,7 @@ mod tests {
             finish_page(page(2), vec![header("p", "same", None, "10", true)], vec![]),
             Err(Error::Internal(_))
         ));
+
         let result = finish_page(
             page(1),
             vec![header("p", "same", None, "10", true)],
@@ -461,6 +474,7 @@ mod tests {
         let summary = flow::summary(&result.summary, "scope").unwrap();
         assert!(summary.grouped.is_empty());
         assert_eq!(summary.unassigned, "10".parse().unwrap());
+
         let empty = finish_page(page(0), vec![], vec![]).unwrap();
         assert!(empty.versions.is_empty());
         assert!(empty.summary.is_empty());

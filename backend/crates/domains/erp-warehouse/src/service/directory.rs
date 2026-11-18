@@ -35,6 +35,7 @@ impl WarehouseDirectoryService {
     /// 缺动作、非法请求、目录超限、旧版本或持久化失败时拒绝。
     pub async fn list(&self, actor: AuditActor, query: DirectoryQuery) -> Result<DirectoryPage> {
         let query = query.normalized()?;
+
         let db = self.db.clone();
         let access = self.access.clone();
         db.client()
@@ -45,6 +46,7 @@ impl WarehouseDirectoryService {
                     let rows = snapshot(&db, &read, &query, executor).await?;
                     let scope = directory_scope(&read, rows.iter().map(|row| row.id.clone()).collect());
                     let page = DirectoryPage::from_snapshot(rows, &query, scope)?;
+
                     if query.scope_version.as_ref().is_some_and(|v| v != &page.scope_version) {
                         return Err(Error::ConflictError(
                             "DATA_SCOPE_CHANGED：目录已变化，请重新查询".into(),
@@ -76,6 +78,7 @@ impl WarehouseDirectoryService {
         {
             return Err(Error::ConflictError("DATA_SCOPE_CHANGED：后续页必须提供范围版本".into()));
         }
+
         let db = self.db.clone();
         let access = self.access.clone();
         db.client()
@@ -86,6 +89,7 @@ impl WarehouseDirectoryService {
                     if params.scope_version.as_ref().is_some_and(|v| v != &read.version()) {
                         return Err(Error::ConflictError("DATA_SCOPE_CHANGED：仓库范围已变化".into()));
                     }
+
                     let filter = params.normalized()?.into_filter();
                     let result = warehouses(&db, &read, &filter, executor).await?;
                     let scope =
@@ -96,6 +100,7 @@ impl WarehouseDirectoryService {
                         page: filter.page,
                         page_size: filter.page_size,
                     };
+
                     read.validate(executor).await?;
                     Ok(ScopedPage::new(page, scope))
                 })

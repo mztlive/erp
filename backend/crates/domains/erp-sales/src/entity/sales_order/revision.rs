@@ -203,6 +203,7 @@ impl SalesOrderRevision {
         if data.settlement_party_id.as_ref().trim().is_empty() {
             return Err(Error::from("正式销售版本必须冻结我方结算主体身份"));
         }
+
         let content_hash = normalize_required_text(
             data.content_hash,
             "内容指纹不能为空",
@@ -213,6 +214,7 @@ impl SalesOrderRevision {
         let project_name = normalize_optional_text(data.project_name, "项目名称", PROJECT_NAME_MAX_LEN)?;
         let business_remark =
             normalize_optional_text(data.business_remark, "业务备注", BUSINESS_REMARK_MAX_LEN)?;
+
         if data.voucher_category_sku_id.is_some() != data.voucher_expiry_at.is_some() {
             return Err(Error::from("卡券类目与卡券履约期限必须同时提供或同时省略"));
         }
@@ -399,6 +401,7 @@ impl SalesOrderRevisionLine {
         )?;
         let spec_snapshot = normalize_optional_text(data.spec_snapshot, "规格", SPEC_MAX_LEN)?;
         let unit_snapshot = normalize_optional_text(data.unit_snapshot, "单位", UNIT_MAX_LEN)?;
+
         validate_amount_triple(data.gross_amount, data.net_amount, data.tax_amount)?;
 
         Ok(Self {
@@ -437,6 +440,7 @@ impl SalesOrderRevisionLine {
         if goods.revision_line_id.as_ref() != self.base.id {
             return Err(Error::from(format!("销售单当前版本第 {} 行与实物服务快照不匹配", self.line_no)));
         }
+
         Ok(SalesOrderWorkingCopyLineData {
             sales_order_line_id: self.sales_order_line_id.clone(),
             line_no: self.line_no,

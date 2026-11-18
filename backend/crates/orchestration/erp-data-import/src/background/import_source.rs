@@ -85,9 +85,11 @@ impl<T> ImportSourceCache<T> {
             entries.push_back(entry);
             return Ok(value);
         }
+
         entries.retain(|entry| entry.key.job_id != key.job_id);
         let (value, bytes) = load().await?;
         let value = Arc::new(value);
+
         if bytes <= self.max_bytes {
             let mut used = entries.iter().map(|entry| entry.bytes).sum::<usize>();
             while entries.len() >= IMPORT_JOBS_PER_POLL as usize || used > self.max_bytes - bytes {
@@ -164,6 +166,7 @@ mod tests {
         let cache = ImportSourceCache::new(100);
         let mut job = fixture();
         let first = cache.get_or_load(&job, || async { Ok((vec![1, 2, 3], 3)) }).await.unwrap();
+
         job.base.version += 1;
         job.processed_count += 1;
         cache.retain_jobs(&[job.clone()]).await;
@@ -204,6 +207,7 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(error, Error::Internal(message) if message == "storage unavailable"));
+
         let next = cache.get_or_load(&job, || async { Ok(("recovered", 1)) }).await.unwrap();
         assert_eq!(*next, "recovered");
     }
@@ -216,11 +220,13 @@ mod tests {
         second.base.id = "second".into();
         let mut third = first.clone();
         third.base.id = "third".into();
+
         cache.get_or_load(&first, || async { Ok(("first", 5)) }).await.unwrap();
         cache.get_or_load(&second, || async { Ok(("second", 5)) }).await.unwrap();
         cache.get_or_load(&first, || async { panic!("缓存应命中") }).await.unwrap();
         cache.get_or_load(&third, || async { Ok(("third", 5)) }).await.unwrap();
         cache.get_or_load(&first, || async { panic!("近期使用项应保留") }).await.unwrap();
+
         let next = cache.get_or_load(&second, || async { Ok(("reloaded", 11)) }).await.unwrap();
         assert_eq!(*next, "reloaded");
         let next = cache.get_or_load(&second, || async { Ok(("oversized-reloaded", 11)) }).await.unwrap();
@@ -235,16 +241,19 @@ mod tests {
         let first = cache.get_or_load(&job, || async { Ok(("first", 1)) }).await.unwrap();
         let old = Arc::downgrade(&first);
         drop(first);
+
         for number in 0..IMPORT_JOBS_PER_POLL {
             job.base.id = number.to_string();
             cache.get_or_load(&job, || async { Ok(("next", 1)) }).await.unwrap();
         }
         assert!(old.upgrade().is_none());
         assert_eq!(cache.entries.lock().await.len(), IMPORT_JOBS_PER_POLL as usize);
+
         cache.retain_jobs(&[job.clone()]).await;
         assert_eq!(cache.entries.lock().await.len(), 1);
         cache.remove(&job.base.id).await;
         assert!(cache.entries.lock().await.is_empty());
+
         cache.get_or_load(&job, || async { Ok(("next", 1)) }).await.unwrap();
         cache.retain_jobs(&[]).await;
         assert!(cache.entries.lock().await.is_empty());

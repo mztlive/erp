@@ -96,6 +96,7 @@ impl ReceivableProcess {
         let command = command.clone();
         let evidence = ReplayEvidence::default();
         let observed = evidence.clone();
+
         let result = db
             .client()
             .clone()
@@ -108,6 +109,7 @@ impl ReceivableProcess {
                 })
             })
             .await;
+
         let view = evidence.finish(result)?;
         Ok(view)
     }
@@ -211,6 +213,7 @@ mod recovery_tests {
                 Err(Error::CommittedResultUnavailable(_))
             ));
         }
+
         assert_eq!(recover_replay(replay_requires_readback(), Ok(Some("authorized"))).unwrap(), "authorized");
     }
 
@@ -250,15 +253,18 @@ mod recovery_tests {
         let error =
             recover_replay::<String>(unknown, Err(Error::Forbidden("来源范围已变化".into()))).unwrap_err();
         assert!(matches!(error, Error::OutcomeUnknown(_)));
+
         let committed = Error::CommittedResultUnavailable("original result unreadable".into());
         assert!(
             matches!(recover_replay::<String>(committed, Err(Error::Forbidden("后来撤权".into()))), Err(Error::CommittedResultUnavailable(message)) if message == "original result unreadable")
         );
+
         let known = Error::ConflictError("提交冲突".into());
         assert!(matches!(
             recover_replay::<String>(known, Err(Error::Forbidden("权限已撤销".into()))),
             Err(Error::Forbidden(_))
         ));
+
         assert_eq!(
             recover_replay(Error::ConflictError("已提交".into()), Ok(Some("authorized"))).unwrap(),
             "authorized"

@@ -172,6 +172,7 @@ mod tests {
     fn occurred_conversion_and_inverted_time_fails() {
         let entity = ElectronicDeliveryDraft::build(ElectronicDeliveryId::new("ed-1"), data()).unwrap();
         assert_eq!(entity.fact.occurred_at.unix_secs(), 1_700_000_000);
+
         assert!(
             ElectronicDeliveryDraft::build(
                 ElectronicDeliveryId::new("ed-2"),

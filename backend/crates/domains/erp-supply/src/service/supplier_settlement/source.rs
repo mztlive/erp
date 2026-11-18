@@ -78,6 +78,7 @@ impl SupplierSettlementService {
         self.access()
             .require_operation(actor, &supplier_settlement::SOURCE_EVIDENCE_LATEST, executor)
             .await?;
+
         let period = SettlementPeriod::new(
             super::draft::parse_settlement_business_date(&query.period_start, "结算期间开始")?,
             super::draft::parse_settlement_business_date(&query.period_end, "结算期间结束")?,
@@ -124,8 +125,10 @@ impl SupplierSettlementService {
             req.lines.iter().map(|line| line.supplier_fulfillment_item_id.clone()).collect::<Vec<_>>();
         SupplierSettlementSourceEvidence::ensure_unique_item_ids(&input_item_ids)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
+
         let scope = load_source_scope(&self.db, req, period, &input_item_ids, executor).await?;
         let lines = assemble_source_lines(&req.supplier_id, &req.lines, scope, period)?;
+
         let mut data = SupplierSettlementSourceEvidenceData {
             request_id: req.request_id.clone(),
             supplier_id: req.supplier_id.clone(),
@@ -185,6 +188,7 @@ async fn load_source_scope(
             .ensure_newer_source_version(req.source_version)
             .map_err(|error| Error::ConflictError(error.to_string()))?;
     }
+
     let scope = db
         .supplier_settlement()
         .settlement_source_scope(
@@ -228,6 +232,7 @@ fn assemble_source_lines(
     let refund_allocations = scope.refund_allocations;
     let refund_fact_map =
         scope.refund_facts.iter().map(|fact| (fact.base.id.as_str(), fact)).collect::<HashMap<_, _>>();
+
     let item_ids =
         inputs.iter().map(|line| line.supplier_fulfillment_item_id.to_string()).collect::<HashSet<_>>();
     ensure_complete_source_scope(CompleteSourceScope {
@@ -239,6 +244,7 @@ fn assemble_source_lines(
         refund_fact_map: &refund_fact_map,
         period,
     })?;
+
     let mut lines = Vec::with_capacity(inputs.len());
     for input in inputs {
         let (order, item) = check_source_line(input, &order_map, &item_map, supplier_id)?;
@@ -272,6 +278,7 @@ fn check_source_line<'a>(
     let item = item_map
         .get(input.supplier_fulfillment_item_id.as_ref())
         .ok_or_else(|| Error::NotFound("供应商履约明细不存在".to_string()))?;
+
     if !item.belongs_to_order(&input.supplier_fulfillment_order_id) {
         return Err(Error::BusinessLogicError(format!(
             "履约明细 {} 不属于订单 {}",
@@ -309,6 +316,7 @@ fn build_source_line(
 ) -> Result<SupplierSettlementSourceEvidenceLine> {
     let completion_in_period =
         order.confirmed_completed_at()?.filter(|completed_at| period.contains(*completed_at));
+
     let cancel_evidence = SettlementCancelEvidence::from_optional(
         input.cancel_occurred_at.map(Instant::from_unix_secs),
         input.cancel_evidence_reference_id.clone(),
@@ -317,6 +325,7 @@ fn build_source_line(
     if cancel_evidence.is_some() {
         order.ensure_canceled()?;
     }
+
     let mut source_fact_types = Vec::new();
     let mut evidence_reference_ids = input.evidence_reference_ids.clone();
     let order_amounts = if let Some(completed_at) = completion_in_period {
@@ -333,6 +342,7 @@ fn build_source_line(
     } else {
         SettlementAmountComponents::zero()
     };
+
     if let Some(cancel_evidence) = cancel_evidence {
         source_fact_types.push(SettlementSourceFactType::CancelConfirmed);
         evidence_reference_ids.push(cancel_evidence.reference_id().to_string());
@@ -343,17 +353,20 @@ fn build_source_line(
             cancel_evidence.occurred_at().unix_secs()
         ));
     }
+
     let refund =
         refund_amounts(input, refund_allocations, refund_fact_map, period, &mut evidence_reference_ids)?;
     if refund != SettlementAmountComponents::zero() {
         source_fact_types.push(SettlementSourceFactType::RefundConfirmed);
     }
+
     if source_fact_types.is_empty() {
         return Err(Error::BusinessLogicError(format!(
             "履约明细 {} 在结算周期内没有完成、取消或退款正式事实",
             item.base.id
         )));
     }
+
     SupplierSettlementSourceEvidenceLine::from_components(SupplierSettlementSourceEvidenceLineData {
         supplier_fulfillment_order_id: input.supplier_fulfillment_order_id.clone(),
         supplier_fulfillment_item_id: input.supplier_fulfillment_item_id.clone(),
@@ -418,6 +431,7 @@ fn refund_amounts(
         if !period.contains(fact.refunded_at) {
             continue;
         }
+
         match allocation.allocation_action {
             AllocationAction::Apply => {
                 gross = gross.checked_add(allocation.gross_amount);
@@ -433,6 +447,7 @@ fn refund_amounts(
         evidence_reference_ids
             .push(format!("supplier-refund://{}/allocation/{}", fact.base.id, allocation.base.id));
     }
+
     SettlementAmountComponents::new(gross, net, tax, "退款金额").map_err(Into::into)
 }
 
@@ -479,6 +494,7 @@ fn ensure_complete_source_scope(scope: CompleteSourceScope<'_>) -> Result<()> {
             required_item_ids.insert(item.base.id.as_str());
         }
     }
+
     for allocation in refund_allocations {
         let fact = refund_fact_map
             .get(allocation.supplier_refund_fact_id.as_ref())
@@ -487,9 +503,11 @@ fn ensure_complete_source_scope(scope: CompleteSourceScope<'_>) -> Result<()> {
             required_item_ids.insert(allocation.supplier_fulfillment_item_id.as_ref());
         }
     }
+
     for input in inputs.iter().filter(|input| input.cancel_occurred_at.is_some()) {
         required_item_ids.insert(input.supplier_fulfillment_item_id.as_ref());
     }
+
     let mut missing = required_item_ids
         .into_iter()
         .filter(|item_id| !input_item_ids.contains(*item_id))
@@ -530,6 +548,7 @@ pub fn source_request_hash(req: &RecordSettlementSourceEvidenceRequest) -> Strin
         req.external_bill_version.trim().to_string(),
         req.external_bill_evidence_reference_id.trim().to_string(),
     ];
+
     let mut lines = req.lines.iter().collect::<Vec<_>>();
     lines.sort_by(|left, right| {
         left.supplier_fulfillment_item_id.as_ref().cmp(right.supplier_fulfillment_item_id.as_ref())
@@ -554,6 +573,7 @@ pub fn source_request_hash(req: &RecordSettlementSourceEvidenceRequest) -> Strin
         references.sort();
         parts.push(references.join(","));
     }
+
     digest_parts(&parts)
 }
 
@@ -855,6 +875,7 @@ mod tests {
             action: AllocationAction::Apply,
             reverses_allocation_id: None,
         });
+
         assert!(
             ensure_scope(
                 vec![line_request("item-1", "order-1")],
@@ -872,6 +893,7 @@ mod tests {
         let order = completed_order("order-1", instant("2026-07-15T12:00:00+08:00"));
         let item_1 = fulfillment_item("item-1", &SupplierFulfillmentOrderId::new("order-1"));
         let item_2 = fulfillment_item("item-2", &SupplierFulfillmentOrderId::new("order-1"));
+
         let message = business_logic_message(
             ensure_scope(
                 vec![line_request("item-1", "order-1")],
@@ -897,6 +919,7 @@ mod tests {
                 fulfillment_item(&format!("item-{index:02}"), &SupplierFulfillmentOrderId::new("order-1"))
             })
             .collect();
+
         let error = ensure_scope(vec![], vec![order], items, vec![], vec![]).unwrap_err();
         let expected_ids = (0..20).map(|index| format!("item-{index:02}")).collect::<Vec<_>>().join(",");
         assert_eq!(
@@ -932,6 +955,7 @@ mod tests {
             action: AllocationAction::Apply,
             reverses_allocation_id: None,
         });
+
         let message = business_logic_message(
             ensure_scope(
                 vec![line_request("item-1", "order-1")],
@@ -962,6 +986,7 @@ mod tests {
             action: AllocationAction::Apply,
             reverses_allocation_id: None,
         });
+
         let message = business_logic_message(
             ensure_scope(
                 vec![line_request("item-1", "order-1")],
@@ -1024,6 +1049,7 @@ mod tests {
         let facts = [fact];
         let fact_map = fact_map(&facts);
         let mut references = vec!["bill://line".to_string()];
+
         let refund = refund_amounts(&input, &allocations, &fact_map, period(), &mut references).unwrap();
         assert_eq!(refund.gross, Amount::from_str("6.00").unwrap());
         assert_eq!(refund.net, Amount::from_str("5.22").unwrap());
@@ -1077,6 +1103,7 @@ mod tests {
         let facts = [out_fact, other_fact];
         let fact_map = fact_map(&facts);
         let mut references = Vec::new();
+
         let refund = refund_amounts(&input, &allocations, &fact_map, period(), &mut references).unwrap();
         assert_eq!(refund, SettlementAmountComponents::zero(), "期外与异明细分配不计入");
         assert!(references.is_empty());
@@ -1109,8 +1136,10 @@ mod tests {
         let order = completed_order("order-1", instant("2026-07-15T12:00:00+08:00"));
         let item = fulfillment_item("item-1", &SupplierFulfillmentOrderId::new("order-1"));
         let input = line_request("item-1", "order-1");
+
         let line = build_source_line(&input, &order, &item, &[], &HashMap::new(), period())
             .expect("期间内完成行必须构造成功");
+
         let (gross, net, tax) =
             line_amounts(item.unit_cost_snapshot_gross, item.quantity, item.input_tax_rate);
         assert!(line.source_fact_types.contains(&SettlementSourceFactType::FulfillmentCompleted));
@@ -1164,6 +1193,7 @@ mod tests {
         let mut input = line_request("item-1", "order-1");
         input.cancel_occurred_at = Some(instant("2026-07-20T10:00:00+08:00").unix_secs());
         input.cancel_evidence_reference_id = Some("cancel://proof-1".to_string());
+
         let line = build_source_line(&input, &order, &item, &[], &HashMap::new(), period())
             .expect("已取消订单携带期间内取消补证必须构造成功");
         assert!(line.source_fact_types.contains(&SettlementSourceFactType::CancelConfirmed));

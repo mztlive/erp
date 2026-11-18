@@ -180,6 +180,7 @@ mod tests {
         for name in ["../secret", "a/b", "a\\b", "a\n.csv", ""] {
             assert!(TransferResult::file(name.into(), "text/csv", vec![], Value::Null).is_err());
         }
+
         let file = TransferResult::file(
             "结果.xlsx".into(),
             "application/octet-stream",

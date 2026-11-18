@@ -73,6 +73,7 @@ impl ProfileDisplay {
             .filter(|(_, permission, needs_active)| (!needs_active || active) && self.visible(permission))
             .map(|(name, _, _)| name.into())
             .collect();
+
         for (kind, action) in [
             (SensitiveFieldKind::ContactMobile, "REVEAL_CONTACT"),
             (SensitiveFieldKind::Address, "REVEAL_ADDRESS"),
@@ -98,6 +99,7 @@ mod tests {
             assert!(!display.reveal(kind));
             assert!(!display.actions(true).contains(&"REVEAL_BANK_ACCOUNT".into()));
         }
+
         let display = ProfileDisplay(PermissionSet::new([
             party::BANK_ACCOUNT_DETAIL,
             payable::PAYMENT_RECIPIENT_REVEAL,
@@ -116,8 +118,10 @@ mod tests {
         assert!(view_only.filter(&party::ADDRESS_DETAIL, vec!["address"]).is_empty());
         assert!(view_only.filter(&party::TAX_PROFILE_DETAIL, vec!["tax"]).is_empty());
         assert!(view_only.filter(&party::BANK_ACCOUNT_DETAIL, vec!["bank"]).is_empty());
+
         let reveal_only = ProfileDisplay(PermissionSet::new([party::CONTACT_REVEAL]));
         assert!(!reveal_only.reveal(SensitiveFieldKind::ContactMobile));
+
         let granted = ProfileDisplay(PermissionSet::new([
             party::CONTACT_DETAIL,
             party::CONTACT_REVEAL,

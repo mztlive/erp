@@ -58,9 +58,11 @@ impl SavePurchaseOrderLine {
                 )
             },
         };
+
         let expected_delivery_date =
             self.expected_delivery_date.as_deref().map(parse_business_date).transpose()?;
         let allocated_quantity = parse_optional::<Quantity>(self.allocated_quantity.as_deref(), "数量")?;
+
         Ok(self.line_input(ParsedLineValues {
             quantity,
             unit_cost_gross,
@@ -334,6 +336,7 @@ mod tests {
 
         let line = SavePurchaseOrderLine { quantity: Some(" abc ".to_string()), ..goods_line() };
         assert_eq!(line.to_line_input().unwrap_err().to_string(), "参数验证失败: 非法数量:  abc ");
+
         let line = SavePurchaseOrderLine { gross_amount: Some(" \t ".to_string()), ..logistics_line() };
         assert_eq!(line.to_line_input().unwrap_err().to_string(), "参数验证失败: 物流费用行含税金额不能为空");
     }
@@ -344,6 +347,7 @@ mod tests {
         let inputs = SavePurchaseOrderLine::to_line_inputs(&[logistics_line(), goods_line()]).unwrap();
         assert_eq!(inputs[0].line_type, PurchaseLineType::LogisticsFee);
         assert_eq!(inputs[1].line_type, PurchaseLineType::ItemService);
+
         let invalid_first = SavePurchaseOrderLine { quantity: Some(" first ".to_string()), ..goods_line() };
         let invalid_later =
             SavePurchaseOrderLine { input_tax_rate: Some("later".to_string()), ..goods_line() };

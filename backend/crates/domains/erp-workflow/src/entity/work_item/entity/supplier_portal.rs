@@ -191,11 +191,13 @@ mod tests {
     fn authorized_reviewer_completion_preserves_reassigned_responsibility() {
         let mut item = task();
         assert!(item.complete_by_domain_command("reviewer", Instant::from_unix_secs(100)).is_err());
+
         item.reassign("replacement", Instant::from_unix_secs(110)).unwrap();
         item.complete_supplier_portal_review("replacement", Instant::from_unix_secs(120)).unwrap();
         assert_eq!(item.status, WorkItemStatus::Completed);
         assert_eq!(item.completed_by.as_deref(), Some("replacement"));
         assert_eq!(item.responsibility_actor_ids, ["reviewer", "replacement"]);
+
         assert!(
             item.withdraw_supplier_portal_review("supplier", "撤回", Instant::from_unix_secs(130)).is_err()
         );
@@ -207,11 +209,13 @@ mod tests {
         let at = Instant::from_unix_secs(100);
         assert!(item.close("manager", WorkItemCloseData { close_reason: "清理".into() }, at).is_err());
         assert!(item.withdraw_supplier_portal_review("supplier", " ", at).is_err());
+
         item.withdraw_supplier_portal_review("supplier", "重新核对报价", at).unwrap();
         assert_eq!(item.status, WorkItemStatus::Closed);
         assert_eq!(item.closed_by.as_deref(), Some("supplier"));
         assert!(item.completed_by.is_none());
         assert!(item.complete_supplier_portal_review("reviewer", at).is_err());
+
         let mut unrelated = WorkItem::new(WorkItemId::new("other"), direct_data()).unwrap();
         assert!(unrelated.complete_supplier_portal_review("alice", at).is_err());
     }

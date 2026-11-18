@@ -173,14 +173,12 @@ mod tests {
     #[test]
     fn optimistic_locking_error_maps_to_conflict() {
         let error = Error::from(persistence_core::Error::OptimisticLockingError);
-
         assert!(matches!(error, Error::ConflictError(_)));
     }
 
     #[test]
     fn duplicate_key_error_maps_to_conflict() {
         let error = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
-
         assert!(matches!(error, Error::ConflictError(_)));
         assert_eq!(error.to_string(), "数据冲突: 数据已存在，请勿重复提交");
     }
@@ -210,7 +208,6 @@ mod tests {
     fn other_database_error_remains_repository_error() {
         let error =
             Error::from(persistence_core::Error::DatabaseError(MongoError::custom("connection failed")));
-
         assert!(matches!(error, Error::RepositoryError(_)));
     }
 

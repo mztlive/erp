@@ -108,6 +108,7 @@ impl ActionResultRead for MongoActionResultRead {
             .find_authorized(order_id, scope, executor)
             .await?
             .ok_or_else(|| Error::NotFound("原订单不存在或无权读取动作结果".into()))?;
+
         let action_id = self.action_id(order_id, target, executor).await?;
         let action = self
             .db
@@ -125,6 +126,7 @@ impl ActionResultRead for MongoActionResultRead {
             },
             ActionResult::Cancellation => Vec::new(),
         };
+
         Ok(SubmitActionResultView {
             action: action.into(),
             order: order.into(),
@@ -169,6 +171,7 @@ pub(crate) async fn read_action_result(
     let port = MongoActionResultRead { db: db.clone(), access: access.clone() };
     let actor = actor.clone();
     let order_id = order_id.to_owned();
+
     db.client()
         .with_transaction(move |executor| {
             Box::pin(async move { read_result(&port, &actor, &order_id, &target, executor).await })
@@ -292,6 +295,7 @@ mod tests {
             &mut SnapshotExecutor::default(),
         )
         .await;
+
         assert!(matches!(result, Err(Error::Forbidden(_))));
         assert_eq!(*port.trace.lock().unwrap(), ["authorize"]);
     }
@@ -307,6 +311,7 @@ mod tests {
             &mut SnapshotExecutor::default(),
         )
         .await;
+
         assert!(matches!(result, Err(Error::ConflictError(message)) if message == "DATA_SCOPE_CHANGED"));
         assert_eq!(*port.trace.lock().unwrap(), ["authorize", "view", "validate"]);
     }

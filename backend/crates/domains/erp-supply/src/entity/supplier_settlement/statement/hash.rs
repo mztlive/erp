@@ -38,6 +38,7 @@ impl SupplierSettlementStatement {
             self.refresh_cutoff_policy_id.clone(),
             self.refresh_cutoff_policy_version.clone(),
         ];
+
         let mut differences = differences.iter().collect::<Vec<_>>();
         differences.sort_by(|left, right| left.base.id.cmp(&right.base.id));
         for difference in differences {
@@ -52,6 +53,7 @@ impl SupplierSettlementStatement {
                 difference.resolved_at.map(|value| value.unix_secs().to_string()).unwrap_or_default(),
             ]);
         }
+
         digest_parts(&parts)
     }
     /// 更新差异结论变化后的主题摘要。

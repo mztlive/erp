@@ -23,6 +23,7 @@ pub(crate) fn execute(
                     for (key, expression) in lookup.get_document("let").unwrap() {
                         bindings.insert(key, value(expression, row, variables));
                     }
+
                     let stages = lookup
                         .get_array("pipeline")
                         .unwrap()
@@ -240,6 +241,7 @@ mod tests {
             doc! { "id": "empty", "history": [] },
             doc! { "id": "missing" },
         ];
+
         for (filter, expected) in [
             (doc! { "history": "user" }, vec!["scalar", "array", "reverse"]),
             (doc! { "history": { "$in": ["user"] } }, vec!["scalar", "array", "reverse"]),

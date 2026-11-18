@@ -21,6 +21,7 @@ pub(in crate::sales_timeline) async fn discover(
 ) -> Result<()> {
     receivable(db, sale, sources, executor).await?;
     payable(db, sale, sources, executor).await?;
+
     let receipts = sources.ids(DocumentType::CustomerReceipt);
     let payments = sources.ids(DocumentType::SupplierPayment);
     for row in db
@@ -53,6 +54,7 @@ async fn receivable(
         .find_many(doc! { "receivable_account_id": { "$in": &accounts } }, executor)
         .await?;
     let entries = entries.into_iter().map(|row| row.base.id).collect::<Vec<_>>();
+
     for row in db
         .customer_receipts()
         .find_many(doc! { "pending_allocations.receivable_entry_id": { "$in": &entries } }, executor)
@@ -60,6 +62,7 @@ async fn receivable(
     {
         sources.add(DocumentType::CustomerReceipt, row.base.id, Some(sale), None);
     }
+
     for row in db
         .receipt_allocations()
         .find_many(doc! { "receivable_entry_id": { "$in": &entries } }, executor)
@@ -78,6 +81,7 @@ async fn receivable(
             TimelineCategory::Receivable,
         );
     }
+
     receivable_invoices(db, sale, sources, &accounts, executor).await?;
     customer_refunds(db, sale, sources, &entries, executor).await?;
     Ok(())
@@ -93,6 +97,7 @@ async fn payable(
     for snapshot in db.purchase_payment_request_snapshots().find_for_purchases(&purchases, executor).await? {
         sources.add(DocumentType::PurchasePaymentRequest, snapshot.request_id, Some(sale), None);
     }
+
     let accounts = db
         .payable_accounts()
         .find_many(
@@ -104,6 +109,7 @@ async fn payable(
     let entries =
         db.payable_entries().find_many(doc! { "payable_account_id": { "$in": &accounts } }, executor).await?;
     let entries = entries.into_iter().map(|row| row.base.id).collect::<Vec<_>>();
+
     for row in
         db.payment_allocations().find_many(doc! { "payable_entry_id": { "$in": &entries } }, executor).await?
     {
@@ -121,6 +127,7 @@ async fn payable(
             TimelineCategory::Payable,
         );
     }
+
     payable_documents(db, sale, sources, &accounts, &purchases, executor).await?;
     supplier_refunds(db, sale, sources, &entries, executor).await?;
     Ok(())
@@ -151,6 +158,7 @@ async fn receivable_invoices(
             TimelineCategory::Receivable,
         );
     }
+
     for row in db.sales_invoice_requests().find_many(doc! { "sales_order_id": sale }, executor).await? {
         sources.add(DocumentType::SalesInvoiceRequest, row.base.id, Some(sale), None);
     }
@@ -208,6 +216,7 @@ async fn payable_documents(
             TimelineCategory::Payable,
         );
     }
+
     for row in db
         .purchase_payment_requests()
         .find_many(

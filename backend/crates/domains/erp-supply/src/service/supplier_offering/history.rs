@@ -42,6 +42,7 @@ impl SupplierOfferingService {
                 Box::pin(async move {
                     let offering =
                         access.require_offering(&actor, &supplier_offering::LIST, &id, executor).await?;
+
                     let revisions = db
                         .supplier_offering_revisions()
                         .history_page(&SupplierOfferingId::new(id), params.before_revision_no, executor)

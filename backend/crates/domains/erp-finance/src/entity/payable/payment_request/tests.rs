@@ -119,6 +119,7 @@ fn showing_validated_draft_basis_neither_reserves_nor_changes_approval_identity(
     assert_eq!(request.reserved_for("account-1"), Amount::zero());
     assert_eq!(request.submission_version, 0);
     assert!(request.approval_instance_id.is_none());
+
     request.submit(submission(&request)).unwrap();
     request.approval_instance_id = Some("old-instance".into());
     request.reject("核对金额").unwrap();
@@ -174,6 +175,7 @@ fn version_overflow_and_reverse_overpaid_are_atomic() {
     let original = draft.clone();
     assert!(draft.submit(submission(&draft)).is_err());
     assert_eq!(draft, original);
+
     let mut paid = approved(&[("account-1", "10")]);
     paid.record_payment(&allocations(&[("account-1", "3")])).unwrap();
     let original = paid.clone();
@@ -189,6 +191,7 @@ fn reject_withdraw_and_resubmit_release_old_authority_and_freeze_new_version() {
         assert_eq!(request.reserved_for("account-1"), amount("70000"));
         request.approval_instance_id = Some("old-approval".into());
         request.work_item_id = Some("old-task".into());
+
         if reject {
             request.reject("依据不足").unwrap();
         } else {
@@ -196,6 +199,7 @@ fn reject_withdraw_and_resubmit_release_old_authority_and_freeze_new_version() {
         }
         assert_eq!(request.reserved_for("account-1"), Amount::zero());
         assert!(request.record_payment(&allocations(&[("account-1", "1")])).is_err());
+
         request.submit(submission(&request)).unwrap();
         assert_eq!(request.submission_version, 2);
         assert_eq!(request.approval_subject_version, 2);
@@ -214,6 +218,7 @@ fn contract_100k_30k_paid_70k_request_then_40k_payment_keeps_30k_reserved() {
     assert_eq!(request.remaining(), amount("30000"));
     assert_eq!(request.reserved_for("account-1"), amount("30000"));
     assert_eq!(request.status, PurchasePaymentRequestStatus::PartiallyPaid);
+
     assert_eq!(request.close("账户发生变更").unwrap(), allocations(&[("account-1", "30000")]));
     assert_eq!(request.paid_amount(), amount("40000"));
     assert_eq!(request.closed_amount(), amount("30000"));
@@ -234,6 +239,7 @@ fn partial_payments_cannot_move_between_lines_or_mutate_on_failure() {
         assert!(candidate.record_payment(&values).is_err());
         assert_eq!(candidate, request);
     }
+
     let mut paid = request;
     paid.record_payment(&allocations(&[("account-1", "10"), ("account-2", "20")])).unwrap();
     assert_eq!(paid.status, PurchasePaymentRequestStatus::Paid);
@@ -246,6 +252,7 @@ fn closing_fully_paid_authority_keeps_history_and_reversal_never_restores_reserv
     let mut request = approved(&[("account-1", "10.01"), ("account-2", "20.02")]);
     request.work_item_id = Some("completed-task".into());
     request.record_payment(&allocations(&[("account-1", "10.01"), ("account-2", "20.02")])).unwrap();
+
     assert!(request.close(" 收款账户已维护，终止原授权 ").unwrap().is_empty());
     assert_eq!(request.status, PurchasePaymentRequestStatus::Closed);
     assert_eq!(request.paid_amount(), amount("30.03"));
@@ -253,6 +260,7 @@ fn closing_fully_paid_authority_keeps_history_and_reversal_never_restores_reserv
     assert_eq!(request.remaining(), Amount::zero());
     assert_eq!(request.work_item_id.as_deref(), Some("completed-task"));
     assert_eq!(request.last_reason.as_deref(), Some("收款账户已维护，终止原授权"));
+
     for (account, value) in [("account-1", "10.01"), ("account-2", "20.02")] {
         request.reverse_payment(&allocations(&[(account, value)])).unwrap();
         assert_eq!(request.status, PurchasePaymentRequestStatus::Closed);
@@ -283,6 +291,7 @@ fn close_rejects_nonapproved_states_or_missing_reason_before_mutation() {
         assert!(error.to_string().contains("只有已批准、部分付款或已付清"));
         assert_eq!(request, original);
     }
+
     for status in [
         PurchasePaymentRequestStatus::Approved,
         PurchasePaymentRequestStatus::PartiallyPaid,
@@ -305,6 +314,7 @@ fn reversal_restores_open_request_only_and_closed_request_stays_closed() {
     request.reverse_payment(&allocations(&[("account-1", "40")])).unwrap();
     assert_eq!(request.reserved_for("account-1"), amount("40"));
     assert_eq!(request.status, PurchasePaymentRequestStatus::PartiallyPaid);
+
     request.close("终止未付").unwrap();
     request.reverse_payment(&allocations(&[("account-1", "10")])).unwrap();
     assert_eq!(request.status, PurchasePaymentRequestStatus::Closed);
@@ -312,6 +322,7 @@ fn reversal_restores_open_request_only_and_closed_request_stays_closed() {
     assert_eq!(request.closed_amount(), amount("50"));
     assert_eq!(request.reserved_for("account-1"), Amount::zero());
     assert!(request.record_payment(&allocations(&[("account-1", "1")])).is_err());
+
     request.reverse_payment(&allocations(&[("account-1", "20")])).unwrap();
     assert_eq!(request.status, PurchasePaymentRequestStatus::Closed);
     assert_eq!(request.paid_amount(), Amount::zero());
@@ -346,11 +357,13 @@ fn submitted_materials_remain_exact_after_withdrawal_and_resubmission() {
     assert!(PurchasePaymentRequestSubmissionSnapshot::freeze(&request).is_err());
     request.approval_instance_id = Some("approval-1".into());
     let original = PurchasePaymentRequestSubmissionSnapshot::freeze(&request).unwrap();
+
     request.withdraw("核对新的对账依据").unwrap();
     request.update(data(&[("account-1", "20")])).unwrap();
     request.submit(submission(&request)).unwrap();
     request.approval_instance_id = Some("approval-2".into());
     let next = PurchasePaymentRequestSubmissionSnapshot::freeze(&request).unwrap();
+
     request.lines[0].source_snapshot.sales_sources[0].preview = json!({"order_no":"changed-current"});
     assert_eq!(original.submission_version, 1);
     assert_eq!(original.approval_instance_id, "approval-1");
@@ -363,6 +376,7 @@ fn submitted_materials_remain_exact_after_withdrawal_and_resubmission() {
     assert_eq!(next.approval_instance_id, "approval-2");
     assert_eq!(next.request.total_amount, amount("20"));
     assert_ne!(original.base.id, next.base.id);
+
     let decoded: PurchasePaymentRequestSubmissionSnapshot =
         serde_json::from_value(serde_json::to_value(&original).unwrap()).unwrap();
     assert_eq!(decoded, original);
@@ -398,19 +412,23 @@ fn deposit_request_preserves_approval_and_never_executes_as_bank_payment() {
     let material = PurchasePaymentRequestSubmissionSnapshot::freeze(&request).unwrap();
     assert!(material.request.payee_account.is_none());
     assert_eq!(material.request.deposit_account.as_ref().unwrap().account_id, "deposit-1");
+
     request.approve().unwrap();
     assert!(request.require_deposit_account("deposit-1").is_ok());
     assert!(request.require_deposit_account("other").is_err());
     request.reserve_deposit("reservation", "account-1", 1, amount("100")).unwrap();
     assert_eq!(request.paid_amount(), Amount::zero());
     assert_eq!(request.available_to_execute("account-1").unwrap(), Amount::zero());
+
     let before = request.clone();
     assert!(request.record_payment(&allocations(&[("account-1", "1")])).is_err());
     assert_eq!(request, before);
+
     request.settle_deposit("reservation", amount("40")).unwrap();
     assert_eq!(request.paid_amount(), amount("40"));
     assert_eq!(request.deposit_reservations["reservation"].amount, amount("60"));
     assert_eq!(request.available_to_execute("account-1").unwrap(), Amount::zero());
+
     let before = request.clone();
     assert!(request.settle_deposit("reservation", amount("61")).is_err());
     assert_eq!(request, before);
@@ -424,15 +442,18 @@ fn deposit_submission_rejects_mixed_bank_and_cross_owner_while_legacy_defaults_t
     let legacy: PurchasePaymentRequestData = serde_json::from_value(value).unwrap();
     assert_eq!(legacy.execution_method, PaymentRequestExecutionMethod::BankTransfer);
     assert!(serde_json::to_value(&legacy).unwrap().get("execution_method").is_none());
+
     let mut mixed = deposit_draft().data;
     mixed.payee_bank_account_id = "bank-1".into();
     assert!(mixed.normalize().is_err());
+
     let mut request = deposit_draft();
     let mut frozen = deposit_submission(&request);
     frozen.deposit_account.as_mut().unwrap().identity.payer_party_id = "other-company".into();
     let original = request.clone();
     assert!(request.submit(frozen).is_err());
     assert_eq!(request, original);
+
     let mut frozen = deposit_submission(&request);
     frozen.payee_account = submission(&request).payee_account;
     assert!(request.submit(frozen).is_err());
@@ -464,6 +485,7 @@ fn original_deposit_basis_accepts_paid_requests_and_rejects_closed_or_changed_so
         request.status = status;
         assert!(request.ensure_deposit_reservation("deposit-1", &identity, &basis).is_ok());
     }
+
     for status in [
         PurchasePaymentRequestStatus::Draft,
         PurchasePaymentRequestStatus::InApproval,
@@ -477,17 +499,20 @@ fn original_deposit_basis_accepts_paid_requests_and_rejects_closed_or_changed_so
             matches!(error, crate::Error::BusinessLogicError(ref text) if text == "原付款申请未批准或授权已关闭")
         );
     }
+
     request.status = PurchasePaymentRequestStatus::Approved;
     basis.purchase_revision_id = "changed".into();
     let error = request.ensure_deposit_reservation("deposit-1", &identity, &basis).unwrap_err();
     assert!(
         matches!(error, crate::Error::BusinessLogicError(ref text) if text == "资金执行采购修订与原批准来源不一致")
     );
+
     basis.payment_request_version += 1;
     let error = request.ensure_deposit_reservation("deposit-1", &identity, &basis).unwrap_err();
     assert!(
         matches!(error, crate::Error::BusinessLogicError(ref text) if text == "预存款与原付款申请主体、供应商或审批版本不一致")
     );
+
     request.deposit_account = None;
     assert!(matches!(
         request.ensure_deposit_reservation("deposit-1", &identity, &basis),
@@ -505,9 +530,11 @@ fn deposit_release_updates_original_reservation_and_removes_only_after_full_rele
     assert!(request.release_deposit("missing", amount("1")).is_err());
     assert!(request.release_deposit("reservation", amount("101")).is_err());
     assert_eq!(request, before);
+
     request.release_deposit("reservation", amount("40")).unwrap();
     assert_eq!(request.deposit_reservations["reservation"].amount, amount("60"));
     assert_eq!(request.available_to_execute("account-1").unwrap(), amount("40"));
+
     request.release_deposit("reservation", amount("60")).unwrap();
     assert!(!request.deposit_reservations.contains_key("reservation"));
     assert_eq!(request.available_to_execute("account-1").unwrap(), amount("100"));

@@ -74,6 +74,7 @@ impl ContractExtraction {
                     if self.conflicts.iter().any(|conflict| conflict.contains(&name)) {
                         return None;
                     }
+
                     if field.value.trim().is_empty()
                         || field.quote.trim().is_empty()
                         || !document
@@ -89,6 +90,7 @@ impl ContractExtraction {
                 (key, value)
             })
             .collect();
+
         RecognitionDraft { fields, warnings }
     }
 }
@@ -127,6 +129,7 @@ impl ConfirmImport {
         if self.version == 0 || self.fields.values().flatten().any(|value| value.len() > 4096) {
             return Err(ImportFailure::new("INVALID_CONFIRMATION", "确认内容无效，请检查字段或刷新重试"));
         }
+
         let values = ContractValues {
             fields: self
                 .fields

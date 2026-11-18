@@ -95,6 +95,7 @@ pub(super) fn recipient_hash(secret: &str, recipient: &Recipient) -> ConnectorRe
     if geo.coordinate_system != CoordinateSystem::Bd09 {
         return Err(mapping());
     }
+
     let bytes = to_vec(&[
         &recipient.name,
         &recipient.phone,

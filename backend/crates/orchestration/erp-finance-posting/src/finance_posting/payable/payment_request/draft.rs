@@ -24,6 +24,7 @@ impl PurchasePaymentRequestProcess {
         if req.expected_version.is_some() {
             return Err(Error::ValidationError("新申请不能指定已有版本".into()));
         }
+
         let request = PurchasePaymentRequest::new(id_generator::next_id(), req.data, actor.id())?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
@@ -64,6 +65,7 @@ impl PurchasePaymentRequestProcess {
                     require_sources(&db, &rbac, &request, &actor, "update", executor).await?;
                     ensure_version(&request, version)?;
                     request.update(req.data)?;
+
                     let sources = require_sources(&db, &rbac, &request, &actor, "update", executor).await?;
                     let basis = source::prepare_submission(
                         &db,
@@ -76,6 +78,7 @@ impl PurchasePaymentRequestProcess {
                     )
                     .await?;
                     request.set_draft_basis(basis)?;
+
                     db.purchase_payment_requests().update(&mut request, executor).await?;
                     let audit = actor.resource_log(
                         "purchase_payment_request.update",
@@ -107,6 +110,7 @@ pub(super) async fn create_draft(
             return Err(Error::ConflictError("采购可申请余额已变化，请刷新后重新核对".into()));
         }
     }
+
     db.purchase_payment_requests().create(&request, executor).await?;
     let audit = actor.clone().resource_log(
         "purchase_payment_request.create",

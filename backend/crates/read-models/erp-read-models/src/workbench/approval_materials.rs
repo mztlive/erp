@@ -50,10 +50,12 @@ pub async fn freeze_approval_materials(
     snapshot.links =
         work_item_links::capture(db, snapshot.document_type.as_str(), &snapshot.business_object_id, executor)
             .await?;
+
     let (mut materials, actor) = direct_materials(identity_service, db, &snapshot, executor).await?;
     if let Some(contract) = sales_contract_material(db, auth, &actor, &snapshot, executor).await? {
         materials.push(contract);
     }
+
     if snapshot.display.is_none() {
         snapshot.display = Some(
             capture_approval_display(db, snapshot.document_type, &snapshot.business_object_id, executor)
@@ -64,6 +66,7 @@ pub async fn freeze_approval_materials(
         display.source.resolve_submitter_name(&snapshot.payload.submitted_by, actor.actor_name_snapshot());
         display.validate()?;
     }
+
     if snapshot.document_type == DocumentType::PurchaseOrder {
         let (source_sales, files) = related_sales::capture(db, &snapshot, executor).await?;
         if let Some(display) = &mut snapshot.display {
@@ -72,9 +75,11 @@ pub async fn freeze_approval_materials(
         }
         materials.extend(files);
     }
+
     if snapshot.document_type == DocumentType::SalesChangeOrder {
         materials.extend(sales_change_evidence(db, &mut snapshot, executor).await?);
     }
+
     if snapshot.document_type == DocumentType::PurchasePaymentRequest {
         let (sources, files) = payment_request::capture(db, &snapshot, executor).await?;
         if let Some(display) = &mut snapshot.display {
@@ -83,6 +88,7 @@ pub async fn freeze_approval_materials(
         }
         materials.extend(files);
     }
+
     if snapshot.document_type == DocumentType::SalesInvoiceRequest {
         let (source, files) = super::invoice_review::capture(db, &snapshot, executor).await?;
         if let Some(display) = &mut snapshot.display {
@@ -95,6 +101,7 @@ pub async fn freeze_approval_materials(
         }
         materials.extend(files);
     }
+
     snapshot.with_material_files(unique_materials(materials)).map_err(Error::from)
 }
 
@@ -118,6 +125,7 @@ async fn direct_materials(
         .await?
         .filter(|row| row.document_type == snapshot.document_type)
         .ok_or_else(|| Error::ConflictError("审批材料缺少匹配的业务单据注册".into()))?;
+
     let mut ids = db
         .document_attachments()
         .list_by_document(&BusinessDocumentId::new(document.base.id), executor)
@@ -132,11 +140,13 @@ async fn direct_materials(
     if ids.len() > 100 {
         return Err(Error::ValidationError("审批材料最多 100 个文件".into()));
     }
+
     let files =
         db.file_assets().find_by_ids(&ids.iter().map(FileAssetId::new).collect::<Vec<_>>(), executor).await?;
     if files.len() != ids.len() {
         return Err(Error::ConflictError("审批材料引用的文件不存在或已删除".into()));
     }
+
     let account = AccountDirectoryService::new(db.clone())
         .account(&snapshot.payload.submitted_by, executor)
         .await?
@@ -187,6 +197,7 @@ async fn sales_contract_material(
     if !auth.approval_contract_readable(actor, contract.contract_id.as_ref(), executor).await? {
         return Err(Error::Forbidden("无权将锁定合同作为销售审批材料".into()));
     }
+
     let file = db
         .file_assets()
         .find_by_id(contract.contract_pdf_file_id.as_ref(), executor)
@@ -286,6 +297,7 @@ mod tests {
         let mut files = (0..100).map(|index| file(&format!("file-{index}"))).collect::<Vec<_>>();
         files.push(file("file-0"));
         assert_eq!(unique_materials(files).len(), 100);
+
         let mut changed = file("file-0");
         changed.asset_version = 2;
         let variants = unique_materials(vec![file("file-0"), changed]);

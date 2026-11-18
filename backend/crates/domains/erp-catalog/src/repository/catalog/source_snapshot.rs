@@ -53,6 +53,7 @@ impl CatalogRepository<'_> {
         let Some(product) = self.db.products().find_by_id(product_id, executor).await? else {
             return Ok(None);
         };
+
         let current_revision = if let Some(id) = product.stable.current_revision_id.as_deref() {
             self.db.product_revisions().find_by_id(id, executor).await?
         } else {
@@ -60,6 +61,7 @@ impl CatalogRepository<'_> {
         };
         let latest_revision_no =
             self.latest_product_revision_no(&ProductId::new(product_id), executor).await?;
+
         let media = if let Some(revision) = &current_revision {
             self.db
                 .product_revision_medias()

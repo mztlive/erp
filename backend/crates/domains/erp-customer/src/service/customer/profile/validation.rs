@@ -64,6 +64,7 @@ impl SaveCustomerProfileRequest {
         let payload = serde_json::to_vec(self)
             .map_err(|_| crate::error::Error::Internal("客户资料请求指纹计算失败".to_string()))?;
         let fingerprint = CustomerProfileRequestFingerprint::from_json_bytes_v1(&payload);
+
         Ok(CustomerProfileReplayContext::new(
             self.idempotency_key.clone(),
             operation,
@@ -112,6 +113,7 @@ impl SaveCustomerProfileRequest {
             self.reuse_existing_party,
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
+
         CustomerProfileFactSet::new(CustomerProfileFactKind::Contact, self.contacts.as_deref())
             .validate(shape.operation())?;
         CustomerProfileFactSet::new(CustomerProfileFactKind::Address, self.addresses.as_deref())
@@ -163,10 +165,12 @@ mod tests {
         assert!(!request.reuse_existing_party);
         assert!(serde_json::to_value(&request).unwrap().get("reuse_existing_party").is_none());
         let original = request.replay_context(CustomerProfileOperation::Create, None, "admin").unwrap();
+
         request.reuse_existing_party = true;
         assert!(request.validate_structure(CustomerProfileOperation::Create).is_ok());
         let confirmed = request.replay_context(CustomerProfileOperation::Create, None, "admin").unwrap();
         assert_ne!(original.request_fingerprint(), confirmed.request_fingerprint());
+
         request.expected_party_version = Some(1);
         request.expected_customer_version = Some(1);
         assert!(request.validate_structure(CustomerProfileOperation::Update).is_err());
@@ -202,6 +206,7 @@ mod tests {
         );
         assert_eq!(first.idempotency_key(), "save-customer-1");
         assert!(first.request_fingerprint().as_str().starts_with("sha256-json-v1:"));
+
         let debug_context = format!("{first:?}");
         assert!(!debug_context.contains("13800000000"));
         assert!(!debug_context.contains("6222020000000000"));

@@ -97,6 +97,7 @@ pub async fn account_detail(
     let available_amount = account.available()?;
     let row = account_row(db, account, executor).await?;
     let payee_bank_accounts = payee_bank_accounts(db, &row.account.identity.supplier_id, executor).await?;
+
     let reservations = merge_recent(
         latest(db.supplier_deposit_reservations(), &id, executor).await?,
         outstanding_reservations(db, &id, executor).await?,
@@ -105,6 +106,7 @@ pub async fn account_detail(
         latest(db.supplier_deposit_reconciliations(), &id, executor).await?,
         unresolved_reconciliations(db, &id, executor).await?,
     )?;
+
     Ok(DepositAccountDetail {
         row,
         available_amount,

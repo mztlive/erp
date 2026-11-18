@@ -83,6 +83,7 @@ impl ReplaySource for MongoReplay<'_> {
         self.authorization
             .require(self.actor, &sales_review::SALES_CHANGE_DRAFT, AccessTarget::Operation, executor)
             .await?;
+
         let change = self
             .db
             .sales_change_orders()
@@ -123,6 +124,7 @@ async fn replay(
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
     source.authorize(command, executor).await?;
+
     let Some(receipt) = source.receipt(&command.id, executor).await? else {
         return Ok(None);
     };
@@ -215,6 +217,7 @@ mod tests {
             .database("sales_change_entry_test");
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         let command = SalesChangeSubmissionCommand::new("change", actor.id(), 1, "submit", None).unwrap();
+
         let error = replay_submission(
             &db,
             unavailable_authorization(),
@@ -225,6 +228,7 @@ mod tests {
         .await
         .unwrap_err();
         assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+
         let error = replay_submission(&db, unavailable_authorization(), &actor, &command, &mut NoTransaction)
             .await
             .unwrap_err();
@@ -237,6 +241,7 @@ mod tests {
         let first = record(4, "k1", 1);
         let second = record(7, "k2", 2);
         let source = store(&[first.clone(), second.clone()]);
+
         let found = replay(&source, &first.command, &mut ReadExecutor::default()).await.unwrap();
         assert_eq!(found.as_deref(), Some("instance1"));
         assert_eq!(
@@ -254,6 +259,7 @@ mod tests {
             SalesChangeSubmissionCommand::new("change", "actor", 4, "same-key", Some("原说明")).unwrap();
         assert_eq!(winner.command.id, original.id);
         let source = store(std::slice::from_ref(&winner));
+
         for error in [
             Error::ReceiptDuplicate(persistence_core::Error::DuplicateKey(MongoError::custom("receipt"))),
             Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(MongoError::custom(
@@ -267,6 +273,7 @@ mod tests {
             .unwrap_err();
             assert!(matches!(error, Error::ConflictError(_)));
         }
+
         assert_eq!(source.receipts[&original.id], winner);
         assert_eq!(
             replay(&source, &winner.command, &mut ReadExecutor::default()).await.unwrap().as_deref(),
@@ -284,6 +291,7 @@ mod tests {
             replay(&source, &changed, &mut ReadExecutor::default()).await,
             Err(Error::ConflictError(_))
         ));
+
         source.submissions.get_mut("s1").unwrap().source_version = Some(5);
         assert!(matches!(
             replay(&source, &original.command, &mut ReadExecutor::default()).await,
@@ -300,6 +308,7 @@ mod tests {
         let unknown = Error::OutcomeUnknown(persistence_core::Error::CommitOutcomeUnknown(
             MongoError::custom("unknown"),
         ));
+
         assert!(matches!(
             recover_approval_command(unknown, || async {
                 replay(&source, &original.command, &mut ReadExecutor::default()).await

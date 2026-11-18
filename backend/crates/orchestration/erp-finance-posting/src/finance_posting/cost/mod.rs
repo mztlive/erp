@@ -68,11 +68,13 @@ impl CostProcess {
         actor: &AuditActor,
     ) -> Result<CostEntryView> {
         validate_create_cost_entry(&req)?;
+
         // 归属销售单存在性：先去重、一次批量读取存在性事实，再解释缺失订单；
         // Repository 只返回已存在 ID 的最小事实，跨聚合报错决策保留 Process。
         let requested_order_ids =
             req.allocations.iter().map(|line| line.sales_order_id.clone()).collect::<Vec<_>>();
         let unique_order_ids = dedupe_order_ids(&requested_order_ids);
+
         let prepared = prepare_cost_entry(req)?;
         let entry_id = CostEntryId::new(prepared.entry.base.id.clone());
         let audit = actor.clone().resource_log("cost_entry.create", "cost_entry", entry_id.to_string())?;
@@ -85,8 +87,10 @@ impl CostProcess {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     authorize_cost_sources(&db, &authorization, &actor, &unique_order_ids, executor).await?;
+
                     persist_cost_entry(&db, prepared, executor).await?;
                     persist_log(&db, &audit, executor).await?;
+
                     Ok(FinanceCostService::new(db)
                         .cost_entry_detail_with_executor(&entry_id, executor)
                         .await?)
@@ -117,6 +121,7 @@ async fn authorize_cost_sources(
         ..Default::default()
     };
     authorization.require(actor, &cost::ENTRY_CREATE, AccessTarget::Candidate(candidate), executor).await?;
+
     let existing = db.sales_order().find_existing_ids(order_ids, executor).await?;
     if missing_order_id(order_ids, &existing).is_some() {
         return Err(Error::NotFound("成本归属销售单不存在".into()));

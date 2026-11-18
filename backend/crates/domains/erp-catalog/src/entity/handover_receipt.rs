@@ -142,6 +142,7 @@ mod tests {
         let receipt = receipt();
         assert!(receipt.ensure_matches(&command("normalized-payload")).is_ok());
         assert!(matches!(receipt.ensure_matches(&command("other")), Err(Error::ConflictError(_))));
+
         let encoded = serde_json::to_string(&receipt).unwrap();
         assert!(!encoded.contains("\"key\""));
         let restored: ProductHandoverReceipt = serde_json::from_str(&encoded).unwrap();
@@ -167,6 +168,7 @@ mod tests {
         let mut changed = original;
         changed.audit_event_id.clear();
         cases.push(changed);
+
         for changed in cases {
             assert!(matches!(
                 changed.ensure_matches(&command("normalized-payload")),

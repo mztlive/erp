@@ -29,6 +29,7 @@ pub(super) async fn revalidate(
     if request.approval_instance_id.as_deref() != Some(snapshot.approval_instance_id.as_str()) {
         return Err(Error::ConflictError("原付款与申请审批实例不一致".into()));
     }
+
     validate_snapshot(payment, &snapshot)?;
     validate_reversal_allocations(payment, allocations)
 }
@@ -171,6 +172,7 @@ mod tests {
             .unwrap();
         request.approval_instance_id = Some("instance-1".into());
         let snapshot = PurchasePaymentRequestSubmissionSnapshot::freeze(&request).unwrap();
+
         let mut payment = SupplierPayment::new(
             SupplierPaymentId::new("payment-1"),
             SupplierPaymentData {
@@ -200,6 +202,7 @@ mod tests {
         current.record_payment(&payment.request_allocations).unwrap();
         current.close("关闭未付金额").unwrap();
         assert_eq!(current.status, PurchasePaymentRequestStatus::Closed);
+
         assert!(validate_snapshot(&payment, &snapshot).is_ok());
         assert!(validate_reversal_allocations(&payment, &[allocation("account-1", "5")]).is_ok());
         assert_eq!(snapshot.request.lines[0].paid_amount, Amount::zero());
@@ -211,9 +214,11 @@ mod tests {
         let mut missing = payment.clone();
         missing.payment_request_id = None;
         assert!(matches!(validate_snapshot(&missing, &snapshot), Err(Error::ConflictError(_))));
+
         let mut wrong_request = payment.clone();
         wrong_request.payment_request_id = Some("request-2".into());
         assert!(validate_snapshot(&wrong_request, &snapshot).is_err());
+
         for tamper in ["request", "version", "instance"] {
             let mut bad = snapshot.clone();
             match tamper {
@@ -248,9 +253,11 @@ mod tests {
         bad.amount = amount("21");
         bad.request_allocations = vec![allocation("account-1", "21")];
         variants.push(bad);
+
         for bad in variants {
             assert!(validate_snapshot(&bad, &snapshot).is_err());
         }
+
         for allocations in [
             Vec::new(),
             vec![allocation("account-1", "0")],

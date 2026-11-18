@@ -136,6 +136,7 @@ impl SupplierHealthCheckRun {
         if data.capability_versions.iter().any(|item| item.version == 0) {
             return Err(Error::from("能力版本必须大于零"));
         }
+
         Ok(Self {
             base: BaseModel::new(id.into()),
             connection_id: data.connection_id,
@@ -278,9 +279,11 @@ impl SupplierHealthCheckRun {
         if self.status != SupplierHealthCheckStatus::Running || !status.is_terminal() {
             return Err(Error::from("只有执行中的健康检查可以写入终态"));
         }
+
         self.error_code =
             error_code.map(|value| required(value, "错误代码", ERROR_CODE_MAX_LEN)).transpose()?;
         self.error_summary = normalize_optional_text(error_summary, "错误摘要", ERROR_SUMMARY_MAX_LEN)?;
+
         self.status = status;
         self.finished_at = Some(at);
         self.latency_ms = Some(latency_ms);
@@ -312,6 +315,7 @@ mod recovery_tests {
             "admin",
         )
         .unwrap();
+
         let mut run = SupplierHealthCheckRun::new(
             "run-1",
             SupplierHealthCheckRunData {
@@ -326,6 +330,7 @@ mod recovery_tests {
             },
         )
         .unwrap();
+
         run.start(Instant::from_unix_secs(20)).unwrap();
         run.succeed(Instant::from_unix_secs(21), 1).unwrap();
         connection.record_health(HealthCheckResult::Healthy, Instant::from_unix_secs(21));
@@ -338,9 +343,11 @@ mod recovery_tests {
         assert!(run.verifies_authentication_after(&connection, 10));
         assert!(!run.verifies_authentication_after(&connection, 20));
         assert!(!run.verifies_authentication_after(&connection, 30));
+
         connection.technical_config_version += 1;
         assert!(!run.verifies_authentication_after(&connection, 10));
         connection.technical_config_version = run.technical_config_version;
+
         run.check_type = SupplierHealthCheckType::Connectivity;
         assert!(!run.verifies_authentication_after(&connection, 10));
     }
@@ -350,15 +357,19 @@ mod recovery_tests {
         let (mut run, mut connection) = facts();
         run.connection_id = SupplierApiConnectionId::new("conn-2");
         assert!(!run.verifies_authentication_after(&connection, 10));
+
         run.connection_id = SupplierApiConnectionId::new("conn-1");
         connection.last_health_result = Some(HealthCheckResult::Failed);
         assert!(!run.verifies_authentication_after(&connection, 10));
+
         connection.last_health_result = Some(HealthCheckResult::Healthy);
         connection.last_health_at = Some(Instant::from_unix_secs(19));
         assert!(!run.verifies_authentication_after(&connection, 10));
+
         connection.last_health_at = Some(Instant::from_unix_secs(21));
         run.status = SupplierHealthCheckStatus::Failed;
         assert!(!run.verifies_authentication_after(&connection, 10));
+
         run.status = SupplierHealthCheckStatus::Succeeded;
         run.finished_at = None;
         assert!(!run.verifies_authentication_after(&connection, 10));

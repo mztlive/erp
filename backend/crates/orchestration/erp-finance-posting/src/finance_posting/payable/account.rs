@@ -91,8 +91,10 @@ impl PayableProcess {
                         .find_by_id(&source_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("来源采购单不存在".into()))?;
+
                     db.payable().create_payable_with_entry(&account, &entry, executor).await?;
                     persist_log(&db, &audit, executor).await?;
+
                     created_account_view(
                         &PayableReadService::new(db.clone()),
                         &authorization,
@@ -136,6 +138,7 @@ mod result_tests {
         let read = PayableReadService::new(db);
         let authorization = unavailable_authorization();
         let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+
         for (executor, snapshot) in [
             (&mut ReadExecutor::default() as &mut dyn Executor, false),
             (&mut SnapshotExecutor::default() as &mut dyn Executor, true),

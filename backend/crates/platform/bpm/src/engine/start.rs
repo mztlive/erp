@@ -69,6 +69,7 @@ pub fn start(
     bindings: &[StartAssigneeBinding],
 ) -> EngineResult<TransitionPlan> {
     let by_node = indexed_bindings(graph, bindings)?;
+
     let instance = ApprovalProcessInstance::start_running(NewProcessInstance {
         id: command.instance_id.clone(),
         process_definition_id: ApprovalProcessDefinitionId::new(graph.definition.base.id.clone()),
@@ -80,6 +81,7 @@ pub fn start(
         at: command.now,
     })?;
     let assignees = freeze_assignees(&instance, graph, &by_node, command.now)?;
+
     let entry = graph.entry_node()?;
     let entry_binding = by_node
         .get(entry.node_key.as_str())
@@ -98,6 +100,7 @@ pub fn start(
         replaces_execution_id: None,
         now: command.now,
     })?;
+
     plan.created_assignees = assignees;
     plan.events.insert(
         0,
@@ -114,6 +117,7 @@ fn indexed_bindings<'a>(
     if bindings.len() != graph.nodes.len() {
         return Err(EngineError::InvalidCommand("实例审批人绑定必须与定义节点一一对应"));
     }
+
     let mut by_node = HashMap::with_capacity(bindings.len());
     let mut seen_ids = HashSet::with_capacity(bindings.len());
     for binding in bindings {
@@ -145,6 +149,7 @@ fn freeze_assignees(
         if binding.participant != *node.assignee()? {
             return Err(EngineError::InvalidCommand("实例审批人绑定必须匹配定义审批人"));
         }
+
         if binding.eligibility.participant_ref() != &binding.participant {
             return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
         }
@@ -152,9 +157,11 @@ fn freeze_assignees(
         if binding.eligibility.members().iter().any(|item| item.blocked_code().is_some()) {
             return Err(EngineError::InvalidCommand("启动时全部审批人必须有效，不得创建受阻实例"));
         }
+
         if node.resolution.as_ref().is_some_and(|r| r.subject_id != instance.started_by.as_str()) {
             return Err(EngineError::InvalidCommand("动态审批来源必须属于本次申请人"));
         }
+
         let mut frozen = ApprovalInstanceAssignee::from_definition(
             binding.id.clone(),
             instance_id.clone(),

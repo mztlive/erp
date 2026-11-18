@@ -57,6 +57,7 @@ impl StructuredCommandReceipt {
             idempotency_key_hash: command.idempotency_key_hash().clone(),
             fingerprint: command.fingerprint().clone(),
         };
+
         value.validate()?;
         Ok(value)
     }
@@ -97,6 +98,7 @@ impl CommandReceipt {
         if fact.validate().is_err() || !self.structured_identity_matches(fact) {
             return StructuredReceiptMatch::Corrupted;
         }
+
         let matched = &fact.fingerprint == self.fingerprint();
         if matched { StructuredReceiptMatch::SamePayload } else { StructuredReceiptMatch::DifferentPayload }
     }
@@ -127,6 +129,7 @@ mod tests {
         assert_eq!(original.match_structured(&fact), StructuredReceiptMatch::SamePayload);
         assert_eq!(command(20).match_structured(&fact), StructuredReceiptMatch::DifferentPayload);
         assert_eq!(fact.command_id, original.id());
+
         let encoded = serde_json::to_string(&fact).unwrap();
         let decoded: StructuredCommandReceipt = serde_json::from_str(&encoded).unwrap();
         assert_eq!(decoded, fact);
@@ -147,8 +150,10 @@ mod tests {
         .unwrap();
         let mut fact = StructuredCommandReceipt::from_command(&original).unwrap();
         assert_eq!(original.match_structured(&fact), StructuredReceiptMatch::SamePayload);
+
         fact.scope_id = Some("invoice-2".to_string());
         assert_eq!(original.match_structured(&fact), StructuredReceiptMatch::Corrupted);
+
         fact.scope_id = original.scope_id().map(str::to_string);
         fact.idempotency_key_hash = CommandFingerprint::from_parts(["other".to_string()]);
         assert_eq!(original.match_structured(&fact), StructuredReceiptMatch::Corrupted);
@@ -171,6 +176,7 @@ mod tests {
         let mut changed = fact.clone();
         changed.actor_id.clear();
         cases.push(changed);
+
         for changed in cases {
             assert_eq!(original.match_structured(&changed), StructuredReceiptMatch::Corrupted);
         }
@@ -187,6 +193,7 @@ mod tests {
                 value[field] = invalid.into();
                 assert!(serde_json::from_value::<StructuredCommandReceipt>(value).is_err());
             }
+
             let mut value = encoded.clone();
             let fingerprint = value[field].as_str().unwrap();
             value[field] = format!("sha256-v1:{}", fingerprint[10..].to_ascii_uppercase()).into();

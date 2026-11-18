@@ -39,6 +39,7 @@ impl ReceivableReadService {
             .find_by_id(&id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("应收往来子账不存在".to_string()))?;
+
         let snapshot = load_receivable_snapshot(&self.db, &account, executor).await?;
         let entry_views = self.account_entry_views(&snapshot.entries, executor).await?;
         let receipt_facts = receipt_fact_views(&snapshot);
@@ -90,6 +91,7 @@ impl ReceivableReadService {
             let total = offset_map.entry(key).or_insert_with(zero_amount);
             *total = total.checked_add(offset.offset_amount);
         }
+
         let entry_views = entries
             .iter()
             .map(|entry| {

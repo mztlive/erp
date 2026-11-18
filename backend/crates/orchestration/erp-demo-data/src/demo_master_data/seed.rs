@@ -85,6 +85,7 @@ impl SeedRequest {
             Self::Product(row) => row.validate(),
         };
         validation.map_err(|error| Error::ValidationError(format!("演示种子字段无效：{error}")))?;
+
         match self {
             Self::Product(row) => validate_product(row, previous)?,
             Self::Category(row) if row.parent_category_id.is_some() => {
@@ -114,6 +115,7 @@ impl SeedRequest {
 pub(super) fn load(json: &str) -> Result<Vec<DemoStep>> {
     let requests: Vec<SeedRequest> = serde_json::from_str(json)
         .map_err(|error| Error::ValidationError(format!("演示种子 JSON 无效：{error}")))?;
+
     let mut known = HashMap::new();
     let mut sku_numbers = HashSet::new();
     let mut steps = Vec::new();
@@ -124,6 +126,7 @@ pub(super) fn load(json: &str) -> Result<Vec<DemoStep>> {
         if key.trim().is_empty() || known.insert(key.clone(), kind).is_some() {
             return Err(Error::ValidationError(format!("演示种子身份为空或重复：{key}")));
         }
+
         if let SeedRequest::Product(product) = &request {
             for sku in &product.skus {
                 if !sku_numbers.insert(sku.sku_no.trim().to_string()) {
@@ -202,6 +205,7 @@ mod tests {
         let counts = planned_counts(&steps);
         assert_eq!((counts.unit, counts.brand, counts.category, counts.warehouse), (6, 8, 13, 6));
         assert_eq!((counts.customer, counts.supplier, counts.product), (24, 28, 28));
+
         let SeedRequest::Product(product) = &steps.last().unwrap().request else {
             panic!("商品必须最后生成")
         };
@@ -227,6 +231,7 @@ mod tests {
             serde_json::to_value(&product.skus[0].spec_entries).unwrap(),
             serde_json::to_value(&product.skus[1].spec_entries).unwrap()
         );
+
         let standard = &product.skus[0];
         assert_eq!(standard.market_price.unwrap().to_string(), "159.00");
         let prices = SkuSalesPrices {
@@ -236,6 +241,7 @@ mod tests {
         };
         assert_eq!(prices.reference_price("9".parse::<Quantity>().unwrap()).unwrap().to_string(), "129.00");
         assert_eq!(prices.reference_price("10".parse::<Quantity>().unwrap()).unwrap().to_string(), "119.00");
+
         let light = &product.skus[1];
         assert_eq!(light.market_price.unwrap().to_string(), "129.00");
         let light_prices = SkuSalesPrices {
@@ -330,13 +336,16 @@ mod tests {
         let mut duplicated = original.clone();
         duplicated.as_array_mut().unwrap().push(original[0].clone());
         assert!(load(&duplicated.to_string()).is_err());
+
         let mut bad_reference = original.clone();
         bad_reference.as_array_mut().unwrap().last_mut().unwrap()["data"]["brand_id"] = json!("missing");
         assert!(load(&bad_reference.to_string()).is_err());
+
         let mut bad_price = original;
         bad_price.as_array_mut().unwrap().last_mut().unwrap()["data"]["skus"][0]["sales_visible_price_gross"] =
             json!("NaN");
         assert!(load(&bad_price.to_string()).is_err());
+
         assert!(load("not json").is_err());
         assert!(load("[]").unwrap().is_empty());
     }

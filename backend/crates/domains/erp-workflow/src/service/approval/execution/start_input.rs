@@ -193,12 +193,14 @@ mod tests {
         assert_eq!(input.command.idempotency_key.as_str(), "operation-key");
         assert_eq!(input.command.now, Timestamp::from_unix_secs(10).unwrap());
         assert_eq!(input.command.current_eligibility, input.command.next_eligibility);
+
         let PreparedExecution::Apply(writes) = prepare_start(input.clone()).unwrap() else {
             panic!("首次启动必须产生写入计划");
         };
         assert_eq!(writes.instance.base.id, input.instance_id.as_ref());
         assert_eq!(writes.created_executions[0].base.id, input.entry_execution_id.as_ref());
         assert_eq!(writes.receipt.base.id, input.receipt_id.as_ref());
+
         let mut replay = input;
         replay.command.receipt = Some(writes.receipt.clone());
         assert!(matches!(prepare_start(replay).unwrap(), PreparedExecution::Replay { .. }));
@@ -213,6 +215,7 @@ mod tests {
         second.display_order = 2;
         second.assignee_participant_id = Some(ParticipantId::new("next-reviewer").unwrap());
         graph.nodes.push(second);
+
         let mut checked = Vec::new();
         let bindings = start_bindings(
             &graph,
@@ -227,6 +230,7 @@ mod tests {
         assert_eq!(bindings[0].node_key, graph.nodes[0].node_key);
         assert_eq!(bindings[1].node_key, graph.nodes[1].node_key);
         assert_ne!(bindings[0].id, bindings[1].id);
+
         let input = assemble_start_input(graph, bindings, context(&binding())).unwrap();
         assert_eq!(
             input.command.current_eligibility.blocked_code(),
@@ -240,8 +244,10 @@ mod tests {
         empty.nodes.clear();
         let error = start_bindings(&empty, |_| None, "入口专属空定义提示").unwrap_err();
         assert!(matches!(error, Error::ConflictError(message) if message == "入口专属空定义提示"));
+
         let error = assemble_start_input(empty, vec![], context(&binding())).unwrap_err();
         assert!(matches!(error, Error::ConflictError(message) if message == "审批定义缺少入口节点"));
+
         let error = assemble_start_input(graph(), vec![], context(&binding())).unwrap_err();
         assert!(matches!(error, Error::ConflictError(message) if message == "入口节点缺少审批人绑定"));
     }

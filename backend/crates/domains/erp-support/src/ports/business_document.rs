@@ -132,6 +132,7 @@ mod tests {
         assert!(!is_business_document_type(" Sales_order "));
         assert!(!is_business_document_type("SALES_ORDER"));
         assert!(!is_business_document_type("unknown"));
+
         assert_eq!(BUSINESS_DOCUMENT_TYPE_CODES.len(), 20);
         let mut sorted = BUSINESS_DOCUMENT_TYPE_CODES.to_vec();
         sorted.sort_unstable();

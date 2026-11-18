@@ -56,6 +56,7 @@ pub fn decision_identity(
         scope_payload,
         digest_payload,
     )?;
+
     let legacy_scope = execution_id.to_string();
     Ok(PreparedCommandIdentity::new(
         current,
@@ -149,6 +150,7 @@ pub fn cancel_identity(params: CancelIdentityParams<'_>) -> Result<PreparedComma
             actor_id,
         ),
     )?;
+
     Ok(PreparedCommandIdentity::new(
         current,
         vec![LegacyReceiptIdentity::exact(
@@ -246,6 +248,7 @@ pub fn document_cancel_identity(params: DocumentCancelIdentityParams<'_>) -> Res
         instance_scope_payload(instance_id),
         digest_payload,
     )?;
+
     Ok(PreparedCommandIdentity::new(
         current,
         vec![LegacyReceiptIdentity::exact(
@@ -301,6 +304,7 @@ pub fn resume_identity(
         instance_scope_payload(instance_id),
         digest_payload,
     )?;
+
     Ok(PreparedCommandIdentity::new(
         current,
         vec![LegacyReceiptIdentity::exact(
@@ -393,6 +397,7 @@ pub fn cancel_blocked_identity(params: CancelBlockedIdentityParams<'_>) -> Resul
         instance_scope_payload(instance_id),
         digest_payload,
     )?;
+
     Ok(PreparedCommandIdentity::new(
         current,
         vec![

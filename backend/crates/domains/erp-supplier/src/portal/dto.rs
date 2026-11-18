@@ -36,6 +36,7 @@ impl CooperationRequest {
             "当前商务版本过长",
         )?;
         self.reason = normalize_required_text(self.reason, "申请原因不能为空", 500, "申请原因过长")?;
+
         let term = SupplierPaymentTerm::parse(&self.payment_term)?;
         if term.settlement_mode() != self.settlement_mode {
             return Err(Error::ValidationError("付款条件与结算方式不一致".into()));

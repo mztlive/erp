@@ -39,17 +39,21 @@ impl super::super::WorkItemFactsReader {
                 );
             }
         }
+
         let ids = object_ids(keys, ObjectKind::CustomerReceipt);
         if ids.is_empty() {
             return Ok(());
         }
+
         let receipts = self.read_customer_receipts(&ids, executor).await?;
         if receipts.is_empty() {
             return Ok(());
         }
+
         let party_ids =
             receipts.iter().map(|item| item.counterparty_party_id.to_string()).collect::<Vec<_>>();
         let party_names = self.party_legal_names(&party_ids, executor).await?;
+
         for receipt in receipts {
             let fact = mapping::customer_receipt_fact(
                 &receipt,
@@ -82,9 +86,11 @@ impl super::super::WorkItemFactsReader {
         if ids.is_empty() {
             return Ok(());
         }
+
         let refunds = self.read_customer_refunds(&ids, executor).await?;
         let customer_ids = refunds.iter().map(|refund| refund.customer_id.to_string()).collect::<Vec<_>>();
         let customer_names = self.customer_display_names(&customer_ids, executor).await?;
+
         let receipt_ids = refunds
             .iter()
             .filter_map(|refund| refund.original_receipt_id.as_ref().map(ToString::to_string))
@@ -95,6 +101,7 @@ impl super::super::WorkItemFactsReader {
             .filter_map(|refund| refund.original_receivable_entry_id.as_ref().map(ToString::to_string))
             .collect::<Vec<_>>();
         let entry_origins = self.receivable_entry_origins(&entry_ids, executor).await?;
+
         for refund in refunds {
             let fact = mapping::customer_refund_fact(
                 &refund,
@@ -129,12 +136,14 @@ impl super::super::WorkItemFactsReader {
         if ids.is_empty() {
             return Ok(());
         }
+
         let reversals = self.read_receipt_reversals(&ids, executor).await?;
         let receipt_ids = reversals
             .iter()
             .map(|reversal| reversal.original_customer_receipt_id.to_string())
             .collect::<Vec<_>>();
         let origins = self.customer_receipt_origins(&receipt_ids, executor).await?;
+
         for reversal in reversals {
             let fact = mapping::receipt_reversal_fact(&reversal, &origins);
             facts.insert((ObjectKind::ReceiptReversal, reversal.base.id.clone()), fact);

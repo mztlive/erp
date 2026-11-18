@@ -140,14 +140,12 @@ mod tests {
     #[test]
     fn duplicate_key_code_maps_to_dedicated_error() {
         let error = Error::from(write_error(11000));
-
         assert!(matches!(error, Error::DuplicateKey(_)));
     }
 
     #[test]
     fn other_write_code_remains_database_error() {
         let error = Error::from(write_error(121));
-
         assert!(matches!(error, Error::DatabaseError(_)));
     }
 
@@ -169,7 +167,6 @@ mod tests {
     #[test]
     fn unknown_duplicate_message_has_no_index_name() {
         let error = Error::from(write_error(11000));
-
         assert_eq!(error.duplicate_index_name(), None);
     }
 

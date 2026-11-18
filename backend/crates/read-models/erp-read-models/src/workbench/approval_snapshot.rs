@@ -37,6 +37,7 @@ pub async fn capture_approval_display(
     let reader = WorkbenchReadService::new(db.clone());
     let mut facts = reader.load_live_object_facts(&HashSet::from([key.clone()]), executor).await?;
     let fact = facts.remove(&key).ok_or_else(|| Error::ValidationError("审批单据不存在".into()))?;
+
     let snapshot = ApprovalDisplaySnapshot {
         root_document_id: fact.display.root_document_id,
         counterparty_label: fact.display.counterparty_label,
@@ -101,6 +102,7 @@ pub(super) fn apply_snapshot(facts: &mut WorkbenchObjectFactMap, snapshot: Appro
     let Some(fact) = facts.get_mut(&(policy.object_kind, snapshot.business_object_id.clone())) else {
         return;
     };
+
     if snapshot.display.is_none() {
         apply_legacy(fact, &snapshot);
         return;
@@ -108,6 +110,7 @@ pub(super) fn apply_snapshot(facts: &mut WorkbenchObjectFactMap, snapshot: Appro
     let Some(mut display) = snapshot.display.filter(|display| display.validate().is_ok()) else {
         return;
     };
+
     if snapshot.document_type == DocumentType::PurchaseOrder {
         let customers = display
             .source_sales
@@ -128,6 +131,7 @@ pub(super) fn apply_snapshot(facts: &mut WorkbenchObjectFactMap, snapshot: Appro
             Some(&source.document_id),
         );
     }
+
     fact.display.subject_briefs.insert(
         snapshot.subject_version.to_string(),
         WorkbenchSubjectDisplay {
@@ -144,6 +148,7 @@ fn apply_legacy(fact: &mut super::WorkbenchObjectFact, snapshot: &ApprovalSubjec
     if super::approval_list::document_summary(fact, Some(snapshot.subject_version)).is_some() {
         return;
     }
+
     let label = match snapshot.document_type {
         DocumentType::CustomerReceipt => "回款金额",
         DocumentType::CustomerRefund | DocumentType::SupplierRefund => "退款金额",
@@ -176,6 +181,7 @@ fn apply_legacy(fact: &mut super::WorkbenchObjectFact, snapshot: &ApprovalSubjec
         false,
     );
     source.list_summary = "历史审批 · 部分资料未保存".into();
+
     fact.display.subject_briefs.insert(
         snapshot.subject_version.to_string(),
         WorkbenchSubjectDisplay {
@@ -214,6 +220,7 @@ mod tests {
             fact.display.brief_source =
                 Some(ObjectBriefSource { list_summary: "当前草稿".into(), ..Default::default() });
             let mut facts = WorkbenchObjectFactMap::from([((policy.object_kind, "document".into()), fact)]);
+
             apply_snapshot(&mut facts, snapshot.clone());
             let fact = facts.get_mut(&(policy.object_kind, "document".into())).unwrap();
             fact.display.brief_source.as_mut().unwrap().list_summary = "再次修改".into();
@@ -222,6 +229,7 @@ mod tests {
             assert!(old.summary_sections.iter().any(|s| s.value == "原始原因"));
             assert!(!old.list_summary.contains("修改"));
             assert!(super::super::approval_list::document_summary(fact, Some(2)).is_none());
+
             let mut missing = snapshot;
             missing.subject_version = 3;
             missing.display = None;
@@ -258,10 +266,12 @@ mod tests {
         ));
         let key = (policy.object_kind, "document".into());
         let mut facts = WorkbenchObjectFactMap::from([(key.clone(), fact)]);
+
         apply_snapshot(&mut facts, snapshot.clone());
         let summary = super::super::approval_list::document_summary(&facts[&key], Some(1)).unwrap();
         assert_eq!(summary.counterparty_label.as_deref(), Some("原往来方"));
         assert_eq!(summary.list_summary, "客户：冻结客户");
+
         snapshot.subject_version = 2;
         snapshot.display.as_mut().unwrap().source_sales.clear();
         apply_snapshot(&mut facts, snapshot);

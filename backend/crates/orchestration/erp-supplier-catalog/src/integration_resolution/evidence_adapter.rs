@@ -70,6 +70,7 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                     return Ok(OriginalResultFact::NoResult);
                 }
             }
+
             let evidence = self.discover_evidence(subject, executor).await?;
             Ok(evidence.first().map_or(OriginalResultFact::Unknown, |evidence| {
                 OriginalResultFact::Terminal(evidence.record_id.clone())
@@ -100,11 +101,13 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
             {
                 return Err(Error::BusinessLogicError("原动作当前不满足无结果且可安全重放条件".to_string()));
             }
+
             message.update(InboxMessageUpdate {
                 status: Some(InboxMessageStatus::Received),
                 processed_at: None,
             })?;
             self.db.inbox_messages().update(&mut message, executor).await?;
+
             Ok(evidence_reference_grammar(ReplayOriginalReference::new(
                 &message.base.id,
                 message.base.version,
@@ -166,6 +169,7 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                     "已处理入站结果",
                 )?);
             }
+
             if subject.business_object_type.as_deref() == Some("reconciliation_difference")
                 || !subject.fact_references.is_empty()
             {
@@ -190,6 +194,7 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
                     }
                 }
             }
+
             self.discover_connection_recovery(subject, executor, &mut evidence).await?;
             discover_compensation(&self.db, subject, executor, &mut evidence).await?;
             Ok(evidence)
@@ -237,6 +242,7 @@ impl MongoIntegrationEvidenceAuthority {
         if kind != ControlledEvidenceKind::ExternalCaseResult {
             return kind_mismatch();
         }
+
         let message = self
             .db
             .inbox_messages()
@@ -246,6 +252,7 @@ impl MongoIntegrationEvidenceAuthority {
         if message.status != InboxMessageStatus::Processed || message.processed_at.is_none() {
             return Err(Error::BusinessLogicError("证据引用的入站消息尚未形成已处理终态".to_string()));
         }
+
         ensure_association(subject, std::slice::from_ref(&message.base.id))?;
         canonical_verified("inbox_message", &message.base.id, Some(message.base.version), "processed")
     }
@@ -266,6 +273,7 @@ impl MongoIntegrationEvidenceAuthority {
         ) {
             return kind_mismatch();
         }
+
         let refund = self
             .db
             .customer_refunds()
@@ -278,6 +286,7 @@ impl MongoIntegrationEvidenceAuthority {
         if kind == ControlledEvidenceKind::DistinctReview && refund.reviewed_by == actor_id {
             return Err(Error::BusinessLogicError("独立复核人不得是当前处理人".to_string()));
         }
+
         ensure_association(
             subject,
             &refund_association_ids(
@@ -306,6 +315,7 @@ impl MongoIntegrationEvidenceAuthority {
         ) {
             return kind_mismatch();
         }
+
         let refund = self
             .db
             .supplier_refunds()
@@ -318,6 +328,7 @@ impl MongoIntegrationEvidenceAuthority {
         if kind == ControlledEvidenceKind::DistinctReview && refund.reviewed_by == actor_id {
             return Err(Error::BusinessLogicError("独立复核人不得是当前处理人".to_string()));
         }
+
         ensure_association(
             subject,
             &refund_association_ids(
@@ -344,6 +355,7 @@ impl MongoIntegrationEvidenceAuthority {
             .find_by_id(record_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("证据引用的供应商退款事实不存在".to_string()))?;
+
         ensure_association(
             subject,
             &[
@@ -367,6 +379,7 @@ impl MongoIntegrationEvidenceAuthority {
         if kind != ControlledEvidenceKind::DistinctReview {
             return kind_mismatch();
         }
+
         let record = self
             .db
             .reconciliation_difference_resolutions()
@@ -382,6 +395,7 @@ impl MongoIntegrationEvidenceAuthority {
                 "差异复核记录不满足同一差异、已补证且岗位分离要求".to_string(),
             ));
         }
+
         canonical_verified("reconciliation_difference_resolution", &record.base.id, None, "reviewed")
     }
 }
@@ -413,6 +427,7 @@ async fn discover_compensation(
         return Ok(());
     };
     let kind = subject.business_object_type.as_deref().unwrap_or_default().to_ascii_lowercase();
+
     if (kind.is_empty() || kind == "customer_refund")
         && let Some(refund) = db.customer_refunds().find_by_id(id, executor).await?
         && refund.status == CustomerRefundStatus::Posted
@@ -420,6 +435,7 @@ async fn discover_compensation(
         push_compensation_refs(evidence, "customer_refund", &refund.base.id, "已过账客户退款")?;
         return Ok(());
     }
+
     if (kind.is_empty() || kind == "supplier_refund")
         && let Some(refund) = db.supplier_refunds().find_by_id(id, executor).await?
         && refund.status == SupplierRefundStatus::Posted
@@ -427,6 +443,7 @@ async fn discover_compensation(
         push_compensation_refs(evidence, "supplier_refund", &refund.base.id, "已过账供应商退款")?;
         return Ok(());
     }
+
     if (kind.is_empty() || kind == "supplier_refund_fact")
         && let Some(refund) = db.supplier_refund_facts().find_by_id(id, executor).await?
     {
@@ -552,9 +569,11 @@ mod tests {
     fn refund_evidence_accepts_formal_link_and_rejects_unrelated_subject() {
         let ids = refund_association_ids("refund-1", Some("return-1".into()), None, Some("entry-1".into()));
         assert_eq!(ids, ["refund-1", "return-1", "entry-1"]);
+
         let mut subject = EvidenceSubject::new("task-1".into());
         subject.business_object_id = Some("return-1".into());
         ensure_association(&subject, &ids).unwrap();
+
         subject.business_object_id = Some("unrelated".into());
         assert!(matches!(
             ensure_association(&subject, &ids),
@@ -570,6 +589,7 @@ mod tests {
             ensure_compensation_kind(ControlledEvidenceKind::DistinctReview),
             Err(Error::ValidationError(message)) if message == "证据类型与引用对象类型不匹配"
         ));
+
         let reference = canonical_verified("supplier_refund_fact", "refund-1", Some(3), "succeeded").unwrap();
         assert_eq!(reference.kind(), "supplier_refund_fact");
         assert_eq!(reference.id(), "refund-1");

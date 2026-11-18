@@ -84,6 +84,7 @@ fn role_permission_snapshot_keeps_roles_grants_and_revision_together() {
     assert_eq!(snapshot.granting_role_ids(&permission), &[RoleId::parse("role-b").unwrap()]);
     assert_eq!(snapshot.granting_role_ids_for_all(&[read, create]), &[RoleId::parse("role-b").unwrap()]);
     assert_eq!(snapshot.policy_revision(), 7);
+
     assert!(ensure_policy_snapshot_revision(7, 7).is_ok());
     assert!(matches!(
         ensure_policy_snapshot_revision(7, 8),
@@ -128,8 +129,10 @@ fn profit_loss_source_scope_still_requires_cost_permission_in_the_same_role() {
         policy_revision: 7,
     };
     assert_eq!(snapshot.granting_role_ids_for_all(&required), &[RoleId::parse("finance").unwrap()]);
+
     snapshot.grants.remove("finance");
     assert!(snapshot.granting_role_ids_for_all(&required).is_empty());
+
     snapshot.grants.remove("cost");
     assert_eq!(snapshot.granting_role_ids(&sales), &[RoleId::parse("sales").unwrap()]);
     assert!(snapshot.granting_role_ids_for_all(&required).is_empty());
@@ -358,6 +361,7 @@ fn permission_diagnostics_distinguish_missing_action_from_role_combination() {
         ]),
         policy_revision: 1,
     };
+
     assert!(snapshot.granting_role_ids_for_all(&[create.clone(), submit.clone()]).is_empty());
     assert!(snapshot.denial_message(&[create, submit]).contains("同一有效角色"));
     assert_eq!(

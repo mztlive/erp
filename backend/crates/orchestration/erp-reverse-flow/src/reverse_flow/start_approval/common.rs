@@ -91,12 +91,14 @@ pub fn build_reverse_start_input(
     if graph.definition.definition_version != binding.approval_definition_version {
         return Err(Error::ConflictError(contracts.version_mismatch.to_string()));
     }
+
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
     let bindings =
         reverse_start_bindings(&graph, organization_id, contracts.readable, contracts.empty_definition)?;
+
     Ok(assemble_start_input(
         graph,
         bindings,
@@ -252,12 +254,14 @@ mod tests {
             let built = build(input(document_type, graph(document_type), &binding(1))).unwrap();
             assert_eq!(built.process_kind, process_kind_of(document_type));
             assert_eq!(built.subject, SubjectRef::new(document_type.as_str(), "document").unwrap());
+
             assert_eq!(built.subject_version, 3);
             assert_eq!(built.actor.as_str(), "submitter");
             assert_eq!(built.binding_id, "definition");
             assert_eq!(built.definition_version, 1);
             assert_eq!(built.command.idempotency_key.as_str(), "operation-key");
             assert_eq!(built.command.now, Timestamp::from_unix_secs(10).unwrap());
+
             assert_eq!(built.bindings.len(), 1);
             assert_eq!(built.bindings[0].participant.as_str(), "reviewer");
             assert_eq!(built.command.current_eligibility.participant().as_str(), "reviewer");

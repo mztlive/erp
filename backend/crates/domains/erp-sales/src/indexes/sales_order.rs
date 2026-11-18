@@ -78,10 +78,13 @@ pub(crate) const SALES_ORDER_VOUCHER_LINE_REVISIONS: &str =
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SALES_ORDERS, sales_order_indexes()).await?;
     create_indexes(db, SALES_ORDER_LINES, sales_order_line_indexes()).await?;
+
     create_indexes(db, SALES_ORDER_WORKING_COPIES, working_copy_indexes()).await?;
     create_indexes(db, SALES_ORDER_WORKING_COPY_LINES, working_copy_line_indexes()).await?;
+
     create_indexes(db, SALES_ORDER_SUBMISSIONS, submission_indexes()).await?;
     create_indexes(db, SALES_ORDER_SUBMISSION_LINES, submission_line_indexes()).await?;
+
     create_indexes(db, SALES_ORDER_REVISIONS, revision_indexes()).await?;
     create_indexes(db, SALES_ORDER_REVISION_LINES, revision_line_indexes()).await?;
     create_indexes(db, SALES_ORDER_GOODS_SERVICE_LINE_REVISIONS, goods_service_line_revision_indexes())
@@ -282,7 +285,6 @@ mod tests {
     #[test]
     fn sales_order_identity_index_is_globally_unique() {
         let indexes = sales_order_indexes();
-
         let no_index = indexes
             .iter()
             .find(|index| {
@@ -336,7 +338,6 @@ mod tests {
     #[test]
     fn working_copy_active_uniqueness_is_partial() {
         let indexes = working_copy_indexes();
-
         let active = indexes
             .iter()
             .find(|index| {
@@ -371,7 +372,6 @@ mod tests {
     #[test]
     fn revision_content_hash_index_is_non_unique() {
         let indexes = revision_indexes();
-
         let content = indexes
             .iter()
             .find(|index| {

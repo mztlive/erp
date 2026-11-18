@@ -65,6 +65,7 @@ impl ImportApplyProcess {
         self.authorization
             .require(actor, &legacy_import::CONFIRMATION_LIST, AccessTarget::Operation, executor)
             .await?;
+
         let query = params.normalized()?;
         let filter = LegacyImportConfirmationFilter {
             batch_id: query.batch_id,
@@ -75,6 +76,7 @@ impl ImportApplyProcess {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
+
         let page = self
             .db
             .legacy_import_confirmations()
@@ -100,6 +102,7 @@ impl ImportApplyProcess {
             .into_iter()
             .map(|item| (item.base.id.clone(), item))
             .collect::<HashMap<_, _>>();
+
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
             let work_item_id = row.work_item_id.to_string();
@@ -211,6 +214,7 @@ fn authorized_work_item_view(
         &item.item.business_object_type,
         &item.item.owner_role,
     )?;
+
     let mut allowed_actions = item
         .allowed_actions
         .iter()
@@ -223,6 +227,7 @@ fn authorized_work_item_view(
     if let Some(blocker) = item.processing_blocker {
         action_blockers.push(blocker.message);
     }
+
     Ok(ImportBusinessConfirmationWorkItemView {
         work_item_id: item.item.base.id.clone(),
         work_item_type: item.item.work_item_type,

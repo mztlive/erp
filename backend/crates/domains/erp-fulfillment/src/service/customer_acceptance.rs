@@ -43,6 +43,7 @@ impl FulfillmentService {
         let line_ids: Vec<CustomerAcceptanceLineId> =
             lines.iter().map(|line| line.base.id.clone().into()).collect();
         let allocations = self.db.fulfillment().allocations_by_acceptance_lines(&line_ids, executor).await?;
+
         Ok(CustomerAcceptanceDetailView {
             acceptance: acceptance.into(),
             lines: lines.into_iter().map(Into::into).collect(),
@@ -126,6 +127,7 @@ pub fn prepare_customer_acceptance_draft(
             evidence_attachment_id: req.evidence_attachment_id,
         },
     )?;
+
     let lines = super::FulfillmentService::build_customer_acceptance_lines(id, &req.lines)?;
     Ok((acceptance, lines))
 }

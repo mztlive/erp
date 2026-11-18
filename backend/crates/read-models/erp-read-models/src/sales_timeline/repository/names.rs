@@ -15,6 +15,7 @@ pub(in crate::sales_timeline) async fn names(
         return Ok(());
     }
     let accounts = db.accounts().find_many(doc! { "id": { "$in": ids } }, executor).await?;
+
     for event in events {
         if let Some(id) = event.actor_id.as_deref() {
             event.actor_name = accounts

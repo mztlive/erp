@@ -46,16 +46,19 @@ pub async fn load_runtime(
         definition.name = name;
         definition.nodes = nodes;
     }
+
     let subject =
         subject_ref_for(document_type, id).map_err(|error| Error::ValidationError(error.to_string()))?;
     let Some(instance) = db.bpm_workflow().find_latest_by_subject(&subject, executor).await? else {
         return Ok(view);
     };
+
     let instance_id = ApprovalProcessInstanceId::new(instance.base.id.clone());
     let current = db.bpm_workflow().find_current_execution(&instance_id, executor).await?;
     let limit = RECENT_HISTORY_LIMIT as u32;
     let rows = db.bpm_workflow().list_execution_history(&instance_id, None, limit + 1, executor).await?;
     let page = history_page_from(rows.iter().map(history_item_from_execution).collect(), limit);
+
     view.instance = Some(instance_view(&instance, current.as_ref(), latest_rejection_reason(&page.items)));
     view.recent_history = page
         .items
@@ -144,6 +147,7 @@ mod tests {
         assert_eq!(view.current_assignee.as_deref(), Some("u-li"));
         assert_eq!(view.current_assignee_name.as_deref(), Some("李思勇"));
         assert_eq!(view.latest_rejection.as_deref(), Some("核对退款依据"));
+
         let no_current = instance_view(&running_instance(), None, None);
         assert!(no_current.current_node.is_none());
         assert!(no_current.current_assignee_name.is_none());

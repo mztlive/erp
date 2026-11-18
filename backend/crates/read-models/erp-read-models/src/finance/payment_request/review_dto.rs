@@ -74,6 +74,7 @@ impl PaymentReviewSettlement {
             };
             *total = checked_sum(*total, allocation.allocated_amount)?;
         }
+
         let mut rows = rows.into_values().collect::<Vec<_>>();
         for row in &mut rows {
             if row.reversed_amount > row.amount {
@@ -123,6 +124,7 @@ impl PaymentReviewReservation {
         {
             return None;
         }
+
         let line = other.lines.iter().find(|line| {
             line.payable_account_id == account_id && line.purchase_order_id == source.purchase_order_id
         })?;
@@ -195,6 +197,7 @@ mod tests {
         .unwrap();
         assert_eq!(rows.len(), 2);
         assert!(rows.iter().any(|row| row.payment_id.is_none() && row.method_label == "预存款核销"));
+
         assert!(PaymentReviewSettlement::from_allocations(&[], &scope).unwrap().is_empty());
         assert!(
             PaymentReviewSettlement::from_allocations(
@@ -258,12 +261,15 @@ mod tests {
         unrelated.payable_account_id = "unrelated".into();
         unrelated.requested_amount = "900".parse().unwrap();
         other.lines.push(unrelated);
+
         let row = PaymentReviewReservation::from_request(&other, &current, "allowed").unwrap();
         assert_eq!(row.amount, "50".parse().unwrap());
         assert!(PaymentReviewReservation::from_request(&current, &current, "allowed").is_none());
         assert!(PaymentReviewReservation::from_request(&other, &current, "missing").is_none());
+
         other.payer_party_id = "different".into();
         assert!(PaymentReviewReservation::from_request(&other, &current, "allowed").is_none());
+
         other.payer_party_id = current.payer_party_id.clone();
         other.supplier_id = "different".into();
         assert!(PaymentReviewReservation::from_request(&other, &current, "allowed").is_none());
@@ -283,6 +289,7 @@ mod tests {
             other.status = status;
             assert!(PaymentReviewReservation::from_request(&other, &current, "allowed").is_none());
         }
+
         let mut other = request("other");
         other.lines[0].paid_amount = "80".parse().unwrap();
         assert!(PaymentReviewReservation::from_request(&other, &current, "allowed").is_none());

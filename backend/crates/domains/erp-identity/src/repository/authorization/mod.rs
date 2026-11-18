@@ -53,6 +53,7 @@ pub(crate) async fn compile(
     if mapping.model() != model {
         return Err(Error::ValidationError("Mapping 描述与启动绑定不一致".into()));
     }
+
     let mut compiler = Compiler {
         executor,
         boundary: proof.boundary.clone(),
@@ -71,6 +72,7 @@ pub(crate) async fn compile(
         }
         stages.push(doc! { "$project": projection });
     }
+
     let mut proof = proof.clone();
     proof.valid_until = compiler.valid_until;
     let mut version = Fingerprint::new("authorization-query-v4");
@@ -81,6 +83,7 @@ pub(crate) async fn compile(
     version.optional(management.as_ref(), |hash, stages| {
         hash.sequence(stages, |hash, stage| hash.bson(&Bson::Document(stage.clone())));
     });
+
     let compiled = CompiledAccess {
         proof,
         model: model.clone(),
@@ -144,6 +147,7 @@ impl Compiler<'_> {
             return Ok((BTreeMap::new(), None));
         };
         let whole = self.model(whole_rule, mapping, &proof.context, 0).await?.0.finish();
+
         let mut rules = BTreeMap::new();
         source_rules(&proof.rule, None, &mut rules);
         let mut sources = BTreeMap::new();
@@ -163,6 +167,7 @@ impl Compiler<'_> {
                 };
                 conditions.push(self.condition(&rule, &child, &context, &mut fragment, 0).await?.0);
             }
+
             fragment.filter = combine("$or", conditions);
             let stages = fragment.finish();
             sources.insert(key, SourcePlan { model: child.model().clone(), stages });
@@ -225,6 +230,7 @@ impl Compiler<'_> {
         {
             return Err(Error::ValidationError("业务事实映射与授权资源不匹配".into()));
         }
+
         let Some(preparation) = mapping.preparation() else {
             return Ok(None);
         };
@@ -236,6 +242,7 @@ impl Compiler<'_> {
             cached.facts.validate(self.boundary.is_snapshot(), Instant::now())?;
             return Ok(Some(cached.facts.clone()));
         }
+
         let facts = preparation.prepare(context, self.executor).await?;
         if !self.boundary.is_current(self.executor) {
             return Err(Error::ValidationError("Mapping 准备改变了授权读取阶段".into()));
@@ -244,6 +251,7 @@ impl Compiler<'_> {
         if let Some(until) = facts.valid_until {
             self.valid_until = Some(self.valid_until.map_or(until, |old| old.min(until)));
         }
+
         let key = mapping.key(context, Some(&facts))?;
         let mut version = Fingerprint::new("mapping-preparation-v1");
         version.model(mapping.model());
@@ -353,12 +361,14 @@ impl Compiler<'_> {
         if mode == RelationMatch::Any && mapping.model().output == QueryOutput::Object {
             return Err(Error::ValidationError("任一来源不能用于完整对象查询".into()));
         }
+
         let child_context = AccessContext {
             resource: resource.into(),
             model: Some(related.mapping.model().key.clone()),
             ..context.clone()
         };
         let (child, key_expression) = self.model(rule, &related.mapping, &child_context, depth + 1).await?;
+
         let expected = doc! { "$setUnion": [{ "$ifNull": [related.expected_ids, []] }, []] };
         let mut pipeline =
             vec![doc! { "$match": { "$expr": { "$in": [&key_expression, "$$identity_expected"] } } }];
@@ -366,6 +376,7 @@ impl Compiler<'_> {
         pipeline.push(doc! { "$project": { "_id": 0, "__identity_id": key_expression } });
         let alias = fragment.lookup(doc! { "from": &related.mapping.model().collection,
         "let": { "identity_expected": expected.clone() }, "pipeline": pipeline })?;
+
         let mut result = exists(&alias);
         if matches!(mode, RelationMatch::AllNonEmpty | RelationMatch::ExactlyOne) {
             result = doc! { "$expr": { "$and": [
@@ -627,6 +638,7 @@ mod tests {
             ] } }
         );
         assert_eq!(plan.stages[2], doc! { "$unset": ["__identity_fact_0"] });
+
         let rows = vec![
             doc! { "business_id": "owner", "sales_owner_user_id": "u" },
             doc! { "business_id": "participant", "sales_owner_user_id": "other" },
@@ -657,6 +669,7 @@ mod tests {
             plan.stages[1].get_document("$lookup").unwrap().get_document("let").unwrap(),
             &doc! { "identity_key": "$business_id" }
         );
+
         let conditions = plan.stages[2].get_document("$match").unwrap().get_array("$and").unwrap();
         assert_eq!(conditions[0], doc! { "sales_owner_user_id": "u" }.into());
         assert_eq!(
@@ -688,6 +701,7 @@ mod tests {
             doc! { "$match": { "$expr": { "$in": ["$business_id", "$$identity_expected"] } } }.into()
         );
         assert_eq!(pipeline[1], doc! { "$match": { "sales_owner_user_id": "u" } }.into());
+
         let conditions = plan.stages[1]
             .get_document("$match")
             .unwrap()
@@ -707,6 +721,7 @@ mod tests {
         let unknown =
             query(AccessRule::Fact(AccessFact::WarehouseIn(["w".into()].into())), sales.clone(), &executor);
         assert!(unknown.compile(&mut executor).await.is_err());
+
         let wrong_resource =
             query(AccessRule::RecordReadGrant(ResourceKind::PurchaseOrder), sales.clone(), &executor);
         assert!(wrong_resource.compile(&mut executor).await.is_err());
@@ -749,6 +764,7 @@ mod tests {
         let child = mapping("sales_order", None);
         let root = mapping("invoice", Some(child.clone()));
         assert!(query(rule.clone(), root.clone(), &executor).compile(&mut executor).await.is_err());
+
         let mut model = root.model().clone();
         model.output = QueryOutput::Share { fields: ["business_id".into(), "share_amount".into()].into() };
         let share: Arc<dyn AccessMapping> = Arc::new(Mapping {
@@ -767,6 +783,7 @@ mod tests {
             plan.stages.last().unwrap(),
             &doc! { "$project": { "_id": 0, "business_id": 1, "share_amount": 1 } }
         );
+
         let conditions = plan.stages[1].get_document("$match").unwrap().get_array("$and").unwrap();
         assert_eq!(
             conditions[1],
@@ -794,6 +811,7 @@ mod tests {
         let query = query(AccessRule::Allow, live.clone(), &executor);
         let plan = query.compile(&mut executor).await.unwrap();
         assert!(plan.dependencies[0].validate(&mut executor).await.is_ok());
+
         live.revision.store(2, Ordering::Relaxed);
         assert!(matches!(plan.dependencies[0].validate(&mut executor).await, Err(Error::ConflictError(_))));
         let updated = query.compile(&mut executor).await.unwrap();
@@ -807,6 +825,7 @@ mod tests {
         let mut query = query(AccessRule::Allow, mapping.clone(), &executor);
         query.proof.valid_until = Some(Instant::from_unix_secs(1));
         assert!(matches!(query.compile(&mut executor).await, Err(Error::ConflictError(_))));
+
         query.proof.valid_until = None;
         executor.next_read();
         assert!(matches!(query.compile(&mut executor).await, Err(Error::ValidationError(_))));
@@ -848,6 +867,7 @@ mod tests {
             ] } }]
         );
         assert!(plan.dependencies[1].validate(&mut executor).await.is_ok());
+
         mapping.revision.store(2, Ordering::Relaxed);
         assert!(matches!(plan.dependencies[1].validate(&mut executor).await, Err(Error::ConflictError(_))));
     }
@@ -895,6 +915,7 @@ mod tests {
             key_expression: Some(expression.clone().into()),
             action_sensitive: false,
         });
+
         let grant =
             query(AccessRule::RecordReadGrant(ResourceKind::SalesOrder), calculated.clone(), &executor);
         let compiled = grant.compile(&mut executor).await.unwrap();
@@ -902,6 +923,7 @@ mod tests {
             compiled.stages[0].get_document("$lookup").unwrap().get_document("let").unwrap(),
             &doc! { "identity_key": expression.clone() }
         );
+
         let root = mapping("invoice", Some(calculated));
         let rule = AccessRule::Related {
             relation: RelationKey::parse("sales").unwrap(),
@@ -960,6 +982,7 @@ mod tests {
         let query = query(rule.clone(), mapping.clone(), &executor);
         let plan = query.compile(&mut executor).await.unwrap();
         assert!(plan.dependencies.is_empty());
+
         let samples = [("own", "u", "other"), ("team", "other", "team"), ("denied", "other", "other")];
         let rows = samples
             .iter()
@@ -972,6 +995,7 @@ mod tests {
         let result = execute(rows, plan.stages(), &Default::default(), &doc! {});
         let ids = result.iter().map(|row| row.get_str("business_id").unwrap()).collect::<Vec<_>>();
         assert_eq!(ids, ["own", "team"]);
+
         for (id, owner, org) in samples {
             let object = ObjectFacts {
                 resource: "sales_inquiry".into(),
@@ -1016,6 +1040,7 @@ mod tests {
             key_expression: None,
             action_sensitive: false,
         });
+
         let permission = receivable::ACCOUNT_DETAIL;
         let qualified = QualifiedPermissions::test_grants(&[("finance", std::slice::from_ref(&permission))]);
         let scope = ResolvedScope {
@@ -1028,6 +1053,7 @@ mod tests {
         query.proof.context.permission = permission;
         let plan = query.compile(&mut executor).await.unwrap();
         assert!(plan.dependencies.is_empty());
+
         let sources = [("s1", "u", 0), ("s2", "u", 0), ("denied", "other", 0), ("deleted", "u", 1)];
         let collections = [("access_sources".into(), sources.iter().map(|(id, owner, deleted)| doc! {
             "business_id": *id, "sales_owner_user_id": *owner, "org_unit_id": "team", "deleted_at": *deleted
@@ -1046,6 +1072,7 @@ mod tests {
         let result = execute(rows, plan.stages(), &collections, &doc! {});
         let ids = result.iter().map(|row| row.get_str("business_id").unwrap()).collect::<Vec<_>>();
         assert_eq!(ids, ["all"]);
+
         for (id, refs) in samples {
             let children = sources
                 .iter()
@@ -1113,6 +1140,7 @@ mod tests {
                     .into(),
                     ..source("customer_receipt")
                 });
+
                 let permission = receivable::CUSTOMER_RECEIPT_DETAIL;
                 let qualified = QualifiedPermissions::test_grants(&[(
                     "finance",
@@ -1132,6 +1160,7 @@ mod tests {
                 query.proof.context.permission = permission;
                 let plan = query.compile(executor.as_mut()).await.unwrap();
                 assert_eq!(plan.stages().iter().filter(|stage| stage.contains_key("$lookup")).count(), 3);
+
                 let make_row =
                     |id: &str, sales_ids: Vec<&str>, purchase_ids: Vec<&str>, settlement_ids: Vec<&str>| {
                         doc! {
@@ -1169,9 +1198,11 @@ mod tests {
                 .into();
                 let result = execute(rows, plan.stages(), &collections, &doc! {});
                 assert_eq!(result, allowed);
+
                 for source in [&sales, &purchase, &settlement] {
                     assert_eq!(source.prepare_calls.load(Ordering::Relaxed), u64::from(dynamic));
                 }
+
                 let snapshot = executor.boundary().unwrap().is_snapshot();
                 assert_eq!(plan.dependencies.len(), if dynamic && !snapshot { 4 } else { 0 });
                 for dependency in &plan.dependencies {
@@ -1220,6 +1251,7 @@ mod tests {
             prepared: vec![],
             versions: vec![],
         };
+
         let first_mapping: Arc<dyn AccessMapping> = first.clone();
         let second_mapping: Arc<dyn AccessMapping> = second.clone();
         compiler.prepare(&first_mapping, &proof.context).await.unwrap();
@@ -1237,6 +1269,7 @@ mod tests {
             ..proof.context.clone()
         };
         compiler.prepare(&first_mapping, &other).await.unwrap();
+
         assert_eq!(first.prepare_calls.load(Ordering::Relaxed), 4);
         assert_eq!(second.prepare_calls.load(Ordering::Relaxed), 1);
         assert_eq!(compiler.prepared.len(), 5);
@@ -1248,6 +1281,7 @@ mod tests {
         let mapping = mapping("sales_order", None);
         let query = query(AccessRule::RecordReadGrant(ResourceKind::SalesOrder), mapping.clone(), &executor);
         let plan = query.compile(&mut executor).await.unwrap();
+
         let grants = ["allowed", "stale", "wrong_user", "wrong_target"]
             .iter()
             .map(|id| {
@@ -1280,6 +1314,7 @@ mod tests {
             .iter()
             .map(|id| doc! { "business_id": *id })
             .collect();
+
         let result = execute(rows, plan.stages(), &collections, &doc! {});
         assert_eq!(result, vec![doc! { "business_id": "allowed" }]);
     }
@@ -1304,10 +1339,12 @@ mod tests {
         assert!(plan.proof.valid_until.is_some());
         mapping.revision.store(2, Ordering::Relaxed);
         plan.ensure_current(&mut executor).unwrap();
+
         executor.next_read();
         assert!(matches!(plan.ensure_current(&mut executor), Err(Error::ValidationError(_))));
         executor.restart();
         assert!(matches!(plan.ensure_current(&mut executor), Err(Error::ValidationError(_))));
+
         plan.proof.boundary = executor.boundary().unwrap();
         plan.proof.valid_until = Some(Instant::from_unix_secs(1));
         assert!(matches!(plan.ensure_current(&mut executor), Err(Error::ConflictError(_))));

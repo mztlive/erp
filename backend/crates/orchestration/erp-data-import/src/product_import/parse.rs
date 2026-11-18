@@ -55,6 +55,7 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
     {
         return Err(invalid("请上传大小不超过 700 MiB 的产品报价表 .xlsx 文件"));
     }
+
     let mut archive = Archive::open(bytes, ArchiveLimits::PRODUCT)?;
     let shared = archive.shared_strings()?;
     let sheet_path = xlsx::sheet_paths(&mut archive)?
@@ -63,9 +64,11 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
         .map(|(_, path)| path)
         .ok_or_else(|| invalid("未找到「对内」工作表，请使用原产品报价表模板"))?;
     let rows = parse_sheet_rows(&archive.xml(&sheet_path)?, &shared)?;
+
     let headers = rows.first().ok_or_else(|| invalid("模板没有可导入的数据行"))?;
     let width = template_width(&headers.cells)?;
     let legacy_layout = width == legacy::HEADERS.len();
+
     let data_rows = rows
         .into_iter()
         .skip(1)
@@ -85,6 +88,7 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
     if data_rows.len() > 1000 {
         return Err(invalid("每次导入最多 1000 行"));
     }
+
     let image_targets = parse_image_targets(&mut archive)?;
     Ok(ParsedProductSheet { rows: data_rows, image_targets })
 }
@@ -122,6 +126,7 @@ fn parse_sheet_rows(xml: &str, shared: &[String]) -> Result<Vec<ParsedProductRow
             rows.insert(row.number, cells);
         }
     }
+
     fill_merged_cells(&mut rows, &sheet.merges);
     Ok(rows.into_iter().map(|(row_number, cells)| ParsedProductRow { row_number, cells }).collect())
 }
@@ -164,6 +169,7 @@ fn parse_image_targets(archive: &mut Archive<'_>) -> Result<HashMap<String, Stri
     let Some(rels) = archive.optional_xml("xl/_rels/cellimages.xml.rels")? else {
         return Ok(HashMap::new());
     };
+
     let paths = xlsx::relationships(&rels, "xl/cellimages.xml")?;
     let doc = xlsx::document(&xml)?;
     let mut targets = HashMap::new();
@@ -338,6 +344,7 @@ mod tests {
         if let Some(shared) = shared {
             files.push(("xl/sharedStrings.xml", shared));
         }
+
         let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
         for (name, bytes) in files {
             writer.start_file(name, SimpleFileOptions::default()).unwrap();
@@ -513,6 +520,7 @@ mod tests {
                 writer.start_file(entry.name(), SimpleFileOptions::default()).unwrap();
                 writer.write_all(&bytes).unwrap();
             }
+
             let images = r#"<cellImages xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><pic><nvPicPr><cNvPr name="ID_ABC"/></nvPicPr><blipFill><blip r:embed="r2"/></blipFill></pic></cellImages>"#;
             let rels = format!(r#"<Relationships><Relationship Target="{target}" Id="r2"/></Relationships>"#);
             for (name, bytes) in [
@@ -523,6 +531,7 @@ mod tests {
                 writer.start_file(name, SimpleFileOptions::default()).unwrap();
                 writer.write_all(bytes).unwrap();
             }
+
             let parsed = super::parse_product_quote_xlsx(&writer.finish().unwrap().into_inner()).unwrap();
             assert_eq!(parsed.image_targets.get("ID_ABC").map(String::as_str), Some("xl/media/image.png"));
         }

@@ -55,6 +55,7 @@ impl BusinessTransfers {
             }
             images.insert(id.to_owned(), json!({"version":asset.base.version,"hash":asset.content_hmac}));
         }
+
         let signature = json!({key:source,"images":images});
         let hash = hex::encode(Sha256::digest(
             serde_json::to_vec(&signature).map_err(|_| Error::Internal("导出摘要生成失败".into()))?,

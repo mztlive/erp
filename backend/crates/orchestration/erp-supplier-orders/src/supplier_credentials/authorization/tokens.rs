@@ -63,6 +63,7 @@ impl JdVopAuthorizationProcess {
     ) -> Result<JdVopAuthorizationStatus> {
         let now = Instant::now();
         let expiry = request.validate(now)?;
+
         let access = self.access.clone();
         let target_id = id.to_string();
         let current_actor = actor.clone();
@@ -78,6 +79,7 @@ impl JdVopAuthorizationProcess {
             })
             .await?;
         self.access.binding(&connection)?;
+
         let settings = self.access.settings.as_ref().ok_or(AuthorizationError::Unavailable)?;
         let crypto = CredentialCrypto::new(settings).map_err(|_| AuthorizationError::Unavailable)?;
         let payload = crypto
@@ -89,8 +91,10 @@ impl JdVopAuthorizationProcess {
             expected_version: request.expected_version,
         };
         drop(request);
+
         ensure(&self.access.db).await.map_err(|_| AuthorizationError::Unavailable)?;
         let record = self.save_tokens(id, actor, &crypto, payload, command.clone()).await?;
+
         let mut result =
             status::operation_projection(&record, &crypto, Instant::now(), Some(&command.operation_id));
         result.can_configure_tokens =
@@ -121,6 +125,7 @@ impl JdVopAuthorizationProcess {
                     access
                         .binding(&connection)
                         .map_err(|_| ProcessError::ConflictError("京东连接配置已变化".into()))?;
+
                     let (record, changed) = access
                         .db
                         .supplier_credentials()
@@ -133,6 +138,7 @@ impl JdVopAuthorizationProcess {
                             executor,
                         )
                         .await?;
+
                     if changed {
                         let log = actor.resource_log(
                             "supplier_credential.configure_tokens",
@@ -194,9 +200,11 @@ mod tests {
             input.refresh_token = Zeroizing::new(value.into());
             assert_eq!(input.validate(now).unwrap_err(), AuthorizationError::InvalidTokens);
         }
+
         let mut input = request();
         input.expires_at = 1000;
         assert_eq!(input.validate(now).unwrap_err(), AuthorizationError::InvalidTokens);
+
         let body = serde_json::json!({"operation_id":"26c4dfba-fda5-490d-9d46-d88da680f51d", "access_token":"a", "refresh_token":"b", "expires_at":87400, "app_key":"another-app"});
         assert!(serde_json::from_value::<JdVopTokenConfiguration>(body).is_err());
     }
@@ -226,17 +234,20 @@ mod tests {
             now,
         )
         .unwrap();
+
         let status = status::operation_projection(&record, &crypto, now, Some(&input.operation_id));
         assert_eq!(status.state, "configured");
         assert!(!status.can_authorize);
         assert_eq!(status.expires_at, Some(87_400));
         assert_eq!(status.operation_state, Some("completed"));
+
         let json = serde_json::to_string(&status).unwrap();
         for secret in
             ["access-sentinel", "refresh-sentinel", &record.encrypted_payload, &record.payload_fingerprint]
         {
             assert!(!json.contains(secret));
         }
+
         assert_eq!(status::projection(&record, &crypto, Instant::from_unix_secs(87_400)).state, "expired");
         let mut refreshing = record;
         refreshing

@@ -31,6 +31,7 @@ impl PaymentArrangementState {
         ) {
             return Self::Inactive;
         }
+
         if open <= Amount::zero() {
             return Self::Settled;
         }
@@ -76,12 +77,14 @@ mod tests {
             PaymentArrangementState::resolve(status, zero, zero, true),
             PaymentArrangementState::Settled
         );
+
         for status in [PurchaseOrderStatus::Draft, PurchaseOrderStatus::InApproval] {
             assert_eq!(
                 PaymentArrangementState::resolve(status, total, zero, false),
                 PaymentArrangementState::Inactive
             );
         }
+
         // 驳回、撤回或关闭释放占用后恢复可申请；部分实付不消除余款责任。
         assert!(PaymentArrangementState::resolve(status, total, zero, false).needs_task());
         assert!(PaymentArrangementState::resolve(status, partial, zero, false).needs_task());

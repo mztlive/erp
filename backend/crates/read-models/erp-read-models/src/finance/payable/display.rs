@@ -46,6 +46,7 @@ impl PayableReadService {
         if payment_ids.is_empty() {
             return Ok(());
         }
+
         let reversals =
             self.db.payment_reversals().find_reversals_by_payments(&payment_ids, executor).await?;
         let mut grouped = group_payment_reversals(reversals);
@@ -75,6 +76,7 @@ fn group_payment_reversals(
         let payment_id = reversal.original_supplier_payment_id.to_string();
         grouped.entry(payment_id).or_default().push(payment_reversal_view(reversal));
     }
+
     for items in grouped.values_mut() {
         items.sort_by(|left, right| {
             right.created_at.cmp(&left.created_at).then_with(|| right.reversal_no.cmp(&left.reversal_no))
@@ -122,7 +124,9 @@ pub(super) async fn enrich_payment_allocation_views_batched_with_executor(
     if flat.is_empty() {
         return Ok(lengths.into_iter().map(|_| Vec::new()).collect());
     }
+
     let enriched = enrich_payment_allocation_views(db, flat, executor).await?;
+
     let mut iter = enriched.into_iter();
     let mut batched = Vec::with_capacity(lengths.len());
     for len in lengths {
@@ -148,6 +152,7 @@ async fn enrich_payment_allocation_views(
     executor: &mut dyn Executor,
 ) -> Result<Vec<PaymentAllocationView>> {
     let sources = load_allocation_sources(db, &views, executor).await?;
+
     Ok(views
         .into_iter()
         .map(|mut view| {
@@ -198,8 +203,10 @@ async fn load_allocation_sources(
     let entry_ids = allocation_entry_ids(views);
     let entries = db.payable_entries().find_entries_by_ids(&entry_ids, executor).await?;
     let accounts = load_accounts_for_entries(db, &entries, executor).await?;
+
     let mut document_nos = HashMap::new();
     collect_source_document_nos(db, accounts.values(), &mut document_nos, executor).await?;
+
     Ok(map_allocation_sources(&entries, &accounts, &document_nos))
 }
 
@@ -250,6 +257,7 @@ async fn load_accounts_for_entries(
             account_ids.push(PayableAccountId::new(id));
         }
     }
+
     let accounts = db.payable_accounts().find_accounts_by_ids(&account_ids, executor).await?;
     Ok(accounts.into_iter().map(|account| (account.base.id.clone(), account)).collect())
 }
@@ -284,6 +292,7 @@ where
     if pending.is_empty() {
         return Ok(());
     }
+
     let mut purchase_ids = Vec::new();
     let mut statement_ids = Vec::new();
     for account in &pending {
@@ -294,9 +303,11 @@ where
             },
         }
     }
+
     let purchase_map = db.purchase_order().purchase_nos_by_ids(&purchase_ids, executor).await?;
     let statement_map =
         db.supplier_settlement_statements().statement_nos_by_ids(&statement_ids, executor).await?;
+
     document_nos.extend(merge_source_document_nos(&pending, &purchase_map, &statement_map));
     Ok(())
 }
@@ -386,11 +397,13 @@ pub(super) async fn resolve_supplier_display(
     let Some(account) = account else {
         return Ok((None, None));
     };
+
     let supplier_no = Some(account.supplier_no.clone());
     let party = db.parties().find_by_id(account.party_id.as_ref(), executor).await?;
     let Some(party) = party else {
         return Ok((supplier_no, None));
     };
+
     let Some(revision_id) = party.stable.current_revision_id.clone() else {
         return Ok((supplier_no, None));
     };
@@ -451,7 +464,6 @@ mod tests {
         let other = reversal("reversal-3", "PCZ-3", "payment-2", 15);
 
         let grouped = group_payment_reversals(vec![older, other, newer]);
-
         assert_eq!(grouped["payment-1"].len(), 2);
         assert_eq!(grouped["payment-1"][0].reversal_no, "PCZ-2");
         assert_eq!(grouped["payment-1"][1].reversal_no, "PCZ-1");
@@ -520,6 +532,7 @@ mod tests {
             [("po-1".to_string(), "PO-2026-001".to_string())].into_iter().collect();
         let statement_map: HashMap<String, String> =
             [("st-1".to_string(), "ST-2026-001".to_string())].into_iter().collect();
+
         let merged = merge_source_document_nos(&accounts, &purchase_map, &statement_map);
         assert_eq!(merged["account-po"].as_deref(), Some("PO-2026-001"));
         assert_eq!(merged["account-st"].as_deref(), Some("ST-2026-001"));
@@ -545,6 +558,7 @@ mod tests {
         let accounts = [&present, &missing];
         let purchase_map: HashMap<String, String> =
             [("po-1".to_string(), "PO-2026-001".to_string())].into_iter().collect();
+
         let merged = merge_source_document_nos(&accounts, &purchase_map, &HashMap::new());
         assert_eq!(merged["account-present"].as_deref(), Some("PO-2026-001"));
         assert_eq!(merged["account-missing"], None);

@@ -86,6 +86,7 @@ impl AuthorizationBuilder {
     pub fn build(self) -> Result<AuthorizationService> {
         scope_spec::validate_catalog()?;
         self.ensure_complete()?;
+
         let mut cache = Vec::new();
         let mut mappings = BTreeMap::new();
         let mut errors = Vec::new();
@@ -100,6 +101,7 @@ impl AuthorizationBuilder {
         if !errors.is_empty() {
             return Err(Error::ValidationError(errors.join("\n")));
         }
+
         Ok(AuthorizationService {
             facilities: self.facilities,
             facts: self.facts,
@@ -118,12 +120,14 @@ impl AuthorizationBuilder {
             if !function && !only_task && !self.facts.contains_key(permission.resource()) {
                 return Err(Error::ValidationError(format!("缺少资源 Facts：{}", permission.resource())));
             }
+
             if rules::task_supported(permission) {
                 let resource = rules::task_facts_resource(permission);
                 if !self.facts.contains_key(resource) {
                     return Err(Error::ValidationError(format!("缺少任务 Facts：{resource}")));
                 }
             }
+
             if rules::query_supported(permission)? && !self.mappings.contains_key(permission) {
                 return Err(Error::ValidationError(format!("缺少查询 Mapping：{permission}")));
             }

@@ -48,6 +48,7 @@ impl TransferContext {
                 context[key] = value.clone();
             }
         }
+
         for key in ["mode", "resource", "view"] {
             let value = if kind == TransferKind::PortalBatch {
                 input.get(key).or_else(|| input["request"].get(key))
@@ -58,6 +59,7 @@ impl TransferContext {
                 context[key] = value.clone();
             }
         }
+
         if let Some(files) = input["files"].as_array() {
             context["file_names"] =
                 json!(files.iter().filter_map(|file| file["file_name"].as_str()).collect::<Vec<_>>());
@@ -65,6 +67,7 @@ impl TransferContext {
         if let Some(names) = input["file_names"].as_array() {
             context["file_names"] = json!(names.iter().filter_map(Value::as_str).collect::<Vec<_>>());
         }
+
         Self {
             kind,
             context,

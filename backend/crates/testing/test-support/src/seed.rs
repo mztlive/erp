@@ -77,6 +77,7 @@ async fn insert_account(db: &Database, account_id: &str, login: &str) -> Result<
         "kind": "admin",
         "status": "active",
     };
+
     db.collection::<Document>(ACCOUNTS).insert_one(account).await?;
     Ok(())
 }

@@ -163,6 +163,7 @@ mod tests {
         assert!(missing.contains("DATA_SCOPE_CHANGED"));
         let changed = ensure_scope_version(2, Some("old"), "v1").unwrap_err().to_string();
         assert!(changed.contains("DATA_SCOPE_CHANGED"));
+
         assert!(normalized_scope_version(Some(&"x".repeat(257))).is_err());
         assert_eq!(normalized_scope_version(Some(" v1 ")).unwrap().as_deref(), Some("v1"));
     }
@@ -179,6 +180,7 @@ mod tests {
         );
         assert_eq!(page.empty_reason, Some("no_scope"));
         assert_eq!(page.ownership_basis, "warehouse");
+
         let filled = InventoryListPage::<u8>::from_page(
             PageView::default(),
             &meta,

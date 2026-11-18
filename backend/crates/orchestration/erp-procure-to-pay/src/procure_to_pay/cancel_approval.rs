@@ -73,6 +73,7 @@ impl PurchaseOrderProcess {
         let id_owned = id.to_string();
         let command_cell = Arc::new(OnceLock::new());
         let transaction_command = command_cell.clone();
+
         let outcome = self
             .db
             .client()
@@ -84,6 +85,7 @@ impl PurchaseOrderProcess {
                 })
             })
             .await;
+
         match outcome {
             Err(error) if error.command_may_have_committed() => match command_cell.get() {
                 Some(command) => {
@@ -111,6 +113,7 @@ impl PurchaseOrderProcess {
     ) -> Result<()> {
         let access = self.command_access(actor, &purchase_order_permissions::CANCEL_APPROVAL);
         let mut order = access.current(id, executor).await?;
+
         let subject = purchase_order_subject_ref(id)?;
         let command = DocumentCancelCommand::new(
             subject.clone(),
@@ -124,10 +127,12 @@ impl PurchaseOrderProcess {
         if replay_committed_document_cancel(&self.db, &command, executor).await?.is_some() {
             return Ok(());
         }
+
         self.domain().ensure_version(&order, req.expected_lock_version)?;
         let adapter = purchase_order_adapter()?;
         let (prepared, open_tasks, now) =
             self.prepare_user_cancel(&order, &subject, &command, actor, executor).await?;
+
         let submission_id = order.current_submission_id.clone().unwrap_or_default();
         execute_purchase_order_domain_action(
             &mut order,
@@ -135,6 +140,7 @@ impl PurchaseOrderProcess {
             submission_id.as_str(),
             actor.id(),
         )?;
+
         let audit =
             actor.clone().resource_log("purchase_order.cancel_approval", "purchase_order", id.to_string())?;
         let input = PurchaseOrderCancelPersistInput {
@@ -180,6 +186,7 @@ impl PurchaseOrderProcess {
         let runtime =
             load_cancel_runtime(&self.db, &binding, subject, order.approval_subject_version, executor)
                 .await?;
+
         let now = Instant::now();
         let input = build_purchase_order_cancel_input(
             &runtime,
@@ -278,6 +285,7 @@ pub(super) async fn load_cancel_runtime(
         .work_items()
         .open_approval_tasks_for_execution(&ApprovalNodeExecutionId::new(current.base.id.clone()), executor)
         .await?;
+
     let plan = plan_cancel(CancelPlanInput {
         instance: &instance,
         current: &current,
@@ -445,6 +453,7 @@ async fn apply_purchase_order_cancel(
     if let Some(scope) = &object_scope {
         scope.current(&order.base.id, executor).await?;
     }
+
     execute_cancel_steps(
         &mut CancelPosting {
             actor_id: &actor_id,
@@ -656,6 +665,7 @@ mod tests {
         .unwrap();
         assert!(!built.close_open_task);
         assert!(!built.blocked_port);
+
         let error = prepare_document_cancel(built, 1).unwrap_err();
         assert!(
             matches!(error, erp_workflow::Error::ValidationError(message) if message.contains("不可恢复原审批人的阻塞只能走受阻取消"))
@@ -747,6 +757,7 @@ mod tests {
             seen: vec![],
             fail_at: None,
         };
+
         super::execute_cancel_steps(&mut steps, &mut executor).await.unwrap();
         assert_eq!(steps.seen, [Runtime, Order, Audit]);
     }
@@ -763,6 +774,7 @@ mod tests {
                 seen: vec![],
                 fail_at: Some(step),
             };
+
             let error = super::execute_cancel_steps(&mut steps, &mut executor).await.unwrap_err();
             assert!(
                 matches!(error, crate::Error::ConflictError(message) if message == "original-step-error")

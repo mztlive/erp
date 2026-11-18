@@ -54,10 +54,12 @@ impl<A: WorkflowAuthorizationPort> SupplierSettlementProcess<A> {
         self.authorization
             .require(actor, &supplier_settlement::STATEMENT_VOID, AccessTarget::Operation, executor)
             .await?;
+
         let (mut statement, replayed) = self.domain().prepare_void(id, &req, actor, executor).await?;
         if replayed {
             return Ok(statement.into());
         }
+
         let audit = actor.clone().resource_log(
             "supplier_settlement.void",
             "supplier_settlement_statement",

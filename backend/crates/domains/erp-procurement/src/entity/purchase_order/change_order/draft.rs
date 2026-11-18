@@ -39,6 +39,7 @@ impl PurchaseChangeOrder {
         {
             return Err(Error::from("采购变更保存必须使用独立的完整草稿提交"));
         }
+
         self.update(
             PurchaseChangeOrderUpdate {
                 reason,

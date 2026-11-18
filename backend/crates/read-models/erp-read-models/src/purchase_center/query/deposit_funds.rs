@@ -59,6 +59,7 @@ impl PurchaseOrderReadService {
                     if order.base.version != expected_version {
                         return Err(Error::ConflictError("采购版本已变化，请刷新后查看资金进度".into()));
                     }
+
                     let Some(revision_id) = order.stable.current_revision_id.as_deref() else {
                         scope.validate(executor).await?;
                         return Ok(vec![]);
@@ -71,6 +72,7 @@ impl PurchaseOrderReadService {
                         .ok_or_else(|| Error::NotFound("采购当前版本缺失".into()))?;
                     let executions = for_purchase(&db, &order.base.id, Some(revision_id), executor).await?;
                     scope.validate(executor).await?;
+
                     let context = DepositPurchaseContext {
                         order: &order,
                         revision: &revision,
@@ -107,6 +109,7 @@ impl DepositPurchaseContext<'_> {
         if execution.supplier_id != self.order.supplier_id.as_ref() {
             return Err(Error::Forbidden("资金执行与原采购供应商不一致".into()));
         }
+
         let Some(reservation) = reservation_for_execution(db, &execution.base.id, executor).await? else {
             return Ok(None);
         };
@@ -118,6 +121,7 @@ impl DepositPurchaseContext<'_> {
         {
             return Err(Error::Forbidden("资金记录与采购、付款主体或供应商归属不一致".into()));
         }
+
         let usages = usages_for_reservation(db, &reservation.base.id, executor).await?;
         Ok(Some(
             DepositExecutionFundsSummary::from_records(

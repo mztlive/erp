@@ -92,6 +92,7 @@ impl StatsCounts {
         if overdue {
             timing.overdue = timing.overdue.saturating_add(1);
         }
+
         if !context.selected_types.contains(&item.work_item_type) {
             return;
         }
@@ -160,6 +161,7 @@ impl WorkItemReadService {
             today_start,
             tomorrow_start,
         };
+
         let mut personal_query = query.clone();
         personal_query.scope = WorkItemScope::Mine;
         personal_query.statuses = vec![WorkItemStatus::Open];
@@ -173,6 +175,7 @@ impl WorkItemReadService {
         } else {
             self.stream_stats(&query, &access, &context, executor).await?.selected
         };
+
         self.validate_access(&access, executor).await?;
         Ok(WorkItemStatsView {
             assigned,
@@ -202,6 +205,7 @@ impl WorkItemReadService {
         if query.scope != WorkItemScope::Mine {
             return Ok(counts);
         }
+
         let mut scan = self.candidate_scan(&filter, executor).await?;
         loop {
             let rows = scan.next_batch(AUTHORIZED_SCAN_BATCH_SIZE, executor).await?;
@@ -354,6 +358,7 @@ mod tests {
             item.owner_user_id = owner.map(str::to_owned);
             rows.push(item);
         }
+
         let params: WorkItemListParams = serde_json::from_value(serde_json::json!({"scope":"mine"})).unwrap();
         let query = params.normalized().unwrap();
         let context = context(&actor, &query.work_item_types, at);
@@ -364,6 +369,7 @@ mod tests {
         assert_eq!(counts.family_counts.approval, 1);
         assert_eq!(counts.family_counts.procurement, 1);
         assert_eq!(counts.selected.due_today, 2);
+
         for (page, expected) in [(1, vec!["approval"]), (2, vec!["procurement"]), (3, vec![])] {
             let mut collector = AuthorizedPageCollector::new(page, 1).unwrap();
             collector.extend(rows.clone().into_iter().filter(|item| item.is_pending_for(actor.id())));
@@ -371,6 +377,7 @@ mod tests {
             assert_eq!(u64::try_from(page.total).unwrap(), counts.selected.assigned);
             assert_eq!(page.items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), expected);
         }
+
         let mut other_handler = query.clone();
         other_handler.handler_user_ids = vec!["other".into()];
         let mut narrowed = StatsCounts::default();
@@ -518,6 +525,7 @@ mod tests {
         );
         assert_eq!(counts.selected.overdue, 1);
         assert_eq!(counts.selected.exception, 4);
+
         let mut filter = WorkItemFilter::default();
         apply_due_filter_at(&mut filter, Some(WorkItemDueFilter::Today), midnight).unwrap();
         assert_eq!(filter.due_from, Some(midnight));

@@ -115,7 +115,9 @@ async fn export_page(
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::ValidationError("销售导出必须使用快照事务".into()));
     }
+
     let initial = reader.page(params, actor, executor).await?;
+
     let ids = initial
         .data
         .items
@@ -123,8 +125,10 @@ async fn export_page(
         .filter_map(|row| row.contract_id.as_ref().filter(|id| !id.is_empty()).cloned())
         .collect();
     let numbers = reader.contracts(&ids, actor, executor).await?;
+
     let final_page = reader.page(params, actor, executor).await?;
     ensure_same_page(&initial, &final_page)?;
+
     let mut output =
         serde_json::to_value(final_page).map_err(|_| Error::Internal("销售导出列表无法编码".into()))?;
     if let Some(rows) = output["items"].as_array_mut() {

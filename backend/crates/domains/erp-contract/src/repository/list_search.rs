@@ -162,6 +162,7 @@ impl ContractDomainRepository<'_> {
         if let Some(scope) = &filter.access {
             scope.ensure_current(executor)?;
         }
+
         let result: persistence_core::Result<_> = async {
             let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
             let mut stages = filter.stages();
@@ -174,6 +175,7 @@ impl ContractDomainRepository<'_> {
         }
         .await;
         let result = result?;
+
         if let Some(scope) = &filter.access {
             scope.ensure_current(executor)?;
         }
@@ -197,6 +199,7 @@ impl ContractDomainRepository<'_> {
         if let Some(scope) = &filter.access {
             scope.ensure_current(executor)?;
         }
+
         let result: persistence_core::Result<_> = async {
             let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
             let mut stages = filter.stages();
@@ -209,6 +212,7 @@ impl ContractDomainRepository<'_> {
         }
         .await;
         let result = result?;
+
         if let Some(scope) = &filter.access {
             scope.ensure_current(executor)?;
         }
@@ -236,12 +240,14 @@ impl ContractDomainRepository<'_> {
         if let Some(scope) = &filter.access {
             scope.ensure_current(executor)?;
         }
+
         let collection =
             self.db.collection::<ContractSearchResult>(<mongodb::Database as ContractExt>::CONTRACTS);
         let mut pipeline = filter.stages();
         pipeline.extend(list_pipeline(filter, search, BusinessDate::today()));
         let result =
             aggregate::rows(&collection, pipeline, executor).await?.into_iter().next().unwrap_or_default();
+
         if let Some(scope) = &filter.access {
             scope.ensure_current(executor)?;
         }
@@ -295,6 +301,7 @@ fn list_sort(filter: &ContractFilter) -> Document {
         Some("sales") => "id",
         _ => "created_at",
     };
+
     let mut sort = Document::new();
     sort.insert(field, direction);
     sort.insert("id", direction);
@@ -362,11 +369,13 @@ mod tests {
         let candidates = pipeline[0].get_document("$match").unwrap();
         assert_eq!(candidates.get_i64("deleted_at").unwrap(), 0);
         assert!(candidates.get_document("customer_id").unwrap().get_array("$in").unwrap().is_empty());
+
         let facets = pipeline.last().unwrap().get_document("$facet").unwrap();
         let items = facets.get_array("items").unwrap();
         let totals = facets.get_array("totals").unwrap();
         assert_eq!(items[0], totals[0]);
         assert_eq!(items[2].as_document().unwrap(), &doc! { "$skip": 40_i64 });
+
         let matching = items[0].as_document().unwrap().get_document("$match").unwrap();
         assert_eq!(matching.get_str("settlement_party_id").unwrap(), "party-1");
         assert!(matching.get_bool("search_expiring").unwrap());
@@ -429,6 +438,7 @@ mod tests {
             expression[2].as_document().unwrap(),
             &doc! { "$lte": ["$current.valid_to", "2026-10-08"] }
         );
+
         assert_eq!(ContractSearchResult::default().total(), 0);
     }
 

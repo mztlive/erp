@@ -30,6 +30,7 @@ impl DeliveryPacking {
         mut next_id: impl FnMut() -> String,
     ) -> Result<PackingPartition> {
         self.validate(source, original, true)?;
+
         let max_original_line_no = original.iter().map(|row| row.line_no).max().unwrap_or(0);
         let mut packing = self;
         let mut shipped = Vec::new();
@@ -37,6 +38,7 @@ impl DeliveryPacking {
         let mut current_source = source.clone();
         let mut rest_source = source.clone();
         let mut remap = BTreeMap::new();
+
         for (current, remainder) in current_source.destinations.iter_mut().zip(&mut rest_source.destinations)
         {
             let mut current_items = Vec::new();
@@ -47,6 +49,7 @@ impl DeliveryPacking {
                     .find(|line| line.base.id == item.delivery_line_id)
                     .ok_or_else(|| Error::from("发货行已变更"))?;
                 let (quantity, left) = partition_quantities(&packing, &current.key, item)?;
+
                 if quantity > Decimal::ZERO {
                     let new = new_line(
                         line,
@@ -61,6 +64,7 @@ impl DeliveryPacking {
                         .push(PackingItem { delivery_line_id: new.base.id.clone(), quantity: new.quantity });
                     shipped.push(new);
                 }
+
                 if left > Decimal::ZERO {
                     let new = new_line(line, rest, Quantity::try_from(left)?, 0, remaining.len(), next_id())?;
                     rest_items
@@ -71,6 +75,7 @@ impl DeliveryPacking {
             current.items = current_items;
             remainder.items = rest_items;
         }
+
         remap_packing(&mut packing, &remap);
         current_source.destinations.retain(|row| !row.items.is_empty());
         rest_source.destinations.retain(|row| !row.items.is_empty());
@@ -108,6 +113,7 @@ fn remap_packing(packing: &mut DeliveryPacking, remap: &BTreeMap<(String, String
         });
     }
     packing.dispatch.retain(|row| !row.items.is_empty());
+
     for package in &mut packing.packages {
         for item in &mut package.items {
             if let Some(id) = remap.get(&(package.destination_key.clone(), item.delivery_line_id.clone())) {
@@ -174,12 +180,14 @@ mod tests {
                 format!("line-{next}")
             })
             .unwrap();
+
         assert_eq!(shipped.len(), 2);
         assert_eq!(remaining.len(), 2);
         assert_eq!(current.destinations.len(), 1);
         assert_eq!(current.destinations[0].key, "a");
         assert_eq!(rest.destinations.len(), 1);
         assert_eq!(rest.destinations[0].key, "b");
+
         assert_eq!(
             shipped[0].quantity.to_decimal() + remaining[0].quantity.to_decimal(),
             original[0].quantity.to_decimal()
@@ -189,6 +197,7 @@ mod tests {
             original[0].purchase_line_sales_allocation_id
         );
         assert!(shipped.iter().all(|line| line.line_no > 2));
+
         packing.validate(&current, &shipped, true).unwrap();
         assert!(
             packing.packages[0]
@@ -238,6 +247,7 @@ mod tests {
                 format!("line-{next}")
             })
             .unwrap();
+
         assert!(!shipped.is_empty());
         assert!(!remaining.is_empty());
         assert!(current.destinations.iter().all(|row| !row.pending_address));
@@ -258,6 +268,7 @@ mod tests {
         let (_, remaining, _, rest, _) = packing
             .partition(&header("first"), &header("second"), &original, &source, &mut identity)
             .unwrap();
+
         let destination = &rest.destinations[0];
         let followup = DeliveryPacking {
             source_version: rest.source_version.clone(),

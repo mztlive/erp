@@ -49,6 +49,7 @@ impl PaymentExecutionMergeSet {
         if members.len() > MAX_PAYMENT_EXECUTION_MERGE {
             return Err(Error::from("一次合并付款最多包含 50 条任务"));
         }
+
         let mut work_item_ids = HashSet::new();
         let mut payable_account_ids = HashSet::new();
         let supplier_id = members[0].supplier_id.as_str();
@@ -62,6 +63,7 @@ impl PaymentExecutionMergeSet {
             if member.supplier_id != supplier_id {
                 return Err(Error::from("合并付款只能包含同一供应商的付款任务"));
             }
+
             if !work_item_ids.insert(member.work_item_id.as_ref()) {
                 return Err(Error::from("合并付款不能重复同一付款任务"));
             }
@@ -148,6 +150,7 @@ impl PaymentExecutionMergeSet {
         if allocation_account_ids.is_empty() {
             return Err(Error::from("至少提供一条核销分配"));
         }
+
         let mut covered: HashMap<&str, bool> =
             self.members.iter().map(|member| (member.payable_account_id.as_str(), false)).collect();
         for account_id in allocation_account_ids {
@@ -156,6 +159,7 @@ impl PaymentExecutionMergeSet {
                 .ok_or_else(|| Error::from(self.out_of_scope_message()))?;
             *flag = true;
         }
+
         if covered.values().any(|covered| !*covered) {
             return Err(Error::from(self.uncovered_member_message()));
         }
@@ -255,6 +259,7 @@ mod tests {
             ])
             .is_err()
         );
+
         let too_many = (0..MAX_PAYMENT_EXECUTION_MERGE + 1)
             .map(|index| member(&format!("wi-{index}"), &format!("pa-{index}"), "sup-1"))
             .collect();

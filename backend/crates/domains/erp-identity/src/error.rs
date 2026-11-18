@@ -159,6 +159,7 @@ mod tests {
         let error = Error::from(duplicate);
         assert!(matches!(&error, Error::ConflictError(message) if message == "数据已存在，请勿重复提交"));
         assert_eq!(error.class(), ErrorClass::Conflict);
+
         let failure = Error::from(MongoError::custom("unavailable"));
         assert!(matches!(failure, Error::RepositoryError(_)));
         assert_eq!(failure.class(), ErrorClass::Internal);
@@ -170,6 +171,7 @@ mod tests {
             Error::from(persistence_core::Error::TransientTransactionConflict(MongoError::custom("retry")));
         assert!(matches!(transient, Error::TransientTransaction(_)));
         assert_eq!(transient.class(), ErrorClass::Conflict);
+
         let unknown =
             Error::from(persistence_core::Error::CommitOutcomeUnknown(MongoError::custom("unknown")));
         assert!(matches!(unknown, Error::OutcomeUnknown(_)));

@@ -154,6 +154,7 @@ pub(crate) async fn copy_link_checked(
                                 .find_authorized_booklet(&id, scope, executor)
                                 .await?
                                 .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+
                             let service = SalesSelectionService::new(owned, authorization);
                             let token = service.copy_link(&id, &crypto, executor).await?;
                             let mut view = service.detail_view(&book, None, executor).await?;
@@ -209,6 +210,7 @@ pub(crate) async fn session_checked(
                                 .find_authorized_booklet(&id, scope, executor)
                                 .await?
                                 .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+
                             Ok(SalesSelectionService::new(owned, authorization)
                                 .session_of(&book.base.id, executor)
                                 .await?)
@@ -263,6 +265,7 @@ pub(crate) async fn image_key_checked(
                                 .find_authorized_booklet(&id, scope, executor)
                                 .await?
                                 .ok_or_else(|| Error::NotFound("选品册不存在或无权查看".into()))?;
+
                             Ok(SalesSelectionService::new(owned, authorization)
                                 .image_key_of(&book.base.id, &asset_id, executor)
                                 .await?)

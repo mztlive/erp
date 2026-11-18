@@ -74,6 +74,7 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, Vec<PurchaseInvoiceLink>>> {
         use erp_core::ids::{InvoiceId, PayableAccountId};
+
         let keys = invoice_ids.iter().map(|id| InvoiceId::new(id.clone())).collect::<Vec<_>>();
         let allocations =
             self.db.purchase_invoice_allocations().find_allocations_by_invoices(&keys, executor).await?;
@@ -89,6 +90,7 @@ impl FundsAccess {
                 (account.base.id.clone(), order)
             })
             .collect::<HashMap<_, _>>();
+
         let mut links: HashMap<String, Vec<PurchaseInvoiceLink>> = HashMap::new();
         for item in allocations {
             let signed = match item.allocation_action {
@@ -133,6 +135,7 @@ impl FundsAccess {
         params.validate()?;
         let query = params.normalized().map_err(Error::from)?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
+
         let snapshot = self
             .checked_purchase_invoice_allocations(params, &query, actor, params.scope_version.as_deref())
             .await?;
@@ -223,8 +226,10 @@ impl FundsAccess {
         let (authorization, snapshot) = self.allocation_projection(query, actor, true, executor).await?;
         let version = allocation_scope_version(&authorization, &snapshot.versions);
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
+
         let summary = snapshot.summary(&version)?;
         let items = snapshot.items.iter().map(allocation_page_row).collect();
+
         authorization.deliver(executor).await?;
         Ok(FundsScopedPage {
             items,

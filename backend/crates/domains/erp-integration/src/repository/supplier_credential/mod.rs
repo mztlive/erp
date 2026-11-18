@@ -87,6 +87,7 @@ impl SupplierCredentialRepository<'_> {
                 current.require_binding(binding)?;
                 let mut next = current.clone();
                 next.import(payload, expected, now)?;
+
                 let filter = filters::ordinary_import(&current, expected, now)?;
                 self.replace(filter, &next, executor).await?.ok_or_else(changed)
             },
@@ -112,10 +113,12 @@ impl SupplierCredentialRepository<'_> {
         let Some(current) = self.load(id, binding, executor).await? else {
             return Ok(None);
         };
+
         let mut next = current.clone();
         if !next.claim_refresh(expected_version, &claim)? {
             return Ok(None);
         }
+
         self.replace(filters::claim(&current, expected_version, &claim)?, &next, executor).await
     }
 
@@ -212,10 +215,12 @@ impl SupplierCredentialRepository<'_> {
             .load(id, binding, executor)
             .await?
             .ok_or_else(|| Error::NotFound("原技术凭据不存在或绑定不符".into()))?;
+
         let mut next = current.clone();
         if !next.reauthorize(payload, &recovery, now)? {
             return Ok(current);
         }
+
         self.replace(filters::reauthorization(&current, recovery.expected_version, now)?, &next, executor)
             .await?
             .ok_or_else(changed)

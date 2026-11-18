@@ -46,6 +46,7 @@ impl FulfillmentService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: super::sort_ascending(query.paging.sort_dir),
         };
+
         super::map_search_page(
             self.db.service_fulfillments().search_service_fulfillments(&filter, executor),
             |row| ServiceFulfillmentView {

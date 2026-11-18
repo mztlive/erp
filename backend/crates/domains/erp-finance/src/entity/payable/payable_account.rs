@@ -307,6 +307,7 @@ impl PayableAccount {
     ) -> Result<()> {
         let (open_total, open_invoiceable) =
             validate_totals(self.gross_total, settled_total, self.invoiceable_total, invoiced_total)?;
+
         self.settled_total = settled_total;
         self.invoiced_total = invoiced_total;
         self.open_total = open_total;
@@ -371,8 +372,10 @@ impl PayableAccount {
         if self.gross_total != base_gross {
             return Err(Error::from("应付总额与采购变更基准版本不一致"));
         }
+
         let (open_total, open_invoiceable) =
             validate_totals(new_gross, self.settled_total, new_gross, self.invoiced_total)?;
+
         self.gross_total = new_gross;
         self.invoiceable_total = new_gross;
         self.open_total = open_total;

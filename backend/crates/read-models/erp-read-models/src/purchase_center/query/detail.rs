@@ -68,12 +68,14 @@ impl PurchaseOrderReadService {
     ) -> Result<PurchaseOrderCenterView> {
         let mut facts = load_purchase_order_center_facts(&self.db, id, executor).await?;
         let order = facts.order.take().ok_or_else(|| Error::NotFound("采购单不存在或无权查看".into()))?;
+
         let identity = center_identity(&order, &facts)?;
         let mut content = center_content(&facts);
         attach_inquiry_number(&self.db, &order, &mut content.lines, executor).await?;
         let occurrences =
             occurrences_by_orders(&self.db, std::slice::from_ref(&order.base.id), executor).await?;
         PurchaseOrderLineView::attach_occurrences(&mut content.lines, &occurrences);
+
         let source = match source_sales(&self.db, &order, &content.lines, executor).await {
             Ok(source) => Some(source),
             Err(error) => {
@@ -82,6 +84,7 @@ impl PurchaseOrderReadService {
             },
         };
         let relations = center_relations(facts);
+
         let binding =
             match find_approval_binding(&self.db, &order.base.id, executor).await.map_err(Error::from) {
                 Ok(binding) => binding,
@@ -91,10 +94,12 @@ impl PurchaseOrderReadService {
         let approval =
             load_document_approval(&self.db, &order.base.id, binding.as_ref(), order.stable.status, executor)
                 .await?;
+
         let mut view = center_view(&order, identity, content, source, relations, approval);
         view.target_warehouse_name = target_warehouse_name(&self.db, &order, executor).await?;
         view.source_update = purchase_source_update_view(&self.db, &order, executor).await?;
         view.delivery = delivery_summary(&self.db, &order, executor).await?;
+
         let (api_executions, fulfillment_quantities) =
             super::fulfillment::fulfillment_views(&self.db, &order, executor).await?;
         view.api_executions = api_executions;
@@ -144,6 +149,7 @@ async fn delivery_summary(
     let Some(price_basis) = order.sourcing_delivery.supply_price_basis else {
         return Ok(None);
     };
+
     let sales_order_id = order.sales_order_id.to_string();
     let follow_ups = freight_follow_ups(db, std::slice::from_ref(&sales_order_id), executor).await?;
     let pending = follow_ups
@@ -153,6 +159,7 @@ async fn delivery_summary(
         .filter(|item| item.purchase_order_id == order.base.id)
         .map(|item| item.sales_order_line_id.clone())
         .collect::<std::collections::HashSet<_>>();
+
     let lines = order
         .sourcing_delivery
         .delivery_judgements

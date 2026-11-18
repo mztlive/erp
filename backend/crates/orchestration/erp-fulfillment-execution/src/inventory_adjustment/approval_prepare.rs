@@ -148,6 +148,7 @@ pub async fn reconcile_stock_adjustment_start_receipt(
     {
         return Err(Error::ConflictError("库存调整启动收据与命令作用域不一致".to_string()));
     }
+
     let (instance, snapshot, binding) =
         load_start_receipt_facts(db, &receipt, adjustment_id, req, actor, executor).await?;
     let identity = stock_adjustment_start_identity(
@@ -160,6 +161,7 @@ pub async fn reconcile_stock_adjustment_start_receipt(
     if !matches!(identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)) {
         return Err(payload_conflict_error().into());
     }
+
     let weak_legacy_receipt =
         legacy_standard_receipt_matches(adjustment_id, req, actor.id(), &binding, &receipt)?;
     let adjustment = db
@@ -175,6 +177,7 @@ pub async fn reconcile_stock_adjustment_start_receipt(
     {
         return Err(payload_conflict_error().into());
     }
+
     rbac.authorize_stock_adjustment_submit(&adjustment, actor, executor).await?;
     Ok(Some(instance.base.id))
 }
@@ -226,6 +229,7 @@ async fn load_start_receipt_facts(
     if instance.started_by.as_str() != actor.id() {
         return Err(Error::Forbidden(STOCK_ADJUSTMENT_SUBMIT_FORBIDDEN.to_string()));
     }
+
     let snapshot = db
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, executor)
@@ -241,6 +245,7 @@ async fn load_start_receipt_facts(
     if snapshot.payload.submitted_by != instance.started_by.as_str() {
         return Err(Error::ConflictError("库存调整启动实例与冻结提交人不一致".to_string()));
     }
+
     let binding = load_approval_binding(db, adjustment_id, executor).await?;
     let binding = require_frozen_binding(binding.as_ref())?;
     if instance.process_definition_id != binding.approval_process_definition_id
@@ -289,6 +294,7 @@ pub async fn find_stock_adjustment_start_result(
     {
         return Err(Error::ConflictError("库存调整提交结果收据身份不一致".to_string()));
     }
+
     let instance = db
         .bpm_workflow()
         .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), executor)
@@ -306,6 +312,7 @@ pub async fn find_stock_adjustment_start_result(
         return Err(Error::NotFound("库存调整提交结果不存在".to_string()));
     }
     validate_start_result_snapshot(db, &instance, adjustment_id, expected_subject_version, executor).await?;
+
     let adjustment = db
         .inventory()
         .stock_adjustment(adjustment_id, executor)
@@ -341,6 +348,7 @@ async fn validate_start_result_snapshot(
     if snapshot.payload.submitted_by != instance.started_by.as_str() {
         return Err(Error::ConflictError("库存调整提交结果与冻结提交人不一致".to_string()));
     }
+
     let binding = load_approval_binding(db, adjustment_id, executor).await?;
     let binding = require_frozen_binding(binding.as_ref())?;
     if instance.process_definition_id != binding.approval_process_definition_id
@@ -381,6 +389,7 @@ async fn legacy_start_payload_matches_result(
     {
         return Ok(false);
     }
+
     let persisted_lines = db
         .inventory()
         .adjustment_lines_by_adjustment_ids(&[StockAdjustmentId::new(adjustment.base.id.clone())], executor)
@@ -395,6 +404,7 @@ async fn legacy_start_payload_matches_result(
     {
         return Ok(false);
     }
+
     let reconstructed_snapshot = workflow_snapshot_from_inventory(StockAdjustmentApprovalSnapshot::build(
         adjustment,
         &persisted_lines,
@@ -404,6 +414,7 @@ async fn legacy_start_payload_matches_result(
     if reconstructed_snapshot != snapshot.payload {
         return Ok(false);
     }
+
     legacy_balance_versions_match(db, adjustment, &persisted_lines, &req.balances, executor).await
 }
 
@@ -521,6 +532,7 @@ pub async fn build_stock_adjustment_start_input(
     if graph.definition.definition_version != binding.approval_definition_version {
         return Err(Error::ConflictError("库存调整单绑定定义版本与已加载定义不一致".to_string()));
     }
+
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
@@ -618,6 +630,7 @@ pub(crate) async fn revalidate_candidates_with(
     let assignee_ids = graph.assignee_ids();
     let policy = require_process_required(DocumentType::StockAdjustment)?;
     ensure_separation_of_duties(policy.separation_of_duties_policy, initiator_id, &assignee_ids)?;
+
     let accounts = stock_adjustment_candidate_accounts(db, &assignee_ids, executor).await?;
     let mut checked = HashSet::with_capacity(assignee_ids.len());
     for assignee_id in &assignee_ids {
@@ -631,6 +644,7 @@ pub(crate) async fn revalidate_candidates_with(
         }
         .filter(|account| account.is_active_backoffice())
         .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
+
         let assignee_actor = AuditActor::new(account.base.id.clone(), account.base.id.clone(), account.kind);
         let required = [approval_instance::INSTANCE_LIST, approval_instance::SUBMIT_DECISION];
         if !identity_service
@@ -641,6 +655,7 @@ pub(crate) async fn revalidate_candidates_with(
             return Err(Error::ValidationError("指定审批人缺少审批读取和决定权限".to_string()));
         }
     }
+
     if graph.nodes.is_empty() {
         return Err(Error::ConflictError("审批定义没有节点，无法启动库存调整审批".to_string()));
     }

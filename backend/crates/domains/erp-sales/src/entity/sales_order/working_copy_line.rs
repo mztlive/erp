@@ -151,6 +151,7 @@ impl SalesOrderWorkingCopyLine {
         )?;
         let spec_snapshot = normalize_optional_text(data.spec_snapshot, "规格", SPEC_MAX_LEN)?;
         let unit_snapshot = normalize_optional_text(data.unit_snapshot, "单位", UNIT_MAX_LEN)?;
+
         let built = build_line_groups(data.line_type, data.goods, data.voucher, data.sales_tax_rate)?;
 
         Ok(Self {
@@ -315,11 +316,13 @@ mod tests {
         .unwrap();
         assert!(goods.belongs_to_working_copy(&SalesOrderWorkingCopyId::new("wc-1")));
         assert!(!goods.belongs_to_working_copy(&SalesOrderWorkingCopyId::new("wc-2")));
+
         let (sku, revision) = goods.sellable_sku_ref().unwrap().unwrap();
         assert_eq!(sku.as_ref(), "sku-1");
         assert_eq!(revision.as_ref(), "skurev-1");
         assert_eq!(goods.goods_fields().unwrap().unwrap().sku_id.as_ref(), "sku-1");
         assert!(goods.voucher_fields().unwrap().is_none());
+
         assert_eq!(
             SalesOrderWorkingCopyLine::amount_totals(std::slice::from_ref(&goods)),
             (amt("29.97"), amt("26.07"), amt("3.90"))

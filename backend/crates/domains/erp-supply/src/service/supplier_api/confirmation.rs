@@ -42,6 +42,7 @@ impl SupplierApiService {
     ) -> Result<PreparedBusinessConfirmation> {
         let BusinessConfirmationInput { id, command, operation_id, idempotency_hash, fingerprint, actor_id } =
             input;
+
         let mut connection = self
             .db
             .supplier_api()
@@ -56,6 +57,7 @@ impl SupplierApiService {
             .await?
             .ok_or_else(|| Error::NotFound("连接能力不存在".to_string()))?;
         ensure_version(capability.base.version, command.expected_capability_version)?;
+
         let confirmation = BusinessCapabilityConfirmation::new(
             format!("w20-confirm-{}", digest(&[&id, &operation_id])),
             BusinessCapabilityConfirmationData {
@@ -75,6 +77,7 @@ impl SupplierApiService {
                 confirmed_at: Instant::now(),
             },
         )?;
+
         connection.touch_business_confirmation(actor_id);
         self.db.supplier_api_connections().update(&mut connection, executor).await?;
         Ok(PreparedBusinessConfirmation { connection, capability, confirmation })

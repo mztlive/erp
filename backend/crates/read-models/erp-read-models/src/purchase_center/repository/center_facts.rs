@@ -160,13 +160,16 @@ async fn load_serial_facts(
     let supplier_name = load_supplier_name(db, &order.supplier_id, executor).await?;
     let sales_order_no = load_sales_no(db, &order.sales_order_id, executor).await?;
     let owner_name = load_owner_name(db, &order, executor).await?;
+
     let (current_revision, revision_lines, allocations) =
         load_revision_chain(db, order.stable.current_revision_id.as_deref(), executor).await?;
     let (current_submission, submission_lines) =
         load_submission_chain(db, order.current_submission_id.as_deref(), executor).await?;
+
     let order_id = PurchaseOrderId::new(order.base.id.clone());
     let changes = db.purchase_order().list_changes_by_order(&order_id, executor).await?;
     let payable = load_payable(db, &order_id, executor).await?;
+
     Ok(PurchaseOrderCenterFacts {
         order: Some(order),
         supplier_name,

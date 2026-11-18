@@ -61,6 +61,7 @@ impl CustomerAcceptanceProcess {
         if let Some(view) = self.reversed_result(id, actor, &command_receipt).await? {
             return Ok(view);
         }
+
         let original_actor = actor.clone();
         let original_id = CustomerAcceptanceId::new(id.to_string());
         let actor = actor.clone();
@@ -84,6 +85,7 @@ impl CustomerAcceptanceProcess {
                 })
             })
             .await;
+
         match transaction_result {
             Ok(reversed) => Ok(reversed.into()),
             Err(error) => self.recover_reverse(error, &command_receipt, id, &original_actor).await,
@@ -140,8 +142,10 @@ async fn commit_reverse(
     if let Some(persisted) = reversed(&reader, original_id.as_ref(), actor, &receipt, executor).await? {
         return Ok(persisted);
     }
+
     let (original, reverse_acceptance) =
         FulfillmentService::persist_customer_acceptance_reverse(db, original_id, req, executor).await?;
+
     complete_acceptance(
         db,
         &authorization.authorization,

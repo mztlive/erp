@@ -178,6 +178,7 @@ async fn durable_intent_precedes_query_and_durable_ack_intent_precedes_remote_de
     let applier = applier(&trace);
     let codec = SensitiveDataCodec::from_secret(b"message-test-secret");
     let process = SupplierMessageProcess { store: &store, source: &source, applier: &applier, codec: &codec };
+
     let result = process.run(NonZeroU32::new(10).unwrap()).await.unwrap();
     assert_eq!(result.applied, 1);
     assert_eq!(result.acknowledged, 1);
@@ -196,6 +197,7 @@ async fn durable_intent_precedes_query_and_durable_ack_intent_precedes_remote_de
             "save:Acknowledged"
         ]
     );
+
     *source.messages.lock().unwrap() = vec![message()];
     process.run(NonZeroU32::new(10).unwrap()).await.unwrap();
     assert_eq!(trace.lock().unwrap().iter().filter(|item| *item == "remote_ack").count(), 1);
@@ -211,10 +213,12 @@ async fn persistence_or_refresh_failure_never_deletes_remote_message() {
     let applier = applier(&trace);
     let codec = SensitiveDataCodec::from_secret(b"message-test-secret");
     let process = SupplierMessageProcess { store: &store, source: &source, applier: &applier, codec: &codec };
+
     *store.fail_receive.lock().unwrap() = true;
     assert!(process.run(NonZeroU32::new(10).unwrap()).await.is_err());
     assert!(store.records.lock().unwrap().is_empty());
     assert_eq!(*trace.lock().unwrap(), ["pull"]);
+
     *store.fail_receive.lock().unwrap() = false;
     *source.messages.lock().unwrap() = vec![message()];
     *applier.fail.lock().unwrap() = true;
@@ -233,9 +237,11 @@ async fn crash_after_remote_ack_recovers_unknown_without_reapplying_or_deleting_
     let applier = applier(&trace);
     let codec = SensitiveDataCodec::from_secret(b"message-test-secret");
     let process = SupplierMessageProcess { store: &store, source: &source, applier: &applier, codec: &codec };
+
     *store.fail_save.lock().unwrap() = Some(SupplierMessageState::Acknowledged);
     assert!(process.run(NonZeroU32::new(10).unwrap()).await.is_err());
     assert_eq!(store.record().state, SupplierMessageState::AckSending);
+
     let result = process.run(NonZeroU32::new(10).unwrap()).await.unwrap();
     assert_eq!(result.acknowledgement_unknown, 1);
     assert_eq!(store.record().state, SupplierMessageState::AckUnknown);
@@ -251,10 +257,12 @@ async fn source_ack_unknown_and_unknown_message_type_are_not_silently_retried() 
     let applier = applier(&trace);
     let codec = SensitiveDataCodec::from_secret(b"message-test-secret");
     let process = SupplierMessageProcess { store: &store, source: &source, applier: &applier, codec: &codec };
+
     assert_eq!(process.run(NonZeroU32::new(10).unwrap()).await.unwrap().acknowledgement_unknown, 1);
     *source.messages.lock().unwrap() = vec![message()];
     process.run(NonZeroU32::new(10).unwrap()).await.unwrap();
     assert_eq!(trace.lock().unwrap().iter().filter(|item| *item == "remote_ack").count(), 1);
+
     let mut unknown = message();
     unknown.source_id = "unknown-type".into();
     unknown.interpretation = MessageInterpretation::Quarantine { reason_code: "UNKNOWN_MESSAGE_TYPE".into() };
@@ -327,6 +335,7 @@ async fn address_change_ack_follows_live_refresh_and_durable_processing_receipt(
     let codec = SensitiveDataCodec::from_secret(b"address-notice-test-secret");
     let process =
         SupplierMessageProcess { store: &store, source: &source, applier: &application, codec: &codec };
+
     assert_eq!(process.run(NonZeroU32::new(10).unwrap()).await.unwrap().acknowledged, 1);
     let trace = trace.lock().unwrap();
     assert_eq!(
@@ -342,6 +351,7 @@ async fn address_change_ack_follows_live_refresh_and_durable_processing_receipt(
             "save:Acknowledged"
         ]
     );
+
     let saved = store.record();
     assert_eq!(saved.refresh_hints[0].target_kind, "supplier_address");
     assert_eq!(saved.refresh_hints[0].object_id, "99999");
@@ -406,10 +416,12 @@ async fn legacy_applying_order_notices_keep_original_evidence_and_ack_only_after
                 funds_transaction_id: None,
             },
         ]);
+
         let mut original =
             intake::receive("account", &store.connection, incoming, &codec, Instant::now()).unwrap();
         original.begin_apply().unwrap();
         store.records.lock().unwrap().insert(original.base.id.clone(), original.clone());
+
         let application = LegacyOrderApplication {
             source: &source,
             trace: trace.clone(),
@@ -417,11 +429,14 @@ async fn legacy_applying_order_notices_keep_original_evidence_and_ack_only_after
         };
         let process =
             SupplierMessageProcess { store: &store, source: &source, applier: &application, codec: &codec };
+
         assert_eq!(process.resume_pending().await.unwrap().deferred, 1);
         assert!(!trace.lock().unwrap().iter().any(|step| step == "remote_ack"));
+
         *application.original_ready.lock().unwrap() = true;
         assert_eq!(process.resume_pending().await.unwrap().acknowledged, 1);
         process.resume_pending().await.unwrap();
+
         let saved = store.record();
         assert_eq!(saved.state, SupplierMessageState::Acknowledged);
         assert_eq!(saved.body_encrypted, original.body_encrypted);
@@ -453,6 +468,7 @@ async fn explicit_funds_identity_and_other_supplier_policies_keep_precise_funds_
             product_id: None,
             funds_transaction_id: transaction.map(str::to_owned),
         };
+
         let result =
             super::refresh::apply_order_refresh(&source, &original, &hint, async { Ok(true) }, async {
                 trace.lock().unwrap().push("funds_conclusion".into());

@@ -61,6 +61,7 @@ impl SalesReferencePricePort for CatalogQualificationAdapter {
             .map(|request| (request.sku_id.clone(), request.sku_revision_id.clone()))
             .collect::<Vec<_>>();
         let rows = self.query.find_sellable_sku_refs(&refs, date, executor).await?;
+
         let mut facts = Vec::with_capacity(requests.len());
         for request in requests {
             let Some(row) = rows

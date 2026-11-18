@@ -55,6 +55,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::UNIT_OF_MEASURE_LIST, AccessTarget::Operation, executor)
             .await?;
+
         params.validate()?;
         let query = params.normalized()?;
         let filter = UnitOfMeasureFilter {
@@ -66,6 +67,7 @@ impl CatalogService {
             sort_by: Some(query.paging.sort_by.to_string()),
             sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.unit_of_measures().search_unit_of_measures(&filter, executor).await?;
         let items = page.items.into_iter().map(UnitOfMeasureView::from).collect();
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
@@ -115,6 +117,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::UNIT_OF_MEASURE_UPDATE, AccessTarget::Operation, executor)
             .await?;
+
         req.validate()?;
         let mut unit = self.load_unit(id, executor).await?;
         ensure_version(unit.base.version, req.version)?;
@@ -127,6 +130,7 @@ impl CatalogService {
             },
             actor.id(),
         )?;
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "unit_of_measure.update",
@@ -173,6 +177,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::UNIT_OF_MEASURE_DELETE, AccessTarget::Operation, executor)
             .await?;
+
         let mut unit = self.load_unit(id, executor).await?;
         let audit = self.audit.resource_log(
             actor.clone(),

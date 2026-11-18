@@ -133,6 +133,7 @@ async fn execute<P: TaskCommandPort>(
     ensure_task_matches_frozen_identity(&task, &object)?;
     let identity = authorization();
     port.authorize(&identity, &task, actor, executor).await?;
+
     match kind {
         CommandKind::Activity => {
             task.record_activity(Instant::now())?;
@@ -306,6 +307,7 @@ mod tests {
             fail_at,
             recorded: Mutex::default(),
         };
+
         let delivery = delivery();
         let result = execute(
             &port,
@@ -316,7 +318,6 @@ mod tests {
             &mut executor,
         )
         .await;
-
         (result, port.recorded.into_inner().unwrap())
     }
     /// 入口授权透传真实账号种类及同一执行器，失败时不继续处理任务。
@@ -330,6 +331,7 @@ mod tests {
                 fail_at,
                 recorded: Mutex::default(),
             };
+
             let result = authorize_entry(
                 &port,
                 &|| port.fresh_identity(),
@@ -355,6 +357,7 @@ mod tests {
         let original_id = current.base.id.clone();
         let original_owner = current.owner_user_id.clone();
         let mut started_at = None;
+
         for version in [2, 3] {
             let mut executor = TestExecutor::default();
             let port = RecordingPort {
@@ -365,6 +368,7 @@ mod tests {
             };
             let mut document = delivery();
             document.base.version = version;
+
             execute(
                 &port,
                 &|| port.fresh_identity(),
@@ -375,6 +379,7 @@ mod tests {
             )
             .await
             .unwrap();
+
             let recorded = port.recorded.into_inner().unwrap();
             assert_eq!(recorded.calls, ["load", "identity", "authorize", "update"]);
             assert_eq!(recorded.identities, [1]);
@@ -385,6 +390,7 @@ mod tests {
             assert_eq!(current.owner_user_id, original_owner);
             assert!(current.completed_at.is_none());
             assert!(current.completed_by.is_none());
+
             if let Some(first) = started_at {
                 assert_eq!(current.started_at, Some(first));
             }
@@ -435,11 +441,13 @@ mod tests {
                 recorded: Mutex::default(),
             };
             let document = delivery();
+
             assert!(matches!(
                 execute(&port, &|| port.fresh_identity(), FulfillmentTaskObject::Delivery(&document), &test_actor("buyer-1"), kind, &mut executor).await,
                 Err(Error::ConflictError(message)) if message == "task failure 2"
             ));
             assert!(port.recorded.lock().unwrap().written.is_none());
+
             port.fail_at = None;
             execute(
                 &port,
@@ -451,6 +459,7 @@ mod tests {
             )
             .await
             .unwrap();
+
             let recorded = port.recorded.lock().unwrap();
             assert_eq!(recorded.identities, [1, 2]);
             assert_eq!(

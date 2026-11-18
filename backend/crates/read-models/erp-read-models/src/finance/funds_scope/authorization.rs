@@ -472,6 +472,7 @@ mod tests {
             org_unit_ids: Some(vec!["org-a".into()]),
         };
         assert!(matches_linked_condition(&facts, &matched));
+
         let mismatched = FundsLinkedCondition {
             owner_user_ids: Some(vec!["sales-b".into()]),
             operator_user_ids: None,
@@ -536,6 +537,7 @@ mod tests {
     #[tokio::test]
     async fn lightweight_revalidation_preserves_comparison_order_and_first_page() {
         use std::cell::Cell;
+
         let calls = Cell::new(0);
         let result = checked_revalidated(
             Some("old"),
@@ -548,6 +550,7 @@ mod tests {
         .await;
         assert!(matches!(result, Err(Error::ConflictError(_))));
         assert_eq!(calls.get(), 0);
+
         let changed = checked_revalidated(
             Some("new"),
             || async { Ok(test_page("new", 7)) },
@@ -555,6 +558,7 @@ mod tests {
         )
         .await;
         assert!(matches!(changed, Err(Error::ConflictError(_))));
+
         let page = checked_revalidated(
             Some("new"),
             || async { Ok(test_page("new", 7)) },

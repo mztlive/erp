@@ -180,6 +180,7 @@ impl PreparedCustomerAudit {
         if resource_id.trim().is_empty() {
             return Err(Error::ValidationError("资源ID不能为空".to_string()));
         }
+
         let context = AuditContext::from(actor);
         let id = id_generator::next_id();
         let base = BaseModel::new(id);
@@ -280,12 +281,14 @@ mod tests {
         assert_eq!(prepared.event_sequence, NonZeroU32::MIN);
         assert_eq!(prepared.actor_id, "actor");
         assert_eq!(prepared.resource_id.as_deref(), Some("object-1"));
+
         let unknown =
             PreparedCustomerAudit::resource(actor(), "customer.update", "customer", "object-1".into())
                 .unwrap();
         assert_eq!(unknown.actor_name_snapshot, None);
         assert_eq!(unknown.request_id, None);
         assert_eq!(unknown.event_sequence, NonZeroU32::MIN);
+
         assert!(
             PreparedCustomerAudit::resource(actor(), "customer.update", "customer", " ".into(),).is_err()
         );

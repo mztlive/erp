@@ -88,6 +88,7 @@ impl SupplierDepositRechargeRequest {
         }
         let reference = required(reference, "充值批准依据")?;
         let actor = required(actor.into(), "充值批准人")?;
+
         self.status = DepositRechargeStatus::Approved;
         self.approved_by = Some(actor);
         self.approved_at = Some(now);

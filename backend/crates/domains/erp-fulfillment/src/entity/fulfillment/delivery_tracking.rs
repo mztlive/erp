@@ -88,6 +88,7 @@ impl DeliveryTrackingEntries {
         if entries.len() > TRACKING_ENTRIES_MAX {
             return Err(Error::from("包裹明细关联最多允许100条"));
         }
+
         let mut normalized = Vec::with_capacity(entries.len());
         for entry in entries {
             let entry = entry.normalized()?;
@@ -222,6 +223,7 @@ mod tests {
     fn rejects_empty_required_fields_and_normalizes_optional_carrier() {
         assert!(DeliveryTrackingEntries::new(vec![entry(" ", "A", None)]).is_err());
         assert!(DeliveryTrackingEntries::new(vec![entry("line", " ", None)]).is_err());
+
         let normalized =
             DeliveryTrackingEntries::new(vec![entry("line", "A", Some(" "))]).unwrap().into_entries();
         assert_eq!(normalized[0].carrier, None);
@@ -235,6 +237,7 @@ mod tests {
         assert!(entry("line", &"货".repeat(129), None).normalized().is_err());
         assert!(entry("line", "A", Some(&"货".repeat(65))).normalized().is_err());
         assert!(entry(&"x".repeat(129), "A", None).normalized().is_err());
+
         assert!(DeliveryTrackingEntries::new(vec![entry("line", "A", None); 100]).is_ok());
         assert!(DeliveryTrackingEntries::new(vec![entry("line", "A", None); 101]).is_err());
     }

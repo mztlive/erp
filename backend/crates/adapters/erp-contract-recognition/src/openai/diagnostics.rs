@@ -51,6 +51,7 @@ impl ResponseMetadata {
                 self.request_id = request_id(headers);
             }
         }
+
         if self.rejection.body_state.is_none()
             && let Some(body) = body
         {
@@ -120,6 +121,7 @@ impl Diagnostics {
             self.error(error);
             return;
         }
+
         let mut metadata = self.metadata();
         metadata.record_provider_error(
             format!("{error:?}"),
@@ -127,6 +129,7 @@ impl Diagnostics {
             error.provider_response_headers(),
             error.provider_response_body(),
         );
+
         // hook 已记录完成状态等具体拒绝原因时，不用取消错误覆盖。
         if metadata.validation_error.is_none() {
             metadata.validation_error = Some(error.to_string());
@@ -328,6 +331,7 @@ mod tests {
             let mut headers = HeaderMap::new();
             headers.insert("x-request-id", HeaderValue::from_static("req-recovery"));
             diagnostics.response(429, &headers);
+
             if poisoned {
                 let shared = diagnostics.clone();
                 assert!(
@@ -339,6 +343,7 @@ mod tests {
                     .is_err()
                 );
             }
+
             assert_eq!(diagnostics.status(), Some(429));
             diagnostics.transport_failure(Failure::Timeout(TimeoutSource::ResponseBody));
             assert!(matches!(diagnostics.failure(), Some(Failure::Timeout(TimeoutSource::ResponseBody))));
@@ -350,6 +355,7 @@ mod tests {
             diagnostics.error(&error);
             diagnostics
                 .extraction_error(&StructuredOutputError::PromptError(PromptError::Report(error.report())));
+
             let (_, logs) = capture(async {
                 let result: Result<()> = Err(invalid_output());
                 diagnostics.finish(Instant::now(), &result, None);
@@ -365,6 +371,7 @@ mod tests {
             assert_eq!(fields["provider_error_message"], "try later");
             assert_eq!(fields["provider_response_body"], "original response\u{fffd}");
             assert_eq!(fields["output_validation_error"], "response_shape: original output failure");
+
             let (_, logs) = capture(async {
                 diagnostics.finish(Instant::now(), &Ok(()), None);
             })
@@ -382,10 +389,12 @@ mod tests {
         headers.insert("authorization", HeaderValue::from_static("Bearer credential"));
         headers.insert("x-untrusted-id", HeaderValue::from_static("private-data"));
         assert_eq!(request_id(&headers), None);
+
         for value in ["".to_owned(), "x".repeat(4096), "vendor request id / 123".into()] {
             headers.insert("x-request-id", HeaderValue::from_str(&value).unwrap());
             assert_eq!(request_id(&headers).as_deref(), Some(value.as_str()));
         }
+
         headers.remove("x-request-id");
         headers.insert("x-dashscope-request-id", HeaderValue::from_static("req_123-abc.4"));
         assert_eq!(request_id(&headers).as_deref(), Some("req_123-abc.4"));

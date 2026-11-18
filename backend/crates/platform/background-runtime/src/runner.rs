@@ -88,6 +88,7 @@ impl BackgroundRunner {
             if stop.is_some_and(should_stop) {
                 break;
             }
+
             let started = std::time::Instant::now();
             let name = adapter.name();
             let count = match adapter.run_due().await {
@@ -126,6 +127,7 @@ impl BackgroundRunner {
             self.run_round(Some(&stop), |_, _| {}).await;
         })
         .await;
+
         for adapter in &self.adapters {
             adapter.drain().await;
         }
@@ -185,6 +187,7 @@ mod tests {
         let runner = BackgroundRunner::new(Duration::from_secs(2))
             .register(CountingAdapter { name: "first", calls: Arc::clone(&calls) })
             .register(CountingAdapter { name: "second", calls: Arc::clone(&calls) });
+
         let counts = runner.run_once().await;
         assert_eq!(counts, vec![("first", 1), ("second", 1)]);
         assert_eq!(calls.load(Ordering::SeqCst), 2);
@@ -207,6 +210,7 @@ mod tests {
         let error = FailingAdapter.run_due().await.unwrap_err();
         assert!(error.downcast_ref::<std::io::Error>().is_some());
         assert_eq!(error.to_string(), "expected polling failure");
+
         let calls = Arc::new(AtomicUsize::new(0));
         let runner = BackgroundRunner::new(Duration::ZERO)
             .register(FailingAdapter)
@@ -248,9 +252,11 @@ mod tests {
         let task = tokio::spawn(async move {
             runner.run(receive).await;
         });
+
         draining.notified().await;
         assert_eq!(calls.load(Ordering::SeqCst), 0);
         assert!(!task.is_finished());
+
         finish.notify_one();
         tokio::time::timeout(Duration::from_secs(1), task).await.unwrap().unwrap();
     }

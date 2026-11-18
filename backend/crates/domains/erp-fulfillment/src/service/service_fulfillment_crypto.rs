@@ -123,12 +123,14 @@ mod tests {
             recipient.as_str(),
             "同密钥同明文指纹稳定"
         );
+
         let rotated =
             service_recipient_fingerprint("recipient-plain-001", b"fulfillment-fingerprint-key-v2").unwrap();
         assert_ne!(recipient.as_str(), rotated.as_str(), "密钥版本轮换必须改变指纹");
         let rotated_location =
             service_location_fingerprint("location-plain-001", b"fulfillment-fingerprint-key-v2").unwrap();
         assert_ne!(location.as_str(), rotated_location.as_str(), "地点指纹同样绑定密钥版本");
+
         fn accepts_recipient(_: &super::ServiceRecipientFingerprint) {}
         fn accepts_location(_: &super::ServiceLocationFingerprint) {}
         accepts_recipient(&recipient);

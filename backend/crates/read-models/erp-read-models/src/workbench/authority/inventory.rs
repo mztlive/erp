@@ -68,8 +68,10 @@ impl super::WorkItemFactsReader {
         if ids.is_empty() {
             return Ok(());
         }
+
         let statements = self.read_settlement_statements(&ids, executor).await?;
         let context = self.supplier_settlement_fact_context(&statements, executor).await?;
+
         for statement in statements {
             let supplier = context.supplier_names.get(&statement.supplier_id.to_string()).cloned();
             let items =
@@ -95,12 +97,14 @@ impl super::WorkItemFactsReader {
         let item_ids =
             items.iter().map(|item| SupplierSettlementItemId::new(item.base.id.clone())).collect::<Vec<_>>();
         let differences = self.read_settlement_differences(&item_ids, executor).await?;
+
         let supplier_names = self
             .supplier_display_names(
                 &statements.iter().map(|statement| statement.supplier_id.to_string()).collect::<Vec<_>>(),
                 executor,
             )
             .await?;
+
         Ok(SettlementFactContext {
             supplier_names,
             items_by_statement: group_settlement_items(items),

@@ -26,17 +26,20 @@ impl DataTransferProcess {
         if !matches!(source.kind, TransferKind::SupplyBatch | TransferKind::PortalBatch) {
             return Err(Error::ValidationError("该任务不支持批量结果核对".into()));
         }
+
         let mut result = self.result(id, actor).await?;
         let mut original: Value = serde_json::from_slice(&result.bytes()?)
             .map_err(|_| Error::Internal("批量结果格式无效".into()))?;
         if !has_unknown_rows(&original) {
             return Err(Error::ConflictError("没有需要核对的原操作结果".into()));
         }
+
         let fresh = self.handler.recover(source.kind, &source.input, actor).await?;
         let confirmed = merge_confirmed(&mut original, &fresh)?;
         if confirmed.is_empty() {
             return Ok(result);
         }
+
         result.content_base64 = TransferResult::file(
             result.file_name.clone(),
             &result.content_type,
@@ -60,6 +63,7 @@ impl DataTransferProcess {
             .list_entities_by_job(&BackgroundJobId::new(&job.base.id), &mut ReadExecutor::default())
             .await?;
         apply_recovered(&mut job, &mut items, confirmed, Instant::now())?;
+
         let mut asset = self
             .save_private(
                 &format!("data-transfer/{}/recovered-{}.enc", job.base.id, next_id()),
@@ -72,6 +76,7 @@ impl DataTransferProcess {
             result_file_asset_id: Some(asset.base.id.clone().into()),
             result_expires_at: job.result_expires_at,
         });
+
         let db = self.db.clone();
         db.client()
             .clone()
@@ -190,15 +195,18 @@ mod tests {
         )
         .unwrap();
         apply(&mut job, &mut items, &file).unwrap();
+
         let fresh = json!({"rows":[{"row_id":"r1","status":"replayed","result":{"id":"saved"}},
             {"row_id":"r2","status":"failed","result":{"command_outcome":"rejected"}}]});
         let recovered = merge_confirmed(&mut original, &fresh).unwrap();
         apply_recovered(&mut job, &mut items, &recovered, Instant::now()).unwrap();
+
         assert_eq!((job.success_count, job.failed_count, job.processed_count), (1, 1, 2));
         assert_eq!(job.status, JobStatus::PartiallySucceeded);
         assert_eq!(items[0].status, Some(ItemStatus::Success));
         assert_eq!(items[1].result_code.as_deref(), Some("row_failed"));
         assert!(!has_unknown_rows(&original));
+
         assert!(merge_confirmed(&mut original, &fresh).unwrap().is_empty());
         assert!(apply_recovered(&mut job, &mut items, &recovered, Instant::now()).is_err());
     }

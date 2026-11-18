@@ -91,6 +91,7 @@ pub(super) fn rejection(value: &Value) -> Result<Option<CommandRejection>> {
     if outcome != "rejected" {
         return Err(Error::Internal("门户命令终态回执类型损坏".into()));
     }
+
     let value = value.get("rejection").ok_or_else(|| Error::Internal("门户拒绝回执缺失".into()))?;
     let rejection: CommandRejection =
         serde_json::from_value(value.clone()).map_err(|_| Error::Internal("门户拒绝回执内容损坏".into()))?;
@@ -159,6 +160,7 @@ impl SupplierPortalProcess {
                 Box::pin(async move {
                     let actor = this.session_validate(&actor, executor).await?;
                     actor.require_write()?;
+
                     let receipt = PortalOfferingService::new(this.db.clone())
                         .command_result(&command, executor)
                         .await?;
@@ -243,6 +245,7 @@ mod tests {
     #[tokio::test]
     async fn only_known_business_preflight_rejections_can_be_sealed() {
         assert!(matches!(recovery_decision(None, async { Ok(()) }).await.unwrap(), RecoveryDecision::Retry));
+
         for error in [
             Error::ValidationError("数量不能为负".into()),
             Error::BusinessLogicError("当前商品不可供".into()),
@@ -253,6 +256,7 @@ mod tests {
                 RecoveryDecision::Reject(_)
             ));
         }
+
         for error in [
             Error::Forbidden("资格已撤销".into()),
             Error::Unauthenticated("绑定已失效".into()),
@@ -275,6 +279,7 @@ mod tests {
         assert_eq!(positive.fingerprint, negative.fingerprint);
         let restored = rejection(&negative.replay(&original).unwrap()).unwrap().unwrap().into_error();
         assert!(matches!(restored, Error::ConflictError(message) if message == "版本已变化"));
+
         assert!(negative.replay(&command("same-key", 2)).is_err());
         assert_ne!(original.id(), command("fresh-key", 2).id());
     }

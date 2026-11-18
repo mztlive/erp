@@ -104,6 +104,7 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<StockAdjustmentAdapter
     {
         return Err(Error::Internal("库存调整单审批适配器登记不完整".to_string()));
     }
+
     Ok(StockAdjustmentAdapter {
         document_type: spec.document_type,
         process_kind: spec.process_kind,
@@ -259,10 +260,12 @@ mod tests {
     fn submit_freezes_version_and_cancel_does_not_rollback() {
         let mut adjustment = draft_adjustment();
         assert_eq!(adjustment.approval_subject_version, 0);
+
         execute_stock_adjustment_domain_action(&mut adjustment, ApprovalDomainAction::StockAdjustmentSubmit)
             .unwrap();
         assert_eq!(adjustment.status, StockAdjustmentState::InApproval);
         assert_eq!(adjustment.approval_subject_version, 1);
+
         execute_stock_adjustment_domain_action(
             &mut adjustment,
             ApprovalDomainAction::StockAdjustmentCancelApproval,
@@ -270,6 +273,7 @@ mod tests {
         .unwrap();
         assert_eq!(adjustment.status, StockAdjustmentState::Draft);
         assert_eq!(adjustment.approval_subject_version, 1);
+
         execute_stock_adjustment_domain_action(&mut adjustment, ApprovalDomainAction::StockAdjustmentSubmit)
             .unwrap();
         assert_eq!(adjustment.approval_subject_version, 2);
@@ -322,6 +326,7 @@ mod tests {
             )
             .is_ok()
         );
+
         adjustment.status = StockAdjustmentState::PendingFinanceReview;
         assert!(
             execute_stock_adjustment_domain_action(
@@ -349,6 +354,7 @@ mod tests {
         assert_eq!(payload.responsible_org_id, "wh-1");
         assert_eq!(payload.total_quantity.unwrap().to_string(), "2");
         assert!(payload.total_amount.is_none());
+
         assert!(
             erp_inventory::StockAdjustmentApprovalSnapshot::build(
                 &adjustment,

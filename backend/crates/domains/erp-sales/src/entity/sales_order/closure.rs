@@ -140,6 +140,7 @@ impl SalesOrderClosureFacts {
         } else {
             Some(SalesOrderFulfillmentBlocker::CustomerAcceptance)
         };
+
         SalesOrderClosureAssessment {
             fulfillment_complete,
             receivable_settled,

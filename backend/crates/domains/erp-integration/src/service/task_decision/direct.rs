@@ -46,6 +46,7 @@ pub async fn execute_direct_decision(
     let latest = latest_resolution(db, &prepared.difference_id, executor).await?;
     ensure_direct_version(prepared.difference_version, latest.as_ref())?;
     ensure_difference_open(latest.as_ref())?;
+
     let fact = direct_decision_fact(authority, &difference, command, receipt_id, actor_id, executor).await?;
     persist_appended_resolution(db, &difference, latest.as_ref(), &fact, receipt_id, actor_id, executor)
         .await?;
@@ -151,9 +152,11 @@ async fn terminal_conclusion_fact(
         input.conclusion,
         input.evidence_refs,
     )?;
+
     let subject = EvidenceSubject::difference(difference);
     let verified = verify_evidence_refs(authority, &subject, input.evidence_refs, actor_id, executor).await?;
     let reference = verified_reference(&verified)?;
+
     let typed = DirectConclusion::from(input.conclusion);
     let (resulting_status, outcome) = match input.conclusion {
         DirectReconciliationConclusion::ConfirmNoError => {

@@ -253,6 +253,7 @@ mod tests {
             assert_eq!(participant.options.as_ref().unwrap().unique, Some(true));
             assert!(!indexes.iter().any(|index| index.keys == doc! { "booklet_id": 1 }));
         }
+
         let sessions = session_indexes();
         let code = sessions.iter().find(|index| index.keys == doc! { "voucher_code_hash": 1 }).unwrap();
         let options = code.options.as_ref().unwrap();

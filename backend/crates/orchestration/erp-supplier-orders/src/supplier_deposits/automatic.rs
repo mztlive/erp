@@ -57,8 +57,10 @@ impl AutomaticPreparation {
         if budget.approved_other != Amount::zero() {
             return Err(Error::BusinessLogicError("自动余额执行尚不支持其他收费项目".into()));
         }
+
         let mut connection = self.connection(&execution, executor).await?;
         let account = self.account(&execution, &connection, executor).await?;
+
         let mut purchase = self
             .db
             .purchase_orders()
@@ -71,6 +73,7 @@ impl AutomaticPreparation {
         {
             return Err(Error::ConflictError("原采购生效修订已变化，不能取得旧执行资金占用".into()));
         }
+
         if self.covered(&execution, &account, budget.approved_total, executor).await? {
             return Ok(());
         }
@@ -79,6 +82,7 @@ impl AutomaticPreparation {
                 "本执行组已有可能送达的原写请求，请先调查原资金结果".into(),
             ));
         }
+
         let data = DepositAutomaticReservationData {
             account_id: account.base.id.clone(),
             purchase_order_id: execution.purchase_order_id.clone(),
@@ -133,14 +137,17 @@ impl AutomaticPreparation {
         )
         .await?;
         let request = data.request(&requests)?;
+
         let now = Instant::now();
         let grants = automatic_authorizations(&self.db, &data.account_id, now, executor).await?;
         let grant = data.authorization(&grants, now)?;
+
         let basis = data.basis(request, grant)?;
         let key = format!("automatic-execution:{}", data.execution_group_id);
         SupplierDepositService::new(self.db.clone())
             .reserve(&data.account_id, &key, basis, SYSTEM_ACTOR, now, executor)
             .await?;
+
         let actor = AuditActor::new(SYSTEM_ACTOR.into(), SYSTEM_ACTOR.into(), AccountKind::Admin)
             .with_actor_name_snapshot(Some("供应商预存款自动执行".into()))?;
         audit(&self.db, &actor, "reserve", &data.account_id, executor).await
@@ -198,6 +205,7 @@ impl AutomaticPreparation {
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("连接预存款账户不存在".into()))?;
+
         let revision = self
             .db
             .purchase_order_revisions()

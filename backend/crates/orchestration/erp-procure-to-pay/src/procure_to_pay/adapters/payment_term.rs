@@ -101,6 +101,7 @@ mod tests {
         let encoded = "先用后付｜经营类目：礼盒";
         let provider_error = SupplierPaymentTerm::parse("先用后付").unwrap_err().to_string();
         assert_eq!(parse_snapshot(encoded).unwrap_err().to_string(), provider_error);
+
         let snapshot = PaymentTermSnapshot {
             payment_term_code: encoded.to_string(),
             prepay_gate: false,

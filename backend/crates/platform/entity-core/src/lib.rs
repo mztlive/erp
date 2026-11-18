@@ -197,7 +197,6 @@ mod tests {
     #[test]
     fn non_zero_deleted_at_marks_model_deleted() {
         let model = BaseModel { deleted_at: 1_700_000_001, ..BaseModel::fake() };
-
         assert!(model.is_deleted());
     }
 
@@ -224,7 +223,6 @@ mod tests {
         assert!(!entity.is_deleted());
 
         entity.base_mut().deleted_at = 1_700_000_001;
-
         assert!(entity.is_deleted());
     }
 

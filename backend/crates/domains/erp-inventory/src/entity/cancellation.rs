@@ -191,6 +191,7 @@ mod tests {
         assert!(!fact.matches_request("adjustment", &request, "actor", "other"));
         let changed = CancelStockAdjustmentApprovalRequest { expected_execution_version: 6, ..request };
         assert!(!fact.matches_request("adjustment", &changed, "actor", "撤回"));
+
         let mut damaged = fact;
         damaged.data.task_id = None;
         assert!(damaged.validate().is_err());

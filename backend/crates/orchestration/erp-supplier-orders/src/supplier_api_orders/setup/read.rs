@@ -85,6 +85,7 @@ impl SupplierApiOrderProcess {
             .find_authorized(id, &access, executor)
             .await?
             .ok_or_else(|| Error::NotFound("对象不存在或无权访问".into()))?;
+
         let execution = self
             .db
             .supplier_api_order_executions()
@@ -105,6 +106,7 @@ impl SupplierApiOrderProcess {
             Ok(connector) => (Some(connector.address_requirement()), None),
             Err(error) => (None, Some(error.to_string())),
         };
+
         let (tree, shipments) = self.execution_progress(execution, executor).await?;
         let mut view =
             ExecutionSetupView::from_execution(execution, snapshot.as_ref(), requirement, tree, shipments);
@@ -114,6 +116,7 @@ impl SupplierApiOrderProcess {
                 None => reason,
             });
         }
+
         if !self
             .authorization
             .has_permission(actor, &internal::SUPPLIER_OFFERING_COST_DETAIL, executor)

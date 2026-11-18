@@ -99,6 +99,7 @@ async fn apply_resolution(
     if !replay {
         resolution_asset(&db, &authorization, &command.evidence_asset_id, &actor, executor).await?;
     }
+
     let resolution = DepositReconciliationResolution {
         operation_key: command.operation_key.clone(),
         payload_fingerprint: payload(&(id, &command.balanced_reconciliation_id, &command.evidence_asset_id))?,
@@ -137,11 +138,13 @@ async fn apply_release(
     {
         return Ok(result);
     }
+
     if funds.reconciliation_required {
         return Err(Error::BusinessLogicError("账户仍待对账，请先完成差异结案".into()));
     }
     resolution_asset(&db, &authorization, &verification.evidence_asset_id, &actor, executor).await?;
     let last_external_fact_at = release_finality(&db, &account, id, command.reason, executor).await?;
+
     let result = service
         .release_verified_reservation(
             VerifiedDepositRelease {
@@ -183,6 +186,7 @@ async fn release_finality(
     {
         return Err(Error::ConflictError("原资金占用与采购执行版本不一致".into()));
     }
+
     let order = db
         .supplier_fulfillment_orders()
         .find_by_id(&execution.base.id, executor)
@@ -199,6 +203,7 @@ async fn release_finality(
         DepositReleaseReason::CancelledAndReturned => ExecutionFundsFinality::Cancelled,
     };
     let time = execution.ensure_funds_finality(expected, &order, tracking.as_ref(), observation.as_ref())?;
+
     execution.stage = ApiOrderStage::Stopped;
     execution.blocker = Some("本执行资金风险已核实，剩余占用已按原依据释放".into());
     db.supplier_api_order_executions().update(&mut execution, executor).await?;

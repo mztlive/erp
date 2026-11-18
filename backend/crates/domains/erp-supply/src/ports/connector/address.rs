@@ -106,6 +106,7 @@ impl ConfirmedSupplierAddress {
         {
             return Err(Error::BusinessLogicError("供应商收货地址已变化，请重新确认四级地址".into()));
         }
+
         for level in [&self.province, &self.city, &self.county, &self.town] {
             if level.code.trim().is_empty() || level.name.trim().is_empty() {
                 return Err(Error::ValidationError("请完整确认供应商四级收货地址".into()));
@@ -140,6 +141,7 @@ mod tests {
         assert!(value.validate_binding("other", "snapshot", "address-hash").is_err());
         assert!(value.validate_binding("connection", "new-snapshot", "address-hash").is_err());
         assert!(value.validate_binding("connection", "snapshot", "changed").is_err());
+
         let mut incomplete = value;
         incomplete.town.code.clear();
         assert!(incomplete.validate_binding("connection", "snapshot", "address-hash").is_err());

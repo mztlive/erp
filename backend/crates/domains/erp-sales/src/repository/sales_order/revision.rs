@@ -424,6 +424,7 @@ impl<'a> SalesOrderDomainRepository<'a> {
             executor,
         )
         .await?;
+
         mongo_ops::insert_many(
             &self.db.collection::<SalesOrderRevisionLine>(SALES_ORDER_REVISION_LINES),
             revision_lines,
@@ -444,6 +445,7 @@ impl<'a> SalesOrderDomainRepository<'a> {
             executor,
         )
         .await?;
+
         SalesOrderRepository::new(self.db, SALES_ORDERS).update(order, executor).await
     }
 }
@@ -468,6 +470,7 @@ mod tests {
         assert_eq!(options.sort, Some(doc! { "revision_no": -1 }));
         assert_eq!(options.limit, Some(1));
         assert_eq!(options.projection, Some(doc! { "revision_no": 1, "_id": 0 }));
+
         assert_eq!(sales_order_revision_no_from_rows(Vec::new()), None);
         assert_eq!(
             sales_order_revision_no_from_rows(vec![SalesOrderRevisionNoRow { revision_no: 9 }]),

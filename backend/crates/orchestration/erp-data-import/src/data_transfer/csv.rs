@@ -28,6 +28,7 @@ pub(super) fn render(kind: TransferKind, input: &Value, rows: &[Value]) -> Resul
                 .join(","),
         );
     }
+
     Ok((format!("{title}.csv"), format!("\u{feff}{}", lines.join("\r\n"))))
 }
 fn value(row: &Value, key: &str) -> String {
@@ -127,12 +128,15 @@ mod tests {
     fn exports_business_fields_including_multiple_owners_and_reservation_balance() {
         let (_, csv) = render(TransferKind::Customers, &json!({}), &[json!({"customer_no":"C1","legal_name":"公司","status":"active","owners":[{"user_name":"销售甲"},{"user_name":"销售乙"}]})]).unwrap();
         assert!(csv.contains("销售甲、销售乙"));
+
         let (_, csv) = render(TransferKind::InventoryReservation, &json!({}), &[json!({"id":"R1","reserved_quantity":"12.300","consumed_quantity":"2.000","released_quantity":"1.000","status":"active"})]).unwrap();
         assert!(csv.contains("\"12.300\",\"2.000\",\"1.000\""));
+
         let (_, csv) =
             render(TransferKind::SupplierOrders, &json!({}), &[json!({"fulfillment_order_no":"SF1"})])
                 .unwrap();
         assert!(csv.contains("SF1"));
+
         assert_eq!(
             display(
                 TransferKind::Contracts,
@@ -141,6 +145,7 @@ mod tests {
             ),
             "2026-10-22"
         );
+
         assert!(cell("  =1+1").starts_with("\"'"));
     }
     #[test]

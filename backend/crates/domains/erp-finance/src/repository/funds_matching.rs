@@ -57,6 +57,7 @@ pub async fn bank_paid_recharge_candidate(
     if payment.effective_amount() != amount {
         return Ok(None);
     }
+
     let request = db
         .supplier_deposit_recharge_requests()
         .find_one(doc! {"account_id": account, "supplier_payment_id": &payment.base.id}, executor)
@@ -90,6 +91,7 @@ pub async fn unique_original_usage(
     if entry.kind != DepositLedgerKind::Debit {
         return Ok(None);
     }
+
     let usage = db.supplier_deposit_usages().find_by_id(&entry.base.id, executor).await?;
     Ok(usage.filter(|usage| usage.account_id == account && usage.ledger_entry_id == entry.base.id))
 }

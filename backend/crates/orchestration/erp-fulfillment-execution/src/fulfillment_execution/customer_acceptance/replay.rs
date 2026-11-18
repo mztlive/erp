@@ -143,6 +143,7 @@ pub(super) async fn committed(
 ) -> Result<Option<CustomerAcceptance>> {
     snapshot(executor)?;
     reader.operation(actor, &fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_COMMIT, executor).await?;
+
     let Some(id) = reader.receipt(receipt, executor).await? else { return Ok(None) };
     let acceptance = reader.acceptance(&id, executor).await?;
     if acceptance.sales_order_id != req.sales_order_id
@@ -152,6 +153,7 @@ pub(super) async fn committed(
     {
         return Err(Error::ConflictError("验收命令结果与销售单不一致".into()));
     }
+
     reader.sales(actor, acceptance.sales_order_id.as_ref(), executor).await?;
     reader.task(actor, acceptance.sales_order_id.as_ref(), req.work_item_id.as_deref(), executor).await?;
     Ok(Some(acceptance))
@@ -167,8 +169,10 @@ pub(super) async fn reversed(
 ) -> Result<Option<CustomerAcceptance>> {
     snapshot(executor)?;
     reader.operation(actor, &fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_REVERSE, executor).await?;
+
     let original = reader.acceptance(id, executor).await?;
     reader.sales(actor, original.sales_order_id.as_ref(), executor).await?;
+
     let Some(result) = reader.receipt(receipt, executor).await? else { return Ok(None) };
     let result = reader.acceptance(&result, executor).await?;
     if result.status != CustomerAcceptanceState::Posted

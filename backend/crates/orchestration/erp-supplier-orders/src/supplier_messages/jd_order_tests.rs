@@ -142,8 +142,10 @@ async fn order_failure_and_receipt_notices_wait_for_original_order_then_ack_with
             applier: &application,
             codec: &codec,
         };
+
         assert_eq!(process.run(NonZeroU32::new(1).unwrap()).await.unwrap().deferred, 1);
         assert!(transport.writes.lock().unwrap().is_empty());
+
         *application.fail.lock().unwrap() = false;
         assert_eq!(process.run(NonZeroU32::new(1).unwrap()).await.unwrap().acknowledged, 1);
         assert_eq!(transport.writes.lock().unwrap().len(), 1);
@@ -172,9 +174,11 @@ async fn false_delete_result_keeps_unknown_state_and_cannot_send_a_second_delete
         acknowledged_at: None,
         conflict: None,
     };
+
     message.begin_acknowledge().unwrap();
     let acknowledgement = transport.acknowledge(&message.source_message_id).await.unwrap();
     assert_eq!(acknowledgement, MessageAcknowledgement::Unknown);
+
     message
         .acknowledged(acknowledgement == MessageAcknowledgement::Confirmed, Instant::from_unix_secs(3))
         .unwrap();

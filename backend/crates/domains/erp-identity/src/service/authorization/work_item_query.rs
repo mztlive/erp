@@ -40,9 +40,11 @@ pub(super) fn binding_condition(base: AccessRule) -> Result<AccessRule> {
             rules::data_condition(&source, Some(&rules::capability_scope(&source)?))?,
         )?);
     }
+
     for (key, permission) in PORTAL {
         partitions.push(related(key, "supplier_portal_material", materials::binding_condition(permission)?)?);
     }
+
     partitions.push(related(
         "detail_approval_owner",
         "work_item",
@@ -56,6 +58,7 @@ pub(super) fn binding_condition(base: AccessRule) -> Result<AccessRule> {
         "approval_instance",
         approval_query::query_binding_condition()?,
     )?);
+
     Ok(AccessRule::all(vec![base, AccessRule::any(partitions)]))
 }
 
@@ -85,7 +88,9 @@ impl AuthorizationService {
                 .await?;
             partitions.push(related(key, source.resource(), rule)?);
         }
+
         self.portal_partitions(context, qualified, resolution, &mut partitions, executor).await?;
+
         if qualified.permissions().covers_one(&approval_instance::COPIES_HISTORY) {
             let owner = if decision_qualified(qualified) {
                 AccessRule::Fact(AccessFact::Owned)
@@ -96,6 +101,7 @@ impl AuthorizationService {
                 ])
             };
             partitions.push(related("detail_approval_owner", "work_item", owner)?);
+
             let management = AccessContext {
                 permission: internal::APPROVAL_MANAGEMENT_READ,
                 resource: "approval_instance".into(),
@@ -104,6 +110,7 @@ impl AuthorizationService {
             let rule = self.approval_query_condition(&management, qualified, resolution, executor).await?;
             partitions.push(related("detail_approval_management", "approval_instance", rule)?);
         }
+
         Ok(AccessRule::all(vec![base, AccessRule::any(partitions)]))
     }
 
@@ -172,6 +179,7 @@ impl AuthorizationService {
         if !rules::qualified(&permission, &proof.qualified) {
             return Err(Error::Forbidden("当前账号不具备任务材料读取资格".into()));
         }
+
         let context = AccessContext {
             permission,
             resource: source.resource.clone(),
@@ -198,6 +206,7 @@ impl AuthorizationService {
         {
             return Ok(SourceEvidence::default());
         }
+
         let instance = exact_source(task, "approval_instance", "approval_instance")?;
         let context = AccessContext {
             permission: internal::APPROVAL_MANAGEMENT_READ,
@@ -206,6 +215,7 @@ impl AuthorizationService {
             ..proof.context.clone()
         };
         let access = self.resolve_context(context, None, false, &proof.qualified, executor).await?;
+
         let targets = ResourceTargets::new(&[instance.id.as_str()])?;
         let facts = TargetFacts::load(
             &self.facts,
@@ -215,6 +225,7 @@ impl AuthorizationService {
             executor,
         )
         .await?;
+
         let mut proofs = self.approval_sources(&access, &facts, executor).await?;
         let context = access.context.clone();
         proofs.push(access);

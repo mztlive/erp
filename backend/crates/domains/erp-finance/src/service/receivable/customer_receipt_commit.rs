@@ -89,6 +89,7 @@ impl CommitCustomerReceiptRequest {
         if allocations.is_empty() {
             return Err(Error::ValidationError("至少提供一条核销分配".to_string()));
         }
+
         match (&self.receipt_id, self.expected_version, &self.receipt) {
             (None, None, Some(receipt)) => {
                 Ok(PreparedCustomerReceiptCommit::New { receipt: receipt.clone(), allocations })
@@ -347,6 +348,7 @@ mod tests {
         assert!(json.get("receipt_id").unwrap().is_null());
         assert!(json.get("receipt").is_some());
         assert_eq!(json.get("idempotency_key").unwrap(), "idem-key");
+
         // round-trip
         let back: CommitCustomerReceiptRequest = serde_json::from_value(json).unwrap();
         assert!(back.prepare().is_ok());

@@ -108,6 +108,7 @@ mod tests {
     #[test]
     fn invoice_requires_final_approval_and_all_associations() {
         invoice().validate().unwrap();
+
         let changes: [fn(&mut InvoiceEvidence); 13] = [
             |f| f.approved = false,
             |f| f.request_approved = false,
@@ -145,6 +146,7 @@ mod tests {
                 participant: true,
             };
             make().validate().unwrap();
+
             let changes: [fn(&mut AssignmentEvidence); 6] = [
                 |f| f.subject_kind = "other",
                 |f| f.subject_id = "other",

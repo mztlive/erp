@@ -32,12 +32,14 @@ impl BpmWorkflowRepository<'_> {
             return Err(crate::Error::ValidationError("审批进展授权模型不匹配".into()));
         }
         access.ensure_current(executor)?;
+
         let mut pipeline = access.stages().to_vec();
         pipeline.push(doc! {"$match": {
             "started_by": actor_id, "initiator_unread": true, "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
         }});
         pipeline.push(doc! {"$count": "count"});
         let rows = aggregate::rows(&self.db.collection::<Document>(INSTANCES), pipeline, executor).await?;
+
         let count = rows
             .first()
             .map(|row| row.get_i64("count"))

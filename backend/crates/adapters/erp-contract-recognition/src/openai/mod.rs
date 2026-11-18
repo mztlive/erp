@@ -78,6 +78,7 @@ impl OpenAiContractExtractor {
         let count = u32::try_from(document.pages.len()).map_err(|_| invalid_output())?;
         document.validate(count)?;
         let prompt = serde_json::to_string(&document.pages).map_err(|_| invalid_output())?;
+
         let client = OpenAIConfig::new(self.api_key.clone())
             .with_base_url(self.base_url.trim_end_matches('/'))
             .connect(http);
@@ -119,6 +120,7 @@ impl OpenAiContractExtractor {
                 (result, None)
             },
         };
+
         diagnostics.finish(start, &result, timeout_source);
         result
     }
@@ -143,6 +145,7 @@ fn extraction_failure(
     if let Some(status) = error.provider_response_status().filter(|status| !status.is_success()) {
         return status_failure(status.as_u16());
     }
+
     // Rig runtime 的 ErrorReport 不保留自定义 Rust 错误类型，传输边界保留原始分类。
     if let Some(failure) = diagnostics.failure() {
         return transport_failure(failure);

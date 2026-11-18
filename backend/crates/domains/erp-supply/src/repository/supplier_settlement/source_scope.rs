@@ -75,6 +75,7 @@ impl<'a> SupplierSettlementRepository<'a> {
                     executor,
                 )
                 .await?;
+
         let mut order_ids = requested_order_ids.iter().map(ToString::to_string).collect::<BTreeSet<_>>();
         order_ids.extend(refund_facts.iter().map(|fact| fact.supplier_fulfillment_order_id.to_string()));
         let mut orders: Vec<SupplierFulfillmentOrder> =
@@ -85,6 +86,7 @@ impl<'a> SupplierSettlementRepository<'a> {
                     executor,
                 )
                 .await?;
+
         let fetched_order_ids = orders.iter().map(|order| order.base.id.clone()).collect::<BTreeSet<_>>();
         let items: Vec<SupplierFulfillmentItem> =
             SupplierFulfillmentItemRepository::new(self.db, SUPPLIER_FULFILLMENT_ITEMS)
@@ -94,6 +96,7 @@ impl<'a> SupplierSettlementRepository<'a> {
                     executor,
                 )
                 .await?;
+
         // 请求按明细主键引用、但订单不在范围集合内的明细（例如只按明细引用
         // 供应商既有订单），其订单仍需取回，保证 Service 的订单归属与来源行
         // 派生可以完成；跨供应商或不存在的订单在此查询下取不回，由 Service
@@ -117,6 +120,7 @@ impl<'a> SupplierSettlementRepository<'a> {
             orders.extend(extra);
             orders.sort_by(|left, right| left.base.id.cmp(&right.base.id));
         }
+
         let fact_ids = refund_facts.iter().map(|fact| fact.base.id.clone()).collect::<Vec<_>>();
         let refund_allocations = if fact_ids.is_empty() {
             Vec::new()
@@ -129,6 +133,7 @@ impl<'a> SupplierSettlementRepository<'a> {
                 )
                 .await?
         };
+
         Ok(SupplierSettlementSourceScope { orders, items, refund_facts, refund_allocations })
     }
 }

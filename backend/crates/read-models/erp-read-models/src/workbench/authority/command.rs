@@ -204,6 +204,7 @@ impl super::WorkItemFactsReader {
         if ids.is_empty() {
             return Ok(());
         }
+
         let offerings = self.db.supplier_offerings().list_active_by_ids(&ids, executor).await?;
         let offering_ids = offerings
             .iter()
@@ -217,6 +218,7 @@ impl super::WorkItemFactsReader {
             .into_iter()
             .map(|availability| (availability.supplier_offering_id.to_string(), availability))
             .collect::<HashMap<_, _>>();
+
         for offering in offerings {
             let availability = availabilities.get(&offering.base.id);
             let mut subject_versions = Vec::with_capacity(2);
@@ -231,6 +233,7 @@ impl super::WorkItemFactsReader {
             if subject_versions.is_empty() {
                 continue;
             }
+
             facts.insert(
                 (ObjectKind::SupplierOffering, offering.base.id.clone()),
                 ObjectFact {

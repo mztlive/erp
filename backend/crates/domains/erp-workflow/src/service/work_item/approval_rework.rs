@@ -33,6 +33,7 @@ pub async fn create_rework(
     if instance.status != ApprovalProcessInstanceStatus::Rejected {
         return Err(Error::ConflictError("仅已驳回审批可以生成待处理任务".into()));
     }
+
     let id = task_id(&instance.typed_id());
     let kind = document_type_of(instance.process_kind).as_str();
     if let Some(existing) = db.work_items().find_work_item(&id, executor).await? {
@@ -46,6 +47,7 @@ pub async fn create_rework(
         }
         return Ok(());
     }
+
     let summary = format!("{}：{}", document_no, reason).chars().take(500).collect();
     let mut item = WorkItem::new_with_responsibility_key(
         WorkItemId::new(id),
@@ -65,6 +67,7 @@ pub async fn create_rework(
         },
         format!("approval_rework:{}", instance.base.id),
     )?;
+
     let snapshot = db
         .approval_subject_snapshots()
         .find_by_process_instance_id(&instance.base.id, executor)

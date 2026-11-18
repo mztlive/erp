@@ -140,6 +140,7 @@ impl PaymentPostingSteps for MongoPaymentPosting<'_> {
                 value: AuditValue::Amount { value: self.payment.amount },
             }],
         })?;
+
         persist_log(self.db, &audit, executor).await?;
         Ok(())
     }
@@ -186,6 +187,7 @@ mod tests {
         let expected_executor = &mut executor as *mut ReadExecutor as usize;
         let mut steps = RecordedPosting { calls: Vec::new(), fail_at: None };
         execute_posting(&mut steps, &mut executor).await.unwrap();
+
         assert_eq!(
             steps.calls,
             vec![("settle", expected_executor), ("payment", expected_executor), ("audit", expected_executor)]

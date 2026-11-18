@@ -83,6 +83,7 @@ mod zero_amount_wire_tests {
         assert_eq!(original.amount, alternative.amount);
         assert_eq!(original.amount.to_decimal().scale(), 2);
         assert_eq!(alternative.amount.to_decimal().scale(), 2);
+
         let original_json = serde_json::to_string(&original).unwrap();
         assert_eq!(original_json, r#"{"amount":"0.00"}"#);
         assert_eq!(serde_json::to_string(&alternative).unwrap(), original_json);
@@ -103,8 +104,10 @@ mod zero_amount_wire_tests {
         assert_eq!(original.amount, invalid_probe.amount);
         assert_eq!(original.amount.to_decimal().scale(), 2);
         assert_eq!(invalid_probe.amount.to_decimal().scale(), 0);
+
         assert_eq!(serde_json::to_string(&invalid_probe).unwrap(), r#"{"amount":"0"}"#);
         assert_ne!(serde_json::to_string(&original).unwrap(), serde_json::to_string(&invalid_probe).unwrap());
+
         let original_wire = bson::serialize_to_vec(&original).unwrap();
         let invalid_wire = bson::serialize_to_vec(&invalid_probe).unwrap();
         assert_ne!(original_wire, invalid_wire);

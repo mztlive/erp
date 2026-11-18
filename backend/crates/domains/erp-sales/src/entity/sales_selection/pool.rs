@@ -78,6 +78,7 @@ impl PoolFilterSnapshot {
         {
             return Err(Error::from("销售价下限不能大于上限"));
         }
+
         let delivery_region_code = blank_to_none(self.delivery_region_code)
             .map(|code| RegionCode::parse(&code).map(String::from))
             .transpose()?;
@@ -182,6 +183,7 @@ pub fn normalize_selected_sku_ids(sku_ids: Vec<SkuId>) -> Result<Vec<SkuId>> {
         }
         unique.insert(value.to_string());
     }
+
     if unique.len() < POOL_SKU_MIN || unique.len() > POOL_SKU_MAX {
         return Err(Error::from("勾选商品数量必须在 1 到 500 之间"));
     }
@@ -247,17 +249,20 @@ mod tests {
 
         let old: PoolFilterSnapshot = serde_json::from_str("{}").unwrap();
         assert_eq!(old.price_kind, PoolPriceKind::Dropship);
+
         for kind in ["dropship", "bulk", "market"] {
             let input = serde_json::json!({"price_kind": kind, "sales_price_min": "0.00", "sales_price_max": "90.00"});
             let normalized =
                 serde_json::from_value::<PoolFilterSnapshot>(input).unwrap().normalize().unwrap();
             assert_eq!(serde_json::to_value(&normalized).unwrap()["price_kind"], kind);
+
             for (min, max) in [("-1.00", "10.00"), ("20.00", "10.00"), ("0.00", "-0.01")] {
                 let input =
                     serde_json::json!({"price_kind": kind, "sales_price_min": min, "sales_price_max": max});
                 assert!(serde_json::from_value::<PoolFilterSnapshot>(input).unwrap().normalize().is_err());
             }
         }
+
         assert!(
             serde_json::from_value::<PoolFilterSnapshot>(serde_json::json!({"price_kind": "unknown"}))
                 .is_err()

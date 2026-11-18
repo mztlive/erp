@@ -126,10 +126,12 @@ impl SupplierFulfillmentProcess {
                 })
             })
             .await?;
+
         let mut intent = match submission {
             AfterSalesSubmission::Replayed(result) => return Ok(*result),
             AfterSalesSubmission::Dispatch(intent) => *intent,
         };
+
         self.settle_dispatch(
             &mut intent.order,
             &mut intent.action,
@@ -160,6 +162,7 @@ impl SupplierFulfillmentProcess {
         };
         let order = self.require_legacy_order(id, actor, permission, executor).await?;
         let idempotency_key = format!("{}+{}", order.fulfillment_order_no, action_type.as_str());
+
         if let Some(existing) =
             self.db.supplier_order_actions().find_by_idempotency_key(&idempotency_key, executor).await?
         {
@@ -167,6 +170,7 @@ impl SupplierFulfillmentProcess {
                 self.replayed_after_sales_result(order, existing, executor).await?,
             )));
         }
+
         let mut intent =
             self.prepare_after_sales_intent(order, req, &idempotency_key, action_type, executor).await?;
         let audit = actor.clone().resource_log(
@@ -218,6 +222,7 @@ impl SupplierFulfillmentProcess {
             _ => return Err(Error::BusinessLogicError("不支持的售后动作类型".to_string())),
         };
         ensure_capability(&capabilities, needed)?;
+
         self.domain().ensure_action_lines(&order, req, executor).await?;
         let action = self.domain().build_after_sales_action(&order, req, idempotency_key, action_type)?;
         let lines = self.domain().build_action_lines(&action, req)?;

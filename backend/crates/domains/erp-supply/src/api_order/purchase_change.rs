@@ -28,6 +28,7 @@ impl ApiOrderExecution {
         }) {
             return Err(Error::ConflictError("当前子单关系与已应用取消证据不一致，请重新查询".into()));
         }
+
         if !tracking.applied_shipments.is_empty()
             || self.confirmations.values().any(|action| action.state == ConfirmationActionState::SentUnknown)
             || self.cancellation_actions.values().any(|action| {
@@ -36,6 +37,7 @@ impl ApiOrderExecution {
         {
             return Err(Error::BusinessLogicError("原子单已有发货或确认结果待核实，请先处理原单".into()));
         }
+
         let known = matches!(
             self.stage,
             ApiOrderStage::Observe
@@ -56,6 +58,7 @@ impl ApiOrderExecution {
                 "请先在供应商侧处理原单并等待系统核实取消；已发货、结果未知或退款未决时不能重新发单".into(),
             ));
         }
+
         self.mark_superseded(replacement_revision)
     }
 }
@@ -204,6 +207,7 @@ mod tests {
                 .stop_cancelled_for_purchase_change("new", &order, &unapplied, &observation)
                 .is_err()
         );
+
         let mut no_cancellation = observation.clone();
         no_cancellation.cancellation = None;
         assert!(
@@ -212,6 +216,7 @@ mod tests {
                 .stop_cancelled_for_purchase_change("new", &order, &tracking, &no_cancellation)
                 .is_err()
         );
+
         for stage in [ApiOrderStage::CreationUnknown, ApiOrderStage::PaymentUnknown] {
             let mut unknown = execution.clone();
             unknown.stage = stage;
@@ -232,6 +237,7 @@ mod tests {
                 .stop_cancelled_for_purchase_change("new", &shipped, &tracking, &observation)
                 .is_err()
         );
+
         for refund in [
             RefundStatus::RefundPending,
             RefundStatus::Partial,
@@ -247,6 +253,7 @@ mod tests {
                     .is_err()
             );
         }
+
         let mut wrong = observation.clone();
         wrong.external_order_no = "other".into();
         assert!(

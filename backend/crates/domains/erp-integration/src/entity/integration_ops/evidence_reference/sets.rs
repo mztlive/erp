@@ -104,6 +104,7 @@ impl CompactEvidenceSet {
         if encoded.is_empty() {
             return Ok(None);
         }
+
         let encoded = encode_set(encoded, ',', false, "证据引用汇总过长")?;
         Ok(Some(Self { encoded }))
     }

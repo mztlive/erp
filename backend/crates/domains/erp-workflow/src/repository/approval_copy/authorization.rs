@@ -171,11 +171,13 @@ mod tests {
             as_of: Instant::now(),
         };
         let facts = None;
+
         let QueryFragment::Match(filter) = mapping.predicate(&AccessFact::Owned, &context, facts).unwrap()
         else {
             panic!("收件人应映射为实际字段条件");
         };
         assert_eq!(filter, doc! { "recipient_user_id": "reader" });
+
         assert!(mapping.predicate(&AccessFact::AssignedTo, &context, facts).is_err());
         assert!(mapping.preparation().is_none());
     }

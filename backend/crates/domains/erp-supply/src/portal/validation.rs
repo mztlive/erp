@@ -58,6 +58,7 @@ pub fn validate_portal_quantities(
     {
         return Err(Error::ValidationError("集采起订量与基础单位数量精度不一致".into()));
     }
+
     validate_portal_available_quantity(available_quantity, quantity_scale)
 }
 /// 校验当前基础单位下的可供数量，不改变供应商填报值。
@@ -89,6 +90,7 @@ mod tests {
         validate_portal_available_quantity(None, 0).unwrap();
         validate_portal_available_quantity(Some("0"), 0).unwrap();
         validate_portal_available_quantity(Some("1.200"), 1).unwrap();
+
         assert!(validate_portal_available_quantity(Some("1.21"), 1).is_err());
         assert!(validate_portal_available_quantity(Some("-1"), 6).is_err());
         assert!(validate_portal_available_quantity(Some("invalid"), 6).is_err());

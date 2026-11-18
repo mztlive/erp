@@ -285,6 +285,7 @@ fn assemble_parent_chain_fact(
             truncated: false,
         };
     };
+
     let mut ancestors = row.ancestors;
     ancestors.sort_by_key(|item| item.depth);
     let mut links = Vec::with_capacity(ancestors.len() + 1);
@@ -294,6 +295,7 @@ fn assemble_parent_chain_fact(
     for ancestor in ancestors {
         links.push(CategoryParentLink { id: ancestor.id, parent_id: ancestor.parent_category_id });
     }
+
     inspect_parent_links(start_parent_id, links, graph_lookup_saturated)
 }
 
@@ -319,6 +321,7 @@ fn inspect_parent_links(
     for link in &links {
         by_id.insert(link.id.as_str(), link);
     }
+
     let mut visited = HashSet::new();
     let mut missing_parent_id = None;
     let mut cycle_detected = false;
@@ -335,6 +338,7 @@ fn inspect_parent_links(
             truncated = true;
             break;
         }
+
         let Some(node) = by_id.get(id) else {
             missing_parent_id = Some(id.to_string());
             break;
@@ -346,6 +350,7 @@ fn inspect_parent_links(
         if by_id.contains_key(parent_id) || visited.contains(parent_id) {
             continue;
         }
+
         if graph_lookup_saturated {
             truncated = true;
         } else {
@@ -353,6 +358,7 @@ fn inspect_parent_links(
         }
         break;
     }
+
     CategoryParentChainFact {
         start_parent_id: Some(start_parent_id.to_string()),
         links,
@@ -490,6 +496,7 @@ mod tests {
                 parent_id: Some(format!("n{}", index + 1)),
             });
         }
+
         let fact = inspect_parent_links("n0", links, false);
 
         assert!(fact.truncated);
@@ -508,6 +515,7 @@ mod tests {
             let index = depth as usize;
             ancestors.push(ancestor(&ids[index], Some(&ids[index + 1]), depth));
         }
+
         let fact = assemble_parent_chain_fact("n-start", Some(row("n-start", Some("n0"), ancestors)));
 
         assert!(fact.truncated);

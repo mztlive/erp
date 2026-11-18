@@ -26,6 +26,7 @@ impl OcrDocument {
         {
             return Err(ImportFailure::new("OCR_METADATA", "识别服务未返回版本信息，请联系管理员"));
         }
+
         let mut bytes = 0_usize;
         for (index, page) in self.pages.iter().enumerate() {
             bytes = bytes.saturating_add(page.text.len());
@@ -73,6 +74,7 @@ impl ContractValues {
         for field in [CustomerName, CompanyName] {
             self.required(field)?;
         }
+
         let (payment_code, payment_name) = self.payment()?;
         let invoice_type = self.required(InvoiceType)?;
         if !["增值税专用发票", "增值税普通发票", "不开发票"].contains(&invoice_type) {
@@ -83,12 +85,14 @@ impl ContractValues {
         if !["0", "1", "3", "6", "9", "13"].contains(&tax_point) {
             return Err(self.failure(TaxPoint, "UNMATCHED_TAX", "请选择支持的税率"));
         }
+
         let signed_at = self.date(SignedAt)?;
         let valid_from = self.date(ValidFrom)?;
         let valid_to = if self.required(ValidTo)? == "长期" { None } else { Some(self.date(ValidTo)?) };
         if valid_to.is_some_and(|end| end < valid_from) {
             return Err(self.failure(ValidTo, "INVALID_DATES", "有效期止不能早于生效日期"));
         }
+
         Ok(ValidatedFields {
             contract_no: contract_no.into(),
             payment_code,
@@ -204,6 +208,7 @@ pub fn match_identity(
             "名称对应多个主数据，无法自动选择，请先整理主数据",
         ));
     }
+
     if matched.legal_name.trim() != name.trim() {
         return Err(ImportFailure::new(
             "IDENTITY_CONFLICT",

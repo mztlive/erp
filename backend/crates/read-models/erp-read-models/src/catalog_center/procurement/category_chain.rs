@@ -54,6 +54,7 @@ impl<'a> CategoryChainCache<'a> {
             if pending.is_empty() {
                 break;
             }
+
             let ids = pending.into_iter().collect::<Vec<_>>();
             let rows = self.db.catalog().procurement_categories(&ids, executor).await?;
             let loaded =
@@ -132,6 +133,7 @@ impl CategoryChain {
             let Some(parent) = parents.get(id) else {
                 return Ok(Some(id.clone()));
             };
+
             self.seen.insert(id.clone());
             self.ids.push(ProductCategoryId::new(id.clone()));
             self.current = parent.clone();
@@ -160,6 +162,7 @@ mod tests {
         );
         assert_eq!(pending, HashSet::from(["parent".to_string()]));
         assert_eq!(known.get("missing"), Some(&None));
+
         let pending = cache_parent_batch(&mut known, &["parent".into()], parents(&[("parent", None)]));
         assert!(pending.is_empty());
         for leaf in ["leaf-a", "leaf-b"] {
@@ -194,9 +197,11 @@ mod tests {
         assert_eq!(first.advance(&known).unwrap(), Some("missing".to_string()));
         let mut next_sku = CategoryChain::new("leaf");
         assert_eq!(next_sku.advance(&known).unwrap(), Some("missing".to_string()));
+
         known.insert("missing".to_string(), None);
         assert_eq!(next_sku.advance(&known).unwrap(), None);
         assert_eq!(next_sku.ids, ["leaf", "missing"].map(ProductCategoryId::new));
+
         let mut missing_leaf = CategoryChain::new("missing");
         assert_eq!(missing_leaf.advance(&known).unwrap(), None);
         assert_eq!(missing_leaf.ids, [ProductCategoryId::new("missing")]);
@@ -209,6 +214,7 @@ mod tests {
         assert!(matches!(CategoryChain::new("leaf").advance(&cyclic), Err(Error::ValidationError(_))));
         let self_cycle = parents(&[("leaf", Some("leaf"))]);
         assert!(matches!(CategoryChain::new("leaf").advance(&self_cycle), Err(Error::ValidationError(_))));
+
         let mut known: HashMap<String, Option<String>> = (0..CATEGORY_CHAIN_LIMIT)
             .map(|index| {
                 let parent = (index + 1 < CATEGORY_CHAIN_LIMIT).then(|| (index + 1).to_string());

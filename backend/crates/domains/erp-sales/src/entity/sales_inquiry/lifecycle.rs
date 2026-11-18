@@ -25,6 +25,7 @@ impl SalesInquiry {
         self.ensure_state(&[InquiryStatus::Draft, InquiryStatus::AwaitingSalesSupplement])?;
         data.normalize(false)?;
         self.validate_requirement_history(&data)?;
+
         self.draft = data;
         if let Some(deadline_at) = deadline_at {
             self.deadline_at = deadline_at;
@@ -43,15 +44,18 @@ impl SalesInquiry {
         self.ensure_version(expected_version)?;
         self.ensure_state(&[InquiryStatus::Draft, InquiryStatus::AwaitingSalesSupplement])?;
         validate_text(actor, "提交人", 128)?;
+
         let mut data = self.draft.clone();
         data.normalize(true)?;
         self.validate_requirement_history(&data)?;
+
         if self.requirements.last().is_none_or(|last| last.data != data) {
             if self.requirement_version > 0 {
                 validate_text(&reason, "需求变更原因", 2000)?;
             }
             self.append_requirement(actor, reason.clone(), data, now)?;
         }
+
         self.freeze_work();
         self.status = InquiryStatus::ProcurementProcessing;
         self.event(actor, "submitted", reason, now);
@@ -97,6 +101,7 @@ impl SalesInquiry {
     ) -> Result<()> {
         self.ensure_processing(expected_version)?;
         validate_text(actor, "处理人", 128)?;
+
         let requirement = self.current_requirement()?;
         let unique: HashSet<_> = line_ids.iter().collect();
         if unique.len() != line_ids.len()
@@ -105,10 +110,12 @@ impl SalesInquiry {
         {
             return Err(Error::Forbidden("采购工作包含当前责任范围外的需求".into()));
         }
+
         self.prepare_feedback_fees(actor, &line_ids, &mut data)?;
         if data.lines.iter().any(|line| line.prices.len() > 1) {
             return Err(Error::ValidationError("每件商品最多保存一条报价".into()));
         }
+
         for work in &mut self.feedback_work {
             if work.actor_id == actor && !work.frozen && work.line_ids.iter().any(|id| line_ids.contains(id))
             {
@@ -146,6 +153,7 @@ impl SalesInquiry {
             return Err(Error::BusinessLogicError("整单费用须明确责任采购后发布".into()));
         }
         self.validate_feedback_floor(&data)?;
+
         let round =
             self.feedback_round.checked_add(1).ok_or_else(|| Error::Internal("反馈轮次超出范围".into()))?;
         self.feedbacks.push(InquiryFeedbackSnapshot {
@@ -156,6 +164,7 @@ impl SalesInquiry {
             data,
         });
         self.feedback_round = round;
+
         self.freeze_work();
         self.status = InquiryStatus::AwaitingSales;
         self.event(actor, "published", String::new(), now);
@@ -175,12 +184,14 @@ impl SalesInquiry {
         if round != self.feedback_round {
             return Err(Error::ConflictError("反馈轮次已变化".into()));
         }
+
         let feedback = self
             .feedbacks
             .iter()
             .find(|feedback| feedback.round == round)
             .ok_or_else(|| Error::Internal("当前反馈快照缺失".into()))?;
         self.validate_feedback_floor(&feedback.data)?;
+
         self.acceptances.push(InquiryAcceptance {
             requirement_version: self.requirement_version,
             feedback_round: round,
@@ -210,6 +221,7 @@ impl SalesInquiry {
         self.ensure_state(&[InquiryStatus::AwaitingSales, InquiryStatus::Confirmed])?;
         validate_text(&data.reason, "重询原因", 2000)?;
         self.validate_reinquiry_scope(&data)?;
+
         if let Some(requirement) = &mut data.requirement {
             requirement.normalize(true)?;
             self.validate_requirement_history(requirement)?;
@@ -218,6 +230,7 @@ impl SalesInquiry {
             }
             self.draft = requirement.clone();
         }
+
         self.reinquiries.push(InquiryReinquiry {
             initiated_by_procurement: false,
             actor_id: actor.into(),
@@ -226,6 +239,7 @@ impl SalesInquiry {
             requirement_version: self.requirement_version,
             data,
         });
+
         self.freeze_work();
         self.status = InquiryStatus::ProcurementProcessing;
         Ok(())
@@ -249,6 +263,7 @@ impl SalesInquiry {
         self.ensure_state(&[InquiryStatus::AwaitingSales, InquiryStatus::Confirmed])?;
         validate_text(actor, "报价发起人", 128)?;
         validate_text(&reason, "新一轮报价原因", 2000)?;
+
         self.reinquire(
             expected_version,
             actor,
@@ -327,6 +342,7 @@ impl SalesInquiry {
 
     pub(super) fn validate_requirement_history(&self, data: &InquiryRequirementData) -> Result<()> {
         self.validate_stable_identities(data)?;
+
         for reservation in
             self.quantity_ledger.iter().filter(|entry| entry.state != InquiryReservationState::Released)
         {
@@ -339,6 +355,7 @@ impl SalesInquiry {
                 if self.used_quantity(&line.line_id, None, None)? > line.quantity.to_decimal() {
                     return Err(Error::BusinessLogicError("新需求数量低于已占用及已消耗数量".into()));
                 }
+
                 if let Some(id) = &selection.allocation_id {
                     let allocation =
                         line.allocations.iter().find(|row| &row.allocation_id == id).ok_or_else(|| {
@@ -398,6 +415,7 @@ impl SalesInquiry {
                 }
             }
         }
+
         for old in self.feedbacks.iter().flat_map(|snapshot| &snapshot.data.fees) {
             let used = self.used_fee(&old.fee_id, None)?;
             let allocated = sum_decimal(

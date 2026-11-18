@@ -27,6 +27,7 @@ impl DangaoshushuConnector {
         valid_id(&request.action.id)?;
         valid_id(&request.action.payload_hash)?;
         valid_id(&request.merchant_order_no)?;
+
         let address = self.address_proof(&request.delivery_context)?;
         let choice: ChoiceProof = proof::decode(&self.settings.private_key, &request.delivery.reference)?;
         check_choice_expiry(choice.expires_at, now)?;
@@ -42,6 +43,7 @@ impl DangaoshushuConnector {
         {
             return Err(mapping());
         }
+
         approved_amount(request)?;
         let expires_at = choice.expires_at;
         Ok((self.payload_for_choice(request, address, choice)?, expires_at))
@@ -89,6 +91,7 @@ fn approved_amount(request: &CreateOrder) -> ConnectorResult<()> {
     if total.is_sign_negative() || request.approved_total.to_decimal() <= Decimal::ZERO {
         return Err(mapping());
     }
+
     for line in &request.lines {
         total = total
             .checked_add(
@@ -99,6 +102,7 @@ fn approved_amount(request: &CreateOrder) -> ConnectorResult<()> {
             )
             .ok_or_else(mapping)?;
     }
+
     if total > request.approved_total.to_decimal() {
         return Err(price_rejected());
     }
@@ -151,6 +155,7 @@ impl Orders for DangaoshushuConnector {
         self.verify_prices(request).await?;
         // 读价可能耗时；发送前再次核对配送有效期。
         check_choice_expiry(expires_at, Instant::now())?;
+
         let value = self
             .transport
             .send(Request::Multipart {
@@ -160,6 +165,7 @@ impl Orders for DangaoshushuConnector {
                 not_after: Some(Instant::from_unix_secs(expires_at)),
             })
             .await?;
+
         // 即使实际金额超批准，保留已创建外部订单；由 Process 阻断支付和登记异常。
         created_order(&value, &request.merchant_order_no).map_err(|_| {
             error(
@@ -183,6 +189,7 @@ impl Orders for DangaoshushuConnector {
                 parameters: vec![(parameter.into(), number.clone())],
             })
             .await?;
+
         if value.is_null() {
             return Ok(Lookup::NotVisible);
         }
@@ -248,6 +255,7 @@ fn order_snapshot(value: &Value, channel: &str) -> ConnectorResult<OrderSnapshot
         merchant_order_no: id(&value["out_order_no"])?,
         external_order_no: id(&value["order_no"])?,
     };
+
     let status = field(value, "status")?;
     let (fulfillment, cancellation) = match status.as_str() {
         "0" => (None, None),
@@ -311,7 +319,9 @@ impl PaymentConfirmation for DangaoshushuConnector {
         if request.amount.to_decimal() <= Decimal::ZERO {
             return Err(mapping());
         }
+
         let value=self.transport.send(Request::Json {path:"/dsapi/order/order_pay_result",payload:json!({"result_status":"2","order_sn":request.order.external_order_no,"out_order_sn":request.order.merchant_order_no,"order_price":request.amount.to_string(),"transaction_sn":request.transaction_no})}).await?;
+
         if value.as_str() != Some("支付成功") {
             return Err(error(
                 SupplierFailureClass::ResultUnknown,
@@ -425,6 +435,7 @@ mod tests {
         assert_eq!(created.order.value.amounts.unwrap().payable.to_string(), "24.00");
         assert_eq!(created.order.value.fulfillment, None);
         assert_eq!(created.next, CreationNext::ConfirmPayment);
+
         let requests = calls.requests.lock().unwrap();
         assert_eq!(requests.len(), 2);
         let Request::Multipart { path, parameters, write, not_after } = &requests[1] else {
@@ -447,6 +458,7 @@ mod tests {
             SupplierFailureClass::BusinessRejected
         );
         assert_eq!(calls.requests.lock().unwrap().len(), 1);
+
         let failure = error(SupplierFailureClass::ResultUnknown, "TEST_UNKNOWN", "unknown");
         let (connector, calls) = recording_connector(vec![Ok(product("10.00")), Err(failure)]);
         assert_eq!(
@@ -505,6 +517,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(created.next, CreationNext::ObserveOrder);
+
         let courier = shipments(&json!({"ship_type":"same","express_no":"tracking-1","express_cp":"快递"}))
             .unwrap()
             .unwrap();
@@ -549,6 +562,7 @@ mod tests {
             assert_eq!(created.order.value.amounts.as_ref().unwrap().payable.to_string(), amount);
             assert_eq!(created.order.value.amounts, expected);
         }
+
         for amount in [
             json!("-0.01"),
             json!("1.001"),
@@ -564,6 +578,7 @@ mod tests {
             assert_eq!(order_snapshot(&value, "test-channel").err().unwrap(), mapping());
             assert_eq!(created_order(&json!({"order":value}), "merchant-1").err().unwrap(), mapping());
         }
+
         value["final_amount"] = Value::Null;
         assert_eq!(order_snapshot(&value, "test-channel").unwrap().amounts, None);
         assert_eq!(created_order(&json!({"order":value}), "merchant-1").err().unwrap(), mapping());
@@ -613,6 +628,7 @@ mod tests {
             amount: "12.30".parse().unwrap(),
         };
         assert_eq!(connector.confirm(&request).await.unwrap().value, PaymentState::Confirmed);
+
         let requests = calls.requests.lock().unwrap();
         assert_eq!(requests.len(), 1);
         let Request::Json { path, payload } = &requests[0] else { panic!("expected payment") };

@@ -34,8 +34,10 @@ pub(super) fn render(order: &PurchaseOrderCenterView) -> PurchasePaper {
         html.push_str(&render_line(line));
     }
     html.push_str("</tbody></table>");
+
     html.push_str(&render_delivery(order));
     html.push_str(&format!("<p>不含税金额：{}　税额：{}　<strong>含税合计：{}</strong></p><p>供应商确认：________________　日期：________________</p></body></html>", escape(&order.totals.net), escape(&order.totals.tax), escape(&order.totals.gross)));
+
     let number: String = order.purchase_no.chars().filter(|c| c.is_alphanumeric() || *c == '-').collect();
     PurchasePaper { filename: format!("采购单-{number}.html"), html }
 }
@@ -153,6 +155,7 @@ mod tests {
             expense: None,
             expense_occurrence: None,
         };
+
         let html = render_line(&line);
         for expected in ["茶礼 &lt;限定&gt;", "A&amp;B", "56.50", "113.00", "13%", "2026-10-20"] {
             assert!(html.contains(expected), "missing {expected}");
@@ -161,8 +164,10 @@ mod tests {
         assert!(!html.contains("<限定>"));
         assert_eq!(tax_percent(Some("0.095")), "9.5%");
         assert_eq!(tax_percent(None), "—");
+
         let empty = render_delivery_lines(std::slice::from_ref(&line));
         assert!(empty.contains("未指定交付地址"));
+
         line.delivery_allocations = vec![PurchaseDeliveryAllocation {
             recipient: "张三".into(),
             phone: "13800000000".into(),

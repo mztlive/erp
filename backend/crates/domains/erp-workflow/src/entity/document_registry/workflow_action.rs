@@ -343,8 +343,10 @@ impl WorkflowAction {
         let actor_role =
             normalize_required_text(data.actor_role, "责任角色不能为空", ACTOR_ROLE_MAX_LEN, "责任角色过长")?;
         let comment = normalize_optional_text(data.comment, "意见", COMMENT_MAX_LEN)?;
+
         let (approval_context, approval_binding_context) =
             validate_approval_contexts(data.action_type, approval_context, approval_binding_context)?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             document_id: data.document_id,
@@ -379,6 +381,7 @@ fn validate_approval_contexts(
         }
         return Ok((Some(context), None));
     }
+
     if action_type.requires_approval_binding_context() {
         if approval_context.is_some() {
             return Err(Error::from("审批绑定动作不得携带运行实例上下文"));
@@ -394,6 +397,7 @@ fn validate_approval_contexts(
         }
         return Ok((None, Some(context)));
     }
+
     match (approval_context, approval_binding_context) {
         (None, None) => Ok((None, None)),
         _ => Err(Error::from("非审批动作不得携带审批上下文")),
@@ -533,6 +537,7 @@ mod tests {
         .unwrap();
         assert!(upgrade.approval_context.is_none());
         assert_eq!(upgrade.approval_binding_context.as_ref().unwrap().business_object_version, 7);
+
         assert!(
             WorkflowAction::new_with_approval_context(
                 WorkflowActionId::new("wa-5"),

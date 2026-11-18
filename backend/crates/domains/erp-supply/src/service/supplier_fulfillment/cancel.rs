@@ -107,6 +107,7 @@ impl SupplierFulfillmentService {
             .await?;
         let item_ids: std::collections::HashSet<&str> =
             items.iter().map(|item| item.base.id.as_ref()).collect();
+
         for line in &req.lines {
             if !item_ids.contains(line.supplier_fulfillment_item_id.as_ref()) {
                 return Err(Error::BusinessLogicError("动作行不属于该供应商子订单".to_string()));

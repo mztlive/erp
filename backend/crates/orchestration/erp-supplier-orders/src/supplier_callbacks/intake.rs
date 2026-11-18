@@ -27,12 +27,14 @@ pub(super) fn prepare(
         }
     })?;
     validate(&verified)?;
+
     let hints = verified.notices.iter().map(hint).collect::<Result<Vec<_>>>()?;
     let route = if hints.iter().all(|hint| matches!(hint.topic.as_str(), "order" | "refund")) {
         "order"
     } else {
         "catalog"
     };
+
     let event = verified.notices[0].source_event_id.clone();
     let fingerprint =
         digest(codec, &[request.method.as_bytes(), request.path_and_query.as_bytes(), request.body]);
@@ -47,6 +49,7 @@ pub(super) fn prepare(
             )
         }),
     };
+
     let plaintext =
         std::str::from_utf8(request.body).map_err(|_| Error::ValidationError("推送正文不是 UTF-8".into()))?;
     let mut receipt = SupplierCallbackReceipt::received(

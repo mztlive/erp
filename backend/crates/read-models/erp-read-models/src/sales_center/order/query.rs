@@ -88,6 +88,7 @@ impl SalesOrderReadService {
         let revision_amounts = self.revision_amounts(&page.items, executor).await?;
         let mut items =
             page.items.into_iter().map(|row| map_sales_row(row, &revision_amounts)).collect::<Vec<_>>();
+
         self.fill_stage_owners(&mut items, executor).await?;
         self.fill_owner_names(&mut items, executor).await?;
         self.fill_customer_names(&mut items, executor).await?;
@@ -124,6 +125,7 @@ impl SalesOrderReadService {
         let Some(actor) = actor else {
             return Ok(blocked_purchase_creation_access("当前调用缺少供给分配责任上下文"));
         };
+
         let task_count = match query_tasks(
             &self.db,
             &self.authorization,
@@ -247,6 +249,7 @@ impl SalesOrderReadService {
                 executor,
             )
             .await?;
+
         let owners = tasks
             .into_iter()
             .map(|task| {
@@ -263,6 +266,7 @@ impl SalesOrderReadService {
                 )
             })
             .collect::<HashMap<_, _>>();
+
         for item in items {
             (
                 item.stage.owner_role,
@@ -452,6 +456,7 @@ impl SalesOrderReadService {
             .map(|id| id.to_string())
             .collect::<Vec<_>>();
         let customer_ids = self.db.customer_accounts().matching_ids_by_parties(&party_ids, executor).await?;
+
         let contract_ids = self.db.contracts().matching_ids_by_number(&q, executor).await?;
         Ok(SalesOrderSearch { q: Some(q), customer_ids, contract_ids })
     }

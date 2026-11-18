@@ -43,6 +43,7 @@ mod statement {
             sample_data(),
         )
         .unwrap();
+
         let json = serde_json::to_value(&value).unwrap();
         assert_eq!(json["id"], "statement-wire");
         assert!(json.get("base").is_none());
@@ -62,6 +63,7 @@ mod statement {
             assert!(json.as_object().unwrap().contains_key(key));
             assert!(json[key].is_null());
         }
+
         let bytes = bson::serialize_to_vec(&value).unwrap();
         let wire: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
         for key in ["erp_amount", "supplier_amount", "difference_amount"] {
@@ -95,6 +97,7 @@ mod difference {
         let value =
             SupplierSettlementDifference::new(SupplierSettlementDifferenceId::new("difference-wire"), input)
                 .unwrap();
+
         let json = serde_json::to_value(&value).unwrap();
         assert_eq!(json["difference_type"], "AMOUNT");
         assert_eq!(json["status"], "PENDING");
@@ -103,6 +106,7 @@ mod difference {
             assert!(json.as_object().unwrap().contains_key(key));
             assert!(json[key].is_null());
         }
+
         let bytes = bson::serialize_to_vec(&value).unwrap();
         let wire: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
         assert!(matches!(wire.get("difference_amount"), Some(bson::Bson::Decimal128(_))));
@@ -137,9 +141,11 @@ mod item {
     fn item_json_and_raw_bson_keep_quantity_and_amount_contract() {
         let value =
             SupplierSettlementItem::new(SupplierSettlementItemId::new("item-wire"), sample_data()).unwrap();
+
         let json = serde_json::to_value(&value).unwrap();
         assert_eq!(json["quantity"], "2");
         assert_eq!(json["supplier_billed_amount"], "99.50");
+
         let bytes = bson::serialize_to_vec(&value).unwrap();
         let wire: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
         for key in [
@@ -185,6 +191,7 @@ mod evidence {
         input.opinion_code = None;
         input.comment = None;
         let value = SupplierSettlementDifferenceEvidence::new("evidence-wire", input).unwrap();
+
         let json = serde_json::to_value(&value).unwrap();
         assert_eq!(json["id"], "evidence-wire");
         assert!(json.get("base").is_none());
@@ -193,6 +200,7 @@ mod evidence {
         assert!(json["opinion_code"].is_null());
         assert!(json.as_object().unwrap().contains_key("comment"));
         assert!(json["comment"].is_null());
+
         let bytes = bson::serialize_to_vec(&value).unwrap();
         let wire: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(wire.get_i64("provided_at").unwrap(), 1_700_000_000);
@@ -260,12 +268,14 @@ mod source_evidence {
     #[test]
     fn source_evidence_json_and_raw_bson_keep_frozen_line_contract() {
         let value = SupplierSettlementSourceEvidence::new("source-wire", data()).unwrap();
+
         let json = serde_json::to_value(&value).unwrap();
         assert_eq!(json["period_start"], "2026-07-01");
         assert_eq!(json["source_as_of"], 1_700_000_000_i64);
         assert_eq!(json["lines"][0]["source_fact_types"][0], "FULFILLMENT_COMPLETED");
         assert_eq!(json["lines"][0]["quantity"], "1.000000");
         assert_eq!(json["lines"][0]["erp_gross"], "105.00");
+
         let bytes = bson::serialize_to_vec(&value).unwrap();
         let wire: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
         let line = wire.get_array("lines").unwrap()[0].as_document().unwrap();

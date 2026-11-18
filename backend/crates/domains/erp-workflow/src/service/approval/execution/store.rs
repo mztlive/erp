@@ -300,6 +300,7 @@ fn apply_all(
     if let Some(kind) = writes.domain_action {
         domain.execute(kind)?;
     }
+
     insert_receipt(store, &writes.receipt)?;
     persist_instance(store, &writes.instance)?;
     for execution in &writes.updated_executions {
@@ -311,6 +312,7 @@ fn apply_all(
     for assignee in &writes.created_assignees {
         store.assignees.insert(assignee_key(assignee), assignee.clone());
     }
+
     apply_task_intents(store, writes, ctx)?;
     enqueue_notifications(store, &writes.notifications, ctx)?;
     Ok(())
@@ -427,6 +429,7 @@ fn apply_task_intents(
         .map_err(|error| ApplyError::Invariant(error.to_string()))?;
         store.work_items.insert(item.base.id.clone(), item);
     }
+
     for execution_id in &writes.complete_tasks {
         complete_open_task(store, execution_id, &ctx.actor_id, ctx.now)?;
     }
@@ -585,6 +588,7 @@ pub(super) fn persist_ended_tasks(
             return Err(ApplyError::VersionConflict);
         }
     }
+
     for item in items {
         store.work_items.insert(item.base.id.clone(), item.clone());
     }
@@ -677,6 +681,7 @@ mod tests {
             Instant::from_unix_secs(11),
         )
         .expect("重复开放任务必须全部关闭");
+
         assert_eq!(store.open_task_count(&execution_id), 0);
         assert!(store.work_items().all(|item| item.status == WorkItemStatus::Closed));
     }
@@ -700,6 +705,7 @@ mod tests {
         .unwrap();
         let mut store = MemoryRuntimeStore::default();
         persist_instance(&mut store, &instance).unwrap();
+
         let mut drifted = instance.clone();
         drifted.base.version = 3;
         assert_eq!(persist_instance(&mut store, &drifted), Err(ApplyError::VersionConflict));
@@ -732,6 +738,7 @@ mod tests {
         .unwrap();
         insert_receipt(&mut store, &receipt).unwrap();
         assert_eq!(insert_receipt(&mut store, &receipt), Err(ApplyError::DuplicateReceipt));
+
         let same = replay_after_duplicate(
             &store,
             kind,
@@ -741,6 +748,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(same.payload_digest, receipt.payload_digest);
+
         let conflict =
             replay_after_duplicate(&store, kind, receipt.scope_id.as_str(), &key, "other").unwrap_err();
         assert!(conflict.to_string().contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));

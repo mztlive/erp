@@ -39,11 +39,13 @@ pub async fn freeze_payment_request_source(
     {
         return Err(Error::ConflictError("付款申请采购版本与来源单不匹配".into()));
     }
+
     let lines = db
         .purchase_order()
         .list_revision_lines(&PurchaseOrderRevisionId::new(&revision.base.id), executor)
         .await?;
     let lines = lines.iter().map(PurchaseOrderLineView::from_revision).collect::<Vec<_>>();
+
     let sales_preview = source_sales(db, order, &lines, executor).await?;
     let sales = db
         .sales_order_revisions()
@@ -61,6 +63,7 @@ pub async fn freeze_payment_request_source(
     {
         return Err(Error::ConflictError(SOURCE_PAUSED.into()));
     }
+
     let allowed_attachment_ids =
         sales_preview.materials.iter().map(|file| file.file_asset_id.clone()).collect();
     let sales_source = PaymentRequestSalesSource {

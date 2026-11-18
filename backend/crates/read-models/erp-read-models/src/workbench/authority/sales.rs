@@ -35,10 +35,12 @@ impl super::WorkItemFactsReader {
         if ids.is_empty() {
             return Ok(());
         }
+
         let orders = self.read_sales_orders(&ids, executor).await?;
         if orders.is_empty() {
             return Ok(());
         }
+
         let submissions = self.sales_submissions_for_orders(&orders, executor).await?;
         insert_sales_order_facts(facts, &orders, &submissions);
         Ok(())
@@ -103,6 +105,7 @@ pub(in crate::workbench) fn sales_order_fact(
         order.stable.created_by.clone(),
     );
     fact.order_scope_source = Some(OrderTaskSource::Sales(order.base.id.clone()));
+
     let Some(submission) = preferred_submission(&order.base.id, submissions) else {
         return fact;
     };

@@ -315,6 +315,7 @@ mod tests {
         let defaults = normalize_paging(&None, &None, None, None, &["name"]).unwrap();
         assert_eq!((defaults.page, defaults.page_size), (1, 20));
         assert_eq!((defaults.sort_by, defaults.sort_dir), ("created_at", SortDir::Desc));
+
         let bounded = normalize_paging(
             &Some(" name ".into()),
             &Some(" asc ".into()),

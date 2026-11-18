@@ -237,10 +237,12 @@ impl SettlementDifferenceConclusion {
         if !kind.allowed_reason_codes().contains(&reason_code.as_str()) {
             return Err(Error::from("差异结论与原因代码组合不受支持"));
         }
+
         let evidence_reference_ids = normalize_evidence_references(evidence_reference_ids)?;
         if kind.requires_evidence() && evidence_reference_ids.is_empty() {
             return Err(Error::from("已补偿或无需调整关闭必须提供正式证据引用"));
         }
+
         let encoded = format!("reason={reason_code};evidence={}", evidence_reference_ids.join(","));
         if encoded.len() > RESOLUTION_MAX_LEN {
             return Err(Error::from("差异结论的原因与证据引用合计不能超过512字节"));
@@ -561,6 +563,7 @@ fn validate_resolution_state(
     if trio_present && !trio_complete {
         return Err(Error::from("处理结果、处理人与处理时间必须同时提供或同时省略"));
     }
+
     match status {
         SettlementDifferenceStatus::Pending if trio_present => Err(Error::from("待处理差异不得填写处理结果")),
         SettlementDifferenceStatus::Compensated | SettlementDifferenceStatus::Closed if !trio_complete => {
@@ -704,6 +707,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(
             SettlementDifferenceConclusion::new(
                 SettlementDifferenceConclusionKind::SupplierAccepted,
@@ -727,11 +731,13 @@ mod tests {
             vec!["proof-1".to_string()],
         )
         .unwrap();
+
         difference
             .record_conclusion(&conclusion, "finance-1", Instant::from_unix_secs(1_700_000_000))
             .unwrap();
         assert_eq!(difference.status, SettlementDifferenceStatus::Closed);
         assert_eq!(difference.resolution.as_deref(), Some("reason=NO_BUSINESS_IMPACT;evidence=proof-1"));
+
         assert!(
             difference
                 .record_conclusion(&conclusion, "finance-1", Instant::from_unix_secs(1_700_000_001))
@@ -746,6 +752,7 @@ mod tests {
             sample_data(),
         )
         .unwrap();
+
         difference
             .update(SupplierSettlementDifferenceUpdate {
                 status: Some(SettlementDifferenceStatus::ErpAcknowledged),

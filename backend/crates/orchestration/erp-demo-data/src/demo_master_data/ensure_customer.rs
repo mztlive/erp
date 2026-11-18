@@ -37,6 +37,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if let Some(existing) = self.customer_command(&step.key).await? {
             return self.adopt_customer(actor, step, &existing, notices).await;
         }
+
         let Some(owner) = self.role_actor(&spec::foundation_spec().customer_owner_account).await? else {
             return Ok(EnsureOutcome::Notice("没有可用的销售账号，未生成客户".to_string()));
         };
@@ -47,6 +48,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             },
             Err(error) => return Err(error),
         };
+
         let account = self
             .db
             .customer_accounts()
@@ -60,6 +62,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             lifecycle::restore_customer(&self.db, self.authorization.clone(), actor, &view.customer_id)
                 .await?;
         }
+
         record::save(&self.db, step, view.customer_id, vec![view.party_id]).await?;
         Ok(if created { EnsureOutcome::Created } else { EnsureOutcome::Restored })
     }
@@ -80,10 +83,12 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             .ok_or_else(|| Error::NotFound("演示客户命令缺少客户".to_string()))?;
         let party_id = account.party_id.to_string();
         let live = account.base.deleted_at == entity_core::NOT_DELETED_TIMESTAMP;
+
         lifecycle::restore_party(&self.db, self.authorization.clone(), actor, &party_id).await?;
         if !live {
             lifecycle::restore_customer(&self.db, self.authorization.clone(), actor, customer_id).await?;
         }
+
         self.align_customer_owner(actor, customer_id, notices).await?;
         record::save(&self.db, step, customer_id.to_string(), vec![party_id]).await?;
         Ok(if live { EnsureOutcome::Skipped } else { EnsureOutcome::Restored })
@@ -123,6 +128,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if owners.iter().any(|row| row.user_id == owner.id()) {
             return Ok(());
         }
+
         let request = CustomerAssignmentRequest {
             action: AssignmentAction::Assign,
             user_id: Some(owner.id().to_string()),

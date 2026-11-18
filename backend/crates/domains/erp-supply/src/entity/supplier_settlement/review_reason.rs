@@ -49,6 +49,7 @@ impl SettlementReviewRejectReason {
         }) {
             return Err(Error::from("驳回原因代码只能包含大写字母、数字、下划线、连字符或点"));
         }
+
         match normalized.as_str() {
             "NEEDS_MORE_EVIDENCE" => Ok(Self::NeedsMoreEvidence),
             "AMOUNT_MISMATCH" => Ok(Self::AmountMismatch),

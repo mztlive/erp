@@ -100,6 +100,7 @@ impl WorkbenchReadService {
             })
             .collect::<HashSet<_>>();
         let facts = self.load_object_facts(&keys, executor).await?;
+
         let mut items = instances
             .into_iter()
             .map(|instance| {
@@ -215,17 +216,20 @@ mod tests {
                 },
             );
         }
+
         let old = document_summary(&fact, Some(1)).unwrap();
         let latest = document_summary(&fact, Some(2)).unwrap();
         assert_eq!(old.counterparty_label.as_deref(), Some("供应商"));
         assert_eq!(old.brief_lines[0].title, "礼盒");
         assert_eq!(latest.brief_lines[0].title, "礼盒新版");
         assert_eq!(old.summary_sections.iter().find(|s| s.label == "含税金额").unwrap().value, "¥920");
+
         let queue = assemble_brief(fact.display.subject_briefs["1"].brief_source.as_ref().unwrap(), None);
         assert_eq!(old.summary_sections.len(), queue.sections.len());
         for (actual, expected) in old.summary_sections.iter().zip(&queue.sections) {
             assert_eq!((&actual.label, &actual.value), (&expected.label, &expected.value));
         }
+
         assert!(document_summary(&fact, Some(3)).is_none());
         assert!(document_summary(&fact, None).is_none());
         let json = serde_json::to_value(old).unwrap();
@@ -266,10 +270,12 @@ mod tests {
         fact.display.brief_source =
             Some(ObjectBriefSource { amount_label: Some("¥200".into()), ..Default::default() });
         assert!(document_summary(&fact, Some(1)).is_none());
+
         fact.display.approval_subject_version = Some(2);
         assert!(document_summary(&fact, Some(1)).is_none());
         assert!(document_summary(&fact, None).is_none());
         assert!(document_summary(&fact, Some(2)).is_some());
+
         fact.display.root_document_id = "parent".into();
         assert_eq!(document_summary(&fact, Some(2)).unwrap().root_business_object_id, "parent");
         assert_eq!(fact.authority.root_document_id, "refund", "页面路由不得改变授权根对象");

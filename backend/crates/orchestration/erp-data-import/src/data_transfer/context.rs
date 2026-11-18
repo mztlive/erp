@@ -31,12 +31,14 @@ impl DataTransferProcess {
         let mut source = self.reader_context(&reader, actor).await?;
         let expired = source.expires_at <= Instant::now().unix_secs();
         source.input["__context_expires_at"] = json!(source.expires_at);
+
         let result =
             if source.kind.is_export() || expired { None } else { self.context_result(job, actor).await? };
         let mut view = self.handler.context(source.kind, &source.input, result.as_ref(), actor).await?;
         if !reader.owned {
             view.retain_classification();
         }
+
         view.can_cancel = job.cancellation_allowed();
         view.can_recover = matches!(source.kind, TransferKind::SupplyBatch | TransferKind::PortalBatch)
             && job.finished_at.is_some()
@@ -44,6 +46,7 @@ impl DataTransferProcess {
         if !expired && job.finished_at.is_none() && !source.kind.is_export() {
             view.state(TransferResumeState::Pending, "任务仍在后台处理，请完成后查看结果");
         }
+
         self.validate_reader(job, actor).await?;
         Ok(view)
     }
@@ -166,12 +169,14 @@ impl BusinessTransfers {
             view.state(TransferResumeState::Unavailable, "尚无可继续处理的报价预览");
             return Ok(());
         };
+
         let prior = serde_json::to_value(service.internal_quotes(actor, inquiry, task).await?)
             .map_err(|_| Error::Internal("报价资料无法编码".into()))?;
         if quotes_confirmed(result, &prior) {
             view.state(TransferResumeState::Confirmed, "该预览中的报价已登记，可查看询价报价");
             return Ok(());
         }
+
         match self.quote_context(input, actor).await {
             Ok(original) => {
                 view.context["requirement_version"] = original["requirement_version"].clone();
@@ -214,6 +219,7 @@ async fn inquiry_context_read(
         view.context["inquiry_no"] = json!(inquiry.inquiry_no);
         Some(inquiry)
     };
+
     let Some(result) = result else {
         view.state(TransferResumeState::Unavailable, "尚无可继续处理的预览结果");
         return Ok(());
@@ -225,6 +231,7 @@ async fn inquiry_context_read(
     };
     service.require_preview(actor, &preview.base.id, executor).await?;
     view.preview_expires_at = Some(preview.expires_at);
+
     if let Some(confirmed) = preview.result {
         let inquiry = service.require_import(actor, &confirmed.inquiry_id, executor).await?;
         view.context["inquiry_id"] = json!(confirmed.inquiry_id);

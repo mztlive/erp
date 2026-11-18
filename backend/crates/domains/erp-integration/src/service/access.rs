@@ -169,6 +169,7 @@ mod tests {
         let access =
             IntegrationAccess::new(client.database("difference_authorization"), unavailable_authorization());
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
+
         assert!(matches!(
             access.require_decide(&actor, "difference", &mut SnapshotExecutor::default()).await,
             Err(Error::Internal(reason)) if reason == "测试授权设施不可用"

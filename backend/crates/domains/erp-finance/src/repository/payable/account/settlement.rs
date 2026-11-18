@@ -128,6 +128,7 @@ impl PayableAccountSettlementExt for persistence_core::Repository<'_, PayableAcc
                     executor,
                 )
                 .await?;
+
             if hit {
                 applied.push(id.clone());
             } else {

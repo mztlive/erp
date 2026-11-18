@@ -55,6 +55,7 @@ impl Recipient {
         {
             return Err(Error::ValidationError("请补齐冻结收件资料及联系电话".into()));
         }
+
         match requirement {
             AddressRequirement::Text => Ok(()),
             AddressRequirement::Geocoded(system) => {
@@ -96,6 +97,7 @@ impl GeocodedAddress {
             self.latitude.parse().map_err(|_| Error::ValidationError("收件纬度尚未核验".into()))?;
         let longitude: Decimal =
             self.longitude.parse().map_err(|_| Error::ValidationError("收件经度尚未核验".into()))?;
+
         if self.coordinate_system != required_system
             || self.city_name.trim().is_empty()
             || self.district.trim().is_empty()
@@ -646,6 +648,7 @@ mod tests {
         assert!(
             recipient.ensure_address_ready(AddressRequirement::FourLevel, "c", "e", "fingerprint").is_err()
         );
+
         recipient.geocoded_address = Some(GeocodedAddress {
             city_name: "城市".into(),
             district: "区县".into(),
@@ -671,6 +674,7 @@ mod tests {
                 )
                 .is_err()
         );
+
         recipient.geocoded_address.as_mut().unwrap().latitude = "NaN".into();
         assert!(
             recipient

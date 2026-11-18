@@ -164,6 +164,7 @@ impl SalesReturnLine {
         let quality = update.quality_result.or(self.quality_result);
         let restockable = update.restockable_quantity.or(self.restockable_quantity);
         validate_receiving(received, quality, restockable, self.requested_quantity)?;
+
         self.received_quantity = received;
         self.quality_result = quality;
         self.restockable_quantity = restockable;
@@ -215,6 +216,7 @@ fn validate_receiving(
             return Err(Error::from("实际退回数量不得超过申请数量"));
         }
     }
+
     if let (Some(restockable), Some(received)) = (restockable, received) {
         if restockable > received {
             return Err(Error::from("可重新入库数量不得超过实际退回数量"));
@@ -298,6 +300,7 @@ mod tests {
             assert_eq!(line.quality_result, None);
             assert_eq!(line.restockable_quantity, None);
         }
+
         for (received, expected) in
             [("-0.000001", "实际退回数量不得为负"), ("10.000001", "实际退回数量不得超过申请数量")]
         {
@@ -325,6 +328,7 @@ mod tests {
         assert_eq!(line.received_quantity, None);
         assert_eq!(line.quality_result, Some(QualityResult::Unqualified));
         assert_eq!(line.restockable_quantity, None);
+
         line.update(SalesReturnLineUpdate {
             received_quantity: Some(qty("10.000000")),
             ..Default::default()
@@ -333,6 +337,7 @@ mod tests {
         assert_eq!(line.received_quantity, Some(qty("10.000000")));
         assert_eq!(line.quality_result, Some(QualityResult::Unqualified));
         assert_eq!(line.restockable_quantity, None);
+
         line.update(SalesReturnLineUpdate {
             quality_result: Some(QualityResult::Qualified),
             restockable_quantity: Some(qty("8.000000")),
@@ -342,6 +347,7 @@ mod tests {
         assert_eq!(line.received_quantity, Some(qty("10.000000")));
         assert_eq!(line.quality_result, Some(QualityResult::Qualified));
         assert_eq!(line.restockable_quantity, Some(qty("8.000000")));
+
         line.update(SalesReturnLineUpdate {
             restockable_quantity: Some(qty("10.000000")),
             ..Default::default()
@@ -353,6 +359,7 @@ mod tests {
         assert_eq!(line.requested_quantity, before.requested_quantity);
         assert_eq!(line.sales_order_line_id, before.sales_order_line_id);
         assert_eq!(line.sales_return_case_id, before.sales_return_case_id);
+
         let before = line.clone();
         line.update(SalesReturnLineUpdate::default()).unwrap();
         assert_eq!(line, before);
@@ -369,6 +376,7 @@ mod tests {
         let mut line = SalesReturnLine::new(SalesReturnLineId::new("srl-1"), input).unwrap();
         line.base = BaseModel::fake();
         let before = line.clone();
+
         for (received, restockable, expected) in [
             (Some(qty("-0.000001")), Some(qty("9.000000")), "实际退回数量不得为负"),
             (Some(qty("10.000001")), Some(qty("11.000000")), "实际退回数量不得超过申请数量"),

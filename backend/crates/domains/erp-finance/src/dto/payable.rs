@@ -116,6 +116,7 @@ mod tests {
             },
         )
         .unwrap();
+
         let view = PaymentAllocationView::from(&allocation);
         assert_eq!(view.payable_entry_id, "pe-1");
         assert!(view.payable_account_id.is_none());
@@ -243,6 +244,7 @@ mod tests {
                 allocated_amount: Amount::from_str("10.00").unwrap(),
             },
         ];
+
         let pending: Vec<PendingPaymentAllocation> = lines
             .iter()
             .map(PaymentAllocationLineRequest::to_pending)

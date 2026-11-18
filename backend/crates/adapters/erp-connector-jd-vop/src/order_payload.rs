@@ -250,6 +250,7 @@ pub(super) fn submit(request: &CreateOrder, profile: &JdVopExecutionProfile) -> 
     }
     let address =
         request.recipient.supplier_address.as_ref().ok_or_else(|| mapping("请先确认京东四级收货地址"))?;
+
     let mut seen = BTreeSet::new();
     let mut lines = Vec::new();
     for line in &request.lines {
@@ -261,6 +262,7 @@ pub(super) fn submit(request: &CreateOrder, profile: &JdVopExecutionProfile) -> 
         }
         lines.push(submit_line(line)?);
     }
+
     Ok(SubmitOrder {
         third_order_id: request.merchant_order_no.clone(),
         submit_state_type: 0,
@@ -419,6 +421,7 @@ mod tests {
         assert_eq!(payload.consignee_info.consignee_province_id, 1);
         assert_eq!(payload.consignee_info.consignee_city_id, 2);
         assert_eq!(payload.consignee_info.consignee_county_id, 3);
+
         for depth in 0..3 {
             let address = request.recipient.supplier_address.as_mut().unwrap();
             let level = match depth {
@@ -436,6 +439,7 @@ mod tests {
                 _ => address.county.code = original,
             }
         }
+
         assert!(identifier("0").is_err());
         for invalid in ["", "00", "-1", "0.0", "town"] {
             request.recipient.supplier_address.as_mut().unwrap().town.code = invalid.into();

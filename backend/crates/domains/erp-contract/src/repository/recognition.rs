@@ -135,6 +135,7 @@ mod tests {
             confirmation: None,
             customer_id: None,
         };
+
         let encoded = mongodb::bson::serialize_to_document(&task).unwrap();
         let restored: ContractImport = mongodb::bson::deserialize_from_document(encoded).unwrap();
         assert_eq!(restored.extraction, task.extraction);

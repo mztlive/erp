@@ -45,6 +45,7 @@ pub(super) async fn require_assignee(
         },
         _ => return Err(crate::Error::Internal("履约任务缺少固定办理入口".into())),
     };
+
     Ok(identity
         .require(
             actor,

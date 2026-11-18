@@ -88,6 +88,7 @@ pub(crate) async fn resize_purchase(
     let service = SalesInquiryService::new(db.clone());
     let mut inquiries = service.fee_sources(&order.base.id, executor).await?;
     validate_target_bindings(&inquiries, &order.base.id, order.sales_order_id.as_ref(), targets)?;
+
     if !inquiries.is_empty() {
         // 付款按采购单核销，没有逐费用付款归属；不能把整单每一费用都标成已发生。
         // 同事务重验整单财务下限，来源仅随通过正式业务守卫的减额释放。
@@ -100,6 +101,7 @@ pub(crate) async fn resize_purchase(
             account.ensure_purchase_change_amount(total)?;
         }
     }
+
     for inquiry in &mut inquiries {
         resize_inquiry(db, inquiry, order, targets, actor_id, executor).await?;
         service.save(inquiry, executor).await?;
@@ -118,6 +120,7 @@ fn validate_target_bindings(
         if !ids.insert(&target.detail.expense_line_id) {
             return Err(Error::ValidationError("采购费用行身份重复".into()));
         }
+
         let Some(source) = &target.detail.inquiry_source else { continue };
         let source = source.normalized()?;
         let matches = inquiries
@@ -169,11 +172,13 @@ async fn resize_inquiry(
             .normalized()?;
         validate_target_identity(inquiry, order, &row, &source)?;
         inquiry.fee_for_terms(source.feedback_round, &source.fee_id, target.amount, target.rate)?;
+
         if source.feedback_round != row.feedback_round || target.amount > row.amount {
             confirm_payee(&persistence, inquiry, &source, order, actor_id, executor).await?;
         } else {
             validate_payee(&persistence, inquiry, &source, order, executor).await?;
         }
+
         inquiry.adjust_fee_for_round(
             &row.reservation_id,
             target.amount,
@@ -294,6 +299,7 @@ pub async fn register_finance(
         entry.gross_amount,
         Some(entry.input_tax_rate),
     )?;
+
     let reserved =
         reservation(&source, &entry.source_document_id, &entry.base.id, &entry.base.id, entry.gross_amount);
     let reservation_id = reserved.reservation_id.clone();
@@ -387,6 +393,7 @@ mod tests {
     #[test]
     fn accepted_fee_conversion_can_fill_missing_basis_but_cannot_replace_confirmed_payee() {
         assert!(!payee_basis_matches(&[], "fee", "supplier", "net30").unwrap());
+
         let basis = InquiryFeeBasis::new(
             "basis".into(),
             InquiryFeeBasisData {
@@ -417,6 +424,7 @@ mod tests {
             rate: Some("0.06".parse().unwrap()),
         }];
         assert!(validate_target_bindings(&[], "purchase", "sales", &targets).is_err());
+
         let mut inquiry = inquiry();
         inquiry.fee_ledger.push(reservation(
             &source(),
@@ -441,6 +449,7 @@ mod tests {
             "expense",
             "10.00".parse().unwrap(),
         ));
+
         let mut next = detail.clone();
         next.inquiry_source.as_mut().unwrap().feedback_round = 2;
         let targets = [PurchaseExpenseTarget {
@@ -449,6 +458,7 @@ mod tests {
             rate: Some("0.06".parse().unwrap()),
         }];
         assert!(validate_target_bindings(&[inquiry.clone()], "purchase", "sales", &targets).is_ok());
+
         next.inquiry_source.as_mut().unwrap().fee_id = "other-fee".into();
         let forged = [PurchaseExpenseTarget {
             detail: &next,

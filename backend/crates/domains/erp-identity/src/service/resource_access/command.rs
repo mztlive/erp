@@ -76,6 +76,7 @@ impl ResourceGrantService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     this.authorize_manager(&actor, executor).await?;
+
                     let repo = resource_grants::sources(&this.db);
                     let mut source = repo
                         .find_by_id(&key.id()?, executor)
@@ -84,6 +85,7 @@ impl ResourceGrantService {
                     if source.base.version != expected_version {
                         return Err(Error::ConflictError("授权来源版本已变化".into()));
                     }
+
                     if source.revoke(actor.id(), &reason)? {
                         repo.update(&mut source, executor).await?;
                         resource_grants::advance(
@@ -180,6 +182,7 @@ impl ResourceGrantService {
         )? {
             return Ok(source);
         }
+
         self.db
             .accounts()
             .find_by_id(&source.key.recipient, executor)
@@ -187,6 +190,7 @@ impl ResourceGrantService {
             .filter(|account| account.is_active_backoffice())
             .ok_or_else(|| Error::ValidationError("接收账号不可用".into()))?;
         self.facts.validate_targets(&source.targets, executor).await?;
+
         if is_new {
             repo.create(&source, executor).await?;
         } else {
@@ -195,6 +199,7 @@ impl ResourceGrantService {
         resource_grants::sync_rows(&self.db, &source, executor).await?;
         affected.extend(source.resources());
         resource_grants::advance(&self.db, &source.key.recipient, &affected, executor).await?;
+
         resource_grants::audit_source(&self.db, &source, executor).await?;
         Ok(source)
     }
@@ -225,6 +230,7 @@ pub async fn append_event(
         old.ensure_replay(&event)?;
         return Ok(false);
     }
+
     // 唯一索引兜底并发去重；插入失败必须退出原业务事务，后续重试再读取已有事件。
     repo.create(&event, executor).await?;
     Ok(true)
@@ -285,6 +291,7 @@ mod tests {
                 Err(Error::ValidationError(_))
             ));
         }
+
         assert!(matches!(
             service.source_page(&actor, "recipient", Some("cursor"), &mut SnapshotExecutor::default()).await,
             Err(Error::Forbidden(_))

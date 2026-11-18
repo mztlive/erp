@@ -89,6 +89,7 @@ pub(super) async fn persist_decision_writes(
 ) -> Result<()> {
     persist_decision_runtime_facts(db, &input, executor).await?;
     persist_decision_task_writes(db, &input, executor).await?;
+
     if input.writes.instance.status == ApprovalProcessInstanceStatus::Rejected {
         close_rejected_tasks(db, &input.writes.instance, input.actor_id, input.now, executor).await?;
         create_rework(
@@ -102,6 +103,7 @@ pub(super) async fn persist_decision_writes(
         )
         .await?;
     }
+
     persist_decision_side_effects(db, &input, executor).await?;
     Ok(())
 }
@@ -127,6 +129,7 @@ async fn persist_decision_runtime_facts(
             .await?,
         "审批实例",
     )?;
+
     // 当前执行结束（APPROVED/REJECTED/BLOCKED）。
     for execution in &input.writes.updated_executions {
         let expected = if execution.base.id.as_str() == input.ended_execution_id {
@@ -143,6 +146,7 @@ async fn persist_decision_runtime_facts(
             "审批执行",
         )?;
     }
+
     // 新执行与审批人绑定。
     for execution in &input.writes.created_executions {
         db.bpm_workflow().insert_execution(execution, executor).await?;

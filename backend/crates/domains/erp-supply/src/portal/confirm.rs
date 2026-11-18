@@ -72,6 +72,7 @@ impl PortalOfferingService {
     ) -> std::result::Result<ConfirmedOfferingResult, P::Error> {
         ensure_confirmation(&input)?;
         ensure_transaction(executor)?;
+
         match &input.application.snapshot {
             OfferingApplicationSnapshot::ExistingQuote { sku_id, target_version, .. } => {
                 self.ensure_quote_access(&input.application.supplier_id, sku_id, executor).await?;
@@ -132,6 +133,7 @@ impl PortalOfferingService {
     ) -> std::result::Result<ConfirmedOfferingResult, P::Error> {
         ensure_confirmation(&input)?;
         ensure_transaction(executor)?;
+
         if let OfferingApplicationSnapshot::TermsChange {
             offering_id,
             expected_offering_version,
@@ -153,6 +155,7 @@ impl PortalOfferingService {
                 )
                 .await;
         }
+
         self.create_confirmed(CreateInput::from_context(&input)?, qualification, executor).await
     }
     /// 校验条款与资格后写入供给、首版修订和可供投影；订货身份已存在则冲突。
@@ -178,6 +181,7 @@ impl PortalOfferingService {
                 executor,
             )
             .await?;
+
         let offering_id = SupplierOfferingId::new(next_id());
         let mut offering = input.offering(offering_id.clone())?;
         let revision = SupplierOfferingRevision::new(
@@ -186,6 +190,7 @@ impl PortalOfferingService {
         )?;
         let availability = input.availability(offering_id)?;
         offering.stable.current_revision_id = Some(revision.base.id.clone());
+
         self.db
             .supplier_offering_repository()
             .create_with_revision_and_availability(&offering, &revision, &availability, executor)
@@ -203,11 +208,13 @@ impl PortalOfferingService {
         let mut offering =
             self.confirmation_target(input, id, expected_version, expected_revision_no, executor).await?;
         let current = self.current_revision(&offering, executor).await?;
+
         if let Some(terms) = terms {
             validate_portal_terms(terms, input.on_date)?;
             qualification
                 .ensure_qualified(&offering.supplier_id, &offering.sku_id, input.on_date, executor)
                 .await?;
+
             let next = offering.next_revision_no(current.revision.revision_no, expected_revision_no)?;
             let revision = SupplierOfferingRevision::new(
                 SupplierOfferingRevisionId::new(next_id()),
@@ -219,6 +226,7 @@ impl PortalOfferingService {
                     created: false,
                 });
             }
+
             offering.stable.current_revision_id = Some(revision.base.id.clone());
             offering.stable.updated_by = input.actor.id().to_string();
             self.db
@@ -254,6 +262,7 @@ impl PortalOfferingService {
             .await?
             .filter(|o| o.supplier_id.as_ref() == input.application.supplier_id)
             .ok_or_else(|| Error::NotFound("供给不存在或无权查看".into()))?;
+
         Self::ensure_portal_writable(&offering)?;
         if offering.base.version != version {
             return Err(Error::ConflictError("供给版本已经变化，请供应商重新核对并提交".into()));
@@ -303,6 +312,7 @@ fn ensure_confirmation(input: &ConfirmedOfferingInput<'_>) -> Result<()> {
     if input.application.status != ApplicationStatus::Submitted {
         return Err(Error::ConflictError("申请已不再等待确认".into()));
     }
+
     let submitted =
         input.application.submissions.last().ok_or_else(|| Error::Internal("申请缺少冻结快照".into()))?;
     let current = serde_json::to_value(&input.application.snapshot)
@@ -314,6 +324,7 @@ fn ensure_confirmation(input: &ConfirmedOfferingInput<'_>) -> Result<()> {
             "审核时不能修改供应商已提交的内容，请退回供应商修改后重新提交".into(),
         ));
     }
+
     ensure_text(input.maintainer_user_id, "供给内部维护人")?;
     ensure_text(input.business_org_unit_id, "供给业务组织")
 }
@@ -396,6 +407,7 @@ impl<'a> CreateInput<'a> {
             .last()
             .map(|s| s.submitted_by.clone())
             .ok_or_else(|| Error::Internal("申请缺少提交人".into()))?;
+
         Ok(SupplierOfferingAvailability::new(
             SupplierOfferingAvailabilityId::new(next_id()),
             SupplierOfferingAvailabilityData {

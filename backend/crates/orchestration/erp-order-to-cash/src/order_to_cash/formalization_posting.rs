@@ -149,6 +149,7 @@ async fn persist_sales_revision(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     erp_read_models::sales_attribution::ensure_attribution(&write.db, &write.order, executor).await?;
+
     erp_sales::service::sales_order::formalize::persist_revision(
         &write.db,
         &mut write.order,
@@ -168,6 +169,7 @@ async fn post_receivable(write: &FormalizedSubmissionWrite, executor: &mut dyn E
         .find_by_id(order.customer_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("销售单客户不存在，无法形成应收".into()))?;
+
     create_initial_receivable(
         &write.db,
         receivable_input(
@@ -286,6 +288,7 @@ mod tests {
                 "sales-1",
             )
             .unwrap();
+
             let input = receivable_input(
                 &order,
                 PartyId::new("customer-company"),
@@ -293,6 +296,7 @@ mod tests {
                 Amount::from_str("123.45").unwrap(),
                 Instant::from_unix_secs(1_800_000_000),
             );
+
             assert_eq!(input.customer_id, order.customer_id);
             assert_eq!(input.counterparty_party_id.as_ref(), "customer-company");
             assert_ne!(input.counterparty_party_id, order.settlement_party_id);
@@ -316,6 +320,7 @@ mod tests {
             let mut executor = TestExecutor::default();
             let identity = &mut executor as *mut TestExecutor as usize;
             let mut steps = RecordingSteps { calls: vec![], executor: identity, fail_at: Some(step) };
+
             let error = execute(&mut steps, &mut executor).await.unwrap_err();
             assert!(matches!(error,Error::ConflictError(ref text) if text=="original posting conflict"));
             assert_eq!(steps.calls, expected()[..=index]);

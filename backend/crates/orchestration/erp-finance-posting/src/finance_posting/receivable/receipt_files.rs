@@ -83,6 +83,7 @@ pub(super) async fn persist(
     let document_id = BusinessDocumentId::new(id);
     let existing = db.document_attachments().list_by_document(&document_id, executor).await?;
     check_count(existing.len(), ids.len())?;
+
     pending.persist(db, executor).await?;
     for file_id in ids {
         let attachment = DocumentAttachment::new(
@@ -109,6 +110,7 @@ mod tests {
         resolve(&mut [], &EmptyPendingAttachments).unwrap();
         assert!(resolve(&mut [FileAssetId::new("asset")], &EmptyPendingAttachments).is_err());
         assert!(resolve(&mut [FileAssetId::new("pending-file:missing")], &EmptyPendingAttachments).is_err());
+
         check_count(31, 1).unwrap();
         assert!(check_count(32, 1).is_err());
     }
@@ -135,6 +137,7 @@ mod tests {
             !serde_json::to_value(&req).unwrap().as_object().unwrap().contains_key("attachment_asset_ids")
         );
         assert_eq!(receipt(&req, &actor, &EmptyPendingAttachments).unwrap().fingerprint(), old.fingerprint());
+
         req.attachment_asset_ids = vec![FileAssetId::new("pending-file:receipt")];
         let batch = |digest: &str, key: &str| {
             PendingFileAssets::prepare(
@@ -155,6 +158,7 @@ mod tests {
             )
             .unwrap()
         };
+
         let first = batch("a", "first");
         let retry = batch("a", "retry");
         let changed = batch("b", "changed");
@@ -166,6 +170,7 @@ mod tests {
             receipt(&req, &actor, &first).unwrap().fingerprint(),
             receipt(&req, &actor, &changed).unwrap().fingerprint()
         );
+
         let mut ids = req.attachment_asset_ids.clone();
         resolve(&mut ids, &first).unwrap();
         assert!(!ids[0].as_ref().starts_with("pending-file:"));

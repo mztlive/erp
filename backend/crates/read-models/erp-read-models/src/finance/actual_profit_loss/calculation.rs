@@ -42,6 +42,7 @@ impl OrderResult {
             "PARTIAL"
         }
         .into();
+
         self.row.totals = totals(
             self.revenue,
             &self.costs,
@@ -174,6 +175,7 @@ impl<'a> SalesIndex<'a> {
             .get(order.current_revision_id.as_deref().unwrap_or(""))
             .filter(|r| r.sales_order_id.as_ref() == order.id)
             .ok_or_else(|| Error::ConflictError("销售单缺少匹配的正式版本，无法生成盈亏".into()))?;
+
         let mut revenue = Decimal::ZERO;
         let mut scenarios = BTreeSet::new();
         for line in self.lines(order) {
@@ -185,6 +187,7 @@ impl<'a> SalesIndex<'a> {
         if revenue != revision.net_amount.to_decimal() {
             return Err(Error::ConflictError("销售版本表头与明细收入不一致".into()));
         }
+
         let date =
             order.effective_at.ok_or_else(|| Error::ConflictError("销售单缺少生效日期".into()))?.as_utc();
         Ok(OrderResult {
@@ -242,15 +245,18 @@ pub(super) fn calculate(source: &Sources, as_of: i64, drill: bool) -> Result<Vec
             allocations.entry(id.as_ref()).or_default().push(a);
         }
     }
+
     source
         .orders
         .iter()
         .map(|order| {
             let mut result = sales.result(order, drill)?;
+
             let mut covered_lines = BTreeSet::new();
             for allocation in allocations.get(order.id.as_str()).into_iter().flatten() {
                 apply_cost(&mut result, allocation, &entries, as_of, &mut covered_lines)?;
             }
+
             check_coverage(&mut result, sales.lines(order), order, &covered_lines)?;
             if source.pending_extra_cost_orders.contains(&order.id) {
                 blocker(
@@ -266,6 +272,7 @@ pub(super) fn calculate(source: &Sources, as_of: i64, drill: bool) -> Result<Vec
                     "运费待追加，追加物流费用采购或标记供应商不收运费后才计入成本完整",
                 );
             }
+
             result.finish()?;
             Ok(result)
         })
@@ -287,6 +294,7 @@ fn apply_cost(
     {
         return Ok(());
     }
+
     let amount = allocation.allocated_net_amount.to_decimal();
     result.costs.add(entry.cost_stage, entry.cost_type, amount)?;
     if !entry.cost_stage.is_profit_relevant() {
@@ -305,6 +313,7 @@ fn record_actual_cost(
     record_cost_source(&mut result.row, entry);
     let signed = if entry.cost_stage == CostStage::Reduction { -amount } else { amount };
     add(result.composition.entry(entry.cost_type.as_str().into()).or_default(), signed)?;
+
     if entry.cost_stage == CostStage::Actual
         && matches!(entry.cost_type, CostType::Product | CostType::OfflineService)
     {

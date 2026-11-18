@@ -83,6 +83,7 @@ impl ApprovalDefinitionService {
                 .await
             })
         });
+
         self.recover_definition_command(
             outcome.await,
             &approval_process::PUBLISH_DEFINITION,
@@ -146,6 +147,7 @@ async fn publish_tx(
     let graph = service
         .require_graph(&request.definition_id, actor, &approval_process::PUBLISH_DEFINITION, executor)
         .await?;
+
     if let Some(view) = replay_prepared_definition_receipt(
         &service.db,
         identity,
@@ -156,6 +158,7 @@ async fn publish_tx(
     {
         return Ok(view);
     }
+
     ensure_draft_lock(&graph.definition, request.expected_definition_lock_version)?;
     let policy = policy_for_definition(&graph.definition)?;
     let current =
@@ -176,6 +179,7 @@ async fn apply_publication(
     let db = &service.db;
     let Publication { mut result, previous, previous_lock } =
         plan_publication(db, &current, actor, executor).await?;
+
     write_receipt(db, &identity.current, &DefinitionCommandResultRef::from_graph(&result).encode(), executor)
         .await?;
     let refreshed = replace_graph(db, current, request.expected_definition_lock_version, executor).await?;
@@ -190,6 +194,7 @@ async fn apply_publication(
         )
         .await?;
     result.definition = applied_definition(outcome)?;
+
     write_definition_audit(
         service.audit.as_ref(),
         actor,
@@ -248,10 +253,12 @@ async fn publish_candidate(
     let snapshots =
         validate_assignees(authorization, db, identity_service, &current.assignee_ids(), executor).await?;
     ensure_actions_registered(policy)?;
+
     if let Some(config) = db.approval_copies().config(&current.definition.base.id, executor).await? {
         let rules = ApprovalCopyRule::prepare(config.rules, current.nodes.len())?;
         validate_recipients(identity_service, &rules, executor).await?;
     }
+
     let nodes = apply_snapshots(current.nodes, &snapshots)?;
     rebuild_draft_graph(&current.definition, nodes)
 }
@@ -281,6 +288,7 @@ mod tests {
             actor.id(),
         )
         .unwrap();
+
         let error = publish_tx(
             &service,
             PublishTxInput { request, actor: &actor, identity: &identity },

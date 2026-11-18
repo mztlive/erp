@@ -31,6 +31,7 @@ pub(super) async fn inquiry_candidates(
     if source.released || !source.consumed {
         return Ok(vec![]);
     }
+
     let inquiry = SalesInquiryService::new(db.clone()).require(&source.inquiry_id, executor).await?;
     if !inquiry.acceptances.iter().any(|accepted| {
         accepted.requirement_version == source.requirement_version
@@ -61,6 +62,7 @@ fn candidates_for_bindings(
             candidates.push(quote_candidate(quote, balance, binding)?);
         }
     }
+
     candidates.sort_by(|left, right| {
         (&left.sales_order_line_id, &left.source.quote_revision_id)
             .cmp(&(&right.sales_order_line_id, &right.source.quote_revision_id))
@@ -111,6 +113,7 @@ async fn quote_balances(
     for quote in quotes {
         latest.insert(quote.data.quote_id.clone(), quote);
     }
+
     let ids = latest.keys().cloned().collect::<Vec<_>>();
     let balances = db.inquiry_quote_balances().for_quotes(&ids, executor).await?;
     let balances =
@@ -223,6 +226,7 @@ mod tests {
         wrong_sku.sku_id = "other-sku".to_string().into();
         let balances = HashMap::from([("quote".into(), balance)]);
         let bindings = [first, second, unrelated, wrong_sku];
+
         let candidates = candidates_for_bindings(&bindings, std::slice::from_ref(&quote), &balances).unwrap();
         assert_eq!(
             candidates.iter().map(|row| row.sales_order_line_id.as_str()).collect::<Vec<_>>(),
@@ -234,6 +238,7 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+
         let mut unavailable = quote;
         unavailable.data.terms.unavailable = true;
         unavailable.data.terms.unit_cost_gross = "0".parse().unwrap();

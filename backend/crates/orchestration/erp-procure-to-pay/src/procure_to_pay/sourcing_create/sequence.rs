@@ -122,6 +122,7 @@ mod tests {
         assert_eq!(plan.main(), u32::MAX);
         let last = plan.order(max_orders - 1).unwrap();
         assert_eq!(last.created(), u32::MAX - 1);
+
         assert!(matches!(SourcingEventSequencePlan::new(max_orders + 1),
             Err(Error::ValidationError(message)) if message == "采购批次审计事件序号超出可用范围"));
         assert!(plan.order(max_orders).is_err());

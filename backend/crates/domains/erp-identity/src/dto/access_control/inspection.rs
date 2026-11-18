@@ -29,6 +29,7 @@ impl AccessInspectionRequest {
         if self.user_id.trim().is_empty() || self.user_id.len() > 128 {
             return Err(Error::ValidationError("请选择需要检查的人员".into()));
         }
+
         scope_spec::kind(&Permission::parse(format!("{}:{}", self.resource, self.action))?)?;
         if let Some(id) = &self.object_id {
             if id.trim().is_empty() || id.len() > 128 {
@@ -72,6 +73,7 @@ impl AccessInspectionView {
         let description = scope_spec::action_description(resource, action)?;
         let mut view = Self::default();
         view.push("操作权限", "passed", "账号有效，启用角色提供了本操作权限。");
+
         let company = scope_spec::find_action(resource, action)
             .is_some_and(|spec| matches!(spec.source(), ScopeSource::Company));
         if company {
@@ -83,6 +85,7 @@ impl AccessInspectionView {
             );
             return Ok(view);
         }
+
         view.push("业务授权", "review", description);
         view.push(
             "对象上下文",
@@ -123,6 +126,7 @@ impl AccessInspectionView {
             ..Self::default()
         };
         view.push("操作权限", "passed", "账号有效，至少一个启用角色提供了本操作权限。");
+
         if access.scope.has_role_scope() {
             view.push(
                 "业务数据范围",
@@ -178,6 +182,7 @@ mod tests {
         assert!(request.validate().is_err());
         request.object_id = None;
         assert!(request.validate().is_ok());
+
         request.resource = "unknown".into();
         assert!(request.validate().is_err());
         request.user_id.clear();
@@ -207,6 +212,7 @@ mod tests {
         assert_eq!(view.steps[1].status, "review");
         assert_eq!(view.steps.len(), 2);
         assert_eq!(view.scope_version.as_deref(), Some("v1"));
+
         access.facts.scope.role_clauses.push(ScopeClause { self_owned: true, ..ScopeClause::default() });
         let view = AccessInspectionView::from_access(&access);
         assert_eq!(view.steps[1].status, "passed");
@@ -221,6 +227,7 @@ mod tests {
             }))
             .is_err()
         );
+
         let request = AccessInspectionRequest {
             user_id: "u".into(),
             resource: "sales_order".into(),

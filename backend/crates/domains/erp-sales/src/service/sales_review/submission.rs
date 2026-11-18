@@ -108,6 +108,7 @@ impl SalesReviewService {
         let submission_no = next_change_submission_no(&self.db, &change_order.base.id, executor).await?;
         let (submission, submission_lines) =
             build_change_submission_with_no(&change_order, &working_copy, &copy_lines, submission_no, actor)?;
+
         working_copy.lock_for_submission_if_needed()?;
         start_sales_change_approval(
             &mut change_order,
@@ -151,6 +152,7 @@ fn build_change_submission_with_no(
     let line_datas = data.lines.clone();
     let mut submission = SalesChangeSubmission::new(SalesChangeSubmissionId::new(next_id()), data)?;
     submission.source_version = Some(change_order.base.version);
+
     let mut submission_lines = Vec::with_capacity(line_datas.len());
     for data in line_datas {
         submission_lines.push(SalesChangeSubmissionLine::new(

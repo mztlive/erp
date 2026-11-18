@@ -32,6 +32,7 @@ pub async fn complete_direct_returns(
         if returned.stable.status == PurchaseReturnStatus::Completed {
             continue;
         }
+
         let case_id = returned
             .sales_return_case_id
             .as_ref()
@@ -46,6 +47,7 @@ pub async fn complete_direct_returns(
         {
             return Err(Error::ConflictError("直退处理状态发生变化，请核对销售退货记录".into()));
         }
+
         returned.update(
             PurchaseReturnOrderUpdate { status: Some(PurchaseReturnStatus::Completed), ..Default::default() },
             actor,
@@ -54,6 +56,7 @@ pub async fn complete_direct_returns(
             SalesReturnCaseUpdate { status: Some(SalesReturnCaseStatus::Completed), ..Default::default() },
             actor,
         )?;
+
         db.purchase_return_orders().update(&mut returned, executor).await?;
         db.sales_return_cases().update(&mut case, executor).await?;
     }

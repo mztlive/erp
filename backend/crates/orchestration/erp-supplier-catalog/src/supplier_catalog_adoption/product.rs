@@ -57,6 +57,7 @@ impl SupplierCatalogAdoptionProcess {
     ) -> Result<PreparedAdoption> {
         let mut materialized_item = item.clone();
         media.apply_to(&mut materialized_item)?;
+
         let (source, target, acting, command_id, parent) =
             (item.clone(), row.clone(), actor.clone(), command.to_owned(), anchor.cloned());
         let mut resolved_row = self
@@ -77,11 +78,13 @@ impl SupplierCatalogAdoptionProcess {
                 })
             })
             .await?;
+
         if let AdoptionTarget::Create { brand_id, .. } = &mut resolved_row.target
             && brand_id.is_empty()
         {
             *brand_id = self.resolve_source_brand(item, actor).await?;
         }
+
         let (draft, input) = self.prepare_product_target(item, &resolved_row, &media, actor, anchor).await?;
         Ok(PreparedAdoption {
             media,
@@ -106,8 +109,10 @@ impl SupplierCatalogAdoptionProcess {
         if !matches!(row.target, AdoptionTarget::Create { .. }) {
             return Ok((None, None));
         }
+
         let request = product_request(item, row, media)?;
         let input = sku_input(item, row, media)?;
+
         let mapping = self
             .db
             .catalog_adoption_products()
@@ -150,6 +155,7 @@ impl SupplierCatalogAdoptionProcess {
         {
             return Ok(brand.base.id);
         }
+
         let mut hasher = Sha256::new();
         hasher.update(name.as_bytes());
         hasher.update([0u8]);
@@ -195,6 +201,7 @@ impl SupplierCatalogAdoptionProcess {
                 product_id: id.clone(),
             })
         });
+
         let sku = match &row.target {
             AdoptionTarget::Auto { .. } => return Err(Error::Internal("自动匹配尚未解析".into())),
             AdoptionTarget::Existing { .. } => {
@@ -204,6 +211,7 @@ impl SupplierCatalogAdoptionProcess {
                 self.create_target(effective_mapping.as_ref(), item, row, prepared, actor, executor).await?
             },
         };
+
         if let Some(mapping) = mapping {
             if mapping.product_id != sku.product_id.as_ref() {
                 return Err(Error::ConflictError("同一来源商品已关联其他公司商品，请核对来源规格".into()));
@@ -258,6 +266,7 @@ impl SupplierCatalogAdoptionProcess {
         {
             return Err(Error::ConflictError("公司商品规格、单位或版本已变化".into()));
         }
+
         if let Some(barcode) = &item.barcode {
             let mut revision = self
                 .db
@@ -268,6 +277,7 @@ impl SupplierCatalogAdoptionProcess {
             revision.barcode = Some(barcode.clone());
             self.db.catalog().claim_sku_barcode(&revision, executor).await?;
         }
+
         self.db.catalog().lock_match_target(&product, &sku, executor).await?;
         prepared.media.pending_assets.persist(&self.db, executor).await?;
         Ok(sku)
@@ -284,6 +294,7 @@ impl SupplierCatalogAdoptionProcess {
     ) -> Result<Sku> {
         self.ensure_create_dictionaries(item, row, executor).await?;
         let service = &self.services.catalog;
+
         if let Some(mapping) = mapping {
             self.ensure_bound_product(mapping, item, row, actor, executor).await?;
             prepared.media.pending_assets.persist(&self.db, executor).await?;
@@ -297,6 +308,7 @@ impl SupplierCatalogAdoptionProcess {
                 .map(|image| image.file_asset_id.clone());
             return Ok(service.append_source_sku(&mapping.product_id, input, actor, executor).await?);
         }
+
         let draft = prepared
             .draft
             .take()
@@ -304,6 +316,7 @@ impl SupplierCatalogAdoptionProcess {
         let product = service
             .write_product_draft(draft, actor, prepared.media.pending_assets.clone(), executor)
             .await?;
+
         let mut skus = self.db.catalog().skus_for_product(&ProductId::new(product.base.id), executor).await?;
         if skus.len() != 1 {
             return Err(Error::Internal("选品新建规格结果不完整".into()));
@@ -327,6 +340,7 @@ impl SupplierCatalogAdoptionProcess {
             .await?
             .filter(|category| category.is_active() && category.product_kind == request.product_kind)
             .ok_or_else(|| Error::ValidationError("公司分类已停用或不支持该商品类型".into()))?;
+
         let brand =
             self.db.product_brands().find_by_id(brand_id, executor).await?.filter(|brand| brand.is_active());
         let unit =

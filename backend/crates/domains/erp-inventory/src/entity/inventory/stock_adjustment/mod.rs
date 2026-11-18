@@ -358,6 +358,7 @@ impl StockAdjustment {
         let created_by =
             normalize_required_text(created_by.into(), "创建人不能为空", ACTOR_MAX_LEN, "创建人标识过长")?;
         let note = normalize_note(data.note.as_deref().unwrap_or_default())?;
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             created_by,
@@ -405,9 +406,11 @@ impl StockAdjustment {
     /// 状态不可编辑，复核人与经办人相同，或文本规范化失败时返回错误。
     pub fn update(&mut self, update: StockAdjustmentUpdate) -> Result<()> {
         self.ensure_editable()?;
+
         if let Some(reason_type) = update.reason_type {
             self.reason_type = reason_type;
         }
+
         if let Some(reviewed_by) = update.reviewed_by {
             let reviewed_by =
                 normalize_required_text(reviewed_by, "仓储复核人不能为空", ACTOR_MAX_LEN, "仓储复核人过长")?;
@@ -422,6 +425,7 @@ impl StockAdjustment {
                 "成本影响确认人过长",
             )?);
         }
+
         if let Some(note) = update.note.as_deref() {
             self.note = normalize_note(note)?;
         }
@@ -450,6 +454,7 @@ impl StockAdjustment {
         }
         let next =
             self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))?;
+
         self.approval_subject_version = next;
         self.status = StockAdjustmentState::InApproval;
         Ok(next)
@@ -533,6 +538,7 @@ impl StockAdjustment {
             "仓储复核人过长",
         )?;
         ensure_reviewer_separation(&self.prepared_by, &reviewed_by)?;
+
         self.reviewed_by = Some(reviewed_by);
         self.status = StockAdjustmentState::PendingWarehouseReview;
         Ok(())
@@ -556,6 +562,7 @@ impl StockAdjustment {
             ACTOR_MAX_LEN,
             "成本影响确认人过长",
         )?;
+
         self.finance_reviewed_by = Some(finance_reviewed_by);
         self.status = StockAdjustmentState::PendingFinanceReview;
         Ok(())
@@ -672,10 +679,12 @@ impl StockAdjustment {
         let mut staged = lines.to_vec();
         self.ensure_lines_belong(&staged)?;
         let changed = self.apply_updates_to_staged(&mut staged, updates)?;
+
         if require_all && updates.len() != staged.len() {
             return Err(Error::from("提交必须包含全部调整明细"));
         }
         self.ensure_group_directions(&staged)?;
+
         lines.swap_with_slice(&mut staged);
         Ok(changed)
     }
@@ -721,6 +730,7 @@ impl StockAdjustment {
         for (index, line) in staged.iter().enumerate() {
             indexes.entry(line.base.id.clone()).or_insert(index);
         }
+
         let mut seen = HashSet::with_capacity(updates.len());
         let mut changed = Vec::with_capacity(updates.len());
         for update in updates {
@@ -1033,11 +1043,13 @@ mod tests {
             "驳回后可修改并重新提交复核"
         );
         assert!(ensure_transition(StockAdjustmentState::Posted, StockAdjustmentState::Reversed).is_ok());
+
         assert!(ensure_transition(StockAdjustmentState::Draft, StockAdjustmentState::Posted).is_err());
         assert!(ensure_transition(StockAdjustmentState::Draft, StockAdjustmentState::Reversed).is_err());
         assert!(ensure_transition(StockAdjustmentState::Rejected, StockAdjustmentState::Posted).is_err());
         assert!(ensure_transition(StockAdjustmentState::Rejected, StockAdjustmentState::Draft).is_err());
         assert!(ensure_transition(StockAdjustmentState::Reversed, StockAdjustmentState::Posted).is_err());
+
         assert!(ensure_transition(StockAdjustmentState::Reversed, StockAdjustmentState::Reversed).is_ok());
         assert!(ensure_transition(StockAdjustmentState::Draft, StockAdjustmentState::Draft).is_ok());
     }
@@ -1071,22 +1083,27 @@ mod tests {
         let mut adjustment = adjustment_in_state(StockAdjustmentState::Draft, 0);
         assert!(adjustment.reject_approval(1).is_err());
         adjustment.start_approval().unwrap();
+
         let submitted = adjustment.clone();
         assert!(adjustment.reject_approval(0).is_err());
         assert!(adjustment.reject_approval(2).is_err());
         assert_eq!(adjustment, submitted);
+
         adjustment.reject_approval(1).unwrap();
         assert_eq!(adjustment.status, StockAdjustmentState::Rejected);
         assert_eq!(adjustment.approval_subject_version, 1);
         assert!(adjustment.is_editable());
+
         let before = adjustment.clone();
         assert!(adjustment.reject_approval(1).is_err());
         assert!(adjustment.ensure_approval_postable().is_err());
         assert_eq!(adjustment, before);
+
         adjustment.update(StockAdjustmentUpdate::default()).unwrap();
         assert_eq!(adjustment.status, StockAdjustmentState::Rejected);
         assert_eq!(adjustment.start_approval().unwrap(), 2);
         assert_eq!(adjustment.status, StockAdjustmentState::InApproval);
+
         let resubmitted = adjustment.clone();
         assert!(adjustment.reject_approval(1).is_err());
         assert_eq!(adjustment, resubmitted);

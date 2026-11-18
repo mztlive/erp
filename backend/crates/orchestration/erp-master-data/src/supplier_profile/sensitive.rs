@@ -57,12 +57,15 @@ impl SupplierProfileProcess {
             .rbac
             .require(actor, &supplier::SENSITIVE_REVEAL, AccessTarget::Operation, executor)
             .await?;
+
         let now = u64::try_from(Instant::now().unix_secs())
             .map_err(|_| Error::Internal("系统时间非法".to_string()))?;
         let scope = self.sensitive_data.verify_reveal_token(&req.reveal_token, now)?;
+
         let supplier = self.reveal_supplier(&scope.supplier_id, actor, executor).await?;
         let ciphertext = self.reveal_ciphertext(&scope, &supplier.party_id, executor).await?;
         let value = self.sensitive_data.decrypt(&ciphertext)?;
+
         let audit =
             actor.clone().resource_log("supplier_sensitive.reveal", "supplier_sensitive", scope.record_id)?;
         persist_log(&self.db, &audit, executor).await?;
@@ -152,6 +155,7 @@ mod tests {
             access,
         );
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let error = process
             .reveal_snapshot(
                 &RevealSupplierSensitiveRequest { reveal_token: "unused".into() },
@@ -175,6 +179,7 @@ mod tests {
             access,
         );
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let error = process
             .reveal_supplier("token-supplier", &actor, &mut SnapshotExecutor::default())
             .await

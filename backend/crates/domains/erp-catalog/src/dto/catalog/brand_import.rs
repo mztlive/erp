@@ -28,10 +28,12 @@ impl BrandImportJobRequest {
         if self.file_name.len() > 255 || !self.file_name.to_ascii_lowercase().ends_with(".xlsx") {
             return Err(Error::ValidationError("请选择品牌 Excel 文件（.xlsx）".into()));
         }
+
         let mut numbers = HashSet::new();
         if self.rows.is_empty() || self.rows.len() > 1000 {
             return Err(Error::ValidationError("每次应包含 1–1000 行品牌".into()));
         }
+
         for row in &self.rows {
             if !(2..=10001).contains(&row.row_number) || !numbers.insert(row.row_number) {
                 return Err(Error::ValidationError("Excel 行号无效或重复".into()));
@@ -126,10 +128,12 @@ mod tests {
         }))
         .unwrap();
         assert!(request.key().is_ok());
+
         request.rows.push(request.rows[0].clone());
         assert!(request.key().is_err());
         request.rows.clear();
         assert!(request.key().is_err());
+
         request.rows = (2..1003)
             .map(|row_number| BrandImportRow {
                 row_number,
@@ -139,12 +143,15 @@ mod tests {
             })
             .collect();
         assert!(request.key().is_err());
+
         request.rows.truncate(1000);
         assert!(request.key().is_ok());
         let json = serde_json::to_string(&request).unwrap();
         assert_eq!(serde_json::from_str::<BrandImportJobRequest>(&json).unwrap().rows.len(), 1000);
+
         request.file_name = "品牌.csv".into();
         assert!(request.key().is_err());
+
         request.file_name = "品牌.xlsx".into();
         request.rows.truncate(1);
         request.rows[0].row_number = 1;

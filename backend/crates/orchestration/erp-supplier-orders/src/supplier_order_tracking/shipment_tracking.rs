@@ -33,12 +33,14 @@ pub(super) async fn merge_tracking(
         if delivery.delivery_type != DeliveryType::SupplierDirect {
             return Err(Error::BusinessLogicError("供应商运单不能改写仓库发货单".into()));
         }
+
         let lines =
             db.fulfillment().delivery_lines_by_delivery_ids(&[DeliveryId::new(&id)], executor).await?;
         let entries = entries
             .into_iter()
             .filter(|entry| lines.iter().any(|line| line.sales_order_line_id == entry.sales_order_line_id))
             .collect::<Vec<_>>();
+
         let previous = delivery.tracking_entries.clone();
         delivery.merge_observed_tracking(entries)?;
         delivery.ensure_tracking_lines(&lines)?;
@@ -121,6 +123,7 @@ mod tests {
                 delivery_ids: vec![format!("delivery-{id}")],
             })
             .into();
+
         let shipments = [("101", "A"), ("101", "B"), ("102", "C"), ("103", "foreign"), ("101", "A")].map(
             |(child, waybill)| Shipment {
                 external_shipment_id: Some(waybill.into()),
@@ -163,6 +166,7 @@ mod tests {
             },
         )
         .unwrap();
+
         let updates = tracking_updates(&tracking, &observation);
         assert_eq!(updates.len(), 2);
         assert_eq!(updates["delivery-101"].len(), 4);
@@ -170,6 +174,7 @@ mod tests {
         assert!(updates["delivery-101"].iter().all(|entry| ["A", "B"].contains(&entry.tracking_no.as_str())));
         assert!(updates["delivery-102"].iter().all(|entry| entry.tracking_no == "C"));
         assert_eq!(updates["delivery-101"][0].sales_order_line_id.as_ref(), "sale-one");
+
         assert_eq!(tracking_updates(&tracking, &observation), updates);
         assert!(tracking.pending_shipments(&observation).unwrap().is_empty());
         assert!(tracking.quantities_fully_applied().unwrap());

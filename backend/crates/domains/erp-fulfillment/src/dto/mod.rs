@@ -163,6 +163,7 @@ mod tests {
             }]
         });
         assert!(serde_json::from_value::<CreatePurchaseReceiptRequest>(valid).is_ok());
+
         let forged = serde_json::json!({
             "receipt_no": "PR-1",
             "purchase_order_id": "po-1",
@@ -210,6 +211,7 @@ mod tests {
             }]
         });
         assert!(serde_json::from_value::<CreateDeliveryRequest>(valid).is_ok());
+
         let forged = serde_json::json!({
             "delivery_no": "DV-1",
             "delivery_type": "WAREHOUSE_SHIP",

@@ -54,10 +54,12 @@ impl PurchaseOrderProcess {
                             executor,
                         )
                         .await?;
+
                     let line = SalesOrderLineId::new(req.sales_order_line_id.trim());
                     order
                         .waive_freight(&line, req.reason.clone(), actor.id(), Instant::now())
                         .map_err(|error| Error::ValidationError(error.to_string()))?;
+
                     let audit = actor.clone().resource_log_with_message(
                         WAIVE_FREIGHT_ACTION,
                         "purchase_order",

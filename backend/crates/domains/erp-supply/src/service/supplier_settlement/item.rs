@@ -48,6 +48,7 @@ impl SupplierSettlementService {
         executor: &mut dyn Executor,
     ) -> Result<SettlementPageView<SupplierSettlementItemView>> {
         self.access().require_operation(actor, &supplier_settlement::ITEM_LIST, executor).await?;
+
         params.validate()?;
         let query = params.normalized()?;
         let filter = SupplierSettlementItemFilter {
@@ -59,6 +60,7 @@ impl SupplierSettlementService {
         };
         let page =
             self.db.supplier_settlement_items().search_supplier_settlement_items(&filter, executor).await?;
+
         let items = page
             .items
             .into_iter()
@@ -81,7 +83,6 @@ impl SupplierSettlementService {
                 created_at: row.created_at,
             })
             .collect();
-
         Ok(SettlementPageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 }
@@ -105,6 +106,7 @@ mod tests {
         let access = SettlementAccess::new(db.clone(), unavailable_authorization());
         let service = SupplierSettlementService::new(db).with_data_scope(access);
         let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+
         let item_params = serde_json::from_value(json!({})).unwrap();
         let difference_params = serde_json::from_value(json!({})).unwrap();
         let source_query = serde_json::from_value(json!({
@@ -113,6 +115,7 @@ mod tests {
             "period_end": "2026-11-30"
         }))
         .unwrap();
+
         let mut executor = SnapshotExecutor::default();
         let errors = [
             service.item_page(&item_params, &actor, &mut executor).await.expect_err("必须拒绝"),

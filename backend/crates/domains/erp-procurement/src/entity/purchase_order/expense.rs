@@ -207,12 +207,14 @@ impl PurchaseExpenseOccurrence {
         if data.gross_amount != data.net_amount.checked_add(data.tax_amount) {
             return Err(Error::from("含税金额必须等于不含税金额加税额"));
         }
+
         if data.occurred_on > today {
             return Err(Error::from("发生日期不能晚于今天"));
         }
         if data.confirmed_by.trim().is_empty() {
             return Err(Error::from("确认人不能为空"));
         }
+
         let expense = data.expense.normalized()?;
         Ok(Self {
             base: BaseModel::new(id),
@@ -279,6 +281,7 @@ pub fn validate_change_expenses(
         .iter()
         .filter_map(|line| Some((line.expense?.expense_line_id.as_str(), line)))
         .collect::<std::collections::HashMap<_, _>>();
+
     let mut seen = std::collections::HashSet::new();
     for line in requested {
         let Some(expense) = line.expense else { continue };
@@ -287,6 +290,7 @@ pub fn validate_change_expenses(
         if !seen.insert(id) {
             return Err(Error::from("同一费用行在改单中重复出现，请刷新后重试"));
         }
+
         if original.expense.map(|value| value.category) != Some(expense.category) {
             return Err(Error::from("费用类别不能修改；需要其他类别请移除本行后另建费用采购单"));
         }
@@ -294,10 +298,12 @@ pub fn validate_change_expenses(
         if !same_inquiry_source(original_source, expense.inquiry_source.as_ref()) {
             return Err(Error::from("采购改单不能更换询价费用来源"));
         }
+
         if occurred.contains(id) && line.differs_from(original) {
             return Err(Error::from("已确认发生的费用行不能修改"));
         }
     }
+
     if seen.len() != by_id.len() {
         return Err(Error::from("原费用行须保留记录；不再需要的费用请把金额改为 0"));
     }
@@ -352,6 +358,7 @@ mod tests {
         assert_eq!(value.description, "第三方物流");
         assert_eq!(PurchaseExpenseCategory::PlatformTech.as_str(), "platform_tech");
         assert_eq!(PurchaseExpenseCategory::Other.label(), "其他");
+
         let blank = PurchaseExpenseDetail::new("e".into(), PurchaseExpenseCategory::Other, " ".into(), None);
         assert!(blank.is_err());
         let long =
@@ -375,10 +382,12 @@ mod tests {
                 .unwrap();
         let base = [state(&first, "100.00"), state(&second, "20.00")];
         let none = std::collections::HashSet::new();
+
         assert!(
             validate_change_expenses(&base, &[state(&first, "80.00"), state(&second, "0.00")], &none).is_ok()
         );
         assert!(validate_change_expenses(&base, &[state(&first, "80.00")], &none).is_err());
+
         let extra =
             PurchaseExpenseDetail::new("exp-3".into(), PurchaseExpenseCategory::Other, "新增".into(), None)
                 .unwrap();
@@ -386,6 +395,7 @@ mod tests {
         assert!(validate_change_expenses(&base, &added, &none).is_err());
         let duplicated = [state(&first, "100.00"), state(&first, "100.00")];
         assert!(validate_change_expenses(&base, &duplicated, &none).is_err());
+
         let recategorized =
             PurchaseExpenseDetail { category: PurchaseExpenseCategory::Storage, ..first.clone() };
         assert!(
@@ -396,6 +406,7 @@ mod tests {
             )
             .is_err()
         );
+
         let occurred = std::collections::HashSet::from(["exp-1".to_string()]);
         assert!(
             validate_change_expenses(&base, &[state(&first, "100.00"), state(&second, "0.00")], &occurred)
@@ -420,6 +431,7 @@ mod tests {
         assert_eq!(ok.expense_line_id, "exp-1");
         assert!(PurchaseExpenseOccurrence::new("o".into(), data("0.00", "0.00", "0.00"), today).is_err());
         assert!(PurchaseExpenseOccurrence::new("o".into(), data("106.00", "99.00", "6.36"), today).is_err());
+
         let future = BusinessDate::from_ymd(2026, 10, 13).unwrap();
         let early_today = BusinessDate::from_ymd(2026, 10, 12).unwrap();
         assert!(future > early_today);
@@ -439,12 +451,15 @@ mod tests {
             }),
             ..detail()
         };
+
         let mut revised = original.clone();
         revised.inquiry_source.as_mut().unwrap().feedback_round = 2;
         let base = [state(&original, "100.00")];
         assert!(validate_change_expenses(&base, &[state(&revised, "110.00")], &Default::default()).is_ok());
+
         let occurred = std::collections::HashSet::from([original.expense_line_id.clone()]);
         assert!(validate_change_expenses(&base, &[state(&revised, "100.00")], &occurred).is_err());
+
         revised.inquiry_source.as_mut().unwrap().allocation_id = "other".into();
         assert!(validate_change_expenses(&base, &[state(&revised, "100.00")], &Default::default()).is_err());
         revised.inquiry_source = None;

@@ -54,12 +54,14 @@ impl SupplierApiReadService {
         self.authorization
             .require(actor, &action_permission(action), AccessTarget::Operation, executor)
             .await?;
+
         let connection = self
             .db
             .supplier_api_connections()
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("连接不存在".into()))?;
+
         if let Some(registry) = self.reference_registry.as_ref() {
             registry.options(kind, &SupplierReferenceTarget::from(&connection)).await.map_err(|failure| {
                 Error::BusinessLogicError(format!("{}: {}", failure.code, failure.summary))

@@ -30,6 +30,7 @@ impl FundsAccess {
         let (_access, authorization) =
             self.resolve(actor, &receivable_permissions::ACCOUNT_DETAIL, executor).await?;
         self.require_visible_root(&authorization, id, executor).await?;
+
         let account = self
             .db
             .receivable_accounts()
@@ -45,6 +46,7 @@ impl FundsAccess {
         {
             return Err(Error::NotFound("应收往来子账不存在".into()));
         }
+
         authorization.deliver(executor).await?;
         Ok(())
     }

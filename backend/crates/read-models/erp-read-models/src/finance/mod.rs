@@ -48,6 +48,7 @@ mod command_tests {
         let payable = PayableReadService::new(db.clone());
         let receivable = ReceivableReadService::new(db);
         let mut executor = ReadExecutor::default();
+
         for result in [
             payable.payable_account_view("account".into(), true, &mut executor).await.map(|_| ()),
             payable.supplier_payment_detail_with_executor("payment", &mut executor).await.map(|_| ()),

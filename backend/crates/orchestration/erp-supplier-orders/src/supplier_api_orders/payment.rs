@@ -21,6 +21,7 @@ impl SupplierApiOrderProcess {
                 .defer("供应商已创建订单，但未取得批准范围内的准确应付金额，已阻断履约通知，请核查原订单");
             return self.persist(&mut execution).await;
         };
+
         let order = self
             .db
             .supplier_fulfillment_orders()
@@ -32,6 +33,7 @@ impl SupplierApiOrderProcess {
             execution.defer("供应商已明确取消原订单，已停止履约通知");
             return self.persist(&mut execution).await;
         }
+
         let reference = OrderReference {
             merchant_order_no: execution.base.id.clone(),
             external_order_no: order
@@ -43,6 +45,7 @@ impl SupplierApiOrderProcess {
         let action = freeze_action(&mut execution, "payment", &(&reference, &transaction_no, amount))?;
         let request = ConfirmPayment { action, order: reference, transaction_no, amount };
         self.claim(&mut execution, ApiOrderStage::PaymentUnknown).await?;
+
         match connector
             .payment_confirmation()
             .ok_or_else(|| missing_capability("履约通知"))?
@@ -57,6 +60,7 @@ impl SupplierApiOrderProcess {
             Ok(_) => execution.defer("供应商尚未确认履约通知，系统将查询原订单恢复，不重复通知"),
             Err(error) => record_failure(&mut execution, error, ApiOrderStage::ConfirmPayment),
         }
+
         self.persist(&mut execution).await
     }
 
@@ -85,6 +89,7 @@ impl SupplierApiOrderProcess {
             Ok(_) => execution.defer("原履约通知结果尚未确认，系统保留原动作并继续查询，不重复通知"),
             Err(error) => execution.defer(error.summary),
         }
+
         self.persist(&mut execution).await
     }
 }

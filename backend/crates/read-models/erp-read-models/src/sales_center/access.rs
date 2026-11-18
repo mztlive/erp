@@ -196,6 +196,7 @@ impl SalesAccess {
         } else {
             AccessTarget::record(&order.base.id)?
         };
+
         self.rbac.require(actor, permission, target, executor).await?;
         Ok(())
     }

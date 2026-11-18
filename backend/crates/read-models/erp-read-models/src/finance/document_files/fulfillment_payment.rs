@@ -69,6 +69,7 @@ impl BusinessFinanceFiles {
                     if expected.work_item_type != WorkItemType::FulfillmentOperation {
                         return Err(Error::NotFound("采购履约任务不存在或无权查看".into()));
                     }
+
                     let purchase_id = this
                         .purchase_source(
                             &expected.business_object_type,
@@ -77,6 +78,7 @@ impl BusinessFinanceFiles {
                         )
                         .await?;
                     let view = this.purchase_payment(&purchase_id, executor).await?;
+
                     this.rbac.validate(&access, executor).await?;
                     Ok::<_, Error>(view)
                 })
@@ -95,12 +97,14 @@ impl BusinessFinanceFiles {
             .find_by_purchase_order(purchase_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("采购应付信息暂不可用".into()))?;
+
         let revision = self.payment_revision(purchase_id, executor).await?;
         let code = split_encoded_payment_term_snapshot(&revision.payment_term_snapshot.payment_term_code)
             .payment_term_code;
         let payment_term_label = SupplierPaymentTerm::parse(&code)
             .map(SupplierPaymentTerm::label)
             .unwrap_or_else(|_| "付款条件待核对".into());
+
         let requests = self.payment_requests(purchase_id, &account.base.id, executor).await?;
         Ok(FulfillmentPaymentView {
             gross_amount: revision.gross_amount,
@@ -127,12 +131,14 @@ impl BusinessFinanceFiles {
             .current_revision_id
             .as_deref()
             .ok_or_else(|| Error::ConflictError("采购付款条件暂不可用".into()))?;
+
         let revision = self
             .db
             .purchase_order_revisions()
             .find_by_id(revision_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("采购生效版本不存在".into()))?;
+
         if &revision.purchase_order_id != purchase_id {
             return Err(Error::ConflictError("采购付款条件来源不匹配".into()));
         }

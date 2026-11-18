@@ -57,6 +57,7 @@ impl SupplierSettlementDraftSnapshot {
         if source.lines.is_empty() {
             return Err(Error::from("SOURCE_EVIDENCE_INCOMPLETE: 来源证据批次没有可结算行"));
         }
+
         let mut items = Vec::with_capacity(source.lines.len());
         let mut differences = Vec::new();
         let mut erp_amount = zero();
@@ -81,8 +82,10 @@ impl SupplierSettlementDraftSnapshot {
                     supplier_billed_tax_amount: line.supplier_billed_tax,
                 },
             )?;
+
             erp_amount = erp_amount.checked_add(line.erp_gross);
             supplier_amount = supplier_amount.checked_add(line.supplier_billed_gross);
+
             let difference_amount = line.supplier_billed_gross.checked_sub(line.erp_gross);
             if difference_amount != zero() {
                 differences.push(SupplierSettlementDifference::new(
@@ -100,6 +103,7 @@ impl SupplierSettlementDraftSnapshot {
             }
             items.push(item);
         }
+
         Ok(Self { items, differences, erp_amount, supplier_amount })
     }
 }
@@ -226,9 +230,11 @@ mod tests {
         assert_eq!(snapshot.items[0].quantity.to_decimal(), Quantity::from_str("1").unwrap().to_decimal());
         assert_eq!(snapshot.items[0].erp_calculated_amount, amount("113.00"));
         assert_eq!(snapshot.items[0].supplier_billed_amount, amount("114.00"));
+
         assert_eq!(snapshot.differences[0].base.id, "settlement-difference-1");
         assert_eq!(snapshot.differences[0].statement_item_id.as_ref(), "settlement-item-1");
         assert_eq!(snapshot.differences[0].difference_amount, amount("1.00"));
+
         assert_eq!(snapshot.erp_amount, amount("113.00"));
         assert_eq!(snapshot.supplier_amount, amount("114.00"));
     }
@@ -333,6 +339,7 @@ mod tests {
             || SupplierSettlementDifferenceId::new("other-difference-1"),
         )
         .unwrap();
+
         assert_ne!(first, second, "注入主键不同时快照身份不同");
         assert_eq!(first.erp_amount, second.erp_amount);
         assert_eq!(first.supplier_amount, second.supplier_amount);

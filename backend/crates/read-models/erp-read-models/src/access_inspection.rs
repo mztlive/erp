@@ -55,6 +55,7 @@ impl AccessInspectionReadService {
                         .inspect(&operator, &request, executor)
                         .await?;
                     let mut view = inspected.view;
+
                     if let Some(target) = inspected.actor {
                         if let Some(id) = &request.object_id {
                             this.sales_object(&operator, &target, &request.action, id, &mut view, executor)
@@ -85,6 +86,7 @@ impl AccessInspectionReadService {
     ) -> Result<()> {
         let service = SalesAccess::new(self.db.clone(), self.authorization.clone());
         service.require_object(operator, &sales_order_permissions::DETAIL, id, executor).await?;
+
         let permission =
             AccessPermission::parse(format!("sales_order:{action}")).map_err(IdentityError::from)?;
         match service.require_object(target, &permission, id, executor).await {

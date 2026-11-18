@@ -135,6 +135,7 @@ mod tests {
         assert_eq!(facts.org_unit_id, FactValue::Known(Some("procurement-org".into())));
         assert_eq!(facts.warehouse_id, FactValue::Known(Some("warehouse".into())));
         assert_eq!(facts.version, order.base.version.to_string());
+
         for missing in [None, Some("   \t".into())] {
             order.owner_user_id = missing;
             assert_eq!(PurchaseFacts::object(&order, "purchase_order").owner_id, FactValue::Known(None));
@@ -157,6 +158,7 @@ mod tests {
     async fn company_purchase_access_uses_current_facts_without_historical_participants() {
         let object = PurchaseFacts::object(&order(), "purchase_order");
         assert_eq!(object.history_participants, FactValue::Missing);
+
         let entries = [purchase_order::LIST, purchase_order::DETAIL, purchase_order::SAVE_DRAFT];
         let authorization = fixed_authorization(
             &entries,
@@ -169,6 +171,7 @@ mod tests {
         )
         .unwrap();
         let actor = AuditActor::new("other-buyer".into(), "other".into(), AccountKind::Admin);
+
         for entry in entries {
             authorization
                 .require(

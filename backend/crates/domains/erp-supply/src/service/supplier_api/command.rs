@@ -87,6 +87,7 @@ pub(super) fn apply_validated_changes(
                         "能力缺少与当前配置匹配的采购业务确认".to_string(),
                     ));
                 }
+
                 let mut updated = existing.clone();
                 updated.update(SupplierApiCapabilityUpdate {
                     status: Some(if change.enabled {

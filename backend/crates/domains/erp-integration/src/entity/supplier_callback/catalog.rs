@@ -30,6 +30,7 @@ impl SupplierCallbackReceipt {
             "price" => "price",
             _ => return Err(Error::ValidationError("非商品回调不能进入目录消费者".into())),
         };
+
         if self.refresh_hints.is_empty()
             || self.catalog_progress.hint_index > self.refresh_hints.len()
             || self.refresh_hints.iter().any(|hint| {
@@ -103,6 +104,7 @@ impl SupplierCallbackReceipt {
         {
             return Err(Error::ConflictError("商品回调检查点不能跳过或重复推进".into()));
         }
+
         self.catalog_progress.after_id = Some(id.into());
         if single {
             self.finish_catalog_hint()?;
@@ -183,10 +185,12 @@ mod tests {
             assert!(value.finish_catalog_hint().is_err());
             assert!(!value.settle_catalog(Instant::from_unix_secs(12)).unwrap());
             assert_eq!(value.status, "received");
+
             value.advance_catalog("catalog-1", kind == "sku").unwrap();
             if kind != "sku" {
                 value.finish_catalog_hint().unwrap();
             }
+
             value.processing_error = Some("previous failure".into());
             assert!(value.settle_catalog(Instant::from_unix_secs(20)).unwrap());
             assert_eq!(value.status, "applied");
@@ -204,11 +208,13 @@ mod tests {
         for n in 0..120 {
             value.advance_catalog(&format!("catalog-{n:04}"), false).unwrap();
         }
+
         let wire = serde_json::to_value(&value).unwrap();
         let mut restored: SupplierCallbackReceipt = serde_json::from_value(wire).unwrap();
         assert_eq!(restored.catalog_progress.after_id.as_deref(), Some("catalog-0119"));
         assert!(restored.advance_catalog("catalog-0119", false).is_err());
         assert!(restored.advance_catalog("catalog-0001", false).is_err());
+
         assert!(!restored.claim_catalog(Instant::from_unix_secs(309)).unwrap());
         assert!(restored.claim_catalog(Instant::from_unix_secs(310)).unwrap());
         restored.advance_catalog("catalog-0120", false).unwrap();
@@ -222,6 +228,7 @@ mod tests {
         wire.as_object_mut().unwrap().remove("catalog_progress");
         let restored: SupplierCallbackReceipt = serde_json::from_value(wire).unwrap();
         assert_eq!(restored.catalog_progress, CatalogCallbackProgress::default());
+
         let order = receipt("order", "order", "merchant_order");
         assert!(order.ensure_catalog().is_err());
         let mut mixed = receipt("status", "availability", "brand");
@@ -241,6 +248,7 @@ mod tests {
         assert!(!value.settle_catalog(Instant::from_unix_secs(2)).unwrap());
         value.advance_catalog("b", true).unwrap();
         assert!(value.settle_catalog(Instant::from_unix_secs(3)).unwrap());
+
         let mut mixed = receipt("catalog", "product", "sku");
         mixed.refresh_hints.push(receipt("order", "order", "merchant_order").refresh_hints.remove(0));
         assert!(mixed.ensure_catalog().is_err());
@@ -250,9 +258,11 @@ mod tests {
     fn price_batch_does_not_finish_after_first_sku() {
         let mut value = receipt("price", "price", "sku");
         value.refresh_hints.push(value.refresh_hints[0].clone());
+
         value.advance_catalog("sku-1", true).unwrap();
         assert!(!value.settle_catalog(Instant::from_unix_secs(3)).unwrap());
         assert_eq!(value.catalog_progress.hint_index, 1);
+
         value.advance_catalog("sku-2", true).unwrap();
         assert!(value.settle_catalog(Instant::from_unix_secs(4)).unwrap());
     }

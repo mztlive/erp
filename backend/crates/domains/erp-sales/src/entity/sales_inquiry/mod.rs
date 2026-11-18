@@ -68,6 +68,7 @@ impl SalesInquiry {
         validate_text(&data.sales_owner_user_id, "销售负责人", 128)?;
         validate_text(&data.business_org_unit_id, "业务组织", 128)?;
         data.draft.normalize(false)?;
+
         Ok(Self {
             base: BaseModel::new(id),
             inquiry_no,

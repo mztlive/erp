@@ -47,8 +47,10 @@ impl CustomerProfileProcess {
     ) -> Result<CustomerProfileMutationView> {
         req.validate_protocol()?;
         req.validate_structure(CustomerProfileOperation::Update)?;
+
         let replay = req.replay_context(CustomerProfileOperation::Update, Some(customer_id), actor.id())?;
         let fields = field_changes::permissions(&req, CustomerProfileOperation::Update);
+
         let fields_owned = fields.clone();
         let this = self.clone();
         let actor_owned = actor.clone();
@@ -68,9 +70,11 @@ impl CustomerProfileProcess {
                         )
                         .await?;
                     this.require_fields(&actor_owned, &fields_owned, executor).await?;
+
                     if let Some(view) = this.replay_command(&replay_owned, &actor_owned, executor).await? {
                         return Ok(view);
                     }
+
                     let prepared =
                         this.prepare_update(&customer_id, req, replay_owned, &actor_owned, executor).await?;
                     let result = prepared.result.clone();
@@ -79,6 +83,7 @@ impl CustomerProfileProcess {
                 })
             })
             .await;
+
         self.resolve_transaction(transaction, &replay, actor, &fields).await
     }
 
@@ -114,8 +119,10 @@ impl CustomerProfileProcess {
         party
             .ensure_version(req.expected_party_version.unwrap_or_default())
             .map_err(|error| Error::ConflictError(error.to_string()))?;
+
         let revision_no = self.db.party_revisions().next_revision_no(&account.party_id, executor).await?;
         let revision = update_roots(&mut party, &mut account, &req, revision_no, actor.id())?;
+
         let facts = self.prepare_fact_changes(&account.party_id, &req, actor.id(), executor).await?;
         PreparedUpdate::new(party, revision, account, facts, req, replay, actor)
     }
@@ -159,6 +166,7 @@ impl PreparedUpdate {
             },
         )?;
         let result = command_view(command.clone());
+
         let audit = actor.clone().resource_log(
             "customer_profile.update",
             "customer_profile",
@@ -170,10 +178,12 @@ impl PreparedUpdate {
     /// 将根修订、事实差异、幂等结果与审计写入同一事务。
     async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         ensure_identity_available(db, &self.party, &self.revision, executor).await?;
+
         db.party_revisions().create(&self.revision, executor).await?;
         db.parties().update(&mut self.party, executor).await?;
         db.customer_accounts().update(&mut self.account, executor).await?;
         self.facts.persist(db, executor).await?;
+
         db.customer_profile_commands().create(&self.command, executor).await.map_err(command_insert_error)?;
         persist_log(db, &self.audit, executor).await?;
         Ok(())
@@ -196,6 +206,7 @@ fn update_roots(
         actor,
     )?;
     party.stable.current_revision_id = Some(revision_id.to_string());
+
     let status = req.status.filter(|status| *status != account.stable.status);
     account.update(
         CustomerAccountUpdate {
@@ -204,6 +215,7 @@ fn update_roots(
         },
         actor,
     )?;
+
     Ok(PartyRevision::new(
         revision_id,
         PartyRevisionData {

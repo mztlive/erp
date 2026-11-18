@@ -238,6 +238,7 @@ mod tests {
                 ImportExecutionNextStep::StartApply,
             ),
         };
+
         ImportExecutionReceipt {
             action,
             result_status,
@@ -262,6 +263,7 @@ mod tests {
         )
         .structured_receipt("legacy_import_batch")
         .unwrap();
+
         ImportCommandReceipt::new(
             identity,
             ImportCommandResult::Execution {
@@ -287,10 +289,12 @@ mod tests {
             let decoded: ImportCommandReceipt = serde_json::from_str(&encoded).unwrap();
             assert_eq!(decoded, original);
             assert!(decoded.ensure_identity(&original.identity).is_ok());
+
             let mut damaged = original.clone();
             let ImportCommandResult::Execution { receipt, .. } = &mut damaged.result else { unreachable!() };
             receipt.result_status = ImportExecutionResultStatus::Unknown;
             assert!(damaged.validate().is_err());
+
             let mut damaged = original;
             damaged.schema_version = 2;
             assert!(damaged.validate().is_err());
@@ -303,9 +307,11 @@ mod tests {
         let changed = fact(ImportExecutionAction::RetryFailed);
         assert_eq!(original.base.id, changed.base.id);
         assert!(original.ensure_identity(&changed.identity).is_err());
+
         let mut foreign = original.identity.clone();
         foreign.scope_id = Some("foreign".into());
         assert!(original.ensure_identity(&foreign).is_err());
+
         let mut damaged = original;
         damaged.identity.schema_version = 2;
         assert!(damaged.validate().is_err());

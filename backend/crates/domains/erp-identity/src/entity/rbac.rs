@@ -199,6 +199,7 @@ impl RoleIdSet {
             }
             role_ids.push(id);
         }
+
         role_ids.sort();
         Ok(Self::from(role_ids))
     }
@@ -408,6 +409,7 @@ mod tests {
                 .unwrap();
 
         assert_eq!(role_ids.iter().map(RoleId::as_str).collect::<Vec<_>>(), vec!["role-a", "role-b"]);
+
         assert!(RoleIdSet::from_casbin_role_keys(["role:bad/id"]).is_err());
         assert!(RoleIdSet::from_casbin_role_keys(["role: role-a"]).is_err());
         assert!(RoleIdSet::from_casbin_role_keys(["role:role-a "]).is_err());

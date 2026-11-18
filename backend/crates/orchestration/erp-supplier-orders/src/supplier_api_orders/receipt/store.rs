@@ -45,6 +45,7 @@ impl SupplierApiOrderProcess {
             .as_ref()
             .ok_or_else(|| Error::BusinessLogicError("原供应商真实物流子单尚未核实，不能通知收到".into()))?;
         tree.validate(&snapshot.lines)?;
+
         let loaded = facts::load(&self.db, execution, &tracking, executor).await?;
         let evidence = ReceiptEvidence::from_facts(execution, &tracking, &snapshot.lines, &loaded.actual)?;
         Ok((loaded, evidence))
@@ -72,20 +73,24 @@ impl SupplierApiOrderProcess {
                             "原执行或实收依据已变化，请查询原结果后核验".into(),
                         ));
                     }
+
                     let (mut loaded, evidence) = process.load_receipt_evidence(&current, executor).await?;
                     let request = current_receipt_request(&current, &target, &evidence)?;
                     if !current.begin_receipt_confirmation(&request)? {
                         return Err(Error::ConflictError("原收货通知已登记，不能重复发送".into()));
                     }
+
                     loaded.fence(&process.db, executor).await?;
                     if let Some(mut tracking) =
                         process.db.supplier_order_tracking().find_by_id(&current.base.id, executor).await?
                     {
                         process.db.supplier_order_tracking().update(&mut tracking, executor).await?;
                     }
+
                     current.receipt_next_run_at = Some(super::later());
                     current.receipt_blocker = Some("原收货通知已经登记，等待查询实际结果".into());
                     process.db.supplier_api_order_executions().update(&mut current, executor).await?;
+
                     receipt_audit(&process.db, &current.base.id, executor).await?;
                     Ok((current, request))
                 })
@@ -134,6 +139,7 @@ fn current_receipt_request(
         tree.leaves().into_iter().find(|node| node.external_order_no == order.external_order_no).ok_or_else(
             || Error::BusinessLogicError("原目标已经拆分或不是当前物流子单，请先核实原关系".into()),
         )?;
+
     let lines = leaf
         .lines
         .iter()

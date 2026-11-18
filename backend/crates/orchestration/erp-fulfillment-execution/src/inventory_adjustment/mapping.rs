@@ -72,6 +72,7 @@ pub(super) fn stock_adjustment_start_digest(
         .map(|balance| (balance.balance_id.clone(), balance.expected_version.to_string()))
         .collect::<Vec<_>>();
     balances.sort();
+
     // 固定顺序 JSON tuple 负责字符串转义与字段边界。不得复用 U+001F/NULL
     // 拼接格式：note、ID 等外部文本可合法包含这些字符，拼接会产生碰撞。
     let canonical = serde_json::to_string(&(
@@ -125,6 +126,7 @@ pub(super) fn stock_adjustment_start_identity(
     if req.resubmission_reason.is_some() {
         return Ok(identity);
     }
+
     let identity = identity
         .with_legacy(legacy_start_receipt_identity(
             process_kind.as_str(),

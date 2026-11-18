@@ -89,10 +89,12 @@ mod tests {
                 .unwrap();
         assert_eq!(first.as_str(), second.as_str(), "同密钥同明文指纹稳定");
         assert_eq!(first.as_str().len(), 64);
+
         let rotated =
             electronic_recipient_fingerprint("recipient-plain-001", b"fulfillment-fingerprint-key-v2")
                 .unwrap();
         assert_ne!(first.as_str(), rotated.as_str(), "密钥版本轮换必须改变指纹");
+
         let other_plain =
             electronic_recipient_fingerprint("recipient-plain-002", b"fulfillment-fingerprint-key-v1")
                 .unwrap();

@@ -47,10 +47,12 @@ impl CatalogService {
             .authorization
             .require(actor, &internal::CATALOG_ADOPTION, AccessTarget::Operation, executor)
             .await?;
+
         let unit = self.source_unit(name, actor, executor).await?;
         if unit.base.id != expected_id {
             return Err(Error::ConflictError("计量单位匹配结果已变化，请重新匹配后入库".into()));
         }
+
         if self.db.unit_of_measures().find_by_id(&unit.base.id, executor).await?.is_none() {
             self.db.unit_of_measures().create(&unit, executor).await?;
             let audit = self.audit.resource_log(

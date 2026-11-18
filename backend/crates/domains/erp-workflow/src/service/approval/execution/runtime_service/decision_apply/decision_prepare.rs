@@ -178,6 +178,7 @@ async fn load_open_decision_instance(
     if instance.process_kind != process_kind_of(document_type) {
         return Err(Error::ConflictError("审批实例流程种类与单据类型不一致".to_string()));
     }
+
     let snapshot = db
         .approval_subject_snapshots()
         .find_by_process_instance_id(instance_id.as_ref(), executor)
@@ -224,11 +225,13 @@ async fn load_open_decision_tasks(
     ) {
         return Err(Error::ConflictError("APPROVAL_RESPONSIBILITY_CONFLICT".to_string()));
     }
+
     let open_tasks =
         db.work_items().open_approval_tasks_for_execution(&loaded.execution_id, executor).await?;
     if open_tasks.is_empty() || !open_tasks.iter().any(|task| task.base.id == command.work_item_id) {
         return Err(Error::from_approval_code(ErrorCode::ApprovalTaskNotOpen));
     }
+
     let instance_assignee = db
         .bpm_workflow()
         .find_assignee_for_node(&subject.instance_id, &loaded.execution.node_key, executor)
@@ -326,6 +329,7 @@ async fn revalidate_decision_eligibilities(
     let DecisionServices { authorization, identity_service, db, rbac } = *services;
     let separation_policy = process_required_separation_policy(loaded.document_type)?;
     let graph = load_frozen_definition_graph(db, loaded, executor).await?;
+
     let actor_name = loaded
         .execution
         .participants()
@@ -349,9 +353,11 @@ async fn revalidate_decision_eligibilities(
         executor,
     )
     .await?;
+
     if command.decision == ApprovalDecision::Reject {
         return Ok((graph, current_eligibility.clone(), current_eligibility));
     }
+
     let decision_target = graph
         .decision_target_node_key(&loaded.execution.node_key, command.decision)
         .map_err(map_runtime_graph_error)?;
@@ -475,13 +481,16 @@ fn finish_prepared_open_decision(
     let subject_version = writes.instance.subject_version.to_string();
     let business_object_id = writes.instance.subject.subject_id().to_string();
     let document_type_label = loaded.document_type.label().to_string();
+
     let should_finalize = writes.commit == CommitRequired::TerminalApproved;
     let action_context =
         decision_action_context(command, loaded, &actor_id, &business_object_id, &subject_version)?;
+
     let new_task_ids: Vec<String> = writes.create_tasks.iter().map(|_| next_id()).collect();
     let list_projection =
         list_projection_from_writes(&writes, loaded.execution_id.as_ref(), command.reason.clone(), now);
     let audit = decision_audit(actor, command, &loaded.instance_id)?;
+
     Ok(PreparedOpenDecision {
         writes,
         should_finalize,

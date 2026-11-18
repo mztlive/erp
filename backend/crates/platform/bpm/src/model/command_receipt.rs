@@ -315,6 +315,7 @@ mod tests {
         let receipt = receipt();
         let document = bson::serialize_to_document(&receipt).expect("命令收据必须可序列化");
         assert_eq!(document.keys().filter(|key| *key == "created_at").count(), 1);
+
         let decoded: ApprovalCommandReceipt = bson::deserialize_from_document(document)
             .expect("历史单 created_at 字段必须由 BaseModel 唯一读取");
         assert_eq!(decoded, receipt);
@@ -336,6 +337,7 @@ mod tests {
         };
         let raw =
             bson::serialize_to_raw_document_buf(&legacy).expect("历史命令收据必须按 Mongo raw writer 序列化");
+
         let created_at_count = raw
             .iter()
             .map(|entry| entry.expect("raw BSON 字段必须有效"))

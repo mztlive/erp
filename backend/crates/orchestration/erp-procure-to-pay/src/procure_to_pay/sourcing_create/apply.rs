@@ -46,8 +46,10 @@ pub(super) async fn create_from_sourcing_apply(
     if let Some(result) = replay_sourcing(db, input.rbac, replay, executor).await? {
         return Ok(result);
     }
+
     let (task, order, plan, sequences) = prepare_plan(db, &input, executor).await?;
     authorize_planned_orders(db, ports, &input, &order, &plan, executor).await?;
+
     let stock_reservations = reserve_stock(db, ports, &input, &task, &order, &plan, executor).await?;
     let writes = SourcingWriteContext { db, ports, input: &input };
     let orders = writes.create_orders(&task, &order, &plan, sequences, executor).await?;
@@ -70,6 +72,7 @@ async fn prepare_plan(
     )
     .await?;
     let mut order = load_effective_sales_order(db, input.sales_order_id, executor).await?;
+
     let (groups, stock_groups) =
         sourcing_groups_for_order(db, &order, task.responsibility_scope_ids(), executor).await?;
     let plan = SourcingPlan::plan(
@@ -81,6 +84,7 @@ async fn prepare_plan(
     )
     .map_err(map_sourcing_plan_error)?;
     let sequences = SourcingEventSequencePlan::new(plan.purchase_plans().len())?;
+
     order.advance_procurement_guard(input.actor.id())?;
     db.sales_orders().update(&mut order, executor).await?;
     Ok((task, order, plan, sequences))
@@ -99,6 +103,7 @@ async fn reserve_stock(
     let latest_stock_groups =
         stock_basis_groups_for_order(db, order, task.responsibility_scope_ids(), executor).await?;
     plan.validate_against_latest_stock(&latest_stock_groups).map_err(map_sourcing_plan_error)?;
+
     let persisted = persist_stock_allocations(
         db,
         plan.stock_plans(),
@@ -109,6 +114,7 @@ async fn reserve_stock(
         executor,
     )
     .await?;
+
     create_stock_delivery_drafts(db, ports, input.sales_order_id, &persisted, executor).await?;
     Ok(persisted.into_iter().map(|allocation| allocation.result).collect())
 }
@@ -137,6 +143,7 @@ async fn persist_order(
         Some(basis_id.as_str()),
         &input.req.idempotency_key,
     )?;
+
     let command = CreateBasisCommand {
         sales_order_id: input.sales_order_id,
         req: &item_req,
@@ -200,6 +207,7 @@ impl SourcingWriteContext<'_, '_> {
         let (latest_groups, latest_facts) =
             basis_groups_and_facts(db, order, task.responsibility_scope_ids(), executor).await?;
         plan.validate_against_latest_sourcing(&latest_groups).map_err(map_sourcing_plan_error)?;
+
         let mut orders = Vec::with_capacity(plan.purchase_plans().len());
         for (draft, sequence) in plan.purchase_plans().iter().zip(sequences.orders()) {
             let latest = latest_groups
@@ -213,6 +221,7 @@ impl SourcingWriteContext<'_, '_> {
                 selected_lines: &selected_lines,
                 facts: &latest_facts,
             };
+
             orders.push(persist_order(db, ports, input, &verified, draft, sequence?, executor).await?);
         }
         Ok(orders)
@@ -237,6 +246,7 @@ impl SourcingWriteContext<'_, '_> {
             executor,
         )
         .await?;
+
         let status = db
             .work_items()
             .find_by_id(&input.req.work_item_id, executor)
@@ -245,6 +255,7 @@ impl SourcingWriteContext<'_, '_> {
             .status;
         let frozen_status = sourcing_work_item_status(status)?;
         let response_status = frozen_status.as_str().to_string();
+
         let receipt = SourcingReceipt {
             orders: orders
                 .iter()
@@ -258,6 +269,7 @@ impl SourcingWriteContext<'_, '_> {
             work_item_status: frozen_status,
         };
         write_sourcing_receipt(db, input, sales_order, &receipt, sequences.main(), executor).await?;
+
         Ok(CreatePurchaseOrdersFromSourcingResult {
             orders,
             stock_reservations,

@@ -51,6 +51,7 @@ pub(super) async fn post(
         .find_by_id(allocation.purchase_order_revision_line_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("履约成本的采购版本明细不存在".into()))?;
+
     let prepared = prepare(FulfillmentCostFact {
         purchase_order_id: source.purchase.base.id.clone(),
         allocation_id: allocation.base.id.clone(),

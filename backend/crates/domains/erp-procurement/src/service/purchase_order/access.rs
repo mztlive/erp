@@ -195,6 +195,7 @@ where
         Err(error) => return Err(error),
         Ok(()) => {},
     }
+
     load(executor).await?.ok_or_else(|| Error::NotFound("采购单不存在或无权操作".into()))
 }
 
@@ -341,6 +342,7 @@ mod tests {
             let stages = scope.stages.clone();
             let mut executor = SnapshotExecutor::default();
             let boundary = executor.boundary().unwrap();
+
             let loaded =
                 authorized_order(&scope, &actor(), entry, "purchase-1", &mut executor, move |executor| {
                     Box::pin(async move {
@@ -351,6 +353,7 @@ mod tests {
                 })
                 .await
                 .unwrap();
+
             assert_eq!(loaded, order());
             assert_eq!(*scope.stages.lock().unwrap(), ["require", "load"]);
         }
@@ -394,6 +397,7 @@ mod tests {
         )
         .await
         .unwrap_err();
+
         let denied = authorized_order(
             &ObjectAccess::new(Outcome::Denied),
             &actor(),
@@ -404,6 +408,7 @@ mod tests {
         )
         .await
         .unwrap_err();
+
         assert!(matches!(missing, Error::NotFound(message) if message == "采购单不存在或无权操作"));
         assert!(matches!(denied, Error::NotFound(message) if message == "采购单不存在或无权操作"));
     }
@@ -442,9 +447,11 @@ mod tests {
         );
         let mut executor = SnapshotExecutor::default();
         let entry = &sales_order::DETAIL;
+
         let record = scope.require_record_entry(&actor(), entry, "purchase-1", &mut executor).await;
         let query = scope.resolve(&actor(), entry, &mut executor).await;
         let candidate = scope.require_entry(&actor(), entry, &order(), &mut executor).await;
+
         for result in [record, query.map(|_| ()), candidate] {
             assert!(
                 matches!(result, Err(Error::ValidationError(message)) if message == "采购端口只接受采购单入口")

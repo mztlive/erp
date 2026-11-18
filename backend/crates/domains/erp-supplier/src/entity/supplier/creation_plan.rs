@@ -229,6 +229,7 @@ pub fn plan_supplier_creation(
     inputs: SupplierCreationInputs,
 ) -> erp_core::Result<SupplierCreationPlan> {
     validate_creation_cardinality(&ids, &inputs)?;
+
     let (party_seed, supplier, commercial_profile) = build_creation_head(&ids, &inputs)?;
     let (capabilities, capability_revisions, capability_ids) =
         build_creation_capabilities(&ids.supplier_id, ids.capability_ids, &inputs)?;
@@ -280,6 +281,7 @@ fn validate_creation_cardinality(
         })
         .collect();
     validate_profile_selection(&inputs.capability_codes, &selections)?;
+
     if ids.capability_ids.len() != inputs.capability_codes.len() {
         return Err(erp_core::Error::from("供应商能力 ID 与能力代码数量不一致"));
     }
@@ -316,6 +318,7 @@ fn build_creation_head(
         change_reason: inputs.change_reason.clone(),
         actor_id: inputs.actor_id.clone(),
     };
+
     let supplier = SupplierAccount::new(
         ids.supplier_id.clone(),
         SupplierAccountData {
@@ -329,6 +332,7 @@ fn build_creation_head(
         },
         inputs.actor_id.clone(),
     )?;
+
     let commercial_profile = SupplierCommercialProfileRevision::new(
         ids.commercial_profile_id.clone(),
         SupplierCommercialProfileRevisionData {
@@ -385,6 +389,7 @@ fn build_creation_capabilities(
             capability_id.clone(),
             revision_id,
         )?;
+
         capability_ids.insert(code.as_str().to_string(), capability_id);
         capabilities.push(capability);
         capability_revisions.push(revision);
@@ -437,6 +442,7 @@ fn build_creation_qualifications(
                 revision_id: allocated.revision_id,
                 link_ids: allocated.link_ids,
             })?;
+
         out.push(qualification);
         revisions.push(revision);
         links.extend(qualification_links);
@@ -577,6 +583,7 @@ mod tests {
     #[test]
     fn creation_plan_builds_first_revisions_and_links() {
         let plan = plan_supplier_creation(test_ids(true), test_inputs()).unwrap();
+
         assert_eq!(plan.party_seed.party_id.to_string(), "party-1");
         assert_eq!(plan.party_seed.party_revision_id.to_string(), "party-rev-1");
         assert_eq!(plan.party_seed.party_no, "PARTY-1");
@@ -585,14 +592,18 @@ mod tests {
             Some(plan.commercial_profile.base.id.as_str())
         );
         assert_eq!(plan.commercial_profile.revision.revision_no, 1);
+
         assert_eq!(plan.capabilities.len(), 1);
         assert_eq!(plan.capability_revisions.len(), 1);
         assert_eq!(plan.capability_ids.get("physical").map(ToString::to_string).as_deref(), Some("cap-1"));
+
         assert_eq!(plan.qualifications.len(), 1);
         assert_eq!(plan.qualification_revisions.len(), 1);
         assert_eq!(plan.qualification_links.len(), 1);
+
         assert!(plan.rating.is_some());
         assert_eq!(plan.rating.as_ref().unwrap().revision.revision_no, 1);
+
         assert_eq!(plan.supplier.maintainer_user_id, "buyer-1");
         assert_eq!(plan.capabilities[0].owner_user_id, "buyer-1");
         assert_ne!(plan.capabilities[0].owner_user_id, plan.supplier.stable.created_by);
@@ -659,6 +670,7 @@ mod tests {
     fn creation_plan_rejects_rating_input_id_mismatch() {
         let inputs = test_inputs();
         assert!(plan_supplier_creation(test_ids(false), inputs).is_err());
+
         let mut no_rating = test_inputs();
         no_rating.rating = None;
         assert!(plan_supplier_creation(test_ids(true), no_rating).is_err());

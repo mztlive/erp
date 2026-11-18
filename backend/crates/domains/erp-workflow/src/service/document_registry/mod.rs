@@ -240,11 +240,13 @@ impl DocumentRegistryService {
                             executor,
                         )
                         .await?;
+
                     if let Some(map_id) = external_identity_map_id
                         && !facts.external_identity_map_exists(&map_id, executor).await?
                     {
                         return Err(Error::NotFound("外部身份映射不存在".to_string()));
                     }
+
                     let existing = db.business_documents().register(&doc_for_tx, executor).await?;
                     if existing.is_none() {
                         audit_port.persist(&audit, executor).await?;
@@ -253,10 +255,10 @@ impl DocumentRegistryService {
                 })
             })
             .await?;
+
         if let Some(existing) = existing {
             return Ok(existing.into());
         }
-
         Ok(doc.into())
     }
 
@@ -311,6 +313,7 @@ impl DocumentRegistryService {
         executor: &mut dyn Executor,
     ) -> Result<PageView<BusinessDocumentView>> {
         self.require_read_access(actor, &document_registry::BUSINESS_DOCUMENT_LIST, executor).await?;
+
         params.validate()?;
         let query = params.normalized()?;
         let filter = BusinessDocumentFilter {
@@ -322,6 +325,7 @@ impl DocumentRegistryService {
             sort_ascending: matches!(query.paging.sort_dir, dto::SortDir::Asc),
         };
         let page = self.db.business_documents().search_business_documents(&filter, executor).await?;
+
         // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结，无法命名），
         // 此处按字段映射为响应视图，避免把仓储类型泄漏到接口层。
         let items = page
@@ -336,7 +340,6 @@ impl DocumentRegistryService {
                 created_at: row.created_at,
             })
             .collect();
-
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
@@ -428,6 +431,7 @@ impl DocumentRegistryService {
             "workflow_action",
             action.base.id.clone(),
         )?;
+
         let action_for_tx = action.clone();
         let audit_port = Arc::clone(&self.audit);
         self.write_with_audit(actor, &document_registry::WORKFLOW_ACTION_CREATE, move |tx_db, executor| {
@@ -435,6 +439,7 @@ impl DocumentRegistryService {
                 if !tx_db.business_documents().exists_by_id(&action_for_tx.document_id, executor).await? {
                     return Err(Error::NotFound("业务单据未注册".to_string()));
                 }
+
                 tx_db.workflow_actions().create(&action_for_tx, executor).await?;
                 audit_port.persist(&audit, executor).await?;
                 Ok::<(), crate::error::Error>(())
@@ -494,6 +499,7 @@ impl DocumentRegistryService {
         executor: &mut dyn Executor,
     ) -> Result<PageView<WorkflowActionView>> {
         self.require_read_access(actor, &document_registry::WORKFLOW_ACTION_LIST, executor).await?;
+
         params.validate()?;
         let query = params.normalized()?;
         let filter = WorkflowActionFilter {
@@ -506,6 +512,7 @@ impl DocumentRegistryService {
             sort_ascending: matches!(query.paging.sort_dir, dto::SortDir::Asc),
         };
         let page = self.db.workflow_actions().search_workflow_actions(&filter, executor).await?;
+
         let items = page
             .items
             .into_iter()
@@ -521,7 +528,6 @@ impl DocumentRegistryService {
                 created_at: row.created_at,
             })
             .collect();
-
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
@@ -605,6 +611,7 @@ impl DocumentRegistryService {
             "document_relation",
             relation.base.id.clone(),
         )?;
+
         let relation_for_tx = relation.clone();
         let audit_port = Arc::clone(&self.audit);
         self.write_with_audit(actor, &document_registry::DOCUMENT_RELATION_CREATE, move |tx_db, executor| {
@@ -614,6 +621,7 @@ impl DocumentRegistryService {
                 if tx_db.business_documents().existing_ids(&document_ids, executor).await?.len() != 2 {
                     return Err(Error::NotFound("业务单据未注册".to_string()));
                 }
+
                 tx_db.document_relations().create(&relation_for_tx, executor).await?;
                 audit_port.persist(&audit, executor).await?;
                 Ok::<(), crate::error::Error>(())
@@ -730,6 +738,7 @@ impl DocumentRegistryService {
             "document_participant",
             participant.base.id.clone(),
         )?;
+
         let participant_for_tx = participant.clone();
         let audit_port = Arc::clone(&self.audit);
         self.write_with_audit(
@@ -744,6 +753,7 @@ impl DocumentRegistryService {
                     {
                         return Err(Error::NotFound("业务单据未注册".to_string()));
                     }
+
                     participant_access::append(tx_db, &participant_for_tx, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<(), crate::error::Error>(())

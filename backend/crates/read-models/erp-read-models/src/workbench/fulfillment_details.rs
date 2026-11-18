@@ -55,12 +55,14 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let rows = self.db.purchase_receipts().list_active_by_ids(&ids, executor).await?;
         let receipt_ids = ids.iter().cloned().map(Into::into).collect::<Vec<_>>();
         let lines = self.db.fulfillment().receipt_lines_by_receipt_ids(&receipt_ids, executor).await?;
         let names = self.receipt_line_names(&lines, executor).await?;
         let warehouse_ids = rows.iter().map(|r| r.warehouse_id.to_string()).collect::<Vec<_>>();
         let warehouses = self.warehouse_labels(&warehouse_ids, executor).await?;
+
         for row in rows {
             let fields = receipt_fields(&row, &warehouses);
             let visible = lines
@@ -84,14 +86,17 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let rows = self.db.deliveries().list_active_by_ids(&ids, executor).await?;
         let delivery_ids = ids.iter().cloned().map(Into::into).collect::<Vec<_>>();
         let lines = self.db.fulfillment().delivery_lines_by_delivery_ids(&delivery_ids, executor).await?;
+
         let sales_ids = rows.iter().map(|r| r.sales_order_id.to_string()).collect::<Vec<_>>();
         let names = self.sales_line_names(&sales_ids, executor).await?;
         let warehouse_ids =
             rows.iter().filter_map(|r| r.warehouse_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();
         let warehouses = self.warehouse_labels(&warehouse_ids, executor).await?;
+
         self.enrich_delivery_briefs(&rows, &lines, facts, executor).await?;
         for row in rows {
             let fields = delivery_fields(&row, &warehouses);
@@ -116,9 +121,11 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let rows = self.db.electronic_deliveries().list_active_by_ids(&ids, executor).await?;
         let purchase_ids = rows.iter().map(|r| r.purchase_order_id.to_string()).collect::<Vec<_>>();
         let names = self.purchase_sales_line_names(&purchase_ids, executor).await?;
+
         for row in rows {
             let fields = electronic_fields(&row);
             let line = item_line(names.get(row.sales_order_line_id.as_ref()), 1, &row.quantity);
@@ -138,9 +145,11 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let rows = self.db.service_fulfillments().list_active_by_ids(&ids, executor).await?;
         let purchase_ids = rows.iter().map(|r| r.purchase_order_id.to_string()).collect::<Vec<_>>();
         let names = self.purchase_sales_line_names(&purchase_ids, executor).await?;
+
         for row in rows {
             let fields = service_fields(&row);
             let line = item_line(names.get(row.sales_order_line_id.as_ref()), 1, &row.quantity);
@@ -221,6 +230,7 @@ impl WorkbenchFactsReader<'_> {
             .into_iter()
             .map(|r| (r.base.id, r.name))
             .collect::<HashMap<_, _>>();
+
         Ok(warehouses
             .into_iter()
             .map(|w| {
@@ -421,6 +431,7 @@ mod tests {
         let second: DeliveryLine = entity(json!({
             "delivery_id":"internal-id", "line_no":2, "sales_order_line_id":"line-2", "quantity":"1"
         }));
+
         assert_eq!(
             delivery_line(&row, &first, &Names::new()).due_label.as_deref(),
             Some("顺丰 · SF-001；货拉拉 · LL-001")
@@ -455,13 +466,16 @@ mod tests {
             "service_location_encrypted":"private", "service_location_fingerprint":"hash", "completion_note":"已完成服务"});
         let mut electronic: ElectronicDelivery = entity(fields.clone());
         let mut service: ServiceFulfillment = entity(fields);
+
         assert!(electronic_fields(&electronic).iter().any(|s| s.label == "交付结果" && s.value == "未登记"));
         assert!(electronic_fields(&electronic).iter().any(|s| s.label == "交付时间" && s.value == "未登记"));
         assert!(service_fields(&service).iter().any(|s| s.label == "履约结果" && s.value == "未登记"));
+
         electronic.status = ElectronicDeliveryState::Confirmed;
         service.status = ServiceFulfillmentState::Confirmed;
         assert!(electronic_fields(&electronic).iter().any(|s| s.label == "交付结果" && s.value == "成功"));
         assert!(service_fields(&service).iter().any(|s| s.label == "完成说明" && s.value == "已完成服务"));
+
         let evidence = service_fields(&service).into_iter().find(|s| s.label == "履约凭证").unwrap();
         assert_eq!(evidence.value, "查看凭证");
         assert_eq!(evidence.object_id.as_deref(), Some("file-id"));

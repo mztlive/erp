@@ -83,6 +83,7 @@ fn receipt_reversal_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<Recei
             mismatch_message: "回款冲正单审批适配器登记不完整",
         },
     )?;
+
     Ok(ReceiptReversalAdapter {
         document_type: spec.document_type,
         process_kind: spec.process_kind,
@@ -264,6 +265,7 @@ mod receipt_reversal_tests {
         let adapter = receipt_reversal_adapter().expect("回款冲正单必须可登记");
         assert_eq!(adapter.document_type, DocumentType::ReceiptReversal);
         assert_eq!(adapter.process_kind.as_str(), "receipt_reversal");
+
         assert_eq!(
             receipt_reversal_subject_ref("rr-1").expect("主体引用必须可构造").subject_kind(),
             "receipt_reversal"
@@ -274,15 +276,18 @@ mod receipt_reversal_tests {
             ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
         );
         assert_eq!(adapter.subject_snapshot_builder, "build_receipt_reversal_snapshot");
+
         assert_eq!(adapter.on_approval_start, ApprovalDomainAction::ReceiptReversalSubmit);
         assert_eq!(adapter.on_final_approve, ApprovalDomainAction::ReceiptReversalPost);
         assert_eq!(adapter.cancel_action, ApprovalDomainAction::ReceiptReversalCancelApproval);
+
         assert_eq!(adapter.owner_role, "receipt_reversal_approver");
         assert_eq!(
             adapter.owner_organization_snapshot,
             OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         );
         assert_eq!(adapter.read_scope, AdapterReadScope::DocumentOrganizationAndCreator);
+
         assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
     }
@@ -294,6 +299,7 @@ mod receipt_reversal_tests {
         start_receipt_reversal_approval(&mut reversal).unwrap();
         assert_eq!(reversal.status, ReceiptReversalStatus::InApproval);
         assert_eq!(reversal.approval_subject_version, 1);
+
         execute_receipt_reversal_domain_action(
             &mut reversal,
             ApprovalDomainAction::ReceiptReversalCancelApproval,
@@ -343,6 +349,7 @@ mod receipt_reversal_tests {
             Instant::from_unix_secs(10),
         )
         .unwrap();
+
         assert_eq!(payload.document_no, "RR-1");
         assert_eq!(payload.responsible_org_id, "party-1");
         assert_eq!(payload.submitted_by, "user-1");
@@ -350,6 +357,7 @@ mod receipt_reversal_tests {
         assert_eq!(payload.line_count, 1);
         assert!(payload.total_quantity.is_none());
         assert!(matches!(payload.counterparty, Some(ApprovalSubjectCounterparty::Customer { .. })));
+
         assert!(
             build_receipt_reversal_snapshot(&reversal, " ", None, "user-1", Instant::from_unix_secs(10))
                 .is_err()

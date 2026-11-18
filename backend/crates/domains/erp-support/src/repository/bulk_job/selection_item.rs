@@ -71,6 +71,7 @@ impl BulkSelectionItemRepositoryExt for persistence_core::Repository<'_, BulkSel
         if let Some(result_status) = result_status {
             filter.insert("result_status", result_status.as_str());
         }
+
         let options = FindOptions::builder()
             .sort(doc! { "created_at": 1 })
             .skip((page.max(1) - 1) * u64::from(page_size))
@@ -78,9 +79,9 @@ impl BulkSelectionItemRepositoryExt for persistence_core::Repository<'_, BulkSel
             .projection(selection_item_projection())
             .build();
         let collection = self.collection().clone_with_type::<BulkSelectionItemRow>();
+
         let items = mongo_ops::find_many(&collection, filter.clone(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter, executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 }

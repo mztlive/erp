@@ -100,10 +100,12 @@ pub(crate) fn build_purchase_order_start_input(
         receipt,
         now,
     } = input;
+
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
+
     let plan = plan_purchase_approval_start(&graph, binding.approval_definition_version, organization_id)?;
     Ok(StartExecutionInput {
         resubmission_reason,
@@ -148,6 +150,7 @@ pub(crate) fn plan_purchase_approval_start(
             })
         })
         .collect::<Result<Vec<_>>>()?;
+
     plan_start(StartPlanInput { graph, expected_definition_version, bindings }).map_err(map_start_plan_error)
 }
 
@@ -308,10 +311,12 @@ pub(crate) mod tests {
     fn purchase_order_start_freezes_all_nodes_with_bpm_plan() {
         let graph = two_node_graph();
         let built = build_purchase_order_start_input(input(graph, &binding(1), "org-1")).unwrap();
+
         assert_eq!(built.bindings.len(), 2);
         assert_eq!(built.bindings[0].node_key, "n1");
         assert_eq!(built.bindings[0].participant.as_str(), "u1");
         assert_eq!(built.bindings[1].node_key, "n2");
+
         assert_eq!(built.command.current_eligibility.participant().as_str(), "u1");
         assert_eq!(built.command.graph.definition.definition_version, 1);
         assert_eq!(built.process_kind, process_kind_of(DocumentType::PurchaseOrder));
@@ -354,6 +359,7 @@ pub(crate) mod tests {
             built.command.current_eligibility.blocked_code(),
             Some(ApprovalBlockerCode::ApproverCannotReadSubject)
         );
+
         let error = prepare_start(built).unwrap_err();
         assert!(
             matches!(error, erp_workflow::Error::ValidationError(message) if message.contains("启动时全部审批人必须有效"))
@@ -382,6 +388,7 @@ pub(crate) mod tests {
             at(10),
         )
         .unwrap();
+
         let mut built =
             build_purchase_order_start_input(input(two_node_graph(), &binding(1), "org-1")).unwrap();
         built.command.receipt = Some(receipt);
@@ -393,6 +400,7 @@ pub(crate) mod tests {
     fn start_plan_error_maps_to_conflict() {
         let error = map_start_plan_error(EngineError::InvalidCommand("定义版本与冻结绑定不一致"));
         assert!(matches!(error, Error::ConflictError(_)));
+
         let error = map_start_plan_error(EngineError::Uncommittable("无法形成合法快照"));
         assert!(matches!(error, Error::Internal(_)));
     }
@@ -456,7 +464,9 @@ pub(crate) mod tests {
             seen: vec![],
             fail_at: None,
         };
+
         super::execute_start_steps(&mut steps, &mut executor).await.unwrap();
+
         assert_eq!(
             steps.seen,
             [
@@ -492,6 +502,7 @@ pub(crate) mod tests {
             CommandReceipt,
             Audit,
         ];
+
         for (index, step) in expected.iter().copied().enumerate() {
             let mut executor = TestExecutor::default();
             let mut steps = RecordingSteps {
@@ -499,6 +510,7 @@ pub(crate) mod tests {
                 seen: vec![],
                 fail_at: Some(step),
             };
+
             let error = super::execute_start_steps(&mut steps, &mut executor).await.unwrap_err();
             assert!(
                 matches!(error, crate::Error::ConflictError(message) if message == "original-step-error")

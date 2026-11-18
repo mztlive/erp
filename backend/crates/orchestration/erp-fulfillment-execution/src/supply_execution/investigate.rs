@@ -94,6 +94,7 @@ impl SupplierFulfillmentProcess {
             command.order_id.as_ref(),
             &command.idempotency_key,
         );
+
         if let Some(result) = self
             .replay_investigation(
                 &command_id,
@@ -107,6 +108,7 @@ impl SupplierFulfillmentProcess {
         {
             return Ok(result);
         }
+
         let context = InvestigationCommandContext {
             order_id: command.order_id.to_string(),
             expected_order_version: command.expected_lock_version,
@@ -154,6 +156,7 @@ impl SupplierFulfillmentProcess {
             expected_task_version,
             expected_subject_version: command.expected_subject_version,
         };
+
         if let Some(result) = self
             .replay_investigation(
                 &command_id,
@@ -167,6 +170,7 @@ impl SupplierFulfillmentProcess {
         {
             return Ok(result);
         }
+
         let context = InvestigationCommandContext {
             order_id: command.action.order_id.to_string(),
             expected_order_version: command.action.expected_order_lock_version,
@@ -192,6 +196,7 @@ impl SupplierFulfillmentProcess {
             command_id,
             fingerprint,
         };
+
         let prepared = self.prepare_investigation_result(&context, &identity, actor).await?;
         let commit = InvestigationCommit::new(
             self.identity.workflow.clone(),
@@ -202,11 +207,13 @@ impl SupplierFulfillmentProcess {
             prepared,
             actor,
         );
+
         let db = self.db.clone();
         let client = db.client().clone();
         let transaction_result = client
             .with_transaction(move |executor| Box::pin(async move { commit.apply(&db, executor).await }))
             .await;
+
         recover_final_result(
             transaction_result.map(|(order, evidence, record, task_version)| {
                 investigation_result(
@@ -350,6 +357,7 @@ fn investigation_result(
         SupplierOrderInvestigationOutcome::VerifiedNoResult => vec!["REPLAY".to_string()],
         SupplierOrderInvestigationOutcome::ResultUnknown => vec!["QUERY_RESULT".to_string()],
     };
+
     let work_item =
         work_item_id.zip(task_version).map(|(id, task_version)| SupplierOrderInvestigationWorkItemView {
             id: id.to_string(),
@@ -425,6 +433,7 @@ async fn persist_investigation_result(
         order_version: input.order.base.version,
         task_version: input.task_version,
     };
+
     let audit = input
         .actor
         .clone()

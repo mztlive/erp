@@ -112,6 +112,7 @@ pub(crate) async fn load_cancel_runtime(
         .find_current_execution(&ApprovalProcessInstanceId::new(instance.base.id.clone()), executor)
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例缺少当前执行".to_string()))?;
+
     let open_tasks = db
         .work_items()
         .open_approval_tasks_for_execution(&ApprovalNodeExecutionId::new(current.base.id.clone()), executor)
@@ -168,6 +169,7 @@ pub(crate) async fn committed_cancel_replay(
             actor_id: actor.id(),
         })?,
     };
+
     let db = service.db.clone();
     let authorization = service.identity.clone();
     let client = db.client().clone();
@@ -202,6 +204,7 @@ async fn replay_cancel_step(
             executor,
         )
         .await?;
+
     let receipt = find_cancel_receipt(db, &input.identity, executor).await?;
     let instance = db
         .bpm_workflow()
@@ -225,6 +228,7 @@ async fn replay_cancel_step(
     if !matches!(input.identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)) {
         return Err(payload_conflict_error().into());
     }
+
     let adjustment = db
         .inventory()
         .stock_adjustment(&input.id, executor)
@@ -437,6 +441,7 @@ pub(crate) fn ensure_cancel_runtime_versions(
     ensure_cancel_execution_identity(&runtime.instance, &runtime.current, runtime.task_policy)?;
     ensure_expected_version("审批实例", req.expected_instance_version, runtime.instance.base.version)?;
     ensure_expected_version("审批执行", req.expected_execution_version, runtime.current.base.version)?;
+
     match runtime.task_policy {
         ApprovalCancellationTaskPolicy::CloseOpenTask => {
             let expected = req
@@ -712,6 +717,7 @@ mod authorization_tests {
             .await
             .unwrap_err();
         assert!(matches!(error, Error::ValidationError(message) if message == "写入授权必须使用快照事务"));
+
         let error = replay_cancel_step(&db, &authorization, command(), &mut SnapshotExecutor::default())
             .await
             .unwrap_err();

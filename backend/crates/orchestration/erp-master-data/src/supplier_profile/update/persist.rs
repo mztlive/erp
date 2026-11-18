@@ -159,6 +159,7 @@ impl PreparedUpdate {
             qualifications,
             ratings,
         } = context;
+
         let command = SupplierProfileCommand::new(
             next_id(),
             SupplierProfileCommandData {
@@ -175,6 +176,7 @@ impl PreparedUpdate {
             },
         )?;
         let result = command_view(command.clone());
+
         let audit = actor.clone().resource_log(
             "supplier_profile.update",
             "supplier_profile",
@@ -214,6 +216,7 @@ impl PreparedUpdate {
         self.capabilities.persist(db, executor).await?;
         self.qualifications.persist(db, executor).await?;
         self.ratings.persist(db, executor).await?;
+
         db.supplier_profile_commands().create(&self.command, executor).await.map_err(command_insert_error)?;
         persist_log(db, &self.audit, executor).await?;
         Ok(())
@@ -222,8 +225,10 @@ impl PreparedUpdate {
     /// 写入 Party/Supplier 根及新修订。
     async fn persist_roots(&mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         ensure_identity_available(db, &self.party, &self.party_revision, executor).await?;
+
         db.party_revisions().create(&self.party_revision, executor).await?;
         db.parties().update(&mut self.party, executor).await?;
+
         db.supplier_commercial_profile_revisions().create(&self.commercial_profile, executor).await?;
         db.supplier_accounts().update(&mut self.supplier, executor).await?;
         Ok(())
@@ -239,18 +244,21 @@ impl PartyFactChanges {
         if let Some(item) = &self.new_contact {
             db.party_contacts().create(item, executor).await?;
         }
+
         for item in &mut self.addresses {
             db.party_addresses().update(item, executor).await?;
         }
         if let Some(item) = &self.new_address {
             db.party_addresses().create(item, executor).await?;
         }
+
         for item in &mut self.tax_profiles {
             db.party_tax_profiles().update(item, executor).await?;
         }
         if let Some(item) = &self.new_tax_profile {
             db.party_tax_profiles().create(item, executor).await?;
         }
+
         if let Some(change) = self.bank_routing {
             change.persist(db, executor).await?;
         }
@@ -292,6 +300,7 @@ impl QualificationChanges {
         for qualification in &mut self.updated {
             db.supplier_qualifications().update(qualification, executor).await?;
         }
+
         for (qualification_id, links) in self.replacements {
             db.supplier().replace_qualification_capabilities(&qualification_id, links, executor).await?;
         }

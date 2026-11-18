@@ -117,6 +117,7 @@ mod tests {
     async fn reads_allow_permissions_and_prepare_real_list_detail_and_revision_inputs() {
         let service = service(true).await;
         let mut executor = SnapshotExecutor::default();
+
         let params = PartyListParams {
             keyword: Some("  主体编号  ".into()),
             page: Some(2),
@@ -127,7 +128,9 @@ mod tests {
         assert_eq!(query.keyword.as_deref(), Some("主体编号"));
         assert_eq!(query.paging.page, 2);
         assert_eq!(query.paging.page_size, 7);
+
         assert_eq!(service.detail_id(&actor(), "party-1", &mut executor).await.unwrap().as_ref(), "party-1");
+
         let params =
             serde_json::from_value(serde_json::json!({"legal_name":"  法定名称  ","page":3,"page_size":5}))
                 .unwrap();
@@ -160,6 +163,7 @@ mod tests {
                 .map(|_| ())
                 .unwrap_err(),
         ];
+
         for error in errors {
             assert!(matches!(error, Error::Forbidden(_)));
         }
@@ -186,6 +190,7 @@ mod tests {
                 .map(|_| ())
                 .unwrap_err(),
         ];
+
         for error in errors {
             assert!(
                 matches!(error, Error::ValidationError(message) if message == "无对象操作及其业务读取必须使用快照事务")

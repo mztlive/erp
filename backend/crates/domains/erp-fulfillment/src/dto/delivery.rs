@@ -216,6 +216,7 @@ mod tests {
             serde_json::from_value(serde_json::json!({"version":1,"tracking_entries":[]})).unwrap();
         assert_eq!(omitted.tracking_entries, None);
         assert_eq!(clear.tracking_entries, Some(Vec::new()));
+
         let entries: PostDeliveryRequest =
             serde_json::from_value(serde_json::json!({"version":1,"tracking_entries":[
                 {"sales_order_line_id":"line-1","tracking_no":"A","carrier":"货拉拉"},

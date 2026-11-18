@@ -26,6 +26,7 @@ impl MongoIntegrationEvidenceAuthority {
         let Some((task, connection)) = self.connection_failure_context(subject, executor).await? else {
             return Ok(());
         };
+
         let runs = self
             .db
             .supplier_api()
@@ -54,6 +55,7 @@ impl MongoIntegrationEvidenceAuthority {
         if kind != ControlledEvidenceKind::BusinessObjectVerification {
             return kind_mismatch();
         }
+
         let (task, connection) = self
             .connection_failure_context(subject, executor)
             .await?
@@ -69,6 +71,7 @@ impl MongoIntegrationEvidenceAuthority {
                 "请先完成失败后、当前配置下的鉴权检查；连接仍异常或配置已变更时不能完成处理".into(),
             ));
         }
+
         let latest = self
             .db
             .supplier_api()
@@ -92,6 +95,7 @@ impl MongoIntegrationEvidenceAuthority {
         {
             return Ok(None);
         }
+
         let Some(task) = self.db.integration_error_tasks().find_by_id(&subject.item_id, executor).await?
         else {
             return Ok(None);
@@ -99,6 +103,7 @@ impl MongoIntegrationEvidenceAuthority {
         if !accepts_connection_recovery(&task, subject) {
             return Ok(None);
         }
+
         let Some(id) = task.business_object_id.as_deref() else { return Ok(None) };
         let connection =
             self.db.supplier_api().connection(&SupplierApiConnectionId::new(id), executor).await?;
@@ -146,10 +151,12 @@ mod tests {
             run.status = status;
             run
         };
+
         let runs = vec![
             run("newer", SupplierHealthCheckStatus::Failed),
             run("older", SupplierHealthCheckStatus::Succeeded),
         ];
+
         assert_eq!(latest_authentication(&runs).unwrap().base.id, "newer");
         assert_eq!(latest_authentication(&runs).unwrap().status, SupplierHealthCheckStatus::Failed);
         assert!(latest_authentication(&[]).is_none());
@@ -168,8 +175,10 @@ mod tests {
         .unwrap();
         let mut subject = EvidenceSubject::error(&task);
         assert!(accepts_connection_recovery(&task, &subject));
+
         subject.business_object_id = Some("connection-2".into());
         assert!(!accepts_connection_recovery(&task, &subject));
+
         subject = EvidenceSubject::error(&task);
         task.error_class = ErrorClass::MappingError;
         assert!(!accepts_connection_recovery(&task, &subject));

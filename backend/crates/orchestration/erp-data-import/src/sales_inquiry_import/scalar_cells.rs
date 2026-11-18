@@ -115,6 +115,7 @@ mod tests {
         assert_eq!(row.cells[0].value, "00123");
         assert_eq!(row.cells[2].value, "02100123456");
         assert_eq!(row.cells[8].value, "46296");
+
         row.cells[8].formula = false;
         row.cells[8].numeric = false;
         normalize(std::slice::from_mut(&mut row), false);

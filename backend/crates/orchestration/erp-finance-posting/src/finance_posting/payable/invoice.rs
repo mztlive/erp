@@ -90,6 +90,7 @@ impl PayableProcess {
     ) -> Result<PurchaseInvoiceWithAssetsResult> {
         req.validate()?;
         let receipt = purchase_invoice_receipt_with_assets(&req, actor, pending.as_ref())?;
+
         let port = MongoPurchaseInvoiceCommand {
             db: self.db.clone(),
             authorization: self.authorization_rbac.authorization.clone(),
@@ -109,6 +110,7 @@ impl PayableProcess {
                 })
             })
             .await;
+
         finish_registration(&port, result, &receipt, fresh_asset_id.as_deref()).await
     }
 }
@@ -214,6 +216,7 @@ async fn finish_registration(
             (id, unknown)
         },
     };
+
     let view = port.registered_view(&invoice_id).await;
     if view.is_err()
         && let Some(error) = original_unknown
@@ -252,10 +255,12 @@ impl<P: PurchaseInvoiceCommandPort> AuditedCommand for RegisterPurchaseInvoiceCo
         if let Some(id) = self.port.receipt_invoice_id(&registration.receipt, executor).await? {
             return Ok(AuditedWrite::Replayed(id));
         }
+
         let invoice = self.port.persist_invoice(registration, executor).await?;
         if !registration.req.attachment_asset_ids.is_empty() {
             self.port.persist_attachments(registration, &invoice, executor).await?;
         }
+
         let invoice_id = InvoiceId::new(invoice.base.id.clone());
         self.port.save_receipt(registration, invoice_id.clone(), self.audit_event_id, executor).await?;
         Ok(AuditedWrite::Fresh { result: invoice_id, content: registered_event_content(&invoice)? })
@@ -307,9 +312,11 @@ impl MongoPurchaseInvoiceCommand {
                 executor,
             )
             .await?;
+
         if let Some(invoice_id) = self.receipt_invoice_id(&receipt, executor).await? {
             return Ok(invoice_id);
         }
+
         invoice_attachments::resolve(&mut req.attachment_asset_ids, pending.as_ref())?;
         let supplier = self
             .db
@@ -319,6 +326,7 @@ impl MongoPurchaseInvoiceCommand {
             .ok_or_else(|| Error::NotFound("供应商不存在".into()))?;
         let mut invoice = payable::prepare_purchase_invoice(&req, supplier.party_id, actor.id())?;
         invoice.base.id = fresh_id;
+
         let context = BusinessEventContext::new(actor.clone(), PURCHASE_INVOICE_REGISTER)?
             .with_command_id(Some(receipt.id().to_string()))?;
         let registration = PurchaseInvoiceRegistration { req, invoice, actor, receipt, pending };
@@ -368,6 +376,7 @@ impl PurchaseInvoiceCommandPort for MongoPurchaseInvoiceCommand {
         .await?;
         validate_supplier_parties(&self.db, &accounts, &plan, &registration.invoice.party_id, executor)
             .await?;
+
         let invoice = payable::persist_purchase_invoice(
             &self.db,
             registration.invoice.clone(),
@@ -426,6 +435,7 @@ impl PurchaseInvoiceCommandPort for MongoPurchaseInvoiceCommand {
                             executor,
                         )
                         .await?;
+
                     let boundary = executor
                         .boundary()
                         .ok_or_else(|| Error::Internal("进项发票回读缺少授权执行边界".into()))?;
@@ -457,9 +467,11 @@ async fn validate_supplier_parties(
         .filter(|account| seen.insert(account.supplier_id.to_string()))
         .map(|account| account.supplier_id.clone())
         .collect();
+
     let suppliers = db.supplier_accounts().find_accounts_by_ids(&supplier_ids, executor).await?;
     let suppliers_by_id: HashMap<&str, &SupplierAccount> =
         suppliers.iter().map(|supplier| (supplier.base.id.as_str(), supplier)).collect();
+
     for account in ordered_accounts {
         let supplier = suppliers_by_id
             .get(account.supplier_id.as_ref())
@@ -686,13 +698,16 @@ mod tests {
             registration: &registration,
             audit_event_id: context.event_id(),
         };
+
         let invoice_id = execute_audited(&context, &port, &mut executor, &command).await.unwrap();
         assert_eq!(invoice_id.as_ref(), "invoice-original");
         assert_eq!(*port.calls.lock().unwrap(), ["lookup", "business", "receipt", "event"]);
+
         let receipts = port.saved_receipts.lock().unwrap();
         assert_eq!(receipts.len(), 1);
         assert_eq!(receipts[0].purchase_invoice_id(&registration.receipt).unwrap(), invoice_id);
         assert_eq!(receipts[0].audit_event_id, context.event_id());
+
         let events = port.events.lock().unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].base.id, context.event_id());
@@ -734,6 +749,7 @@ mod tests {
             audit_event_id: context.event_id(),
         };
         let first = execute_audited(&context, &port, &mut NoTransaction, &command).await.unwrap();
+
         port.calls.lock().unwrap().clear();
         let replayed = execute_audited(&context, &port, &mut NoTransaction, &command).await.unwrap();
         assert_eq!(replayed, first);
@@ -890,6 +906,7 @@ mod tests {
                 registration: &registration,
                 audit_event_id: context.event_id(),
             };
+
             let result = execute_audited(&context, &port, &mut executor, &command).await;
             if fail.is_some() {
                 assert!(result.is_err());
@@ -902,6 +919,7 @@ mod tests {
                     *port.calls.lock().unwrap(),
                     ["lookup", "business", "attachments", "receipt", "event"]
                 );
+
                 port.calls.lock().unwrap().clear();
                 execute_audited(&context, &port, &mut executor, &command).await.unwrap();
                 assert_eq!(*port.calls.lock().unwrap(), ["lookup"]);
@@ -924,6 +942,7 @@ mod tests {
         .unwrap();
         assert!(result.assets_committed);
         assert!(result.view.is_err());
+
         let result = super::finish_registration(
             &port,
             Ok(InvoiceId::new("original")),
@@ -962,6 +981,7 @@ mod tests {
             )
             .unwrap()
         };
+
         let first = purchase_invoice_receipt_with_assets(
             &registration.req,
             &registration.actor,
@@ -982,6 +1002,7 @@ mod tests {
         .unwrap();
         assert_eq!(first.fingerprint(), retry.fingerprint());
         assert_ne!(first.fingerprint(), changed.fingerprint());
+
         let mut ids = registration.req.attachment_asset_ids.clone();
         invoice_attachments::resolve(&mut ids, &batch("a", "first")).unwrap();
         assert!(!ids[0].as_ref().starts_with("pending-file:"));

@@ -81,6 +81,7 @@ mod tests {
         )
         .unwrap();
         assert!(change.submission_id_for_effect(Some("pcs-current")).is_err());
+
         change.start_approval(PurchaseChangeSubmissionId::new("pcs-current"), "hash-1", "user-1").unwrap();
         assert_eq!(change.submission_id_for_effect(Some("pcs-current")).unwrap().as_ref(), "pcs-current");
         assert!(change.submission_id_for_effect(Some("pcs-old")).is_err());
@@ -107,6 +108,7 @@ mod tests {
             )
             .is_err()
         );
+
         start_purchase_change_approval(
             &mut change,
             PurchaseChangeSubmissionId::new("pcs-1"),
@@ -115,6 +117,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(change.approval_subject_version, 1);
+
         execute_purchase_change_domain_action(
             &mut change,
             ApprovalDomainAction::PurchaseChangeOrderCancelApproval,

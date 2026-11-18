@@ -33,6 +33,7 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Workbook> {
     if bytes.is_empty() || bytes.len() > INQUIRY_IMPORT_MAX_BYTES {
         return Err(invalid("工作簿不能为空且不得超过 5 MiB"));
     }
+
     let mut archive = Archive::open(bytes, ArchiveLimits::CUSTOMER)?;
     let shared = archive.shared_strings()?;
     let paths = sheet_paths(&mut archive, false)?;
@@ -41,6 +42,7 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Workbook> {
         sheets.insert(name, rows(&archive.xml(&path)?, &shared)?);
     }
     let date1904 = xlsx::date1904(&archive.xml("xl/workbook.xml")?)?;
+
     let mut workbook = parse_sheets(sheets)?;
     scalar_cells::normalize(&mut workbook.deliveries, date1904);
     Ok(workbook)
@@ -61,6 +63,7 @@ pub(crate) fn quote_sheets(bytes: &[u8]) -> Result<HashMap<String, Vec<Row>>> {
     if xlsx::date1904(&archive.xml("xl/workbook.xml")?)? {
         return Err(invalid("报价表不支持 1904 日期系统，请使用原模板"));
     }
+
     let shared = archive.shared_strings()?;
     let mut sheets = HashMap::new();
     for (name, path) in sheet_paths(&mut archive, true)? {
@@ -69,6 +72,7 @@ pub(crate) fn quote_sheets(bytes: &[u8]) -> Result<HashMap<String, Vec<Row>>> {
         if sheet.hyperlinks {
             return Err(invalid("报价表不能包含超链接"));
         }
+
         let mut rows = sheet.rows;
         trim_rows(&mut rows);
         if rows.iter().flat_map(|r| &r.cells).any(|c| c.formula) {
@@ -90,6 +94,7 @@ fn parse_sheets(mut sheets: HashMap<String, Vec<Row>>) -> Result<Workbook> {
     } else {
         data_rows(product_rows.clone(), PRODUCT_SHEET, &PRODUCT_HEADERS, &mut errors)
     };
+
     let mut delivery_rows = sheets.remove(DELIVERY_SHEET).unwrap_or_default();
     if let Some(version) = version {
         strip_checks(&mut delivery_rows, version, &mut errors);
@@ -102,6 +107,7 @@ fn parse_sheets(mut sheets: HashMap<String, Vec<Row>>) -> Result<Workbook> {
     if product_sheet == POOL_SHEET {
         deliveries.retain(|row| row.cells.iter().skip(1).any(|cell| !cell.value.is_empty() || cell.formula));
     }
+
     if products.len() > INQUIRY_IMPORT_MAX_ROWS || deliveries.len() > INQUIRY_IMPORT_MAX_ROWS {
         return Err(invalid("商品行及实际填写的配送行每次均不得超过 2000 行"));
     }
@@ -176,6 +182,7 @@ pub(super) fn data_rows(
     if !valid {
         issue(errors, sheet, 1, "表头", "表头必须与当前客户模板完全一致，不接受供应商或内部字段");
     }
+
     rows.retain(|row| row.number > 1 && row.cells.iter().any(|cell| !cell.value.is_empty() || cell.formula));
     for row in &mut rows {
         if row.cells.len() > headers.len() {
@@ -279,6 +286,7 @@ mod tests {
         let delivery = r#"<c r="A2" t="inlineStr"><is><t>001</t></is></c><c r="B2" t="inlineStr"><is><t>收件人</t></is></c><c r="C2"><v>1.3800000000E+10</v></c><c r="D2" t="inlineStr"><is><t>广东省</t></is></c><c r="E2" t="inlineStr"><is><t>广州市</t></is></c><c r="F2" t="inlineStr"><is><t>天河区</t></is></c><c r="G2" t="inlineStr"><is><t>测试地址</t></is></c><c r="H2"><v>1</v></c><c r="I2" s="1"><v>46296</v></c>"#;
         let parsed = parse(&package(INQUIRY_TEMPLATE_VERSION, products, delivery)).unwrap();
         assert_valid_delivery(&parsed);
+
         // 两种日期系统必须得到同一天，不受 XML 属性引号形式影响。
         let bytes = package(INQUIRY_TEMPLATE_VERSION, products, &delivery.replace("46296", "44834"));
         let mut archive = ZipArchive::new(Cursor::new(bytes)).unwrap();
@@ -488,6 +496,7 @@ mod tests {
         for (name, path) in sheet_paths(&mut archive, false).unwrap() {
             sheets.insert(name, rows(&archive.xml(&path).unwrap(), &shared).unwrap());
         }
+
         let deliveries = sheets.get_mut(DELIVERY_SHEET).unwrap();
         let mut spare = deliveries.last().unwrap().clone();
         // 核对列即使转值也不参与实际地址计数。
@@ -498,6 +507,7 @@ mod tests {
             spare.number = number;
             deliveries.push(spare.clone());
         }
+
         let parsed = parse_sheets(sheets).unwrap();
         assert!(parsed.errors.is_empty());
         assert_eq!(parsed.deliveries.len(), 2);
@@ -549,6 +559,7 @@ mod tests {
         assert_eq!(deliveries.len(), 2);
         assert_eq!(deliveries[0].quantity, "100");
         assert_eq!(deliveries[1].quantity, "100");
+
         for delivery in &mut deliveries {
             delivery.due_date = "2026-11-01".into();
         }
@@ -575,6 +586,7 @@ mod tests {
         );
         assert_eq!(result.errors.len(), 1, "{:?}", result.errors);
         assert!(result.errors.iter().any(|error| error.column == "需求数量"), "{:?}", result.errors);
+
         deliveries[0].quantity = "60".into();
         deliveries[1].quantity = "40".into();
         let mut identity = 0;

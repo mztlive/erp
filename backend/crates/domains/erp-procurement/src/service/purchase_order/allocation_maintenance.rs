@@ -51,6 +51,7 @@ pub async fn prepare_current_sales_allocations(
     executor: &mut dyn Executor,
 ) -> Result<PreparedSalesAllocations> {
     let current_sales_lines = port.current_lines(&order.sales_order_id, executor).await?;
+
     let allocation_ids = revision_lines
         .iter()
         .filter(|line| line.line_type == PurchaseLineType::ItemService)
@@ -58,6 +59,7 @@ pub async fn prepare_current_sales_allocations(
         .collect();
     let plan = CurrentSalesAllocationPlan::build(revision_lines, &current_sales_lines, allocation_ids)
         .map_err(translate_current_sales_allocation_plan_error)?;
+
     revision_lines.clone_from_slice(&plan.rebound_purchase_lines);
     Ok(PreparedSalesAllocations {
         by_purchase_line: plan.allocation_ids_by_purchase_line,

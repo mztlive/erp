@@ -32,6 +32,7 @@ pub(crate) async fn sync_rows(
             repo.update(row, executor).await?;
         }
     }
+
     let rows = delta
         .missing()
         .into_iter()

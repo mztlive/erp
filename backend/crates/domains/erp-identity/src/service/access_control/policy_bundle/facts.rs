@@ -26,6 +26,7 @@ impl PolicyBundleService {
         let mut facts = PolicyFacts::default();
         let mut roles = document.roles.iter().map(|role| role.id.to_string()).collect::<BTreeSet<_>>();
         roles.extend(document.bindings.iter().flat_map(|b| b.role_ids.iter().map(ToString::to_string)));
+
         for user_id in document.user_ids() {
             let user = self.user_fact(&user_id, executor).await?;
             roles.extend(user.role_ids.iter().map(ToString::to_string));
@@ -34,6 +35,7 @@ impl PolicyBundleService {
                 self.access.db.person_data_scopes().for_person(&user_id, None, None, executor).await?,
             );
         }
+
         for id in roles {
             if let Some(role) = self.role_fact(&id, executor).await? {
                 facts.roles.insert(id, role);
@@ -58,6 +60,7 @@ impl PolicyBundleService {
             .await?
             .filter(|account| account.is_active_backoffice())
             .ok_or_else(|| Error::ValidationError(format!("后台人员不存在或已失效：{id}")))?;
+
         let keys = MongoCasbinAdapter::new(self.access.db.clone())
             .subject_roles(&subject(AccountKind::Admin, id), executor)
             .await?;

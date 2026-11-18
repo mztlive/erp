@@ -32,6 +32,7 @@ impl RbacService {
             return Err(Error::Forbidden("超级管理员角色不能通过种子命令配置".into()));
         }
         let authorized = self.authorize_permissions(&actor, params.permissions).await?;
+
         let existing = self.db.roles().find_by_id_including_deleted(id, &mut NoTransaction).await?;
         if let Some(role) = existing {
             let current = self.direct_role_permissions(id).await?;
@@ -40,6 +41,7 @@ impl RbacService {
             else {
                 return Ok(false);
             };
+
             self.update_role(
                 id,
                 UpdateRoleParams {
@@ -84,6 +86,7 @@ mod tests {
         assert!(merged.covers(&current));
         assert!(merged.covers(&desired));
         assert_eq!(merged.as_slice().len(), 2);
+
         assert!(role.seeded_permissions("演示销售", &merged, &desired).unwrap().is_none());
     }
 

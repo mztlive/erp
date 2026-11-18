@@ -133,6 +133,7 @@ mod tests {
         ] {
             assert_eq!(duplicate_index_conflict_message(index), "数据已存在，请勿重复提交");
         }
+
         let error = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
         assert_eq!(error.class(), ErrorClass::Conflict);
         assert_eq!(error.to_string(), "数据冲突: 数据已存在，请勿重复提交");
@@ -143,10 +144,12 @@ mod tests {
         let error = Error::from(persistence_core::Error::OptimisticLockingError);
         assert_eq!(error.to_string(), "数据冲突: 数据已被其他请求修改，请刷新后重试");
         assert_eq!(error.class(), ErrorClass::Conflict);
+
         let error = Error::from(persistence_core::Error::TransientTransactionConflict(MongoError::custom(
             "transient",
         )));
         assert!(matches!(error, Error::TransientTransaction(_)));
+
         let error = Error::from(persistence_core::Error::CommitOutcomeUnknown(MongoError::custom("unknown")));
         assert!(matches!(error, Error::OutcomeUnknown(_)));
         assert_eq!(error.to_string(), "操作结果暂无法确认，请查询当前状态后再决定是否重试");

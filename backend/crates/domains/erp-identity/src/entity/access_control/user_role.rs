@@ -164,6 +164,7 @@ impl UserRole {
         if self.revoked_at.is_some() {
             return Err(Error::from("用户角色绑定已撤权"));
         }
+
         let revoke_reason_code = normalize_required_text(
             data.revoke_reason_code,
             "撤权原因代码不能为空",
@@ -178,6 +179,7 @@ impl UserRole {
             ASSIGNED_BY_MAX_LEN,
             "撤权执行人过长",
         )?;
+
         self.revoked_at = Some(at);
         self.revoked_by = Some(revoked_by);
         self.revoke_reason_code = Some(revoke_reason_code);

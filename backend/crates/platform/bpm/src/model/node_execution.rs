@@ -103,6 +103,7 @@ impl ApprovalNodeExecution {
         {
             return person.name.clone();
         }
+
         let names = people.into_iter().map(|person| person.name).collect::<Vec<_>>().join("、");
         if self.additional_assignees.is_empty() { names } else { format!("{names}（或签）") }
     }
@@ -288,6 +289,7 @@ impl ApprovalNodeExecution {
         if self.status != ApprovalNodeExecutionStatus::Active {
             return Err(ModelError::InvalidStatus("只有活动执行可以进入受阻"));
         }
+
         self.status = ApprovalNodeExecutionStatus::Blocked;
         self.blocker_code = Some(code);
         self.blocked_at = Some(at);
@@ -314,6 +316,7 @@ impl ApprovalNodeExecution {
         if !code.allows_assignee_recovery() {
             return Err(ModelError::InvalidStatus("结构性或一致性阻塞不得恢复原审批人"));
         }
+
         self.status = ApprovalNodeExecutionStatus::Superseded;
         self.ended_reason = Some(ApprovalExecutionEndReason::AssigneeRecovered);
         self.ended_at = Some(at);
@@ -325,6 +328,7 @@ impl ApprovalNodeExecution {
         if input.round_no == 0 || input.execution_no == 0 {
             return Err(ModelError::InvalidField("轮次和执行序号必须从 1 开始"));
         }
+
         let status = if blocker_code.is_some() {
             ApprovalNodeExecutionStatus::Blocked
         } else {
@@ -343,6 +347,7 @@ impl ApprovalNodeExecution {
                 ));
             },
         }
+
         let blocked_at = blocker_code.map(|_| input.at);
         Ok(Self {
             base: base_model_at(input.id.to_string(), input.at)?,
@@ -386,6 +391,7 @@ impl ApprovalNodeExecution {
         if self.status != ApprovalNodeExecutionStatus::Active {
             return Err(ModelError::InvalidStatus("只有活动执行可以记录决定"));
         }
+
         self.decision_reason = normalize_optional(reason, REASON_MAX_LEN, "决定原因过长")?;
         self.status = match decision {
             ApprovalDecision::Approve => ApprovalNodeExecutionStatus::Approved,
@@ -440,6 +446,7 @@ mod tests {
         let exec = active();
         assert_eq!(exec.status, ApprovalNodeExecutionStatus::Active);
         assert!(exec.decision.is_none());
+
         let blocked = ApprovalNodeExecution::new_blocked(
             NewNodeExecution {
                 id: ApprovalNodeExecutionId::new("e2"),
@@ -468,6 +475,7 @@ mod tests {
             .unwrap();
         assert_eq!(exec.status, ApprovalNodeExecutionStatus::Approved);
         assert_eq!(exec.decision, Some(ApprovalDecision::Approve));
+
         assert_eq!(
             exec.record_reject(
                 ParticipantId::new("u1").unwrap(),

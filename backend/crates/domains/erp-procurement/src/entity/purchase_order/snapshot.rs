@@ -99,6 +99,7 @@ impl PaymentTermSnapshot {
         if payment_term.prepay_gate != prepay_gate {
             return Err(Error::from("付款条件与先款门禁不一致，请重新选择"));
         }
+
         if let Some(amount) = prepay_minimum_amount
             && amount.to_decimal() < rust_decimal::Decimal::ZERO
         {
@@ -111,6 +112,7 @@ impl PaymentTermSnapshot {
         {
             return Err(Error::from("先款门槛比例不能为负"));
         }
+
         Ok(Self {
             payment_term_code: payment_term.canonical_code,
             prepay_gate,
@@ -136,10 +138,12 @@ impl PaymentTermSnapshot {
         if self.prepay_minimum_amount.is_none() && self.prepay_minimum_ratio.is_none() {
             return Err(Error::from("先款条件缺少冻结门槛"));
         }
+
         let fixed = self.prepay_minimum_amount.unwrap_or(Amount::zero());
         if gross_amount < Amount::zero() || fixed < Amount::zero() {
             return Err(Error::from("先款门槛金额不能为负"));
         }
+
         let proportional = match self.prepay_minimum_ratio {
             Some(ratio) if ratio.to_decimal().is_sign_negative() => {
                 return Err(Error::from("先款门槛比例不能为负"));
@@ -178,6 +182,7 @@ impl PaymentTermSnapshot {
         resolve_term: impl FnOnce(&str) -> Result<PaymentTermFact>,
     ) -> Result<BusinessDate> {
         let payment_term = resolve_term(&self.payment_term_code)?;
+
         if let Some((period, days)) = payment_term.calendar_due {
             let base = period.end(expected_delivery_on.ok_or("周期结算缺少预计交付日")?)?;
             let due = base
@@ -187,6 +192,7 @@ impl PaymentTermSnapshot {
             return BusinessDate::from_ymd(due.year(), due.month(), due.day())
                 .ok_or_else(|| Error::from("计划付款日无效"));
         }
+
         let Some(days) = payment_term.days_after_delivery else {
             return Ok(approved_on);
         };
@@ -218,13 +224,16 @@ mod tests {
             snapshot.required_prepayment("0.03".parse().unwrap()).unwrap(),
             Some("0.02".parse().unwrap())
         );
+
         snapshot.prepay_minimum_amount = Some("40".parse().unwrap());
         assert_eq!(snapshot.required_prepayment("60".parse().unwrap()).unwrap(), Some("40".parse().unwrap()));
+
         snapshot.prepay_minimum_amount = None;
         snapshot.prepay_minimum_ratio = None;
         assert!(snapshot.required_prepayment("60".parse().unwrap()).is_err());
         snapshot.prepay_minimum_ratio = Some("-0.5".parse().unwrap());
         assert!(snapshot.required_prepayment("60".parse().unwrap()).is_err());
+
         snapshot.prepay_gate = false;
         assert_eq!(snapshot.required_prepayment("60".parse().unwrap()).unwrap(), None);
     }

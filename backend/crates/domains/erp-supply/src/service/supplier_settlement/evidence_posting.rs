@@ -134,6 +134,7 @@ async fn persist_with_store<S: EvidenceStore>(
     if current.base.version != expected_version {
         return Err(Error::ConflictError("结算差异版本已变化，请刷新后重试".to_string()));
     }
+
     let item = store
         .item(current.statement_item_id.as_ref(), executor)
         .await?
@@ -141,6 +142,7 @@ async fn persist_with_store<S: EvidenceStore>(
     if item.statement_id.as_ref() != statement_id {
         return Err(Error::BusinessLogicError("差异不属于命令指定的结算单".to_string()));
     }
+
     let mut statement = store
         .statement(statement_id, executor)
         .await?
@@ -151,6 +153,7 @@ async fn persist_with_store<S: EvidenceStore>(
     ) {
         return Err(Error::BusinessLogicError("当前结算状态禁止追加差异补证".to_string()));
     }
+
     // 补证属于结算主题变更：与提交复核共同 CAS 同一结算单，禁止
     // `PENDING_REVIEW` 状态推进和迟到证据在不同文档上并发穿透。
     store.update_statement(&mut statement, executor).await?;
@@ -303,9 +306,11 @@ mod tests {
             let evidence = sample_evidence("evidence-1", "difference-1", 1700000000);
             let mut executor = TestExecutor::default();
             let identity = &mut executor as *mut TestExecutor as usize;
+
             persist_with_store(&mut store, "difference-1", "statement-1", 7, &evidence, &mut executor)
                 .await
                 .unwrap();
+
             assert_trace(&store, 5, identity);
             assert_eq!(store.written_statement.as_ref().unwrap().base.version, version + 1);
             assert_eq!(store.written_evidence.as_ref(), Some(&evidence));
@@ -320,6 +325,7 @@ mod tests {
             let evidence = sample_evidence("evidence-1", "difference-1", 1700000000);
             let mut executor = TestExecutor::default();
             let identity = &mut executor as *mut TestExecutor as usize;
+
             let result =
                 persist_with_store(&mut store, "difference-1", "statement-1", 7, &evidence, &mut executor)
                     .await;
@@ -343,6 +349,7 @@ mod tests {
             let evidence = sample_evidence("evidence-1", "difference-1", 1700000000);
             let mut executor = TestExecutor::default();
             let identity = &mut executor as *mut TestExecutor as usize;
+
             let result =
                 persist_with_store(&mut store, "difference-1", "statement-1", 7, &evidence, &mut executor)
                     .await;
@@ -359,6 +366,7 @@ mod tests {
             let evidence = sample_evidence("evidence-1", "difference-1", 1700000000);
             let mut executor = TestExecutor::default();
             let identity = &mut executor as *mut TestExecutor as usize;
+
             let result = persist_with_store(
                 &mut store,
                 "difference-1",
@@ -368,6 +376,7 @@ mod tests {
                 &mut executor,
             )
             .await;
+
             if stale {
                 assert!(
                     matches!(result,Err(Error::ConflictError(message)) if message=="结算差异版本已变化，请刷新后重试")
@@ -379,6 +388,7 @@ mod tests {
                 );
                 assert_trace(&store, 2, identity);
             }
+
             assert!(store.written_statement.is_none());
             assert!(store.written_evidence.is_none());
         }
@@ -392,6 +402,7 @@ mod tests {
             let evidence = sample_evidence("evidence-1", "difference-1", 1700000000);
             let mut executor = TestExecutor::default();
             let identity = &mut executor as *mut TestExecutor as usize;
+
             let result =
                 persist_with_store(&mut store, "difference-1", "statement-1", 7, &evidence, &mut executor)
                     .await;

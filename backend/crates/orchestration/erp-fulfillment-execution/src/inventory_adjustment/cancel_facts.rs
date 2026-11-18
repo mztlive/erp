@@ -52,6 +52,7 @@ pub(super) async fn cancellation_fact(
         .await?
         .ok_or_else(|| Error::ConflictError("库存调整撤回缺少结构化操作事实".into()))?;
     fact.validate()?;
+
     let execution_id = ApprovalNodeExecutionId::new(&fact.data.execution_id);
     let execution = db
         .bpm_workflow()
@@ -220,6 +221,7 @@ mod tests {
             at,
         })
         .unwrap();
+
         let mut execution = ApprovalNodeExecution::new_active(NewNodeExecution {
             id: ApprovalNodeExecutionId::new("execution"),
             process_instance_id: instance.typed_id(),
@@ -235,6 +237,7 @@ mod tests {
         })
         .unwrap();
         instance.set_current_execution(execution.typed_id(), at).unwrap();
+
         let task = WorkItem::new_document_approval(
             WorkItemId::new("task"),
             DocumentApprovalWorkItemData {
@@ -251,6 +254,7 @@ mod tests {
             Instant::from_unix_secs(10),
         )
         .unwrap();
+
         let identity = document_cancel_identity(DocumentCancelIdentityParams {
             idempotency_key: IdempotencyKey::parse("key").unwrap(),
             instance_id: "instance",
@@ -291,6 +295,7 @@ mod tests {
             cancelled_at: Instant::from_unix_secs(20),
         })
         .unwrap();
+
         instance.cancel(ended).unwrap();
         execution.cancel(ended).unwrap();
         let mut task =
@@ -304,9 +309,11 @@ mod tests {
         let (fact, instance, execution, task, receipt) = fixture();
         assert!(ensure_receipt(&fact, &receipt).is_ok());
         assert!(ensure_terminal(&fact, &instance, &execution, std::slice::from_ref(&task)).is_ok());
+
         let mut wrong = receipt;
         wrong.payload_digest = "different".into();
         assert!(ensure_receipt(&fact, &wrong).is_err());
+
         for case in 0..10 {
             let mut wrong = task.clone();
             match case {
@@ -324,6 +331,7 @@ mod tests {
             assert!(ensure_terminal(&fact, &instance, &execution, &[wrong]).is_err(), "case {case}");
         }
         assert!(ensure_terminal(&fact, &instance, &execution, &[]).is_err());
+
         let mut wrong = execution;
         wrong.ended_at = Some(Timestamp::from_unix_secs(21).unwrap());
         assert!(ensure_terminal(&fact, &instance, &wrong, &[task]).is_err());
@@ -353,6 +361,7 @@ mod tests {
         assert!(
             ensure_terminal(&fact, &instance, &execution, &[original.clone(), historical.clone()]).is_ok()
         );
+
         for case in 0..4 {
             let mut wrong = historical.clone();
             match case {

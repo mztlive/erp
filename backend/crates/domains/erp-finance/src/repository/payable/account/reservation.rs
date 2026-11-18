@@ -141,6 +141,7 @@ async fn change(
     if *amount <= Amount::zero() {
         return Ok(false);
     }
+
     let amount = amount_bson(amount)?;
     let filter = guard(id, &amount, increase);
     let delta = if increase {
@@ -148,6 +149,7 @@ async fn change(
     } else {
         doc! {"$subtract": ["$payment_request_reserved_total", &amount]}
     };
+
     repository
         .conditional_update(
             filter,

@@ -158,6 +158,7 @@ mod tests {
         assert_eq!(result.created, result.all[2..]);
         assert_ne!(result.created[0].base.id, result.created[1].base.id);
         assert!(result.created.iter().all(|line| line.sales_order_id == order_id));
+
         let empty = DraftStableLines::from_draft(&order_id, existing.clone(), &[]).unwrap();
         assert_eq!(empty.all, existing);
         assert!(empty.created.is_empty());

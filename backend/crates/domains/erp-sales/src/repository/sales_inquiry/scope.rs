@@ -105,10 +105,12 @@ impl SalesInquiryRepository<'_> {
         executor: &mut dyn Executor,
     ) -> crate::Result<Option<SalesInquiry>> {
         scope.ensure_current(executor)?;
+
         let collection = self.db.collection::<SalesInquiry>(Database::SALES_INQUIRIES);
         let mut stages = scope.lookup_after(doc! { "id": id });
         stages.push(doc! { "$limit": 1_i64 });
         let mut rows = aggregate::rows(&collection, stages, executor).await?;
+
         scope.ensure_current(executor)?;
         Ok(rows.pop())
     }

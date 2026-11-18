@@ -31,6 +31,7 @@ impl SupplierCatalogAdoptionProcess {
         actor: &AuditActor,
     ) -> Result<BatchView> {
         let fingerprint = self.preflight_batch_submission(connection, id, &request, actor).await?;
+
         let (process, source_id, batch_id, acting) =
             (self.clone(), connection.to_owned(), id.to_owned(), actor.clone());
         let command = self
@@ -45,6 +46,7 @@ impl SupplierCatalogAdoptionProcess {
                 })
             })
             .await?;
+
         let (source, target, acting) = (connection.to_owned(), id.to_owned(), actor.clone());
         let batch = self
             .with_snapshot(move |process, executor| {
@@ -59,6 +61,7 @@ impl SupplierCatalogAdoptionProcess {
             }
             return Err(error);
         }
+
         self.batch(connection, id, actor).await
     }
 
@@ -91,6 +94,7 @@ impl SupplierCatalogAdoptionProcess {
         let batch = self.load_batch(connection, id, actor, executor).await?;
         let rows = self.all_batch_items(id, executor).await?;
         self.ensure_batch_rows_access(actor, &rows, executor).await?;
+
         let command = adoption_identity(&[connection, actor.id(), &request.idempotency_key]);
         let fingerprint = submission_fingerprint(id, request, &rows)?;
         if self.db.catalog_adoption_commands().find_by_id(&command, executor).await?.is_none() {
@@ -120,6 +124,7 @@ impl SupplierCatalogAdoptionProcess {
         let mut batch = self.load_batch(connection, id, actor, executor).await?;
         let source = self.batch_access(connection, actor, executor).await?;
         self.ensure_source(&source)?;
+
         let command = adoption_identity(&[connection, actor.id(), &request.idempotency_key]);
         if let Some(existing) = self.db.catalog_adoption_commands().find_by_id(&command, executor).await? {
             if existing.base.is_deleted() || existing.fingerprint != fingerprint {
@@ -127,6 +132,7 @@ impl SupplierCatalogAdoptionProcess {
             }
             return Ok(command);
         }
+
         batch.ensure_version(request.expected_version)?;
         batch.ensure_submission(request.preview_version, &request.item_ids)?;
         let record = CatalogAdoptionCommand {
@@ -136,6 +142,7 @@ impl SupplierCatalogAdoptionProcess {
             fingerprint: fingerprint.clone(),
         };
         self.db.catalog_adoption_commands().create(&record, executor).await?;
+
         batch.confirmations.push(BatchConfirmation {
             operation_id: command.clone(),
             actor_id: actor.id().into(),
@@ -162,6 +169,7 @@ impl SupplierCatalogAdoptionProcess {
             .cloned()
             .ok_or_else(|| Error::Internal("原入库确认记录缺失".into()))?;
         let actor = self.batch_actor(&confirmation.actor_id, &mut NoTransaction).await?;
+
         for item in &confirmation.item_ids {
             let (process, source, batch_id, item, command, actor, preview_version) = (
                 self.clone(),
@@ -184,12 +192,14 @@ impl SupplierCatalogAdoptionProcess {
                         if batch.draft_operation.as_deref() != Some(format!("submit:{command}").as_str()) {
                             return Err(Error::ConflictError("原入库确认已中断，请重新核对".into()));
                         }
+
                         let mut row = batch_item_by_source(&process.db, &batch_id, &item, executor)
                             .await?
                             .ok_or_else(|| Error::Internal("原确认行缺失".into()))?;
                         if row.operation_id.as_deref() == Some(&command) {
                             return Ok(());
                         }
+
                         // 此处只冻结用户已经查看的载荷。来源、目标及供给资格由
                         // confirm_execution 在每行实际执行前及写事务内重验，避免
                         // 单行来源变化阻断同次确认中其他有效行。
@@ -203,6 +213,7 @@ impl SupplierCatalogAdoptionProcess {
                 })
                 .await?;
         }
+
         self.publish_batch_operation(batch, command, &actor).await
     }
 
@@ -252,6 +263,7 @@ impl SupplierCatalogAdoptionProcess {
         if batch.published_operations.iter().any(|value| value == command) {
             return Ok(());
         }
+
         let confirmation = batch
             .confirmations
             .iter()
@@ -269,6 +281,7 @@ impl SupplierCatalogAdoptionProcess {
                 self.db.catalog_adoption_batch_items().update(row, &mut NoTransaction).await?;
             }
         }
+
         if !batch.published_operations.iter().any(|value| value == command) {
             batch.published_operations.push(command.into());
         }
@@ -294,6 +307,7 @@ impl SupplierCatalogAdoptionProcess {
             .await?
             .filter(|batch| batch.selection_complete && batch.execution_pending)
             .ok_or_else(|| Error::NotFound("无待执行入库任务".into()))?;
+
         for confirmation in batch.confirmations.clone() {
             if !batch.published_operations.contains(&confirmation.operation_id)
                 && let Err(error) = self.prepare_batch_operation(&batch, &confirmation.operation_id).await
@@ -305,6 +319,7 @@ impl SupplierCatalogAdoptionProcess {
                 return Err(error);
             }
         }
+
         batch = self
             .db
             .catalog_adoption_batches()
@@ -313,6 +328,7 @@ impl SupplierCatalogAdoptionProcess {
             .ok_or_else(|| Error::NotFound("入库批次不存在".into()))?;
         self.reconcile_batch_rows(&batch, None).await?;
         let claimed = self.execute_batch_queue(&batch).await?;
+
         let rows = self.all_batch_items(id, &mut NoTransaction).await?;
         if !rows.iter().any(|row| {
             row.status == BatchItemStatus::Processing
@@ -340,6 +356,7 @@ impl SupplierCatalogAdoptionProcess {
                 Err(error) => return Err(error.into()),
             }
             claimed += 1;
+
             let result = self.execute_batch_row(batch, &row).await;
             record_execution_result(&mut row, result)?;
             self.db.catalog_adoption_batch_items().update(&mut row, &mut NoTransaction).await?;
@@ -418,6 +435,7 @@ impl SupplierCatalogAdoptionProcess {
             .await?;
             let Some(last) = rows.last() else { break };
             after = last.base.id.clone();
+
             for mut row in rows {
                 if row.status == BatchItemStatus::Processing {
                     row.mark_unknown("执行中断，正在查询原入库结果".into())?;
@@ -468,6 +486,7 @@ fn submission_fingerprint(
     if request.idempotency_key.trim().is_empty() || request.idempotency_key.len() > 128 {
         return Err(Error::ValidationError("请提供有效入库操作号".into()));
     }
+
     let fingerprints = request
         .item_ids
         .iter()
@@ -625,10 +644,12 @@ mod tests {
         let original = submission_fingerprint("batch", &request, &rows).unwrap();
         request.expected_version = 6;
         assert_eq!(original, submission_fingerprint("batch", &request, &rows).unwrap());
+
         rows[0].frozen_row.as_mut().unwrap().terms.input_tax_rate = "0.09".into();
         assert_ne!(original, submission_fingerprint("batch", &request, &rows).unwrap());
         request.preview_version = 3;
         assert_ne!(original, submission_fingerprint("batch", &request, &rows).unwrap());
+
         request.item_ids = vec!["unknown".into()];
         assert!(submission_fingerprint("batch", &request, &rows).is_err());
         request.idempotency_key = String::new();
@@ -655,6 +676,7 @@ mod tests {
         let preview = batch_preview(&batch, &row);
         assert_eq!(preview.connection_id, "connection");
         assert!(preview.ensure_current_item(&row.source).is_ok());
+
         let mut changed = row.source.clone();
         changed.purchase_price = Some("101.00".into());
         assert!(preview.ensure_current_item(&changed).is_err());
@@ -679,6 +701,7 @@ mod tests {
             item.freeze("original".into(), 2).unwrap();
             item.begin().unwrap();
         }
+
         let failure = Error::ConflictError("来源报价已变化".into());
         let reason = failure.to_string();
         record_execution_result(&mut changed, Err(failure)).unwrap();
@@ -700,6 +723,7 @@ mod tests {
             ))),
         )
         .unwrap();
+
         assert_eq!(changed.status, BatchItemStatus::Failed);
         assert_eq!(changed.messages, [reason]);
         assert!(changed.editable());

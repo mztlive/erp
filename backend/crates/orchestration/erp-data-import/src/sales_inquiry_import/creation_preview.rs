@@ -41,10 +41,12 @@ impl SalesInquiryImportProcess {
         {
             return Err(Error::ValidationError("请选择非空且不超过 5 MiB 的 XLSX 文件".into()));
         }
+
         let fingerprint = hex::encode(Sha256::digest(&bytes));
         let workbook = tokio::task::spawn_blocking(move || parse::parse(&bytes))
             .await
             .map_err(|_| Error::Internal("工作簿解析任务失败".into()))??;
+
         let this = self.clone();
         let actor = actor.clone();
         let customer = customer.to_string();
@@ -74,6 +76,7 @@ impl SalesInquiryImportProcess {
             copied_from_inquiry_id: None,
             draft: InquiryRequirementData::default(),
         };
+
         let candidate = SalesInquiry::create("preview".into(), "preview".into(), data.clone())?;
         self.access().require(actor, &internal::SALES_INQUIRY_IMPORT_CREATE, &candidate, executor).await?;
         Ok(data)
@@ -88,6 +91,7 @@ impl SalesInquiryImportProcess {
         executor: &mut dyn Executor,
     ) -> Result<InquiryImportPreviewView> {
         self.creation_header(actor, customer, executor).await?;
+
         let products = product_rows(&workbook);
         let deliveries = delivery_rows(&workbook);
         let codes = products.iter().map(|row| row.sku_code.clone()).collect::<Vec<_>>();
@@ -99,6 +103,7 @@ impl SalesInquiryImportProcess {
             &InquiryRequirementData::default(),
             next_id,
         );
+
         let mut errors = workbook.errors;
         errors.extend(
             validated
@@ -106,6 +111,7 @@ impl SalesInquiryImportProcess {
                 .into_iter()
                 .map(|issue| locate_issue(issue, workbook.product_sheet, workbook.automatic_delivery)),
         );
+
         let preview = InquiryImportPreview {
             base: BaseModel::new(next_id()),
             inquiry_id: String::new(),

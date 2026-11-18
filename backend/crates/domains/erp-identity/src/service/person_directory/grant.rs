@@ -73,6 +73,7 @@ pub async fn ensure_grant(
     if !should_insert_grant(state) {
         return Ok(());
     }
+
     let qualification = PersonQueryQualification::grant(next_id(), account_id, category)?;
     match db.person_query_qualifications().create(&qualification, executor).await {
         Ok(()) => Ok(()),

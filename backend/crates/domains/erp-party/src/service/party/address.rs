@@ -111,6 +111,7 @@ impl PartyAddressService {
             executor,
         )
         .await?;
+
         let paging = normalize_paging(
             &params.sort_by,
             &params.sort_dir,
@@ -128,6 +129,7 @@ impl PartyAddressService {
             sort_by: Some(paging.sort_by.to_string()),
             sort_ascending: matches!(paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.party_addresses().search_party_addresses(&filter, executor).await?;
         let items = page
             .items
@@ -145,7 +147,6 @@ impl PartyAddressService {
                 created_at: row.created_at,
             })
             .collect();
-
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
@@ -217,6 +218,7 @@ impl PartyAddressService {
     ) -> Result<PartyAddressView> {
         self.authorization.require(actor, &party::ADDRESS_CREATE, AccessTarget::Operation, executor).await?;
         super::ensure_new_fact_guards(&self.db, self.supplier_roles.as_ref(), party_id, executor).await?;
+
         let address = self.prepare_record(party_id, req, actor)?;
         let audit = self.audit.resource_log(
             actor.clone(),
@@ -224,6 +226,7 @@ impl PartyAddressService {
             "party_address",
             address.base.id.clone(),
         )?;
+
         if address.is_default {
             self.db.party_addresses().clear_other_default_marks(&address.party_id, None, executor).await?;
         }
@@ -281,6 +284,7 @@ impl PartyAddressService {
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &address.party_id, executor)
             .await?;
         super::map_version_conflict(address.ensure_version(req.version))?;
+
         address.update(
             PartyAddressUpdate {
                 status: req.status,
@@ -295,6 +299,7 @@ impl PartyAddressService {
             "party_address",
             address.base.id.clone(),
         )?;
+
         if address.is_default {
             self.db
                 .party_addresses()

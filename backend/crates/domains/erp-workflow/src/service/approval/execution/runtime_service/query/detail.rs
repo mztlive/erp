@@ -34,6 +34,7 @@ impl RuntimeInstanceListItem {
         if !current_execution_matches_instance(instance, execution) {
             return Err(hidden_not_found());
         }
+
         Ok(Self {
             instance_id: instance.base.id.clone(),
             status: instance.status.as_str().to_string(),

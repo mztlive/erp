@@ -70,6 +70,7 @@ impl ProductImportProcess {
             self.sources.remove(job_id).await;
             return Ok(());
         };
+
         let items = self
             .db
             .background_job_items()
@@ -88,6 +89,7 @@ impl ProductImportProcess {
             }
             return Ok(());
         }
+
         let row_source = self
             .sources
             .get_or_load(&job, || async {
@@ -96,6 +98,7 @@ impl ProductImportProcess {
                 Ok((source, bytes))
             })
             .await?;
+
         let result = self.execute_pending_items(&mut job, items, &actor, &mut cache, &row_source).await;
         if job.finished_at.is_some() {
             self.sources.remove(job_id).await;
@@ -114,6 +117,7 @@ impl ProductImportProcess {
         if job.domain_job_type.as_deref() != Some(PRODUCT_IMPORT_DOMAIN_JOB_TYPE) {
             return Ok(None);
         }
+
         if job.status == JobStatus::Pending {
             job.start(Instant::now())?;
             if let Err(error) = self.db.background_jobs().update(&mut job, &mut ReadExecutor::default()).await
@@ -231,6 +235,7 @@ impl ProductImportProcess {
                     "私有行清单不可用，回退到对象清单链路"),
             }
         }
+
         match read_row_manifest(&self.storage, &job.request_id).await {
             Ok(manifest) => Ok(JobRowSource::Manifest(manifest)),
             Err(error) => {
@@ -306,11 +311,13 @@ impl ProductImportProcess {
             .find_by_id(file_id.as_ref(), &mut ReadExecutor::default())
             .await?
             .ok_or_else(|| Error::NotFound("导入源文件不存在".into()))?;
+
         let bytes = self
             .storage
             .read(&asset.storage_object_key)
             .await
             .map_err(|error| Error::Internal(format!("读取导入文件失败: {error}")))?;
+
         let bytes = Arc::new(bytes);
         let parse_bytes = bytes.clone();
         let parsed = tokio::task::spawn_blocking(move || parse_product_quote_xlsx(&parse_bytes))

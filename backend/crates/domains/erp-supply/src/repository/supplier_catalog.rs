@@ -50,6 +50,7 @@ pub async fn next_callback_target(
     if let Some(after) = after {
         filter.insert("id", doc! {"$gt":after});
     }
+
     let mut items = mongo_ops::find_many(
         &db.collection::<SupplierCatalogItem>(ITEMS),
         filter,
@@ -114,6 +115,7 @@ pub async fn successful_run(
         filter.insert("sync_mode", "FULL");
         filter.insert("skipped_count", 0_i64);
     }
+
     let mut runs = mongo_ops::find_many(
         &db.collection::<SupplierCatalogRun>(RUNS),
         filter,
@@ -218,7 +220,9 @@ pub async fn filtered_page(
 ) -> Result<(Vec<SupplierCatalogItem>, u64)> {
     let collection = db.collection::<SupplierCatalogItem>(ITEMS);
     let filter = catalog_filter(connection, query)?;
+
     let total = mongo_ops::count_documents(&collection, filter.clone(), executor).await?;
+
     let options = FindOptions::builder()
         .sort(doc! { "name": 1, "id": 1 })
         .skip(u64::from(page.saturating_sub(1)) * u64::from(size))
@@ -235,6 +239,7 @@ fn catalog_filter(connection: &str, query: &CatalogFilter) -> Result<Document> {
             filter.insert(field, doc! { "$in": values });
         }
     }
+
     if let Some(keyword) = query.keyword.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
         let alternatives = ["name", "specification", "product_id", "spec_id", "brand_name"].map(|field| {
             let mut item = Document::new();
@@ -243,6 +248,7 @@ fn catalog_filter(connection: &str, query: &CatalogFilter) -> Result<Document> {
         });
         filter.insert("$or", alternatives.to_vec());
     }
+
     availability_filter(&mut filter, query.availability);
     let selection = if query.only_unadopted {
         CatalogSelectionStatus::Unselected
@@ -258,6 +264,7 @@ fn catalog_filter(connection: &str, query: &CatalogFilter) -> Result<Document> {
             filter.insert("offering_id", Bson::Null);
         },
     }
+
     price_filter(&mut filter, query)?;
     Ok(filter)
 }
@@ -284,6 +291,7 @@ fn price_filter(filter: &mut Document, query: &CatalogFilter) -> Result<()> {
             conditions.push(doc! { operator: [numeric.clone(), Bson::Decimal128(price)] });
         }
     }
+
     if !conditions.is_empty() {
         conditions.insert(0, doc! { "$ne": [numeric, Bson::Null] });
         filter.insert("purchase_price", doc! { "$ne": Bson::Null });
@@ -440,6 +448,7 @@ pub async fn expire_availability(
     let rows = mongo_ops::find_many(&collection,
         doc! {"availability_status":"AVAILABLE", "valid_until":{"$type":"number", "$lte":now.unix_secs()}, "deleted_at":0_i64},
         FindOptions::builder().sort(doc! {"valid_until":1,"id":1}).limit(100).build(),executor).await?;
+
     let count = rows.len();
     for mut row in rows {
         row.availability_status = AvailabilityStatus::Stale;
@@ -540,6 +549,7 @@ mod tests {
             panic!("range bound must be an exact BSON decimal");
         };
         assert_eq!(price.to_string(), "10.1001");
+
         let closed: CatalogFilter =
             serde_json::from_value(serde_json::json!({"price_min":"0","price_max":"0"})).unwrap();
         let filter = catalog_filter("connection", &closed).unwrap();
@@ -570,6 +580,7 @@ mod tests {
         assert_eq!(old.source_updated_at, Some(Instant::from_unix_secs(10)));
         assert!(old.valid_until.is_none());
         assert!(old.is_available());
+
         let mut missing = base;
         missing.remove("source_updated_at");
         let missing: SupplierOfferingAvailability =

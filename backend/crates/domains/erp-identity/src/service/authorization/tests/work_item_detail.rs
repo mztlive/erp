@@ -165,6 +165,7 @@ async fn missing_order_source_rejects_detail_without_filtering_the_original_list
     let list = service.query(&actor(), &work_item::LIST, &mut executor).await.unwrap();
     assert_eq!(rows(&list, vec![task.clone()], BTreeMap::new()), ["task"]);
     service.validate(&list, &mut executor).await.unwrap();
+
     let detail = service.query(&actor(), &work_item::DETAIL, &mut executor).await.unwrap();
     assert!(rows(&detail, vec![task], BTreeMap::new()).is_empty());
     service.validate(&detail, &mut executor).await.unwrap();
@@ -286,6 +287,7 @@ async fn detail_source_preparation_expiry_is_part_of_the_original_delivery_proof
     let mut access = service.query(&actor(), &work_item::DETAIL, &mut executor).await.unwrap();
     assert_eq!(access.proof.valid_until, Some(deadline));
     service.validate(&access, &mut executor).await.unwrap();
+
     access.proof.boundary = executor.boundary().unwrap();
     access.proof.valid_until = Some(Instant::from_unix_secs(1));
     assert!(matches!(service.validate(&access, &mut executor).await, Err(Error::ConflictError(_))));
@@ -389,6 +391,7 @@ async fn approval_detail_revalidates_full_management_source_before_nontransactio
                 &mut ReadExecutor::default(),
             )
             .await;
+
         if change == "unchanged" {
             result.unwrap();
         } else {

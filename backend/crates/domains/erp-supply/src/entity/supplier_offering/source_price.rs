@@ -26,6 +26,7 @@ impl SupplierCatalogItem {
                 return Err(Error::ValidationError("采购税率必须与供应商已核实税率一致".into()));
             }
         }
+
         revision.source_purchase_terms = self.source_purchase_terms.clone();
         self.ensure_supply_prices(revision)
     }
@@ -127,12 +128,14 @@ impl SupplierOfferingRevision {
             .and_then(|terms| terms.quote_context.as_ref())
             .and_then(|context| context.tax_rate)
             .unwrap_or(self.input_tax_rate);
+
         let previous = self.source_purchase_terms.as_ref().map(|terms| terms.version_content());
         let current = item.source_purchase_terms.as_ref().map(|terms| terms.version_content());
         if price == self.dropship_supply_price_gross && tax_rate == self.input_tax_rate && previous == current
         {
             return Ok(None);
         }
+
         let mut next = self.next_priced_revision(id, revision_no, price, tax_rate)?;
         item.bind_purchase_terms(&mut next)?;
         Ok(Some(next))
@@ -257,12 +260,14 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+
         let zero = old
             .with_source_price(SupplierOfferingRevisionId::new("zero"), 2, "0".parse().unwrap())
             .unwrap()
             .unwrap();
         assert_eq!(zero.dropship_supply_price_gross, "0".parse().unwrap());
         assert_eq!(zero.dropship_supply_price_net, "0".parse().unwrap());
+
         assert!(
             old.with_source_price(SupplierOfferingRevisionId::new("bad"), 2, "-1".parse().unwrap()).is_err()
         );
@@ -273,12 +278,14 @@ mod tests {
         let mut old = revision();
         let mut original = catalog("0.13", "2");
         original.bind_purchase_terms(&mut old).unwrap();
+
         let mut same = original.clone();
         same.source_purchase_terms.as_mut().unwrap().quote_context.as_mut().unwrap().observed_at =
             Instant::from_unix_secs(200);
         assert!(
             old.with_source_observation(SupplierOfferingRevisionId::new("same"), 2, &same).unwrap().is_none()
         );
+
         let changed = catalog("0.09", "3");
         let next = old
             .with_source_observation(SupplierOfferingRevisionId::new("new"), 2, &changed)
@@ -290,10 +297,12 @@ mod tests {
         assert_eq!(next.source_purchase_terms, changed.source_purchase_terms);
         assert_eq!(old.source_purchase_terms, original.source_purchase_terms);
         assert!(next.source_purchase_terms.as_ref().unwrap().ensure_quantity("2".parse().unwrap()).is_err());
+
         let mut encoded = serde_json::to_value(next).unwrap();
         encoded.as_object_mut().unwrap().remove("source_purchase_terms");
         let restored: SupplierOfferingRevision = serde_json::from_value(encoded).unwrap();
         assert!(restored.source_purchase_terms.is_none());
+
         original.source_purchase_terms.as_mut().unwrap().quote_context.as_mut().unwrap().tax_rate =
             Some("0.09".parse().unwrap());
         assert!(original.bind_purchase_terms(&mut old).is_err());

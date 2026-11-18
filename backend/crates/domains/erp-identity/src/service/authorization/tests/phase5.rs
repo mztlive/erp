@@ -33,6 +33,7 @@ async fn customer_history_allows_viewing_but_current_selection_requires_current_
     let facts = Arc::new(Facts::new(vec![customer]));
     let service = bound(identity.clone(), "customer", facts.clone());
     let mut executor = SnapshotExecutor::default();
+
     service
         .require(&actor(), &customer::DETAIL, AccessTarget::record("one").unwrap(), &mut executor)
         .await
@@ -48,11 +49,13 @@ async fn customer_history_allows_viewing_but_current_selection_requires_current_
             .await,
         Err(Error::Forbidden(_))
     ));
+
     facts.objects.lock().unwrap()[0].owner_id = FactValue::Known(Some("user".into()));
     service
         .require(&actor(), &internal::CUSTOMER_SELECT, AccessTarget::record("one").unwrap(), &mut executor)
         .await
         .unwrap();
+
     grant(&identity, &[("sales", &[])]);
     assert!(matches!(
         service
@@ -225,6 +228,7 @@ async fn supplier_material_requires_every_independent_business_qualification() {
         )
         .await
         .unwrap();
+
     let before = facts.calls.load(Ordering::SeqCst);
     grant(
         &identity,
@@ -242,6 +246,7 @@ async fn supplier_material_requires_every_independent_business_qualification() {
         Err(Error::Forbidden(_))
     ));
     assert_eq!(facts.calls.load(Ordering::SeqCst), before);
+
     grant(&identity, &[("supplier-editor", &[supplier::PROFILE_UPDATE])]);
     service
         .require(
@@ -252,6 +257,7 @@ async fn supplier_material_requires_every_independent_business_qualification() {
         )
         .await
         .unwrap();
+
     assert!(matches!(
         service
             .require(
@@ -516,6 +522,7 @@ async fn settlement_commands_use_central_preparer_and_assignee_policies() {
             },
         );
     }
+
     let mut statement = object("supplier_settlement_statement", "statement", "other");
     statement.assignee_id = FactValue::Known(Some("other".into()));
     let facts = Arc::new(Facts::new(vec![statement]));
@@ -548,6 +555,7 @@ async fn settlement_commands_use_central_preparer_and_assignee_policies() {
             }
         }
     }
+
     grant(&identity, &[("no-functional-grant", &[])]);
     assert!(matches!(
         service
@@ -603,6 +611,7 @@ async fn organization_scope_preserves_fixed_profile_qualification_and_snapshot_b
             .await,
         Err(Error::Forbidden(_))
     ));
+
     grant(&identity, &[("combined", &[organization::CHANGE, admin::ACCOUNT_UPDATE_ADMIN])]);
     let scope = service
         .organization_scope(&actor(), &internal::ORGANIZATION_PERSON_PROFILE_CHANGE, &mut executor)

@@ -48,6 +48,7 @@ pub(crate) fn source_stages(
     let number = format!("${number_field}");
     let reference = format!("${as_field}");
     let allowed = format!("{as_field}_allowed");
+
     let mut allowed_stages = grant_lookup.to_vec();
     allowed_stages.extend([doc! { "$match": scope }, doc! { "$project": { "_id": 0, "id": 1 } }]);
     vec![

@@ -93,6 +93,7 @@ async fn preview(
         return Err(Error::ValidationError("采购责任预览必须使用同一快照事务".into()));
     }
     source.authorize(actor, &admin::PROCUREMENT_RESPONSIBILITY_RESOLVE, executor).await?;
+
     let view = preview_lines(source, request, executor).await?;
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::ValidationError("采购责任预览已离开原快照事务".into()));
@@ -113,11 +114,13 @@ async fn preview_lines(
         .collect::<erp_core::Result<Vec<_>>>()
         .map_err(Error::Logic)?;
     ProcurementResponsibilityResolutionBatch::new(&inputs).map_err(Error::Logic)?;
+
     if let Ok(views) = source.batch(&inputs, request.purpose, executor).await {
         return Ok(ProcurementResponsibilityResolveView {
             lines: views.into_iter().map(success_preview).collect(),
         });
     }
+
     let mut lines = Vec::with_capacity(inputs.len());
     for input in inputs {
         let line_key = input.line_key.clone();
@@ -261,7 +264,9 @@ mod tests {
         let source = Fixture::new();
         let mut executor = SnapshotExecutor::default();
         let expected = &mut executor as *mut SnapshotExecutor as usize;
+
         let view = preview(&source, &actor(), request(), &mut executor).await.unwrap();
+
         assert_eq!(
             view.lines.iter().map(|line| line.line_key.as_str()).collect::<Vec<_>>(),
             ["first", "second"]
@@ -269,6 +274,7 @@ mod tests {
         assert!(
             view.lines.iter().all(|line| line.resolved && line.owner_user_id.as_deref() == Some("buyer"))
         );
+
         assert_eq!(
             *source.calls.lock().unwrap(),
             [
@@ -282,8 +288,10 @@ mod tests {
     async fn denied_preview_does_not_read_any_rules_or_owner_facts() {
         let mut source = Fixture::new();
         source.denied = true;
+
         let error =
             preview(&source, &actor(), request(), &mut SnapshotExecutor::default()).await.unwrap_err();
+
         assert!(matches!(error, Error::Forbidden(message) if message == "缺少采购责任预览资格"));
         let calls = source.calls.lock().unwrap();
         assert_eq!(calls.len(), 1);
@@ -296,10 +304,13 @@ mod tests {
         source.failed_line = Some("second");
         let mut executor = SnapshotExecutor::default();
         let expected = &mut executor as *mut SnapshotExecutor as usize;
+
         let view = preview(&source, &actor(), request(), &mut executor).await.unwrap();
+
         assert!(view.lines[0].resolved);
         assert!(!view.lines[1].resolved);
         assert_eq!(view.lines[1].error.as_deref(), Some("业务逻辑错误: 商品未配置责任规则"));
+
         assert_eq!(
             *source.calls.lock().unwrap(),
             [
@@ -325,7 +336,9 @@ mod tests {
     #[tokio::test]
     async fn preview_rejects_non_snapshot_execution_and_unavailable_real_authorization() {
         let fixture = Fixture::new();
+
         let error = preview(&fixture, &actor(), request(), &mut ReadExecutor::default()).await.unwrap_err();
+
         assert!(
             matches!(error, Error::ValidationError(message) if message == "采购责任预览必须使用同一快照事务")
         );
@@ -336,8 +349,10 @@ mod tests {
             .unwrap()
             .database("procurement_preview");
         let source = ProcurementResponsibilityProcess::new(db, unavailable_authorization());
+
         let error =
             preview(&source, &actor(), request(), &mut SnapshotExecutor::default()).await.unwrap_err();
+
         assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
     }
 }

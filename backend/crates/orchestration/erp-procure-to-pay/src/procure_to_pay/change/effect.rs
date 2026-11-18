@@ -57,6 +57,7 @@ impl PurchaseOrderProcess {
         let submission_id = change
             .submission_id_for_effect(Some(req.submission_id.as_str()))
             .map_err(|error| Error::ConflictError(error.to_string()))?;
+
         self.persist_effective_change(change, submission_id.to_string(), actor).await
     }
 
@@ -87,6 +88,7 @@ impl PurchaseOrderProcess {
         )?;
         let submission_id =
             change.submission_id_for_effect(None).map_err(|error| Error::ConflictError(error.to_string()))?;
+
         let prepared = self.prepare_effective_change_write(&change, submission_id.as_ref()).await?;
         write_effective_change_apply(&self.db, ports.as_ref(), prepared.write, actor, executor)
             .await
@@ -121,6 +123,7 @@ impl PurchaseOrderProcess {
         let PreparedEffectiveChange { write, revision_id, revision_no, payable_delta_entry_id } = prepared;
         let purchase_order_lock_version =
             write_effective_change(&self.db, ports.as_ref(), write, actor).await?;
+
         Ok(PurchaseChangeEffectResult {
             change_id: change.base.id.clone(),
             revision_id,
@@ -142,6 +145,7 @@ impl PurchaseOrderProcess {
     ) -> Result<PreparedEffectiveChange> {
         let (write, base_revision) =
             self.domain().prepare_purchase_effective_change(change, submission_id).await?;
+
         let payable = prepare_purchase_change_payable(PurchaseChangePayableInput {
             purchase_order_id: write.order.base.id.clone().into(),
             supplier_id: write.order.supplier_id.clone(),
@@ -244,6 +248,7 @@ async fn write_effective_change_apply(
         executor,
     )
     .await?;
+
     let audit = actor.clone().resource_log(
         "purchase_change_order.effect",
         "purchase_change_order",

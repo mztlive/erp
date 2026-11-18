@@ -39,6 +39,7 @@ impl ReceivableProcess {
         let receipt = evidence_receipt(&req, actor.id(), pending.as_ref())?;
         let expected = expected_task_version(&req.expected_task_version)?;
         let has_pending = !pending.is_empty();
+
         let command = EvidenceCommand {
             db: self.db.clone(),
             rbac: self.rbac.clone(),
@@ -48,12 +49,14 @@ impl ReceivableProcess {
             receipt: receipt.clone(),
             expected,
         };
+
         let result = self
             .db
             .client()
             .clone()
             .with_transaction(move |executor| Box::pin(command.execute(executor)))
             .await;
+
         self.committed_invoice_view(result, &receipt, has_pending, actor).await
     }
 }
@@ -92,6 +95,7 @@ impl EvidenceCommand {
             executor,
         )
         .await?;
+
         let db = &self.db;
         if let Some(id) = FinanceCommandReceiptService::new(db.clone())
             .committed_resource_id(&self.receipt, executor)
@@ -106,6 +110,7 @@ impl EvidenceCommand {
     async fn execute_fresh(mut self, executor: &mut dyn Executor) -> Result<(String, bool)> {
         let db = &self.db;
         invoice_attachments::resolve(&mut self.req.attachment_asset_ids, self.pending.as_ref())?;
+
         let request = self.request(executor).await?;
         let mut invoice = Invoice::from_evidence(
             InvoiceId::new(id_generator::next_id()),
@@ -115,6 +120,7 @@ impl EvidenceCommand {
         )?;
         register_created_invoice_document(db, &self.rbac, &invoice, &self.actor, executor).await?;
         db.invoices().create(&invoice, executor).await?;
+
         post_invoice_apply(
             db,
             &mut invoice,
@@ -130,6 +136,7 @@ impl EvidenceCommand {
             executor,
         )
         .await?;
+
         invoice_attachments::persist(
             db,
             &self.rbac.authorization,
@@ -201,27 +208,32 @@ mod tests {
             )
             .unwrap()
         };
+
         let first = evidence_receipt(&req, actor.id(), &batch("a", "first")).unwrap();
         let retry = evidence_receipt(&req, actor.id(), &batch("a", "retry")).unwrap();
         let changed_file = evidence_receipt(&req, actor.id(), &batch("b", "changed")).unwrap();
         assert_eq!(first.fingerprint(), retry.fingerprint());
         assert_ne!(first.fingerprint(), changed_file.fingerprint());
+
         let stored =
             erp_finance::FinanceCommandReceipt::resource(&first, "invoice".into(), "event".into()).unwrap();
         assert_eq!(stored.resource_id(&retry).unwrap(), "invoice");
         assert!(stored.resource_id(&changed_file).is_err());
+
         let mut changed = req.clone();
         changed.expected_request_version += 1;
         assert_ne!(
             evidence_receipt(&changed, actor.id(), &batch("a", "first")).unwrap().fingerprint(),
             first.fingerprint()
         );
+
         changed = req.clone();
         changed.work_item_id = "another".to_string().into();
         assert_ne!(
             evidence_receipt(&changed, actor.id(), &batch("a", "first")).unwrap().fingerprint(),
             first.fingerprint()
         );
+
         assert!(
             invoice_attachments::resolve(&mut req.attachment_asset_ids.clone(), &EmptyPendingAttachments)
                 .is_err()

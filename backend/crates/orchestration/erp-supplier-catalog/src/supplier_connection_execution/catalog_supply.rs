@@ -36,8 +36,10 @@ pub(crate) async fn apply_source_supply(
                 && item.sku_id.as_deref() == Some(offering.sku_id.as_ref())
         })
         .ok_or_else(|| Error::ConflictError("目录与正式API供给来源不一致".into()))?;
+
     SupplierOfferingService::new(db.clone()).sync_source_price(&mut offering, item, actor, executor).await?;
     apply_availability(db, item, &offering, actor, executor).await?;
+
     let audit = actor.clone().resource_log(
         "supplier_catalog.supply.apply",
         "supplier_offering",
@@ -59,6 +61,7 @@ async fn apply_availability(
         .find_by_offering_id(&SupplierOfferingId::new(&offering.base.id), executor)
         .await?
         .ok_or_else(|| Error::ConflictError("已选品供给缺少可供事实".into()))?;
+
     let status = if item.requires_identity_review {
         AvailabilityStatus::Stale
     } else {
@@ -80,6 +83,7 @@ async fn apply_availability(
         .map(str::parse)
         .transpose()
         .map_err(|_| Error::ValidationError("来源可供数量无法解析".into()))?;
+
     availability.apply(SupplierOfferingAvailabilityData {
         supplier_offering_id: SupplierOfferingId::new(&offering.base.id),
         availability_status: status,

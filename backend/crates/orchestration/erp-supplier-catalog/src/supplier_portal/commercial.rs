@@ -102,6 +102,7 @@ impl SupplierPortalProcess {
                         .get(&id, &actor.supplier_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("合作申请不存在".into()))?;
+
                     let supplier = this.active_supplier(&actor.supplier_id, executor).await?;
                     let task_id = next_id();
                     app.submit(
@@ -113,6 +114,7 @@ impl SupplierPortalProcess {
                         now_u64()?,
                     )?;
                     repo.update(&mut app, executor).await?;
+
                     this.services
                         .work_items
                         .create_supplier_portal_review(
@@ -172,6 +174,7 @@ impl SupplierPortalProcess {
                         executor,
                     )
                     .await?;
+
                     app.withdraw(
                         &actor.supplier_id,
                         input.expected_version,
@@ -248,6 +251,7 @@ impl SupplierPortalProcess {
             repo.find_any(id, executor).await?.ok_or_else(|| Error::NotFound("合作申请不存在".into()))?;
         let subject = cooperation_subject(&app)?;
         self.validate_task(id, &subject, input, actor, executor).await?;
+
         match input.decision {
             PortalDecision::Return => {
                 self.complete_task(id, &subject, input, actor, executor).await?;
@@ -261,6 +265,7 @@ impl SupplierPortalProcess {
             PortalDecision::Approve => {
                 self.submission_actor(&app.supplier_id, &app.pending_submission()?.submitted_by, executor)
                     .await?;
+
                 let supplier = self.active_supplier(&app.supplier_id, executor).await?;
                 let profile_id = supplier
                     .current_commercial_profile_revision_id
@@ -272,6 +277,7 @@ impl SupplierPortalProcess {
                     .find_by_id(profile_id.as_ref(), executor)
                     .await?
                     .ok_or_else(|| Error::ConflictError("供应商商务档案不存在".into()))?;
+
                 let mut plan = plan_confirmed_cooperation(
                     &app,
                     &supplier,
@@ -281,10 +287,12 @@ impl SupplierPortalProcess {
                     now_u64()?,
                 )?;
                 repo.apply_confirmed(&supplier, &mut plan, executor).await?;
+
                 self.complete_task(id, &subject, input, actor, executor).await?;
                 app.activate(input.expected_version, actor, plan.result)?;
             },
         }
+
         repo.update(&mut app, executor).await?;
         Ok(app)
     }

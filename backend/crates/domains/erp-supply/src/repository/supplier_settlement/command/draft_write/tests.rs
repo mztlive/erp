@@ -121,6 +121,7 @@ async fn draft_replace_keeps_physical_delete_cas_insert_order_and_one_executor()
     let mut store = Store::new(None);
     let mut executor = TestExecutor::default();
     let identity = &mut executor as *mut TestExecutor as usize;
+
     replace_snapshot(
         &mut store,
         &mut statement,
@@ -132,6 +133,7 @@ async fn draft_replace_keeps_physical_delete_cas_insert_order_and_one_executor()
     )
     .await
     .unwrap();
+
     assert_eq!(store.calls, full_trace());
     assert_eq!(store.executors, vec![identity; 6]);
     assert_eq!(statement.base.version, version + 1);
@@ -146,6 +148,7 @@ async fn draft_replace_stops_at_every_failed_write_and_keeps_original_error() {
         let mut store = Store::new(Some(failed.step));
         let mut executor = TestExecutor::default();
         let identity = &mut executor as *mut TestExecutor as usize;
+
         let result = replace_snapshot(
             &mut store,
             &mut statement,
@@ -156,6 +159,7 @@ async fn draft_replace_stops_at_every_failed_write_and_keeps_original_error() {
             &mut executor,
         )
         .await;
+
         assert!(matches!(result, Err(persistence_core::Error::OptimisticLockingError)));
         assert_eq!(store.calls, expected[..=index]);
         assert_eq!(store.executors, vec![identity; index + 1]);
@@ -184,6 +188,7 @@ async fn draft_replace_keeps_original_empty_batch_conditions() {
                 let mut store = Store::new(None);
                 let mut executor = TestExecutor::default();
                 let identity = &mut executor as *mut TestExecutor as usize;
+
                 replace_snapshot(
                     &mut store,
                     &mut statement,
@@ -195,6 +200,7 @@ async fn draft_replace_keeps_original_empty_batch_conditions() {
                 )
                 .await
                 .unwrap();
+
                 let mut expected = Vec::new();
                 if has_old_difference {
                     expected.push(call(Step::DeleteEvidence, &["old-difference"]));
@@ -210,6 +216,7 @@ async fn draft_replace_keeps_original_empty_batch_conditions() {
                 if has_new_difference {
                     expected.push(call(Step::InsertDifferences, &["new-difference"]));
                 }
+
                 assert_eq!(store.calls, expected);
                 assert_eq!(store.executors, vec![identity; expected.len()]);
             }
@@ -223,6 +230,7 @@ async fn draft_store_does_not_add_a_state_guard_before_original_first_write() {
     statement.status = SettlementStatus::Confirmed;
     let mut store = Store::new(Some(Step::DeleteEvidence));
     let mut executor = TestExecutor::default();
+
     let result = replace_snapshot(
         &mut store,
         &mut statement,
@@ -233,6 +241,7 @@ async fn draft_store_does_not_add_a_state_guard_before_original_first_write() {
         &mut executor,
     )
     .await;
+
     assert!(matches!(result, Err(persistence_core::Error::OptimisticLockingError)));
     assert_eq!(store.calls, [call(Step::DeleteEvidence, &["old-difference"])]);
 }

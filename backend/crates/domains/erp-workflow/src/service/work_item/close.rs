@@ -89,6 +89,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         if let Some(replayed) = self.idempotent_replay(&command.receipt, &item, executor).await? {
             return Ok(WorkItemWriteOutcome::Updated(Box::new(replayed)));
         }
+
         if item.base.version != command.expected_version {
             return Ok(WorkItemWriteOutcome::VersionConflict);
         }
@@ -98,6 +99,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
         if let Some(id) = command.decision.replacement_work_item_id.as_deref() {
             self.ensure_w29_replacement(&item, id, &command.actor, executor).await?;
         }
+
         let item = self.close_with_domain_evidence(item, command, executor).await?;
         Ok(WorkItemWriteOutcome::Updated(Box::new(item)))
     }
@@ -133,6 +135,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
             WorkItemCloseData { close_reason: command.decision.close_reason.clone() },
             closed_at,
         )?;
+
         let evidence = command.decision.evidence_reference(&item.base.id, command.receipt.id());
         self.facts
             .persist_w29_close(
@@ -145,6 +148,7 @@ impl<A: WorkflowAuthorizationPort> WorkItemService<A> {
                 executor,
             )
             .await?;
+
         self.db.work_items().update(&mut item, executor).await.map_err(work_item_update_error)?;
         self.audit.persist(&command.audit, executor).await?;
         persist_close_receipt(&self.db, &command.receipt, &item, &evidence, &command.audit.id, executor)
@@ -256,8 +260,10 @@ mod tests {
         let audit = service.prepare_close_audit(&actor, &receipt, "task").unwrap();
         let command =
             CloseCommand { id: "task".into(), actor, expected_version: 1, decision, receipt, audit };
+
         let error = service.apply_close(&command, &mut NoTransaction).await.err().unwrap();
         assert!(matches!(error, WorkItemWriteError::Service(Error::ValidationError(_))));
+
         let error = service.apply_close(&command, &mut SnapshotExecutor::default()).await.err().unwrap();
         assert!(
             matches!(error, WorkItemWriteError::Service(Error::Internal(reason)) if reason == "测试授权设施不可用")

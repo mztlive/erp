@@ -201,7 +201,6 @@ mod tests {
     #[test]
     fn document_participant_indexes_cover_id_and_user_lookups() {
         let indexes = document_participant_indexes();
-
         let id_index = indexes
             .iter()
             .find(|index| {
@@ -210,6 +209,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(id_index.options.as_ref().unwrap().unique, Some(true));
+
         assert!(indexes.iter().any(|index| index.keys.contains_key("participant_user_id")));
         assert!(
             indexes.iter().any(|index| index.keys == doc! { "document_id": 1, "participant_user_id": 1 })
@@ -219,7 +219,6 @@ mod tests {
     #[test]
     fn workflow_action_indexes_cover_document_and_actor_history() {
         let indexes = workflow_action_indexes();
-
         assert!(indexes.iter().any(|index| { index.keys == doc! { "document_id": 1, "created_at": -1 } }));
         assert!(indexes.iter().any(|index| { index.keys == doc! { "actor_id": 1, "created_at": -1 } }));
         assert!(indexes.iter().any(|index| {

@@ -342,6 +342,7 @@ mod tests {
             "admin-1",
         )
         .unwrap();
+
         assert_eq!(planned.contract.settlement_party_id, PartyId::new("party-from-customer"));
         assert_eq!(planned.revision.contract_pdf_file_id, FileAssetId::new("asset-9"));
         assert_eq!(planned.revision.archive_source, ArchiveSource::ContractCenter);
@@ -383,6 +384,7 @@ mod tests {
         .unwrap();
         let planned = plan_next_revision(contract, req, 1).unwrap();
         assert_eq!(planned.revision.revision.revision_no, 2);
+
         assert!(
             plan_next_revision(
                 planned.contract,

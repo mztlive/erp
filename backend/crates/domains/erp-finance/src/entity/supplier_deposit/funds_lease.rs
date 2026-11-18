@@ -84,9 +84,11 @@ mod tests {
         let original = current.clone();
         assert!(!current.claim("worker-2", Instant::from_unix_secs(99), 30).unwrap());
         assert_eq!(current, original);
+
         assert!(current.claim("worker-2", Instant::from_unix_secs(100), 30).unwrap());
         assert_eq!(current.fencing_token, 8);
         assert_eq!(current.expires_at, Instant::from_unix_secs(130));
+
         assert!(current.ensure_owner("worker-1", 7, Instant::from_unix_secs(101)).is_err());
         assert!(current.release("worker-1", 7, Instant::from_unix_secs(101)).is_err());
         current.ensure_owner("worker-2", 8, Instant::from_unix_secs(129)).unwrap();
@@ -101,6 +103,7 @@ mod tests {
         assert!(current.ensure_owner("worker-1", 7, Instant::from_unix_secs(51)).is_err());
         current.release("worker-1", 8, Instant::from_unix_secs(52)).unwrap();
         assert_eq!(current.expires_at, Instant::from_unix_secs(52));
+
         let original = current.clone();
         assert!(current.claim("worker-1", Instant::from_unix_secs(52), 0).is_err());
         assert_eq!(current, original);

@@ -137,6 +137,7 @@ pub(super) fn task_document(field: &WorkItemFields) -> SearchDocument {
         ..Default::default()
     };
     task_facets(&mut doc, field);
+
     for link in &field.links {
         let key = match link.object_type() {
             "sales_order" => "sales_orders",
@@ -145,6 +146,7 @@ pub(super) fn task_document(field: &WorkItemFields) -> SearchDocument {
         };
         doc.facet(key, link.object_id(), link.object_id());
     }
+
     doc.text("任务编号", &field.id);
     doc.text("关联对象编号", &field.business_object_id);
     if let Some(id) = &field.owner_user_id {
@@ -168,6 +170,7 @@ fn task_facets(doc: &mut SearchDocument, field: &WorkItemFields) {
     if field.work_item_type == WorkItemType::DocumentApproval {
         doc.facet("item_types", "task:DOCUMENT_APPROVAL", "审批 · 全部类型");
     }
+
     doc.facet(
         "statuses",
         field.status.as_str(),
@@ -218,6 +221,7 @@ mod tests {
         collect_options(&mut options, &doc, &filters);
         assert_eq!(options["handlers"].len(), 101);
         assert!(options["handlers"].iter().any(|value| value.label == "人员149"));
+
         let mut searched = SearchOptions::new();
         collect_options(
             &mut searched,

@@ -102,6 +102,7 @@ impl ReceivableReadService {
         authorization
             .require(actor, &internal::INVOICE_REQUEST_AMOUNTS_READ, AccessTarget::Operation, executor)
             .await?;
+
         let boundary =
             executor.boundary().ok_or_else(|| Error::ValidationError("开票额度读取缺少授权快照".into()))?;
         let view = self.amounts_view(account_id, executor).await?;
@@ -123,6 +124,7 @@ impl ReceivableReadService {
             .find_by_id(account_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("销售应收不存在".into()))?;
+
         let requests = self.db.sales_invoice_requests().reserved_for_account(account_id, executor).await?;
         let mut pending = Amount::zero();
         let mut approved = Amount::zero();
@@ -133,10 +135,12 @@ impl ReceivableReadService {
                 _ => {},
             }
         }
+
         let source = super::invoice_request_source::load(&self.db, &account, executor).await?;
         let available =
             account.open_invoiceable_total.checked_sub(pending).checked_sub(approved).max(Amount::zero());
         let unavailable_reason = source.unavailable_reason(available).map(str::to_owned);
+
         Ok(InvoiceRequestAmounts {
             can_submit: unavailable_reason.is_none(),
             unavailable_reason,
@@ -163,12 +167,14 @@ impl ReceivableReadService {
             .find_by_id(&request.sales_order_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".into()))?;
+
         let mut approval = super::approval_view::document_approval_view(binding.as_ref(), None, status);
         if let (Some(binding), Some(definition)) = (binding.as_ref(), approval.definition.as_mut()) {
             let (name, nodes) = binding_route(&self.db, binding, executor).await?;
             definition.name = name;
             definition.nodes = nodes;
         }
+
         let subject = subject_ref_for(DocumentType::SalesInvoiceRequest, &request.base.id)?;
         if let Some(instance) = self.db.bpm_workflow().find_latest_by_subject(&subject, executor).await? {
             let current = self
@@ -183,6 +189,7 @@ impl ReceivableReadService {
                     .with_current_assignee(current.as_ref().map(|e| e.assignee_name_snapshot.clone())),
             );
         }
+
         let creator = self
             .db
             .accounts()
@@ -190,6 +197,7 @@ impl ReceivableReadService {
             .await?
             .into_iter()
             .next();
+
         Ok(InvoiceRequestView {
             request,
             sales_order_no: order.order_no,
@@ -234,11 +242,13 @@ mod authorization_tests {
         let service = ReceivableReadService::new(db);
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         let authorization = unavailable_authorization();
+
         let result =
             service.amounts_snapshot("account", &actor, &authorization, &mut ReadExecutor::default()).await;
         assert!(
             matches!(result, Err(Error::ValidationError(reason)) if reason == "开票额度读取必须使用快照事务")
         );
+
         let result = service
             .amounts_snapshot("account", &actor, &authorization, &mut SnapshotExecutor::default())
             .await;

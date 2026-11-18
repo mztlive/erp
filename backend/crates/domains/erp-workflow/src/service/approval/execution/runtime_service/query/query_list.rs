@@ -94,6 +94,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             },
             Err(error) => return Err(error.into()),
         };
+
         let page = self.mine_task_page(actor, query, &access, executor).await?;
         ensure_mine_page_integrity(page.integrity_conflicts.len())?;
         let items = self.hydrate_mine_items(actor, page.items, executor).await?;
@@ -102,6 +103,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         } else {
             None
         };
+
         self.authorization.validate(&access, executor).await?;
         Ok(RuntimeInstanceListPage { items, total: page.total, next_cursor, document_type_counts: None })
     }
@@ -200,22 +202,26 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         if query.view != RuntimeInstanceListView::Started {
             return Err(Error::ValidationError("工作台审批查询只允许本人发起范围".into()));
         }
+
         let type_scopes = self.runtime_read_type_scopes(query)?;
         let filter = instance_list_filter(actor, query)?;
         let scope = ApprovalRuntimeReadScope::Started {
             process_kinds: type_scopes.iter().map(|scope| scope.process_kind).collect(),
             submitted_by: actor.id().to_owned(),
         };
+
         let access =
             self.authorization.query(actor, &internal_permissions::APPROVAL_STARTED_LIST, executor).await?;
         let (rows, last) = ApprovalRuntimeReadRepository::new(&self.db)
             .scan_authorized(&filter, &scope, &access, executor)
             .await?;
+
         let next = last.map(|row| cursor_from_summary(filter.view, &row));
         let items = rows
             .into_iter()
             .map(|row| item_from_runtime_read_row(row, actor, query.view, &type_scopes))
             .collect::<Result<Vec<_>>>()?;
+
         self.authorization.validate(&access, executor).await?;
         Ok((items, next))
     }
@@ -269,9 +275,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         } else {
             ApprovalRuntimeReadScope::Managed { type_scopes: type_scopes.clone() }
         };
+
         let (mut page, access) =
             self.scoped_runtime_page(actor, query.view, &filter, &scope, executor).await?;
         ensure_runtime_result_limit(page.total)?;
+
         let has_more = page.items.len() > query.limit as usize;
         if has_more {
             page.items.truncate(query.limit as usize);
@@ -291,6 +299,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             document_type_counts: (query.view == RuntimeInstanceListView::Started)
                 .then_some(page.document_type_counts),
         };
+
         self.authorization.validate(&access, executor).await?;
         Ok(result)
     }

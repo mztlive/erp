@@ -110,6 +110,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         if let Some(extra_set) = spec.extra_set {
             merge_documents(&mut set_doc, extra_set);
         }
+
         let matched = mongo_ops::update_one(
             &self.db.collection::<T>(spec.collection),
             spec.filter,
@@ -124,6 +125,7 @@ impl<'a> BpmWorkflowRepository<'a> {
             applied.base_mut().version = spec.expected_version.saturating_add(1);
             return Ok(CasWriteOutcome::Applied(applied));
         }
+
         let current = mongo_ops::find_one(
             &self.db.collection::<T>(spec.collection),
             doc! { "id": spec.entity.base().id.as_str(), "deleted_at": NOT_DELETED_TIMESTAMP_BSON },

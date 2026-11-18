@@ -166,6 +166,7 @@ impl BackofficeAuthService {
                 return Err(invalid_credentials());
             },
         };
+
         if let Some(secret) = password_check.into_upgraded_secret() {
             stored_account.secret = secret;
             self.db.accounts().update(&mut stored_account, &mut NoTransaction).await?;
@@ -303,7 +304,6 @@ mod tests {
     #[tokio::test]
     async fn inactive_account_should_still_use_password_boundary() {
         let suspended = account(AccountKind::Admin, AccountStatus::Suspended);
-
         let secret = suspended.authentication_secret_for(AccountKind::Admin).cloned();
         let result = verify_password(secret, "password123".to_string()).await.unwrap();
         assert!(matches!(result, PasswordCheck::Mismatch));

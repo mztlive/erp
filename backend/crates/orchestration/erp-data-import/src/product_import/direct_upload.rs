@@ -48,6 +48,7 @@ impl ProductImportProcess {
         req.validate()?;
         validate_xlsx_file_name(&req.file_name)?;
         validate_byte_size(req.byte_size)?;
+
         let object_key = direct_object_key(&req.request_id)?;
         let upload_id = self
             .storage
@@ -129,6 +130,7 @@ impl ProductImportProcess {
         if upload_id.trim().is_empty() {
             return Err(Error::ValidationError("分片上传标识不能为空".to_string()));
         }
+
         let parts = req
             .parts
             .iter()
@@ -138,6 +140,7 @@ impl ProductImportProcess {
             .complete_multipart_upload(&req.object_key, upload_id, parts)
             .await
             .map_err(|error| Error::Internal(format!("合并直传分片失败，请重试: {error}")))?;
+
         let result = self.register_merged_object(&req, actor).await;
         if let Err(error) = &result
             && !matches!(error, Error::OutcomeUnknown(_))
@@ -185,6 +188,7 @@ impl ProductImportProcess {
         let shared_bytes = self.read_merged_workbook(req).await?;
         let byte_len = u64::try_from(shared_bytes.len()).expect("上传文件不超过 700 MB");
         let (parsed, digest) = self.parse_merged_workbook(req, shared_bytes.clone()).await?;
+
         let registration = RegisterFileAssetRequest {
             storage_object_key: req.object_key.clone(),
             file_name: req.file_name.trim().to_string(),
@@ -196,6 +200,7 @@ impl ProductImportProcess {
             expires_at: None,
         };
         let file_asset = FileAsset::new(FileAssetId::new(next_id()), registration.into_data(actor.id())?)?;
+
         self.create_job_from_parsed(
             file_asset,
             parsed,
@@ -221,6 +226,7 @@ impl ProductImportProcess {
                 return Err(Error::Internal(format!("读取直传文件失败: {error}")));
             },
         };
+
         if bytes.len() as u64 != req.byte_size || bytes.len() as u64 > MAX_PRODUCT_IMPORT_FILE_BYTES {
             let _ = self.storage.delete(&req.object_key).await;
             return Err(Error::ValidationError("文件大小与申报不一致，请重新上传".to_string()));

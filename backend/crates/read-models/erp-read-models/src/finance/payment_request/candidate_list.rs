@@ -52,6 +52,7 @@ impl PaymentCandidateQuery {
                 return Err(Error::ValidationError("查询条件不能超过 200 个字符".into()));
             }
         }
+
         self.page = Some(self.page.unwrap_or(1).max(1));
         self.page_size = Some(self.page_size.unwrap_or(50).clamp(1, 100));
         Ok(self)
@@ -225,10 +226,12 @@ mod tests {
         renamed.supplier_name = "新供应商名称".into();
         renamed.payer_party_name = "新主体名称".into();
         let rows = vec![renamed, other_supplier, other_payer];
+
         let page = query.page(rows.clone()).unwrap();
         assert_eq!(page.total, 1);
         assert_eq!(page.items[0].payable_account_id, "1");
         assert_eq!(query.ids(rows.clone()), ["1"]);
+
         let cleared = PaymentCandidateQuery {
             supplier_id: Some(" ".into()),
             payer_party_id: Some("".into()),
@@ -237,6 +240,7 @@ mod tests {
         .normalize()
         .unwrap();
         assert_eq!(cleared.page(rows).unwrap().total, 3);
+
         assert!(
             PaymentCandidateQuery { payer_party_id: Some("x".repeat(201)), ..Default::default() }
                 .normalize()
@@ -258,12 +262,15 @@ mod tests {
         let row = candidate("1", "100");
         assert!(query.matches(&row));
         assert!(!query.matches(&candidate("2", "100")));
+
         let mut wrong_supplier = row.clone();
         wrong_supplier.supplier_name = "另一家公司".into();
         assert!(!query.matches(&wrong_supplier));
+
         let mut wrong_payer = row.clone();
         wrong_payer.payer_party_name = "其他主体".into();
         assert!(!query.matches(&wrong_payer));
+
         let mut wrong_summary = row;
         wrong_summary.purchase_summary = "Tea 茶叶 AB".into();
         assert!(!query.matches(&wrong_summary));
@@ -279,19 +286,23 @@ mod tests {
         }
         .normalize()
         .unwrap();
+
         let page = query.page(rows.clone()).unwrap();
         assert_eq!(page.total, 3);
         assert_eq!(
             page.items.iter().map(|row| row.payable_account_id.as_str()).collect::<Vec<_>>(),
             ["3", "2"]
         );
+
         query.page = Some(2);
         assert_eq!(query.page(rows.clone()).unwrap().items[0].payable_account_id, "1");
         assert_eq!(query.ids(rows.clone()), ["3", "2", "1"]);
+
         query.page = Some(u64::MAX);
         let beyond = query.page(rows.clone()).unwrap();
         assert_eq!(beyond.total, 3);
         assert!(beyond.items.is_empty());
+
         query.supplier_name = Some("不存在".into());
         assert_eq!(query.page(rows.clone()).unwrap().total, 0);
         assert!(query.ids(rows).is_empty());
@@ -314,6 +325,7 @@ mod tests {
                 .normalize()
                 .is_err()
         );
+
         let query = PaymentCandidateQuery {
             sort_by: Some(PaymentCandidateSort::TotalAmount),
             sort_desc: Some(true),

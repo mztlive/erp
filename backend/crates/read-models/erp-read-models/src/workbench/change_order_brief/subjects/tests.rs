@@ -49,6 +49,7 @@ fn sales_change_history_keeps_frozen_customer_amount_and_lines() {
         context.submissions.insert(id.clone(), submission);
         context.target_lines.insert(id, target(customer, amount));
     }
+
     let mut fact = WorkbenchObjectFact::from_authority(erp_workflow::ports::ObjectFact::new(
         "change",
         "销售变更",
@@ -90,6 +91,7 @@ fn purchase_change_history_keeps_frozen_supplier_amount_and_lines() {
         context.submissions.insert(id.clone(), submission);
         context.target_lines.insert(id, target(supplier, amount));
     }
+
     let mut fact = WorkbenchObjectFact::from_authority(erp_workflow::ports::ObjectFact::new(
         "change",
         "采购变更",
@@ -216,17 +218,20 @@ fn assert_original_purchase(fact: &WorkbenchObjectFact) {
 fn rejected_purchase_history_survives_multiple_draft_saves_and_resubmission() {
     let (mut change, mut context) = rejected_purchase();
     assert_original_purchase(&mapped_purchase(&change, &context));
+
     for id in ["draft-1", "draft-2"] {
         save_purchase_target(&mut change, &mut context, id);
         let fact = mapped_purchase(&change, &context);
         assert_original_purchase(&fact);
         assert!(!fact.display.subject_briefs.contains_key("2"));
     }
+
     let mut second = purchase_submission("s2", 2, "200.00", "新供应商");
     second.submit(erp_core::common::time::Instant::from_unix_secs(1800000001), "starter").unwrap();
     context.submissions.insert("s2".into(), second);
     context.target_lines.insert("s2".into(), target("新供应商", "200.00"));
     change.start_approval("s2".to_owned().into(), "new-hash", "starter").unwrap();
+
     let fact = mapped_purchase(&change, &context);
     assert_original_purchase(&fact);
     assert!(
@@ -273,11 +278,13 @@ fn legacy_purchase_overlay_keeps_formal_history_and_never_falls_back_to_saved_dr
     let key = (crate::workbench::ObjectKind::PurchaseChangeOrder, "change".into());
     let snapshot = legacy_purchase_snapshot();
     assert!(snapshot.display.is_none());
+
     let mut facts = WorkbenchObjectFactMap::from([(key.clone(), mapped_purchase(&change, &context))]);
     crate::workbench::approval_snapshot::apply_snapshot(&mut facts, snapshot.clone());
     assert_original_purchase(&facts[&key]);
     let summary = crate::workbench::approval_list::document_summary(&facts[&key], Some(1)).unwrap();
     assert!(!summary.list_summary.contains("草稿"));
+
     context.submissions.remove("s1");
     facts.insert(key.clone(), mapped_purchase(&change, &context));
     crate::workbench::approval_snapshot::apply_snapshot(&mut facts, snapshot);

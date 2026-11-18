@@ -33,12 +33,15 @@ impl WorkItemFactsReader {
         if ids.is_empty() {
             return Ok(());
         }
+
         for request in self.db.portal_applications().list_active_by_ids(&ids, executor).await? {
             insert_request(facts, &request.base.id, offering_request_fact(&request)?)?;
         }
+
         for request in self.db.new_product_drafts().list_active_by_ids(&ids, executor).await? {
             insert_request(facts, &request.base.id, new_product_request_fact(&request)?)?;
         }
+
         for request in CooperationRepository::new(&self.db).list_active_by_ids(&ids, executor).await? {
             insert_request(facts, &request.base.id, cooperation_request_fact(&request)?)?;
         }
@@ -211,9 +214,11 @@ mod tests {
         )
         .unwrap();
         assert!(offering_request_fact(&request).unwrap().is_none());
+
         request.submit(&actor, "reviewer", "task-1", 1, Instant::from_unix_secs(100)).unwrap();
         request.withdraw(&actor).unwrap();
         request.submit(&actor, "replacement", "task-2", 1, Instant::from_unix_secs(200)).unwrap();
+
         let fact = offering_request_fact(&request).unwrap().unwrap();
         assert_eq!(fact.root_document_id, "request");
         assert_eq!(fact.created_by, "supplier-user");
@@ -253,6 +258,7 @@ mod tests {
         .unwrap();
         assert!(cooperation_request_fact(&request).unwrap().is_none());
         request.submit("supplier", 1, "reviewer", "task", &actor, 100).unwrap();
+
         let fact = cooperation_request_fact(&request).unwrap().unwrap();
         assert_eq!(fact.created_by, "external");
         assert!(fact.subject_versions.accepts("cooperation:1"));

@@ -82,6 +82,7 @@ impl SupplierQualificationCapability {
         if capability_codes.len() != link_ids.len() {
             return Err(erp_core::Error::from("资质适用能力与关联 ID 数量不一致"));
         }
+
         let mut links = Vec::with_capacity(capability_codes.len());
         for (code, link_id) in capability_codes.iter().zip(link_ids) {
             let capability_id = capability_ids
@@ -128,6 +129,7 @@ mod tests {
         use crate::entity::supplier::CapabilityCode;
         let mut ids = HashMap::new();
         ids.insert("physical".to_string(), SupplierCapabilityId::new("cap-1"));
+
         // 空集合返回空
         let empty = SupplierQualificationCapability::links_for_qualification(
             SupplierQualificationId::new("qual-1"),
@@ -137,6 +139,7 @@ mod tests {
         )
         .unwrap();
         assert!(empty.is_empty());
+
         // 缺失能力报错
         let err = SupplierQualificationCapability::links_for_qualification(
             SupplierQualificationId::new("qual-2"),
@@ -146,6 +149,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.to_string().contains("资质适用能力不存在"));
+
         // 长度不一致报错
         let err2 = SupplierQualificationCapability::links_for_qualification(
             SupplierQualificationId::new("qual-3"),
@@ -155,6 +159,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(err2.to_string().contains("数量不一致"));
+
         // 正确映射且只引用当前能力
         let links = SupplierQualificationCapability::links_for_qualification(
             SupplierQualificationId::new("qual-4"),

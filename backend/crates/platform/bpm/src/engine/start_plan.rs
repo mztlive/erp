@@ -71,16 +71,19 @@ pub fn plan_start(input: StartPlanInput<'_>) -> EngineResult<StartPlan> {
     if bindings.len() != graph.nodes.len() {
         return Err(EngineError::InvalidCommand("启动绑定必须与定义节点一一对应"));
     }
+
     let mut by_node = HashMap::with_capacity(bindings.len());
     for binding in bindings {
         if by_node.insert(binding.node_key, (binding.assignee_id, binding.eligibility)).is_some() {
             return Err(EngineError::InvalidCommand("节点审批人绑定缺失或重复"));
         }
     }
+
     let mut frozen = Vec::with_capacity(graph.nodes.len());
     for node in &graph.nodes {
         frozen.push(freeze_binding(node, &mut by_node, &frozen)?);
     }
+
     let entry = graph.entry_node().map_err(|_| EngineError::InvalidCommand("审批定义缺少入口节点"))?;
     let entry_eligibility = frozen
         .iter()
@@ -117,10 +120,12 @@ fn freeze_binding(
         }
         return Err(EngineError::InvalidCommand("实例审批人绑定主键不得重复"));
     };
+
     if eligibility.participant_ref() != node.assignee()? {
         return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
     }
     eligibility.validate_node(node)?;
+
     if frozen.iter().any(|prior| prior.id == assignee_id) {
         return Err(EngineError::InvalidCommand("实例审批人绑定主键不得重复"));
     }
@@ -262,6 +267,7 @@ mod tests {
             nodes: vec![],
             transitions: vec![],
         };
+
         let error =
             plan_start(StartPlanInput { graph: &graph, expected_definition_version: 1, bindings: vec![] })
                 .unwrap_err();
@@ -385,6 +391,7 @@ mod tests {
             nodes: vec![node("nd1", "n1", "采购确认", 1, "u1", "张三", at)],
             transitions: vec![],
         };
+
         let error = plan_start(StartPlanInput {
             graph: &graph,
             expected_definition_version: 1,
@@ -431,6 +438,7 @@ mod tests {
             ],
         })
         .unwrap();
+
         let started = crate::engine::start(
             crate::engine::StartCommand {
                 instance_id: crate::ids::ApprovalProcessInstanceId::new("inst"),

@@ -121,6 +121,7 @@ impl LinkTokenCrypto {
         let (nonce_part, body) = rest.split_once('.').ok_or_else(|| Error::from("选品链接密文无效"))?;
         let nonce_bytes = URL_SAFE_NO_PAD.decode(nonce_part).map_err(|_| Error::from("选品链接密文无效"))?;
         let body_bytes = URL_SAFE_NO_PAD.decode(body).map_err(|_| Error::from("选品链接密文无效"))?;
+
         let cipher =
             Aes256Gcm::new_from_slice(&self.key).map_err(|_| Error::from("选品链接加密初始化失败"))?;
         let nonce = Nonce::<Aes256Gcm>::try_from(nonce_bytes.as_slice())
@@ -228,15 +229,18 @@ mod tests {
         let other_crypto = LinkTokenCrypto::from_secret(b"application-secret-two");
         let payload = json!({"access_password": "selection-password", "idempotency_key": "same-key"});
         let operation = IdempotencyOperation::Create;
+
         let first = crypto.request_fingerprint(operation, &payload).unwrap();
         let replay = crypto.request_fingerprint(operation, &payload).unwrap();
         assert_eq!(first.as_str(), replay.as_str());
         assert!(first.as_str().starts_with("hmac-sha256-v1:"));
+
         assert_ne!(first.as_str(), other_crypto.request_fingerprint(operation, &payload).unwrap().as_str());
         assert_ne!(
             first.as_str(),
             crypto.request_fingerprint(IdempotencyOperation::SetAccessPassword, &payload).unwrap().as_str()
         );
+
         let changed = json!({"access_password": "changed-password", "idempotency_key": "same-key"});
         assert_ne!(first.as_str(), crypto.request_fingerprint(operation, &changed).unwrap().as_str());
     }

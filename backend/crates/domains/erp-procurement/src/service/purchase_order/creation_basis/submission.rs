@@ -46,6 +46,7 @@ pub async fn build_draft_submission(
         .clone()
         .ok_or_else(|| Error::BusinessLogicError("供应商缺少商务结算版本".to_string()))?;
     let payment_term = port.payment_term(&scope.payment_term_code)?;
+
     PurchaseOrderSubmission::new(
         PurchaseOrderSubmissionId::new(next_id()),
         PurchaseOrderSubmissionData {

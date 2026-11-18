@@ -199,6 +199,7 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
         };
         let context = BusinessEventContext::new(self.input.actor.clone(), action)?
             .with_command_id(self.input.command_receipt.map(|command| command.id().to_string()))?;
+
         let audit = context.log(BusinessEventContent {
             target_id: self.invoice.base.id.clone(),
             target_number: self.invoice.invoice_no.clone(),
@@ -216,6 +217,7 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
             })
             .collect(),
         })?;
+
         self.audit_event_id = Some(audit.base.id.clone());
         persist_log(self.db, &audit, executor).await?;
         Ok(())
@@ -337,6 +339,7 @@ mod tests {
             let expected_executor = &mut executor as *mut ReadExecutor as usize;
             let mut steps = RecordedPosting { calls: Vec::new(), fail_at: None, command_receipt };
             execute_posting(&mut steps, &mut executor).await.unwrap();
+
             let mut expected = vec!["execution", "finance", "audit", "tasks", "sales"];
             if command_receipt {
                 expected.push("receipt");
@@ -357,6 +360,7 @@ mod tests {
                 let mut steps =
                     RecordedPosting { calls: Vec::new(), fail_at: Some(fail_at), command_receipt };
                 let error = execute_posting(&mut steps, &mut ReadExecutor::default()).await.unwrap_err();
+
                 assert!(matches!(error, Error::ConflictError(message) if message == *fail_at));
                 assert_eq!(steps.calls.iter().map(|(step, _)| *step).collect::<Vec<_>>(), sequence[..=index]);
             }

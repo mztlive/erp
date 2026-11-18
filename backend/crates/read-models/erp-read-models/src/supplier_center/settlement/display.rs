@@ -175,6 +175,7 @@ impl SupplierSettlementReadService {
             work_item.owner_user_name =
                 work_item.owner_user_id.as_deref().and_then(|id| readable_name(&facts.user_names, id));
         }
+
         Ok(SupplierSettlementStatementDetailView {
             statement: facts.statement(detail.statement),
             items: self.item_display_views(detail.items, executor).await?,

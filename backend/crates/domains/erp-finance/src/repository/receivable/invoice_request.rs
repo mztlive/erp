@@ -24,6 +24,7 @@ impl QueryFilter for RequestFilter<'_> {
         if let Some(status) = self.0.status {
             filter.insert("status", status.as_str());
         }
+
         if let Some(q) = self.0.q.as_deref().filter(|q| !q.trim().is_empty()) {
             let mut terms = Vec::new();
             for field in ["request_no", "data.invoice_title", "data.reason"] {
@@ -156,6 +157,7 @@ impl SalesInvoiceRequestRepositoryExt for persistence_core::Repository<'_, Sales
             .skip(filter.skip())
             .limit(filter.limit())
             .build();
+
         let items =
             persistence_core::mongo_ops::find_many(&self.collection(), filter.to_doc(), options, executor)
                 .await?;
@@ -209,6 +211,7 @@ mod tests {
             ..Default::default()
         };
         let expected = RequestFilter(&query).to_doc();
+
         query.page = Some(50);
         query.page_size = Some(1);
         assert_eq!(RequestFilter(&query).to_doc(), expected);
@@ -232,6 +235,7 @@ mod tests {
         assert_eq!(filter.get_str("sales_order_id").unwrap(), "sale-1");
         assert_eq!(filter.get_str("customer_id").unwrap(), "customer-1");
         assert_eq!(filter.get_str("status").unwrap(), "approved");
+
         let terms = filter.get_array("$or").unwrap();
         assert_eq!(terms.len(), 3);
         let text = terms[0].as_document().unwrap().get_document("request_no").unwrap();

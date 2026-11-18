@@ -59,6 +59,7 @@ pub async fn ensure_account_risk_covered(
             executor,
         )
         .await?;
+
     if ledger_newer || evidence_newer || usage_newer {
         return Err(Error::BusinessLogicError(
             "账户存在平衡核对之后的资金风险或处理，请取得更新的完整核对依据".into(),
@@ -219,6 +220,7 @@ pub async fn ensure_account_funds_resolved(
             executor,
         )
         .await?;
+
     if pending || conflicts || unsettled {
         return Err(Error::BusinessLogicError(
             "账户仍有未应用资金、来源冲突或未完成核销，请先处理原记录".into(),
@@ -281,6 +283,7 @@ fn ensure_contiguous_windows(windows: &[FundsScanCheckpoint], from: Instant, thr
     if windows.len() > 1000 || from >= through {
         return Err(Error::BusinessLogicError("资金查询覆盖范围无效或过大".into()));
     }
+
     let mut covered = from;
     for window in windows {
         if !window.finished || !window.read_complete {
@@ -293,6 +296,7 @@ fn ensure_contiguous_windows(windows: &[FundsScanCheckpoint], from: Instant, thr
             covered = covered.max(until.min(window.window.through));
         }
     }
+
     if covered < through {
         return Err(Error::BusinessLogicError("资金证据尚未连续覆盖所选核对范围，请先补查原资金明细".into()));
     }

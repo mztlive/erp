@@ -20,6 +20,7 @@ pub fn insert_literal_regex_filter(filter: &mut Document, field: &str, value: Op
     let Some(value) = value else {
         return false;
     };
+
     filter.insert(
         field,
         doc! {
@@ -41,7 +42,6 @@ mod tests {
         let mut filter = Document::new();
 
         assert!(insert_literal_regex_filter(&mut filter, "name", Some("a.b+[x]")));
-
         assert_eq!(
             filter,
             doc! {

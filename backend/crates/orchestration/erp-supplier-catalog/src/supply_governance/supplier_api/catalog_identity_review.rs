@@ -67,6 +67,7 @@ impl SupplierApiGovernanceProcess {
         self.ensure_permission(actor, &supplier_api::ADOPTIONS_PREVIEW).await?;
         self.ensure_permission(actor, &catalog::PRODUCT_PRODUCT_UPDATE).await?;
         self.ensure_permission(actor, &supplier_offering::REVISE).await?;
+
         let services = self.services.clone();
         let (db, connection, item, actor) =
             (self.db.clone(), connection.to_owned(), item.to_owned(), actor.clone());
@@ -77,6 +78,7 @@ impl SupplierApiGovernanceProcess {
             format!("catalog-review-{}", digest(&[&connection, &item, actor.id(), &request.idempotency_key]));
         let authorization = self.authorization.clone();
         let command = IdentityReviewCommand { connection, item, request, actor, id, fingerprint };
+
         db.client()
             .clone()
             .with_transaction(move |executor| {
@@ -131,6 +133,7 @@ async fn load_review(
         .offering_id
         .as_deref()
         .ok_or_else(|| Error::BusinessLogicError("当前来源尚未完成选品".into()))?;
+
     let offering_permission = if write { supplier_offering::REVISE } else { supplier_offering::LIST };
     let offering =
         services.offering_access.require_offering(actor, &offering_permission, offering_id, executor).await?;
@@ -140,6 +143,7 @@ async fn load_review(
         .await?
         .filter(|sku| item.sku_id.as_deref() == Some(sku.base.id.as_str()) && sku.is_active())
         .ok_or_else(|| Error::ConflictError("当前公司SKU关联不一致或已停用".into()))?;
+
     let product_permission = if write {
         catalog_permissions::PRODUCT_PRODUCT_UPDATE
     } else {
@@ -152,6 +156,7 @@ async fn load_review(
     if !product.is_active() {
         return Err(Error::BusinessLogicError("公司商品已停用，不能恢复自动使用".into()));
     }
+
     let unit = db
         .unit_of_measures()
         .find_by_id(sku.base_unit_id.as_ref(), executor)
@@ -161,6 +166,7 @@ async fn load_review(
         return Err(Error::BusinessLogicError("公司商品单位已停用".into()));
     }
     item.ensure_company_unit(&[&unit.unit_code, &unit.name, &unit.symbol])?;
+
     let current = review_sku_content(db, &sku, &item, write, executor).await?;
     let view = review_view(&item, &sku, &unit, offering.base.version, current.specification.as_deref())?;
     Ok((item, view))
@@ -183,6 +189,7 @@ async fn review_sku_content(
         .find_by_id(current_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("公司规格资料不存在".into()))?;
+
     if write
         && item
             .barcode
@@ -241,19 +248,21 @@ async fn confirm_review(
     executor: &mut dyn Executor,
 ) -> Result<CatalogIdentityReviewView> {
     let IdentityReviewCommand { connection, item, request, actor, id, fingerprint } = command;
-
     let (mut current, mut result) =
         load_review(db, services, &connection, &item, &actor, true, executor).await?;
+
     if let Some(receipt) = db.supplier_catalog_identity_reviews().find_by_id(&id, executor).await? {
         if receipt.fingerprint != fingerprint || receipt.actor_id != actor.id() || receipt.base.is_deleted() {
             return Err(Error::ConflictError("同一操作号已经用于其他来源核对".into()));
         }
         return Ok(receipt.result);
     }
+
     result.ensure_current(&request)?;
     current.confirm_identity_review(&request)?;
     db.supplier_catalog_items().update(&mut current, executor).await?;
     apply_source_supply(db, &current, &actor, executor).await?;
+
     result.requires_identity_review = false;
     result.item_version = current.base.version;
     let receipt = CatalogIdentityReviewReceipt {
@@ -265,6 +274,7 @@ async fn confirm_review(
         result: result.clone(),
     };
     db.supplier_catalog_identity_reviews().create(&receipt, executor).await?;
+
     let audit = actor.resource_log_with_message(
         "supplier_catalog.identity.review",
         "supplier_api_connection",
@@ -295,6 +305,7 @@ mod read_tests {
         assert!(
             matches!(error, Error::ValidationError(message) if message == "商品身份核对读取必须使用快照事务")
         );
+
         let error =
             authorize_review_read(&authorization, "connection", &actor, &mut SnapshotExecutor::default())
                 .await

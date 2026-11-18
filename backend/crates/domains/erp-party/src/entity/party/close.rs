@@ -243,6 +243,7 @@ mod tests {
         let mut later = address();
         later.close_at(date(2026, 2, 1), "admin-3").unwrap();
         assert_eq!(later.valid_to, Some(date(2026, 2, 1)));
+
         later.close_at(date(2026, 2, 1), "admin-4").unwrap();
         assert_eq!(later.status, EffectiveRecordStatus::Disabled);
         assert!(!later.is_default);
@@ -270,6 +271,7 @@ mod tests {
         let mut later = bank_account();
         later.close_at(date(2026, 6, 1), "admin-3").unwrap();
         assert_eq!(later.valid_to, Some(date(2026, 6, 1)));
+
         later.close_at(date(2026, 7, 1), "admin-4").unwrap();
         assert_eq!(later.status, EffectiveRecordStatus::Disabled);
         assert!(!later.is_default);

@@ -158,6 +158,7 @@ fn validate_envelope<T: BatchOperation>(request: &mut BatchRequest<T>, actor: &s
     if request.rows.is_empty() || request.rows.len() > MAX_BATCH_ROWS {
         return Err(Error::ValidationError("每批请选择 1–100 行".into()));
     }
+
     let mut rows = HashSet::new();
     let mut identities = HashSet::new();
     let mut keys = HashSet::new();
@@ -232,6 +233,7 @@ async fn run_batch<T: Send + Sync>(
         };
         results.push(RowResult { row_id: row.row_id.clone(), status, message, result });
     }
+
     let blocked = results.iter().any(|row| row.status == RowStatus::Invalid);
     if !request.validate_only && !blocked {
         for (row, result) in request.rows.into_iter().zip(&mut results) {
@@ -250,6 +252,7 @@ async fn run_batch<T: Send + Sync>(
             }
         }
     }
+
     Ok(BatchResult { rows: results })
 }
 

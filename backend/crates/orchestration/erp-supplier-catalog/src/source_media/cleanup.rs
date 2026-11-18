@@ -124,10 +124,12 @@ mod tests {
     async fn committed_and_unknown_outcomes_never_discard_objects() {
         let (cleanup, objects) = cleanup();
         cleanup.after_transaction(&Ok(())).await;
+
         let unknown: Result<()> = Err(Error::OutcomeUnknown(PersistenceError::CommitOutcomeUnknown(
             MongoError::custom("commit unknown"),
         )));
         cleanup.after_transaction(&unknown).await;
+
         let wrapped: Result<()> = Err(Error::RepositoryError(PersistenceError::CommitOutcomeUnknown(
             MongoError::custom("unknown commit still unresolved"),
         )));

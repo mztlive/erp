@@ -62,6 +62,7 @@ impl SalesSelectionService {
         if public_kind(&book, now) == PublicSelectionPageKind::Ended {
             return Err(Error::Forbidden("选品已结束".into()));
         }
+
         let session = self.unlock_session(&book, voucher_code, executor).await?;
         let access_token = SelectionGrant::issue(&book, &session, now, crypto)?;
         let page = self.participant_page(&book, &session, now, executor).await?;
@@ -136,12 +137,14 @@ impl SalesSelectionService {
         {
             return Ok((view, false));
         }
+
         let mut book = self.load_booklet(id, executor).await?;
         book.ensure_version(req.expected_version)
             .map_err(|error| Error::selection_conflict(error.to_string()))?;
         book.set_access_password_hash(password_hash, actor)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
         self.db.sales_selection_booklets().update(&mut book, executor).await?;
+
         let view = self.detail_view(&book, None, executor).await?;
         self.store_idempotency(
             IdempotencyStoreInput {
@@ -211,6 +214,7 @@ impl SalesSelectionService {
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
         let sessions = domain.sessions_for_booklet(id, executor).await?;
         let proposals = domain.proposals_for_booklet(id, executor).await?;
+
         let mut result = Vec::with_capacity(proposals.len());
         for proposal in proposals {
             let view = self.proposal_view_of(&proposal, executor).await?;

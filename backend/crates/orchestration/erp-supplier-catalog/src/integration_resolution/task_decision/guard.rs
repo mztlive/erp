@@ -500,6 +500,7 @@ mod replay_tests {
             matches!(error, Error::ValidationError(message) if message == "任务回放授权必须使用快照事务")
         );
         assert!(tasks.calls.lock().unwrap().is_empty());
+
         let mut executor = SnapshotExecutor::default();
         let tasks = Tasks {
             executor: &mut executor as *mut SnapshotExecutor as usize,
@@ -512,6 +513,7 @@ mod replay_tests {
             .await
             .unwrap();
         assert_eq!(*tasks.calls.lock().unwrap(), vec!["result_access"]);
+
         tasks.calls.lock().unwrap().clear();
         let mut changed = task();
         changed.business_object_id = "other-difference".into();

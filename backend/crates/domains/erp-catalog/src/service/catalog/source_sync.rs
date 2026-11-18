@@ -63,6 +63,7 @@ impl CatalogService {
             .authorized_product(id, &scope, executor)
             .await?
             .ok_or_else(|| Error::NotFound("商品不存在或无权查看".into()))?;
+
         let view = self.source_diff_view(id, product.base.version, executor).await?;
         scope.validate(executor).await?;
         Ok(view)
@@ -78,6 +79,7 @@ impl CatalogService {
         let Some(source) = self.db.product_sources().find_by_id(id, executor).await? else {
             return Ok(None);
         };
+
         let current = self.source_company_content(id, executor).await?;
         let mut view = source.view(product_version);
         view.sku_versions = current.sku_versions;
@@ -108,6 +110,7 @@ impl CatalogService {
         if req.idempotency_key.trim().is_empty() || req.idempotency_key.len() > 128 {
             return Err(Error::ValidationError("差异确认操作号无效".into()));
         }
+
         let service = self.clone();
         let id = id.to_owned();
         let actor = actor.clone();
@@ -155,6 +158,7 @@ impl CatalogService {
         let revision = snapshot
             .current_revision
             .ok_or_else(|| Error::BusinessLogicError("商品当前修订不存在".into()))?;
+
         let mut result = CompanySourceContent {
             values: vec![
                 (SourceField::Name, None, SourceValue::Text(Some(revision.name))),
@@ -164,6 +168,7 @@ impl CatalogService {
             sku_numbers: Default::default(),
         };
         result.values.extend(current_media_values(&snapshot.media));
+
         self.append_source_sku_content(id, &mut result, executor).await?;
         Ok(result)
     }
@@ -178,6 +183,7 @@ impl CatalogService {
         for sku in skus {
             result.sku_versions.insert(sku.base.id.clone(), sku.base.version);
             result.sku_numbers.insert(sku.base.id.clone(), sku.sku_no.clone());
+
             let Some(revision_id) = sku.stable.current_revision_id else { continue };
             let revision = self
                 .db
@@ -185,6 +191,7 @@ impl CatalogService {
                 .find_by_id(&revision_id, executor)
                 .await?
                 .ok_or_else(|| Error::BusinessLogicError("SKU当前修订不存在".into()))?;
+
             result.values.push((
                 SourceField::SkuName,
                 Some(sku.base.id.clone()),
@@ -253,11 +260,13 @@ impl CatalogService {
         if changes.is_empty() {
             return Ok(product.base.version);
         }
+
         let old = snapshot
             .current_revision
             .ok_or_else(|| Error::BusinessLogicError("商品当前修订不存在".into()))?;
         let mut revision = source_successor(id, old, snapshot.latest_revision_no, changes)?;
         revision.status = product.stable.status;
+
         let revision_id = ProductRevisionId::new(revision.base.id.clone());
         let mut media = copy_source_media(snapshot.media, &revision_id)?;
         for (field, _, value) in changes {
@@ -271,9 +280,11 @@ impl CatalogService {
                 _ => return Err(Error::ValidationError("商品资料类型无效".into())),
             }
         }
+
         for sku in source_sku_ids(changes)? {
             self.write_source_sku_changes(id, &sku, changes, actor, executor).await?;
         }
+
         product.attach_revision(&revision, actor)?;
         self.db.catalog().create_product_revision_with_media(&revision, &media, executor).await?;
         self.db.products().update(&mut product, executor).await?;
@@ -366,6 +377,7 @@ impl CatalogService {
     ) -> Result<()> {
         let (mut sku, old) = self.current_source_sku(product, id, executor).await?;
         let latest = self.db.catalog().latest_sku_revision_no(&SkuId::new(id), executor).await?;
+
         let name = changes
             .iter()
             .find_map(|(field, sku, value)| match (field, sku.as_deref(), value) {
@@ -376,6 +388,7 @@ impl CatalogService {
             })
             .unwrap_or_else(|| old.name.clone());
         let mut revision = source_sku_successor(&sku, &old, next_revision_no(latest)?, name)?;
+
         for (field, sku, value) in changes {
             if *field != SourceField::MainImage || sku.as_deref() != Some(id) {
                 continue;
@@ -386,12 +399,14 @@ impl CatalogService {
             if images.len() > 1 {
                 return Err(Error::ValidationError("SKU主图最多一张".into()));
             }
+
             revision.source_main_image_asset_id = if let Some(image) = images.first() {
                 Some(self.source_image_asset(image, executor).await?)
             } else {
                 None
             };
         }
+
         sku.attach_revision(&revision, actor)?;
         self.db.catalog().create_sku_revision(&revision, executor).await?;
         self.db.skus().update(&mut sku, executor).await?;
@@ -470,12 +485,14 @@ impl ResolutionStore for MongoResolutionStore<'_> {
             self.id.to_owned(),
         )?;
         self.service.audit.persist(&audit, self.executor).await?;
+
         let mut result = source.view(version);
         let current = self.service.source_company_content(self.id, self.executor).await?;
         result.sku_versions = current.sku_versions;
         for field in &mut result.fields {
             field.sku_no = field.sku_id.as_ref().and_then(|id| current.sku_numbers.get(id)).cloned();
         }
+
         let receipt = SourceResolutionReceipt {
             base: BaseModel::new(receipt_id(self.id, &req.idempotency_key)),
             product_id: self.id.into(),
@@ -641,9 +658,11 @@ mod tests {
         .unwrap();
         sku.attach_revision(&old, "buyer").unwrap();
         sku.disable("buyer").unwrap();
+
         let mut next = source_sku_successor(&sku, &old, 2, "新名称".into()).unwrap();
         next.source_main_image_asset_id = Some(FileAssetId::new("new-image"));
         sku.attach_revision(&next, "sync-actor").unwrap();
+
         assert!(!sku.is_active());
         assert_eq!(next.status, EnableStatus::Disabled);
         assert_eq!(sku.listing_status, ListingStatus::Unlisted);

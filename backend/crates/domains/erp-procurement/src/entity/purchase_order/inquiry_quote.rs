@@ -104,6 +104,7 @@ impl PurchaseInquiryQuoteSource {
         {
             return Err(Error::from("采购专项报价身份或商业条件非法"));
         }
+
         validate_addresses(&self.address_limits, self.available_quantity)
     }
 
@@ -130,6 +131,7 @@ impl PurchaseInquiryQuoteSource {
             }) else {
                 continue;
             };
+
             let used = address_quantity(held, &binding.allocation_id)
                 .checked_sub(address_quantity(own, &binding.allocation_id))
                 .filter(|value| *value >= Decimal::ZERO)
@@ -142,6 +144,7 @@ impl PurchaseInquiryQuoteSource {
                 .max(Decimal::ZERO)
                 .min(binding.quantity.to_decimal())
                 .min(remaining);
+
             if available > Decimal::ZERO {
                 rows.push(PurchaseInquiryAddress {
                     allocation_id: binding.allocation_id.clone(),
@@ -154,6 +157,7 @@ impl PurchaseInquiryQuoteSource {
                 break;
             }
         }
+
         if !remaining.is_zero() {
             return Err(Error::from("专项报价剩余配送范围不足本次入仓采购需求"));
         }
@@ -184,6 +188,7 @@ fn validate_addresses(addresses: &[PurchaseInquiryAddress], quantity: Quantity) 
         }
         total = total.checked_add(row.quantity.to_decimal()).ok_or("专项采购地址数量超出范围")?;
     }
+
     if !addresses.is_empty() && total < quantity.to_decimal() {
         return Err(Error::from("采购专项报价配送范围数量不足"));
     }
@@ -228,7 +233,6 @@ mod tests {
         let limits = [address_limit("second", &rows[1]), address_limit("first", &rows[0])];
 
         let mapped = PurchaseInquiryAddress::from_delivery(&rows, &limits).unwrap();
-
         assert_eq!(mapped[0].allocation_id, "first");
         assert_eq!(mapped[1].allocation_id, "second");
         assert_eq!(mapped[0].quantity, rows[0].quantity);
@@ -279,6 +283,7 @@ mod tests {
             quantity: "20".parse().unwrap(),
         }];
         source.validate().unwrap();
+
         source.address_limits[0].quantity = "4".parse().unwrap();
         assert!(source.validate().is_err());
     }
@@ -298,6 +303,7 @@ mod tests {
             .warehouse_allocations(from_ref(&limit), from_ref(&own), from_ref(&own), "10".parse().unwrap())
             .unwrap();
         assert_eq!(rows[0].quantity.to_string(), "10");
+
         assert!(
             source
                 .warehouse_allocations(from_ref(&limit), from_ref(&own), &[], "15".parse().unwrap())

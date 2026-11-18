@@ -155,6 +155,7 @@ pub fn enrich_change_lines(
             line.allocated_quantity = None;
             continue;
         }
+
         let stable_id = line
             .sales_order_line_id
             .clone()
@@ -172,6 +173,7 @@ pub fn enrich_change_lines(
             .quantity
             .clone()
             .ok_or_else(|| Error::BusinessLogicError("采购变更商品行缺少数量".to_string()))?;
+
         line.procurement_confirmation_line_id = Some(stable_id.clone());
         line.sales_order_line_id = Some(stable_id);
         line.sales_order_revision_line_id = Some(sales_line.revision_line_id.clone());
@@ -240,6 +242,7 @@ mod tests {
         )]);
         let mut changed = item();
         changed.unit_cost_gross = Some("12".into());
+
         let result = enrich_change_lines(std::slice::from_ref(&changed), &facts).unwrap();
         let line = &result[0];
         assert_eq!(line.procurement_confirmation_line_id.as_deref(), Some("stable-1"));
@@ -249,6 +252,7 @@ mod tests {
         assert_eq!(line.allocated_quantity.as_deref(), Some("2"));
         assert_eq!(line.sku_id.as_deref(), Some("sku-1"));
         assert_eq!(line.unit_cost_gross.as_deref(), Some("12"));
+
         assert_eq!(changed.sales_order_revision_line_id.as_deref(), Some("old-revision-line"));
     }
 
@@ -268,6 +272,7 @@ mod tests {
             Error::BusinessLogicError(message)
                 if message == "采购变更商品行SKU与销售当前版本不一致，不能刷新采购来源"
         ));
+
         assert_eq!(original.sku_id.as_deref(), Some("sku-1"));
         assert_eq!(original.sales_order_revision_line_id.as_deref(), Some("old-revision-line"));
         assert_eq!(original.allocated_quantity.as_deref(), Some("1"));
@@ -294,6 +299,7 @@ mod tests {
         assert!(
             matches!(error, Error::BusinessLogicError(message) if message == "采购变更商品行在销售当前版本中没有对应稳定行")
         );
+
         let facts = HashMap::from([(
             "stable-fallback".into(),
             CurrentSalesRevisionLineFact {
@@ -303,6 +309,7 @@ mod tests {
         )]);
         let error = enrich_change_lines(&[line.clone()], &facts).unwrap_err();
         assert!(matches!(error, Error::BusinessLogicError(message) if message == "采购变更商品行缺少数量"));
+
         line.quantity = Some("3".into());
         let result = enrich_change_lines(&[line], &facts).unwrap();
         assert_eq!(result[0].sales_order_line_id.as_deref(), Some("stable-fallback"));

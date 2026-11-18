@@ -17,6 +17,7 @@ pub(crate) fn payment_term(raw: &str) -> Result<PaymentTermFact> {
             return Err(Error::from("付款条件缺少可计算规则，请在供应商资料中选择具体付款条件"));
         },
     };
+
     let mut fact = PaymentTermFact::new(canonical_code).with_prepay_gate(prepay_gate);
     if let Some(days) = days_after_delivery {
         fact = fact.with_days_after_delivery(days);

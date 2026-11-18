@@ -179,6 +179,7 @@ impl WarehouseRevision {
             CHANGE_REASON_MAX_LEN,
             "变更原因过长",
         )?;
+
         if data.revision_no == 0 {
             return Err(Error::from("修订序号必须从 1 开始"));
         }

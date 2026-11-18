@@ -258,6 +258,7 @@ mod tests {
         let domain = FulfillmentService::new(db);
         let authorization = unavailable_authorization();
         let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+
         for permission in [
             fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_LIST,
             fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_DETAIL,

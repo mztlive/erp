@@ -66,6 +66,7 @@ async fn persist_handover(
     if product.base.version != req.expected_version {
         return Err(Error::ConflictError("商品责任或版本已变化，请刷新后重试".into()));
     }
+
     let before = product.clone();
     product
         .handover(req.target_user_id.clone(), req.target_org_unit_id.clone(), actor.id())
@@ -87,6 +88,7 @@ async fn persist_handover(
             executor,
         )
         .await?;
+
     db.products().update(&mut product, executor).await?;
     Ok((before, handover_view(&product)))
 }

@@ -50,6 +50,7 @@ impl PreparedWriteBackOutcome {
     /// 不读取全局时钟；`processed` 禁止 error 信息是对旧静默忽略的收紧。
     pub fn prepare(request: &WriteBackInboxResultRequest, now: Instant) -> Result<Self> {
         request.validate()?;
+
         match request.outcome {
             WriteBackOutcome::Processed => {
                 if request.error_class.is_some() || request.attempt_summary.is_some() {

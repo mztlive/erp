@@ -222,6 +222,7 @@ pub fn ensure_completion_policy(
     {
         return Err(Error::ConflictError("终态证据策略已变化，请刷新后重试".to_string()));
     }
+
     kinds_subset(
         &domain_kinds(submitted_refs),
         &expected
@@ -263,6 +264,7 @@ pub fn ensure_direct_reason(
     if registry_id != registry.id || registry_version != registry.version {
         return Err(Error::ConflictError("对账原因注册表已变化，请刷新后重试".to_string()));
     }
+
     if registered_reason_id != reason_code.as_str() {
         return Err(Error::ValidationError("注册原因 ID 与原因代码不一致".to_string()));
     }
@@ -272,6 +274,7 @@ pub fn ensure_direct_reason(
     if dto_conclusion(reason.conclusion) != conclusion {
         return Err(Error::ValidationError("对账原因与结论不一致".to_string()));
     }
+
     kinds_subset(&domain_kinds(evidence_refs), reason.required)
 }
 
@@ -318,6 +321,7 @@ pub async fn verify_evidence_refs(
     if refs.is_empty() {
         return Err(Error::ValidationError("必须提供受控证据引用".to_string()));
     }
+
     let mut verified = Vec::with_capacity(refs.len());
     for evidence in refs {
         verified.push(authority.verify_evidence(subject, evidence, actor_id, executor).await?);
@@ -399,6 +403,7 @@ mod tests {
             &expected,
         )
         .unwrap();
+
         assert!(
             ensure_completion_policy(
                 "stale",
@@ -419,6 +424,7 @@ mod tests {
             record_id: "mall_order_fact:fact-1".to_string(),
             label: "attributed".to_string(),
         };
+
         ensure_direct_reason(
             &registry.reason_registry_id,
             registry.reason_registry_version,
@@ -428,6 +434,7 @@ mod tests {
             std::slice::from_ref(&evidence),
         )
         .unwrap();
+
         assert!(
             ensure_direct_reason(
                 &registry.reason_registry_id,
@@ -540,6 +547,7 @@ mod authority_sequence_tests {
         let authority = RecordingAuthority::default();
         let mut executor = TestExecutor::default();
         let id = &mut executor as *mut TestExecutor as usize;
+
         let verified =
             verify_evidence_refs(&authority, &subject(), &refs(), "actor", &mut executor).await.unwrap();
         assert_eq!(

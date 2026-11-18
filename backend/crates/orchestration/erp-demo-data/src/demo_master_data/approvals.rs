@@ -34,6 +34,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         report: &mut DemoFoundationReport,
     ) -> Result<()> {
         self.validate_approval_accounts(accounts).await?;
+
         let definitions = ApprovalDefinitionService::with_audit(
             self.db.clone(),
             self.identity.clone(),
@@ -41,6 +42,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             self.ports.workflow_audit.clone(),
         );
         let catalog = definitions.definition_catalog(actor).await?;
+
         for spec in &spec::foundation_spec().approvals {
             let document_type = spec::document_type(&spec.document_type)?;
             let published = catalog.iter().any(|item| {
@@ -101,6 +103,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     ) -> Result<()> {
         let definition_id = self.draft_id(definitions, actor, spec).await?;
         let detail = definitions.definition_detail(&definition_id, actor).await?;
+
         let replaced = definitions
             .replace_definition_nodes(
                 ReplaceDefinitionNodesRequest {
@@ -113,6 +116,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                 actor,
             )
             .await?;
+
         definitions
             .publish_definition(
                 PublishDefinitionRequest {
@@ -141,6 +145,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if let Some(draft) = versions.iter().find(|version| version.status == "DRAFT") {
             return Ok(draft.definition_id.clone());
         }
+
         let generation = versions.iter().map(|version| version.definition_version).max().unwrap_or(0);
         let created = definitions
             .create_definition_draft(
@@ -170,6 +175,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                     .role_actor(&account.account)
                     .await?
                     .ok_or_else(|| Error::Forbidden(format!("审批账号 {} 不可用", account.account)))?;
+
                 if !approval_participant_permissions_with_executor(
                     &self.authorization,
                     &self.db,
@@ -197,6 +203,7 @@ fn approval_nodes(spec: &ApprovalSpec, accounts: &PreparedAccounts) -> Result<Ve
         .get(&spec.submitter)
         .ok_or_else(|| Error::NotFound(format!("提交人 {} 尚未建号", spec.submitter)))?;
     let policy = require_process_required(spec::document_type(&spec.document_type)?)?;
+
     spec.nodes
         .iter()
         .enumerate()
@@ -211,6 +218,7 @@ fn approval_nodes(spec: &ApprovalSpec, accounts: &PreparedAccounts) -> Result<Ve
                 submitter,
                 slice::from_ref(&assignee),
             )?;
+
             Ok(DefinitionNodeRequest {
                 assignee_source: Default::default(),
                 additional_assignee_user_ids: Vec::new(),
@@ -256,8 +264,10 @@ mod tests {
         assert_eq!(nodes[0].assignee_user_id, "buyer-id");
         assert_eq!(nodes[0].display_order, 1);
         assert!(nodes[0].node_id.is_none());
+
         accounts.by_key.insert("procurement".into(), "seller-id".into());
         assert_eq!(approval_nodes(spec, &accounts).unwrap()[0].assignee_user_id, "seller-id");
+
         accounts.by_key.remove("sales");
         assert!(approval_nodes(spec, &accounts).is_err());
     }

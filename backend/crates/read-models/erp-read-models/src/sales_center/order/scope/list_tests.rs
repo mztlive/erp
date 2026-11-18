@@ -169,10 +169,12 @@ async fn complete_page_is_delivered_only_after_enrichment_and_validation_on_the_
     let mut executor = SnapshotExecutor::default();
     let original = &mut executor as *mut SnapshotExecutor as usize;
     let boundary = executor.boundary().unwrap();
+
     let view = read_list(&reader, &params(Some(&version())), &actor(), &mut executor).await.unwrap();
     assert_eq!(reader.stages(), ["load", "present", "present_complete", "validate"]);
     assert!(reader.calls.lock().unwrap().iter().all(|(_, id)| *id == original));
     assert!(!boundary.is_current(&executor));
+
     assert_eq!((view.data.total, view.data.page, view.data.page_size), (31, 2, 20));
     assert_eq!(view.scope_version, version());
     assert_eq!(view.data.items, [presented_row()]);
@@ -197,6 +199,7 @@ async fn failed_loading_or_enrichment_stops_the_page_before_delivery() {
     let result = read_list(&reader, &params(None), &actor(), &mut SnapshotExecutor::default()).await;
     assert!(matches!(result, Err(Error::Forbidden(reason)) if reason == "列表资格被拒绝"));
     assert_eq!(reader.stages(), ["load"]);
+
     let reader = ListReader { fail_present: true, ..Default::default() };
     let result = read_list(&reader, &params(None), &actor(), &mut SnapshotExecutor::default()).await;
     assert!(matches!(result, Err(Error::ConflictError(reason)) if reason == "客户事实读取失败"));
@@ -209,6 +212,7 @@ async fn a_stale_page_version_stops_before_enrichment_and_unscoped_execution_sto
     let result = read_list(&reader, &params(Some("old")), &actor(), &mut SnapshotExecutor::default()).await;
     assert!(matches!(result, Err(Error::ConflictError(_))));
     assert_eq!(reader.stages(), ["load"]);
+
     let reader = ListReader::default();
     let result = read_list(&reader, &params(None), &actor(), &mut ReadExecutor::default()).await;
     assert!(matches!(result, Err(Error::ValidationError(reason)) if reason == "销售列表必须使用快照事务"));
@@ -225,6 +229,7 @@ fn list_version_keeps_the_existing_full_match_hash_and_detects_changes_outside_t
     versions.hash(&mut legacy);
     let version = list_scope_version("scope", &versions);
     assert_eq!(version, format!("scope:{:x}", legacy.finish()));
+
     versions[1].version += 1;
     assert_ne!(version, list_scope_version("scope", &versions));
     versions[1].version -= 1;

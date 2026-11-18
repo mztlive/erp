@@ -92,15 +92,18 @@ fn assemble_one_supplier_view(row: SupplierAccountRow, context: &SupplierRowCont
     let party = context.parties.get(&row.party_id);
     let revision =
         party.and_then(|party| party.current_revision_id.as_ref()).and_then(|id| context.revisions.get(id));
+
     let current_profile = row
         .current_commercial_profile_revision_id
         .as_ref()
         .and_then(|id| context.profiles.get(id))
         .cloned()
         .map(|profile| named_profile(profile, &context.entity_names));
+
     let quals = context.qualifications.get(&row.id).map(|items| items.as_slice()).unwrap_or(&[]);
     let maintainer_user_name = context.maintainer_names.get(&row.maintainer_user_id).cloned();
     let capability_codes = context.capabilities.get(&row.id).cloned().unwrap_or_default();
+
     SupplierView {
         id: row.id,
         party_id: row.party_id,
@@ -198,6 +201,7 @@ fn capability_codes_by_supplier(
     for capability in capabilities {
         grouped.entry(capability.supplier_id.to_string()).or_default().push(capability);
     }
+
     grouped
         .into_iter()
         .map(|(supplier_id, items)| (supplier_id, SupplierCapability::list_codes(items, as_of)))
@@ -270,6 +274,7 @@ mod tests {
             },
         )
         .unwrap();
+
         let capability = SupplierCapability::new(
             SupplierCapabilityId::new("cap-1"),
             SupplierCapabilityData {
@@ -285,6 +290,7 @@ mod tests {
             "test",
         )
         .unwrap();
+
         let qualification = SupplierQualification::new(
             SupplierQualificationId::new("qual-1"),
             SupplierQualificationData {
@@ -300,9 +306,11 @@ mod tests {
             "test",
         )
         .unwrap();
+
         let mut names = HashMap::new();
         names.insert("party-sign".to_string(), "签约公司".to_string());
         names.insert("party-pay".to_string(), "付款公司".to_string());
+
         let views = assemble_supplier_views(SupplierViewAssembleInput {
             rows: vec![SupplierAccountRow {
                 id: "sup-1".to_string(),
@@ -337,6 +345,7 @@ mod tests {
             maintainer_names: HashMap::from([("buyer".to_string(), "采购员".to_string())]),
             as_of: as_of(),
         });
+
         let view = &views[0];
         assert_eq!(view.legal_name.as_deref(), Some("华东供应商"));
         assert_eq!(view.capability_codes, vec![CapabilityCode::Physical]);
@@ -345,9 +354,11 @@ mod tests {
             Some(crate::dto::supplier::SupplierQualificationHealth::Expiring30)
         );
         assert_eq!(view.qualification_types, vec![QualificationType::Contract]);
+
         let profile_view = view.current_profile.as_ref().expect("商务资料");
         assert_eq!(profile_view.signing_entity_name.as_deref(), Some("签约公司"));
         assert_eq!(profile_view.payment_entity_name.as_deref(), Some("付款公司"));
+
         let mut party_ids: Vec<String> =
             commercial_party_ids(&[profile]).into_iter().map(|id| id.to_string()).collect();
         party_ids.sort();

@@ -150,6 +150,7 @@ pub fn validate_profile_selection(
     if capability_set.len() != capability_codes.len() {
         return Err(erp_core::Error::from("供应商能力不能重复"));
     }
+
     let mut qualification_keys = std::collections::HashSet::new();
     for qualification in qualifications {
         let key = qualification_identity_key(qualification.qualification_type, qualification.certificate_no);
@@ -196,6 +197,7 @@ mod profile_selection_tests {
         assert!(
             validate_profile_selection(&[CapabilityCode::Physical, CapabilityCode::Physical], &[],).is_err()
         );
+
         let qualification_codes = [CapabilityCode::Api];
         let qualifications = [SupplierQualificationSelection {
             qualification_type: QualificationType::Contract,

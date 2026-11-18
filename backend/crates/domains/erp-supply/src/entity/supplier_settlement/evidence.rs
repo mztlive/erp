@@ -65,6 +65,7 @@ impl SupplierSettlementDifferenceEvidence {
             REQUEST_ID_MAX_LEN,
             "补证请求ID过长",
         )?;
+
         if data.evidence_reference_ids.is_empty() || data.evidence_reference_ids.len() > MAX_REFERENCES {
             return Err(Error::from("补证必须包含 1-20 个证据引用"));
         }
@@ -79,14 +80,17 @@ impl SupplierSettlementDifferenceEvidence {
         }
         evidence_reference_ids.sort();
         evidence_reference_ids.dedup();
+
         let opinion_code = normalize_optional_text(data.opinion_code, "意见代码", OPINION_MAX_LEN)?;
         let comment = normalize_optional_text(data.comment, "补证说明", COMMENT_MAX_LEN)?;
         let provided_by =
             normalize_required_text(data.provided_by, "补证人不能为空", ACTOR_MAX_LEN, "补证人过长")?;
+
         let command_hash = data.command_hash.trim().to_ascii_lowercase();
         if command_hash.len() != HASH_LEN || !command_hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return Err(Error::from("补证命令摘要必须是64位SHA-256十六进制值"));
         }
+
         Ok(Self {
             base: BaseModel::new(id.into()),
             request_id,

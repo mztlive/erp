@@ -133,11 +133,13 @@ fn build_sales_change_receivable(
     let Some(delta) = delta else {
         return Ok(None);
     };
+
     let mut account = existing_account
         .ok_or_else(|| Error::BusinessLogicError("销售单缺少正式应收子账，不能生效销售变更".to_string()))?;
     let account_update =
         account.sales_change_delta_update(input.business_type, input.new_gross).map_err(Error::Logic)?;
     account.update(account_update, &input.updated_by).map_err(Error::Logic)?;
+
     let entry = ReceivableEntry::new(
         entry_id(),
         ReceivableEntryData {
@@ -235,6 +237,7 @@ mod tests {
             assert_eq!(write.entry.source_revision_id, "revision-2");
             assert_eq!(write.entry.source_sequence, 1);
             assert_eq!(write.entry.posted_at, Instant::from_unix_secs(1_800_000_000));
+
             assert_eq!(write.account.gross_total, amount(gross));
             assert_eq!(write.account.invoiceable_total, amount(gross));
             assert_eq!(write.account.review_status, AccountReviewStatus::NotApplicable);

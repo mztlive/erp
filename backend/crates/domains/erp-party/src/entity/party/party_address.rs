@@ -416,6 +416,7 @@ mod tests {
             )
             .unwrap();
         assert!(!address.is_active());
+
         address
             .update(
                 PartyAddressUpdate {

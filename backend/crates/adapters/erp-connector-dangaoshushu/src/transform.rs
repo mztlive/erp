@@ -26,6 +26,7 @@ impl OfferTransform<DangaoshushuOffer<'_>> for DangaoshushuConnector {
         let spec_id = id(&spec[spec_id_field])
             .map_err(|e| context(e, &format!("规格编号 {spec_id_field} 缺失或格式无效")))?;
         let unit = self.settings.spec_units.get(&spec_id).cloned();
+
         let quote = if !spec["clearing_price"].is_null() {
             let unit_price: UnitPrice = fixed(&spec["clearing_price"])
                 .map_err(|e| context(e, "规格结算价 clearing_price 格式或精度无效"))?;
@@ -44,6 +45,7 @@ impl OfferTransform<DangaoshushuOffer<'_>> for DangaoshushuConnector {
         } else {
             None
         };
+
         Ok(Offer {
             sku: SupplierSku {
                 product_id: Some(id(&product["id"]).map_err(|e| context(e, "商品编号 id 缺失或格式无效"))?),
@@ -83,6 +85,7 @@ mod tests {
         let product = json!({"id":"00023","title":" 蛋糕 ","cat_id":"12"});
         let spec = json!({"spec_id":"spec-1","name":" 6寸 ","clearing_price":"100.25"});
         let listed = connector.transform(DangaoshushuOffer::List { product: &product, spec: &spec }).unwrap();
+
         let root = json!({
             "product":product,
             "images":[{"m_path":"https://img.dangaoss.com/cake.jpg"}],
@@ -92,6 +95,7 @@ mod tests {
         let spec = json!({"id":"spec-1","name":" 6寸 ","clearing_price":"100.25","stock":"2"});
         let mapper: &dyn OfferTransform<DangaoshushuOffer<'_>> = &connector;
         let detailed = mapper.transform(DangaoshushuOffer::Detail { root: &root, spec: &spec }).unwrap();
+
         assert_eq!(listed.sku, detailed.sku);
         assert_eq!(detailed.sku.product_id.as_deref(), Some("00023"));
         assert_eq!(listed.name, "蛋糕");
@@ -117,6 +121,7 @@ mod tests {
         let spec = json!({"id":"s1","name":"规格"});
         let offer = connector.transform(DangaoshushuOffer::Detail { root: &root, spec: &spec }).unwrap();
         assert_eq!(offer.details.images.unwrap()[0].url, "");
+
         let spec = json!({"id":"s1","name":" "});
         let error = connector.transform(DangaoshushuOffer::Detail { root: &root, spec: &spec }).unwrap_err();
         assert_eq!(error.summary, "供应商名称字段 name 缺失、为空或类型无效");

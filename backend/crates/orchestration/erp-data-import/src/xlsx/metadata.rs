@@ -72,6 +72,7 @@ pub(crate) fn sheet_paths(archive: &mut Archive<'_>) -> Result<Vec<(String, Stri
     let workbook = archive.xml("xl/workbook.xml")?;
     let rels = archive.xml("xl/_rels/workbook.xml.rels")?;
     let paths = relationships(&rels, "xl/workbook.xml")?;
+
     let doc = document(&workbook)?;
     let mut sheets = Vec::new();
     for node in doc.descendants().filter(|node| node.is_element() && node.tag_name().name() == "sheet") {
@@ -93,6 +94,7 @@ fn resolve_target(source: &str, target: &str) -> Result<String> {
     if target.is_empty() || target.contains(['\\', ':', '\0', '?', '#']) {
         return Err(invalid("工作簿关系路径不安全"));
     }
+
     let mut parts = if target.starts_with('/') || target.starts_with("xl/") {
         Vec::new()
     } else {
@@ -107,6 +109,7 @@ fn resolve_target(source: &str, target: &str) -> Result<String> {
             _ => parts.push(part),
         }
     }
+
     if parts.is_empty() {
         return Err(invalid("工作簿关系路径缺失"));
     }

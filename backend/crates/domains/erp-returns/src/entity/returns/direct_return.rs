@@ -35,6 +35,7 @@ impl DirectReturnRequest {
     /// 非当前行、非正数、重复或累计超退时拒绝。
     pub fn check_limits(&self, limits: &[(&str, Quantity)]) -> Result<()> {
         self.validate()?;
+
         for line in &self.lines {
             let max = limits
                 .iter()
@@ -60,12 +61,14 @@ impl DirectReturnRequest {
         if key.len() != 36 || !key.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
             return Err(Error::from("退货提交标识无效，请重新打开登记窗口"));
         }
+
         for (value, label) in [(&self.reason, "退货原因"), (&self.receipt_reference, "供应商收货凭据")]
         {
             if value.trim().is_empty() || value.len() > 1500 {
                 return Err(Error::from(format!("请填写{label}，长度不得超过 1500 字节")));
             }
         }
+
         if self.lines.is_empty() || self.lines.len() > 100 {
             return Err(Error::from("每次登记 1 至 100 条实际退货明细"));
         }
@@ -135,11 +138,14 @@ mod tests {
             lines: vec![DirectReturnLine { purchase_line_id: "line".into(), quantity: q("27") }],
         };
         req.validate().unwrap();
+
         req.lines.push(req.lines[0].clone());
         assert!(req.validate().is_err());
+
         req.lines.pop();
         req.lines[0].quantity = q("0");
         assert!(req.validate().is_err());
+
         req.lines[0].quantity = q("27");
         req.receipt_reference.clear();
         assert!(req.validate().is_err());
@@ -161,6 +167,7 @@ mod tests {
         assert!(req.check_limits(&[("a", q("27"))]).is_err());
         req.lines.clear();
         assert!(req.check_limits(&[]).is_err());
+
         let first = net_fulfilled(q("47"), q("10")).unwrap();
         assert_eq!(net_fulfilled(first, q("17")).unwrap(), q("20"));
         assert!(net_fulfilled(first, q("38")).is_err());

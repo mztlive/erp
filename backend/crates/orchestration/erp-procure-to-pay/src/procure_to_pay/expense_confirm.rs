@@ -99,8 +99,10 @@ impl PurchaseOrderProcess {
     ) -> Result<ConfirmExpenseOccurrenceResult> {
         let ports = self.ports.clone();
         req.validate()?;
+
         let pending = PendingFileAssets::prepare(assets, actor)?.shared();
         resolve_evidence(&mut req.evidence_attachment_id, pending.as_ref())?;
+
         let command = ConfirmCommand {
             purchase_order_id: purchase_order_id.to_string(),
             expense_line_id: expense_line_id.to_string(),
@@ -138,9 +140,11 @@ async fn apply_confirm(
             executor,
         )
         .await?;
+
     let (revision_id, lines) = current_lines(db, &order, executor).await?;
     let line = find_expense_line(&lines, &command.expense_line_id)?;
     ensure_not_confirmed(db, command, executor).await?;
+
     let occurrence = build_occurrence(&order, &revision_id, line, command)?;
     let cost_entry_id = CostEntryId::new(next_id());
     let (entry, allocation) = cost_fact(&occurrence, cost_entry_id.clone()).into_facts()?;
@@ -150,6 +154,7 @@ async fn apply_confirm(
         order.base.id.clone(),
         Some(format!("费用行 {} 确认发生", occurrence.expense.description)),
     )?;
+
     pending.persist(db, executor).await?;
     purchase_expense_occurrences(db).create(&occurrence, executor).await?;
     crate::procure_to_pay::inquiry_expense::mark_occurred(
@@ -159,9 +164,11 @@ async fn apply_confirm(
         executor,
     )
     .await?;
+
     persist_cost_entry(db, PreparedCostEntry { entry, allocations: vec![allocation] }, executor).await?;
     refresh_expense_progress(db, &mut order, &lines, command.actor.id(), executor).await?;
     persist_log(db, &audit, executor).await?;
+
     Ok(ConfirmExpenseOccurrenceResult {
         expense_line_id: occurrence.expense_line_id,
         cost_entry_id: cost_entry_id.to_string(),
@@ -183,6 +190,7 @@ async fn current_lines(
     ) {
         return Err(Error::BusinessLogicError("采购单生效后才能确认费用发生".into()));
     }
+
     let revision_id = order
         .stable
         .current_revision_id
@@ -267,6 +275,7 @@ async fn refresh_expense_progress(
     {
         return Ok(());
     }
+
     let occurred = occurrences_by_orders(db, std::slice::from_ref(&order.base.id), executor)
         .await?
         .into_iter()

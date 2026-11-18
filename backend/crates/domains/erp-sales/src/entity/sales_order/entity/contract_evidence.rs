@@ -57,6 +57,7 @@ impl SalesOrder {
         if ids.iter().any(|id| !unique.insert(id.as_ref())) {
             return Err(Error::from("销售建单凭证不能重复"));
         }
+
         self.evidence_file_asset_ids = ids;
         Ok(())
     }
@@ -86,6 +87,7 @@ impl SalesOrder {
         if changed_settlement {
             self.ensure_first_submission_working_copy_editable()?;
         }
+
         if let Some(contract_id) = first_contract {
             self.bind_contract(contract_id.clone(), customer_id, actor_id)?;
         }
@@ -119,6 +121,7 @@ impl SalesOrder {
             return Err(Error::from("销售单已有关联合同，不允许替换"));
         }
         ensure_contract_customer(customer_id, Some(&self.customer_id))?;
+
         self.contract_id = Some(contract_id);
         self.stable.touch(actor_id);
         Ok(())
@@ -195,12 +198,14 @@ mod tests {
             order.bind_contract(ContractId::new("c"), &CustomerAccountId::new("other"), "sales").is_err()
         );
         assert_eq!(order, original);
+
         order.settlement_party_id = PartyId::new("our-selected-company");
         order.commercial_status = CommercialStatus::Effective;
         order.bind_contract(ContractId::new("c"), &CustomerAccountId::new("customer-1"), "sales").unwrap();
         assert_eq!(order.commercial_status, CommercialStatus::Effective);
         assert_eq!(order.order_no, original.order_no);
         assert_eq!(order.settlement_party_id.as_ref(), "our-selected-company");
+
         assert!(
             order
                 .bind_contract(ContractId::new("replacement"), &CustomerAccountId::new("customer-1"), "sales")
@@ -233,6 +238,7 @@ mod tests {
             )
             .is_err()
         );
+
         let mut order = order();
         order.commercial_status = CommercialStatus::Voided;
         let before = order.clone();
@@ -256,6 +262,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(order.contract_id.as_deref(), Some("c"));
+
         assert!(
             order
                 .apply_command_contract_context(
@@ -282,6 +289,7 @@ mod tests {
         assert_eq!(order.contract_id, contract);
         assert_eq!(order.customer_id, customer);
         assert_eq!(order.settlement_party_id.as_ref(), "other-company");
+
         let before = order.clone();
         assert!(
             order

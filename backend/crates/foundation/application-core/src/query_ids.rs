@@ -22,6 +22,7 @@ fn parse_query_ids(raw: &str) -> Result<Vec<String>, &'static str> {
     if parts.clone().nth(MAX_QUERY_IDS).is_some() {
         return Err("单次人员条件最多 100 个 ID");
     }
+
     let mut ids = BTreeSet::new();
     for part in parts {
         let id = part.trim();
@@ -113,9 +114,11 @@ mod tests {
     #[test]
     fn identities_are_deduplicated_and_names_are_rejected() {
         assert_eq!(parse(" user-2,user-1,user-2 ").unwrap().into_vec(), ["user-1", "user-2"]);
+
         for raw in ["", " ", "张三", "user-1,", "user-1,,user-2"] {
             assert!(parse(raw).is_err());
         }
+
         assert!(parse(&vec!["u"; 101].join(",")).is_err());
         assert!(parse(&vec!["u"; 100].join(",")).is_ok());
     }

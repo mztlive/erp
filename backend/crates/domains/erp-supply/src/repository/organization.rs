@@ -37,6 +37,7 @@ pub async fn has_unsettled_business_org(
     {
         return Ok(true);
     }
+
     let orders =
         db.supplier_fulfillment_orders().find_many(doc! { "business_org_unit_id": org }, executor).await?;
     if orders
@@ -45,6 +46,7 @@ pub async fn has_unsettled_business_org(
     {
         return Ok(true);
     }
+
     let ids = orders.into_iter().map(|order| order.base.id).collect::<Vec<_>>();
     db.supplier_order_actions()
         .exists(
@@ -77,12 +79,14 @@ mod tests {
         {
             assert!(unsettled_order(main, CancelStatus::None, RefundStatus::None));
         }
+
         for main in [FulfillmentStatus::Completed, FulfillmentStatus::Rejected] {
             assert!(!unsettled_order(main, CancelStatus::None, RefundStatus::None));
             assert!(unsettled_order(main, CancelStatus::CancelPending, RefundStatus::None));
             assert!(unsettled_order(main, CancelStatus::None, RefundStatus::RefundPending));
             assert!(unsettled_order(main, CancelStatus::None, RefundStatus::Manual));
         }
+
         assert!(!unsettled_order(FulfillmentStatus::Accepted, CancelStatus::Canceled, RefundStatus::None));
         assert!(!unsettled_order(FulfillmentStatus::Accepted, CancelStatus::None, RefundStatus::Refunded));
         // 部分退款可为已完成订单的合法终态；后续在途退款另查动作事实。

@@ -30,6 +30,7 @@ impl PurchasePaymentRequest {
         if &frozen_account.identity != identity {
             return Err(FinanceError::BusinessLogicError("预存款真实账号身份与原批准快照不一致".into()));
         }
+
         if !matches!(
             self.status,
             PurchasePaymentRequestStatus::Approved
@@ -46,6 +47,7 @@ impl PurchasePaymentRequest {
                 "预存款与原付款申请主体、供应商或审批版本不一致".into(),
             ));
         }
+
         let line = self
             .lines
             .iter()
@@ -116,6 +118,7 @@ impl PurchasePaymentRequest {
         if amount > self.available_to_execute(account_id)? {
             return Err(Error::from("付款申请可执行额度不足"));
         }
+
         self.deposit_reservations.insert(
             reservation_id.into(),
             PaymentRequestDepositReservation { payable_account_id: account_id.into(), amount },
@@ -166,12 +169,14 @@ impl PurchasePaymentRequest {
             .get(reservation_id)
             .ok_or_else(|| Error::from("付款申请缺少原预存款占用"))?
             .clone();
+
         let mut candidate = self.clone();
         candidate.release_deposit(reservation_id, amount)?;
         candidate.record_authorized_payment(&[PaymentRequestAllocation {
             payable_account_id: item.payable_account_id,
             amount,
         }])?;
+
         *self = candidate;
         Ok(())
     }

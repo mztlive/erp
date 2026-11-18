@@ -113,6 +113,7 @@ pub(super) fn receipt_brief_source(
     let more_count = lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
     let mut visible = lines;
     visible.truncate(BRIEF_LINE_LIMIT);
+
     let mut sections = Vec::new();
     push_section(&mut sections, "往来主体", counterparty, false);
     push_section(&mut sections, "回款金额", Some(format_yuan(&receipt.amount)).as_deref(), true);
@@ -126,6 +127,7 @@ pub(super) fn receipt_brief_source(
             false,
         );
     }
+
     let first_line = visible.first().map(|line| line.title.clone());
     ObjectBriefSource {
         customer: None,
@@ -307,6 +309,7 @@ pub(super) fn append_funds_origin(
         Some(if has_evidence { "已上传" } else { "未上传" }),
         false,
     );
+
     let lines = origin.map(|item| item.lines.clone()).unwrap_or_default();
     brief.more_count = lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
     brief.lines = lines.into_iter().take(BRIEF_LINE_LIMIT).collect();
@@ -749,6 +752,7 @@ mod tests {
                 FundsOriginBrief { counterparty: Some("分录主体".into()), ..Default::default() },
             )]),
         };
+
         let authority = crate::workbench::authority::funds::mapping::customer_refund_fact(
             &refund,
             None,
@@ -762,6 +766,7 @@ mod tests {
             &entries,
         );
         let fact = funds_fact_display(authority, origin.and_then(|row| row.counterparty.clone()));
+
         assert_eq!(fact.authority.root_document_id, "refund-1");
         assert_eq!(fact.authority.created_by, "entity-creator");
         assert_eq!(fact.authority.counterparty_label.as_deref(), Some("分录主体"));
@@ -793,6 +798,7 @@ mod tests {
         )
         .unwrap();
         let origins = HashMap::from([("payment-1".into(), "来源供应商".into())]);
+
         let authority = crate::workbench::authority::funds::mapping::supplier_refund_fact(
             &refund,
             None,
@@ -800,6 +806,7 @@ mod tests {
             &HashMap::new(),
         );
         let fact = funds_fact_display(authority, None);
+
         assert_eq!(fact.authority.created_by, "entity-creator");
         assert_eq!(fact.authority.counterparty_label.as_deref(), Some("来源供应商"));
         assert_eq!(fact.display.counterparty_label, None);
@@ -850,6 +857,7 @@ mod tests {
         let command_voucher =
             voucher_revision_ids(std::slice::from_ref(&revision)).contains(&revision.base.id);
         assert!(!command_voucher);
+
         let mut authority = erp_workflow::ports::ObjectFact::new("sales-1", "应收子账 1", "creator");
         authority.impact_summary =
             Some(crate::workbench::authority::funds::mapping::receivable_account_impact(command_voucher));
@@ -861,6 +869,7 @@ mod tests {
         );
         assert_eq!(fact.authority.root_document_id, "sales-1");
         assert_eq!(fact.authority.created_by, "creator");
+
         // 读取既有修订时仍按任一标志识别，不追加新构造时的成对校验。
         revision.voucher_category_sku_id = Some(SkuId::new("voucher-sku"));
         assert!(voucher_revision_ids(std::slice::from_ref(&revision)).contains(&revision.base.id));

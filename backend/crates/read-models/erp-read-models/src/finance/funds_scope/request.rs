@@ -39,6 +39,7 @@ impl FundsAccess {
         query.validate_scope_filters().map_err(Error::from)?;
         let page = query.page.unwrap_or(1).max(1);
         ensure_page(page, query.scope_version.as_deref())?;
+
         let snapshot = self.checked_requests(query, actor, query.scope_version.as_deref()).await?;
         Ok(snapshot)
     }
@@ -151,8 +152,10 @@ impl FundsAccess {
         {
             self.ensure_request_ready(&request, actor, &authorization, executor).await?;
         }
+
         let candidates = self.request_candidates(query, &authorization, executor).await?;
         let snapshot = self.assemble_requests(candidates, executor).await?;
+
         let version = request_version(
             &authorization.context,
             snapshot.decided.iter().map(|(row, _)| row),
@@ -180,8 +183,10 @@ impl FundsAccess {
     ) -> Result<RequestSnapshot> {
         let order_ids = rows.iter().map(|row| row.sales_order_id.to_string()).collect::<Vec<_>>();
         let (facts, order_nos) = self.request_sales_context(&order_ids, executor).await?;
+
         let work_ids = rows.iter().filter_map(|row| row.work_item_id.clone()).collect::<Vec<_>>();
         let handlers = self.work_item_handlers(&work_ids, executor).await?;
+
         let decided = hydrate_requests(rows, &facts, &handlers);
         Ok(RequestSnapshot { decided, facts, order_nos })
     }
@@ -207,9 +212,11 @@ impl FundsAccess {
                             executor,
                         )
                         .await?;
+
                     let rows = this.request_candidates(&query, &authorization, executor).await?;
                     let order_ids = rows.iter().map(|row| row.sales_order_id.to_string()).collect::<Vec<_>>();
                     let (facts, _) = this.request_sales_context(&order_ids, executor).await?;
+
                     authorization.deliver(executor).await?;
                     Ok(request_version(&authorization.context, rows.iter(), &facts))
                 })
@@ -296,6 +303,7 @@ impl FundsAccess {
             .resolve(actor, &receivable_permissions::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL, executor)
             .await?;
         self.require_visible_root(&authorization, id, executor).await?;
+
         let row = self
             .db
             .sales_invoice_requests()
@@ -304,6 +312,7 @@ impl FundsAccess {
             .map_err(Error::from)?
             .ok_or_else(|| Error::NotFound("开票申请不存在".into()))?;
         self.ensure_request_ready(&row, actor, &authorization, executor).await?;
+
         let order_ids = vec![row.sales_order_id.to_string()];
         let (facts, order_nos) = self.request_sales_context(&order_ids, executor).await?;
         let fact = facts
@@ -313,6 +322,7 @@ impl FundsAccess {
         if !authorized.contains(&row.sales_order_id.to_string()) {
             return Err(Error::NotFound("开票申请不存在".into()));
         }
+
         let handlers = self
             .work_item_handlers(&row.work_item_id.clone().into_iter().collect::<Vec<_>>(), executor)
             .await?;
@@ -320,6 +330,7 @@ impl FundsAccess {
         let row_facts = request_linked_facts(&row, fact, handler.as_deref());
         let data = request_row(&row, handler, &facts, &order_nos);
         let parts = vec![format!("{}:{}", row.base.id, row.base.version), row_facts.version_part()];
+
         authorization.deliver(executor).await?;
         Ok(FundsScopedResult {
             data,
@@ -351,14 +362,17 @@ fn finish_requests(
         .iter()
         .map(|(row, handler)| request_row(row, handler.clone(), &facts, &order_nos))
         .collect();
+
     let triples = decided
         .iter()
         .map(|(row, _)| (row.base.id.clone(), row.data.amount, Some(row.sales_order_id.to_string())))
         .collect::<Vec<_>>();
     let owner_of =
         facts.iter().map(|(id, fact)| (id.clone(), fact.owner_user_id.clone())).collect::<HashMap<_, _>>();
+
     ensure_version(query.scope_version.as_deref(), &version).map_err(|_| changed())?;
     let summary = build_summary(&triples, &owner_of, None, &version, false)?;
+
     Ok(FundsScopedPage {
         items,
         total,
@@ -532,6 +546,7 @@ mod tests {
         let row = request("r", "so", None);
         let allowed = bounded_request_candidates(vec![row.clone(); 10_000]).unwrap();
         assert_eq!(allowed.len(), 10_000);
+
         let error = bounded_request_candidates(vec![row; 10_001]).unwrap_err();
         assert!(matches!(
             error,
@@ -553,6 +568,7 @@ mod tests {
         ]);
         let numbers = HashMap::from([("so-a".into(), "SO-A".into()), ("so-b".into(), "SO-B".into())]);
         let handlers = HashMap::from([("work".into(), "handler".into())]);
+
         let decided = hydrate_requests(rows, &facts, &handlers);
         assert_eq!(
             decided.iter().map(|(row, _)| row.base.id.as_str()).collect::<Vec<_>>(),
@@ -560,6 +576,7 @@ mod tests {
         );
         assert_eq!(decided[0].1.as_deref(), Some("handler"));
         assert_eq!(decided[1].1, None);
+
         let row = request_row(&decided[0].0, decided[0].1.clone(), &facts, &numbers);
         assert_eq!(row.sales_order_no, "SO-A");
         assert_eq!(row.sales_owner_user_id.as_deref(), Some("owner-a"));
@@ -568,6 +585,7 @@ mod tests {
         assert_eq!(row.handler_user_id.as_deref(), Some("handler"));
         assert_eq!(row.amount, "9.99".parse().unwrap());
         assert!(!row.permission_limited);
+
         let linked = request_linked_facts(&decided[0].0, &facts["so-a"], decided[0].1.as_deref());
         assert_eq!(linked.linked_document_version, 10);
         assert_eq!(linked.linked_document_id, "so-a");
@@ -582,10 +600,12 @@ mod tests {
         request.data.invoice_content = "福利用品".into();
         request.data.reason = "按合同开票".into();
         request.invoiced_amount = "3.25".parse().unwrap();
+
         let row = request_row(&request, None, &HashMap::new(), &HashMap::new());
         assert_eq!(row.data, request.data);
         assert_eq!(row.amount, request.data.amount);
         assert_eq!(row.invoiced_amount, request.invoiced_amount);
+
         let json = serde_json::to_value(row).unwrap();
         assert_eq!(json["data"]["invoice_title"], "提交时开票抬头");
         assert_eq!(json["data"]["tax_number"], "91440101MA00000000");
@@ -604,6 +624,7 @@ mod tests {
         assert_eq!(row.receivable_account_id, "account");
         assert_eq!(row.work_item_id.as_deref(), Some("work"));
         assert_eq!(request.completion_amount(row.version).unwrap(), "6.74".parse().unwrap());
+
         let json = serde_json::to_value(&row).unwrap();
         assert_eq!(json["version"], 4);
         assert_eq!(json["receivable_account_id"], "account");
@@ -633,12 +654,15 @@ mod tests {
             ("so-b".into(), fact("owner-b", "org-b", 2)),
         ]);
         let version = request_version(&context, rows.iter(), &facts);
+
         rows[1].base.version += 1;
         assert_ne!(version, request_version(&context, rows.iter(), &facts));
         rows[1].base.version -= 1;
+
         facts.get_mut("so-b").unwrap().version += 1;
         assert_ne!(version, request_version(&context, rows.iter(), &facts));
         facts.get_mut("so-b").unwrap().version -= 1;
+
         let mut changed = context.clone();
         changed.scope_version = "revoked".into();
         assert_ne!(version, request_version(&changed, rows.iter(), &facts));

@@ -22,6 +22,7 @@ pub(super) fn product_request(
     if kind == ProductKind::Voucher {
         return Err(Error::ValidationError("API 商品选品不创建卡券类目".into()));
     }
+
     let (name, description) = company_display_texts(item, &row.target)?;
     Ok(CreateProductRequest {
         change_reason: Some("供应商 API 商品选品入库".into()),
@@ -53,6 +54,7 @@ pub(super) fn sku_input(
     if unit_id.trim().is_empty() || (!item.specification.trim().is_empty() && spec_entries.is_empty()) {
         return Err(Error::ValidationError("请选择单位并填写来源规格映射".into()));
     }
+
     Ok(ProductSkuInput {
         sku_id: None,
         expected_sku_revision_id: None,
@@ -132,6 +134,7 @@ pub(super) fn offering_request(
         },
         CatalogAvailability::Unknown => AvailabilityStatus::Stale,
     };
+
     Ok(CreateSupplierOfferingRequest {
         sku_id: sku_id.into(),
         supplier_id: item.supplier_id.clone(),
@@ -255,6 +258,7 @@ mod tests {
             market_price: Some("189.00".parse().unwrap()),
         });
         assert_ne!(original, row.fingerprint().unwrap());
+
         let input = sku_input(&source, &row, &PreparedSourceMedia::empty()).unwrap();
         assert_eq!(input.sales_visible_price_gross, Some("120.00".parse().unwrap()));
         assert_eq!(input.bulk_price_gross, Some("110.00".parse().unwrap()));
@@ -264,6 +268,7 @@ mod tests {
             offering_request(&source, &row, "sku", "command").unwrap().terms.dropship_supply_price_gross,
             "80.00"
         );
+
         row.sales_prices = Some(AdoptionSalesPrices::default());
         assert!(sku_input(&source, &row, &PreparedSourceMedia::empty()).unwrap().market_price.is_none());
         assert_eq!(source.market_price, Some("199.00".parse().unwrap()));
@@ -277,15 +282,18 @@ mod tests {
             *specification_confirmed = false;
         }
         assert!(product_request(&item(), &row, &PreparedSourceMedia::empty()).is_ok());
+
         if let AdoptionTarget::Create { unit_id, .. } = &mut row.target {
             *unit_id = String::new();
         }
         assert!(product_request(&item(), &row, &PreparedSourceMedia::empty()).is_err());
+
         if let AdoptionTarget::Create { unit_id, spec_entries, .. } = &mut row.target {
             *unit_id = "unit".into();
             spec_entries.clear();
         }
         assert!(product_request(&item(), &row, &PreparedSourceMedia::empty()).is_err());
+
         if let AdoptionTarget::Create { product_kind, .. } = &mut row.target {
             *product_kind = "VOUCHER".into();
         }
@@ -302,17 +310,20 @@ mod tests {
         assert_eq!(request.availability_status, AvailabilityStatus::Stale);
         assert!(request.available_quantity.is_none());
         assert!(request.source_updated_at.is_none());
+
         let data = request.try_into_initial_revision(SupplierOfferingId::new("offering")).unwrap();
         let mut revision =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("revision"), data).unwrap();
         assert!(item.ensure_supply_prices(&revision).is_ok());
         revision.bulk_supply_price_gross = Some("75".parse().unwrap());
         assert!(item.ensure_supply_prices(&revision).is_err());
+
         for quote in [Some("90.00".into()), None] {
             item.purchase_price = quote.clone();
             assert!(offering_request(&item, &row(), "company-sku", "command").is_err());
             assert_eq!(item.purchase_price, quote);
         }
+
         item.availability = CatalogAvailability::Withdrawn;
         assert!(offering_request(&item, &row(), "company-sku", "command").is_err());
     }
@@ -335,6 +346,7 @@ mod tests {
             file_asset_id: Some("asset-one".into()),
             ..CatalogImage::default()
         }]);
+
         let request = product_request(&item(), &row(), &media).unwrap();
         assert_eq!(request.carousel_media[0].file_asset_id.as_ref(), "asset-one");
         assert_eq!(request.skus[0].main_image_asset_id.as_ref().unwrap().as_ref(), "asset-one");
@@ -354,6 +366,7 @@ mod tests {
                 alt_text: None,
             })
             .collect();
+
         let request = product_request(&item(), &row(), &media).unwrap();
         assert!(request.carousel_media.is_empty());
         assert!(request.skus[0].main_image_asset_id.is_none());
@@ -367,6 +380,7 @@ mod tests {
         item.name = "源".repeat(129);
         item.description = Some("完整介绍".repeat(200));
         assert!(company_display_texts(&item, &row.target).is_err());
+
         let original_description = item.description.clone();
         if let AdoptionTarget::Create { company_name, company_description, .. } = &mut row.target {
             *company_name = Some("公司整理名称".into());

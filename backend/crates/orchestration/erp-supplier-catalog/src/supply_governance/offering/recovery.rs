@@ -114,6 +114,7 @@ mod tests {
         })
         .await;
         assert_eq!(value.unwrap(), 9);
+
         for error in [
             Error::Forbidden("revoked".into()),
             Error::Unauthenticated("disabled".into()),
@@ -130,6 +131,7 @@ mod tests {
             .await;
             assert_eq!(result.unwrap_err().to_string(), expected);
         }
+
         assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 
@@ -141,8 +143,10 @@ mod tests {
         let result: Result<u64> =
             resolve(Err(original()), || async { Err(Error::Forbidden("revoked".into())) }).await;
         assert!(matches!(result, Err(Error::Forbidden(reason)) if reason == "revoked"));
+
         let result: Result<u64> = resolve(Err(original()), || async { Ok(None) }).await;
         assert!(matches!(result, Err(Error::OutcomeUnknown(_))));
+
         let result = resolve(Err(original()), || async { Ok(Some(73)) }).await;
         assert_eq!(result.unwrap(), 73);
     }

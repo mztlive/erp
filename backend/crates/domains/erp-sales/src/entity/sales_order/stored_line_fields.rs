@@ -190,11 +190,13 @@ mod tests {
         let working = working_line(LineType::GoodsService);
         let expected = working.goods_fields().unwrap().unwrap();
         let (submitted, changed) = frozen_lines(&working);
+
         assert_eq!(submitted.goods_fields().unwrap(), expected);
         assert_eq!(changed.goods_fields().unwrap(), expected);
         assert_eq!(expected.sku_revision_id.as_ref(), "skurev-1");
         assert_eq!(expected.procurement_supply_price_gross, Some(price("8.5000")));
         assert_eq!(expected.quantity.to_decimal().to_string(), "3.000000");
+
         assert!(working.voucher_fields().unwrap().is_none());
         for error in [submitted.voucher_fields().unwrap_err(), changed.voucher_fields().unwrap_err()] {
             assert_eq!(error.to_string(), "第 7 行不是卡券行");
@@ -207,6 +209,7 @@ mod tests {
         working.gift_rate = None;
         let expected = working.voucher_fields().unwrap().unwrap();
         let (mut submitted, mut changed) = frozen_lines(&working);
+
         // 持久化历史可以没有可选配赠率；读取字段组不能用重算值替代它。
         submitted.gift_rate = None;
         changed.gift_rate = None;
@@ -215,6 +218,7 @@ mod tests {
         assert_eq!(changed, expected);
         assert_eq!(expected.transaction_amount, amt("270.00"));
         assert!(expected.gift_rate.is_none());
+
         assert!(working.goods_fields().unwrap().is_none());
         assert_eq!(submitted.goods_fields().unwrap_err().to_string(), "第 7 行不是实物及服务行");
     }
@@ -230,6 +234,7 @@ mod tests {
         fields.base_unit_code = None;
         fields.unit_price_gross = None;
         assert_eq!(fields.goods().unwrap_err().to_string(), "第 7 行缺少商品字段组");
+
         fields.sku_id = working.sku_id.as_ref();
         assert_eq!(fields.goods().unwrap_err().to_string(), "第 7 行缺少 SKU 修订");
         fields.sku_revision_id = working.sku_revision_id.as_ref();
@@ -254,6 +259,7 @@ mod tests {
         fields.gift_amount = None;
         fields.card_form = None;
         assert_eq!(fields.voucher().unwrap_err().to_string(), "第 7 行缺少卡券字段组");
+
         fields.face_value = working.face_value;
         assert_eq!(fields.voucher().unwrap_err().to_string(), "第 7 行缺少卡张数");
         fields.card_count = working.card_count;

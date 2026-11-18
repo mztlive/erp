@@ -104,6 +104,7 @@ async fn exact_qualification_keeps_refs_date_and_nonzero_executor() {
         fail: false,
     });
     let adapter = CatalogQualificationAdapter { query: query.clone() };
+
     let result = adapter.qualified_refs(&refs, "2026-09-07".parse().unwrap(), &mut executor).await.unwrap();
     assert_eq!(result, refs);
     assert_eq!(query.calls.load(Ordering::SeqCst), 1);
@@ -120,6 +121,7 @@ async fn exact_qualification_keeps_persistence_failure_without_retry() {
         fail: true,
     });
     let adapter = CatalogQualificationAdapter { query: query.clone() };
+
     assert!(matches!(adapter.qualified_refs(&refs, "2026-09-07".parse().unwrap(), &mut executor).await,
         Err(erp_sales::Error::ConflictError(message)) if message == "数据已被其他请求修改，请刷新后重试"));
     assert_eq!(query.calls.load(Ordering::SeqCst), 1);
@@ -141,8 +143,10 @@ async fn reference_prices_use_catalog_quantity_rule_and_exact_revision() {
         fail: false,
     });
     let adapter = CatalogQualificationAdapter { query: query.clone() };
+
     let facts =
         adapter.reference_prices(&requests, "2026-09-07".parse().unwrap(), &mut executor).await.unwrap();
+
     assert_eq!(
         facts.iter().map(|fact| fact.unit_price_gross).collect::<Vec<_>>(),
         ["10", "8", "8"].map(|price| UnitPrice::from_str(price).unwrap())
@@ -170,6 +174,7 @@ async fn reference_prices_keep_provider_failure_without_retry() {
         fail: true,
     });
     let adapter = CatalogQualificationAdapter { query: query.clone() };
+
     assert!(matches!(
         adapter.reference_prices(&requests, "2026-09-07".parse().unwrap(), &mut executor).await,
         Err(erp_sales::Error::ConflictError(_))

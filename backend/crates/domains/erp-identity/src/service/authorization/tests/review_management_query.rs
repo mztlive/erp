@@ -51,6 +51,7 @@ async fn management_query_keeps_type_qualification_real_source_and_object_member
         )
         .await
         .unwrap();
+
     identity.state.lock().unwrap().denied_scope = true;
     let access = service.query(&actor(), &internal::APPROVAL_MANAGEMENT_READ, &mut executor).await.unwrap();
     assert!(management_members(&access).is_empty());
@@ -66,6 +67,7 @@ async fn management_query_keeps_type_qualification_real_source_and_object_member
             .await,
         Err(Error::Forbidden(_))
     ));
+
     identity.state.lock().unwrap().denied_scope = false;
     facts.objects.lock().unwrap()[0].relations.values_mut().next().unwrap().objects.clear();
     assert!(matches!(
@@ -92,6 +94,7 @@ async fn management_query_does_not_splice_type_admin_from_another_role_or_other_
     let access = service.query(&actor(), &internal::APPROVAL_MANAGEMENT_READ, &mut executor).await.unwrap();
     assert!(management_members(&access).is_empty());
     service.validate(&access, &mut executor).await.unwrap();
+
     identity.state.lock().unwrap().grants = vec![(
         "purchase-manager".into(),
         vec![approval_instance::INSTANCE_LIST, approval_admin::PURCHASE_ORDER_RUNTIME],
@@ -113,6 +116,7 @@ async fn management_query_retains_scope_expiry_and_rejects_revocation_before_del
     assert_eq!(management_members(&access), ["sales"]);
     access.proof.valid_until = Some(Instant::from_unix_secs(1));
     assert!(matches!(service.validate(&access, &mut executor).await, Err(Error::ConflictError(_))));
+
     let mut executor = ReadExecutor::default();
     let access = service.query(&actor(), &internal::APPROVAL_MANAGEMENT_READ, &mut executor).await.unwrap();
     identity.state.lock().unwrap().grants = vec![("entry".into(), vec![approval_instance::INSTANCE_LIST])];

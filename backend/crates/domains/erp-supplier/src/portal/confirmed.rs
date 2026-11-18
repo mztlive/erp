@@ -39,6 +39,7 @@ pub fn plan_confirmed_cooperation(
     ensure_actor(actor, AccountKind::Admin)?;
     let proposal = &application.pending_submission()?.proposal;
     ensure_current(application, proposal, supplier, current)?;
+
     let revision_key: &str = revision_id.as_ref();
     if revision_key.trim().is_empty() || revision_key == current.base.id {
         return Err(Error::ValidationError("新商务修订身份无效".into()));
@@ -50,6 +51,7 @@ pub fn plan_confirmed_cooperation(
         .ok_or_else(|| Error::ConflictError("商务修订版本超限".into()))?;
     let supplier_version =
         supplier.base.version.checked_add(1).ok_or_else(|| Error::ConflictError("供应商版本超限".into()))?;
+
     let mut supplier = supplier.clone();
     let profile = plan_commercial_profile_revision(PlanCommercialProfileRevisionParams {
         supplier: &mut supplier,
@@ -67,6 +69,7 @@ pub fn plan_confirmed_cooperation(
         revision_no,
         actor_id: actor.id(),
     })?;
+
     let result = CooperationResult {
         profile_id: profile.base.id.clone(),
         profile_revision_no: revision_no,
@@ -91,6 +94,7 @@ fn ensure_current(
     {
         return Err(Error::Forbidden("供应商当前状态不允许确认合作条款".into()));
     }
+
     if supplier.base.version != proposal.expected_supplier_version
         || current.base.is_deleted()
         || current.base.id != proposal.expected_profile_id

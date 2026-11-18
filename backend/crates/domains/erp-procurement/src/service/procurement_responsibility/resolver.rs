@@ -130,6 +130,7 @@ async fn resolve_candidates(
     let facts =
         build_catalog_facts(inputs, &bundle.skus, &bundle.products, &bundle.revisions, &bundle.categories)
             .map_err(Error::Logic)?;
+
     let rules = store.active_rules(executor).await?;
     let rule_set = ProcurementResponsibilityRuleSet::new(&rules);
     let mut selected = Vec::with_capacity(inputs.len());
@@ -144,11 +145,13 @@ async fn resolve_candidates(
             fact.product_kind,
         )
         .map_err(Error::Logic)?;
+
         let rule = match purpose {
             ResolutionPurpose::Procurement => rule_set.resolve(&context),
             ResolutionPurpose::Inquiry => rule_set.resolve_inquiry(&context),
         }
         .map_err(Error::Logic)?;
+
         let owner = if let Some(owner) = owners.get(&rule.base.id) {
             owner.clone()
         } else {
@@ -163,6 +166,7 @@ async fn resolve_candidates(
         };
         selected.push((input.line_key.clone(), rule, owner));
     }
+
     attach_owner_accounts(port, selected, executor).await
 }
 
@@ -235,6 +239,7 @@ async fn attach_owner_accounts(
     let accounts = port.load_owners(&owner_ids, executor).await?;
     let account_map = accounts.into_iter().map(|account| (account.id.clone(), account)).collect();
     ensure_all_ids_present("采购负责人账号", &owner_ids, &account_map)?;
+
     selected
         .into_iter()
         .map(|(line_key, rule, owner_id)| {
@@ -424,8 +429,10 @@ mod tests {
         let mut executor = ReadExecutor::default();
         let address = &mut executor as *mut ReadExecutor as usize;
         let candidates = fixture.run(&mut executor).await.unwrap();
+
         assert_eq!(*fixture.events.lock().unwrap(), vec!["catalog", "rules", "owners"]);
         assert_eq!(*fixture.executors.lock().unwrap(), vec![address; 3]);
+
         assert_eq!(
             candidates.iter().map(|line| line.line_key.as_str()).collect::<Vec<_>>(),
             ["line-2", "line-1"]
@@ -521,11 +528,13 @@ mod tests {
             .push(AccountSummary::new("owner-2", AccountKind::Admin, true).with_display_name("李四"));
         fixture.rules[0].owner_user_ids.push("owner-2".into());
         fixture.last_owners.insert("rule-1".into(), "owner-1".into());
+
         for _ in 0..2 {
             let candidates = fixture.run(&mut ReadExecutor::default()).await.unwrap();
             assert!(candidates.iter().all(|row| row.owner_user_id == "owner-2"));
             assert_eq!(fixture.last_owners.get("rule-1").map(String::as_str), Some("owner-1"));
         }
+
         let mut inquiry = fixture.rules[0].clone();
         inquiry.rule_type = ProcurementResponsibilityRuleType::Inquiry;
         inquiry.sku_id = None;
@@ -537,6 +546,7 @@ mod tests {
             ResolutionInput::new("line-1".into(), SkuId::new("sku-1")).unwrap(),
             ResolutionInput::new("line-2".into(), SkuId::new("sku-1")).unwrap(),
         ];
+
         let chosen = resolve_candidates(
             &fixture,
             &fixture,
@@ -548,11 +558,13 @@ mod tests {
         .unwrap();
         assert!(chosen.iter().all(|row| row.rule_type == ProcurementResponsibilityRuleType::Inquiry
             && row.owner_user_id == "owner-1"));
+
         let ordinary = fixture.run(&mut ReadExecutor::default()).await.unwrap();
         assert!(
             ordinary.iter().all(|row| row.rule_type == ProcurementResponsibilityRuleType::Sku
                 && row.owner_user_id == "owner-2")
         );
+
         fixture.rules[1].status = EnableStatus::Disabled;
         let fallback = resolve_candidates(
             &fixture,

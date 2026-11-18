@@ -192,7 +192,6 @@ mod tests {
     #[test]
     fn cleared_item_lines_are_dropped() {
         let kept = drop_cleared_item_lines(vec![request("0", None, None), request("3", None, None)]);
-
         assert_eq!(kept.len(), 1);
         assert_eq!(kept[0].quantity.as_deref(), Some("3"));
     }
@@ -201,9 +200,7 @@ mod tests {
     #[test]
     fn rebind_points_lines_to_current_revision() {
         let mut lines = vec![request("3", Some("2026-10-19"), Some(vec![address("张三", "3")]))];
-
         rebind_draft_lines(&mut lines, &coverage(vec![address("张三", "8")])).unwrap();
-
         assert_eq!(lines[0].sales_order_revision_line_id.as_deref(), Some("cur-1"));
     }
 
@@ -230,7 +227,6 @@ mod tests {
         .unwrap();
 
         let rebased = rebased_payment_subject(&subject, "rev-2").unwrap();
-
         assert_eq!(rebased.sales_order_revision_id.as_ref(), "rev-2");
         assert_eq!(rebased.settlement_party_name, "我方公司");
     }

@@ -104,6 +104,7 @@ impl InventoryAdjustmentProcess {
         if let Some(view) = committed_stock_adjustment_start_replay(self, id, &req, actor).await? {
             return Ok(view);
         }
+
         let process = Self::new(
             self.db.clone(),
             self.identity.clone(),
@@ -129,6 +130,7 @@ impl InventoryAdjustmentProcess {
                 return Err(error);
             },
         };
+
         self.read_model()
             .stock_adjustment_detail_for_instance(
                 id,
@@ -169,6 +171,7 @@ impl InventoryAdjustmentProcess {
         let (mut adjustment, binding, lines) =
             load_adjustment_submission_draft(&self.db, &self.identity, id, req, actor, executor).await?;
         execute_stock_adjustment_domain_action(&mut adjustment, adapter.on_approval_start)?;
+
         let now = Instant::now();
         let snapshot = workflow_snapshot_from_inventory(StockAdjustmentApprovalSnapshot::build(
             &adjustment,
@@ -201,6 +204,7 @@ impl InventoryAdjustmentProcess {
             start_approval::load_bound_definition_graph_with_executor(&self.db, &context.binding, executor)
                 .await?;
         let graph = resolve_approvers(&self.db, &self.identity, graph, actor.id(), executor).await?;
+
         let input = start_approval::build_stock_adjustment_start_input(
             &self.db,
             self.workflow.as_ref(),
@@ -257,6 +261,7 @@ impl InventoryAdjustmentProcess {
         let actor = actor.clone();
         let query_for_read = query.clone();
         let client = db.client().clone();
+
         let result_ref = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
@@ -273,6 +278,7 @@ impl InventoryAdjustmentProcess {
                 })
             })
             .await?;
+
         let result_ref = result_ref.ok_or_else(|| Error::NotFound("库存调整提交结果不存在".to_string()))?;
         self.read_model()
             .stock_adjustment_detail_for_instance(
@@ -295,6 +301,7 @@ async fn load_adjustment_submission_draft(
     executor: &mut dyn Executor,
 ) -> Result<(StockAdjustment, ApprovalDefinitionBinding, Vec<StockAdjustmentLine>)> {
     require_submit(identity, actor, id, executor).await?;
+
     let mut adjustment = db
         .inventory()
         .stock_adjustment(id, executor)
@@ -310,6 +317,7 @@ async fn load_adjustment_submission_draft(
     if req.expected_subject_version != target_subject_version {
         return Err(Error::ConflictError("库存调整审批主题版本已变化，请刷新后重试".into()));
     }
+
     adjustment.update(StockAdjustmentUpdate {
         reason_type: Some(req.reason_type),
         reviewed_by: None,
@@ -317,8 +325,10 @@ async fn load_adjustment_submission_draft(
         note: Some(req.note.clone()),
         occurred_at: Some(Instant::from_unix_secs(req.occurred_at)),
     })?;
+
     let binding = load_approval_binding(db, id, executor).await?;
     let binding = require_frozen_binding(binding.as_ref())?.clone();
+
     let mut lines =
         db.inventory().adjustment_lines_by_adjustment_ids(&[StockAdjustmentId::new(id)], executor).await?;
     let updates = build_adjustment_line_updates(&req.lines)?;
@@ -356,6 +366,7 @@ async fn committed_stock_adjustment_start_replay(
             })
         })
         .await?;
+
     let Some(result_ref) = result_ref else {
         return Ok(None);
     };
@@ -418,6 +429,7 @@ mod tests {
             occurred_at: 42,
             idempotency_key: "submit-1".into(),
         };
+
         let error = load_adjustment_submission_draft(
             &db,
             &identity,
@@ -429,6 +441,7 @@ mod tests {
         .await
         .unwrap_err();
         assert!(matches!(error, Error::ValidationError(message) if message == "写入授权必须使用快照事务"));
+
         let error = load_adjustment_submission_draft(
             &db,
             &identity,

@@ -82,6 +82,7 @@ async fn apply_receipt_reversal_final_post(
     let reversal = ReturnsService::prepare_receipt_reversal_post(db, id, executor).await?;
     let receipt = load_posted_receipt(db, &reversal.original_customer_receipt_id, executor).await?;
     ReturnsService::validate_receipt_reversal_amount(db, &reversal, receipt.amount, executor).await?;
+
     let mut posting = DatabasePosting { db, reversal, receipt, actor };
     post(&mut posting, executor).await
 }
@@ -209,6 +210,7 @@ mod tests {
         let mut port = RecordingPosting::default();
         let mut executor = TestExecutor::default();
         let expected = &mut executor as *mut TestExecutor as usize;
+
         post(&mut port, &mut executor).await.unwrap();
         assert_eq!(
             port.events,

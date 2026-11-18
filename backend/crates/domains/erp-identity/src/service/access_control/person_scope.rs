@@ -37,6 +37,7 @@ impl AccessControlService {
                 vec!["resource".into(), "actions".into(), "expression".into()],
             )
             .await?;
+
         let service = self.clone();
         let (user, actor) = (user.to_owned(), actor.clone());
         self.rbac
@@ -45,6 +46,7 @@ impl AccessControlService {
                 Box::pin(async move {
                     let access = service.authorize_person_scope(&actor, true, executor).await?;
                     service.validate_person_scope(&user, &req, &access.organizations, executor).await?;
+
                     service.replace_person_scope(&user, &req, executor).await?;
                     service.db.audit_events().create(&event, executor).await?;
                     Ok(())
@@ -69,6 +71,7 @@ impl AccessControlService {
         if req.actions.iter().any(|a| !option.configurable_actions.contains(a)) {
             return Err(Error::ValidationError("请选择此人当前具备的操作".into()));
         }
+
         self.validate_person_scope_targets(req, organizations, executor).await
     }
 
@@ -121,6 +124,7 @@ impl AccessControlService {
         let mut existing =
             self.db.person_data_scopes().for_person(user, Some(&req.resource), None, executor).await?;
         req.ensure_legacy_conversion(&existing)?;
+
         for action in &req.actions {
             let expression = req.expression(action);
             if let Some(scope) = existing.iter_mut().find(|s| s.action == *action) {

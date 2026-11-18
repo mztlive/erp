@@ -47,6 +47,7 @@ pub async fn resolve_follow_up(
         .supplier_capabilities()
         .find_by_supplier_and_code(supplier_id, CapabilityCode::Api, executor)
         .await?;
+
     let user_id = pick_follow_up_user(
         capability.as_ref().map(|item| item.owner_user_id.as_str()),
         Some(supplier.maintainer_user_id.as_str()),

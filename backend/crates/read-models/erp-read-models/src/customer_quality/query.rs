@@ -161,6 +161,7 @@ mod tests {
             ..Default::default()
         };
         assert!(current.validate().is_err());
+
         let history = HistoryQualityQuery {
             from: "2026-09-01".into(),
             to: "2026-09-30".into(),

@@ -124,6 +124,7 @@ impl SalesCommandAccess {
         } else {
             self.access.require_object(&self.actor, &self.permission, id, executor).await?
         };
+
         if self.submit {
             self.access.require_object(&self.actor, &sales_order_permissions::SUBMIT, id, executor).await?;
         }
@@ -171,6 +172,7 @@ impl SalesCommandAccess {
             .customer_access
             .require_current(&self.actor, order.customer_id.as_ref(), executor)
             .await?;
+
         let permission = if self.submit { &internal::SALES_CREATE_AND_SUBMIT } else { &self.permission };
         self.access.require_loaded(&self.actor, permission, order, executor).await?;
         if self.submit {

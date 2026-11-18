@@ -33,6 +33,7 @@ impl WorkbenchReadService {
         if objects.is_empty() {
             return Ok(());
         }
+
         let snapshots =
             self.db.approval_subject_snapshots().list_by_business_objects(&objects, executor).await?;
         let allowed = snapshots
@@ -53,6 +54,7 @@ impl WorkbenchReadService {
         if ids.is_empty() {
             return Ok(());
         }
+
         let revisions = self.db.sales_order_revisions().find_revisions_by_ids(&ids, executor).await?;
         let lines = self
             .db
@@ -61,6 +63,7 @@ impl WorkbenchReadService {
             .await?;
         let revisions =
             revisions.iter().map(|revision| (revision.base.id.as_str(), revision)).collect::<HashMap<_, _>>();
+
         for (key, display) in allowed {
             display.validate()?;
             let doc = documents.entry(key).or_default();

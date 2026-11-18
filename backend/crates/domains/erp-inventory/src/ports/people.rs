@@ -152,6 +152,7 @@ pub fn latest_snapshot_submitters(
             },
         }
     }
+
     latest.into_iter().map(|(id, (_, submitted_by))| (id, submitted_by)).collect()
 }
 
@@ -196,6 +197,7 @@ pub fn merge_adjustment_people(
     for (id, submitted_by) in submitted {
         facts.entry(id).or_default().submitted_by = Some(submitted_by);
     }
+
     for (id, current_assignee) in assignees {
         facts.entry(id).or_default().current_assignee = Some(current_assignee);
     }

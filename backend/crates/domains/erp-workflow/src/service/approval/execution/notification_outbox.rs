@@ -81,6 +81,7 @@ mod tests {
         let resumed =
             BpmEvent::new(BpmEventKind::AssigneeRecovered, ApprovalProcessInstanceId::new("inst"), 1)
                 .with_execution(ApprovalNodeExecutionId::new("e2"));
+
         let intents = map_notification_intents(&[started, entered, resumed]);
         assert_eq!(intents[0].dedup_key, "started:inst");
         assert_eq!(intents[1].dedup_key, "entered:e1");

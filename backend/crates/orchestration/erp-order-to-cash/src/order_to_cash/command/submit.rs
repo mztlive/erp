@@ -178,6 +178,7 @@ impl SalesOrderCommandProcess {
     ) -> Result<SubmissionView> {
         req.validate()?;
         let identity = SubmissionIdentity::new(id, &req, actor)?;
+
         let process = self.clone();
         let command = identity.clone();
         let request_id = id.to_owned();
@@ -191,6 +192,7 @@ impl SalesOrderCommandProcess {
                 })
             })
             .await;
+
         match result {
             Err(error) if error.command_may_have_committed() => {
                 self.recover_sales_submission(id, actor, &identity, error).await
@@ -210,6 +212,7 @@ impl SalesOrderCommandProcess {
     ) -> Result<SubmissionView> {
         let access = self.command_access(actor, sales_order_permissions::SUBMIT);
         let order = access.current(id, executor).await?;
+
         if let Some(view) = replay_submission_with_executor(
             &self.db,
             &identity.audit_id,
@@ -223,6 +226,7 @@ impl SalesOrderCommandProcess {
         {
             return Ok(view);
         }
+
         let draft = self
             .prepare_sales_edit(
                 &access,
@@ -252,13 +256,16 @@ impl SalesOrderCommandProcess {
         if let Some(existing) = self.submission_for_copy(&working_copy, executor).await? {
             return Ok(existing);
         }
+
         let sellable = SalesOrderService::sellable_working_copy_refs(&copy_lines)?;
         self.sales().ensure_sellable_refs(&sellable, &self.catalog(), executor).await?;
         self.ensure_procurement_responsibility_before_submit(&order, &copy_lines, executor).await?;
+
         let submission_no = self.next_submission_no(&order, executor).await?;
         let submission = build_submission(&working_copy, &copy_lines, submission_no, actor)?;
         let submission_lines = build_submission_lines(&submission, &copy_lines)?;
         working_copy.submit()?;
+
         self.start_approval_submission(
             ApprovalSubmissionStart {
                 resubmission_reason,
@@ -308,6 +315,7 @@ impl SalesOrderCommandProcess {
             .map(|goods| (goods.sku_id.to_string(), goods.sku_revision_id.to_string()))
             .collect::<Vec<_>>();
         self.sales().ensure_sellable_refs(&refs, &self.catalog(), executor).await?;
+
         let order_id = SalesOrderId::new(order.base.id.clone());
         let active_working_copy = self
             .db
@@ -397,6 +405,7 @@ impl SalesOrderCommandProcess {
         let context = self.prepare_submission_domain(&mut start, actor, idempotency_key, executor).await?;
         let prepared =
             self.prepare_submission_runtime(&start, &context, actor, idempotency_key, executor).await?;
+
         let workflow_action = submission_workflow_action(start.id, actor, start.resubmission_reason.clone())?;
         let audit = submission_event(
             audit_id.to_string(),
@@ -406,6 +415,7 @@ impl SalesOrderCommandProcess {
             &start.order,
             &start.submission,
         )?;
+
         let sellable_refs = SalesOrderService::sellable_working_copy_refs(&start.copy_lines)?;
         SalesOrderService::new(self.db.clone())
             .ensure_sellable_refs(
@@ -414,6 +424,7 @@ impl SalesOrderCommandProcess {
                 executor,
             )
             .await?;
+
         Ok(PreparedSalesSubmission {
             access: context.access,
             expected_order_version: context.expected_order_version,
@@ -453,6 +464,7 @@ impl SalesOrderCommandProcess {
             .map_err(|error| Error::ValidationError(error.to_string()))?;
         let binding = find_approval_binding(&self.db, start.id, executor).await.map_err(Error::from)?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
+
         execute_sales_order_domain_action(&mut start.order, ports.on_approval_start, actor.id())?;
         let now = Instant::now();
         let snapshot = build_sales_order_snapshot(
@@ -470,7 +482,6 @@ impl SalesOrderCommandProcess {
             idempotency_key,
         );
         ensure_unified_start_command(&command)?;
-
         let organization_id = sales_order_responsible_org_id(&start.order)?;
         Ok(SalesSubmissionApprovalContext {
             access,
@@ -503,6 +514,7 @@ impl SalesOrderCommandProcess {
             executor,
         )
         .await?;
+
         let graph = resolve_start_approvers(
             &self.db,
             &self.authorization,
@@ -512,6 +524,7 @@ impl SalesOrderCommandProcess {
             executor,
         )
         .await?;
+
         let input = build_sales_order_start_input(SalesOrderStartInput {
             resubmission_reason: start.resubmission_reason.clone(),
             graph,
@@ -653,6 +666,7 @@ mod identity_tests {
             "draft": {"editor_user_id": "actor", "lines": []}
         }))
         .unwrap();
+
         let identity = SubmissionIdentity::new("sales-1", &request, &actor).unwrap();
         assert_eq!(identity.idempotency_key, "request-key");
         assert_eq!(request.idempotency_key, " request-key ");
@@ -665,6 +679,7 @@ mod identity_tests {
             identity.fingerprint,
             sales_submission_fingerprint(actor.id(), "sales-1", &prepared).unwrap()
         );
+
         request.idempotency_key = " ".into();
         assert!(matches!(
             SubmissionIdentity::new("sales-1", &request, &actor),

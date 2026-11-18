@@ -39,11 +39,13 @@ pub(crate) async fn integration_error_labels(
     } else {
         db.inbox_messages().list_active_by_ids(&ids, executor).await?
     };
+
     let mut labels = connection_task_labels(db, tasks, executor).await?;
     let source_labels = source_labels(db, &messages, executor).await?;
     let orders = message_orders(db, &messages, executor).await?;
     let messages =
         messages.into_iter().map(|message| (message.base.id.clone(), message)).collect::<HashMap<_, _>>();
+
     labels.extend(tasks.iter().filter_map(|task| {
         let message = messages.get(task.message_id.as_deref()?)?;
         let source = source_labels
@@ -115,6 +117,7 @@ async fn source_labels(
         .filter(|system| !system.name.trim().is_empty())
         .map(|system| (system.base.id, system.name))
         .collect::<HashMap<_, _>>();
+
     let ids = messages
         .iter()
         .filter_map(|message| supplier_connection_id(message.source_system_id.as_ref()))
@@ -156,6 +159,7 @@ async fn message_orders(
         .into_iter()
         .map(|action| (action.base.id, action.supplier_fulfillment_order_id.to_string()))
         .collect::<HashMap<_, _>>();
+
     let message_orders = messages
         .iter()
         .filter_map(|message| {
@@ -168,10 +172,12 @@ async fn message_orders(
             Some((message.base.id.clone(), order_id))
         })
         .collect::<HashMap<_, _>>();
+
     let ids = message_orders.values().cloned().collect::<Vec<_>>();
     if ids.is_empty() {
         return Ok(HashMap::new());
     }
+
     let orders = db
         .supplier_fulfillment_orders()
         .list_active_by_ids(&ids, executor)
@@ -280,6 +286,7 @@ mod tests {
         assert_eq!(supplier_payload(&message), Some(("supplier-order-action", "action-1")));
         message.payload_reference = Some("supplier-refund-order:order-1".into());
         assert_eq!(supplier_payload(&message), Some(("supplier-refund-order", "order-1")));
+
         message.payload_reference = Some("supplier-order-action:action-1:extra".into());
         assert!(supplier_payload(&message).is_none());
         message.payload_reference = Some("unknown-type:action-1".into());
@@ -315,8 +322,10 @@ mod tests {
             .unwrap(),
         );
         assert_eq!(connection_task_identity(&task), Some("connection-1"));
+
         task.message_id = Some("message-1".into());
         assert!(connection_task_identity(&task).is_none());
+
         task.message_id = None;
         task.id = "w20-error-not-a-health-task".into();
         assert!(connection_task_identity(&task).is_none());

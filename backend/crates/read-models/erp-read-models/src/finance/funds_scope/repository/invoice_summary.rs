@@ -121,6 +121,7 @@ fn assemble_summary_rows(
             Ok((row.id.as_str(), header))
         })
         .collect::<Result<HashMap<_, _>>>()?;
+
     let mut allocated = HashMap::<String, Amount>::new();
     for link in sales.iter().chain(&purchase) {
         let sum = allocated.entry(link.parent_id.clone()).or_insert_with(zero_amount);
@@ -129,9 +130,11 @@ fn assemble_summary_rows(
             AllocationAction::Reverse => sum.checked_sub(link.amount),
         };
     }
+
     let mut grouped: HashMap<String, Vec<InvoiceShare>> = HashMap::new();
     append_summary_links(sales, false, &headers, &mut grouped);
     append_summary_links(purchase, true, &headers, &mut grouped);
+
     Ok(versions
         .iter()
         .map(|row| {
@@ -196,6 +199,7 @@ fn append_summary_links(
             id.clone()
         };
         let Some(source) = sources.get(key.as_str()) else { continue };
+
         let owner = source.owner.clone().filter(|owner| {
             link.source_type != Some(PayableSourceType::PurchaseOrder) || !owner.trim().is_empty()
         });
@@ -246,6 +250,7 @@ pub(super) fn invoice_summary(rows: &[InvoiceSummaryRow], version: &str) -> Resu
             }
         }
     }
+
     owners.extend(purchase_owners);
     let mut summary =
         build_summary(&triples, &owners, whole_amount(all_whole, whole_sum), version, !all_whole)?;
@@ -297,9 +302,11 @@ mod tests {
                 AllocationAction::Apply,
             ),
         ];
+
         let rows = assemble_summary_rows(&versions, sales, purchase).unwrap();
         assert_eq!(rows[0].shares.iter().map(|share| share.id.as_str()).collect::<Vec<_>>(), ["a"]);
         assert_eq!(rows[1].shares.iter().map(|share| share.id.as_str()).collect::<Vec<_>>(), ["b", "c", "d"]);
+
         let summary = invoice_summary(&rows, "v").unwrap();
         assert_eq!(
             summary.grouped.iter().find(|group| group.owner_user_id == "buyer").unwrap().visible_share,
@@ -409,6 +416,7 @@ mod tests {
         assert_eq!(summary.whole_total, Some("120".parse().unwrap()));
         assert_eq!(summary.unassigned, Amount::zero());
         assert!(!summary.permission_limited);
+
         assert_eq!(invoice_summary(&[], "v").unwrap().whole_total, Some(Amount::zero()));
     }
     #[test]
@@ -425,8 +433,10 @@ mod tests {
             summary_link("b", "invoice", "other", None, "30", AllocationAction::Apply),
             summary_link("r", "invoice", "other", None, "5", AllocationAction::Reverse),
         ];
+
         let rows = assemble_summary_rows(&versions, links, vec![]).unwrap();
         assert_eq!(invoice_summary(&rows, "v").unwrap().balance_total, Some("55.01".parse().unwrap()));
+
         for (status, kind) in [("draft", "blue"), ("registered", "red"), ("red_invoiced", "blue")] {
             let header = versions[0].summary.as_mut().unwrap();
             header.status = status.into();
@@ -434,6 +444,7 @@ mod tests {
             let rows = assemble_summary_rows(&versions, vec![], vec![]).unwrap();
             assert_eq!(invoice_summary(&rows, "v").unwrap().balance_total, Some(Amount::zero()));
         }
+
         versions[0].summary.as_mut().unwrap().whole = false;
         let rows = assemble_summary_rows(&versions, vec![], vec![]).unwrap();
         assert_eq!(invoice_summary(&rows, "v").unwrap().balance_total, None);

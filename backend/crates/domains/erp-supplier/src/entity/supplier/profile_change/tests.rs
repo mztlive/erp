@@ -40,6 +40,7 @@ fn capability_plan_preserves_fact_order_and_deduplicates_requested_creates() {
     physical.stable.status = CapabilityStatus::Disabled;
     let mut duplicate = physical.clone();
     duplicate.base.id = "duplicate-physical".into();
+
     let plan = SupplierProfileChangePlan::from_loaded(
         &[physical, duplicate],
         &[],
@@ -54,6 +55,7 @@ fn capability_plan_preserves_fact_order_and_deduplicates_requested_creates() {
         &[],
     )
     .unwrap();
+
     assert_eq!(plan.capability_creates, vec![CapabilityCode::Printing, CapabilityCode::Virtual]);
     assert_eq!(
         plan.capability_toggles.iter().map(|toggle| toggle.capability_id.as_ref()).collect::<Vec<&str>>(),
@@ -84,6 +86,7 @@ fn omitted_unverified_contracts_are_disabled_once() {
         )
         .unwrap();
         assert!(!contract.is_valid());
+
         let plan = |contract: &SupplierQualification| {
             SupplierProfileChangePlan::from_loaded(
                 &[],
@@ -96,6 +99,7 @@ fn omitted_unverified_contracts_are_disabled_once() {
             .unwrap()
         };
         assert_eq!(plan(&contract).qualification_disables, vec![contract.identity_key()]);
+
         contract
             .update(
                 SupplierQualificationUpdate {
@@ -105,11 +109,13 @@ fn omitted_unverified_contracts_are_disabled_once() {
                 "actor",
             )
             .unwrap();
+
         let revision =
             contract.snapshot_revision(SupplierQualificationRevisionId::new("disabled-revision"), 2).unwrap();
         assert_eq!(revision.status, QualificationStatus::Disabled);
         assert_eq!(revision.valid_from, start);
         assert_eq!(revision.valid_to, None);
+
         assert!(plan(&contract).qualification_disables.is_empty());
     }
 }
@@ -131,6 +137,7 @@ fn commercial_profile_revision_advances_pointer() {
         "admin-1",
     )
     .unwrap();
+
     let rev = plan_commercial_profile_revision(PlanCommercialProfileRevisionParams {
         supplier: &mut supplier,
         settlement_mode: SettlementMode::Prepayment,
@@ -148,6 +155,7 @@ fn commercial_profile_revision_advances_pointer() {
         actor_id: "admin-2",
     })
     .unwrap();
+
     assert_eq!(rev.revision.revision_no, 1);
     assert_eq!(
         supplier.current_commercial_profile_revision_id.as_ref().map(|id| id.to_string()),
@@ -192,6 +200,7 @@ fn apply_qualification_input_reactivates_and_replaces_fields() {
         "admin-1",
     )
     .unwrap();
+
     // 停用
     q.update(
         crate::entity::supplier::SupplierQualificationUpdate {
@@ -202,6 +211,7 @@ fn apply_qualification_input_reactivates_and_replaces_fields() {
     )
     .unwrap();
     assert!(!q.is_valid());
+
     apply_qualification_input(
         &mut q,
         Some("新机构".to_string()),
@@ -332,6 +342,7 @@ fn capability_disable_then_reenable_via_update() {
     )
     .unwrap();
     assert!(cap.is_active());
+
     cap.update(
         crate::entity::supplier::SupplierCapabilityUpdate {
             status: Some(crate::entity::supplier::CapabilityStatus::Disabled),
@@ -341,6 +352,7 @@ fn capability_disable_then_reenable_via_update() {
     )
     .unwrap();
     assert!(!cap.is_active());
+
     cap.update(
         crate::entity::supplier::SupplierCapabilityUpdate {
             status: Some(crate::entity::supplier::CapabilityStatus::Active),
@@ -350,6 +362,7 @@ fn capability_disable_then_reenable_via_update() {
     )
     .unwrap();
     assert!(cap.is_active());
+
     let snap = cap.snapshot_revision(SupplierCapabilityRevisionId::new("cap-rev-2"), 2).unwrap();
     assert_eq!(snap.status, crate::entity::supplier::CapabilityStatus::Active);
     assert_eq!(snap.revision.revision_no, 2);
@@ -378,6 +391,7 @@ fn qualification_no_change_preserves_valid_and_matches_fields() {
     .unwrap();
     assert!(qual.is_valid());
     assert!(qual.matches_profile_fields(Some("机构"), Some(business_date(2026, 1, 1)), None, None));
+
     let before = qual.clone();
     apply_qualification_input(
         &mut qual,
@@ -528,6 +542,7 @@ fn profile_change_plan_from_loaded_covers_full_matrix() {
     })
     .unwrap();
     let qualifications = vec![qual_match.clone(), qual_to_update.clone(), qual_to_disable.clone()];
+
     let mut linked: HashMap<String, HashSet<String>> = HashMap::new();
     linked.insert("qual-match".to_string(), HashSet::from(["cap-phy".to_string()]));
     linked.insert("qual-update".to_string(), HashSet::from(["cap-phy".to_string()]));
@@ -569,6 +584,7 @@ fn profile_change_plan_from_loaded_covers_full_matrix() {
             capability_codes: vec![CapabilityCode::Physical],
         },
     ];
+
     let plan = SupplierProfileChangePlan::from_loaded(
         &capabilities,
         &qualifications,
@@ -578,6 +594,7 @@ fn profile_change_plan_from_loaded_covers_full_matrix() {
         &planned_inputs,
     )
     .unwrap();
+
     // Capabilities: Api Disabled->Active toggle expected, Physical no toggle, Virtual create
     assert!(
         plan.capability_toggles
@@ -586,6 +603,7 @@ fn profile_change_plan_from_loaded_covers_full_matrix() {
     );
     assert!(!plan.capability_toggles.iter().any(|t| t.code == CapabilityCode::Physical));
     assert!(plan.capability_creates.contains(&CapabilityCode::Virtual));
+
     // Qualifications: MATCH no change => not in updates, UPDATE should be in updates, DISABLE should be disabled, NEW in creates
     assert!(!plan.qualification_updates.contains(&qual_match.identity_key()));
     assert!(plan.qualification_updates.contains(&qual_to_update.identity_key()));

@@ -252,6 +252,7 @@ mod tests {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("selection_reads");
         let access = SelectionAccess::new(db, unavailable_authorization());
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+
         let error = access
             .require_booklet(&actor, &permissions::BOOKLET_COPY_LINK, "book", &mut ReadExecutor::default())
             .await
@@ -264,6 +265,7 @@ mod tests {
             .unwrap_err();
         assert!(matches!(error, Error::ValidationError(message)
             if message == "选品对象授权与读取必须使用同一快照事务"));
+
         let error = access
             .require_booklet(
                 &actor,

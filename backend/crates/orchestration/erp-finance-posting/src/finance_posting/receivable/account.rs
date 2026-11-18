@@ -57,6 +57,7 @@ impl ReceivableProcess {
         actor: &AuditActor,
     ) -> Result<ReceivableAccountView> {
         req.validate()?;
+
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let actor = actor.clone();
@@ -66,6 +67,7 @@ impl ReceivableProcess {
                 Box::pin(async move {
                     let sales_order = authorized_source(&db, &rbac, &req, &actor, executor).await?;
                     let review_status = initial_review_status(&req, &sales_order)?;
+
                     let account_id = ReceivableAccountId::new(next_id());
                     let entry_id = ReceivableEntryId::new(next_id());
                     let posted_at = Instant::now();
@@ -79,6 +81,7 @@ impl ReceivableProcess {
 
                     db.receivable().create_receivable_with_entry(&account, &entry, executor).await?;
                     persist_log(&db, &audit, executor).await?;
+
                     created_account_view(
                         &ReceivableReadService::new(db.clone()),
                         &rbac.authorization,
@@ -115,6 +118,7 @@ async fn created_account_view(
     authorization
         .require(actor, &receivable::ACCOUNT_CREATE, AccessTarget::Candidate(candidate), executor)
         .await?;
+
     Ok(read.receivable_account_view(id.to_owned(), executor).await?)
 }
 
@@ -211,6 +215,7 @@ async fn authorized_source(
         .find_by_id(&req.sales_order_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
+
     let candidate = ObjectFacts {
         resource: "receivable_account".into(),
         relations: [(
@@ -223,6 +228,7 @@ async fn authorized_source(
     rbac.authorization
         .require(actor, &receivable::ACCOUNT_CREATE, AccessTarget::Candidate(candidate), executor)
         .await?;
+
     if sales_order.customer_id != req.customer_id {
         return Err(Error::ConflictError("应收客户与来源销售单不一致".into()));
     }
@@ -251,6 +257,7 @@ mod result_tests {
         let read = ReceivableReadService::new(db);
         let authorization = unavailable_authorization();
         let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+
         for (executor, snapshot) in [
             (&mut ReadExecutor::default() as &mut dyn Executor, false),
             (&mut SnapshotExecutor::default() as &mut dyn Executor, true),

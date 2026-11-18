@@ -282,6 +282,7 @@ fn legacy_digest_v2(domain: &str, fields: &[LegacyV2Field<'_>]) -> String {
     hasher.update([0, 2]);
     update_text(&mut hasher, domain);
     hasher.update((fields.len() as u64).to_be_bytes());
+
     for field in fields {
         match field {
             LegacyV2Field::Text(value) => {
@@ -314,6 +315,7 @@ fn legacy_digest_v2(domain: &str, fields: &[LegacyV2Field<'_>]) -> String {
             },
         }
     }
+
     format!("{V2_DIGEST_PREFIX}{}", hex::encode(hasher.finalize()))
 }
 

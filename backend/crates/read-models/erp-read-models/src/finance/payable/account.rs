@@ -47,12 +47,15 @@ impl PayableReadService {
             .find_by_id(&id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("应付往来子账不存在".to_string()))?;
+
         let source_document_no = resolve_source_document_no(&self.db, &account, executor).await?;
         let entries = self.detail_entries(&account, source_document_no.as_deref(), executor).await?;
         let payment_allocations = payment_allocations_for_entries(&self.db, &entries, executor).await?;
+
         let (supplier_no, supplier_name) =
             resolve_supplier_display(&self.db, account.supplier_id.as_ref(), executor).await?;
         let payment_recipient = self.detail_recipient(&account, include_payment_recipient, executor).await?;
+
         Ok(PayableAccountView {
             id: account.base.id.clone(),
             source_document_id: account.source_document_id,

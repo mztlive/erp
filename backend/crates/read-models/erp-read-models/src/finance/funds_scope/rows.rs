@@ -474,6 +474,7 @@ impl FundsAccess {
         use erp_core::ids::{CustomerReceiptId, ReceivableEntryId};
         let keys = receipt_ids.iter().map(|id| CustomerReceiptId::new(id.clone())).collect::<Vec<_>>();
         let allocations = self.db.receipt_allocations().find_allocations_by_receipts(&keys, executor).await?;
+
         let entry_keys = allocations
             .iter()
             .map(|item| ReceivableEntryId::new(item.receivable_entry_id.to_string()))
@@ -483,12 +484,14 @@ impl FundsAccess {
             .into_iter()
             .map(|entry| (entry.base.id.clone(), entry.receivable_account_id.to_string()))
             .collect::<HashMap<_, _>>();
+
         let account_keys = entry_account.values().cloned().collect::<Vec<_>>();
         let accounts = self.db.receivable_accounts().find_accounts_by_ids(&account_keys, executor).await?;
         let account_order = accounts
             .into_iter()
             .map(|account| (account.base.id.clone(), account.sales_order_id.to_string()))
             .collect::<HashMap<_, _>>();
+
         let mut links: HashMap<String, Vec<ReceiptLink>> = HashMap::new();
         for item in allocations {
             let signed = match item.allocation_action {
@@ -526,6 +529,7 @@ impl FundsAccess {
         let keys = invoice_ids.iter().map(|id| InvoiceId::new(id.clone())).collect::<Vec<_>>();
         let allocations =
             self.db.sales_invoice_allocations().find_allocations_by_invoices(&keys, executor).await?;
+
         let account_keys =
             allocations.iter().map(|item| item.receivable_account_id.to_string()).collect::<Vec<_>>();
         let accounts = self.db.receivable_accounts().find_accounts_by_ids(&account_keys, executor).await?;
@@ -533,6 +537,7 @@ impl FundsAccess {
             .into_iter()
             .map(|account| (account.base.id.clone(), account.sales_order_id.to_string()))
             .collect::<HashMap<_, _>>();
+
         let mut links: HashMap<String, Vec<SalesInvoiceLink>> = HashMap::new();
         for item in allocations {
             let signed = match item.allocation_action {
@@ -566,6 +571,7 @@ impl FundsAccess {
         use erp_core::ids::{PayableAccountId, PayableEntryId, SupplierPaymentId};
         let keys = payment_ids.iter().map(|id| SupplierPaymentId::new(id.clone())).collect::<Vec<_>>();
         let allocations = self.db.payment_allocations().find_allocations_by_payments(&keys, executor).await?;
+
         let entry_keys = allocations
             .iter()
             .map(|item| PayableEntryId::new(item.payable_entry_id.to_string()))
@@ -575,6 +581,7 @@ impl FundsAccess {
             .into_iter()
             .map(|entry| (entry.base.id.clone(), entry.payable_account_id.to_string()))
             .collect::<HashMap<_, _>>();
+
         let account_keys =
             entry_account.values().map(|id| PayableAccountId::new(id.clone())).collect::<Vec<_>>();
         let accounts = self.db.payable_accounts().find_accounts_by_ids(&account_keys, executor).await?;
@@ -585,6 +592,7 @@ impl FundsAccess {
                 (account.base.id.clone(), order)
             })
             .collect::<HashMap<_, _>>();
+
         let mut links: HashMap<String, Vec<PaymentLink>> = HashMap::new();
         for item in allocations {
             let signed = match item.allocation_action {
@@ -683,11 +691,13 @@ pub(super) fn build_summary(
         .cloned()
         .collect::<Vec<_>>();
     let (grouped, unassigned) = summarize_matched_shares(&visible, |order| owner_of.get(order).cloned());
+
     let mut grouped = grouped
         .into_iter()
         .map(|(owner_user_id, visible_share)| FundsPersonShare { owner_user_id, visible_share })
         .collect::<Vec<_>>();
     grouped.sort_by(|left, right| left.owner_user_id.cmp(&right.owner_user_id));
+
     Ok(FundsSummaryView {
         grouped,
         unassigned,
@@ -988,6 +998,7 @@ mod work_item_handler_tests {
     fn work_item_handler_ids_remove_empty_and_deduplicate_before_batching() {
         assert!(handler_work_item_ids(&[String::new(), String::new()]).is_empty());
         assert_eq!(handler_work_item_ids(&["b".into(), "".into(), "a".into(), "b".into()]), ["a", "b"]);
+
         let mut ids = (0..501).map(|index| format!("task-{index:03}")).collect::<Vec<_>>();
         ids.push(ids[0].clone());
         ids.push(String::new());
@@ -1004,6 +1015,7 @@ mod work_item_handler_tests {
             item("empty-owner", Some(""), Some("finisher"), WorkItemStatus::Closed),
             item("no-handler", None, None, WorkItemStatus::Open),
         ]);
+
         assert_eq!(handlers["owner"], "current");
         assert_eq!(handlers["fallback"], "finisher");
         assert_eq!(handlers["empty-owner"], "");

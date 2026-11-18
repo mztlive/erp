@@ -66,6 +66,7 @@ impl ReceiptCapacity {
             entries: HashMap::new(),
             accounts: accounts.into_iter().map(|account| (account.id.clone(), account)).collect(),
         };
+
         let mut settled = HashMap::new();
         for line in allocations {
             let sum = settled.entry(line.receivable_entry_id.as_ref()).or_insert(Amount::zero());
@@ -74,16 +75,19 @@ impl ReceiptCapacity {
                 AllocationAction::Reverse => checked_sub_amount(*sum, line.allocated_amount)?,
             };
         }
+
         let mut reduced = HashMap::new();
         for offset in offsets {
             let sum = reduced.entry(offset.increase_entry_id.as_ref()).or_insert(Amount::zero());
             *sum = checked_add_amount(*sum, offset.offset_amount)?;
         }
+
         let mut pending = HashMap::new();
         for line in reserved {
             let sum = pending.entry(line.receivable_entry_id.as_ref()).or_insert(Amount::zero());
             *sum = checked_add_amount(*sum, line.allocated_amount)?;
         }
+
         for entry in entries {
             let id = entry.base.id.as_str();
             result.insert(
@@ -151,6 +155,7 @@ impl ReceiptCapacity {
             if !seen.insert(id) || line.allocated_amount <= Amount::zero() {
                 return Err(Error::ValidationError("核销项目不可重复且金额必须大于零".into()));
             }
+
             let (account_id, _) = self
                 .entries
                 .get(id)
@@ -159,6 +164,7 @@ impl ReceiptCapacity {
             if account.party_id != receipt.counterparty_party_id {
                 return Err(Error::BusinessLogicError("禁止跨往来主体核销".into()));
             }
+
             let available = self.entry(id).expect("分录及其子账已在构造时校验").available;
             let total = totals.entry(account_id).or_insert(Amount::zero());
             *total = checked_add_amount(*total, line.allocated_amount)?;
@@ -332,6 +338,7 @@ mod tests {
             capacity("165", &[entry("entry")], &[line("entry", "200")]).entry("entry").unwrap().available,
             Amount::zero()
         );
+
         let mut decrease = entry("decrease");
         decrease.direction = EntryDirection::Decrease;
         let snapshot = capacity("165", &[decrease], &[]);
@@ -348,6 +355,7 @@ mod tests {
         capacity("165", &[entry("entry")], &[line("entry", "65")])
             .validate(&receipt(vec![line("entry", "100")]))
             .unwrap();
+
         let posted = ReceiptCapacity::new(
             vec![account("65")],
             &[entry("entry")],
@@ -357,6 +365,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(posted.entry("entry").unwrap().available, Amount::zero());
+
         let released = ReceiptCapacity::new(
             vec![account("65")],
             &[entry("entry")],

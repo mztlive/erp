@@ -44,11 +44,13 @@ pub async fn apply_posted_adjustment(
     if lines.is_empty() {
         return Err(Error::ValidationError("库存调整单没有明细，无法过账".to_string()));
     }
+
     let occurred_at = Instant::now();
     for line in lines {
         adjustment.reason_type.ensure_direction(line.direction)?;
         post_adjustment_line(db, executor, adjustment, line, &occurred_at, actor).await?;
     }
+
     adjustment.mark_posted()?;
     db.stock_adjustments().update(adjustment, executor).await?;
     Ok(())
@@ -133,6 +135,7 @@ async fn post_adjustment_line(
             }
         },
     }
+
     // 余额记录最后流水（台账「最后变动」列），与数量增减同事务
     if !db.stock_balances().apply_last_movement(&balance.base.id, &movement.base.id, executor).await? {
         return Err(Error::BusinessLogicError("库存余额行不存在".to_string()));
@@ -175,6 +178,7 @@ async fn release_applicable_reservations(
         if remaining <= zero {
             continue;
         }
+
         if !db
             .stock_reservations()
             .release_quantity(&reservation.base.id, reservation.reserved_quantity, executor)
@@ -189,6 +193,7 @@ async fn release_applicable_reservations(
                 "库存余额预占与预占记录不一致，无法过账库存调整".to_string(),
             ));
         }
+
         db.stock_reservation_entries()
             .create(
                 &StockReservationEntry::new(

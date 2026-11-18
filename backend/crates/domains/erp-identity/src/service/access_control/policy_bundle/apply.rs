@@ -31,6 +31,7 @@ impl PolicyBundleService {
         if request.idempotency_key.is_empty() || request.idempotency_key.len() > 128 {
             return Err(Error::ValidationError("操作号必须为1至128字节".into()));
         }
+
         let command = CommandReceipt::from_payload(
             "authorization-policy-",
             actor.id(),
@@ -39,6 +40,7 @@ impl PolicyBundleService {
             &request.idempotency_key,
             &request,
         )?;
+
         let service = self.clone();
         self.access
             .rbac
@@ -67,9 +69,11 @@ impl PolicyBundleService {
                 executor,
             )
             .await?;
+
         if let Some(receipt) = receipts(&self.access.db).find_by_id(command.id(), executor).await? {
             return Ok((receipt.replay(&command)?, false));
         }
+
         if authorization.scope.policy_version != request.expected_policy_version {
             return Err(Error::ConflictError("授权版本已变化，请重新预览".into()));
         }
@@ -77,13 +81,16 @@ impl PolicyBundleService {
         if plan.preview.review_hash != request.review_hash {
             return Err(Error::ConflictError("审核文件或目标事实已变化，请重新预览".into()));
         }
+
         let change_count = plan.preview.changes.len();
         let changed = change_count > 0;
         let policy_version = request
             .expected_policy_version
             .checked_add(u64::from(changed))
             .ok_or_else(|| Error::ConflictError("授权版本超限".into()))?;
+
         self.persist(plan, &actor, command.id(), executor).await?;
+
         let result = PolicyApplyResult {
             command_id: command.id().into(),
             policy_version,
@@ -105,6 +112,7 @@ impl PolicyBundleService {
         if plan.preview.changes.is_empty() {
             return Ok(());
         }
+
         let rbac = self.access.rbac.clone();
         let event = self
             .access
@@ -116,12 +124,14 @@ impl PolicyBundleService {
                 vec!["roles".into(), "bindings".into(), "data_scopes".into()],
             )
             .await?;
+
         for role in plan.roles {
             rbac.write_bundle_role(role, actor, executor).await?;
         }
         for binding in plan.bindings {
             rbac.write_bundle_binding(binding, actor, executor).await?;
         }
+
         for scope in plan.scopes {
             match scope.existing {
                 Some(mut row) => {
@@ -140,6 +150,7 @@ impl PolicyBundleService {
                 },
             }
         }
+
         self.access.db.audit_events().create(&event, executor).await?;
         Ok(())
     }

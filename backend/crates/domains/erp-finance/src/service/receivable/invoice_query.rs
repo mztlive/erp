@@ -35,6 +35,7 @@ impl ReceivableService {
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("发票不存在".to_string()))?;
+
         let (allocated_total, views) = match invoice.invoice_direction {
             InvoiceDirection::Purchase => {
                 // 进项票分配独立存储（purchase_invoice_allocations）；视图共用销项形状，
@@ -56,6 +57,7 @@ impl ReceivableService {
                 sales_allocation_view(allocations)
             },
         };
+
         Ok(InvoiceView {
             sales_invoice_request_id: invoice.sales_invoice_request_id,
             id: invoice.base.id,

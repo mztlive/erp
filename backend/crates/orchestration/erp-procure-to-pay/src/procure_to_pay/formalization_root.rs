@@ -61,6 +61,7 @@ impl PurchaseOrderFormalizationProcess {
     ) -> Result<PurchaseReviewResult> {
         let service = PurchaseOrderProcess::new(self.db.clone(), self.rbac.clone(), self.ports.clone());
         let (persist, result) = service.prepare_formalized_order(id, actor).await?.into_parts();
+
         let db = self.db.clone();
         let actor = actor.clone();
         self.db
@@ -109,6 +110,7 @@ async fn persist_formalized_order_write(
         .await?
         .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
     ensure_source_unaffected(db, &order, FORMALIZE_SOURCE_AFFECTED, executor).await?;
+
     let audit = actor.clone().resource_log(
         "purchase_order.formalize",
         "purchase_order",

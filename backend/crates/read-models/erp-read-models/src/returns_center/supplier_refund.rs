@@ -42,6 +42,7 @@ impl ReturnsReadService {
                             executor,
                         )
                         .await?;
+
                     this.load_supplier_refund_view(&id, executor).await
                 })
             })
@@ -75,6 +76,7 @@ impl ReturnsReadService {
     ) -> Result<SupplierRefundView> {
         Self::ensure_command_snapshot(executor)?;
         let id = id.to_owned();
+
         let refund = self
             .db
             .supplier_refunds()
@@ -82,6 +84,7 @@ impl ReturnsReadService {
             .await?
             .ok_or_else(|| Error::NotFound("供应商退款单不存在".to_string()))?;
         let binding = super::approval::optional_approval_binding(&self.db, &id, executor).await?;
+
         Ok(SupplierRefundView {
             id: refund.base.id.clone(),
             refund_no: refund.refund_no,

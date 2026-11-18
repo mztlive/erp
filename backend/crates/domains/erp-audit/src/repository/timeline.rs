@@ -61,6 +61,7 @@ fn filter(targets: &[TimelineTarget], before: Option<(u64, &str)>) -> Document {
         "structured_event.result": "succeeded",
         "$or": identities,
     };
+
     if let Some((time, id)) = before {
         let time = i64::try_from(time).unwrap_or(i64::MAX);
         filter.insert(

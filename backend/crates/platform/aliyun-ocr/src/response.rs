@@ -41,15 +41,18 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Page> {
     if bytes.len() > MAX_RESPONSE_BYTES {
         return Err(Error::ResponseSize);
     }
+
     let envelope: Envelope = serde_json::from_slice(bytes).map_err(|_| Error::InvalidResponse)?;
     if let Some(code) = envelope.code.filter(|value| value != "200") {
         return Err(classify_business_error(&code));
     }
+
     let data: Data = serde_json::from_str(&envelope.data.ok_or(Error::InvalidResponse)?)
         .map_err(|_| Error::InvalidResponse)?;
     if data.content.len() > 100_000 || data.algo_version.len() > 80 || data.prism_version.len() > 80 {
         return Err(Error::ResponseSize);
     }
+
     let version = format!("{API_VERSION};algo={};prism={}", data.algo_version, data.prism_version);
     Ok(Page { text: data.content, version })
 }
@@ -103,6 +106,7 @@ mod tests {
         let error = decode(br#"{"Code":"noPermission","Message":"secret response"}"#).err().unwrap();
         assert_eq!(error, Error::Authorization);
         assert!(!error.to_string().contains("secret"));
+
         for (code, expected) in [
             ("InvalidSecurityToken.Expired", Error::Authorization),
             ("Throttling.User", Error::Throttled),
@@ -112,6 +116,7 @@ mod tests {
             let data = serde_json::to_vec(&json!({"Code": code})).unwrap();
             assert_eq!(decode(&data).err(), Some(expected));
         }
+
         for data in [br#"{}"#.as_slice(), br#"{"Data":"{}"}"#, br#"{"Data":{}}"#, b"not-json"] {
             assert_eq!(decode(data).err(), Some(Error::InvalidResponse));
         }

@@ -43,9 +43,11 @@ pub async fn ensure(db: &Database) -> Result<()> {
             false,
         ),
     ];
+
     for (keys, name, unique) in indexes {
         register(db, Database::SALES_INQUIRIES, keys, name, unique).await?;
     }
+
     register(
         db,
         Database::SALES_INQUIRY_COMMAND_RECEIPTS,

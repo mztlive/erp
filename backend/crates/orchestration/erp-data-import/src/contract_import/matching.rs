@@ -32,12 +32,14 @@ impl ContractImportProcess {
     ) -> Result<RecognitionProof> {
         let company = self.company(values, executor).await?;
         let settlement = self.settlement(task, &company, executor).await?;
+
         let (customer, customer_party) = self.customer(task, values, allow_create, actor, executor).await?;
         if task.command.expected_customer_id.as_ref().is_some_and(|id| id != &customer.base.id) {
             return Err(Error::BusinessLogicError(
                 "合同对方主体与当前销售单客户不一致，请上传同一客户的合同".into(),
             ));
         }
+
         Ok(RecognitionProof {
             confirmed_fields: None,
             import_id: task.base.id.clone(),
@@ -64,6 +66,7 @@ impl ContractImportProcess {
             .map(|value| value.trim())
             .filter(|value| !value.is_empty())
             .map(str::to_ascii_uppercase);
+
         let candidates = exact_parties(&self.db, name, true, credit.as_deref(), executor)
             .await?
             .into_iter()
@@ -118,6 +121,7 @@ impl ContractImportProcess {
             .await?
             .filter(|party| party.is_active() && !party.base.is_deleted())
             .ok_or_else(|| Error::BusinessLogicError("原合同结算主体不可用，请先维护主体".into()))?;
+
         let revision_id = party
             .stable
             .current_revision_id
@@ -132,6 +136,7 @@ impl ContractImportProcess {
                 revision.party_id == PartyId::new(party.base.id.clone()) && !revision.base.is_deleted()
             })
             .ok_or_else(|| Error::BusinessLogicError("原合同结算主体资料不可用".into()))?;
+
         Ok(MatchedIdentity {
             id: party.base.id,
             version: party.base.version,
@@ -160,6 +165,7 @@ pub(super) fn identity_from_candidates(
     if candidates.iter().any(|candidate| candidate.legal_name.is_none()) {
         return Err(Error::BusinessLogicError("已有主体缺少当前身份资料，请先修复，不能重复建档".into()));
     }
+
     let matches = candidates
         .iter()
         .map(|candidate| MatchedIdentity {
@@ -178,6 +184,7 @@ pub(super) fn identity_from_candidates(
         };
         Error::BusinessLogicError(format!("对方签约主体：{}{visibility_hint}", error.message))
     })?;
+
     if candidates.iter().any(|candidate| {
         candidate.party.base.id == identity.id
             && (!candidate.party.is_active() || candidate.party.base.is_deleted())

@@ -13,6 +13,7 @@ pub fn ensure_sourcing_quantity(quantity: Quantity, scale: Option<u8>, unit: &st
     let scale = scale
         .filter(|value| *value <= 6)
         .ok_or_else(|| crate::Error::ValidationError(format!("{unit}的数量精度未配置，请检查计量单位")))?;
+
     let decimal = quantity.to_decimal().normalize();
     if decimal <= rust_decimal::Decimal::ZERO || decimal.scale() > u32::from(scale) {
         let rule = match scale {

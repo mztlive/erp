@@ -75,5 +75,6 @@ fn prepare_evidence_assets(
         ServiceEvidencePolicy::validate(&request.registration.content_type, sensitivity, retention, false)
             .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
     }
+
     Ok(PendingFileAssets::prepare(asset_requests, actor)?.shared())
 }

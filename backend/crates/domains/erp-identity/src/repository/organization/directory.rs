@@ -124,6 +124,7 @@ impl OrganizationRepository<'_> {
         if ids.is_some_and(|values| values.is_empty()) || orgs.is_some_and(|values| values.is_empty()) {
             return Ok(Vec::new());
         }
+
         let mut filter = current_filter(at);
         if let Some(ids) = ids {
             filter.insert("user_id", doc! { "$in": ids });
@@ -153,6 +154,7 @@ async fn bounded<T: DeserializeOwned + Send + Sync>(
     filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
     let options = FindOptions::builder().sort(doc! { "id": 1 }).limit(10001).build();
     let rows = mongo_ops::find_many(&db.collection::<T>(name), filter, options, executor).await?;
+
     if rows.len() > DIRECTORY_LIMIT {
         return Err(Error::ValidationError("目录组织索引超过 10000 项，请收窄范围或组织条件".into()));
     }
@@ -178,6 +180,7 @@ impl OrganizationRepository<'_> {
         if org_ids.is_empty() {
             return Ok(Default::default());
         }
+
         let units = bounded::<OrgUnit>(
             self.db,
             ORG_UNITS,
@@ -185,6 +188,7 @@ impl OrganizationRepository<'_> {
             executor,
         )
         .await?;
+
         primary_names(ids, &memberships, &units, at)
     }
 }
@@ -251,11 +255,13 @@ mod tests {
             primary_names(&ids, from_ref(&membership), from_ref(&unit), Instant::from_unix_secs(10)).unwrap();
         assert_eq!(names.get("reviewer").map(String::as_str), Some("采购部"));
         assert!(!names.contains_key("missing"));
+
         assert!(
             primary_names(&ids, from_ref(&membership), from_ref(&unit), Instant::from_unix_secs(20))
                 .unwrap()
                 .is_empty()
         );
+
         unit.enabled = false;
         assert!(primary_names(&ids, &[membership], &[unit], Instant::from_unix_secs(15)).unwrap().is_empty());
     }

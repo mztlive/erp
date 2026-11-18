@@ -255,6 +255,7 @@ where
                 validate_existing_id(existing_id, operation, self.kind, &mut existing_ids)?;
                 continue;
             }
+
             let has_required_value =
                 item.required_value().map(str::trim).is_some_and(|value| !value.is_empty());
             if !has_required_value {
@@ -355,6 +356,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(
             CustomerProfileRequestShape::new(CustomerProfileOperation::Update, Some(1), Some(1), true, false,)
                 .is_err()

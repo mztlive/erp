@@ -30,12 +30,14 @@ impl CatalogPortalService {
             return Err(Error::ValidationError("供应商归属缺失".into()));
         }
         let path = source_path(original_category_path)?;
+
         let mapping = self
             .db
             .supplier_category_mappings()
             .find_one(category_mapping_filter(supplier_id, path, product_kind), executor)
             .await?;
         let Some(mapping) = mapping else { return Ok(None) };
+
         let confirmed = mapping
             .confirmations
             .last()
@@ -63,6 +65,7 @@ impl CatalogPortalService {
             .as_ref()
             .ok_or_else(|| Error::Internal("新品冻结输入缺失".into()))?
             .product_kind;
+
         let repository = self.db.supplier_category_mappings();
         let filter = category_mapping_filter(&draft.supplier_id, &path, kind);
         match repository.find_one(filter, executor).await? {
@@ -105,6 +108,7 @@ impl CatalogPortalService {
             .ok_or_else(|| Error::Internal("分类映射必须来自真实新品生效决定".into()))?;
         let normalized =
             decision.normalized_product.as_ref().ok_or_else(|| Error::Internal("新品生效映射缺失".into()))?;
+
         self.ensure_dictionaries(input, normalized, executor).await?;
         let category = self
             .db
@@ -113,6 +117,7 @@ impl CatalogPortalService {
             .await?
             .ok_or_else(|| Error::BusinessLogicError("分类尚未完成有效匹配".into()))?;
         let hierarchy = self.category_hierarchy(&category, executor).await?;
+
         Ok(CategoryMappingConfirmation {
             draft_id: draft.base.id.clone(),
             submission_id: submission.id.clone(),
@@ -140,11 +145,13 @@ impl CatalogPortalService {
         if !category.is_active() || category.product_kind != product_kind {
             return Ok(None);
         }
+
         let hierarchy = match self.category_hierarchy(&category, executor).await {
             Ok(hierarchy) => hierarchy,
             Err(Error::BusinessLogicError(_)) => return Ok(None),
             Err(error) => return Err(error),
         };
+
         let candidate = DictionaryCandidate {
             id: category.base.id,
             version: category.base.version,

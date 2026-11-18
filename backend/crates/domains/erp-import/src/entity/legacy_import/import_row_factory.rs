@@ -49,6 +49,7 @@ pub fn build_import_rows(
     {
         return Err(Error::from("同一批次内来源行身份重复"));
     }
+
     let mut rows = Vec::with_capacity(specs.len());
     for spec in specs {
         rows.push(LegacyImportRow::new(

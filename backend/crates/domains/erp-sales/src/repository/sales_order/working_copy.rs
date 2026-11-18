@@ -334,6 +334,7 @@ impl<'a> SalesOrderDomainRepository<'a> {
             executor,
         )
         .await?;
+
         SalesOrderWorkingCopyRepository::new(self.db, SALES_ORDER_WORKING_COPIES)
             .update(working_copy, executor)
             .await

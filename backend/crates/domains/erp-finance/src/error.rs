@@ -135,6 +135,7 @@ mod tests {
             assert_eq!(error.class(), ErrorClass::Conflict);
             assert_eq!(error.to_string(), "数据冲突: 数据已存在，请勿重复提交");
         }
+
         let error = Error::from(persistence_core::Error::DuplicateKey(MongoError::custom("duplicate key")));
         assert_eq!(error.class(), ErrorClass::Conflict);
         assert_eq!(error.to_string(), "数据冲突: 数据已存在，请勿重复提交");

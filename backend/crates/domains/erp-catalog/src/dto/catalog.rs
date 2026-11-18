@@ -143,6 +143,7 @@ mod tests {
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");
         assert_eq!(query.paging.sort_dir, SortDir::Desc);
+
         assert_eq!(query.owner_user_ids.unwrap().as_slice(), &["user-1".to_string(), "user-2".to_string()]);
         assert!(
             serde_json::from_value::<super::ProductListParams>(serde_json::json!({"owner": "张三"})).is_err()
@@ -177,7 +178,6 @@ mod tests {
         }))
         .unwrap();
         let query = params.normalized().unwrap();
-
         assert_eq!(query.listing_status, Some(ListingStatus::Listed));
     }
 
@@ -268,9 +268,7 @@ mod tests {
     #[test]
     fn fill_blank_sku_nos_keeps_rows_that_already_have_numbers() {
         let mut skus = vec![sku_input("KEEP-1")];
-
         super::ProductSkuInput::fill_blank_sku_nos("SPU1", Vec::new(), &mut skus);
-
         assert_eq!(skus[0].sku_no, "KEEP-1");
     }
 

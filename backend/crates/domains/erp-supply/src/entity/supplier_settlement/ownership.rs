@@ -36,12 +36,14 @@ impl SupplierSettlementStatement {
         if next_org.is_empty() {
             return Err(Error::from("对账负责人缺少有效业务组织"));
         }
+
         if self.reviewed_by.as_deref() == Some(target.as_str()) {
             return Err(Error::from("经办人与复核人不得相同"));
         }
         if target == self.prepared_by && next_org == self.business_org_unit_id {
             return Err(Error::from("目标已是当前对账负责人，无需交接"));
         }
+
         self.prepared_by = target;
         self.business_org_unit_id = next_org;
         Ok(())
@@ -119,6 +121,7 @@ mod tests {
         let mut statement = sample();
         statement.reviewed_by = Some("reviewer-b".into());
         assert!(statement.handover("reviewer-b".into(), None).is_err());
+
         statement.handover("owner-b".into(), Some("org-b".into())).unwrap();
         assert_eq!(statement.prepared_by, "owner-b");
         assert_eq!(statement.business_org_unit_id, "org-b");

@@ -31,6 +31,7 @@ impl BulkJobService {
         actor: &AuditActor,
     ) -> Result<CancelAllBackgroundJobsResponse> {
         let candidates = self.cancel_candidates(req, actor).await?;
+
         let mut result = CancelAllBackgroundJobsResponse {
             cancelled_count: 0,
             skipped_count: 0,
@@ -87,6 +88,7 @@ impl BulkJobService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     authorization.require_cancel_all(&actor, executor).await?;
+
                     let mut job = db
                         .background_jobs()
                         .find_by_id(&id, executor)
@@ -95,6 +97,7 @@ impl BulkJobService {
                     if job.is_terminal() || job.cancel(Instant::now()).is_err() {
                         return Ok(false);
                     }
+
                     let audit =
                         audit_port.resource_log(actor, "background_job.cancel_all", "background_job", id)?;
                     db.background_jobs().update(&mut job, executor).await?;

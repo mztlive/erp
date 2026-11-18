@@ -102,11 +102,13 @@ mod tests {
         let params = serde_json::from_value(json!({"eligibility_as_of": "2026-10-03"})).unwrap();
         let filter = prepare_sellable_sku_list(&params).unwrap();
         let mut view = sellable_sku_page_view(PageResult { items: rows, total: 2 }, &filter).unwrap();
+
         let ids = vec![vec!["supplier-a".into()], vec!["supplier-b".into()]];
         let numbers = [("supplier-a".into(), "0002".into()), ("supplier-b".into(), "0001".into())].into();
         apply_supplier_codes(&mut view.items, &ids, &numbers);
         assert_eq!(view.items[0].supplier_codes, vec!["0002"]);
         assert_eq!(view.items[1].supplier_codes, vec!["0001"]);
+
         let value = serde_json::to_value(&view.items[0]).unwrap();
         assert_eq!(value["bulk_price_gross"], "8.00");
         assert!(value.get("supplier_ids").is_none());

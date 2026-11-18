@@ -36,6 +36,7 @@ impl CatalogService {
             .authorization
             .require(actor, &catalog::PRODUCT_BRAND_CREATE, AccessTarget::Operation, executor)
             .await?;
+
         let number = row.row_number;
         if let Some(error) = row.error.filter(|value| !value.trim().is_empty()) {
             return Ok(BrandImportResult::failed(number, error));
@@ -45,6 +46,7 @@ impl CatalogService {
             Ok(value) => value,
             Err(error) => return Ok(BrandImportResult::failed(number, error.to_string())),
         };
+
         let code = (!prepared.automatic_code).then_some(prepared.brand.brand_code.as_str());
         if let Some(existing) = self
             .db
@@ -57,6 +59,7 @@ impl CatalogService {
                 Err(error) => BrandImportResult::failed(number, error.to_string()),
             });
         }
+
         let brand = self.create_import_brand(prepared, actor, executor).await?;
         Ok(BrandImportResult::from_brand(number, BrandImportStatus::Created, brand))
     }
@@ -78,6 +81,7 @@ impl CatalogService {
                 .await
                 .map_err(|error| Error::Internal(error.to_string()))?;
         }
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "product_brand.create",

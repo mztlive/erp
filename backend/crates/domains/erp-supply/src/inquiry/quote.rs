@@ -70,6 +70,7 @@ impl InquiryQuote {
                 return Err(Error::ValidationError("询价报价作用域或供应身份非法".into()));
             }
         }
+
         data.recorded_by =
             normalize_required_text(data.recorded_by, "报价登记人不能为空", 128, "报价登记人过长")?;
         if data.terms.unavailable && data.internal_note.trim().is_empty() {
@@ -78,6 +79,7 @@ impl InquiryQuote {
         if data.internal_note.chars().count() > 4000 {
             return Err(Error::ValidationError("询价报价备注过长".into()));
         }
+
         data.terms = data.terms.validated()?;
         Ok(Self { base: BaseModel::new(id), data })
     }

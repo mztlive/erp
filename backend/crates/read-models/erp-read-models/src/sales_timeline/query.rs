@@ -21,6 +21,7 @@ impl SalesTimelineReadService {
     pub async fn sales(&self, actor: &AuditActor, id: &str, query: TimelineQuery) -> Result<TimelinePage> {
         query.limit()?;
         query.cursor()?;
+
         let this = self.clone();
         let actor = actor.clone();
         let id = id.to_owned();
@@ -32,10 +33,12 @@ impl SalesTimelineReadService {
                     let order = SalesAccess::new(this.db.clone(), this.rbac.clone())
                         .require_object(&actor, &sales_order_permissions::DETAIL, &id, executor)
                         .await?;
+
                     let mut sources = discover(&this.db, &id, executor).await?;
                     if let Some(document) = sources.documents.get_mut(&id) {
                         document.number = order.order_no;
                     }
+
                     authorize(this.access.as_ref(), &actor, &mut sources, executor).await?;
                     this.read(sources, &query, None, executor).await
                 })
@@ -52,6 +55,7 @@ impl SalesTimelineReadService {
     ) -> Result<TimelinePage> {
         let mut events = history::history(&self.db, &sources.documents, query, executor).await?;
         events.extend(sources.facts);
+
         for event in &mut events {
             if let Some(document) = sources.documents.get(&event.document_id) {
                 if event.document_number.is_empty() {
@@ -61,6 +65,7 @@ impl SalesTimelineReadService {
             }
             event.after_submission = submitted_at.is_some_and(|at| event.occurred_at > at);
         }
+
         let mut page = dto::page(events, query)?;
         super::repository::names::names(&self.db, &mut page.items, executor).await?;
         Ok(page)
@@ -111,6 +116,7 @@ pub(super) async fn authorize(
             visible.push(document.id.clone());
         }
     }
+
     sources.documents.retain(|id, _| visible.contains(id));
     sources.facts.retain(|event| sources.documents.contains_key(&event.document_id));
     Ok(())

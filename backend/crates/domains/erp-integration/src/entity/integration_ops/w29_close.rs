@@ -243,6 +243,7 @@ impl W29CloseDecision {
         if self.replacement_work_item_id.as_deref() == Some(work_item_id.as_str()) {
             return Err(Error::from("替代任务不能引用自身"));
         }
+
         Ok(W29EvidenceReference {
             work_item_id,
             replacement_work_item_id: self.replacement_work_item_id.clone(),
@@ -292,6 +293,7 @@ mod tests {
         let decision = W29CloseDecision::new(" DUPLICATE ", Some(" 已有有效替代 "), Some("wi-2")).unwrap();
         assert_eq!(decision.resolution_action(), ResolutionAction::CloseDuplicate);
         assert_eq!(decision.close_reason(), "DUPLICATE replacement=wi-2: 已有有效替代");
+
         let evidence = decision.evidence_reference("wi-1", "audit-1").unwrap();
         let encoded = evidence.to_string();
         assert_eq!(encoded, "work_item:wi-1;replacement_work_item:wi-2;command_receipt:audit-1");
@@ -302,6 +304,7 @@ mod tests {
     fn misrouted_requires_comment_and_forbids_replacement() {
         assert!(W29CloseDecision::new("MISROUTED", None, None).is_err());
         assert!(W29CloseDecision::new("MISROUTED", Some("误派"), Some("wi-2")).is_err());
+
         let decision = W29CloseDecision::new("MISROUTED", Some("对象类型登记错误"), None).unwrap();
         assert_eq!(decision.resolution_action(), ResolutionAction::CloseMisrouted);
         assert_eq!(
@@ -314,9 +317,11 @@ mod tests {
     fn invalid_combinations_self_reference_and_sequence_overflow_fail_closed() {
         assert!(W29CloseDecision::new("DUPLICATE", None, None).is_err());
         assert!(W29CloseDecision::new("UNKNOWN", Some("原因"), None).is_err());
+
         let decision = W29CloseDecision::new("DUPLICATE", None, Some("wi-1")).unwrap();
         assert!(decision.evidence_reference("wi-1", "audit-1").is_err());
         assert!(W29EvidenceReference::parse("work_item:wi-1;command_receipt:").is_err());
+
         assert_eq!(W29CloseDecision::next_resolution_no(None).unwrap(), 1);
         assert_eq!(W29CloseDecision::next_resolution_no(Some(7)).unwrap(), 8);
         assert!(W29CloseDecision::next_resolution_no(Some(u32::MAX)).is_err());

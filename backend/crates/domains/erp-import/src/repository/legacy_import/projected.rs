@@ -41,6 +41,7 @@ where
     let options = FindOptions::builder().sort(sort).skip(skip).limit(limit).projection(projection).build();
     let collection = base.clone_with_type::<Row>();
     let items = mongo_ops::find_many(&collection, filter.clone(), options, executor).await?;
+
     let total = mongo_ops::count_documents(base, filter, executor).await?;
     Ok(PageResult { items, total: total as i64 })
 }

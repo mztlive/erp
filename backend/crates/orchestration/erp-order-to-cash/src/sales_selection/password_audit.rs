@@ -59,6 +59,7 @@ impl AuditedCommand for PasswordCommand {
         self.access
             .require_booklet(&self.actor, &sales_selection::BOOKLET_DELETE_ITEM, &self.id, executor)
             .await?;
+
         let (result, fresh) = SalesSelectionService::new(self.db.clone(), self.access.authorization())
             .set_access_password(
                 &self.id,
@@ -69,6 +70,7 @@ impl AuditedCommand for PasswordCommand {
                 executor,
             )
             .await?;
+
         if !fresh {
             return Ok(AuditedWrite::Replayed(result));
         }
@@ -109,6 +111,7 @@ mod tests {
         assert_eq!(event.action_label, "维护选品册访问密码");
         assert!(event.resource_number_snapshot.is_none());
         assert!(event.facts.is_empty() && event.field_changes.is_empty());
+
         assert!(
             context
                 .log(BusinessEventContent {

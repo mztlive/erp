@@ -72,6 +72,7 @@ impl<'a> SupplierSettlementRepository<'a> {
             executor,
         )
         .await?;
+
         if !differences.is_empty() {
             mongo_ops::insert_many(
                 &self.db.collection::<SupplierSettlementDifference>(SUPPLIER_SETTLEMENT_DIFFERENCES),

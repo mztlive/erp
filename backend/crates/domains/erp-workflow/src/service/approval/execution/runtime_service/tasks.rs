@@ -56,10 +56,12 @@ pub(super) async fn complete_or_close_tasks(
     let Some(ending) = approval_task_ending(&input, &execution_id)? else {
         return Ok(());
     };
+
     let tasks = db.work_items().open_approval_tasks_for_execution(&execution_id, executor).await?;
     let requested =
         tasks.iter().find(|item| item.base.id == input.work_item_id).ok_or_else(hidden_not_found)?;
     ensure_expected_version("审批任务", input.expected_task_version, requested.base.version)?;
+
     let ending = if ending == ApprovalRuntimeTaskEnding::Complete && tasks.len() > 1 {
         ApprovalRuntimeTaskEnding::CompleteAnyOf { work_item_id: input.work_item_id.to_string() }
     } else {
@@ -140,6 +142,7 @@ pub(super) async fn create_open_tasks(
         .await?
         .ok_or_else(|| Error::ConflictError("审批任务缺少冻结业务快照".into()))?;
     let due_at = due::inherited_due_at(db, input.writes, executor).await?;
+
     for (index, intent) in input.writes.create_tasks.iter().enumerate() {
         let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
             continue;

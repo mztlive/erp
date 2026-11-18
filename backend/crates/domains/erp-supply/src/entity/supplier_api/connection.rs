@@ -379,6 +379,7 @@ impl SupplierApiConnection {
         let account_id = normalize_required_text(account_id, "预存款账户不能为空", 256, "预存款账户过长")?;
         let external_account_ref =
             normalize_required_text(external_account_ref, "外部资金账号不能为空", 256, "外部资金账号过长")?;
+
         if self.supplier_deposit_account_id.as_ref().is_some_and(|id| id != &account_id)
             || self
                 .supplier_deposit_external_account_ref
@@ -392,6 +393,7 @@ impl SupplierApiConnection {
         {
             return Ok(());
         }
+
         self.bump_technical_config_version()?;
         self.supplier_deposit_account_id = Some(account_id);
         self.supplier_deposit_external_account_ref = Some(external_account_ref);
@@ -423,9 +425,11 @@ impl SupplierApiConnection {
         self.apply_rate_limit_policy(update.rate_limit_policy);
         self.apply_health(update.last_health_at, update.last_health_result)?;
         self.apply_status(update.status);
+
         if endpoint_changed || credential_changed {
             self.bump_technical_config_version()?;
         }
+
         self.stable.touch(updated_by);
         Ok(())
     }
@@ -819,6 +823,7 @@ mod tests {
             data.status = status;
             let connection =
                 SupplierApiConnection::new(SupplierApiConnectionId::new("conn-1"), data, "admin-1").unwrap();
+
             let result = connection.ensure_active();
             match expected {
                 None => result.unwrap(),
@@ -826,11 +831,13 @@ mod tests {
                     assert!(matches!(result, Err(Error::LogicError(message)) if message == expected))
                 },
             }
+
             if status == SupplierApiConnectionStatus::Fault {
                 assert!(connection.ensure_offering_source("sup-1").is_err());
             } else {
                 connection.ensure_offering_source("sup-1").unwrap();
             }
+
             for supplier in ["sup-2", ""] {
                 assert!(matches!(
                     connection.ensure_offering_source(supplier),
@@ -846,7 +853,6 @@ mod tests {
         let connection =
             SupplierApiConnection::new(SupplierApiConnectionId::new("conn-1"), connection_data(), "admin-1")
                 .unwrap();
-
         assert_eq!(connection.connection_code, "SUP-CN-001");
         assert_eq!(connection.endpoint_reference, "config://supplier/001");
         assert_eq!(connection.credential_reference.as_deref(), Some("kms://prod/erp/sup-001"));
@@ -863,6 +869,7 @@ mod tests {
         let connection =
             SupplierApiConnection::new(SupplierApiConnectionId::new("conn-1"), connection_data(), "admin-1")
                 .unwrap();
+
         for environment in ["production", "testing"] {
             let mut stored = to_value(&connection).unwrap();
             stored["environment"] = environment.into();
@@ -878,6 +885,7 @@ mod tests {
         let connection =
             SupplierApiConnection::new(SupplierApiConnectionId::new("conn-1"), connection_data(), "actor")
                 .unwrap();
+
         let mut stored = to_value(&connection).unwrap();
         stored.as_object_mut().unwrap().remove("connector_type");
         let restored: SupplierApiConnection = from_value(stored).unwrap();
@@ -1004,6 +1012,7 @@ mod tests {
     fn rate_limit_policy_rejects_zero_bounds() {
         assert!(RateLimitPolicy::new(0, 60).is_err());
         assert!(RateLimitPolicy::new(100, 0).is_err());
+
         let policy = RateLimitPolicy::new(100, 60).unwrap();
         assert_eq!(policy.window_secs(), 60);
     }

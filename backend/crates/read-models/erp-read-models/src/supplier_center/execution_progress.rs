@@ -95,6 +95,7 @@ impl SupplierExecutionProgressReadModel {
             .as_ref()
             .or(execution.order_tree.as_ref())
             .map(|tree| ExecutionOrderTreeView::from_tree(tree, &labels, pending));
+
         let Some(tracking) =
             self.db.supplier_order_tracking().find_by_id(&execution.base.id, executor).await?
         else {
@@ -109,6 +110,7 @@ impl SupplierExecutionProgressReadModel {
         if observation.order_id != execution.base.id || observation.connection_id != execution.connection_id {
             return Err(Error::ConflictError("供应商物流观察与当前订单不一致".into()));
         }
+
         let shipments = observation
             .shipments
             .unwrap_or_default()
@@ -227,6 +229,7 @@ impl ExecutionShipmentView {
                 ExecutionProgressLine::from_source(&line.line_id, sku, line.quantity.to_string(), labels)
             })
             .collect();
+
         Self {
             external_shipment_id: shipment.external_shipment_id.clone(),
             source_order_no: shipment.source_order_no.clone(),
@@ -275,6 +278,7 @@ mod tests {
                 }),
             }],
         };
+
         let value = serde_json::to_value(ExecutionOrderTreeView::from_tree(&tree, &labels, false)).unwrap();
         assert_eq!(value["nodes"][0]["lines"][0]["product_name"], "商品名称");
         assert_eq!(value["nodes"][0]["lines"][0]["quantity"], "2");
@@ -297,10 +301,12 @@ mod tests {
             tracking_no: Some("no".into()),
             has_courier_contact: false,
         };
+
         let view = ExecutionShipmentView::from_shipment(&shipment, &execution, &BTreeMap::new());
         assert!(!view.quantity_proven);
         assert!(view.lines.is_empty());
         assert_eq!(view.tracking_no.as_deref(), Some("no"));
+
         shipment.quantity_lines =
             Some(vec![ShipmentLine { line_id: "line".into(), quantity: "1".parse().unwrap() }]);
         let view = ExecutionShipmentView::from_shipment(&shipment, &execution, &BTreeMap::new());

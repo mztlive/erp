@@ -94,12 +94,15 @@ mod tests {
     fn root_cancelled_does_not_hide_partial_child_or_pending_refund() {
         let original = observation();
         original.ensure_leaf_cancellations().unwrap();
+
         let mut partial = original.clone();
         partial.topology.as_mut().unwrap().nodes[1].cancellation = None;
         assert!(partial.ensure_leaf_cancellations().is_err());
+
         let mut pending = original.clone();
         pending.topology.as_mut().unwrap().nodes[1].refund = Some(RefundStatus::RefundPending);
         assert!(pending.ensure_leaf_cancellations().is_err());
+
         let mut shipped = original.clone();
         shipped.topology.as_mut().unwrap().nodes[0].fulfillment = Some(FulfillmentStatus::Shipped);
         assert!(shipped.ensure_leaf_cancellations().is_err());

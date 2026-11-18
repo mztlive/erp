@@ -89,6 +89,7 @@ impl PortalCommandReceipt {
     /// 异载荷冲突，身份损坏失败关闭。
     pub fn replay(&self, command: &CommandReceipt) -> Result<Value> {
         self.validate()?;
+
         if self.base.id != command.id()
             || self.actor_id != command.actor_id()
             || self.action != command.action()
@@ -98,6 +99,7 @@ impl PortalCommandReceipt {
         {
             return Err(Error::Internal("门户命令回执身份不匹配".into()));
         }
+
         if self.fingerprint != command.fingerprint().as_str() {
             return Err(Error::ConflictError("同一操作号已用于不同提交".into()));
         }

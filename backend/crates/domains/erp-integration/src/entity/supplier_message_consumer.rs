@@ -77,6 +77,7 @@ mod tests {
         consumer.lease_owner = Some("worker".into());
         consumer.lease_epoch = 2;
         consumer.lease_until = Instant::from_unix_secs(20);
+
         assert!(consumer.require_lease("worker", 2, Instant::from_unix_secs(19)).is_ok());
         assert!(consumer.require_lease("worker", 1, Instant::from_unix_secs(19)).is_err());
         assert!(consumer.require_lease("other", 2, Instant::from_unix_secs(19)).is_err());

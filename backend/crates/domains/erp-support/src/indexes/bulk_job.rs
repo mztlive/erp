@@ -126,7 +126,6 @@ mod tests {
     #[test]
     fn snapshot_identity_is_unique_and_workbench_indexes_exist() {
         let indexes = bulk_selection_snapshot_indexes();
-
         let id_index = indexes
             .iter()
             .find(|index| {
@@ -135,6 +134,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(id_index.options.as_ref().unwrap().unique, Some(true));
+
         assert!(indexes.iter().any(|index| index.keys == doc! { "created_by": 1, "created_at": -1 }));
         assert!(indexes.iter().any(|index| index.keys == doc! { "status": 1, "expires_at": 1 }));
     }
@@ -142,7 +142,6 @@ mod tests {
     #[test]
     fn selection_item_target_is_unique_within_snapshot() {
         let indexes = bulk_selection_item_indexes();
-
         let target = indexes
             .iter()
             .find(|index| {
@@ -164,7 +163,6 @@ mod tests {
     #[test]
     fn background_job_identity_indexes_are_globally_unique() {
         let indexes = background_job_indexes();
-
         for name in ["uk_background_jobs_no", "uk_background_jobs_request_id"] {
             let index = indexes
                 .iter()
@@ -176,6 +174,7 @@ mod tests {
             assert_eq!(options.unique, Some(true));
             assert!(options.partial_filter_expression.is_none());
         }
+
         assert!(indexes.iter().any(|index| index.keys == doc! { "status": 1, "created_at": -1 }));
         assert!(indexes.iter().any(|index| index.keys == doc! { "domain_job_type": 1, "domain_job_id": 1 }));
     }
@@ -183,12 +182,12 @@ mod tests {
     #[test]
     fn background_job_item_number_is_unique_within_job() {
         let indexes = background_job_item_indexes();
-
         assert!(indexes.iter().any(|index| {
             index.options.as_ref().and_then(|options| options.name.as_deref())
                 == Some("uk_background_job_items_no")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
+
         assert!(indexes.iter().any(|index| index.keys == doc! { "background_job_id": 1, "status": 1 }));
     }
 }

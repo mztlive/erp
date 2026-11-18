@@ -148,6 +148,7 @@ mod tests {
             CommitRequired::Proceed,
             false,
         );
+
         assert_eq!(view.instance_status, "RUNNING");
         assert_eq!(
             view.next_open_task.as_ref().map(|task| task.task_version.as_str()),
@@ -155,6 +156,7 @@ mod tests {
         );
         assert_eq!(view.latest_rejection_reason.as_deref(), Some("资料不全"));
         assert_eq!(view.outcome, ApprovalCommandOutcome::Applied);
+
         let replay = map_command_view(&instance, None, None, None, None, CommitRequired::Proceed, true);
         assert_eq!(replay.outcome, ApprovalCommandOutcome::IdempotentReplay);
     }

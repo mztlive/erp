@@ -350,6 +350,7 @@ impl Delivery {
             "发货单号过长",
         )?;
         let tracking_entries = DeliveryTrackingEntries::new(data.tracking_entries)?.into_entries();
+
         let address_snapshot_encrypted = normalize_optional_text(
             data.address_snapshot_encrypted,
             "履约地址加密值",
@@ -363,6 +364,7 @@ impl Delivery {
         if let Some(fingerprint) = &address_snapshot_fingerprint {
             validate_fingerprint(fingerprint)?;
         }
+
         validate_source_ownership(data.delivery_type, &data.warehouse_id, &data.purchase_order_id)?;
 
         Ok(Self {
@@ -507,12 +509,14 @@ impl Delivery {
         if self.status == DeliveryState::Reversed {
             return Err(Error::from("已冲正发货不能自动更新包裹"));
         }
+
         let mut merged = self.tracking_entries.clone();
         for entry in entries {
             if !merged.contains(&entry) {
                 merged.push(entry);
             }
         }
+
         self.tracking_entries = DeliveryTrackingEntries::new(merged)?.into_entries();
         Ok(())
     }
@@ -660,6 +664,7 @@ impl DeliveryLine {
         if data.quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
             return Err(Error::from("发货数量必须为正数"));
         }
+
         match delivery_type {
             DeliveryType::WarehouseShip => {
                 if data.stock_reservation_id.is_none() {
@@ -678,6 +683,7 @@ impl DeliveryLine {
                 }
             },
         }
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             delivery_id: data.delivery_id,
@@ -787,8 +793,10 @@ pub(crate) mod tests {
 
         delivery.mark_shipped(Instant::from_unix_secs(1_700_000_000)).unwrap();
         assert_eq!(delivery.status, DeliveryState::Shipped);
+
         delivery.mark_signed().unwrap();
         assert_eq!(delivery.status, DeliveryState::Signed);
+
         delivery.reverse().unwrap();
         assert_eq!(delivery.status, DeliveryState::Reversed);
     }
@@ -808,6 +816,7 @@ pub(crate) mod tests {
             delivery.tracking_entries,
             [tracking_entry("LL-1", "货拉拉"), tracking_entry("SF-2", "顺丰")]
         );
+
         let serialized = serde_json::to_value(&delivery).unwrap();
         assert_eq!(serialized["tracking_entries"][0]["sales_order_line_id"], "so-line-1");
         assert_eq!(serialized["tracking_entries"][1]["carrier"], "顺丰");
@@ -825,8 +834,10 @@ pub(crate) mod tests {
         delivery.update(update).unwrap();
         assert_eq!(delivery, after_first);
         assert_eq!(delivery.tracking_entries[0].tracking_no, "LL-1");
+
         delivery.update(DeliveryUpdate::default()).unwrap();
         assert_eq!(delivery, after_first);
+
         delivery.update(DeliveryUpdate { tracking_entries: Some(Vec::new()) }).unwrap();
         assert!(delivery.tracking_entries.is_empty());
     }
@@ -920,6 +931,7 @@ pub(crate) mod tests {
                 .acceptance_quantity(&line, &SalesOrderId::new("so-1"), &SalesOrderLineId::new("so-line-1"),)
                 .is_err()
         );
+
         delivery.mark_shipped(Instant::from_unix_secs(1_700_000_000)).unwrap();
         assert_eq!(
             delivery
@@ -927,6 +939,7 @@ pub(crate) mod tests {
                 .unwrap(),
             Quantity::from_str("3").unwrap()
         );
+
         assert!(
             delivery
                 .acceptance_quantity(
@@ -936,6 +949,7 @@ pub(crate) mod tests {
                 )
                 .is_err()
         );
+
         let mut foreign_delivery_line = line.clone();
         foreign_delivery_line.delivery_id = DeliveryId::new("other-delivery");
         assert!(
@@ -947,6 +961,7 @@ pub(crate) mod tests {
                 )
                 .is_err()
         );
+
         let mut foreign_sales_line = line.clone();
         foreign_sales_line.sales_order_line_id = SalesOrderLineId::new("other-line");
         assert!(
@@ -958,6 +973,7 @@ pub(crate) mod tests {
                 )
                 .is_err()
         );
+
         assert_eq!(delivery.registration_context_id().unwrap(), "so-1");
         let mut missing_context = delivery.clone();
         missing_context.sales_order_id = SalesOrderId::new("   ");

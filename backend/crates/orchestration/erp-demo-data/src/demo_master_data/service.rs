@@ -131,12 +131,15 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
     pub async fn apply_chunk(&self, actor: &AuditActor, cursor: u32) -> Result<DemoChunkReport> {
         self.ensure_enabled()?;
         self.authorize_apply(actor).await?;
+
         let steps = plan::demo_steps()?;
         let offerings = offerings::load(&steps)?;
         let range = plan::apply_window(cursor as usize, steps.len());
         let mut report = empty_report(range.end, steps.len());
+
         let company_party_id = self.company_party_id(actor, &mut report.notices).await?;
         let handler_user_id = self.warehouse_handler_id().await?;
+
         for step in &steps[range] {
             let records = self.record_map().await?;
             let outcome = self
@@ -149,11 +152,13 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
                     &mut report.notices,
                 )
                 .await?;
+
             if step.kind == plan::DemoKind::Product {
                 let records = self.record_map().await?;
                 self.ensure_product_defaults(actor, step, &records).await?;
                 self.ensure_sellable(step, &offerings, &records).await?;
             }
+
             tally(&mut report, outcome)?;
         }
         Ok(report)
@@ -240,6 +245,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         if let Some(id) = self.active_company_id(actor).await? {
             return Ok(Some(id));
         }
+
         match self.ports.party.create_company(super::spec::foundation_spec().company.clone(), actor).await {
             Ok(company) => Ok(Some(company.id)),
             Err(erp_party::Error::ConflictError(message) | erp_party::Error::ValidationError(message)) => {
@@ -285,12 +291,14 @@ async fn status_snapshot(
     executor: &mut dyn Executor,
 ) -> Result<DemoStatus> {
     authorization.require(actor, &demo_master_data::STATUS, AccessTarget::Operation, executor).await?;
+
     let records = record::load(db, executor).await?;
     let rows = records
         .iter()
         .filter_map(|record| record.kind().map(|kind| (kind, record.removed)))
         .collect::<Vec<_>>();
     let (active, removed) = plan::count_records(&rows);
+
     let view = DemoStatus { enabled, planned: plan::planned_counts(&plan::demo_steps()?), active, removed };
     Ok(view)
 }
@@ -303,6 +311,7 @@ fn tally(report: &mut DemoChunkReport, outcome: EnsureOutcome) -> Result<()> {
         EnsureOutcome::Skipped => report.skipped += 1,
         EnsureOutcome::Notice(text) => return Err(Error::ValidationError(text)),
     }
+
     if !report.notices.is_empty() {
         return Err(Error::ValidationError(report.notices.join("；")));
     }
@@ -358,8 +367,10 @@ mod tests {
     fn prerequisites_and_owner_handover_failures_cannot_report_completion() {
         let mut report = empty_report(8, 8);
         assert!(tally(&mut report, EnsureOutcome::Notice("供应商无创建权限".into())).is_err());
+
         report.notices.push("客户负责人移交失败".into());
         assert!(tally(&mut report, EnsureOutcome::Skipped).is_err());
+
         report.notices.clear();
         tally(&mut report, EnsureOutcome::Created).unwrap();
         assert_eq!(report.created, 1);

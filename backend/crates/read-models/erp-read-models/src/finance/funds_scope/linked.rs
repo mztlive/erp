@@ -164,6 +164,7 @@ mod tests {
             None,
             None,
         ];
+
         let tuples = linked_order_tuples("receipt-1", 7, &orders, &facts, |fact| {
             (Some(fact.owner_user_id.clone()), fact.business_org_unit_id.clone())
         });

@@ -60,6 +60,7 @@ impl SupplierFulfillmentProcess {
         let fingerprint = serialized_fingerprint(&command)?;
         let command_id =
             completion_command_id(actor.id(), command.work_item_id.as_ref(), &command.idempotency_key);
+
         if let Some(result) = self
             .replay_task_completion(
                 &command_id,
@@ -154,12 +155,14 @@ impl CompletionReplay {
                 executor,
             )
             .await?;
+
         let Some(stored) = db.supply_command_receipts().find_command(&self.command_id, executor).await?
         else {
             return Ok(None);
         };
         let (resource_id, receipt) = self.receipt(stored)?;
         legacy::ensure(db, &resource_id, executor).await?;
+
         let action = db
             .supplier_order_actions()
             .find_by_id(&receipt.terminal_action_id, executor)
@@ -236,6 +239,7 @@ impl TaskCompletion {
         )
         .await?;
         legacy::ensure(db, self.command.decision.order_id.as_ref(), executor).await?;
+
         let (order, evidence) = load_completion_evidence(db, &self.command, &work_item, executor).await?;
         let terminal_action = prepare_terminal_action(
             work_item.base.id.clone(),
@@ -245,6 +249,7 @@ impl TaskCompletion {
             self.terminal_action_id,
             self.idempotency_key,
         )?;
+
         let completed_at = Instant::now();
         work_item.record_activity(completed_at)?;
         work_item.complete_by_domain_command(self.actor.id(), completed_at)?;
@@ -280,12 +285,14 @@ async fn load_completion_evidence(
         .ensure_version(command.decision.expected_order_lock_version)
         .map_err(|_| Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string()))?;
     ensure_task_subject_matches_order(work_item, &command.expected_subject_version, order.base.version)?;
+
     let evidence = db
         .supplier_order_actions()
         .find_by_id(command.decision.verified_supplier_action_result_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("供应商结果证据不存在".to_string()))?;
     let evidence_record = verified_terminal_evidence(&evidence, &order, command.decision.resolution)?;
+
     let target_action = db
         .supplier_order_actions()
         .find_by_id(evidence_record.target_supplier_action_id(), executor)
@@ -335,6 +342,7 @@ async fn persist_completed_task(
 ) -> Result<CompletionReceipt> {
     create_action(input.db, input.terminal_action, executor).await?;
     input.db.work_items().update(input.work_item, executor).await?;
+
     let receipt = CompletionReceipt {
         terminal_action_id: input.terminal_action.base.id.clone(),
         order_version: input.order.base.version,
@@ -384,6 +392,7 @@ async fn load_completion_task(
         executor,
     )
     .await?;
+
     let work_item = db
         .work_items()
         .find_by_id(command.work_item_id.as_ref(), executor)
@@ -396,7 +405,6 @@ async fn load_completion_task(
         &command.expected_subject_version,
     )?;
     identity.workflow.ensure_domain_decision_access(actor, &work_item, executor).await?;
-
     Ok(work_item)
 }
 
@@ -452,8 +460,10 @@ mod replay_tests {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1").await.unwrap().database("unit_test");
         let (replay, _) = fixture();
         let authorization = unavailable_authorization();
+
         let error = replay.load(&db, &authorization, &mut SnapshotExecutor::default()).await.unwrap_err();
         assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
+
         let error = replay.load(&db, &authorization, &mut ReadExecutor::default()).await.unwrap_err();
         assert!(
             matches!(error, Error::ValidationError(message) if message == "无对象操作及其业务读取必须使用快照事务")
@@ -486,6 +496,7 @@ mod replay_tests {
             mutate(&mut replay);
             assert!(matches!(replay.receipt(stored), Err(Error::Internal(_))));
         }
+
         let (mut replay, stored) = fixture();
         replay.fingerprint = stable_digest("changed request");
         assert!(matches!(replay.receipt(stored), Err(Error::ConflictError(_))));

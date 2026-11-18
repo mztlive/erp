@@ -42,6 +42,7 @@ pub(super) fn stage_code_label_tone(
             ("effective", "已生效", "success")
         };
     }
+
     match review {
         ReviewStatus::PendingProcurementConfirmation => ("awaiting_confirm", "待二次确认", "warning"),
         ReviewStatus::PendingLowMarginSuperior => ("awaiting_sales", "待销售处理", "warning"),
@@ -98,6 +99,7 @@ pub(super) fn close_eligibility_view(assessment: SalesOrderClosureAssessment) ->
             if assessment.collection_unsettled {
                 blockers.push("客户回款还没收齐".to_string());
             }
+
             let note = if assessment.eligible_to_close {
                 "交付和回款都齐了，系统会自动结案。发票开没开完都不挡结案，也无需人工点「关闭」。".to_string()
             } else {
@@ -106,6 +108,7 @@ pub(super) fn close_eligibility_view(assessment: SalesOrderClosureAssessment) ->
             (blockers, note)
         },
     };
+
     dto::CloseEligibilityView {
         fulfillment_complete: assessment.fulfillment_complete,
         receivable_settled: assessment.receivable_settled,
@@ -342,6 +345,7 @@ mod tests {
             assert!(!allowed, "stage={code}");
             assert!(reason.is_some());
         }
+
         for code in
             ["awaiting_sales", "awaiting_confirm", "awaiting_sales_lead", "awaiting_ops", "in_approval"]
         {

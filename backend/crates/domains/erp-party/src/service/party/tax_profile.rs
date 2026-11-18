@@ -109,6 +109,7 @@ impl PartyTaxProfileService {
             executor,
         )
         .await?;
+
         let paging = normalize_paging(
             &params.sort_by,
             &params.sort_dir,
@@ -125,6 +126,7 @@ impl PartyTaxProfileService {
             sort_by: Some(paging.sort_by.to_string()),
             sort_ascending: matches!(paging.sort_dir, SortDir::Asc),
         };
+
         let page = self.db.party_tax_profiles().search_party_tax_profiles(&filter, executor).await?;
         let items = page
             .items
@@ -141,7 +143,6 @@ impl PartyTaxProfileService {
                 created_at: row.created_at,
             })
             .collect();
-
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
@@ -210,6 +211,7 @@ impl PartyTaxProfileService {
             .require(actor, &party::TAX_PROFILE_CREATE, AccessTarget::Operation, executor)
             .await?;
         super::ensure_new_fact_guards(&self.db, self.supplier_roles.as_ref(), party_id, executor).await?;
+
         let profile = self.prepare_record(party_id, req, actor)?;
         let audit = self.audit.resource_log(
             actor.clone(),
@@ -217,6 +219,7 @@ impl PartyTaxProfileService {
             "party_tax_profile",
             profile.base.id.clone(),
         )?;
+
         if profile.is_default {
             self.db.party_tax_profiles().clear_other_default_marks(&profile.party_id, None, executor).await?;
         }
@@ -276,6 +279,7 @@ impl PartyTaxProfileService {
         super::ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &profile.party_id, executor)
             .await?;
         super::map_version_conflict(profile.ensure_version(req.version))?;
+
         profile.update(
             PartyTaxProfileUpdate {
                 status: req.status,
@@ -290,6 +294,7 @@ impl PartyTaxProfileService {
             "party_tax_profile",
             profile.base.id.clone(),
         )?;
+
         if profile.is_default {
             self.db
                 .party_tax_profiles()

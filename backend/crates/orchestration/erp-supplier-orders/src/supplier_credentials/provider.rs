@@ -93,6 +93,7 @@ impl MongoJdVopTokenProvider {
         ) {
             return Err(token_error());
         }
+
         let plain = self.crypto.open(record)?;
         let token = JdVopAccessToken::new(
             plain.access_token,
@@ -120,6 +121,7 @@ impl MongoJdVopTokenProvider {
             Ok(Some(claimed)) => claimed,
             _ => return self.current().await,
         };
+
         let sent = match self.store.sent(claimed, self.clock.now()).await {
             Ok(Some(sent)) => sent,
             _ => return self.current().await,
@@ -134,6 +136,7 @@ impl MongoJdVopTokenProvider {
         if sent.refresh.deadline().is_none_or(|deadline| deadline.unix_secs() < latest_finish) {
             return self.current().await;
         }
+
         let result = timeout(Duration::from_secs(self.timeout_seconds), self.oauth.refresh(request))
             .await
             .unwrap_or(Err(RefreshFailure::Unknown));
@@ -184,6 +187,7 @@ impl JdVopTokenProvider for MongoJdVopTokenProvider {
         ) {
             return Err(token_error());
         }
+
         let plain = self.crypto.open(&record)?;
         let due = plain.refresh_after <= now.unix_secs();
         let claimable = matches!(record.refresh, SupplierCredentialRefreshState::Ready)

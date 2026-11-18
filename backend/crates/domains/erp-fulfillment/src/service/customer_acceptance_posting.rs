@@ -174,6 +174,7 @@ impl super::FulfillmentService {
         session: &mut dyn persistence_core::Executor,
     ) -> Result<()> {
         acceptance.require_evidence()?;
+
         let acceptance_id = CustomerAcceptanceId::new(acceptance.base.id.clone());
         if is_new {
             db.fulfillment().create_customer_acceptance_with_lines(acceptance, final_lines, session).await?;
@@ -181,6 +182,7 @@ impl super::FulfillmentService {
             db.customer_acceptances().update(acceptance, session).await?;
             db.fulfillment().replace_customer_acceptance_lines(&acceptance_id, final_lines, session).await?;
         }
+
         write_matched_line_allocations(
             db,
             session,
@@ -190,6 +192,7 @@ impl super::FulfillmentService {
             &acceptance.sales_order_id,
         )
         .await?;
+
         acceptance.mark_posted()?;
         db.customer_acceptances().update(acceptance, session).await?;
         Ok(())
@@ -248,6 +251,7 @@ impl super::FulfillmentService {
             .await?;
         acceptance.ensure_posting_lines(&lines).map_err(|error| Error::ValidationError(error.to_string()))?;
         ensure_post_lines_match(&lines, &req.lines)?;
+
         write_matched_line_allocations(
             db,
             session,
@@ -257,6 +261,7 @@ impl super::FulfillmentService {
             &acceptance.sales_order_id,
         )
         .await?;
+
         acceptance.mark_posted()?;
         db.customer_acceptances().update(acceptance, session).await?;
         Ok(())
@@ -291,6 +296,7 @@ impl super::FulfillmentService {
         original
             .ensure_reversible(req.expected_version)
             .map_err(|error| Error::ConflictError(error.to_string()))?;
+
         let original_lines = db
             .fulfillment()
             .acceptance_lines_by_acceptance_ids(std::slice::from_ref(original_id), session)
@@ -301,6 +307,7 @@ impl super::FulfillmentService {
             db.fulfillment().allocations_by_acceptance_lines(&original_line_ids, session).await?;
         AcceptanceFulfillmentAllocation::ensure_reversible_source(&original_allocations)
             .map_err(|error| Error::ConflictError(error.to_string()))?;
+
         let reverse_acceptance = CustomerAcceptance::new(
             CustomerAcceptanceId::new(next_id()),
             CustomerAcceptanceData {
@@ -317,6 +324,7 @@ impl super::FulfillmentService {
             &original_allocations,
             &req.reason_text,
         )?;
+
         persist_reverse_acceptance(
             db,
             session,
@@ -373,6 +381,7 @@ fn build_reverse_lines_and_allocations(
             .map_err(Error::Logic)?,
         );
     }
+
     let mut reverse_allocations = Vec::with_capacity(original_allocations.len());
     for allocation in original_allocations {
         let reverse_line_id = reverse_line_by_original
@@ -425,11 +434,14 @@ async fn persist_reverse_acceptance(
     db.fulfillment()
         .create_customer_acceptance_with_lines(&reverse_acceptance, reverse_lines, session)
         .await?;
+
     for allocation in reverse_allocations {
         db.acceptance_fulfillment_allocations().create(allocation, session).await?;
     }
+
     reverse_acceptance.mark_posted()?;
     db.customer_acceptances().update(&mut reverse_acceptance, session).await?;
+
     original.reverse(reverse_acceptance.base.id.clone().into())?;
     db.customer_acceptances().update(&mut original, session).await?;
     Ok((original, reverse_acceptance))
@@ -494,6 +506,7 @@ async fn write_single_line_allocations(
     }
     line.ensure_allocation_conserved(allocations.iter().map(|allocation| allocation.allocated_quantity))
         .map_err(|error| Error::ValidationError(error.to_string()))?;
+
     for allocation in allocations {
         write_acceptance_allocation(db, session, &line.base.id, allocation, line, sales_order_id).await?;
     }
@@ -581,6 +594,7 @@ async fn write_acceptance_allocation(
         acceptance_line,
     )
     .await?;
+
     let existing = db
         .fulfillment()
         .allocations_by_fulfillment_fact(
@@ -596,6 +610,7 @@ async fn write_acceptance_allocation(
         allocation.allocated_quantity,
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
+
     let record = AcceptanceFulfillmentAllocation::new(
         AcceptanceFulfillmentAllocationId::new(next_id()),
         AcceptanceFulfillmentAllocationData {
@@ -733,6 +748,7 @@ mod tests {
             Some(draft.base.version),
         )
         .expect("正确版本的当前销售单草稿应可继续登记");
+
         assert!(
             ensure_existing_acceptance_draft(
                 &draft,
@@ -743,6 +759,7 @@ mod tests {
             .to_string()
             .contains("不属于当前销售单")
         );
+
         assert!(
             ensure_existing_acceptance_draft(&draft, &SalesOrderId::new("sales-order-1"), None)
                 .expect_err("显式草稿缺少版本必须拒绝")

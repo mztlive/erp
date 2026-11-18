@@ -52,6 +52,7 @@ impl SalesOrderCommandProcess {
         }
         current.ensure_first_submission_working_copy_editable()?;
         Self::check_first_contract_binding(db, access, &current, order, revision_id, executor).await?;
+
         let mut updated = order.clone();
         db.sales_orders().update(&mut updated, executor).await?;
         Ok(())
@@ -86,8 +87,10 @@ impl SalesOrderCommandProcess {
                     if !order.matches_version(req.version) {
                         return Err(Error::ConflictError("销售单版本已变化，请刷新后重试".into()));
                     }
+
                     verify_and_bind_contract(&db, &access, &mut order, &req, &command_actor, executor)
                         .await?;
+
                     db.sales_orders().update(&mut order, executor).await?;
                     let audit =
                         command_actor.resource_log("sales_order.bind_contract", "sales_order", id_owned)?;
@@ -96,6 +99,7 @@ impl SalesOrderCommandProcess {
                 })
             })
             .await?;
+
         self.command_result(id, actor, &sales_order::BIND_CONTRACT).await
     }
 }
@@ -166,6 +170,7 @@ impl SalesOrderCommandProcess {
         if current.contract_id == prepared.contract_id {
             return Ok(());
         }
+
         let req = BindSalesOrderContractRequest {
             version: current.base.version,
             contract_id: prepared
@@ -193,6 +198,7 @@ async fn verify_and_bind_contract(
 ) -> Result<()> {
     let (check, basis) = contract_binding_check(db, access, order, req, executor).await?;
     check.ensure_matches()?;
+
     if let Some(mut copy) = basis.working_copy {
         db.sales_order_working_copies().update(&mut copy, executor).await?;
     }
@@ -211,6 +217,7 @@ async fn contract_binding_check(
     if !order.matches_version(req.version) {
         return Err(Error::ConflictError("销售单版本已变化，请刷新后重试".into()));
     }
+
     let contract = access.load_contract(req.contract_id.as_ref(), executor).await?;
     access.related(req.contract_id.as_ref(), contract.customer_id.as_ref(), executor).await?;
     if contract.stable.status != ContractStatus::Effective {
@@ -219,6 +226,7 @@ async fn contract_binding_check(
     if contract.stable.current_revision_id.as_deref() != Some(req.requested_contract_revision_id.as_ref()) {
         return Err(Error::ConflictError("所选合同版本已变化，请刷新后重试".into()));
     }
+
     let revision = db
         .contract_revisions()
         .find_by_id(req.requested_contract_revision_id.as_ref(), executor)
@@ -229,6 +237,7 @@ async fn contract_binding_check(
     {
         return Err(Error::ConflictError("合同版本归属或结算主体已变化，请刷新后重试".into()));
     }
+
     // 在副本上执行领域关系守卫；预检不修改原对象。
     order.clone().bind_contract(req.contract_id.clone(), &contract.customer_id, "contract-check")?;
     let basis = SalesOrderService::new(db.clone()).contract_binding_basis(order, executor).await?;

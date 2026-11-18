@@ -113,6 +113,7 @@ impl TestApi {
             None => Body::empty(),
         };
         let request = builder.body(body).expect("HTTP 请求构造失败");
+
         let Ok(response) = self.router.clone().oneshot(request).await;
         let status = response.status().as_u16();
         let bytes = to_bytes(response.into_body(), MAX_RESPONSE_BYTES).await.expect("响应体读取失败");

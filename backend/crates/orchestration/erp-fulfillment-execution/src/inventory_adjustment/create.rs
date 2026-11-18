@@ -57,6 +57,7 @@ impl InventoryAdjustmentProcess {
         req.validate()?;
         let balance_id = req.balance_id.clone();
         let expected_balance_version = req.expected_balance_version;
+
         let id = StockAdjustmentId::new(next_id());
         let adjustment = StockAdjustment::new(
             id.clone(),
@@ -71,6 +72,7 @@ impl InventoryAdjustmentProcess {
             actor.id(),
         )?;
         let lines = build_adjustment_lines(&id, adjustment.reason_type, &req.lines)?;
+
         let audit =
             actor.clone().resource_log("stock_adjustment.create", "stock_adjustment", id.to_string())?;
         let document =
@@ -85,6 +87,7 @@ impl InventoryAdjustmentProcess {
                 actor.id().to_string(),
             ),
         };
+
         persist_created_adjustment(
             &self.db,
             CreatedAdjustmentPersist {
@@ -192,6 +195,7 @@ async fn validate_creation_source(
         .warehouse(persist.adjustment.warehouse_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
+
     let balance = db
         .inventory()
         .stock_balance(&persist.balance_id, executor)
@@ -226,6 +230,7 @@ async fn apply_created_adjustment(
         workflow,
         ..
     } = persist;
+
     // 提交资格沿已持久化的来源对象检查仓库范围，须先在同一事务内写入新单据。
     db.inventory().create_stock_adjustment_with_lines(&adjustment, &lines, executor).await?;
     let can_submit =
@@ -234,6 +239,7 @@ async fn apply_created_adjustment(
             Err(Error::Forbidden(_)) => false,
             Err(error) => return Err(error),
         };
+
     let binding =
         persist_bound_document(db, workflow.as_ref(), &mut document, &bind_command, &actor, executor).await?;
     persist_log(db, &audit, executor).await?;
@@ -259,6 +265,7 @@ fn created_adjustment_detail(
     } else {
         None
     };
+
     let approval = document_approval_view_with_history(
         Some(&binding),
         None,

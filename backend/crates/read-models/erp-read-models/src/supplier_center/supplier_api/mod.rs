@@ -129,6 +129,7 @@ mod tests {
             )
             .await;
         assert!(matches!(list, Err(Error::Internal(message)) if message == "测试授权设施不可用"));
+
         let detail = service
             .connection_detail_snapshot("connection", &actor(), &mut SnapshotExecutor::default())
             .await;
@@ -162,6 +163,7 @@ mod tests {
             assert_eq!(display.covers_one(&supplier_api::REFERENCES_OPTIONS), visible);
             assert_eq!(display.covers_one(&internal::CONNECTION_UPDATE_BUSINESS_PROFILE), visible);
             service.authorization.validate(&access, executor).await.unwrap();
+
             let (access, can_read_cost) = service.catalog_access(&actor(), executor).await.unwrap();
             assert_eq!(can_read_cost, visible);
             service.authorization.validate(&access, executor).await.unwrap();
@@ -178,6 +180,7 @@ mod tests {
         .await;
         let detail = service.connection_detail_access(&actor(), &mut SnapshotExecutor::default()).await;
         assert!(matches!(detail, Err(Error::Forbidden(_))));
+
         let catalog = service.catalog_access(&actor(), &mut SnapshotExecutor::default()).await;
         assert!(matches!(catalog, Err(Error::Forbidden(_))));
     }
@@ -190,6 +193,7 @@ mod tests {
         assert!(
             matches!(detail, Err(Error::ValidationError(reason)) if reason == "供应连接详情读取必须使用快照事务")
         );
+
         let query = serde_json::from_value::<CatalogQuery>(serde_json::json!({})).unwrap();
         let catalog =
             service.catalog_snapshot("connection", &query, &actor(), &mut ReadExecutor::default()).await;
@@ -208,6 +212,7 @@ mod tests {
         assert!(
             matches!(result, Err(IdentityError::ValidationError(reason)) if reason == "授权结果不能跨事务或读取阶段使用")
         );
+
         service.connection_detail_access(&actor(), executor).await.unwrap();
         let result = service.authorization.validate(&catalog, executor).await;
         assert!(

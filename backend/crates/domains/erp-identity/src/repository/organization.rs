@@ -112,6 +112,7 @@ impl<'a> OrganizationRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.advance(receipt.before.version, receipt.after.version, executor).await?;
+
         save_changed(self.db, ORG_UNITS, &receipt.before.units, &mut receipt.after.units, executor).await?;
         save_changed(
             self.db,
@@ -121,6 +122,7 @@ impl<'a> OrganizationRepository<'a> {
             executor,
         )
         .await?;
+
         Repository::new(self.db, ORG_CHANGES).create(receipt, executor).await
     }
 
@@ -128,6 +130,7 @@ impl<'a> OrganizationRepository<'a> {
     async fn advance(&self, expected: u64, next: u64, executor: &mut dyn Executor) -> Result<()> {
         let repository = Repository::<OrganizationRevision>::new(self.db, ORG_REVISIONS);
         let current = self.revision(executor).await?;
+
         if let Some(mut current) = current {
             if current.revision != expected {
                 return Err(persistence_core::Error::OptimisticLockingError);
@@ -135,6 +138,7 @@ impl<'a> OrganizationRepository<'a> {
             current.revision = next;
             return repository.update(&mut current, executor).await;
         }
+
         if expected != 0 {
             return Err(persistence_core::Error::OptimisticLockingError);
         }

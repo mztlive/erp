@@ -133,8 +133,10 @@ async fn require_sources(
             .ok_or_else(|| Error::NotFound("来源应付不存在".into()))?;
         ids.push(account.source_document_id);
     }
+
     let (permission, target) = request_target(request, action, &ids)?;
     rbac.authorization.require(actor, &permission, target, executor).await?;
+
     let mut orders = Vec::new();
     for id in ids {
         orders.push(
@@ -231,6 +233,7 @@ mod command_access_tests {
             .unwrap_err();
             assert!(matches!(error, Error::Internal(message) if message == "测试授权设施不可用"));
         }
+
         let error = authorized_request(
             &db,
             &authorization,

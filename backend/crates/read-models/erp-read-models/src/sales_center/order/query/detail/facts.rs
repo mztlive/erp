@@ -46,6 +46,7 @@ impl SalesOrderReadService {
     {
         let summary = self.db.receivable_accounts().sales_order_amount_summary(order_id, executor).await?;
         let binding = find_approval_binding(&self.db, document_id, executor).await.ok().flatten();
+
         let copy = self
             .db
             .sales_order_working_copies()
@@ -86,6 +87,7 @@ impl SalesOrderReadService {
             self.load_detail_batch_a(&order_id, executor).await?;
         let (receivable_summary, binding, working_copy_view) =
             self.load_detail_batch_b(&order_id, &order.base.id, executor).await?;
+
         let submission_ids = submissions
             .iter()
             .map(|item| SalesOrderSubmissionId::new(item.base.id.clone()))
@@ -95,6 +97,7 @@ impl SalesOrderReadService {
             .sales_order_submission_lines()
             .list_lines_by_submissions(&submission_ids, executor)
             .await?;
+
         Ok(DetailFacts {
             stable_lines: stable_lines
                 .into_iter()
@@ -144,6 +147,7 @@ fn assemble_submission_views(
     for line in lines {
         lines_by_submission.entry(line.submission_id.to_string()).or_default().push(line);
     }
+
     submissions
         .into_iter()
         .map(|submission| {

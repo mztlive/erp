@@ -91,6 +91,7 @@ mod tests {
         let instance = index_named(&indexes, "uk_approval_subject_snapshots_instance");
         assert_eq!(instance.keys, doc! { "approval_process_instance_id": 1 });
         assert_eq!(instance.options.as_ref().unwrap().unique, Some(true));
+
         assert_eq!(
             index_named(&indexes, "idx_approval_subject_snapshots_object").keys,
             doc! {

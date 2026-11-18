@@ -269,11 +269,14 @@ impl WorkbenchFactsReader<'_> {
             facts.extend(
                 inquiries.into_iter().map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))),
             );
+
             self.load_sales_order_facts(keys, &mut facts, executor).await?;
             self.load_purchase_order_facts(keys, &mut facts, executor).await?;
             self.load_fulfillment_operation_facts(keys, &mut facts, executor).await?;
+
             self.load_purchase_change_facts(keys, &mut facts, executor).await?;
             self.load_sales_change_review_facts(keys, &mut facts, executor).await?;
+
             self.load_receivable_account_facts(keys, &mut facts, executor).await?;
             self.load_payable_account_facts(keys, &mut facts, executor).await?;
             self.load_purchase_payment_request_facts(keys, &mut facts, executor).await?;
@@ -283,6 +286,7 @@ impl WorkbenchFactsReader<'_> {
             self.load_supplier_payment_facts(keys, &mut facts, executor).await?;
             self.load_supplier_refund_facts(keys, &mut facts, executor).await?;
             self.load_payment_reversal_facts(keys, &mut facts, executor).await?;
+
             self.load_independent_object_facts(keys, &mut facts, executor).await?;
             Ok(facts)
         })

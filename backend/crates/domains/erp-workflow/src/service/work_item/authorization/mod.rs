@@ -54,6 +54,7 @@ impl WorkItemAuthorization {
             .find_work_item(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".into()))?;
+
         self.service
             .require(
                 actor,

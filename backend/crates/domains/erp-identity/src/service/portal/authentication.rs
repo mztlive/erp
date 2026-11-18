@@ -24,6 +24,7 @@ impl PortalIdentityService {
     pub async fn authenticate(&self, request: &PortalLoginPayload) -> Result<PortalActor> {
         request.validate()?;
         let login = LoginAccount::new(&request.account)?;
+
         let stored = self.db.accounts().find_by_account(login.as_str(), &mut NoTransaction).await?;
         let secret = stored
             .as_ref()
@@ -34,10 +35,12 @@ impl PortalIdentityService {
             (Some(account), true) => account,
             _ => return Err(invalid_credentials()),
         };
+
         if let Some(secret) = password_check.into_upgraded_secret() {
             stored.secret = secret;
             self.db.accounts().update(&mut stored, &mut NoTransaction).await?;
         }
+
         let binding = self
             .db
             .portal_bindings()

@@ -151,6 +151,7 @@ impl SupplierFulfillmentProcess {
                 Box::pin(async move { process.investigation_input(&context, &actor, executor).await })
             })
             .await?;
+
         match input {
             InvestigationInput::Prepared(result) => Ok(result),
             InvestigationInput::Gateway(input) => self.call_investigation_gateway(*input).await,
@@ -174,6 +175,7 @@ impl SupplierFulfillmentProcess {
             executor,
         )
         .await?;
+
         let (order, target_action) = load_investigation_facts(&self.db, context, executor).await?;
         if context.action == SupplierOrderInvestigationAction::QueryResult {
             if let Some(resolution) = order.verified_resolution(&target_action).map(Into::into) {
@@ -184,6 +186,7 @@ impl SupplierFulfillmentProcess {
         } else {
             ensure_replay_safe(&self.db, &order, &target_action, executor).await?;
         }
+
         let connection = self
             .db
             .supplier_api_connections()
@@ -231,10 +234,12 @@ impl InvestigationIntent {
         executor: &mut dyn Executor,
     ) -> Result<Option<PreparedInvestigation>> {
         self.authorize(db, executor).await?;
+
         let (order, target_action) = load_investigation_facts(db, &self.context, executor).await?;
         if self.context.action == SupplierOrderInvestigationAction::Replay {
             ensure_replay_safe(db, &order, &target_action, executor).await?;
         }
+
         if let Some(existing) =
             db.supplier_order_actions().find_by_id(&self.identity.evidence_id, executor).await?
         {
@@ -249,6 +254,7 @@ impl InvestigationIntent {
                 .map(|_| parse_prepared_investigation(&existing, &self.context.subject()))
                 .transpose()?);
         }
+
         let intent = prepare_intent(
             &self.context.subject(),
             self.identity.evidence_id,
@@ -346,6 +352,7 @@ pub(super) async fn load_investigation_facts(
     order
         .ensure_version(context.expected_order_version)
         .map_err(|_| Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string()))?;
+
     let target_action = db
         .supplier_order_actions()
         .find_by_id(&context.target_action_id, executor)

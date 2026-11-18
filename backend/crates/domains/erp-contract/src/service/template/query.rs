@@ -46,6 +46,7 @@ impl ContractTemplateService {
         self.authorization
             .require(actor, &contract::TEMPLATES_LIST, AccessTarget::Operation, executor)
             .await?;
+
         let result = templates_page(&self.db, params, executor).await?;
         Ok(PageView {
             items: result.items.into_iter().map(Into::into).collect(),
@@ -90,6 +91,7 @@ impl ContractTemplateService {
         self.authorization
             .require(actor, &contract::TEMPLATES_APPLICATIONS, AccessTarget::Operation, executor)
             .await?;
+
         let result = applications_page(&self.db, actor.id(), params, executor).await?;
         Ok(PageView {
             items: result.items.into_iter().map(Into::into).collect(),

@@ -73,6 +73,7 @@ impl SupplierApiGovernanceProcess {
                     authorization
                         .require(&actor, &action_permission(action), AccessTarget::Operation, executor)
                         .await?;
+
                     let connection = SupplierApiService::new(db.clone())
                         .apply_reference(
                             &connection_id_value,
@@ -83,6 +84,7 @@ impl SupplierApiGovernanceProcess {
                             executor,
                         )
                         .await?;
+
                     persist_command_receipt(
                         &db,
                         CommandReceiptWrite {
@@ -230,6 +232,7 @@ mod tests {
         assert!(
             matches!(reference_target(&db, &authorization, &actor, &permission, "connection", 1, &mut ReadExecutor::default()).await, Err(Error::ValidationError(message)) if message == "写入授权必须使用快照事务")
         );
+
         assert!(
             matches!(reference_target(&db, &authorization, &actor, &permission, "connection", 1, &mut SnapshotExecutor::default()).await, Err(Error::Internal(message)) if message == "测试授权设施不可用")
         );
@@ -394,6 +397,7 @@ mod tests {
             matches!(error, Error::BusinessLogicError(message) if message.starts_with("REFERENCE_TARGET_MISMATCH:"))
         );
         assert!(commits.lock().unwrap().is_empty());
+
         execute_reference(RuntimeReference {
             registry: &runtime,
             target,

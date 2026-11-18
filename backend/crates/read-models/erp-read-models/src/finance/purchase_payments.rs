@@ -51,8 +51,10 @@ pub(crate) async fn payment_records(
     let ids = entries.into_iter().map(|e| e.base.id.into()).collect::<Vec<_>>();
     let allocations = db.payment_allocations().find_allocations_by_entries(&ids, executor).await?;
     let totals = effective_payment_totals(&allocations);
+
     let ids = totals.keys().map(|id| SupplierPaymentId::new(id.clone())).collect::<Vec<_>>();
     let payments = db.supplier_payments().find_supplier_payments_by_ids(&ids, executor).await?;
+
     let mut result = vec![];
     for payment in payments.into_iter().filter(|p| p.status == SupplierPaymentStatus::Posted) {
         let Some(amount) = totals.get(&payment.base.id) else { continue };

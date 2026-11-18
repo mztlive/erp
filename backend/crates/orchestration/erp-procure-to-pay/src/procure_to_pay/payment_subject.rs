@@ -43,6 +43,7 @@ fn subject_from_revision(
     if revision.sales_order_id != *sales_order_id || revision.base.is_deleted() {
         return Err(Error::ConflictError("采购引用的正式销售版本与来源销售单不一致".into()));
     }
+
     let name = revision
         .settlement_party_snapshot
         .as_ref()
@@ -131,6 +132,7 @@ mod tests {
         let frozen = subject_from_revision(&SalesOrderId::new("sales-1"), &formal).unwrap();
         assert_eq!(frozen.settlement_party_id.as_ref(), "our-company");
         assert_eq!(frozen.sales_order_revision_id.as_ref(), "sales-v1");
+
         formal.settlement_party_id = PartyId::new("other-company");
         let changed = subject_from_revision(&SalesOrderId::new("sales-1"), &formal).unwrap();
         assert_ne!(frozen, changed);
@@ -141,6 +143,7 @@ mod tests {
     fn subject_rejects_unrelated_source_and_missing_frozen_name() {
         let mut formal = revision();
         assert!(subject_from_revision(&SalesOrderId::new("unrelated-sales"), &formal).is_err());
+
         formal.settlement_party_snapshot = None;
         assert!(subject_from_revision(&SalesOrderId::new("sales-1"), &formal).is_err());
     }

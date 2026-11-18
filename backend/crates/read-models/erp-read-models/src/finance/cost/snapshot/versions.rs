@@ -86,10 +86,12 @@ impl CostReadModel {
                     access.context.ensure_current(executor)?;
                     access.whole.ensure_current(executor)?;
                     access.require_filter(&filter)?;
+
                     let facts = this.candidate_versions(&filter, id.as_deref(), &access, executor).await?;
                     this.authorized_orders(&facts, &mut access, executor).await?;
                     this.whole_orders(&facts, &access.whole, executor).await?.hash(&mut access.fingerprint);
                     facts.hash(&mut access.fingerprint);
+
                     // 同一根凭证只在全部读取结束后交付一次。
                     access.context.validate(executor).await?;
                     Ok(format!("{:x}", access.fingerprint.finish()))
@@ -118,6 +120,7 @@ impl CostReadModel {
         if entries.len() > ENTRY_LIMIT {
             return Err(Error::ValidationError("成本查询超过上限，请指定供应商或成本类型".into()));
         }
+
         let ids = entries.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
         let mut allocations = Vec::new();
         for chunk in ids.chunks(500) {
@@ -150,6 +153,7 @@ impl CostReadModel {
                     .map(|row| row.id),
             );
         }
+
         access.ensure_current(executor)?;
         Ok(result)
     }
@@ -224,18 +228,23 @@ mod tests {
     #[test]
     fn complete_scope_fingerprint_detects_unreturned_cost_and_allocation_changes() {
         let original = version(&facts());
+
         let mut changed = facts();
         changed.entries[1].version += 1;
         assert_ne!(original, version(&changed));
+
         let mut changed = facts();
         changed.allocations[1].version += 1;
         assert_ne!(original, version(&changed));
+
         let mut changed = facts();
         changed.entries.pop();
         assert_ne!(original, version(&changed));
+
         let mut changed = facts();
         changed.allocations.pop();
         assert_ne!(original, version(&changed));
+
         let mut changed = facts();
         changed.entries.push(CostEntryScopeVersion { id: "new-cost".into(), version: 1 });
         assert_ne!(original, version(&changed));
@@ -249,6 +258,7 @@ mod tests {
         let mut allocations = vec![allocation("a", "sales-a", "60"), allocation("b", "sales-b", "40")];
         allocations[0].base.version = 2;
         allocations[1].base.version = 4;
+
         let original = VersionFacts::from_rows(&entries, &allocations);
         let minimal = VersionFacts {
             entries: serde_json::from_value(serde_json::json!([
@@ -262,6 +272,7 @@ mod tests {
             .unwrap(),
         };
         assert_eq!(version(&original), version(&minimal));
+
         let mut changed = allocations;
         changed[1].base.version += 1;
         assert_ne!(version(&original), version(&VersionFacts::from_rows(&entries, &changed)));

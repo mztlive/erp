@@ -136,6 +136,7 @@ mod tests {
         let fallback = statement_fact(statement.clone());
         assert_eq!(fallback.owner_id, FactValue::Known(Some("preparer".into())));
         assert_eq!(fallback.assignee_id, FactValue::Known(Some("preparer".into())));
+
         statement.difference_handler_user_id = "handler".into();
         let facts = statement_fact(statement);
         assert_eq!(facts.id, "statement");

@@ -22,6 +22,7 @@ pub(super) fn validate(downloaded: DownloadedSourceImage) -> Result<VerifiedSour
     if bytes.is_empty() || bytes.len() > MAX_SOURCE_IMAGE_BYTES {
         return Err(invalid_image());
     }
+
     let format = image::guess_format(&bytes).map_err(|_| invalid_image())?;
     let (content_type, extension) = match format {
         ImageFormat::Png => ("image/png", "png"),
@@ -35,6 +36,7 @@ pub(super) fn validate(downloaded: DownloadedSourceImage) -> Result<VerifiedSour
         return Err(Error::ValidationError("供应商图片实际格式与内容类型不一致".into()));
     }
     decode(&bytes, format)?;
+
     let digest = hex::encode(Sha256::digest(&bytes));
     Ok(VerifiedSourceImage { bytes, content_type, extension, digest })
 }

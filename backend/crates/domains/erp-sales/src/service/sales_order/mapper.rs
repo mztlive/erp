@@ -84,6 +84,7 @@ pub fn build_working_copy(
     let line_datas = build_working_copy_line_datas(stable_lines, &draft.lines)?;
     let lines = materialize_working_copy_lines(&working_copy_id, line_datas.iter().cloned())?;
     let (gross, net, tax) = SalesOrderWorkingCopyLine::amount_totals(&lines);
+
     let snapshot = header_snapshot(draft)?;
     let working_copy = SalesOrderWorkingCopy::new(
         working_copy_id,
@@ -135,6 +136,7 @@ fn build_working_copy_line_datas(
     for stable in stable_lines {
         stable_by_no.entry(stable.line_no).or_insert(stable);
     }
+
     let mut datas = Vec::with_capacity(lines.len());
     for line in lines {
         let stable_id = stable_by_no
@@ -557,6 +559,7 @@ mod tests {
         let mut duplicate = stable[0].clone();
         duplicate.base.id = "later-duplicate".into();
         stable.push(duplicate);
+
         let result = build_working_copy_line_datas(&stable, &requests).unwrap();
         assert_eq!(
             result.iter().map(|line| line.sales_order_line_id.as_ref()).collect::<Vec<_>>(),
@@ -641,6 +644,7 @@ mod tests {
         let mut lines = (1..=2000).map(draft_line).collect::<Vec<_>>();
         let stable = build_stable_lines(&SalesOrderId::new("order-1"), &lines).unwrap();
         lines.reverse();
+
         let started = Stopwatch::now();
         for _ in 0..20 {
             let mapped = build_working_copy_line_datas(&stable, &lines).unwrap();

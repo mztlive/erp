@@ -31,6 +31,7 @@ async fn period_basis_requires_cost_list_without_requiring_sales_list_or_object_
             Err(Error::Forbidden(_))
         ));
     }
+
     identity.state.lock().unwrap().grants = vec![("cost".into(), vec![cost::ENTRY_LIST])];
     identity.state.lock().unwrap().denied_scope = true;
     service
@@ -42,6 +43,7 @@ async fn period_basis_requires_cost_list_without_requiring_sales_list_or_object_
         )
         .await
         .unwrap();
+
     assert!(matches!(
         service
             .require(
@@ -79,12 +81,14 @@ async fn quality_history_keeps_independent_customer_qualification_and_sales_list
             Err(Error::Forbidden(_))
         ));
     }
+
     identity.state.lock().unwrap().grants =
         vec![("sales".into(), vec![sales_order::LIST]), ("customers".into(), vec![customer::LIST])];
     identity.role_scopes.lock().unwrap().extend([
         (("sales".into(), sales_order::LIST), ScopeClause { self_owned: true, ..Default::default() }),
         (("customers".into(), customer::LIST), ScopeClause { company: true, ..Default::default() }),
     ]);
+
     let mut executor = SnapshotExecutor::default();
     let history = service.query(&actor(), &internal::CUSTOMER_QUALITY_HISTORY, &mut executor).await.unwrap();
     let baseline =
@@ -121,6 +125,7 @@ async fn delivery_options_requires_update_and_detail_independently_without_chang
             Err(Error::Forbidden(_))
         ));
     }
+
     identity.state.lock().unwrap().grants = vec![
         ("reader".into(), vec![purchase_order::DETAIL]),
         ("editor".into(), vec![purchase_order::SAVE_DRAFT]),
@@ -136,6 +141,7 @@ async fn delivery_options_requires_update_and_detail_independently_without_chang
             user_limit: None,
         },
     );
+
     let mut executor = SnapshotExecutor::default();
     let access =
         service.query(&actor(), &internal::PURCHASE_DELIVERY_OPTIONS_READ, &mut executor).await.unwrap();

@@ -102,6 +102,7 @@ impl super::super::WorkItemFactsReader {
         if revision_ids.is_empty() {
             return Ok(HashMap::new());
         }
+
         let names_by_revision = self
             .db
             .party_revisions()
@@ -110,6 +111,7 @@ impl super::super::WorkItemFactsReader {
             .into_iter()
             .map(|revision| (revision.base.id.clone(), revision.legal_name))
             .collect::<HashMap<_, _>>();
+
         Ok(parties
             .iter()
             .filter_map(|party| {
@@ -139,9 +141,11 @@ impl super::super::WorkItemFactsReader {
         if customer_ids.is_empty() {
             return Ok(HashMap::new());
         }
+
         let customers = self.db.customer_accounts().list_active_by_ids(customer_ids, executor).await?;
         let party_ids = customers.iter().map(|item| item.party_id.to_string()).collect::<Vec<_>>();
         let party_names = self.party_legal_names(&party_ids, executor).await?;
+
         Ok(customers
             .into_iter()
             .map(|customer| {
@@ -171,9 +175,11 @@ impl super::super::WorkItemFactsReader {
         if supplier_ids.is_empty() {
             return Ok(HashMap::new());
         }
+
         let suppliers = self.db.supplier_accounts().list_active_by_ids(supplier_ids, executor).await?;
         let party_ids = suppliers.iter().map(|item| item.party_id.to_string()).collect::<Vec<_>>();
         let party_names = self.party_legal_names(&party_ids, executor).await?;
+
         Ok(suppliers
             .into_iter()
             .map(|supplier| {

@@ -56,6 +56,7 @@ impl OfferSource for JdVopConnector {
                 membership: Some(membership),
             });
         }
+
         let page: PoolPage = reader
             .read(JdVopReadRequest::PoolPage {
                 pool_id: cursor.pools[cursor.pool].clone(),
@@ -66,9 +67,11 @@ impl OfferSource for JdVopConnector {
         if page.skus.len() > usize::try_from(scan.limit.get()).expect("页大小不超过100") {
             return Err(mapping("京东目录返回数量超过请求上限"));
         }
+
         let ids = page.skus.into_iter().map(|id| id.0).collect::<BTreeSet<_>>();
         let members = ids.iter().map(|id| SupplierSku { product_id: None, spec_id: id.clone() }).collect();
         let (items, skipped) = self.scan_offers(ids).await?;
+
         let previous = cursor.clone();
         let has_next = cursor.advance(&page.offset.0, &page.remain_page.0)?;
         let pool_finished = page.remain_page.0 == "0";
@@ -173,12 +176,14 @@ impl JdVopConnector {
         if detail.sku_id.0 != id {
             return Err(mapping("京东商品详情与请求编号不一致"));
         }
+
         let price: Vec<SellPrice> =
             reader.read(JdVopReadRequest::Price { sku_id: id.into(), quantity: "1".into() }).await?;
         let images: Vec<SkuImages> = reader.read(JdVopReadRequest::Images { sku_id: id.into() }).await?;
         if price.len() > 1 || images.len() > 1 {
             return Err(mapping("京东单项读取返回重复商品"));
         }
+
         let category_ids = detail
             .category
             .as_deref()
@@ -195,6 +200,7 @@ impl JdVopConnector {
         } else {
             reader.read(JdVopReadRequest::Categories { category_ids }).await?
         };
+
         self.mapper.transform(JdVopOffer {
             detail: &detail,
             price: price.first(),
@@ -222,6 +228,7 @@ impl JdVopConnector {
         let mut mac = cursor_mac(&self.cursor_secret);
         mac.update(&body);
         mac.verify_slice(&signature).map_err(|_| mapping("京东目录检查点已失效"))?;
+
         let cursor: Cursor = serde_json::from_slice(&body).map_err(|_| mapping("京东目录检查点格式无效"))?;
         if cursor.binding != self.binding
             || cursor.pool >= cursor.pools.len()
@@ -367,6 +374,7 @@ mod tests {
                 json!({"skuPoolList":[{"bizPoolId":"1","name":"one"},{"bizPoolId":"2","name":"two"}]}),
             ),
         ]);
+
         let first = connector.scan(&scan(None)).await.unwrap();
         assert!(first.items.is_empty());
         assert!(first.next.is_some());
@@ -394,6 +402,7 @@ mod tests {
                 json!({"skuPoolList":[{"bizPoolId":"1","name":"one"},{"bizPoolId":"2","name":"new authorization"}]}),
             ),
         ]);
+
         let page = connector.scan_scoped(&scan(None)).await.unwrap();
         assert!(page.page.next.is_none());
         let proof = page.membership.unwrap();
@@ -467,6 +476,7 @@ mod tests {
         ]);
         assert!(connector.scan(&scan(None)).await.is_err());
         assert_eq!(transport.requests.lock().unwrap().len(), 2);
+
         let cursor = Cursor {
             binding: connector.binding.clone(),
             pools: vec!["1".into()],
@@ -475,6 +485,7 @@ mod tests {
         };
         let token = connector.encode_cursor(&cursor).unwrap();
         assert_eq!(connector.decode_cursor(&token).unwrap().offset, "123");
+
         let (other, _) = super::tests::connector(vec![]);
         let mut other = other;
         other.binding = "other-account".into();
@@ -508,6 +519,7 @@ mod tests {
             ),
             response(JdVopReadRequest::Pools, json!({"skuPoolList":[{"bizPoolId":"1","name":"one"}]})),
         ]);
+
         let result = connector.scan(&scan(None)).await.unwrap();
         assert_eq!(result.items.len(), 1);
         let stamp = &result.items[0].stamp;
@@ -534,6 +546,7 @@ mod tests {
         let mut responses = item_responses("123", detail.clone());
         responses.extend(item_responses("123", detail));
         let (connector, transport) = connector(responses);
+
         let Lookup::Found(snapshot) =
             connector.offer(&SupplierSku { product_id: None, spec_id: "123".into() }).await.unwrap()
         else {
@@ -542,6 +555,7 @@ mod tests {
         assert_eq!(snapshot.value.sku.product_id.as_deref(), Some("sku:123"));
         assert_eq!(serde_json::to_value(snapshot.stamp.revision).unwrap(), "Unversioned");
         assert!(snapshot.stamp.changed_at.is_none());
+
         let failure = connector
             .offer(&SupplierSku { product_id: Some("spu:other".into()), spec_id: "123".into() })
             .await
@@ -574,13 +588,16 @@ mod tests {
         responses.extend(item_responses("123", json!({"skuId":"123","skuName":"bad","spuId":"10"})));
         responses.extend(item_responses("124", json!({"skuId":"124","skuName":"good"})));
         let (connector, transport) = connector(responses);
+
         let page = connector.scan_scoped(&scan(None)).await.unwrap();
         assert_eq!(page.page.items.len(), 1);
         let OfferChange::Upsert(offer) = &page.page.items[0].value else { panic!("expected valid offer") };
         assert_eq!(offer.sku.spec_id, "124");
+
         assert_eq!(page.skipped.len(), 1);
         assert!(page.skipped[0].contains("京东 SKU 123：JD_VOP_MAPPING_INVALID"));
         assert!(page.skipped[0].contains("SPU缺少共有名称"));
+
         assert_eq!(page.membership.unwrap().members.len(), 2);
         assert_eq!(connector.decode_cursor(page.page.next.as_deref().unwrap()).unwrap().offset, "124");
         assert_eq!(transport.requests.lock().unwrap().len(), 8);

@@ -52,6 +52,7 @@ impl ScheduledRunStore for MongoScheduledRuns {
             mongo_ops::find_many(&self.0, doc! {"app":app,"state":"accepted"}, options, &mut NoTransaction)
                 .await?;
         let Some(mut run) = rows.pop() else { return Ok(None) };
+
         let changed = mongo_ops::update_one(
             &self.0,
             doc! {"id":&run.base.id,"state":"accepted"},
@@ -63,6 +64,7 @@ impl ScheduledRunStore for MongoScheduledRuns {
         if changed.modified_count == 0 {
             return Ok(None);
         }
+
         run.state = ScheduledState::Running;
         run.owner = Some(owner.into());
         run.base.version += 1;
@@ -108,6 +110,7 @@ impl ScheduledRunStore for MongoScheduledRuns {
                 DateTime::from_millis(now.saturating_add(30 * 86400).saturating_mul(1000)),
             );
         }
+
         mongo_ops::update_one(
             &self.0,
             doc! {"id":&run.base.id,"state":"completed","callback_done":false},

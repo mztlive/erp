@@ -59,6 +59,7 @@ impl RbacService {
                 role
             },
         };
+
         self.policy_store
             .replace_role_permissions(
                 &role_key(&role.base.id),
@@ -66,6 +67,7 @@ impl RbacService {
                 executor,
             )
             .await?;
+
         let audit =
             self.audit.resource_log(actor.clone(), action, "role", std::mem::take(&mut role.base.id))?;
         self.audit.persist(&audit, executor).await
@@ -91,6 +93,7 @@ impl RbacService {
             executor,
         )
         .await?;
+
         let audit = self.audit.resource_log(actor.clone(), "admin.role.update", "admin", planned.user_id)?;
         self.audit.persist(&audit, executor).await
     }

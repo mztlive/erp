@@ -120,10 +120,12 @@ async fn execute_final_post<P: PaymentReversalPostingPort>(
     let mut reversal = port.prepare(executor).await?;
     let payment = port.payment(&reversal, executor).await?;
     port.limit(&reversal, &payment, executor).await?;
+
     let (write, affected_accounts) = port.settlements(&reversal, payment, executor).await?;
     for account_id in affected_accounts {
         port.task(&account_id, executor).await?;
     }
+
     port.reverse_finance(write, executor).await?;
     port.post_reversal(&mut reversal, executor).await?;
     port.audit(&reversal, executor).await
@@ -297,6 +299,7 @@ mod tests {
             fail_at: None,
             calls: Mutex::new(Vec::new()),
         };
+
         execute_final_post(&port, &mut executor).await.unwrap();
         assert_eq!(*port.calls.lock().unwrap(), STEPS);
     }
@@ -310,6 +313,7 @@ mod tests {
                 fail_at: Some(index),
                 calls: Mutex::new(Vec::new()),
             };
+
             let error = execute_final_post(&port, &mut executor).await.unwrap_err();
             assert!(matches!(error,Error::ConflictError(message) if message==format!("failure {index}")));
             assert_eq!(*port.calls.lock().unwrap(), STEPS[..=index]);

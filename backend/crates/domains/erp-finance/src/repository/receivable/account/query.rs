@@ -169,10 +169,10 @@ impl ReceivableAccountRepositoryExt for persistence_core::Repository<'_, Receiva
             .limit(filter.limit())
             .projection(receivable_account_projection())
             .build();
+
         let collection = self.collection().clone_with_type::<ReceivableAccountRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 

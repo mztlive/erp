@@ -24,15 +24,19 @@ fn command_replay_is_bound_to_supplier_and_fingerprint_stable() {
         },
     )
     .unwrap();
+
     assert!(command.ensure_replayable("update", Some("supplier-1"), FP1).is_ok());
     assert!(command.ensure_replayable("update", Some("supplier-1"), FP1_V1).is_ok());
+
     let replayed = command_view(command.clone());
     assert_eq!(replayed.effective_from, "2026-01-01");
     assert_eq!(replayed.recorded_at, command.base.created_at);
     assert_eq!(replayed.change_reason, "修订");
+
     assert!(command.ensure_replayable("update", Some("supplier-2"), FP1).is_err());
     assert!(command.ensure_replayable("update", Some("supplier-1"), FP2).is_err());
     assert!(command.ensure_replayable("create", Some("supplier-1"), FP1).is_err());
+
     assert!(SupplierProfileCommand::ensure_version(3, 3).is_ok());
     assert!(SupplierProfileCommand::ensure_version(3, 2).is_err());
     assert!(matches!(
@@ -43,6 +47,7 @@ fn command_replay_is_bound_to_supplier_and_fingerprint_stable() {
         SupplierProfileCommand::required_create_identity(Some(" SUP-001 "), "供应商编号").unwrap(),
         "SUP-001"
     );
+
     let req1 = SaveSupplierProfileRequest {
         idempotency_key: "key-1".to_string(),
         party_no: Some("PARTY-1".to_string()),
@@ -84,13 +89,16 @@ fn command_replay_is_bound_to_supplier_and_fingerprint_stable() {
     assert_eq!(fp1, fp2);
     assert!(fp1.starts_with("sha256-v1:"));
     assert_eq!(fp1.len(), "sha256-v1:".len() + 64);
+
     req2.legal_name = "不同".to_string();
     let fp3 = req2.fingerprint().unwrap();
     assert_ne!(fp1, fp3);
+
     assert!(SaveSupplierProfileRequest::required_create_identity(None, "主体编号").is_err());
     assert!(SaveSupplierProfileRequest::ensure_version(1, 2).is_err());
     let digest = fp1.strip_prefix("sha256-v1:").unwrap();
     assert!(digest.chars().all(|c| c.is_ascii_hexdigit()));
+
     // 兼容旧裸 hex：存储为裸 hex 的命令仍可与新版指纹回放
     let bare = fp1.strip_prefix("sha256-v1:").unwrap().to_string();
     let cmd_bare = SupplierProfileCommand::new(

@@ -54,6 +54,7 @@ impl SellableProjectionRefresher {
     /// 读取或写入失败时返回错误；已完成的标记与保存保留，下一轮继续。
     pub async fn run_due(&self) -> Result<usize> {
         supplier_catalog::expire_availability(&self.db, Instant::now(), &mut NoTransaction).await?;
+
         let (now, today) = (Instant::now().unix_secs(), BusinessDate::today());
         let store = self.db.sellable_sku_projections();
         let state = self.prepare_state(now, today).await?;
@@ -61,8 +62,10 @@ impl SellableProjectionRefresher {
             store.mark_all(&mut NoTransaction).await?;
             store.advance(state.watermarks, Some(today), &mut NoTransaction).await?;
         }
+
         self.mark_changes(state.watermarks.scan_windows(now)).await?;
         store.advance(state.watermarks.advanced(now), None, &mut NoTransaction).await?;
+
         let saved = self.recompute_batches(now, today).await?;
         if !state.ready && store.dirty_count(&mut NoTransaction).await? == 0 {
             store.mark_ready(state.version, &mut NoTransaction).await?;
@@ -89,9 +92,11 @@ impl SellableProjectionRefresher {
         if !state.serves_list() {
             return Ok(false);
         }
+
         let now = Instant::now().unix_secs();
         self.mark_changes(vec![state.watermarks.catch_up_window(now)]).await?;
         store.advance(state.watermarks.fresh_advanced(now), None, &mut NoTransaction).await?;
+
         let pending = store.dirty_batch(CATCH_UP_LIMIT as i64 + 1, &mut NoTransaction).await?;
         if !pending.is_empty() && pending.len() <= CATCH_UP_LIMIT {
             self.recompute(pending, now, BusinessDate::today()).await?;
@@ -106,8 +111,10 @@ impl SellableProjectionRefresher {
         if let Some(state) = state.filter(|state| !SellableSkuProjectionState::needs_rebuild(Some(state))) {
             return Ok(state);
         }
+
         let sku_ids = store.all_sku_ids(&mut NoTransaction).await?;
         store.mark_skus(&sku_ids, &mut NoTransaction).await?;
+
         let state = SellableSkuProjectionState::rebuilt(now, today);
         store.begin_rebuild(&state, &mut NoTransaction).await?;
         tracing::info!(sku_count = sku_ids.len(), "公司商品池预算投影开始全量构建");
@@ -146,6 +153,7 @@ impl SellableProjectionRefresher {
         if marks.is_empty() {
             return Ok(0);
         }
+
         let sku_ids = marks.iter().map(|mark| mark.id.clone()).collect::<Vec<_>>();
         let query = CatalogSupplyRepository::new(&self.db);
         let rows = query.find_sellable_skus_by_ids(&sku_ids, today, &mut NoTransaction).await?;
@@ -153,6 +161,7 @@ impl SellableProjectionRefresher {
             .into_iter()
             .map(|row| (row.sku_id.clone(), row))
             .collect::<HashMap<String, SellableSkuRow>>();
+
         let store = self.db.sellable_sku_projections();
         let mut saved = 0;
         for mark in marks {

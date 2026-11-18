@@ -172,6 +172,7 @@ impl<T> PurchaseCommandReceipt<T> {
         {
             return Err(Error::from("采购命令身份不能为空"));
         }
+
         let mut parts = vec![actor_id, action];
         if let Some(target) = target_id {
             parts.push(target);
@@ -241,6 +242,7 @@ impl<T: PurchaseReceiptResult> PurchaseCommandReceipt<T> {
             result,
             audit_event_id,
         };
+
         if !value.valid() {
             return Err(Error::from("采购命令回执结果无效"));
         }
@@ -506,6 +508,7 @@ mod tests {
         let record =
             PurchaseCommandReceipt::new(&identity, &"a".repeat(64), payload.clone(), "audit-event".into())
                 .unwrap();
+
         let stored = serde_json::to_string(&record).unwrap();
         assert!(!stored.contains("raw-secret-key"));
         let decoded: PurchaseCommandReceipt<T> = serde_json::from_str(&stored).unwrap();
@@ -515,16 +518,19 @@ mod tests {
                 .into_payload(),
             payload
         );
+
         assert!(matches!(
             PurchaseCommandReceipt::decode(decoded.clone(), &identity, &"b".repeat(64)),
             Err(PurchaseCommandReceiptError::PayloadConflict)
         ));
+
         let mut corrupted = decoded.clone();
         corrupted.result_schema_version = 2;
         assert!(matches!(
             PurchaseCommandReceipt::decode(corrupted, &identity, &"a".repeat(64)),
             Err(PurchaseCommandReceiptError::Corrupted(_))
         ));
+
         let mut other_identity = identity.clone();
         other_identity.idempotency_key_digest.digest = "b".repeat(64);
         assert!(matches!(
@@ -663,6 +669,7 @@ mod tests {
             "event".into(),
         )
         .unwrap();
+
         let mut cases = Vec::new();
         let mut changed = record.clone();
         changed.base.deleted_at = 1;
@@ -688,6 +695,7 @@ mod tests {
         let mut changed = record.clone();
         changed.command.idempotency_key_digest.schema_version = 2;
         cases.push(changed);
+
         for changed in cases {
             let encoded = serde_json::to_string(&changed).unwrap();
             let decoded = serde_json::from_str(&encoded).unwrap();
@@ -696,6 +704,7 @@ mod tests {
                 Err(PurchaseCommandReceiptError::Corrupted(_))
             ));
         }
+
         let mut other_actor = record;
         other_actor.command.actor_id = "actor-2".into();
         assert!(matches!(

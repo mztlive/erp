@@ -109,6 +109,7 @@ impl ReturnsProcess {
         let reversal = new_payment_reversal(req, actor.id())?;
         persist_created_payment_reversal(&self.db, &self.rbac, reversal.clone(), actor.clone(), executor)
             .await?;
+
         self.payment_reversal_result_read(
             &reversal.base.id,
             actor,
@@ -171,6 +172,7 @@ impl ReturnsProcess {
             command_receipt: req.command_receipt(id, actor.id())?,
             actor: actor.clone(),
         };
+
         let process = self.clone();
         let command = submission.clone();
         let persisted = self
@@ -180,6 +182,7 @@ impl ReturnsProcess {
                 Box::pin(async move { process.submit_payment_reversal_stage(req, &command, executor).await })
             })
             .await;
+
         self.finish_reversal_submit(&submission, persisted).await?;
         self.payment_reversal_result(
             &submission.id,
@@ -201,6 +204,7 @@ impl ReturnsProcess {
         if self.replay_reversal_submit_stage(submission, executor).await?.is_some() {
             return Ok(());
         }
+
         let id = submission.id.as_str();
         let adapter = payment_reversal_adapter()?;
         let mut reversal = self.domain().load_payment_reversal(id, executor).await?;
@@ -273,6 +277,7 @@ impl ReturnsProcess {
         let mut reversal = self.domain().load_payment_reversal(id, executor).await?;
         conflict_if_stale_version(reversal.matches_version(req.expected_version))?;
         self.persist_cancelled_payment_reversal(id, &mut reversal, &req, actor, executor).await?;
+
         self.payment_reversal_result_read(
             id,
             actor,
@@ -301,12 +306,14 @@ impl ReturnsProcess {
         let subject = payment_reversal_subject_ref(id)?;
         let binding = find_approval_binding(&self.db, id, executor).await.map_err(crate::Error::from)?;
         let binding = require_payment_reversal_binding(binding.as_ref())?.clone();
+
         let now = Instant::now();
         let (organization_id, supplier_id) =
             load_payment_reversal_context(&self.db, &reversal.original_supplier_payment_id, executor).await?;
         let snapshot =
             build_payment_reversal_snapshot(&reversal, &organization_id, &supplier_id, actor.id(), now)?;
         let _ = payment_reversal_object_readable(&organization_id, actor.id())?;
+
         let version = reversal.approval_subject_version;
         let existing_receipt =
             load_payment_reversal_start_receipt(&self.db, &subject, version, &idempotency_key, executor)
@@ -326,6 +333,7 @@ impl ReturnsProcess {
             receipt: existing_receipt,
             now,
         })?)?;
+
         persist_payment_reversal_start(
             &self.db,
             &self.rbac,
@@ -365,6 +373,7 @@ impl ReturnsProcess {
         let runtime =
             load_cancel_runtime(&self.db, &binding, &subject, reversal.approval_subject_version, executor)
                 .await?;
+
         let now = Instant::now();
         let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
         let input = build_payment_reversal_cancel_input(
@@ -376,12 +385,14 @@ impl ReturnsProcess {
             now,
         )?;
         let prepared = prepare_cancel(input)?;
+
         execute_payment_reversal_domain_action(reversal, adapter.cancel_action)?;
         let audit = actor.clone().resource_log(
             "payment_reversal.cancel_approval",
             "payment_reversal",
             id.to_string(),
         )?;
+
         persist_payment_reversal_cancel(
             &self.db,
             &self.rbac,
@@ -425,6 +436,7 @@ async fn persist_created_payment_reversal(
             executor,
         )
         .await?;
+
     let (organization_id, _) =
         load_payment_reversal_context(db, &reversal.original_supplier_payment_id, executor).await?;
     let bind_command = BindPublishedDefinitionCommand {

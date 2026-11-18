@@ -94,6 +94,7 @@ impl PurchaseSupplyWarningReader {
         if ids.len() > 10_000 {
             return Err(Error::ValidationError("采购选源超过提示读取上限".into()));
         }
+
         let availability = self
             .db
             .supplier_offering_availabilities()
@@ -110,6 +111,7 @@ impl PurchaseSupplyWarningReader {
             .into_iter()
             .map(|fact| (fact.base.id.clone(), fact))
             .collect::<BTreeMap<_, _>>();
+
         Ok(sources.into_iter().map(|(id,facts)| {
             let association_unknown=facts.sources.iter().any(Option::is_none);
             let ids=facts.sources.into_iter().flatten().map(|source|source.supplier_offering_id.to_string()).collect::<BTreeSet<_>>();
@@ -147,6 +149,7 @@ pub(super) fn current_warning(
                     .into(),
         });
     };
+
     let reason = offering
         .stable
         .status
@@ -162,6 +165,7 @@ pub(super) fn current_warning(
                 .into(),
         });
     };
+
     let (code, label) = match reason {
         AvailabilityInterruptionReason::SupplierStopped => ("SUPPLIER_STOPPED", "供应商已停止供应"),
         AvailabilityInterruptionReason::SupplyUnavailable => ("SUPPLY_UNAVAILABLE", "供应商当前缺货或不可供"),
@@ -223,11 +227,13 @@ mod tests {
         .unwrap();
         let offering = offering();
         assert!(current_warning("offering1", Some(&offering), Some(&fact)).is_none());
+
         fact.availability_status = AvailabilityStatus::Stopped;
         fact.base.version = 9;
         let warning = current_warning("offering1", Some(&offering), Some(&fact)).unwrap();
         assert_eq!(warning.code, "SUPPLIER_STOPPED");
         assert_eq!(warning.availability_version, Some(9));
+
         let value = to_value(warning).unwrap();
         assert!(value.get("unit_cost_gross").is_none());
         assert!(value.get("payment_term").is_none());
@@ -251,6 +257,7 @@ mod tests {
         )
         .unwrap();
         let before = fact.clone();
+
         for (status, code) in
             [(OfferingStatus::Stopped, "SUPPLIER_STOPPED"), (OfferingStatus::Paused, "SUPPLY_UNAVAILABLE")]
         {

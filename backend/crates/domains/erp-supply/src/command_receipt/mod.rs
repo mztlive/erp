@@ -87,6 +87,7 @@ impl SupplyCommandReceipt {
         {
             return Err(corrupted());
         }
+
         self.verify(command.fingerprint().as_str(), None, "同一操作号已用于不同提交，请重新发起操作")?;
         Ok(self.resource_id.clone())
     }
@@ -123,6 +124,7 @@ impl SupplyCommandReceipt {
         {
             return Err(corrupted());
         }
+
         self.validate_result()
     }
 
@@ -282,6 +284,7 @@ mod tests {
             value.committed_resource_id(&exception_command("actor-2", "原决定")),
             Err(Error::Internal(_))
         ));
+
         let encoded = serde_json::to_string(&value).unwrap();
         assert!(!encoded.contains("private-operation-key"));
         let restored: SupplyCommandReceipt = serde_json::from_str(&encoded).unwrap();
@@ -315,6 +318,7 @@ mod tests {
                 Err(Error::Internal(_))
             ));
         }
+
         assert!(
             matches!(valid.verify(&"c".repeat(64), Some("resource-1"), "原冲突"), Err(Error::ConflictError(message)) if message == "原冲突")
         );
@@ -473,6 +477,7 @@ mod tests {
             wrong.resource_type = "different-resource-type".to_string();
             assert!(wrong.validate().is_err());
         }
+
         let mut missing = receipt(
             "supplier_fulfillment.task_investigate",
             "SUPPLIER_FULFILLMENT_ORDER",
@@ -510,11 +515,13 @@ mod tests {
         let restored: SupplyCommandReceipt =
             serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap();
         assert_eq!(restored, value);
+
         value.action = "supplier_settlement.review_reject".to_string();
         assert!(value.validate().is_err());
         let SupplyCommandResult::ReviewDecision(decision) = &mut value.result else { unreachable!() };
         decision.result_status = SettlementReviewDecisionStatus::Rejected;
         assert!(value.validate().is_err());
+
         let SupplyCommandResult::ReviewDecision(decision) = &mut value.result else { unreachable!() };
         decision.payable_account_id = None;
         decision.cost_delta = None;

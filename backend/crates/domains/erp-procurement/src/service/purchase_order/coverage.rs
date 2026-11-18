@@ -49,6 +49,7 @@ pub async fn load_sales_procurement_coverage(
             executor,
         )
         .await?;
+
     build_procurement_coverage(facts).map_err(Error::Logic)
 }
 

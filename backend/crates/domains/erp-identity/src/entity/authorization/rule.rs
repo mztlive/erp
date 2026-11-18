@@ -90,6 +90,7 @@ impl AccessRule {
             }
             Self::any(grants)
         };
+
         match &scope.user_limit {
             Some(limit) => Self::all(vec![granted, Self::clause(limit)]),
             None => granted,
@@ -101,6 +102,7 @@ impl AccessRule {
         if clause.company {
             return Self::Allow;
         }
+
         let mut ownership = Vec::new();
         if clause.self_owned {
             ownership.push(Self::Fact(AccessFact::Owned));
@@ -111,6 +113,7 @@ impl AccessRule {
         if !clause.org_unit_ids.is_empty() {
             ownership.push(Self::Fact(AccessFact::OrganizationIn(clause.org_unit_ids.clone())));
         }
+
         let mut dimensions = Vec::new();
         if !ownership.is_empty() {
             dimensions.push(Self::any(ownership));
@@ -245,6 +248,7 @@ mod tests {
         let grants = BTreeSet::new();
         let current = ObjectFacts::default();
         assert!(AccessRule::scope(&scope, true).allows_object("user", &current, &grants).unwrap());
+
         scope.user_limit = Some(ScopeClause { self_owned: true, ..Default::default() });
         let mut current = current;
         current.owner_id = FactValue::Known(Some("other".into()));
@@ -269,6 +273,7 @@ mod tests {
         assert!(read.evaluate(&object(), &granted));
         assert!(!read.evaluate(&object(), &|_| false));
         assert!(!AccessRule::scope(&scope, false).evaluate(&object(), &granted));
+
         let protected = AccessRule::all(vec![read, AccessRule::Fact(AccessFact::Collaborating)]);
         assert!(!protected.evaluate(&object(), &granted));
     }

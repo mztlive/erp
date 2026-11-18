@@ -198,6 +198,7 @@ mod tests {
         line.tax_amount = Amount::from_str("0").unwrap();
         goods.quantity = Quantity::from_str("0").unwrap();
         goods.pricing_mode = SalesPricingMode::Auto;
+
         let view = SalesOrderWorkingCopyLineView::from_revision_line(&line, Some(&goods), None).unwrap();
         assert_eq!(view.gross_amount, line.gross_amount);
         assert_eq!(view.quantity, Some(goods.quantity));
@@ -230,6 +231,7 @@ mod tests {
         assert!(
             SalesOrderWorkingCopyLineView::from_revision_line(&line, Some(&goods), Some(&voucher)).is_err()
         );
+
         goods.revision_line_id = SalesOrderRevisionLineId::new("historical-revision-line-1");
         assert!(SalesOrderWorkingCopyLineView::from_revision_line(&line, Some(&goods), None).is_err());
     }

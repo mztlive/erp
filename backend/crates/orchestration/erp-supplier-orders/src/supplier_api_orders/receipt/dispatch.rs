@@ -42,6 +42,7 @@ pub(super) async fn send(
     port: &dyn OrderReceiptConfirmation,
 ) -> Result<()> {
     let (mut claimed, request) = store.claim(expected, order).await?;
+
     match port.confirm_receipt(&request).await {
         Ok(snapshot) => {
             claimed.observe_receipt_confirmation(order, request.topology_version, snapshot.value)?;
@@ -50,6 +51,7 @@ pub(super) async fn send(
         },
         Err(error) => claimed.receipt_blocker = Some(error.summary),
     }
+
     claimed.receipt_next_run_at = Some(super::later());
     store.save(&mut claimed).await
 }
@@ -70,6 +72,7 @@ pub(super) async fn recover(
         Err(error) => Some(error.summary),
         _ => Some("原收货通知未取得明确结果；未妥投或暂不可见不代表可以重发".into()),
     };
+
     execution.receipt_blocker = source_error
         .map(|error| format!("原收货通知可能已送达，但ERP实收依据已变更，请核对原签收或入库冲正：{error}"))
         .or(reason);

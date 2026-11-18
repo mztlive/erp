@@ -111,6 +111,7 @@ impl ReturnsProcess {
         let refund = new_supplier_refund(req, actor.id())?;
         persist_created_supplier_refund(&self.db, &self.rbac, refund.clone(), actor.clone(), executor)
             .await?;
+
         self.supplier_refund_result_read(
             &refund.base.id,
             actor,
@@ -151,6 +152,7 @@ impl ReturnsProcess {
             command_receipt: req.command_receipt(id, actor.id())?,
             actor: actor.clone(),
         };
+
         let process = self.clone();
         let command = submission.clone();
         let persisted = self
@@ -160,6 +162,7 @@ impl ReturnsProcess {
                 Box::pin(async move { process.submit_supplier_refund_stage(req, &command, executor).await })
             })
             .await;
+
         self.finish_reversal_submit(&submission, persisted).await?;
         self.supplier_refund_result(
             &submission.id,
@@ -181,6 +184,7 @@ impl ReturnsProcess {
         if self.replay_reversal_submit_stage(submission, executor).await?.is_some() {
             return Ok(());
         }
+
         let id = submission.id.as_str();
         let adapter = supplier_refund_adapter()?;
         let mut refund = self.domain().load_supplier_refund(id, executor).await?;
@@ -253,6 +257,7 @@ impl ReturnsProcess {
         let mut refund = self.domain().load_supplier_refund(id, executor).await?;
         conflict_if_stale_version(refund.matches_version(req.expected_version))?;
         self.persist_cancelled_supplier_refund(id, &mut refund, &req, actor, executor).await?;
+
         self.supplier_refund_result_read(
             id,
             actor,
@@ -281,9 +286,11 @@ impl ReturnsProcess {
         let subject = supplier_refund_subject_ref(id)?;
         let binding = find_approval_binding(&self.db, id, executor).await.map_err(crate::Error::from)?;
         let binding = require_supplier_refund_binding(binding.as_ref())?.clone();
+
         let now = Instant::now();
         let organization_id = load_supplier_refund_org_id(&self.db, &refund.supplier_id, executor).await?;
         let snapshot = build_supplier_refund_snapshot(&refund, &organization_id, actor.id(), now)?;
+
         let existing_receipt = load_supplier_refund_start_receipt(
             &self.db,
             &subject,
@@ -307,6 +314,7 @@ impl ReturnsProcess {
             receipt: existing_receipt,
             now,
         })?)?;
+
         persist_supplier_refund_start(
             &self.db,
             &self.rbac,
@@ -346,6 +354,7 @@ impl ReturnsProcess {
         let runtime =
             load_cancel_runtime(&self.db, &binding, &subject, refund.approval_subject_version, executor)
                 .await?;
+
         let now = Instant::now();
         let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
         let input = build_supplier_refund_cancel_input(
@@ -357,12 +366,14 @@ impl ReturnsProcess {
             now,
         )?;
         let prepared = prepare_cancel(input)?;
+
         execute_supplier_refund_domain_action(refund, adapter.cancel_action)?;
         let audit = actor.clone().resource_log(
             "supplier_refund.cancel_approval",
             "supplier_refund",
             id.to_string(),
         )?;
+
         persist_supplier_refund_cancel(
             &self.db,
             &self.rbac,
@@ -397,6 +408,7 @@ async fn persist_created_supplier_refund(
     rbac.identity
         .require(&actor, &returns::SUPPLIER_REFUND_SUPPLIER_REFUND_CREATE, AccessTarget::Operation, executor)
         .await?;
+
     let organization_id = load_supplier_refund_org_id(db, &refund.supplier_id, executor).await?;
     let bind_command = BindPublishedDefinitionCommand {
         document_type: DocumentType::SupplierRefund,

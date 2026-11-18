@@ -51,8 +51,10 @@ fn page_pipeline(filter: &FulfillmentQueueFilter, authorization: &[Document]) ->
     let offset = i64::try_from(filter.offset)
         .map_err(|_| Error::EntityMetadataOutOfRange("fulfillment_queue_offset"))?;
     let page_size = i64::from(filter.page_size);
+
     let mut pipeline = fulfillment_facts_pipeline(base_match(filter));
     pipeline.splice(1..1, authorization.iter().cloned());
+
     append_optional_filters(&mut pipeline, filter);
     pipeline.push(page_facet(offset, page_size));
     Ok(pipeline)
@@ -532,7 +534,6 @@ mod tests {
         )
         .expect("测试分页应有效");
         let rendered = format!("{pipeline:?}");
-
         assert!(rendered.contains("FULFILLMENT_OPERATION"));
         assert!(rendered.contains("user-1"));
         assert!(rendered.contains("purchase_receipts"));
@@ -545,6 +546,7 @@ mod tests {
         assert!(rendered.contains("metrics"));
         assert!(rendered.contains("warehouses"));
         assert!(rendered.contains("SO\\\\.1"), "检索词必须按字面量转义");
+
         let keyword = pipeline
             .iter()
             .filter_map(|stage| stage.get_document("$match").ok())
@@ -570,6 +572,7 @@ mod tests {
     fn missing_authorization_is_rejected_and_filter_precedes_sources_and_pagination() {
         let filter = FulfillmentQueueFilter::new("user-1".into());
         assert!(fulfillment_queue_pipeline(&filter).is_err());
+
         let deny = doc! { "$match": { "$expr": false } };
         let stages = page_pipeline(&filter, std::slice::from_ref(&deny)).unwrap();
         assert_eq!(stages[1], deny);

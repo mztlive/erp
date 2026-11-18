@@ -109,6 +109,7 @@ impl JdVopAuthorizationProcess {
         actor: &AuditActor,
     ) -> Result<JdVopAuthorizationStatus> {
         request.validate()?;
+
         let access = self.access.clone();
         let engine = self.engine.clone();
         let target_id = id.to_owned();
@@ -133,6 +134,7 @@ impl JdVopAuthorizationProcess {
             })
             .await
             .map_err(|error| error.0)?;
+
         if let Some(status) = replayed {
             return Ok(status);
         }

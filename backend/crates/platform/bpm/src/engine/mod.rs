@@ -103,6 +103,7 @@ impl Eligibility {
                 return Err(EngineError::InvalidCommand("或签资格不能重复或嵌套"));
             }
         }
+
         let primary = members.remove(0);
         if members.is_empty() {
             Ok(primary)
@@ -280,6 +281,7 @@ mod tests {
             graph.clone().with_frozen_assignees(&started.instance, &duplicate),
             Err(ModelError::InvalidField("实例节点指派缺失或重复"))
         );
+
         bindings[0].node_key = "missing-node".into();
         assert_eq!(
             graph.with_frozen_assignees(&started.instance, &bindings),
@@ -359,6 +361,7 @@ mod tests {
             },
         )
         .unwrap();
+
         assert_eq!(plan.commit, CommitRequired::Proceed);
         assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Approved);
         assert_eq!(plan.created_executions[0].status, ApprovalNodeExecutionStatus::Blocked);
@@ -367,6 +370,7 @@ mod tests {
             plan.task_intents.as_slice(),
             [TaskIntent::CompleteTask { execution_id }] if execution_id.as_ref() == "e1"
         ));
+
         assert_eq!(
             plan.events
                 .iter()
@@ -458,12 +462,14 @@ mod tests {
         assert!(plan.created_assignees.is_empty());
         assert!(matches!(plan.task_intents.as_slice(), [TaskIntent::CompleteTask { .. }]));
         assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Rejected);
+
         let mut empty_reason = command.clone();
         empty_reason.reason = Some("   ".into());
         assert!(
             reject_terminal(started.instance.clone(), current.clone(), &two_node_graph(), empty_reason)
                 .is_err()
         );
+
         let mut inactive = command;
         inactive.current_eligibility = blocked("u1", "张三", ApprovalBlockerCode::ApproverAccountInactive);
         let blocked_plan = reject_terminal(started.instance, current, &two_node_graph(), inactive).unwrap();
@@ -565,7 +571,6 @@ mod tests {
 
         let error = block_current(started.instance, current, ApprovalBlockerCode::OpenTaskConflict, at(24))
             .unwrap_err();
-
         assert_eq!(error, EngineError::InvalidCommand("执行不是实例当前令牌"));
     }
 
@@ -578,7 +583,6 @@ mod tests {
 
         let error = block_current(started.instance, current, ApprovalBlockerCode::OpenTaskConflict, at(24))
             .unwrap_err();
-
         assert_eq!(error, EngineError::InvalidCommand("只有活动执行可以接受决定"));
     }
 
@@ -589,6 +593,7 @@ mod tests {
         let current = started.created_executions[0].clone();
         let mut graph = two_node_graph();
         graph.transitions.clear();
+
         let plan = decide(
             started.instance,
             current,
@@ -654,6 +659,7 @@ mod tests {
             },
         )
         .unwrap();
+
         assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Superseded);
         assert_eq!(
             plan.updated_executions[0].ended_reason,
@@ -674,9 +680,11 @@ mod tests {
             plan.created_executions[0].assignee_participant_id,
             assignee.definition_assignee_participant_id
         );
+
         assert!(plan.created_assignees.is_empty());
         assert_eq!(assignee, original_assignee);
         assert!(assignee.ensure_unchanged_from_definition().is_ok());
+
         assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Running);
         assert!(matches!(plan.task_intents.first(), Some(TaskIntent::HumanTaskRequested { .. })));
         assert_eq!(
@@ -694,6 +702,7 @@ mod tests {
         instance.enter_blocked(ApprovalBlockerCode::DefinitionGraphCorrupted, at(27)).unwrap();
         let mut current = started.created_executions[0].clone();
         current.block(ApprovalBlockerCode::DefinitionGraphCorrupted, at(27)).unwrap();
+
         let error = resume(
             instance,
             current,
@@ -723,6 +732,7 @@ mod tests {
         let original_instance = instance.clone();
         let original_current = current.clone();
         let original_assignee = assignee.clone();
+
         let error = resume(
             instance.clone(),
             current.clone(),
@@ -737,6 +747,7 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error, EngineError::InvalidCommand("原审批人资格尚未恢复"));
+
         assert_eq!(instance, original_instance);
         assert_eq!(current, original_current);
         assert_eq!(assignee, original_assignee);
@@ -881,6 +892,7 @@ mod tests {
             primary: Box::new(eligible("u1", "张三")),
             additional: vec![eligible("u1", "张三")],
         };
+
         for (graph, user, eligibility, expected) in [
             (
                 unresolved,
@@ -1179,6 +1191,7 @@ mod or_sign_tests {
             .unwrap()
             .validate_node(node)
             .unwrap();
+
         let invalid = [
             eligible("u1", "张三"),
             Eligibility::any_of(vec![
@@ -1271,6 +1284,7 @@ mod or_sign_tests {
                 .collect::<Vec<_>>();
             assert_eq!(owners, ["u1", "u2"]);
             assert_eq!(start.created_assignees[0].additional_assignees, graph.nodes[0].additional_assignees);
+
             let plan = decide(
                 start.instance,
                 start.created_executions[0].clone(),
@@ -1283,6 +1297,7 @@ mod or_sign_tests {
             assert_eq!(plan.created_executions.len(), 1);
             assert_eq!(plan.created_executions[0].node_key, "n2");
             assert_eq!(plan.task_intents.len(), 2);
+
             assert!(
                 decide(
                     plan.instance,
@@ -1310,6 +1325,7 @@ mod or_sign_tests {
         assert!(plan.created_executions.is_empty());
         assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Rejected);
         assert!(matches!(plan.task_intents.as_slice(), [TaskIntent::CompleteTask { .. }]));
+
         let terminal = reject_terminal(
             start.instance,
             start.created_executions[0].clone(),
@@ -1330,6 +1346,7 @@ mod or_sign_tests {
         mismatched.current_eligibility = eligible("u1", "张三");
         let mut inactive = command("u2", ApprovalDecision::Approve);
         inactive.current_eligibility = blocked("u2", "李四", ApprovalBlockerCode::ApproverAccountInactive);
+
         for cmd in [outsider, mismatched, inactive] {
             assert!(
                 decide(start.instance.clone(), start.created_executions[0].clone(), &graph, cmd).is_err()
@@ -1360,6 +1377,7 @@ mod or_sign_tests {
             .unwrap();
             let plan =
                 decide(start.instance.clone(), start.created_executions[0].clone(), &graph, cmd).unwrap();
+
             assert_eq!(plan.commit, CommitRequired::Proceed);
             assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Approved);
             assert_eq!(
@@ -1392,6 +1410,7 @@ mod or_sign_tests {
         ] {
             assert_eq!(Eligibility::any_of(members).unwrap().blocked_code(), None);
         }
+
         let single = Eligibility::any_of(vec![blocked("u1", "张三", primary_code)]).unwrap();
         assert_eq!(single.blocked_code(), Some(primary_code));
     }
@@ -1408,6 +1427,7 @@ mod or_sign_tests {
                 .with_additional_assignees(vec![ApprovalParticipant::new(participant("u1"), "重复").unwrap()])
                 .is_err()
         );
+
         assert!(Eligibility::any_of(vec![]).is_err());
         assert!(Eligibility::any_of(vec![eligible("u1", "张三"), eligible("u1", "重复")]).is_err());
         assert!(Eligibility::any_of(vec![group()]).is_err());
@@ -1420,6 +1440,7 @@ mod or_sign_tests {
             .clone()
             .with_additional_assignees(vec![ApprovalParticipant::new(participant("u4"), "赵六").unwrap()])
             .unwrap();
+
         let start = started(&graph);
         let binding = start.created_assignees[1].clone();
         let mut cmd = command("u2", ApprovalDecision::Approve);
@@ -1429,6 +1450,7 @@ mod or_sign_tests {
         ])
         .unwrap();
         let waiting = decide(start.instance, start.created_executions[0].clone(), &graph, cmd).unwrap();
+
         let resumed = super::resume(
             waiting.instance,
             waiting.created_executions[0].clone(),
@@ -1451,6 +1473,7 @@ mod or_sign_tests {
         assert!(
             matches!(&resumed.task_intents[0], TaskIntent::HumanTaskRequested { assignee, .. } if assignee.as_str() == "u4")
         );
+
         let mut final_command = command("u4", ApprovalDecision::Approve);
         final_command.now = at(40);
         let finished =

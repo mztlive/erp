@@ -197,12 +197,15 @@ mod tests {
         let groups = inquiry().groups(&order(), &coverage(), &["sales-line".into()], &mut facts).unwrap();
         assert_eq!(groups.len(), 2);
         assert_eq!(facts.source_inquiry_id.as_deref(), Some("inquiry"));
+
         let special = groups.iter().find(|group| group.scope.inquiry_quote_revision_id.is_some()).unwrap();
         assert_eq!(special.lines[0].unit_cost(SupplyPriceBasis::Dropship).unwrap(), "45".parse().unwrap());
         assert_eq!(special.lines[0].max_create_quantity, "7".parse().unwrap());
         assert_eq!(special.lines[0].tax_rate(), "0.06".parse().unwrap());
+
         let general = groups.iter().find(|group| group.scope.inquiry_quote_revision_id.is_none()).unwrap();
         assert_eq!(general.lines[0].unit_cost(SupplyPriceBasis::Dropship).unwrap(), "60".parse().unwrap());
+
         let groups = InquiryBasis::default()
             .groups(&order(), &coverage(), &["sales-line".into()], &mut facts)
             .unwrap();
@@ -216,11 +219,13 @@ mod tests {
         let mut facts = facts();
         let coverage = coverage();
         assert!(inquiry.groups(&order(), &coverage, &["other-line".into()], &mut facts).unwrap().is_empty());
+
         inquiry.candidates[0].source.valid_to = Some(BusinessDate::today());
         let groups = inquiry.groups(&order(), &coverage, &["sales-line".into()], &mut facts).unwrap();
         assert_eq!(groups.len(), 2);
         assert!(groups.iter().any(|group| group.scope.inquiry_quote_revision_id.is_some()));
         assert_eq!(facts.source_inquiry_id.as_deref(), Some("inquiry"));
+
         inquiry.candidates.clear();
         let groups = inquiry.groups(&order(), &coverage, &["sales-line".into()], &mut facts).unwrap();
         assert_eq!(groups.len(), 1);

@@ -615,6 +615,7 @@ impl SupplierQualification {
             FieldUpdate::Set(value) => Some(value),
         };
         self.qualification_type.ensure_validity_window(next_valid_from, next_valid_to)?;
+
         self.valid_from = next_valid_from;
         self.valid_to = next_valid_to;
         Ok(())
@@ -828,6 +829,7 @@ mod tests {
             "admin-1",
         )
         .unwrap();
+
         let next_from = BusinessDate::from_ymd(2026, 2, 1).unwrap();
         qualification
             .update(
@@ -858,6 +860,7 @@ mod tests {
             !QualificationType::Contract
                 .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::General)
         );
+
         assert!(
             !QualificationType::LegalPersonId
                 .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::Sensitive)
@@ -900,6 +903,7 @@ mod tests {
             SupplierQualification::expiry_cutoff(as_of, 30).unwrap(),
             BusinessDate::from_ymd(2026, 3, 2).unwrap()
         );
+
         let max = chrono::NaiveDate::MAX;
         let max = BusinessDate::from_ymd(
             chrono::Datelike::year(&max),
@@ -984,13 +988,16 @@ mod tests {
                 end,
                 contract.attachment_id.as_ref()
             ));
+
             let view = crate::dto::supplier::SupplierQualificationView::from(contract.clone());
             assert!(!view.validity_verified);
+
             let snapshot = contract
                 .snapshot_revision(erp_core::ids::SupplierQualificationRevisionId::new("rev"), 1)
                 .unwrap();
             assert_eq!(snapshot.valid_from, start);
         }
+
         let license = SupplierQualificationData {
             qualification_type: QualificationType::FoodLicense,
             valid_from: None,
@@ -1011,6 +1018,7 @@ mod tests {
         .unwrap();
         let on_date = BusinessDate::from_ymd(2026, 6, 1).unwrap();
         assert!(contract.is_valid_on(on_date));
+
         contract
             .update(
                 SupplierQualificationUpdate { valid_from: FieldUpdate::Clear, ..Default::default() },
@@ -1018,6 +1026,7 @@ mod tests {
             )
             .unwrap();
         assert!(!contract.is_valid_on(on_date));
+
         contract
             .update(
                 SupplierQualificationUpdate {
@@ -1044,6 +1053,7 @@ mod tests {
             "actor",
         )
         .unwrap();
+
         assert!(ensure_linked_contracts_qualified(&[], on_date).is_ok());
         assert!(ensure_linked_contracts_qualified(std::slice::from_ref(&unknown), on_date).is_err());
         assert!(ensure_linked_contracts_qualified(&[unknown, valid.clone()], on_date).is_ok());

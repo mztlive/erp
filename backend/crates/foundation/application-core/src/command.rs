@@ -39,6 +39,7 @@ impl CommandFingerprint {
             hasher.update((bytes.len() as u64).to_be_bytes());
             hasher.update(bytes);
         }
+
         Self(format!("{V1_PREFIX}{}", hex::encode(hasher.finalize())))
     }
 
@@ -143,6 +144,7 @@ impl CommandIdentity {
         if prefix.trim().is_empty() {
             return Err(Error::from("命令身份前缀不能为空"));
         }
+
         let fingerprint = CommandFingerprint::hash_parts(parts);
         let current_id = format!("{prefix}{}", fingerprint.digest_hex());
         Ok(Self { current_id })
@@ -208,6 +210,7 @@ fn assemble(
         .chain(header.scope_id)
         .chain([header.idempotency_key]);
     let identity = CommandIdentity::from_parts(prefix, identity_parts)?;
+
     Ok(CommandReceipt {
         identity,
         actor_id: header.actor_id.to_string(),
@@ -244,8 +247,10 @@ impl CommandReceipt {
         payload: &T,
     ) -> Result<Self> {
         let key = require_non_blank(idempotency_key, "操作号不能为空")?;
+
         let canonical_payload = canonical_json(payload)?;
         let fingerprint = CommandFingerprint::hash_parts([action, resource_type, &canonical_payload]);
+
         assemble(
             prefix,
             ReceiptHeader { actor_id, action, resource_type, scope_id: None, idempotency_key: key },
@@ -282,6 +287,7 @@ impl CommandReceipt {
     ) -> Result<Self> {
         let key = require_non_blank(idempotency_key, "操作号不能为空")?;
         require_non_blank(resource_id, "命令资源 ID 不能为空")?;
+
         assemble(
             prefix,
             ReceiptHeader {
@@ -451,6 +457,7 @@ mod tests {
         let a = CommandFingerprint::from_parts(["a".to_string(), "bc".to_string()]);
         let b = CommandFingerprint::from_parts(["ab".to_string(), "c".to_string()]);
         assert_ne!(a, b);
+
         assert_eq!(CommandFingerprint::parse(a.as_str()).unwrap(), a);
         assert_eq!(
             serde_json::from_str::<CommandFingerprint>(&serde_json::to_string(&a).unwrap()).unwrap(),
@@ -476,6 +483,7 @@ mod tests {
         let fact = StructuredCommandReceipt::from_command(&original).unwrap();
         assert_eq!(original.match_structured(&fact), StructuredReceiptMatch::SamePayload);
         assert_eq!(make(20).match_structured(&fact), StructuredReceiptMatch::DifferentPayload);
+
         assert!(!serde_json::to_string(&fact).unwrap().contains("raw-key"));
     }
 
@@ -510,6 +518,7 @@ mod tests {
         {
             assert_ne!(original.id(), altered.id());
         }
+
         assert!(CommandReceipt::from_resource_parts("c-", "actor", "a", "r", " ", "key", []).is_err());
         assert!(CommandReceipt::from_payload("c-", "actor", "a", "r", " ", &1).is_err());
     }
@@ -535,9 +544,11 @@ mod tests {
             [],
         )
         .unwrap();
+
         assert_eq!(created.id(), "c-df6c7183067dda8b7faa5210f5251b87985910a02357af149a2547f4eadad6d3");
         assert_eq!(resource.id(), "c-222a373cb9efe4ee3ec7afbeba9311a6955b4ccfd741fbd67adc59252866913c");
         assert_eq!(resource.scope_id(), Some(" target "));
+
         assert_eq!(
             created.fingerprint().digest_hex(),
             "123e70809840e65313a5aff730d1d8d7ac65940805b5f018e39af98c2e37dfb1"
@@ -561,6 +572,7 @@ mod tests {
             ["a", "bc"].into_iter().map(str::to_owned),
         )
         .unwrap();
+
         assert_eq!(receipt.fingerprint(), &CommandFingerprint::from_parts(["a".into(), "bc".into()]));
         assert_ne!(receipt.fingerprint(), &CommandFingerprint::from_parts(["ab".into(), "c".into()]));
     }

@@ -39,10 +39,12 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let payments = self.funds_reader().read_supplier_payments(&ids, executor).await?;
         let supplier_ids = payments.iter().map(|item| item.supplier_id.to_string()).collect::<Vec<_>>();
         let supplier_names = self.supplier_display_names(&supplier_ids, executor).await?;
         let allocation_lines = self.payment_allocation_lines(&payments, executor).await?;
+
         for payment in payments {
             let supplier = supplier_names.get(&payment.supplier_id.to_string()).cloned();
             let lines = allocation_lines.get(&payment.base.id).cloned().unwrap_or_default();
@@ -69,6 +71,7 @@ impl WorkbenchFactsReader<'_> {
                     false,
                 );
             }
+
             let more_count = lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
             let lines = lines.into_iter().take(BRIEF_LINE_LIMIT).collect();
             fact.display.brief_source = Some(ObjectBriefSource {
@@ -111,9 +114,11 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let refunds = self.funds_reader().read_supplier_refunds(&ids, executor).await?;
         let supplier_ids = refunds.iter().map(|item| item.supplier_id.to_string()).collect::<Vec<_>>();
         let supplier_names = self.supplier_display_names(&supplier_ids, executor).await?;
+
         let payment_ids = refunds
             .iter()
             .filter_map(|refund| refund.original_payment_id.as_ref().map(ToString::to_string))
@@ -124,6 +129,7 @@ impl WorkbenchFactsReader<'_> {
             .filter_map(|refund| refund.original_payable_entry_id.as_ref().map(ToString::to_string))
             .collect::<Vec<_>>();
         let entry_origins = self.payable_entry_origins(&entry_ids, executor).await?;
+
         for refund in refunds {
             let supplier = supplier_names.get(&refund.supplier_id.to_string()).cloned();
             let origin = select_funds_origin(
@@ -141,6 +147,7 @@ impl WorkbenchFactsReader<'_> {
                 ),
                 supplier.clone(),
             );
+
             let mut brief = amount_reason_brief(
                 "退款金额",
                 format_yuan(&refund.amount),
@@ -161,6 +168,7 @@ impl WorkbenchFactsReader<'_> {
                 refund.evidence_attachment_id.is_some(),
                 "通过后追加应付冲减；已付款部分追加反向付款分配，原付款或应付事实保留",
             );
+
             fact.display.brief_source = Some(brief);
             fact.display.approval_subject_version = (!refund.status.as_str().eq_ignore_ascii_case("draft"))
                 .then_some(refund.approval_subject_version);
@@ -191,18 +199,21 @@ impl WorkbenchFactsReader<'_> {
         if ids.is_empty() {
             return Ok(());
         }
+
         let reversals = self.funds_reader().read_payment_reversals(&ids, executor).await?;
         let payment_ids = reversals
             .iter()
             .map(|reversal| reversal.original_supplier_payment_id.to_string())
             .collect::<Vec<_>>();
         let origins = self.supplier_payment_origins(&payment_ids, executor).await?;
+
         for reversal in reversals {
             let origin = origins.briefs.get(&reversal.original_supplier_payment_id.to_string());
             let mut fact = funds_fact_display(
                 authority_mapping::payment_reversal_fact(&reversal, &origins.counterparties),
                 origin.and_then(|item| item.counterparty.clone()),
             );
+
             let mut brief = amount_reason_brief(
                 "冲正金额",
                 format_yuan(&reversal.amount),
@@ -223,6 +234,7 @@ impl WorkbenchFactsReader<'_> {
                 reversal.evidence_attachment_id.is_some(),
                 "通过后追加反向付款与反向核销，原付款事实保留并标记已冲正",
             );
+
             fact.display.brief_source = Some(brief);
             fact.display.approval_subject_version = (!reversal.status.as_str().eq_ignore_ascii_case("draft"))
                 .then_some(reversal.approval_subject_version);

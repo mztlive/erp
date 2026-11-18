@@ -45,6 +45,7 @@ impl SupplierApiGovernanceProcess {
             req.capabilities.len(),
         )
         .map_err(map_command_shape_rejection)?;
+
         let supplier_id = req.supplier_id.clone();
         let mut connection = SupplierApiService::prepare_connection(req, prepared, actor.id())?;
         let target = SupplierReferenceTarget::from(&connection);
@@ -77,6 +78,7 @@ impl SupplierApiGovernanceProcess {
                         .find_by_id(&supplier_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("API 供应商不存在".into()))?;
+
                     SupplierApiService::new(db.clone())
                         .persist_created_connection(&connection_tx, executor)
                         .await?;

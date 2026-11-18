@@ -41,6 +41,7 @@ pub(crate) fn headers(
     if let Some(token) = &credentials.security_token {
         values.insert("x-acs-security-token", token);
     }
+
     let authorization = authorize(credentials, &values, query, &payload_hash)?;
     let mut headers = HeaderMap::new();
     for (key, value) in values {
@@ -66,10 +67,12 @@ fn authorize(
         values.iter().flat_map(|(&key, &value)| [key, ":", value.trim(), "\n"]).collect::<String>();
     let canonical = format!("POST\n/\n{query}\n{canonical_headers}\n{signed}\n{payload_hash}");
     let to_sign = format!("ACS3-HMAC-SHA256\n{}", hex::encode(Sha256::digest(canonical.as_bytes())));
+
     let mut mac = Hmac::<Sha256>::new_from_slice(credentials.access_key_secret.as_bytes())
         .map_err(|_| Error::Configuration)?;
     mac.update(to_sign.as_bytes());
     let signature = hex::encode(mac.finalize().into_bytes());
+
     Ok(format!(
         "ACS3-HMAC-SHA256 Credential={},SignedHeaders={signed},Signature={signature}",
         credentials.access_key_id
@@ -96,6 +99,7 @@ mod tests {
             ("x-acs-signature-nonce", "3156853299f313e23d1673dc12e1703d"),
             ("x-acs-version", "2014-05-26"),
         ]);
+
         let auth = authorize(
             &credentials,
             &values,
@@ -116,6 +120,7 @@ mod tests {
         let a = headers(&credentials, b"image", "Row=true", "2026-10-07T00:00:00Z", "nonce").unwrap();
         let b = headers(&credentials, b"other", "Row=true", "2026-10-07T00:00:00Z", "nonce").unwrap();
         let c = headers(&credentials, b"image", "Row=false", "2026-10-07T00:00:00Z", "nonce").unwrap();
+
         assert_ne!(a["authorization"], b["authorization"]);
         assert_ne!(a["authorization"], c["authorization"]);
         assert!(a["authorization"].to_str().unwrap().contains("x-acs-security-token"));

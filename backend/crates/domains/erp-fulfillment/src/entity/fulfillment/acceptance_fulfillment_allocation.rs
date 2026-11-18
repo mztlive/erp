@@ -180,12 +180,14 @@ impl AcceptanceFulfillmentAllocation {
         if fulfillment_line_id.is_empty() {
             return Err(Error::from("履约事实引用不能为空"));
         }
+
         if data.allocation_action == AllocationAction::Reverse && data.reverses_allocation_id.is_none() {
             return Err(Error::from("反向分配必须引用原分配"));
         }
         if data.allocation_action == AllocationAction::Apply && data.reverses_allocation_id.is_some() {
             return Err(Error::from("应用分配不得携带反向引用"));
         }
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             customer_acceptance_line_id: data.customer_acceptance_line_id,
@@ -472,6 +474,7 @@ pub(crate) mod tests {
         )
         .unwrap();
         let allocations = vec![apply, reverse];
+
         assert_eq!(
             AcceptanceFulfillmentAllocation::net_quantity_for_fact(&allocations, "dl-1").unwrap(),
             Quantity::from_str("2.5").unwrap()
@@ -485,6 +488,7 @@ pub(crate) mod tests {
             .unwrap(),
             Quantity::from_str("2.5").unwrap()
         );
+
         assert!(
             AcceptanceFulfillmentAllocation::ensure_apply_within_successful_quantity(
                 Quantity::from_str("5").unwrap(),
@@ -503,6 +507,7 @@ pub(crate) mod tests {
             )
             .is_err()
         );
+
         assert!(
             AcceptanceFulfillmentAllocation::eligible_quantity_for_fact(
                 Quantity::from_str("2").unwrap(),

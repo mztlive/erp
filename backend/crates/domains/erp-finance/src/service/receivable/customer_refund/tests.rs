@@ -218,13 +218,16 @@ async fn refund_writes_offsets_before_decrease_then_reverse_allocations_with_fro
     let mut store = RecordingStore::new(&mut ex);
     let receipt = receipt();
     let input = refund();
+
     post_with_store(&mut store, &input, &receipt, "actor-1", &mut ex).await.unwrap();
     assert_eq!(store.calls, order());
     assert_eq!(receipt.status, CustomerReceiptStatus::Posted);
+
     assert_eq!(store.offsets[0].offset_amount, a("40"));
     assert_eq!(store.offsets[1].offset_amount, a("10"));
     assert_eq!(store.offsets[0].increase_entry_id.as_ref(), "entry-1");
     assert_eq!(store.offsets[1].increase_entry_id.as_ref(), "entry-2");
+
     let decrease = store.decrease.unwrap();
     assert_eq!(decrease.amount, input.amount);
     assert_eq!(decrease.entry_type, ReceivableEntryType::Refund);
@@ -235,6 +238,7 @@ async fn refund_writes_offsets_before_decrease_then_reverse_allocations_with_fro
     assert_eq!(decrease.source_revision_id, input.refund_id);
     assert_eq!(decrease.source_sequence, 1);
     assert_eq!(decrease.posted_at, input.occurred_at);
+
     for (index, allocation) in store.reverses.iter().enumerate() {
         assert_eq!(allocation.allocation_action, ReceivableAllocationAction::Reverse);
         assert_eq!(allocation.allocated_at, input.occurred_at);
@@ -279,6 +283,7 @@ async fn refund_keeps_missing_cross_party_and_settlement_failure_order() {
             },
             _ => store.settlement_false = true,
         }
+
         let error = post_with_store(&mut store, &refund(), &receipt(), "actor-1", &mut ex).await.unwrap_err();
         match case {
             0 => assert!(matches!(error,Error::NotFound(message) if message=="应收分录不存在")),
@@ -305,6 +310,7 @@ async fn refund_reloads_interleaved_reverse_facts_and_rejects_over_reversal() {
     store.offsets.clear();
     store.decrease = None;
     store.reverses.clear();
+
     let second = CustomerRefundPosting {
         refund_id: "refund-2".into(),
         amount: a("10"),
@@ -315,6 +321,7 @@ async fn refund_reloads_interleaved_reverse_facts_and_rejects_over_reversal() {
     assert_eq!(store.reverses[0].receivable_entry_id.as_ref(), "entry-2");
     assert_eq!(store.reverses[0].allocation_seq, 5);
     assert_eq!(store.reverses[0].allocated_amount, a("10"));
+
     store.allocations.extend(store.reverses.clone());
     store.calls.clear();
     let excess = CustomerRefundPosting {

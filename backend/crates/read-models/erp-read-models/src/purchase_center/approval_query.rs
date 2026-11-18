@@ -46,6 +46,7 @@ pub async fn load_document_approval(
     let Some(binding) = binding else {
         return Ok(document_approval_view(None, None, status));
     };
+
     let graph = load_bound_definition_graph(db, binding, executor).await?;
     let subject = purchase_order_subject_ref(purchase_order_id)?;
     let runtime = load_approval_summary(
@@ -55,6 +56,7 @@ pub async fn load_document_approval(
         executor,
     )
     .await?;
+
     let mut view = document_approval_view_with_definition(Some(binding), Some(&graph), None, status);
     view.instance = runtime.instance;
     view.recent_history = runtime.recent_history;
@@ -87,6 +89,7 @@ pub(super) async fn load_change_document_approval(
         let graph = bound_definition_graph(db, binding, "采购单绑定的审批定义不存在", executor).await?;
         view.definition = Some(super::approval::order::definition_view_from_binding(binding, Some(&graph)));
     }
+
     let subject = subject_ref_for(DocumentType::PurchaseChangeOrder, id)
         .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
     let runtime = load_approval_summary(
@@ -96,6 +99,7 @@ pub(super) async fn load_change_document_approval(
         executor,
     )
     .await?;
+
     view.instance = runtime.instance;
     view.recent_history = runtime.recent_history;
     view.history_page = runtime.history_page;

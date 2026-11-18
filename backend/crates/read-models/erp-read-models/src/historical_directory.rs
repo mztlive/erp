@@ -58,9 +58,11 @@ impl HistoricalDirectoryView {
                 remember(&mut orgs, &node.id, &node.name);
             }
         }
+
         if users.len() > 10_000 || orgs.len() > 10_000 {
             return Err(Error::ValidationError("历史候选超过 10000 项，请缩小期间或指定客户".into()));
         }
+
         let empty_reason = if users.is_empty() && orgs.is_empty() { Some("no_data".into()) } else { None };
         Ok(Self {
             attribution_user_options: labels(users),
@@ -112,6 +114,7 @@ mod tests {
         let mut second = first.clone();
         second.attribution_user_id = "former-b".into();
         let rows = [first, second];
+
         let view = HistoricalDirectoryView::from_attributions(rows.iter(), "v1".into()).unwrap();
         assert_eq!(view.attribution_user_options.len(), 2);
         assert_ne!(view.attribution_user_options[0].label, view.attribution_user_options[1].label);
@@ -120,6 +123,7 @@ mod tests {
                 .iter()
                 .any(|option| option.value == "old-parent" && option.label.contains("原部门"))
         );
+
         let reversed = HistoricalDirectoryView::from_attributions(rows.iter().rev(), "v1".into()).unwrap();
         assert_eq!(serde_json::to_value(view).unwrap(), serde_json::to_value(reversed).unwrap());
     }
@@ -130,6 +134,7 @@ mod tests {
             value[extra] = serde_json::json!("narrowed");
             assert!(serde_json::from_value::<HistoricalDirectoryQuery>(value).is_err());
         }
+
         let empty = HistoricalDirectoryView::from_attributions([].iter(), "v2".into()).unwrap();
         assert_eq!(empty.empty_reason.as_deref(), Some("no_data"));
         assert!(empty.attribution_user_options.is_empty());

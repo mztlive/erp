@@ -39,6 +39,7 @@ pub fn prepare_payable_account(
         },
         actor_id,
     )?;
+
     let entry = PayableEntry::new(
         entry_id,
         PayableEntryData {
@@ -86,6 +87,7 @@ mod tests {
         assert_eq!(account.settled_total, Amount::zero());
         assert_eq!(account.invoiced_total, Amount::zero());
         assert_eq!(account.stable.status(), PayableAccountStatus::Open);
+
         assert_eq!(entry.payable_account_id.as_ref(), account.base.id);
         assert_eq!(entry.amount, account.gross_total);
         assert_eq!(entry.source_document_id, "purchase-1");

@@ -86,6 +86,7 @@ impl PurchaseOrderProcess {
             &req.idempotency_key,
         )?;
         let receipt_id = receipt_identity;
+
         execute_void_draft_transaction(
             DraftVoidServices { service: self, ports: ports.as_ref() },
             id,
@@ -150,6 +151,7 @@ async fn execute_void_draft_transaction(
             })
         })
         .await;
+
     recover_void_draft(transaction_result, service, &receipt_id, &fingerprint, purchase_order_id, actor).await
 }
 
@@ -186,6 +188,7 @@ async fn void_draft_apply(
     {
         return Ok(result);
     }
+
     let mut order = load_purchase_order(db, command.purchase_order_id, executor).await?;
     ensure_void_target(
         &order.stable.created_by,
@@ -195,6 +198,7 @@ async fn void_draft_apply(
         command.actor.id(),
     )?;
     ensure_current_submission_is_draft(db, &order, executor).await?;
+
     void_order_and_persist(db, ports, &mut order, command, executor).await
 }
 
@@ -310,6 +314,7 @@ impl VoidSteps for VoidPosting<'_, '_> {
             .resource_log_with_id(next_id(), VOID_ACTION, "purchase_order", self.order.base.id.clone(), None)?
             .with_command_id(Some(self.command.receipt_id.receipt_id().to_string()))?
             .with_resource_number(Some(self.order.purchase_no.clone()))?;
+
         let record = PurchaseCommandReceipt::new(
             self.command.receipt_id,
             self.command.request_fingerprint,
@@ -370,6 +375,7 @@ async fn replay_void_draft(
     if receipt.payload().purchase_order_id != purchase_order_id {
         return Err(Error::ConflictError("采购草稿作废收据与业务资源不一致".to_string()));
     }
+
     let order = load_purchase_order(db, purchase_order_id, executor).await?;
     if order.stable.status != PurchaseOrderStatus::Voided
         || order.base.version < receipt.payload().lock_version
@@ -424,6 +430,7 @@ async fn recover_void_draft(
                     })
                 })
                 .await;
+
             recover_command(error, recovered)
         },
     }
@@ -566,7 +573,9 @@ mod tests {
             seen: vec![],
             fail_at: None,
         };
+
         let result = super::execute_void_steps(&mut steps, &mut executor).await.unwrap();
+
         assert_eq!(steps.seen, [0, 1, 2, 3]);
         assert_eq!(result.lock_version, 5);
         assert_eq!(result.reference, "VOID-V5");
@@ -583,6 +592,7 @@ mod tests {
                 seen: vec![],
                 fail_at: Some(index),
             };
+
             let error = super::execute_void_steps(&mut steps, &mut executor).await.unwrap_err();
             assert!(
                 matches!(error, crate::Error::ConflictError(message) if message == "original-step-error")

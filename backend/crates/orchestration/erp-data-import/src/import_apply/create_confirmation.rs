@@ -48,6 +48,7 @@ impl ImportApplyProcess {
         actor: &AuditActor,
     ) -> Result<LegacyImportConfirmationView> {
         let prepared = PreparedConfirmationCreation::new(req, actor)?;
+
         let authorization = self.authorization.clone();
         let operator = actor.clone();
         let identity = prepared.identity.clone();
@@ -68,6 +69,7 @@ impl ImportApplyProcess {
                 })
             })
             .await;
+
         let (confirmation, work_item) = match transaction_result {
             Ok(result) => result,
             Err(error) => match self.replay_confirmation_creation(identity, actor).await? {
@@ -148,6 +150,7 @@ impl ConfirmationCreationIdentity {
             .find_by_id(confirmation.work_item_id.as_ref(), executor)
             .await?
             .ok_or_else(|| Error::Internal("导入确认任务关联缺失".to_string()))?;
+
         validate_confirmation_creation_replay(
             &confirmation,
             &work_item,
@@ -173,6 +176,7 @@ struct PreparedConfirmationCreation {
 impl PreparedConfirmationCreation {
     fn new(req: CreateLegacyImportConfirmationRequest, actor: &AuditActor) -> Result<Self> {
         let identity = ConfirmationCreationIdentity::new(req)?;
+
         let confirmation_id = LegacyImportConfirmationId::new(next_id());
         let work_item_id = WorkItemId::new(next_id());
         let confirmation = LegacyImportConfirmation::new(
@@ -194,6 +198,7 @@ impl PreparedConfirmationCreation {
             &identity.scope,
             actor.id(),
         )?;
+
         let audit = actor.clone().resource_log(
             "legacy_import_confirmation.create",
             "legacy_import_confirmation",
@@ -210,6 +215,7 @@ impl PreparedConfirmationCreation {
         if let Some(existing) = self.identity.existing(db, executor).await? {
             return Ok(existing);
         }
+
         let mut batch = db
             .legacy_import_batches()
             .find_by_id(self.identity.req.batch_id.as_ref(), executor)
@@ -221,11 +227,13 @@ impl PreparedConfirmationCreation {
             &self.identity.import_rule_version,
         )?;
         batch.prepare_confirmation()?;
+
         let enabled_roles =
             db.roles().enabled_roles(std::slice::from_ref(&self.identity.owner_role), executor).await?;
         if enabled_roles.len() != 1 {
             return Err(Error::BusinessLogicError("导入确认责任角色未注册或已停用".to_string()));
         }
+
         self.persist(db, batch, executor).await
     }
 
@@ -243,6 +251,7 @@ impl PreparedConfirmationCreation {
             &self.identity.req,
             &self.identity.import_rule_version,
         )?;
+
         super::supersede::invalidate_replaced_confirmation(
             db,
             &mut confirmations,
@@ -251,6 +260,7 @@ impl PreparedConfirmationCreation {
             executor,
         )
         .await?;
+
         let mut current_matrix = LegacyImportConfirmation::current_matrix(
             &confirmations,
             self.identity.req.batch_version,
@@ -262,6 +272,7 @@ impl PreparedConfirmationCreation {
             batch.failure_code_summary.clone(),
             Some(LegacyImportConfirmation::matrix_summary(self.identity.req.trial_version, &current_matrix)),
         )?;
+
         db.legacy_import_confirmations().create(&self.confirmation, executor).await?;
         db.work_items().create(&self.work_item, executor).await?;
         db.legacy_import_batches().update(&mut batch, executor).await?;
@@ -421,6 +432,7 @@ mod tests {
             &identity.subject_version,
         )
         .unwrap();
+
         let mut changed_task = prepared.work_item.clone();
         changed_task.subject_version = "foreign-trial".into();
         let error = validate_confirmation_creation_replay(

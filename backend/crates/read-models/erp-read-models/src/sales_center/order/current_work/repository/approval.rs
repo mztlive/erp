@@ -41,6 +41,7 @@ impl CurrentWorkRepository<'_> {
             .into_iter()
             .map(|execution| (execution.base.id.clone(), execution))
             .collect::<HashMap<_, _>>();
+
         Ok(tasks
             .into_iter()
             .filter(|task| match task.work_item_type {
@@ -154,14 +155,18 @@ mod tests {
         assert!(matches_current_approval(&task, Some(&execution), Some(&instance)));
         assert!(!matches_current_approval(&task, None, Some(&instance)));
         assert!(!matches_current_approval(&task, Some(&execution), None));
+
         task.owner_user_id = Some("another".into());
         assert!(!matches_current_approval(&task, Some(&execution), Some(&instance)));
+
         task.owner_user_id = Some("reviewer".into());
         instance.subject_version += 1;
         assert!(!matches_current_approval(&task, Some(&execution), Some(&instance)));
+
         instance.subject_version -= 1;
         execution.round_no += 1;
         assert!(!matches_current_approval(&task, Some(&execution), Some(&instance)));
+
         execution.round_no -= 1;
         instance.current_node_execution_id = Some(ApprovalNodeExecutionId::new("old"));
         assert!(!matches_current_approval(&task, Some(&execution), Some(&instance)));
@@ -178,6 +183,7 @@ mod tests {
             instance.status = status;
             assert!(!matches_current_approval(&task, Some(&execution), Some(&instance)));
         }
+
         instance.status = ApprovalProcessInstanceStatus::Running;
         for status in [
             ApprovalNodeExecutionStatus::Approved,
@@ -188,6 +194,7 @@ mod tests {
             execution.status = status;
             assert!(!matches_current_approval(&task, Some(&execution), Some(&instance)));
         }
+
         instance.status = ApprovalProcessInstanceStatus::Blocked;
         execution.status = ApprovalNodeExecutionStatus::Blocked;
         assert!(matches_current_approval(&task, Some(&execution), Some(&instance)));

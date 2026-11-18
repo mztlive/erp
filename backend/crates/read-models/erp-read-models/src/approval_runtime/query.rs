@@ -111,6 +111,7 @@ async fn load_runtime_facts(
     let instance_id = ApprovalProcessInstanceId::new(instance.base.id.clone());
     let current = db.bpm_workflow().find_current_execution(&instance_id, executor).await?;
     ensure_current_execution(&instance, current.as_ref())?;
+
     let tasks = match current.as_ref() {
         Some(execution) => {
             db.work_items()
@@ -123,9 +124,11 @@ async fn load_runtime_facts(
         None => Vec::new(),
     };
     ensure_runtime_tasks(&instance, current.as_ref(), &tasks)?;
+
     let latest_rejected = db.bpm_workflow().find_latest_rejected_execution(&instance_id, executor).await?;
     let rows = db.bpm_workflow().list_execution_history(&instance_id, None, 9, executor).await?;
     let history = history_page_from(rows.iter().map(history_item_from_execution).collect(), 8);
+
     Ok(DocumentRuntime {
         instance: instance_view(&instance, current.as_ref(), tasks.first(), latest_rejected.as_ref()),
         history,
@@ -272,6 +275,7 @@ mod tests {
             at: Timestamp::from_unix_secs(10).unwrap(),
         })
         .unwrap();
+
         let current = ApprovalNodeExecution::new_active(NewNodeExecution {
             id: ApprovalNodeExecutionId::new("current"),
             process_instance_id: ApprovalProcessInstanceId::new("instance"),
@@ -292,6 +296,7 @@ mod tests {
                 Timestamp::from_unix_secs(11).unwrap(),
             )
             .unwrap();
+
         let task = WorkItem::new_document_approval(
             WorkItemId::new("task"),
             DocumentApprovalWorkItemData {
@@ -321,12 +326,14 @@ mod tests {
             Instant::from_unix_secs(10),
         )
         .unwrap();
+
         let mut previous = current.clone();
         previous.base.id = "zz-previous".into();
         previous.subject_version = 2;
         current.base.id = "aa-current".into();
         assert_eq!(previous.started_at, current.started_at);
         assert!(previous.base.id > current.base.id);
+
         let check = |instance: &ApprovalProcessInstance, binding: Option<&ApprovalDefinitionBinding>| {
             ensure_instance_binding(
                 instance,
@@ -339,6 +346,7 @@ mod tests {
         check(&current, Some(&binding)).unwrap();
         assert!(check(&previous, Some(&binding)).is_err());
         assert!(check(&current, None).is_err());
+
         let mut invalid = current.clone();
         invalid.subject_version = 2;
         assert!(check(&invalid, Some(&binding)).is_err());
@@ -348,6 +356,7 @@ mod tests {
         invalid = current.clone();
         invalid.process_kind = ProcessKind::SalesOrder;
         assert!(check(&invalid, Some(&binding)).is_err());
+
         invalid = current.clone();
         invalid.definition_version += 1;
         assert!(check(&invalid, Some(&binding)).is_err());
@@ -363,6 +372,7 @@ mod tests {
         instance.base.version = 9_007_199_254_740_993;
         current.base.version = 9_007_199_254_740_995;
         task.base.version = 9_007_199_254_740_997;
+
         let mut rejected = current.clone();
         rejected.base.id = "rejected".into();
         rejected
@@ -372,6 +382,7 @@ mod tests {
                 Timestamp::from_unix_secs(12).unwrap(),
             )
             .unwrap();
+
         let view = instance_view(&instance, Some(&current), Some(&task), Some(&rejected));
         assert_eq!(view.instance_version.as_deref(), Some("9007199254740993"));
         assert_eq!(view.current_execution_version.as_deref(), Some("9007199254740995"));
@@ -398,10 +409,12 @@ mod tests {
         rejected.assignee_name_snapshot = "  原审批人姓名  ".into();
         let view = instance_view(&instance, Some(&current), Some(&task), Some(&rejected));
         assert_eq!(view.latest_rejection_by_name.as_deref(), Some("原审批人姓名"));
+
         rejected.assignee_name_snapshot = "  ".into();
         let view = instance_view(&instance, Some(&current), Some(&task), Some(&rejected));
         assert_eq!(view.latest_rejection_by.as_deref(), Some("reviewer"));
         assert_eq!(view.latest_rejection_by_name, None);
+
         let view = instance_view(&instance, Some(&current), Some(&task), None);
         assert_eq!(view.latest_rejection_by_name, None);
     }
@@ -416,6 +429,7 @@ mod tests {
         let mut other_execution = current.clone();
         other_execution.base.id = "other".into();
         assert!(ensure_current_execution(&instance, Some(&other_execution)).is_err());
+
         let mut other_source = task.clone();
         other_source.business_object_id = "other".into();
         let mut other_version = task.clone();
@@ -453,6 +467,7 @@ mod tests {
         let (mut instance, mut current, _) = running();
         assert!(runtime_cancellable(&instance, Some(&current), 1));
         assert!(!runtime_cancellable(&instance, Some(&current), 0));
+
         current
             .block(ApprovalBlockerCode::ApproverAccountInactive, Timestamp::from_unix_secs(12).unwrap())
             .unwrap();
@@ -463,8 +478,10 @@ mod tests {
             )
             .unwrap();
         assert!(runtime_cancellable(&instance, Some(&current), 0));
+
         instance.blocker_code = Some(ApprovalBlockerCode::InternalInvariantBroken);
         assert!(!runtime_cancellable(&instance, Some(&current), 0));
+
         instance.cancel(Timestamp::from_unix_secs(13).unwrap()).unwrap();
         assert!(!runtime_cancellable(&instance, None, 0));
     }

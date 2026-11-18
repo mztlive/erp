@@ -29,6 +29,7 @@ where
     if let Some(result) = replay().await? {
         return Ok(result);
     }
+
     match write().await {
         Ok(result) => Ok(result),
         Err(error) if error.command_may_have_committed() => recover_command(error, replay().await),
@@ -143,9 +144,11 @@ pub(super) async fn run_action<P: TaskCommandPort>(
 ) -> Result<P::Output> {
     let mut item = port.load_bound(executor).await?;
     port.authorize(&item, executor).await?;
+
     let fact = port.apply_domain(executor).await?;
     port.transition(&mut item, &fact)?;
     port.persist_task(&mut item, executor).await?;
+
     let result = port.result(&fact)?;
     port.receipt(&fact, executor).await?;
     Ok(result)
@@ -168,9 +171,11 @@ pub(super) async fn run_completion<P: TaskCommandPort>(
 ) -> Result<P::Output> {
     let mut item = port.load_bound(executor).await?;
     port.authorize(&item, executor).await?;
+
     let fact = port.apply_domain(executor).await?;
     port.transition(&mut item, &fact)?;
     port.persist_task(&mut item, executor).await?;
+
     port.receipt(&fact, executor).await?;
     port.result(&fact)
 }
@@ -244,6 +249,7 @@ pub(super) async fn run_direct<P: DirectCommandPort>(
     executor: &mut dyn Executor,
 ) -> Result<P::Output> {
     port.ensure_no_task(executor).await?;
+
     let fact = port.apply_domain(executor).await?;
     port.receipt(&fact, executor).await?;
     Ok(port.result(fact))

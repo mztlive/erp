@@ -82,6 +82,7 @@ impl ProcurementCoverageSummary {
                 *sum += value.to_decimal();
             }
         }
+
         let [total, covered, remaining, excess, effective] = sums.map(Quantity::try_from);
         let (total, effective) = (total?, effective?);
         Ok(Self {
@@ -210,7 +211,6 @@ mod tests {
         .unwrap();
 
         let total = ProcurementCoverageSummary::aggregate([&over, &gap]).unwrap();
-
         assert_eq!(total.total_quantity, Quantity::from_str("15").unwrap());
         assert_eq!(total.covered_quantity, Quantity::from_str("12").unwrap());
         assert_eq!(total.remaining_quantity, Quantity::from_str("6").unwrap());
@@ -222,7 +222,6 @@ mod tests {
     #[test]
     fn aggregate_of_no_lines_is_zero() {
         let total = ProcurementCoverageSummary::aggregate([]).unwrap();
-
         assert_eq!(total.total_quantity, Quantity::from_str("0").unwrap());
         assert_eq!(total.progress, Rate::from_str("0").unwrap());
     }

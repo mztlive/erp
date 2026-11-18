@@ -244,6 +244,7 @@ impl SalesOrderWorkingCopy {
         if data.draft_version == 0 {
             return Err(Error::from("草稿版本必须为正整数"));
         }
+
         let content_hash = normalize_required_text(
             data.content_hash,
             "内容指纹不能为空",
@@ -256,6 +257,7 @@ impl SalesOrderWorkingCopy {
         let project_name = normalize_optional_text(data.project_name, "项目名称", PROJECT_NAME_MAX_LEN)?;
         let business_remark =
             normalize_optional_text(data.business_remark, "业务备注", BUSINESS_REMARK_MAX_LEN)?;
+
         Self::validate_associations(
             data.working_purpose,
             data.sales_change_order_id.as_ref(),
@@ -267,6 +269,7 @@ impl SalesOrderWorkingCopy {
         if data.contract_id.is_some() != data.contract_revision_id.is_some() {
             return Err(Error::from("合同与合同版本必须同时提供或同时省略"));
         }
+
         let lines = data
             .lines
             .into_iter()
@@ -332,6 +335,7 @@ impl SalesOrderWorkingCopy {
         updated_by: impl Into<String>,
     ) -> Result<()> {
         ensure_transition(self.stable.status, WorkingCopyStatus::Editing)?;
+
         if let Some(content_hash) = update.content_hash {
             self.content_hash = normalize_required_text(
                 content_hash,
@@ -340,6 +344,7 @@ impl SalesOrderWorkingCopy {
                 "内容指纹过长",
             )?;
         }
+
         if let Some(customer_id) = update.customer_id {
             self.customer_id = customer_id;
         }
@@ -355,6 +360,7 @@ impl SalesOrderWorkingCopy {
         if let Some(settlement_party_id) = update.settlement_party_id {
             self.settlement_party_id = settlement_party_id;
         }
+
         if let Some(snapshot) = update.snapshot {
             let snapshots = HeaderSnapshots::build(&snapshot)?;
             self.customer_snapshot = snapshots.customer_snapshot;
@@ -371,6 +377,7 @@ impl SalesOrderWorkingCopy {
             self.business_remark =
                 normalize_optional_text(Some(business_remark), "业务备注", BUSINESS_REMARK_MAX_LEN)?;
         }
+
         if let Some(voucher_category_sku_id) = update.voucher_category_sku_id {
             self.voucher_category_sku_id = Some(voucher_category_sku_id);
         }
@@ -380,6 +387,7 @@ impl SalesOrderWorkingCopy {
         if let Some(receivable_due_date) = update.receivable_due_date {
             self.receivable_due_date = Some(receivable_due_date);
         }
+
         if let Some(gross_amount) = update.gross_amount {
             self.gross_amount = gross_amount;
         }
@@ -389,6 +397,7 @@ impl SalesOrderWorkingCopy {
         if let Some(tax_amount) = update.tax_amount {
             self.tax_amount = tax_amount;
         }
+
         Self::validate_associations(
             self.working_purpose,
             self.sales_change_order_id.as_ref(),
@@ -397,6 +406,7 @@ impl SalesOrderWorkingCopy {
             self.receivable_due_date,
         )?;
         validate_amount_triple(self.gross_amount, self.net_amount, self.tax_amount)?;
+
         self.stable.touch(updated_by);
         Ok(())
     }
@@ -523,6 +533,7 @@ impl SalesOrderWorkingCopy {
         let editor_user_id: String = editor_user_id.into();
         self.editor_user_id =
             normalize_required_text(editor_user_id, "编辑人不能为空", EDITOR_MAX_LEN, "编辑人过长")?;
+
         self.draft_version += 1;
         self.stable.touch(self.editor_user_id.clone());
         Ok(())
@@ -693,6 +704,7 @@ mod tests {
             &CustomerAccountId::new("cust-1"),
             &PartyId::new("party-1"),
         ));
+
         assert!(!copy.is_submitted());
         assert!(copy.lock_for_submission_if_needed().unwrap());
         assert!(copy.is_submitted());
@@ -712,9 +724,11 @@ mod tests {
 
         copy.business_type = BusinessType::Voucher;
         assert!(copy.voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap()).is_err());
+
         copy.voucher_category_sku_id = Some(SkuId::new("voucher-1"));
         copy.receivable_due_date = Some(BusinessDate::from_ymd(2026, 8, 24).unwrap());
         assert!(copy.voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap()).is_err());
+
         copy.receivable_due_date = Some(BusinessDate::from_ymd(2026, 8, 25).unwrap());
         let category = copy
             .voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap())

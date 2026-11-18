@@ -97,6 +97,7 @@ fn sending_requires_live_lease_but_original_late_success_keeps_owner_and_operati
     assert_eq!(before.get_document("refresh.lease_until").unwrap(), &doc! {"$gt":102_i64});
     assert_eq!(before.get_str("refresh.owner_id").unwrap(), "owner");
     assert_eq!(before.get_str("refresh.operation_id").unwrap(), "operation");
+
     record.mark_refresh_sent(at(102)).unwrap();
     let completion = sent(&record).unwrap();
     assert_eq!(completion.get_str("refresh.state").unwrap(), "SENT_UNKNOWN");
@@ -104,6 +105,7 @@ fn sending_requires_live_lease_but_original_late_success_keeps_owner_and_operati
     assert_eq!(completion.get_str("refresh.operation_id").unwrap(), "operation");
     assert_eq!(completion.get_i64("refresh.sent_at").unwrap(), 102);
     assert!(!completion.contains_key("refresh.lease_until"));
+
     record
         .reauthorize(
             payload(),
@@ -134,6 +136,7 @@ fn recovery_deadline_is_in_atomic_filter_and_replacement_treats_ciphertext_as_li
             doc! {"refresh.state":{"$in":["READY","CLAIMED"]},"expires_at":{"$lte":131_i64}}.into(),
         ]
     );
+
     let pipeline = replacement(&record).unwrap();
     let fields = pipeline[0].get_document("$set").unwrap();
     assert_eq!(
@@ -181,6 +184,7 @@ fn authorization_boundary_filters_fence_owner_operation_version_and_exchange_pha
     assert_eq!(claim.get_str("refresh.operation_id").unwrap(), "authorize");
     assert_eq!(claim.get_str("refresh.state").unwrap(), "AUTHORIZATION_CLAIMED");
     assert_eq!(claim.get_document("refresh.lease_until").unwrap(), &doc! {"$gt":101_i64});
+
     record.mark_authorization_sent(at(101)).unwrap();
     let sending = authorization_sent(&record).unwrap();
     assert_eq!(sending.get_i64("version").unwrap(), 2);
@@ -188,6 +192,7 @@ fn authorization_boundary_filters_fence_owner_operation_version_and_exchange_pha
     assert_eq!(sending.get("refresh.exchange_sent_at"), Some(&Bson::Null));
     let exchange = authorization_exchange(&record, at(102)).unwrap();
     assert_eq!(exchange.get_document("refresh.lease_until").unwrap(), &doc! {"$gt":102_i64});
+
     record.mark_authorization_exchange_sent(at(102)).unwrap();
     let completion = authorization_sent(&record).unwrap();
     assert_eq!(completion.get_i64("version").unwrap(), 3);
@@ -195,6 +200,7 @@ fn authorization_boundary_filters_fence_owner_operation_version_and_exchange_pha
     assert_eq!(completion.get_str("refresh.owner_id").unwrap(), "owner");
     assert_eq!(completion.get_str("refresh.operation_id").unwrap(), "authorize");
     assert!(!completion.contains_key("refresh.lease_until"));
+
     record.complete_authorization(payload(), None, at(150)).unwrap();
     assert_ne!(completion.get_i64("version").unwrap(), i64::try_from(record.base.version).unwrap());
     assert_eq!(record.refresh.code(), "READY");
@@ -220,6 +226,7 @@ fn authorization_recovery_cas_guards_original_identity_deadline_and_historical_o
     );
     let expiry = filter.get_array("$or").unwrap()[1].as_document().unwrap();
     assert_eq!(expiry.get_document("refresh.lease_until").unwrap(), &doc! {"$lte":130_i64});
+
     assert!(record.claim_authorization(&request).unwrap());
     assert_eq!(record.base.version, 3);
     assert_ne!(authorization_sent(&reserved_sent_authorization()).unwrap().get_i64("version").unwrap(), 3);

@@ -73,12 +73,14 @@ async fn purchase_entries_reject_missing_entry_or_source_before_facts_and_accept
             ));
             assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
         }
+
         identity.state.lock().unwrap().grants =
             vec![("source".into(), source), ("entry".into(), vec![independent])];
         service
             .require(&actor(), &entry, AccessTarget::record("order").unwrap(), &mut executor)
             .await
             .unwrap();
+
         identity.state.lock().unwrap().active = false;
         let calls = facts.calls.load(Ordering::SeqCst);
         assert!(matches!(

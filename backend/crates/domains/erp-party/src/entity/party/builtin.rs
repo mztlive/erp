@@ -80,6 +80,7 @@ impl BuiltinCompany {
         let Some(candidate) = candidates.next() else {
             return Ok(None);
         };
+
         if candidates.any(|party| party.base.id != candidate.base.id) {
             return Err(Error::ConflictError(format!(
                 "内建公司 {} 的税号与名称指向不同主体",
@@ -120,9 +121,11 @@ mod tests {
         codes.sort();
         codes.dedup();
         assert_eq!(codes.len(), 6);
+
         let missing = companies.iter().filter(|c| c.bank_account.is_none()).collect::<Vec<_>>();
         assert_eq!(missing.len(), 1);
         assert_eq!(missing[0].legal_name, "广州福尚云科技研发有限公司");
+
         for company in &companies {
             let p = party("existing");
             assert_eq!(company.profile(&p, None).unwrap().legal_name, company.legal_name);
@@ -148,6 +151,7 @@ mod tests {
         let mut duplicate = first.clone();
         duplicate.party_no = "later-snapshot".into();
         assert_eq!(seed.identity(vec![first.clone(), duplicate]).unwrap().unwrap().party_no, first.party_no);
+
         let mut deleted = first;
         deleted.base.deleted_at = 1;
         assert!(matches!(
@@ -166,6 +170,7 @@ mod tests {
         assert_eq!(profile.short_name.as_deref(), Some("简称"));
         assert_eq!(profile.aliases, vec!["别名"]);
         assert_eq!(profile.bank_name.as_deref(), Some(seed.bank_name.as_str()));
+
         p.company_profile = Some(profile.clone());
         assert_eq!(seed.profile(&p, None).unwrap(), profile);
     }
@@ -175,6 +180,7 @@ mod tests {
         let mut p = seed.new_party("same-id".into()).unwrap();
         let (profile, name_changed) = seed.change(&p, None).unwrap().unwrap();
         assert!(name_changed);
+
         p.company_profile = Some(profile.clone());
         let revision = PartyRevision::new(
             PartyRevisionId::new("revision"),
@@ -188,12 +194,14 @@ mod tests {
         )
         .unwrap();
         assert!(seed.change(&p, Some(&revision)).unwrap().is_none());
+
         seed.bank_name = "新开户行".into();
         let (profile, name_changed) = seed.change(&p, Some(&revision)).unwrap().unwrap();
         assert!(!name_changed);
         assert_eq!(profile.bank_name.as_deref(), Some("新开户行"));
         p.company_profile = Some(profile);
         assert!(seed.change(&p, Some(&revision)).unwrap().is_none());
+
         seed.legal_name = "新公司名称".into();
         assert!(seed.change(&p, Some(&revision)).unwrap().unwrap().1);
         assert_eq!(p.base.id, "same-id");

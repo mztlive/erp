@@ -27,11 +27,13 @@ pub(in crate::returns_center) async fn search(
     executor: &mut dyn Executor,
 ) -> Result<PageResult<PurchaseReturnOrderRow>> {
     scope.ensure_current(executor)?;
+
     let collection = db.collection::<PurchaseReturnOrderRow>(Database::PURCHASE_RETURN_ORDERS);
     let stages = scope.related_stages(filter.to_doc(), "$purchase_order_id");
     let items =
         aggregate::find(&collection, filter.to_doc(), page_options(filter), stages.clone(), executor).await?;
     let total = aggregate::count(&collection, filter.to_doc(), stages, executor).await?;
+
     scope.ensure_current(executor)?;
     let total =
         i64::try_from(total).map_err(|_| RepositoryError::EntityMetadataOutOfRange("采购退货总数超限"))?;
@@ -173,12 +175,14 @@ mod tests {
             .resolve(&actor, &purchase_order_permissions::DETAIL, &mut SnapshotExecutor::default())
             .await
             .unwrap();
+
         let pipeline = purchase_return_identity_pipeline("return", &scope);
         assert_eq!(pipeline[0], doc! { "$match": { "id": "return", "deleted_at": 0_i64 } });
         assert_eq!(
             pipeline.last(),
             Some(&doc! { "$project": { "_id": 0, "id": 1, "purchase_order_id": 1 } })
         );
+
         let lookup = pipeline[1].get_document("$lookup").unwrap();
         assert_eq!(lookup.get_document("let").unwrap(), &doc! { "source_id": "$purchase_order_id" });
         let source = lookup.get_array("pipeline").unwrap();

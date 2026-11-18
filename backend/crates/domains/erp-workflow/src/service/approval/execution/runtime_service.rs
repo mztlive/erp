@@ -228,6 +228,7 @@ async fn persisted_command_view_with_executor(
     let instance =
         db.bpm_workflow().find_instance_by_id(&instance_id, executor).await?.ok_or_else(hidden_not_found)?;
     let current = db.bpm_workflow().find_current_execution(&instance_id, executor).await?;
+
     let next_open_task = match current.as_ref() {
         Some(execution) => {
             let tasks = db
@@ -248,6 +249,7 @@ async fn persisted_command_view_with_executor(
         },
         None => None,
     };
+
     Ok(map_command_view(&instance, current.as_ref(), None, None, next_open_task, commit, replay))
 }
 
@@ -763,9 +765,7 @@ mod tests {
     #[test]
     fn mine_page_rejects_two_tasks_for_the_same_execution() {
         let tasks = [approval_task("wi-1", "exec-1"), approval_task("wi-2", "exec-1")];
-
         let error = mine_execution_ids(&tasks).expect_err("重复 execution 必须整页失败关闭");
-
         assert_hidden_not_found(error);
     }
 
@@ -788,7 +788,6 @@ mod tests {
 
         let error = mine_instance_ids(&execution_ids, &execution_by_id)
             .expect_err("不同 execution 指向同一 instance 必须整页失败关闭");
-
         assert_hidden_not_found(error);
     }
 
@@ -863,6 +862,7 @@ mod tests {
                 .is_err()
             );
         }
+
         for view in [RuntimeInstanceListView::Started, RuntimeInstanceListView::Mine] {
             assert!(
                 item_from_runtime_read_row(
@@ -874,6 +874,7 @@ mod tests {
                 .is_err()
             );
         }
+
         let starter = AuditActor::new("starter".into(), "starter".into(), AccountKind::Admin);
         assert!(
             item_from_runtime_read_row(
@@ -955,6 +956,7 @@ mod tests {
             assert!(!command_may_have_committed(&error));
             assert!(matches!(error, Error::ConflictError(_)));
         }
+
         let transient = Error::from(persistence_core::Error::TransientTransactionConflict(
             mongodb::error::Error::custom("write conflict"),
         ));
@@ -963,10 +965,12 @@ mod tests {
         assert!(command_may_have_committed(&Error::OutcomeUnknown(
             persistence_core::Error::CommitOutcomeUnknown(mongodb::error::Error::custom("unknown commit")),
         )));
+
         assert!(!command_may_have_committed(&Error::ConflictError("数据已存在，请勿重复提交".to_string())));
         assert!(!command_may_have_committed(&Error::ConflictError("并发事务冲突，请重试".to_string())));
         assert!(!command_may_have_committed(&Error::ConflictError("审批任务已结束".to_string())));
         assert!(!command_may_have_committed(&Error::ValidationError("请求无效".to_string())));
+
         assert_eq!(command_recovery_delay(0).as_millis(), 5);
         assert_eq!(command_recovery_delay(5).as_millis(), 160);
         assert_eq!(command_recovery_delay(99).as_millis(), 160);

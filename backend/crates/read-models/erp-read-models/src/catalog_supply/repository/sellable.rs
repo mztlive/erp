@@ -64,6 +64,7 @@ impl CatalogSupplyRepository<'_> {
         if let Some(sku_ids) = restrict {
             match_doc.insert("id", doc! { "$in": sku_ids });
         }
+
         let pipeline = sellable_sku_pipeline(match_doc, filter, Some((filter.page, filter.page_size)));
         let facet = self.aggregate_sellable_skus(pipeline, executor).await?;
         Ok(PageResult { items: facet.items, total: facet.total.first().map_or(0, |row| row.count) })
@@ -90,6 +91,7 @@ impl CatalogSupplyRepository<'_> {
         if refs.is_empty() {
             return Ok(Vec::new());
         }
+
         let match_doc = sellable_sku_match(refs);
         let filter = SellableSkuFilter::as_of(eligibility_as_of);
         let pipeline = sellable_sku_pipeline(match_doc, &filter, None);
@@ -117,6 +119,7 @@ impl CatalogSupplyRepository<'_> {
         if sku_ids.is_empty() {
             return Ok(Vec::new());
         }
+
         let mut match_doc = sellable_sku_match(&[]);
         match_doc.insert("id", doc! { "$in": sku_ids });
         let filter = SellableSkuFilter::as_of(eligibility_as_of);
@@ -236,6 +239,7 @@ fn append_sellable_optional_filters(pipeline: &mut Vec<Document>, filter: &Sella
     if let Some(brand_id) = filter.brand_id.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
         pipeline.push(doc! { "$match": { "product_revision.brand_id": brand_id } });
     }
+
     if let Some(supplier_id) = filter.supplier_id.as_deref().map(str::trim).filter(|value| !value.is_empty())
     {
         // 仅匹配资格供给中的供应商；响应投影仍不返回供应商身份。
@@ -253,6 +257,7 @@ fn append_sellable_optional_filters(pipeline: &mut Vec<Document>, filter: &Sella
             }
         });
     }
+
     append_price_filter(pipeline, filter);
     if let Some(value) = filter.keyword.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
         let pattern = regex::escape(value);
@@ -305,7 +310,9 @@ fn sellable_sku_pipeline(
         sellable_supply_summary(),
         doc! { "$set": { "supplier_count": { "$size": "$supplier_ids" } } },
     ];
+
     append_sellable_optional_filters(&mut pipeline, filter);
+
     pipeline.push(doc! {
         "$facet": {
             "items": sellable_sku_item_stages(paging, filter.sort),
@@ -334,6 +341,7 @@ fn sellable_sku_item_stages(paging: Option<(u64, u32)>, sort: SellableSort) -> V
     if paging.is_some() {
         stages.push(doc! { "$limit": limit });
     }
+
     stages.push(sellable_sku_projection());
     stages
 }
@@ -668,6 +676,7 @@ mod tests {
             let mut pipeline = Vec::new();
             append_price_filter(&mut pipeline, &filter);
             assert!(pipeline.is_empty());
+
             let min = Amount::from_str("0.00").unwrap();
             let max = Amount::from_str("99.90").unwrap();
             for (lower, upper) in [(Some(min), None), (None, Some(max)), (Some(min), Some(max))] {
@@ -742,6 +751,7 @@ mod tests {
         assert_eq!(pipeline_sort(price), doc! { "sku_revision.bulk_price_gross": -1, "sku_no": 1, "id": 1 });
         let suppliers = SellableSort { field: SellableSortField::SupplierCount, descending: false };
         assert_eq!(pipeline_sort(suppliers), doc! { "supplier_count": 1, "sku_no": 1, "id": 1 });
+
         let projection = sellable_sku_projection();
         let fields = projection.get_document("$project").unwrap();
         assert_eq!(fields.get_str("brand_id").unwrap(), "$product_revision.brand_id");
@@ -763,6 +773,7 @@ mod tests {
             "current_revision_id": { "$ne": null },
         };
         assert_eq!(sellable_sku_match(&[]), base);
+
         let mut expected = base;
         expected.insert(
             "$or",

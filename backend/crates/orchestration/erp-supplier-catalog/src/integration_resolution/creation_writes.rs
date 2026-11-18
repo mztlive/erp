@@ -124,6 +124,7 @@ mod tests {
         let id = &mut e as *mut TestExecutor as usize;
         let mut writes = RecordingWrites::default();
         execute(&mut writes, &mut e).await.unwrap();
+
         assert_eq!(writes.steps, ["domain", "work_item", "audit"]);
         assert_eq!(writes.executors, [id, id, id]);
     }

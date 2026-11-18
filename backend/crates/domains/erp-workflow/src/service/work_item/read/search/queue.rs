@@ -28,6 +28,7 @@ impl WorkItemReadService {
         let collector = AuthorizedPageCollector::new(query.page, query.page_size)?;
         let mut result =
             SearchPage { collector, result_version: String::new(), options: SearchOptions::new() };
+
         let mut scan = self.candidate_scan(&candidates, executor).await?;
         loop {
             let rows = scan.next_batch(AUTHORIZED_SCAN_BATCH_SIZE, executor).await?;
@@ -35,6 +36,7 @@ impl WorkItemReadService {
             if candidate_count == 0 {
                 break;
             }
+
             let mut fields = rows.into_iter().map(dto::WorkItemFields::from).collect::<Vec<_>>();
             for field in &mut fields {
                 field.search = super::task_document(field);
@@ -47,6 +49,7 @@ impl WorkItemReadService {
                 break;
             }
         }
+
         for key in ["handlers", "sales_orders", "purchase_orders"] {
             result.options.remove(key);
         }
@@ -127,6 +130,7 @@ mod tests {
         .unwrap();
         query.merge_filters().unwrap();
         assert_eq!(query.scope, WorkItemScope::Mine);
+
         let mut page = SearchPage {
             collector: AuthorizedPageCollector::new(2, 1).unwrap(),
             result_version: String::new(),
@@ -148,6 +152,7 @@ mod tests {
                 fields
             })
             .collect();
+
         page.extend(rows, &query, None);
         let result = page.collector.finish();
         assert_eq!(result.total, 3);

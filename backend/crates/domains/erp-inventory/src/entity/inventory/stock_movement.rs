@@ -292,6 +292,7 @@ impl StockMovement {
                 expected.as_str()
             )));
         }
+
         let source_document_id = normalize_required_text(
             data.source_document_id,
             "来源单据标识不能为空",
@@ -302,12 +303,14 @@ impl StockMovement {
             normalize_optional_text(data.source_line_id, "来源单据行标识", SOURCE_REFERENCE_MAX_LEN)?;
         let recorded_by =
             normalize_required_text(data.recorded_by, "记录人不能为空", ACTOR_MAX_LEN, "记录人过长")?;
+
         if data.recorded_at < data.occurred_at {
             return Err(Error::from("记录时间不得早于业务发生时间"));
         }
         if data.reversal_of_movement_id.as_ref() == Some(&id) {
             return Err(Error::from("冲正流水不能引用自身"));
         }
+
         let source_reference = data
             .source_reference
             .map(|value| value.trim().chars().take(SOURCE_REFERENCE_MAX_LEN).collect())

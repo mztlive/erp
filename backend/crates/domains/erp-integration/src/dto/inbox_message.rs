@@ -259,11 +259,13 @@ mod tests {
             sort_by: None,
             sort_dir: None,
         };
+
         let query = params.normalized().unwrap();
         assert_eq!(query.message_type, Some(MessageType::PaymentSucceeded));
         assert_eq!(query.status, Some(InboxMessageStatus::Received));
         assert_eq!(query.source_event_id.as_deref(), Some("SO-1"));
         assert_eq!(query.received_at_from, Some(1_700_000_000));
+
         assert_eq!(query.paging.page, 1);
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");

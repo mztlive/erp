@@ -47,6 +47,7 @@ pub async fn approve(
     let account = lock_account(db, request.receivable_account_id.as_ref(), executor).await?;
     ensure_reserved_capacity(db, &account, executor).await?;
     request.approve()?;
+
     let service = rbac.tasks.as_ref();
     let responsibility = service
         .resolve_finance_responsibility(
@@ -69,10 +70,12 @@ pub async fn approve(
         &request.base.id,
         &request.request_no,
     )?;
+
     request.work_item_id = Some(task.base.id.clone());
     task.set_links(work_item_links::capture(db, "sales_invoice_request", &request.base.id, executor).await?)?;
     db.work_items().create(&task, executor).await?;
     db.sales_invoice_requests().update(&mut request, executor).await?;
+
     append_invoice_grant(db, &request, &task, approval_instance_id, executor).await?;
     let audit = actor.clone().resource_log(
         "sales_invoice_request.approve",
@@ -112,6 +115,7 @@ pub(crate) async fn consume_authorization(
     if request.receivable_account_id.as_ref() != account_id || &request.counterparty_party_id != party_id {
         return Err(Error::ConflictError("开票申请与当前销售应收或客户不一致".into()));
     }
+
     lock_account(db, account_id, executor).await?;
     request.record_invoice(amount)?;
     db.sales_invoice_requests().update(&mut request, executor).await?;
@@ -138,12 +142,14 @@ pub(crate) async fn sync_authorized_tasks(
         .work_items()
         .list_sales_invoice_execution_by_receivable_newest_first(&account.base.id, executor)
         .await?;
+
     for mut task in tasks.into_iter().filter(|task| task.status == WorkItemStatus::Open) {
         let Some(request) =
             db.sales_invoice_requests().find_for_task(task.base.id.as_str(), executor).await?
         else {
             continue;
         };
+
         if request.remaining() == Amount::zero() {
             task.complete_when_fully_invoiced(Instant::now())?;
         } else {

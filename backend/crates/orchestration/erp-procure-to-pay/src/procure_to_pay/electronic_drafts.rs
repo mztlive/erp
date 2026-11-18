@@ -55,6 +55,7 @@ pub(super) async fn create_electronic_drafts(
         let Some(sales_line_id) = &line.procurement_confirmation_line_id else {
             continue;
         };
+
         let allocation_id = allocations
             .get(line.base.id.as_str())
             .ok_or_else(|| Error::BusinessLogicError("电子交付明细缺少销售分配，无法生成交付草稿".into()))?;
@@ -66,6 +67,7 @@ pub(super) async fn create_electronic_drafts(
             actor_id,
         )?;
         db.electronic_deliveries().create(&record, executor).await?;
+
         ensure_fulfillment_task(
             db,
             &ports.task_identity,

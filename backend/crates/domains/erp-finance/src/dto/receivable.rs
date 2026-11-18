@@ -236,6 +236,7 @@ mod tests {
             "tax_amount": "11.50"
         });
         assert!(serde_json::from_value::<CreateInvoiceRequest>(valid).is_ok());
+
         let forged = serde_json::json!({
             "invoice_direction": "sales",
             "invoice_kind": "blue",
@@ -292,6 +293,7 @@ mod tests {
             }))
             .is_err()
         );
+
         let submit: SubmitCustomerReceiptRequest = serde_json::from_value(serde_json::json!({
             "expected_version": 1,
             "idempotency_key": "k1",
@@ -299,6 +301,7 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(submit.expected_version, 1);
+
         assert!(
             serde_json::from_value::<CancelCustomerReceiptApprovalRequest>(serde_json::json!({
                 "expected_version": 1,

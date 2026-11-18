@@ -91,10 +91,12 @@ impl DataTransferProcess {
             },
             Err(error) => return Err(error),
         };
+
         let context = self.stored_context(id, executor).await?;
         if !owned && context.as_ref().is_none_or(|context| !context.kind.is_export()) {
             return Err(Error::Forbidden("该任务仅供原提交人读取，请返回原业务页重新提交".into()));
         }
+
         let job = if let Some(context) = &context {
             authorized_read(self.handler.as_ref(), context, actor, executor, |executor| {
                 Box::pin(self.transfer_job(id, executor))
@@ -298,6 +300,7 @@ mod tests {
         })
         .await
         .unwrap();
+
         assert_eq!(value, 42);
         assert_eq!(*handler.calls.lock().unwrap(), ["authorize", "read"]);
     }
@@ -314,6 +317,7 @@ mod tests {
         )
         .await
         .unwrap_err();
+
         assert!(matches!(error, Error::Forbidden(reason) if reason == "业务资格已撤销"));
         assert_eq!(*handler.calls.lock().unwrap(), ["authorize"]);
     }

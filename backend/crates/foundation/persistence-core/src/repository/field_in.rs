@@ -73,7 +73,6 @@ mod tests {
         let collection = client.database("unit_test").collection::<Document>("documents");
 
         let rows = find_active_by_field_in(&collection, "parent_id", &[], &mut UnusedExecutor).await.unwrap();
-
         assert!(rows.is_empty());
     }
 

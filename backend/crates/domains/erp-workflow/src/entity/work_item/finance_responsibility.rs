@@ -381,6 +381,7 @@ impl<'a> FinanceResponsibilityRuleSet<'a> {
             COUNTERPARTY_ID_MAX_LEN,
             "财务责任往来方过长",
         )?;
+
         if let Some(rule) =
             self.unique_match(operation, FinanceResponsibilityScope::Counterparty, |rule| {
                 rule.counterparty_id.as_deref() == Some(counterparty_id.as_str())
@@ -388,6 +389,7 @@ impl<'a> FinanceResponsibilityRuleSet<'a> {
         {
             return Ok(rule);
         }
+
         self.unique_match(operation, FinanceResponsibilityScope::Default, |_| true)?.ok_or_else(|| {
             Error::from(format!(
                 "{}未配置{}责任人，也未配置默认负责人",
@@ -453,6 +455,7 @@ impl TryFrom<FinanceResponsibilityRuleData> for NormalizedRuleData {
             },
             _ => {},
         }
+
         let owner_user_ids = normalize_pool(data.owner_user_ids)?;
         let selector_key = selector_key(data.operation, data.scope, counterparty_id.as_deref());
         Ok(Self {
@@ -615,6 +618,7 @@ mod tests {
         rule.update(data.clone(), "admin").unwrap();
         assert_eq!(rule.owner_user_ids, ["second", "first"]);
         assert_eq!(rule.strategy.select(&rule.owner_user_ids, Some("second")).unwrap(), "first");
+
         let before = rule.clone();
         for members in [vec![], vec!["first".into(), " first ".into()]] {
             let invalid = FinanceResponsibilityRuleData { owner_user_ids: members, ..data.clone() };

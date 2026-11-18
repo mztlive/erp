@@ -314,6 +314,7 @@ impl ReceivableAccount {
         if data.account_seq == 0 {
             return Err(Error::from("往来子账序号必须从 1 开始"));
         }
+
         let (open_total, open_invoiceable) = validate_totals(
             data.gross_total,
             data.settled_total,
@@ -363,6 +364,7 @@ impl ReceivableAccount {
         let invoiceable_total = update.invoiceable_total.unwrap_or(self.invoiceable_total);
         let (open_total, open_invoiceable_total) =
             validate_totals(gross_total, self.settled_total, invoiceable_total, self.invoiced_total)?;
+
         let (reviewed_by, reviewed_at, evidence) = if update.reviewed_by.is_none()
             && update.reviewed_at.is_none()
             && update.review_evidence_reference.is_none()
@@ -376,6 +378,7 @@ impl ReceivableAccount {
                 update.review_evidence_reference,
             )?
         };
+
         self.review_status = review_status;
         self.gross_total = gross_total;
         self.invoiceable_total = invoiceable_total;
@@ -412,6 +415,7 @@ impl ReceivableAccount {
     ) -> Result<()> {
         let (open_total, open_invoiceable) =
             validate_totals(self.gross_total, settled_total, self.invoiceable_total, invoiced_total)?;
+
         self.settled_total = settled_total;
         self.invoiced_total = invoiced_total;
         self.open_total = open_total;

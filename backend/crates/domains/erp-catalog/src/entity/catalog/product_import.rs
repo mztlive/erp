@@ -54,6 +54,7 @@ pub fn truncate_import_text(value: &str, max_chars: usize) -> String {
     if count <= max_chars {
         return value.to_string();
     }
+
     let keep = max_chars.saturating_sub(1);
     let mut out: String = value.chars().take(keep).collect();
     out.push('…');
@@ -97,6 +98,7 @@ pub fn dispimg_id(value: &str) -> Option<&str> {
     let marker = "DISPIMG(";
     let start = trimmed.find(marker)? + marker.len();
     let rest = trimmed[start..].trim_start();
+
     let rest = rest.strip_prefix("&quot;").or_else(|| rest.strip_prefix('"'))?;
     let end = rest.find("&quot;").or_else(|| rest.find('"'))?;
     let id = rest[..end].trim();

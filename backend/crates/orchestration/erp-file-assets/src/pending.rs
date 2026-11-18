@@ -47,6 +47,7 @@ impl PendingFileAssets {
         let mut assets = Vec::with_capacity(requests.len());
         let mut audits = Vec::with_capacity(requests.len());
         let mut references = Vec::with_capacity(requests.len());
+
         for request in requests {
             let reference = PendingFileReference::parse(&request.reference)?;
             manifest.push(PendingFileContent {
@@ -56,6 +57,7 @@ impl PendingFileAssets {
                 byte_size: request.registration.byte_size,
                 content_hmac: request.registration.content_hmac.clone(),
             });
+
             request.registration.validate()?;
             let sensitivity = request.registration.sensitivity_class;
             let asset =
@@ -67,6 +69,7 @@ impl PendingFileAssets {
             assets.push(asset);
             audits.push(audit);
         }
+
         manifest.sort_by(|a, b| a.reference.cmp(&b.reference));
         Ok(Self { assets, references: PendingFileReferenceSet::new(references)?, audits, manifest })
     }
@@ -212,6 +215,7 @@ mod tests {
         assert!(pending.resolve_id(&mut id, &mut used).unwrap());
         assert_ne!(id.as_ref(), "pending-file:one");
         pending.ensure_all_used(&used).unwrap();
+
         let mut replay = FileAssetId::new("pending-file:one");
         assert!(pending.resolve_id(&mut replay, &mut used).is_err());
     }
@@ -225,10 +229,12 @@ mod tests {
         let mut used = HashSet::new();
         assert!(!pending.is_empty());
         assert!(pending.ensure_all_used(&used).is_err());
+
         let mut id = FileAssetId::new("pending-file:one");
         assert!(pending.resolve_id(&mut id, &mut used).unwrap());
         assert!(pending.contains_id(&id));
         pending.ensure_all_used(&used).unwrap();
+
         let mut repeated = FileAssetId::new("pending-file:one");
         assert!(pending.resolve_id(&mut repeated, &mut used).is_err());
     }

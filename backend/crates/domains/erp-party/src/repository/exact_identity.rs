@@ -40,8 +40,10 @@ pub async fn contract_identity_candidates(
 ) -> Result<Vec<ContractIdentityCandidate>> {
     let revisions = db.collection::<Document>(<Database as PartyExt>::PARTY_REVISIONS);
     let result = candidate_rows(&revisions, current_name_pipeline(name), executor).await?;
+
     let parties = db.collection::<Document>(<Database as PartyExt>::PARTIES);
     let direct = candidate_rows(&parties, stable_identity_pipeline(name, credit), executor).await?;
+
     Ok(merge_candidates(result, direct))
 }
 
@@ -145,6 +147,7 @@ pub async fn exact_parties(
         )
         .await;
     }
+
     let mut pipeline = vec![
         doc! { "$match": { "legal_name": name, "deleted_at": 0_i64 } },
         doc! { "$lookup": { "from": <Database as PartyExt>::PARTIES, "localField": "id", "foreignField": "current_revision_id", "as": "party" } },

@@ -188,6 +188,7 @@ fn normalize_code_list<T: Copy + Eq>(
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(Vec::new());
     };
+
     let mut codes = Vec::new();
     for raw in value.split(',').map(str::trim).filter(|code| !code.is_empty()) {
         let code = parse(raw).ok_or_else(|| Error::ValidationError(format!("不支持的{field}: {raw}")))?;

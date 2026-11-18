@@ -101,6 +101,7 @@ fn related_sales_stages(source_field: &str, authorization: Vec<Document>) -> Vec
     let mut source = vec![doc! {"$match": {"$expr": {"$eq": ["$id", "$$sales_source_id"]}}}];
     source.extend(authorization);
     source.extend([doc! {"$project": {"_id": 0, "id": 1}}, doc! {"$limit": 1}]);
+
     vec![
         doc! {"$lookup": {
             "from": Database::SALES_ORDERS,
@@ -166,6 +167,7 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
             return Ok(vec![]);
         }
         scope.ensure_current(executor)?;
+
         let result = aggregate::find(
             &self.collection().clone_with_type::<SalesVersion>(),
             doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$and": [
@@ -176,6 +178,7 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
             executor,
         )
         .await?;
+
         scope.ensure_current(executor)?;
         Ok(result)
     }
@@ -187,6 +190,7 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
         executor: &mut dyn persistence_core::Executor,
     ) -> crate::Result<Option<crate::entity::sales_order::SalesOrder>> {
         scope.ensure_current(executor)?;
+
         let rows = aggregate::find(
             &self.collection(),
             doc! { "deleted_at": 0, "id": id },
@@ -195,6 +199,7 @@ impl SalesOrderRepositoryScopeExt for Repository<'_, crate::entity::sales_order:
             executor,
         )
         .await?;
+
         scope.ensure_current(executor)?;
         Ok(rows.into_iter().next())
     }
@@ -222,6 +227,7 @@ mod tests {
         let lookup = stages[0].get_document("$lookup").unwrap();
         assert_eq!(lookup.get_str("from").unwrap(), Database::SALES_ORDERS);
         assert_eq!(lookup.get_document("let").unwrap(), &doc! {"sales_source_id": "$sales_order_id"});
+
         let source = lookup.get_array("pipeline").unwrap();
         assert_eq!(
             source[0].as_document().unwrap(),
@@ -231,6 +237,7 @@ mod tests {
             assert_eq!(actual.as_document().unwrap(), &expected);
         }
         assert_eq!(source.last().unwrap().as_document().unwrap(), &doc! {"$limit": 1});
+
         assert_eq!(stages[1], doc! {"$match": {"__authorized_sales_source.0": {"$exists": true}}});
         assert_eq!(stages[2], doc! {"$unset": "__authorized_sales_source"});
     }

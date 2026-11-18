@@ -141,6 +141,7 @@ impl TryFrom<CompleteImportBusinessConfirmationCommand> for PreparedConfirmation
     fn try_from(command: CompleteImportBusinessConfirmationCommand) -> Result<Self> {
         let decision = command.decision;
         let confirmation_scope = ConfirmationScope::parse(&decision.confirmation_scope)?.as_str().to_string();
+
         let reason_code = optional_text(decision.reason_code);
         if decision.action == ConfirmationDecision::ReturnForFix && reason_code.is_none() {
             return Err(Error::ValidationError("退回修复必须提供原因代码".to_string()));
@@ -148,6 +149,7 @@ impl TryFrom<CompleteImportBusinessConfirmationCommand> for PreparedConfirmation
         if decision.action == ConfirmationDecision::ConfirmScope && reason_code.is_some() {
             return Err(Error::ValidationError("确认责任范围不得携带退回原因".to_string()));
         }
+
         Ok(Self {
             work_item_id: command.work_item_id,
             batch_id: decision.batch_id,

@@ -81,6 +81,7 @@ mod wire_tests {
         assert_eq!(instance.id, "inst-1");
         assert_eq!(instance.current_round_no, 2);
         assert_eq!(instance.process_version, Some(4));
+
         let item = DocumentApprovalHistoryItemView::new(
             "exec-1".to_string(),
             "node-1".to_string(),
@@ -114,6 +115,7 @@ mod wire_tests {
         .with_sales_line_no(1);
         assert_eq!(line.sales_order_line_id, "line-1");
         assert_eq!(line.max_create_quantity, "6");
+
         let basis = CreationBasisView::new(
             "wi-1".to_string(),
             "basis-1".to_string(),

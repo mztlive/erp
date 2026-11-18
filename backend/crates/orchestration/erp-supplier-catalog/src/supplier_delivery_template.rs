@@ -97,6 +97,7 @@ pub async fn create_delivery_template(
         Some(format!("配送模板 {}", content.name.trim())),
     )?;
     let supplier = SupplierAccountId::new(supplier_id.trim());
+
     let template = run_audited::<_, Error, _>(&db, audit, move |db, executor| {
         Box::pin(async move {
             authorization
@@ -105,6 +106,7 @@ pub async fn create_delivery_template(
             if db.supplier_accounts().find_by_id(supplier.as_ref(), executor).await?.is_none() {
                 return Err(Error::NotFound("供应商不存在".into()));
             }
+
             let service = DeliveryTemplateService::new(db.clone());
             Ok(service.create(id, supplier, content, actor.id(), executor).await?)
         })
@@ -143,6 +145,7 @@ pub async fn update_delivery_template(
         id.clone(),
         Some(format!("配送模板 {}", content.name.trim())),
     )?;
+
     let template = run_audited::<_, Error, _>(&db, audit, move |db, executor| {
         Box::pin(async move {
             authorization
@@ -230,6 +233,7 @@ pub async fn assign_offering_delivery_template(
                 offerings
                     .push(access.require_offering(&actor, &supplier_offering::REVISE, id, executor).await?);
             }
+
             let updated = DeliveryTemplateService::new(db.clone())
                 .assign(offerings, template_id.as_deref(), actor.id(), executor)
                 .await?;
@@ -258,6 +262,7 @@ mod authorization_tests {
             .database("delivery_template_read_unit");
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         let authorization = unavailable_authorization();
+
         assert!(matches!(
             template_list(&db, &authorization, "supplier", &actor, &mut NoTransaction).await,
             Err(Error::ValidationError(_))

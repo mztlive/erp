@@ -46,6 +46,7 @@ impl ContractCreationPort for CreationFacts {
         if rows.len() != 1 || rows[0].resource != "customer" || rows[0].id != customer_id {
             return Err(Error::NotFound("客户不存在或无权访问".into()));
         }
+
         let mut candidate = rows.remove(0);
         candidate.resource = "contract".into();
         candidate.id.clear();

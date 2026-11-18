@@ -70,6 +70,7 @@ impl CostReadModel {
     ) -> Result<CostReadResult<PageView<ScopedCostEntryView>>> {
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
+
         let mut snapshot = self
             .checked(
                 &params,
@@ -79,6 +80,7 @@ impl CostReadModel {
                 params.scope_version.as_deref(),
             )
             .await?;
+
         let rows = std::mem::take(&mut snapshot.rows);
         Ok(snapshot.result(paging::costs(rows, query.paging)))
     }
@@ -120,6 +122,7 @@ impl CostReadModel {
         validator::Validate::validate(&params)?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
+
         let selection = CostSelection::allocations(query.clone());
         let mut snapshot = self
             .checked(
@@ -130,6 +133,7 @@ impl CostReadModel {
                 params.scope_version.as_deref(),
             )
             .await?;
+
         let entries = std::mem::take(&mut snapshot.rows);
         let rows = entries.into_iter().flat_map(|entry| entry.allocations).collect();
         let page = paging::allocations(rows, &snapshot.allocation_created_at, &query)?;

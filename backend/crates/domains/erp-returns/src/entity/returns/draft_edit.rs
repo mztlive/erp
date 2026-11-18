@@ -56,6 +56,7 @@ mod tests {
             FinancialDraftEditPolicy::ensure("handler", "reviewer", false),
             Err(Error::ConflictError(_))
         ));
+
         for is_draft in [true, false] {
             assert!(matches!(
                 FinancialDraftEditPolicy::ensure("handler", "handler", is_draft),

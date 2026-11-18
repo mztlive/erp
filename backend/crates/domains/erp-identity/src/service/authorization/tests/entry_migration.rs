@@ -38,6 +38,7 @@ async fn adoption_and_its_unit_preparation_preserve_separate_role_qualifications
             Err(Error::Forbidden(_))
         ));
     }
+
     grant(
         &identity,
         vec![
@@ -119,9 +120,11 @@ async fn execution_setup_result_query_preserves_submit_qualification_without_det
         .require(&actor(), &permission, AccessTarget::record("order").unwrap(), &mut executor)
         .await
         .unwrap();
+
     let access = service.query(&actor(), &permission, &mut executor).await.unwrap();
     service.validate(&access, &mut executor).await.unwrap();
     assert!(matches!(access.ensure_current(&mut executor), Err(Error::ValidationError(_))));
+
     grant(&identity, vec![("reader".into(), vec![supplier_fulfillment::ORDER_DETAIL])]);
     assert!(matches!(service.query(&actor(), &permission, &mut executor).await, Err(Error::Forbidden(_))));
     assert!(matches!(
@@ -177,11 +180,14 @@ async fn management_never_uses_a_previously_valid_identity_or_masks_facility_err
     let service = Arc::new(service(identity.clone(), Arc::new(Facts::default())));
     let access = ManagementAccess::new(service, actor(), &admin::ROLE_CREATE_ROLE);
     access.require(&mut SnapshotExecutor::default()).await.unwrap();
+
     identity.state.lock().unwrap().active = false;
     assert!(matches!(access.require(&mut SnapshotExecutor::default()).await, Err(Error::Forbidden(_))));
+
     identity.state.lock().unwrap().active = true;
     identity.state.lock().unwrap().fail = true;
     assert!(matches!(access.require(&mut SnapshotExecutor::default()).await, Err(Error::Internal(_))));
+
     let calls = identity.permissions_calls.load(Ordering::SeqCst);
     assert!(matches!(access.require(&mut ReadExecutor::default()).await, Err(Error::ValidationError(_))));
     assert_eq!(identity.permissions_calls.load(Ordering::SeqCst), calls);
@@ -219,6 +225,7 @@ async fn purchase_change_replies_require_original_entry_and_source_without_detai
         let facts = Arc::new(Facts::new(vec![object("purchase_order", "purchase", "other")]));
         let service = purchase_service(identity.clone(), facts.clone());
         let target = || AccessTarget::record("purchase").unwrap();
+
         for granted in [vec![entry.clone()], vec![source.clone()]] {
             grant(&identity, vec![("incomplete".into(), granted)]);
             assert!(matches!(
@@ -227,10 +234,12 @@ async fn purchase_change_replies_require_original_entry_and_source_without_detai
             ));
         }
         assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
+
         grant(&identity, vec![("entry".into(), vec![entry]), ("source".into(), vec![source])]);
         service.require(&actor(), &permission, target(), &mut SnapshotExecutor::default()).await.unwrap();
         let mut executor = SnapshotExecutor::default();
         service.require(&actor(), &permission, target(), &mut executor).await.unwrap();
+
         executor.next_read();
         identity.state.lock().unwrap().active = false;
         assert!(matches!(

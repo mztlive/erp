@@ -16,6 +16,7 @@ pub fn pdf_page_count(pdf: &[u8]) -> Result<u32, ImportFailure> {
         LoadOptions { strict: true, max_decompressed_size: Some(8 * 1024 * 1024), ..LoadOptions::default() },
     )
     .map_err(|_| ImportFailure::new("INVALID_PDF", "PDF 无法解析，请上传完整文件"))?;
+
     let pages = u32::try_from(document.get_pages().len()).unwrap_or(u32::MAX);
     if document.is_encrypted()
         || document.was_encrypted()
@@ -48,6 +49,7 @@ mod tests {
         doc.trailer.set("Root", root);
         let mut bytes = Vec::new();
         doc.save_to(&mut bytes).unwrap();
+
         assert_eq!(pdf_page_count(&bytes).unwrap(), 1);
         assert!(pdf_page_count(b"%PDF-invalid").is_err());
         assert!(pdf_page_count(&[]).is_err());

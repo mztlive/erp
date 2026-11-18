@@ -151,6 +151,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
             None => None,
         };
         let offering_ids = intersect_offering_ids(availability_ids, query.offering_ids.clone());
+
         let keyword_sku_ids = match query.keyword.as_deref() {
             Some(keyword) => Some(self.db.catalog().resolve_sku_ids_by_keyword(keyword, executor).await?),
             None => None,
@@ -160,6 +161,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
             .catalog()
             .resolve_sku_ids_by_codes(query.product_no.as_deref(), query.sku_no.as_deref(), executor)
             .await?;
+
         Ok(SupplierOfferingFilter {
             offering_ids,
             sku_id: query.sku_id.clone(),
@@ -220,6 +222,7 @@ impl<'a> SupplierOfferingReadRepository<'a> {
         executor: &mut dyn Executor,
     ) -> erp_supply::Result<SupplierOfferingListBundle> {
         let page = self.db.supplier_offerings().search_supplier_offerings(filter, executor).await?;
+
         let revisions =
             self.db.supplier_offering_repository().load_current_revisions(&page.items, executor).await?;
         let offering_ids =
@@ -232,11 +235,13 @@ impl<'a> SupplierOfferingReadRepository<'a> {
             .into_iter()
             .map(|value| (value.supplier_offering_id.to_string(), value))
             .collect::<HashMap<_, _>>();
+
         let display = self.load_display_entities(&page.items, executor).await?;
         let supplier_ids =
             crate::support::dedup_ordered(page.items.iter().map(|row| row.supplier_id.clone()));
         let delivery_templates =
             self.db.supplier_delivery_templates().list_by_suppliers(&supplier_ids, executor).await?;
+
         Ok(SupplierOfferingListBundle {
             delivery_templates,
             page,

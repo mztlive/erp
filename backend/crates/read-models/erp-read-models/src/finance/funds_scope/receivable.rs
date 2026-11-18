@@ -41,6 +41,7 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<CustomerCenterReceivableRow> {
         let (_, authorization) = self.resolve(actor, &receivable_permissions::ACCOUNT_LIST, executor).await?;
+
         let params = ReceivableAccountListParams {
             customer_id: Some(CustomerAccountId::new(customer_id)),
             ..Default::default()
@@ -50,12 +51,14 @@ impl FundsAccess {
         let snapshot =
             self.receivable_database_snapshot(&query, &authorization, &condition, false, executor).await?;
         let _ = snapshot.version(&authorization)?;
+
         let ids = snapshot.versions.into_iter().map(|row| row.id).collect::<Vec<_>>();
         let result = self
             .db
             .receivable_accounts()
             .customer_center_receivable(customer_id, &ids, BusinessDate::today(), executor)
             .await?;
+
         authorization.deliver(executor).await?;
         Ok(result)
     }
@@ -79,6 +82,7 @@ impl FundsAccess {
         params.validate()?;
         let query = params.normalized().map_err(Error::from)?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
+
         let snapshot =
             self.checked_receivable_accounts(params, &query, actor, params.scope_version.as_deref()).await?;
         Ok(snapshot)
@@ -122,6 +126,7 @@ impl FundsAccess {
         let (_access, authorization) =
             self.resolve(actor, &receivable_permissions::ACCOUNT_DETAIL, executor).await?;
         self.require_visible_root(&authorization, id, executor).await?;
+
         let account = self
             .db
             .receivable_accounts()
@@ -129,6 +134,7 @@ impl FundsAccess {
             .await
             .map_err(Error::from)?
             .ok_or_else(|| Error::NotFound("应收往来子账不存在".into()))?;
+
         let order = authorization
             .sales_scope()?
             .sales_fact(&self.db, account.sales_order_id.as_ref(), executor)
@@ -142,10 +148,12 @@ impl FundsAccess {
             linked_document_id: order.id.clone(),
             linked_document_version: order.version,
         };
+
         let mut row = self.receivable_detail_row(&account, &order, executor).await?;
         self.finish_receivable_display(std::slice::from_mut(&mut row), executor).await?;
         let parts = vec![facts.version_part()];
         let version = scope_version(&authorization.context, &parts);
+
         authorization.deliver(executor).await?;
         Ok(FundsScopedResult {
             data: row,
@@ -276,11 +284,13 @@ impl FundsAccess {
     ) -> Result<FundsScopedPage<ScopedReceivableAccountRow>> {
         let (_access, authorization) =
             self.resolve(actor, &receivable_permissions::ACCOUNT_LIST, executor).await?;
+
         let condition = self.receivable_condition(query, executor).await?;
         let snapshot =
             self.receivable_database_snapshot(query, &authorization, &condition, true, executor).await?;
         let version = snapshot.version(&authorization)?;
         ensure_version(params.scope_version.as_deref(), &version)?;
+
         let ids = snapshot.summary.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
         let display_ids = snapshot.items.iter().map(|item| item.row.id.clone()).collect();
         let mut facts = self.receivable_facts(&ids, &display_ids, executor).await?;
@@ -288,6 +298,7 @@ impl FundsAccess {
         self.finish_receivable_names(&mut items, executor).await?;
         self.attach_receipt_capacity(&mut items, executor).await?;
         let summary = receivable_summary(&snapshot.summary, &facts, &version)?;
+
         authorization.deliver(executor).await?;
         Ok(FundsScopedPage {
             items,

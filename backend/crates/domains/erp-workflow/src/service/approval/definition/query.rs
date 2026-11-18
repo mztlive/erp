@@ -51,6 +51,7 @@ impl ApprovalDefinitionService {
             executor,
         )
         .await?;
+
         let mut required_kinds = Vec::new();
         let mut policies = Vec::with_capacity(ALL_DOCUMENT_TYPES.len());
         for document_type in ALL_DOCUMENT_TYPES {
@@ -60,6 +61,7 @@ impl ApprovalDefinitionService {
             }
             policies.push((document_type, policy));
         }
+
         let facts = self.db.bpm_workflow().definition_catalog_facts(&required_kinds, executor).await?;
         let by_kind = catalog_facts_by_kind(facts);
         Ok(policies
@@ -145,12 +147,14 @@ impl ApprovalDefinitionService {
         self.authorization
             .require(actor, &approval_process::DEFINITION_DETAIL, AccessTarget::Operation, executor)
             .await?;
+
         let graph = self
             .db
             .bpm_workflow()
             .load_definition_graph(&ApprovalProcessDefinitionId::new(definition_id.to_string()), executor)
             .await?
             .ok_or_else(definition_not_found)?;
+
         let policy = require_process_required(document_type_of(graph.definition.process_kind))?;
         require_definition_access(
             &self.authorization,
@@ -161,6 +165,7 @@ impl ApprovalDefinitionService {
         )
         .await
         .map_err(detail_access_error)?;
+
         detail_with_copies(&self.db, &graph, executor).await
     }
 }

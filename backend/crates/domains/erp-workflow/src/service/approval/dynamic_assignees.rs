@@ -42,6 +42,7 @@ pub async fn resolve_graph(
         node.validate_assignment()
             .map_err(|e| Error::ValidationError(format!("“{}”节点：{e}", node.node_name)))?;
     }
+
     let policy = require_process_required(document_type_of(graph.definition.process_kind))?;
     ensure_separation_of_duties(policy.separation_of_duties_policy, applicant, &graph.assignee_ids())?;
     Ok(graph)
@@ -209,6 +210,7 @@ mod tests {
         )
         .await
         .unwrap();
+
         let plan = start_graph(&resolved).unwrap();
         assert_eq!(plan.created_executions[0].assignee_name_snapshot, "张三");
         for binding in &plan.created_assignees {
@@ -216,6 +218,7 @@ mod tests {
             assert_eq!(snapshot.source_name, "部".repeat(100));
             assert_eq!(snapshot.participant_name, "张三");
         }
+
         let restored = original.with_frozen_assignees(&plan.instance, &plan.created_assignees).unwrap();
         let eligible = |index: usize| Eligibility::Eligible {
             participant: restored.nodes[index].assignee().unwrap().clone(),
@@ -284,25 +287,30 @@ mod tests {
         let resolved =
             resolve_graph(&directory, original.clone(), "applicant", at, &mut NoTransaction).await.unwrap();
         assert!(original.nodes[0].assignee_participant_id.is_none());
+
         let plan = start_graph(&resolved).unwrap();
         revalidate_assignments(&directory, &plan.instance, &plan.created_assignees, at, &mut NoTransaction)
             .await
             .unwrap();
+
         let changed = Directory { user: "new-leader", assignment: "a2", fail: false };
         assert!(
             revalidate_assignments(&changed, &plan.instance, &plan.created_assignees, at, &mut NoTransaction)
                 .await
                 .is_err()
         );
+
         assert!(
             original.clone().with_frozen_assignees(&plan.instance, &plan.created_assignees[..1]).is_err()
         );
         let mut tampered = plan.created_assignees.clone();
         tampered[0].resolution.as_mut().unwrap().subject_id = "other".into();
         assert!(original.clone().with_frozen_assignees(&plan.instance, &tampered).is_err());
+
         let restored = original.with_frozen_assignees(&plan.instance, &plan.created_assignees).unwrap();
         assert_eq!(restored.nodes[0].assignee().unwrap().as_str(), "leader");
         assert_eq!(restored.nodes[0].resolution.as_ref().unwrap().source_name, "销售一组");
+
         let eligible = |index: usize| Eligibility::Eligible {
             participant: restored.nodes[index].assignee().unwrap().clone(),
             assignee_name_snapshot: restored.nodes[index].assignee_label_snapshot.clone(),
@@ -324,6 +332,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(next.created_executions[0].node_key, "n2");
+
         let rejected = decide(
             next.instance,
             next.created_executions[0].clone(),
@@ -352,6 +361,7 @@ mod tests {
         original.nodes[1].assignee_participant_id = None;
         original.nodes[1].assignee_rule = Some("APPLICANT_DEPARTMENT_LEADER".into());
         original.validate_linear().unwrap();
+
         let identities = (1..=2)
             .map(|i| CopiedNodeIdentity {
                 node_id: ApprovalNodeDefinitionId::new(format!("copy{i}")),
@@ -368,6 +378,7 @@ mod tests {
         assert_eq!(copied[0].assignee_rule, original.nodes[0].assignee_rule);
         assert_eq!(copied[1].assignee_rule, original.nodes[1].assignee_rule);
         assert!(copied.iter().all(|n| n.assignee_participant_id.is_none() && n.resolution.is_none()));
+
         let directory = Directory { user: "leader", assignment: "a1", fail: false };
         let resolved =
             resolve_graph(&directory, original, "applicant", Instant::from_unix_secs(10), &mut NoTransaction)

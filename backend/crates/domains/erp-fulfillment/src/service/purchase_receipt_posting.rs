@@ -48,9 +48,11 @@ impl FulfillmentService {
         if warehouse_id.as_ref().is_some_and(|requested| requested != &receipt.warehouse_id) {
             return Err(Error::ValidationError("采购入库单的目标仓库已冻结，不能在过账时变更".to_string()));
         }
+
         receipt.update(crate::entity::fulfillment::PurchaseReceiptUpdate {
             warehouse_id: warehouse_id.or_else(|| Some(receipt.warehouse_id.clone())),
         })?;
+
         let lines = self
             .db
             .fulfillment()
@@ -144,6 +146,7 @@ impl FulfillmentService {
             receipt_reservation_specs(reservations),
         )
         .map_err(Error::Logic)?;
+
         self.db.fulfillment().create_delivery_with_lines(&delivery, &lines, session).await?;
         Ok(delivery)
     }
@@ -171,6 +174,7 @@ impl FulfillmentService {
             .fulfillment()
             .delivery_lines_by_delivery_ids(std::slice::from_ref(&delivery_id), session)
             .await?;
+
         let existing_reservations = existing
             .iter()
             .filter_map(|line| line.stock_reservation_id.as_ref().map(ToString::to_string))
@@ -180,6 +184,7 @@ impl FulfillmentService {
             .filter(|reservation| !existing_reservations.contains(reservation.reservation_id.as_ref()))
             .cloned()
             .collect::<Vec<_>>();
+
         let next_line_no = existing.iter().map(|line| line.line_no).max().unwrap_or(0) + 1;
         for line in DeliveryLineBatch::build(
             delivery_id,

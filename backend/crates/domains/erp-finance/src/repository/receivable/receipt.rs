@@ -122,6 +122,7 @@ impl QueryFilter for CustomerReceiptFilter {
                 ]);
             }
         }
+
         insert_literal_regex_filter(&mut filter, "receipt_no", self.receipt_no.as_deref());
         if let Some(counterparty_party_id) = &self.counterparty_party_id {
             filter.insert("counterparty_party_id", counterparty_party_id.to_string());
@@ -129,6 +130,7 @@ impl QueryFilter for CustomerReceiptFilter {
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }
+
         if let Some(ids) = &self.keyword_ids {
             let condition = doc! { "id": { "$in": ids } };
             return doc! { "$and": [filter, condition] };
@@ -226,10 +228,10 @@ impl CustomerReceiptRepositoryExt for persistence_core::Repository<'_, CustomerR
             .limit(filter.limit())
             .projection(customer_receipt_projection())
             .build();
+
         let collection = self.collection().clone_with_type::<CustomerReceiptRow>();
         let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
         let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
         Ok(PageResult { items, total: total as i64 })
     }
 
@@ -390,6 +392,7 @@ mod tests {
             alternatives[1].as_document().unwrap(),
             &mongodb::bson::doc! { "pending_allocations.receivable_entry_id": { "$in": ["entry-1"] } }
         );
+
         assert_eq!(document.get_str("counterparty_party_id").unwrap(), "party-1");
         assert_eq!(document.get_str("status").unwrap(), "IN_APPROVAL");
         assert!(document.contains_key("deleted_at"));

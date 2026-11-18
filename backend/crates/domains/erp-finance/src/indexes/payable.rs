@@ -231,11 +231,11 @@ mod tests {
     #[test]
     fn payable_account_source_identity_is_unique() {
         let indexes = payable_account_indexes();
-
         let identity =
             indexes.iter().find(|index| name(index) == Some("uk_payable_accounts_source")).unwrap();
         assert_eq!(identity.keys, doc! { "source_type": 1, "source_document_id": 1 });
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
+
         assert!(indexes.iter().any(|index| name(index) == Some("idx_payable_accounts_aging")));
     }
 
@@ -256,6 +256,7 @@ mod tests {
             }
         );
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
+
         let direction_due = indexes
             .iter()
             .find(|index| name(index) == Some("idx_payable_entries_account_direction_due"))
@@ -284,6 +285,7 @@ mod tests {
             name(index) == Some("idx_payment_allocations_entry_time")
                 && index.keys == doc! { "payable_entry_id": 1, "allocated_at": 1 }
         }));
+
         assert!(
             purchase_invoice_allocation_indexes()
                 .iter()
@@ -302,6 +304,7 @@ mod tests {
             name(index) == Some("idx_purchase_invoice_allocations_invoice_page")
                 && index.keys == doc! { "invoice_id": 1, "created_at": 1, "id": 1 }
         }));
+
         assert!(
             supplier_payment_indexes().iter().any(|index| name(index) == Some("uk_supplier_payments_no"))
         );

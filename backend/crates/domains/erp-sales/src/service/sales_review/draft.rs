@@ -70,6 +70,7 @@ impl SalesReviewService {
         if let Some(terms) = request.terms {
             terms.apply(&mut copy, actor_id)?;
         }
+
         let stable = self.new_change_lines(&change, &old_lines, &request.lines, executor).await?;
         let target = request
             .lines
@@ -77,16 +78,19 @@ impl SalesReviewService {
             .map(|line| (SalesOrderWorkingCopyLineId::new(next_id()), line))
             .collect();
         let lines = copy.edit_change_lines(id, &old_lines, target, request.business_remark, actor_id)?;
+
         let service = SalesOrderService::new(self.db.clone());
         service
             .ensure_sellable_refs(&SalesOrderService::sellable_working_copy_refs(&lines)?, catalog, executor)
             .await?;
+
         if old_copy.is_submitted() {
             service.create_working_copy(&stable, &copy, &lines, executor).await?;
         } else {
             service.persist_saved_working_copy(&stable, old_lines, &lines, &mut copy, executor).await?;
         }
         self.db.sales_change_orders().update(&mut change, executor).await?;
+
         self.draft_view(&change, &copy, &lines, executor).await
     }
 
@@ -105,6 +109,7 @@ impl SalesReviewService {
         if !change.is_editable() {
             return Err(Error::ConflictError("请先撤回销售变更审批，再修改原单".into()));
         }
+
         let copy = self
             .db
             .sales_order_working_copies()

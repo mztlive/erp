@@ -53,11 +53,13 @@ mod tests {
         )
         .unwrap();
         assert!(item.is_open_procurement_task());
+
         for status in [WorkItemStatus::Completed, WorkItemStatus::Closed] {
             let mut ended = item.clone();
             ended.status = status;
             assert!(!ended.is_open_procurement_task());
         }
+
         let mut invalid = item.clone();
         invalid.business_object_type = "purchase_order".into();
         assert!(!invalid.is_open_procurement_task());

@@ -41,6 +41,7 @@ impl ContractTemplateService {
         {
             return Err(Error::ValidationError("申请信息无效，请刷新页面重试".into()));
         }
+
         let service = self.clone();
         let transaction_actor = actor.clone();
         let transaction_request = request.clone();
@@ -62,6 +63,7 @@ impl ContractTemplateService {
                 })
             })
             .await;
+
         self.finish_apply(result, &request, actor).await
     }
 
@@ -82,6 +84,7 @@ impl ContractTemplateService {
         ) {
             return Err(original);
         }
+
         let service = self.clone();
         let actor = actor.clone();
         let request = request.clone();
@@ -92,6 +95,7 @@ impl ContractTemplateService {
                 Box::pin(async move { service.application_replay(&request, &actor, executor).await })
             })
             .await;
+
         match replay {
             Ok(Some(view)) => Ok(view),
             Ok(None) => Err(original),
@@ -110,6 +114,7 @@ impl ContractTemplateService {
         self.authorization
             .require(actor, &contract::TEMPLATES_APPLY, AccessTarget::Operation, executor)
             .await?;
+
         let Some(existing) =
             application_by_command(&self.db, actor.id(), &request.command_id, executor).await?
         else {
@@ -131,13 +136,16 @@ impl ContractTemplateService {
             existing.require_same(&request.template_id, &request.purpose)?;
             return Ok(existing.into());
         }
+
         let template = self.template(&request.template_id, executor).await?;
         if !template.enabled {
             return Err(Error::BusinessLogicError("模板已停用，请选择其他模板".into()));
         }
         self.active_company(&template.company_id, executor).await?;
+
         let counter = ContractCounter::initial(template.group, BusinessDate::today().ymd().0)?;
         let contract_no = self.allocate(counter, executor).await?;
+
         let application = ContractApplication {
             base: BaseModel::new(id_generator::next_id()),
             command_id: request.command_id,
@@ -148,6 +156,7 @@ impl ContractTemplateService {
             purpose: request.purpose,
             contract_no,
         };
+
         let audit = self.audit.resource_log(
             actor.clone(),
             "contract_application.apply",
@@ -164,6 +173,7 @@ impl ContractTemplateService {
         let existing = self.db.contract_counters().find_by_id(&initial.base.id, executor).await?;
         let is_new = existing.is_none();
         let mut counter = existing.unwrap_or(initial);
+
         for _ in 0..100 {
             let number = counter.allocate()?;
             if self
@@ -175,6 +185,7 @@ impl ContractTemplateService {
             {
                 continue;
             }
+
             if is_new {
                 self.db.contract_counters().create(&counter, executor).await?;
             } else {
@@ -210,6 +221,7 @@ impl ContractTemplateService {
                         .await?
                         .ok_or_else(|| Error::NotFound("合同申请不存在或无权下载".into()))?;
                     let template = service.template(&application.template_id, executor).await?;
+
                     let audit = service.audit.resource_log(
                         actor.clone(),
                         "contract_application.download",
@@ -248,6 +260,7 @@ impl ContractTemplateService {
                         .await?;
 
                     let template = service.template(&id, executor).await?;
+
                     let audit = service.audit.resource_log(
                         actor.clone(),
                         "contract_template.sample",

@@ -86,6 +86,7 @@ impl<T> MongoReplay<T> {
             .authorization
             .require(&self.actor, &permission, AccessTarget::Operation, executor)
             .await?;
+
         let item = self
             .process
             .db
@@ -176,6 +177,7 @@ mod tests {
             assert_eq!(replay(&port, &mut SnapshotExecutor::default()).await.unwrap(), payload);
             assert_eq!(*port.calls.lock().unwrap(), ["authorize", "receipt"]);
         }
+
         let port = Replay {
             allowed: false,
             payload: Some("old-result"),
@@ -184,6 +186,7 @@ mod tests {
         };
         assert!(matches!(replay(&port, &mut SnapshotExecutor::default()).await, Err(Error::Forbidden(_))));
         assert_eq!(*port.calls.lock().unwrap(), ["authorize"]);
+
         port.calls.lock().unwrap().clear();
         assert!(matches!(replay(&port, &mut ReadExecutor::default()).await, Err(Error::ValidationError(_))));
         assert!(port.calls.lock().unwrap().is_empty());

@@ -71,14 +71,17 @@ async fn delivery_snapshot(
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::ValidationError("采购交付安排读取必须使用快照事务".into()));
     }
+
     let access =
         Arc::new(authorization.query(actor, &internal::PURCHASE_DELIVERY_OPTIONS_READ, executor).await?);
     let scope = PurchaseReadScope::from_compiled(access, authorization);
+
     let order = db
         .purchase_orders()
         .find_authorized(id, &scope, executor)
         .await?
         .ok_or_else(|| Error::NotFound("采购单不存在或无权查看".into()))?;
+
     let view = delivery_options_view(db, &order, executor).await?;
     scope.validate(executor).await?;
     Ok(view)
@@ -93,6 +96,7 @@ async fn delivery_options_view(
     if !order.stable.status.allows_change() {
         return draft_delivery_options_view(db, order, executor).await;
     }
+
     let facts = load_change_quantity_facts(db, order, executor).await?;
     let mut view = delivery_options(order, &facts.state.facts)?;
     attach_quantity_bounds(&mut view, &facts.bounds)?;
@@ -113,6 +117,7 @@ async fn draft_delivery_options_view(
     let revision_id = sales
         .current_revision_id()
         .ok_or_else(|| Error::BusinessLogicError("来源销售单缺少当前版本".into()))?;
+
     let facts = load_procurement_coverage_facts(
         db,
         &SalesOrderRevisionId::new(revision_id),
@@ -143,6 +148,7 @@ fn delivery_options(
         let Some((line, goods)) = facts.current_goods_line(&stable) else {
             continue;
         };
+
         let requires_addresses = order.fulfillment_responsibility != FulfillmentResponsibility::Warehouse
             && !goods.delivery_allocations.is_empty();
         let addresses = if requires_addresses {
@@ -164,6 +170,7 @@ fn delivery_options(
         } else {
             Vec::new()
         };
+
         lines.push(PurchaseDeliveryLineOptionView {
             sales_order_line_id: stable,
             line_no: line.line_no,
@@ -266,12 +273,14 @@ mod tests {
             .database("purchase_delivery_options_test");
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
         let authorization = unavailable_authorization();
+
         let result =
             delivery_snapshot(&db, authorization.clone(), &actor, "purchase", &mut ReadExecutor::default())
                 .await;
         assert!(
             matches!(result, Err(Error::ValidationError(reason)) if reason == "采购交付安排读取必须使用快照事务")
         );
+
         let result =
             delivery_snapshot(&db, authorization, &actor, "purchase", &mut SnapshotExecutor::default()).await;
         assert!(matches!(result, Err(Error::Internal(reason)) if reason == "测试授权设施不可用"));
@@ -396,6 +405,7 @@ mod tests {
         assert_eq!((line.sales_order_line_id.as_str(), line.line_no), ("sol-1", 2));
         assert_eq!(line.sales_due_date, "2027-01-15");
         assert!(line.requires_addresses);
+
         let remaining = line
             .addresses
             .iter()

@@ -111,6 +111,7 @@ impl WorkItem {
             impact_summary: None,
         };
         let mut item = Self::new_at_with_optional_responsibility(id, generic, None, Vec::new(), at)?;
+
         item.responsibility_key =
             Some(format!("approval:{}:{}", data.approval_node_execution_id, owner_user_id));
         item.work_item_type = WorkItemType::DocumentApproval;
@@ -286,6 +287,7 @@ impl WorkItem {
         {
             return Err(Error::from("或签决定任务与操作人不一致"));
         }
+
         for item in &mut items {
             if item.approval_node_execution_id.as_ref() != Some(execution_id) {
                 return Err(Error::from("审批任务不属于当前节点执行"));
@@ -533,6 +535,7 @@ mod tests {
         assert_eq!(ended[0].closed_by.as_deref(), Some("bob"));
         assert_eq!(ended[1].status, WorkItemStatus::Completed);
         assert_eq!(ended[1].completed_by.as_deref(), Some("bob"));
+
         assert!(
             WorkItem::end_all_for_approval_execution(
                 ended,
@@ -543,6 +546,7 @@ mod tests {
             )
             .is_err()
         );
+
         assert!(
             WorkItem::end_all_for_approval_execution(
                 vec![first, second],

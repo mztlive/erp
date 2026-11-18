@@ -120,6 +120,7 @@ fn related_pipeline(filter: Document, source_id: &str, access: &[Document]) -> V
     let mut source = vec![doc! { "$match": { "deleted_at": 0, "$expr": { "$eq": ["$id", "$$source_id"] } } }];
     source.extend_from_slice(access);
     source.extend([doc! { "$limit": 1 }, doc! { "$project": { "_id": 0, "id": 1 } }]);
+
     stages.extend([
         doc! { "$lookup": { "from": PURCHASE_ORDERS, "let": { "source_id": source_id }, "pipeline": source, "as": "__authorized_purchase_source" } },
         doc! { "$match": { "__authorized_purchase_source.0": { "$exists": true } } },
@@ -200,6 +201,7 @@ impl PurchaseOrderRepositoryScopeExt
         executor: &mut dyn persistence_core::Executor,
     ) -> crate::Result<Option<crate::entity::purchase_order::PurchaseOrder>> {
         scope.ensure_current(executor)?;
+
         let rows = aggregate::find(
             &self.collection(),
             doc! { "deleted_at": 0, "id": id },
@@ -208,6 +210,7 @@ impl PurchaseOrderRepositoryScopeExt
             executor,
         )
         .await?;
+
         scope.ensure_current(executor)?;
         Ok(rows.into_iter().next())
     }
@@ -222,6 +225,7 @@ impl PurchaseOrderRepositoryScopeExt
         if ids.is_empty() {
             return Ok(Vec::new());
         }
+
         let filter = doc! { "deleted_at": 0, "id": { "$in": ids } };
         let rows = aggregate::find(
             &self.collection(),
@@ -231,6 +235,7 @@ impl PurchaseOrderRepositoryScopeExt
             executor,
         )
         .await?;
+
         scope.ensure_current(executor)?;
         Ok(rows)
     }
@@ -242,6 +247,7 @@ impl PurchaseOrderRepositoryScopeExt
         executor: &mut dyn persistence_core::Executor,
     ) -> crate::Result<Vec<PurchaseVersion>> {
         scope.ensure_current(executor)?;
+
         let rows = aggregate::find(
             &self.collection().clone_with_type::<PurchaseVersion>(),
             filter.to_doc(),
@@ -254,6 +260,7 @@ impl PurchaseOrderRepositoryScopeExt
             executor,
         )
         .await?;
+
         scope.ensure_current(executor)?;
         Ok(rows)
     }
@@ -282,8 +289,10 @@ mod tests {
             doc! { "$match": { "$or": [{ "current_owner_user_id": "owner-1" }, { "grant.0": { "$exists": true } }] } },
             doc! { "$unset": "grant" },
         ];
+
         let stages = related_pipeline(filter.clone(), "$purchase_order_id", &access);
         assert_eq!(stages[0], doc! { "$match": filter });
+
         let lookup = stages[1].get_document("$lookup").unwrap();
         assert_eq!(lookup.get_document("let").unwrap(), &doc! { "source_id": "$purchase_order_id" });
         let source = lookup.get_array("pipeline").unwrap();
@@ -295,6 +304,7 @@ mod tests {
         );
         assert_eq!(&source[1..=access.len()], access.iter().cloned().map(Bson::Document).collect::<Vec<_>>());
         assert_eq!(source[access.len() + 1], Bson::Document(doc! { "$limit": 1 }));
+
         assert_eq!(stages[2], doc! { "$match": { "__authorized_purchase_source.0": { "$exists": true } } });
         assert_eq!(stages[3], doc! { "$unset": "__authorized_purchase_source" });
     }

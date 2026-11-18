@@ -113,6 +113,7 @@ mod tests {
                 vec![purchase_payment_request::CREDIT_LIST, purchase_payment_request::DETAIL],
             ),
         ];
+
         for (upload, permissions) in cases {
             let authorization = fixed_authorization(
                 &permissions,
@@ -124,6 +125,7 @@ mod tests {
             authorize_upload(&authorization, &actor(), upload, &mut SnapshotExecutor::default())
                 .await
                 .unwrap();
+
             let denied = fixed_authorization(
                 &[],
                 ResolvedScope { role_clauses: vec![], user_limit: None },

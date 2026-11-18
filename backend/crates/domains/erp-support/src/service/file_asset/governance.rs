@@ -87,9 +87,11 @@ impl FileAssetService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     this.require_operation(&actor, &mutation.permission(), executor).await?;
+
                     let mut asset = this.require_asset(&id, executor).await?;
                     check_expected_version(asset.base.version, version)?;
                     mutation.apply(&mut asset)?;
+
                     let audit = this.audit.resource_log(
                         actor,
                         mutation.action(),

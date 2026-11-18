@@ -101,6 +101,7 @@ pub(super) fn authorization_claim(
         "authorization_candidate_identity_fingerprint",
         current.authorization_candidate_identity_fingerprint.clone(),
     );
+
     filter.insert("$or", vec![
         doc! {"refresh.state":{"$in":["READY","REAUTHORIZATION_REQUIRED","AUTHORIZATION_REJECTED"]}},
         doc! {"refresh.state":{"$in":["CLAIMED","SENT_UNKNOWN","AUTHORIZATION_CLAIMED","AUTHORIZATION_SENT_UNKNOWN"]},
@@ -148,6 +149,7 @@ pub(super) fn authorization_exchange(current: &SupplierCredential, now: Instant)
 pub(super) fn replacement(next: &SupplierCredential) -> Result<Vec<Document>> {
     let record =
         serialize_to_document(next).map_err(|_| Error::Internal("技术凭据无法编码为存储格式".into()))?;
+
     let mut fields = Document::new();
     for (name, value) in record {
         // 所有服务端字段均按常量写入；密文或操作文本不能被解释为Mongo表达式。

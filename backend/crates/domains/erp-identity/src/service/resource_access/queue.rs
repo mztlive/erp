@@ -74,6 +74,7 @@ mod tests {
             queue.claim_event("", 1).await,
             Err(Error::ValidationError(message)) if message == "领取令牌不能为空"
         ));
+
         let event = GrantEvent::new(GrantEventEvidence {
             payload: GrantEventPayload::InvoiceTaskReassigned {
                 work_item_id: "task".into(),

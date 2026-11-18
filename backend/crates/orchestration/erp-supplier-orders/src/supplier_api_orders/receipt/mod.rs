@@ -43,6 +43,7 @@ impl SupplierApiOrderProcess {
             execution.receipt_next_run_at = (!execution.receipt_actions.is_empty()).then(later);
             return self.save_receipt_progress(&mut execution).await;
         };
+
         let source_error =
             self.receipt_source_evidence(&execution).await.err().map(|error| error.to_string());
         if let Some(action) = execution
@@ -61,6 +62,7 @@ impl SupplierApiOrderProcess {
             )
             .await;
         }
+
         if let Some(error) = source_error {
             execution.receipt_blocker = Some(if execution.receipt_actions.is_empty() {
                 error
@@ -70,6 +72,7 @@ impl SupplierApiOrderProcess {
             execution.receipt_next_run_at = (!execution.receipt_actions.is_empty()).then(later);
             return self.save_receipt_progress(&mut execution).await;
         }
+
         let Some((order, version)) = execution.next_receipt_target()? else {
             // 已通知后的净实收仍低频重核，仓库历史冲正或退货不能隐藏来源冲突。
             execution.receipt_next_run_at =
@@ -158,6 +161,7 @@ mod tests {
             }],
         );
         execution.stage = ApiOrderStage::Observe;
+
         execution.order_tree = Some(OrderTree {
             root_order_no: "leaf".into(),
             version: 1,
@@ -173,6 +177,7 @@ mod tests {
                 refund: None,
             }],
         });
+
         let request = ConfirmReceipt {
             action: ActionKey { id: "receipt".into(), payload_hash: "hash".into() },
             order: OrderReference { merchant_order_no: "execution".into(), external_order_no: "leaf".into() },
@@ -205,12 +210,15 @@ mod tests {
         let mut restored: ApiOrderExecution =
             serde_json::from_str(&serde_json::to_string(&execution).unwrap()).unwrap();
         assert!(!restored.begin_receipt_confirmation(&request).unwrap());
+
         let mut changed = request.clone();
         changed.lines[0].quantity = qty("1");
         assert!(restored.begin_receipt_confirmation(&changed).is_err());
+
         restored.order_tree.as_mut().unwrap().nodes[0].role = OrderNodeRole::Parent;
         assert!(!restored.begin_receipt_confirmation(&request).unwrap());
         assert_eq!(restored.receipt_actions["leaf"].state, ReceiptActionState::SentUnknown);
+
         assert!(
             restored
                 .observe_receipt_confirmation(&request.order, 1, ReceiptConfirmationState::NotRequired)
@@ -280,6 +288,7 @@ mod tests {
     fn warehouse_receipt_requires_exact_original_full_quantity_and_current_effective_receipt() {
         let (execution, _) = fixture();
         assert_eq!(warehouse().quantities(&execution).unwrap()["item"], qty("2"));
+
         for invalid in
             ["reversed", "partial", "rejected", "wrong-warehouse", "wrong-line", "ambiguous-executions"]
         {
@@ -320,6 +329,7 @@ mod tests {
             }],
         )
         .unwrap();
+
         let frozen = vec![OrderLine {
             line_id: "item".into(),
             sku: request.lines[0].sku.clone(),
@@ -421,6 +431,7 @@ mod tests {
         let expected = store.current.lock().unwrap().clone();
         let order = store.request.order.clone();
         let port = Port { calls: Mutex::new(vec![]), state: ReceiptConfirmationState::Confirmed };
+
         assert!(send(&store, &expected, &order, &port).await.is_err());
         assert!(port.calls.lock().unwrap().is_empty());
         assert!(store.current.lock().unwrap().receipt_actions.is_empty());
@@ -432,12 +443,14 @@ mod tests {
         let expected = store.current.lock().unwrap().clone();
         let order = store.request.order.clone();
         store.claim(&expected, &order).await.unwrap();
+
         let mut restored = store.current.lock().unwrap().clone();
         let port = Port { calls: Mutex::new(vec![]), state: ReceiptConfirmationState::Unverified };
         recover(&store, &mut restored, &order, 1, &port, None).await.unwrap();
         recover(&store, &mut restored, &order, 1, &port, None).await.unwrap();
         assert_eq!(*port.calls.lock().unwrap(), ["query", "query"]);
         assert_eq!(restored.receipt_actions["leaf"].state, ReceiptActionState::SentUnknown);
+
         assert!(send(&store, &restored, &order, &port).await.is_err());
         assert_eq!(port.calls.lock().unwrap().len(), 2);
     }
@@ -449,11 +462,13 @@ mod tests {
         let expected = store.current.lock().unwrap().clone();
         let order = store.request.order.clone();
         let port = Port { calls: Mutex::new(vec![]), state: ReceiptConfirmationState::Confirmed };
+
         assert!(send(&store, &expected, &order, &port).await.is_err());
         assert_eq!(
             store.current.lock().unwrap().receipt_actions["leaf"].state,
             ReceiptActionState::SentUnknown
         );
+
         *store.fail_save.lock().unwrap() = false;
         let mut restored = store.current.lock().unwrap().clone();
         recover(&store, &mut restored, &order, 1, &port, Some("原客户验收已冲正".into())).await.unwrap();

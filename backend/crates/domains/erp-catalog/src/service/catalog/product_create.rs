@@ -80,6 +80,7 @@ impl CatalogService {
         actor: &AuditActor,
     ) -> Result<ProductView> {
         let draft = self.prepare_product_create(req, &pending_assets, actor).await?;
+
         let service = self.clone();
         let actor = actor.clone();
         self.db
@@ -143,6 +144,7 @@ impl CatalogService {
         let revision_id = ProductRevisionId::new(next_id());
         let status = req.status.unwrap_or(EnableStatus::Active);
         let media = self.create_media(&revision_id, &req, pending_assets, executor).await?;
+
         let (maintainer_user_id, business_org_unit_id) =
             self.bind_create_maintainer(req.maintainer_user_id.as_deref(), actor, executor).await?;
         let product_no = self.resolve_product_no(req.take_explicit_product_no(), executor).await?;
@@ -157,6 +159,7 @@ impl CatalogService {
             },
             actor.id(),
         )?;
+
         ProductSkuInput::fill_blank_sku_nos(&product.product_no, Vec::new(), &mut req.skus);
         let sku_items = self
             .build_create_sku_items(
@@ -168,6 +171,7 @@ impl CatalogService {
                 executor,
             )
             .await?;
+
         let revision = ProductRevision::new(
             revision_id.clone(),
             ProductRevisionData {
@@ -204,6 +208,7 @@ impl CatalogService {
             executor,
         )
         .await?;
+
         self.build_spu_media(revision_id, &request.carousel_media, &request.detail_media, pending, executor)
             .await
     }
@@ -304,6 +309,7 @@ impl CatalogService {
             return Err(Error::ValidationError("商品写入必须使用原快照事务".into()));
         }
         self.access().ensure_writable(actor, &catalog::PRODUCT_PRODUCT_CREATE, executor).await?;
+
         let draft = self.build_product_draft(draft.request, actor, pending_assets.as_ref(), executor).await?;
         let PreparedProduct { change_reason, product, revision, media, sku_items } = draft;
         let audit = self.audit.resource_log_with_message(
@@ -313,14 +319,17 @@ impl CatalogService {
             product.base.id.clone(),
             change_reason,
         )?;
+
         let db = self.db.clone();
         let audit_port = self.audit.clone();
         let access = self.access();
         let actor = actor.clone();
         access.require_create(&actor, &product, executor).await?;
+
         pending_assets.persist(&db, executor).await?;
         db.products().create(&product, executor).await?;
         db.catalog().create_product_revision_with_media(&revision, &media, executor).await?;
+
         for item in &sku_items {
             db.catalog().create_sku_with_revision(&item.sku, &item.revision, &[], executor).await?;
         }
@@ -349,12 +358,14 @@ mod authorization_tests {
             "skus":[{"name":"sku", "base_unit_id":"missing-unit", "main_image_asset_id":"missing-image"}]
         }))
         .unwrap();
+
         let draft = service.prepare_product_create(request.clone(), &pending, &actor).await.unwrap();
         assert_eq!(draft.request.category_id.as_ref(), "missing-category");
         assert!(matches!(
             service.write_product_draft(draft, &actor, pending.clone(), &mut NoTransaction).await,
             Err(Error::ValidationError(message)) if message == "商品写入必须使用原快照事务"
         ));
+
         let draft = service.prepare_product_create(request, &pending, &actor).await.unwrap();
         denied(service.write_product_draft(draft, &actor, pending, &mut SnapshotExecutor::default()).await);
     }

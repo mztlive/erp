@@ -90,6 +90,7 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<SalesChangeOrderAdapte
     {
         return Err(Error::Internal("销售变更单审批适配器登记不完整".to_string()));
     }
+
     Ok(SalesChangeOrderAdapter {
         document_type: spec.document_type,
         process_kind: spec.process_kind,
@@ -241,6 +242,7 @@ pub(super) fn build_sales_change_snapshot(
     if lines.is_empty() {
         return Err(Error::ValidationError("销售变更单没有明细，无法启动审批".to_string()));
     }
+
     Ok(ApprovalSubjectSnapshotPayload {
         document_no: change_order.base.id.clone(),
         responsible_org_id: sales_change_responsible_org_id(&sales_order.settlement_party_id)?,
@@ -440,6 +442,7 @@ mod tests {
         .unwrap();
         assert_eq!(order.stable.status(), SalesChangeOrderStatus::InApproval);
         assert_eq!(order.stable.updated_by, "submitter-9");
+
         execute_sales_change_domain_action(
             &mut order,
             ApprovalDomainAction::SalesChangeOrderCancelApproval,
@@ -489,11 +492,13 @@ mod tests {
             Instant::from_unix_secs(10),
         )
         .unwrap();
+
         assert_eq!(payload.document_no, "co-1");
         assert_eq!(payload.responsible_org_id, "party-1");
         assert_eq!(payload.submitted_by, "user-1");
         assert_eq!(payload.total_amount.unwrap().to_string(), "10");
         assert_eq!(payload.total_quantity.unwrap().to_string(), "2");
+
         assert!(
             build_sales_change_snapshot(
                 &draft_order(),
@@ -527,6 +532,7 @@ mod tests {
             "user-1",
         )
         .unwrap();
+
         assert!(
             execute_sales_change_domain_action(
                 &mut order,

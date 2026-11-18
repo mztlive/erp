@@ -43,6 +43,7 @@ pub async fn lock_name(db: &Database, name: &str, executor: &mut dyn Executor) -
     if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(Error::Internal("主体身份校验必须位于写事务".into()));
     }
+
     mongo_ops::update_one(
         &db.collection::<Document>(<Database as PartyExt>::PARTY_IDENTITY_GUARDS),
         doc! {"_id": name},

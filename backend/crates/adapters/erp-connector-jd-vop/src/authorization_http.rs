@@ -53,6 +53,7 @@ impl ReqwestAuthorizationHttp {
         let client = self.client.as_ref().map_err(|error| *error)?;
         let url = Zeroizing::new(format!("{endpoint}?{parameters}"));
         let mut response = client.get(url.as_str()).send().await.map_err(|_| AuthorizationError::Unknown)?;
+
         let status = response.status().as_u16();
         let location = response
             .headers()
@@ -62,6 +63,7 @@ impl ReqwestAuthorizationHttp {
         if (300..400).contains(&status) {
             return Ok(Reply { status, location, body: Zeroizing::new(Vec::new()) });
         }
+
         if response.content_length().is_some_and(|size| size > 1_048_576) {
             return Err(AuthorizationError::Unknown);
         }
@@ -161,6 +163,7 @@ fn grant(body: &[u8]) -> Result<AuthorizationGrant> {
         return Err(AuthorizationError::Unknown);
     }
     let tokens = parse_refresh(body).map_err(|_| AuthorizationError::Unknown)?;
+
     let root: Value = from_slice(body).map_err(|_| AuthorizationError::Unknown)?;
     let object = root.get("result").unwrap_or(&root);
     let origin = object.get("originJosResp").unwrap_or(object);

@@ -59,11 +59,13 @@ mod tests {
         executor.restart();
         assert!(!first.is_snapshot());
         assert!(!copied.is_current(&executor));
+
         let second = executor.boundary().unwrap();
         assert!(second.is_current(&executor));
         executor.session();
         assert!(!second.is_snapshot());
         assert!(!second.is_current(&executor));
+
         executor.restart();
         let third = executor.boundary().unwrap();
         drop(executor);

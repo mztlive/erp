@@ -62,6 +62,7 @@ impl InquirySalesSourceRequest {
         {
             return Err(invalid("询价来源身份、轮次或商品行数无效"));
         }
+
         let mut lines = HashSet::new();
         let mut sources = HashSet::new();
         for line in &self.selections {
@@ -97,6 +98,7 @@ fn validate_allocations(line: &InquirySalesLineSelection) -> Result<()> {
             .checked_add(allocation.quantity.to_decimal())
             .ok_or_else(|| invalid("询价来源数量超出范围"))?;
     }
+
     if !line.allocations.is_empty() && total != line.quantity.to_decimal() {
         return Err(invalid("询价来源地址数量合计必须等于商品数量"));
     }
@@ -205,6 +207,7 @@ impl SalesOrderInquirySource {
         if lines.len() != request.selections.len() {
             return Err(invalid("询价转销售明细与来源选择不一致"));
         }
+
         let bindings = request
             .selections
             .iter()
@@ -217,6 +220,7 @@ impl SalesOrderInquirySource {
                 binding_from_selection(selection, demand, price, line)
             })
             .collect::<Result<Vec<_>>>()?;
+
         Ok(Self {
             base: BaseModel::new(id),
             inquiry_id: inquiry.base.id.clone(),
@@ -279,6 +283,7 @@ impl SalesOrderInquirySource {
         if !self.consumed || self.released {
             return Err(invalid("正式销售单的询价消耗事实不完整"));
         }
+
         for changed in self.reconciled(customer, lines)? {
             let original = self
                 .lines
@@ -347,6 +352,7 @@ impl SalesOrderInquirySource {
         }) {
             return Err(invalid("询价来源销售单不得直接新增无来源商品，请先重新询价"));
         }
+
         self.lines
             .iter()
             .map(|binding| {
@@ -387,6 +393,7 @@ impl InquirySalesLineSelection {
             .iter()
             .find(|line| line.line_id == self.inquiry_line_id)
             .ok_or_else(|| invalid("来源需求行不存在"))?;
+
         let result = feedback
             .data
             .lines
@@ -458,6 +465,7 @@ fn binding_from_selection(
         quantity: selection.quantity,
         allocations,
     };
+
     let actual = binding.reconciled(&InquirySalesLineFact::from(line))?;
     if actual != binding {
         return Err(invalid("询价转销售数量或配送分配与明确选择不一致"));
@@ -496,6 +504,7 @@ impl InquirySalesLineBinding {
         {
             return Err(invalid("询价来源商品或交期已变化，请先重新询价"));
         }
+
         let mut result = self.clone();
         result.quantity = quantity;
         result.allocations = self.reconcile_addresses(&line.delivery_allocations)?;
@@ -519,6 +528,7 @@ impl InquirySalesLineBinding {
         for row in &mut result {
             row.delivery.quantity = zero_quantity();
         }
+
         for allocation in requested {
             let mut matching =
                 result.iter_mut().filter(|binding| same_address(&binding.delivery, allocation));
@@ -530,6 +540,7 @@ impl InquirySalesLineBinding {
             }
             binding.delivery.quantity = allocation.quantity;
         }
+
         if !self.allocations.is_empty() && requested.is_empty() {
             return Err(invalid("询价来源商品必须保留收货地址"));
         }
@@ -578,11 +589,14 @@ mod tests {
             selections: vec![line.clone()],
         };
         request.validate().unwrap();
+
         request.selections.push(line);
         assert!(request.validate().is_err());
         request.selections.pop();
+
         request.selections[0].allocations[0].quantity = "1".parse().unwrap();
         assert!(request.validate().is_err());
+
         request.selections[0].allocations.clear();
         request.selections[0].quantity = zero_quantity();
         assert!(request.validate().is_err());
@@ -664,6 +678,7 @@ mod tests {
         assert_eq!(changed[0].quantity, "1".parse().unwrap());
         assert_eq!(changed[0].allocations[0].allocation_id, "address");
         assert_eq!(source.lines[0].quantity, "2".parse().unwrap());
+
         let removed = source.reconciled(&source.customer_id, &[]).unwrap();
         assert!(removed[0].quantity.to_decimal().is_zero());
         assert_eq!(removed[0].sku_id, source.lines[0].sku_id);
@@ -701,7 +716,6 @@ mod tests {
         line.delivery_allocations = vec![second.delivery];
 
         let reconciled = source.reconciled(&source.customer_id, &[line]).unwrap();
-
         assert_eq!(reconciled[0].allocations[0].allocation_id, "address");
         assert_eq!(reconciled[0].allocations[0].delivery.quantity, zero_quantity());
         assert_eq!(reconciled[0].allocations[1].allocation_id, "second-address");
@@ -773,6 +787,7 @@ mod tests {
                 quantity: "2".parse().unwrap(),
             }],
         };
+
         selection.ensure_price_scope(&price(), &demand, available, Instant::from_unix_secs(2_999)).unwrap();
         assert!(
             selection
@@ -781,10 +796,12 @@ mod tests {
         );
         selection.quantity = "1".parse().unwrap();
         selection.ensure_price_scope(&price(), &demand, available, Instant::from_unix_secs(1)).unwrap();
+
         selection.quantity = "11".parse().unwrap();
         assert!(
             selection.ensure_price_scope(&price(), &demand, available, Instant::from_unix_secs(1)).is_err()
         );
+
         selection.quantity = "2".parse().unwrap();
         selection.allocations[0].allocation_id = "foreign".into();
         assert!(
@@ -797,6 +814,7 @@ mod tests {
         let mut source = source();
         let original = fact(&source);
         assert!(source.ensure_formal_change(&source.customer_id, slice::from_ref(&original)).is_err());
+
         source.consumed = true;
         let mut reduced = original.clone();
         reduced.quantity = Some("1".parse().unwrap());
@@ -804,10 +822,12 @@ mod tests {
         source.ensure_formal_change(&source.customer_id, &[reduced]).unwrap();
         assert_eq!(source.lines[0].quantity, "2".parse().unwrap());
         assert_eq!(source.selections()[0].quantity, "2".parse().unwrap());
+
         let mut increased = original;
         increased.quantity = Some("3".parse().unwrap());
         increased.delivery_allocations[0].quantity = "3".parse().unwrap();
         assert!(source.ensure_formal_change(&source.customer_id, &[increased]).is_err());
+
         source.released = true;
         assert!(source.ensure_formal_change(&source.customer_id, &[]).is_err());
     }

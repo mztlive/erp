@@ -63,6 +63,7 @@ impl SupplierProfileProcess {
         actor: &AuditActor,
     ) -> Result<HandoverSupplierView> {
         req.validate()?;
+
         let fingerprint = supplier_handover_fingerprint(actor.id(), id, &req)?;
         let command = CommandReceipt::from_resource_parts(
             "supplier-handover-",
@@ -73,6 +74,7 @@ impl SupplierProfileProcess {
             &req.idempotency_key,
             [fingerprint],
         )?;
+
         let rbac = self.authorization.clone();
         let context = handover_context(actor, &command, SUPPLIER_ACTION)?;
         let operation = SupplierHandoverCommand {
@@ -110,6 +112,7 @@ impl SupplierProfileProcess {
         actor: &AuditActor,
     ) -> Result<HandoverSupplierCapabilityView> {
         req.validate()?;
+
         let fingerprint = capability_handover_fingerprint(actor.id(), capability_id, &req)?;
         let command = CommandReceipt::from_resource_parts(
             "supplier-capability-handover-",
@@ -120,6 +123,7 @@ impl SupplierProfileProcess {
             &req.idempotency_key,
             [supplier_id.to_string(), fingerprint],
         )?;
+
         let rbac = self.authorization.clone();
         let context = handover_context(actor, &command, CAPABILITY_ACTION)?;
         let operation = SupplierHandoverCommand {
@@ -190,6 +194,7 @@ async fn apply_supplier_handover(
     rbac.access.clone().require_with(actor, &supplier::HANDOVER, id, executor).await?;
     ensure_target_qualified(db, rbac, target, executor).await?;
     ensure_org_enabled(db, req.target_org_unit_id.as_deref(), executor).await?;
+
     let mut account = db
         .supplier()
         .account(&SupplierAccountId::new(id), executor)
@@ -198,6 +203,7 @@ async fn apply_supplier_handover(
     if account.base.version != req.expected_version {
         return Err(Error::ConflictError("供应商责任或版本已变化，请刷新后重试".into()));
     }
+
     let next_org = req
         .target_org_unit_id
         .as_deref()
@@ -209,6 +215,7 @@ async fn apply_supplier_handover(
     account.handover(target.to_string(), next_org, actor.id())?;
     rbac.access.require_owner_change(actor, &account, executor).await?;
     db.supplier_accounts().update(&mut account, executor).await?;
+
     let content = handover_content(HandoverEventFacts {
         target_id: account.base.id.clone(),
         target_number: Some(account.supplier_no.clone()),
@@ -239,6 +246,7 @@ async fn apply_capability_handover(
 ) -> Result<(HandoverSupplierCapabilityView, BusinessEventContent)> {
     rbac.access.clone().require_with(actor, &supplier::HANDOVER, supplier_id, executor).await?;
     ensure_target_qualified(db, rbac, target, executor).await?;
+
     let mut capability = db
         .supplier_capabilities()
         .find_by_id(capability_id, executor)
@@ -250,6 +258,7 @@ async fn apply_capability_handover(
     if capability.base.version != req.expected_version {
         return Err(Error::ConflictError("能力责任或版本已变化，请刷新后重试".into()));
     }
+
     let old_owner = capability.owner_user_id.clone();
     capability.handover(target.to_string(), actor.id())?;
     let revision_no = db
@@ -259,8 +268,10 @@ async fn apply_capability_handover(
     let revision_id = SupplierCapabilityRevisionId::new(id_generator::next_id());
     capability.stable.current_revision_id = Some(revision_id.to_string());
     let revision = capability.snapshot_revision(revision_id, revision_no)?;
+
     db.supplier_capability_revisions().create(&revision, executor).await?;
     db.supplier_capabilities().update(&mut capability, executor).await?;
+
     let content = handover_content(HandoverEventFacts {
         target_id: capability.base.id.clone(),
         target_number: None,
@@ -316,6 +327,7 @@ impl AuditedCommand for SupplierHandoverCommand {
                 self.execute_capability(supplier_id, capability_id, req, executor).await?
             },
         };
+
         match outcome {
             AuditedWrite::Replayed(view) => Ok(AuditedWrite::Replayed(view)),
             AuditedWrite::Fresh { result: output, content } => {
@@ -344,6 +356,7 @@ impl SupplierHandoverCommand {
         {
             return Ok(AuditedWrite::Replayed(HandoverOutput::Supplier(view)));
         }
+
         let (view, content) = apply_supplier_handover(
             &self.db,
             &self.rbac,
@@ -378,6 +391,7 @@ impl SupplierHandoverCommand {
         {
             return Ok(AuditedWrite::Replayed(HandoverOutput::Capability(view)));
         }
+
         let (view, content) = apply_capability_handover(
             &self.db,
             &self.rbac,
@@ -414,6 +428,7 @@ async fn replay_supplier(
         return Ok(None);
     };
     receipt.ensure_matches(command)?;
+
     rbac.access.clone().require_with(actor, &supplier::HANDOVER, id, executor).await?;
     let account = db
         .supplier()
@@ -445,6 +460,7 @@ async fn replay_capability(
         return Ok(None);
     };
     receipt.ensure_matches(command)?;
+
     rbac.access.clone().require_with(actor, &supplier::HANDOVER, supplier_id, executor).await?;
     let capability = db
         .supplier_capabilities()

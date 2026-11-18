@@ -54,13 +54,16 @@ impl SalesSelectionService {
         {
             return Ok(replay);
         }
+
         let customer = customer_port.customer_fact(&req.customer_id).await?;
         if !customer.active {
             return Err(Error::ValidationError("客户已停用，不能创建选品册".into()));
         }
+
         let booklet_id = SalesSelectionBookletId::new(id_generator::next_id());
         let booklet = create_booklet(booklet_id.clone(), req, customer, creator, password_hash)?;
         self.db.sales_selection_booklets().create(&booklet, executor).await?;
+
         let view = self
             .enqueue_prepare(
                 PrepareSalesSelectionRequest::first_prepare(
@@ -72,6 +75,7 @@ impl SalesSelectionService {
                 executor,
             )
             .await?;
+
         self.store_idempotency(
             IdempotencyStoreInput {
                 operation: IdempotencyOperation::Create,
@@ -119,6 +123,7 @@ impl SalesSelectionService {
             return Ok(None);
         };
         record.ensure_same_request(hash).map_err(|error| Error::selection_conflict(error.to_string()))?;
+
         if operation.replays_live_booklet()
             && let Some(id) = &record.booklet_id
         {
@@ -130,6 +135,7 @@ impl SalesSelectionService {
             .map(Some)
             .map_err(|e| Error::Internal(e.to_string()));
         }
+
         let value = serde_json::from_str(&record.result_json)
             .map_err(|error| Error::Internal(format!("幂等结果无法读取: {error}")))?;
         Ok(Some(value))
@@ -222,6 +228,7 @@ fn create_booklet(
         req.sku_ids.map(|ids| ids.into_iter().map(SkuId::new).collect()),
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
+
     let tiers = req
         .tiers
         .into_iter()
@@ -235,6 +242,7 @@ fn create_booklet(
             sku_count: tier.sku_count,
         })
         .collect();
+
     SalesSelectionBooklet::new(
         id,
         SalesSelectionBookletData {
@@ -357,6 +365,7 @@ mod tests {
         assert_eq!(record.idempotency_key, "same-key");
         assert!(record.ensure_same_request(same.as_str()).is_ok());
         assert!(record.ensure_same_request(changed.as_str()).is_err());
+
         let stored = serde_json::to_string(&record).unwrap();
         let unkeyed_request = request_hash(&serde_json::to_string(original).unwrap());
         assert!(!stored.contains(password));

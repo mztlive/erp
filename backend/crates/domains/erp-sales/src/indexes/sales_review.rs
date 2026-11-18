@@ -118,7 +118,6 @@ mod tests {
     #[test]
     fn sales_change_order_active_uniqueness_is_partial() {
         let indexes = sales_change_order_indexes();
-
         let active = indexes
             .iter()
             .find(|index| {
@@ -143,6 +142,7 @@ mod tests {
             },
             "草稿、审批中及已驳回共同占用原单基准版本；生效和作废不参与唯一"
         );
+
         assert!(
             !indexes.iter().any(|index| {
                 index.options.as_ref().and_then(|options| options.name.as_deref())

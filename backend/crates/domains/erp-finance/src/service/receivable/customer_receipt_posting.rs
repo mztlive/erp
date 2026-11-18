@@ -55,6 +55,7 @@ pub async fn settle_customer_receipt(
     let entries = db.receivable_entries().find_entries_by_ids(&entry_ids, executor).await?;
     let entries_by_id: HashMap<&str, &ReceivableEntry> =
         entries.iter().map(|entry| (entry.base.id.as_str(), entry)).collect();
+
     let mut account_ids: Vec<ReceivableAccountId> =
         entries.iter().map(|entry| entry.receivable_account_id.clone()).collect();
     account_ids.sort_by(|left, right| left.as_ref().cmp(right.as_ref()));
@@ -65,6 +66,7 @@ pub async fn settle_customer_receipt(
         .await?;
     let accounts_by_id: HashMap<&str, &ReceivableAccount> =
         accounts.iter().map(|account| (account.base.id.as_str(), account)).collect();
+
     let mut checked_accounts = HashSet::new();
     let mut sales_order_ids = Vec::new();
     let allocation_ids: Vec<ReceiptAllocationId> =
@@ -85,6 +87,7 @@ pub async fn settle_customer_receipt(
         }
         ledger.apply(line, entry, allocation_id, allocated_at).map_err(map_ledger_error)?;
     }
+
     persist_settlement(db, receipt, &ledger, actor_id, executor).await?;
     Ok(sales_order_ids)
 }
@@ -103,6 +106,7 @@ async fn persist_settlement(
     if !settlement.rejected.is_empty() {
         return Err(Error::BusinessLogicError("子账剩余开放余额不足，核销被拒绝".to_string()));
     }
+
     receipt.mark_posted()?;
     db.customer_receipts().update(receipt, executor).await?;
     db.receivable().create_receipt_allocations_many(ledger.new_allocations(), executor).await?;

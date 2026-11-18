@@ -125,6 +125,7 @@ impl PurchasePaymentRequestData {
         self.supplier_id = required(self.supplier_id, "供应商", 128)?;
         self.execution_method.normalize(&mut self.payee_bank_account_id)?;
         self.reason = required(self.reason, "申请说明", 2000)?;
+
         if self.lines.is_empty() || self.lines.len() > 100 {
             return Err(Error::from("付款申请须包含 1 至 100 张采购单"));
         }
@@ -136,6 +137,7 @@ impl PurchasePaymentRequestData {
                 return Err(Error::from("同一申请不得重复选择采购单"));
             }
         }
+
         if self.attachment_ids.len() > 50 {
             return Err(Error::from("付款申请附件不得超过 50 个"));
         }

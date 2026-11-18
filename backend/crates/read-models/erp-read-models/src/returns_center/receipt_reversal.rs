@@ -42,6 +42,7 @@ impl ReturnsReadService {
                             executor,
                         )
                         .await?;
+
                     this.load_receipt_reversal_view(&id, executor).await
                 })
             })
@@ -75,6 +76,7 @@ impl ReturnsReadService {
     ) -> Result<ReceiptReversalView> {
         Self::ensure_command_snapshot(executor)?;
         let id = id.to_owned();
+
         let reversal = self
             .db
             .receipt_reversals()
@@ -82,6 +84,7 @@ impl ReturnsReadService {
             .await?
             .ok_or_else(|| Error::NotFound("回款冲正单不存在".to_string()))?;
         let binding = super::approval::optional_approval_binding(&self.db, &id, executor).await?;
+
         Ok(ReceiptReversalView {
             id: reversal.base.id.clone(),
             reversal_no: reversal.reversal_no,

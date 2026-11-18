@@ -152,9 +152,11 @@ pub(super) async fn persist_sales_change_cancel(
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(());
     };
+
     let closed_tasks = WorkItem::close_all_for_approval_cancellation(open_tasks, &actor_id, &reason, now)?;
     claim_and_persist_document_cancel_runtime(db, &writes, &closed_tasks, actor.id(), executor).await?;
     approvals.persist_cancel_copies(db, &writes, executor).await?;
+
     erp_sales::service::sales_review::persist_cancelled_change(db, &mut change_order, executor).await?;
     persist_log(db, &audit, executor).await?;
     Ok(())

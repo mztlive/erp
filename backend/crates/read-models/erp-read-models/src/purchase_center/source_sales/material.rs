@@ -48,6 +48,7 @@ impl PurchaseOrderReadService {
                 Box::pin(async move {
                     let (order, access_version, scope) =
                         access.resolve_detail(&actor, &order_id, executor).await?;
+
                     let facts = load_purchase_order_center_facts(&db, &order_id, executor).await?;
                     let revision = source_revision(&db, &order, &displayed_lines(&facts), executor).await?;
                     let materials = revision_materials(&db, &revision, executor).await?;
@@ -57,6 +58,7 @@ impl PurchaseOrderReadService {
                         .find(|file| file.file_asset_id.as_ref() == asset_id)
                         .ok_or_else(|| Error::NotFound("采购关联销售材料不存在或无权下载".into()))?;
                     validate_materials(&db, std::slice::from_ref(&file), executor).await?;
+
                     scope.validate(executor).await?;
                     Ok(PurchaseSalesMaterialReference {
                         file,

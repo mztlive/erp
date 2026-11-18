@@ -391,8 +391,10 @@ mod procurement_price_basis {
                 data,
             )
             .unwrap();
+
             let stored = bson::serialize_to_document(&line).unwrap();
             let restored: SalesOrderWorkingCopyLine = bson::deserialize_from_document(stored).unwrap();
+
             let submitted = SalesOrderSubmissionLineData::from_working_copy_line(&restored).unwrap();
             assert_eq!(submitted.goods.unwrap().procurement_price_basis, Some(basis));
             assert_eq!(restored.gross_amount.to_string(), "29.97");

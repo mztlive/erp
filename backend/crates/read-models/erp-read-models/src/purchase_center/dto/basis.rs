@@ -590,8 +590,10 @@ mod tests {
         let basis = bare_basis("供应商").with_source_inquiry(true);
         assert_eq!(basis.has_source_inquiry, Some(true));
         assert!(basis.inquiry_source.is_none());
+
         let response = serde_json::to_value(&basis).unwrap();
         assert_eq!(response["has_source_inquiry"], true);
+
         let response = serde_json::to_value(basis.with_source_inquiry(false)).unwrap();
         assert!(response.get("has_source_inquiry").is_none());
     }

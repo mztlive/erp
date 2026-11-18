@@ -357,6 +357,7 @@ where
     {
         executor.next_read();
         let (metadata, filter) = cas_metadata_and_filter(entity.base(), false)?;
+
         let mut document = persisted_document(&*entity)?;
         document.insert("version", metadata.next_version_bson);
         document.insert("updated_at", metadata.updated_at_bson);
@@ -417,6 +418,7 @@ where
     {
         executor.next_read();
         let (metadata, filter) = cas_metadata_and_filter(entity.base(), !deleted)?;
+
         let (deleted_at, deleted_at_bson) = if deleted {
             (metadata.updated_at, metadata.updated_at_bson)
         } else {
@@ -429,6 +431,7 @@ where
                 "deleted_at": deleted_at_bson,
             }
         };
+
         exec_cas(&self.collection(), entity.base_mut(), metadata, filter, update, Some(deleted_at), executor)
             .await
     }
@@ -709,6 +712,7 @@ mod tests {
             let mut entity = TestEntity { base: base.clone() };
             let mut executor = ReadExecutor::default();
             let before = executor.boundary().unwrap();
+
             let result = match write {
                 Write::Update => repository.update(&mut entity, &mut executor).await,
                 Write::SoftDelete => repository.soft_delete(&mut entity, &mut executor).await,
@@ -722,6 +726,7 @@ mod tests {
             } else {
                 assert!(matches!(error, Error::BsonError(_)));
             }
+
             assert!(!before.is_current(&executor));
             assert!(executor.boundary().unwrap().is_current(&executor));
             assert_eq!(entity.base, base);
@@ -760,8 +765,10 @@ mod tests {
         struct Availability {
             available_quantity: Option<Quantity>,
         }
+
         let document = persisted_document(&Availability { available_quantity: Some(Quantity) }).unwrap();
         assert!(matches!(document.get("available_quantity"), Some(Bson::Decimal128(_))));
+
         let absent = persisted_document(&Availability { available_quantity: None }).unwrap();
         assert_eq!(absent.get("available_quantity"), Some(&Bson::Null));
     }
@@ -769,7 +776,6 @@ mod tests {
     #[test]
     fn pagination_normalizes_zero_to_first_page() {
         let pagination = TestPagination { page: 0, page_size: 20 };
-
         assert_eq!(pagination.skip(), 0);
         assert_eq!(pagination.limit(), 20);
     }
@@ -777,7 +783,6 @@ mod tests {
     #[test]
     fn pagination_calculates_offset_for_regular_page() {
         let pagination = TestPagination { page: 3, page_size: 20 };
-
         assert_eq!(pagination.skip(), 40);
         assert_eq!(pagination.limit(), 20);
     }
@@ -788,7 +793,6 @@ mod tests {
         base.version = 7;
 
         let metadata = write_metadata_at(&base, 1_700_000_000).expect("metadata should be valid");
-
         assert_eq!(metadata.expected_version, 7);
         assert_eq!(metadata.next_version, 8);
         assert_eq!(metadata.next_version_bson, 8);
@@ -801,7 +805,6 @@ mod tests {
         base.version = u64::MAX;
 
         let error = write_metadata_at(&base, 1_700_000_000).expect_err("overflow should fail");
-
         assert!(matches!(error, Error::EntityMetadataOutOfRange("version")));
     }
 
@@ -811,7 +814,6 @@ mod tests {
         base.version = i64::MAX as u64;
 
         let error = write_metadata_at(&base, 1_700_000_000).expect_err("BSON overflow should fail");
-
         assert!(matches!(error, Error::EntityMetadataOutOfRange("version")));
     }
 

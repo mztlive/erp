@@ -123,6 +123,7 @@ impl SupplierCatalogAdoptionProcess {
     ) -> Result<AdoptionResolution> {
         self.batch_access(connection, actor, executor).await?;
         self.require_preview_owner(actor, preview_id, executor).await?;
+
         let preview = self
             .db
             .catalog_adoption_previews()
@@ -133,6 +134,7 @@ impl SupplierCatalogAdoptionProcess {
         if preview.expires_at <= Instant::now() {
             return Err(Error::ConflictError("选品预览已过期，请重新预览".into()));
         }
+
         let item = preview
             .items
             .iter()
@@ -160,6 +162,7 @@ impl SupplierCatalogAdoptionProcess {
         {
             return Err(Error::ConflictError("商品匹配结果已变化，请刷新自动匹配结果后重新确认".into()));
         }
+
         let mut resolved = row.clone();
         resolved.target = resolution.target;
         Ok(resolved)
@@ -181,6 +184,7 @@ impl SupplierCatalogAdoptionProcess {
         if !has_product_receipt(&self.db, command, product_id, executor).await? {
             return Ok(false);
         }
+
         let kind = serde_json::from_value(serde_json::Value::String(mapping.product_kind.clone()))
             .map_err(|_| Error::ValidationError("商品类型无效".into()))?;
         let mapping = self.resolve_unit_mapping(item, mapping, actor, executor).await?;
@@ -209,6 +213,7 @@ impl SupplierCatalogAdoptionProcess {
         let connection = self.batch_access(&item.connection_id, actor, executor).await?;
         self.ensure_source(&connection)?;
         connection.ensure_offering_source(&item.supplier_id)?;
+
         let kind: ProductKind =
             serde_json::from_value(serde_json::Value::String(mapping.product_kind.clone()))
                 .map_err(|_| Error::ValidationError("商品类型无效".into()))?;
@@ -220,8 +225,10 @@ impl SupplierCatalogAdoptionProcess {
                 "来源规格缺失、发生变化或商品类型不支持，请先核对来源商品".into(),
             ));
         }
+
         let mapping = self.resolve_unit_mapping(item, mapping, actor, executor).await?;
         let mapping = &mapping;
+
         let binding =
             self.db.catalog_adoption_products().find_by_id(&product_binding_id(item), executor).await?;
         let bound_id = binding.as_ref().map(|b| b.product_id.as_str());
@@ -229,6 +236,7 @@ impl SupplierCatalogAdoptionProcess {
             return Err(Error::ConflictError("同一来源商品的公司商品归属已变化，请重新核对".into()));
         }
         let bound_id = bound_id.or(parent);
+
         let (sku, reason) = self.find_match(item, mapping, bound_id, kind, executor).await?;
         let mut resolution = if let Some(sku) = sku {
             if bound_id.is_some_and(|id| id != sku.product_id.as_ref()) {
@@ -240,6 +248,7 @@ impl SupplierCatalogAdoptionProcess {
         } else {
             self.create_resolution(item, mapping, bound_id, kind, actor, executor).await?
         };
+
         resolution.reason = reason;
         resolution.expected_match = resolution_digest(item, mapping, &resolution)?;
         Ok(resolution)
@@ -265,6 +274,7 @@ impl SupplierCatalogAdoptionProcess {
                 .filter(|u| u.is_active() && !u.base.is_deleted())
                 .ok_or_else(|| Error::ValidationError("请选择启用的公司计量单位".into()))?
         };
+
         if let Some(source) = item.unit.as_deref().filter(|u| !u.trim().is_empty())
             && ![unit.name.as_str(), unit.symbol.as_str(), unit.unit_code.as_str()]
                 .iter()
@@ -290,12 +300,14 @@ impl SupplierCatalogAdoptionProcess {
         if let Some(id) = &item.sku_id {
             return Ok((Some(self.match_sku(id, executor).await?), "复用已有来源绑定".into()));
         }
+
         if let Some(barcode) = &item.barcode {
             let ids = self.db.catalog().match_barcode(barcode, executor).await?;
             if let Some(id) = unique_match(&ids)? {
                 return Ok((Some(self.match_sku(&id, executor).await?), "条码、规格和单位一致".into()));
             }
         }
+
         let products = if let Some(id) = bound_id {
             vec![
                 self.db
@@ -323,6 +335,7 @@ impl SupplierCatalogAdoptionProcess {
                 }
             }
         }
+
         let sku = match unique_match(&candidates)? {
             Some(id) => Some(self.match_sku(&id, executor).await?),
             None => None,
@@ -388,6 +401,7 @@ impl SupplierCatalogAdoptionProcess {
                 executor,
             )
             .await?;
+
         let revision = self
             .db
             .catalog()
@@ -406,6 +420,7 @@ impl SupplierCatalogAdoptionProcess {
             .find_by_id(product_revision.brand_id.as_ref(), executor)
             .await?
             .ok_or_else(|| Error::ConflictError("公司品牌不存在".into()))?;
+
         let source_identity = MatchIdentity {
             kind,
             brand: item.brand_name.as_deref(),
@@ -457,6 +472,7 @@ impl SupplierCatalogAdoptionProcess {
             category_id = revision.category_id.to_string();
             brand_id = revision.brand_id.to_string();
         }
+
         self.db
             .product_categories()
             .find_by_id(&category_id, executor)
@@ -480,6 +496,7 @@ pub(super) fn resolution_digest(
     {
         *expected_product_version = anchor.target.product_version;
     }
+
     let identity = (
         &item.base.id,
         (&item.name, &item.specification, &item.unit, &item.brand_name, &item.barcode),
@@ -549,14 +566,18 @@ mod tests {
                 specification_confirmed: true,
             },
         };
+
         let original = resolution_digest(&item, &mapping, &resolution).unwrap();
         item.source_fingerprint = "background-image-archive".into();
         assert_eq!(original, resolution_digest(&item, &mapping, &resolution).unwrap());
+
         item.barcode = Some("00123".into());
         assert_ne!(original, resolution_digest(&item, &mapping, &resolution).unwrap());
+
         item.barcode = None;
         mapping.unit_id = "other".into();
         assert_ne!(original, resolution_digest(&item, &mapping, &resolution).unwrap());
+
         mapping.unit_id = "unit".into();
         if let AdoptionTarget::Existing { expected_sku_version, .. } = &mut resolution.target {
             *expected_sku_version = 2;
@@ -619,20 +640,24 @@ mod tests {
                 },
             }),
         };
+
         let initial = resolution_digest(&item, &mapping, &resolution).unwrap();
         if let AdoptionTarget::Existing { expected_product_version, .. } = &mut resolution.target {
             *expected_product_version += 1;
         }
         assert_eq!(initial, resolution_digest(&item, &mapping, &resolution).unwrap());
+
         if let AdoptionTarget::Existing { expected_sku_version, .. } = &mut resolution.target {
             *expected_sku_version += 1;
         }
         assert_ne!(initial, resolution_digest(&item, &mapping, &resolution).unwrap());
+
         if let AdoptionTarget::Existing { expected_sku_version, .. } = &mut resolution.target {
             *expected_sku_version = 1;
         }
         resolution.group_anchor.as_mut().unwrap().target.product_revision_id = "new-revision".into();
         assert_ne!(initial, resolution_digest(&item, &mapping, &resolution).unwrap());
+
         resolution.group_anchor = None;
         assert_ne!(initial, resolution_digest(&item, &mapping, &resolution).unwrap());
     }

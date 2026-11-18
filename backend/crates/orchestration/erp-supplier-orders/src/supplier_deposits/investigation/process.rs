@@ -94,11 +94,13 @@ impl FundsInvestigationProcess<'_> {
         if self.source.account_reference() != self.store.account_reference() {
             return Err(Error::Forbidden("资金查询能力与本地账户归属不一致".into()));
         }
+
         let mut result = self.store.resume().await?;
         let query = self.store.query(now).await?;
         if query.limit.get() > 50 || query.since >= query.through {
             return Err(Error::ValidationError("资金查询窗口或分页上限无效".into()));
         }
+
         let page = self
             .source
             .transactions(&query)
@@ -107,8 +109,10 @@ impl FundsInvestigationProcess<'_> {
         if page.items.len() > usize::try_from(query.limit.get()).expect("固定批次不超过50") {
             return Err(Error::BusinessLogicError("供应商资金明细超过本次分页上限".into()));
         }
+
         result.received += self.store.receive_page(&query, page).await?;
         result.merge(self.store.resume().await?);
+
         let balance = self
             .source
             .balance()

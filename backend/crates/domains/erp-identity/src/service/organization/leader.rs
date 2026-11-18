@@ -31,6 +31,7 @@ pub async fn applicant_leader(
     let memberships = OrganizationRepository::new(db).primary_memberships(applicant, at, ex).await?;
     let primary = OrgMembership::primary_org(&memberships, applicant, at)?
         .ok_or_else(|| Error::ValidationError("申请人尚未设置所属组织，请在组织与人员中调整部门".into()))?;
+
     let repository = Repository::<OrgUnit>::new(db, ORG_UNITS);
     let mut id = Some(primary.to_owned());
     let mut path = Vec::new();
@@ -46,6 +47,7 @@ pub async fn applicant_leader(
         id = unit.parent_id.clone();
         path.push(unit);
     }
+
     OrgUnit::leader_on_path(path, kind, at)
 }
 
@@ -82,8 +84,10 @@ pub async fn own_leader_preview(
                     .await?
                     .filter(|a| a.is_active_backoffice() && a.kind == actor.kind())
                     .ok_or_else(|| Error::Forbidden("当前账号不可查询内部组织负责人".into()))?;
+
                 let unit = applicant_leader(&db, &applicant.base.id, kind, Instant::now(), ex).await?;
                 let leader = unit.leader.ok_or_else(|| Error::ValidationError("组织负责人未设置".into()))?;
+
                 let subject = AuditActor::new(leader.user_id.clone(), leader.user_id, AccountKind::Admin);
                 let required = [approval_instance::INSTANCE_LIST, approval_instance::SUBMIT_DECISION];
                 let qualified =
@@ -95,6 +99,7 @@ pub async fn own_leader_preview(
                         "审批负责人缺少审批读取或决定权限，请联系管理员配置角色".into(),
                     ));
                 }
+
                 Ok(LeaderPreview {
                     name: qualified.account().display_name.clone(),
                     organization_name: unit.name,

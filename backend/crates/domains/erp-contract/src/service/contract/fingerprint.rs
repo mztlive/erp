@@ -12,6 +12,7 @@ use crate::repository::scope::ContractVersion;
 pub(super) fn version_fingerprint_input(versions: &[ContractVersion]) -> Vec<u8> {
     let mut pairs = versions.iter().map(|version| (version.id.as_str(), version.version)).collect::<Vec<_>>();
     pairs.sort_unstable();
+
     let mut out = Vec::new();
     push_u64(&mut out, u64::try_from(pairs.len()).expect("合同版本集合长度可表示为 u64"));
     for (id, version) in pairs {
@@ -68,6 +69,7 @@ mod tests {
             ContractVersion { id: "contract-a".into(), version: 2 },
             ContractVersion { id: "contract-b".into(), version: 2 },
         ];
+
         let fingerprint = |rows: &[ContractVersion]| stable_fingerprint(&version_fingerprint_input(rows));
         assert_eq!(fingerprint(&versions), fingerprint(&reordered));
         assert_ne!(fingerprint(&versions), fingerprint(&changed));

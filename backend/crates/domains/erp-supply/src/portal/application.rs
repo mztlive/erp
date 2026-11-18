@@ -80,6 +80,7 @@ impl OfferingApplication {
         {
             return Err(Error::ConflictError("申请身份或版本已变化".into()));
         }
+
         if self.submissions.len() < before.submissions.len() || self.decisions.len() < before.decisions.len()
         {
             return Err(Error::ConflictError("申请提交及决定历史不得删除".into()));
@@ -95,6 +96,7 @@ impl OfferingApplication {
         if submissions != previous || decisions != previous_decisions {
             return Err(Error::ConflictError("申请提交及决定历史不得改写".into()));
         }
+
         if before.status == ApplicationStatus::Effective {
             return Err(Error::ConflictError("已生效申请不得再次修改".into()));
         }
@@ -172,6 +174,7 @@ impl OfferingApplication {
         if snapshot.kind() != self.kind {
             return Err(Error::ValidationError("申请类型不可修改".into()));
         }
+
         self.snapshot = snapshot;
         self.reason = reason.trim().to_string();
         self.status = ApplicationStatus::Draft;
@@ -199,11 +202,13 @@ impl OfferingApplication {
         ) {
             return Err(Error::ConflictError("申请不可重复提交".into()));
         }
+
         ensure_text(handler_id, "确认处理人")?;
         ensure_text(work_item_id, "确认任务")?;
         if work_item_version == 0 {
             return Err(Error::ValidationError("确认任务版本无效".into()));
         }
+
         let submission_no = u32::try_from(self.submissions.len())
             .ok()
             .and_then(|n| n.checked_add(1))
@@ -256,6 +261,7 @@ impl OfferingApplication {
         if self.status != ApplicationStatus::Submitted || self.base.version != expected_version {
             return Err(Error::ConflictError("申请状态或版本已变化".into()));
         }
+
         let submission = self.submissions.last().ok_or_else(|| Error::Internal("申请缺少冻结提交".into()))?;
         if submission.work_item_id != task_id || task_version == 0 {
             return Err(Error::ConflictError("申请任务身份无效".into()));
@@ -284,6 +290,7 @@ impl OfferingApplication {
         }
         ensure_text(reason, "处理原因")?;
         let submission = self.submissions.last().ok_or_else(|| Error::Internal("申请缺少冻结提交".into()))?;
+
         self.status =
             if result.is_some() { ApplicationStatus::Effective } else { ApplicationStatus::Returned };
         self.decisions.push(ApplicationDecision {
@@ -365,6 +372,7 @@ impl QuoteAccessGrant {
         if self.active == active {
             return Ok(());
         }
+
         self.active = active;
         if !active {
             self.revoked_by = Some(actor.id().to_string());

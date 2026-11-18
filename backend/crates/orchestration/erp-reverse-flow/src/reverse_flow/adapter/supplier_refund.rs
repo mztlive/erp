@@ -83,6 +83,7 @@ fn supplier_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<SupplierRefun
             mismatch_message: "供应商退款单审批适配器登记不完整",
         },
     )?;
+
     Ok(SupplierRefundAdapter {
         document_type: spec.document_type,
         process_kind: spec.process_kind,
@@ -265,6 +266,7 @@ mod supplier_refund_tests {
         let adapter = supplier_refund_adapter().expect("供应商退款单必须可登记");
         assert_eq!(adapter.document_type, DocumentType::SupplierRefund);
         assert_eq!(adapter.process_kind.as_str(), "supplier_refund");
+
         assert_eq!(
             supplier_refund_subject_ref("srf-1").expect("主体引用必须可构造").subject_kind(),
             "supplier_refund"
@@ -275,15 +277,18 @@ mod supplier_refund_tests {
             ApprovalSubjectVersionSource::EntityApprovalSubjectVersion
         );
         assert_eq!(adapter.subject_snapshot_builder, "build_supplier_refund_snapshot");
+
         assert_eq!(adapter.on_approval_start, ApprovalDomainAction::SupplierRefundSubmit);
         assert_eq!(adapter.on_final_approve, ApprovalDomainAction::SupplierRefundPost);
         assert_eq!(adapter.cancel_action, ApprovalDomainAction::SupplierRefundCancelApproval);
+
         assert_eq!(adapter.owner_role, "supplier_refund_approver");
         assert_eq!(
             adapter.owner_organization_snapshot,
             OwnerOrganizationSource::SubjectSnapshotResponsibleOrgId
         );
         assert_eq!(adapter.read_scope, AdapterReadScope::DocumentOrganizationAndCreator);
+
         assert_ne!(adapter.on_approval_start, adapter.on_final_approve);
         assert_ne!(adapter.on_approval_start, adapter.cancel_action);
     }
@@ -295,6 +300,7 @@ mod supplier_refund_tests {
         start_supplier_refund_approval(&mut refund).unwrap();
         assert_eq!(refund.status, SupplierRefundStatus::InApproval);
         assert_eq!(refund.approval_subject_version, 1);
+
         execute_supplier_refund_domain_action(
             &mut refund,
             ApprovalDomainAction::SupplierRefundCancelApproval,
@@ -338,12 +344,14 @@ mod supplier_refund_tests {
         let payload =
             build_supplier_refund_snapshot(&refund, "party-1", "user-1", Instant::from_unix_secs(10))
                 .unwrap();
+
         assert_eq!(payload.document_no, "SRF-1");
         assert_eq!(payload.responsible_org_id, "party-1");
         assert_eq!(payload.submitted_by, "user-1");
         assert_eq!(payload.total_amount.unwrap().to_string(), "100");
         assert_eq!(payload.line_count, 1);
         assert!(payload.total_quantity.is_none());
+
         assert!(build_supplier_refund_snapshot(&refund, " ", "user-1", Instant::from_unix_secs(10)).is_err());
     }
 

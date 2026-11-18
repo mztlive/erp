@@ -181,12 +181,14 @@ mod tests {
             chrono::DateTime::parse_from_rfc3339("2026-07-01T00:00:00+08:00").unwrap().timestamp(),
         );
         assert!(period.contains(occurred_at));
+
         let cancel =
             SettlementCancelEvidence::from_optional(Some(occurred_at), Some(" proof-1 ".to_string()), period)
                 .unwrap()
                 .unwrap();
         assert_eq!(cancel.reference_id(), "proof-1");
         assert!(SettlementCancelEvidence::from_optional(Some(occurred_at), None, period).is_err());
+
         assert!(SettlementPeriod::new(period.end(), period.start(), SETTLEMENT_TIMEZONE).is_err());
         assert!(SettlementPeriod::new(period.start(), period.end(), "UTC").is_err());
     }
@@ -197,6 +199,7 @@ mod tests {
         let end = BusinessDate::from_ymd(2026, 7, 31).unwrap();
         let period = SettlementPeriod::new(start, end, SETTLEMENT_TIMEZONE).unwrap();
         let (start_secs, end_secs) = SettlementPeriod::secs_bounds(start, end);
+
         // 以小时为步长覆盖期间前后各一天，秒级区间判定必须与上海业务日期
         // 判定完全一致（开始日 00:00 含、结束日次日 00:00 不含）。
         let first = chrono::DateTime::parse_from_rfc3339("2026-06-30T00:00:00+08:00").unwrap().timestamp();

@@ -83,7 +83,6 @@ mod tests {
     #[test]
     fn storage_key_identity_is_globally_unique() {
         let indexes = file_asset_indexes();
-
         let storage_key = indexes
             .iter()
             .find(|index| {
@@ -106,7 +105,6 @@ mod tests {
     #[test]
     fn attachment_indexes_cover_id_and_both_lookup_directions() {
         let indexes = document_attachment_indexes();
-
         let id_index = indexes
             .iter()
             .find(|index| {
@@ -115,6 +113,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(id_index.options.as_ref().unwrap().unique, Some(true));
+
         assert!(indexes.iter().any(|index| { index.keys == doc! { "document_id": 1, "created_at": 1 } }));
         assert!(indexes.iter().any(|index| index.keys == doc! { "file_asset_id": 1 }));
     }

@@ -112,6 +112,7 @@ mod tests {
             Instant::from_unix_secs(1700000000),
         )
         .unwrap();
+
         for fail in [None, Some("account"), Some("entry")] {
             let mut ex = ReadExecutor::default();
             let mut store =

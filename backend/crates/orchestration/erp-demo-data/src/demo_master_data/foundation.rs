@@ -43,6 +43,7 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
         self.ensure_enabled()?;
         self.authorize_apply(actor).await?;
         spec::foundation_spec().validate()?;
+
         let mut report = DemoFoundationReport {
             accounts_created: 0,
             accounts_existing: 0,
@@ -53,15 +54,19 @@ impl<A: WorkflowAuthorizationPort> DemoMasterDataProcess<A> {
             responsibilities_existing: 0,
             notices: Vec::new(),
         };
+
         self.ensure_demo_roles(actor, &mut report).await?;
         let accounts = self.ensure_accounts(actor, &mut report).await?;
         self.validate_demo_permissions(&accounts).await?;
+
         self.ensure_departments(actor, &accounts.by_login, &mut report.notices).await?;
         self.ensure_person_scopes(actor, &accounts.by_login).await?;
+
         self.ensure_approvals(actor, &accounts, &mut report).await?;
         if report.approvals_mismatched > 0 {
             return Err(Error::ValidationError(report.notices.join("；")));
         }
+
         self.ensure_responsibilities(actor, &accounts, &mut report).await?;
         Ok(report)
     }

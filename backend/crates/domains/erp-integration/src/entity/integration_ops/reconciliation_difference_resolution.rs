@@ -402,6 +402,7 @@ impl ReconciliationDifferenceResolution {
         if evidence_reference.resolution_action() != action {
             return Err(Error::from("领域关闭证据引用格式非法"));
         }
+
         Self::new(
             id,
             ReconciliationDifferenceResolutionData {
@@ -438,6 +439,7 @@ impl ReconciliationDifferenceResolution {
         if data.resulting_status != data.resolution_action.derived_status() {
             return Err(Error::from("决定后的派生状态与决定不一致"));
         }
+
         let handled_by =
             normalize_required_text(data.handled_by, "决定人不能为空", HANDLED_BY_MAX_LEN, "决定人标识过长")?;
         let evidence_reference =
@@ -445,6 +447,7 @@ impl ReconciliationDifferenceResolution {
         if data.resolution_action.requires_evidence() && evidence_reference.is_none() {
             return Err(Error::from("该决定必须引用可追溯证据或正式结果"));
         }
+
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             reconciliation_difference_id: data.reconciliation_difference_id,
@@ -520,6 +523,7 @@ pub(crate) mod tests {
             ResolutionAction::ConfirmValidDifference.derived_status(),
             ResultingStatus::ConfirmedValidDifference
         );
+
         assert!(ResultingStatus::ConfirmedNoError.is_terminal());
         assert!(ResultingStatus::ConfirmedValidDifference.is_terminal());
         assert!(ResultingStatus::Closed.is_terminal());
@@ -550,7 +554,6 @@ pub(crate) mod tests {
             "ops-1".to_string(),
             Instant::from_unix_secs(1_700_000_001),
         );
-
         assert!(result.is_err());
     }
 
@@ -565,7 +568,6 @@ pub(crate) mod tests {
             "ops-1".to_string(),
             Instant::from_unix_secs(1_700_000_001),
         );
-
         assert!(result.is_err());
     }
 

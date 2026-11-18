@@ -36,6 +36,7 @@ impl SupplierCatalogRun {
         if previous.finished || previous.succeeded {
             return;
         }
+
         self.restart_required = previous.restart_required;
         self.scan_since = previous.scan_since;
         self.scan_through = previous.scan_through;
@@ -78,6 +79,7 @@ impl SupplierCatalogRun {
         {
             return;
         }
+
         let (Some(latest), Some(full)) = (latest, full) else { return };
         let Ok(interval) = i64::try_from(policy.full_sync_interval_seconds) else { return };
         if [latest, full].iter().any(|run| {
@@ -89,6 +91,7 @@ impl SupplierCatalogRun {
         {
             return;
         }
+
         self.scan_since = Some(policy.since(latest.scan_through));
         self.sync_mode = match policy.incremental {
             IncrementalSupport::Complete => CatalogSyncMode::IncrementalComplete,
@@ -141,6 +144,7 @@ mod tests {
         previous.scan_since = Some(Instant::from_unix_secs(90_000));
         previous.sync_mode = CatalogSyncMode::IncrementalPartial;
         previous.record_skipped(vec!["bad item".into()]).unwrap();
+
         let mut next = run();
         next.resume(&previous);
         assert_eq!(next.cursor.as_deref(), Some("8"));
@@ -148,6 +152,7 @@ mod tests {
         assert_eq!(next.skipped_samples, previous.skipped_samples);
         assert_eq!(next.scan_since, previous.scan_since);
         assert_eq!(next.scan_through, previous.scan_through);
+
         for change in 0..6 {
             let mut incompatible = previous.clone();
             match change {
@@ -172,6 +177,7 @@ mod tests {
         let mut previous = run();
         previous.mapping_version = 8;
         previous.advance(Some("2".into()), 5).unwrap();
+
         let mut next = run();
         next.resume(&previous);
         next.plan(policy(), Some(&baseline), Some(&baseline));
@@ -187,6 +193,7 @@ mod tests {
         stored.as_object_mut().unwrap().remove("checkpoint_version");
         old_writer = serde_json::from_value(stored).unwrap();
         assert!(!old_writer.supports_incremental(1, 7));
+
         old_writer.finished = false;
         old_writer.succeeded = false;
         old_writer.cursor = Some("9".into());
@@ -202,8 +209,10 @@ mod tests {
         let mut run = run();
         assert!(!run.succeeded);
         assert!(run.complete().is_err());
+
         run.advance(Some("2".into()), 5).unwrap();
         assert!(run.complete().is_err());
+
         run.advance(None, 0).unwrap();
         run.resume_requested = true;
         run.complete().unwrap();
@@ -220,6 +229,7 @@ mod tests {
         next.plan(policy, Some(&baseline), Some(&baseline));
         assert_eq!(next.sync_mode, CatalogSyncMode::Full);
         assert_eq!(next.scan_since, None);
+
         policy.incremental = IncrementalSupport::Complete;
         policy.overlap_seconds = 0;
         next.plan(policy, Some(&baseline), Some(&baseline));
@@ -233,13 +243,16 @@ mod tests {
         let mut latest = completed();
         latest.sync_mode = CatalogSyncMode::IncrementalPartial;
         latest.scan_through = Instant::from_unix_secs(99_900);
+
         let mut next = run();
         next.plan(policy(), Some(&latest), Some(&full));
         assert_eq!(next.scan_since.unwrap().unix_secs(), 99_870);
         assert_eq!(next.sync_mode, CatalogSyncMode::IncrementalPartial);
+
         let since = next.scan_since;
         next.plan(policy(), None, None);
         assert_eq!(next.scan_since, since);
+
         for change in 0..6 {
             let mut latest = latest.clone();
             let mut full = full.clone();

@@ -106,6 +106,7 @@ mod tests {
             };
             assert_eq!(actual, expected);
         }
+
         assert_eq!(mapping.key(&context(), None).unwrap(), Bson::String("$id".into()));
         assert!(
             mapping

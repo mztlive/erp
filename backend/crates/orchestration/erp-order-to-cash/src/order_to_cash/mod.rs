@@ -107,8 +107,10 @@ pub async fn cancel_approval(
         .find_by_id(id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("销售单不存在".into()))?;
+
     adapter::execute_sales_order_domain_action(&mut order, action, actor.id())?;
     SalesOrderService::new(db.clone()).persist_order(&mut order, executor).await?;
+
     let audit = actor.clone().resource_log("sales_order.cancel_approval", "sales_order", id.to_string())?;
     persist_log(db, &audit, executor).await?;
     Ok(())

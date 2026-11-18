@@ -34,6 +34,7 @@ fn bson_roundtrip_preserves_stock_balance() {
         },
     )
     .unwrap();
+
     let roundtrip: StockBalance =
         mongodb::bson::deserialize_from_document(mongodb::bson::serialize_to_document(&balance).unwrap())
             .unwrap();
@@ -64,6 +65,7 @@ fn bson_roundtrip_preserves_stock_movement() {
         },
     )
     .unwrap();
+
     let roundtrip: StockMovement =
         mongodb::bson::deserialize_from_document(mongodb::bson::serialize_to_document(&movement).unwrap())
             .unwrap();
@@ -86,6 +88,7 @@ fn bson_roundtrip_preserves_stock_adjustment() {
     )
     .unwrap();
     adjustment.submit_for_warehouse_review("reviewer-1").unwrap();
+
     let roundtrip: StockAdjustment =
         mongodb::bson::deserialize_from_document(mongodb::bson::serialize_to_document(&adjustment).unwrap())
             .unwrap();
@@ -111,6 +114,7 @@ fn bson_roundtrip_preserves_stock_reservation() {
         },
     )
     .unwrap();
+
     let roundtrip: StockReservation =
         mongodb::bson::deserialize_from_document(mongodb::bson::serialize_to_document(&reservation).unwrap())
             .unwrap();
@@ -132,6 +136,7 @@ fn legacy_missing_created_by_defaults_empty() {
         "creator-1",
     )
     .unwrap();
+
     let mut legacy = mongodb::bson::serialize_to_document(&adjustment).unwrap();
     legacy.remove("created_by");
     let legacy: StockAdjustment = mongodb::bson::deserialize_from_document(legacy).unwrap();

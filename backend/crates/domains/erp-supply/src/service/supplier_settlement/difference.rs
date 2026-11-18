@@ -61,6 +61,7 @@ impl SupplierSettlementService {
         executor: &mut dyn Executor,
     ) -> Result<SettlementPageView<SupplierSettlementDifferenceView>> {
         self.access().require_operation(actor, &supplier_settlement::DIFFERENCE_LIST, executor).await?;
+
         params.validate()?;
         let query = params.normalized()?;
         let filter = SupplierSettlementDifferenceFilter {
@@ -76,6 +77,7 @@ impl SupplierSettlementService {
             .supplier_settlement_differences()
             .search_supplier_settlement_differences(&filter, executor)
             .await?;
+
         let items = page
             .items
             .into_iter()
@@ -93,7 +95,6 @@ impl SupplierSettlementService {
                 evidence: Vec::new(),
             })
             .collect();
-
         Ok(SettlementPageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
@@ -122,7 +123,9 @@ impl SupplierSettlementService {
         self.access()
             .require_action(actor, SettlementAction::ResolveDifference, &req.statement_id, executor)
             .await?;
+
         let mut difference = self.load_decision_difference(id, req, executor).await?;
+
         let mut statement = self.load_statement(&req.statement_id, executor).await?;
         statement
             .ensure_version(req.expected_lock_version)
@@ -130,9 +133,11 @@ impl SupplierSettlementService {
         if !statement.is_editable() {
             return Err(Error::BusinessLogicError("当前结算状态禁止处理差异".to_string()));
         }
+
         self.ensure_conclusion_evidence(&difference, conclusion, executor).await?;
         let now = Instant::now();
         difference.record_conclusion(conclusion, actor.id(), now)?;
+
         let items = self.load_statement_items(&statement.base.id, executor).await?;
         let mut differences = self.load_statement_differences(&items, executor).await?;
         let stored = differences
@@ -162,6 +167,7 @@ impl SupplierSettlementService {
             .await?
             .ok_or_else(|| Error::NotFound("结算差异不存在".to_string()))?;
         ensure_difference_version(difference.base.version, req.expected_difference_version)?;
+
         let item = self
             .db
             .supplier_settlement_items()
@@ -325,6 +331,7 @@ mod authorization_tests {
         let access = SettlementAccess::new(db.clone(), unavailable_authorization());
         let service = SupplierSettlementService::new(db).with_data_scope(access);
         let actor = AuditActor::new("actor".into(), "operator".into(), AccountKind::Admin);
+
         let refresh = RefreshSettlementStatementRequest {
             action: SettlementDraftAction::Refresh,
             statement_id: "statement".into(),
@@ -350,6 +357,7 @@ mod authorization_tests {
             Vec::new(),
         )
         .unwrap();
+
         let results = [
             service
                 .prepare_refresh("statement", &refresh, &actor, &mut SnapshotExecutor::default())

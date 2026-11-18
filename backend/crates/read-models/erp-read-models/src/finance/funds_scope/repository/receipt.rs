@@ -52,6 +52,7 @@ pub(in crate::finance::funds_scope) async fn page(
         snapshot
             .count()
             .map_err(|_| Error::ValidationError("回款查询超过上限，请收窄组织或负责人条件".into()))?;
+
         let mut stages = pipeline(query, filter, authorization, condition, false);
         stages.extend(flow::header_stages(sort(query)));
         let headers: Vec<FlowHeader> =
@@ -62,6 +63,7 @@ pub(in crate::finance::funds_scope) async fn page(
         Ok(snapshot)
     }
     .await;
+
     let result = result?;
     authorization.validate(executor).await?;
     Ok(result)
@@ -97,6 +99,7 @@ pub(in crate::finance::funds_scope) async fn versions(
         aggregate(db.collection(Database::CUSTOMER_RECEIPTS), stages, executor).await
     }
     .await;
+
     let result = result?;
     authorization.validate(executor).await?;
     Ok(result)
@@ -113,6 +116,7 @@ fn pipeline(
     let mut stages = vec![doc! { "$match": filter.to_doc() }];
     stages.extend(operator_stages(query, condition));
     stages.extend(authorization.guard_stages());
+
     stages.push(allocation_lookup(query, authorization, condition, summary));
     if query.sales_order_id.is_some() || query.receivable_account_id.is_some() {
         stages.push(pending_lookup(query));
@@ -121,6 +125,7 @@ fn pipeline(
             { "$gt": [{ "$size": "$scope_pending" }, 0] }
         ] } } });
     }
+
     stages.push(super::whole_facts::fields("$scope_links.order".into(), Bson::Array(vec![]),
         doc! { "$allElementsTrue": [{ "$map": { "input": "$scope_links", "as": "link", "in": "$$link.exists" } }] }.into()));
     stages.extend(authorization.whole.stages());
@@ -166,6 +171,7 @@ fn allocation_lookup(
         "order_no",
         &authorization.sales_stages(),
     ));
+
     let mut project = doc! { "_id": 0, "id": 1, "order": "$scope_order_id", "owner": "$scope_source.owner_user_id", "source_version": "$scope_source.version",
     "exists": { "$ne": [{ "$ifNull": ["$scope_source.id", Bson::Null] }, Bson::Null] },
     "matched": "$scope_source_allowed", "scope_match": scope_match(query, "$scope_account_id", "$scope_order_id") };
@@ -266,6 +272,7 @@ mod tests {
             operator_stages(&query, &condition),
             [doc! { "$match": { "created_by": { "$in": ["operator"] } } }]
         );
+
         query.operator_kind = Some(ReceiptOperatorKind::Settle);
         let stages = operator_stages(&query, &condition);
         let lookup = stages[0].get_document("$lookup").unwrap();

@@ -63,6 +63,7 @@ async fn persist_handover(
     if offering.base.version != req.expected_version {
         return Err(Error::ConflictError("供给责任或版本已变化，请刷新后重试".into()));
     }
+
     let before = offering.clone();
     authorize_handover(access, &mut offering, req, actor, executor).await?;
     db.supplier_offerings().update(&mut offering, executor).await?;
@@ -181,6 +182,7 @@ mod tests {
         .unwrap();
         assert_eq!(changed.maintainer_user_id, "new-owner");
         assert_eq!(changed.business_org_unit_id, "new-org");
+
         let mut retained = offering();
         authorize_handover(
             &access,
@@ -207,6 +209,7 @@ mod tests {
         )
         .await
         .unwrap();
+
         let destination_denied = authorize_handover(
             &allowed,
             &mut offering(),
@@ -216,6 +219,7 @@ mod tests {
         )
         .await;
         assert!(matches!(destination_denied, Err(Error::Forbidden(_))));
+
         let denied = access(original("outside-org"), restricted()).await;
         let original_denied = authorize_handover(
             &denied,
@@ -226,6 +230,7 @@ mod tests {
         )
         .await;
         assert!(matches!(original_denied, Err(Error::Forbidden(_))));
+
         let no_snapshot =
             authorize_handover(&allowed, &mut offering(), &request(None), &actor(), &mut NoTransaction).await;
         assert!(matches!(no_snapshot, Err(Error::ValidationError(_))));

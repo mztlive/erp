@@ -105,6 +105,7 @@ pub(super) async fn submit_created_draft(
     let now = Instant::now();
     prepare_created_order(&mut bundle.order, &mut bundle.document, now)?;
     let frozen = freeze_created_order(db, bundle, actor, executor).await?;
+
     persist_created_order_start(
         db,
         ports,
@@ -191,6 +192,7 @@ async fn freeze_created_order(
     superseded_draft.mark_superseded()?;
     let (submission, submission_lines) =
         freeze_submission_from_created_draft(db, &order, &draft, &draft_lines, actor, executor).await?;
+
     execute_purchase_order_domain_action(
         &mut order,
         ApprovalDomainAction::PurchaseOrderSubmit,
@@ -251,6 +253,7 @@ async fn persist_created_order_start(
         actor.id(),
         now,
     )?;
+
     let prepared = prepare_created_order_start(
         db,
         &ports.task_identity.clone(),
@@ -261,6 +264,7 @@ async fn persist_created_order_start(
         executor,
     )
     .await?;
+
     persist_frozen_created_order_start(
         db,
         ports,
@@ -302,6 +306,7 @@ async fn prepare_created_order_start(
     let binding = require_frozen_binding(binding.as_ref())?.clone();
     let graph = load_bound_definition_graph_with_executor(db, &binding, executor).await?;
     let graph = resolve_approvers(db, identity, graph, actor.id(), executor).await?;
+
     let start_input = build_purchase_order_start_input(PurchaseOrderStartInput {
         resubmission_reason: None,
         graph,
@@ -384,6 +389,7 @@ async fn persist_frozen_created_order_start(
         executor,
     )
     .await?;
+
     load_submitted_created_order(db, &order_id, executor).await
 }
 
@@ -492,11 +498,13 @@ mod tests {
         order.attach_draft_submission(String::from("draft").into()).unwrap();
         let mut document = new_registered_document(&order.base.id, DocumentType::PurchaseOrder, "").unwrap();
         let version = order.base.version;
+
         prepare_created_order(&mut order, &mut document, Instant::from_unix_secs(1)).unwrap();
         assert_eq!(order.purchase_no, "PO-po-created");
         assert_eq!(document.document_no, order.purchase_no);
         assert_eq!(order.draft_submission_id().unwrap().as_ref(), "draft");
         assert_eq!(order.base.version, version);
+
         prepare_created_order(&mut order, &mut document, Instant::from_unix_secs(2)).unwrap();
         assert_eq!(document.document_no, "PO-po-created");
         assert_eq!(order.base.version, version);
@@ -538,12 +546,15 @@ mod tests {
         order.assign_purchase_no("PO-20261004-001").unwrap();
         let actor = AuditActor::new("buyer-id".into(), "buyer-account".into(), erp_core::AccountKind::Admin);
         let batch_command = "purchase-order-sourcing-command-batch";
+
         let audit =
             create_submit_audit(&actor, &order, batch_command, PurchaseCreationEventSequence::standalone())
                 .unwrap();
+
         let prepared = erp_audit::prepare_business_log(&audit).unwrap();
         let stored = serde_json::to_string(&prepared).unwrap();
         let decoded: erp_audit::AuditLog = serde_json::from_str(&stored).unwrap();
+
         assert_eq!(decoded.base.id, "purchase-create-submit-po-created");
         let event = decoded.structured_event.unwrap();
         assert_eq!(event.command_id.as_deref(), Some(batch_command));

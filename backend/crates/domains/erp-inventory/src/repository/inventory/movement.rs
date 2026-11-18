@@ -128,6 +128,7 @@ impl QueryFilter for StockMovementFilter {
         if let Some(direction) = self.direction {
             filter.insert("direction", direction.as_str());
         }
+
         let mut range = Document::new();
         if let Some(from) = self.occurred_from {
             range.insert("$gte", from.unix_secs());
@@ -138,6 +139,7 @@ impl QueryFilter for StockMovementFilter {
         if !range.is_empty() {
             filter.insert("occurred_at", range);
         }
+
         if let Some(recorded_by_ids) = &self.recorded_by_ids {
             filter.insert("recorded_by", doc! { "$in": recorded_by_ids.as_slice() });
         }

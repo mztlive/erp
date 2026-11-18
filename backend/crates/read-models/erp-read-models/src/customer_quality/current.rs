@@ -55,11 +55,13 @@ impl super::CustomerQualityReadModel {
         let compiled = Arc::new(self.rbac.query(actor, &internal::CUSTOMER_QUALITY_CURRENT, executor).await?);
         let sales_scope = SalesReadScope::from_compiled(compiled.clone(), self.rbac.clone());
         let sales_context = SalesReadContext::from_access(compiled, self.rbac.clone());
+
         let expanded = expand_requested_orgs(&self.customer_scope, query, executor).await?;
         let order_customer_ids = query.customer_id.clone().map(|id| vec![id]);
         let order_filter = super::source::quality_order_filter(&bounds, order_customer_ids);
         let raw_orders = load_orders(&self.db, order_filter, &sales_scope, executor).await?;
         sales_context.validate(executor).await?;
+
         let compiled =
             Arc::new(self.rbac.query(actor, &internal::CUSTOMER_QUALITY_CUSTOMERS, executor).await?);
         let customer_context = CustomerResolvedScope {
@@ -70,9 +72,11 @@ impl super::CustomerQualityReadModel {
         };
         let mut sources = self.current_sources(query, &customer_context, raw_orders, executor).await?;
         self.customer_scope.validate(&customer_context, executor).await?;
+
         apply_request_filters(&mut sources, query, expanded.as_ref());
         let mut view = project_current(query, sources);
         apply_context(&mut view, &customer_context);
+
         let expected = combined_version(&customer_context.scope_version, &sales_context.scope_version, &view);
         super::ensure_version(query.scope_version.as_deref(), &expected)?;
         if !export {
@@ -95,12 +99,14 @@ impl super::CustomerQualityReadModel {
             customer_ids: Some(candidates.into_iter().collect()),
             ..Default::default()
         };
+
         let authorized: Vec<String> =
             authorized_versions(&self.db, &filter, customer, &self.customer_scope, executor)
                 .await?
                 .into_iter()
                 .map(|customer| customer.id)
                 .collect();
+
         let allowed: BTreeSet<_> = authorized.iter().cloned().collect();
         orders.retain(|order| allowed.contains(&order.customer_id));
         load_current_snapshot(&self.db, authorized, orders, executor).await
@@ -193,6 +199,7 @@ fn apply_request_filters(
                 || order_hit.contains(&c.id)
         });
     }
+
     let kept = sources.customers.iter().map(|c| c.id.clone()).collect::<BTreeSet<_>>();
     sources.orders.retain(|o| kept.contains(&o.customer_id));
 }
@@ -246,6 +253,7 @@ fn project_current(
         let orders = orders_by_customer.get(&customer.id).map(Vec::as_slice).unwrap_or(&[]);
         rows.extend(current_customer_rows(customer, orders, &sources, &query.dimension));
     }
+
     let grouped = group_current_rows(rows, &query.dimension, &sources);
     let totals = totals_for(&grouped);
     let mut view = assemble_current(query, grouped, totals);
@@ -330,6 +338,7 @@ fn customer_order_groups<'a>(
                 .or_default()
                 .push(order);
         }
+
         if orders.is_empty() {
             for (user, org) in &customer.owners {
                 groups.entry((Some(user.clone()), org.clone())).or_default();
@@ -392,6 +401,7 @@ fn group_current_rows(
         };
         groups.entry(key).or_default().push(row);
     }
+
     groups
         .into_iter()
         .map(|(key, values)| {
@@ -640,6 +650,7 @@ mod shared_sales_tests {
         assert_eq!(customer.totals.order_count, 3);
         assert_eq!(customer.totals.gross_total, "35.00");
         assert!(customer.rows.items[0].owner_user_id.is_none());
+
         let grouped = project_current(&query("owner_user"), snapshot());
         assert_eq!(grouped.rows.total, 2);
         assert_eq!(grouped.totals.gross_total, "35.00");

@@ -77,6 +77,7 @@ impl JdVopHttpTransport {
             self.tokens.access_token(&self.settings.credential_id).await.map_err(|_| token_error())?;
         let now = self.clock.now();
         let access_token = token.value_for(&self.settings.account_scope, now)?;
+
         let timestamp = DateTime::<Utc>::from_timestamp(now.unix_secs(), 0)
             .ok_or_else(|| mapping("京东请求时间无法编码"))?
             // 本应用采用固定 UTC+8，不从宿主机时区或账号参数推导。
@@ -92,6 +93,7 @@ impl JdVopHttpTransport {
             ("v".into(), "2.0".into()),
         ]);
         let encoded = encode_raw(parameters, payload.as_ref(), &self.settings.app_secret)?;
+
         let reply = self.sender.send(&self.settings.gateway_url, encoded.into_string()).await;
         Self::response(reply).map_err(|failure| if write { unknown_write(failure) } else { failure })
     }
@@ -108,10 +110,12 @@ impl JdVopHttpTransport {
         if reply.body.len() > RESPONSE_LIMIT {
             return Err(mapping("京东响应超过允许大小"));
         }
+
         let status = reply.status;
         if (200..300).contains(&status) {
             return Ok(reply.body);
         }
+
         let class = match status {
             401 | 403 => SupplierFailureClass::AuthSignature,
             429 => SupplierFailureClass::RateLimited,

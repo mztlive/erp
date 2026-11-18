@@ -44,6 +44,7 @@ async fn offering_create_replay_uses_real_record_with_current_create_qualificati
             .await,
         Err(Error::ValidationError(_))
     ));
+
     grant(&identity, &[("reader", &[supplier_offering::LIST])]);
     assert!(matches!(
         service
@@ -51,6 +52,7 @@ async fn offering_create_replay_uses_real_record_with_current_create_qualificati
             .await,
         Err(Error::Forbidden(_))
     ));
+
     grant(&identity, &[("creator", &[supplier_offering::CREATE])]);
     identity.state.lock().unwrap().denied_scope = true;
     assert!(matches!(
@@ -59,6 +61,7 @@ async fn offering_create_replay_uses_real_record_with_current_create_qualificati
             .await,
         Err(Error::Forbidden(_))
     ));
+
     identity.state.lock().unwrap().active = false;
     assert!(matches!(
         service
@@ -88,6 +91,7 @@ async fn availability_requires_independent_entry_qualification_and_actual_offeri
         ));
     }
     assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
+
     grant(
         &identity,
         &[
@@ -99,6 +103,7 @@ async fn availability_requires_independent_entry_qualification_and_actual_offeri
         .require(&actor(), &permission, AccessTarget::record("offering").unwrap(), &mut executor)
         .await
         .unwrap();
+
     facts.objects.lock().unwrap()[0].owner_id = FactValue::Known(Some("other".into()));
     assert!(matches!(
         service
@@ -133,6 +138,7 @@ async fn selection_order_basis_requires_create_before_facts_and_keeps_customer_a
     grant(&identity, &[("proposal", &[sales_selection::PROPOSAL_DETAIL]), ("customer", &[customer::DETAIL])]);
     assert!(matches!(service.query(&actor(), &permission, &mut executor).await, Err(Error::Forbidden(_))));
     assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
+
     grant(
         &identity,
         &[
@@ -145,8 +151,10 @@ async fn selection_order_basis_requires_create_before_facts_and_keeps_customer_a
         .require(&actor(), &permission, AccessTarget::record("proposal").unwrap(), &mut executor)
         .await
         .unwrap();
+
     let access = service.query(&actor(), &permission, &mut executor).await.unwrap();
     service.validate(&access, &mut executor).await.unwrap();
+
     facts.objects.lock().unwrap()[0].owner_id = FactValue::Known(Some("other".into()));
     assert!(matches!(
         service
@@ -171,6 +179,7 @@ async fn supplier_command_result_queries_use_original_command_without_detail_and
         let access = service.query(&actor(), &permission, &mut executor).await.unwrap();
         executor.next_read();
         assert!(matches!(service.validate(&access, &mut executor).await, Err(Error::ValidationError(_))));
+
         grant(&identity, &[("detail-only", &[supplier_fulfillment::ORDER_DETAIL])]);
         assert!(matches!(
             service.query(&actor(), &permission, &mut executor).await,

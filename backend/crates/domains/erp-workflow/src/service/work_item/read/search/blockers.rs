@@ -28,6 +28,7 @@ impl WorkItemReadService {
             .map(|field| WorkItemView::from_fields(field, String::new()))
             .collect::<Result<Vec<_>>>()?;
         self.apply_approval_contexts(&mut projected, executor).await?;
+
         for (field, view) in fields.iter_mut().zip(projected) {
             field.search.blocked = matches!(
                 view.processing_state,

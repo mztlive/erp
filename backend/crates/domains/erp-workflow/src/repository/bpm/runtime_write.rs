@@ -154,6 +154,7 @@ impl<'a> BpmWorkflowRepository<'a> {
             )
             .await?,
         )?;
+
         for execution in updated_executions {
             let expected_execution_version = previous_version(execution.base.version)?;
             require_cas_applied(
@@ -192,6 +193,7 @@ impl<'a> BpmWorkflowRepository<'a> {
             expected_instance_version,
             expected_current_execution_id,
         )?;
+
         let mut projection = serialize_to_document(list_projection)?;
         if let Some(progress) = ApprovalProgress::changed(
             instance.started_by.as_str(),
@@ -200,6 +202,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         ) {
             merge_documents(&mut projection, serialize_to_document(&progress)?);
         }
+
         self.cas_replace(
             CasReplaceSpec {
                 collection: INSTANCES,

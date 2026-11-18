@@ -429,6 +429,7 @@ mod tests {
             Some(&current_execution()),
             Some("价格过高".into()),
         );
+
         assert_eq!(view.id, "inst-1");
         assert_eq!(view.status, "RUNNING");
         assert_eq!(view.current_node.as_deref(), Some("procurement_confirm"));
@@ -449,6 +450,7 @@ mod tests {
                 Timestamp::from_unix_secs(12).unwrap(),
             )
             .unwrap();
+
         let view = DocumentApprovalInstanceSummaryView::from_runtime(&instance, None, None);
         assert_eq!(view.blocker_code.as_deref(), Some("APPROVER_ACCOUNT_INACTIVE"));
         assert!(view.current_node.is_none());
@@ -474,6 +476,7 @@ mod tests {
         assert_eq!(view.node_name, "采购确认");
         assert_eq!(view.result, "REJECTED");
         assert_eq!(view.decision_reason.as_deref(), Some("价格过高"));
+
         let mut execution = current_execution();
         execution.assignee_name_snapshot = "  ".into();
         let view =

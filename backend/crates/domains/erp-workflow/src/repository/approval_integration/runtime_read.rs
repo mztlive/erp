@@ -126,6 +126,7 @@ impl<'a> ApprovalRuntimeReadRepository<'a> {
         if runtime_read_scope_empty(filter, scope) {
             return Ok(ApprovalRuntimeReadPage::default());
         }
+
         let rows = aggregate_runtime_read::<ApprovalRuntimeReadFacet>(
             &self.db.collection::<Document>(INSTANCES),
             pipeline,
@@ -153,6 +154,7 @@ impl<'a> ApprovalRuntimeReadRepository<'a> {
         if runtime_read_scope_empty(filter, scope) {
             return Ok((Vec::new(), None));
         }
+
         let rows = aggregate_runtime_read::<ApprovalRuntimeReadScanFacet>(
             &self.db.collection::<Document>(INSTANCES),
             pipeline,
@@ -209,6 +211,7 @@ fn runtime_read_page(facet: Option<ApprovalRuntimeReadFacet>) -> Result<Approval
     let Some(facet) = facet else {
         return Ok(ApprovalRuntimeReadPage::default());
     };
+
     let total = facet_total_or_empty(facet.total.first().map(|row| row.count), "approval_runtime_total")?;
     let document_type_counts = facet
         .document_type_counts
@@ -250,6 +253,7 @@ fn runtime_read_pipeline(
         doc! { "$match": runtime_instance_match(&base_filter, scope) },
         doc! { "$sort": instance_list_sort(filter) },
     ];
+
     pipeline.extend(runtime_snapshot_stages(filter));
     pipeline.push(doc! { "$facet": runtime_read_facets(filter) });
     pipeline
@@ -262,6 +266,7 @@ fn runtime_scan_pipeline(
 ) -> Vec<Document> {
     let mut items = runtime_snapshot_stages(filter);
     items.push(doc! { "$project": runtime_read_projection() });
+
     let mut cursor_projection = instance_summary_projection();
     cursor_projection.insert("_id", 0);
     vec![
@@ -335,6 +340,7 @@ fn runtime_snapshot_stages(filter: &ApprovalInstanceListFilter) -> Vec<Document>
         doc! { "$set": { "_runtime_snapshot_exact": runtime_snapshot_exact_expr() } },
         doc! { "$match": { "_runtime_snapshot_exact": true } },
     ];
+
     if let Some(text_query) = &filter.text_query {
         pipeline.push(doc! { "$match": runtime_text_match(&text_query.query) });
     }
@@ -508,6 +514,7 @@ mod tests {
         assert!(!instance_match.contains_key("$or"));
 
         assert_eq!(pipeline[1].get_document("$sort").unwrap(), &doc! { "blocked_at": -1, "id": -1 });
+
         let lookup = pipeline[2].get_document("$lookup").unwrap();
         assert_eq!(lookup.get_str("localField").unwrap(), "id");
         assert_eq!(lookup.get_str("foreignField").unwrap(), "approval_process_instance_id");
@@ -523,10 +530,12 @@ mod tests {
             assert!(exact.contains(field));
         }
         assert_eq!(pipeline[6], doc! { "$match": { "_runtime_snapshot_exact": true } });
+
         let text = pipeline[7].get_document("$match").unwrap().to_string();
         assert!(text.contains("_runtime_snapshot.payload.document_no"));
         assert!(text.contains("_runtime_snapshot_exact"));
         assert!(text.contains(r"ADJ\.\[1\]"));
+
         let facet = pipeline[9].get_document("$facet").unwrap();
         let items = facet.get_array("items").unwrap();
         assert!(items[0].as_document().unwrap().contains_key("$match"));
@@ -549,6 +558,7 @@ mod tests {
                 .get_document("$match")
                 .map_or(true, |filter| !filter.to_string().contains("responsible_org_id"))
         }));
+
         let projection = pipeline
             .last()
             .unwrap()
@@ -579,6 +589,7 @@ mod tests {
             ]
         );
         assert_eq!(pipeline[2], doc! { "$limit": 21_i64 });
+
         let facet = pipeline[3].get_document("$facet").unwrap();
         assert_eq!(facet.len(), 2);
         assert!(!facet.contains_key("total"));
@@ -615,6 +626,7 @@ mod tests {
         assert!(!runtime_read_scope_empty(&filter, &matching));
         let pipeline = runtime_read_pipeline(&filter, &matching);
         assert_eq!(pipeline[6], doc! { "$match": { "_runtime_snapshot_exact": true } });
+
         assert!(runtime_read_scope_empty(
             &filter,
             &ApprovalRuntimeReadScope::Started {

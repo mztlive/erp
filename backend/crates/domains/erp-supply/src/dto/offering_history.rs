@@ -125,6 +125,7 @@ impl OfferingHistoryPage {
         revisions.truncate(20);
         let next_before_revision_no =
             if has_more { revisions.last().map(|row| row.revision.revision_no) } else { None };
+
         let items = revisions
             .into_iter()
             .map(|revision| OfferingRevisionView::from_revision(revision, current_id))
@@ -168,6 +169,7 @@ mod tests {
         assert_eq!(page.items[0].revision_no, 21);
         assert!(!page.items[0].is_current);
         assert!(page.items[1].is_current);
+
         let tail = OfferingHistoryPage::from_revisions(vec![revision(1)], Some("revision-20"));
         assert_eq!(tail.next_before_revision_no, None);
         assert!(!tail.items[0].is_current);
@@ -184,6 +186,7 @@ mod tests {
         let mut view = OfferingRevisionView::from_revision(revision(1), Some("revision-1"));
         assert!(view.dropship_supply_price_gross.is_some());
         let minimum = view.bulk_minimum_order_quantity.clone().unwrap();
+
         view.redact_costs();
         let json = serde_json::to_value(view).unwrap();
         for key in [

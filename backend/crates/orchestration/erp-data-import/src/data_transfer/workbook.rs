@@ -41,16 +41,19 @@ impl BusinessTransfers {
         if kind == TransferKind::SupplierQuoteArchive {
             return self.quote_archive(input, actor).await;
         }
+
         let rows = self.pool_source(input, actor).await?;
         let authorization = self.workbook_evidence("rows", &json!(rows), &rows).await?;
         let images = self.images(&rows).await?;
         let row_count = rows.len();
+
         let bytes = spawn_blocking(move || pool_workbook(&rows, &images))
             .await
             .map_err(|_| Error::Internal("Excel 生成中断".into()))??;
         if bytes.len() > 5 * 1024 * 1024 {
             return Err(Error::ValidationError("导出文件超过询价可导入的 5 MiB，请减少商品".into()));
         }
+
         let mut result = TransferResult::file("公司商品池.xlsx".into(), XLSX_MIME, bytes, authorization)?;
         result.metadata = json!({"row_count":row_count});
         Ok(result)
@@ -73,10 +76,12 @@ impl BusinessTransfers {
             {
                 return Err(Error::ValidationError("商品图片不可用或超过 20 MiB".into()));
             }
+
             let bytes = timeout(Duration::from_secs(60), self.storage.read(&asset.storage_object_key))
                 .await
                 .map_err(|_| Error::Internal("商品图片读取超时，请重试".into()))?
                 .map_err(|_| Error::Internal("商品图片读取失败，请重试".into()))?;
+
             let jpeg = spawn_blocking(move || thumbnail(bytes))
                 .await
                 .map_err(|_| Error::Internal("商品图片转换中断".into()))??;
@@ -100,6 +105,7 @@ fn thumbnail(bytes: Vec<u8>) -> Result<Vec<u8>> {
         check_dimensions(dimensions.0, dimensions.1)?;
         image::load_from_memory(&bytes).map_err(|_| image_error())?
     };
+
     let thumbnail = image.thumbnail(152, 152);
     let mut out = Cursor::new(Vec::new());
     thumbnail.write_to(&mut out, ImageFormat::Png).map_err(|_| image_error())?;
@@ -118,6 +124,7 @@ fn jpeg_image(bytes: &[u8]) -> Result<DynamicImage> {
     let info = decoder.info().ok_or_else(image_error)?;
     let (width, height) = (u32::from(info.width), u32::from(info.height));
     check_dimensions(width, height)?;
+
     let decoded = decoder.decode().map_err(|_| image_error())?;
     if decoded.len() == (u64::from(width) * u64::from(height)) as usize {
         return GrayImage::from_raw(width, height, decoded)
@@ -158,6 +165,7 @@ fn pool_book(rows: &[Value], images: &HashMap<String, Vec<u8>>) -> Result<Workbo
     book.set_properties(
         &DocProperties::new().set_subject(PoolTemplateVersion::CURRENT.marker()).set_author("公司商品池"),
     );
+
     let sheet = book.add_worksheet();
     sheet.set_name(POOL_SHEET).map_err(xlsx)?;
     configure_pool_sheet(sheet).map_err(xlsx)?;
@@ -172,6 +180,7 @@ fn pool_book(rows: &[Value], images: &HashMap<String, Vec<u8>>) -> Result<Workbo
         )
         .map_err(xlsx)?;
     pool_rows(sheet, rows, images)?;
+
     let cols: Vec<_> = HEADERS
         .iter()
         .enumerate()
@@ -190,6 +199,7 @@ fn pool_book(rows: &[Value], images: &HashMap<String, Vec<u8>>) -> Result<Workbo
                 .set_columns(&cols),
         )
         .map_err(xlsx)?;
+
     delivery_sheet(&mut book, rows).map_err(xlsx)?;
     pool_notes(&mut book)?;
     Ok(book)
@@ -248,6 +258,7 @@ fn delivery_sheet(book: &mut Workbook, rows: &[Value]) -> StdResult<(), XlsxErro
     configure_delivery_sheet(sheet)?;
     sheet.set_column_hidden(16)?.set_column_hidden(17)?;
     delivery_colors(sheet)?;
+
     for (i, row) in rows.iter().enumerate() {
         if row["product_kind"] == "VOUCHER" {
             continue;
@@ -336,6 +347,7 @@ fn pool_rows(sheet: &mut Worksheet, rows: &[Value], images: &HashMap<String, Vec
         if image.is_some() {
             values[0].clear();
         }
+
         for (col, value) in values.iter().enumerate() {
             let column = u16::try_from(col).map_err(|_| Error::ValidationError("列数超限".into()))?;
             sheet.write_string_with_format(n, column, value, &formats[col]).map_err(xlsx)?;
@@ -358,6 +370,7 @@ fn insert_pool_image(sheet: &mut Worksheet, row: u32, bytes: &[u8]) -> Result<()
     if longest == 0 {
         return Err(image_error());
     }
+
     // 图片已由 thumbnail 限制为 152px；按等比缩放后的尺寸计算留白。
     let x = (IMAGE_CELL_WIDTH - width * IMAGE_SIZE / longest) / 2;
     let y = (PRODUCT_ROW_HEIGHT - height * IMAGE_SIZE / longest) / 2;
@@ -393,6 +406,7 @@ fn pool_notes(book: &mut Workbook) -> Result<()> {
         ],
     )
     .map_err(xlsx)?;
+
     for row in 0..2 {
         notes.set_row_height(row, if row == 0 { 30 } else { 54 }).map_err(xlsx)?;
         notes.set_cell_format(row, 0, &catalog_format().set_bold()).map_err(xlsx)?;
@@ -470,6 +484,7 @@ mod tests {
         for (column, value) in [(14, "2.500001"), (15, "12.5001"), (16, "客户填写备注")] {
             sheet.write_string(2, column, value).unwrap();
         }
+
         let sheet = book.worksheet_from_name(DELIVERY_SHEET).unwrap();
         for (column, value) in [
             (3, "张三"),
@@ -517,6 +532,7 @@ mod tests {
             ["001-A*", "=1+1 礼盒", "红", "BOX", "2.500001", "12.5001", "客户填写备注"]
         );
         assert!(product.cells.iter().all(|cell| cell.text && !cell.formula));
+
         assert_eq!(parsed.deliveries.len(), 1);
         assert_eq!(
             parsed.deliveries[0].cells.iter().map(|cell| cell.value.as_str()).collect::<Vec<_>>(),
@@ -543,6 +559,7 @@ mod tests {
         let parsed = parse::parse(&legacy).unwrap();
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         assert_eq!(parsed.products[0].cells[5].value, "12.5001");
+
         let duplicate = replace_shared_text(bytes, "<t>条码</t>", "<t>销售参考价</t>");
         assert!(
             matches!(parse::parse(&duplicate), Err(Error::ValidationError(message)) if message.contains("重复表头"))
@@ -581,6 +598,7 @@ mod tests {
             let bytes =
                 pool_workbook(&[row], &HashMap::from([("image".into(), image.into_inner())])).unwrap();
             assert!(parse::parse(&bytes).unwrap().errors.is_empty());
+
             let mut archive = ZipArchive::new(Cursor::new(bytes)).unwrap();
             let mut drawing = String::new();
             archive.by_name("xl/drawings/drawing1.xml").unwrap().read_to_string(&mut drawing).unwrap();

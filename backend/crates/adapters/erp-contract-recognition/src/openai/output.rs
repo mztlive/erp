@@ -117,6 +117,7 @@ pub(super) fn validate_response(response: &CompletionResponse) -> DecodeResult<(
             incomplete: Box::new(raw["incomplete_details"].clone()),
         });
     }
+
     let output = raw["output"].as_array().ok_or(DecodeError::Shape("output must be an array"))?;
     let mut submitted = false;
     for (index, item) in output.iter().enumerate() {
@@ -172,11 +173,13 @@ pub(super) fn convert(
     }
     let version =
         format!("protocol=responses;requested={requested};reported={reported};prompt={PROMPT_VERSION}");
+
     limit("fields_count", output.fields.len(), 14)?;
     limit("conflicts_count", output.conflicts.len(), 32)?;
     for conflict in &output.conflicts {
         limit("conflict_bytes", conflict.len(), 2048)?;
     }
+
     let mut fields = BTreeMap::new();
     for field in output.fields {
         let name = ContractField::from(field.field);
@@ -193,6 +196,7 @@ pub(super) fn convert(
             return Err(DecodeError::Duplicate(name));
         }
     }
+
     let extraction =
         ContractExtraction { provider: provider_id.into(), version, fields, conflicts: output.conflicts };
     limit("extraction_bytes", serde_json::to_vec(&extraction)?.len(), 256_000)?;

@@ -25,12 +25,14 @@ impl PartyService {
         {
             candidates.push(party);
         }
+
         let names = self.db.party().exact_current_party_ids_by_name(&seed.legal_name, executor).await?;
         for id in names {
             if let Some(party) = self.db.parties().find_by_id(&id, executor).await? {
                 candidates.push(party);
             }
         }
+
         seed.identity(candidates)
     }
 
@@ -46,6 +48,7 @@ impl PartyService {
             Some(party) => party,
             None => seed.new_party(next_id())?,
         };
+
         let current = match &party.stable.current_revision_id {
             Some(id) => Some(
                 self.db
@@ -59,14 +62,17 @@ impl PartyService {
         if let Some(revision) = &current {
             party.current_revision(std::slice::from_ref(revision))?;
         }
+
         let Some((profile, name_changed)) = seed.change(&party, current.as_ref())? else {
             return Ok((party, false));
         };
+
         party.company_profile = Some(profile.clone());
         party.update(
             PartyUpdate { unified_credit_code: FieldUpdate::Set(seed.credit_code.clone()), status: None },
             ACTOR,
         )?;
+
         if name_changed {
             self.append_builtin_name(&mut party, profile, executor).await?;
         }
@@ -94,6 +100,7 @@ impl PartyService {
                 change_reason: "同步内建公司资料".into(),
             },
         )?;
+
         self.db.party_revisions().create(&revision, executor).await?;
         party.stable.current_revision_id = Some(revision.base.id);
         Ok(())

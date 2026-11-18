@@ -133,6 +133,7 @@ mod tests {
             request.validate().unwrap();
             assert!(matches!(request.selection, GrantRecompute::All));
         }
+
         for after in ["".into(), " ".into(), " a".into(), "a ".into(), "x".repeat(4097)] {
             let request = RecomputeRequest { selection: GrantRecompute::All, after: Some(after) };
             assert!(request.validate().is_err());
@@ -155,12 +156,15 @@ mod tests {
                 .unwrap()
         );
         assert!(!source.apply(1, 1, update.targets.clone(), "admin", &update.reason).unwrap());
+
         let mut changed = update.targets.clone();
         changed[0].id = "S002".into();
         assert!(source.apply(1, 1, changed, "admin", &update.reason).is_err());
+
         let mut forged = request;
         forged["fact_version"] = json!(9);
         assert!(serde_json::from_value::<ManualGrantRequest>(forged).is_err());
+
         for value in ["", " ", " a"] {
             assert!(validate_cursor(Some(value)).is_err());
         }

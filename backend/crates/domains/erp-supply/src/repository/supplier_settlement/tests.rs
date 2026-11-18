@@ -37,6 +37,7 @@ fn statement_filter_ands_three_role_conditions_without_expanding_scope() {
         handler_open_statement_ids: vec!["st-open".into()],
         ..Default::default()
     };
+
     let text = format!("{:?}", filter.to_doc());
     assert!(text.contains("prepared_by"));
     assert!(text.contains("difference_handler_user_id"));
@@ -51,6 +52,7 @@ fn handler_filter_without_open_tasks_is_empty_and_operator_falls_back() {
         ..Default::default()
     };
     assert!(format!("{:?}", empty_handler.to_doc()).contains("$expr"));
+
     let operator = SupplierSettlementStatementFilter {
         operator_user_ids: Some(vec!["op-1".into()]),
         ..Default::default()
@@ -134,6 +136,7 @@ fn settlement_period_bounds_use_shanghai_inclusive_start_exclusive_end() {
             "{start_text} 结束边界错误"
         );
     }
+
     let start = BusinessDate::from_ymd(2026, 7, 1).unwrap();
     let end = BusinessDate::from_ymd(2026, 7, 31).unwrap();
     let (start_secs, end_secs) = SettlementPeriod::secs_bounds(start, end);
@@ -181,6 +184,7 @@ fn settlement_scope_filters_cover_supplier_period_and_requested_ids() {
     let tampered_branch = branches[2].as_document().unwrap();
     assert_eq!(tampered_branch.get_str("fulfillment_status").unwrap(), "COMPLETED");
     assert!(matches!(tampered_branch.get("completed_at").unwrap(), mongodb::bson::Bson::Null));
+
     let item_ids = vec![SupplierFulfillmentItemId::new("item-1")];
     let items = item_scope_filter(&order_ids, &item_ids);
     let branches = items.get_array("$or").unwrap();

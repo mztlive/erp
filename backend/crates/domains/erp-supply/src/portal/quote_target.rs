@@ -43,6 +43,7 @@ impl QuoteTargetVersion {
         {
             return Err(Error::ValidationError("报价目标版本必须为正数".into()));
         }
+
         if self != current {
             return Err(Error::ConflictError(
                 "公司SKU、商品修订或基础单位已经变化，请重新核对报价并提交".into(),
@@ -74,6 +75,7 @@ mod tests {
     fn unchanged_target_accepts_and_each_changed_fact_rejects_without_replacing_original() {
         let original = target();
         original.ensure_current(&target()).unwrap();
+
         let serialized = serde_json::to_value(&original).unwrap();
         for field in [
             "sku_version",
@@ -87,12 +89,14 @@ mod tests {
             let current = serde_json::from_value(value).unwrap();
             assert!(matches!(original.ensure_current(&current), Err(Error::ConflictError(_))));
         }
+
         for field in ["sku_revision_id", "product_id", "product_revision_id", "unit_id"] {
             let mut value = serialized.clone();
             value[field] = serde_json::json!("changed");
             let current = serde_json::from_value(value).unwrap();
             assert!(matches!(original.ensure_current(&current), Err(Error::ConflictError(_))));
         }
+
         assert_eq!(serde_json::to_value(&original).unwrap(), serialized);
     }
 
@@ -101,6 +105,7 @@ mod tests {
         let mut invalid = target();
         invalid.sku_revision_id.clear();
         assert!(matches!(invalid.ensure_current(&invalid), Err(Error::ValidationError(_))));
+
         invalid = target();
         invalid.unit_version = 0;
         assert!(matches!(invalid.ensure_current(&invalid), Err(Error::ValidationError(_))));

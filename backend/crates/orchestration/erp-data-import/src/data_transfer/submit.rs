@@ -50,13 +50,16 @@ impl DataTransferProcess {
             account: actor.account().into(),
             account_kind: actor.kind(),
         };
+
         if let Some(existing) = self.replay(&request_id, &digest, &envelope, actor).await? {
             return Ok(existing.into());
         }
+
         envelope.input = self.handler.prepare(request.kind, envelope.input, actor).await?;
         let id = next_id();
         let source =
             self.save_private(&format!("data-transfer/{id}/source.enc"), &envelope, actor.id()).await?;
+
         let (job, items) =
             build_job(id, request_id, digest, source.base.id.clone(), request.kind, &envelope.input, actor)?;
         let context = ContextInput::new(
@@ -65,6 +68,7 @@ impl DataTransferProcess {
         )
         .record()?;
         let submission = Submission { job, items, source, context };
+
         match self.persist_submission(submission, &envelope, actor).await {
             Ok(view) => Ok(view),
             Err(error) => {
@@ -125,11 +129,13 @@ impl DataTransferProcess {
         let kind = envelope.kind;
         let input = envelope.input.clone();
         let actor = actor.clone();
+
         db.client()
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     authorize_registration(handler.as_ref(), kind, &input, &actor, executor).await?;
+
                     db.file_assets().create(&source, executor).await?;
                     db.bulk_job().create_job_with_items(&copy, items, executor).await?;
                     db.bulk_job()

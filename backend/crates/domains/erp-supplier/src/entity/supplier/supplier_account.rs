@@ -353,9 +353,11 @@ impl SupplierAccount {
             },
             None => self.business_org_unit_id.clone(),
         };
+
         if target == self.maintainer_user_id && next_org == self.business_org_unit_id {
             return Err(erp_core::Error::from("目标已是当前维护人，无需交接"));
         }
+
         self.maintainer_user_id = target;
         self.business_org_unit_id = next_org;
         self.stable.touch(updated_by);
@@ -474,6 +476,7 @@ pub(crate) fn intersect_supplier_ids(
         (None, Some(matched)) => return Some(matched),
         (None, None) => return None,
     };
+
     let matched: HashSet<SupplierAccountId> = matched.into_iter().collect();
     Some(current.into_iter().filter(|id| matched.contains(id)).collect())
 }
@@ -505,6 +508,7 @@ mod intersect_tests {
                 .collect::<Vec<_>>(),
             vec!["s-2".to_string(), "s-3".to_string()]
         );
+
         assert_eq!(
             intersect_supplier_ids(Some(vec![SupplierAccountId::new("s-1")]), None)
                 .unwrap()
@@ -522,6 +526,7 @@ mod intersect_tests {
             vec!["s-9".to_string()]
         );
         assert!(intersect_supplier_ids(None, None).is_none());
+
         assert_eq!(
             intersect_supplier_ids(
                 Some(vec![SupplierAccountId::new("s-1")]),
@@ -610,10 +615,12 @@ mod tests {
             SupplierAccount::new(SupplierAccountId::new("supplier-5"), account_data(), "admin-1").unwrap();
         account.maintainer_user_id.clear();
         assert!(account.ensure_responsibility().is_err());
+
         account.maintainer_user_id = "buyer-1".into();
         account.handover("buyer-2".into(), Some("org-b".into()), "manager").unwrap();
         assert_eq!(account.maintainer_user_id, "buyer-2");
         assert_eq!(account.business_org_unit_id, "org-b");
+
         assert!(account.handover("buyer-2".into(), None, "manager").is_err());
         assert_eq!(account.business_org_unit_id, "org-b");
     }
@@ -685,6 +692,7 @@ mod tests {
             account.profile_update_violation(2),
             Some(SupplierProfileUpdateViolation::VersionMismatch)
         );
+
         account.stable.status = SupplierAccountStatus::Disabled;
         assert_eq!(
             account.profile_update_violation(1),

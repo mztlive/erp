@@ -29,6 +29,7 @@ impl SourceServiceRegions {
         if snapshot.stamp.observed_at < received_at {
             return Err(Error::ConflictError("商品城市观察早于回调".into()));
         }
+
         for code in &included {
             RegionCode::parse(code)?;
         }
@@ -83,6 +84,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(regions.included, ["110100"]);
+
         for value in [
             RegionCoverage::Unreported,
             RegionCoverage::Unrestricted,
@@ -126,6 +128,7 @@ mod tests {
             observed_at: Instant::from_unix_secs(20),
         })
         .unwrap();
+
         let mut historical = serde_json::to_value(&item).unwrap();
         historical.as_object_mut().unwrap().remove("source_service_regions");
         assert!(
@@ -134,9 +137,11 @@ mod tests {
                 .source_service_regions
                 .is_none()
         );
+
         ordinary_sync.observed_at = Instant::from_unix_secs(30);
         ordinary_sync.merge_observation(item).unwrap();
         assert_eq!(ordinary_sync.source_service_regions.as_ref().unwrap().included, ["110100"]);
+
         assert!(
             ordinary_sync
                 .apply_service_regions(SourceServiceRegions {
@@ -146,6 +151,7 @@ mod tests {
                 .is_err()
         );
         assert_eq!(ordinary_sync.source_service_regions.as_ref().unwrap().included, ["110100"]);
+
         ordinary_sync
             .apply_service_regions(SourceServiceRegions {
                 included: vec![],

@@ -41,16 +41,19 @@ impl PurchaseOrderService {
         change
             .ensure_base_revision_current(order.stable.current_revision_id.as_deref())
             .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+
         let (submission, lines) = self.load_pending_change_submission(submission_id).await?;
         let revision_no = self.next_revision_no(&order).await?;
         let (revision, revision_lines) =
             self.build_change_revision(&order, &submission, &lines, revision_no).await?;
+
         let base_revision = self
             .db
             .purchase_order_revisions()
             .find_by_id(&change.base_revision_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("基准版本不存在".to_string()))?;
+
         Ok((
             EffectiveChangeWrite { order, change: change.clone(), submission, revision, revision_lines },
             base_revision,
@@ -74,6 +77,7 @@ impl PurchaseOrderService {
         submission
             .ensure_pending()
             .map_err(|_| Error::ConflictError("变更提交已处理，请勿重复生效".to_string()))?;
+
         let lines = self
             .db
             .purchase_order()

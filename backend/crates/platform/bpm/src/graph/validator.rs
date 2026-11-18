@@ -45,6 +45,7 @@ pub fn validate_entry_node(entry_node_key: &str, node_keys: &[String]) -> ModelR
     if entry.len() > NODE_KEY_MAX_LEN {
         return Err(ModelError::InvalidField("入口节点键过长"));
     }
+
     if node_keys.iter().any(|key| key.trim() == entry) {
         return Ok(());
     }
@@ -93,12 +94,14 @@ pub fn validate_linear_graph(
         node.validate_assignment()?;
         node.validate_additional_assignees()?;
     }
+
     let ordered = ordered_nodes(nodes)?;
     let keys = ordered.into_iter().map(|node| node.node_key.clone()).collect::<Vec<_>>();
     validate_entry_node(&definition.entry_node_key, &keys)?;
     if definition.entry_node_key.trim() != keys[0] {
         return Err(ModelError::InvalidField("入口必须是顺序第一节点"));
     }
+
     let expected = generate_linear_transitions(&keys)?;
     ensure_transitions_match(transitions, &expected, &definition.entry_node_key)?;
     for transition in transitions {
@@ -126,6 +129,7 @@ fn ensure_transitions_match(
     if actual.len() != expected.len() {
         return Err(ModelError::InvalidTransition("连线与线性生成器结果不一致"));
     }
+
     let mut actual_keys =
         actual.iter().map(|transition| transition_key(transition, entry)).collect::<Vec<_>>();
     let mut expected_keys = expected
@@ -139,6 +143,7 @@ fn ensure_transitions_match(
             )
         })
         .collect::<Vec<_>>();
+
     actual_keys.sort();
     expected_keys.sort();
     if actual_keys == expected_keys {
@@ -244,6 +249,7 @@ mod tests {
             let nodes = [node("id1", "n1", 1), node("id2", "n2", second_order)];
             assert_eq!(ordered_nodes(&nodes), Err(ModelError::InvalidField("节点顺序必须从 1 连续且无重复")));
         }
+
         let nodes = (1..=20)
             .rev()
             .map(|order| node(&format!("id{order}"), &format!("n{order}"), order))
@@ -275,6 +281,7 @@ mod tests {
         )
         .unwrap();
         validate_linear_graph(&definition, &nodes, &transitions).unwrap();
+
         let mut legacy = transitions.clone();
         for transition in legacy.iter_mut().filter(|edge| edge.event == ApprovalTransitionEvent::Reject) {
             transition.to_node_key = Some("n1".into());
@@ -294,6 +301,7 @@ mod tests {
             None
         );
         assert_eq!(legacy_graph.transitions, frozen);
+
         legacy[1].to_node_key = Some("n2".into());
         assert!(validate_linear_graph(&definition, &nodes, &legacy).is_err());
 

@@ -101,6 +101,7 @@ pub(super) fn purchase(
             impact_summary: fact.display.impact_summary.clone(),
             brief_source: Some(source),
         };
+
         let current =
             change.current_submission_id.as_ref().map(|id| id.as_ref()) == Some(submission.base.id.as_str());
         let version = if submission.status == SubmissionStatus::Draft {
@@ -133,6 +134,7 @@ fn purchase_versions_aligned(change: &PurchaseChangeOrder, context: &PurchaseCha
             row.purchase_change_order_id.as_ref() == change.base.id && row.status != SubmissionStatus::Draft
         })
         .collect::<Vec<_>>();
+
     let current =
         change.current_submission_id.as_ref().and_then(|id| context.submissions.get::<str>(id.as_ref()));
     let Some(current) = current.filter(|row| row.purchase_change_order_id.as_ref() == change.base.id) else {
@@ -146,6 +148,7 @@ fn purchase_versions_aligned(change: &PurchaseChangeOrder, context: &PurchaseCha
     if !pointer_matches || rows.len() != change.approval_subject_version as usize {
         return false;
     }
+
     let mut versions = rows.iter().filter_map(|row| purchase_sequence(row)).collect::<Vec<_>>();
     versions.sort_unstable();
     versions.len() == rows.len() && versions.iter().copied().eq(1..=change.approval_subject_version)

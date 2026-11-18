@@ -78,6 +78,7 @@ impl SalesOrderRepositoryQualityExt for Repository<'_, SalesOrder> {
         executor: &mut dyn Executor,
     ) -> Result<Vec<SalesOrder>> {
         scope.ensure_current(executor)?;
+
         let options = FindOptions::builder()
             .limit((QUALITY_ORDER_LIMIT + 1) as i64)
             .sort(doc! { "effective_at": 1, "id": 1 })
@@ -90,6 +91,7 @@ impl SalesOrderRepositoryQualityExt for Repository<'_, SalesOrder> {
             executor,
         )
         .await?;
+
         scope.ensure_current(executor)?;
         Ok(rows)
     }
