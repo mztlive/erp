@@ -2,6 +2,7 @@
 use erp_finance::repository::extensions::ReceivableExt;
 use erp_identity::Result;
 use erp_identity::entity::resource_access::SourceKey;
+use erp_identity::ports::ResourceGrantFacts;
 use persistence_core::Executor;
 
 use crate::ResourceGrantProcess;
@@ -65,7 +66,7 @@ impl ResourceGrantProcess {
             return Ok(GrantReadiness::Absent);
         };
 
-        let update = Facts::compute(&self.db, &event, executor).await?;
+        let update = Facts { db: self.db.clone() }.compute_source(&event, executor).await?;
         let source = self.queue.source(&event.source, executor).await?;
         Ok(match source {
             Some(s) if s.terminated => GrantReadiness::Terminated,

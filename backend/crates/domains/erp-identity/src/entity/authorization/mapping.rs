@@ -1,8 +1,5 @@
 use std::collections::BTreeSet;
 
-use erp_core::common::time::Instant;
-use serde_json::Value;
-
 use super::{FactKind, QueryModelKey};
 use crate::{Error, Result};
 
@@ -31,12 +28,12 @@ pub enum QueryOutput {
     /// 返回单一来源的可见份额，每行只对应一个来源。
     Share {
         /// 允许投影的份额字段与行主键；金额仅取该份额。
-        fields: BTreeSet<String>
+        fields: BTreeSet<String>,
     },
     /// 仅暴露记录存在性的只读视图。
     Existence {
         /// 投影字段集合，必须且只能包含行主键。
-        fields: BTreeSet<String>
+        fields: BTreeSet<String>,
     },
 }
 
@@ -76,33 +73,6 @@ fn valid_segment(value: &str) -> bool {
         && value.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
 }
 
-/// 当前读取阶段准备的动态映射事实及其一致性边界；缺少修订号时仅用于调用方事务快照。
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct MappingFacts {
-    /// 本次条件转换使用的冻结数据，仅随调用传递，禁止写入共享映射实例。
-    pub data: Value,
-    /// 覆盖数据变更的修订号，供非事务读取在交付前重取并比较。
-    pub version: Option<String>,
-    /// 任一依赖最早到期的时刻，到点后本次事实失效。
-    pub valid_until: Option<Instant>,
-}
-
-impl MappingFacts {
-    /// 在 `now` 核对动态事实：非事务读取要求修订号，提供的修订号必须非空。
-    /// `transactional` 表示使用调用方事务；到达有效期时返回 `DATA_SCOPE_CHANGED`。
-    pub fn validate(&self, transactional: bool, now: Instant) -> Result<()> {
-        if self.version.as_ref().is_some_and(|value| value.is_empty())
-            || (!transactional && self.version.is_none())
-        {
-            return Err(Error::ValidationError("非事务授权事实必须提供有效修订号".into()));
-        }
-        if self.valid_until.is_some_and(|until| now >= until) {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：授权事实已到期".into()));
-        }
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,21 +97,5 @@ mod tests {
             model.output = QueryOutput::Share { fields: ["id".into(), field.into()].into() };
             assert!(model.validate().is_err());
         }
-    }
-
-    // 验证事务可省略修订号、空修订号始终无效，且事实在到期时刻立即失效。
-    #[test]
-    fn facts_require_revision_or_transaction_and_expire_at_boundary() {
-        let now = Instant::from_unix_secs(10);
-        let mut facts = MappingFacts::default();
-        assert!(facts.validate(false, now).is_err());
-        assert!(facts.validate(true, now).is_ok());
-        facts.version = Some(String::new());
-        assert!(facts.validate(true, now).is_err());
-
-        facts.version = Some("v1".into());
-        facts.valid_until = Some(Instant::from_unix_secs(11));
-        assert!(facts.validate(false, now).is_ok());
-        assert!(matches!(facts.validate(false, Instant::from_unix_secs(11)), Err(Error::ConflictError(_))));
     }
 }

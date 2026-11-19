@@ -18,6 +18,7 @@ use super::super::facilities::Facilities;
 use super::fixtures::{Facts, Identity, actor, complete, service};
 use crate::entity::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::authorization::{AccessContext, AccessTarget, FactValue, ObjectFacts, ResourceTargets};
+use crate::entity::resource_access::event::GrantEvent;
 use crate::entity::resource_access::{GrantTarget, ResourceKind, SourceUpdate};
 use crate::ports::ResourceGrantFacts;
 use crate::service::access_control::resolve::AuthorizedDataScope;
@@ -50,8 +51,8 @@ impl ResourceGrantFacts for NoGrantFacts {
         panic!("管理员资格检查不得读取授权目标")
     }
 
-    // 若资格检查尝试校验自动授权来源，立即让测试失败。
-    async fn validate_source(&self, _: &SourceUpdate, _: &mut dyn Executor) -> Result<()> {
+    // 若资格检查尝试计算自动授权来源，立即让测试失败。
+    async fn compute_source(&self, _: &GrantEvent, _: &mut dyn Executor) -> Result<SourceUpdate> {
         panic!("管理员资格检查不得读取自动来源")
     }
 }

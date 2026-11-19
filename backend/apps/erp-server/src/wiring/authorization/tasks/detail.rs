@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use erp_catalog::portal::CatalogPortalExt;
 use erp_fulfillment::repository::FulfillmentExt;
-use erp_identity::entity::authorization::{AccessContext, AccessFact, MappingFacts, QueryModel, RelationKey};
+use erp_identity::entity::authorization::{AccessContext, AccessFact, QueryModel, RelationKey};
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{AccessMapping, Error, Result};
 use erp_permissions::{internal, purchase_order, sales_order, supplier, supplier_offering};
@@ -62,26 +62,16 @@ impl AccessMapping for TaskDetailMapping {
     fn stages(&self) -> Vec<Document> {
         self.base.stages().into_iter().chain(source_stages()).collect()
     }
-    fn key(&self, context: &AccessContext, facts: Option<&MappingFacts>) -> Result<Bson> {
-        self.base.key(context, facts)
+    fn key(&self, context: &AccessContext) -> Result<Bson> {
+        self.base.key(context)
     }
-    fn records(&self, context: &AccessContext, facts: Option<&MappingFacts>) -> Result<QueryFragment> {
-        self.base.records(context, facts)
+    fn records(&self, context: &AccessContext) -> Result<QueryFragment> {
+        self.base.records(context)
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        prepared: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
-        self.base.predicate(fact, context, prepared)
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> Result<QueryFragment> {
+        self.base.predicate(fact, context)
     }
-    fn relation(
-        &self,
-        key: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
+    fn relation(&self, key: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
         let mapping =
             self.sources.get(key).ok_or_else(|| Error::ValidationError("任务详情来源关系未登记".into()))?;
         Ok(RelationMapping { mapping: mapping.clone(), expected_ids: reference(key.as_str())? })

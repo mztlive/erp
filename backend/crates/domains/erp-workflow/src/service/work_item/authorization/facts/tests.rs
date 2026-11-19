@@ -86,7 +86,7 @@ fn empty_collaboration_and_real_task_history_match_object_and_query_scope() {
         let row = serialize_to_document(&item).unwrap();
         let facts = item_facts(item, None, None);
         assert_eq!(facts.completed, FactValue::Known(true));
-        let QueryFragment::Match(records) = mapping.records(&context("reader"), None).unwrap() else {
+        let QueryFragment::Match(records) = mapping.records(&context("reader")).unwrap() else {
             panic!("任务存在性不得依赖当前负责人或主属关系");
         };
         assert!(query_matches(&records, &row));
@@ -115,8 +115,7 @@ fn empty_collaboration_and_real_task_history_match_object_and_query_scope() {
                 (AccessFact::Collaborating, ScopeClause { collaborative: true, ..Default::default() }, false),
                 (AccessFact::HistoryParticipant, ScopeClause::default(), true),
             ] {
-                let QueryFragment::Match(filter) = mapping.predicate(&fact, &context(actor), None).unwrap()
-                else {
+                let QueryFragment::Match(filter) = mapping.predicate(&fact, &context(actor)).unwrap() else {
                     panic!("任务自身事实应使用原任务行");
                 };
                 let scope = ResolvedScope { role_clauses: vec![scope], user_limit: None };

@@ -43,8 +43,8 @@ impl BsonFingerprint for Fingerprint {
 }
 
 impl Fingerprint {
-    /// 将动态事实的 JSON 写入摘要，使用类型标记、排序后的对象键和数字的十进制文本表示。
-    pub(crate) fn json(&mut self, value: &Value) {
+    // 将 BSON 标量的 Canonical Extended JSON 写入摘要，使用类型标记、排序后的对象键和数字的十进制文本表示。
+    fn json(&mut self, value: &Value) {
         match value {
             Value::Null => self.text("null"),
             Value::Bool(value) => self.boolean(*value),

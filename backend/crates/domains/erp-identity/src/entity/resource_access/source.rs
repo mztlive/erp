@@ -205,7 +205,7 @@ pub struct ResourceGrant {
     pub active: bool,
 }
 
-/// 人工或自动入口提交的来源全量结果；规则和事实版本由可信依据提供，接收时间不参与版本排序。
+/// 来源的全量结果，由人工命令构造或由可信事实端口计算；接收时间不参与版本排序。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceUpdate {
     /// 要创建或更新的稳定来源身份。

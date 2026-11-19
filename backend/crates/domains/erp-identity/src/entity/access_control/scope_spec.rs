@@ -4,7 +4,7 @@ mod catalog;
 pub(crate) use catalog::INVENTORY_WAREHOUSE_ENTRIES;
 use erp_permissions::MODULES;
 
-use crate::entity::access_control::{DataScopeType, ScopeBinding, ScopeDimension};
+use crate::entity::access_control::{DataScopeType, ScopeDimension};
 use crate::{Error, Permission, Result};
 
 /// 范围配置的取得方式。不表达任务、功能资格或真实来源关系。
@@ -306,12 +306,16 @@ pub(crate) fn validate_scope_type(resource: &str, scope_type: DataScopeType) -> 
     Ok(())
 }
 
-/// 逐动作校验绑定的目标维度，防止资源支持的维度被用于不支持它的动作。
-pub(crate) fn validate_binding(binding: &ScopeBinding) -> Result<()> {
-    for action in &binding.actions {
-        let spec = require_action(&binding.resource, action)?;
-        if !spec.dimensions.contains(&binding.target_dimension) {
-            let dimension = match binding.target_dimension {
+/// 逐动作校验范围项的目标维度，防止把其他动作的维度用于当前动作。
+pub(crate) fn validate_target_dimension(
+    resource: &str,
+    actions: &[String],
+    dimension: ScopeDimension,
+) -> Result<()> {
+    for action in actions {
+        let spec = require_action(resource, action)?;
+        if !spec.dimensions.contains(&dimension) {
+            let dimension = match dimension {
                 ScopeDimension::InternalOrg => "内部组织",
                 ScopeDimension::SettlementParty => "结算主体",
                 ScopeDimension::Warehouse => "仓库",

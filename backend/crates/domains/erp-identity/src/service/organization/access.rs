@@ -36,8 +36,8 @@ pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &Authorized
             if !covers(access, state.own_org(&profile.user_id, access.as_of)?) {
                 return Err(Error::Forbidden("人员超出组织配置管理边界".into()));
             }
-            for operation in profile.operations()? {
-                ensure_targets(&operation, access)?;
+            if profile.org_unit_id.as_deref().is_some_and(|id| !covers(access, Some(id))) {
+                return Err(Error::Forbidden("目标超出组织配置管理边界".into()));
             }
         },
         CreateUnit { parent_id, .. } => targets.push(parent_id.as_deref()),
@@ -262,7 +262,7 @@ mod tests {
         assert!(ensure_targets(&change, &company_access(state)).is_ok());
     }
 
-    // 验证合并资料命令逐项检查边界，幂等回放要求完整载荷一致。
+    // 验证人员资料变更同时检查原组织和目标组织，预览只读且回放复核当前范围与请求载荷。
     #[test]
     fn profile_change_checks_all_targets_and_replay_payload() {
         use crate::entity::person_profile_change::PersonProfileChange;
@@ -278,20 +278,42 @@ mod tests {
                 add_management: vec![],
             },
         };
-        let limited = access_with(
-            ResolvedScope {
-                role_clauses: vec![ScopeClause {
-                    org_unit_ids: ["one".into()].into(),
-                    ..ScopeClause::default()
-                }],
-                user_limit: None,
-            },
-            state(),
-        );
-        assert!(matches!(ensure_targets(&change, &limited), Err(Error::Forbidden(_))));
+        let limited_to = |org: &str, organizations| {
+            access_with(
+                ResolvedScope {
+                    role_clauses: vec![ScopeClause {
+                        org_unit_ids: [org.into()].into(),
+                        ..ScopeClause::default()
+                    }],
+                    user_limit: None,
+                },
+                organizations,
+            )
+        };
+        assert!(matches!(
+            ensure_targets(&change, &limited_to("one", state())),
+            Err(Error::Forbidden(message)) if message == "目标超出组织配置管理边界"
+        ));
+        assert!(matches!(
+            ensure_targets(&change, &limited_to("two", state())),
+            Err(Error::Forbidden(message)) if message == "人员超出组织配置管理边界"
+        ));
 
         let access = company_access(state());
         let request = request(change);
+        let (preview, persist) = prepare_organization_change(
+            true,
+            None,
+            request.clone(),
+            &access,
+            "new",
+            "admin",
+            Instant::from_unix_secs(10),
+        )
+        .unwrap();
+        assert!(!persist);
+        assert_eq!(preview.request, request);
+        assert_eq!(preview.after.memberships.last().unwrap().base.id, "new-0");
         let (receipt, persist) = prepare_organization_change(
             false,
             None,
@@ -304,8 +326,12 @@ mod tests {
         .unwrap();
         assert!(persist);
 
-        let current = company_access(receipt.after.clone());
-        let (_, persist) = prepare_organization_change(
+        assert!(matches!(
+            replay(receipt.clone(), &request, &limited_to("one", receipt.after.clone())),
+            Err(Error::Forbidden(_))
+        ));
+        let current = limited_to("two", receipt.after.clone());
+        let (replayed, persist) = prepare_organization_change(
             false,
             Some(receipt.clone()),
             request.clone(),
@@ -316,6 +342,8 @@ mod tests {
         )
         .unwrap();
         assert!(!persist);
+        assert_eq!(replayed.request, request);
+        assert_eq!(replayed.after.memberships.as_slice(), &receipt.after.memberships[1..]);
 
         let mut altered = request;
         if let OrganizationOperation::UpdatePersonProfile { profile } = &mut altered.change {

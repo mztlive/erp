@@ -74,19 +74,21 @@ impl PolicyBundleService {
         if authorization.scope.policy_version != request.expected_policy_version {
             return Err(Error::ConflictError("授权版本已变化，请重新预览".into()));
         }
-        let plan = self.plan(request.document, &actor, &authorization.scope, executor).await?;
-        if plan.preview.review_hash != request.review_hash {
+        let (plan, preview) = self.plan(request.document, &actor, &authorization.scope, executor).await?;
+        if preview.review_hash != request.review_hash {
             return Err(Error::ConflictError("审核文件或目标事实已变化，请重新预览".into()));
         }
 
-        let change_count = plan.preview.changes.len();
+        let change_count = plan.change_count();
         let changed = change_count > 0;
         let policy_version = request
             .expected_policy_version
             .checked_add(u64::from(changed))
             .ok_or_else(|| Error::ConflictError("授权版本超限".into()))?;
 
-        self.persist(plan, &actor, command.id(), executor).await?;
+        if changed {
+            self.persist(plan, &actor, command.id(), executor).await?;
+        }
 
         let result = PolicyApplyResult {
             command_id: command.id().into(),
@@ -106,10 +108,6 @@ impl PolicyBundleService {
         command_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if plan.preview.changes.is_empty() {
-            return Ok(());
-        }
-
         let rbac = self.access.rbac.clone();
         let event = self
             .access

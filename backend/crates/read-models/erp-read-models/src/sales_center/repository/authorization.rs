@@ -2,8 +2,8 @@
 
 use async_trait::async_trait;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, RelationKey, ResourceTargets,
+    AccessContext, AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey, QueryOutput,
+    RelationKey, ResourceTargets,
 };
 use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::{Error, Result};
@@ -56,18 +56,13 @@ impl AccessMapping for SalesMapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
+    fn key(&self, _: &AccessContext) -> Result<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at":0}))
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> Result<QueryFragment> {
         match fact {
             AccessFact::Owned => Ok(QueryFragment::Match(doc! {"sales_owner_user_id":context.actor.id()})),
             AccessFact::Collaborating => Ok(QueryFragment::Match(doc! {"$expr":false})),
@@ -88,12 +83,7 @@ impl AccessMapping for SalesMapping {
             _ => Err(Error::ValidationError("销售模型不支持该事实维度".into())),
         }
     }
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
         Err(Error::ValidationError("销售单没有来源关系".into()))
     }
 }

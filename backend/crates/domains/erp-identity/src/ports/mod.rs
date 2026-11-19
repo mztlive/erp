@@ -2,7 +2,7 @@
 
 mod access;
 mod audit;
-pub use access::{AccessFactsPort, AccessMapping, MappingPreparation};
+pub use access::{AccessFactsPort, AccessMapping};
 mod organization;
 pub use audit::{IdentityAuditPort, PreparedResourceAudit};
 pub use organization::OrganizationBusinessPort;

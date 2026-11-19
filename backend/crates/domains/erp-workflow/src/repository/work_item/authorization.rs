@@ -4,7 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, QueryModel, QueryModelKey, QueryOutput, RelationKey,
 };
 use erp_identity::ports::{AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::repository::organization::primary_membership_query;
@@ -54,18 +54,13 @@ impl AccessMapping for WorkItemMapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
+    fn key(&self, _: &AccessContext) -> Result<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON }))
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> Result<QueryFragment> {
         match fact {
             AccessFact::Owned => Ok(QueryFragment::Match(doc! { "owner_user_id": context.actor.id() })),
             AccessFact::Collaborating => Ok(QueryFragment::Match(doc! { "$expr": false })),
@@ -85,12 +80,7 @@ impl AccessMapping for WorkItemMapping {
             _ => Err(Error::ValidationError("任务查询不支持该事实维度".into())),
         }
     }
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
         Err(Error::ValidationError("任务列表不接入来源单据授权".into()))
     }
 }
@@ -202,26 +192,23 @@ mod tests {
     async fn static_mapping_rejects_source_and_unsupported_warehouse_facts() {
         let mapping = WorkItemMapping::shared();
         let context = context();
-        assert!(mapping.preparation().is_none());
-        let facts = None;
-        assert!(mapping.predicate(&AccessFact::WarehouseIn(["w".into()].into()), &context, facts).is_err());
-        assert!(mapping.relation(&RelationKey::parse("sources").unwrap(), &context, facts).is_err());
+
+        assert!(mapping.predicate(&AccessFact::WarehouseIn(["w".into()].into()), &context).is_err());
+        assert!(mapping.relation(&RelationKey::parse("sources").unwrap(), &context).is_err());
     }
 
     #[test]
     fn owner_uses_current_responsibility_and_org_uses_current_identity_membership() {
         let mapping = WorkItemMapping::shared();
         let context = context();
-        let facts = None;
-        let QueryFragment::Match(owner) = mapping.predicate(&AccessFact::Owned, &context, facts).unwrap()
-        else {
+        let QueryFragment::Match(owner) = mapping.predicate(&AccessFact::Owned, &context).unwrap() else {
             panic!("owner must use task responsibility")
         };
         assert_eq!(owner, doc! { "owner_user_id": "reader" });
 
         let orgs = ["dept".into()].into();
         let QueryFragment::Exists { bindings, pipeline, .. } =
-            mapping.predicate(&AccessFact::OrganizationIn(orgs), &context, facts).unwrap()
+            mapping.predicate(&AccessFact::OrganizationIn(orgs), &context).unwrap()
         else {
             panic!("org must resolve current membership")
         };
@@ -231,6 +218,6 @@ mod tests {
             &doc! { "$lte": 10_i64 }
         );
         assert_eq!(pipeline[3], doc! { "$match": { "count": 1, "org": { "$in": ["dept"] } } });
-        assert_eq!(mapping.key(&context, facts).unwrap(), Bson::String("$id".into()));
+        assert_eq!(mapping.key(&context).unwrap(), Bson::String("$id".into()));
     }
 }

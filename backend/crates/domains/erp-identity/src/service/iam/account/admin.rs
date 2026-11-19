@@ -66,7 +66,7 @@ enum SuperAdminInitialization {
     },
 }
 
-// 管理员资料更新的事务外准备结果，供写事务选择资料或角色写入路径。
+// 管理员资料更新的事务外准备结果，供写事务保存资料及可选角色。
 struct AdminUpdateContext {
     // 已应用领域更新的管理员账号，变更的密码已哈希。
     account: AccountCore,
@@ -196,21 +196,24 @@ impl AdminService {
         access.preflight(&self.db).await?;
 
         params.validate()?;
-        let context = self.prepare_admin_update(params, &actor).await?;
-        let resource_id = context.account.base.id.clone();
-        let policy_revision = context.authorization.policy_revision();
-
-        match context.authorization.into_role_grant() {
-            Some(grant) => {
-                let audit = self.rbac.prepare_resource_log(actor, "admin.update", "admin", resource_id)?;
-                self.update_account_with_roles(context.account, grant, audit, access).await?;
-            },
-            None => {
-                let audit = self.rbac.prepare_resource_log(actor, "admin.update", "admin", resource_id)?;
-                self.update_account_only(context.account, audit, policy_revision, access).await?;
-            },
-        }
-        Ok(())
+        let AdminUpdateContext { mut account, authorization } =
+            self.prepare_admin_update(params, &actor).await?;
+        let policy_revision = authorization.policy_revision();
+        let grant = authorization.into_role_grant();
+        let account_id = account.base.id.clone();
+        let audit = self.rbac.prepare_resource_log(actor, "admin.update", "admin", account_id.clone())?;
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        self.run_admin_account_write(policy_revision, audit, access, move |executor| {
+            Box::pin(async move {
+                db.accounts().update(&mut account, executor).await?;
+                if let Some(grant) = grant {
+                    rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
+                }
+                Ok(())
+            })
+        })
+        .await
     }
 
     // 写事务前校验目标管理员及可选的完整角色集，应用资料变更并哈希新密码；写入时仍须重验管理授权。
@@ -237,24 +240,6 @@ impl AdminService {
 
         account = apply_account_update(account, AccountCoreUpdate { name, password, status }).await?;
         Ok(AdminUpdateContext { account, authorization })
-    }
-
-    // 未提交角色变更时，沿管理写事务只更新账号资料并保存审计，仍校验授权策略版本。
-    async fn update_account_only(
-        &self,
-        mut account: AccountCore,
-        audit: PreparedResourceAudit,
-        policy_revision: u64,
-        access: ManagementAccess,
-    ) -> Result<()> {
-        let db = self.db.clone();
-        self.run_admin_account_write(policy_revision, audit, access, move |executor| {
-            Box::pin(async move {
-                db.accounts().update(&mut account, executor).await?;
-                Ok(())
-            })
-        })
-        .await
     }
 
     /// 管理端仅更换角色时，校验目标及新角色的授予资格后，在写事务替换决定实际权限的 Casbin 角色集并记录审计。
@@ -339,28 +324,6 @@ impl AdminService {
         self.run_admin_account_write(policy_revision, audit, access, move |executor| {
             Box::pin(async move {
                 db.accounts().create(&account, executor).await?;
-                rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
-                Ok(())
-            })
-        })
-        .await
-    }
-
-    // 资料更新包含角色变更时，在同一事务保存已更新的账号、替换完整 Casbin 绑定并写入审计；写入或提交失败时返回错误。
-    async fn update_account_with_roles(
-        &self,
-        mut account: AccountCore,
-        grant: AuthorizedRoleGrant,
-        audit: PreparedResourceAudit,
-        access: ManagementAccess,
-    ) -> Result<()> {
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
-        let account_id = account.base.id.clone();
-        let policy_revision = grant.policy_revision();
-        self.run_admin_account_write(policy_revision, audit, access, move |executor| {
-            Box::pin(async move {
-                db.accounts().update(&mut account, executor).await?;
                 rbac.assign_roles(AccountKind::Admin, &account_id, grant, executor).await?;
                 Ok(())
             })

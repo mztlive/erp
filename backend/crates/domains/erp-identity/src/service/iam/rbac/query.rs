@@ -9,8 +9,8 @@ use erp_permissions::admin;
 use persistence_core::{Executor, Transactional};
 
 use super::policy::{
-    collect_role_ids, collect_role_permissions, implicit_permissions_for_role, parse_policy_permissions,
-    permissions_for_actor, role_ids_for_account, role_key,
+    collect_role_ids, implicit_permissions_for_role, parse_policy_permissions, permissions_for_actor,
+    permissions_for_role, role_ids_for_account, role_key,
 };
 use super::{RBAC_MODEL, RbacService, subject};
 use crate::dto::RoleItem;
@@ -20,19 +20,6 @@ use crate::error::Result;
 use crate::repository::prelude::*;
 use crate::service::iam::management::ManagementAccess;
 use crate::{AccessControlExt, AuthorizationService, MongoCasbinAdapter};
-
-// 两个角色列表共用此装配步骤：按输入顺序取出各角色的直接权限，也保留空权限角色。
-// 权限映射须覆盖所有待装配角色；角色 ID 重复或缺少映射项时触发 panic。
-fn role_items_from_map(roles: Vec<Role>, permissions: &mut HashMap<String, PermissionSet>) -> Vec<RoleItem> {
-    roles
-        .into_iter()
-        .map(|role| {
-            let role_permissions =
-                permissions.remove(&role.base.id).expect("权限映射由全部角色 ID 构造，且每个角色仅装配一次");
-            RoleItem::from_role(role, role_permissions.into_vec())
-        })
-        .collect()
-}
 
 impl RbacService {
     /// 需要在原事务确认账号的有效直接绑定时，读取 Casbin 绑定和启用状态并返回排序去重后的角色 ID。
@@ -283,9 +270,13 @@ impl QueryPolicy {
 
 // 列表返回前按输入顺序装配直接权限，保留没有直接权限的角色。
 fn role_items(roles: Vec<Role>, policy: &Enforcer) -> Result<Vec<RoleItem>> {
-    let ids = roles.iter().map(|role| role.base.id.clone()).collect::<Vec<_>>();
-    let mut permissions = collect_role_permissions(policy, &ids)?;
-    Ok(role_items_from_map(roles, &mut permissions))
+    roles
+        .into_iter()
+        .map(|role| {
+            let permissions = permissions_for_role(policy, &role.base.id)?;
+            Ok(RoleItem::from_role(role, permissions.into_vec()))
+        })
+        .collect()
 }
 
 // 装配分配候选时，用同一事务策略图核对操作人能否覆盖候选的继承权限，响应只展示直接权限。
@@ -306,7 +297,7 @@ mod tests {
     use super::*;
     use crate::{Error, Permission, RoleData};
 
-    // 验证批量权限映射可按输入顺序装配完整列表或子集，并保留空权限角色。
+    // 验证角色列表保持输入顺序并保留空权限角色。
     #[tokio::test]
     async fn role_items_preserve_order_and_empty_permissions() {
         let model = DefaultModel::from_str(RBAC_MODEL).await.unwrap();
@@ -315,23 +306,11 @@ mod tests {
             .add_permission_for_user(&role_key("role-a"), vec!["customer".into(), "list".into()])
             .await
             .unwrap();
-        let roles = ["role-b", "role-a"]
-            .into_iter()
-            .map(|id| Role::new(RoleId::parse(id).unwrap(), RoleData::new(id)).unwrap())
-            .collect::<Vec<_>>();
-        let ids = roles.iter().map(|role| role.base.id.clone()).collect::<Vec<_>>();
-
-        let mut permissions = collect_role_permissions(&enforcer, &ids).unwrap();
-        let items = role_items_from_map(roles.clone(), &mut permissions);
+        let items = role_items(vec![role("role-b"), role("role-a")], &enforcer).unwrap();
         assert_eq!(items[0].id, "role-b");
         assert!(items[0].permissions.is_empty());
         assert_eq!(items[1].id, "role-a");
         assert_eq!(items[1].permissions, vec![Permission::parse("customer:list").unwrap()]);
-
-        let mut permissions = collect_role_permissions(&enforcer, &ids).unwrap();
-        let items = role_items_from_map(vec![roles[0].clone()], &mut permissions);
-        assert_eq!(items.len(), 1);
-        assert!(items[0].permissions.is_empty());
     }
 
     // 验证直接权限展示和继承权限上限均使用同一冻结策略，隔离后续策略变化。
@@ -349,12 +328,10 @@ mod tests {
 
         let allowed = assignable_role_items(roles.clone(), &actor, &frozen.enforcer).unwrap();
         assert_eq!(allowed.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), ["candidate", "empty"]);
-        let changed = assignable_role_items(roles.clone(), &actor, &current.enforcer).unwrap();
+        assert_eq!(allowed[0].permissions, items[0].permissions);
+        assert!(allowed[1].permissions.is_empty());
+        let changed = assignable_role_items(roles, &actor, &current.enforcer).unwrap();
         assert_eq!(changed.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), ["empty"]);
-        assert_eq!(
-            assignable_role_items(roles, &actor, &frozen.enforcer).unwrap()[0].permissions,
-            allowed[0].permissions
-        );
     }
 
     // 验证完整遍历父角色时，重复引用和继承环中的每个主体只进入一次读取批次。

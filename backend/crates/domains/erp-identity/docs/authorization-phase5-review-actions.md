@@ -584,9 +584,9 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-supplier-orders --lib
 
 ### B-13 合同映射对纯数据库关联做空准备（已解决）
 
-- 现状：`crates/domains/erp-contract/src/repository/authorization.rs` 原 `preparation` 返回 `Some(self)`，`MappingPreparation::prepare` 只读取组织状态。合同字段、组织主属关系和历史参与均通过数据库条件关联。新 Mapping 路径的对象历史事实只调用 `document_ids_in`；`ContractParticipantPort::revision` 仅被第六阶段待迁移的旧接线调用。
+- 现状：`crates/domains/erp-contract/src/repository/authorization.rs` 原先在编译前只读取组织状态。合同字段、组织主属关系和历史参与均通过数据库条件关联。新 Mapping 路径的对象历史事实只调用 `document_ids_in`；`ContractParticipantPort::revision` 仅被第六阶段待迁移的旧接线调用。
 - 依据：重写方案 §3.3.2。
-- 修改要求：删除 `MappingPreparation` 实现，`preparation` 使用默认的 `None`。删除无调用的 `revision` 及其实现。保留 `document_ids_in`。
+- 修改要求：合同 Mapping 只构建数据库内条件，不预读组织状态。删除无调用的 `revision` 及其实现。保留 `document_ids_in`。
 - 修复：合同 Mapping 使用静态集合和字段描述，删除准备能力、组织准备数据和仅供准备使用的数据库句柄。组织条件继续使用统一授权时点关联真实主属关系；对象事实继续保留负责人组织、到期边界及本次目标的历史参与。参与 Port 只保留 `document_ids_in`，删除各接线和测试替身中的 `revision` 实现。
 - 阶段边界：旧 `contract_data_scope` 接线归 P02／第六阶段；其修订读取直接调用工作流既有 `participant_access::revision`，保留原读取／写入选择和错误分类。本条仅调整 server 必要源码，不执行 server 编译或测试。
 - 验收：以下库测试实际通过，117 passed，0 failed。测试覆盖默认无准备、合同字段与组织条件、历史来源关联、目标内历史读取、未接线读取失败和对象组织到期边界。仅格式化本条修改的 Rust 文件；这些文件的格式检查与本条改动的 `git diff --check` 均通过。

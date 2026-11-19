@@ -6,7 +6,7 @@ use crate::repository::authorization::{AccessProof, CompiledAccess, Replay, Reso
 use crate::{Error, Result};
 
 impl AuthorizationService {
-    /// 交付查询结果前，沿原执行器复验本服务签发的凭证。事务内只检查原快照阶段与期限；非事务还重读身份、范围和实际动态 Mapping 依赖。
+    /// 交付查询结果前，沿原执行器复验本服务签发的凭证。事务内只检查原快照阶段与期限；非事务还重读身份、范围和已使用的读取授权修订。
     ///
     /// 依赖变化或到期返回 `DATA_SCOPE_CHANGED`，调用方须丢弃结果；设施错误保持原类别。成功后结束当前读取阶段。
     pub async fn validate(&self, access: &CompiledAccess, executor: &mut dyn Executor) -> Result<()> {
@@ -15,11 +15,7 @@ impl AuthorizationService {
                 .revalidation
                 .as_deref()
                 .ok_or_else(|| Error::ValidationError("缺少查询授权复验依据".into()))?;
-            self.revalidate(&access.context, &revalidation.resolved, executor).await?;
-            access.validity.ensure_current(executor)?;
-            for dependency in &revalidation.dependencies {
-                dependency.validate(executor).await?;
-            }
+            self.revalidate(&access.context, revalidation, executor).await?;
         }
 
         access.ensure_current(executor)?;

@@ -26,7 +26,7 @@
 
 [`erp-worker` 的授权循环](../../../apps/erp-server/src/worker/resource_grants.rs)用数据库和共享 `AuthorizationService` 构造 `ResourceGrantProcess::new`；构造本身不启动后台任务。每次 `tick(token, now)` 使用唯一领取令牌和秒级时间，至多处理一条事件；成功返回的布尔值表示是否领到事件。
 
-领取后，[发布事务](src/process.rs)核对租约，经 `erp-workflow` 仓储和 `bpm` 模型核验正式审批、工作项及转派回执，经 `erp-finance` 读取开票申请与应收关联，经 `erp-sales`、`erp-procurement` 仓储校验目标存在。事实读取复用 `persistence-core` 的 `Executor`；证据错配、事实版本低于事件证据或读取失败时返回错误，不生成空目标。identity 的 `ResourceGrantService::apply_source` 在同一事务中通过事实端口重验并保存变更，随后标记事件已处理。已完成事件不重复写入；永久终止的来源不恢复，较旧的事实也不覆盖该来源的新版本。
+领取后，[发布事务](src/process.rs)将领取凭据传给 identity 的 `ResourceGrantService::apply_source`。身份域复核租约后调用一次事实端口，经 `erp-workflow` 仓储和 `bpm` 模型核验正式审批、工作项及转派回执，经 `erp-finance` 读取开票申请与应收关联。写入时仍经 `erp-sales`、`erp-procurement` 仓储校验目标存在。取证和写入共用 `persistence-core` 的 `Executor`，授权变更与事件完成一同提交。证据错配、事实版本低于事件证据或读取失败时返回错误；已完成事件直接返回，永久终止的来源跳过取证，较旧的事实不覆盖新版本。
 
 发布失败时，[队列](../../domains/erp-identity/src/repository/resource_grants/queue.rs)只回写仍持有原令牌的事件，并按退避规则安排重试；提交结果未知时保留租约，恢复时先检查事件是否已处理。worker 定期调用 `reconcile` 按游标逐页把已处理的正式事件重新排队，用 `health` 观察积压、最老未完成时长和失败数量。停机由[服务端进程](../../../apps/erp-server/README.md#执行与退出合同)停止领取并等待已开始的轮次。
 

@@ -34,22 +34,13 @@ pub struct DirectoryRead<'a> {
     pub page_size: u32,
 }
 
-/// 同一快照和查询口径下的人员列表、总数及有界内容版本数据。
+/// 同一快照下的人员列表及有界候选版本数据。
 #[derive(Default, Deserialize)]
 pub struct DirectoryResult {
     /// 按姓名和稳定 ID 排序的当前页人员投影。
     pub items: Vec<PersonDirectoryItem>,
-    /// MongoDB 计数分面的结果行，无匹配时为空。
-    pub totals: Vec<DirectoryTotal>,
     /// 按 ID 排序的内容版本投影，不包含账号凭证。
     pub versions: Vec<Document>,
-}
-
-/// 目录聚合计数分面的单行结果。
-#[derive(Deserialize)]
-pub struct DirectoryTotal {
-    /// 分页前满足同一授权及业务筛选的账号数。
-    pub count: i64,
 }
 
 /// 先核对授权模型、执行阶段和有效期，再沿用用例事务执行完整授权与目录聚合。返回同口径的当前页、总数及不含账号凭证的内容版本数据；读库失败或版本索引超上限时不返回部分结果。
@@ -67,10 +58,15 @@ pub async fn directory_page(
     pipeline.extend(directory_pipeline(read, access.as_of())?);
     let result = aggregate::rows(&collection, pipeline, executor).await?.pop().unwrap_or_default();
 
-    if result.versions.len() > DIRECTORY_LIMIT {
+    ensure_candidate_limit(result.versions.len())?;
+    Ok(result)
+}
+
+fn ensure_candidate_limit(count: usize) -> Result<()> {
+    if count > DIRECTORY_LIMIT {
         return Err(Error::ValidationError("人员目录超过查询上限，请收窄组织或搜索条件".into()));
     }
-    Ok(result)
+    Ok(())
 }
 
 // 仅接受当前目录类别对应的完整账号模型，拒绝其他资源、集合、主键或受限输出。
@@ -113,8 +109,7 @@ fn directory_pipeline(read: &DirectoryRead<'_>, as_of: Instant) -> Result<Vec<Do
     pipeline.push(doc! { "$facet": {
         "items": [{ "$sort": { "name": 1, "id": 1 } }, { "$skip": skip }, { "$limit": i64::from(read.page_size) },
             { "$project": { "_id": 0, "id": 1, "name": 1, "account": 1, "status": 1 } }],
-        "totals": [{ "$count": "count" }],
-        "versions": [{ "$sort": { "id": 1 } }, { "$limit": 10001 },
+        "versions": [{ "$sort": { "id": 1 } }, { "$limit": (DIRECTORY_LIMIT as i64 + 1) },
             { "$project": { "_id": 0, "id": 1, "version": 1, "name": 1, "account": 1, "status": 1, "query_qualification.version": 1 } }]
     } });
     Ok(pipeline)
@@ -182,6 +177,12 @@ mod tests {
         assert!(ensure_model(&partial, PersonDirectoryCategory::Sales).is_err());
     }
 
+    #[test]
+    fn candidate_limit_rejects_the_first_truncated_result() {
+        assert!(ensure_candidate_limit(DIRECTORY_LIMIT).is_ok());
+        assert!(ensure_candidate_limit(DIRECTORY_LIMIT + 1).is_err());
+    }
+
     // 验证已选 ID 在资格关联前筛选，通用业务类别不追加角色或资格关联。
     #[test]
     fn selected_ids_precede_qualification_lookup_and_business_needs_no_role() {
@@ -202,7 +203,9 @@ mod tests {
         read.category = PersonDirectoryCategory::Business;
         let business = directory_pipeline(&read, Instant::from_unix_secs(1)).unwrap();
         assert_eq!(business.len(), 2);
-        assert!(business[1].contains_key("$facet"));
+        let facets = business[1].get_document("$facet").unwrap();
+        assert_eq!(facets.len(), 2);
+        assert_eq!(facets.get_array("versions").unwrap()[1], doc! { "$limit": 10_001_i64 }.into());
         assert!(!business[0].to_string().contains("status"));
     }
 }

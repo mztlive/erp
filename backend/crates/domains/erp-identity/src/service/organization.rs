@@ -183,17 +183,12 @@ impl OrganizationService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         access::ensure_targets(change, access)?;
-        if let OrganizationOperation::UpdatePersonProfile { profile } = change {
-            self.ensure_account(&profile.user_id, executor).await?;
-            let roles = self.rbac.role_ids(AccountKind::Admin, &profile.user_id).await?;
-            profile.validate_roles(&roles)?;
-            for operation in profile.operations()? {
-                Box::pin(self.ensure_change(&operation, access, executor)).await?;
-            }
-            return Ok(());
-        }
-
         match change {
+            OrganizationOperation::UpdatePersonProfile { profile } => {
+                self.ensure_account(&profile.user_id, executor).await?;
+                let roles = self.rbac.role_ids(AccountKind::Admin, &profile.user_id).await?;
+                profile.validate_roles(&roles)?;
+            },
             OrganizationOperation::SetLeader { user_id: Some(user_id), .. }
             | OrganizationOperation::TransferMember { user_id, .. } => {
                 self.ensure_account(user_id, executor).await?;

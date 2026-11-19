@@ -2,7 +2,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use erp_identity::entity::authorization::{AccessContext, AccessFact, MappingFacts, QueryModel, RelationKey};
+use erp_identity::entity::authorization::{AccessContext, AccessFact, QueryModel, RelationKey};
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{AccessMapping, Error, Result};
 use mongodb::bson::{Bson, doc};
@@ -37,26 +37,16 @@ impl AccessMapping for QualitySalesMapping {
     fn relations(&self) -> BTreeMap<RelationKey, Arc<dyn AccessMapping>> {
         [(RelationKey::parse("customer").expect("固定客户关系"), self.customer.clone())].into()
     }
-    fn key(&self, context: &AccessContext, facts: Option<&MappingFacts>) -> Result<Bson> {
-        self.sales.key(context, facts)
+    fn key(&self, context: &AccessContext) -> Result<Bson> {
+        self.sales.key(context)
     }
-    fn records(&self, context: &AccessContext, facts: Option<&MappingFacts>) -> Result<QueryFragment> {
-        self.sales.records(context, facts)
+    fn records(&self, context: &AccessContext) -> Result<QueryFragment> {
+        self.sales.records(context)
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        facts: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
-        self.sales.predicate(fact, context, facts)
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> Result<QueryFragment> {
+        self.sales.predicate(fact, context)
     }
-    fn relation(
-        &self,
-        relation: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
+    fn relation(&self, relation: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
         if relation.as_str() != "customer" {
             return Err(Error::ValidationError("未知客户质量关系".into()));
         }

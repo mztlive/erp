@@ -1,6 +1,6 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, QueryModel, QueryModelKey, QueryOutput, RelationKey,
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{AccessMapping, Error, Result};
@@ -39,20 +39,15 @@ impl AccessMapping for PurchaseMapping {
         &self.model
     }
 
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
+    fn key(&self, _: &AccessContext) -> Result<Bson> {
         Ok("$id".into())
     }
 
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON }))
     }
 
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> Result<QueryFragment> {
         let predicate = match fact {
             AccessFact::Owned => doc! { "owner_user_id": context.actor.id() },
             AccessFact::OrganizationIn(ids) => {
@@ -66,12 +61,7 @@ impl AccessMapping for PurchaseMapping {
         Ok(QueryFragment::Match(predicate))
     }
 
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
         Err(Error::ValidationError("采购 Mapping 未登记该来源关系".into()))
     }
 }
@@ -114,13 +104,13 @@ mod tests {
                 doc! { "target_warehouse_id": { "$in": ["warehouse"] } },
             ),
         ] {
-            let QueryFragment::Match(actual) = mapping.predicate(&fact, &context(), None).unwrap() else {
+            let QueryFragment::Match(actual) = mapping.predicate(&fact, &context()).unwrap() else {
                 panic!("采购字段事实应编译为单字段条件");
             };
             assert_eq!(actual, expected);
         }
 
-        assert!(mapping.predicate(&AccessFact::Participant, &context(), None).is_err());
+        assert!(mapping.predicate(&AccessFact::Participant, &context()).is_err());
     }
 
     #[test]
@@ -130,7 +120,7 @@ mod tests {
             assert!(mapping.relations().is_empty());
             for relation in ["self_purchase", "other"] {
                 assert!(matches!(
-                    mapping.relation(&RelationKey::parse(relation).unwrap(), &context(), None),
+                    mapping.relation(&RelationKey::parse(relation).unwrap(), &context()),
                     Err(Error::ValidationError(message)) if message == "采购 Mapping 未登记该来源关系"
                 ));
             }

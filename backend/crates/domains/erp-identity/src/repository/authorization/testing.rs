@@ -1,42 +1,29 @@
 //! 公共授权 API 的无数据库查询夹具；不执行真实 MongoDB 请求。
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_permissions::sales_order;
 use mongodb::bson::{Bson, Document, doc};
-use persistence_core::Executor;
 use serde_json::{Value, to_value};
 
 use super::fixtures::execute;
 use crate::entity::authorization::{
-    AccessContext, AccessFact, AccessRule, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput,
-    RelationKey,
+    AccessContext, AccessFact, AccessRule, FactKind, QueryModel, QueryModelKey, QueryOutput, RelationKey,
 };
-use crate::ports::{AccessMapping, MappingPreparation, QueryFragment, RelationMapping};
+use crate::ports::{AccessMapping, QueryFragment, RelationMapping};
 use crate::service::authorization::rules;
 use crate::{CompiledAccess, Error, Permission, Result};
 
-/// 公共授权 API 的内存映射替身，可模拟动态修订、到期和违反绑定约束。
+/// 公共授权 API 的内存映射替身，可模拟到期和违反绑定约束。
 pub(crate) struct Mapping {
     /// 固定模型、集合及可用事实维度的测试描述。
     pub model: QueryModel,
     /// 按关系键登记的来源映射实例。
     pub relations: BTreeMap<RelationKey, Arc<dyn AccessMapping>>,
-    /// 是否启用动态准备；关闭时模拟静态映射。
-    pub dynamic: bool,
-    /// 动态准备是否提供可用于非事务复验的可靠版本。
-    pub reliable: bool,
-    /// 用于模拟底层动态事实变化的修订号。
-    pub revision: AtomicU64,
-    /// 动态准备调用次数，供缓存及交付复验断言使用。
-    pub prepares: AtomicU64,
-    /// 动态事实可选的到期边界，供测试推进或修改时限。
+    /// 静态条件的到期边界，供测试推进或修改时限。
     pub expires: Mutex<Option<Instant>>,
-    /// 模拟准备过程错误地推进执行器读取阶段。
-    pub change_stage: AtomicBool,
     /// 模拟运行时返回与启动登记不同的来源实例。
     pub replace_source: AtomicBool,
 }
@@ -45,29 +32,24 @@ impl AccessMapping for Mapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    // 仅为启用动态行为的替身提供准备接口。
-    fn preparation(&self) -> Option<&dyn MappingPreparation> {
-        if self.dynamic { Some(self) } else { None }
+    // 返回测试配置的静态条件时限。
+    fn valid_until(&self, _: &AccessContext) -> Option<Instant> {
+        *self.expires.lock().unwrap()
     }
     // 返回原登记的来源实例，供启动绑定冻结使用。
     fn relations(&self) -> BTreeMap<RelationKey, Arc<dyn AccessMapping>> {
         self.relations.clone()
     }
     // 使用样本行的 `id` 字段作为授权资源键。
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
+    fn key(&self, _: &AccessContext) -> Result<Bson> {
         Ok("$id".into())
     }
     // 在所有授权分支下都排除已删除样本。
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at":0}))
     }
     // 将测试支持的所有者、任务关系和仓库事实转换成样本字段条件，未支持的维度返回错误。
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> Result<QueryFragment> {
         Ok(QueryFragment::Match(match fact {
             AccessFact::Owned => doc! {"owner":context.actor.id()},
             AccessFact::HistoryParticipant => doc! {"history":context.actor.id()},
@@ -81,12 +63,7 @@ impl AccessMapping for Mapping {
         }))
     }
     // 解析指定关系的样本引用；可替换来源实例以验证冻结映射拒绝漂移。
-    fn relation(
-        &self,
-        key: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
+    fn relation(&self, key: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
         if self.replace_source.load(Ordering::SeqCst) {
             return Ok(RelationMapping {
                 expected_ids: format!("${}", key.as_str()).into(),
@@ -100,23 +77,6 @@ impl AccessMapping for Mapping {
                 .get(key)
                 .ok_or_else(|| Error::ValidationError("fixture missing relation".into()))?
                 .clone(),
-        })
-    }
-}
-
-#[async_trait]
-impl MappingPreparation for Mapping {
-    // 记录调用并返回可控事实、修订及期限；需要测试边界失败时推进读取阶段。
-    async fn prepare(&self, _: &AccessContext, executor: &mut dyn Executor) -> Result<MappingFacts> {
-        self.prepares.fetch_add(1, Ordering::SeqCst);
-        if self.change_stage.load(Ordering::SeqCst) {
-            executor.next_read();
-        }
-        let revision = self.revision.load(Ordering::SeqCst);
-        Ok(MappingFacts {
-            data: serde_json::json!({"revision":revision}),
-            version: self.reliable.then(|| revision.to_string()),
-            valid_until: *self.expires.lock().unwrap(),
         })
     }
 }
@@ -151,12 +111,7 @@ fn model(resource: &str, rule: &AccessRule) -> Arc<Mapping> {
             .into(),
         },
         relations,
-        dynamic: false,
-        reliable: true,
-        revision: AtomicU64::new(1),
-        prepares: AtomicU64::new(0),
         expires: Mutex::new(None),
-        change_stage: AtomicBool::new(false),
         replace_source: AtomicBool::new(false),
     })
 }

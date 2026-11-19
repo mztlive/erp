@@ -4,8 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, RelatedObjects,
-    RelationKey,
+    AccessContext, AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, RelatedObjects, RelationKey,
 };
 use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::{ResourceTargets, Result};
@@ -112,18 +111,13 @@ impl AccessMapping for PurchaseHistoryMapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    fn key(&self, context: &AccessContext, prepared: Option<&MappingFacts>) -> Result<Bson> {
-        self.inner.key(context, prepared)
+    fn key(&self, context: &AccessContext) -> Result<Bson> {
+        self.inner.key(context)
     }
-    fn records(&self, context: &AccessContext, prepared: Option<&MappingFacts>) -> Result<QueryFragment> {
-        self.inner.records(context, prepared)
+    fn records(&self, context: &AccessContext) -> Result<QueryFragment> {
+        self.inner.records(context)
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        prepared: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> Result<QueryFragment> {
         match fact {
             AccessFact::HistoryParticipant => Ok(QueryFragment::Exists {
                 collection: Database::DOCUMENT_PARTICIPANTS.into(),
@@ -134,16 +128,11 @@ impl AccessMapping for PurchaseHistoryMapping {
                 }}],
             }),
             AccessFact::Collaborating => Ok(QueryFragment::Match(doc! { "$expr": false })),
-            _ => self.inner.predicate(fact, context, prepared),
+            _ => self.inner.predicate(fact, context),
         }
     }
-    fn relation(
-        &self,
-        relation: &RelationKey,
-        context: &AccessContext,
-        prepared: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
-        self.inner.relation(relation, context, prepared)
+    fn relation(&self, relation: &RelationKey, context: &AccessContext) -> Result<RelationMapping> {
+        self.inner.relation(relation, context)
     }
 }
 
@@ -236,9 +225,9 @@ mod tests {
     #[test]
     fn purchase_history_is_static_and_correlates_the_actual_document_and_actor() {
         let mapping = PurchaseHistoryMapping::shared().unwrap();
-        assert!(mapping.preparation().is_none());
+
         let QueryFragment::Exists { collection, bindings, pipeline } =
-            mapping.predicate(&AccessFact::HistoryParticipant, &context(), None).unwrap()
+            mapping.predicate(&AccessFact::HistoryParticipant, &context()).unwrap()
         else {
             panic!("采购历史参与须为实际文档关联")
         };

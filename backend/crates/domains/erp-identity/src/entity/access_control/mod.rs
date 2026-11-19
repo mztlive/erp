@@ -14,7 +14,7 @@ pub mod user_role;
 pub use audit_event::{AuditEvent, AuditEventData, AuditEventResult};
 pub use erp_core::ids::{AuditEventId, PermissionId, UserRoleId};
 pub use permission::{PermissionData, PermissionDefinition, PermissionUpdate};
-pub use scope_binding::{ScopeBinding, ScopeDimension, ScopeTargetMode};
+pub use scope_binding::{ScopeDimension, ScopeTargetMode};
 pub use scope_type::DataScopeType;
 pub use user_role::{UserRole, UserRoleData, UserRoleRevokeData};
 

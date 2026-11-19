@@ -153,7 +153,7 @@ pub struct OrganizationChangeReceipt {
 
 impl OrganizationChangeRequest {
     /// 在计算新状态前校验命令、幂等键和原因。
-    /// 拒绝已停用的授予与撤销管理命令；传播人员资料展开错误；批量调岗须有人员且账号 ID 非空、唯一。
+    /// 拒绝已停用的授予与撤销管理命令；校验人员资料请求；批量调岗须有人员且账号 ID 非空、唯一。
     /// 幂等键须为 1 至 128 字节的 ASCII 字母、数字、下划线或短横线；原因去首尾空白后须非空，原值最多 1000 字符。
     pub fn validate(&self) -> Result<()> {
         match &self.change {
@@ -162,7 +162,7 @@ impl OrganizationChangeRequest {
                 return Err(Error::ValidationError("部门管理关系已停用，请在人员数据范围中设置授权".into()));
             },
             OrganizationOperation::UpdatePersonProfile { profile } => {
-                profile.operations()?;
+                profile.validate()?;
             },
             OrganizationOperation::TransferMembers { user_ids, .. } => {
                 if user_ids.is_empty() {
@@ -238,7 +238,7 @@ impl OrganizationState {
         Ok(())
     }
 
-    // 将命令应用到组织快照；资料更新只展开其中的调岗，业务单据负责人和任务保持原归属。
+    // 将命令应用到组织快照；人员资料仅在指定目标组织时更新主属关系。
     fn apply(
         &mut self,
         change: &OrganizationOperation,
@@ -249,8 +249,9 @@ impl OrganizationState {
     ) -> Result<()> {
         match change {
             OrganizationOperation::UpdatePersonProfile { profile } => {
-                for (index, operation) in profile.operations()?.iter().enumerate() {
-                    self.apply(operation, &format!("{id}-{index}"), actor, reason, at)?;
+                if let Some(org_unit_id) = &profile.org_unit_id {
+                    // 人员资料调岗沿用回执中的 `-0` 主属关系 ID 后缀。
+                    self.transfer(&profile.user_id, org_unit_id, &format!("{id}-0"), actor, reason, at)?;
                 }
             },
             OrganizationOperation::CreateUnit { name, parent_id, kind } => {
@@ -596,7 +597,24 @@ mod tests {
         let after = before.changed(&change, "id", "admin", Instant::from_unix_secs(10)).unwrap();
         assert_eq!(after.version, before.version + 1);
         assert_eq!(after.own_org("sales", Instant::from_unix_secs(10)).unwrap(), Some("two"));
+        assert_eq!(after.memberships.len(), before.memberships.len() + 1);
+        let membership = after.memberships.last().unwrap();
+        assert_eq!(membership.base.id, "id-0");
+        assert_eq!(membership.changed_by, "admin");
+        assert_eq!(membership.reason, change.reason);
         assert!(after.management.is_empty());
+
+        let mut name_only = profile.clone();
+        name_only.org_unit_id = None;
+        let after = before
+            .changed(
+                &request(OrganizationOperation::UpdatePersonProfile { profile: name_only }),
+                "id",
+                "admin",
+                Instant::from_unix_secs(10),
+            )
+            .unwrap();
+        assert_eq!(after.memberships, before.memberships);
 
         let mut invalid = profile;
         invalid.org_unit_id = Some("missing".into());

@@ -238,7 +238,7 @@ mod tests {
         let mapping = CustomerMapping::new();
         assert!(mapping.model().facts.contains(&FactKind::Collaborators));
         let QueryFragment::Match(filter) =
-            mapping.predicate(&AccessFact::Collaborating, &context(customer::DETAIL), None).unwrap()
+            mapping.predicate(&AccessFact::Collaborating, &context(customer::DETAIL)).unwrap()
         else {
             panic!("退役协作查询不得读取协作集合");
         };

@@ -4,8 +4,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use erp_identity::ResourceTargets;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey, QueryOutput,
+    RelationKey,
 };
 use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
 use erp_sales::entity::sales_inquiry::SalesInquiry;
@@ -22,18 +22,13 @@ impl AccessMapping for InquiryMapping {
     fn model(&self) -> &QueryModel {
         &self.0
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> erp_identity::Result<Bson> {
+    fn key(&self, _: &AccessContext) -> erp_identity::Result<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> erp_identity::Result<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> erp_identity::Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! { "deleted_at": 0_i64 }))
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> erp_identity::Result<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> erp_identity::Result<QueryFragment> {
         let condition = match fact {
             AccessFact::Owned => doc! { "sales_owner_user_id": context.actor.id() },
             AccessFact::OrganizationIn(ids) => {
@@ -44,12 +39,7 @@ impl AccessMapping for InquiryMapping {
         };
         Ok(QueryFragment::Match(condition))
     }
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> erp_identity::Result<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> erp_identity::Result<RelationMapping> {
         Err(erp_identity::Error::ValidationError("询价未登记来源关系".into()))
     }
 }
@@ -102,18 +92,13 @@ impl AccessMapping for TaskInquiryMapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> erp_identity::Result<Bson> {
+    fn key(&self, _: &AccessContext) -> erp_identity::Result<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> erp_identity::Result<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> erp_identity::Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at": 0_i64}))
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> erp_identity::Result<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> erp_identity::Result<QueryFragment> {
         let relation = match fact {
             AccessFact::AssignedTo => doc! {"owner_user_id": context.actor.id()},
             AccessFact::Participant if !matches!(context.permission.action(), "list" | "detail") => {
@@ -134,12 +119,7 @@ impl AccessMapping for TaskInquiryMapping {
             ]}}],
         })
     }
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> erp_identity::Result<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> erp_identity::Result<RelationMapping> {
         Err(erp_identity::Error::ValidationError("采购询价没有来源映射".into()))
     }
 }
@@ -250,34 +230,21 @@ mod tests {
     fn inquiry_mapping_uses_current_responsibility_and_rejects_unavailable_dimensions() {
         let mapping = mapping();
         let context = context();
-        let facts = MappingFacts::default();
 
-        let QueryFragment::Match(owner) =
-            mapping.predicate(&AccessFact::Owned, &context, Some(&facts)).unwrap()
-        else {
+        let QueryFragment::Match(owner) = mapping.predicate(&AccessFact::Owned, &context).unwrap() else {
             panic!("owner fact must use current sales owner");
         };
         assert_eq!(owner, doc! {"sales_owner_user_id":"sales"});
 
-        let QueryFragment::Match(org) = mapping
-            .predicate(&AccessFact::OrganizationIn(["org".into()].into()), &context, Some(&facts))
-            .unwrap()
+        let QueryFragment::Match(org) =
+            mapping.predicate(&AccessFact::OrganizationIn(["org".into()].into()), &context).unwrap()
         else {
             panic!("organization must use the inquiry business organization");
         };
         assert_eq!(org, doc! {"business_org_unit_id":{"$in":["org"]}});
 
-        assert!(
-            mapping
-                .predicate(&AccessFact::WarehouseIn(["warehouse".into()].into()), &context, Some(&facts))
-                .is_err()
-        );
-        assert!(mapping.relation(&RelationKey::parse("other").unwrap(), &context, Some(&facts)).is_err());
-    }
-    #[test]
-    fn static_inquiry_mappings_have_no_preparation_dependency() {
-        assert!(mapping().preparation().is_none());
-        assert!(procurement_mapping().preparation().is_none());
+        assert!(mapping.predicate(&AccessFact::WarehouseIn(["warehouse".into()].into()), &context).is_err());
+        assert!(mapping.relation(&RelationKey::parse("other").unwrap(), &context).is_err());
     }
     #[test]
     fn procurement_mapping_uses_real_task_existence_and_exact_current_owner_for_internal_data() {
@@ -287,7 +254,7 @@ mod tests {
         context.resource = "procurement_inquiry".into();
         for fact in [AccessFact::AssignedTo, AccessFact::Participant, AccessFact::Completed(false)] {
             let QueryFragment::Exists { collection, bindings, pipeline } =
-                mapping.predicate(&fact, &context, None).unwrap()
+                mapping.predicate(&fact, &context).unwrap()
             else {
                 panic!("task relations must be read in the database query");
             };
@@ -296,7 +263,7 @@ mod tests {
             let clauses = pipeline[0].get_document("$match").unwrap().get_array("$and").unwrap();
             assert_eq!(clauses[2].as_document().unwrap().get_str("owner_user_id").unwrap(), "sales");
         }
-        assert!(mapping.predicate(&AccessFact::Owned, &context, None).is_err());
+        assert!(mapping.predicate(&AccessFact::Owned, &context).is_err());
     }
 
     #[test]

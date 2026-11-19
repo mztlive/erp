@@ -5,24 +5,22 @@ use erp_core::AccountKind;
 use persistence_core::Executor;
 
 use super::PolicyBundleService;
-use crate::entity::authorization_bundle::PolicyDocument;
 use crate::entity::authorization_bundle::plan::{PolicyFacts, PolicyRoleState, PolicyUserState};
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
 use crate::{AccessControlExt, Error, MongoCasbinAdapter, Permission, Result, subject};
 
 impl PolicyBundleService {
-    /// 预览、应用或导出时，沿原事务按规范化文件的引用有界读取人员、直接角色绑定、角色和人员范围。
+    /// 预览、应用或导出时，沿原事务按规范化引用有界读取人员、直接角色绑定、角色和人员范围。
     /// 一并读取人员当前绑定的角色；人员失效、角色形态不受支持或读取失败时返回错误。
     pub(super) async fn facts(
         &self,
-        document: &PolicyDocument,
+        mut roles: BTreeSet<String>,
+        user_ids: Vec<String>,
         executor: &mut dyn Executor,
     ) -> Result<PolicyFacts> {
         let mut facts = PolicyFacts::default();
-        let mut roles = document.roles.iter().map(|role| role.id.to_string()).collect::<BTreeSet<_>>();
-        roles.extend(document.bindings.iter().flat_map(|b| b.role_ids.iter().map(ToString::to_string)));
 
-        for user_id in document.user_ids() {
+        for user_id in user_ids {
             let user = self.user_fact(&user_id, executor).await?;
             roles.extend(user.role_ids.iter().map(ToString::to_string));
             facts.users.insert(user_id.clone(), user);

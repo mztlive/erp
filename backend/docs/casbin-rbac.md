@@ -10,9 +10,11 @@
 
 MongoDB 的 `roles` 集合保存角色展示信息与启用状态，`casbin_rules` 集合保存 `g`/`p`
 policy，`casbin_policy_state` 的单例文档保存全局 policy revision。
-`database::MongoCasbinAdapter` 位于 `database/src/casbin_adapter.rs`，既实现 Casbin
-Adapter，也提供事务内替换角色绑定、替换角色权限、删除角色规则和递增 revision 的 session
-方法。
+[`erp_identity::MongoCasbinAdapter`](../crates/domains/erp-identity/src/repository/casbin_adapter.rs)
+仅通过 Casbin `Adapter` 为 Enforcer 全量加载规则，Enforcer 关闭自动保存。过滤加载、保存、
+清空及单条或批量增删（含按条件删除）均返回不支持错误；`is_filtered()` 始终为 `false`。
+需要在原事务快照内复核版本的调用方可直接使用 `MongoCasbinAdapter::policy_revision(executor)`，
+不读取 Enforcer 缓存。
 
 ## 请求授权链路
 
@@ -23,9 +25,8 @@ Adapter，也提供事务内替换角色绑定、替换角色权限、删除角�
 
 ## 写入与事务边界
 
-`RbacService` 是角色、账号角色绑定和授权判定的统一 Service 入口。涉及角色实体、
-账号/Profile 与 policy 的业务事务由 Service 开启，Adapter 和 Repository 通过调用方传入
-的 `ClientSession` 加入同一事务：
+`RbacService` 统一编排角色和账号角色绑定的策略事务。涉及角色实体、账号/Profile 与 policy
+的业务事务由 Service 开启，Adapter 和 Repository 复用调用方传入的事务 `Executor`：
 
 - 创建或更新角色及其权限：角色实体与完整 `p` 规则在同一事务中写入。
 - 删除角色：角色软删除、对应 `p` 规则及指向该角色的 `g` 绑定在同一事务中删除。
@@ -37,13 +38,11 @@ Adapter，也提供事务内替换角色绑定、替换角色权限、删除角�
 或删除同一角色时，不会因事务快照的旧读而提交指向已删除角色的 `g`/`p` 规则。角色版本是
 内部持久化元数据，不属于 HTTP 响应契约。
 
-`MongoCasbinAdapter` 确实持久化 policy；不能把它描述为只由 Service 或角色 Repository
-保存。Repository 负责领域实体，Adapter 负责 Casbin rule，二者由 Service 统一编排。
-业务代码只调用 Adapter 的 policy 写接口，并传入事务执行器。普通管理操作由
-`RbacService::run_authorized_policy_transaction` 把授权快照 revision 与最终写事务绑定；
-内建角色初始化才使用无操作人快照的 `run_system_policy_transaction`。禁止绕过这个边界自行提交
-policy 事务。Casbin `Adapter` trait 暴露的独立写方法也会自行开启事务，并只在规则确有
-变化时原子递增 revision。
+角色和账号的 Repository 负责领域实体，`MongoCasbinAdapter` 的显式业务方法负责替换或清除
+主体角色绑定、替换角色权限、删除角色规则和推进 revision。这些方法不自行开启或提交事务。
+普通管理操作由 `RbacService::run_authorized_policy_transaction` 把授权快照 revision
+与最终写事务绑定；内建角色初始化使用无操作人快照的 `run_system_policy_transaction`。
+不得通过 Casbin `Adapter` 通用写方法或绕过业务事务修改 policy。
 
 每个包含 policy 变更的事务都会在同一 MongoDB session 内递增全局 revision。全部实例写入
 同一个 revision 文档，因此跨实例并发 policy 写会产生事务写冲突并向调用方返回 `409`，

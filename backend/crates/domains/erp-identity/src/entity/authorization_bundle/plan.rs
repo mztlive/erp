@@ -75,10 +75,9 @@ pub(crate) struct PlannedScope {
     pub existing: Option<PersonDataScope>,
 }
 
-/// 预览和应用共用的授权差异及写入步骤，按角色、绑定、范围的依赖顺序执行。
+/// 有差异的写入步骤，按角色、绑定、范围的依赖顺序执行。
+#[derive(Default)]
 pub(crate) struct PolicyPlan {
-    /// 供审核的规范化配置、逐项差异、规则说明和快照摘要。
-    pub preview: PolicyPreview,
     /// 需创建或更新的角色及其最终直接权限。
     pub roles: Vec<PlannedRole>,
     /// 需更新的人员直接角色绑定。
@@ -97,24 +96,8 @@ impl PolicyPlan {
         actor_permissions: &PermissionSet,
         policy_version: u64,
         authorization_version: &str,
-    ) -> Result<Self> {
-        let mut plan = Self {
-            preview: PolicyPreview {
-                document: document.clone(),
-                policy_version,
-                changes: vec![],
-                policy_notes: policy_notes(&document),
-                review_hash: CommandReceipt::from_payload(
-                    "preview-", actor_id, "preview", "policy", "preview", &document,
-                )?
-                .fingerprint()
-                .clone(),
-            },
-            roles: vec![],
-            bindings: vec![],
-            scopes: vec![],
-        };
-
+    ) -> Result<(Self, PolicyPreview)> {
+        let mut plan = Self::default();
         for role in &document.roles {
             plan.role(role, facts, actor_permissions)?;
         }
@@ -123,16 +106,11 @@ impl PolicyPlan {
             plan.scope(scope, facts)?;
         }
 
-        let payload = (
-            actor_id,
-            authorization_version,
-            policy_version,
-            &document,
-            facts,
-            &plan.preview.changes,
-            &plan.preview.policy_notes,
-        );
-        plan.preview.review_hash = CommandReceipt::from_payload(
+        let changes = plan.changes(facts);
+        let policy_notes = policy_notes(&document);
+        let payload =
+            (actor_id, authorization_version, policy_version, &document, facts, &changes, &policy_notes);
+        let review_hash = CommandReceipt::from_payload(
             "preview-",
             actor_id,
             "authorization_policy.preview",
@@ -142,7 +120,49 @@ impl PolicyPlan {
         )?
         .fingerprint()
         .clone();
-        Ok(plan)
+        Ok((plan, PolicyPreview { document, policy_version, review_hash, changes, policy_notes }))
+    }
+
+    /// 返回实际写入项数，供应用判断是否推进策略版本。
+    pub(crate) fn change_count(&self) -> usize {
+        self.roles.len() + self.bindings.len() + self.scopes.len()
+    }
+
+    // 审核差异按写入顺序从实际变更及原快照生成。
+    fn changes(&self, facts: &PolicyFacts) -> Vec<PolicyChange> {
+        let mut changes = Vec::with_capacity(self.change_count());
+        for role in &self.roles {
+            let current = facts.roles.get(role.id.as_str());
+            changes.push(PolicyChange {
+                kind: "role".into(),
+                target: role.id.to_string(),
+                before: current.map_or(Value::Null, |r| {
+                    let permissions = merge(PolicyMode::Replace, &[], &r.permissions);
+                    json!({"name": r.role.name, "permissions": permissions})
+                }),
+                after: json!({"name": role.name, "permissions": role.permissions}),
+                affected_user_ids: current.map_or_else(Vec::new, |r| r.affected_user_ids.clone()),
+            });
+        }
+        for binding in &self.bindings {
+            changes.push(PolicyChange {
+                kind: "binding".into(),
+                target: binding.user_id.clone(),
+                before: json!(facts.users[&binding.user_id].role_ids),
+                after: json!(binding.role_ids),
+                affected_user_ids: vec![binding.user_id.clone()],
+            });
+        }
+        for scope in &self.scopes {
+            changes.push(PolicyChange {
+                kind: "data_scope".into(),
+                target: format!("{}/{}/{}", scope.user_id, scope.resource, scope.action),
+                before: scope.existing.as_ref().map_or(Value::Null, |s| json!(s.expression)),
+                after: json!(scope.expression),
+                affected_user_ids: vec![scope.user_id.clone()],
+            });
+        }
+        changes
     }
 
     // 规划角色名称和直接权限的变更；现存角色同时检查原权限和结果权限，新角色要求 `policy-` 前缀。
@@ -160,18 +180,8 @@ impl PolicyPlan {
         let permissions = merge(requested.mode, &before_permissions, &requested.permissions);
         ensure_subset(actor, &permissions)?;
 
-        let before = current
-            .map(|r| json!({"name": r.role.name, "permissions": before_permissions}))
-            .unwrap_or(Value::Null);
-        let after = json!({"name": requested.name, "permissions": permissions});
-        if before != after {
-            self.preview.changes.push(PolicyChange {
-                kind: "role".into(),
-                target: requested.id.to_string(),
-                before,
-                after,
-                affected_user_ids: current.map(|r| r.affected_user_ids.clone()).unwrap_or_default(),
-            });
+        if current.is_none_or(|state| state.role.name != requested.name || before_permissions != permissions)
+        {
             self.roles.push(PlannedRole {
                 id: requested.id.clone(),
                 name: requested.name.clone(),
@@ -201,20 +211,12 @@ impl PolicyPlan {
                 ensure_subset(actor, &role.permissions)?;
             }
 
-            let requested = binding.role_ids.clone();
-            let role_ids = merge(binding.mode, &user.role_ids, &requested);
+            let role_ids = merge(binding.mode, &user.role_ids, &binding.role_ids);
             for id in &role_ids {
                 ensure_subset(actor, self.role_permissions(id.as_str(), facts)?)?;
             }
 
             if role_ids != user.role_ids {
-                self.preview.changes.push(PolicyChange {
-                    kind: "binding".into(),
-                    target: binding.user_id.clone(),
-                    before: json!(user.role_ids),
-                    after: json!(role_ids),
-                    affected_user_ids: vec![binding.user_id.clone()],
-                });
                 self.bindings.push(PlannedBinding { user_id: binding.user_id.clone(), role_ids });
             }
         }
@@ -258,13 +260,6 @@ impl PolicyPlan {
                 continue;
             }
 
-            self.preview.changes.push(PolicyChange {
-                kind: "data_scope".into(),
-                target: format!("{}/{}/{action}", scope.user_id, scope.resource),
-                before: current.map(|s| json!(s.expression)).unwrap_or(Value::Null),
-                after: json!(expression),
-                affected_user_ids: vec![scope.user_id.clone()],
-            });
             self.scopes.push(PlannedScope {
                 user_id: scope.user_id.clone(),
                 resource: scope.resource.clone(),
@@ -381,7 +376,7 @@ mod tests {
     }
 
     // 以固定操作人、策略版本及授权版本规划规范化文件，默认给予操作人全量权限。
-    fn plan(document: PolicyDocument, facts: &PolicyFacts) -> Result<PolicyPlan> {
+    fn plan(document: PolicyDocument, facts: &PolicyFacts) -> Result<(PolicyPlan, PolicyPreview)> {
         PolicyPlan::build(
             document.normalized()?,
             facts,
@@ -421,9 +416,9 @@ mod tests {
         }))
         .unwrap();
 
-        let plan = plan(value, &facts).unwrap();
+        let (plan, preview) = plan(value, &facts).unwrap();
         assert_eq!(
-            plan.preview.changes.iter().map(|c| c.kind.as_str()).collect::<Vec<_>>(),
+            preview.changes.iter().map(|c| c.kind.as_str()).collect::<Vec<_>>(),
             ["role", "binding", "data_scope"]
         );
         assert_eq!(plan.bindings[0].role_ids, [RoleId::parse("policy-new").unwrap()]);
@@ -441,13 +436,13 @@ mod tests {
             }))
             .unwrap(),
         );
-        let plan = plan(value.clone(), &facts()).unwrap();
+        let (plan, preview) = plan(value.clone(), &facts()).unwrap();
         assert_eq!(plan.roles[0].permissions, vec![Permission::parse("sales_order:list").unwrap()]);
-        assert_eq!(plan.preview.changes[0].affected_user_ids, ["alice"]);
+        assert_eq!(preview.changes[0].affected_user_ids, ["alice"]);
         assert!(plan.bindings.is_empty());
 
         value.roles[0].mode = PolicyMode::Merge;
-        assert!(super::tests::plan(value, &facts()).unwrap().preview.changes.is_empty());
+        assert!(super::tests::plan(value, &facts()).unwrap().1.changes.is_empty());
     }
 
     // 验证追加人员范围无法补足角色缺失的更新动作资格。
@@ -525,14 +520,14 @@ mod tests {
         let mut value = document();
         value.data_scopes.push(scope(&["list"]));
         let mut facts = facts();
-        let first = plan(value.clone(), &facts).unwrap();
+        let (first, _) = plan(value.clone(), &facts).unwrap();
         let mut row = PersonDataScope::default_for("alice", "sales_order", "list");
         row.expression = first.scopes[0].expression.clone();
         facts.scopes.push(row);
-        assert!(plan(value.clone(), &facts).unwrap().preview.changes.is_empty());
+        assert!(plan(value.clone(), &facts).unwrap().1.changes.is_empty());
 
         value.data_scopes[0].grants.clear();
-        let cleared = plan(value, &facts).unwrap();
+        let (cleared, _) = plan(value, &facts).unwrap();
         assert!(cleared.scopes[0].expression.additive);
         assert!(cleared.scopes[0].expression.alternatives.is_empty());
         assert!(cleared.bindings.is_empty());
@@ -550,9 +545,10 @@ mod tests {
         assert!(matches!(plan(value.clone(), &facts), Err(Error::ValidationError(_))));
 
         value.data_scopes[0].replace_legacy = true;
-        let result = plan(value, &facts).unwrap();
+        let (result, preview) = plan(value, &facts).unwrap();
         assert_eq!(result.scopes.len(), 1);
         assert_eq!(result.scopes[0].action, "list");
+        assert_eq!(preview.changes.len(), result.change_count());
     }
 
     // 验证相同输入的审核摘要稳定，操作人、策略版本、授权版本和目标账号版本变化会改变摘要。
@@ -562,8 +558,8 @@ mod tests {
         value.data_scopes.push(scope(&["list"]));
         let value = value.normalized().unwrap();
         let facts = facts();
-        let first = plan(value.clone(), &facts).unwrap().preview.review_hash;
-        assert_eq!(first, plan(value.clone(), &facts).unwrap().preview.review_hash);
+        let first = plan(value.clone(), &facts).unwrap().1.review_hash;
+        assert_eq!(first, plan(value.clone(), &facts).unwrap().1.review_hash);
 
         let actor = PermissionSet::new(vec![Permission::parse("*:*").unwrap()]);
         for (who, version, organization) in
@@ -571,12 +567,12 @@ mod tests {
         {
             let result =
                 PolicyPlan::build(value.clone(), &facts, who, &actor, version, organization).unwrap();
-            assert_ne!(first, result.preview.review_hash);
+            assert_ne!(first, result.1.review_hash);
         }
 
         let mut changed = facts;
         changed.users.get_mut("alice").unwrap().version += 1;
-        assert_ne!(first, plan(value, &changed).unwrap().preview.review_hash);
+        assert_ne!(first, plan(value, &changed).unwrap().1.review_hash);
     }
 
     #[test]
@@ -591,7 +587,7 @@ mod tests {
         scope.grants.extend([detail_only, duplicate]);
         value.data_scopes.push(scope);
 
-        let preview = plan(value, &facts()).unwrap().preview;
+        let (_, preview) = plan(value, &facts()).unwrap();
         assert_eq!(
             preview.changes.iter().map(|change| change.target.as_str()).collect::<Vec<_>>(),
             ["alice/sales_order/detail", "alice/sales_order/list"]
@@ -612,7 +608,7 @@ mod tests {
         facts.scopes.push(row);
         let exported = facts.export(4).unwrap();
         assert_eq!(exported.document.bindings[0].role_ids[0].as_str(), "reader");
-        assert!(plan(exported.document, &facts).unwrap().preview.changes.is_empty());
+        assert!(plan(exported.document, &facts).unwrap().1.changes.is_empty());
 
         facts.scopes[0].expression.additive = false;
         assert!(matches!(facts.export(4), Err(Error::ValidationError(_))));
@@ -641,11 +637,11 @@ mod tests {
         .unwrap();
         let mut facts = facts();
         facts.scopes.push(PersonDataScope::default_for("alice", "sales_order", "list"));
-        let result = plan(value, &facts).unwrap();
+        let (result, preview) = plan(value, &facts).unwrap();
         assert!(result.roles[0].permissions.is_empty());
         assert!(result.bindings[0].role_ids.is_empty());
         assert!(result.scopes.is_empty());
-        assert_eq!(result.preview.changes.len(), 2);
+        assert_eq!(preview.changes.len(), 2);
     }
 
     // 验证重导空追加范围可清除导出之后新添的条款，并保留追加模型。
@@ -656,7 +652,7 @@ mod tests {
         let mut row = PersonDataScope::default_for("alice", "sales_order", "list");
         row.expression = scope(&["list"]).request(4).unwrap().expression("list");
         facts.scopes.push(row);
-        let restored = plan(exported.document, &facts).unwrap();
+        let (restored, _) = plan(exported.document, &facts).unwrap();
         assert_eq!(restored.scopes.len(), 1);
         assert_eq!(restored.scopes[0].action, "list");
         assert!(restored.scopes[0].expression.additive);
@@ -676,7 +672,7 @@ mod tests {
         row.expression.alternatives.push(other);
         facts.scopes.push(row);
         let exported = facts.export(4).unwrap();
-        assert!(plan(exported.document, &facts).unwrap().preview.changes.is_empty());
+        assert!(plan(exported.document, &facts).unwrap().1.changes.is_empty());
     }
 
     // 验证无本人基础的库存动作导出空追加项，任务和来源继承动作省略，重导无差异。
@@ -693,7 +689,7 @@ mod tests {
         assert_eq!(scope.resource, "stock_balance");
         assert!(scope.grants.is_empty());
         assert!(!PersonScopeExpression::default_self(&scope.resource, "list"));
-        assert!(plan(exported.document, &facts).unwrap().preview.changes.is_empty());
+        assert!(plan(exported.document, &facts).unwrap().1.changes.is_empty());
     }
 
     // 验证共享资源保留角色权限，已退役范围仅记入说明，文件无法重新启用该范围。
@@ -713,7 +709,7 @@ mod tests {
         assert_eq!(exported.document.data_scopes[0].resource, "sales_order");
         assert!(exported.policy_notes.iter().any(|note| note.contains("alice/product/list")));
         assert!(exported.document.roles[0].permissions.contains(&Permission::parse("product:list").unwrap()));
-        assert!(plan(exported.document, &facts).unwrap().preview.changes.is_empty());
+        assert!(plan(exported.document, &facts).unwrap().1.changes.is_empty());
 
         let mut invalid = document();
         let mut shared = scope(&["list"]);

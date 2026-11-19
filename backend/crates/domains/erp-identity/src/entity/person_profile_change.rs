@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use erp_core::common::time::Instant;
 use serde::{Deserialize, Serialize};
 
-use super::organization_change::OrganizationOperation;
 use crate::{Error, Result, RoleId, RoleIdSet};
 
 /// 旧人员资料请求中的管理关系明细，仅供历史审计载荷往返。
@@ -63,9 +62,8 @@ impl PersonProfileChange {
         Ok(())
     }
 
-    /// 将目标人员的主属组织修改展开为一条调岗命令；只改姓名或角色时返回空列表。
-    /// 人员 ID 为空白、没有修改内容或试图修改旧管理关系时拒绝。
-    pub fn operations(&self) -> Result<Vec<OrganizationOperation>> {
+    /// 校验单人资料请求：人员不能为空，至少有一项改动，且不得修改旧管理关系。
+    pub(super) fn validate(&self) -> Result<()> {
         if self.user_id.trim().is_empty() {
             return Err(Error::ValidationError("人员不能为空".into()));
         }
@@ -73,17 +71,10 @@ impl PersonProfileChange {
             return Err(Error::ValidationError("部门管理关系已停用，请在人员数据范围中设置授权".into()));
         }
 
-        let mut operations = Vec::new();
-        if let Some(org_unit_id) = &self.org_unit_id {
-            operations.push(OrganizationOperation::TransferMember {
-                user_id: self.user_id.clone(),
-                org_unit_id: org_unit_id.clone(),
-            });
-        }
-        if operations.is_empty() && self.name.is_none() && self.role_ids.is_none() {
+        if self.org_unit_id.is_none() && self.name.is_none() && self.role_ids.is_none() {
             return Err(Error::ValidationError("没有需要保存的修改".into()));
         }
-        Ok(operations)
+        Ok(())
     }
 }
 
@@ -103,7 +94,7 @@ mod tests {
             add_management: vec![],
         }
     }
-    // 验证仅改角色不生成调岗，期望集合忽略顺序，缺失或过期快照及空新集合均拒绝。
+    // 验证仅改角色的请求有效，期望集合忽略顺序，缺失或过期快照及空新集合均拒绝。
     #[test]
     fn role_change_checks_original_set_and_accepts_role_only_change() {
         let mut value = change();
@@ -114,7 +105,7 @@ mod tests {
         assert!(matches!(value.validate_roles(&current), Err(Error::ConflictError(_))));
         value.expected_role_ids = Some(RoleIdSet::parse(&current).unwrap());
         assert!(value.validate_roles(&current).is_ok());
-        assert!(value.operations().unwrap().is_empty());
+        assert!(value.validate().is_ok());
         value.expected_role_ids = Some(RoleIdSet::parse(["second", "old"]).unwrap());
         assert!(
             value.validate_roles(&[RoleId::parse("old").unwrap(), RoleId::parse("second").unwrap()]).is_ok()
@@ -124,14 +115,14 @@ mod tests {
         assert!(value.validate_roles(&current).is_err());
     }
 
-    // 验证主属组织变更只生成一条针对目标人员的调岗命令。
+    // 验证仅修改主属组织的请求有效，但不能省略目标人员。
     #[test]
-    fn profile_expands_only_target_person() {
+    fn transfer_only_change_requires_a_person() {
         let mut value = change();
         value.org_unit_id = Some("sales".into());
-        let ops = value.operations().unwrap();
-        assert_eq!(ops.len(), 1);
-        assert!(matches!(&ops[0], OrganizationOperation::TransferMember { user_id, .. } if user_id == "one"));
+        assert!(value.validate().is_ok());
+        value.user_id = " ".into();
+        assert!(value.validate().is_err());
     }
 
     // 验证仅改姓名的请求可缺省旧管理字段，往返序列化后仍省略这些字段。
@@ -144,7 +135,7 @@ mod tests {
         }"#,
         )
         .unwrap();
-        assert!(value.operations().unwrap().is_empty());
+        assert!(value.validate().is_ok());
         let encoded = serde_json::to_value(&value).unwrap();
         assert!(encoded.get("remove_management_ids").is_none());
         assert!(encoded.get("add_management").is_none());
@@ -154,12 +145,12 @@ mod tests {
     #[test]
     fn empty_and_legacy_management_writes_fail_but_history_roundtrips() {
         let mut value = change();
-        assert!(value.operations().is_err());
+        assert!(value.validate().is_err());
         value.name = Some("新姓名".into());
-        assert!(value.operations().unwrap().is_empty());
+        assert!(value.validate().is_ok());
 
         value.remove_management_ids.push("legacy".into());
-        assert!(value.operations().is_err());
+        assert!(value.validate().is_err());
         let encoded = serde_json::to_string(&value).unwrap();
         assert_eq!(serde_json::from_str::<PersonProfileChange>(&encoded).unwrap(), value);
 
@@ -170,7 +161,7 @@ mod tests {
             include_descendants: false,
             valid_to: None,
         });
-        assert!(value.operations().is_err());
+        assert!(value.validate().is_err());
         let encoded = serde_json::to_string(&value).unwrap();
         assert_eq!(serde_json::from_str::<PersonProfileChange>(&encoded).unwrap(), value);
     }

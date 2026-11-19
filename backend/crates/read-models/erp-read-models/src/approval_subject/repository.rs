@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, MappingFacts, QueryModel, QueryModelKey, QueryOutput, RelationKey,
+    AccessContext, AccessFact, QueryModel, QueryModelKey, QueryOutput, RelationKey,
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{AccessMapping, Error, Result};
@@ -77,29 +77,19 @@ impl AccessMapping for ApprovalManagementMapping {
         self.base.stages().into_iter().chain(source_stages()).collect()
     }
 
-    fn key(&self, context: &AccessContext, prepared: Option<&MappingFacts>) -> Result<Bson> {
-        self.base.key(context, prepared)
+    fn key(&self, context: &AccessContext) -> Result<Bson> {
+        self.base.key(context)
     }
 
-    fn records(&self, context: &AccessContext, prepared: Option<&MappingFacts>) -> Result<QueryFragment> {
-        self.base.records(context, prepared)
+    fn records(&self, context: &AccessContext) -> Result<QueryFragment> {
+        self.base.records(context)
     }
 
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        prepared: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
-        self.base.predicate(fact, context, prepared)
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> Result<QueryFragment> {
+        self.base.predicate(fact, context)
     }
 
-    fn relation(
-        &self,
-        key: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
+    fn relation(&self, key: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
         let mapping =
             self.sources.get(key).ok_or_else(|| Error::ValidationError("审批管理来源关系未登记".into()))?;
         let expected_ids = self
@@ -144,27 +134,17 @@ impl AccessMapping for CompleteSourceMapping {
     fn stages(&self) -> Vec<Document> {
         self.inner.stages()
     }
-    fn key(&self, context: &AccessContext, prepared: Option<&MappingFacts>) -> Result<Bson> {
-        self.inner.key(context, prepared)
+    fn key(&self, context: &AccessContext) -> Result<Bson> {
+        self.inner.key(context)
     }
-    fn records(&self, context: &AccessContext, prepared: Option<&MappingFacts>) -> Result<QueryFragment> {
-        self.inner.records(context, prepared)
+    fn records(&self, context: &AccessContext) -> Result<QueryFragment> {
+        self.inner.records(context)
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        prepared: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
-        self.inner.predicate(fact, context, prepared)
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> Result<QueryFragment> {
+        self.inner.predicate(fact, context)
     }
-    fn relation(
-        &self,
-        key: &RelationKey,
-        context: &AccessContext,
-        prepared: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
-        self.inner.relation(key, context, prepared)
+    fn relation(&self, key: &RelationKey, context: &AccessContext) -> Result<RelationMapping> {
+        self.inner.relation(key, context)
     }
 }
 
@@ -257,7 +237,7 @@ fn refund_reference(alias: &str, selected: &str, other: &str, entry: Option<(&st
     ]}}}.into()
 }
 
-// 组装审批管理来源映射的聚合管道时，只关联完整身份和强外键，不展开、不过滤根记录，也不执行请求外动态准备。
+// 组装审批管理来源映射的聚合管道时，只关联完整身份和强外键，不展开、不过滤根记录。
 fn source_stages() -> Vec<Document> {
     let mut stages = snapshot_stages();
     for (kind, collection, alias) in [

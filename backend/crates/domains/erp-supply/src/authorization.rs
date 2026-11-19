@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey, QueryOutput,
+    RelationKey,
 };
 use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::{AccessTarget, AuthorizationService, CompiledAccess, Permission, ResourceTargets};
@@ -95,18 +95,13 @@ impl AccessMapping for Mapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> erp_identity::Result<Bson> {
+    fn key(&self, _: &AccessContext) -> erp_identity::Result<Bson> {
         Ok(Bson::String("$id".into()))
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> erp_identity::Result<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> erp_identity::Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at":NOT_DELETED_TIMESTAMP_BSON}))
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> erp_identity::Result<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> erp_identity::Result<QueryFragment> {
         match fact {
             AccessFact::Owned => {
                 Ok(QueryFragment::Match(doc! { (owner_field(&self.model.resource)?): context.actor.id() }))
@@ -117,12 +112,7 @@ impl AccessMapping for Mapping {
             _ => Err(erp_identity::Error::ValidationError("共享资料未登记该授权维度".into())),
         }
     }
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> erp_identity::Result<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> erp_identity::Result<RelationMapping> {
         Err(erp_identity::Error::ValidationError("共享资料未登记来源关系".into()))
     }
 }
@@ -378,7 +368,7 @@ mod tests {
                     doc! { "business_org_unit_id": { "$in": ["internal_org"] } }
                 };
                 assert!(
-                    matches!(mapping.predicate(&fact, &context, None).unwrap(), QueryFragment::Match(actual) if actual == expected)
+                    matches!(mapping.predicate(&fact, &context).unwrap(), QueryFragment::Match(actual) if actual == expected)
                 );
             }
         }

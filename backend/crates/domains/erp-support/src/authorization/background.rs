@@ -5,8 +5,8 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::ids::BackgroundJobId;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey, QueryOutput,
+    RelationKey,
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{
@@ -110,33 +110,23 @@ impl AccessMapping for JobMapping {
     fn model(&self) -> &QueryModel {
         &self.0
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
+    fn key(&self, _: &AccessContext) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, context: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+    fn records(&self, context: &AccessContext) -> IdentityResult<QueryFragment> {
         let mut filter = doc! {"deleted_at": 0};
         if let Some(domain) = job_domain(&context.permission)? {
             filter.insert("domain_job_type", domain);
         }
         Ok(QueryFragment::Match(filter))
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> IdentityResult<QueryFragment> {
         match fact {
             AccessFact::Owned => Ok(QueryFragment::Match(doc! {"requested_by": context.actor.id()})),
             _ => Err(IdentityError::ValidationError("后台任务仅提供发起人事实".into())),
         }
     }
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> IdentityResult<RelationMapping> {
         Err(IdentityError::ValidationError("后台任务没有授权来源关系".into()))
     }
 }
@@ -243,12 +233,12 @@ mod tests {
         assert_eq!(facts.version, job.base.version.to_string());
         assert_eq!(facts.resource, "background_job");
 
-        let predicate = JobMapping(model()).predicate(&AccessFact::Owned, &context("owner"), None).unwrap();
+        let predicate = JobMapping(model()).predicate(&AccessFact::Owned, &context("owner")).unwrap();
         let QueryFragment::Match(document) = predicate else {
             panic!("本人范围应为真实发起人条件")
         };
         assert_eq!(document, doc! {"requested_by": "owner"});
-        let other = JobMapping(model()).predicate(&AccessFact::Owned, &context("other"), None).unwrap();
+        let other = JobMapping(model()).predicate(&AccessFact::Owned, &context("other")).unwrap();
         let QueryFragment::Match(other_document) = other else {
             panic!("本人范围应为真实发起人条件")
         };
@@ -265,15 +255,14 @@ mod tests {
         ] {
             let mut context = context("reader");
             context.permission = permission;
-            let QueryFragment::Match(records) = JobMapping(model()).records(&context, None).unwrap() else {
+            let QueryFragment::Match(records) = JobMapping(model()).records(&context).unwrap() else {
                 panic!("固定资料过滤必须为字段条件")
             };
             assert_eq!(records.get_str("domain_job_type").unwrap(), domain);
             assert_eq!(job_domain(&context.permission).unwrap(), Some(domain));
         }
 
-        let QueryFragment::Match(records) = JobMapping(model()).records(&context("reader"), None).unwrap()
-        else {
+        let QueryFragment::Match(records) = JobMapping(model()).records(&context("reader")).unwrap() else {
             panic!("固定资料过滤必须为字段条件")
         };
         assert!(!records.contains_key("domain_job_type"));
@@ -283,8 +272,8 @@ mod tests {
     fn mapping_rejects_unsupported_fact_dimensions() {
         let mut unknown = context("owner");
         unknown.permission = Permission::parse("background_job:unknown").unwrap();
-        assert!(JobMapping(model()).records(&unknown, None).is_err());
-        assert!(JobMapping(model()).predicate(&AccessFact::AssignedTo, &context("owner"), None).is_err());
+        assert!(JobMapping(model()).records(&unknown).is_err());
+        assert!(JobMapping(model()).predicate(&AccessFact::AssignedTo, &context("owner")).is_err());
         assert_eq!(model().facts, [FactKind::Owner].into());
     }
 }

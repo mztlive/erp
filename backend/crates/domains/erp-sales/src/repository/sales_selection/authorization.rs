@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, RelatedObjects, RelationKey, ResourceTargets,
+    AccessContext, AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey, QueryOutput,
+    RelatedObjects, RelationKey, ResourceTargets,
 };
 use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::{Error as IdentityError, Result as IdentityResult};
@@ -94,22 +94,17 @@ impl AccessMapping for SelectionMapping {
             })
             .unwrap_or_default()
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
+    fn key(&self, _: &AccessContext) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> IdentityResult<QueryFragment> {
         if self.model.resource == "sales_selection_proposal" {
             Ok(self.responsibility(doc! {}))
         } else {
             Ok(QueryFragment::Match(doc! { "deleted_at": 0 }))
         }
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> IdentityResult<QueryFragment> {
         let condition = match fact {
             AccessFact::Owned => doc! { "sales_owner_user_id": context.actor.id() },
             AccessFact::OrganizationIn(ids) => {
@@ -120,12 +115,7 @@ impl AccessMapping for SelectionMapping {
         };
         Ok(self.responsibility(condition))
     }
-    fn relation(
-        &self,
-        relation: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<RelationMapping> {
+    fn relation(&self, relation: &RelationKey, _: &AccessContext) -> IdentityResult<RelationMapping> {
         if relation.as_str() != "customer" {
             return Err(IdentityError::ValidationError("选品模型未登记该来源关系".into()));
         }
@@ -276,14 +266,13 @@ mod tests {
         for permission in [sales_selection::BOOKLET_LIST, sales_selection::PROPOSAL_LIST] {
             let resource = permission.resource();
             let mapping = SelectionMapping::with_customer(resource, customer.clone()).unwrap();
-            let relation = mapping
-                .relation(&RelationKey::parse("customer").unwrap(), &context(&permission), None)
-                .unwrap();
+            let relation =
+                mapping.relation(&RelationKey::parse("customer").unwrap(), &context(&permission)).unwrap();
             assert_eq!(relation.expected_ids, Bson::Array(vec!["$customer_id".into()]));
             assert!(Arc::ptr_eq(&relation.mapping, &customer));
             assert!(
                 mapping
-                    .relation(&RelationKey::parse("unregistered").unwrap(), &context(&permission), None,)
+                    .relation(&RelationKey::parse("unregistered").unwrap(), &context(&permission))
                     .is_err()
             );
         }
@@ -294,11 +283,7 @@ mod tests {
         let mapping = SelectionMapping::new("sales_selection_booklet").unwrap();
         assert!(
             mapping
-                .relation(
-                    &RelationKey::parse("customer").unwrap(),
-                    &context(&sales_selection::BOOKLET_LIST),
-                    None,
-                )
+                .relation(&RelationKey::parse("customer").unwrap(), &context(&sales_selection::BOOKLET_LIST))
                 .is_err()
         );
         assert!(SelectionMapping::with_customer("sales_selection_booklet", Arc::new(mapping)).is_err());
@@ -307,16 +292,14 @@ mod tests {
     #[test]
     fn booklet_maps_current_owner_and_organization_fields() {
         let mapping = SelectionMapping::new("sales_selection_booklet").unwrap();
-        let facts = None;
         let context = context(&sales_selection::BOOKLET_LIST);
-        let QueryFragment::Match(owner) = mapping.predicate(&AccessFact::Owned, &context, facts).unwrap()
-        else {
+        let QueryFragment::Match(owner) = mapping.predicate(&AccessFact::Owned, &context).unwrap() else {
             panic!("册责任必须使用本行字段");
         };
         assert_eq!(owner, doc! { "sales_owner_user_id": "sales-a" });
 
         let QueryFragment::Match(org) =
-            mapping.predicate(&AccessFact::OrganizationIn(["org-a".into()].into()), &context, facts).unwrap()
+            mapping.predicate(&AccessFact::OrganizationIn(["org-a".into()].into()), &context).unwrap()
         else {
             panic!("册组织必须使用本行字段");
         };
@@ -327,7 +310,7 @@ mod tests {
     fn proposal_responsibility_uses_live_parent_instead_of_snapshot_fields() {
         let mapping = SelectionMapping::new("sales_selection_proposal").unwrap();
         let QueryFragment::Exists { collection, bindings, pipeline } =
-            mapping.predicate(&AccessFact::Owned, &context(&sales_selection::PROPOSAL_LIST), None).unwrap()
+            mapping.predicate(&AccessFact::Owned, &context(&sales_selection::PROPOSAL_LIST)).unwrap()
         else {
             panic!("方案责任必须关联实际父册");
         };
@@ -346,8 +329,7 @@ mod tests {
             mapping
                 .predicate(
                     &AccessFact::WarehouseIn(["warehouse".into()].into()),
-                    &context(&sales_selection::BOOKLET_LIST),
-                    None
+                    &context(&sales_selection::BOOKLET_LIST)
                 )
                 .is_err()
         );

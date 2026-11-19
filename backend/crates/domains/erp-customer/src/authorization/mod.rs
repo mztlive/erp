@@ -7,7 +7,7 @@ pub use context::CustomerResolvedScope;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, QueryModel, QueryModelKey, QueryOutput, RelationKey,
 };
 use erp_identity::ports::{AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::repository::organization::primary_membership_query;
@@ -63,7 +63,7 @@ impl AccessMapping for CustomerMapping {
         &self.model
     }
 
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
+    fn key(&self, _: &AccessContext) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
 
@@ -71,16 +71,11 @@ impl AccessMapping for CustomerMapping {
         Some(next_day(context.as_of))
     }
 
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> IdentityResult<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at": NOT_DELETED_TIMESTAMP_BSON}))
     }
 
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> IdentityResult<QueryFragment> {
         if fact == &AccessFact::Collaborating {
             return Ok(QueryFragment::Match(doc! {"$expr": false}));
         }
@@ -122,12 +117,7 @@ impl AccessMapping for CustomerMapping {
         })
     }
 
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> IdentityResult<RelationMapping> {
         Err(IdentityError::ValidationError("客户没有来源关系".into()))
     }
 }
@@ -165,7 +155,6 @@ mod tests {
         let mapping = CustomerMapping::new();
         for (at, midnight) in [(0, 57600), (57599, 57600), (57600, 144000)] {
             assert_eq!(mapping.valid_until(&context("detail", at)), Some(Instant::from_unix_secs(midnight)));
-            assert!(mapping.preparation().is_none());
         }
     }
 
@@ -179,7 +168,7 @@ mod tests {
             ("detail", AccessFact::HistoryParticipant, false),
         ] {
             let QueryFragment::Exists { bindings, pipeline, .. } =
-                mapping.predicate(&fact, &context(action, 0), None).unwrap()
+                mapping.predicate(&fact, &context(action, 0)).unwrap()
             else {
                 panic!("客户责任事实必须来自实际归属");
             };
@@ -195,9 +184,7 @@ mod tests {
     #[test]
     fn history_supplements_are_read_only_and_unsupported_facts_fail_closed() {
         let mapping = CustomerMapping::new();
-        assert!(mapping.predicate(&AccessFact::Participant, &context("detail", 0), None).is_err());
-        assert!(
-            mapping.relation(&RelationKey::parse("orders").unwrap(), &context("detail", 0), None).is_err()
-        );
+        assert!(mapping.predicate(&AccessFact::Participant, &context("detail", 0)).is_err());
+        assert!(mapping.relation(&RelationKey::parse("orders").unwrap(), &context("detail", 0)).is_err());
     }
 }

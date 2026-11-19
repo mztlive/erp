@@ -5,8 +5,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use erp_core::AccountKind;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey, QueryOutput,
+    RelationKey,
 };
 use erp_identity::entity::organization::{OrgMembership, OrgUnit};
 use erp_identity::entity::person_directory::{PersonDirectoryCategory, PersonQueryStatus};
@@ -178,10 +178,10 @@ impl AccessMapping for DirectoryMapping {
     fn model(&self) -> &QueryModel {
         &self.0
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
+    fn key(&self, _: &AccessContext) -> Result<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, context: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
+    fn records(&self, context: &AccessContext) -> Result<QueryFragment> {
         if self.0.resource == "org_unit" {
             return Ok(QueryFragment::Match(doc! { "deleted_at": 0 }));
         }
@@ -206,12 +206,7 @@ impl AccessMapping for DirectoryMapping {
             pipeline,
         })
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> Result<QueryFragment> {
         match fact {
             AccessFact::Collaborating | AccessFact::HistoryParticipant => {
                 Ok(QueryFragment::Match(doc! { "$expr": false }))
@@ -230,12 +225,7 @@ impl AccessMapping for DirectoryMapping {
             _ => Err(Error::ValidationError("身份目录不支持此事实维度".into())),
         }
     }
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
         Err(Error::ValidationError("身份目录没有来源关系".into()))
     }
 }
@@ -307,16 +297,16 @@ mod tests {
     #[test]
     fn person_models_are_static_and_organization_filters_use_real_memberships() {
         let model = DirectoryMapping::new("business_person").unwrap();
-        assert!(model.preparation().is_none());
+
         let QueryFragment::Exists { collection, .. } = model
-            .predicate(&AccessFact::OrganizationIn(["org".into()].into()), &context("business_person"), None)
+            .predicate(&AccessFact::OrganizationIn(["org".into()].into()), &context("business_person"))
             .unwrap()
         else {
             panic!("人员组织必须取真实主属关系")
         };
         assert_eq!(collection, ORG_MEMBERSHIPS);
         assert!(DirectoryMapping::new("unknown").is_err());
-        assert!(model.predicate(&AccessFact::AssignedTo, &context("business_person"), None).is_err());
+        assert!(model.predicate(&AccessFact::AssignedTo, &context("business_person")).is_err());
     }
     #[test]
     fn directories_do_not_grant_access_through_collaboration_or_history() {
@@ -327,7 +317,7 @@ mod tests {
                 (AccessFact::HistoryParticipant, FactKind::HistoryParticipants),
             ] {
                 assert!(model.model().facts.contains(&kind));
-                let predicate = model.predicate(&fact, &context(resource), None).unwrap();
+                let predicate = model.predicate(&fact, &context(resource)).unwrap();
                 assert!(
                     matches!(predicate, QueryFragment::Match(document) if document == doc! { "$expr": false })
                 );
@@ -338,8 +328,7 @@ mod tests {
     #[test]
     fn organization_self_scope_does_not_turn_a_node_into_the_actors_personal_record() {
         let model = DirectoryMapping::new("org_unit").unwrap();
-        let QueryFragment::Match(filter) =
-            model.predicate(&AccessFact::Owned, &context("org_unit"), None).unwrap()
+        let QueryFragment::Match(filter) = model.predicate(&AccessFact::Owned, &context("org_unit")).unwrap()
         else {
             panic!("组织无个人负责语义")
         };

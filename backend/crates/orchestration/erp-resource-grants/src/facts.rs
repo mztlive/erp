@@ -19,16 +19,29 @@ use super::rules::{AssignmentEvidence, InvoiceEvidence};
 
 pub(crate) struct Facts {
     pub db: Database,
-    pub event: Option<GrantEvent>,
 }
-impl Facts {
-    // 用传入的执行器从正式业务记录计算授权来源的完整目标，供发布和就绪查询共用；证据不匹配、事实版本回退或读取失败时返回错误，不生成空目标。
-    pub(crate) async fn compute(
-        db: &Database,
-        event: &GrantEvent,
-        ex: &mut dyn Executor,
-    ) -> Result<SourceUpdate> {
-        let (target, version) = Self::target(db, event, ex).await?;
+
+#[async_trait]
+impl ResourceGrantFacts for Facts {
+    async fn validate_targets(&self, targets: &[GrantTarget], ex: &mut dyn Executor) -> Result<()> {
+        for target in targets {
+            let exists = match target.resource {
+                ResourceKind::SalesOrder => {
+                    self.db.sales_orders().find_by_id(&target.id, ex).await?.is_some()
+                },
+                ResourceKind::PurchaseOrder => {
+                    self.db.purchase_orders().find_by_id(&target.id, ex).await?.is_some()
+                },
+            };
+            if !exists {
+                return Err(Error::ConflictError("找不到要授权查看的销售单或采购单，请核对所选单据".into()));
+            }
+        }
+        Ok(())
+    }
+
+    async fn compute_source(&self, event: &GrantEvent, ex: &mut dyn Executor) -> Result<SourceUpdate> {
+        let (target, version) = Self::target(&self.db, event, ex).await?;
         if event.source != event.evidence.payload.source(&event.evidence.recipient)?
             || version < event.evidence.fact_version
         {
@@ -43,7 +56,9 @@ impl Facts {
             reason: "正式业务分配自动读取授权".into(),
         })
     }
+}
 
+impl Facts {
     async fn target(db: &Database, event: &GrantEvent, ex: &mut dyn Executor) -> Result<(GrantTarget, u64)> {
         Ok(match &event.evidence.payload {
             GrantEventPayload::InvoiceTaskReassigned { work_item_id, command_receipt_id } => {
@@ -194,38 +209,4 @@ impl Facts {
 }
 fn conflict() -> Error {
     Error::ConflictError("自动授权业务关联或正式分配事实不一致".into())
-}
-#[async_trait]
-impl ResourceGrantFacts for Facts {
-    async fn validate_targets(&self, targets: &[GrantTarget], ex: &mut dyn Executor) -> Result<()> {
-        validate_targets(&self.db, targets, ex).await
-    }
-    async fn validate_source(&self, update: &SourceUpdate, ex: &mut dyn Executor) -> Result<()> {
-        let expected = Self::compute(&self.db, self.event.as_ref().ok_or_else(conflict)?, ex).await?;
-        if expected.key != update.key
-            || expected.rule_version != update.rule_version
-            || expected.fact_version != update.fact_version
-            || expected.targets != update.targets
-        {
-            return Err(conflict());
-        }
-        Ok(())
-    }
-}
-
-pub(crate) async fn validate_targets(
-    db: &Database,
-    targets: &[GrantTarget],
-    ex: &mut dyn Executor,
-) -> Result<()> {
-    for target in targets {
-        let exists = match target.resource {
-            ResourceKind::SalesOrder => db.sales_orders().find_by_id(&target.id, ex).await?.is_some(),
-            ResourceKind::PurchaseOrder => db.purchase_orders().find_by_id(&target.id, ex).await?.is_some(),
-        };
-        if !exists {
-            return Err(Error::ConflictError("找不到要授权查看的销售单或采购单，请核对所选单据".into()));
-        }
-    }
-    Ok(())
 }

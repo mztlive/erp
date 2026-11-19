@@ -90,9 +90,9 @@ pub(crate) fn validate_cursor(after: Option<&str>) -> Result<()> {
 }
 
 impl ResourceGrantProcess {
-    /// 组装绑定业务目标校验的授权管理服务，供管理员授予、撤销、查询来源或发起重算。构造不执行 I/O，各管理操作自行校验管理员权限。
+    /// 返回已绑定业务事实的授权管理服务，供授予、撤销、查询来源或发起重算；各操作自行校验管理员权限。
     pub fn management(&self) -> ResourceGrantService {
-        self.access(None)
+        self.grants.clone()
     }
 }
 

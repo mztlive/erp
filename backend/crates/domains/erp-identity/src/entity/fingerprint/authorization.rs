@@ -1,6 +1,6 @@
 use super::Fingerprint;
 use crate::entity::authorization::{
-    AccessFact, AccessRule, FactKind, MappingFacts, QueryModel, QueryOutput, RelationMatch,
+    AccessFact, AccessRule, FactKind, QueryModel, QueryOutput, RelationMatch,
 };
 
 impl Fingerprint {
@@ -100,23 +100,11 @@ impl Fingerprint {
         }
         self.unordered(facts, Self::kind);
     }
-
-    /// 写入动态映射的修订号与到期时刻以绑定依赖，时间保留秒和纳秒；准备数据不直接编码。
-    pub(crate) fn facts(&mut self, facts: &MappingFacts) {
-        let MappingFacts { version, valid_until, .. } = facts;
-        self.optional(version.as_deref(), Self::text);
-        self.optional(*valid_until, |hash, until| {
-            hash.text(&until.unix_secs().to_string());
-            hash.number(u64::from(until.as_utc().timestamp_subsec_nanos()));
-        });
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
-
-    use erp_core::common::time::Instant;
 
     use super::*;
     use crate::entity::authorization::{QueryModelKey, RelationKey};
@@ -186,9 +174,9 @@ mod tests {
         assert_eq!(hashes.len(), 3);
     }
 
-    // 锁定模型与动态依赖的固定摘要，并验证模型字段、修订号和到期变化均影响版本。
+    // 锁定模型的固定摘要，并验证所有模型字段均影响版本。
     #[test]
-    fn model_and_mapping_facts_bind_every_field() {
+    fn model_binds_every_field() {
         let model = QueryModel {
             key: QueryModelKey::parse("orders").unwrap(),
             resource: "sales_order".into(),
@@ -197,20 +185,14 @@ mod tests {
             output: QueryOutput::Object,
             facts: [FactKind::Owner].into(),
         };
-        let facts = MappingFacts {
-            data: Default::default(),
-            version: Some("revision".into()),
-            valid_until: Some(Instant::from_unix_secs(100)),
-        };
-        let hash = |model: &QueryModel, facts: &MappingFacts| {
+        let hash = |model: &QueryModel| {
             let mut hash = Fingerprint::new("mapping-test-v3");
             hash.model(model);
-            hash.facts(facts);
             hash.finish()
         };
 
-        let original = hash(&model, &facts);
-        assert_eq!(original, "1d4065d4218375da9e6d5b8c6eeda8a4");
+        let original = hash(&model);
+        assert_eq!(original, "bd3de907eac5fb8151a727d0729ff168");
 
         let changed_models = [
             QueryModel { key: QueryModelKey::parse("other").unwrap(), ..model.clone() },
@@ -222,17 +204,7 @@ mod tests {
             QueryModel { facts: [FactKind::Warehouse].into(), ..model.clone() },
         ];
         for changed in changed_models {
-            assert_ne!(original, hash(&changed, &facts));
-        }
-
-        let changed_facts = [
-            MappingFacts { version: None, ..facts.clone() },
-            MappingFacts { version: Some("other".into()), ..facts.clone() },
-            MappingFacts { valid_until: None, ..facts.clone() },
-            MappingFacts { valid_until: Some(Instant::from_unix_secs(101)), ..facts.clone() },
-        ];
-        for changed in changed_facts {
-            assert_ne!(original, hash(&model, &changed));
+            assert_ne!(original, hash(&changed));
         }
     }
 

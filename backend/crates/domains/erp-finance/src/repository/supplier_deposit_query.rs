@@ -319,7 +319,7 @@ mod tests {
     use erp_core::AccountKind;
     use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
     use erp_identity::entity::authorization::{
-        AccessContext, AccessFact, FactKind, MappingFacts, QueryModelKey, RelationKey,
+        AccessContext, AccessFact, FactKind, QueryModelKey, RelationKey,
     };
     use erp_identity::ports::{AccessMapping, QueryFragment, RelationMapping};
     use erp_identity::testing::fixed_authorization;
@@ -338,29 +338,19 @@ mod tests {
             &self.0
         }
 
-        fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
+        fn key(&self, _: &AccessContext) -> IdentityResult<Bson> {
             Ok("$id".into())
         }
 
-        fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+        fn records(&self, _: &AccessContext) -> IdentityResult<QueryFragment> {
             Ok(QueryFragment::Match(doc! {"deleted_at": 0_i64}))
         }
 
-        fn predicate(
-            &self,
-            _: &AccessFact,
-            _: &AccessContext,
-            _: Option<&MappingFacts>,
-        ) -> IdentityResult<QueryFragment> {
+        fn predicate(&self, _: &AccessFact, _: &AccessContext) -> IdentityResult<QueryFragment> {
             Ok(QueryFragment::Match(doc! {"owner_id": "user"}))
         }
 
-        fn relation(
-            &self,
-            _: &RelationKey,
-            _: &AccessContext,
-            _: Option<&MappingFacts>,
-        ) -> IdentityResult<RelationMapping> {
+        fn relation(&self, _: &RelationKey, _: &AccessContext) -> IdentityResult<RelationMapping> {
             Err(IdentityError::ValidationError("账户没有来源关系".into()))
         }
     }

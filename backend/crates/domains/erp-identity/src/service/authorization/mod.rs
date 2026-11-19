@@ -35,10 +35,9 @@ pub use builder::AuthorizationBuilder;
 use facilities::Facilities;
 use persistence_core::Executor;
 
+use crate::repository::authorization::binding::FrozenMapping;
 use crate::repository::authorization::compile;
-use crate::{
-    AccessFactsPort, AccessMapping, CompiledAccess, Error, Permission, QualifiedPermissions, Result,
-};
+use crate::{AccessFactsPort, CompiledAccess, Error, Permission, QualifiedPermissions, Result};
 
 /// 统一执行 ERP 业务授权；只持有身份设施和已校验的固定绑定，不保存请求状态。
 #[derive(Clone)]
@@ -48,7 +47,7 @@ pub struct AuthorizationService {
     // 按资源绑定真实对象及其来源的事实端口。
     facts: BTreeMap<String, Arc<dyn AccessFactsPort>>,
     // 按查询权限绑定已冻结的根模型及来源映射。
-    mappings: BTreeMap<Permission, Arc<dyn AccessMapping>>,
+    mappings: BTreeMap<Permission, Arc<FrozenMapping>>,
     // 标识签发服务；克隆共享标识，独立装配的服务不能互验凭证。
     token: Arc<()>,
 }
@@ -110,7 +109,7 @@ impl AuthorizationService {
             )
             .await?;
 
-        compile(proof, qualified, mapping, executor).await
+        compile(proof, qualified, mapping, executor)
     }
 }
 

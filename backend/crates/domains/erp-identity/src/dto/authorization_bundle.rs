@@ -3,10 +3,7 @@ use application_core::CommandFingerprint;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::entity::authorization_bundle::{
-    PolicyBinding, PolicyDocument, PolicyMode, PolicyRole, PolicyVersion,
-};
-use crate::{Error, Result, RoleId};
+use crate::entity::authorization_bundle::PolicyDocument;
 
 /// 确认审核后应用授权文件；服务端重新生成差异，不接受客户端指定差异。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,36 +81,4 @@ pub struct PolicyExport {
     pub policy_version: u64,
     /// 仅供说明的系统政策，不作为文件中的可编辑授权。
     pub policy_notes: Vec<String>,
-}
-
-impl ExportPolicyRequest {
-    /// 导出读库前，把角色和人员选择转成规范化的只读取证条件；拒绝空选择、超限、重复或非法标识。
-    pub(crate) fn selection(self) -> Result<PolicyDocument> {
-        if self.role_ids.len() > 100
-            || self.user_ids.len() > 100
-            || (self.role_ids.is_empty() && self.user_ids.is_empty())
-        {
-            return Err(Error::ValidationError("导出须选择1至100个角色或人员".into()));
-        }
-
-        let roles = self
-            .role_ids
-            .into_iter()
-            .map(|id| {
-                Ok(PolicyRole {
-                    id: RoleId::parse(id)?,
-                    name: "导出选择".into(),
-                    mode: PolicyMode::Replace,
-                    permissions: vec![],
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let bindings = self
-            .user_ids
-            .into_iter()
-            .map(|user_id| PolicyBinding { user_id, mode: PolicyMode::Replace, role_ids: vec![] })
-            .collect();
-
-        PolicyDocument { version: PolicyVersion::V1, roles, bindings, data_scopes: vec![] }.normalized()
-    }
 }

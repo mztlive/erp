@@ -1,17 +1,14 @@
 use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
+use std::io;
 
 use async_trait::async_trait;
 use casbin::error::AdapterError;
 use casbin::{Adapter, Filter, Model};
 use futures_util::StreamExt;
 use mongodb::Database;
-use mongodb::bson::{Document, doc, serialize_to_document};
+use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{
-    Error as PersistenceError, Executor, ResetRetention, Result, Transactional, mongo_ops,
-};
+use persistence_core::{Error as PersistenceError, Executor, ResetRetention, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::role::ROOT_ROLE_ID;
@@ -53,13 +50,11 @@ impl CasbinRule {
     }
 }
 
-/// 把 Casbin 规则装载和持久化接入 MongoDB，并协调全局策略修订。
+/// 为 Casbin 全量加载 MongoDB 规则，并为业务事务提供规则读写和版本操作。
 #[derive(Clone)]
 pub struct MongoCasbinAdapter {
     // 保存 Casbin 规则与全局修订的 MongoDB 数据库。
     db: Database,
-    // 当前适配器是否处于过滤加载状态，供 Casbin 区分部分策略。
-    filtered: bool,
 }
 
 /// 由同一执行器读取的主体直接策略，不含缓存、继承结果或跨事务证明。
@@ -72,9 +67,9 @@ pub(crate) struct SubjectPolicy {
 }
 
 impl MongoCasbinAdapter {
-    /// 绑定规则和策略版本所在的数据库，初始不是过滤加载状态。
+    /// 绑定规则和策略版本所在的数据库。
     pub fn new(db: Database) -> Self {
-        Self { db, filtered: false }
+        Self { db }
     }
 
     /// 全库重置时在调用方事务内登记 `admin` 的直接 root 绑定、root 的全量权限及版本文档，不保留其他授权。按 `account_id` 构造主体键，读取或登记失败直接返回。
@@ -131,35 +126,6 @@ impl MongoCasbinAdapter {
         assertion.get_mut_policy().insert(rule.values);
     }
 
-    // 对受支持的 `p`、`g` 规则逐列匹配 Casbin 加载条件；空过滤值不限制对应列。
-    fn matches_filter(rule: &CasbinRule, filter: &Filter<'_>) -> bool {
-        let values = if rule.sec == "p" {
-            &filter.p
-        } else if rule.sec == "g" {
-            &filter.g
-        } else {
-            return false;
-        };
-
-        values.iter().enumerate().all(|(index, expected)| {
-            expected.is_empty() || rule.values.get(index).is_some_and(|actual| actual == expected)
-        })
-    }
-
-    // 将自指定列起的非空 Casbin 过滤值下推为 MongoDB `values.N` 精确匹配。
-    fn filtered_query(sec: &str, ptype: &str, field_index: usize, field_values: &[String]) -> Document {
-        let mut filter = doc! {
-            "sec": sec,
-            "ptype": ptype,
-        };
-        for (offset, value) in field_values.iter().enumerate() {
-            if !value.is_empty() {
-                filter.insert(format!("values.{}", field_index + offset), value);
-            }
-        }
-        filter
-    }
-
     // 按 `p` 规则第一列筛选角色直接权限，供权限读取或清理使用。
     fn role_permission_filter(role_key: &str) -> Document {
         doc! {
@@ -204,33 +170,6 @@ impl MongoCasbinAdapter {
                 CasbinRule::new("p", "p", vec![role_key.to_string(), resource.clone(), action.clone()])
             })
             .collect()
-    }
-
-    // 为适配器独立写策略开启事务，仅当操作报告实际变更时一并推进全局修订，再将错误转换给 Casbin。
-    async fn run_policy_write<T, F>(&self, operation: F) -> casbin::Result<T>
-    where
-        T: Send + 'static,
-        F: for<'a> FnOnce(
-                &'a MongoCasbinAdapter,
-                &'a mut dyn Executor,
-            ) -> Pin<Box<dyn Future<Output = Result<(T, bool)>> + Send + 'a>>
-            + Send
-            + 'static,
-    {
-        let adapter = self.clone();
-        self.db
-            .client()
-            .with_transaction::<_, _, PersistenceError>(move |executor| {
-                Box::pin(async move {
-                    let (value, changed) = operation(&adapter, executor).await?;
-                    if changed {
-                        adapter.bump_policy_revision(executor).await?;
-                    }
-                    Ok(value)
-                })
-            })
-            .await
-            .map_err(Self::adapter_error)
     }
 
     /// 用调用方执行器读取已提交的单调递增策略修订；历史库没有版本文档时返回 0，查询失败或持久化版本非法时返回错误。
@@ -451,19 +390,19 @@ impl MongoCasbinAdapter {
         Ok(())
     }
 
-    // 在调用方事务中删除旧策略全集并写入替换规则；任一操作失败时返回数据库错误。
-    async fn replace_all_rules(&self, rules: Vec<CasbinRule>, executor: &mut dyn Executor) -> Result<()> {
-        let collection = self.collection();
-        mongo_ops::delete_many(&collection, doc! {}, &mut *executor).await?;
-        mongo_ops::insert_many(&collection, rules, executor).await
+    // Casbin 只负责全量装载，策略写入必须走业务事务。
+    fn unsupported_operation(operation: &str) -> casbin::Error {
+        Self::adapter_error(io::Error::new(
+            io::ErrorKind::Unsupported,
+            format!("MongoCasbinAdapter does not support {operation}"),
+        ))
     }
 }
 
 #[async_trait]
 impl Adapter for MongoCasbinAdapter {
-    // 全量加载持久化规则到 Casbin 模型并清除过滤状态，读取错误转换为适配器错误。
+    // 全量加载持久化规则到 Casbin 模型，保留查询或游标错误。
     async fn load_policy(&mut self, model: &mut dyn Model) -> casbin::Result<()> {
-        self.filtered = false;
         let mut cursor = self.collection().find(doc! {}).await.map_err(Self::adapter_error)?;
         while let Some(rule) = cursor.next().await {
             Self::load_rule(model, rule.map_err(Self::adapter_error)?);
@@ -471,186 +410,104 @@ impl Adapter for MongoCasbinAdapter {
         Ok(())
     }
 
-    // 标记过滤加载状态，只把逐列匹配的规则装入模型，保留查询或游标错误。
     async fn load_filtered_policy<'a>(
         &mut self,
-        model: &mut dyn Model,
-        filter: Filter<'a>,
+        _model: &mut dyn Model,
+        _filter: Filter<'a>,
     ) -> casbin::Result<()> {
-        self.filtered = true;
-        let mut cursor = self.collection().find(doc! {}).await.map_err(Self::adapter_error)?;
-        while let Some(rule) = cursor.next().await {
-            let rule = rule.map_err(Self::adapter_error)?;
-            if Self::matches_filter(&rule, &filter) {
-                Self::load_rule(model, rule);
-            }
-        }
-        Ok(())
+        Err(Self::unsupported_operation("load_filtered_policy"))
     }
 
-    // 从模型提取全部 `p` 和 `g` 规则，在一笔事务内覆盖策略全集并推进修订。
-    async fn save_policy(&mut self, model: &mut dyn Model) -> casbin::Result<()> {
-        let mut rules = Vec::new();
-        for sec in ["p", "g"] {
-            let Some(assertions) = model.get_model().get(sec) else {
-                continue;
-            };
-            for (ptype, assertion) in assertions {
-                rules.extend(
-                    assertion.get_policy().iter().cloned().map(|values| CasbinRule::new(sec, ptype, values)),
-                );
-            }
-        }
-
-        self.run_policy_write(move |adapter, session| {
-            Box::pin(async move {
-                adapter.replace_all_rules(rules, session).await?;
-                Ok(((), true))
-            })
-        })
-        .await
+    async fn save_policy(&mut self, _model: &mut dyn Model) -> casbin::Result<()> {
+        Err(Self::unsupported_operation("save_policy"))
     }
 
-    // 事务内清空规则，仅删除到记录时推进修订；成功后清除过滤状态。
     async fn clear_policy(&mut self) -> casbin::Result<()> {
-        self.run_policy_write(move |adapter, session| {
-            Box::pin(async move {
-                let result = mongo_ops::delete_many(&adapter.collection(), doc! {}, session).await?;
-                Ok(((), result.deleted_count > 0))
-            })
-        })
-        .await?;
-
-        self.filtered = false;
-        Ok(())
+        Err(Self::unsupported_operation("clear_policy"))
     }
 
-    // 把是否处于部分策略加载状态报告给 Casbin。
     fn is_filtered(&self) -> bool {
-        self.filtered
+        false
     }
 
-    // 按稳定规则 ID 幂等插入，实际新增时才返回 `true` 并推进修订。
-    async fn add_policy(&mut self, sec: &str, ptype: &str, rule: Vec<String>) -> casbin::Result<bool> {
-        let rule = CasbinRule::new(sec, ptype, rule);
-        let rule_doc = serialize_to_document(&rule).map_err(Self::adapter_error)?;
-
-        self.run_policy_write(move |adapter, session| {
-            Box::pin(async move {
-                let result = mongo_ops::update_one(
-                    &adapter.collection(),
-                    doc! { "_id": &rule.id },
-                    doc! { "$setOnInsert": rule_doc },
-                    true,
-                    session,
-                )
-                .await?;
-                let changed = result.upserted_id.is_some();
-                Ok((changed, changed))
-            })
-        })
-        .await
+    async fn add_policy(&mut self, _sec: &str, _ptype: &str, _rule: Vec<String>) -> casbin::Result<bool> {
+        Err(Self::unsupported_operation("add_policy"))
     }
 
-    // 空批或已有任一规则时不写入；否则在同一事务批量插入并推进修订。
     async fn add_policies(
         &mut self,
-        sec: &str,
-        ptype: &str,
-        rules: Vec<Vec<String>>,
+        _sec: &str,
+        _ptype: &str,
+        _rules: Vec<Vec<String>>,
     ) -> casbin::Result<bool> {
-        let rules = rules.into_iter().map(|rule| CasbinRule::new(sec, ptype, rule)).collect::<Vec<_>>();
-        if rules.is_empty() {
-            return Ok(false);
-        }
-
-        let ids = rules.iter().map(|rule| rule.id.clone()).collect::<Vec<_>>();
-        self.run_policy_write(move |adapter, session| {
-            Box::pin(async move {
-                let existing = mongo_ops::count_documents(
-                    &adapter.collection(),
-                    doc! { "_id": { "$in": ids } },
-                    &mut *session,
-                )
-                .await?;
-                if existing > 0 {
-                    return Ok((false, false));
-                }
-
-                mongo_ops::insert_many(&adapter.collection(), rules, session).await?;
-                Ok((true, true))
-            })
-        })
-        .await
+        Err(Self::unsupported_operation("add_policies"))
     }
 
-    // 按稳定规则 ID 删除单条规则，命中并删除时才返回 `true` 并推进修订。
-    async fn remove_policy(&mut self, sec: &str, ptype: &str, rule: Vec<String>) -> casbin::Result<bool> {
-        let id = CasbinRule::id(sec, ptype, &rule);
-        self.run_policy_write(move |adapter, session| {
-            Box::pin(async move {
-                let result =
-                    mongo_ops::delete_one(&adapter.collection(), doc! { "_id": id }, session).await?;
-                let changed = result.deleted_count > 0;
-                Ok((changed, changed))
-            })
-        })
-        .await
+    async fn remove_policy(&mut self, _sec: &str, _ptype: &str, _rule: Vec<String>) -> casbin::Result<bool> {
+        Err(Self::unsupported_operation("remove_policy"))
     }
 
-    // 在事务内删除批量 ID 命中的规则；仅全部命中时返回 `true`，部分删除也会推进修订。
     async fn remove_policies(
         &mut self,
-        sec: &str,
-        ptype: &str,
-        rules: Vec<Vec<String>>,
+        _sec: &str,
+        _ptype: &str,
+        _rules: Vec<Vec<String>>,
     ) -> casbin::Result<bool> {
-        if rules.is_empty() {
-            return Ok(false);
-        }
-
-        let ids = rules.iter().map(|rule| CasbinRule::id(sec, ptype, rule)).collect::<Vec<_>>();
-        let expected_count = rules.len() as u64;
-        self.run_policy_write(move |adapter, session| {
-            Box::pin(async move {
-                let result =
-                    mongo_ops::delete_many(&adapter.collection(), doc! { "_id": { "$in": ids } }, session)
-                        .await?;
-                Ok((result.deleted_count == expected_count, result.deleted_count > 0))
-            })
-        })
-        .await
+        Err(Self::unsupported_operation("remove_policies"))
     }
 
-    // 按区段、断言及指定起始列的非空值批量删除；空过滤列表不执行，实际删除时推进修订。
     async fn remove_filtered_policy(
         &mut self,
-        sec: &str,
-        ptype: &str,
-        field_index: usize,
-        field_values: Vec<String>,
+        _sec: &str,
+        _ptype: &str,
+        _field_index: usize,
+        _field_values: Vec<String>,
     ) -> casbin::Result<bool> {
-        if field_values.is_empty() {
-            return Ok(false);
-        }
-        let filter = Self::filtered_query(sec, ptype, field_index, &field_values);
-        self.run_policy_write(move |adapter, session| {
-            Box::pin(async move {
-                let result = mongo_ops::delete_many(&adapter.collection(), filter, session).await?;
-                let changed = result.deleted_count > 0;
-                Ok((changed, changed))
-            })
-        })
-        .await
+        Err(Self::unsupported_operation("remove_filtered_policy"))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::io;
+
+    use casbin::{Adapter, DefaultModel, Filter};
+    use mongodb::Client;
     use mongodb::bson::doc;
     use persistence_core::Error as PersistenceError;
 
     use super::{CasbinRule, MongoCasbinAdapter};
+
+    // 验证 Casbin 过滤加载及通用写入全部返回明确的错误，包括空批次。
+    #[tokio::test]
+    async fn adapter_rejects_filtered_loads_and_generic_writes() {
+        let client = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1").await.unwrap();
+        let mut adapter = MongoCasbinAdapter::new(client.database("casbin_test"));
+        let mut model = DefaultModel::default();
+        let filter = Filter { p: vec![], g: vec![] };
+
+        for (operation, error) in [
+            ("load_filtered_policy", adapter.load_filtered_policy(&mut model, filter).await.unwrap_err()),
+            ("save_policy", adapter.save_policy(&mut model).await.unwrap_err()),
+            ("clear_policy", adapter.clear_policy().await.unwrap_err()),
+            ("add_policy", adapter.add_policy("p", "p", vec![]).await.unwrap_err()),
+            ("add_policies", adapter.add_policies("p", "p", vec![]).await.unwrap_err()),
+            ("remove_policy", adapter.remove_policy("p", "p", vec![]).await.unwrap_err()),
+            ("remove_policies", adapter.remove_policies("p", "p", vec![]).await.unwrap_err()),
+            (
+                "remove_filtered_policy",
+                adapter.remove_filtered_policy("p", "p", 0, vec![]).await.unwrap_err(),
+            ),
+        ] {
+            let casbin::Error::AdapterError(error) = error else {
+                panic!("{operation} did not return an adapter error: {error}");
+            };
+            let unsupported = error.0.downcast_ref::<io::Error>().unwrap();
+            assert_eq!(unsupported.kind(), io::ErrorKind::Unsupported);
+            assert!(unsupported.to_string().contains(operation));
+        }
+        assert!(!adapter.is_filtered());
+    }
 
     // 验证角色权限稳定按角色、资源、动作顺序生成 `p` 规则。
     #[test]

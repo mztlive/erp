@@ -6,11 +6,10 @@ use std::{cell::Cell, future::Future};
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use mongodb::bson::{Bson, Document};
+use mongodb::bson::Document;
 use persistence_core::{ExecutionBoundary, Executor};
 
-use crate::entity::authorization::{AccessContext, AccessRule, MappingFacts, QueryModel, RelationKey};
-use crate::ports::AccessMapping;
+use crate::entity::authorization::{AccessContext, AccessRule, QueryModel, RelationKey};
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
 #[cfg(test)]
@@ -164,14 +163,14 @@ pub struct CompiledAccess {
     /// 查询可使用的服务实例、执行边界及到期时点。
     pub(crate) validity: AccessValidity,
     /// 非事务交付的复验依据，快照路径不保存。
-    pub(crate) revalidation: Option<Box<QueryRevalidation>>,
+    pub(crate) revalidation: Option<Box<ResolvedAccess>>,
     /// 本次组织修订及正向角色范围标记。
     pub(super) scope: ScopeMetadata,
     /// 凭证固定绑定的根集合、记录身份字段和输出模型。
     pub(crate) model: QueryModel,
     /// 完整 MongoDB 授权管道，含最终过滤及必要的投影和清理。
     pub(crate) stages: Vec<Document>,
-    /// 身份、范围和映射等实际依赖的稳定摘要，供跨页检查。
+    /// 身份、范围、查询模型与过滤阶段的稳定摘要，供跨页检查。
     pub(crate) version: String,
     /// 按关系键索引的可见来源份额计划。
     pub(crate) sources: BTreeMap<RelationKey, SourcePlan>,
@@ -188,49 +187,6 @@ pub(super) enum FilterPlan {
         /// 为辅助读取单独编译的 MongoDB 授权管道。
         Vec<Document>,
     ),
-}
-
-/// 已解析规则和本次动态准备的依赖，共同用于非快照交付复验。
-#[derive(Clone)]
-pub(crate) struct QueryRevalidation {
-    pub(crate) resolved: ResolvedAccess,
-    pub(crate) dependencies: Vec<MappingDependency>,
-}
-
-/// 一次动态映射准备的证据，供非事务查询交付复验。
-#[derive(Clone)]
-pub(crate) struct MappingDependency {
-    /// 实际执行准备的映射实例，复验时沿用同一实例。
-    pub mapping: Arc<dyn AccessMapping>,
-    /// 准备时的固定模型描述，供检测接入描述漂移。
-    pub model: QueryModel,
-    /// 准备所属的完整授权上下文，包括独立入口动作及时点。
-    pub context: AccessContext,
-    /// 动态准备当时返回的数据、可靠版本和可选到期时点。
-    pub facts: MappingFacts,
-    /// 本次准备转换出的授权主键表达式，复验时检查是否变化。
-    pub key: Bson,
-}
-
-impl MappingDependency {
-    /// 非事务交付时用原执行器重新准备映射，核对模型、主键、动态事实、修订及有效期；事实或主键变化时返回 `DATA_SCOPE_CHANGED`。
-    pub(crate) async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
-        if *self.mapping.model() != self.model {
-            return Err(Error::ValidationError("授权 Mapping 模型已改变".into()));
-        }
-        self.facts.validate(false, Instant::now())?;
-
-        let preparation = self
-            .mapping
-            .preparation()
-            .ok_or_else(|| Error::ValidationError("动态 Mapping 的准备能力已改变".into()))?;
-        let current = preparation.prepare(&self.context, executor).await?;
-        current.validate(false, Instant::now())?;
-        if current != self.facts || self.mapping.key(&self.context, Some(&current))? != self.key {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：业务授权事实已变化".into()));
-        }
-        Ok(())
-    }
 }
 
 /// 随根查询同次编译的来源份额子计划，不是独立对象凭证。
@@ -314,16 +270,10 @@ impl CompiledAccess {
 
     /// 仓储执行前核对原执行器、事务、读取阶段及有效期，不读取数据库；结果交付前仍须调用 `AuthorizationService::validate`。
     pub fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
-        self.validity.ensure_current(executor)?;
-        if let Some(revalidation) = &self.revalidation {
-            for dependency in &revalidation.dependencies {
-                dependency.facts.validate(false, Instant::now())?;
-            }
-        }
-        Ok(())
+        self.validity.ensure_current(executor)
     }
 
-    /// 获取实际身份、范围和业务映射依赖的稳定摘要，供跨页游标比较；不替代执行边界检查或交付复验。
+    /// 获取身份、范围、查询模型与过滤阶段的稳定摘要，供跨页游标比较；不替代执行边界检查或交付复验。
     pub fn version(&self) -> String {
         self.version.clone()
     }

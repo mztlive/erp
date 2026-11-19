@@ -11,81 +11,63 @@ pub(crate) mod testing;
 #[cfg(feature = "test-support")]
 pub(crate) mod unavailable;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
+use binding::FrozenMapping;
 use erp_core::common::time::Instant;
 use fragment::{Fragment, combine, exists};
-use futures_util::future::BoxFuture;
 use mongodb::bson::{Bson, Document, doc};
-use persistence_core::{ExecutionBoundary, Executor};
+use persistence_core::Executor;
 pub use query::CompiledAccess;
 pub(crate) use query::{
     AccessProof, AccessValidity, Replay, ResolvedAccess, ResolvedFilter, ResolvedRules, ScopeMetadata,
     WholeRule,
 };
-use query::{FilterPlan, MappingDependency, QueryRevalidation, SourcePlan};
+use query::{FilterPlan, SourcePlan};
 
-use crate::entity::authorization::{
-    AccessContext, AccessRule, MappingFacts, QueryOutput, RelationKey, RelationMatch,
-};
+use crate::entity::authorization::{AccessContext, AccessRule, QueryOutput, RelationKey, RelationMatch};
 use crate::entity::fingerprint::Fingerprint;
 use crate::entity::resource_access::ResourceKind;
-use crate::ports::AccessMapping;
 use crate::repository::fingerprint::BsonFingerprint;
 use crate::repository::resource_grants::grant_lookup;
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
-// 保存一次授权编译的映射准备、版本和复验边界；各集合独立管理关联别名。
-struct Compiler<'a> {
-    // 原调用方执行器，用于在同一读取阶段准备动态事实。
-    executor: &'a mut dyn Executor,
-    // 取证时签发的执行边界，避免动态准备跨事务或阶段。
-    boundary: ExecutionBoundary,
-    // 身份和映射依赖中最早的有效期截止时点。
+// 汇总本次授权编译所遇到的最早有效期。
+struct Compiler {
+    // 身份和各静态映射条件的最早失效时点。
     valid_until: Option<Instant>,
-    // 按映射实例和完整授权上下文缓存的本次动态准备结果。
-    prepared: Vec<MappingDependency>,
-    // 动态准备的稳定摘要集合，参与生成查询版本。
-    versions: Vec<String>,
 }
 
-/// 用服务端签发的授权证明编译固定模型的根过滤、受限投影和已登记的份额、整账或管理计划。沿用原执行边界，聚合有效期和版本，仅在非事务路径保留交付复验依赖。
-pub(crate) async fn compile(
+/// 用服务端签发的授权证明编译固定模型的根过滤、受限投影和已登记的份额、整账或管理计划。沿用原执行边界，聚合有效期和版本，仅在非事务路径保留已解析规则用于交付复验。
+pub(crate) fn compile(
     proof: AccessProof,
     qualified: QualifiedPermissions,
-    mapping: &Arc<dyn AccessMapping>,
+    mapping: &FrozenMapping,
     executor: &mut dyn Executor,
 ) -> Result<CompiledAccess> {
     let AccessProof { context, resolved, mut validity, scope } = proof;
     validity.ensure_current(executor)?;
     let model = mapping.model();
 
-    let mut compiler = Compiler {
-        executor,
-        boundary: validity.boundary.clone(),
-        valid_until: validity.valid_until,
-        prepared: vec![],
-        versions: vec![],
-    };
-    let (fragment, _) = compiler.model(&resolved.rules.root, mapping, &context, 0).await?;
+    let mut compiler = Compiler { valid_until: validity.valid_until };
+    let (fragment, _) = compiler.model(&resolved.rules.root, mapping, &context, 0)?;
     let mut stages = fragment.finish();
     let whole = match &resolved.rules.whole {
         Some(WholeRule::Root) if model.output == QueryOutput::Object => Some(FilterPlan::Root),
         Some(WholeRule::Root) => return Err(Error::ValidationError("受限查询需要独立整账过滤".into())),
         Some(WholeRule::Separate(rule)) => {
-            Some(FilterPlan::Separate(compiler.model(rule, mapping, &context, 0).await?.0.finish()))
+            Some(FilterPlan::Separate(compiler.model(rule, mapping, &context, 0)?.0.finish()))
         },
         None => None,
     };
     let sources = if whole.is_some() {
-        compiler.source_plans(&resolved.rules.root, &context, mapping).await?
+        compiler.source_plans(&resolved.rules.root, &context, mapping)?
     } else {
         BTreeMap::new()
     };
     let management = match &resolved.rules.management {
         Some(ResolvedFilter::Root) => Some(FilterPlan::Root),
         Some(ResolvedFilter::Separate { context, rule }) => {
-            Some(FilterPlan::Separate(compiler.model(rule, mapping, context, 0).await?.0.finish()))
+            Some(FilterPlan::Separate(compiler.model(rule, mapping, context, 0)?.0.finish()))
         },
         None => None,
     };
@@ -101,7 +83,8 @@ pub(crate) async fn compile(
     let mut version = Fingerprint::new("authorization-query-v4");
     version.text(&resolved.version);
     version.model(model);
-    version.unordered(&compiler.versions, |hash, value| hash.text(value));
+    // 保留 v4 中原动态映射依赖的空序列，避免静态查询的分页版本变化。
+    version.sequence(std::iter::empty::<&str>(), Fingerprint::text);
     version.sequence(&stages, Fingerprint::document);
     let management_stages = match &management {
         Some(FilterPlan::Separate(stages)) => Some(stages),
@@ -111,11 +94,7 @@ pub(crate) async fn compile(
         hash.sequence(stages, Fingerprint::document);
     });
 
-    let revalidation = if compiler.boundary.is_snapshot() {
-        None
-    } else {
-        Some(Box::new(QueryRevalidation { resolved, dependencies: compiler.prepared }))
-    };
+    let revalidation = (!validity.boundary.is_snapshot()).then(|| Box::new(resolved));
     let compiled = CompiledAccess {
         context,
         qualified,
@@ -129,7 +108,7 @@ pub(crate) async fn compile(
         whole,
         management,
     };
-    compiled.ensure_current(compiler.executor)?;
+    compiled.ensure_current(executor)?;
     Ok(compiled)
 }
 
@@ -156,22 +135,20 @@ fn source_rules<'a>(rule: &'a AccessRule, permission: Option<&'a Permission>, ou
     }
 }
 
-impl Compiler<'_> {
-    // 为已登记的根层来源分别编译可见份额过滤，沿用同次准备缓存和执行边界，保留各分支入口上下文。
-    async fn source_plans(
+impl Compiler {
+    // 为已登记的根层来源分别编译可见份额过滤，保留各分支入口上下文。
+    fn source_plans(
         &mut self,
         rule: &AccessRule,
         root: &AccessContext,
-        mapping: &Arc<dyn AccessMapping>,
+        mapping: &FrozenMapping,
     ) -> Result<BTreeMap<RelationKey, SourcePlan>> {
         let mut rules = BTreeMap::new();
         source_rules(rule, None, &mut rules);
         let mut sources = BTreeMap::new();
         for (key, rules) in rules {
-            let child = mapping
-                .relations()
-                .remove(key)
-                .ok_or_else(|| Error::ValidationError("缺少来源 Mapping".into()))?;
+            let child =
+                mapping.child(key).ok_or_else(|| Error::ValidationError("缺少来源 Mapping".into()))?;
             let mut fragment = Fragment::with_stages(child.stages());
             let mut conditions = Vec::new();
             for (entry, rule) in rules {
@@ -181,7 +158,7 @@ impl Compiler<'_> {
                     permission: entry.unwrap_or(&root.permission).clone(),
                     ..root.clone()
                 };
-                conditions.push(self.condition(rule, &child, &context, &mut fragment, 0).await?.0);
+                conditions.push(self.condition(rule, child, &context, &mut fragment, 0)?.0);
             }
 
             fragment.filter = combine("$or", conditions);
@@ -192,48 +169,40 @@ impl Compiler<'_> {
     }
 
     // 为根或来源模型开启独立关联作用域，结合固定阶段、有效记录条件和权限谓词，返回模型键表达式。
-    fn model<'a>(
-        &'a mut self,
-        rule: &'a AccessRule,
-        mapping: &'a Arc<dyn AccessMapping>,
-        context: &'a AccessContext,
-        depth: usize,
-    ) -> BoxFuture<'a, Result<(Fragment, Bson)>> {
-        Box::pin(async move {
-            let mut fragment = Fragment::with_stages(mapping.stages());
-            let (filter, key) = self.condition(rule, mapping, context, &mut fragment, depth).await?;
-            fragment.filter = filter;
-            Ok((fragment, key))
-        })
-    }
-
-    // 在调用方给定的关联作用域内用当前上下文准备映射并求交有效记录与授权条件，返回谓词和主键表达式。
-    fn condition<'a>(
-        &'a mut self,
-        rule: &'a AccessRule,
-        mapping: &'a Arc<dyn AccessMapping>,
-        context: &'a AccessContext,
-        fragment: &'a mut Fragment,
-        depth: usize,
-    ) -> BoxFuture<'a, Result<(Document, Bson)>> {
-        Box::pin(async move {
-            let facts = self.prepare(mapping, context).await?;
-            let key = mapping.key(context, facts.as_ref())?;
-            let records = fragment.fact(mapping.records(context, facts.as_ref())?)?;
-            let access = self.node(rule, mapping, context, facts.as_ref(), fragment, depth).await?;
-            if records.is_empty() {
-                return Ok((access, key));
-            }
-            Ok((combine("$and", vec![records, access]), key))
-        })
-    }
-
-    // 校验模型、资源和有效期后按实例与完整上下文缓存动态事实，仅限本次编译。静态映射不制造空事实，准备不得改变读取阶段。
-    async fn prepare(
+    fn model(
         &mut self,
-        mapping: &Arc<dyn AccessMapping>,
+        rule: &AccessRule,
+        mapping: &FrozenMapping,
         context: &AccessContext,
-    ) -> Result<Option<MappingFacts>> {
+        depth: usize,
+    ) -> Result<(Fragment, Bson)> {
+        let mut fragment = Fragment::with_stages(mapping.stages());
+        let (filter, key) = self.condition(rule, mapping, context, &mut fragment, depth)?;
+        fragment.filter = filter;
+        Ok((fragment, key))
+    }
+
+    // 在调用方给定的关联作用域内用当前上下文求交有效记录与授权条件，返回谓词和主键表达式。
+    fn condition(
+        &mut self,
+        rule: &AccessRule,
+        mapping: &FrozenMapping,
+        context: &AccessContext,
+        fragment: &mut Fragment,
+        depth: usize,
+    ) -> Result<(Document, Bson)> {
+        self.check_mapping(mapping, context)?;
+        let key = mapping.key(context)?;
+        let records = fragment.fact(mapping.records(context)?)?;
+        let access = self.node(rule, mapping, context, fragment, depth)?;
+        if records.is_empty() {
+            return Ok((access, key));
+        }
+        Ok((combine("$and", vec![records, access]), key))
+    }
+
+    // 校验模型与上下文，并将静态条件的截止时点纳入凭证期限。
+    fn check_mapping(&mut self, mapping: &FrozenMapping, context: &AccessContext) -> Result<()> {
         mapping.model().validate()?;
         if let Some(until) = mapping.valid_until(context) {
             if Instant::now() >= until {
@@ -247,131 +216,85 @@ impl Compiler<'_> {
             return Err(Error::ValidationError("业务事实映射与授权资源不匹配".into()));
         }
 
-        let Some(preparation) = mapping.preparation() else {
-            return Ok(None);
-        };
-        if let Some(cached) = self
-            .prepared
-            .iter()
-            .find(|cached| Arc::ptr_eq(&cached.mapping, mapping) && cached.context == *context)
-        {
-            cached.facts.validate(self.boundary.is_snapshot(), Instant::now())?;
-            return Ok(Some(cached.facts.clone()));
-        }
-
-        let facts = preparation.prepare(context, self.executor).await?;
-        if !self.boundary.is_current(self.executor) {
-            return Err(Error::ValidationError("Mapping 准备改变了授权读取阶段".into()));
-        }
-        facts.validate(self.boundary.is_snapshot(), Instant::now())?;
-        if let Some(until) = facts.valid_until {
-            self.valid_until = Some(self.valid_until.map_or(until, |old| old.min(until)));
-        }
-
-        let key = mapping.key(context, Some(&facts))?;
-        let mut version = Fingerprint::new("mapping-preparation-v1");
-        version.model(mapping.model());
-        version.facts(&facts);
-        version.json(&facts.data);
-        version.bson(&key);
-        self.versions.push(version.finish());
-        self.prepared.push(MappingDependency {
-            mapping: mapping.clone(),
-            model: mapping.model().clone(),
-            context: context.clone(),
-            facts: facts.clone(),
-            key,
-        });
-        Ok(Some(facts))
+        Ok(())
     }
 
     // 递归将授权节点转成当前模型的 MongoDB 谓词，校验必需维度与嵌套上限，遇到缺失或超限时拒绝而不截断。
-    fn node<'a>(
-        &'a mut self,
-        rule: &'a AccessRule,
-        mapping: &'a Arc<dyn AccessMapping>,
-        context: &'a AccessContext,
-        facts: Option<&'a MappingFacts>,
-        fragment: &'a mut Fragment,
+    fn node(
+        &mut self,
+        rule: &AccessRule,
+        mapping: &FrozenMapping,
+        context: &AccessContext,
+        fragment: &mut Fragment,
         depth: usize,
-    ) -> BoxFuture<'a, Result<Document>> {
-        Box::pin(async move {
-            if depth > 16 {
-                return Err(Error::ValidationError("授权查询嵌套超限".into()));
-            }
-            match rule {
-                AccessRule::Allow => Ok(doc! { "$expr": true }),
-                AccessRule::Deny => Ok(doc! { "$expr": false }),
-                AccessRule::All(rules) | AccessRule::Any(rules) => {
-                    let operator = if matches!(rule, AccessRule::All(_)) { "$and" } else { "$or" };
-                    let mut children = Vec::new();
-                    for child in rules {
-                        children.push(self.node(child, mapping, context, facts, fragment, depth + 1).await?);
-                    }
-                    Ok(combine(operator, children))
-                },
-                AccessRule::Required { facts: required, rule } => {
-                    if !required.is_subset(&mapping.model().facts) {
-                        return Err(Error::ValidationError("Mapping 缺少登记的必需事实".into()));
-                    }
-                    self.node(rule, mapping, context, facts, fragment, depth + 1).await
-                },
-                AccessRule::Independent { permission, rule } => {
-                    let context = AccessContext { permission: permission.clone(), ..context.clone() };
-                    Ok(self.condition(rule, mapping, &context, fragment, depth + 1).await?.0)
-                },
-                AccessRule::Fact(fact) => {
-                    if !mapping.model().facts.contains(&fact.kind()) {
-                        return Err(Error::ValidationError("Mapping 未声明所需事实维度".into()));
-                    }
-                    fragment.fact(mapping.predicate(fact, context, facts)?)
-                },
-                AccessRule::RecordReadGrant(resource) => {
-                    self.read_grant(*resource, mapping.as_ref(), context, facts, fragment)
-                },
-                AccessRule::RelationPresence { relation, present } => {
-                    relation_presence(mapping.as_ref(), relation, *present, context, facts)
-                },
-                AccessRule::Related { relation, resource, mode, rule } => {
-                    self.related((relation, resource, *mode, rule), mapping, context, facts, fragment, depth)
-                        .await
-                },
-            }
-        })
+    ) -> Result<Document> {
+        if depth > 16 {
+            return Err(Error::ValidationError("授权查询嵌套超限".into()));
+        }
+        match rule {
+            AccessRule::Allow => Ok(doc! { "$expr": true }),
+            AccessRule::Deny => Ok(doc! { "$expr": false }),
+            AccessRule::All(rules) | AccessRule::Any(rules) => {
+                let operator = if matches!(rule, AccessRule::All(_)) { "$and" } else { "$or" };
+                let mut children = Vec::new();
+                for child in rules {
+                    children.push(self.node(child, mapping, context, fragment, depth + 1)?);
+                }
+                Ok(combine(operator, children))
+            },
+            AccessRule::Required { facts: required, rule } => {
+                if !required.is_subset(&mapping.model().facts) {
+                    return Err(Error::ValidationError("Mapping 缺少登记的必需事实".into()));
+                }
+                self.node(rule, mapping, context, fragment, depth + 1)
+            },
+            AccessRule::Independent { permission, rule } => {
+                let context = AccessContext { permission: permission.clone(), ..context.clone() };
+                Ok(self.condition(rule, mapping, &context, fragment, depth + 1)?.0)
+            },
+            AccessRule::Fact(fact) => {
+                if !mapping.model().facts.contains(&fact.kind()) {
+                    return Err(Error::ValidationError("Mapping 未声明所需事实维度".into()));
+                }
+                fragment.fact(mapping.predicate(fact, context)?)
+            },
+            AccessRule::RecordReadGrant(resource) => self.read_grant(*resource, mapping, context, fragment),
+            AccessRule::RelationPresence { relation, present } => {
+                relation_presence(mapping, relation, *present, context)
+            },
+            AccessRule::Related { relation, resource, mode, rule } => {
+                self.related((relation, resource, *mode, rule), mapping, context, fragment, depth)
+            },
+        }
     }
 
     // 以当前模型的授权主键查找有效记录读取来源，作为补充分支，不把授权行用作根记录。
     fn read_grant(
         &mut self,
         resource: ResourceKind,
-        mapping: &dyn AccessMapping,
+        mapping: &FrozenMapping,
         context: &AccessContext,
-        facts: Option<&MappingFacts>,
         fragment: &mut Fragment,
     ) -> Result<Document> {
         if mapping.model().resource != resource.code() {
             return Err(Error::ValidationError("读取授权资源与查询记录不匹配".into()));
         }
-        let alias =
-            fragment.lookup(grant_lookup(context.actor.id(), resource, mapping.key(context, facts)?))?;
+        let alias = fragment.lookup(grant_lookup(context.actor.id(), resource, mapping.key(context)?))?;
         Ok(exists(&alias))
     }
 
     // 按完整原始引用编译来源存在性及范围；需全部命中时比较原引用与通过的来源集合，不让缺失或无权引用消失。
-    async fn related(
+    fn related(
         &mut self,
         relation: (&RelationKey, &str, RelationMatch, &AccessRule),
-        mapping: &Arc<dyn AccessMapping>,
+        mapping: &FrozenMapping,
         context: &AccessContext,
-        facts: Option<&MappingFacts>,
         fragment: &mut Fragment,
         depth: usize,
     ) -> Result<Document> {
         let (key, resource, mode, rule) = relation;
-        let related = mapping.relation(key, context, facts)?;
-        if related.mapping.model().resource != resource
-            || related.mapping.model().output != QueryOutput::Object
-        {
+        let (expected_ids, child_mapping) = mapping.relation(key, context)?;
+        if child_mapping.model().resource != resource || child_mapping.model().output != QueryOutput::Object {
             return Err(Error::ValidationError("来源 Mapping 与登记资源不一致".into()));
         }
         if mode == RelationMatch::Any && mapping.model().output == QueryOutput::Object {
@@ -380,17 +303,17 @@ impl Compiler<'_> {
 
         let child_context = AccessContext {
             resource: resource.into(),
-            model: Some(related.mapping.model().key.clone()),
+            model: Some(child_mapping.model().key.clone()),
             ..context.clone()
         };
-        let (child, key_expression) = self.model(rule, &related.mapping, &child_context, depth + 1).await?;
+        let (child, key_expression) = self.model(rule, child_mapping, &child_context, depth + 1)?;
 
-        let expected = doc! { "$setUnion": [{ "$ifNull": [related.expected_ids, []] }, []] };
+        let expected = doc! { "$setUnion": [{ "$ifNull": [expected_ids, []] }, []] };
         let mut pipeline =
             vec![doc! { "$match": { "$expr": { "$in": [&key_expression, "$$identity_expected"] } } }];
         pipeline.extend(child.finish());
         pipeline.push(doc! { "$project": { "_id": 0, "__identity_id": key_expression } });
-        let alias = fragment.lookup(doc! { "from": &related.mapping.model().collection,
+        let alias = fragment.lookup(doc! { "from": &child_mapping.model().collection,
         "let": { "identity_expected": expected.clone() }, "pipeline": pipeline })?;
 
         let mut result = exists(&alias);
@@ -416,24 +339,22 @@ impl Compiler<'_> {
 
 // 按去重后的原始引用是否为空生成分区谓词，不在关联准备时剔除根候选。
 fn relation_presence(
-    mapping: &dyn AccessMapping,
+    mapping: &FrozenMapping,
     relation: &RelationKey,
     present: bool,
     context: &AccessContext,
-    facts: Option<&MappingFacts>,
 ) -> Result<Document> {
-    let related = mapping.relation(relation, context, facts)?;
-    let size = doc! { "$size": { "$setUnion": [{ "$ifNull": [related.expected_ids, []] }, []] } };
+    let (expected_ids, _) = mapping.relation(relation, context)?;
+    let size = doc! { "$size": { "$setUnion": [{ "$ifNull": [expected_ids, []] }, []] } };
     Ok(doc! { "$expr": { if present { "$gt" } else { "$eq" }: [size, 0] } })
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
 
     use application_core::AuditActor;
-    use async_trait::async_trait;
     use erp_core::AccountKind;
     use erp_permissions::{
         policy_permission, purchase_order, receivable, sales_inquiry, sales_order, supplier_settlement,
@@ -449,9 +370,9 @@ mod tests {
         AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey, RelatedObjects,
     };
     use crate::entity::resource_access::ResourceKind;
-    use crate::ports::{MappingPreparation, QueryFragment, RelationMapping};
+    use crate::ports::{AccessMapping, QueryFragment, RelationMapping};
+    use crate::service::authorization::rules;
     use crate::service::authorization::rules::sources::{Output, data_condition as source_condition};
-    use crate::service::authorization::rules::{self};
     use crate::{Permission, QualifiedPermissions};
 
     #[test]
@@ -486,25 +407,19 @@ mod tests {
         );
     }
 
-    // 可配置的编译器测试映射，用于模拟事实、来源、动态版本和动作敏感过滤。
+    // 可配置的编译器测试映射，用于模拟事实、来源和动作敏感过滤。
     struct Mapping {
         // 当前样本的模型、资源、集合及支持的事实维度。
         model: QueryModel,
         // 未按关系单独登记时使用的默认来源映射。
         child: Option<Arc<dyn AccessMapping>>,
-        // `None` 表示静态；布尔值控制动态准备是否提供可靠版本。
-        versioned: Option<bool>,
-        // 可推进的动态事实修订，测试变化是否使凭证失效。
-        revision: AtomicU64,
-        // 动态准备执行次数，用于核对缓存是否按上下文复用。
-        prepare_calls: AtomicU64,
         // 按关系名称覆盖的来源映射实例。
         sources: BTreeMap<String, Arc<dyn AccessMapping>>,
         // 是否为样本启用未删除记录筛选。
         live_only: bool,
         // 覆盖默认 ID 字段的主键表达式，用于测试计算键。
         key_expression: Option<Bson>,
-        // 是否让事实、记录过滤及动态版本依赖当前入口动作。
+        // 是否让事实、记录过滤及有效期依赖当前入口动作。
         action_sensitive: bool,
     }
 
@@ -514,15 +429,28 @@ mod tests {
             &self.model
         }
         // 优先返回测试指定的计算键，未指定时引用模型 ID 字段。
-        fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
+        fn key(&self, _: &AccessContext) -> Result<Bson> {
             Ok(self.key_expression.clone().unwrap_or_else(|| format!("${}", self.model.id_field).into()))
         }
-        // 仅在配置为动态映射时暴露准备接口。
-        fn preparation(&self) -> Option<&dyn MappingPreparation> {
-            self.versioned.map(|_| self as &dyn MappingPreparation)
+        // 独立详情动作的时限早于根动作，供编译器聚合期限。
+        fn valid_until(&self, context: &AccessContext) -> Option<Instant> {
+            self.action_sensitive.then(|| {
+                let ttl = if context.permission == sales_order::DETAIL { 3600 } else { 7200 };
+                Instant::from_unix_secs(context.as_of.unix_secs() + ttl)
+            })
+        }
+        // 声明运行时解析的来源及别名。
+        fn relations(&self) -> BTreeMap<RelationKey, Arc<dyn AccessMapping>> {
+            ["sales", "sales_source", "purchase_source", "settlement_source"]
+                .into_iter()
+                .filter_map(|key| {
+                    let child = self.sources.get(key).or(self.child.as_ref())?;
+                    Some((RelationKey::parse(key).unwrap(), child.clone()))
+                })
+                .collect()
         }
         // 根据测试配置按当前动作或未删除状态限定有效样本记录。
-        fn records(&self, context: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
+        fn records(&self, context: &AccessContext) -> Result<QueryFragment> {
             Ok(QueryFragment::Match(if self.action_sensitive {
                 doc! { "record_action": context.permission.action() }
             } else if self.live_only {
@@ -532,12 +460,7 @@ mod tests {
             }))
         }
         // 将所有者、组织或历史参与事实转换为测试字段谓词或存在性关联，拒绝其他事实。
-        fn predicate(
-            &self,
-            fact: &AccessFact,
-            context: &AccessContext,
-            _: Option<&MappingFacts>,
-        ) -> Result<QueryFragment> {
+        fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> Result<QueryFragment> {
             match fact {
                 AccessFact::Owned => {
                     let mut filter = doc! { "sales_owner_user_id": context.actor.id() };
@@ -560,12 +483,7 @@ mod tests {
             }
         }
         // 从测试关系解析实际引用字段，并选用该关系专属映射或默认来源。
-        fn relation(
-            &self,
-            key: &RelationKey,
-            _: &AccessContext,
-            _: Option<&MappingFacts>,
-        ) -> Result<RelationMapping> {
+        fn relation(&self, key: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
             let field = match key.as_str() {
                 "sales" | "sales_source" => "$sales_ids",
                 "purchase_source" => "$purchase_ids",
@@ -584,33 +502,7 @@ mod tests {
         }
     }
 
-    #[async_trait]
-    impl MappingPreparation for Mapping {
-        // 按调用动作和模拟修订生成动态事实，记录准备次数，并可带入截止时间；静态样本不得调用。
-        async fn prepare(&self, context: &AccessContext, _: &mut dyn Executor) -> Result<MappingFacts> {
-            assert!(self.versioned.is_some(), "static mappings must never prepare");
-            self.prepare_calls.fetch_add(1, Ordering::Relaxed);
-            Ok(MappingFacts {
-                data: Default::default(),
-                version: self.versioned.unwrap_or(false).then(|| {
-                    if self.action_sensitive {
-                        format!(
-                            "facts-{}-v{}",
-                            context.permission.action(),
-                            self.revision.load(Ordering::Relaxed)
-                        )
-                    } else {
-                        format!("facts-v{}", self.revision.load(Ordering::Relaxed))
-                    }
-                }),
-                valid_until: self
-                    .action_sensitive
-                    .then(|| Instant::from_unix_secs(context.as_of.unix_secs() + 3600)),
-            })
-        }
-    }
-
-    // 构造共享样本集合的完整对象映射，默认提供带修订的动态事实及可选来源。
+    // 构造共享样本集合的完整对象映射，可提供默认来源。
     fn mapping(resource: &str, child: Option<Arc<dyn AccessMapping>>) -> Arc<dyn AccessMapping> {
         Arc::new(Mapping {
             model: QueryModel {
@@ -622,9 +514,6 @@ mod tests {
                 facts: [FactKind::Owner, FactKind::Organization, FactKind::HistoryParticipants].into(),
             },
             child,
-            versioned: Some(true),
-            revision: AtomicU64::new(1),
-            prepare_calls: AtomicU64::new(0),
             sources: BTreeMap::new(),
             live_only: false,
             key_expression: None,
@@ -637,13 +526,13 @@ mod tests {
         // 测试账号、固定规则及执行边界组成的原证明。
         proof: AccessProof,
         // 与证明模型匹配、供真实编译器调用的测试映射。
-        mapping: Arc<dyn AccessMapping>,
+        mapping: Arc<FrozenMapping>,
     }
 
     impl Query {
         // 克隆样本证明并以空角色授权集调用真实查询编译器。
-        async fn compile(&self, executor: &mut dyn Executor) -> Result<CompiledAccess> {
-            compile(self.proof.clone(), QualifiedPermissions::test_grants(&[]), &self.mapping, executor).await
+        fn compile(&self, executor: &mut dyn Executor) -> Result<CompiledAccess> {
+            compile(self.proof.clone(), QualifiedPermissions::test_grants(&[]), &self.mapping, executor)
         }
     }
 
@@ -671,33 +560,33 @@ mod tests {
                     service: Arc::new(()),
                 },
             },
-            mapping,
+            mapping: FrozenMapping::freeze(mapping, &mut Vec::new(), 0).unwrap(),
         }
     }
 
     // 验证编译凭证保留原授权证明的入口、账号和组织修订等元数据。
-    #[tokio::test]
-    async fn compiled_metadata_comes_from_the_original_authorization_proof() {
+    #[test]
+    fn compiled_metadata_comes_from_the_original_authorization_proof() {
         let mut executor = ReadExecutor::default();
         let mapping = mapping("sales_order", None);
         let query = query(AccessRule::Allow, mapping.clone(), &executor);
         let as_of = query.proof.context.as_of;
-        let compiled = query.compile(&mut executor).await.unwrap();
+        let compiled = query.compile(&mut executor).unwrap();
         assert_eq!(compiled.policy_version(), QualifiedPermissions::test_grants(&[]).policy_revision());
         assert_eq!(compiled.organization_version(), 11);
         assert_eq!(compiled.as_of(), as_of);
     }
 
     // 验证并集分支准备来源关联时不会提前丢弃可由其他分支放行的记录。
-    #[tokio::test]
-    async fn union_prepares_relations_without_discarding_other_branches() {
+    #[test]
+    fn union_prepares_relations_without_discarding_other_branches() {
         let mut executor = ReadExecutor::default();
         let mapping = mapping("sales_order", None);
         let rule = AccessRule::any(vec![
             AccessRule::Fact(AccessFact::Owned),
             AccessRule::Fact(AccessFact::HistoryParticipant),
         ]);
-        let plan = query(rule, mapping.clone(), &executor).compile(&mut executor).await.unwrap();
+        let plan = query(rule, mapping.clone(), &executor).compile(&mut executor).unwrap();
         assert_eq!(plan.stages.len(), 3);
         assert!(plan.stages[0].contains_key("$lookup"));
         assert_eq!(
@@ -723,8 +612,8 @@ mod tests {
     }
 
     // 验证读取补充使用映射主键，仍须满足独立范围约束。
-    #[tokio::test]
-    async fn grants_use_mapped_key_and_remain_inside_independent_constraints() {
+    #[test]
+    fn grants_use_mapped_key_and_remain_inside_independent_constraints() {
         let mut executor = ReadExecutor::default();
         let mapping = mapping("sales_order", None);
         let rule = AccessRule::all(vec![
@@ -734,7 +623,7 @@ mod tests {
                 AccessRule::RecordReadGrant(ResourceKind::SalesOrder),
             ]),
         ]);
-        let plan = query(rule, mapping.clone(), &executor).compile(&mut executor).await.unwrap();
+        let plan = query(rule, mapping.clone(), &executor).compile(&mut executor).unwrap();
         assert_eq!(
             plan.stages[1].get_document("$lookup").unwrap().get_document("let").unwrap(),
             &doc! { "identity_key": "$business_id" }
@@ -752,8 +641,8 @@ mod tests {
     }
 
     // 验证全部来源规则生成非空检查，并比较原始引用与通过的完整集合。
-    #[tokio::test]
-    async fn all_sources_compiles_nonempty_complete_set_comparison() {
+    #[test]
+    fn all_sources_compiles_nonempty_complete_set_comparison() {
         let mut executor = ReadExecutor::default();
         let child = mapping("sales_order", None);
         let root = mapping("invoice", Some(child));
@@ -763,7 +652,7 @@ mod tests {
             mode: RelationMatch::AllNonEmpty,
             rule: Box::new(AccessRule::Fact(AccessFact::Owned)),
         };
-        let plan = query(rule, root.clone(), &executor).compile(&mut executor).await.unwrap();
+        let plan = query(rule, root.clone(), &executor).compile(&mut executor).unwrap();
         let lookup = plan.stages[0].get_document("$lookup").unwrap();
         assert_eq!(lookup.get_str("from").unwrap(), "access_rows");
         let pipeline = lookup.get_array("pipeline").unwrap();
@@ -782,53 +671,34 @@ mod tests {
             .unwrap();
         assert!(conditions[0].as_document().unwrap().contains_key("$gt"));
         assert!(conditions[1].as_document().unwrap().contains_key("$setEquals"));
-        assert_eq!(plan.revalidation.as_ref().unwrap().dependencies.len(), 2);
     }
 
     // 验证事实维度缺失、模型错配或授权资源不符时拒绝编译。
-    #[tokio::test]
-    async fn missing_dimensions_wrong_mapping_and_grant_resources_fail() {
+    #[test]
+    fn missing_dimensions_wrong_mapping_and_grant_resources_fail() {
         let mut executor = ReadExecutor::default();
         let sales = mapping("sales_order", None);
         let unknown =
             query(AccessRule::Fact(AccessFact::WarehouseIn(["w".into()].into())), sales.clone(), &executor);
-        assert!(unknown.compile(&mut executor).await.is_err());
+        assert!(unknown.compile(&mut executor).is_err());
 
         let wrong_resource =
             query(AccessRule::RecordReadGrant(ResourceKind::PurchaseOrder), sales.clone(), &executor);
-        assert!(wrong_resource.compile(&mut executor).await.is_err());
-    }
-
-    // 验证非事务查询不能依赖没有可靠修订号的动态事实。
-    #[tokio::test]
-    async fn unversioned_nontransaction_facts_are_rejected() {
-        let mut executor = ReadExecutor::default();
-        let mapping: Arc<dyn AccessMapping> = Arc::new(Mapping {
-            model: mapping("sales_order", None).model().clone(),
-            child: None,
-            versioned: Some(false),
-            revision: AtomicU64::new(1),
-            prepare_calls: AtomicU64::new(0),
-            sources: BTreeMap::new(),
-            live_only: false,
-            key_expression: None,
-            action_sensitive: false,
-        });
-        assert!(query(AccessRule::Allow, mapping.clone(), &executor).compile(&mut executor).await.is_err());
+        assert!(wrong_resource.compile(&mut executor).is_err());
     }
 
     // 验证拒绝规则生成显式为假的谓词，而不是省略查询过滤。
-    #[tokio::test]
-    async fn denied_query_compiles_false_instead_of_missing_filter() {
+    #[test]
+    fn denied_query_compiles_false_instead_of_missing_filter() {
         let mut executor = ReadExecutor::default();
         let mapping = mapping("sales_order", None);
-        let plan = query(AccessRule::Deny, mapping.clone(), &executor).compile(&mut executor).await.unwrap();
+        let plan = query(AccessRule::Deny, mapping.clone(), &executor).compile(&mut executor).unwrap();
         assert_eq!(plan.stages, vec![doc! { "$match": { "$expr": false } }]);
     }
 
     // 验证受限视图仅投影登记字段，且每行份额仅能对应一个来源。
-    #[tokio::test]
-    async fn partial_query_projects_only_registered_fields_and_share_has_one_source() {
+    #[test]
+    fn partial_query_projects_only_registered_fields_and_share_has_one_source() {
         let mut executor = ReadExecutor::default();
         let rule = AccessRule::Related {
             relation: RelationKey::parse("sales").unwrap(),
@@ -838,22 +708,19 @@ mod tests {
         };
         let child = mapping("sales_order", None);
         let root = mapping("invoice", Some(child.clone()));
-        assert!(query(rule.clone(), root.clone(), &executor).compile(&mut executor).await.is_err());
+        assert!(query(rule.clone(), root.clone(), &executor).compile(&mut executor).is_err());
 
         let mut model = root.model().clone();
         model.output = QueryOutput::Share { fields: ["business_id".into(), "share_amount".into()].into() };
         let share: Arc<dyn AccessMapping> = Arc::new(Mapping {
             model,
             child: Some(child),
-            versioned: Some(true),
-            revision: AtomicU64::new(1),
-            prepare_calls: AtomicU64::new(0),
             sources: BTreeMap::new(),
             live_only: false,
             key_expression: None,
             action_sensitive: false,
         });
-        let plan = query(rule, share.clone(), &executor).compile(&mut executor).await.unwrap();
+        let plan = query(rule, share.clone(), &executor).compile(&mut executor).unwrap();
         assert_eq!(
             plan.stages.last().unwrap(),
             &doc! { "$project": { "_id": 0, "business_id": 1, "share_amount": 1 } }
@@ -869,56 +736,27 @@ mod tests {
         );
     }
 
-    // 验证动态修订变化使旧依赖复验失败，并改变新查询的跨页版本。
-    #[tokio::test]
-    async fn mapping_revision_changes_invalidate_dependencies_and_page_version() {
-        let mut executor = ReadExecutor::default();
-        let live = Arc::new(Mapping {
-            model: mapping("sales_order", None).model().clone(),
-            child: None,
-            versioned: Some(true),
-            revision: AtomicU64::new(1),
-            prepare_calls: AtomicU64::new(0),
-            sources: BTreeMap::new(),
-            live_only: false,
-            key_expression: None,
-            action_sensitive: false,
-        });
-        let query = query(AccessRule::Allow, live.clone(), &executor);
-        let plan = query.compile(&mut executor).await.unwrap();
-        let dependency = &plan.revalidation.as_ref().unwrap().dependencies[0];
-        assert!(dependency.validate(&mut executor).await.is_ok());
-
-        live.revision.store(2, Ordering::Relaxed);
-        assert!(matches!(dependency.validate(&mut executor).await, Err(Error::ConflictError(_))));
-        let updated = query.compile(&mut executor).await.unwrap();
-        assert_ne!(plan.version(), updated.version());
-    }
-
     // 验证证明到期或执行器进入新读取阶段后，不能据此编译凭证。
-    #[tokio::test]
-    async fn expired_proof_or_wrong_session_cannot_compile() {
+    #[test]
+    fn expired_proof_or_wrong_session_cannot_compile() {
         let mut executor = ReadExecutor::default();
         let mapping = mapping("sales_order", None);
         let mut query = query(AccessRule::Allow, mapping.clone(), &executor);
         query.proof.validity.valid_until = Some(Instant::from_unix_secs(1));
-        assert!(matches!(query.compile(&mut executor).await, Err(Error::ConflictError(_))));
+        assert!(matches!(query.compile(&mut executor), Err(Error::ConflictError(_))));
 
         query.proof.validity.valid_until = None;
         executor.next_read();
-        assert!(matches!(query.compile(&mut executor).await, Err(Error::ValidationError(_))));
+        assert!(matches!(query.compile(&mut executor), Err(Error::ValidationError(_))));
     }
 
-    // 验证独立范围按自身动作转换并复验，不借用根操作上下文。
-    #[tokio::test]
-    async fn independent_scope_compiles_and_revalidates_its_own_action_context() {
+    // 验证独立范围按自身动作转换，且更早的截止时点限制整份凭证。
+    #[test]
+    fn independent_scope_compiles_its_own_action_context_and_deadline() {
         let mut executor = ReadExecutor::default();
         let mapping = Arc::new(Mapping {
             model: mapping("sales_order", None).model().clone(),
             child: None,
-            versioned: Some(true),
-            revision: AtomicU64::new(1),
-            prepare_calls: AtomicU64::new(0),
             sources: BTreeMap::new(),
             live_only: false,
             key_expression: None,
@@ -929,13 +767,11 @@ mod tests {
             rule: Box::new(AccessRule::Fact(AccessFact::Owned)),
         };
         let query = query(rule, mapping.clone(), &executor);
-        let plan = query.compile(&mut executor).await.unwrap();
-        let dependencies = &plan.revalidation.as_ref().unwrap().dependencies;
-        assert_eq!(dependencies.len(), 2);
-        assert_eq!(dependencies[0].context.permission.action(), "list");
-        assert_eq!(dependencies[1].context.permission.action(), "detail");
-        assert_eq!(dependencies[1].facts.version.as_deref(), Some("facts-detail-v1"));
-        assert!(dependencies[1].facts.valid_until.is_some());
+        let plan = query.compile(&mut executor).unwrap();
+        assert_eq!(
+            plan.validity.valid_until,
+            Some(Instant::from_unix_secs(query.proof.context.as_of.unix_secs() + 3600))
+        );
         assert_eq!(
             plan.stages,
             vec![doc! { "$match": { "$and": [
@@ -946,22 +782,15 @@ mod tests {
                 ] }
             ] } }]
         );
-        assert!(dependencies[1].validate(&mut executor).await.is_ok());
-
-        mapping.revision.store(2, Ordering::Relaxed);
-        assert!(matches!(dependencies[1].validate(&mut executor).await, Err(Error::ConflictError(_))));
     }
 
-    // 验证辅助过滤保留已解析入口的上下文及独立映射依赖。
-    #[tokio::test]
-    async fn auxiliary_filter_uses_the_resolved_context_and_keeps_its_own_mapping_dependency() {
+    // 验证辅助过滤的入口上下文及有效期参与编译，过滤变化影响摘要。
+    #[test]
+    fn auxiliary_filter_uses_the_resolved_context_and_deadline() {
         let mut executor = ReadExecutor::default();
         let mapping = Arc::new(Mapping {
             model: mapping("sales_order", None).model().clone(),
             child: None,
-            versioned: Some(true),
-            revision: AtomicU64::new(1),
-            prepare_calls: AtomicU64::new(0),
             sources: BTreeMap::new(),
             live_only: false,
             key_expression: None,
@@ -974,14 +803,11 @@ mod tests {
             rule: AccessRule::Fact(AccessFact::Owned),
         });
 
-        let plan = query.compile(&mut executor).await.unwrap();
-        let dependencies = &plan.revalidation.as_ref().unwrap().dependencies;
-        assert_eq!(dependencies.len(), 2);
-        assert_eq!(dependencies[0].context, query.proof.context);
-        let dependency = &dependencies[1];
-        assert_eq!(dependency.context, context);
-        assert_eq!(dependency.facts.version.as_deref(), Some("facts-detail-v1"));
-        assert_eq!(plan.validity.valid_until, dependency.facts.valid_until);
+        let plan = query.compile(&mut executor).unwrap();
+        assert_eq!(
+            plan.validity.valid_until,
+            Some(Instant::from_unix_secs(context.as_of.unix_secs() + 3600))
+        );
         assert_eq!(
             plan.management_stages().unwrap(),
             &[doc! { "$match": { "$and": [
@@ -989,32 +815,24 @@ mod tests {
                 { "sales_owner_user_id": "u", "owner_action": "detail" }
             ] } }]
         );
-        dependency.validate(&mut executor).await.unwrap();
         query.proof.resolved.rules.management =
             Some(ResolvedFilter::Separate { context: Box::new(context), rule: AccessRule::Deny });
-        let denied = query.compile(&mut executor).await.unwrap();
+        let denied = query.compile(&mut executor).unwrap();
         assert_eq!(plan.stages(), denied.stages());
         assert_ne!(plan.version(), denied.version());
 
         query.proof.resolved.rules.management = Some(ResolvedFilter::Root);
-        let root = query.compile(&mut executor).await.unwrap();
+        let root = query.compile(&mut executor).unwrap();
         assert_eq!(root.management_stages().unwrap(), root.stages());
-        assert_eq!(root.revalidation.as_ref().unwrap().dependencies.len(), 1);
-
-        mapping.revision.store(2, Ordering::Relaxed);
-        assert!(matches!(dependency.validate(&mut executor).await, Err(Error::ConflictError(_))));
     }
 
     // 验证来源范围即使允许全部，引用对象仍须存在且未删除。
-    #[tokio::test]
-    async fn related_shared_scope_still_requires_live_source_record() {
+    #[test]
+    fn related_shared_scope_still_requires_live_source_record() {
         let mut executor = ReadExecutor::default();
         let child: Arc<dyn AccessMapping> = Arc::new(Mapping {
             model: mapping("purchase_order", None).model().clone(),
             child: None,
-            versioned: Some(true),
-            revision: AtomicU64::new(1),
-            prepare_calls: AtomicU64::new(0),
             sources: BTreeMap::new(),
             live_only: true,
             key_expression: None,
@@ -1027,7 +845,7 @@ mod tests {
             mode: RelationMatch::AllNonEmpty,
             rule: Box::new(AccessRule::Allow),
         };
-        let plan = query(rule, root.clone(), &executor).compile(&mut executor).await.unwrap();
+        let plan = query(rule, root.clone(), &executor).compile(&mut executor).unwrap();
         let pipeline = plan.stages[0].get_document("$lookup").unwrap().get_array("pipeline").unwrap();
         assert_eq!(
             pipeline[1],
@@ -1035,16 +853,13 @@ mod tests {
         );
     }
     // 验证记录读取授权和来源匹配都使用映射提供的计算主键。
-    #[tokio::test]
-    async fn calculated_keys_are_used_by_grants_and_related_record_matching() {
+    #[test]
+    fn calculated_keys_are_used_by_grants_and_related_record_matching() {
         let mut executor = ReadExecutor::default();
         let expression = doc! { "$toString": "$_id" };
         let calculated: Arc<dyn AccessMapping> = Arc::new(Mapping {
             model: mapping("sales_order", None).model().clone(),
             child: None,
-            versioned: Some(true),
-            revision: AtomicU64::new(1),
-            prepare_calls: AtomicU64::new(0),
             sources: BTreeMap::new(),
             live_only: false,
             key_expression: Some(expression.clone().into()),
@@ -1053,7 +868,7 @@ mod tests {
 
         let grant =
             query(AccessRule::RecordReadGrant(ResourceKind::SalesOrder), calculated.clone(), &executor);
-        let compiled = grant.compile(&mut executor).await.unwrap();
+        let compiled = grant.compile(&mut executor).unwrap();
         assert_eq!(
             compiled.stages[0].get_document("$lookup").unwrap().get_document("let").unwrap(),
             &doc! { "identity_key": expression.clone() }
@@ -1066,7 +881,7 @@ mod tests {
             mode: RelationMatch::AllNonEmpty,
             rule: Box::new(AccessRule::Allow),
         };
-        let compiled = query(rule, root.clone(), &executor).compile(&mut executor).await.unwrap();
+        let compiled = query(rule, root.clone(), &executor).compile(&mut executor).unwrap();
         let pipeline = compiled.stages[0].get_document("$lookup").unwrap().get_array("pipeline").unwrap();
         assert_eq!(
             pipeline[0],
@@ -1079,29 +894,26 @@ mod tests {
     }
 
     // 验证即便授权分支允许全部记录，仍须校验映射声明的必需事实。
-    #[tokio::test]
-    async fn required_mapping_facts_are_checked_even_when_rule_allows_every_record() {
+    #[test]
+    fn required_fact_dimensions_are_checked_even_when_rule_allows_every_record() {
         let mut executor = ReadExecutor::default();
         let mapping = mapping("sales_order", None);
         let rule = AccessRule::Allow.requiring(&[FactKind::Warehouse].into());
         assert!(matches!(
-            query(rule, mapping.clone(), &executor).compile(&mut executor).await,
+            query(rule, mapping.clone(), &executor).compile(&mut executor),
             Err(Error::ValidationError(_))
         ));
         let rule = AccessRule::Allow.requiring(&[FactKind::Owner].into());
-        assert!(query(rule, mapping.clone(), &executor).compile(&mut executor).await.is_ok());
+        assert!(query(rule, mapping.clone(), &executor).compile(&mut executor).is_ok());
     }
 
-    // 验证静态询价映射不准备动态数据，列表与对象条件判定一致。
-    #[tokio::test]
-    async fn static_inquiry_mapping_needs_no_preparation_and_matches_the_object_condition() {
+    // 验证询价列表和对象条件的授权判定一致。
+    #[test]
+    fn inquiry_query_matches_the_object_condition() {
         let mut executor = ReadExecutor::default();
         let mapping = Arc::new(Mapping {
             model: mapping("sales_inquiry", None).model().clone(),
             child: None,
-            versioned: None,
-            revision: AtomicU64::new(1),
-            prepare_calls: AtomicU64::new(0),
             sources: BTreeMap::new(),
             live_only: true,
             key_expression: None,
@@ -1117,8 +929,7 @@ mod tests {
         };
         let rule = rules::data_condition(&sales_inquiry::QUERY_SALES_LIST, Some(&scope)).unwrap();
         let query = query(rule.clone(), mapping.clone(), &executor);
-        let plan = query.compile(&mut executor).await.unwrap();
-        assert!(plan.revalidation.as_ref().unwrap().dependencies.is_empty());
+        let plan = query.compile(&mut executor).unwrap();
 
         let samples = [("own", "u", "other"), ("team", "other", "team"), ("denied", "other", "other")];
         let rows = samples
@@ -1150,8 +961,8 @@ mod tests {
     }
 
     // 对比完整、缺失、无权及已删除来源样本的列表与对象授权成员。
-    #[tokio::test]
-    async fn source_query_and_object_membership_agree_for_complete_missing_denied_and_deleted_sources() {
+    #[test]
+    fn source_query_and_object_membership_agree_for_complete_missing_denied_and_deleted_sources() {
         let mut executor = ReadExecutor::default();
         let child = Arc::new(Mapping {
             model: QueryModel {
@@ -1159,9 +970,6 @@ mod tests {
                 ..mapping("sales_order", None).model().clone()
             },
             child: None,
-            versioned: None,
-            revision: AtomicU64::new(1),
-            prepare_calls: AtomicU64::new(0),
             sources: BTreeMap::new(),
             live_only: true,
             key_expression: None,
@@ -1170,9 +978,6 @@ mod tests {
         let root = Arc::new(Mapping {
             model: mapping("receivable_account", None).model().clone(),
             child: Some(child),
-            versioned: None,
-            revision: AtomicU64::new(1),
-            prepare_calls: AtomicU64::new(0),
             sources: BTreeMap::new(),
             live_only: true,
             key_expression: None,
@@ -1189,8 +994,7 @@ mod tests {
             .unwrap();
         let mut query = query(rule.clone(), root.clone(), &executor);
         query.proof.context.permission = permission;
-        let plan = query.compile(&mut executor).await.unwrap();
-        assert!(plan.revalidation.as_ref().unwrap().dependencies.is_empty());
+        let plan = query.compile(&mut executor).unwrap();
 
         let sources = [("s1", "u", 0), ("s2", "u", 0), ("denied", "other", 0), ("deleted", "u", 1)];
         let collections = [("access_sources".into(), sources.iter().map(|(id, owner, deleted)| doc! {
@@ -1245,186 +1049,107 @@ mod tests {
         }
     }
 
-    // 验证多来源查询对每个相同依赖只准备、关联一次，且不改变授权成员。
-    #[tokio::test]
-    async fn multi_source_query_prepares_and_joins_each_source_once_without_changing_membership() {
-        for dynamic in [false, true] {
-            for mut executor in [
-                Box::new(ReadExecutor::default()) as Box<dyn Executor>,
-                Box::new(SnapshotExecutor::default()) as Box<dyn Executor>,
-            ] {
-                let source = |resource: &str| Mapping {
-                    model: QueryModel {
-                        collection: format!("sources_{resource}"),
-                        ..mapping(resource, None).model().clone()
-                    },
-                    child: None,
-                    versioned: dynamic.then_some(true),
-                    revision: AtomicU64::new(1),
-                    prepare_calls: AtomicU64::new(0),
-                    sources: BTreeMap::new(),
-                    live_only: true,
-                    key_expression: None,
-                    action_sensitive: false,
-                };
-                let sales = Arc::new(source("sales_order"));
-                let purchase = Arc::new(source("purchase_order"));
-                let settlement = Arc::new(source("supplier_settlement_statement"));
-                let root = Arc::new(Mapping {
-                    sources: [
-                        ("sales_source".into(), sales.clone() as Arc<dyn AccessMapping>),
-                        ("purchase_source".into(), purchase.clone() as Arc<dyn AccessMapping>),
-                        ("settlement_source".into(), settlement.clone() as Arc<dyn AccessMapping>),
-                    ]
-                    .into(),
-                    ..source("customer_receipt")
-                });
-
-                let permission = receivable::CUSTOMER_RECEIPT_DETAIL;
-                let qualified = QualifiedPermissions::test_grants(&[(
-                    "finance",
-                    &[permission.clone(), policy_permission::FINANCE_LEDGER_READ],
-                )]);
-                let scope = ResolvedScope {
-                    role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
-                    user_limit: None,
-                };
-                let scopes = [
-                    (sales_order::DETAIL, scope.clone()),
-                    (purchase_order::DETAIL, scope.clone()),
-                    (supplier_settlement::STATEMENT_LIST, scope),
-                ];
-                let rule = source_condition(&permission, &qualified, &scopes, Output::Object).unwrap();
-                let mut query = query(rule, root.clone(), executor.as_ref());
-                query.proof.context.permission = permission;
-                let plan = query.compile(executor.as_mut()).await.unwrap();
-                assert_eq!(plan.stages().iter().filter(|stage| stage.contains_key("$lookup")).count(), 3);
-
-                let make_row =
-                    |id: &str, sales_ids: Vec<&str>, purchase_ids: Vec<&str>, settlement_ids: Vec<&str>| {
-                        doc! {
-                            "business_id": id, "sales_ids": sales_ids, "purchase_ids": purchase_ids,
-                            "settlement_ids": settlement_ids, "deleted_at": 0
-                        }
-                    };
-                let allowed = (0..8)
-                    .map(|mask| {
-                        make_row(
-                            &format!("partition_{mask}"),
-                            if mask & 1 != 0 { vec!["s1", "s1"] } else { vec![] },
-                            if mask & 2 != 0 { vec!["p1"] } else { vec![] },
-                            if mask & 4 != 0 { vec!["t1"] } else { vec![] },
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                let mut rows = allowed.clone();
-                rows.extend([
-                    make_row("denied_sales", vec!["denied"], vec!["p1"], vec!["t1"]),
-                    make_row("denied_purchase", vec!["s1"], vec!["denied"], vec!["t1"]),
-                    make_row("denied_settlement", vec!["s1"], vec!["p1"], vec!["denied"]),
-                    make_row("missing", vec!["s1", "missing"], vec![], vec![]),
-                ]);
-                let row = |id: &str, owner: &str| {
-                    doc! {
-                        "business_id": id, "sales_owner_user_id": owner, "org_unit_id": "team", "deleted_at": 0
-                    }
-                };
-                let collections = [
-                    (sales.model.collection.clone(), vec![row("s1", "u"), row("denied", "other")]),
-                    (purchase.model.collection.clone(), vec![row("p1", "u"), row("denied", "other")]),
-                    (settlement.model.collection.clone(), vec![row("t1", "u"), row("denied", "other")]),
+    // 验证多来源查询对每个相同来源只关联一次，且不改变授权成员。
+    #[test]
+    fn multi_source_query_joins_each_source_once_without_changing_membership() {
+        for mut executor in [
+            Box::new(ReadExecutor::default()) as Box<dyn Executor>,
+            Box::new(SnapshotExecutor::default()) as Box<dyn Executor>,
+        ] {
+            let source = |resource: &str| Mapping {
+                model: QueryModel {
+                    collection: format!("sources_{resource}"),
+                    ..mapping(resource, None).model().clone()
+                },
+                child: None,
+                sources: BTreeMap::new(),
+                live_only: true,
+                key_expression: None,
+                action_sensitive: false,
+            };
+            let sales = Arc::new(source("sales_order"));
+            let purchase = Arc::new(source("purchase_order"));
+            let settlement = Arc::new(source("supplier_settlement_statement"));
+            let root = Arc::new(Mapping {
+                sources: [
+                    ("sales_source".into(), sales.clone() as Arc<dyn AccessMapping>),
+                    ("purchase_source".into(), purchase.clone() as Arc<dyn AccessMapping>),
+                    ("settlement_source".into(), settlement.clone() as Arc<dyn AccessMapping>),
                 ]
-                .into();
-                let result = execute(rows, plan.stages(), &collections, &doc! {});
-                assert_eq!(result, allowed);
+                .into(),
+                ..source("customer_receipt")
+            });
 
-                for source in [&sales, &purchase, &settlement] {
-                    assert_eq!(source.prepare_calls.load(Ordering::Relaxed), u64::from(dynamic));
-                }
+            let permission = receivable::CUSTOMER_RECEIPT_DETAIL;
+            let qualified = QualifiedPermissions::test_grants(&[(
+                "finance",
+                &[permission.clone(), policy_permission::FINANCE_LEDGER_READ],
+            )]);
+            let scope = ResolvedScope {
+                role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
+                user_limit: None,
+            };
+            let scopes = [
+                (sales_order::DETAIL, scope.clone()),
+                (purchase_order::DETAIL, scope.clone()),
+                (supplier_settlement::STATEMENT_LIST, scope),
+            ];
+            let rule = source_condition(&permission, &qualified, &scopes, Output::Object).unwrap();
+            let mut query = query(rule, root.clone(), executor.as_ref());
+            query.proof.context.permission = permission;
+            let plan = query.compile(executor.as_mut()).unwrap();
+            assert_eq!(plan.stages().iter().filter(|stage| stage.contains_key("$lookup")).count(), 3);
 
-                let snapshot = executor.boundary().unwrap().is_snapshot();
-                assert_eq!(plan.revalidation.is_none(), snapshot);
-                if let Some(revalidation) = &plan.revalidation {
-                    assert_eq!(revalidation.dependencies.len(), if dynamic { 4 } else { 0 });
-                    for dependency in &revalidation.dependencies {
-                        dependency.validate(executor.as_mut()).await.unwrap();
+            let make_row =
+                |id: &str, sales_ids: Vec<&str>, purchase_ids: Vec<&str>, settlement_ids: Vec<&str>| {
+                    doc! {
+                        "business_id": id, "sales_ids": sales_ids, "purchase_ids": purchase_ids,
+                        "settlement_ids": settlement_ids, "deleted_at": 0
                     }
+                };
+            let allowed = (0..8)
+                .map(|mask| {
+                    make_row(
+                        &format!("partition_{mask}"),
+                        if mask & 1 != 0 { vec!["s1", "s1"] } else { vec![] },
+                        if mask & 2 != 0 { vec!["p1"] } else { vec![] },
+                        if mask & 4 != 0 { vec!["t1"] } else { vec![] },
+                    )
+                })
+                .collect::<Vec<_>>();
+            let mut rows = allowed.clone();
+            rows.extend([
+                make_row("denied_sales", vec!["denied"], vec!["p1"], vec!["t1"]),
+                make_row("denied_purchase", vec!["s1"], vec!["denied"], vec!["t1"]),
+                make_row("denied_settlement", vec!["s1"], vec!["p1"], vec!["denied"]),
+                make_row("missing", vec!["s1", "missing"], vec![], vec![]),
+            ]);
+            let row = |id: &str, owner: &str| {
+                doc! {
+                    "business_id": id, "sales_owner_user_id": owner, "org_unit_id": "team", "deleted_at": 0
                 }
-                for source in [&sales, &purchase, &settlement] {
-                    assert_eq!(
-                        source.prepare_calls.load(Ordering::Relaxed),
-                        if dynamic { if snapshot { 1 } else { 2 } } else { 0 }
-                    );
-                }
-            }
+            };
+            let collections = [
+                (sales.model.collection.clone(), vec![row("s1", "u"), row("denied", "other")]),
+                (purchase.model.collection.clone(), vec![row("p1", "u"), row("denied", "other")]),
+                (settlement.model.collection.clone(), vec![row("t1", "u"), row("denied", "other")]),
+            ]
+            .into();
+            let result = execute(rows, plan.stages(), &collections, &doc! {});
+            assert_eq!(result, allowed);
+
+            let snapshot = executor.boundary().unwrap().is_snapshot();
+            assert_eq!(plan.revalidation.is_none(), snapshot);
         }
     }
 
-    // 验证缓存不会混用不同映射实例或不同授权上下文的动态事实。
-    #[tokio::test]
-    async fn preparation_cache_keeps_mapping_instances_and_contexts_separate() {
-        let mut executor = ReadExecutor::default();
-        let first = Arc::new(Mapping {
-            model: mapping("sales_order", None).model().clone(),
-            child: None,
-            versioned: Some(true),
-            revision: AtomicU64::new(1),
-            prepare_calls: AtomicU64::new(0),
-            sources: BTreeMap::new(),
-            live_only: false,
-            key_expression: None,
-            action_sensitive: false,
-        });
-        let second = Arc::new(Mapping {
-            model: first.model.clone(),
-            child: None,
-            versioned: Some(true),
-            prepare_calls: AtomicU64::new(0),
-            revision: AtomicU64::new(1),
-            sources: BTreeMap::new(),
-            live_only: false,
-            key_expression: None,
-            action_sensitive: false,
-        });
-        let proof = query(AccessRule::Allow, first.clone(), &executor).proof;
-        let mut compiler = Compiler {
-            executor: &mut executor,
-            boundary: proof.validity.boundary,
-            valid_until: None,
-            prepared: vec![],
-            versions: vec![],
-        };
-
-        let first_mapping: Arc<dyn AccessMapping> = first.clone();
-        let second_mapping: Arc<dyn AccessMapping> = second.clone();
-        compiler.prepare(&first_mapping, &proof.context).await.unwrap();
-        compiler.prepare(&first_mapping, &proof.context).await.unwrap();
-        compiler.prepare(&second_mapping, &proof.context).await.unwrap();
-        let detail = AccessContext { permission: sales_order::DETAIL, ..proof.context.clone() };
-        compiler.prepare(&first_mapping, &detail).await.unwrap();
-        let later = AccessContext {
-            as_of: Instant::from_unix_secs(proof.context.as_of.unix_secs() + 1),
-            ..proof.context.clone()
-        };
-        compiler.prepare(&first_mapping, &later).await.unwrap();
-        let other = AccessContext {
-            actor: AuditActor::new("other".into(), "other user".into(), AccountKind::Admin),
-            ..proof.context.clone()
-        };
-        compiler.prepare(&first_mapping, &other).await.unwrap();
-
-        assert_eq!(first.prepare_calls.load(Ordering::Relaxed), 4);
-        assert_eq!(second.prepare_calls.load(Ordering::Relaxed), 1);
-        assert_eq!(compiler.prepared.len(), 5);
-    }
-
     // 验证记录授权关联使用合法变量名，且只接受接收人、目标和版本相符的有效来源。
-    #[tokio::test]
-    async fn record_grant_query_uses_valid_variables_and_only_accepts_live_matching_sources() {
+    #[test]
+    fn record_grant_query_uses_valid_variables_and_only_accepts_live_matching_sources() {
         let mut executor = ReadExecutor::default();
         let mapping = mapping("sales_order", None);
         let query = query(AccessRule::RecordReadGrant(ResourceKind::SalesOrder), mapping.clone(), &executor);
-        let plan = query.compile(&mut executor).await.unwrap();
+        let plan = query.compile(&mut executor).unwrap();
 
         let grants = [
             ("allowed", "allowed"),
@@ -1470,26 +1195,22 @@ mod tests {
         assert_eq!(result, vec![doc! { "business_id": "allowed" }]);
     }
 
-    // 验证快照凭证不保存动态复验事实但保留到期限制，不能跨写入或事务复用。
-    #[tokio::test]
-    async fn snapshot_mapping_keeps_only_expiry_and_rejects_cross_write_or_transaction_reuse() {
+    // 验证快照凭证不保存复验规则但保留到期限制，不能跨写入或事务复用。
+    #[test]
+    fn snapshot_mapping_keeps_only_expiry_and_rejects_cross_write_or_transaction_reuse() {
         let mut executor = SnapshotExecutor::default();
         let mapping = Arc::new(Mapping {
             model: mapping("sales_order", None).model().clone(),
             child: None,
-            versioned: Some(false),
-            revision: AtomicU64::new(1),
-            prepare_calls: AtomicU64::new(0),
             sources: BTreeMap::new(),
             live_only: false,
             key_expression: None,
             action_sensitive: true,
         });
         let query = query(AccessRule::Allow, mapping.clone(), &executor);
-        let mut plan = query.compile(&mut executor).await.unwrap();
+        let mut plan = query.compile(&mut executor).unwrap();
         assert!(plan.revalidation.is_none());
         assert!(plan.validity.valid_until.is_some());
-        mapping.revision.store(2, Ordering::Relaxed);
         plan.ensure_current(&mut executor).unwrap();
 
         executor.next_read();
@@ -1503,8 +1224,8 @@ mod tests {
     }
 
     // 验证即使原快照不需重读，交付时也必须先核对服务实例和执行边界。
-    #[tokio::test]
-    async fn revalidation_mode_checks_service_and_boundary_before_skipping_snapshot_reads() {
+    #[test]
+    fn revalidation_mode_checks_service_and_boundary_before_skipping_snapshot_reads() {
         use persistence_core::NoTransaction;
 
         let mut snapshot = SnapshotExecutor::default();
@@ -1521,7 +1242,7 @@ mod tests {
             snapshot_query.proof.validity.needs_revalidation(&Arc::new(()), &mut snapshot),
             Err(Error::ValidationError(_))
         ));
-        assert!(matches!(snapshot_query.compile(&mut NoTransaction).await, Err(Error::ValidationError(_))));
+        assert!(matches!(snapshot_query.compile(&mut NoTransaction), Err(Error::ValidationError(_))));
         snapshot.session();
         assert!(matches!(
             snapshot_query

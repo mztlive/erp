@@ -5,8 +5,8 @@ use async_trait::async_trait;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey, QueryOutput,
+    RelationKey,
 };
 use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::{
@@ -84,18 +84,13 @@ impl AccessMapping for Mapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> erp_identity::Result<Bson> {
+    fn key(&self, _: &AccessContext) -> erp_identity::Result<Bson> {
         Ok(Bson::String("$id".into()))
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> erp_identity::Result<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> erp_identity::Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at":NOT_DELETED_TIMESTAMP_BSON}))
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> erp_identity::Result<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> erp_identity::Result<QueryFragment> {
         match fact {
             AccessFact::Owned => Ok(QueryFragment::Match(doc! {"maintainer_user_id":context.actor.id()})),
             AccessFact::OrganizationIn(orgs) => Ok(QueryFragment::Match(
@@ -104,12 +99,7 @@ impl AccessMapping for Mapping {
             _ => Err(erp_identity::Error::ValidationError("共享资料未登记该授权事实".into())),
         }
     }
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> erp_identity::Result<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> erp_identity::Result<RelationMapping> {
         Err(erp_identity::Error::ValidationError("共享资料未登记来源关系".into()))
     }
 }
@@ -277,13 +267,13 @@ mod tests {
             model: None,
             as_of: Instant::from_unix_secs(0),
         };
-        assert!(mapping.preparation().is_none());
-        assert_eq!(mapping.key(&context, None).unwrap(), Bson::String("$id".into()));
-        assert!(matches!(mapping.records(&context, None).unwrap(), QueryFragment::Match(filter)
+
+        assert_eq!(mapping.key(&context).unwrap(), Bson::String("$id".into()));
+        assert!(matches!(mapping.records(&context).unwrap(), QueryFragment::Match(filter)
             if filter == doc! {"deleted_at": NOT_DELETED_TIMESTAMP_BSON}));
 
-        assert!(mapping.predicate(&AccessFact::HistoryParticipant, &context, None).is_err());
-        assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context, None).is_err());
+        assert!(mapping.predicate(&AccessFact::HistoryParticipant, &context).is_err());
+        assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context).is_err());
     }
     // 验证真实维护人与组织在对象及查询两端一致；创建人不能补负责人，历史缺值保持已知空。
     #[test]
@@ -307,8 +297,7 @@ mod tests {
                     model: None,
                     as_of: Instant::from_unix_secs(0),
                 };
-                let QueryFragment::Match(filter) =
-                    mapping.predicate(&AccessFact::Owned, &context, None).unwrap()
+                let QueryFragment::Match(filter) = mapping.predicate(&AccessFact::Owned, &context).unwrap()
                 else {
                     panic!("负责人必须使用真实字段");
                 };
@@ -329,7 +318,7 @@ mod tests {
 
                 let organizations = ["org".into()].into();
                 let QueryFragment::Match(filter) =
-                    mapping.predicate(&AccessFact::OrganizationIn(organizations), &context, None).unwrap()
+                    mapping.predicate(&AccessFact::OrganizationIn(organizations), &context).unwrap()
                 else {
                     panic!("组织必须使用真实字段");
                 };

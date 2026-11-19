@@ -202,7 +202,7 @@ mod tests {
         };
         for kind in ["purchase_order", "purchase_change_order"] {
             let key = RelationKey::parse(format!("management_{kind}_purchase_order")).unwrap();
-            let source = management.relation(&key, &context, None).unwrap();
+            let source = management.relation(&key, &context).unwrap();
             assert!(Arc::ptr_eq(&source.mapping, &purchase));
             assert_eq!(source.mapping.model().collection, <Database as PurchaseOrderExt>::PURCHASE_ORDERS);
             assert_eq!(source.mapping.model().output, QueryOutput::Object);

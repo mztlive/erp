@@ -85,23 +85,6 @@ impl PersonQueryStatus {
     }
 }
 
-/// 自动补记前查到的资格记录状态，用于区分首次授予和既有记录。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ExistingGrant {
-    /// 账号在该目录尚无记录，可补记首次授予。
-    Absent,
-    /// 资格已有效，保留现有记录。
-    Active,
-    /// 资格已终止，保留终止记录。
-    Terminated,
-}
-
-/// 自动授予时仅为尚无记录的账号和目录组合补记资格，保留有效及已终止的记录。
-/// 此判定只接受记录状态；角色撤销不删除资格，初始化重跑不恢复已终止资格。
-pub fn should_insert_grant(existing: ExistingGrant) -> bool {
-    matches!(existing, ExistingGrant::Absent)
-}
-
 /// 岗位目录的人员查询资格；每个账号和目录组合至多保留一条记录。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Entity)]
 pub struct PersonQueryQualification {
@@ -280,8 +263,8 @@ mod tests {
     use erp_core::common::time::Instant;
 
     use super::{
-        DirectoryListRequest, ExistingGrant, PersonDirectoryCategory, PersonQueryQualification,
-        PersonQueryStatus, candidate_in_directory, should_insert_grant,
+        DirectoryListRequest, PersonDirectoryCategory, PersonQueryQualification, PersonQueryStatus,
+        candidate_in_directory,
     };
     use crate::entity::access_control::{ResolvedScope, ScopeClause};
 
@@ -302,13 +285,8 @@ mod tests {
         assert_eq!(PersonDirectoryCategory::Procurement.resource(), "procurement_person");
     }
 
-    // 验证自动授予只补缺失记录，有效资格可终止一次，已终止记录不会被自动恢复。
     #[test]
-    fn missing_grant_inserts_once_and_termination_is_not_restored() {
-        assert!(should_insert_grant(ExistingGrant::Absent));
-        assert!(!should_insert_grant(ExistingGrant::Active));
-        assert!(!should_insert_grant(ExistingGrant::Terminated));
-
+    fn new_qualification_is_active_and_can_be_terminated_once() {
         let mut grant =
             PersonQueryQualification::grant("q1", "sales-a", PersonDirectoryCategory::Sales).unwrap();
         assert_eq!(grant.status, PersonQueryStatus::Active);

@@ -4,9 +4,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::entity::person_directory::{
-    ExistingGrant, PersonDirectoryCategory, PersonQueryQualification, PersonQueryStatus, should_insert_grant,
-};
+use crate::entity::person_directory::{PersonDirectoryCategory, PersonQueryQualification};
 use crate::repository::prelude::*;
 use crate::{AccessControlExt, Error, Result, RoleId};
 
@@ -34,12 +32,7 @@ pub async fn ensure_grant(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let existing = db.person_query_qualifications().find_for_account(account_id, category, executor).await?;
-    let state = match existing.as_ref().map(|row| row.status) {
-        None => ExistingGrant::Absent,
-        Some(PersonQueryStatus::Active) => ExistingGrant::Active,
-        Some(PersonQueryStatus::Terminated) => ExistingGrant::Terminated,
-    };
-    if !should_insert_grant(state) {
+    if existing.is_some() {
         return Ok(());
     }
 

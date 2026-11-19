@@ -6,10 +6,7 @@ use entity_macros::{Entity, id_type};
 use erp_core::common::time::Instant;
 use serde::{Deserialize, Serialize};
 
-use super::scope_target::{BoundScopeTarget, ScopeTarget};
-use super::{
-    DataScopeType, ResolvedScope, ScopeBinding, ScopeClause, ScopeDimension, ScopeTargetMode, scope_spec,
-};
+use super::{DataScopeType, ResolvedScope, ScopeClause, ScopeDimension, ScopeTargetMode, scope_spec};
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
 use crate::{Error, Result};
@@ -62,32 +59,6 @@ pub struct PersonDataScope {
     pub action: String,
     /// 保存的旧完整表达式或新版附加授权。
     pub expression: PersonScopeExpression,
-}
-
-impl PersonScopeTerm {
-    /// 校验所属资源动作的绑定和目标形态，返回规范化的人员目标；角色专用的管理部门模式会被拒绝。
-    pub(crate) fn target(&self, resource: &str, actions: &[String]) -> Result<ScopeTarget> {
-        let target = self.binding(resource, actions).target(self.scope_type, &self.scope_targets)?;
-        match target {
-            BoundScopeTarget::Personal(target) => Ok(target),
-            BoundScopeTarget::ManagedOrgs => {
-                Err(Error::ValidationError("人员范围不接受角色管理部门模式".into()))
-            },
-        }
-    }
-
-    /// 在处理输入或历史记录时，按所属资源、动作和原始项组装 v2 启用绑定，留待目标解析校验。
-    pub(crate) fn binding(&self, resource: &str, actions: &[String]) -> ScopeBinding {
-        ScopeBinding {
-            schema_version: 2,
-            resource: resource.into(),
-            actions: actions.to_vec(),
-            target_dimension: self.target_dimension,
-            target_mode: self.target_mode,
-            include_descendants: self.include_descendants,
-            enabled: true,
-        }
-    }
 }
 
 impl PersonScopeExpression {
@@ -167,14 +138,8 @@ impl PersonDataScope {
         let condition = self.expression.read_limit(&branches, dimensions, allows_history)?;
 
         let tree = OrgTree::new(&state.units)?;
-        let compiler = ScopeCompiler {
-            user: &self.user_id,
-            resource: &self.resource,
-            action: &self.action,
-            tree: &tree,
-            memberships: &state.memberships,
-            at,
-        };
+        let compiler =
+            ScopeCompiler { user: &self.user_id, tree: &tree, memberships: &state.memberships, at };
 
         let mut role_clauses = Vec::new();
         for branch in &branches {
@@ -281,6 +246,28 @@ mod tests {
         assert!(
             !policy.compile(&state, &[], true, Instant::now()).unwrap().allows(&object(false, true), true)
         );
+    }
+
+    // 旧记录仍可解码管理部门模式，但交集不能因该模式无效而放宽。
+    #[test]
+    fn legacy_managed_org_mode_decodes_but_cannot_be_used_as_a_limit() {
+        let mut policy = config(vec![term(DataScopeType::Company)]);
+        let saved: PersonScopeExpression = serde_json::from_value(serde_json::json!({
+            "history_read": true,
+            "alternatives": policy.expression.alternatives,
+            "condition": [{
+                "scope_type": "team", "target_dimension": "internal_org",
+                "target_mode": "managed_orgs", "scope_targets": []
+            }]
+        }))
+        .unwrap();
+        assert!(!saved.additive);
+        assert_eq!(saved.condition.as_ref().unwrap()[0].target_mode, Some(ScopeTargetMode::ManagedOrgs));
+        policy.expression = saved;
+        assert!(matches!(
+            policy.resolve(&OrganizationState::default(), Instant::now()),
+            Err(Error::ValidationError(message)) if message == "人员范围不接受角色管理部门模式"
+        ));
     }
 
     // 验证旧本人范围约束历史读取，显式拒绝关闭两条路径，公司范围须单独授予。
@@ -415,7 +402,7 @@ mod tests {
         }
     }
 
-    // 构造只覆盖指定部门的显式项，并按绑定约束明确排除下级。
+    // 构造只覆盖指定部门的显式项，并明确排除下级。
     fn department(id: &str) -> PersonScopeTerm {
         PersonScopeTerm {
             target_mode: Some(ScopeTargetMode::Explicit),

@@ -8,7 +8,7 @@ use erp_core::AccountKind;
 use erp_core::ids::{SkuId, StockMovementId, WarehouseId};
 use erp_identity::entity::access_control::{ResolvedScope, ScopeClause};
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, QueryModel, QueryModelKey, QueryOutput, RelationKey,
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::testing::fixed_authorization;
@@ -97,26 +97,16 @@ impl AccessMapping for WarehouseModel {
     fn model(&self) -> &QueryModel {
         &self.0
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
+    fn key(&self, _: &AccessContext) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> IdentityResult<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at":0}))
     }
-    fn predicate(
-        &self,
-        _: &AccessFact,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<QueryFragment> {
+    fn predicate(&self, _: &AccessFact, _: &AccessContext) -> IdentityResult<QueryFragment> {
         unreachable!("公司范围不执行仓库维度谓词")
     }
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> IdentityResult<RelationMapping> {
         unreachable!("仓库没有外部来源")
     }
 }

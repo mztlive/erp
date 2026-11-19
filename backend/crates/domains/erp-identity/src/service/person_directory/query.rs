@@ -229,7 +229,8 @@ fn page_from_result(
     display: &DirectoryDisplay,
     version: String,
 ) -> Result<PersonDirectoryPage> {
-    let total = result.totals.first().map_or(0, |row| row.count);
+    // 仓储已拒绝超限结果，版本分面覆盖分页前的全部候选。
+    let total = result.versions.len() as i64;
     let mut items = result.items;
     for item in &mut items {
         let org = display.organizations.own_org(&item.id, display.as_of)?;
@@ -269,6 +270,12 @@ mod tests {
         };
         let empty = page_from_result(DirectoryResult::default(), 1, 20, &display, "scope".into()).unwrap();
         assert_eq!(empty.empty_reason, None);
+        assert_eq!(empty.total, 0);
+
+        let past_last =
+            page_from_result(version_fixture("甲", "active"), 2, 20, &display, "scope".into()).unwrap();
+        assert!(past_last.items.is_empty());
+        assert_eq!(past_last.total, 1);
 
         display.no_scope = true;
         let denied = page_from_result(DirectoryResult::default(), 1, 20, &display, "scope".into()).unwrap();

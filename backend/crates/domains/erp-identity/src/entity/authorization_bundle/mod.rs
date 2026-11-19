@@ -2,6 +2,7 @@
 mod export;
 mod facts;
 mod normalize;
+pub(crate) use normalize::normalize_id;
 pub(crate) mod plan;
 pub(crate) mod receipt;
 

@@ -6,6 +6,7 @@ use bpm::model::types::ApprovalNodeExecutionStatus;
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use erp_finance::repository::extensions::ReceivableExt;
 use erp_identity::entity::resource_access::event::{GrantEvent, GrantEventEvidence, GrantEventPayload};
+use erp_identity::ports::ResourceGrantFacts;
 use erp_identity::service::resource_access::append_event;
 use erp_identity::{Error, Result};
 use erp_workflow::entity::work_item_command::WorkItemCommandResult;
@@ -16,7 +17,7 @@ use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 
 use crate::ResourceGrantProcess;
-use crate::facts::{Facts, validate_targets};
+use crate::facts::Facts;
 use crate::management::validate_cursor;
 
 #[derive(Debug, Deserialize)]
@@ -116,6 +117,7 @@ impl ResourceGrantProcess {
     ) -> Result<PreparedHistory> {
         let events = self.historical_events(entry, ex).await?;
         let mut prepared = PreparedHistory::default();
+        let facts = Facts { db: self.db.clone() };
         for evidence in events {
             let event = GrantEvent::new(evidence)?;
             if self.queue.source(&event.source, ex).await?.is_some_and(|source| source.terminated) {
@@ -123,8 +125,8 @@ impl ResourceGrantProcess {
                 continue;
             }
 
-            let update = Facts::compute(&self.db, &event, ex).await?;
-            validate_targets(&self.db, &update.targets, ex).await?;
+            let update = facts.compute_source(&event, ex).await?;
+            facts.validate_targets(&update.targets, ex).await?;
 
             if planned.contains(&event.source.id()?)
                 || self.queue.source_event(&event.source, ex).await?.is_some()

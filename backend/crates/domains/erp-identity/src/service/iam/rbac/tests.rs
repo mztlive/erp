@@ -8,10 +8,10 @@ use persistence_core::Executor;
 
 use super::{
     AuthorizedAccountManagement, RBAC_MODEL, ROOT_ROLE_ID, RbacService, RolePermissionSnapshot,
-    collect_role_ids, collect_role_permissions, commit_outcome_unknown, ensure_all_roles_assignable,
-    ensure_management_subset, ensure_permission_subset, ensure_policy_snapshot_revision,
-    ensure_roles_delegable, ensure_target_roles_manageable, parse_policy_permissions, permission_pairs,
-    permissions_for_roles, role_key, role_or_not_found, root_role_is_current,
+    collect_role_ids, commit_outcome_unknown, ensure_all_roles_assignable, ensure_management_subset,
+    ensure_permission_subset, ensure_policy_snapshot_revision, ensure_roles_delegable,
+    ensure_target_roles_manageable, parse_policy_permissions, permission_pairs, permissions_for_roles,
+    role_key, role_or_not_found, root_role_is_current,
 };
 use crate::entity::{Permission, PermissionSet, Role, RoleData};
 use crate::error::Error;
@@ -363,26 +363,6 @@ async fn batch_role_ids_should_include_unbound_accounts() {
 
     assert_eq!(bound_role_ids, vec![RoleId::parse("role-a").unwrap(), RoleId::parse("role-b").unwrap()]);
     assert!(role_ids.get("2").is_some_and(Vec::is_empty));
-}
-
-// 验证批量读取直接权限时，无权限角色仍返回一个空权限集。
-#[tokio::test]
-async fn batch_role_permissions_should_include_roles_without_permissions() {
-    let model = casbin::DefaultModel::from_str(RBAC_MODEL).await.unwrap();
-    let mut enforcer = Enforcer::new(model, MemoryAdapter::default()).await.unwrap();
-    enforcer
-        .add_permission_for_user(&role_key("role-a"), vec!["customer".to_string(), "list".to_string()])
-        .await
-        .unwrap();
-
-    let role_ids = vec!["role-a".to_string(), "role-b".to_string()];
-    let permissions = collect_role_permissions(&enforcer, &role_ids).unwrap();
-
-    assert_eq!(
-        permissions.get("role-a"),
-        Some(&PermissionSet::new([Permission::parse("customer:list").unwrap()]))
-    );
-    assert!(permissions.get("role-b").is_some_and(PermissionSet::is_empty));
 }
 
 // 验证拒绝诊断能区分缺少某项权限和已有各项权限但缺少共同授予角色。

@@ -9,8 +9,8 @@ pub use creation::creation_facts;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey, QueryOutput,
+    RelationKey,
 };
 use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::repository::organization::primary_membership_query;
@@ -107,18 +107,13 @@ impl AccessMapping for ContractMapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
+    fn key(&self, _: &AccessContext) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> IdentityResult<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at":NOT_DELETED_TIMESTAMP_BSON}))
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> IdentityResult<QueryFragment> {
         let filter = match fact {
             AccessFact::Owned => {
                 doc! {"$or":[{"sales_owner_user_id":context.actor.id()},{"shared_sales_user_ids":context.actor.id()}]}
@@ -138,12 +133,7 @@ impl AccessMapping for ContractMapping {
         };
         Ok(QueryFragment::Match(filter))
     }
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> IdentityResult<RelationMapping> {
         Err(IdentityError::ValidationError("合同本体没有来源授权关系".into()))
     }
 }
@@ -376,10 +366,8 @@ mod tests {
             bindings(db.clone(), Arc::new(EmptyContractParticipants), "participation").unwrap();
         assert_eq!(mapping.model().collection, <Database as ContractExt>::CONTRACTS);
         assert_eq!(mapping.model().output, QueryOutput::Object);
-        assert!(mapping.preparation().is_none());
 
-        let QueryFragment::Match(ownership) =
-            mapping.predicate(&AccessFact::Owned, &context(), None).unwrap()
+        let QueryFragment::Match(ownership) = mapping.predicate(&AccessFact::Owned, &context()).unwrap()
         else {
             panic!("合同责任必须生成真实字段条件");
         };
@@ -389,7 +377,7 @@ mod tests {
         );
         let orgs = BTreeSet::from(["org-a".into()]);
         let QueryFragment::Exists { bindings: member, pipeline: memberships, .. } =
-            mapping.predicate(&AccessFact::OrganizationIn(orgs), &context(), None).unwrap()
+            mapping.predicate(&AccessFact::OrganizationIn(orgs), &context()).unwrap()
         else {
             panic!("合同组织范围必须关联真实主属关系");
         };
@@ -401,7 +389,7 @@ mod tests {
         assert_eq!(memberships.last().unwrap(), &doc! {"$match": {"count": 1, "org": {"$in": ["org-a"]}}});
 
         let QueryFragment::Exists { collection, bindings: bound, pipeline } =
-            mapping.predicate(&AccessFact::HistoryParticipant, &context(), None).unwrap()
+            mapping.predicate(&AccessFact::HistoryParticipant, &context()).unwrap()
         else {
             panic!("历史参与必须检查真实来源");
         };

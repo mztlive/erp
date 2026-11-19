@@ -5,8 +5,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey, QueryOutput,
+    RelationKey,
 };
 use erp_identity::ports::{AccessFactsPort, AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::{Error, ResourceTargets, Result};
@@ -42,35 +42,25 @@ impl AccessMapping for CopyMapping {
         &self.0
     }
 
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
+    fn key(&self, _: &AccessContext) -> Result<Bson> {
         Ok("$id".into())
     }
 
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! {
             "delivered": true,
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
         }))
     }
 
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> Result<QueryFragment> {
         match fact {
             AccessFact::Owned => Ok(QueryFragment::Match(doc! { "recipient_user_id": context.actor.id() })),
             _ => Err(Error::ValidationError("抄送仅提供真实收件人事实".into())),
         }
     }
 
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
         Err(Error::ValidationError("抄送不继承当前业务单据范围".into()))
     }
 }
@@ -170,15 +160,12 @@ mod tests {
             model: Some(QueryModelKey::parse(MODEL).unwrap()),
             as_of: Instant::now(),
         };
-        let facts = None;
 
-        let QueryFragment::Match(filter) = mapping.predicate(&AccessFact::Owned, &context, facts).unwrap()
-        else {
+        let QueryFragment::Match(filter) = mapping.predicate(&AccessFact::Owned, &context).unwrap() else {
             panic!("收件人应映射为实际字段条件");
         };
         assert_eq!(filter, doc! { "recipient_user_id": "reader" });
 
-        assert!(mapping.predicate(&AccessFact::AssignedTo, &context, facts).is_err());
-        assert!(mapping.preparation().is_none());
+        assert!(mapping.predicate(&AccessFact::AssignedTo, &context).is_err());
     }
 }

@@ -2,7 +2,7 @@
 
 use mongodb::bson::Bson;
 
-use crate::entity::authorization::{AccessContext, AccessFact, MappingFacts, QueryModel, RelationKey};
+use crate::entity::authorization::{AccessContext, AccessFact, QueryModel, RelationKey};
 use crate::ports::{AccessMapping, QueryFragment, RelationMapping};
 use crate::{Error, Result};
 
@@ -19,32 +19,22 @@ impl AccessMapping for UnavailableMapping {
     }
 
     // 拒绝生成主键，避免将失败替身用于关联查询。
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
+    fn key(&self, _: &AccessContext) -> Result<Bson> {
         Err(mapping_unavailable())
     }
 
     // 拒绝生成有效记录条件，不把不可用映射解释成全量读取。
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> Result<QueryFragment> {
         Err(mapping_unavailable())
     }
 
     // 拒绝生成事实谓词，供测试定位映射转换错误。
-    fn predicate(
-        &self,
-        _: &AccessFact,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
+    fn predicate(&self, _: &AccessFact, _: &AccessContext) -> Result<QueryFragment> {
         Err(mapping_unavailable())
     }
 
     // 拒绝解析来源，不提供可执行的子查询。
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
         Err(mapping_unavailable())
     }
 }

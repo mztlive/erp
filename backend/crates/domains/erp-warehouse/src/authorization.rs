@@ -5,8 +5,8 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey, QueryOutput,
+    RelationKey,
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{
@@ -80,30 +80,20 @@ impl AccessMapping for WarehouseMapping {
     fn model(&self) -> &QueryModel {
         &self.0
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> erp_identity::Result<Bson> {
+    fn key(&self, _: &AccessContext) -> erp_identity::Result<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> erp_identity::Result<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> erp_identity::Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at":0}))
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> erp_identity::Result<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, _: &AccessContext) -> erp_identity::Result<QueryFragment> {
         Ok(QueryFragment::Match(match fact {
             AccessFact::WarehouseIn(ids) => doc! {"id":{"$in":ids.iter().cloned().collect::<Vec<_>>() }},
             AccessFact::Collaborating => doc! {"$expr": false},
             _ => return Err(erp_identity::Error::ValidationError("仓库身份仅支持仓库事实".into())),
         }))
     }
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> erp_identity::Result<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> erp_identity::Result<RelationMapping> {
         Err(erp_identity::Error::ValidationError("仓库身份没有来源关系".into()))
     }
 }
@@ -333,15 +323,14 @@ mod tests {
     fn warehouse_fact_uses_real_identity_and_rejects_unsupported_dimensions() {
         let mapping = mapping();
         let context = context();
-        let prepared = None;
         let fragment = mapping
-            .predicate(&AccessFact::WarehouseIn(["wh-a".into(), "wh-b".into()].into()), &context, prepared)
+            .predicate(&AccessFact::WarehouseIn(["wh-a".into(), "wh-b".into()].into()), &context)
             .unwrap();
         assert!(
             matches!(fragment, QueryFragment::Match(filter) if filter == doc! {"id":{"$in":["wh-a","wh-b"]}})
         );
-        assert!(mapping.predicate(&AccessFact::Owned, &context, prepared).is_err());
-        assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context, prepared).is_err());
+        assert!(mapping.predicate(&AccessFact::Owned, &context).is_err());
+        assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context).is_err());
     }
     fn inventory_entries() -> [(Permission, Permission); 8] {
         [
@@ -410,16 +399,16 @@ mod tests {
     fn warehouse_collaboration_query_matches_known_empty_object_facts() {
         let mapping = WarehouseMapping::shared("inventory_warehouse").unwrap();
         assert!(mapping.model().facts.contains(&FactKind::Collaborators));
-        let fragment = mapping.predicate(&AccessFact::Collaborating, &context(), None).unwrap();
+        let fragment = mapping.predicate(&AccessFact::Collaborating, &context()).unwrap();
         assert!(matches!(fragment, QueryFragment::Match(filter) if filter == doc! {"$expr": false}));
     }
 
     #[test]
     fn model_records_exclude_deleted_warehouse_identities() {
         let mapping = mapping();
-        assert_eq!(mapping.key(&context(), None).unwrap(), Bson::String("$id".into()));
+        assert_eq!(mapping.key(&context()).unwrap(), Bson::String("$id".into()));
         assert!(
-            matches!(mapping.records(&context(), None).unwrap(), QueryFragment::Match(filter) if filter == doc! {"deleted_at":0})
+            matches!(mapping.records(&context()).unwrap(), QueryFragment::Match(filter) if filter == doc! {"deleted_at":0})
         );
     }
 }

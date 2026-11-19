@@ -6,7 +6,7 @@ use std::sync::Arc;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_catalog::portal::CatalogPortalExt;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, MappingFacts, QueryModel, QueryModelKey, QueryOutput, RelationKey,
+    AccessContext, AccessFact, QueryModel, QueryModelKey, QueryOutput, RelationKey,
 };
 use erp_identity::ports::{AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::{Error, Result};
@@ -78,11 +78,11 @@ impl AccessMapping for MaterialMapping {
         relations
     }
 
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
+    fn key(&self, _: &AccessContext) -> Result<Bson> {
         Ok("$id".into())
     }
 
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> Result<QueryFragment> {
         let mut filter = doc! {
             "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
             "supplier_id": {"$type": "string", "$ne": ""},
@@ -93,21 +93,11 @@ impl AccessMapping for MaterialMapping {
         Ok(QueryFragment::Match(filter))
     }
 
-    fn predicate(
-        &self,
-        _: &AccessFact,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
+    fn predicate(&self, _: &AccessFact, _: &AccessContext) -> Result<QueryFragment> {
         Err(Error::ValidationError("门户材料归属必须沿真实供应商或供给来源检查".into()))
     }
 
-    fn relation(
-        &self,
-        relation: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
+    fn relation(&self, relation: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
         let (expected_ids, mapping) = match relation.as_str() {
             "supplier" => (Bson::Array(vec!["$supplier_id".into()]), self.supplier.clone()),
             "offering" => {
@@ -172,19 +162,18 @@ mod tests {
             let mapping = &mappings[partition];
             assert_eq!(mapping.model().collection, collection);
             assert_eq!(mapping.model().output, QueryOutput::Object);
-            assert!(mapping.preparation().is_none());
-            let relation =
-                mapping.relation(&RelationKey::parse("supplier").unwrap(), &context, None).unwrap();
+
+            let relation = mapping.relation(&RelationKey::parse("supplier").unwrap(), &context).unwrap();
             assert_eq!(relation.expected_ids, Bson::Array(vec!["$supplier_id".into()]));
             assert!(Arc::ptr_eq(
                 &relation.mapping,
                 &mapping.relations()[&RelationKey::parse("supplier").unwrap()]
             ));
-            let QueryFragment::Match(filter) = mapping.records(&context, None).unwrap() else {
+            let QueryFragment::Match(filter) = mapping.records(&context).unwrap() else {
                 panic!("必须输出真实有效记录条件")
             };
             assert_eq!(filter.get("deleted_at"), Some(&Bson::Int64(0)));
-            assert!(mapping.predicate(&AccessFact::Owned, &context, None).is_err());
+            assert!(mapping.predicate(&AccessFact::Owned, &context).is_err());
         }
     }
 
@@ -193,8 +182,7 @@ mod tests {
         let mappings = mappings().await;
         let context = context();
         let application = &mappings["application"];
-        let reference =
-            application.relation(&RelationKey::parse("offering").unwrap(), &context, None).unwrap();
+        let reference = application.relation(&RelationKey::parse("offering").unwrap(), &context).unwrap();
         let snapshot = OfferingApplicationSnapshot::StopSupply {
             offering_id: "actual-offering".into(),
             expected_offering_version: 7,
@@ -213,7 +201,7 @@ mod tests {
 
         for partition in ["new_product", "cooperation"] {
             assert!(matches!(
-                mappings[partition].relation(&RelationKey::parse("offering").unwrap(), &context, None),
+                mappings[partition].relation(&RelationKey::parse("offering").unwrap(), &context),
                 Err(Error::ValidationError(_))
             ));
         }

@@ -1,8 +1,10 @@
 //! 将持久化范围字段解析为不可混用的内部目标形态。
-use erp_core::{Error, Result};
+use erp_core::Error as CoreError;
 
+use super::person_scope::PersonScopeTerm;
 use super::scope_type::normalize_scope_targets;
-use super::{DataScopeType, ScopeBinding, ScopeDimension, ScopeTargetMode};
+use super::{DataScopeType, ScopeDimension, ScopeTargetMode};
+use crate::{Error, Result};
 
 /// 已校验的人员范围目标，各模式只携带适用信息，沿用原有持久化协议。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,100 +20,113 @@ pub(crate) enum ScopeTarget {
         /// 经规范化的内部组织标识，供组织树展开。
         ids: Vec<String>,
         /// 是否将显式组织目标的有效下级纳入范围。
-        include_descendants: bool
+        include_descendants: bool,
     },
     /// 解析时以账号的有效成员关系确定目标组织。
     OwnOrg {
         /// 是否将本人组织的有效下级纳入范围。
-        include_descendants: bool
+        include_descendants: bool,
     },
     /// 以对象结算主体匹配显式目标。
     SettlementParties(
         /// 经规范化的结算主体标识。
-        Vec<String>
+        Vec<String>,
     ),
     /// 以对象仓库匹配显式目标。
     Warehouses(
         /// 经规范化的仓库标识。
-        Vec<String>
+        Vec<String>,
     ),
 }
-/// 绑定解析结果，区分人员目标与旧角色专用的管理部门模式。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum BoundScopeTarget {
-    /// 允许进入人员范围表达式的已验证目标。
-    Personal(
-        /// 按各维度和模式解释的目标内容。
-        ScopeTarget
-    ),
-    /// 仅旧角色协议接受的动态管理部门标记。
-    ManagedOrgs,
-}
-impl BoundScopeTarget {
-    /// 将存储或请求中的目标字段解析成内部形态；无目标类型须省略目标设置，显式模式须提供目标。
-    /// 动态模式只接受内部组织且目标须为空；下级标记仅对显式内部组织和本人组织必填。
-    /// 显式目标会规范化，非法字段组合、身份或数量返回错误。
-    pub(crate) fn parse(binding: &ScopeBinding, kind: DataScopeType, targets: &[String]) -> Result<Self> {
-        if !kind.requires_targets() {
-            if binding.target_mode.is_some() || binding.include_descendants.is_some() || !targets.is_empty() {
-                return Err(Error::from("公司、本人及协作范围不得携带组织目标设置"));
+
+impl ScopeTarget {
+    /// 校验人员范围项的目标字段并规范化显式标识；角色管理部门模式不会产生人员目标。
+    pub(crate) fn parse(term: &PersonScopeTerm) -> Result<Self> {
+        if !term.scope_type.requires_targets() {
+            if term.target_mode.is_some()
+                || term.include_descendants.is_some()
+                || !term.scope_targets.is_empty()
+            {
+                return Err(CoreError::from("公司、本人及协作范围不得携带组织目标设置").into());
             }
-            return Ok(Self::Personal(match kind {
-                DataScopeType::Company => ScopeTarget::Company,
-                DataScopeType::SelfOwned => ScopeTarget::SelfOwned,
-                DataScopeType::Collaborative => ScopeTarget::Collaborative,
+            return Ok(match term.scope_type {
+                DataScopeType::Company => Self::Company,
+                DataScopeType::SelfOwned => Self::SelfOwned,
+                DataScopeType::Collaborative => Self::Collaborative,
                 _ => unreachable!("需要目标的范围已排除"),
-            }));
+            });
         }
 
-        let mode = binding.target_mode.ok_or_else(|| Error::from("组织范围必须指定目标模式"))?;
-        if mode != ScopeTargetMode::Explicit && binding.target_dimension != ScopeDimension::InternalOrg {
-            return Err(Error::from("动态范围仅支持内部组织"));
+        let mode = term.target_mode.ok_or_else(|| CoreError::from("组织范围必须指定目标模式"))?;
+        if mode != ScopeTargetMode::Explicit && term.target_dimension != ScopeDimension::InternalOrg {
+            return Err(CoreError::from("动态范围仅支持内部组织").into());
         }
-        if (mode == ScopeTargetMode::Explicit) == targets.is_empty() {
-            return Err(Error::from("显式模式必须指定目标，动态模式不得混入静态目标"));
+        if (mode == ScopeTargetMode::Explicit) == term.scope_targets.is_empty() {
+            return Err(CoreError::from("显式模式必须指定目标，动态模式不得混入静态目标").into());
         }
-
+        // 先校验目标形态，再拒绝合法形态的旧管理部门模式。
         let needs_descendants =
-            binding.target_dimension == ScopeDimension::InternalOrg && mode != ScopeTargetMode::ManagedOrgs;
-        if needs_descendants != binding.include_descendants.is_some() {
-            return Err(Error::from("内部组织显式或本人组织模式必须明确是否包含下级，其他模式不得设置"));
+            term.target_dimension == ScopeDimension::InternalOrg && mode != ScopeTargetMode::ManagedOrgs;
+        if needs_descendants != term.include_descendants.is_some() {
+            return Err(
+                CoreError::from("内部组织显式或本人组织模式必须明确是否包含下级，其他模式不得设置").into()
+            );
         }
-        Self::from_shape(binding, kind, targets, mode)
-    }
 
-    // 字段组合校验通过后，按模式及维度构造目标；显式模式在此规范化标识。
-    fn from_shape(
-        binding: &ScopeBinding,
-        kind: DataScopeType,
-        targets: &[String],
-        mode: ScopeTargetMode,
-    ) -> Result<Self> {
         match mode {
-            ScopeTargetMode::ManagedOrgs => Ok(Self::ManagedOrgs),
-            ScopeTargetMode::OwnOrg => Ok(Self::Personal(ScopeTarget::OwnOrg {
-                include_descendants: binding.include_descendants.expect("本人组织已要求下级标记"),
-            })),
+            ScopeTargetMode::ManagedOrgs => {
+                Err(Error::ValidationError("人员范围不接受角色管理部门模式".into()))
+            },
+            ScopeTargetMode::OwnOrg => Ok(Self::OwnOrg {
+                include_descendants: term.include_descendants.expect("本人组织已要求下级标记"),
+            }),
             ScopeTargetMode::Explicit => {
-                let ids = normalize_scope_targets(kind, targets.to_vec())?;
-                Ok(Self::Personal(match binding.target_dimension {
-                    ScopeDimension::InternalOrg => ScopeTarget::OrgExplicit {
+                let ids = normalize_scope_targets(term.scope_type, term.scope_targets.clone())?;
+                Ok(match term.target_dimension {
+                    ScopeDimension::InternalOrg => Self::OrgExplicit {
                         ids,
-                        include_descendants: binding.include_descendants.expect("内部组织已要求下级标记"),
+                        include_descendants: term.include_descendants.expect("内部组织已要求下级标记"),
                     },
-                    ScopeDimension::SettlementParty => ScopeTarget::SettlementParties(ids),
-                    ScopeDimension::Warehouse => ScopeTarget::Warehouses(ids),
-                }))
+                    ScopeDimension::SettlementParty => Self::SettlementParties(ids),
+                    ScopeDimension::Warehouse => Self::Warehouses(ids),
+                })
             },
         }
     }
-}
-impl ScopeTarget {
+
     /// 借用已规范化的显式目标标识；动态或隐式范围返回空切片。
     pub(crate) fn ids(&self) -> &[String] {
         match self {
             Self::OrgExplicit { ids, .. } | Self::SettlementParties(ids) | Self::Warehouses(ids) => ids,
             _ => &[],
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // 多个字段不合法时，沿用先维度、再静态目标、最后下级标记的报错顺序。
+    #[test]
+    fn malformed_managed_org_mode_reports_the_first_shape_error() {
+        let mut term = PersonScopeTerm {
+            scope_type: DataScopeType::Team,
+            target_dimension: ScopeDimension::Warehouse,
+            target_mode: Some(ScopeTargetMode::ManagedOrgs),
+            include_descendants: Some(false),
+            scope_targets: vec!["one".into()],
+        };
+        let assert_error = |term: &PersonScopeTerm, expected: &str| {
+            assert!(matches!(
+                ScopeTarget::parse(term),
+                Err(Error::Logic(CoreError::LogicError(message))) if message == expected
+            ));
+        };
+        assert_error(&term, "动态范围仅支持内部组织");
+        term.target_dimension = ScopeDimension::InternalOrg;
+        assert_error(&term, "显式模式必须指定目标，动态模式不得混入静态目标");
+        term.scope_targets.clear();
+        assert_error(&term, "内部组织显式或本人组织模式必须明确是否包含下级，其他模式不得设置");
     }
 }

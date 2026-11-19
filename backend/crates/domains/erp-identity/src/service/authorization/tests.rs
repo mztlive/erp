@@ -456,61 +456,22 @@ async fn credentials_reject_other_service_executor_next_query_restart_and_raw_se
     assert!(matches!(service.validate(&access, &mut ex).await, Err(Error::ValidationError(_))));
 }
 
-// 动态映射在查询时准备，已到期则拒绝；交付时非事务复验版本，快照内不重复准备。
+// 静态映射条件已到期时，快照及非事务查询都必须拒绝编译。
 #[tokio::test]
-async fn dynamic_mapping_revisions_and_expiry_are_checked_by_public_delivery_api() {
-    let mut map = mapping(&inquiry::QUERY_SALES_LIST);
-    Arc::get_mut(&mut map).unwrap().dynamic = true;
-    let mut builder = complete();
-    builder.mappings.insert(inquiry::QUERY_SALES_LIST, map.clone());
-    let service = builder.build().unwrap();
-    assert_eq!(map.prepares.load(Ordering::SeqCst), 0);
-
-    let mut ex = ReadExecutor::default();
-    let access = service.query(&actor(), &inquiry::QUERY_SALES_LIST, &mut ex).await.unwrap();
-    assert_eq!(map.prepares.load(Ordering::SeqCst), 1);
-    service.validate(&access, &mut ex).await.unwrap();
-    assert_eq!(map.prepares.load(Ordering::SeqCst), 2);
-
-    let access = service.query(&actor(), &inquiry::QUERY_SALES_LIST, &mut ex).await.unwrap();
-    map.revision.fetch_add(1, Ordering::SeqCst);
-    assert!(matches!(service.validate(&access, &mut ex).await, Err(Error::ConflictError(_))));
-
-    let mut snapshot = SnapshotExecutor::default();
-    let access = service.query(&actor(), &inquiry::QUERY_SALES_LIST, &mut snapshot).await.unwrap();
-    let calls = map.prepares.load(Ordering::SeqCst);
-    service.validate(&access, &mut snapshot).await.unwrap();
-    assert_eq!(map.prepares.load(Ordering::SeqCst), calls);
-
+async fn expired_static_mapping_is_rejected_by_public_query_api() {
+    let map = mapping(&inquiry::QUERY_SALES_LIST);
     *map.expires.lock().unwrap() = Some(Instant::from_unix_secs(1));
-    assert!(matches!(
-        service.query(&actor(), &inquiry::QUERY_SALES_LIST, &mut snapshot).await,
-        Err(Error::ConflictError(_))
-    ));
-}
-
-// 不能复验版本的动态映射只支持快照，准备过程中也不得切换读取阶段。
-#[tokio::test]
-async fn dynamic_mapping_without_revision_only_supports_snapshot_and_cannot_change_stage() {
-    let mut map = mapping(&inquiry::QUERY_SALES_LIST);
-    let data = Arc::get_mut(&mut map).unwrap();
-    data.dynamic = true;
-    data.reliable = false;
     let mut builder = complete();
-    builder.mappings.insert(inquiry::QUERY_SALES_LIST, map.clone());
+    builder.mappings.insert(inquiry::QUERY_SALES_LIST, map);
     let service = builder.build().unwrap();
-    assert!(matches!(
-        service.query(&actor(), &inquiry::QUERY_SALES_LIST, &mut ReadExecutor::default()).await,
-        Err(Error::ValidationError(_))
-    ));
-    let mut ex = SnapshotExecutor::default();
-    let access = service.query(&actor(), &inquiry::QUERY_SALES_LIST, &mut ex).await.unwrap();
-    service.validate(&access, &mut ex).await.unwrap();
-    map.change_stage.store(true, Ordering::SeqCst);
-    assert!(matches!(
-        service.query(&actor(), &inquiry::QUERY_SALES_LIST, &mut ex).await,
-        Err(Error::ValidationError(_))
-    ));
+    for mut executor in
+        [Box::new(ReadExecutor::default()) as Box<dyn Executor>, Box::new(SnapshotExecutor::default())]
+    {
+        assert!(matches!(
+            service.query(&actor(), &inquiry::QUERY_SALES_LIST, executor.as_mut()).await,
+            Err(Error::ConflictError(message)) if message == "DATA_SCOPE_CHANGED：静态时间边界已到期"
+        ));
+    }
 }
 
 // 整条记录授权不能替代功能权限，列表交付还要复验记录授权版本。

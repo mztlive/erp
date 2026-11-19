@@ -1,7 +1,7 @@
 //! 采购创建任务的真实来源映射与授权结果读取。
 
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, QueryModel, QueryModelKey, QueryOutput, RelationKey,
 };
 use erp_identity::ports::{AccessMapping, QueryFragment, RelationMapping};
 use erp_identity::repository::organization::primary_membership_query;
@@ -83,18 +83,13 @@ impl AccessMapping for CreationTaskMapping {
     fn model(&self) -> &QueryModel {
         &self.0
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
+    fn key(&self, _: &AccessContext) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> IdentityResult<QueryFragment> {
         Ok(QueryFragment::Match(filter(None, None)))
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> IdentityResult<QueryFragment> {
         match fact {
             AccessFact::Owned | AccessFact::AssignedTo => {
                 Ok(QueryFragment::Match(doc! { "owner_user_id": context.actor.id() }))
@@ -105,12 +100,7 @@ impl AccessMapping for CreationTaskMapping {
             _ => Err(IdentityError::ValidationError("采购创建任务不提供该事实维度".into())),
         }
     }
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> IdentityResult<RelationMapping> {
         Err(IdentityError::ValidationError("采购创建任务没有来源授权关系".into()))
     }
 }
@@ -141,7 +131,7 @@ mod tests {
             as_of: Instant::from_unix_secs(100),
         };
         for fact in [AccessFact::Owned, AccessFact::AssignedTo] {
-            let QueryFragment::Match(predicate) = mapping.predicate(&fact, &context, None).unwrap() else {
+            let QueryFragment::Match(predicate) = mapping.predicate(&fact, &context).unwrap() else {
                 panic!("任务归属和分配必须使用真实负责人")
             };
             assert_eq!(predicate, doc! { "owner_user_id": "buyer" });
@@ -149,7 +139,7 @@ mod tests {
 
         let organizations = ["current-org".into()].into();
         let QueryFragment::Exists { bindings, pipeline, .. } =
-            mapping.predicate(&AccessFact::OrganizationIn(organizations), &context, None).unwrap()
+            mapping.predicate(&AccessFact::OrganizationIn(organizations), &context).unwrap()
         else {
             panic!("任务组织必须解析当前负责人主属组织")
         };
@@ -160,11 +150,11 @@ mod tests {
         );
         assert_eq!(pipeline[3], doc! { "$match": { "count": 1, "org": { "$in": ["current-org"] } } });
 
-        let QueryFragment::Match(records) = mapping.records(&context, None).unwrap() else {
+        let QueryFragment::Match(records) = mapping.records(&context).unwrap() else {
             panic!("任务查询仅按真实开放任务收窄")
         };
         assert_eq!(records, filter(None, None));
-        assert_eq!(mapping.key(&context, None).unwrap(), Bson::String("$id".into()));
+        assert_eq!(mapping.key(&context).unwrap(), Bson::String("$id".into()));
     }
     #[test]
     fn task_filter_keeps_exact_business_and_open_task_identity() {

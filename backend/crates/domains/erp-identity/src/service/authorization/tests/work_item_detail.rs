@@ -18,6 +18,7 @@ use crate::entity::authorization::{
     AccessContext, AccessTarget, FactValue, ObjectFacts, RelatedObjects, RelationKey, ResourceTargets,
 };
 use crate::ports::AccessFactsPort;
+use crate::repository::authorization::AccessValidity;
 use crate::repository::authorization::fixtures::execute;
 use crate::{AuthorizationService, CompiledAccess, Error, Result};
 
@@ -279,14 +280,13 @@ async fn approval_manager_detail_requires_the_real_type_and_complete_source_rang
     }
 }
 
-// 详情来源准备阶段产生的到期时间要纳入原读取凭证并在交付时检查。
+// 详情来源映射的静态到期时间要纳入原读取凭证并在交付时检查。
 #[tokio::test]
-async fn detail_source_preparation_expiry_is_part_of_the_original_delivery_proof() {
+async fn detail_source_mapping_expiry_is_part_of_the_original_delivery_proof() {
     let mut builder = complete();
     let mut task = mapping(&work_item::DETAIL);
-    let mut purchase = mapping(&purchase_order::DETAIL);
+    let purchase = mapping(&purchase_order::DETAIL);
     let deadline = Instant::from_unix_secs(Instant::now().unix_secs() + 100);
-    Arc::get_mut(&mut purchase).unwrap().dynamic = true;
     *purchase.expires.lock().unwrap() = Some(deadline);
     Arc::get_mut(&mut task)
         .unwrap()
@@ -295,13 +295,15 @@ async fn detail_source_preparation_expiry_is_part_of_the_original_delivery_proof
     builder.mappings.insert(work_item::DETAIL, task);
     let service = builder.build().unwrap();
     let mut executor = SnapshotExecutor::default();
-    let mut access = service.query(&actor(), &work_item::DETAIL, &mut executor).await.unwrap();
+    let access = service.query(&actor(), &work_item::DETAIL, &mut executor).await.unwrap();
     assert_eq!(access.validity.valid_until, Some(deadline));
-    service.validate(&access, &mut executor).await.unwrap();
-
-    access.validity.boundary = executor.boundary().unwrap();
-    access.validity.valid_until = Some(Instant::from_unix_secs(1));
-    assert!(matches!(service.validate(&access, &mut executor).await, Err(Error::ConflictError(_))));
+    AccessValidity::with_test_time(deadline, async {
+        assert!(matches!(
+            service.validate(&access, &mut executor).await,
+            Err(Error::ConflictError(message)) if message == "DATA_SCOPE_CHANGED：授权关系已到期"
+        ));
+    })
+    .await;
 }
 
 // 在审批任务详情复验时提供可能已变化的审批来源。

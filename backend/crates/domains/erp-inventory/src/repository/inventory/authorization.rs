@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, QueryModel, QueryModelKey, QueryOutput, RelationKey,
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{AccessMapping, Error, Result};
@@ -63,18 +63,13 @@ impl AccessMapping for InventoryMapping {
     fn relations(&self) -> BTreeMap<RelationKey, Arc<dyn AccessMapping>> {
         [(RelationKey::parse("warehouse").expect("固定仓库来源标识"), self.warehouse.clone())].into()
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
+    fn key(&self, _: &AccessContext) -> Result<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at": 0}))
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> Result<QueryFragment> {
         let filter = match fact {
             AccessFact::Collaborating | AccessFact::HistoryParticipant => doc! { "$expr": false },
             AccessFact::WarehouseIn(ids) => {
@@ -87,12 +82,7 @@ impl AccessMapping for InventoryMapping {
         };
         Ok(QueryFragment::Match(filter))
     }
-    fn relation(
-        &self,
-        relation: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
+    fn relation(&self, relation: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
         if relation.as_str() != "warehouse" {
             return Err(Error::ValidationError("未登记库存来源关系".into()));
         }
@@ -117,26 +107,16 @@ mod tests {
         fn model(&self) -> &QueryModel {
             &self.0
         }
-        fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
+        fn key(&self, _: &AccessContext) -> Result<Bson> {
             Ok("$id".into())
         }
-        fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
+        fn records(&self, _: &AccessContext) -> Result<QueryFragment> {
             Ok(QueryFragment::Match(doc! {"deleted_at":0}))
         }
-        fn predicate(
-            &self,
-            _: &AccessFact,
-            _: &AccessContext,
-            _: Option<&MappingFacts>,
-        ) -> Result<QueryFragment> {
+        fn predicate(&self, _: &AccessFact, _: &AccessContext) -> Result<QueryFragment> {
             Err(Error::ValidationError("not used".into()))
         }
-        fn relation(
-            &self,
-            _: &RelationKey,
-            _: &AccessContext,
-            _: Option<&MappingFacts>,
-        ) -> Result<RelationMapping> {
+        fn relation(&self, _: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
             Err(Error::ValidationError("not used".into()))
         }
     }
@@ -163,25 +143,24 @@ mod tests {
     fn warehouse_relation_references_the_full_actual_warehouse_and_fixed_source() {
         let warehouse = source();
         let mapping = InventoryMapping::shared(InventoryAction::BalanceList, warehouse.clone()).unwrap();
-        let relation = mapping.relation(&RelationKey::parse("warehouse").unwrap(), &context(), None).unwrap();
+        let relation = mapping.relation(&RelationKey::parse("warehouse").unwrap(), &context()).unwrap();
         assert_eq!(relation.expected_ids, Bson::Array(vec!["$warehouse_id".into()]));
         assert!(Arc::ptr_eq(&relation.mapping, &warehouse));
-        assert!(mapping.relation(&RelationKey::parse("other").unwrap(), &context(), None).is_err());
-        assert!(mapping.predicate(&AccessFact::Owned, &context(), None).is_err());
+        assert!(mapping.relation(&RelationKey::parse("other").unwrap(), &context()).is_err());
+        assert!(mapping.predicate(&AccessFact::Owned, &context()).is_err());
     }
     #[test]
-    fn static_inventory_maps_actual_warehouse_without_dynamic_preparation() {
+    fn inventory_maps_actual_warehouse_and_task_assignment() {
         let mapping = InventoryMapping::shared(InventoryAction::AdjustmentList, source()).unwrap();
-        assert!(mapping.preparation().is_none());
+
         let QueryFragment::Match(warehouse) =
-            mapping.predicate(&AccessFact::WarehouseIn(["w1".into()].into()), &context(), None).unwrap()
+            mapping.predicate(&AccessFact::WarehouseIn(["w1".into()].into()), &context()).unwrap()
         else {
             panic!("仓库范围应使用本行字段")
         };
         assert_eq!(warehouse, doc! {"warehouse_id": {"$in": ["w1"]}});
 
-        let QueryFragment::Match(assigned) =
-            mapping.predicate(&AccessFact::AssignedTo, &context(), None).unwrap()
+        let QueryFragment::Match(assigned) = mapping.predicate(&AccessFact::AssignedTo, &context()).unwrap()
         else {
             panic!("提交经办人应使用真实prepared_by")
         };
@@ -202,7 +181,7 @@ mod tests {
                 (AccessFact::HistoryParticipant, FactKind::HistoryParticipants),
             ] {
                 assert!(mapping.model().facts.contains(&kind));
-                let predicate = mapping.predicate(&fact, &context(), None).unwrap();
+                let predicate = mapping.predicate(&fact, &context()).unwrap();
                 assert!(
                     matches!(predicate, QueryFragment::Match(document) if document == doc! { "$expr": false })
                 );
@@ -221,7 +200,7 @@ mod tests {
             let mapping = InventoryMapping::shared(action, source()).unwrap();
             assert_eq!(mapping.model().collection, collection);
             assert!(
-                matches!(mapping.records(&context(), None).unwrap(), QueryFragment::Match(filter) if filter == doc! {"deleted_at":0})
+                matches!(mapping.records(&context()).unwrap(), QueryFragment::Match(filter) if filter == doc! {"deleted_at":0})
             );
         }
 

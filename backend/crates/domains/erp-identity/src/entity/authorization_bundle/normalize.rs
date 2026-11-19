@@ -114,7 +114,7 @@ impl PolicyScope {
         for grant in &self.grants {
             let start = targets.len();
             for term in &grant.terms {
-                let target = term.target(&self.resource, &grant.actions)?;
+                let target = ScopeTarget::parse(term)?;
                 if !targets[start..].contains(&target) {
                     targets.push(target);
                 }
@@ -183,7 +183,7 @@ fn action_expression(grants: &[PersonScopeGrant], action: &str) -> Result<Person
 }
 
 /// 去除外部人员 ID 的首尾空白；结果为空、超过 128 字节或含控制字符时返回校验错误。
-pub(super) fn normalize_id(value: &str) -> Result<String> {
+pub(crate) fn normalize_id(value: &str) -> Result<String> {
     let value = value.trim();
     if value.is_empty() || value.len() > 128 || value.chars().any(char::is_control) {
         return Err(Error::ValidationError("人员ID为空、过长或包含控制字符".into()));

@@ -5,8 +5,8 @@ use async_trait::async_trait;
 use erp_finance::entity::supplier_deposit::DepositAccountIdentity;
 use erp_finance::repository::SupplierDepositExt;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey, QueryOutput,
+    RelationKey,
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{
@@ -120,10 +120,10 @@ impl AccessMapping for DepositMapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
+    fn key(&self, _: &AccessContext) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> IdentityResult<QueryFragment> {
         Ok(QueryFragment::Exists {
             collection: Database::PARTIES.into(),
             bindings: doc! {
@@ -154,12 +154,7 @@ impl AccessMapping for DepositMapping {
             ],
         })
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> IdentityResult<QueryFragment> {
         match fact {
             AccessFact::Owned => Ok(QueryFragment::Exists {
                 collection: Database::SUPPLIER_ACCOUNTS.into(),
@@ -182,12 +177,7 @@ impl AccessMapping for DepositMapping {
             _ => Err(IdentityError::ValidationError("预存款模型不支持该事实维度".into())),
         }
     }
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> IdentityResult<RelationMapping> {
         Err(IdentityError::ValidationError("预存款账户没有来源授权关系".into()))
     }
 }
@@ -235,15 +225,14 @@ mod tests {
     #[test]
     fn payer_and_supplier_organization_use_their_actual_foreign_keys() {
         let mapping = DepositMapping::new();
-        let payer = mapping
-            .predicate(&AccessFact::SettlementPartyIn(["payer".into()].into()), &context(), None)
-            .unwrap();
+        let payer =
+            mapping.predicate(&AccessFact::SettlementPartyIn(["payer".into()].into()), &context()).unwrap();
         assert!(
             matches!(payer, QueryFragment::Match(filter) if filter == doc! {"identity.payer_party_id": {"$in": ["payer"]}})
         );
 
         let organization =
-            mapping.predicate(&AccessFact::OrganizationIn(["org".into()].into()), &context(), None).unwrap();
+            mapping.predicate(&AccessFact::OrganizationIn(["org".into()].into()), &context()).unwrap();
         let QueryFragment::Exists { collection, bindings, pipeline } = organization else {
             panic!("组织事实必须从实际供应商读取")
         };
@@ -261,10 +250,10 @@ mod tests {
     fn unsupported_fact_and_relation_fail_closed() {
         let mapping = DepositMapping::new();
         assert!(matches!(
-            mapping.predicate(&AccessFact::AssignedTo, &context(), None),
+            mapping.predicate(&AccessFact::AssignedTo, &context()),
             Err(IdentityError::ValidationError(_))
         ));
-        assert!(mapping.relation(&RelationKey::parse("sales").unwrap(), &context(), None).is_err());
+        assert!(mapping.relation(&RelationKey::parse("sales").unwrap(), &context()).is_err());
         assert!(mapping.model().validate().is_ok());
     }
 
@@ -280,7 +269,7 @@ mod tests {
 
     #[test]
     fn record_eligibility_requires_the_same_actual_payer_and_supplier_as_object_facts() {
-        let fragment = DepositMapping::new().records(&context(), None).unwrap();
+        let fragment = DepositMapping::new().records(&context()).unwrap();
         let QueryFragment::Exists { collection, bindings, pipeline } = fragment else {
             panic!("资金账户必须校验真实来源资料");
         };

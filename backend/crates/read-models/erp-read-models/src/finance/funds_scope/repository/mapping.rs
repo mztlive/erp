@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, MappingFacts, QueryModel, QueryModelKey, QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, QueryModel, QueryModelKey, QueryOutput, RelationKey,
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{AccessMapping, Error, Result};
@@ -95,18 +95,13 @@ impl AccessMapping for FundsMapping {
     fn stages(&self) -> Vec<Document> {
         self.stages.clone()
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
+    fn key(&self, _: &AccessContext) -> Result<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> Result<QueryFragment> {
         Ok(QueryFragment::Match(doc! { "deleted_at": 0, "__funds_sources_valid": true }))
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> Result<QueryFragment> {
         if self.model.resource == "purchase_payment_request" && fact == &AccessFact::AssignedTo {
             return Ok(QueryFragment::Exists {
                 collection: "work_items".into(),
@@ -120,12 +115,7 @@ impl AccessMapping for FundsMapping {
         }
         Err(Error::ValidationError("资金根不提供该授权事实".into()))
     }
-    fn relation(
-        &self,
-        key: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> Result<RelationMapping> {
+    fn relation(&self, key: &RelationKey, _: &AccessContext) -> Result<RelationMapping> {
         let mapping =
             self.sources.get(key).ok_or_else(|| Error::ValidationError("未知资金来源关系".into()))?;
         let field = match key.as_str() {

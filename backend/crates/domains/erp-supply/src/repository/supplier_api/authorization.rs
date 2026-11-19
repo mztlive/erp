@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, MappingFacts, QueryModel, QueryModelKey, QueryOutput, RelationKey,
+    AccessContext, AccessFact, QueryModel, QueryModelKey, QueryOutput, RelationKey,
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{AccessMapping, CompiledAccess, Error as IdentityError, Result as IdentityResult};
@@ -23,7 +23,7 @@ struct ConnectionMapping {
 }
 
 /// 描述连接主键和真实供应商引用，不声明访问政策。
-/// 无动态准备的完整连接对象映射。
+/// 完整连接对象的查询映射。
 /// 固定模型校验失败时拒绝。
 pub fn connection_mapping(supplier: Arc<dyn AccessMapping>) -> IdentityResult<Arc<dyn AccessMapping>> {
     let model = QueryModel {
@@ -45,26 +45,16 @@ impl AccessMapping for ConnectionMapping {
     fn relations(&self) -> BTreeMap<RelationKey, Arc<dyn AccessMapping>> {
         [(RelationKey::parse("supplier").expect("固定供应商关系"), self.supplier.clone())].into()
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
+    fn key(&self, _: &AccessContext) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> IdentityResult<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at": NOT_DELETED_TIMESTAMP_BSON}))
     }
-    fn predicate(
-        &self,
-        _: &AccessFact,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<QueryFragment> {
+    fn predicate(&self, _: &AccessFact, _: &AccessContext) -> IdentityResult<QueryFragment> {
         Err(IdentityError::ValidationError("连接根没有负责人或组织事实".into()))
     }
-    fn relation(
-        &self,
-        key: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<RelationMapping> {
+    fn relation(&self, key: &RelationKey, _: &AccessContext) -> IdentityResult<RelationMapping> {
         if key.as_str() != "supplier" {
             return Err(IdentityError::ValidationError("连接来源关系未登记".into()));
         }
@@ -133,26 +123,16 @@ mod tests {
         fn model(&self) -> &QueryModel {
             &self.0
         }
-        fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
+        fn key(&self, _: &AccessContext) -> IdentityResult<Bson> {
             Ok("$id".into())
         }
-        fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+        fn records(&self, _: &AccessContext) -> IdentityResult<QueryFragment> {
             Ok(QueryFragment::Match(doc! {"deleted_at": 0}))
         }
-        fn predicate(
-            &self,
-            _: &AccessFact,
-            _: &AccessContext,
-            _: Option<&MappingFacts>,
-        ) -> IdentityResult<QueryFragment> {
+        fn predicate(&self, _: &AccessFact, _: &AccessContext) -> IdentityResult<QueryFragment> {
             Err(IdentityError::ValidationError("测试来源不执行字段条件".into()))
         }
-        fn relation(
-            &self,
-            _: &RelationKey,
-            _: &AccessContext,
-            _: Option<&MappingFacts>,
-        ) -> IdentityResult<RelationMapping> {
+        fn relation(&self, _: &RelationKey, _: &AccessContext) -> IdentityResult<RelationMapping> {
             Err(IdentityError::ValidationError("测试来源没有下级关系".into()))
         }
     }
@@ -177,13 +157,12 @@ mod tests {
         };
 
         let key = RelationKey::parse("supplier").unwrap();
-        let relation = mapping.relation(&key, &context, None).unwrap();
+        let relation = mapping.relation(&key, &context).unwrap();
         assert_eq!(relation.expected_ids, Bson::Array(vec!["$supplier_id".into()]));
         assert!(Arc::ptr_eq(&relation.mapping, &supplier));
         assert!(Arc::ptr_eq(&mapping.relations()[&key], &supplier));
 
-        assert!(mapping.relation(&RelationKey::parse("other").unwrap(), &context, None).is_err());
-        assert!(mapping.predicate(&AccessFact::Owned, &context, None).is_err());
-        assert!(mapping.preparation().is_none());
+        assert!(mapping.relation(&RelationKey::parse("other").unwrap(), &context).is_err());
+        assert!(mapping.predicate(&AccessFact::Owned, &context).is_err());
     }
 }

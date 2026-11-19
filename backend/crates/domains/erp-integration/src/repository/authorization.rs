@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use erp_identity::entity::authorization::{
-    AccessContext, AccessFact, FactKind, FactValue, MappingFacts, ObjectFacts, QueryModel, QueryModelKey,
-    QueryOutput, RelationKey,
+    AccessContext, AccessFact, FactKind, FactValue, ObjectFacts, QueryModel, QueryModelKey, QueryOutput,
+    RelationKey,
 };
 use erp_identity::ports::{QueryFragment, RelationMapping};
 use erp_identity::{
@@ -126,18 +126,13 @@ impl AccessMapping for IntegrationMapping {
     fn model(&self) -> &QueryModel {
         &self.model
     }
-    fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<Bson> {
+    fn key(&self, _: &AccessContext) -> IdentityResult<Bson> {
         Ok("$id".into())
     }
-    fn records(&self, _: &AccessContext, _: Option<&MappingFacts>) -> IdentityResult<QueryFragment> {
+    fn records(&self, _: &AccessContext) -> IdentityResult<QueryFragment> {
         Ok(QueryFragment::Match(doc! {"deleted_at": 0_i64}))
     }
-    fn predicate(
-        &self,
-        fact: &AccessFact,
-        context: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<QueryFragment> {
+    fn predicate(&self, fact: &AccessFact, context: &AccessContext) -> IdentityResult<QueryFragment> {
         match fact {
             AccessFact::Collaborating | AccessFact::HistoryParticipant => {
                 Ok(QueryFragment::Match(doc! { "$expr": false }))
@@ -149,12 +144,7 @@ impl AccessMapping for IntegrationMapping {
             _ => Err(IdentityError::ValidationError("集成模型不支持该事实维度".into())),
         }
     }
-    fn relation(
-        &self,
-        _: &RelationKey,
-        _: &AccessContext,
-        _: Option<&MappingFacts>,
-    ) -> IdentityResult<RelationMapping> {
+    fn relation(&self, _: &RelationKey, _: &AccessContext) -> IdentityResult<RelationMapping> {
         Err(IdentityError::ValidationError("集成模型没有来源授权关系".into()))
     }
 }
@@ -178,13 +168,12 @@ mod tests {
     #[test]
     fn actual_handler_and_handler_organization_are_independent_facts() {
         let mapping = IntegrationMapping::new("integration_error_task", Database::INTEGRATION_ERROR_TASKS);
-        let own = mapping.predicate(&AccessFact::Owned, &context(), None).unwrap();
+        let own = mapping.predicate(&AccessFact::Owned, &context()).unwrap();
         assert!(
             matches!(own, QueryFragment::Match(document) if document == doc! {"owner_user_id":"handler"})
         );
 
-        let org =
-            mapping.predicate(&AccessFact::OrganizationIn(["org".into()].into()), &context(), None).unwrap();
+        let org = mapping.predicate(&AccessFact::OrganizationIn(["org".into()].into()), &context()).unwrap();
         assert!(
             matches!(org, QueryFragment::Match(document) if document == doc! {"owner_org_unit_id":{"$in":["org"]}})
         );
@@ -209,13 +198,13 @@ mod tests {
             (AccessFact::Collaborating, FactKind::Collaborators),
             (AccessFact::HistoryParticipant, FactKind::HistoryParticipants),
         ] {
-            let predicate = mapping.predicate(&fact, &context(), None).unwrap();
+            let predicate = mapping.predicate(&fact, &context()).unwrap();
             assert!(
                 matches!(predicate, QueryFragment::Match(document) if document == doc! { "$expr": false })
             );
             assert!(mapping.model().facts.contains(&kind));
         }
 
-        assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context(), None).is_err());
+        assert!(mapping.relation(&RelationKey::parse("source").unwrap(), &context()).is_err());
     }
 }

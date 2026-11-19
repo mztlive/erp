@@ -212,7 +212,7 @@ async fn preview_and_apply_preserve_the_same_authorized_target_and_review_hash()
             .require_policy_bundle(&actor(), &permission, Some(&document), &mut SnapshotExecutor::default())
             .await
             .unwrap();
-        let plan = PolicyPlan::build(
+        let (_, preview) = PolicyPlan::build(
             document.clone(),
             &PolicyFacts::default(),
             actor().id(),
@@ -221,7 +221,7 @@ async fn preview_and_apply_preserve_the_same_authorized_target_and_review_hash()
             &access.scope.scope_version,
         )
         .unwrap();
-        hashes.push(plan.preview.review_hash);
+        hashes.push(preview.review_hash);
     }
     assert_eq!(hashes[0], hashes[1]);
 }

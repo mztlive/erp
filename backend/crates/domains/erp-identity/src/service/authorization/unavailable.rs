@@ -10,7 +10,7 @@ use super::facilities::Facilities;
 use super::{AuthorizationService, rules};
 use crate::entity::authorization::{AccessContext, QueryModel, QueryModelKey, QueryOutput, ResourceTargets};
 use crate::entity::resource_access::ResourceKind;
-use crate::ports::AccessMapping;
+use crate::repository::authorization::binding::FrozenMapping;
 use crate::repository::authorization::unavailable::UnavailableMapping;
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Permission, QualifiedPermissions, Result};
@@ -33,7 +33,7 @@ impl AuthorizationService {
             facts: BTreeMap::new(),
             mappings: rules::queries::permissions()
                 .map(|permission| {
-                    let mapping: Arc<dyn AccessMapping> = Arc::new(UnavailableMapping {
+                    let mapping = Arc::new(UnavailableMapping {
                         model: QueryModel {
                             key: QueryModelKey::parse(format!("unavailable_{}", permission.resource()))
                                 .expect("固定查询权限资源组成合法测试模型标识"),
@@ -44,7 +44,9 @@ impl AuthorizationService {
                             facts: BTreeSet::new(),
                         },
                     });
-                    (permission.clone(), mapping)
+                    let frozen = FrozenMapping::freeze(mapping, &mut Vec::new(), 0)
+                        .expect("不可用查询夹具的固定模型有效");
+                    (permission.clone(), frozen)
                 })
                 .collect(),
             token: Arc::new(()),
@@ -115,7 +117,6 @@ mod tests {
             let mapping = authorization.mappings.get(permission).unwrap();
             mapping.model().validate().unwrap();
             assert_eq!(mapping.model().resource, permission.resource());
-            assert!(mapping.preparation().is_none());
             assert!(mapping.stages().is_empty());
 
             assert!(
@@ -155,16 +156,16 @@ mod tests {
         };
 
         assert!(
-            matches!(mapping.key(&context, None), Err(Error::Internal(reason)) if reason == "测试查询映射不可执行")
+            matches!(mapping.key(&context), Err(Error::Internal(reason)) if reason == "测试查询映射不可执行")
         );
         assert!(
-            matches!(mapping.records(&context, None), Err(Error::Internal(reason)) if reason == "测试查询映射不可执行")
+            matches!(mapping.records(&context), Err(Error::Internal(reason)) if reason == "测试查询映射不可执行")
         );
         assert!(
-            matches!(mapping.predicate(&AccessFact::Owned, &context, None), Err(Error::Internal(reason)) if reason == "测试查询映射不可执行")
+            matches!(mapping.predicate(&AccessFact::Owned, &context), Err(Error::Internal(reason)) if reason == "测试查询映射不可执行")
         );
         assert!(
-            matches!(mapping.relation(&RelationKey::parse("source").unwrap(), &context, None), Err(Error::Internal(reason)) if reason == "测试查询映射不可执行")
+            matches!(mapping.relation(&RelationKey::parse("source").unwrap(), &context), Err(Error::Internal(reason)) if reason == "测试查询映射不可执行")
         );
     }
 }

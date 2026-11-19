@@ -3,7 +3,7 @@ use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
 
-use crate::access_control::{DataScopeType, ScopeBinding, ScopeDimension};
+use crate::access_control::{DataScopeType, ScopeDimension};
 use crate::entity::access_control::person_scope::{PersonDataScope, PersonScopeExpression, PersonScopeTerm};
 use crate::entity::access_control::scope_spec;
 use crate::entity::access_control::scope_target::ScopeTarget;
@@ -176,16 +176,6 @@ impl SavePersonScopeRequest {
         for action in &self.actions {
             scope_spec::configurable_action(&self.resource, action)?;
         }
-        ScopeBinding {
-            schema_version: 2,
-            resource: self.resource.clone(),
-            actions: self.actions.clone(),
-            target_dimension: ScopeDimension::InternalOrg,
-            target_mode: None,
-            include_descendants: None,
-            enabled: true,
-        }
-        .validate(DataScopeType::Company, &[])?;
 
         let mut grants = Vec::new();
         let mut targets = Vec::new();
@@ -265,8 +255,8 @@ impl PersonScopeGrant {
             }
             term.scope_targets.sort();
             term.scope_targets.dedup();
-            let target = term.target(resource, &self.actions)?;
-            scope_spec::validate_binding(&term.binding(resource, &self.actions))?;
+            let target = ScopeTarget::parse(&term)?;
+            scope_spec::validate_target_dimension(resource, &self.actions, term.target_dimension)?;
             scope_spec::validate_scope_type(resource, term.scope_type)?;
             term.scope_targets = target.ids().to_vec();
             term.scope_targets.sort();
@@ -472,6 +462,10 @@ mod tests {
         let mut over_limit = request();
         over_limit.grants = vec![over_limit.grants[0].clone(); 33];
         assert!(over_limit.normalized().is_err());
+
+        let mut over_limit = request();
+        over_limit.grants[0].terms = vec![over_limit.grants[0].terms[0].clone(); 17];
+        assert!(over_limit.normalized().is_err());
     }
 
     // 事务校验和保存表达式共用规范化目标 ID；表达式按原协议字段往返序列化。
@@ -480,30 +474,56 @@ mod tests {
         use crate::access_control::ScopeTargetMode;
 
         let mut input = request();
-        input.grants[0].terms = vec![PersonScopeTerm {
+        let org = PersonScopeTerm {
             scope_type: DataScopeType::Organization,
             target_dimension: ScopeDimension::InternalOrg,
             target_mode: Some(ScopeTargetMode::Explicit),
             include_descendants: Some(false),
-            scope_targets: vec![" one ".into(), "one".into()],
-        }];
+            scope_targets: vec![" two ".into(), "one".into(), "two".into()],
+        };
+        input.grants[0].terms.extend([org.clone(), org]);
         let command = input.normalized().unwrap();
         assert_eq!(
             command.targets(),
-            &[ScopeTarget::OrgExplicit { ids: vec!["one".into()], include_descendants: false }]
+            &[
+                ScopeTarget::SelfOwned,
+                ScopeTarget::OrgExplicit {
+                    ids: vec!["two".into(), "one".into()],
+                    include_descendants: false
+                },
+            ]
         );
         let expression = command.expression("detail");
-        assert_eq!(expression.alternatives[0][0].scope_targets, ["one"]);
+        assert_eq!(expression.alternatives[0].len(), 2);
+        assert_eq!(expression.alternatives[0][0].scope_targets, ["one", "two"]);
+        assert_eq!(expression.alternatives[0][1].scope_type, DataScopeType::SelfOwned);
         let json = serde_json::to_value(&expression).unwrap();
         assert_eq!(
             json["alternatives"][0][0],
             serde_json::json!({
                 "scope_type": "organization", "target_dimension": "internal_org",
                 "target_mode": "explicit", "include_descendants": false,
-                "scope_targets": ["one"],
+                "scope_targets": ["one", "two"],
             })
         );
         assert_eq!(serde_json::from_value::<PersonScopeExpression>(json).unwrap(), expression);
+    }
+
+    // 合法的显式仓库目标也不能用于不支持仓库维度的动作。
+    #[test]
+    fn command_checks_the_target_dimension_against_the_grant_actions() {
+        let mut input = request();
+        input.grants[0].terms = vec![PersonScopeTerm {
+            scope_type: DataScopeType::Organization,
+            target_dimension: ScopeDimension::Warehouse,
+            target_mode: Some(crate::access_control::ScopeTargetMode::Explicit),
+            include_descendants: None,
+            scope_targets: vec!["warehouse-one".into()],
+        }];
+        assert!(matches!(
+            input.normalized(),
+            Err(Error::ValidationError(message)) if message == "所选操作不支持按仓库设置数据范围，请调整授权范围"
+        ));
     }
 
     // 拒绝错误维度、角色专用的管理部门模式及缺少下级标记的本人组织模式。

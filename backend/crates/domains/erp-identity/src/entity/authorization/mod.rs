@@ -5,7 +5,7 @@ mod object;
 mod rule;
 mod target;
 
-pub use mapping::{MappingFacts, QueryModel, QueryOutput};
+pub use mapping::{QueryModel, QueryOutput};
 pub use rule::AccessFact;
 pub(crate) use rule::AccessRule;
 pub use target::{

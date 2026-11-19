@@ -25,14 +25,6 @@ pub(super) fn implicit_permissions_for_role(enforcer: &Enforcer, role_id: &str) 
     parse_policy_permissions(policies)
 }
 
-/// 批量组装角色展示结果时，从同一 Enforcer 快照收集各角色的直接权限；任一角色权限解析失败即返回错误。
-pub(super) fn collect_role_permissions(
-    enforcer: &Enforcer,
-    role_ids: &[String],
-) -> Result<HashMap<String, PermissionSet>> {
-    role_ids.iter().map(|role_id| Ok((role_id.clone(), permissions_for_role(enforcer, role_id)?))).collect()
-}
-
 /// 管理写入预检时，按操作人的身份从已加载的 Enforcer 读取经角色继承的隐式权限上限；解析失败时返回错误。
 pub(super) fn permissions_for_actor(enforcer: &Enforcer, actor: &AuditActor) -> Result<PermissionSet> {
     let policies = enforcer.get_implicit_permissions_for_user(&subject(actor.kind(), actor.id()), None);

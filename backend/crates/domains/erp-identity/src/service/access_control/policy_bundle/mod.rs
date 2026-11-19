@@ -55,9 +55,9 @@ impl PolicyBundleService {
                         )
                         .await?;
 
-                    let plan = service.plan(document, &actor, &authorization.scope, executor).await?;
+                    let (_, preview) = service.plan(document, &actor, &authorization.scope, executor).await?;
                     authorization.ensure_current(executor)?;
-                    Ok(plan.preview)
+                    Ok(preview)
                 })
             })
             .await
@@ -70,8 +70,16 @@ impl PolicyBundleService {
         actor: &AuditActor,
         authorization: &AuthorizedDataScope,
         executor: &mut dyn Executor,
-    ) -> Result<PolicyPlan> {
-        let facts = self.facts(&document, executor).await?;
+    ) -> Result<(PolicyPlan, PolicyPreview)> {
+        let roles = document
+            .roles
+            .iter()
+            .map(|role| role.id.to_string())
+            .chain(
+                document.bindings.iter().flat_map(|binding| binding.role_ids.iter().map(ToString::to_string)),
+            )
+            .collect();
+        let facts = self.facts(roles, document.user_ids(), executor).await?;
         for scope in &document.data_scopes {
             self.access
                 .validate_person_scope_targets(&scope.targets()?, &authorization.organizations, executor)

@@ -13,10 +13,6 @@ use crate::entity::organization::{OrgMembership, OrgTree};
 pub(super) struct ScopeCompiler<'a, 'tree> {
     /// 人员配置所属账号，用于筛选本人组织成员关系。
     pub user: &'a str,
-    /// 范围所属资源，用于校验各项的目标绑定。
-    pub resource: &'a str,
-    /// 本次解析的动作，各项按此动作绑定。
-    pub action: &'a str,
     /// 经校验的组织树，用于展开显式组织目标和本人组织。
     pub tree: &'a OrgTree<'tree>,
     /// 本次读取的成员关系，用于解析本人组织模式。
@@ -31,7 +27,7 @@ impl ScopeCompiler<'_, '_> {
     pub(super) fn clause(&self, terms: &[PersonScopeTerm]) -> Result<ScopeClause> {
         let mut clause = ScopeClause::default();
         for term in terms {
-            match term.target(self.resource, &[self.action.into()])? {
+            match ScopeTarget::parse(term)? {
                 ScopeTarget::Company => clause.company = true,
                 ScopeTarget::SelfOwned => clause.self_owned = true,
                 ScopeTarget::Collaborative => clause.collaborative = true,
