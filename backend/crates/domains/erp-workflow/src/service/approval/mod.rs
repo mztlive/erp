@@ -29,6 +29,7 @@ pub use dto::{
     ApprovalCancelBlockedCommand, ApprovalCancelCommand, ApprovalDecisionCommand, ApprovalResumeCommand,
     ApprovalStartCommand,
 };
+pub(crate) use scope::approver_qualification;
 pub use scope::{
     approval_participant_permissions_with_executor, definition_management_visibility_with_executor,
     require_approval_management_with_executor,

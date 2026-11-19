@@ -5,6 +5,8 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use application_core::AuditActor;
+use bpm::model::types::{ApprovalBlockerCode, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
+use erp_core::AccountKind;
 use erp_identity::{AuthorizationService, ResourceTargets};
 use erp_permissions::{Permission, work_item};
 use futures_util::future::BoxFuture;
@@ -15,13 +17,17 @@ use super::access::QueueAccess;
 use super::context::*;
 use super::stats::apply_due_filter;
 use super::{
-    ProcessingBlockerView, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFilter, WorkItemListParams,
-    WorkItemPageView, WorkItemScope, WorkItemSearchParams, WorkItemView, WorkspaceFilters, dto,
+    ProcessingBlockerView, ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFilter,
+    WorkItemListParams, WorkItemPageView, WorkItemScope, WorkItemSearchParams, WorkItemView,
+    WorkspaceFilters, dto,
 };
 use crate::dto::work_item::ViewAccess;
+use crate::entity::approval_qualification::ApprovalQualification;
+use crate::entity::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
 use crate::error::{Error, Result};
 use crate::repository::prelude::*;
 use crate::repository::work_item::WorkItemScan;
+use crate::service::approval::approver_qualification;
 use crate::service::work_item::WorkItemAuthorization;
 use crate::{BpmExt, WorkItemExt};
 
@@ -252,12 +258,10 @@ impl WorkItemReadService {
         Ok(items)
     }
 
-    // 批量补齐审批任务的当前节点和最近驳回事实。
-    // 列表固定执行两次批量查询，不得逐任务读取审批历史；最近驳回只取实例有界投影。
+    // 批量补齐审批上下文，按开放任务的实际负责人投影办理资格。
+    // 节点和实例摘要各查询一次，同批次内同一负责人只读取一次资格。
     //
-    // 无审批节点的任务保持不变；审批任务获得与节点执行严格绑定的运行上下文。
-    //
-    // BPM 节点执行或实例有界投影查询失败时返回错误。
+    // BPM 或负责人资格取证失败时返回错误。
     //
     // `items`：已通过工作项和业务对象授权的安全投影；`executor`：审批节点与实例读取沿用的执行器。
     pub(super) async fn apply_approval_contexts(
@@ -265,11 +269,14 @@ impl WorkItemReadService {
         items: &mut [WorkItemView],
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let execution_ids = items
-            .iter()
-            .filter_map(|item| item.approval_node_execution_id.as_deref())
-            .map(bpm::ids::ApprovalNodeExecutionId::new)
-            .collect::<Vec<_>>();
+        let mut execution_ids = Vec::new();
+        for item in items.iter_mut() {
+            if let Some(id) = item.approval_node_execution_id.as_deref() {
+                execution_ids.push(bpm::ids::ApprovalNodeExecutionId::new(id));
+            } else {
+                fail_closed_missing_approval_context(item);
+            }
+        }
         if execution_ids.is_empty() {
             return Ok(());
         }
@@ -286,6 +293,7 @@ impl WorkItemReadService {
         let summaries =
             summaries.into_iter().map(|summary| (summary.id.clone(), summary)).collect::<HashMap<_, _>>();
 
+        let mut qualifications = HashMap::new();
         for item in items {
             let Some(execution_id) = item.approval_node_execution_id.as_deref() else {
                 continue;
@@ -298,7 +306,54 @@ impl WorkItemReadService {
                 fail_closed_missing_approval_context(item);
                 continue;
             };
+            if summary.subject.subject_kind() != item.business_object_type
+                || summary.subject.subject_id() != item.business_object_id
+                || summary.subject_version.to_string() != item.subject_version
+            {
+                fail_closed_missing_approval_context(item);
+                continue;
+            }
             item.set_approval_context(approval_context_view(execution, summary));
+            if !is_open_approval_task(item) {
+                continue;
+            }
+
+            let is_current =
+                summary.current_node_execution_id.as_ref().is_some_and(|id| id.as_ref() == execution.base.id)
+                    && summary.current_round_no == execution.round_no;
+            if is_current && summary.status == ApprovalProcessInstanceStatus::Blocked {
+                set_approval_blocker(
+                    item,
+                    ProcessingState::ApprovalBlocked,
+                    "APPROVAL_INSTANCE_BLOCKED",
+                    "审批流程已受阻，请联系有权限的管理员处理",
+                );
+                continue;
+            }
+            let Some(owner) = item.owner_user_id.as_deref().filter(|owner| execution.has_participant(owner))
+            else {
+                fail_closed_missing_approval_context(item);
+                continue;
+            };
+            if !is_current
+                || summary.status != ApprovalProcessInstanceStatus::Running
+                || execution.status != ApprovalNodeExecutionStatus::Active
+                || item.assignment_source != AssignmentSource::ApprovalRuntime
+            {
+                fail_closed_missing_approval_context(item);
+                continue;
+            }
+
+            let qualification = match qualifications.entry(owner.to_string()) {
+                std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    let actor = AuditActor::new(owner.to_string(), owner.to_string(), AccountKind::Admin);
+                    let qualification =
+                        approver_qualification(&self.authorization.service, &actor, executor).await?;
+                    entry.insert(qualification)
+                },
+            };
+            apply_approver_qualification(item, qualification);
         }
         Ok(())
     }
@@ -406,15 +461,38 @@ fn approval_context_view(
     }
 }
 
-// 审批任务缺少精确运行上下文时移除可提交决定动作，并投影稳定阻断信息，不展示可办理状态。
+fn is_open_approval_task(item: &WorkItemView) -> bool {
+    item.work_item_type == WorkItemType::DocumentApproval && item.status == WorkItemStatus::Open
+}
+
 fn fail_closed_missing_approval_context(item: &mut WorkItemView) {
-    if !remove_approval_decision_actions(&mut item.allowed_actions) {
-        return;
+    if is_open_approval_task(item) {
+        set_approval_blocker(
+            item,
+            ProcessingState::ApprovalBlocked,
+            "APPROVAL_CONTEXT_MISSING",
+            "审批运行信息暂不可用，请刷新；仍未恢复时联系管理员修复审批数据",
+        );
     }
-    item.action_blockers.push(ProcessingBlockerView {
-        code: "APPROVAL_CONTEXT_MISSING".to_string(),
-        message: "审批运行信息暂不可用，请刷新；仍未恢复时联系管理员修复审批数据".to_string(),
-    });
+}
+
+fn apply_approver_qualification(item: &mut WorkItemView, qualification: &ApprovalQualification) {
+    let (code, message) = match qualification {
+        ApprovalQualification::Eligible(_) => return,
+        ApprovalQualification::Inactive => {
+            (ApprovalBlockerCode::ApproverAccountInactive, "审批人账号当前不可用")
+        },
+        ApprovalQualification::MissingPermissions => {
+            (ApprovalBlockerCode::ApproverNotEligible, "当前负责人已失去审批办理资格")
+        },
+    };
+    set_approval_blocker(item, ProcessingState::ExecutionBlocked, code.as_str(), message);
+}
+
+fn set_approval_blocker(item: &mut WorkItemView, state: ProcessingState, code: &str, message: &str) {
+    item.processing_state = state;
+    item.processing_blocker = Some(ProcessingBlockerView { code: code.into(), message: message.into() });
+    remove_approval_decision_actions(&mut item.allowed_actions);
 }
 
 // 从动作集合中移除审批决定并返回是否发生移除。
@@ -567,6 +645,67 @@ mod tests {
         assert!(remove_approval_decision_actions(&mut actions));
         assert_eq!(actions, vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Process]);
         assert!(!remove_approval_decision_actions(&mut actions));
+    }
+
+    #[test]
+    fn approval_qualification_changes_display_without_changing_task_responsibility() {
+        use bpm::ids::ApprovalNodeExecutionId;
+        use erp_core::AccountKind;
+        use erp_core::common::time::Instant;
+        use erp_core::ids::WorkItemId;
+        use erp_identity::AccountSummary;
+
+        use super::{
+            ApprovalQualification, ProcessingState, WorkItemStatus, WorkItemView,
+            apply_approver_qualification, fail_closed_missing_approval_context,
+        };
+        use crate::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
+
+        let task = WorkItem::new_document_approval(
+            WorkItemId::new("task"),
+            DocumentApprovalWorkItemData {
+                approval_node_execution_id: ApprovalNodeExecutionId::new("execution"),
+                business_object_type: "stock_adjustment".into(),
+                business_object_id: "adjustment".into(),
+                subject_version: "1".into(),
+                owner_role: "approver".into(),
+                owner_organization_id: "warehouse".into(),
+                owner_user_id: "finance".into(),
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+            },
+            Instant::from_unix_secs(120),
+        )
+        .unwrap();
+        let mut ready = WorkItemView::from_fields(task.into(), "queue".into()).unwrap();
+        ready.allowed_actions =
+            vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Approve, WorkItemAllowedAction::Reject];
+        let qualification =
+            ApprovalQualification::Eligible(AccountSummary::new("finance", AccountKind::Admin, true));
+        let mut restored = ready.clone();
+        apply_approver_qualification(&mut restored, &qualification);
+        assert_eq!(restored, ready);
+
+        for (qualification, code) in [
+            (ApprovalQualification::MissingPermissions, "APPROVER_NOT_ELIGIBLE"),
+            (ApprovalQualification::Inactive, "APPROVER_ACCOUNT_INACTIVE"),
+        ] {
+            let mut blocked = ready.clone();
+            apply_approver_qualification(&mut blocked, &qualification);
+            assert_eq!(blocked.processing_state, ProcessingState::ExecutionBlocked);
+            assert_eq!(blocked.processing_blocker.unwrap().code, code);
+            assert_eq!(blocked.allowed_actions, vec![WorkItemAllowedAction::View]);
+            assert_eq!(blocked.status, WorkItemStatus::Open);
+            assert_eq!(blocked.task_version, ready.task_version);
+            assert_eq!(blocked.owner_user_id, ready.owner_user_id);
+            assert_eq!(blocked.owner_organization_id, ready.owner_organization_id);
+        }
+
+        let mut invalid = ready;
+        invalid.allowed_actions = vec![WorkItemAllowedAction::View];
+        fail_closed_missing_approval_context(&mut invalid);
+        assert_eq!(invalid.processing_state, ProcessingState::ApprovalBlocked);
+        assert_eq!(invalid.processing_blocker.unwrap().code, "APPROVAL_CONTEXT_MISSING");
     }
 
     #[test]

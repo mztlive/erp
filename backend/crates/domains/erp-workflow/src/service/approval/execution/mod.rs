@@ -374,7 +374,10 @@ mod tests {
         let mut input = start_input(eligible("u1", "张三"), None);
         input.bindings[1].eligibility = blocked("u2", "李四", ApprovalBlockerCode::ApproverAccountInactive);
         let error = prepare_start(input).unwrap_err();
-        assert!(error.to_string().contains("全部审批人必须有效"));
+        assert!(matches!(
+            error,
+            crate::Error::ValidationError(message) if message == "部分审批人不可用，请检查流程中的审批人设置后再提交"
+        ));
     }
 
     // 验证：原审批人可恢复的 blocker 不得走受阻取消；结构 blocker 只能走受阻取消。

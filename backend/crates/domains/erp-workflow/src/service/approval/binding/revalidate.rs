@@ -26,8 +26,8 @@ pub(super) fn revalidate_published_graph(graph: &DefinitionGraph) -> Result<()> 
 /// 绑定或升级时，从 BPM 已校验图提取全部指定审批人，沿调用方事务复核岗位分离、有效账号、审批读写权限和订单必需事实。任一条件不满足即拒绝绑定。
 pub async fn revalidate_binding_graph(
     authorization: &AuthorizationService,
-    db: &Database,
-    identity_service: &SharedRbacService,
+    _db: &Database,
+    _identity_service: &SharedRbacService,
     policy: &ProcessRequiredApprovalPolicy,
     context: &BindingRevalidationContext,
     graph: &DefinitionGraph,
@@ -38,7 +38,7 @@ pub async fn revalidate_binding_graph(
 
     for user_id in &assignee_ids {
         let actor = AuditActor::new(user_id.clone(), user_id.clone(), AccountKind::Admin);
-        match approver_qualification(authorization, db, identity_service, &actor, executor).await? {
+        match approver_qualification(authorization, &actor, executor).await? {
             ApprovalQualification::Inactive => {
                 return Err(Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()));
             },

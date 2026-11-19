@@ -64,8 +64,8 @@ pub(super) struct RevalidateDecisionApproverInput<'a> {
 // 资格丢失返回 BPM 可消费的结构化 blocker，不转为空值；快照类型不一致或取证故障仍返回错误。
 pub(super) async fn revalidate_decision_approver(
     authorization: &AuthorizationService,
-    db: &Database,
-    identity_service: &SharedRbacService,
+    _db: &Database,
+    _identity_service: &SharedRbacService,
     _rbac: &impl WorkflowAuthorizationPort,
     input: RevalidateDecisionApproverInput<'_>,
     executor: &mut dyn Executor,
@@ -86,7 +86,7 @@ pub(super) async fn revalidate_decision_approver(
         .cloned()
         .unwrap_or_else(|| AuditActor::new(assignee_id.into(), assignee_id.into(), AccountKind::Admin));
     let qualified = if actor.id() == assignee_id {
-        approver_qualification(authorization, db, identity_service, &actor, executor).await?
+        approver_qualification(authorization, &actor, executor).await?
     } else {
         ApprovalQualification::Inactive
     };

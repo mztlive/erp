@@ -1,6 +1,6 @@
 /**
  * S2 组织与人员授权浏览器验收：真实账号密码登录真实 HTTP，覆盖组织/成员变更、
- * 人员管理委派、跨页刷新、仓库维度隔离与审批失资格恢复。
+ * 人员管理委派、跨页刷新、仓库维度隔离与审批资格撤销后的原任务续办。
  *
  * 环境（全部隔离，不碰共享开发库与生产库）：
  * - 后端：独立 shard 的 web-api、配置、端口与临时副本集数据库。
@@ -196,7 +196,7 @@ async function adminAccountOf(token: string, account: string): Promise<AdminAcco
     return found
 }
 
-test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受阻", async ({ browser }) => {
+test("S2 浏览器验收：组织变更跨页可见、维度隔离、审批撤权与续办", async ({ browser }) => {
     // 1. 真实密码登录：管理员走登录页，token 全部经真实登录接口取得。
     const adminPage = await loginAs(browser, "admin")
     const adminToken = await apiToken("admin")
@@ -339,6 +339,8 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
     expect(task, "审批必须指定给种子财务账号").toBeTruthy()
     expect(task!.owner_user_id).toBe(financeId)
     expect(task!.owner_organization_id, "责任组织必须保持仓库").toBe(warehouse!.id)
+    expect(task!.processing_state).toBe("READY")
+    expect(task!.allowed_actions).toEqual(expect.arrayContaining(["APPROVE", "REJECT"]))
     // 审批监督还要求类型运行管理资格和真实库存来源范围；部门管理范围不能补齐类型资格。
     const managementRoles = await apiGet<AdminRole[]>(adminToken, "/admin/roles")
     const managerPermissions = [...new Set(managementRoles
@@ -359,8 +361,9 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
         role_ids: [...manageAccount.role_ids, managementRuntimeRoleId],
     })
     // 管理监督可见但不能代办：部门委派、类型资格、仓库来源范围齐备，审批决定仍必须拒绝。
+    const managerToken = await apiToken("guanli")
     const managedQueue = await apiGet<{ items: Array<Record<string, any>> }>(
-        await apiToken("guanli"),
+        managerToken,
         "/admin/work-items",
         { scope: "managed", page: 1, page_size: 100 },
     )
@@ -368,7 +371,7 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
         (managedQueue.items ?? []).some((row) => row.id === task!.id),
         "经理在部门委派和库存审批管理资格范围内可监督",
     ).toBe(true)
-    const managerDecision = await apiCall("POST", "/admin/approval-decisions", await apiToken("guanli"), {
+    const managerDecision = await apiCall("POST", "/admin/approval-decisions", managerToken, {
         work_item_id: task!.id,
         decision: "APPROVE",
         expected_task_version: task!.task_version,
@@ -453,7 +456,7 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
         balanceDenied || balanceEmpty,
         `审批参与关系不得打开无业务范围的仓库余额（HTTP ${balanceResult.status} items=${balanceItems?.length}）`,
     ).toBe(true)
-    // 审批不接受独立人员范围；撤去读取资格、保留决定入口以验收写时重验与受阻提交。
+    // 审批不接受独立人员范围；只撤读取资格，保留决定权限以验收写时重验。
     const financeScopes = await apiGet<{
         businesses: Array<{ resource: string; policy_description: string; configurable_actions: string[] }>
     }>(adminToken, `/admin/person-data-scopes/${financeId}`)
@@ -479,19 +482,37 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
     expect(revokedProfile.permissions).not.toContain("approval_instance:read")
     expect(revokedProfile.permissions).toContain("approval_instance:decide")
 
-    // 管理视图看到受阻任务：保留原负责人与业务组织，仅保留查看。
+    // 队列动态标记失资格，审批实例和原任务仍在运行。
     const blockedQueue = await apiGet<{ items: Array<Record<string, any>> }>(
-        await apiToken("guanli"),
+        managerToken,
         "/admin/work-items",
         { scope: "managed", page: 1, page_size: 100 },
     )
-    const blocked = (blockedQueue.items ?? []).find((row) => row.id === task!.id)
-    expect(blocked, "受阻任务应对经理可见").toBeTruthy()
-    expect(blocked!.processing_state).toBe("EXECUTION_BLOCKED")
-    expect(blocked!.owner_user_id).toBe(financeId)
-    expect((blocked!.allowed_actions as string[]).includes("APPROVE")).toBe(false)
-    // 浏览器管理视图必须在决定提交之前：写时重验失败会关闭原受阻任务
-    //（原任务不可变，恢复必须建新任务），关单后管理队列不再列出该任务。
+    const blocked = blockedQueue.items.find((row) => row.id === task!.id)
+    expect(blocked, "失资格任务应继续对经理可见").toMatchObject({
+        status: "OPEN",
+        task_version: task!.task_version,
+        owner_user_id: financeId,
+        owner_organization_id: warehouse!.id,
+        processing_state: "EXECUTION_BLOCKED",
+        processing_blocker: { code: "APPROVER_NOT_ELIGIBLE" },
+        approval_context: { status: "RUNNING" },
+        allowed_actions: ["VIEW"],
+    })
+    const revokedQueue = await apiGet<{ items: Array<Record<string, any>> }>(
+        financeToken,
+        "/admin/work-items",
+        { scope: "mine", page: 1, page_size: 100 },
+    )
+    const revokedTask = revokedQueue.items.find((row) => row.id === task!.id)
+    expect(revokedTask).toMatchObject({
+        status: "OPEN",
+        task_version: task!.task_version,
+        processing_state: "EXECUTION_BLOCKED",
+    })
+    expect(revokedTask!.allowed_actions).toContain("VIEW")
+    expect(revokedTask!.allowed_actions).not.toContain("APPROVE")
+    expect(revokedTask!.allowed_actions).not.toContain("REJECT")
     const managePage = await loginAs(browser, "guanli")
     await managePage.goto("/workspace/tasks")
     await workPage(managePage).locator("#workspace-task-scope").click()
@@ -500,55 +521,96 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
     const managedTask = workPage(managePage).getByRole("region", { name: "任务队列" })
         .locator(`[data-row-id="${task!.id}"]`)
     await expect(managedTask.getByText("受阻", { exact: true })).toBeVisible(VISIBLE)
+    await workPage(managePage).locator("#workspace-query-more").click()
+    await workPage(managePage).getByRole("checkbox", { name: "仅看受阻", exact: true }).click()
+    const filteredQueue = managePage.waitForResponse((response) => {
+        const url = new URL(response.url())
+        return response.request().method() === "GET" && url.pathname === "/admin/work-items" &&
+            url.searchParams.get("scope") === "managed" &&
+            url.searchParams.get("filters")?.includes('"blocked":true') === true
+    })
+    await workPage(managePage).locator("#workspace-query-more-apply").click()
+    const filteredResponse = await filteredQueue
+    expect(filteredResponse.ok()).toBe(true)
+    const filtered = (await filteredResponse.json()).data.items as Array<Record<string, unknown>>
+    expect(filtered.find((row) => row.id === task!.id)).toMatchObject({ processing_state: "EXECUTION_BLOCKED" })
+    await expect(managedTask.getByText("受阻", { exact: true })).toBeVisible(VISIBLE)
     await managePage.screenshot({
         path: test.info().outputPath("s2-workspace-managed.png"),
     })
-    const blockedDecision = await apiCall("POST", "/admin/approval-decisions", financeToken, {
+
+    const stockPath = `/admin/stock-adjustments/${stockId}`
+    const balancePath = `/admin/stock-balances/${balance!.id}`
+    const taskPath = `/admin/work-items/${task!.id}`
+    const [beforeDecision, beforeBalance, beforeTask] = await Promise.all([
+        apiOk("GET", stockPath, warehouseToken),
+        apiOk("GET", balancePath, warehouseToken),
+        apiOk("GET", taskPath, adminToken),
+    ])
+    expect(beforeDecision).toMatchObject({
+        adjustment: { status: "IN_APPROVAL" },
+        approval: {
+            instance: { status: "RUNNING", current_task_id: task!.id, current_task_version: task!.task_version },
+            recent_history: [{ execution_id: task!.approval_node_execution_id, result: "ACTIVE" }],
+        },
+        posted_movements: [],
+    })
+    expect(beforeTask).toMatchObject({ status: "OPEN", close_reason: null, completed_at: null, closed_at: null })
+    const decisionBody = {
         work_item_id: task!.id,
         decision: "APPROVE",
         expected_task_version: task!.task_version,
         idempotency_key: randomUUID(),
-    })
-    expect(blockedDecision.status, "失资格审批决定必须提交受阻事实后返回409").toBe(409)
-    expect(blockedDecision.parsed.code).toBe("APPROVAL_INSTANCE_BLOCKED")
+    }
+    const deniedDecision = await apiCall("POST", "/admin/approval-decisions", financeToken, decisionBody)
+    expect(deniedDecision.status, "失去读取资格的审批决定必须直接返回403").toBe(403)
+    expect(deniedDecision.parsed).toMatchObject({ success: false, code: "PERMISSION_DENIED" })
+    const [afterDecision, afterBalance, afterTask] = await Promise.all([
+        apiOk("GET", stockPath, warehouseToken),
+        apiOk("GET", balancePath, warehouseToken),
+        apiOk("GET", taskPath, adminToken),
+    ])
+    expect(afterDecision.approval.instance, "拒绝不得改变审批实例或当前执行及任务版本")
+        .toEqual(beforeDecision.approval.instance)
+    expect(afterDecision.approval.recent_history, "拒绝不得新增或改写审批历史")
+        .toEqual(beforeDecision.approval.recent_history)
+    expect(afterDecision.adjustment, "拒绝不得改写库存调整单").toEqual(beforeDecision.adjustment)
+    expect(afterDecision.lines).toEqual(beforeDecision.lines)
+    expect(afterDecision.posted_movements, "拒绝不得生成库存流水").toEqual([])
+    expect(afterBalance, "拒绝不得改变库存余额、流水或预占").toEqual(beforeBalance)
+    expect(afterTask, "拒绝不得关闭或改写原任务").toEqual(beforeTask)
 
-    // 9. 资格恢复：恢复原角色后显式恢复当前审批人，生成新任务，财务通过后单据 POSTED。
+    // 9. 恢复原角色后，同一任务、版本和决定命令可直接办理。
     await apiOk("PUT", `/admin/admins/${financeId}/role`, adminToken, {
         role_ids: financeAccount.role_ids,
     })
-    const instanceId = blocked!.approval_context?.instance_id as string | undefined
-    expect(instanceId, "受阻任务应携带审批实例").toBeTruthy()
-    const resume = await apiOk(
-        "GET",
-        `/admin/approval-instances/${instanceId}/recovery-options`,
-        adminToken,
+    const restoredQueue = await apiGet<{ items: Array<Record<string, any>> }>(
+        financeToken,
+        "/admin/work-items",
+        { scope: "mine", page: 1, page_size: 100 },
     )
-    expect((resume.actions as string[]).includes("RESUME_CURRENT_APPROVER")).toBe(true)
-    const resumed = await apiOk(
-        "POST",
-        `/admin/approval-instances/${instanceId}/resume-current-approver`,
-        adminToken,
-        {
-            expected_instance_version: resume.expected_instance_version,
-            expected_execution_version: resume.expected_execution_version,
-            expected_assignment_version: resume.expected_assignment_version,
-            expected_closed_task_version: resume.expected_closed_task_version ?? undefined,
-            idempotency_key: randomUUID(),
-        },
-    )
-    const nextTask = resumed.next_open_task as
-        | { work_item_id: string; task_version: string }
-        | undefined
-    expect(nextTask?.work_item_id, "恢复应返回下一开放任务").toBeTruthy()
-    expect(nextTask!.work_item_id).not.toBe(task!.id)
-    await apiOk("POST", "/admin/approval-decisions", financeToken, {
-        work_item_id: nextTask!.work_item_id,
-        decision: "APPROVE",
-        expected_task_version: nextTask!.task_version,
-        idempotency_key: randomUUID(),
+    expect(restoredQueue.items.filter((row) => row.business_object_id === stockId)).toMatchObject([{
+        id: task!.id,
+        status: "OPEN",
+        task_version: task!.task_version,
+        processing_state: "READY",
+        processing_blocker: null,
+        allowed_actions: expect.arrayContaining(["APPROVE", "REJECT"]),
+    }])
+    const approved = await apiOk("POST", "/admin/approval-decisions", financeToken, decisionBody)
+    expect(approved).toMatchObject({
+        instance_id: beforeDecision.approval.instance.id,
+        instance_status: "APPROVED",
+        outcome: "APPLIED",
+        next_open_task: null,
     })
-    const result = await apiOk("GET", `/admin/stock-adjustments/${stockId}`, warehouseToken)
+    const [result, completedTask] = await Promise.all([
+        apiOk("GET", stockPath, warehouseToken),
+        apiOk("GET", taskPath, financeToken),
+    ])
     expect(result.adjustment.status).toBe("POSTED")
+    expect(result.posted_movements).toMatchObject([{ source_document_id: stockId, movement_type: "STOCK_GAIN" }])
+    expect(completedTask).toMatchObject({ id: task!.id, status: "COMPLETED", completed_by: financeId })
     // 跨页刷新：恢复后管理视图与库存页重新加载无错。
     await managePage.goto("/workspace/tasks?view=managed")
     await expect(workPage(managePage).getByRole("heading", { name: "范围内待办", exact: true })).toBeVisible(VISIBLE)

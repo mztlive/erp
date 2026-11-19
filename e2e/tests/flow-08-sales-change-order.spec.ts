@@ -9,6 +9,7 @@
  */
 import { workPage } from "../helpers/workspace-page"
 import { archiveContractViaUi } from "../helpers/contracts"
+import { randomUUID } from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -16,7 +17,7 @@ import { fileURLToPath } from "node:url"
 
 import { expect, test, type BrowserContext, type Page } from "../helpers/test"
 
-import { apiGet, apiToken } from "../helpers/api"
+import { API_BASE, apiGet, apiToken } from "../helpers/api"
 import { createCustomerViaUi } from "../helpers/customers"
 import { openLoggedInWorkspace } from "../helpers/login"
 import {
@@ -47,7 +48,14 @@ type ChangeDetail = {
     status: string
     reason: string
     approval: {
-        instance: { id: string; subject_version: string | null } | null
+        instance: {
+            id: string
+            subject_version: string | null
+            current_execution_id: string | null
+            current_task_id: string | null
+            status: string
+            blocker_code: string | null
+        } | null
     }
 }
 
@@ -102,6 +110,106 @@ async function gotoNav(page: Page, name: string, hrefId: string) {
         return
     }
     await page.locator(`#${hrefId}`).click()
+}
+
+async function approvalApiWrite<T>(token: string, method: string, path: string, body?: unknown): Promise<T> {
+    const response = await fetch(`${API_BASE}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(15_000),
+    })
+    const payload = await response.json() as { data: T; success: boolean; errorMessage?: string }
+    expect(response.ok && payload.success, `${method} ${path}: ${payload.errorMessage ?? response.status}`).toBe(true)
+    return payload.data
+}
+
+async function approveWithBlockedSuccessorAndResume(page: Page, changeId: string, salesToken: string) {
+    const api = new URL(API_BASE)
+    expect(api.hostname).toBe("127.0.0.1")
+    expect(api.origin).not.toBe(new URL(process.env.ERP_E2E_SOURCE_API_BASE ?? "http://127.0.0.1:10001").origin)
+    expect(process.env.ERP_E2E_CONFIG_PATH).toBeTruthy()
+
+    const admin = await apiToken("admin")
+    const financeToken = await apiToken("caiwu")
+    const accounts = await apiGet<Array<{ id: string; account: string; role_ids: string[] }>>(admin, "/admin/admins")
+    const finance = accounts.find((account) => account.account === "caiwu")!
+    const roles = await apiGet<Array<{ id: string; permissions: string[] }>>(admin, "/admin/roles")
+    const permissions = [...new Set(roles.filter((role) => finance.role_ids.includes(role.id)).flatMap((role) => role.permissions))]
+    expect(permissions).toEqual(expect.arrayContaining(["approval_instance:read", "approval_instance:decide"]))
+    const change = () => apiGet<ChangeDetail>(salesToken, `/admin/sales-change-orders/${changeId}`)
+    const original = (await change()).approval.instance!
+    expect(original).toMatchObject({ status: "RUNNING", current_task_id: expect.any(String) })
+    const instancePath = `/admin/approval-instances/${original.id}`
+    type History = { items: Array<{ execution_id: string; result: string }> }
+    type Task = { id: string; status: string; task_version: string; owner_user_id: string; approval_node_execution_id: string }
+    const history = () => apiGet<History>(admin, `${instancePath}/history`)
+    const firstTaskPath = `/admin/work-items/${original.current_task_id}`
+
+    const restricted = await approvalApiWrite<string>(admin, "POST", "/admin/roles", {
+        name: `E08财务复核撤权-${changeId.slice(-12)}`,
+        permissions: permissions.filter((permission) => permission !== "approval_instance:decide"),
+    })
+    const rolePath = `/admin/admins/${finance.id}/role`
+    try {
+        await approvalApiWrite(admin, "PUT", rolePath, { role_ids: [restricted] })
+        const profile = await apiGet<{ permissions: string[] }>(financeToken, "/account/profile")
+        expect(profile.permissions).toContain("approval_instance:read")
+        expect(profile.permissions).not.toContain("approval_instance:decide")
+        await approveCurrentDocument(page)
+    } finally {
+        await approvalApiWrite(admin, "PUT", rolePath, { role_ids: finance.role_ids })
+        await approvalApiWrite(admin, "DELETE", `/admin/roles/${restricted}`)
+    }
+
+    const blocked = (await change()).approval.instance!
+    expect(blocked).toMatchObject({
+        id: original.id,
+        status: "BLOCKED",
+        blocker_code: "APPROVER_NOT_ELIGIBLE",
+        current_execution_id: expect.any(String),
+        current_task_id: null,
+    })
+    expect(blocked.current_execution_id).not.toBe(original.current_execution_id)
+    const firstCompleted = await apiGet<Task>(admin, firstTaskPath)
+    expect(firstCompleted.status).toBe("COMPLETED")
+    expect((await history()).items).toMatchObject([
+        { execution_id: original.current_execution_id, result: "APPROVED" },
+        { execution_id: blocked.current_execution_id, result: "BLOCKED" },
+    ])
+
+    const recovery = await apiGet<{
+        actions: string[]
+        expected_instance_version: string
+        expected_execution_version: string
+        expected_assignment_version: string
+        expected_closed_task_version: string | null
+    }>(admin, `${instancePath}/recovery-options`)
+    expect(recovery.actions).toContain("RESUME_CURRENT_APPROVER")
+    expect(recovery.expected_closed_task_version).toBeNull()
+    const resumed = await approvalApiWrite<{
+        instance_id: string
+        instance_status: string
+        next_open_task: { work_item_id: string; task_version: string; owner_user_id: string }
+    }>(admin, "POST", `${instancePath}/resume-current-approver`, {
+        expected_instance_version: recovery.expected_instance_version,
+        expected_execution_version: recovery.expected_execution_version,
+        expected_assignment_version: recovery.expected_assignment_version,
+        idempotency_key: randomUUID(),
+    })
+    expect(resumed).toMatchObject({ instance_id: original.id, instance_status: "RUNNING" })
+    const next = resumed.next_open_task
+    expect(next).toMatchObject({ work_item_id: expect.any(String), owner_user_id: finance.id })
+    expect(next.work_item_id).not.toBe(original.current_task_id)
+    const nextTask = await apiGet<Task>(financeToken, `/admin/work-items/${next.work_item_id}`)
+    expect(nextTask).toMatchObject({ id: next.work_item_id, status: "OPEN", task_version: next.task_version, owner_user_id: finance.id })
+    expect(nextTask.approval_node_execution_id).not.toBe(blocked.current_execution_id)
+    expect((await history()).items).toMatchObject([
+        { execution_id: original.current_execution_id, result: "APPROVED" },
+        { execution_id: blocked.current_execution_id, result: "SUPERSEDED" },
+        { execution_id: nextTask.approval_node_execution_id, result: "ACTIVE" },
+    ])
+    expect(await apiGet<Task>(admin, firstTaskPath)).toMatchObject({ status: "COMPLETED", task_version: firstCompleted.task_version })
 }
 
 async function rejectOpenTask(page: Page, reason: string) {
@@ -540,7 +648,11 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             ).toBeVisible({
                 timeout: TIMEOUT,
             })
-            await approveCurrentDocument(procurement.page)
+            if (process.env.ERP_E2E_ISOLATED === "1") {
+                await approveWithBlockedSuccessorAndResume(procurement.page, changeOrderId, salesToken)
+            } else {
+                await approveCurrentDocument(procurement.page)
+            }
             await openWorkspaceTask(
                 finance.page,
                 /销售变更单审批/,

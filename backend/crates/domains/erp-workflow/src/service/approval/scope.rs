@@ -157,13 +157,13 @@ fn visibility_from_enforced_permissions(
 /// `identity_service`：同一应用注入的共享身份与权限服务；`identity_service` / `actor` / `executor`：当前授权事实及事务快照。
 pub async fn approval_participant_permissions_with_executor(
     authorization: &AuthorizationService,
-    db: &Database,
-    identity_service: &SharedRbacService,
+    _db: &Database,
+    _identity_service: &SharedRbacService,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<bool> {
     Ok(matches!(
-        approver_qualification(authorization, db, identity_service, actor, executor).await?,
+        approver_qualification(authorization, actor, executor).await?,
         ApprovalQualification::Eligible(_)
     ))
 }
@@ -173,11 +173,9 @@ pub async fn approval_participant_permissions_with_executor(
 //
 // 身份、策略和数据库错误保持原类别。
 //
-// identity_service 为共享身份服务，actor 为待核验审批人，executor 沿用原执行器。
-pub(super) async fn approver_qualification(
+// actor 为待核验审批人，executor 沿用原执行器。
+pub(crate) async fn approver_qualification(
     authorization: &AuthorizationService,
-    _db: &Database,
-    _identity_service: &SharedRbacService,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalQualification> {

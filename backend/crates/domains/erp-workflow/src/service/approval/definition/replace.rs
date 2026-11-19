@@ -349,24 +349,23 @@ fn node_replacement_drafts(requests: &[DefinitionNodeRequest]) -> Result<Vec<Nod
 // identity_service 为共享身份服务，user_ids 为 BPM 提取的有序账号，executor 为原事务。
 pub(super) async fn validate_assignees(
     authorization: &AuthorizationService,
-    db: &Database,
-    identity_service: &SharedRbacService,
+    _db: &Database,
+    _identity_service: &SharedRbacService,
     user_ids: &[String],
     executor: &mut dyn Executor,
 ) -> Result<HashMap<String, AccountSummary>> {
     let mut accounts = HashMap::new();
     for user_id in user_ids {
         let actor = AuditActor::new(user_id.clone(), user_id.clone(), AccountKind::Admin);
-        let account =
-            match approver_qualification(authorization, db, identity_service, &actor, executor).await? {
-                ApprovalQualification::Inactive => {
-                    return Err(Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()));
-                },
-                ApprovalQualification::MissingPermissions => {
-                    return Err(Error::BusinessLogicError("指定审批人不具备静态审批权限".into()));
-                },
-                ApprovalQualification::Eligible(account) => account,
-            };
+        let account = match approver_qualification(authorization, &actor, executor).await? {
+            ApprovalQualification::Inactive => {
+                return Err(Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()));
+            },
+            ApprovalQualification::MissingPermissions => {
+                return Err(Error::BusinessLogicError("指定审批人不具备静态审批权限".into()));
+            },
+            ApprovalQualification::Eligible(account) => account,
+        };
         accounts.insert(user_id.clone(), account);
     }
     Ok(accounts)

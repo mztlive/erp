@@ -331,9 +331,8 @@ mod tests {
     async fn terminal_policy_stops_before_current_query() {
         let mut store = RecordingStore::new();
         store.runtime.instance.status = ApprovalProcessInstanceStatus::Cancelled;
-        let expected = store.runtime.instance.cancellation_task_policy().unwrap_err().to_string();
         let error = load(&store, &mut NoTransaction).await.err().unwrap();
-        assert!(matches!(error, Error::ConflictError(message) if message == expected));
+        assert!(matches!(error, Error::ConflictError(message) if message == "审批已取消，不能重复撤回"));
         assert_eq!(store.phases(), vec!["instance"]);
     }
 
