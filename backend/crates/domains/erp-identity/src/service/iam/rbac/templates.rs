@@ -17,12 +17,8 @@ use crate::service::iam::management::ManagementAccess;
 use crate::{AccessControlExt, AuthorizationService, Error, Result, RoleId};
 
 impl RbacService {
-    /// 查询可审阅的岗位权限及当前生成状态。
-    /// 固定目录、可生成标记及权限版本。
-    ///
-    /// 读取权限不足、策略变化或存储失败时拒绝。
-    ///
-    /// actor 为当前操作人，authorization 为应用注入的共享授权服务。
+    /// 生成岗位前预览固定模板的权限、已有角色状态、可生成标记及提交所需的策略版本。
+    /// 在预览事务中检查入口资格；资格不足、策略变化或存储失败时返回错误。
     pub async fn builtin_role_catalog(
         self: &Arc<Self>,
         actor: &AuditActor,
@@ -44,7 +40,8 @@ impl RbacService {
             .await
     }
 
-    // 角色目录读取沿当前快照生成岗位模板及允许动作，不交付跨快照的模板资格信息。
+    // 装配目录时沿原事务读取固定角色的状态；仅当角色缺失、操作人可创建且覆盖全部模板权限时标记可生成。
+    // 返回前复核用于计算标记的策略版本。
     async fn role_catalog(
         &self,
         actor: &AuditActor,
@@ -76,12 +73,8 @@ impl RbacService {
         Ok(BuiltinRoleCatalog { policy_version, templates })
     }
 
-    /// 以服务端模板原子生成全部所选岗位，任何既有身份保持不变。
-    /// 每个岗位的新建或保留结果。
-    ///
-    /// 模板、授予上限、版本或任一写入失败时整批拒绝。
-    ///
-    /// request 为已预览的模板选择及版本，actor 为发起人，authorization 为共享授权服务。
+    /// 提交预览版本及模板选择后，按服务端模板原子生成整批岗位，逐项返回新建或保留结果。
+    /// 仅创建缺失角色；选择非法、超出授予上限、版本冲突或任一写入失败时整批拒绝。
     pub async fn generate_builtin_roles(
         self: &Arc<Self>,
         request: GenerateBuiltinRolesRequest,
@@ -112,7 +105,7 @@ impl RbacService {
         .await
     }
 
-    // 创建模板角色时沿调用方事务重新证明固定身份，再保存角色、权限规则及审计。
+    // 在批量事务中按固定 ID 重查角色，保留已有角色（含停用和软删除）；缺失时保存角色、权限和审计。
     async fn generate_builtin_role(
         &self,
         template: BuiltinRoleTemplate,

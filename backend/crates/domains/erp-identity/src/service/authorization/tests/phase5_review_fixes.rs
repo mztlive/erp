@@ -12,12 +12,13 @@ use super::fixtures::{Facts, Identity, actor, complete, object};
 use crate::entity::authorization::{AccessTarget, FactValue, RelatedObjects, RelationKey};
 use crate::{Error, Permission};
 
-// 为用例换入实际启用角色资格，不向派生入口授予内部权限码，用于验证规则复用原资格。
+// 仅换入实际业务权限，不授予派生入口的内部权限码，以验证原资格是否被复用。
 fn grant(identity: &Identity, roles: &[(&str, &[Permission])]) {
     identity.state.lock().unwrap().grants =
         roles.iter().map(|(role, permissions)| ((*role).into(), permissions.to_vec())).collect();
 }
 
+// 供给创建回放必须按当前创建资格检查真实记录，不可用候选或其他权限代替。
 #[tokio::test]
 async fn offering_create_replay_uses_real_record_with_current_create_qualification() {
     let identity = Arc::new(Identity::default());
@@ -71,6 +72,7 @@ async fn offering_create_replay_uses_real_record_with_current_create_qualificati
     ));
 }
 
+// 供给可用性需要独立入口资格，并按实际供给对象的范围判断。
 #[tokio::test]
 async fn availability_requires_independent_entry_qualification_and_actual_offering_scope() {
     let identity = Arc::new(Identity::default());
@@ -117,6 +119,7 @@ async fn availability_requires_independent_entry_qualification_and_actual_offeri
     ));
 }
 
+// 销售选单依据先检查订单创建资格再读取事实，保留客户和方案的对象规则。
 #[tokio::test]
 async fn selection_order_basis_requires_create_before_facts_and_keeps_customer_and_proposal_rules() {
     let identity = Arc::new(Identity::default());
@@ -164,6 +167,7 @@ async fn selection_order_basis_requires_create_before_facts_and_keeps_customer_a
     ));
 }
 
+// 供应商命令回包查询沿用原动作资格，不要求详情菜单，也不能复用旧读取阶段。
 #[tokio::test]
 async fn supplier_command_result_queries_use_original_command_without_detail_and_reject_old_stage() {
     for permission in [supplier_fulfillment::ORDER_CANCEL, supplier_fulfillment::ORDER_REFUND] {

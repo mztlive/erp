@@ -7,77 +7,66 @@ use crate::repository::prelude::*;
 use crate::service::directory::AccountDirectoryService;
 use crate::{AccessControlExt, AccountSummary, Error, Permission, PermissionSet, Result, Role, RoleId};
 
-/// 已核验账号及启用角色的功能资格；不授予对象访问权。
+/// 批量功能资格结果，绑定已核验账号及启用角色；对象访问仍需完整授权。
 #[derive(Debug, Clone)]
 pub struct QualifiedPermissions {
+    // 同一策略版本下的有效角色及逐角色权限命中。
     snapshot: RolePermissionSnapshot,
+    // 取证时的无凭证账号摘要，供调用方使用同次读取的显示信息。
     account: AccountSummary,
+    // 由账号、策略及有效角色版本组合的身份版本，供授权凭证复验。
     version: String,
+    /// 本次取证读取的启用角色实体，供固定角色资格判断和数据范围解析复用。
     pub(crate) roles: Vec<Role>,
+    /// 本次读取的账号记录版本，参与数据范围版本计算。
     pub(crate) account_version: u64,
 }
 
 impl QualifiedPermissions {
-    // 统一授权解析范围时仅使用同次取证中覆盖完整动作组合的角色，不能混入只授予部分权限的角色。
+    /// 解析数据范围时，选取本次取证中各自覆盖全部要求的启用角色。
     pub(crate) fn roles_for_all(&self, required: &[Permission]) -> Vec<RoleId> {
         self.snapshot.granting_role_ids_for_all(required)
     }
-    /// 返回本次资格检查读取的无凭证账号摘要。
-    /// 与权限及身份版本来自同次取证的账号资料，供调用方冻结显示名。
-    ///
-    /// 仅有效内部账号能形成资格结果。
+    /// 读取有效内部账号的无凭证摘要，供调用方使用与权限取证一致的显示名。
     pub fn account(&self) -> &AccountSummary {
         &self.account
     }
 
-    /// 取得单项权限的有效授权角色。
-    /// 未请求、未授权或角色停用时返回空集合。
-    ///
-    /// permission 为本批取证的具体权限。
+    /// 取得本批指定权限的启用授予角色，供单项范围解析使用。
+    /// 未请求或无启用角色授予时返回空集合。
     pub fn roles(&self, permission: &Permission) -> Vec<RoleId> {
         self.snapshot.granting_role_ids(permission)
     }
 
-    /// 当全部权限由同一有效角色授予时返回 `true`。
-    /// 空要求或没有共同角色时返回 false。
-    ///
-    /// permissions 为必须同角色覆盖的权限。
+    /// 检查是否有一个启用角色同时授予全部指定权限；空要求或没有共同角色时返回 `false`。
     pub fn same_role(&self, permissions: &[Permission]) -> bool {
         !self.snapshot.granting_role_ids_for_all(permissions).is_empty()
     }
 
-    /// 返回逐项独立成立的权限集合，允许不同权限来自不同角色。
-    /// 只包含本批请求且由启用角色授予的具体权限。
+    /// 汇总本批由启用角色授予的具体权限，供逐项资格查询；各项可由不同角色授予。
     pub fn permissions(&self) -> PermissionSet {
         PermissionSet::new(self.snapshot.grants.values().flatten().cloned())
     }
 
-    /// 返回本批取证的策略修订号。
-    /// 供原事务继续校验或策略写入使用的修订号。
+    /// 返回本批取证的策略修订号，供原事务校验或授权后的策略写入使用。
     pub fn policy_revision(&self) -> u64 {
         self.snapshot.policy_revision()
     }
 
-    /// 返回绑定账号、策略及有效角色版本的身份版本。
-    /// 用于授权凭证的完整身份依赖。
+    /// 返回绑定账号、策略及有效角色版本的身份版本，供授权凭证记录和复验。
     pub fn version(&self) -> &str {
         &self.version
     }
 }
 
 impl RbacService {
-    /// 取得同一身份数据库的账号目录。
-    /// 不查询、不缓存的身份目录服务。
+    /// 为后续账号查询构造复用同一身份数据库的目录服务；此时不读库或建缓存。
     pub fn directory(&self) -> AccountDirectoryService {
         AccountDirectoryService::new(self.db.clone())
     }
 
-    /// 一次读取账号、权限快照及启用角色，分别证明本批具体权限。
-    /// 账号失效时返回 None；有效账号返回逐项资格，允许零项授权。
-    ///
-    /// 通配查询、基础设施或策略版本错误保持失败；不降级为空权限。
-    ///
-    /// actor 为真实账号，permissions 为具体功能权限，executor 沿用业务事务。
+    /// 为当前账号批量核验具体功能权限，并沿原执行器核对策略版本及启用角色。
+    /// 账号失效返回 `None`，有效账号可以零项授权；通配请求、版本不一致或读取失败均返回错误。
     pub async fn qualified_permissions(
         &self,
         actor: &AuditActor,
@@ -107,7 +96,7 @@ impl RbacService {
 
 #[cfg(any(test, feature = "test-support"))]
 impl QualifiedPermissions {
-    // 在同一身份快照准备角色授权，用于测试固定规则是否真正要求权限来自同一角色。
+    /// 为默认后台测试账号构造同一快照下的角色授权，供同角色规则测试使用。
     #[cfg(test)]
     pub(crate) fn test_grants(grants: &[(&str, &[Permission])]) -> Self {
         use erp_core::AccountKind;
@@ -116,12 +105,8 @@ impl QualifiedPermissions {
         Self::test_grants_for(&actor, grants)
     }
 
-    // 用固定启用角色为指定测试账号构造资格。
-    // 与生产共用资格构造和版本计算的内存取证结果。
-    //
-    // 无。固定角色编号或名称无效时触发测试断言。
-    //
-    // actor 为待核验账号；grants 为固定启用角色及其具体权限。
+    /// 为指定测试账号和启用角色构造内存资格，复用生产的资格过滤与版本计算。
+    /// 测试角色编号或名称无效时触发断言。
     pub(crate) fn test_grants_for(actor: &AuditActor, grants: &[(&str, &[Permission])]) -> Self {
         use std::collections::{HashMap, HashSet};
 
@@ -144,7 +129,7 @@ impl QualifiedPermissions {
     }
 }
 
-// 用启用角色的授予生成有效资格，身份版本仍绑定本次参与取证的全部角色事实。
+// 取证完成后按启用角色过滤授权，并用账号、策略及本批启用角色版本构造身份版本。
 fn qualified(
     mut snapshot: RolePermissionSnapshot,
     roles: &[Role],
@@ -176,6 +161,7 @@ mod tests {
     use super::*;
     use crate::RoleData;
 
+    // 验证逐项权限不能拼成同角色资格，停用角色的授予会从结果中剔除。
     #[test]
     fn independent_permissions_do_not_imply_a_common_role_and_disabled_roles_are_removed() {
         let read = Permission::parse("example:read").unwrap();
@@ -207,6 +193,7 @@ mod tests {
         assert_eq!(reduced.policy_revision(), 7);
     }
 
+    // 验证同角色授予和账号摘要得以保留，账号或角色版本变化会更新身份版本。
     #[test]
     fn common_role_and_identity_versions_are_preserved() {
         let read = Permission::parse("example:read").unwrap();
@@ -232,6 +219,7 @@ mod tests {
         assert!(empty.permissions().into_vec().is_empty());
     }
 
+    // 验证固定角色和权限的资格判断只采纳启用角色证据。
     #[test]
     fn fixed_role_and_permission_policies_only_accept_enabled_role_evidence() {
         let preview = Permission::parse("file_asset:preview").unwrap();
@@ -251,12 +239,14 @@ mod tests {
         assert_ne!(enabled.version(), disabled.version());
     }
 
+    // 为资格测试提供带固定显示名和登录名的有效后台账号摘要。
     fn account() -> AccountSummary {
         AccountSummary::new("user", AccountKind::Admin, true)
             .with_display_name("审批人")
             .with_login_account("login")
     }
 
+    // 用指定 ID 构造启用角色，供资格测试匹配策略中的角色绑定。
     fn role(id: &str) -> Role {
         let mut role = Role::new(RoleId::parse(id).unwrap(), RoleData::new(id)).unwrap();
         role.base = BaseModel::fake();

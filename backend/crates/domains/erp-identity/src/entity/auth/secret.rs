@@ -30,22 +30,18 @@ pub enum PasswordVerification {
     Legacy,
 }
 
-/// 已完成规范化和基础校验的登录账号。
-///
-/// 账号仅去除首尾空白，不改变大小写，避免改变既有账号的匹配语义。
+/// 用于创建凭证和登录查找的规范账号名，保留原大小写以延续既有匹配规则。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct LoginAccount(String);
+pub struct LoginAccount(
+    // 裁剪首尾空白后通过通用长度校验的登录名。
+    String
+);
 
 impl LoginAccount {
     /// 后台账号在通用区间上进一步收敛的最大长度（[`crate::entity::AccountCore`] 复用）。
     pub const BACKOFFICE_MAX_LEN: usize = 32;
 
-    /// 规范化并校验登录账号。
-    /// 返回已去除首尾空白的登录账号。
-    ///
-    /// 当账号为空或字符数不在允许区间时返回错误。
-    ///
-    /// `value`：原始登录账号。
+    /// 裁剪登录名首尾空白并保留大小写，裁剪后少于 3 或多于 64 字符时报错。
     pub fn new(value: impl Into<String>) -> Result<Self> {
         let value = value.into();
         let value = value.trim();
@@ -56,39 +52,37 @@ impl LoginAccount {
         Ok(Self(value.to_string()))
     }
 
-    /// 返回规范化后的账号字符串。
-    /// 返回账号的借用视图。
+    /// 借用规范登录名，供账号查找和精确匹配。
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 
-    /// 消费值对象并返回账号字符串。
-    /// 返回规范化后的账号所有权。
+    /// 交出规范登录名的所有权，供凭证保存。
     pub fn into_string(self) -> String {
         self.0
     }
 }
 
 impl AsRef<str> for LoginAccount {
+    // 向接受字符串借用的接口提供规范登录名，无需复制。
     fn as_ref(&self) -> &str {
         self.as_str()
     }
 }
 
-/// 账号登录凭证。
-///
-/// 持久化字段名保持为 `account` 和 `password`。新密码使用 Argon2id PHC
-/// 字符串，旧 MD5 摘要仅用于兼容验证和登录后的透明迁移。
+/// 持久化登录凭证，沿用 `account` 和 `password` 字段名。
+/// 新密码存为 Argon2id PHC 字符串，旧 MD5 摘要仅用于兼容验证和登录迁移。
 #[derive(Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Secret {
+    // 用于登录及凭证归属核对的账号名，持久化为 `account`。
     account: String,
+    // 存于 `password` 的验密哈希，可能是 Argon2 PHC 字符串或待迁移的 MD5 摘要。
     #[serde(rename = "password")]
     password_hash: String,
 }
 
 impl fmt::Debug for Secret {
-    // 调试输出登录账号，密码哈希固定写成 `[REDACTED]`。
-    // 格式化写入失败时返回 `fmt::Error`。
+    // 调试时显示登录名，密码字段固定为 `[REDACTED]`；格式化失败时传递错误。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("Secret")
@@ -99,54 +93,37 @@ impl fmt::Debug for Secret {
 }
 
 impl Secret {
-    /// 使用已规范化账号和明文密码创建登录凭证。
-    /// 返回采用 Argon2id 哈希的新凭证。
-    ///
-    /// 当密码为空或密码哈希失败时返回错误。
-    ///
-    /// `account`：已规范化的登录账号。
+    /// 为规范登录名创建凭证，用明文生成 Argon2id 哈希；空密码或哈希失败时返回错误。
     pub fn new(account: LoginAccount, password: impl AsRef<str>) -> Result<Self> {
         Ok(Self { account: account.into_string(), password_hash: hash_password(password.as_ref())? })
     }
 
-    /// 返回规范化后的登录账号。
-    /// 返回账号字符串的借用视图。
+    /// 借用凭证中的登录名，供认证身份比较或展示。
     pub fn account(&self) -> &str {
         self.account.as_str()
     }
 
-    /// 消费凭证并返回登录账号。
-    /// 返回账号字符串所有权；密码哈希随凭证一起丢弃。
+    /// 消费凭证并交出登录名，密码哈希随凭证丢弃。
     pub fn into_account(self) -> String {
         self.account
     }
 
-    /// 使用已规范化账号替换当前登录账号。
-    /// `account`：已规范化的新登录账号。
+    /// 用已规范化的登录名更新凭证归属，保留原密码哈希。
     pub fn change_account(&mut self, account: LoginAccount) {
         self.account = account.into_string();
     }
 
-    /// 使用 Argon2id 替换当前密码哈希。
-    /// 成功时用新的 Argon2id 哈希替换当前密码哈希。
-    ///
-    /// 当密码为空或密码哈希失败时返回错误。
+    /// 设置新密码或迁移旧凭证时生成 Argon2id 哈希；空密码或哈希失败时返回错误并保留旧值。
     pub fn change_password(&mut self, password: impl AsRef<str>) -> Result<()> {
         self.password_hash = hash_password(password.as_ref())?;
         Ok(())
     }
 
-    /// 验证明文密码，并在没有凭证时执行等成本的 Argon2 dummy work。
+    /// 登录时按持久化 PHC 参数验证 Argon2 凭证；无账号或账号不可认证时传入 `None`。
+    /// 旧 MD5 验证后，以及凭证缺失、格式未知或 Argon2 哈希损坏时，执行一次默认参数的 Argon2 占位计算以缩小时延差异。
     ///
-    /// Argon2 PHC 字符串按其中记录的参数验证。旧 MD5 摘要先完成兼容
-    /// 校验，再执行一次默认参数的 Argon2 dummy work。没有凭证、未知格式
-    /// 或损坏的 Argon2 哈希同样执行 dummy work，减少失败路径的时延差异。
-    ///
-    /// 该方法是 CPU 密集型同步能力，异步调用方必须通过有界阻塞任务执行。
-    ///
-    /// 匹配当前 Argon2 时返回 `Current`，匹配旧 MD5 时返回 `Legacy`，其余情况返回 `Mismatch`。
-    ///
-    /// `secret`：已加载凭证；账号不存在或不可认证时传入 `None`。
+    /// Argon2 匹配返回 `Current`，MD5 匹配返回待迁移的 `Legacy`，其余返回 `Mismatch`。
+    /// 此方法会同步消耗 CPU；异步调用方必须使用有界阻塞任务。
     pub fn verify_password_or_dummy(secret: Option<&Self>, password: &str) -> PasswordVerification {
         let Some(secret) = secret else {
             perform_dummy_argon2(password);
@@ -174,15 +151,14 @@ impl Secret {
         PasswordVerification::Mismatch
     }
 
-    /// 当当前凭证仍使用可迁移的旧 MD5 摘要时返回 `true`。
-    /// 哈希是合法的 32 位十六进制 MD5 摘要时返回 `true`。
+    /// 按 32 个 ASCII 十六进制字符识别旧 MD5 摘要格式，供验密选择兼容路径。
     pub fn is_legacy_password_hash(&self) -> bool {
         self.password_hash.len() == LEGACY_MD5_LEN
             && self.password_hash.bytes().all(|byte| byte.is_ascii_hexdigit())
     }
 }
 
-// 保存新密码时生成 PHC 文本格式的 Argon2id 哈希，不将明文带入凭证。
+// 创建或换密时以随机盐生成 Argon2id PHC 文本，空密码和生成失败均返回业务错误。
 fn hash_password(password: &str) -> Result<String> {
     if password.is_empty() {
         return Err(Error::LogicError("密码不能为空".to_string()));
@@ -195,7 +171,7 @@ fn hash_password(password: &str) -> Result<String> {
         .map_err(|_| Error::LogicError("密码处理失败".to_string()))
 }
 
-// 验证已有 Argon2 凭证与输入密码；无法解析 PHC 时返回 `None`，与正常的密码不匹配区分。
+// 按 PHC 参数验密并返回是否匹配；解析失败、缺少盐或摘要、以及其他验证错误均返回 `None`。
 fn verify_argon2(password: &str, encoded_hash: &str) -> Option<bool> {
     let hash = PasswordHash::new(encoded_hash).ok()?;
     if hash.salt.is_none() || hash.hash.is_none() {
@@ -209,22 +185,19 @@ fn verify_argon2(password: &str, encoded_hash: &str) -> Option<bool> {
     }
 }
 
-// 使用与新密码哈希相同的默认参数执行一次 Argon2 工作。
-//
-// 触发 panic 的条件：
-// 固定盐常量无法按 Base64 编码时 panic；该常量在源码中写死，正常构建不应发生。
+// 用固定盐执行一次默认参数的 Argon2 占位计算并丢弃结果；固定盐无法编码成 Base64 时 panic。
 fn perform_dummy_argon2(password: &str) {
     let salt = SaltString::encode_b64(DUMMY_ARGON2_SALT).expect("dummy Argon2 salt constant must be valid");
     let _ = Argon2::default().hash_password(password.as_bytes(), &salt);
 }
 
-// 兼容迁移期间用于核验尚未升级的 MD5 凭证，不生成新账号密码哈希。
+// 仅在旧凭证验密时计算输入的 MD5 小写十六进制摘要，并逐字节核对持久化值。
 fn verify_legacy_md5(password: &str, encoded_hash: &str) -> bool {
     let candidate = format!("{:x}", md5::compute(password.as_bytes()));
     constant_time_eq(candidate.as_bytes(), encoded_hash.as_bytes())
 }
 
-// 对已知等长的密码摘要遍历全部字节再比较结果，不在发现首个差异时返回。
+// 长度不同直接判定不匹配；等长时逐字节累积差异，遍历完成后判定。
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     if left.len() != right.len() {
         return false;
@@ -237,18 +210,21 @@ fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
 mod tests {
     use super::{LoginAccount, PasswordVerification, Secret};
 
+    // 验证登录名规范化裁剪两端空白并保留大小写。
     #[test]
     fn login_account_should_trim_without_changing_case() {
         let account = LoginAccount::new("  Admin01  ").unwrap();
         assert_eq!(account.as_str(), "Admin01");
     }
 
+    // 验证通用登录名规则拒绝全空白及 65 字符输入。
     #[test]
     fn login_account_should_reject_out_of_range_values() {
         assert!(LoginAccount::new("  ").is_err());
         assert!(LoginAccount::new("a".repeat(65)).is_err());
     }
 
+    // 验证登录名先裁剪再校验，并接受 3 和 64 字符边界。
     #[test]
     fn account_constructor_keeps_normalization_and_length_boundaries() {
         assert_eq!(LoginAccount::new("  Admin01  ").unwrap().as_str(), "Admin01");
@@ -260,6 +236,7 @@ mod tests {
         }
     }
 
+    // 验证新凭证采用 Argon2id，正确密码匹配当前格式，错误密码验证失败。
     #[test]
     fn new_secret_should_use_argon2_and_match_password() {
         let secret = Secret::new(LoginAccount::new("admin01").unwrap(), "password123").unwrap();
@@ -276,6 +253,7 @@ mod tests {
         assert!(!secret.is_legacy_password_hash());
     }
 
+    // 验证密码保留首尾空白，省略空白后的输入无法匹配原凭证。
     #[test]
     fn password_whitespace_should_be_preserved_for_exact_matching() {
         let secret = Secret::new(LoginAccount::new("admin01").unwrap(), " password123 ").unwrap();
@@ -290,6 +268,7 @@ mod tests {
         );
     }
 
+    // 验证旧 MD5 凭证仅在密码正确时返回待迁移标记。
     #[test]
     fn legacy_md5_secret_should_verify_for_migration() {
         let secret = Secret {
@@ -308,6 +287,7 @@ mod tests {
         assert!(secret.is_legacy_password_hash());
     }
 
+    // 验证换密将旧 MD5 哈希替换为可按当前格式验证的凭证。
     #[test]
     fn change_password_should_upgrade_legacy_hash() {
         let mut secret = Secret {
@@ -324,6 +304,7 @@ mod tests {
         assert!(!secret.is_legacy_password_hash());
     }
 
+    // 验证缺少凭证和损坏的 Argon2 哈希均返回不匹配。
     #[test]
     fn missing_and_malformed_secret_should_fail_closed() {
         let malformed =
@@ -336,6 +317,7 @@ mod tests {
         );
     }
 
+    // 验证调试文本使用脱敏占位值，不包含 Argon2 哈希。
     #[test]
     fn debug_output_should_redact_password_hash() {
         let secret = Secret::new(LoginAccount::new("admin01").unwrap(), "password123").unwrap();

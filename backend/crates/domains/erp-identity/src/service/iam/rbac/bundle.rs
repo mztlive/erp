@@ -11,12 +11,8 @@ use crate::{
 };
 
 impl RbacService {
-    // 从当前启用角色构造授予上限，停用角色不能提供上限。
-    // 当前有效角色的隐式权限集合。
-    //
-    // 策略快照、角色读取或权限解析失败时拒绝。
-    //
-    // actor 为认证身份，executor 为原事务执行器。
+    /// 预览或重验授权文件时，读取操作人的 Casbin 绑定，在原事务中筛出启用角色，以其隐式权限并集作为授予上限。
+    /// 策略快照、角色读取或权限解析失败时返回错误；调用方须核对事务可见的策略版本。
     pub(crate) async fn bundle_actor_permissions(
         &self,
         actor: &AuditActor,
@@ -32,12 +28,8 @@ impl RbacService {
         Ok(PermissionSet::new(permissions))
     }
 
-    // 写入已重验的单个角色及策略和原有审计。
-    // 当前步骤写入成功。
-    //
-    // 角色校验、仓储或审计失败时向原事务返回错误。
-    //
-    // planned 为重验后的角色计划，actor 为操作人，executor 为原授权事务。
+    /// 应用重验后的单个角色计划，在原事务中创建角色或更新名称、替换整套直接权限并保存资源审计。
+    /// 角色校验、持久化或审计失败时将错误返回外层事务。
     pub(crate) async fn write_bundle_role(
         &self,
         planned: PlannedRole,
@@ -71,12 +63,8 @@ impl RbacService {
         self.audit.persist(&audit, executor).await
     }
 
-    // 沿用账号角色分配、角色版本触碰和目录资格初始化。
-    // 当前绑定步骤及审计写入成功。
-    //
-    // 绑定、资格初始化或审计失败时向原事务返回错误。
-    //
-    // planned 为重验后的完整角色集合，actor 为操作人，executor 为原授权事务。
+    /// 应用重验后的完整绑定计划，在原事务中更新角色版本、覆盖后台账号的 Casbin 绑定、初始化目录资格并写审计。
+    /// 角色校验、绑定、资格初始化或审计失败时将错误返回外层事务。
     pub(crate) async fn write_bundle_binding(
         &self,
         planned: PlannedBinding,

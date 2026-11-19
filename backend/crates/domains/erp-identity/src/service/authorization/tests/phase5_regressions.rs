@@ -16,11 +16,13 @@ use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts, Related
 use crate::entity::resource_access::ResourceKind;
 use crate::{AuthorizationService, Error};
 
+// 换入当前用例的角色权限，用于比较同角色组合与分离授权。
 fn grant(identity: &Identity, roles: &[(&str, &[Permission])]) {
     identity.state.lock().unwrap().grants =
         roles.iter().map(|(role, permissions)| ((*role).into(), permissions.to_vec())).collect();
 }
 
+// 用指定身份和单个资源事实装配真实服务，供写入与回放用例调用。
 fn bound(identity: Arc<Identity>, resource: &str, facts: Arc<Facts>) -> AuthorizationService {
     let mut builder = complete();
     builder.facilities = identity;
@@ -28,10 +30,12 @@ fn bound(identity: Arc<Identity>, resource: &str, facts: Arc<Facts>) -> Authoriz
     builder.build().unwrap()
 }
 
+// 构造归属于当前用户及指定组织的销售单候选。
 fn sales_candidate(org: &str) -> ObjectFacts {
     ObjectFacts { org_unit_id: FactValue::Known(Some(org.into())), ..candidate("sales_order", "user") }
 }
 
+// 创建并提交只使用同时具备两项资格的角色范围，候选和持久化回放都应用该限制。
 #[tokio::test]
 async fn create_and_submit_uses_only_jointly_qualified_roles_for_creation_scope_and_replay() {
     let identity = Arc::new(Identity::default());
@@ -74,6 +78,7 @@ async fn create_and_submit_uses_only_jointly_qualified_roles_for_creation_scope_
     }
 }
 
+// 额外成本读取需要独立的成本资格，并保留销售单详情的对象范围规则。
 #[tokio::test]
 async fn extra_cost_requires_independent_cost_qualification_and_preserves_detail_data_rules() {
     let identity = Arc::new(Identity::default());
@@ -147,6 +152,7 @@ async fn extra_cost_requires_independent_cost_qualification_and_preserves_detail
     ));
 }
 
+// 各履约创建入口都检查自己的当前权限和账号状态，不复用旧资格。
 #[tokio::test]
 async fn fulfillment_creation_requires_each_current_functional_grant_and_active_identity() {
     let identity = Arc::new(Identity::default());
@@ -174,12 +180,14 @@ async fn fulfillment_creation_requires_each_current_functional_grant_and_active_
     }
 }
 
+// 沿用完整测试绑定，只换身份设施来验证不依赖业务事实的入口。
 fn complete_with_identity(identity: Arc<Identity>) -> AuthorizationService {
     let mut builder = complete();
     builder.facilities = identity;
     builder.build().unwrap()
 }
 
+// 采购退货的真实来源沿用完整命令角色，无需采购单详情菜单资格。
 #[tokio::test]
 async fn purchase_return_source_requires_the_complete_command_role_without_a_detail_menu() {
     let identity = Arc::new(Identity::default());
@@ -234,6 +242,7 @@ async fn purchase_return_source_requires_the_complete_command_role_without_a_det
     ));
 }
 
+// 库存调整更新检查已持久化的调整单和完整仓库来源，不接受候选替代。
 #[tokio::test]
 async fn stock_adjustment_update_checks_the_persisted_record_and_complete_warehouse_source() {
     let identity = Arc::new(Identity::default());
@@ -327,6 +336,7 @@ async fn stock_adjustment_update_checks_the_persisted_record_and_complete_wareho
     assert_eq!(facts.calls.load(Ordering::SeqCst), calls);
 }
 
+// 登记供应商导入必须重新检查当前导入资格。
 #[tokio::test]
 async fn supplier_import_registration_requires_current_import_qualification() {
     let identity = Arc::new(Identity::default());
@@ -350,6 +360,7 @@ async fn supplier_import_registration_requires_current_import_qualification() {
     }
 }
 
+// 供应商补全回放要求同一角色持有全部三项现行权限。
 #[tokio::test]
 async fn supplier_completion_replay_requires_one_role_with_all_three_current_permissions() {
     let identity = Arc::new(Identity::default());
@@ -404,6 +415,7 @@ async fn supplier_completion_replay_requires_one_role_with_all_three_current_per
     }
 }
 
+// 客户创建回包按当前创建资格和范围复查真实记录，不放过不存在的对象。
 #[tokio::test]
 async fn customer_creation_receipt_rechecks_the_real_record_with_only_current_creation_scope() {
     let identity = Arc::new(Identity::default());
@@ -445,6 +457,7 @@ async fn customer_creation_receipt_rechecks_the_real_record_with_only_current_cr
     assert_eq!(facts.calls.load(Ordering::SeqCst), calls);
 }
 
+// 客户创建接受归属候选，不能改用记录目标，归属变更授权到期也不放行。
 #[tokio::test]
 async fn customer_creation_accepts_candidate_and_rejects_record_and_expired_owner_change() {
     let identity = Arc::new(Identity::default());

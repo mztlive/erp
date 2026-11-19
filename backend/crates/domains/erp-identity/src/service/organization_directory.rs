@@ -9,29 +9,20 @@ use crate::Result;
 use crate::entity::organization::{OrgMembership, OrgTree};
 use crate::repository::OrganizationRepository;
 
-/// 业务筛选与责任归属共用的组织目录。
+/// 复用调用方快照读取组织树和成员关系，供业务筛选、责任归属及授权事实获取使用。
 #[derive(Clone)]
 pub struct OrganizationDirectoryService {
+    // 组织事实所在数据库，保存节点和账号成员关系。
     db: Database,
 }
 
 impl OrganizationDirectoryService {
-    /// 绑定组织事实数据库。
-    /// 不缓存组织快照的目录服务。
-    ///
-    /// 不执行 I/O。
-    ///
-    /// db 为身份数据库。
+    /// 绑定组织数据库以便后续沿调用方执行器取证；构造时只保存句柄，读取时再获取当前组织事实。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// 展开启用组织及可选下级。
-    /// 排序去重的有效组织集合。
-    ///
-    /// 未知组织、非法组织树或读取失败时返回错误。
-    ///
-    /// ids 为筛选组织，include_descendants 控制下级展开，executor 为原执行器。
+    /// 将业务筛选指定的组织展开为排序去重的启用节点，可选包含下级。未知组织、非法树或读取失败时返回错误。
     pub async fn expand_org_units(
         &self,
         ids: &[String],
@@ -47,12 +38,7 @@ impl OrganizationDirectoryService {
         Ok(result)
     }
 
-    /// 读取指定组织在给定时点的有效成员。
-    /// 排序去重的有效成员账号 ID。
-    ///
-    /// 组织事实读取失败时返回错误。
-    ///
-    /// ids 为组织集合，at 为解释时点，executor 为原执行器。
+    /// 按组织 ID 集合和指定时点查找有效成员，返回排序去重的后台账号 ID，供按组织筛选业务数据。
     pub async fn org_member_ids(
         &self,
         ids: &BTreeSet<String>,
@@ -72,12 +58,7 @@ impl OrganizationDirectoryService {
             .collect())
     }
 
-    /// 查询账号在给定时点的唯一主属组织。
-    /// 主属组织 ID；没有主属组织时为 None。
-    ///
-    /// 读取失败或存在重叠主属关系时返回错误。
-    ///
-    /// user 为真实账号，at 为解释时点，executor 为原执行器。
+    /// 读取指定时点的唯一主属组织，供责任归属或目录展示使用。无主属关系时返回 `None`；重叠关系或读取失败时返回错误。
     pub async fn own_org(
         &self,
         user: &str,
@@ -89,12 +70,7 @@ impl OrganizationDirectoryService {
         Ok(OrgMembership::primary_org(&memberships, user, at)?.map(str::to_owned))
     }
 
-    /// 查询账号当前唯一主属组织及下一次关系变化边界。
-    /// 当前组织及最近未来生效或失效时点；无关系时组织为 None。
-    ///
-    /// 查询失败或当前存在重叠主属关系时返回错误。
-    ///
-    /// user 为明确账号，at 为授权解释时点，executor 为原执行器。
+    /// 返回指定时点的主属组织及下一次关系生效或失效的时间，供调用方限制依赖该关系的授权期限。当前关系重叠时返回错误。
     pub async fn own_org_with_validity(
         &self,
         user: &str,

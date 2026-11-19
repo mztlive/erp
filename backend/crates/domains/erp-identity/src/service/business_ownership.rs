@@ -8,12 +8,7 @@ use crate::entity::organization::OrgTree;
 use crate::repository::OrganizationRepository;
 use crate::{AccessControlExt, Error, Result};
 
-/// 解析有效后台责任人的唯一主属组织，不默认放入根组织或系统账号。
-/// 返回仍启用的主属组织 ID。
-///
-/// 账号不是有效后台账号、缺少有效主属组织、组织树无法构造或所属组织已停用时返回业务错误。仓储失败时返回对应错误。
-///
-/// `db`：账号与组织所在数据库；`executor`：调用方读或事务执行器。
+/// 建立业务归属前，确认负责人是有效后台账号，并返回其唯一且仍启用的主属组织。资格或组织事实缺失时停止建单，仓储错误原样返回。
 pub async fn required_business_org(db: &Database, user: &str, executor: &mut dyn Executor) -> Result<String> {
     db.accounts()
         .find_by_id(user, executor)
@@ -31,13 +26,7 @@ pub async fn required_business_org(db: &Database, user: &str, executor: &mut dyn
     Ok(org.into())
 }
 
-/// 在正式写入事务中重验预先采集的组织，调岗后不得提交旧建单计划。
-/// 当前主属组织仍等于 `org` 时返回。
-///
-/// 责任事实失效时返回 `required_business_org` 的错误；组织已变化时返回冲突。
-///
-/// `db`：账号与组织所在数据库；`org`：预先采集的主属组织 ID。
-/// `executor`：正式写入事务的执行器。
+/// 在建单写事务中复核预先记录的负责人组织。当前主属组织已变更时返回冲突，要求调用方重新准备写入。
 pub async fn ensure_creation_org(
     db: &Database,
     user: &str,

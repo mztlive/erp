@@ -13,45 +13,53 @@ use crate::service::account_support::account_of_kind;
 use crate::service::iam::SharedRbacService;
 use crate::{AccessControlExt, RoleRepositoryExt};
 
-/// 当前账号信息响应结构。
+/// 当前后台账号的资料和权限摘要，供客户端刷新会话展示。
 #[derive(Debug, Serialize)]
 pub struct AccountProfile {
+    /// 当前账号 ID，对外字段名为 `userid`。
     #[serde(rename = "userid")]
     pub user_id: String,
+    /// 本次资料读取校验通过的 Casbin 策略版本。
     pub policy_version: u64,
+    /// 读取到的组织版本，尚无版本记录时为 `0`。
     pub organization_version: u64,
+    /// 登录账号。
     pub account: String,
+    /// 显示名称。
     pub name: String,
+    /// 已登记的联系电话。
     pub phone: Option<String>,
+    /// 去除首尾空白后的头像地址，缺失或全空白时为 `None`。
     pub avatar: Option<String>,
+    /// 由账号类型与 ID 组成的 Casbin 主体标识。
     pub subject: String,
+    /// 当前直接绑定的 Casbin 角色 ID。
     pub role_ids: Vec<String>,
+    /// 根据启用角色与权限计算出的可用工作台。
     pub workbenches: BTreeSet<RoleWorkbench>,
+    /// 根据 Casbin 策略读取的角色继承权限，用于功能展示。
     pub permissions: Vec<Permission>,
+    /// 当前账号的身份类型；本用例仅交付有效后台账号的资料。
     pub account_kind: AccountKind,
 }
 
-/// 账号信息服务。
-///
-/// 提供当前账号信息的读取能力。
+/// 为已认证的后台账号提供本人资料、工作台和权限信息。
 pub struct AccountProfileService {
+    // 身份数据库，用于读取账号、启用角色和组织版本。
     db: Database,
+    // 共享 Casbin 角色授权服务，用于读取绑定、权限和策略版本。
     rbac: SharedRbacService,
 }
 
 impl AccountProfileService {
-    /// 使用共享 RBAC 服务创建账号信息服务实例。
-    /// 返回账号信息服务实例。
-    ///
-    /// `rbac`：共享 Casbin RBAC 服务。
+    /// 组装当前账号资料查询时接入身份数据库和共享 Casbin 角色授权服务，构造阶段只保存依赖。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
 
-    /// 获取当前账号信息。
-    /// 返回当前账号的资料、角色、权限以及策略和组织版本。
+    /// 凭已认证的账号 ID 和类型读取本人资料、角色、权限、可用工作台及策略和组织版本；交付前再次比较策略版本。
     ///
-    /// 账号不存在或类型不符时返回 `NotFound`；账号已失效时返回 `Forbidden`；读取期间策略版本变化时返回 `ConflictError`。数据库、角色或组织版本读取失败时返回对应错误。
+    /// 账号缺失或类型不符返回 `NotFound`，已失效返回 `Forbidden`，策略版本变化返回 `ConflictError`；读取失败沿用原错误。
     pub async fn account_profile(&self, user_id: &str, account_kind: AccountKind) -> Result<AccountProfile> {
         let policy_version = self.rbac.current_policy_revision().await?;
         let account = account_of_kind(
@@ -89,10 +97,7 @@ impl AccountProfileService {
         Ok(profile)
     }
 
-    // 构建统一账号资料响应。
-    // 返回统一账号资料响应。
-    //
-    // `permissions`：权限集合；`avatar`：已规范化的头像。
+    // 交付前投影账号资料、角色和权限，并生成 Casbin 主体标识；头像已规范化，工作台和版本由调用方填入。
     fn build_profile(
         account: AccountCore,
         role_ids: Vec<String>,
@@ -117,10 +122,7 @@ impl AccountProfileService {
         }
     }
 
-    // 归一化头像地址。
-    // 返回有效头像地址；空值返回 `None`。
-    //
-    // `avatar`：原始头像地址。
+    // 组装资料前裁去头像地址首尾空白，缺失或全空白时返回 `None`。
     fn normalized_avatar(avatar: Option<&str>) -> Option<String> {
         avatar.map(|value| value.trim().to_string()).filter(|value| !value.is_empty())
     }
@@ -133,6 +135,7 @@ mod tests {
     use super::AccountProfileService;
     use crate::entity::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Permission, Secret};
 
+    // 验证资料投影保留联系电话和后台主体标识，序列化省略邮箱及门店字段。
     #[test]
     fn build_profile_should_keep_admin_identity_and_phone() {
         let mut account = AccountCore::new(
@@ -162,6 +165,7 @@ mod tests {
         assert_eq!(profile.subject, "user:admin:account-1");
     }
 
+    // 验证头像地址去除首尾空白，全空白地址映射为 `None`。
     #[test]
     fn normalized_avatar_should_trim_and_filter_empty_values() {
         let avatar = AccountProfileService::normalized_avatar(Some(" https://example.com/a.png "));

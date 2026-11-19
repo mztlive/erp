@@ -8,10 +8,8 @@ use crate::entity::role::{ROOT_ROLE_ID, Role, RoleData};
 use crate::{Error, Permission, Result};
 
 impl PolicyDocument {
-    /// 规范化文件，并拒绝含糊的管理边界。
-    /// 稳定排序、去重且结构有效的配置文件。
-    ///
-    /// 重复对象、重叠范围、非法角色、超限或不可配置动作时拒绝。
+    /// 在预览和应用前规范化标识和值集合，按管理对象稳定排序。
+    /// 拒绝重复对象、重叠范围、非法角色、不可配置动作及超出输入上限的文件。
     pub fn normalized(mut self) -> Result<Self> {
         if self.roles.len() > 100 || self.bindings.len() > 100 || self.data_scopes.len() > 200 {
             return Err(Error::ValidationError("单文件最多100个角色、100个人员绑定和200项业务范围".into()));
@@ -53,7 +51,7 @@ impl PolicyDocument {
         Ok(self)
     }
 
-    // 规范化授权文件的人员范围时，按人员、业务和动作识别重叠写入并拒绝同批冲突。
+    // 规范化人员范围条目，要求显式替换，并检查同批人员、资源和动作的替换边界互斥。
     fn normalize_scopes(&mut self) -> Result<()> {
         let mut keys = BTreeSet::new();
         for scope in &mut self.data_scopes {
@@ -71,12 +69,8 @@ impl PolicyDocument {
         Ok(())
     }
 
-    /// 校验角色权限属于服务端当前注册目录。
-    /// 每个精确权限或通配模式均覆盖已登记权限时成功。
-    ///
-    /// 未登记权限、无匹配通配符或空目录时拒绝。
-    ///
-    /// catalog 为当前运行版本生成的权限目录。
+    /// 对照当前运行版本的权限目录，要求文件中的每项精确权限或通配模式至少覆盖一项登记权限。
+    /// 目录为空时拒绝包含任何权限声明的文件。
     pub fn validate_catalog(&self, catalog: &[Permission]) -> Result<()> {
         for permission in self.roles.iter().flat_map(|role| &role.permissions) {
             if !catalog.iter().any(|known| permission.covers(known)) {
@@ -86,10 +80,7 @@ impl PolicyDocument {
         Ok(())
     }
 
-    /// 返回文件明确引用的人员，供有界仓储查询。
-    /// 排序去重后的人员 ID。
-    ///
-    /// 不返回错误。人员 ID 已在文件规范化阶段校验。
+    /// 汇总绑定和范围条目引用的人员 ID，排序去重后供仓储定向查询；标识校验由规范化阶段负责。
     pub fn user_ids(&self) -> Vec<String> {
         self.bindings
             .iter()
@@ -102,7 +93,7 @@ impl PolicyDocument {
 }
 
 impl PolicyScope {
-    // 为文件预览和应用统一整理动作、条件及授权项顺序，使等价条款按同一方式规范化。
+    // 复用范围保存命令规范化动作和条款，再按条款的序列化值排序，使比较与审核摘要保持稳定。
     fn normalize_grants(&mut self) -> Result<()> {
         let request = self.request(0)?.into_request();
         self.actions = request.actions;
@@ -116,12 +107,8 @@ impl PolicyScope {
         Ok(())
     }
 
-    // 将已存储和待保存的追加范围转为同一比较形式；保留旧表达式标志。
-    // 追加项、条件和目标均按集合规范化的表达式。
-    //
-    // 追加配置不满足正式范围模型时拒绝。
-    //
-    // action 为当前动作，expression 为该动作的范围表达式。
+    /// 将指定动作的已存或待写追加范围按正式模型规范化，供差异比较；非法追加条款返回错误。
+    /// 旧完整表达式、启用历史读取或带条件的表达式保持原样。
     pub(super) fn canonical_expression(
         &self,
         action: &str,
@@ -143,12 +130,8 @@ impl PolicyScope {
         Ok(scope.request(0)?.expression(action))
     }
 
-    /// 复用人员范围正式 DTO 的规范化规则。
-    /// 可传入范围保存步骤的规范化命令。
-    ///
-    /// 非法动作、缺失维度、超限或范围准入失败时拒绝。
-    ///
-    /// version 为当前策略版本。
+    /// 用传入的策略版本构造正式的人员范围保存命令，供导入校验和提取逐动作表达式。
+    /// 非法动作、缺失必需维度、超限或违反范围准入规则时拒绝。
     pub fn request(&self, version: u64) -> Result<PersonScopeCommand> {
         SavePersonScopeRequest {
             resource: self.resource.clone(),
@@ -161,12 +144,7 @@ impl PolicyScope {
     }
 }
 
-// 统一限制外部人员标识，拒绝空白及控制字符。
-// 返回去掉首尾空白后的标识。
-//
-// 去空白后为空、字节长度超过 128，或含控制字符时返回 `Error::ValidationError`。
-//
-// `value`：外部人员标识；先去掉首尾空白。
+/// 去除外部人员 ID 的首尾空白；结果为空、超过 128 字节或含控制字符时返回校验错误。
 pub(super) fn normalize_id(value: &str) -> Result<String> {
     let value = value.trim();
     if value.is_empty() || value.len() > 128 || value.chars().any(char::is_control) {
@@ -182,7 +160,7 @@ mod tests {
     use super::*;
     use crate::RoleId;
 
-    // 让文件校验测试从真实 DTO 出发，复用生产的输入规范化，而非直接构造校验后结构。
+    // 从文件输入构造带首尾空白和重复集合值的测试文档，供规范化断言使用。
     fn document() -> PolicyDocument {
         serde_json::from_value(json!({
             "version": "1.0",
@@ -192,6 +170,7 @@ mod tests {
         })).unwrap()
     }
 
+    // 验证规范化裁剪名称和账号 ID、去重集合，并保留显式模式；重复规范化结果一致。
     #[test]
     fn normalize_is_deterministic_and_preserves_explicit_modes() {
         let value = document().normalized().unwrap();
@@ -203,6 +182,7 @@ mod tests {
         assert_eq!(value.clone().normalized().unwrap(), value);
     }
 
+    // 验证重复角色在规范化时失败，绑定期限和拒绝效果等未知字段在反序列化时失败。
     #[test]
     fn duplicate_objects_and_unknown_fields_fail_closed() {
         let mut value = document();
@@ -218,6 +198,7 @@ mod tests {
         assert!(serde_json::from_value::<PolicyDocument>(value).is_err());
     }
 
+    // 验证精确权限和命中目录的通配模式可用，拼写错误和无匹配通配模式被拒绝。
     #[test]
     fn catalog_requires_registered_permission_or_matching_wildcard() {
         let catalog = vec![Permission::parse("sales_order:list").unwrap()];
@@ -231,6 +212,7 @@ mod tests {
         assert!(matches!(value.validate_catalog(&catalog), Err(Error::ValidationError(_))));
     }
 
+    // 验证同一人员资源动作的重复替换和不可配置的审批动作都无法通过规范化。
     #[test]
     fn overlapping_scope_actions_and_nonconfigurable_resources_are_rejected() {
         let scope = json!({
@@ -248,6 +230,7 @@ mod tests {
         assert!(matches!(value.normalized(), Err(Error::ValidationError(_))));
     }
 
+    // 验证系统根角色、超长人员 ID 和超过单文件上限的角色条目被拒绝。
     #[test]
     fn root_role_and_oversized_input_are_rejected() {
         let mut value = document();

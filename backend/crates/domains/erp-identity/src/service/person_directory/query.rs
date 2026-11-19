@@ -18,20 +18,21 @@ use crate::repository::fingerprint::BsonFingerprint;
 use crate::repository::person_directory_query::{DirectoryRead, DirectoryResult, directory_page};
 use crate::{AuthorizationService, CompiledAccess, Error, Result};
 
+// 目录授权快照中用于补充组织标签与响应元信息的数据。
 struct DirectoryDisplay {
+    // 同次读取取得的组织树和有效成员关系，用于计算主属组织标签。
     organizations: OrganizationState,
+    // 查询用到的身份策略修订号，供响应报告授权版本。
     policy_version: u64,
+    // 查询凭证的范围摘要，用于生成跨页比较的内容版本。
     scope_version: String,
+    // 本次授权时点；组织关系与标签也按这个时点解释。
     as_of: Instant,
+    // 账号是否缺少角色范围，用于区分无范围与正常的空目录。
     no_scope: bool,
 }
 
-/// 使用中央查询条件在数据库分页前过滤人员目录。
-/// 满足完整授权及业务筛选的目录页、总数与范围版本。
-///
-/// 无权限、非法筛选、超限、版本变化或读取失败时拒绝。
-///
-/// db、authorization 为共享设施；actor、category、request 为当前身份和目录筛选；executor 为原快照。
+/// 沿原执行器生成该类别的完整授权过滤，在数据库分页前叠加目录筛选。返回前核对跨页内容版本，并复验授权凭证。
 pub async fn list_page(
     db: &Database,
     authorization: &AuthorizationService,
@@ -72,12 +73,7 @@ pub async fn list_page(
     Ok(page)
 }
 
-/// 已选账号只收窄同一目录查询，不以请求 ID 代替中央授权条件。
-/// 当前仍可读且满足目录资格的人员及授权元信息。
-///
-/// 身份、动作无权、输入超限、依赖到期或读取失败时拒绝。
-///
-/// db、authorization 为共享设施；actor、category、ids 为当前身份和已选完整集合；executor 为原快照。
+/// 沿原快照查询 1 到 100 个已选账号，用完整目录授权及岗位资格过滤回显结果，交付前复验凭证。
 pub async fn selected_page(
     db: &Database,
     authorization: &AuthorizationService,
@@ -113,7 +109,7 @@ pub async fn selected_page(
     Ok(page)
 }
 
-// 在目录读取开始时统一解析功能资格和数据范围；展示需要的组织树也沿该快照读取。
+// 根据目录类别取得完整查询凭证，同时读取组织树以便原快照内补充标签。
 async fn authorize(
     db: &Database,
     authorization: &AuthorizationService,
@@ -138,7 +134,7 @@ async fn authorize(
     Ok((access, display))
 }
 
-// 根据固定入口选择对应人员类别的公共权限常量，不接受调用方自选权限。
+// 把固定目录类别映射到对应的列表权限，使两种目录查询使用同一入口定义。
 fn permission(category: PersonDirectoryCategory) -> Permission {
     match category {
         PersonDirectoryCategory::Sales => access_control::PERSON_DIRECTORY_LIST_SALESPEOPLE,
@@ -147,7 +143,7 @@ fn permission(category: PersonDirectoryCategory) -> Permission {
     }
 }
 
-// 为已经授权的目录版本计算补充标签，只读取准入成员所需的展示信息，不扩大成员集合。
+// 为已进入目录结果的账号读取有效主属关系，将其变化纳入目录版本摘要。
 async fn display_version(
     db: &Database,
     display: &mut DirectoryDisplay,
@@ -178,7 +174,7 @@ async fn display_version(
     Ok(version.finish())
 }
 
-// 目录分页内容版本纳入账号展示字段及资格版本，不能用结果人数代替实际变化摘要。
+// 将账号展示字段和资格版本纳入授权范围摘要，使同样数量的人员发生变化也能检测到。
 fn content_version(scope: &str, result: &DirectoryResult) -> String {
     let mut hash = Fingerprint::new("person-directory-content-v2");
     hash.text(scope);
@@ -186,7 +182,7 @@ fn content_version(scope: &str, result: &DirectoryResult) -> String {
     hash.finish()
 }
 
-// 按组织树展开业务筛选，用于收窄目录查询；完整访问范围仍由原 `CompiledAccess` 提供。
+// 把客户端选择的组织按需要展开到启用下级，使业务筛选收窄原始授权结果。目标无有效节点时返回参数错误。
 fn expand_org_filter(
     state: &OrganizationState,
     org_unit_ids: &[String],
@@ -207,6 +203,7 @@ fn expand_org_filter(
     Ok(Some(filter))
 }
 
+// 根据有效主属组织补充组织名称；无主属或组织已停用、删除时留空。
 fn org_label(state: &OrganizationState, primary_org: Option<&str>) -> Option<String> {
     let org_id = primary_org?;
     state
@@ -216,7 +213,7 @@ fn org_label(state: &OrganizationState, primary_org: Option<&str>) -> Option<Str
         .map(|unit| unit.name.clone())
 }
 
-// 跨页读取人员目录时核对客户端版本与当前内容，旧版本拒绝整页以免拼接不同快照结果。
+// 翻页时比较客户端携带的版本与本次目录版本；发现变化时拒绝合并不同快照的页面。
 fn ensure_current_version(requested: &Option<String>, current: &str) -> Result<()> {
     if requested.as_ref().is_some_and(|version| version != current) {
         return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));
@@ -224,7 +221,7 @@ fn ensure_current_version(requested: &Option<String>, current: &str) -> Result<(
     Ok(())
 }
 
-// 将已在数据库完成资格授权和分页的成员投影为目录响应，只在原读取快照补显示信息。
+// 把仓储的已授权分页结果与同一快照的人员及组织展示元信息合并成目录响应。
 fn page_from_result(
     result: DirectoryResult,
     page: u64,
@@ -260,6 +257,7 @@ mod tests {
     use crate::entity::organization::{OrgMembership, OrgUnit, OrgUnitKind, OrgValidity};
     use crate::repository::person_directory_query::version_fixture;
 
+    // 验证空目录依旧标明是否缺角色范围，使界面能区分授权范围缺失与没有匹配人员。
     #[test]
     fn empty_directory_keeps_scope_absence_separate_from_empty_membership() {
         let mut display = DirectoryDisplay {
@@ -277,6 +275,7 @@ mod tests {
         assert_eq!(denied.empty_reason, Some("no_scope"));
     }
 
+    // 验证目录使用本次授权时点的主属关系，关系已到期时不继续展示旧组织。
     #[test]
     fn directory_returns_effective_primary_org_and_clears_expired_membership() {
         let unit = OrgUnit::new(
@@ -331,6 +330,7 @@ mod tests {
         }
     }
 
+    // 验证展示字段变化或授权结果清空会使已有分页版本失效，避免混读。
     #[test]
     fn changed_display_or_empty_authorization_invalidates_previous_version() {
         let result = version_fixture("甲", "active");
@@ -347,7 +347,7 @@ mod tests {
         assert!(ensure_current_version(&None, &old).is_ok());
     }
 
-    // 验证：目录内容按人员事实集合编码，返回顺序变化不造成版本漂移。
+    // 验证人员记录顺序不影响内容版本，而授权范围变化会更新版本。
     #[test]
     fn directory_versions_ignore_row_order_but_bind_scope() {
         let mut result = version_fixture("甲", "active");

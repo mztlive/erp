@@ -8,7 +8,7 @@ use super::AuthorizationService;
 use crate::entity::authorization::{AccessTarget, ObjectFacts};
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
-// 审批定义用例按固定入口确定目标形态；对定义写入必须带实际单据类型，不能仅证菜单权限。
+/// 在目标检查时匹配审批定义专用入口：写入须携带真实类型候选，只有定义详情也接受无对象操作。
 pub(super) fn target(permission: &Permission, target: &AccessTarget) -> Option<bool> {
     entry(permission).map(|_| {
         matches!(target, AccessTarget::Candidate(_))
@@ -17,7 +17,7 @@ pub(super) fn target(permission: &Permission, target: &AccessTarget) -> Option<b
     })
 }
 
-// 解析审批定义固定入口。内部候选人查询沿用已有读取资格，不要求额外授予内部权限码。
+/// 识别固定审批定义动作；内部候选人查询复用定义详情资格，不另授内部权限码。
 pub(super) fn entry(permission: &Permission) -> Option<Permission> {
     if permission == &internal::APPROVAL_DEFINITION_ASSIGNEES {
         return Some(approval_process::DEFINITION_DETAIL);
@@ -33,6 +33,7 @@ pub(super) fn entry(permission: &Permission) -> Option<Permission> {
     .find(|entry| entry == permission)
 }
 
+// 按服务端候选的冻结主体类型匹配管理资格。动作与类型资格独立取证，定义详情还可由该类型运行管理员读取。
 fn allows(permission: &Permission, object: &ObjectFacts, qualified: &QualifiedPermissions) -> Result<bool> {
     if object.resource != "approval_process" || !object.id.is_empty() || !object.version.is_empty() {
         return Err(Error::ValidationError("审批定义必须使用服务端确认的主体类型候选".into()));
@@ -51,12 +52,9 @@ fn allows(permission: &Permission, object: &ObjectFacts, qualified: &QualifiedPe
 }
 
 impl AuthorizationService {
-    // 固定操作和类型管理资格分别取证，保留既有跨角色独立资格语义。
-    // 资格满足且候选、原快照阶段仍有效时成功。
-    //
-    // 非快照、目标无效或资格不足时拒绝；候选到期或执行阶段失效返回 DATA_SCOPE_CHANGED。
-    //
-    // actor、permission 为真实身份及定义动作；target 为服务端类型候选；executor 为原快照执行器。
+    /// 审批定义操作前，在原快照分别检查动作和服务端主体类型的管理资格，两项可由不同启用角色提供。
+    ///
+    /// 非快照、目标无效或资格不足时拒绝；候选到期或跨阶段返回 `DATA_SCOPE_CHANGED`。
     pub(super) async fn require_definition(
         &self,
         actor: &AuditActor,

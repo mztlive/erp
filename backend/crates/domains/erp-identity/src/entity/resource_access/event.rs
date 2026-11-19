@@ -13,34 +13,43 @@ use crate::{Error, Result};
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GrantEventPayload {
     InvoiceTaskReassigned {
+        /// 本次转派的开票执行任务 ID，用于回查任务及其关联申请。
         work_item_id: String,
+        /// 正式转派命令的回执 ID，用于去重并复验实际接收人。
         command_receipt_id: String,
     },
     InvoiceApproved {
+        /// 最终审批通过的开票申请 ID，也是授权来源的业务主键。
         invoice_request_id: String,
+        /// 最终批准该申请的审批实例 ID。
         approval_instance_id: String,
+        /// 最终审批通过时创建的开票执行任务 ID，用于复验正式分配。
         work_item_id: String,
     },
     SalesOrderApprovalAssigned {
+        /// 本次审批实际关联的销售单 ID，也是待复验的读取目标。
         sales_order_id: String,
+        /// 产生本次销售单审批分配的实例 ID，也是来源业务主键。
         approval_instance_id: String,
+        /// 本次分配对应的审批节点键，用于和节点执行记录交叉核验。
         node_id: String,
+        /// 产生销售单正式分配的节点执行记录 ID。
         assignment_id: String,
     },
     PurchaseOrderApprovalAssigned {
+        /// 本次审批实际关联的采购单 ID，也是待复验的读取目标。
         purchase_order_id: String,
+        /// 产生本次采购单审批分配的实例 ID，也是来源业务主键。
         approval_instance_id: String,
+        /// 本次分配对应的审批节点键，用于确认实际分配节点。
         node_id: String,
+        /// 产生采购单正式分配的节点执行记录 ID。
         assignment_id: String,
     },
 }
 impl GrantEventPayload {
-    /// 从类型化业务证据生成固定规则与来源，禁止调用方任意搭配字符串。
-    /// 与事件变体一致的稳定来源身份；节点及分配证据仍保存在事件中。
-    ///
-    /// 证据或接收账号为空、超长、含首尾空白时拒绝。
-    ///
-    /// recipient 为正式执行任务或审批节点的实际分配账号。
+    /// 根据事件变体固定授权规则、业务类型和业务 ID，节点及分配等细节保留在事件证据中。
+    /// 接收账号须来自正式任务或审批节点的实际分配；证据 ID 或账号为空、超长或带首尾空白时拒绝。
     pub fn source(&self, recipient: &str) -> Result<SourceKey> {
         let (rule, business_type, business_id, ids) = match self {
             Self::InvoiceTaskReassigned { work_item_id, command_receipt_id } => {
@@ -93,7 +102,7 @@ impl GrantEventPayload {
         Ok(source)
     }
 
-    // 从正式分配载荷提取事件幂等身份，不把后续可能变化的关联目标纳入事件键。
+    // 提取事件类型和该业务动作的稳定证据键；未参与键的关联记录仍在重放时比对。
     fn identity(&self) -> (&'static str, &str, &str, &str) {
         match self {
             Self::InvoiceTaskReassigned { command_receipt_id, .. } => {
@@ -112,14 +121,17 @@ impl GrantEventPayload {
     }
 }
 
-/// 来源业务已正式提交的事件事实；不接受客户端自选接收人。
+/// 由业务事务提供的正式触发事实；接收账号必须来自真实分配。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GrantEventEvidence {
+    /// 标明触发类型并携带回查正式业务分配所需的证据。
     pub payload: GrantEventPayload,
+    /// 任务或审批节点实际分配的后台账号 ID，禁止由客户端自选。
     pub recipient: String,
-    /// 开票通过使用申请版本；转派使用任务版本；订单审批使用实例版本。
+    /// 触发时的业务事实版本：开票通过用申请版本，转派用任务版本，订单审批分配用审批实例版本。
     pub fact_version: u64,
+    /// 原业务动作发生的秒级时间，也是事件初次可领取时间；重放时须保持一致。
     pub occurred_at: u64,
 }
 /// 处理状态独立于业务事件类型；领取与重试由后续 worker 实现。
@@ -131,28 +143,34 @@ pub enum GrantEventStatus {
     Applied,
     Failed,
 }
+/// 在业务事务中追加、由后台异步处理的记录读取授权事件；追加时授权尚未发布。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity)]
 pub struct GrantEvent {
+    /// 事件队列记录的存储 ID 和版本，独立于业务幂等键。
     #[serde(flatten)]
     pub base: BaseModel,
-    /// 业务身份、接收人和事实版本组成的唯一幂等键，与记录 ID 无关。
+    /// 由事件类型、稳定业务证据键、接收账号及事实版本组成的唯一键，用于识别重放。
     pub dedup_key: String,
+    /// 从业务证据派生的稳定来源身份，授权发布时用它定位来源记录。
     pub source: SourceKey,
+    /// 供重放比较和后台处理器回查的完整业务证据。
     pub evidence: GrantEventEvidence,
+    /// 后台队列的处理状态，独立于触发事件的业务类型。
     pub status: GrantEventStatus,
+    /// 累计领取次数，包含租约到期后的重新领取，用于计算失败退避。
     pub attempts: u32,
+    /// 待处理或失败事件最早可领取的秒级时间，失败后按退避推进。
     pub available_at: u64,
+    /// 当前领取的唯一令牌，完成或失败回写前用于识别持有者。
     pub lease_owner: Option<String>,
+    /// 当前领取的秒级到期时间，到期后队列可重新分配事件。
     pub lease_until: Option<u64>,
+    /// 最近一次失败回写的原因，成功完成后清除。
     pub failure: Option<String>,
 }
 impl GrantEvent {
-    /// 由业务事件类型、正式业务身份、接收人及事实版本构造幂等事件。
-    /// 含派生来源身份及原发生时间的 Pending 事件。
-    ///
-    /// 业务证据非法、零版本或零发生时间时拒绝。
-    ///
-    /// evidence 来自开票审批通过或审批节点正式分配事务。
+    /// 将正式业务证据构造成待领取事件，派生来源与幂等键，首次可领取时间取业务发生时间。
+    /// 正式证据非法、事实版本为零或发生时间为零时拒绝。
     pub fn new(evidence: GrantEventEvidence) -> Result<Self> {
         let source = evidence.payload.source(&evidence.recipient)?;
         if evidence.fact_version == 0 || evidence.occurred_at == 0 {
@@ -178,12 +196,8 @@ impl GrantEvent {
         })
     }
 
-    /// 验证相同幂等键对应的完整证据，拒绝悄悄替换任务、单据或发生时间。
-    /// 同键同来源同证据时成功；原处理状态不影响幂等重放。
-    ///
-    /// 键、来源或载荷不一致返回冲突。
-    ///
-    /// incoming 为本次构造并校验的事件。
+    /// 追加重放时比较幂等键、来源和完整证据（含业务发生时间）；任一变化都返回冲突。
+    /// 队列记录 ID 和处理状态不参与此次比较。
     pub fn ensure_replay(&self, incoming: &Self) -> Result<()> {
         if self.dedup_key != incoming.dedup_key
             || self.source != incoming.source
@@ -196,12 +210,8 @@ impl GrantEvent {
 }
 
 impl GrantEvent {
-    /// 核验幂等证据及当前租约，防止旧 worker 覆盖新领取。
-    /// 已完成的同事件重放或当前持有者成功。
-    ///
-    /// 异载荷、空令牌、状态或领取令牌变化时拒绝。
-    ///
-    /// claim 为原领取快照。
+    /// 发布前核对原领取快照的记录 ID 和幂等证据；相同事件已完成时允许重放。
+    /// 未完成事件须仍在处理中，且持有与原快照相同的非空领取令牌；否则返回冲突。
     pub fn ensure_claim(&self, claim: &Self) -> Result<()> {
         if self.base.id != claim.base.id {
             return Err(Error::ConflictError("授权事件记录不一致".into()));
@@ -219,8 +229,7 @@ impl GrantEvent {
         }
         Ok(())
     }
-    /// 计算有上限的失败退避时间。
-    /// 秒数，最大 900 秒。
+    /// 根据已领取次数计算失败后的指数退避秒数，上限为 900 秒。
     pub fn retry_delay(&self) -> u64 {
         2_u64.pow(self.attempts.min(10)).min(900)
     }
@@ -232,6 +241,7 @@ mod tests {
 
     use super::*;
 
+    // 为四种授权触发类型构造合法的业务证据样本，供序列化和校验测试复用。
     fn payloads() -> Vec<GrantEventPayload> {
         vec![
             GrantEventPayload::InvoiceTaskReassigned {
@@ -257,9 +267,11 @@ mod tests {
             },
         ]
     }
+    // 为测试载荷补齐固定接收账号、正版本和秒级事件时间。
     fn evidence(payload: GrantEventPayload) -> GrantEventEvidence {
         GrantEventEvidence { payload, recipient: "operator-1".into(), fact_version: 1, occurred_at: 100 }
     }
+    // 验证四类载荷可按类型标记往返 JSON，并派生预期的来源和初始队列状态。
     #[test]
     fn typed_events_round_trip_json_and_derive_sources() {
         let cases = payloads().into_iter().zip([
@@ -282,6 +294,7 @@ mod tests {
             assert_eq!(event.available_at, 100);
         }
     }
+    // 验证事件类型、接收账号或事实版本的变化会区分幂等键。
     #[test]
     fn event_types_recipients_and_versions_have_independent_keys() {
         let events: Vec<_> = payloads().into_iter().map(|p| GrantEvent::new(evidence(p)).unwrap()).collect();
@@ -300,6 +313,7 @@ mod tests {
         changed.fact_version += 1;
         assert_ne!(original.dedup_key, GrantEvent::new(changed).unwrap().dedup_key);
     }
+    // 验证同证据能重放已处理事件，同键下更换关联证据或发生时间会触发冲突。
     #[test]
     fn replay_preserves_processing_state_and_rejects_changed_business_evidence() {
         for payload in payloads() {
@@ -334,6 +348,7 @@ mod tests {
             assert!(original.ensure_replay(&GrantEvent::new(changed).unwrap()).is_err());
         }
     }
+    // 逐类验证缺失或非法证据字段、零版本、零时间、空接收账号及未知类型或字段均会失败。
     #[test]
     fn invalid_or_missing_evidence_fails_closed_for_every_variant() {
         for payload in payloads() {
@@ -368,7 +383,7 @@ mod tests {
         bad["assignment_id"] = json!("unexpected");
         assert!(serde_json::from_value::<GrantEventPayload>(bad).is_err());
     }
-    // 验证：已回填的历史记录保留旧 ID，新事件通过幂等键识别重放。
+    // 验证回填事件可按幂等键匹配新事件，同时保留迁移前的记录 ID、处理状态和领取次数。
     #[test]
     fn migrated_event_replays_without_replacing_legacy_id_or_state() {
         let incoming = GrantEvent::new(evidence(payloads().remove(0))).unwrap();
@@ -389,6 +404,7 @@ mod tests {
         assert!(stored.ensure_replay(&wrong_key).is_err());
     }
 
+    // 验证发布要求正确事件和有效领取令牌；换主后旧令牌失效，已完成的同证据允许重放。
     #[test]
     fn lease_takeover_rejects_old_worker_but_applied_replay_is_safe() {
         let mut event = GrantEvent::new(evidence(payloads().remove(0))).unwrap();
@@ -416,6 +432,7 @@ mod tests {
         event.evidence.occurred_at += 1;
         assert!(event.ensure_claim(&claim).is_err());
     }
+    // 验证领取次数增加时退避按指数增长，达到上限后即使计数极大也保持 900 秒。
     #[test]
     fn retry_backoff_is_bounded_even_after_many_failures() {
         let mut event = GrantEvent::new(evidence(payloads().remove(0))).unwrap();

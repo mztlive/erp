@@ -6,12 +6,7 @@ use persistence_core::Executor;
 /// 只读取阻止组织停用的未结业务事实，不修改业务归属或任务。
 #[async_trait]
 pub trait OrganizationBusinessPort: Send + Sync {
-    /// 判断组织是否仍存在需要交接的未结业务。
-    /// 仍有需要交接的未结业务时返回 `true`，否则返回 `false`。
-    ///
-    /// 外域查询失败必须拒绝停用，禁止将失败解释为空业务。
-    ///
-    /// `org_unit_id`：待停用的组织单元 ID。
+    /// 停用组织前向所属业务域确认该组织是否仍有待交接事项。存在未结业务时返回 `true`；查询失败直接返回错误，让停用流程终止。
     async fn has_unsettled_business(
         &self,
         org_unit_id: &str,

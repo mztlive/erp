@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use mongodb::bson::{Bson, Document};
 
+/// 在内存样本上解释授权管道的受支持阶段，供成员判断测试使用；未知阶段直接中止，不访问 MongoDB。
 pub(crate) fn execute(
     mut rows: Vec<Document>,
     stages: &[Document],
@@ -72,7 +73,7 @@ pub(crate) fn execute(
     rows
 }
 
-/// 按 MongoDB 用户变量规则校验生成的管道，空数据也必须暴露非法 let 名称。
+// 递归检查 MongoDB 用户变量命名，确保没有输入行时也会暴露非法 `let` 名称。
 fn validate_variables(value: &Bson) {
     match value {
         Bson::Array(items) => items.iter().for_each(validate_variables),
@@ -98,6 +99,7 @@ fn validate_variables(value: &Bson) {
     }
 }
 
+// 从样本行解析点分字段路径，支持嵌套文档、数组下标和数组中的同名字段。
 fn path(row: &Document, field: &str) -> Option<Bson> {
     let (head, tail) = field.split_once('.').unwrap_or((field, ""));
     let value = row.get(head)?;
@@ -114,6 +116,7 @@ fn path(row: &Document, field: &str) -> Option<Bson> {
     }
 }
 
+// 对一条测试记录求值匹配文档，将结构字段、逻辑组合和表达式条件一起判定。
 fn matches(filter: &Document, row: &Document, variables: &Document) -> bool {
     filter.iter().all(|(field, expected)| match field.as_str() {
         "$and" => expected
@@ -142,12 +145,13 @@ fn matches(filter: &Document, row: &Document, variables: &Document) -> bool {
     })
 }
 
-/// 查询字段等值匹配接受数组中的标量；聚合 `$expr` 的 `$eq` 仍比较完整值。
+// 模拟查询等值语义：标量可命中数组元素；数组查询及 `$expr` 的 `$eq` 仍比较完整值。
 fn query_equality(actual: &Bson, expected: &Bson) -> bool {
     actual == expected
         || matches!(actual, Bson::Array(items) if !matches!(expected, Bson::Array(_)) && items.contains(expected))
 }
 
+// 解释测试管道使用的 BSON 表达式，解析字段、变量及支持的聚合运算符。
 fn value(expression: &Bson, row: &Document, variables: &Document) -> Bson {
     match expression {
         Bson::String(field) if field.starts_with("$$") => path(variables, &field[2..]).unwrap_or(Bson::Null),
@@ -231,6 +235,7 @@ mod tests {
 
     use super::*;
 
+    // 验证标量查询能命中数组成员，而数组查询和表达式比较保留完整值语义。
     #[test]
     fn scalar_queries_match_array_members_while_array_queries_and_expressions_keep_full_equality() {
         let rows = vec![
@@ -253,6 +258,7 @@ mod tests {
         }
     }
 
+    // 验证没有样本记录时也会拒绝非法的关联变量名。
     #[test]
     #[should_panic(expected = "invalid MongoDB user variable")]
     fn invalid_lookup_variable_fails_even_without_rows() {

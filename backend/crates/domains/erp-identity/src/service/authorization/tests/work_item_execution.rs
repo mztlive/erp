@@ -15,11 +15,13 @@ use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts, Related
 use crate::entity::resource_access::ResourceKind;
 use crate::{AuthorizationService, Error};
 
+// 按用例替换任务办理角色授权，测试缺项和跨角色拼接。
 fn grant(identity: &Identity, roles: &[(&str, &[Permission])]) {
     identity.state.lock().unwrap().grants =
         roles.iter().map(|(role, permissions)| ((*role).into(), permissions.to_vec())).collect();
 }
 
+// 构造归当前用户、无当前指派的已完成任务，按用例指定种类和来源资源。
 fn task(kind: &str, source: &str) -> ObjectFacts {
     ObjectFacts {
         subject_type: FactValue::Known(kind.into()),
@@ -30,6 +32,7 @@ fn task(kind: &str, source: &str) -> ObjectFacts {
     }
 }
 
+// 将一条真实业务来源连到任务上，同时登记预期引用标识。
 fn related(root: &mut ObjectFacts, relation: &str, source: ObjectFacts) {
     root.relations.insert(
         RelationKey::parse(relation).unwrap(),
@@ -37,6 +40,7 @@ fn related(root: &mut ObjectFacts, relation: &str, source: ObjectFacts) {
     );
 }
 
+// 为真实任务办理入口接入指定身份和工作项事实。
 fn bound(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     let mut builder = complete();
     builder.facilities = identity;
@@ -44,6 +48,7 @@ fn bound(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     builder.build().unwrap()
 }
 
+// 办理审批任务须满足完整裁决资格；已结束任务仍保留所有者读取路径。
 #[tokio::test]
 async fn approval_execution_keeps_complete_decision_qualification_and_terminal_owner_reading() {
     let identity = Arc::new(Identity::default());
@@ -117,6 +122,7 @@ async fn approval_execution_keeps_complete_decision_qualification_and_terminal_o
     ));
 }
 
+// 办理只接受带当前版本的真实任务标识，不能改用普通记录目标。
 #[tokio::test]
 async fn task_execution_requires_exact_task_identity_and_version() {
     let identity = Arc::new(Identity::default());
@@ -159,6 +165,7 @@ async fn task_execution_requires_exact_task_identity_and_version() {
         .unwrap();
 }
 
+// 终态回放无需当前指派，但仍要求完整资格和快照中的精确任务目标。
 #[tokio::test]
 async fn terminal_replay_retains_full_qualification_without_inventing_current_assignment() {
     let identity = Arc::new(Identity::default());
@@ -213,6 +220,7 @@ async fn terminal_replay_retains_full_qualification_without_inventing_current_as
     ));
 }
 
+// 任务办理沿用原业务动作的完整同角色权限，不能跨角色凑齐。
 #[tokio::test]
 async fn task_execution_cannot_split_the_original_complete_permissions_between_roles() {
     let identity = Arc::new(Identity::default());
@@ -261,6 +269,7 @@ async fn task_execution_cannot_split_the_original_complete_permissions_between_r
     }
 }
 
+// 采购任务办理保留历史范围和针对确切来源记录的显式读取补权。
 #[tokio::test]
 async fn task_execution_preserves_purchase_history_scope_and_exact_read_grants() {
     let identity = Arc::new(Identity::default());
@@ -320,6 +329,7 @@ async fn task_execution_preserves_purchase_history_scope_and_exact_read_grants()
     ));
 }
 
+// 真实任务的主体缺失、未知或与来源种类错配时，不放行办理。
 #[tokio::test]
 async fn task_execution_rejects_unknown_missing_or_mismatched_persisted_subjects() {
     let identity = Arc::new(Identity::default());
@@ -349,6 +359,7 @@ async fn task_execution_rejects_unknown_missing_or_mismatched_persisted_subjects
     }
 }
 
+// 门户任务分别核对原业务来源资格，并校验真实供应商来源范围。
 #[tokio::test]
 async fn portal_task_requires_original_independent_sources_and_real_supplier_scope() {
     let identity = Arc::new(Identity::default());
@@ -427,6 +438,7 @@ async fn portal_task_requires_original_independent_sources_and_real_supplier_sco
     ));
 }
 
+// 供给变更物料同时检查两套独立来源范围，且引用必须完整。
 #[tokio::test]
 async fn offering_update_material_checks_both_independent_source_ranges_and_complete_references() {
     let identity = Arc::new(Identity::default());
@@ -491,6 +503,7 @@ async fn offering_update_material_checks_both_independent_source_ranges_and_comp
     ));
 }
 
+// 供应商异常任务的全部外层办理动作必须由同一角色满足。
 #[tokio::test]
 async fn supplier_exception_tasks_keep_all_outer_execution_requirements_in_one_role() {
     for (kind, source, read, actions) in [
@@ -590,6 +603,7 @@ async fn supplier_exception_tasks_keep_all_outer_execution_requirements_in_one_r
     }
 }
 
+// 财务执行任务仍要求同一角色具备所有原办理动作。
 #[tokio::test]
 async fn financial_execution_tasks_require_every_original_action_in_one_role() {
     for (kind, source, full) in [
@@ -677,6 +691,7 @@ async fn financial_execution_tasks_require_every_original_action_in_one_role() {
     }
 }
 
+// 供给更新任务须同时落在独立读取和审核范围内。
 #[tokio::test]
 async fn offering_update_task_requires_both_independent_read_and_review_ranges() {
     let identity = Arc::new(Identity::default());

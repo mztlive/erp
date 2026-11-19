@@ -14,30 +14,25 @@ use crate::entity::authorization_bundle::PolicyDocument;
 use crate::entity::authorization_bundle::plan::PolicyPlan;
 use crate::{Permission, Result};
 
-/// 持有当前版本权限目录及既有范围配置端口。
+/// 预览、应用和导出授权配置文件时，统一复用权限目录与人员范围配置能力。
 #[derive(Clone)]
 pub struct PolicyBundleService {
+    // 提供授权、事务和人员范围配置能力，供各文件入口复用。
     access: AccessControlService,
+    // 当前运行版本生成的可配置权限目录，供各入口校验文件内的角色权限。
     catalog: Vec<Permission>,
 }
 
 impl PolicyBundleService {
-    /// 装配统一授权用例。
-    /// 复用身份仓储及授权事务的配置服务。
-    ///
-    /// 缺少依赖或权限目录错误在调用入口拒绝。
-    ///
-    /// access 为已装配目标校验的范围服务；catalog 为运行版本生成的权限目录。
+    /// 装配文件入口时，传入已接入目标校验的范围服务和当前运行版本生成的权限目录。
+    /// 各入口处理文件时再检查所需依赖和目录约束。
     pub fn new(access: AccessControlService, catalog: Vec<Permission>) -> Self {
         Self { access, catalog }
     }
 
-    /// 只读生成可提交的配置计划；不持久化预览。
-    /// 规范化文件、版本、审核摘要和逐项差异。
+    /// 应用前，由已认证后台人员提交完整文件，取得只读预览：规范化文件、策略版本、审核摘要和逐项差异。
     ///
-    /// 越权、未知权限、目标失效、复杂旧配置或读取失败时拒绝。
-    ///
-    /// document 为完整文件，actor 为已认证后台身份。
+    /// 不持久化预览，交付前复验原读取阶段和授权有效期。越权、未知权限、目标失效、旧配置无法处理或读取失败时返回错误。
     pub async fn preview(&self, document: PolicyDocument, actor: AuditActor) -> Result<PolicyPreview> {
         let document = document.normalized()?;
         document.validate_catalog(&self.catalog)?;
@@ -68,7 +63,7 @@ impl PolicyBundleService {
             .await
     }
 
-    // 为预览或应用按真实目标事实重新编译批次最终权限，复用范围目标存在性校验，不信任文件自报资格。
+    // 预览或应用时沿原事务读取真实目标事实，复用范围目标存在性校验，再按操作人当前权限计算批次最终配置和审核摘要。
     async fn plan(
         &self,
         document: PolicyDocument,

@@ -6,12 +6,9 @@ use super::{GrantEventService, GrantRecompute, ResourceGrantService};
 use crate::Result;
 
 impl ResourceGrantService {
-    /// 管理员在同一事务校验资格并重排一页正式事件。
-    /// 本页末尾游标；空页返回 None。
-    ///
-    /// 越权、查询或写入冲突时整页拒绝；未知提交结果不自动重试。
-    ///
-    /// actor 为管理员，selection 为维护范围，after 为排他游标，now 为当前秒数。
+    /// 管理员重算授权时，在同一事务内检查管理资格，并按维护范围和排他游标 `after` 重排一页正式事件。
+    /// `now` 为秒级可领取时间；返回本页末尾游标，空页返回 `None`。
+    /// 越权、查询失败或事务写入冲突时整页失败；提交结果未知时不重跑整页事务。
     pub async fn recompute_managed(
         &self,
         actor: &AuditActor,
@@ -37,12 +34,10 @@ impl ResourceGrantService {
 }
 
 impl GrantEventService {
-    /// 对正式事件按主键有界重算，禁止从当前责任人猜测历史授权。
-    /// 本页末尾游标；空页表示一轮结束。每次最多 100 条。
-    ///
-    /// 查询或更新失败返回错误；已重新排队事件可安全重放。
-    ///
-    /// filter 为类型化选择条件，after 为主键游标，now 为重新可领取时间。
+    /// 后台定期重验时，按类型化范围和排他主键游标 `after` 扫描正式事件，只重新排队已发布的事件。
+    /// 后续按事件证据重算，不从当前责任人推断历史授权。
+    /// 每页扫描最多 100 条，`now` 为秒级可领取时间；返回本页末尾游标，空页表示本轮结束。
+    /// 查询或更新失败时返回错误；已重排的事件可安全重放。
     pub async fn requeue(
         &self,
         filter: &GrantRecompute,
@@ -61,6 +56,7 @@ mod tests {
     use crate::Error;
     use crate::entity::resource_access::event::{GrantEvent, GrantEventEvidence, GrantEventPayload};
 
+    // 验证队列在访问数据库前拒绝空领取令牌，以及不在快照事务中的完成请求。
     #[tokio::test]
     async fn queue_rejects_empty_claim_and_completion_without_snapshot() {
         let db = Client::with_uri_str("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1")

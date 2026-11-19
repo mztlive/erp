@@ -18,10 +18,12 @@ use crate::entity::{Permission, PermissionSet, Role, RoleData};
 use crate::error::Error;
 use crate::ports::{IdentityAuditPort, PreparedResourceAudit};
 
+// 为策略事务收尾测试提供无需审计设施的端口替身。
 struct NoopAudit;
 
 #[async_trait]
 impl IdentityAuditPort for NoopAudit {
+    // 测试只走事务收尾；若请求准备资源审计，返回错误以暴露意外调用。
     fn resource_log(
         &self,
         _actor: AuditActor,
@@ -32,6 +34,7 @@ impl IdentityAuditPort for NoopAudit {
         Err(Error::Internal("noop audit".to_string()))
     }
 
+    // 满足审计端口约定；测试替身直接返回成功，无需写库。
     async fn persist(
         &self,
         _audit: &PreparedResourceAudit,
@@ -41,6 +44,7 @@ impl IdentityAuditPort for NoopAudit {
     }
 }
 
+// 验证错误分类能区分未知提交结果与明确的业务失败。
 #[test]
 fn commit_outcome_unknown_is_detected_separately_from_definite_errors() {
     let unknown =
@@ -51,7 +55,7 @@ fn commit_outcome_unknown_is_detected_separately_from_definite_errors() {
     assert!(!commit_outcome_unknown(&definite));
 }
 
-// 验证：角色绑定与逐角色授权必须来自同一个可验证 revision，禁止 R/R+1 拼接。
+// 验证同一快照保留角色绑定、逐角色授予和策略版本，拒绝拼接 R 和 R+1 的证据。
 #[test]
 fn role_permission_snapshot_keeps_roles_grants_and_revision_together() {
     let permission = Permission::parse("approval_instance:decide").unwrap();
@@ -92,6 +96,7 @@ fn role_permission_snapshot_keeps_roles_grants_and_revision_together() {
     ));
 }
 
+// 验证组合资格须由单一角色覆盖，跨角色拼接和空要求均得不到授予角色。
 #[test]
 fn all_required_permissions_cannot_be_spliced_across_roles() {
     let detail = Permission::parse("stock_adjustment:detail").unwrap();
@@ -109,7 +114,7 @@ fn all_required_permissions_cannot_be_spliced_across_roles() {
     assert!(snapshot.granting_role_ids_for_all(&[]).is_empty());
 }
 
-// 验证：经营盈亏继承销售范围，但收入与成本权限必须由同一角色授予。
+// 验证经营盈亏复用销售范围时，收入与成本权限仍须由同一角色授予。
 #[test]
 fn profit_loss_source_scope_still_requires_cost_permission_in_the_same_role() {
     let sales = Permission::parse("sales_order:list").unwrap();
@@ -138,6 +143,7 @@ fn profit_loss_source_scope_still_requires_cost_permission_in_the_same_role() {
     assert!(snapshot.granting_role_ids_for_all(&required).is_empty());
 }
 
+// 验证 root 初始化只在角色已启用、标记为系统角色且具备规范的直接权限时跳过修复。
 #[test]
 fn root_initialization_is_noop_only_for_canonical_metadata_and_policy() {
     let root = Permission::parse("*:*").unwrap();
@@ -153,6 +159,7 @@ fn root_initialization_is_noop_only_for_canonical_metadata_and_policy() {
     assert!(!root_role_is_current(&role, std::slice::from_ref(&root), &root));
 }
 
+// 验证普通角色委派拒绝系统角色。
 #[test]
 fn system_role_is_rejected_by_normal_delegation_boundary() {
     let system =
@@ -162,6 +169,7 @@ fn system_role_is_rejected_by_normal_delegation_boundary() {
     assert!(matches!(ensure_roles_delegable(&[system]), Err(Error::Forbidden(_))));
 }
 
+// 验证旧角色缺少系统标记时，固定 root ID 仍禁止普通委派、修改和删除。
 #[test]
 fn root_id_is_protected_even_when_legacy_metadata_is_not_system() {
     let root = Role::new(RoleId::parse(ROOT_ROLE_ID).unwrap(), RoleData::new("错误元数据")).unwrap();
@@ -171,6 +179,7 @@ fn root_id_is_protected_even_when_legacy_metadata_is_not_system() {
     assert!(root.ensure_deletable().is_err());
 }
 
+// 验证资源通配权限可授予其覆盖的具体权限，授予全局通配权限须有相应资格。
 #[test]
 fn actor_can_grant_only_a_covered_permission_subset() {
     let actor = PermissionSet::new([Permission::parse("customer:*").unwrap()]);
@@ -181,6 +190,7 @@ fn actor_can_grant_only_a_covered_permission_subset() {
     assert!(matches!(ensure_permission_subset(&actor, &elevated), Err(Error::Forbidden(_))));
 }
 
+// 验证管理对象的权限等于或低于操作人时通过，超出操作人权限时拒绝。
 #[test]
 fn actor_can_manage_only_an_equal_or_lower_permission_target() {
     let actor = PermissionSet::new([Permission::parse("customer:*").unwrap()]);
@@ -193,6 +203,7 @@ fn actor_can_manage_only_an_equal_or_lower_permission_target() {
     assert!(matches!(ensure_management_subset(&actor, &higher), Err(Error::Forbidden(_))));
 }
 
+// 验证固定 root ID 及其他系统角色均受普通账号角色管理保护。
 #[test]
 fn root_and_other_system_role_targets_are_not_manageable() {
     let system =
@@ -210,6 +221,7 @@ fn root_and_other_system_role_targets_are_not_manageable() {
     ));
 }
 
+// 验证写入策略前，权限被转换为去重且有序的资源和动作对。
 #[test]
 fn permission_pairs_are_deduplicated_and_sorted() {
     let pairs = permission_pairs(vec![
@@ -224,6 +236,7 @@ fn permission_pairs_are_deduplicated_and_sorted() {
     );
 }
 
+// 验证载入的策略行也按同一顺序规范化并去重。
 #[test]
 fn loaded_policy_permissions_use_the_same_deduplicated_order() {
     let permissions = parse_policy_permissions(vec![
@@ -239,6 +252,7 @@ fn loaded_policy_permissions_use_the_same_deduplicated_order() {
     );
 }
 
+// 验证绑定写入更新角色版本前的数量校验：缺失或停用导致有效角色数量不足时拒绝。
 #[test]
 fn missing_or_disabled_role_is_rejected_before_cas_touch() {
     let result = ensure_all_roles_assignable(2, 1);
@@ -250,6 +264,7 @@ fn missing_or_disabled_role_is_rejected_before_cas_touch() {
     assert!(ensure_all_roles_assignable(2, 2).is_ok());
 }
 
+// 验证替换角色权限前，缺失角色被统一报告为 `NotFound`。
 #[test]
 fn missing_role_is_rejected_before_policy_replacement() {
     let result = role_or_not_found(None);
@@ -257,6 +272,7 @@ fn missing_role_is_rejected_before_policy_replacement() {
     assert!(matches!(result, Err(Error::NotFound(message)) if message == "角色不存在"));
 }
 
+// 验证未知提交会保留原错误并封锁当前服务实例，其他或新建实例的状态保持独立。
 #[tokio::test]
 async fn unknown_commit_outcome_poison_policy_state() {
     let client = mongodb::Client::with_uri_str("mongodb://localhost:27017").await.unwrap();
@@ -274,6 +290,7 @@ async fn unknown_commit_outcome_poison_policy_state() {
     assert!(next_command.ensure_policy_consistency_known().is_ok());
 }
 
+// 验证生产 Casbin 模型向绑定 root 的账号授予跨资源操作，未绑定账号无法使用其通配权限。
 #[tokio::test]
 async fn casbin_model_should_enforce_role_permissions_and_wildcards() {
     let model = casbin::DefaultModel::from_str(RBAC_MODEL).await.unwrap();
@@ -299,6 +316,7 @@ async fn casbin_model_should_enforce_role_permissions_and_wildcards() {
     assert!(!enforcer.enforce(("user:admin:2", "role", "delete")).unwrap());
 }
 
+// 验证计算角色可授予的权限时纳入父角色的继承权限。
 #[tokio::test]
 async fn role_grant_scope_includes_inherited_permissions() {
     let model = casbin::DefaultModel::from_str(RBAC_MODEL).await.unwrap();
@@ -314,6 +332,7 @@ async fn role_grant_scope_includes_inherited_permissions() {
     assert_eq!(permissions.as_slice(), &[Permission::parse("customer:delete").unwrap()]);
 }
 
+// 验证批量读取角色绑定时，未绑定账号仍在结果中占一项，角色列表为空。
 #[tokio::test]
 async fn batch_role_ids_should_include_unbound_accounts() {
     let model = casbin::DefaultModel::from_str(RBAC_MODEL).await.unwrap();
@@ -330,6 +349,7 @@ async fn batch_role_ids_should_include_unbound_accounts() {
     assert!(role_ids.get("2").is_some_and(Vec::is_empty));
 }
 
+// 验证批量读取直接权限时，无权限角色仍返回一个空权限集。
 #[tokio::test]
 async fn batch_role_permissions_should_include_roles_without_permissions() {
     let model = casbin::DefaultModel::from_str(RBAC_MODEL).await.unwrap();
@@ -349,6 +369,7 @@ async fn batch_role_permissions_should_include_roles_without_permissions() {
     assert!(permissions.get("role-b").is_some_and(PermissionSet::is_empty));
 }
 
+// 验证拒绝诊断能区分缺少某项权限和已有各项权限但缺少共同授予角色。
 #[test]
 fn permission_diagnostics_distinguish_missing_action_from_role_combination() {
     let create = Permission::parse("purchase_order:create").unwrap();

@@ -7,16 +7,9 @@ use crate::entity::rbac::Permission;
 use crate::entity::role::{Role, RoleData};
 use crate::error::{Error, Result};
 
-/// 确保 root 角色存在且拥有全量操作权限。
-///
-/// 角色元数据与 `*:*` policy 按固定 root ID 修复；不写入或恢复业务数据范围。
-/// 内建超级管理员的全公司数据范围由公共解析器提供，不依赖人员范围初始化或旧记录。
-///
-/// 返回当前生效的超级管理员角色。
-///
-/// 角色或 Casbin policy 写入失败时返回错误。
-///
-/// `rbac`：共享 RBAC 服务。
+/// 启动或初始化超级管理员时，按固定 ID `role-root` 创建或修复角色及 `*:*` 策略，返回生效角色。
+/// 遇到冲突错误时有限重试；读取或修复失败时返回错误。
+/// 不写入或恢复人员数据范围；全公司数据范围由公共解析器提供，不依赖人员范围初始化或历史记录。
 pub async fn ensure_root_role(rbac: &SharedRbacService) -> Result<Role> {
     let root_permission = Permission::parse("*:*")?;
     let mut attempts = 0;
@@ -30,14 +23,8 @@ pub async fn ensure_root_role(rbac: &SharedRbacService) -> Result<Role> {
     Ok(role)
 }
 
-// 执行一次可重入的 root 角色校验或修复。
-// 本方法不处理 DataScope，不得通过角色修复补齐业务范围。
-//
-// 返回已存在且元数据/policy 正确，或本次创建/修复后的角色。
-//
-// 角色读取、Enforcer 刷新、policy 解析或创建/修复写入失败时返回错误。
-//
-// `rbac`：共享 RBAC 服务；`root_permission`：固定的 `*:*` 权限。
+// 每次初始化尝试读取固定角色（含软删除）和直接权限；已满足规范则直接返回，否则创建或修复。
+// 写入仅涉及角色与策略；角色读取、Enforcer 刷新、策略解析或写入失败时返回错误。
 async fn ensure_root_role_once(rbac: &SharedRbacService, root_permission: &Permission) -> Result<Role> {
     if let Some(role) = rbac.db.roles().find_by_id_including_deleted(ROOT_ROLE_ID, &mut NoTransaction).await?
     {

@@ -5,11 +5,14 @@ use erp_core::validation::normalize_required_text_ref;
 use super::ObjectFacts;
 use crate::{Error, Result};
 
-/// 本次需要检查的目标集合；不得用它表示账号的完整授权集合。
+/// 当前操作待核验的记录身份；账号的记录授权范围须另行取证。
 #[derive(Debug, Clone)]
-pub struct ResourceTargets(BTreeSet<String>);
+pub struct ResourceTargets(
+    // 经输入校验、去重并按 ID 排序的目标集合。
+    BTreeSet<String>
+);
 impl ResourceTargets {
-    // 对象端口返回后按本次请求核对完整根身份集合，缺失、重复或额外对象均拒绝，不按部分结果判断权限。
+    /// 取证后核对非空目标集；缺失、重复、额外或资源错配的根对象均使整次检查失败。
     pub(crate) fn ensure_objects(&self, resource: &str, objects: &[ObjectFacts]) -> Result<()> {
         let found = objects.iter().map(|object| object.id.clone()).collect::<BTreeSet<_>>();
         if self.0.is_empty()
@@ -21,12 +24,8 @@ impl ResourceTargets {
         }
         Ok(())
     }
-    /// 校验目标身份并去重；数量只受本次操作规模约束。
-    /// 排序后的唯一目标，空集不查询授权集合。
-    ///
-    /// 超限、空白、超长或未规范化身份拒绝。
-    ///
-    /// ids 为服务端确定的完整操作目标，最多 1000 项。
+    /// 校验并去重服务端确认的完整目标，去重前最多接收 1000 项。
+    /// 每个 ID 必须非空、最多 128 个字符且无首尾空白；空集可构造，记录授权查询会跳过空集。
     pub fn new(ids: &[&str]) -> Result<Self> {
         if ids.len() > 1000 {
             return Err(Error::ValidationError("单次最多检查 1000 个目标".into()));
@@ -40,8 +39,7 @@ impl ResourceTargets {
         }
         Ok(Self(targets))
     }
-    /// 取得已校验的目标集合。
-    /// 不可变、去重后的目标 ID。
+    /// 借用去重后的目标 ID，供本次事实读取和身份核对使用。
     pub fn ids(&self) -> &BTreeSet<String> {
         &self.0
     }
@@ -51,6 +49,7 @@ impl ResourceTargets {
 mod tests {
     use super::*;
 
+    // 验证输入规模和 ID 格式限制，以及去重后保留空集合的行为。
     #[test]
     fn targets_are_bounded_normalized_and_deduplicated() {
         assert_eq!(
@@ -63,6 +62,7 @@ mod tests {
         assert!(ResourceTargets::new(&[]).unwrap().ids().is_empty());
     }
 
+    // 验证根对象必须与非空目标集完全对应，资源类型也须一致。
     #[test]
     fn complete_roots_reject_missing_extra_duplicate_and_wrong_resource() {
         let targets = ResourceTargets::new(&["a", "b"]).unwrap();

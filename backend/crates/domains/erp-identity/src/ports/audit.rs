@@ -10,58 +10,47 @@ use persistence_core::Executor;
 
 use crate::error::Result;
 
-/// Prepared successful resource audit that identity can persist through a port.
-///
-/// Identity never depends on `erp-audit` types. Composition-root adapters convert
-/// this fact into an `AuditLog` and write it on the same [`Executor`].
+/// 已校验并等待落库的成功资源审计。组合层将它转换为审计记录，在业务命令使用的同一执行器上写入。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedResourceAudit {
-    /// Stable audit document id.
+    /// 审计记录的稳定标识，用于存储和追溯。
     pub id: String,
-    /// Optimistic-lock version captured at construction.
+    /// 构造审计记录时保存的乐观锁版本。
     pub version: u64,
-    /// Creation timestamp captured at construction.
+    /// 审计记录的创建时间戳。
     pub created_at: u64,
-    /// Update timestamp captured at construction.
+    /// 审计记录快照的最后更新时间戳。
     pub updated_at: u64,
-    /// Soft-delete marker captured at construction.
+    /// 持久化模型快照中的软删除标记。
     pub deleted_at: u64,
-    /// Actor account id.
+    /// 执行操作的账号 ID，用于关联审计主体。
     pub actor_id: String,
-    /// Actor login account.
+    /// 操作发生时的登录账号，用于检索和展示。
     pub actor_account: String,
-    /// 事件发生时已捕获的安全操作人名称；未知保持缺失。
+    /// 操作发生时捕获的安全显示名；未取得名称时留空。
     pub actor_name_snapshot: Option<String>,
-    /// 认证请求的安全关联标识；无请求时保持缺失。
+    /// 串联认证请求和审计记录的标识；无请求时留空。
     pub request_id: Option<String>,
-    /// 同一业务命令内事件的正整数序号。
+    /// 同一业务命令产生多条审计时的顺序，从 1 开始。
     pub event_sequence: NonZeroU32,
-    /// Actor kind.
+    /// 操作人账号类型，用于区分后台、门户等身份。
     pub actor_type: AccountKind,
-    /// Business action name.
+    /// 审计目录中标识本次业务操作的动作名。
     pub action: String,
-    /// Resource type.
+    /// 被操作资源的业务类型，用于分类查询。
     pub resource_type: String,
-    /// Resource id.
+    /// 被操作的资源 ID；无具体对象时留空。
     pub resource_id: Option<String>,
-    /// Success flag; identity only prepares successful resource audits.
+    /// 本次操作是否成功；身份用例通过此端口准备成功事件。
     pub success: bool,
-    /// Optional business message.
+    /// 补充本次操作上下文的可选业务说明。
     pub message: Option<String>,
 }
 
 impl_audit_context!(PreparedResourceAudit);
 
 impl PreparedResourceAudit {
-    /// 从已经校验的审计实体快照抄写身份侧字段。
-    ///
-    /// 名称快照和请求标识留空，事件序号取 `NonZeroU32::MIN`，由后续 `with_*` 补上。
-    ///
-    /// 返回稍后持久化的预制审计事实。
-    ///
-    /// 不返回错误；输入字段由调用方预先校验。
-    ///
-    /// `base`：已构造审计的持久化元数据。
+    /// 从已校验的审计字段与持久化元数据生成身份侧快照，供业务事务落库。名称和请求标识默认留空，序号从 1 开始，调用方可补齐上下文。
     #[allow(clippy::too_many_arguments)]
     pub fn from_validated(
         base: &BaseModel,
@@ -95,13 +84,10 @@ impl PreparedResourceAudit {
     }
 }
 
-/// Port identity uses to prepare and persist resource audits on a caller executor.
+/// 在业务事务前准备审计事实，并沿调用方执行器写入。
 #[async_trait]
 pub trait IdentityAuditPort: Send + Sync {
-    /// 在事务开始前校验并准备一条成功的资源审计。
-    /// 返回可在调用方执行器上持久化的预制审计事实。
-    ///
-    /// 操作人或资源字段不满足审计约束时返回错误。
+    /// 开启写事务前校验操作人与资源标识，并准备本次成功操作的审计快照。输入违反审计约束时提前返回错误。
     fn resource_log(
         &self,
         actor: AuditActor,
@@ -110,11 +96,6 @@ pub trait IdentityAuditPort: Send + Sync {
         resource_id: String,
     ) -> Result<PreparedResourceAudit>;
 
-    /// 把事先准备好的审计写到调用方选定的执行器。
-    /// 写入完成时无额外返回值。
-    ///
-    /// 持久化失败时返回错误。
-    ///
-    /// `audit`：已准备的成功资源审计。
+    /// 将准备好的审计写入业务命令的执行器，使审计与业务变更共用事务。持久化失败交回调用方处理。
     async fn persist(&self, audit: &PreparedResourceAudit, executor: &mut dyn Executor) -> Result<()>;
 }

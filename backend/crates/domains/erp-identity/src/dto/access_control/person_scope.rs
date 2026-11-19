@@ -1,4 +1,4 @@
-//! 人员基础范围与按操作合并的附加授权接口。
+//! 人员范围的查询和保存接口；按动作配置附加授权，基础范围由运行时策略决定。
 use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
@@ -9,76 +9,94 @@ use crate::entity::access_control::scope_spec;
 use crate::entity::access_control::scope_target::ScopeTarget;
 use crate::{Error, Result};
 
+/// 替换同一业务所选动作的人员附加授权；拒绝未知请求字段。
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SavePersonScopeRequest {
+    /// 业务资源标识。
     pub resource: String,
-    /// 本次完整替换的动作；未选择动作的配置保持原样。
+    /// 本次完整替换附加授权的动作；其余动作保持原样。
     pub actions: Vec<String>,
+    /// 所选动作的新附加授权列表；传空列表可清除这些动作的附加授权。
     pub grants: Vec<PersonScopeGrant>,
+    /// 是否确认将所选动作的旧完整表达式转换为基础范围加附加授权；默认 `false`。
     #[serde(default)]
     pub replace_legacy: bool,
+    /// 保存时用于检测并发策略变更的预期版本。
     pub expected_policy_version: u64,
 }
 
-/// 已完成静态校验的人员范围保存命令；只提供不可变请求视图。
+/// 已通过静态校验的人员范围保存命令；写事务另行核对资格和目标。
 #[derive(Debug)]
 pub struct PersonScopeCommand {
+    // 已规范化的保存请求。
     request: SavePersonScopeRequest,
+    // 从保留的授权项解析出、供写事务校验的范围目标。
     targets: Vec<ScopeTarget>,
 }
 impl Deref for PersonScopeCommand {
     type Target = SavePersonScopeRequest;
-    // 向范围配置和文件规范化用例借出已验证请求；不提供可变访问，避免绕过原校验。
+    // 以只读方式借出规范化请求，保护已校验的数据。
     fn deref(&self) -> &Self::Target {
         &self.request
     }
 }
 impl PersonScopeCommand {
-    // 消耗已验证范围命令，导出规范化的协议数据，供授权文件保存或规范化使用。
+    /// 消耗命令，取出规范化请求供授权文件使用。
     pub(crate) fn into_request(self) -> SavePersonScopeRequest {
         self.request
     }
 
-    // 借出原命令解析出的完整目标集合，供同一写事务核对引用实际存在性。
+    /// 借出命令中的范围目标，供写事务核对显式引用是否存在且有效。
     pub(crate) fn targets(&self) -> &[ScopeTarget] {
         &self.targets
     }
 }
 
+/// 一条独立的附加授权。同一动作适用的多条授权取并集。
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PersonScopeGrant {
+    /// 本条授权适用的动作，须从本次保存的动作中选择。
     pub actions: Vec<String>,
+    /// 本条授权的范围项。公司范围覆盖全部；其余范围同维度取并集、不同维度取交集。
     pub terms: Vec<PersonScopeTerm>,
 }
 
+/// 某个业务的人员范围配置候选，按人员已有的动作资格生成。
 #[derive(Serialize)]
 pub struct PersonBusinessOption {
+    /// 已具备资格且允许独立配置人员范围的动作。
     pub configurable_actions: Vec<String>,
+    /// 各动作的策略说明，仅供展示。
     pub policy_description: String,
+    /// 业务资源标识。
     pub resource: String,
+    /// 人员具备资格的全部候选动作，含不可独立配置的动作。
     pub actions: Vec<String>,
+    /// 可配置动作支持的范围维度并集；保存时逐动作校验。
     pub dimensions: Vec<ScopeDimension>,
-    /// 全部可配置动作是否均包含本人基础；部分动作时使用 default_self_actions。
+    /// 至少有一个可配置动作且全部可配置动作均有本人基础时为 `true`。
     pub default_self: bool,
+    /// 有本人基础的可配置动作，可用于区分各动作的默认范围。
     pub default_self_actions: Vec<String>,
 }
+/// 人员范围配置页的查询结果。
 #[derive(Serialize)]
 pub struct PersonScopeView {
+    /// 已退役配置的资源、动作和退役原因。
     pub retired_items: Vec<RetiredPersonScope>,
+    /// 已保存的人员范围记录，含保留用于审计的退役项。
     pub items: Vec<PersonDataScope>,
+    /// 按业务分组的动作资格和范围配置候选。
     pub businesses: Vec<PersonBusinessOption>,
+    /// 本次读取的策略版本，保存时作为预期版本提交。
     pub policy_version: u64,
 }
 
 impl PersonBusinessOption {
-    /// 将已证明的角色动作映射为配置候选，说明按每个动作的实际能力生成。
-    /// 可编辑动作子集、维度并集与完整角色动作。
-    ///
-    /// 空动作或未登记动作返回校验错误。
-    ///
-    /// `resource`、`actions` 为当前角色已证明的动作。
+    /// 根据已确认的资源和动作资格生成配置候选及策略说明。
+    /// 动作列表为空或包含未登记动作时返回校验错误。
     pub fn from_granted(resource: &str, actions: Vec<String>) -> Result<Self> {
         if actions.is_empty() {
             return Err(Error::ValidationError("缺少操作权限".into()));
@@ -113,21 +131,20 @@ impl PersonBusinessOption {
     }
 }
 
-/// 保留原记录用于审计，但不能再次编辑已退役策略。
+/// 已不支持独立配置的人员范围摘要。原记录保留用于审计。
 #[derive(Serialize)]
 pub struct RetiredPersonScope {
+    /// 原记录的业务资源标识。
     pub resource: String,
+    /// 原记录的动作标识。
     pub action: String,
+    /// 当前策略下无法继续独立配置的原因。
     pub reason: String,
 }
 
 impl RetiredPersonScope {
-    /// 从历史记录取得当前配置政策退役说明。
-    /// 不支持独立配置时返回说明；有效配置返回 None。
-    ///
-    /// 未知资源同样标记不可配置。
-    ///
-    /// `scope` 为已存储的原始范围记录。
+    /// 按当前策略检查已存储的 `scope`。仍可独立配置时返回 `None`。
+    /// 其余记录返回退役说明，未知资源或动作也列为退役。
     pub fn from_scope(scope: &PersonDataScope) -> Option<Self> {
         if scope_spec::is_configurable(&scope.resource, &scope.action) {
             return None;
@@ -147,7 +164,9 @@ impl RetiredPersonScope {
 }
 
 impl SavePersonScopeRequest {
-    /// 将人员范围保存请求规范化为一次原子命令。去重动作和附加项后，按服务端登记逐条校验完整维度；任一项非法、为空或超限时拒绝整批。空附加项集合只保留基础范围。
+    /// 将请求规范化为一次原子保存命令；任一动作或授权非法时拒绝整批。
+    /// 动作去重后须有 1 至 32 个，且均可独立配置；原始授权列表最多 32 条。
+    /// 按服务端登记逐条校验并去除等价授权。空授权列表只保留各动作的基础范围。
     pub fn normalized(mut self) -> Result<PersonScopeCommand> {
         self.actions.sort();
         self.actions.dedup();
@@ -182,7 +201,8 @@ impl SavePersonScopeRequest {
         Ok(PersonScopeCommand { request: self, targets })
     }
 
-    /// 写事务按当前配置检查是否需要转换旧完整表达式。未明确确认时拒绝覆盖，避免静默加入本人范围或去掉旧上限。
+    /// 在写事务中检查本资源所选动作的现有配置。覆盖旧完整表达式须显式确认，
+    /// 避免静默加入本人范围或移除旧上限。
     pub fn ensure_legacy_conversion(&self, existing: &[PersonDataScope]) -> Result<()> {
         if !self.replace_legacy
             && existing.iter().any(|scope| {
@@ -196,7 +216,8 @@ impl SavePersonScopeRequest {
         Ok(())
     }
 
-    /// 为本次已验证保存动作提取适用的附加条款；未命中时保留空附加列表。本人基础不在这里写死，由运行时政策解析。
+    /// 为本次保存的指定动作生成附加表达式；无适用授权时附加列表为空。
+    /// 历史读取标记为 `false`，旧交集条件为空；本人基础由运行时策略解析。
     pub fn expression(&self, action: &str) -> PersonScopeExpression {
         PersonScopeExpression {
             additive: true,
@@ -213,7 +234,9 @@ impl SavePersonScopeRequest {
 }
 
 impl PersonScopeGrant {
-    // 保存范围前逐条规范化动作和目标；同一动作的必需维度必须在单条授权内成立，不拼接同批的其他条款。
+    // 动作去重后须为本次保存动作的非空子集；每条授权须有 1 至 16 个原始范围项。
+    // 逐项校验范围类型、动作支持的维度和目标形态，拒绝角色专用的管理部门模式。
+    // 本人及协作范围仅用于内部组织维度。范围项规范化并去重后，校验必需维度并返回目标。
     fn normalize(&mut self, resource: &str, actions: &[String]) -> Result<Vec<ScopeTarget>> {
         self.actions.sort();
         self.actions.dedup();
@@ -253,7 +276,7 @@ impl PersonScopeGrant {
         Ok(targets)
     }
 
-    // 保存授权条目前，按所选动作逐一核对条款内的必需维度；同批其他条款不能补足该条款。
+    // 按动作检查本条授权是否覆盖必需维度；含公司范围时免查，各条授权独立校验。
     fn validate_dimensions(&self, resource: &str) -> Result<()> {
         let company = self.terms.iter().any(|term| term.scope_type == DataScopeType::Company);
         for action in &self.actions {
@@ -278,7 +301,7 @@ impl PersonScopeGrant {
 mod tests {
     use super::*;
 
-    // 为范围保存测试建立销售业务的按动作追加授权输入。
+    // 构造销售单保存请求：重复选择 `detail`，本人附加授权仅适用于 `detail`。
     fn request() -> SavePersonScopeRequest {
         SavePersonScopeRequest {
             resource: "sales_order".into(),
@@ -298,6 +321,7 @@ mod tests {
         }
     }
 
+    // 角色动作全部保留供展示；岗位共享和流程任务动作不可独立编辑，空动作列表报错。
     #[test]
     fn options_keep_role_actions_but_only_expose_configurable_subset() {
         let option = PersonBusinessOption::from_granted(
@@ -322,6 +346,7 @@ mod tests {
         assert!(PersonBusinessOption::from_granted("customer", vec![]).is_err());
     }
 
+    // 选中不可配置动作时拒绝保存；旧记录显示退役原因，仍可配置的记录不列为退役。
     #[test]
     fn retired_resource_or_mixed_retired_action_cannot_be_saved() {
         for (resource, actions) in [
@@ -352,6 +377,7 @@ mod tests {
         assert!(RetiredPersonScope::from_scope(&shared).unwrap().reason.contains("岗位共享"));
     }
 
+    // 重复动作会去重；只有 `detail` 获得附加授权，传空授权列表也可保存。
     #[test]
     fn normalized_save_is_action_specific_and_allows_removing_all_grants() {
         let normalized = request().normalized().unwrap();
@@ -364,6 +390,7 @@ mod tests {
         assert!(empty.normalized().is_ok());
     }
 
+    // 拒绝缺少仓库维度、无范围项、授权动作未被选中及使用通配动作的请求。
     #[test]
     fn normalization_rejects_incomplete_branches_and_unselected_actions() {
         let mut incomplete = request();
@@ -386,7 +413,7 @@ mod tests {
         assert!(invalid.normalized().is_err());
     }
 
-    // 验证：每个授权条目按自己选择的动作验证完整维度，不能借用同批其他条目补齐。
+    // 验证供应商预存款的 `list` 和 `resolve` 各需完整的内部组织与结算主体维度，不能借用其他授权项。
     #[test]
     fn deposit_grants_require_both_dimensions_per_selected_action() {
         use crate::access_control::ScopeTargetMode;
@@ -423,6 +450,7 @@ mod tests {
         assert!(command.grants.iter().all(|grant| grant.terms.len() == 2));
     }
 
+    // 等价授权合并为一条；即使 33 条授权完全相同，原始输入仍超限。
     #[test]
     fn normalization_deduplicates_equivalent_grants_and_bounds_input() {
         let mut duplicate = request();
@@ -436,7 +464,7 @@ mod tests {
         assert!(over_limit.normalized().is_err());
     }
 
-    // 验证：保存表达式与事务校验必须使用相同的规范化身份，协议字段保持原形状。
+    // 事务校验和保存表达式共用规范化目标 ID；表达式按原协议字段往返序列化。
     #[test]
     fn command_preserves_normalized_targets_and_storage_shape() {
         use crate::access_control::ScopeTargetMode;
@@ -468,7 +496,7 @@ mod tests {
         assert_eq!(serde_json::from_value::<PersonScopeExpression>(json).unwrap(), expression);
     }
 
-    // 验证：服务端登记决定必需维度，调用者不能用空维度声明绕过检查。
+    // 拒绝错误维度、角色专用的管理部门模式及缺少下级标记的本人组织模式。
     #[test]
     fn command_rejects_wrong_dimensions_and_role_only_mode() {
         use crate::access_control::ScopeTargetMode;
@@ -490,6 +518,7 @@ mod tests {
         }
     }
 
+    // 反序列化保存请求时拒绝顶层 `terms`、`role_id` 和 `expression` 字段。
     #[test]
     fn api_refuses_old_terms_and_untrusted_expression() {
         for extra in ["terms", "role_id", "expression"] {
@@ -498,6 +527,7 @@ mod tests {
             assert!(serde_json::from_value::<SavePersonScopeRequest>(value).is_err());
         }
     }
+    // 仅选中的旧动作须确认转换；未选动作保持原样，清空授权后仍拒绝通配动作。
     #[test]
     fn legacy_conversion_is_explicit_and_only_checks_selected_operations() {
         let mut save = request();
@@ -513,6 +543,7 @@ mod tests {
         save.actions = vec!["*".into()];
         assert!(save.normalized().is_err());
     }
+    // 销售单的 `list`、`update`、`submit` 分别合并适用部门授权，均保留本人基础。
     #[test]
     fn action_specific_grants_resolve_to_independent_unions() {
         use erp_core::common::time::Instant;
@@ -578,7 +609,7 @@ mod tests {
             assert!(scope.allows(&target, action == "list"));
         }
     }
-    // 验证：配置页面必须区分默认本人读取和显式管理范围，不依赖动作排列顺序。
+    // 工作项 `list`、`detail` 默认本人，`manage` 须显式配置范围；汇总结果与动作顺序无关。
     #[test]
     fn task_scope_options_expose_baseline_for_each_action() {
         for actions in [vec!["manage", "list", "detail"], vec!["detail", "manage", "list"]] {

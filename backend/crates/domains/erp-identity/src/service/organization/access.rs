@@ -11,12 +11,7 @@ use crate::entity::organization_change::{
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Result};
 
-// 以组织对象身份判断配置边界，不使用“同部门”作为权限。
-// 缺范围保持拒绝，不得补 Company。
-//
-// 授权覆盖该目标时为 `true`。
-//
-// `access`：当前组织配置授权；`id`：目标组织；根节点创建时为空。
+// 用组织 ID 检查配置授权是否覆盖目标。空目标用于创建根节点，须具备公司范围；缺少范围时拒绝。
 fn covers(access: &AuthorizedDataScope, id: Option<&str>) -> bool {
     access.scope.allows(
         &ScopedObject {
@@ -31,14 +26,7 @@ fn covers(access: &AuthorizedDataScope, id: Option<&str>) -> bool {
     )
 }
 
-// 组织移动须覆盖整个相关子树；调岗同时检查原组织和新组织。
-// 越界目标不得部分生效；所属部门不代替配置动作。
-//
-// 目标均在配置边界内时成功。
-//
-// 目标超出配置边界时返回 `Forbidden`；旧管理关系命令返回 `ValidationError`。
-//
-// `access`：当前组织配置授权。
+/// 提交组织命令前校验全部受影响的组织。移动覆盖整棵子树，调岗同时检查原组织与目标组织；越界时拒绝整笔操作，旧管理关系命令返回参数错误。
 pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &AuthorizedDataScope) -> Result<()> {
     use OrganizationOperation::*;
     let state = &access.organizations;
@@ -82,14 +70,7 @@ pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &Authorized
     Ok(())
 }
 
-// 使用完整树验证子树边界；不按当前页或名称判断。
-// 必须覆盖原子树全部节点，禁止只检查可见页。
-//
-// 子树节点追加成功。
-//
-// 组织树不合法时返回校验错误。
-//
-// `targets`：追加检查的组织 ID。
+// 从完整组织树收集移动会影响的全部节点，供后续逐一校验权限。树不合法时返回错误。
 fn add_subtree_targets<'a>(
     state: &'a OrganizationState,
     id: &str,
@@ -101,15 +82,7 @@ fn add_subtree_targets<'a>(
     Ok(())
 }
 
-// 幂等回放前仍检查当前管理边界，撤权后不能通过回执取回旧宽范围事实。
-// 异载荷复用幂等键必须拒绝，不得覆盖原回执。
-//
-// 投影到当前边界后的回执。
-//
-// 幂等键已用于不同载荷时返回 `ConflictError`；越界时返回 `Forbidden`。
-//
-// `receipt`：已保存的回执；`request`：当前命令。
-// `access`：当前授权。
+/// 核对重复提交的命令载荷和当前管理范围，然后裁剪已保存的回执。载荷冲突或当前越界时拒绝回放。
 pub(crate) fn replay(
     receipt: OrganizationChangeReceipt,
     request: &OrganizationChangeRequest,
@@ -122,12 +95,7 @@ pub(crate) fn replay(
     Ok(visible_receipt(receipt, access))
 }
 
-// 客户端只接收当前可管理节点和相应关系，隐藏不可见父身份。
-// 缺范围得到空集，不得补 Company 或泄露不可见父节点身份。
-//
-// 裁剪后的可见组织事实。
-//
-// `state`：完整或回执中的组织事实；`access`：当前授权。
+/// 只投影当前可管理的节点和相关成员、管理关系，供页面或回执展示。隐藏不可见父节点的 ID；无范围时返回空集。
 pub(crate) fn visible_state(mut state: OrganizationState, access: &AuthorizedDataScope) -> OrganizationState {
     state.units.retain(|u| covers(access, Some(&u.base.id)));
     let ids = state.units.iter().map(|u| u.base.id.clone()).collect::<std::collections::BTreeSet<_>>();
@@ -142,12 +110,7 @@ pub(crate) fn visible_state(mut state: OrganizationState, access: &AuthorizedDat
     state
 }
 
-// 审计回执仅投影当前管理范围内的前后事实。
-// 不可见组织不得出现在客户端回执中。
-//
-// 可见前后事实的回执。
-//
-// `receipt`：原始回执；`access`：当前授权。
+/// 按当前授权裁剪变更前后的组织事实，使回放和预览只返回当前调用人可见的数据。
 pub(crate) fn visible_receipt(
     mut receipt: OrganizationChangeReceipt,
     access: &AuthorizedDataScope,
@@ -157,16 +120,7 @@ pub(crate) fn visible_receipt(
     receipt
 }
 
-// 在已解析授权快照上准备预览或提交回执，不触达仓储。
-// 预览与提交共用校验；只有提交且无回放时写入。缺范围投影为空集。
-//
-// `(可见回执, 是否持久化)`。预览与已有回放均不持久化。
-//
-// 幂等异载荷、期望版本冲突、越界目标或实体校验失败。
-//
-// `preview`：预览不要求调用方写入；`existing`：已有幂等回执。
-// `request`：当前命令；`access`：当前组织配置授权。
-// `at`：变更时点。
+/// 在已授权快照中检查幂等键、期望版本和变更目标，生成可见回执与写入标记。只有没有旧回执的正式提交才需要持久化。
 pub(crate) fn prepare_organization_change(
     preview: bool,
     existing: Option<OrganizationChangeReceipt>,
@@ -199,11 +153,13 @@ mod tests {
     use crate::access_control::{ResolvedScope, ScopeClause};
     use crate::entity::organization::{OrgMembership, OrgUnit, OrgUnitKind, OrgValidity};
 
+    // 创建启用的独立测试部门，用 ID 区分管理边界。
     fn unit(id: &str) -> OrgUnit {
         OrgUnit::new(id.into(), id.into(), None, OrgUnitKind::Department, "admin".into(), "初始化".into())
             .unwrap()
     }
 
+    // 构造含两个部门及一名现有成员的快照，供目标越界和调岗测试使用。
     fn state() -> OrganizationState {
         OrganizationState {
             version: 1,
@@ -220,6 +176,7 @@ mod tests {
         }
     }
 
+    // 用指定范围与组织快照构造固定时点的测试授权，便于单独验证组织规则。
     fn access_with(scope: ResolvedScope, organizations: OrganizationState) -> AuthorizedDataScope {
         AuthorizedDataScope {
             scope,
@@ -230,6 +187,7 @@ mod tests {
         }
     }
 
+    // 提供公司级组织范围，用于隔离测试版本、载荷或幂等校验。
     fn company_access(organizations: OrganizationState) -> AuthorizedDataScope {
         access_with(
             ResolvedScope {
@@ -240,6 +198,7 @@ mod tests {
         )
     }
 
+    // 为变更测试生成固定版本及幂等键，使不同测试可只变动业务命令。
     fn request(change: OrganizationOperation) -> OrganizationChangeRequest {
         OrganizationChangeRequest {
             expected_version: 1,
@@ -249,6 +208,7 @@ mod tests {
         }
     }
 
+    // 构造在测试时点有效的主属关系，供批量调岗场景设置原部门。
     fn member(id: &str, user: &str, org: &str) -> OrgMembership {
         OrgMembership {
             base: BaseModel::new(id.into()),
@@ -260,6 +220,7 @@ mod tests {
         }
     }
 
+    // 验证配置负责人时必须管理目标组织；越界请求在应用变更前被拒绝。
     #[test]
     fn leader_assignment_requires_target_management_scope() {
         let change =
@@ -278,7 +239,7 @@ mod tests {
         assert!(ensure_targets(&change, &company_access(state())).is_ok());
     }
 
-    // 验证：批量调岗必须逐一校验每个人的原组织和目标组织。
+    // 验证批量调岗会检查逐个成员涉及的原组织和目标组织，越界时整批拒绝。
     #[test]
     fn batch_transfer_checks_every_member_org() {
         let mut state = state();
@@ -301,7 +262,7 @@ mod tests {
         assert!(ensure_targets(&change, &company_access(state)).is_ok());
     }
 
-    // 验证：合并命令必须检查每一项边界，回放必须匹配完整载荷。
+    // 验证合并资料命令逐项检查边界，幂等回放要求完整载荷一致。
     #[test]
     fn profile_change_checks_all_targets_and_replay_payload() {
         use crate::entity::person_profile_change::PersonProfileChange;
@@ -363,7 +324,7 @@ mod tests {
         assert!(matches!(replay(receipt, &altered, &current), Err(Error::ConflictError(_))));
     }
 
-    // 验证：预览不写入，提交才要求持久化；二者都重验期望版本。
+    // 验证预览保持只读，正式提交才标记写入，两条路径都拒绝旧版本。
     #[test]
     fn preview_does_not_persist_and_stale_version_fails_for_both_paths() {
         let access = company_access(state());
@@ -410,7 +371,7 @@ mod tests {
         ));
     }
 
-    // 验证：角色缺范围时可见状态为空集，不得补 Company。
+    // 验证缺少管理范围时，组织、成员及管理关系均裁剪为空集。
     #[test]
     fn no_scope_projects_empty_visible_state() {
         let access = access_with(ResolvedScope { role_clauses: Vec::new(), user_limit: None }, state());
@@ -420,7 +381,7 @@ mod tests {
         assert!(!access.scope.has_role_scope());
     }
 
-    // 验证：越界目标在预览和提交前拒绝。
+    // 验证同一个越界命令在预览和正式提交时都被拒绝。
     #[test]
     fn out_of_boundary_target_is_forbidden() {
         let access = access_with(
@@ -446,7 +407,7 @@ mod tests {
         assert!(matches!(err, Error::Forbidden(_)));
     }
 
-    // 验证：幂等键复用于不同载荷必须冲突，相同载荷回放且不写入。
+    // 验证同载荷可只读重放，复用幂等键提交不同命令时产生冲突。
     #[test]
     fn idempotent_replay_rejects_different_payload() {
         let access = company_access(state());

@@ -11,7 +11,7 @@ use crate::Result;
 use crate::entity::authorization::ResourceTargets;
 use crate::entity::resource_access::{GrantTarget, ResourceKind, SourceKey};
 
-// 为根业务主键构造有效读取授权的存在性关联；未命中授权的根记录仍保留给其他合法分支判断。
+/// 为根记录主键构造有效读取授权的存在性关联；无命中的根记录仍交由其他授权分支判断。
 pub(crate) fn grant_lookup(user: &str, resource: ResourceKind, key: Bson) -> Document {
     let mut filter = grant_filter(user, resource);
     filter.insert("$expr", doc! { "$eq": ["$resource_id", "$$identity_key"] });
@@ -21,12 +21,7 @@ pub(crate) fn grant_lookup(user: &str, resource: ResourceKind, key: Bson) -> Doc
     doc! { "from": GRANTS, "let": { "identity_key": key }, "pipeline": pipeline }
 }
 
-// 只读取本次目标的有效授权；数据库关联来源并按目标去重。
-// 至多与目标数相等的有效 ID 集合，空目标不访问数据库。
-//
-// 数据库读取或反序列化失败时拒绝。
-//
-// user、resource 为可信入口身份；targets 为已校验目标；executor 为调用事务。
+/// 用原事务只查询本次目标集中有有效授权的 ID，在数据库验证来源并去重。空目标不访问数据库，读取或反序列化失败时拒绝。
 pub(crate) async fn target_ids(
     db: &Database,
     user: &str,
@@ -42,12 +37,7 @@ pub(crate) async fn target_ids(
     Ok(rows.into_iter().map(|row| row.id).collect())
 }
 
-// 在同一事务中核验精确来源、当前来源版本和真实目标；不接纳其他实例授权。
-// 存在接收人、来源身份、当前来源版本与真实目标均匹配的有效读取行时返回true。
-//
-// 来源身份非法、数据库读取或反序列化失败时返回错误。
-//
-// db为身份数据库，source为当前真实审批实例来源，target为真实订单，executor为原快照。
+/// 在原快照核验指定来源对真实目标的读取资格，接收人、来源身份及当前版本均须匹配；不接受其他实例授权，非法来源或数据库错误直接返回。
 pub(crate) async fn source_target(
     db: &Database,
     source: &SourceKey,
@@ -65,12 +55,14 @@ pub(crate) async fn source_target(
     Ok(!rows.is_empty())
 }
 
+// 授权聚合返回的最小结果，仅投影命中的目标身份。
 #[derive(Deserialize)]
 struct TargetId {
+    // 已通过有效来源核验的业务记录 ID。
     id: String,
 }
 
-// 单条或批量对象授权仅检查本次账号、资源和精确 ID，关联后由数据库去重，不返回历史授权全集。
+// 在关联前限定账号、资源和本次目标 ID，核验来源后再去重，不返回历史授权全集。
 fn target_pipeline(user: &str, resource: ResourceKind, targets: &ResourceTargets) -> Vec<Document> {
     let mut filter = grant_filter(user, resource);
     filter.insert("resource_id", doc! { "$in": targets.ids().iter().cloned().collect::<Vec<_>>() });
@@ -83,12 +75,12 @@ fn target_pipeline(user: &str, resource: ResourceKind, targets: &ResourceTargets
     pipeline
 }
 
-// 按账号、资源、读动作及有效状态限定候选授权行，不允许其他主体或失效行参与读取判断。
+// 将候选授权行限制为该账号和资源的未删除、有效读取授权。
 fn grant_filter(user: &str, resource: ResourceKind) -> Document {
     doc! { "recipient": user, "resource": resource.code(), "action": "read", "active": true, "deleted_at": 0 }
 }
 
-// 对象和列表共用有效来源关联，撤销或失效来源不能放行；同一记录仍可由另一有效来源证明可读。
+// 为对象和列表核验来源仍有效、接收人和版本一致且仍包含目标；同目标可由另一有效来源证明可读。
 fn valid_source(user: &str, resource: ResourceKind, source: Option<&SourceKey>) -> Vec<Document> {
     let mut filter = doc! {
         "key.recipient": user, "terminated": false, "deleted_at": 0,
@@ -126,6 +118,7 @@ fn valid_source(user: &str, resource: ResourceKind, source: Option<&SourceKey>) 
 mod tests {
     use super::*;
 
+    // 验证目标 ID 在关联之前收窄，只有通过来源核验后才按目标分组去重。
     #[test]
     fn targets_are_restricted_before_join_and_grouped_after_source_validation() {
         let targets = ResourceTargets::new(&["s1", "s2", "s1"]).unwrap();
@@ -145,6 +138,7 @@ mod tests {
         );
     }
 
+    // 验证列表关联绑定映射提供的业务主键，并要求来源仍有效。
     #[test]
     fn lookup_binds_business_key_and_checks_live_source() {
         let lookup = grant_lookup("u", ResourceKind::SalesOrder, "$order_id".into());
@@ -155,6 +149,7 @@ mod tests {
         assert_eq!(pipeline[3], doc! { "$limit": 1 }.into());
     }
 
+    // 验证只接受接收人、版本及目标均匹配的有效来源，精确来源查询还限定业务身份。
     #[test]
     fn source_join_requires_live_matching_recipient_version_and_target() {
         let stages = valid_source("u", ResourceKind::PurchaseOrder, None);

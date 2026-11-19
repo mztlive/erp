@@ -6,12 +6,7 @@ use crate::entity::authorization_bundle::receipt::PolicyReceipt;
 
 pub(crate) const POLICY_RECEIPTS: &str = "authorization_policy_receipts";
 
-// 提供唯一命令回执仓储，所有访问使用调用方事务。
-// 授权配置回执集合仓储。
-//
-// 构造无 I/O；读取与保存错误由仓储方法返回。
-//
-// db 为身份领域数据库。
+/// 绑定授权配置命令回执集合，构造不访问数据库；后续读写沿用调用方事务并传播仓储错误。
 pub(crate) fn receipts(db: &Database) -> Repository<'_, PolicyReceipt> {
     Repository::new(db, POLICY_RECEIPTS)
 }

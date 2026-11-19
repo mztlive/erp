@@ -18,12 +18,8 @@ use crate::service::auth::password;
 use crate::{AccessControlExt, AccountCore, AccountCoreData, AccountStatus, Error, LoginAccount, Result};
 
 impl PortalIdentityService {
-    /// 在事务外规范化开通资料并计算 Argon2 密码哈希。
-    /// 可进入调用方事务的账号资料，不创建角色和组织。
-    ///
-    /// 输入非法或密码哈希失败时拒绝。
-    ///
-    /// `supplier_id` 为内部已选目标；`params` 为固定允许字段。
+    /// 开通前在事务外校验账号开通字段，规范化登录名及内部选定的供应商 ID，并生成 Argon2 凭证。
+    /// 输入或哈希失败时不生成开通资料；此步不写入账号，也不创建角色和组织。
     pub async fn prepare_account(
         &self,
         supplier_id: &str,
@@ -39,12 +35,8 @@ impl PortalIdentityService {
         Ok(PreparedPortalAccount { account, supplier_id, role: params.role })
     }
 
-    /// 在调用方已重验供应商及管理资格的事务中开通账号和唯一绑定。
-    /// 新账号安全视图。
-    ///
-    /// 内外身份不符、账号冲突或任一持久化步骤失败时拒绝。
-    ///
-    /// `prepared` 为已哈希资料；`actor` 为内部开通人；`executor` 为调用方事务。
+    /// 调用方在事务中重验供应商及管理资格后，由内部操作人落地已哈希的账号及唯一供应商绑定。
+    /// 成功后返回不含凭证的账号视图；身份不符、登录名冲突或任一写入失败时拒绝。
     pub async fn account_create(
         &self,
         prepared: PreparedPortalAccount,
@@ -69,12 +61,8 @@ impl PortalIdentityService {
         Ok(PortalAccountView::from_account(&account, &binding))
     }
 
-    /// 读取内部授权供应商的全部账号，不泄露密码哈希。
-    /// 含启停及版本的稳定账号列表。
-    ///
-    /// 绑定损坏或持久化访问失败时拒绝。
-    ///
-    /// `supplier_id` 为已授权供应商；`executor` 为调用方执行器。
+    /// 调用方取得供应商授权后，用原执行器读取门户账号，按账号 ID 排序并返回启停状态和版本。
+    /// 视图不含密码哈希，只收录能关联到供应商账号的绑定；绑定解码或仓储读取失败时返回错误。
     pub async fn account_list(
         &self,
         supplier_id: &str,
@@ -101,12 +89,8 @@ impl PortalIdentityService {
         Ok(result)
     }
 
-    /// 读取账号归属以便组合层执行供应商对象授权。
-    /// 不携带内部事实的账号视图。
-    ///
-    /// 非门户账号、绑定不存在或访问失败时拒绝。
-    ///
-    /// `account_id` 为外部账号；`executor` 为调用方事务。
+    /// 在调用方事务中按门户账号读取归属，供组合层执行供应商对象授权。
+    /// 返回不含内部事实的账号视图；非门户账号、缺少绑定或读取失败时拒绝。
     pub async fn account_detail(
         &self,
         account_id: &str,
@@ -116,12 +100,8 @@ impl PortalIdentityService {
         Ok(PortalAccountView::from_account(&account, &binding))
     }
 
-    /// 在同一调用方事务中调整岗位及启停，旧会话立即失效。
-    /// 新版本账号视图。
-    ///
-    /// 身份、任一版本或持久化失败时拒绝，不允许跨供应商改绑。
-    ///
-    /// `account_id` 是目标；`update` 是核对版本及状态；`actor` 是内部人；`executor` 是调用方事务。
+    /// 内部操作人调整岗位或启停时，在调用方事务中核对账号与绑定版本，不允许跨供应商改绑。
+    /// 成功后返回新版本视图，旧会话失效；身份不符、版本冲突或写入失败时拒绝。
     pub async fn account_update(
         &self,
         account_id: &str,
@@ -143,7 +123,7 @@ impl PortalIdentityService {
         Ok(PortalAccountView::from_account(&account, &binding))
     }
 
-    // 配置门户身份之前读取真实账号与供应商绑定，只有外部账号可继续进入门户管理写入步骤。
+    // 查看或调整门户账号时读取真实账号与绑定，非供应商账号或缺少绑定均视为不存在。
     async fn management_facts(
         &self,
         account_id: &str,

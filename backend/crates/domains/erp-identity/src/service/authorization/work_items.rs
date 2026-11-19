@@ -206,6 +206,7 @@ static TASK_REQUIREMENTS: &[TaskRequirements] = &[
     ("APPROVAL_REWORK", "payment_reversal", purchase_order::DETAIL, REWORK_EXECUTION),
 ];
 
+/// 为履约类精确任务选取固定执行资格；供应商履约仅为订单调查入口返回相应组合。
 pub(super) fn fulfillment_task_permissions(permission: &Permission) -> &'static [Permission] {
     match permission.resource() {
         "purchase_receipt" => PURCHASE_RECEIPT_EXECUTION,
@@ -220,10 +221,15 @@ pub(super) fn fulfillment_task_permissions(permission: &Permission) -> &'static 
     }
 }
 
+/// 工作项引用供应商门户申请时使用的固定详情关联及读审入口。
 pub(super) struct PortalRequest {
+    // 持久化的门户申请种类，用于选取固定政策。
     kind: &'static str,
+    /// 详情查询绑定该种类真实材料的关联键。
     pub(super) detail_key: &'static str,
+    /// 读取真实门户材料使用的固定权限。
     pub(super) read: Permission,
+    /// 办理对应门户申请使用的固定审核权限。
     pub(super) review: Permission,
 }
 
@@ -254,11 +260,12 @@ pub(super) static PORTAL_REQUESTS: &[PortalRequest] = &[
     },
 ];
 
+/// 按真实申请种类查找固定读审政策；未登记时不选择其他入口代替。
 pub(super) fn portal_request(kind: &str) -> Option<&'static PortalRequest> {
     PORTAL_REQUESTS.iter().find(|request| request.kind == kind)
 }
 
-// 集中预取各登记任务种类可能用到的功能权限；与本次操作匹配的组合须由持久化任务事实确定。
+/// 在读取任务前一次预取相关功能资格；实际组合由入口用途及持久化任务种类和来源决定。
 pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     if permission == &internal::WORK_ITEM_EXECUTION_QUALIFICATION {
         return TASK_REQUIREMENTS.iter().flat_map(|(_, _, _, execution)| execution.iter().cloned()).collect();
@@ -285,6 +292,7 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     required
 }
 
+// 按任务真实种类与业务来源配对查找读取和办理资格；未登记组合拒绝。
 fn requirements(kind: &str, source: &str) -> Result<&'static TaskRequirements> {
     TASK_REQUIREMENTS
         .iter()
@@ -292,12 +300,12 @@ fn requirements(kind: &str, source: &str) -> Result<&'static TaskRequirements> {
         .ok_or_else(|| Error::ValidationError("任务类型或业务对象未登记完整办理资格".into()))
 }
 
-// 识别本批工作项显示所用的固定入口，不能借其他资源或权限取得同一展示资格。
+/// 识别提供工作项按钮资格的固定列表、详情和管理查询，其他资源不能复用该展示能力。
 pub(crate) fn view_permission(permission: &Permission) -> bool {
     [work_item::LIST, work_item::DETAIL, work_item::MANAGE].contains(permission)
 }
 
-// 按任务真实种类及业务来源检查完整同角色执行组合，与办理时使用同一功能资格口径。
+/// 按真实任务种类和来源，检查同一启用角色是否同时具备读取及执行权限；展示资格不证明目标可办理。
 pub(crate) fn execution_qualified(
     kind: &str,
     source: &str,
@@ -311,12 +319,12 @@ pub(crate) fn execution_qualified(
     Ok(qualified.same_role(&required))
 }
 
-// 审批决定按钮沿用原有同角色功能资格；返回值只供展示，不能代替任务授权。
+/// 检查同一启用角色是否具备审批历史及提交决定资格；仅供按钮展示，不能代替任务授权。
 pub(crate) fn decision_qualified(qualified: &QualifiedPermissions) -> bool {
     qualified.same_role(DECISION)
 }
 
-// 任务形成前只检查将来办理所需的原功能资格，不要求已有任务详情或当前指派事实。
+// 任务形成前从服务端候选的种类和来源选择执行子集，拒绝夹带已有任务身份、版本或关联事实。
 fn candidate_requirements(object: &ObjectFacts) -> Result<&'static [Permission]> {
     if object.resource != "work_item"
         || !object.id.is_empty()
@@ -332,7 +340,7 @@ fn candidate_requirements(object: &ObjectFacts) -> Result<&'static [Permission]>
 }
 
 impl AuthorizationService {
-    // 形成工作项以前，在同一快照按服务端候选任务种类证明完整执行资格；不以客户端指定类型决定权限。
+    /// 生成任务前在同一快照，以服务端候选检查目标账号的同角色执行资格和候选期限，不要求已有任务或指派事实。
     pub(super) async fn require_work_item_qualification(
         &self,
         actor: &AuditActor,
@@ -363,7 +371,7 @@ impl AuthorizationService {
         Ok(())
     }
 
-    // 对正在办理任务及终态幂等回放应用同一来源和功能资格；当前指派及具体状态仍由业务命令检查。
+    /// 实际办理和终态幂等回放沿用同一套来源与功能检查；具体状态和当前指派仍由业务命令核验。
     pub(super) async fn work_item_sources(
         &self,
         proof: &AccessProof,
@@ -408,7 +416,7 @@ impl AuthorizationService {
         Ok(sources)
     }
 
-    // 工作项详情对关联订单沿其独立读取范围取证，也保留政策允许的显式记录读取补充。
+    /// 工作项读取真实订单时独立取证其读取范围，并保留规则允许的记录读取补充。
     pub(super) async fn work_item_order(
         &self,
         proof: &AccessProof,
@@ -428,7 +436,7 @@ impl AuthorizationService {
         Ok(access)
     }
 
-    // 从持久化申请种类确定固定读取及审核入口，分别取证，不让调用方选择材料政策。
+    // 从持久化申请种类取得固定材料读取及审核入口，分别证明两项资格，调用方不能选择政策。
     async fn work_item_portal(
         &self,
         proof: &AccessProof,
@@ -455,7 +463,7 @@ impl AuthorizationService {
         Ok(sources)
     }
 
-    // 检查任务来源对象后保留该阶段的全部实际来源证明和最早失效时点，不能用新授权阶段续期。
+    /// 加载规则允许的记录补权并检查真实任务来源，再核对来源证明的原阶段与期限，不能用新阶段续期。
     pub(super) async fn check_work_item_source(
         &self,
         proof: &AccessProof,
@@ -471,7 +479,7 @@ impl AuthorizationService {
     }
 }
 
-// 只为本来就要求独立订单读取的任务种类定位对应订单资源，不给其他工作项追加来源权限。
+/// 只将已有独立订单读取要求的任务来源归到对应订单资源，不给其他工作项追加来源权限。
 pub(super) fn order_resource(source: &str) -> Option<&'static str> {
     match source {
         "sales_order" | "voucher_sales_order" | "sales_change_order" | "delivery" => Some("sales_order"),
@@ -484,7 +492,7 @@ pub(super) fn order_resource(source: &str) -> Option<&'static str> {
     }
 }
 
-// 固定任务来源授权只接受恰好一个实际对象；引用 ID 集合和读到的资源、对象身份必须完全匹配。
+/// 固定任务来源授权要求恰好一个实际对象，且引用集、资源及对象身份完全吻合。
 pub(super) fn exact_source<'a>(
     object: &'a ObjectFacts,
     key: &str,

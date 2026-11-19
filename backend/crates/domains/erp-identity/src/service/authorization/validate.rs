@@ -6,9 +6,9 @@ use crate::repository::authorization::{AccessProof, CompiledAccess, Replay, Reso
 use crate::{Error, Result};
 
 impl AuthorizationService {
-    /// 在业务结果交付前，沿原执行器复验本服务签发的查询凭证。事务内核对原快照的边界和有效期；非事务路径重读身份、范围及实际动态映射依赖。
+    /// 交付查询结果前，沿原执行器复验本服务签发的凭证。事务内只检查原快照阶段与期限；非事务还重读身份、范围和实际动态 Mapping 依赖。
     ///
-    /// 依赖变化或到期返回范围变化错误，调用方须丢弃结果；设施读取错误不降级。成功会结束凭证所属的读取阶段。
+    /// 依赖变化或到期返回 `DATA_SCOPE_CHANGED`，调用方须丢弃结果；设施错误保持原类别。成功后结束当前读取阶段。
     pub async fn validate(&self, access: &CompiledAccess, executor: &mut dyn Executor) -> Result<()> {
         if access.validity.needs_revalidation(&self.token, executor)? {
             let resolved = access
@@ -27,7 +27,7 @@ impl AuthorizationService {
         Ok(())
     }
 
-    // 交付前验证凭证所属服务和执行边界。非事务读取须用原授权时点重算身份、范围与实际规则，不能只比较记录授权修订号；原快照无需重读。
+    /// 对象交付前检查凭证归属、执行边界和有效期。非事务按原授权时点重算身份、范围和规则，不能只比记录授权版本；原快照不重读。
     pub(super) async fn validate_proof(
         &self,
         proof: &AccessProof,
@@ -40,6 +40,7 @@ impl AuthorizationService {
         Ok(())
     }
 
+    // 非事务交付时按普通目标、精确任务或审批来源重放原授权，比较完整规则和版本，不使用新的授权时点续期。
     async fn revalidate(
         &self,
         context: &AccessContext,
@@ -77,12 +78,12 @@ impl AuthorizationService {
     }
 }
 
-// 统一构造 `DATA_SCOPE_CHANGED`，通知读取用例丢弃现有结果并重新发起授权查询。
+// 构造统一的 `DATA_SCOPE_CHANGED`，通知读取用例丢弃结果并重新授权查询。
 fn changed() -> Error {
     Error::ConflictError("DATA_SCOPE_CHANGED：授权范围已变化，请重新读取".into())
 }
 
-// 交付复验时，将已授权身份失效、权限撤销或版本冲突报告为范围变化；保留取证设施故障的原始错误类别。
+/// 复验时将身份失效、撤权和版本冲突报告为范围变化，保留设施和接入错误的原始类别。
 pub(super) fn revalidation_error(error: Error) -> Error {
     match error {
         Error::Forbidden(_) | Error::Unauthenticated(_) | Error::ConflictError(_) => changed(),
@@ -94,6 +95,7 @@ pub(super) fn revalidation_error(error: Error) -> Error {
 mod tests {
     use super::*;
 
+    // 验证复验将撤权和版本冲突转换为范围变化，但不吞掉存储或接入错误。
     #[test]
     fn revoked_identity_is_changed_but_evidence_failures_keep_their_class() {
         for error in [

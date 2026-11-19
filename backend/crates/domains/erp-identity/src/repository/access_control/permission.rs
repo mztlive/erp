@@ -12,29 +12,28 @@ use crate::dto::PermissionView;
 use crate::entity::access_control::paging::PageParams;
 use crate::entity::access_control::{PermissionDefinition, UserRole};
 
-/// 权限定义列表筛选条件。
+/// 权限目录的资源、状态筛选及分页参数。
 #[derive(Debug, Clone)]
 pub struct PermissionFilter {
-    /// 权限资源（忽略大小写字面量模糊匹配）；`None` 表示不筛选。
+    /// 资源代码按不区分大小写的字面量匹配；未指定则不限制。
     pub resource: Option<String>,
-    /// 停用标记；`None` 表示不筛选。
+    /// 精确筛选权限是否停用；未指定则不限制。
     pub disabled: Option<bool>,
-    /// 是否仅系统内建；`None` 表示不筛选。
+    /// 精确筛选权限是否为系统内建；未指定则不限制。
     pub system: Option<bool>,
-    /// 已验证的分页与排序。
+    /// 上层已校验的分页和排序参数。
     pub paging: PageParams,
 }
 
 impl Default for PermissionFilter {
-    // 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    // 返回筛选为空、降序的首页过滤条件。
+    // 默认不限制资源或状态，按创建时间倒序读取首页 20 条。
     fn default() -> Self {
         Self { resource: None, disabled: None, system: None, paging: PageParams::default() }
     }
 }
 
 impl QueryFilter for PermissionFilter {
-    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // 组合字面量资源条件和精确状态条件，同时排除已删除定义。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "resource", self.resource.as_deref());
@@ -49,26 +48,17 @@ impl QueryFilter for PermissionFilter {
 }
 
 impl Pagination for PermissionFilter {
-    // 返回页码与单页条数。
+    // 将目录页码和页大小转换成通用分页接口需要的类型。
     fn page_and_size(&self) -> (u64, u64) {
         (self.paging.page, u64::from(self.paging.page_size))
     }
 }
 
-/// 权限定义集合仓储的域特有查询。
+/// 为权限定义集合提供权限目录的投影查询。
 #[allow(async_fn_in_trait)]
 pub trait PermissionRepositoryExt {
-    /// 分页检索权限定义列表（投影查询，权限目录）。
-    ///
-    /// 只返回 [`PermissionView`] 所需的目录字段，不加载整文档；`resource` 按
-    /// 字面量忽略大小写模糊匹配（复用 `insert_literal_regex_filter`），停用/系统
-    /// 标记精确匹配覆盖 `idx_permissions_disabled`。
-    ///
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    ///
-    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
+    /// 用调用方执行器分页读取目录投影及同条件总数，不读取完整定义。
+    /// 资源忽略大小写并按字面量匹配；停用和内建状态精确匹配，使用 `idx_permissions_disabled` 对应字段。查询、游标或计数错误直接返回。
     async fn search_permissions(
         &self,
         filter: &PermissionFilter,
@@ -77,6 +67,7 @@ pub trait PermissionRepositoryExt {
 }
 
 impl PermissionRepositoryExt for Repository<'_, PermissionDefinition> {
+    // 在数据库按同一筛选读取 `PermissionView` 投影及匹配总数。
     async fn search_permissions(
         &self,
         filter: &PermissionFilter,
@@ -97,19 +88,15 @@ impl PermissionRepositoryExt for Repository<'_, PermissionDefinition> {
     }
 }
 
-/// 用户角色绑定集合仓储的域特有查询。
+/// 为用户角色绑定集合提供管理端历史查询。
 #[allow(async_fn_in_trait)]
 pub trait UserRoleRepositoryExt {
-    /// 按用户批量取回全部角色绑定（W19：按当前、未来、已过期分开只读展示）。
-    /// 返回按生效时间倒序排列的绑定记录（含已撤权历史）。
-    ///
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    ///
-    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
+    /// 用调用方执行器读取账号未删除的角色绑定，按生效时间倒序，保留撤权历史以区分当前、待生效和已失效关系。查询或游标错误直接返回。
     async fn list_by_user(&self, user_id: &str, executor: &mut dyn Executor) -> Result<Vec<UserRole>>;
 }
 
 impl UserRoleRepositoryExt for Repository<'_, UserRole> {
+    // 按用户 ID 限定绑定记录并按生效时间倒序，不预先过滤撤权或过期状态。
     async fn list_by_user(&self, user_id: &str, executor: &mut dyn Executor) -> Result<Vec<UserRole>> {
         self.find_many_sorted(doc! { "user_id": user_id }, doc! { "effective_from": -1 }, executor).await
     }
@@ -121,7 +108,7 @@ mod tests {
     use mongodb::bson;
 
     use crate::entity::access_control::{PermissionData, PermissionDefinition};
-    // 验证 BSON 序列化与反序列化保留既有字段，不新增嵌套权限字段。
+    // 验证权限资源与动作按规范化的顶层 BSON 字段持久化，且可无损反序列化。
     #[test]
     fn entity_roundtrips_through_bson() {
         let permission = PermissionDefinition::new(

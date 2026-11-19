@@ -14,10 +14,12 @@ use crate::entity::access_control::{ResolvedScope, ScopeClause};
 use crate::service::iam::management::ManagementAccess;
 use crate::{AccessTarget, AuthorizationService, Error, Permission};
 
+// 为迁移用例直接替换角色权限，模拟入口获权和撤权。
 fn grant(identity: &Identity, permissions: Vec<(String, Vec<Permission>)>) {
     identity.state.lock().unwrap().grants = permissions;
 }
 
+// 目录采纳准备要求采纳和成本读取资格，可由不同角色分别满足，且只能在快照中执行。
 #[tokio::test]
 async fn adoption_and_its_unit_preparation_preserve_separate_role_qualifications() {
     let identity = Arc::new(Identity::default());
@@ -69,6 +71,7 @@ async fn adoption_and_its_unit_preparation_preserve_separate_role_qualifications
     assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
 }
 
+// 联系人、地址、银行账户和税务资料保留原权限码，各自检查快照中的功能资格。
 #[tokio::test]
 async fn customer_material_qualifications_preserve_existing_codes_and_require_their_own_grants() {
     let identity = Arc::new(Identity::default());
@@ -105,6 +108,7 @@ async fn customer_material_qualifications_preserve_existing_codes_and_require_th
     assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
 }
 
+// 执行准备结果的查询沿用提交资格，不增加详情菜单权限，且交付后凭证即失效。
 #[tokio::test]
 async fn execution_setup_result_query_preserves_submit_qualification_without_detail_menu_access() {
     let identity = Arc::new(Identity::default());
@@ -140,6 +144,7 @@ async fn execution_setup_result_query_preserves_submit_qualification_without_det
     ));
 }
 
+// 每个管理入口需要自己的资格，撤权后的下一次检查必须拒绝。
 #[tokio::test]
 async fn management_entries_require_their_own_grant_and_recheck_after_revocation() {
     let identity = Arc::new(Identity::default());
@@ -174,6 +179,7 @@ async fn management_entries_require_their_own_grant_and_recheck_after_revocation
     }
 }
 
+// 管理入口重新确认账号状态，原样返回设施故障，并在非快照时先拒绝。
 #[tokio::test]
 async fn management_never_uses_a_previously_valid_identity_or_masks_facility_errors() {
     let identity = Arc::new(Identity::default());
@@ -193,6 +199,7 @@ async fn management_never_uses_a_previously_valid_identity_or_masks_facility_err
     assert_eq!(identity.permissions_calls.load(Ordering::SeqCst), calls);
 }
 
+// 装配采购单来源事实，用于采购变更回复及回包读取测试。
 fn purchase_service(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     let mut builder = complete();
     builder.facilities = identity;
@@ -200,6 +207,7 @@ fn purchase_service(identity: Arc<Identity>, facts: Arc<Facts>) -> Authorization
     builder.build().unwrap()
 }
 
+// 采购变更回包须有原入口资格并校验来源，不额外要求采购单详情菜单。
 #[tokio::test]
 async fn purchase_change_replies_require_original_entry_and_source_without_detail_menu_grants() {
     for (permission, entry, source) in [
@@ -249,6 +257,7 @@ async fn purchase_change_replies_require_original_entry_and_source_without_detai
     }
 }
 
+// 可读来源订单不等于拥有销售或采购变更入口资格。
 #[tokio::test]
 async fn source_order_reading_does_not_supply_sales_or_purchase_change_entry_grants() {
     let identity = Arc::new(Identity::default());

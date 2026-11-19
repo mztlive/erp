@@ -10,6 +10,7 @@ use crate::entity::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts, RelatedObjects, RelationKey};
 use crate::{AuthorizationService, Error, Permission, Result};
 
+// 构造带原提交人、库存调整单及真实仓库的审批实例。
 fn instance(owner: &str) -> ObjectFacts {
     let source = ObjectFacts {
         warehouse_id: FactValue::Known(Some("warehouse".into())),
@@ -34,6 +35,7 @@ fn instance(owner: &str) -> ObjectFacts {
     }
 }
 
+// 接入库存撤回所需的审批实例，并返回可调整角色及事实的替身。
 fn setup(owner: &str) -> (AuthorizationService, Arc<Identity>, Arc<Facts>) {
     let identity = Arc::new(Identity::default());
     let facts = Arc::new(Facts::new(vec![instance(owner)]));
@@ -53,11 +55,13 @@ fn setup(owner: &str) -> (AuthorizationService, Arc<Identity>, Arc<Facts>) {
     (builder.build().unwrap(), identity, facts)
 }
 
+// 替换撤回用例的角色授权，便于比较完整授权和跨角色组合。
 fn grant(identity: &Identity, roles: &[(&str, &[Permission])]) {
     identity.state.lock().unwrap().grants =
         roles.iter().map(|(role, permissions)| ((*role).into(), permissions.to_vec())).collect();
 }
 
+// 在快照中通过公共入口请求撤回固定审批实例。
 async fn cancel(service: &AuthorizationService) -> Result<()> {
     service
         .require(
@@ -69,6 +73,7 @@ async fn cancel(service: &AuthorizationService) -> Result<()> {
         .await
 }
 
+// 原提交人撤回需要同角色持有撤回和实例读取资格，不需要库存详情权限或范围。
 #[tokio::test]
 async fn original_submitter_requires_same_role_cancel_and_read_without_stock_detail_menu_or_scope() {
     let (service, identity, _) = setup("user");
@@ -87,6 +92,7 @@ async fn original_submitter_requires_same_role_cancel_and_read_without_stock_det
     }
 }
 
+// 运行管理者撤回需在同一角色具备管理资格，并独立满足库存详情资格和仓库范围。
 #[tokio::test]
 async fn runtime_admin_preserves_same_role_management_and_independent_stock_detail() {
     let (service, identity, _) = setup("other");
@@ -125,6 +131,7 @@ async fn runtime_admin_preserves_same_role_management_and_independent_stock_deta
     assert!(matches!(cancel(&service).await, Err(Error::Forbidden(_))));
 }
 
+// 即使是提交人，也不能撤回来源缺失、类型错误或事实无版本的实例。
 #[tokio::test]
 async fn cancellation_rejects_missing_sources_wrong_types_and_unversioned_facts_even_for_submitter() {
     let (service, identity, facts) = setup("user");

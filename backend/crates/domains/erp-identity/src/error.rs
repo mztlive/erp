@@ -60,8 +60,7 @@ pub enum Error {
 }
 
 impl Error {
-    /// 返回 HTTP 映射使用的稳定错误类别；不要解析展示文案。
-    /// 冲突、业务规则、禁止或内部错误类别。`OutcomeUnknown` 归入内部错误。
+    /// 提供 HTTP 层可直接使用的稳定错误分类，避免解析展示文案。结果不确定的事务提交按内部错误处理。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::Rbac(_) | Self::RepositoryError(_) => {
@@ -83,40 +82,28 @@ impl Error {
 impl_repository_error!(Error, duplicate = |_| Error::ConflictError("数据已存在，请勿重复提交".into()));
 
 impl From<MongoError> for Error {
-    // 统一经过仓储分类，保留唯一键和瞬态事务语义。
-    // 对应身份领域错误。
-    //
-    // error 为 MongoDB 驱动错误。
+    // 将驱动错误交给统一仓储分类，保留唯一键和瞬态事务错误的业务映射。
     fn from(error: MongoError) -> Self {
         PersistenceError::from(error).into()
     }
 }
 
 impl From<CasbinError> for Error {
-    // 保留 Casbin 失败的 RBAC 分类与展示信息。
-    // RBAC 错误。
-    //
-    // error 为策略加载或权限匹配错误。
+    // 将策略加载或匹配故障归入角色权限错误，保留 Casbin 的消息供排查。
     fn from(error: CasbinError) -> Self {
         Self::Rbac(error.to_string())
     }
 }
 
 impl From<ParsePermissionError> for Error {
-    // 保留迁移前权限解析失败的业务错误映射。
-    // 与原 erp_core 解析错误相同的身份错误。
-    //
-    // error 为公共权限值的解析错误。
+    // 将公共权限值解析失败转换为身份业务错误，保留底层错误类型。
     fn from(error: ParsePermissionError) -> Self {
         Self::Logic(error.into())
     }
 }
 
 impl From<JsonError> for Error {
-    // 内部 JSON 编码失败统一归为内部错误。
-    // 保留原展示消息的内部错误。
-    //
-    // error 为内部数据编码错误；外部请求解析仍由协议边界处理。
+    // 将身份服务内部的 JSON 编码故障归入内部错误；外部请求解析由协议层处理。
     fn from(error: JsonError) -> Self {
         Self::Internal(error.to_string())
     }
@@ -129,6 +116,7 @@ mod tests {
 
     use super::*;
 
+    // 验证 MongoDB 唯一键异常保留冲突分类，普通驱动故障保留仓储错误分类。
     #[test]
     fn driver_errors_keep_repository_classification() {
         let write_error: WriteError = deserialize_from_document(doc! {
@@ -145,6 +133,7 @@ mod tests {
         assert_eq!(failure.class(), ErrorClass::Internal);
     }
 
+    // 验证瞬态事务冲突和提交结果不明分别保留错误分类，供调用方决定重试或先核查结果。
     #[test]
     fn transaction_failures_preserve_retry_and_unknown_outcome() {
         let transient =

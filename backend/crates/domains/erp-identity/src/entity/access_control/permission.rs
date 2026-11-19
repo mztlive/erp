@@ -14,26 +14,24 @@ const NAME_MAX_LEN: usize = 64;
 /// 权限描述最大长度。
 const DESCRIPTION_MAX_LEN: usize = 256;
 
-/// 权限定义创建数据。
+/// 登记权限目录项时提交的资源、动作及展示资料，交由实体统一校验。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PermissionData {
-    /// 权限资源（如 `sales_order`）。
+    /// 权限面向的资源代码，如 `sales_order`。
     pub resource: String,
-    /// 权限动作（如 `approve`）。
+    /// 权限允许执行的动作代码，如 `approve`。
     pub action: String,
-    /// 展示名称。
+    /// 管理端显示的必填权限名称。
     pub name: String,
-    /// 描述。
+    /// 供管理员理解权限用途的可选说明，纯空白视为缺省。
     pub description: Option<String>,
-    /// 是否为系统内建权限（禁止删除/修改）。
+    /// 创建时确定的内建身份；内建定义受删除保护，身份在通用更新中保持不变。
     pub system: bool,
 }
 
 impl PermissionData {
-    /// 由必填资源、动作与展示名称构造权限创建数据。
-    /// 返回描述为空、非系统权限的创建数据。
-    ///
-    /// `resource`：权限资源（如 `sales_order`）；`action`：权限动作（如 `approve`）。
+    /// 用资源（如 `sales_order`）、动作（如 `approve`）和名称组装待校验数据，
+    /// 默认登记为无说明的自定义权限。
     pub fn new(resource: impl Into<String>, action: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
             resource: resource.into(),
@@ -44,72 +42,60 @@ impl PermissionData {
         }
     }
 
-    /// 设置权限描述。
-    /// `description`：权限描述。
+    /// 在创建输入中附上用途说明，交由实体构造时规范化。
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
-    /// 设置是否为系统内建权限。
+    /// 为待登记定义指定内建身份，供后续删除校验使用。
     pub fn with_system(mut self, system: bool) -> Self {
         self.system = system;
         self
     }
 }
 
-/// 权限定义更新数据。
+/// 修改权限目录时提交的局部更新，仅包含可变的展示资料和启停状态。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct PermissionUpdate {
-    /// 展示名称；`None` 表示不修改。
+    /// 新的展示名称；`None` 保留原名称。
     pub name: Option<String>,
-    /// 描述；`None` 表示不修改。
+    /// 新的用途说明；`None` 保留原说明，提交纯空白文本可清空说明。
     pub description: Option<String>,
-    /// 停用标记；`None` 表示不修改。
+    /// 新的目录停用状态；`None` 保留当前状态。
     pub disabled: Option<bool>,
 }
 
-/// 配置化权限定义实体（数据模型 §5.1）。
+/// 管理端维护的权限目录定义（数据模型 §5.1），以规范化的 `resource:action` 标识权限。
 ///
-/// 角色、用户、团队、权限和数据范围配置化，不把角色枚举硬编码到业务逻辑
-/// （erp-phase-1 §11.1）。`resource:action` 组合复用既有
-/// `Permission` 的解析与规范化（小写、白名单字符）；
-/// 角色 ↔ 权限的授权绑定仍由既有 Casbin 规则承载，本实体只维护定义目录，
-/// 不重建绑定能力。
+/// 目录记录定义及启停状态，角色与权限的授权绑定继续由 Casbin 规则管理。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct PermissionDefinition {
+    /// 扁平存储的定义主键、乐观锁版本与时间戳。
     #[serde(flatten)]
     pub base: BaseModel,
-    /// 已规范化权限；持久化仍使用 resource/action 两个字段。
+    // 已校验的权限身份；存储时拆为历史文档沿用的 `resource` 和 `action` 字段。
     #[serde(flatten, with = "permission_parts")]
     permission: Permission,
-    /// 展示名称。
+    /// 已规范化的权限名称，供管理端展示。
     pub name: String,
-    /// 描述。
+    /// 已规范化的可选用途说明，供权限配置时参考。
     pub description: Option<String>,
-    /// 系统内建权限标记。
+    /// 是否为系统内建定义；为真时禁止删除，通用更新保持该身份。
     pub system: bool,
-    /// 停用标记。
+    /// 目录项是否停用，供管理端筛选和展示。
     pub disabled: bool,
 }
 
 impl PermissionDefinition {
-    /// 返回已验证的资源动作身份。
-    /// 不可变的权限值对象。
+    /// 借用已校验的权限身份，供调用方读取资源和动作。
     pub fn permission(&self) -> &Permission {
         &self.permission
     }
 
-    /// 创建权限定义。
-    ///
-    /// 通过 `Permission::parse` 校验并规范化 `resource:action`
-    /// （trim、小写、白名单字符、长度上限），完成 name/description 的规范化。
-    ///
-    /// 返回新建的权限定义（未停用）。
-    ///
-    /// 当 `resource:action` 非法或 name/description 为空/超长时返回错误。
-    ///
-    /// `id`：实体主键（`erp_core::ids::PermissionId`）。
+    /// 用调用方分配的 `id` 登记初始启用的权限定义。`Permission::parse` 裁剪组合串首尾空白、
+    /// 转为 ASCII 小写，校验单个冒号、字符白名单及每段 128 字节上限。
+    /// 权限身份非法、裁剪后的名称为空或超过 64 字符、说明超过 256 字符时返回错误；空白说明视为缺省。
     pub fn new(id: PermissionId, data: PermissionData) -> Result<Self> {
         let parsed = Permission::parse(format!("{}:{}", data.resource, data.action))?;
         let name = normalize_required_text(data.name, "权限名称不能为空", NAME_MAX_LEN, "权限名称过长")?;
@@ -124,14 +110,8 @@ impl PermissionDefinition {
         })
     }
 
-    /// 更新权限定义。
-    ///
-    /// 复用 `new` 的校验规则；`resource:action` 与 `system` 是权限身份与
-    /// 安全边界，不允许在通用更新中修改。
-    ///
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// 当名称或描述校验失败时返回错误。
+    /// 按名称、说明、启停状态的顺序应用已提交字段，保留资源动作和内建身份。
+    /// 文本沿用创建时的规范化和校验；出错时此前已赋值的字段保留在内存中，调用方须放弃保存。
     pub fn update(&mut self, update: PermissionUpdate) -> Result<()> {
         if let Some(name) = update.name {
             self.name = normalize_required_text(name, "权限名称不能为空", NAME_MAX_LEN, "权限名称过长")?;
@@ -145,10 +125,7 @@ impl PermissionDefinition {
         Ok(())
     }
 
-    /// 校验权限定义是否允许删除。
-    /// 非系统权限时无返回值。
-    ///
-    /// `system` 为真时返回业务错误，文案为「系统权限不能删除」。
+    /// 删除前检查内建保护：自定义定义通过，系统内建定义返回「系统权限不能删除」。
     pub fn ensure_deletable(&self) -> Result<()> {
         if self.system {
             return Err(erp_core::Error::from("系统权限不能删除"));
@@ -163,11 +140,12 @@ mod tests {
 
     use super::{PermissionData, PermissionDefinition, PermissionUpdate};
 
+    // 提供带大写和首尾空白的销售单审批定义，用来验证保存时的规范化。
     fn data() -> PermissionData {
         PermissionData::new(" SalesOrder", "APPROVE", " 销售单审批 ").with_description(" 审批销售单 ")
     }
 
-    // 验证resource:action 小写规范化，name/description 去除首尾空白。
+    // 确认权限写为两个小写顶层字段，正常文档可往返，非法动作在解码时被拒绝。
     #[test]
     fn definition_preserves_document_shape_and_validates_decoded_permission() {
         let value = PermissionDefinition::new(PermissionId::new("p"), data()).unwrap();
@@ -181,6 +159,7 @@ mod tests {
         assert!(serde_json::from_value::<PermissionDefinition>(json).is_err());
     }
 
+    // 确认新定义规范化资源、动作与展示文本，并默认启用。
     #[test]
     fn new_normalizes_resource_action_and_text() {
         let permission = PermissionDefinition::new(PermissionId::new("perm-1"), data()).unwrap();
@@ -191,14 +170,14 @@ mod tests {
         assert!(!permission.disabled);
     }
 
-    // 验证resource:action 非法（缺冒号）时会被拒绝。
+    // 确认动作带额外冒号时，拼成的权限身份无法通过校验。
     #[test]
     fn new_rejects_malformed_resource_action() {
         let payload = PermissionData { action: "approve:extra".to_string(), ..data() };
         assert!(PermissionDefinition::new(PermissionId::new("perm-1"), payload).is_err());
     }
 
-    // 验证名称为空与超长时会被拒绝。
+    // 确认新定义拒绝纯空白名称和超过 64 字符的名称。
     #[test]
     fn new_rejects_blank_and_overlong_name() {
         let blank = PermissionData { name: "  ".to_string(), ..data() };
@@ -208,7 +187,7 @@ mod tests {
         assert!(PermissionDefinition::new(PermissionId::new("perm-2"), overlong).is_err());
     }
 
-    // 验证：更新：复用校验且不改关键字段。
+    // 确认更新可改名和停用，保留资源动作，并拒绝空白的新名称。
     #[test]
     fn update_applies_name_and_disabled_only() {
         let mut permission = PermissionDefinition::new(PermissionId::new("perm-1"), data()).unwrap();
@@ -231,7 +210,7 @@ mod tests {
         );
     }
 
-    // 验证：系统权限删除保护。
+    // 确认删除保护拦截内建定义并允许自定义定义通过。
     #[test]
     fn system_permission_is_not_deletable() {
         let system =
@@ -241,6 +220,7 @@ mod tests {
         assert!(custom.ensure_deletable().is_ok());
     }
 
+    // 确认创建输入保留给定的资源、动作和说明，并默认为自定义定义。
     #[test]
     fn permission_data_constructor_sets_required_fields() {
         let data = PermissionData::new("sales_order", "approve", "销售单审批").with_description("审批销售单");
@@ -257,13 +237,16 @@ mod permission_parts {
 
     use crate::Permission;
 
+    // 用于序列化和反序列化的扁平字段桥接，保持历史 MongoDB 文档形状。
     #[derive(Serialize, Deserialize)]
     struct Parts {
+        // 文档中的资源代码，回读时与动作一起校验。
         resource: String,
+        // 文档中的动作代码，写入时取自已校验的权限值。
         action: String,
     }
 
-    // 落库时把已验证权限值拆回既有资源与动作字段，保持历史文档形状。
+    /// 写入时将已校验的权限值拆成 `resource` 和 `action`，沿用文档的顶层字段布局。
     pub(super) fn serialize<S: Serializer>(
         permission: &Permission,
         serializer: S,
@@ -271,7 +254,7 @@ mod permission_parts {
         Parts { resource: permission.resource().into(), action: permission.action().into() }
             .serialize(serializer)
     }
-    // 读库时将既有资源与动作字段解析为同一个权限值对象，不保留未校验标识。
+    /// 回读时用两个字段重建并校验权限值，字段缺失或权限编码非法时返回解码错误。
     pub(super) fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Permission, D::Error> {
         let parts = Parts::deserialize(deserializer)?;
         Permission::parse(format!("{}:{}", parts.resource, parts.action)).map_err(serde::de::Error::custom)

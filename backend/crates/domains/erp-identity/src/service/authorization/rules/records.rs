@@ -12,6 +12,7 @@ use erp_permissions::{
 use crate::entity::authorization::{AccessFact, AccessRule, FactKind, RelationKey, RelationMatch};
 use crate::{Permission, QualifiedPermissions};
 
+/// 返回固定内部入口借用的同角色功能资格；空集合表示无公共功能门槛，未登记则交给通用规则。
 pub(crate) fn requirements(permission: &Permission) -> Option<Vec<Permission>> {
     if permission == &internal::SALES_INQUIRY_IMPORT_CREATE {
         return Some(vec![
@@ -172,6 +173,7 @@ static REQUIREMENTS: LazyLock<Vec<(Permission, Vec<Permission>)>> = LazyLock::ne
     ]
 });
 
+/// 列出内部业务入口须分别取证的额外资格；可由不同启用角色满足，不能用根入口替代。
 pub(crate) fn independent(permission: &Permission) -> Vec<Permission> {
     if [internal::CONNECTION_PROTOCOL_READ, internal::CONNECTION_REFERENCE_TICKETS].contains(permission) {
         return vec![supplier_api::CONNECTION_DETAIL, supplier::DETAIL];
@@ -214,7 +216,7 @@ pub(crate) fn independent(permission: &Permission) -> Vec<Permission> {
     portal_material_permissions(permission)
 }
 
-// 按门户材料登记用途取得独立业务功能资格，不把这些资格应用到无关对象入口。
+// 按门户材料的固定读审用途选取独立业务资格，不将其扩展到无关入口。
 fn portal_material_permissions(permission: &Permission) -> Vec<Permission> {
     if permission.resource() != "supplier_portal_material" {
         return vec![];
@@ -232,7 +234,7 @@ fn portal_material_permissions(permission: &Permission) -> Vec<Permission> {
     }
 }
 
-// 为派生命令保留独立的补充功能权限，不能把根对象的修改资格当成同一证明。
+// 为派生命令配对额外独立功能权限，根对象修改资格不能替代。
 fn independent_command(permission: &Permission) -> Option<Permission> {
     [
         (internal::CONTRACT_SALES_ACCESS, customer::ASSIGNMENT_APPLY),
@@ -244,7 +246,7 @@ fn independent_command(permission: &Permission) -> Option<Permission> {
     .find_map(|(entry, required)| (&entry == permission).then_some(required))
 }
 
-// 验证采购来源时仍须独立证明其业务入口资格；可由不同启用角色提供入口权限和采购范围资格。
+// 按采购来源操作选取须独立取证的业务权限，入口资格与采购范围资格可以由不同启用角色提供。
 fn purchase_entry(permission: &Permission) -> Option<Permission> {
     [
         (internal::PURCHASE_CHANGE_SOURCE, purchase_order::PURCHASE_CHANGE_SUBMIT),
@@ -258,16 +260,12 @@ fn purchase_entry(permission: &Permission) -> Option<Permission> {
     .find_map(|(entry, required)| (&entry == permission).then_some(required))
 }
 
+/// 除通用资格外，为后台任务全部取消额外核验身份快照包含启用的管理员角色。
 pub(crate) fn qualified(permission: &Permission, qualified: &QualifiedPermissions) -> bool {
     permission != &bulk_job::BACKGROUND_JOB_CANCEL_ALL || administrator(qualified)
 }
 
-// 返回固定对象入口的数据条件。
-// 已登记对象入口返回完整条件，其他入口返回 None。
-//
-// 不执行 I/O；缺失事实由条件执行阶段拒绝。
-//
-// permission 为已登记的对象入口；无正式任务的差异决定按当前处理人判断。
+/// 返回已登记对象入口的固定数据规则，其他入口交由调用方处理。不执行 I/O，必需事实由求值阶段核验；无正式任务的差异决定按当前处理人判断。
 pub(crate) fn condition(permission: &Permission) -> Option<AccessRule> {
     if permission == &integration_ops::DIFFERENCE_DECISION {
         return Some(
@@ -309,6 +307,7 @@ pub(crate) fn condition(permission: &Permission) -> Option<AccessRule> {
     }
 }
 
+/// 为启用管理员按固定动作放宽后台任务的本人过滤，仍要求负责人事实，专用读取入口不放宽。
 pub(crate) fn resolved(
     permission: &Permission,
     qualified: &QualifiedPermissions,
@@ -323,20 +322,22 @@ pub(crate) fn resolved(
     rule
 }
 
+// 构造仅负责人本人可通过的条件，同时要求负责人事实已读取。
 fn owner() -> AccessRule {
     AccessRule::Fact(AccessFact::Owned).requiring(&BTreeSet::from([FactKind::Owner]))
 }
 
+// 在已取证的启用角色中识别固定的超级管理员或系统管理员角色。
 fn administrator(qualified: &QualifiedPermissions) -> bool {
     qualified.roles.iter().any(|role| matches!(role.base.id.as_str(), "role-root" | "role-sysadmin"))
 }
 
-// 只在固定可选读取分支使用该功能资格，不将其提升为其他对象入口的共同前置条件。
+/// 列出固定可选读取分支所需的工作项管理资格，不将其当成根对象共同前提。
 pub(crate) fn optional(permission: &Permission) -> Vec<Permission> {
     super::management_permission(permission).into_iter().collect()
 }
 
-// 将结算责任条件与该入口的数据范围组合成统一规则，不要求业务端另外拼接行级权限。
+/// 把结算单经办人或差异当前处理人的责任要求并入原范围，其他入口保留原条件。
 pub(crate) fn scoped(permission: &Permission, scope: AccessRule) -> AccessRule {
     let responsibility = if [
         internal::SETTLEMENT_REFRESH_PREPARED,

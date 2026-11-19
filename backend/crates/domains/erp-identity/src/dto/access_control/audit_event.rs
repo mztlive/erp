@@ -1,4 +1,4 @@
-//! 域 D06 `access_control` 的 审计事件 DTO。
+//! 管理端审计事件的查询参数和列表响应。
 
 use application_core::normalized_text;
 use serde::{Deserialize, Serialize};
@@ -9,44 +9,45 @@ use crate::entity::access_control::AuditEventResult;
 use crate::error::Result;
 use crate::repository::AuditEventFilter;
 
+/// 只读审计列表项。列表仅加载用于展示的安全字段。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct AuditEventView {
-    /// 实体主键。
+    /// 审计事件的稳定 ID。
     pub id: String,
-    /// 操作者 ID。
+    /// 发起操作的账号 ID。
     pub actor_id: String,
-    /// 操作者名称快照。
+    /// 事件发生时记录的操作者显示名。
     pub actor_label: String,
-    /// 责任角色快照。
+    /// 事件发生时记录的责任角色标识。
     pub actor_role: String,
-    /// 动作代码。
+    /// 审计目录中的动作代码。
     pub action_type: String,
-    /// 业务对象类型代码。
+    /// 此次操作针对的业务对象类型代码。
     pub object_type: String,
-    /// 业务对象 ID。
+    /// 此次操作关联的业务对象 ID（若有）。
     pub object_id: Option<String>,
-    /// 业务对象安全标题。
+    /// 事件记录中可安全展示的对象标题（若有）。
     pub object_label: Option<String>,
-    /// 请求追踪号。
+    /// 用于关联同一请求下各事件的请求号（若有）。
     pub request_id: Option<String>,
-    /// 链路追踪号。
+    /// 链路追踪号；当前列表留空。
     pub trace_id: Option<String>,
-    /// 最终结果。
+    /// 记录的操作结果：成功、拒绝、失败或未知。
     pub result: AuditEventResult,
-    /// 变更字段名（只记录字段名和「已变更」）。
+    /// 发生变更的字段名；只标识变更，省略新旧值。
     pub changed_field_names: Vec<String>,
-    /// 安全摘要。
+    /// 安全摘要；当前列表留空。
     pub safe_digest: Option<String>,
-    /// 来源 IP。
+    /// 事件记录中的来源 IP 地址（若有）。
     pub source_ip: Option<String>,
-    /// 设备上下文。
+    /// 设备上下文；当前列表留空。
     pub device_context: Option<String>,
-    /// 创建时间（秒级时间戳，即事件发生时间）。
+    /// 事件发生时间，以 Unix 秒记录。
     pub created_at: u64,
 }
 
 impl From<crate::repository::AuditEventRow> for AuditEventView {
-    // 把审计仓储的列表投影转换为响应，未读取的 `trace_id`、`safe_digest` 和 `device_context` 固定留空。
+    // 将仓储投影转为列表响应；链路追踪号、安全摘要和设备上下文固定留空。
     fn from(row: crate::repository::AuditEventRow) -> Self {
         Self {
             id: row.id,
@@ -69,53 +70,48 @@ impl From<crate::repository::AuditEventRow> for AuditEventView {
     }
 }
 
-/// 审计事件列表查询参数（分页参数与筛选字段扁平传递）。
+/// 审计列表的筛选和分页参数，按同一层级传入。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct AuditEventListParams {
-    /// 操作者、动作、对象或追踪号字面量关键词。
+    /// 对操作者、动作、对象或追踪号做不区分大小写的字面量匹配，最多 200 个字符。
     #[validate(length(max = 200, message = "搜索关键词不能超过 200 个字符"))]
     pub q: Option<String>,
-    /// 界面动作标签匹配的动作代码（逗号分隔），只作为关键词 OR 条件。
+    /// 界面按动作标签匹配出的逗号分隔动作代码；有关键词时，动作代码或任一文本字段命中即可。
     pub keyword_actions: Option<String>,
-    /// 审计事件稳定身份。
+    /// 精确匹配审计事件 ID。
     pub event_id: Option<String>,
-    /// 链路追踪号或请求号精确筛选。
+    /// 精确匹配链路追踪号或请求号，任一命中即可。
     pub trace_id: Option<String>,
-    /// 创建时间下界（含，Unix 秒）。
+    /// 事件发生时间下界（含，Unix 秒）。
     pub created_from: Option<u64>,
-    /// 创建时间上界（不含，Unix 秒）。
+    /// 事件发生时间上界（不含，Unix 秒）。
     pub created_before: Option<u64>,
 
-    /// 操作者 ID 模糊筛选（忽略大小写）。
+    /// 按操作者 ID 做不区分大小写的字面量匹配。
     pub actor_id: Option<String>,
-    /// 动作代码模糊筛选（忽略大小写）。
+    /// 按动作代码做不区分大小写的字面量匹配。
     pub action_type: Option<String>,
-    /// 业务对象类型代码筛选。
+    /// 精确匹配业务对象类型代码。
     pub object_type: Option<String>,
-    /// 业务对象 ID 筛选。
+    /// 精确匹配业务对象 ID。
     pub object_id: Option<String>,
-    /// 最终结果筛选。
+    /// 精确匹配操作结果。
     pub result: Option<AuditEventResult>,
-    /// 页码（1 起）。
+    /// 页码，从 1 开始；默认第 1 页。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
-    /// 单页条数（1–100）。
+    /// 单页条数，范围为 1–100；默认 20 条。
     #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
     pub page_size: Option<u32>,
-    /// 排序字段（白名单：`created_at`/`updated_at`）。
+    /// 排序字段，仅支持 `created_at` 和 `updated_at`；默认 `created_at`。
     pub sort_by: Option<String>,
-    /// 排序方向（`asc`/`desc`）。
+    /// 排序方向，接受 `asc` 或 `desc`；默认降序。
     pub sort_dir: Option<String>,
 }
 
 impl AuditEventListParams {
-    // 归一化审计事件列表查询参数。
-    //
-    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    //
-    // 返回服务与仓储共用的规范化筛选条件。
-    //
-    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    /// 裁剪文本筛选项，忽略纯空白值，补齐分页和排序默认值后生成仓储筛选条件。
+    /// 分页越界、排序字段超出白名单或方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<AuditEventFilter> {
         Ok(AuditEventFilter {
             q: normalized_text(self.q.as_deref()),

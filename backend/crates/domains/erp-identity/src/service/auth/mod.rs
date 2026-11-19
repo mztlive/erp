@@ -11,51 +11,50 @@ use crate::repository::prelude::*;
 
 pub(crate) mod password;
 
-/// 后台账号认证成功后的最小身份信息。
-///
-/// 该结果不携带密码哈希，避免凭证离开认证服务边界。
+/// 后台登录或会话重验通过后交付的身份快照，不携带密码哈希。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BackofficeAuthResult {
+    // 持久化账号 ID，用于标识当前身份。
     account_id: String,
+    // 规范化后的登录名，用于核对会话身份。
     account: String,
+    // 认证通过的账号类型，用于区分后台与门户身份。
     account_kind: DomainAccountKind,
+    // 认证时读取的账号版本，变更后旧令牌不再有效。
     account_version: u64,
+    // 同次认证读取的显示名称。
     name: String,
 }
 
 impl BackofficeAuthResult {
-    /// 返回账号 ID。
-    /// 返回认证成功的账号 ID。
+    /// 构造会话身份时取得已认证账号的持久化 ID。
     pub fn account_id(&self) -> &str {
         self.account_id.as_str()
     }
 
-    /// 返回规范化后的登录账号。
-    /// 返回认证成功的登录账号。
+    /// 签发或读取会话身份时取得规范化登录名。
     pub fn account(&self) -> &str {
         self.account.as_str()
     }
 
-    /// 返回本次认证已读取的账号名称，不增加额外账号查询。
-    /// 返回认证成功时的名称。
+    /// 组装响应时使用认证快照中的名称，无须再查账号。
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    /// 返回后台账号类型。
-    /// 返回认证成功的账号类型。
+    /// 组装后台会话身份时取得认证过的账号类型。
     pub fn account_kind(&self) -> DomainAccountKind {
         self.account_kind
     }
 
-    /// 返回签发身份时的账号持久化版本。
-    /// 返回用于撤销旧 token 的账号版本。
+    /// 签发令牌时绑定当前账号版本，供后续请求拒绝旧令牌。
     pub fn account_version(&self) -> u64 {
         self.account_version
     }
 }
 
 impl From<&AccountCore> for BackofficeAuthResult {
+    // 在登录或会话重验通过后从账号提取身份，不复制密码哈希。
     fn from(account: &AccountCore) -> Self {
         Self {
             account_id: account.base.id.clone(),
@@ -67,32 +66,21 @@ impl From<&AccountCore> for BackofficeAuthResult {
     }
 }
 
-/// 后台账号密码认证服务。
-///
-/// 该服务统一负责账号规范化、账号类型与状态判断、密码验证，以及旧 MD5
-/// 摘要在认证成功后的 Argon2id 迁移。
+/// 处理后台登录和会话重验，统一规范化账号、检查类型与状态，并在验密通过后将旧 MD5 凭证迁移为 Argon2id。
 pub struct BackofficeAuthService {
+    // 登录和会话重验所读的账号库，也用于持久化升级后的凭证。
     db: Database,
 }
 
 impl BackofficeAuthService {
-    /// 创建后台账号认证服务。
-    /// 返回认证服务实例。
+    /// 应用装配时绑定身份数据库，构造时不查询账号。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// 使用账号、密码及账号类型完成后台认证。
-    ///
-    /// 账号不存在、类型不符、状态不可登录和密码错误均返回相同凭证错误，
-    /// 避免对外泄露账号状态。旧 MD5 摘要只有在验证成功并完成持久化升级后
-    /// 才会返回认证成功；升级失败时不会签发登录身份。
-    ///
-    /// 返回不含密码哈希的后台身份信息。
-    ///
-    /// 当凭证无效、账号不可登录、数据库访问或旧哈希升级失败时返回错误。
-    ///
-    /// `request`：账号、密码和后台账号类型。
+    /// 后台登录时校验请求中的账号、密码和类型，只返回不含密码哈希的身份。
+    /// 不存在、类型不符、不可登录及密码错误统一为凭证错误；数据库错误单独返回。
+    /// 旧 MD5 凭证匹配后必须先成功写入 Argon2id 凭证，才能交付登录身份。
     pub async fn authenticate(&self, request: &crate::dto::AuthRequest) -> Result<BackofficeAuthResult> {
         request.validate()?;
         let stored_account = self.find_account(&request.account).await?;
@@ -123,17 +111,8 @@ impl BackofficeAuthService {
         Ok(BackofficeAuthResult::from(&stored_account))
     }
 
-    /// 校验 JWT 对应的后台账号当前仍然有效。
-    ///
-    /// 每次受保护请求都从持久化层读取账号，确保软删除、停用、账号改名或
-    /// 类型变化能够立即撤销既有 token，而不是等到 token 自然过期。
-    ///
-    /// 当前身份仍可使用时返回最小后台身份信息。
-    ///
-    /// 账号不存在或身份状态不匹配时返回统一认证错误；数据库失败时返回仓储错误。
-    ///
-    /// `account_id`：token 中的账号 ID；`account`：token 中的登录账号。
-    /// `account_kind`：token 中的后台账号类型；`account_version`：token 签发时的账号版本。
+    /// 每次受保护请求验签后重读账号，按 JWT 中的 ID、登录名、后台类型和版本核对当前身份。
+    /// 软删除、停用、改名、类型或版本变化均使旧令牌失效；身份失效统一报认证错误，仓储错误原样返回。
     pub async fn validate_session(
         &self,
         account_id: &str,
@@ -153,7 +132,7 @@ impl BackofficeAuthService {
         Ok(BackofficeAuthResult::from(stored_account))
     }
 
-    // 登录先用规范化账号查找后台记录。账号格式无效按未找到处理，由凭证验证统一执行占位工作，避免提前暴露身份是否存在。
+    // 登录时按规范化账号查询；格式无效视为未找到，交给密码校验做占位计算。
     async fn find_account(&self, account: &str) -> Result<Option<AccountCore>> {
         let Ok(account) = LoginAccount::new(account) else {
             return Ok(None);
@@ -163,12 +142,12 @@ impl BackofficeAuthService {
     }
 }
 
-// 统一生成后台凭证错误，不区分账号不存在、状态不允许或密码不匹配。
+// 后台密码认证失败时使用统一错误，不对外区分账号状态或密码不匹配。
 fn invalid_credentials() -> Error {
     Error::Unauthenticated("用户名或密码错误".to_string())
 }
 
-// 从后台登录请求生成内部账号凭证，入口类型固定，客户端所选账号类型不会切换身份域。
+// 后台验密前只为可登录的内部账号取凭证，请求中的账号类型不能切换身份域。
 fn backoffice_secret(account: &AccountCore, requested_kind: DomainAccountKind) -> Option<&Secret> {
     (requested_kind == DomainAccountKind::Admin)
         .then(|| account.authentication_secret_for(DomainAccountKind::Admin))
@@ -180,6 +159,7 @@ mod login_failure_class_tests {
     use super::{invalid_credentials, invalid_session};
     use crate::error::Error;
 
+    // 验证统一凭证错误的类别和消息，不暴露密码处理细节。
     #[test]
     fn missing_wrong_kind_and_bad_password_share_unauthenticated_class() {
         let error = invalid_credentials();
@@ -189,6 +169,7 @@ mod login_failure_class_tests {
         assert!(!error.to_string().contains("argon2"));
     }
 
+    // 验证后台会话失效只返回通用认证错误。
     #[test]
     fn session_failure_does_not_leak_account_state() {
         let error = invalid_session();
@@ -197,7 +178,7 @@ mod login_failure_class_tests {
     }
 }
 
-// 后台会话不能继续时返回统一错误，不将账号当前状态作为对外原因。
+// 会话重验失败时统一报告身份失效，不披露账号当前状态。
 fn invalid_session() -> Error {
     Error::Unauthenticated("认证已失效".to_string())
 }
@@ -213,6 +194,7 @@ mod tests {
     use crate::entity::account_core::{AccountCore, AccountCoreData, AccountStatus};
     use crate::entity::auth::{LoginAccount, Secret};
 
+    // 按测试场景构造指定类型和状态的账号，复用固定登录名和密码。
     fn account(kind: AccountKind, status: AccountStatus) -> AccountCore {
         AccountCore::new(
             "account-1".to_string(),
@@ -226,6 +208,7 @@ mod tests {
         .unwrap()
     }
 
+    // 验证后台只接受内部账号，客户端指定门户类型也不能越过身份边界。
     #[test]
     fn backoffice_entry_rejects_supplier_credentials_and_client_kind_selection() {
         let admin = account(AccountKind::Admin, AccountStatus::Active);
@@ -236,6 +219,7 @@ mod tests {
         assert!(backoffice_secret(&supplier, AccountKind::Supplier).is_none());
     }
 
+    // 验证启用的后台账号用正确密码可通过当前格式凭证校验。
     #[tokio::test]
     async fn authentication_rules_should_accept_matching_active_account() {
         let account = account(AccountKind::Admin, AccountStatus::Active);
@@ -245,6 +229,7 @@ mod tests {
         assert!(matches!(result, PasswordCheck::Current));
     }
 
+    // 验证停用账号仍经过密码校验边界，但正确密码也不能登录。
     #[tokio::test]
     async fn inactive_account_should_still_use_password_boundary() {
         let suspended = account(AccountKind::Admin, AccountStatus::Suspended);
@@ -253,6 +238,7 @@ mod tests {
         assert!(matches!(result, PasswordCheck::Mismatch));
     }
 
+    // 验证身份结果保留会话所需信息，调试输出不暴露 Argon2 哈希。
     #[test]
     fn auth_result_should_not_expose_password_hash() {
         let account = account(AccountKind::Admin, AccountStatus::Active);
@@ -267,6 +253,7 @@ mod tests {
         assert!(!debug.contains("$argon2"));
     }
 
+    // 验证当前身份可以匹配，登录名或版本不符则拒绝。
     #[test]
     fn session_rules_should_accept_only_current_active_identity() {
         let active = account(AccountKind::Admin, AccountStatus::Active);
@@ -284,6 +271,7 @@ mod tests {
         ));
     }
 
+    // 验证停用和归档账号即使登录名及版本匹配也不能沿用会话。
     #[test]
     fn session_rules_should_reject_missing_or_inactive_accounts() {
         let suspended = account(AccountKind::Admin, AccountStatus::Suspended);

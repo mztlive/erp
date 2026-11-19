@@ -21,8 +21,7 @@ pub enum PortalRole {
 }
 
 impl PortalRole {
-    /// 校验门户写入资格。
-    /// 只读人员返回稳定权限错误。
+    /// 仅允许维护岗位执行门户写入，只读岗位返回固定的权限错误。
     pub fn require_write(self) -> Result<()> {
         match self {
             Self::Maintainer => Ok(()),
@@ -31,26 +30,29 @@ impl PortalRole {
     }
 }
 
-/// 每个供应商账号唯一的实名供应商绑定，撤销后保留原身份。
+/// 供应商账号与单家供应商的唯一实名绑定，撤销后保留原账号及供应商归属。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity, PartialEq, Eq)]
 pub struct PortalBinding {
+    /// 持久化元数据，含绑定 ID、版本及软删除标记。
     #[serde(flatten)]
     pub base: BaseModel,
+    /// 绑定的外部账号稳定 ID。
     pub account_id: String,
+    /// 该账号在门户中代表的唯一供应商 ID。
     pub supplier_id: String,
+    /// 绑定当前授予的门户岗位。
     pub role: PortalRole,
+    /// 绑定是否启用；撤销后无法解析门户身份。
     pub active: bool,
+    /// 首次开通绑定的内部操作人 ID。
     pub created_by: String,
+    /// 最近修改绑定的内部操作人 ID，开通时与创建人相同。
     pub updated_by: String,
 }
 
 impl PortalBinding {
-    /// 创建仅绑定一家供应商的外部账号关系。
-    /// 已规范化的有效绑定。
-    ///
-    /// 任一身份为空或超长时拒绝。
-    ///
-    /// `id`、`account_id`、`supplier_id` 是稳定身份；`role` 是门户岗位；`actor_id` 是开通人。
+    /// 开通时按给定岗位创建启用绑定，并记录内部开通人。
+    /// 绑定、账号、供应商和开通人 ID 均裁剪首尾空白，空值或超过 128 字符时拒绝。
     pub fn new(
         id: String,
         account_id: String,
@@ -72,12 +74,8 @@ impl PortalBinding {
         })
     }
 
-    /// 在已核对的绑定版本上调整岗位或撤销绑定。
-    /// 更新已应用的绑定；身份和原始开通人保持稳定。
-    ///
-    /// 版本过期、绑定删除或操作人无效时拒绝。
-    ///
-    /// `expected_version` 为读取版本；`role`、`active` 为目标状态；`actor_id` 为内部操作人。
+    /// 按读取版本调整岗位或启停绑定，更新操作人并保留账号、供应商和原开通人。
+    /// 版本不符或绑定已删除时报冲突，内部操作人 ID 为空或超长时报校验错误。
     pub fn update(
         &mut self,
         expected_version: u64,
@@ -94,12 +92,8 @@ impl PortalBinding {
         Ok(())
     }
 
-    /// 将当前账号与绑定收窄为可信门户身份。
-    /// 当前岗位及供应商归属，均取自持久化事实。
-    ///
-    /// 账号、类型、状态、绑定或任一版本失效时返回统一认证错误。
-    ///
-    /// `account` 为当前账号；`login` 和两个版本为已签发会话身份。
+    /// 登录或会话复验时，核对登录名和两个版本是否匹配启用的供应商账号及其绑定。
+    /// 通过后按持久化事实返回岗位和供应商归属；身份、状态、删除标记或版本不符时统一报认证失效。
     pub fn identity(
         &self,
         account: &AccountCore,
@@ -128,33 +122,38 @@ impl PortalBinding {
     }
 }
 
-/// 从当前账号及有效绑定解析的供应商操作人，不携带内部组织或角色。
+/// 由当前账号及有效绑定解析的门户操作人，身份范围限于所属供应商及门户岗位。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PortalActor {
+    /// 外部账号稳定 ID，用于关联操作人及审计记录。
     pub account_id: String,
+    /// 当前账号的登录名。
     pub account: String,
+    /// 当前账号的显示名称。
     pub name: String,
+    /// 门户操作限定的供应商 ID。
     pub supplier_id: String,
+    /// 用于判断门户读写资格的当前岗位。
     pub role: PortalRole,
+    /// 解析身份时的账号版本，用于会话复验。
     pub account_version: u64,
+    /// 解析身份时的绑定版本，用于会话复验。
     pub binding_version: u64,
 }
 
 impl PortalActor {
-    /// 校验当前门户岗位是否允许写入。
-    /// 只读人员返回权限错误。
+    /// 在门户写入前检查操作人岗位，只读岗位返回权限错误。
     pub fn require_write(&self) -> Result<()> {
         self.role.require_write()
     }
 
-    /// 生成保留供应商身份类别的审计操作人。
-    /// 真实外部操作人；不授予后台资格。
+    /// 用账号 ID 和登录名生成审计操作人，身份类别固定为外部供应商。
     pub fn audit_actor(&self) -> AuditActor {
         AuditActor::new(self.account_id.clone(), self.account.clone(), AccountKind::Supplier)
     }
 }
 
-// 写入供应商门户绑定前规范化必填稳定身份，不接受空白等无效标识。
+// 写入门户绑定前裁剪标识首尾空白，按字段名报告空值或超过 128 字符的错误。
 fn required_id(value: String, field: &str) -> Result<String> {
     Ok(normalize_required_text(value, &format!("{field}不能为空"), 128, &format!("{field}过长"))?)
 }
@@ -166,6 +165,7 @@ mod tests {
     use super::{PortalBinding, PortalRole};
     use crate::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
 
+    // 构造启用的供应商账号，供门户身份和会话复验测试使用。
     fn account() -> AccountCore {
         AccountCore::new(
             "external-1".into(),
@@ -179,6 +179,7 @@ mod tests {
         .unwrap()
     }
 
+    // 为测试账号开通指定供应商的维护岗位绑定。
     fn binding() -> PortalBinding {
         PortalBinding::new(
             "binding-1".into(),
@@ -190,6 +191,7 @@ mod tests {
         .unwrap()
     }
 
+    // 验证门户维护与只读的写入资格有别，且归属和审计保留外部供应商身份。
     #[test]
     fn roles_separate_write_qualification_and_external_audit_identity() {
         let actor = binding().identity(&account(), "supplier01", 1, 1).unwrap();
@@ -200,6 +202,7 @@ mod tests {
         assert!(!account().is_active_backoffice());
     }
 
+    // 验证登录名、任一版本、账号类型或状态、绑定状态或归属变化时会话失效。
     #[test]
     fn session_rejects_changed_identity_status_binding_and_versions() {
         let account = account();
@@ -224,6 +227,7 @@ mod tests {
         assert!(revoked.identity(&account, "supplier01", 1, 1).is_err());
     }
 
+    // 验证过期版本无法修改绑定，成功撤销时保留供应商和开通人并记录修改人。
     #[test]
     fn management_requires_exact_version_and_preserves_supplier_binding() {
         let mut binding = binding();
@@ -237,6 +241,7 @@ mod tests {
         assert!(!binding.active);
     }
 
+    // 验证开通绑定时拒绝空白账号 ID 和超长供应商 ID。
     #[test]
     fn binding_rejects_empty_or_oversized_identity() {
         assert!(

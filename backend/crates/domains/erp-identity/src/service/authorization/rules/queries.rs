@@ -10,6 +10,7 @@ use erp_permissions::{
 
 use crate::entity::access_control::scope_spec::INVENTORY_WAREHOUSE_ENTRIES;
 
+/// 枚举支持查询的固定权限，合并库存仓库入口与独立查询登记，供运行时和启动校验共用。
 pub(in crate::service::authorization) fn permissions() -> impl Iterator<Item = &'static Permission> {
     INVENTORY_WAREHOUSE_ENTRIES.iter().map(|(entry, _)| entry).chain(PERMISSIONS)
 }

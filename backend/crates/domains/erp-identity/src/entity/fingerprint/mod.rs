@@ -8,37 +8,40 @@
 mod authorization;
 mod scope;
 
-/// 仅供身份域内部使用的有边界、带类型的版本编码器。
+/// 身份域内部的版本指纹编码器，以类型标记和边界形成稳定字节串。
 #[derive(Default)]
-pub(crate) struct Fingerprint(Vec<u8>);
+pub(crate) struct Fingerprint(
+    // 待计算摘要的完整编码；临时元素编码也使用此缓冲区。
+    Vec<u8>
+);
 
 impl Fingerprint {
-    // 以明确的格式版本和用途初始化摘要器，避免不同授权版本合同使用相同编码域。
+    /// 将用途和格式版本作为首个文本字段，区分不同版本合同。
     pub(crate) fn new(format: &str) -> Self {
         let mut value = Self::default();
         value.text(format);
         value
     }
 
-    // 按 UTF-8 字节长度编码指纹中的文本，调用方提供原值而不是不稳定的 `Debug` 格式。
+    /// 写入原始文本，依次编码类型标记、UTF-8 字节数和原始字节。
     pub(crate) fn text(&mut self, value: &str) {
         self.0.push(b's');
         self.0.extend_from_slice(&u64::try_from(value.len()).expect("字符串长度不超过 u64").to_be_bytes());
         self.0.extend_from_slice(value.as_bytes());
     }
 
-    // 向摘要写入固定 64 位大端数字，使结果不依赖机器字宽或显示格式。
+    /// 以独立数字标记和固定 64 位大端字节写入无符号整数。
     pub(crate) fn number(&mut self, value: u64) {
         self.0.push(b'u');
         self.0.extend_from_slice(&value.to_be_bytes());
     }
 
-    // 将布尔值写成独立的固定标记，不与数字或字符串的编码混用。
+    /// 分别以单字节 `t` 和 `f` 编码真和假。
     pub(crate) fn boolean(&mut self, value: bool) {
         self.0.push(if value { b't' } else { b'f' });
     }
 
-    // 为可选事实分别编码缺失与存在；即使存在值的编码为空，也不得与缺失产生相同摘要。
+    /// 先写缺失或存在标记；仅在有值时编码内容，使存在的空值与缺失有不同编码。
     pub(crate) fn optional<T>(&mut self, value: Option<T>, encode: impl FnOnce(&mut Self, T)) {
         match value {
             None => self.0.push(b'n'),
@@ -49,7 +52,7 @@ impl Fingerprint {
         }
     }
 
-    // 按原顺序写入有序序列。用起止标记隔开嵌套边界，避免不同形状的输入合并。
+    /// 按迭代顺序编码元素，以成对的起止标记保留空序列和嵌套边界。
     pub(crate) fn sequence<T>(&mut self, values: impl IntoIterator<Item = T>, encode: impl Fn(&mut Self, T)) {
         self.0.push(b'[');
         for value in values {
@@ -58,7 +61,7 @@ impl Fingerprint {
         self.0.push(b']');
     }
 
-    // 计算无序集合摘要时按成员完整编码排序，保留重复项，不把集合清洗混入摘要逻辑。
+    /// 对每个成员的完整编码排序后写入序列，消除输入顺序差异并保留重复项。
     pub(crate) fn unordered<T>(
         &mut self,
         values: impl IntoIterator<Item = T>,
@@ -81,7 +84,7 @@ impl Fingerprint {
         self.0.push(b']');
     }
 
-    // 完成摘要并返回对外版本字段沿用的 32 位小写十六进制文本。
+    /// 消费编码缓冲区，生成版本字段使用的 32 字符小写十六进制 MD5 摘要。
     pub(crate) fn finish(self) -> String {
         format!("{:x}", md5::compute(self.0))
     }
@@ -91,7 +94,7 @@ impl Fingerprint {
 mod tests {
     use super::*;
 
-    // 验证：固定字节合同，防止内部重构悄悄改变版本编码。
+    // 用固定摘要锁定文本、整数、布尔、可选值和序列的字节合同。
     #[test]
     fn encoding_has_a_fixed_contract() {
         let mut value = Fingerprint::new("test-v1");
@@ -104,7 +107,7 @@ mod tests {
         assert_eq!(value.finish(), "e1a3f72da0a3e03d21a01ce172cfbf8e");
     }
 
-    // 验证：字段边界、可选值和集合边界均参与摘要。
+    // 验证字段切分、空序列、空值标记与格式版本均能区分摘要。
     #[test]
     fn boundaries_and_empty_values_are_distinct() {
         let hash = |parts: &[&str]| {
@@ -122,7 +125,7 @@ mod tests {
         assert_ne!(Fingerprint::new("test-v1").finish(), Fingerprint::new("test-v2").finish());
     }
 
-    // 验证：只对明确声明无序的集合忽略输入顺序。
+    // 验证无序编码对重排保持不变，重复成员仍改变摘要。
     #[test]
     fn unordered_inputs_are_sorted_without_losing_duplicates() {
         let hash = |parts: &[&str]| {

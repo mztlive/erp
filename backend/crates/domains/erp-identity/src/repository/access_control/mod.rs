@@ -13,7 +13,7 @@ pub mod person_scope;
 pub use audit_event::{AuditEventFilter, AuditEventRepositoryExt, AuditEventRow};
 pub use permission::{PermissionFilter, PermissionRepositoryExt, UserRoleRepositoryExt};
 
-// 为权限与审计列表把已校验的时间排序翻译成稳定 MongoDB 排序条件。
+// 将已校验的时间排序转为 MongoDB 排序，并用同向 ID 打破并列。
 fn sort_doc(paging: &PageParams) -> Document {
     let direction = match paging.sort_dir {
         SortDir::Asc => 1,
@@ -26,7 +26,7 @@ fn sort_doc(paging: &PageParams) -> Document {
     doc! { field: direction, "id": direction }
 }
 
-// 权限定义列表投影字段。
+/// 限定权限目录查询只返回展示所需字段。
 pub(super) fn permission_projection() -> Document {
     doc! {
         "id": 1,
@@ -41,7 +41,7 @@ pub(super) fn permission_projection() -> Document {
     }
 }
 
-// 审计事件列表投影字段。
+/// 限定审计列表只读取安全投影字段，不加载完整事件。
 pub(super) fn audit_event_projection() -> Document {
     doc! {
         "id": 1,
@@ -68,6 +68,7 @@ mod tests {
     use super::{AuditEventFilter, PageParams, PermissionFilter, sort_doc};
     use crate::entity::access_control::AuditEventResult;
 
+    // 验证权限资源按字面量筛选，停用和内建状态精确匹配，且排除已删除记录。
     #[test]
     fn permission_filter_applies_resource_regex_and_flags() {
         let filter = PermissionFilter {
@@ -85,6 +86,7 @@ mod tests {
         assert!(document.get_bool("system").unwrap());
     }
 
+    // 验证审计操作者与动作的正则字符被转义，且对象和结果按精确值筛选。
     #[test]
     fn audit_event_filter_applies_regex_and_object_fields() {
         let filter = AuditEventFilter {
@@ -112,6 +114,7 @@ mod tests {
         assert_eq!(document.get_str("result").unwrap(), "DENIED");
     }
 
+    // 验证默认及显式时间排序均以同向 ID 作稳定次序。
     #[test]
     fn sorting_compiles_validated_fields_and_stable_id_order() {
         assert_eq!(sort_doc(&PageParams::default()), doc! { "created_at": -1, "id": -1 });
@@ -125,6 +128,7 @@ mod keyword_regression_tests {
     use persistence_core::QueryFilter;
 
     use super::*;
+    // 验证关键词和动作标签不会覆盖事件 ID、追踪号及时间条件。
     #[test]
     fn keyword_preserves_structural_scope() {
         let mut filter = AuditEventFilter {

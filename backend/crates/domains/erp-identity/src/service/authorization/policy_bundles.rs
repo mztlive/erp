@@ -11,20 +11,18 @@ use crate::entity::authorization_bundle::PolicyDocument;
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Permission, Result};
 
-/// 文件读取保留原范围、事务阶段和到期边界，交付检查不重读同一快照。
+/// 授权文件用例的原快照范围凭据；交付只核对阶段和期限，不重读同一快照。
 pub(crate) struct PolicyBundleAccess {
+    /// 已授权的组织范围、组织事实和策略版本，供文件计划校验。
     pub(crate) scope: AuthorizedDataScope,
+    // 授权文件读取时所属的原快照与读取阶段。
     boundary: ExecutionBoundary,
+    // 组织事实可能变化而使文件授权失效的最早时点。
     valid_until: Option<Instant>,
 }
 
 impl PolicyBundleAccess {
-    // 核对文件读取仍属于授权时的原快照、阶段和有效期。
-    // 全部边界仍有效时成功。
-    //
-    // 事务、读取阶段或期限失效时拒绝交付。
-    //
-    // executor 为文件用例的原执行器。
+    /// 文件交付前沿原执行器核对快照阶段与期限；事务、阶段或期限失效时拒绝。
     pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
         if !self.boundary.is_current(executor) {
             return Err(Error::ValidationError("授权文件读取跨越执行阶段".into()));
@@ -36,7 +34,7 @@ impl PolicyBundleAccess {
     }
 }
 
-// 预览与应用授权文件使用同一组基础权限；根据实际文档内容只增加涉及的写配置资格。
+/// 按文件动作列出完整资格；预览和应用共用基础权限，再按文档实际涉及的角色、绑定和人员范围增加写资格。
 pub(super) fn requirements(
     permission: &Permission,
     document: Option<&PolicyDocument>,
@@ -66,13 +64,9 @@ pub(super) fn requirements(
 }
 
 impl AuthorizationService {
-    // 在原快照一次证明文件所需的同角色资格和公司组织边界。
-    // 已授权的策略版本及组织事实，供文件计划校验使用。
-    //
-    // 入口错配、非快照、完整资格不足、范围收窄或阶段到期时拒绝。
-    //
-    // actor、permission 为真实账号及固定文件入口；document 为预览或应用的规范化文件。
-    // executor 必须属于文件用例的原快照；导出传入 None。
+    /// 在原快照检查固定文件入口、同角色完整资格和公司组织范围，返回文件计划使用的策略与组织事实。
+    ///
+    /// 导出不带文档，预览和应用传规范化文档。入口或目标错配、非快照、资格不足、范围收窄、阶段变化或到期均拒绝。
     pub(crate) async fn require_policy_bundle(
         &self,
         actor: &AuditActor,
@@ -125,6 +119,7 @@ mod tests {
     use crate::entity::access_control::ResolvedScope;
     use crate::entity::organization_change::OrganizationState;
 
+    // 验证文件凭据在范围到期、新读取阶段或事务重启后均不能交付。
     #[test]
     fn file_delivery_rejects_expiry_new_read_phases_and_restarted_transactions() {
         let mut executor = SnapshotExecutor::default();

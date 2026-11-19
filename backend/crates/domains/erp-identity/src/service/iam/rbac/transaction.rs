@@ -11,13 +11,9 @@ use super::policy::commit_outcome_unknown;
 use crate::error::{Error, Result};
 
 impl RbacService {
-    /// 在取消安全的所有权任务内运行系统初始化 policy 事务。
-    ///
-    /// 该入口没有操作人授权快照，只允许内建角色和超级管理员初始化使用。
-    ///
-    /// 当事务、policy 刷新或所有权任务失败时返回错误。
-    ///
-    /// `transaction`：在事务执行器中执行的写入函数。
+    /// 仅在初始化内建角色或超级管理员时使用，无需操作人授权快照。
+    /// 事务启动后由独立任务完成写入和收尾，调用方取消等待时仍可继续。
+    /// 策略一致性未知、事务或任务失败时返回错误。
     pub async fn run_system_policy_transaction<T, E, F>(
         self: &Arc<Self>,
         transaction: F,
@@ -41,10 +37,8 @@ impl RbacService {
         self.run_policy_transaction_at_revision(None, transaction).await
     }
 
-    /// 使用授权快照对应的 policy 版本运行写事务。
-    /// 授权后 policy 已变化、事务失败或本地刷新失败时返回错误。
-    ///
-    /// `policy_revision`：授权时冻结的 policy 版本；`transaction`：在事务执行器中执行的写入函数。
+    /// 完成操作人授权后，用当时冻结的策略版本运行写事务并原子推进版本。
+    /// 策略版本冲突、策略一致性未知、事务或任务失败时返回错误。
     pub async fn run_authorized_policy_transaction<T, E, F>(
         self: &Arc<Self>,
         policy_revision: u64,
@@ -69,10 +63,8 @@ impl RbacService {
         self.run_policy_transaction_at_revision(Some(policy_revision), transaction).await
     }
 
-    // 运行 policy 写事务，并按需绑定事务前授权使用的版本。
-    // 策略一致性未知、版本冲突、事务失败或本地刷新失败时返回错误。
-    //
-    // `expected_revision`：要求匹配的 policy 版本；为空时只推进版本、不比较旧值；`transaction`：在事务执行器中执行的写入函数。
+    /// 用于写入成功即需推进策略版本的事务；指定期望版本时须匹配，系统初始化可省略比较。
+    /// 策略一致性未知、版本冲突、事务或任务失败时返回错误。
     pub(super) async fn run_policy_transaction_at_revision<T, E, F>(
         self: &Arc<Self>,
         expected_revision: Option<u64>,
@@ -100,12 +92,9 @@ impl RbacService {
         .await
     }
 
-    // 授权命令重放保持零写入；确有授权变更时才推进 policy 版本。
-    // 原子提交结果；重放沿用原回执版本。
-    //
-    // 版本冲突、步骤失败、提交失败或所有权任务失败时拒绝。
-    //
-    // expected_revision 为变更所需版本，transaction 返回结果及是否发生授权变更。
+    /// 为可能重放或无授权变更的命令串行执行策略事务，独立任务持有写锁直至提交收尾。
+    /// 回调返回结果及变更标记；仅有变更时才按期望版本推进策略修订号。重放可直接返回原回执且无需写入。
+    /// 策略一致性未知、版本冲突、事务步骤、提交或任务失败时返回错误。
     pub(crate) async fn run_optional_policy_transaction<T, E, F>(
         self: &Arc<Self>,
         expected_revision: Option<u64>,
@@ -158,13 +147,9 @@ impl RbacService {
         .await
     }
 
-    /// 使用授权快照对应版本运行 policy 与审计原子事务。
-    /// 返回业务写入的结果。
-    ///
-    /// 业务写入、审计、policy 版本比较、提交或刷新失败时返回错误。
-    ///
-    /// `policy_revision`：授权时冻结的 policy 版本；`audit`：已在事务前准备的资源审计。
-    /// `transaction`：在事务执行器中执行的业务写入。
+    /// 管理写入需要留痕时，将预先准备的审计、业务写入及授权版本推进放入同一事务。
+    /// 版本须与事务前的授权快照一致；业务写入、审计、版本校验或提交失败时返回错误。
+    /// 提交后刷新失败只记录错误，仍返回已提交的业务结果。
     pub async fn run_authorized_audited_policy_transaction<T, E, F>(
         self: &Arc<Self>,
         policy_revision: u64,
@@ -198,16 +183,9 @@ impl RbacService {
         .await
     }
 
-    // 完成 policy 事务，并在提交成功时刷新本地 Enforcer。
-    //
-    // 提交结果未知时进入不可自动恢复的一致性未知状态，避免单次旧快照 reload 误解锁。
-    //
-    // 成功时返回事务值；失败时返回原始事务错误。
-    //
-    // 事务提交失败时返回错误。提交成功后的刷新失败只记录错误并保持本地失败关闭，
-    // 避免把已提交写入误报为可安全重试的失败。
-    //
-    // `transaction`：已完成的 MongoDB policy 事务结果。
+    /// 策略事务结束后，提交成功时尝试刷新本地 Enforcer 并返回已提交的事务值。
+    /// 刷新失败只记日志，后续授权仍须取得新策略，避免把已提交写入误报为可安全重试的失败。
+    /// 事务失败时保留原错误；提交结果未知时停止当前实例的授权读写，旧快照重载无法解锁。
     pub(super) async fn finish_policy_transaction<T, E>(
         &self,
         transaction: std::result::Result<T, E>,
@@ -240,10 +218,7 @@ impl RbacService {
         }
     }
 
-    // 在提交结果未知后阻止授权读取和后续 policy 写入，避免旧快照被误判为最新状态。
-    // 提交结果仍然已知时无返回值。
-    //
-    // 本进程已进入提交结果未知状态时返回 `Rbac`。
+    /// 授权读取及策略写入前检查提交状态；当前实例曾遇到未知提交结果时返回 `Rbac`，避免使用可能过期的快照。
     pub(super) fn ensure_policy_consistency_known(&self) -> Result<()> {
         if self.policy_consistency_unknown.load(Ordering::Acquire) {
             return Err(Error::Rbac("授权策略提交结果未知，当前进程已停止授权，请重启服务".to_string()));

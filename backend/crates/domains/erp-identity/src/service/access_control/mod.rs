@@ -49,24 +49,21 @@ pub use crate::dto::{
 };
 use crate::error::{Error, Result};
 
-/// 访问控制服务。
-///
-/// 提供权限目录、数据范围、用户角色绑定记录与审计事件的增补编排。
+/// 管理端访问控制用例，负责权限目录、人员范围、角色绑定留痕和审计查询；实际角色授权仍由 IAM 处理。
 #[derive(Clone)]
 pub struct AccessControlService {
+    // 身份仓储及管理用例事务使用的数据库。
     db: Database,
+    // 提供角色资格快照、策略版本及策略写事务的共享 RBAC 服务。
     rbac: crate::SharedRbacService,
+    // 保存人员范围前校验仓库、结算主体等外域目标的端口。
     targets: Arc<dyn ScopeTargetPort>,
+    // 检查目录、范围、绑定留痕和审计等管理入口的统一授权服务。
     authorization: Arc<AuthorizationService>,
 }
 
 impl AccessControlService {
-    /// 创建已完整装配的访问控制服务。
-    /// 可执行目录查询和范围配置的完整服务。
-    ///
-    /// 不执行 I/O，不返回错误。
-    ///
-    /// db 为身份数据库，rbac 为身份设施，targets 为外域目标校验端口，authorization 为共享授权服务。
+    /// 应用装配时注入身份数据库、RBAC、外域目标校验端口和共享授权服务；不执行 I/O。
     pub fn new(
         db: Database,
         rbac: crate::SharedRbacService,
@@ -76,15 +73,10 @@ impl AccessControlService {
         Self { db, rbac, targets, authorization }
     }
 
-    /// 分页查询权限定义列表（权限目录）。
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    /// 管理端打开权限目录时，按资源、停用状态和系统标识查询定义，在同一读取事务内检查权限并在返回前复验。
     ///
-    /// 失败情形：
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    /// * `RepositoryError` - 数据库查询失败
-    ///
-    /// actor 为当前已认证账号。
-    /// `params`：查询参数（`resource`/`disabled`/`system` 扁平筛选）。
+    /// 分页参数非法或排序字段不在白名单时返回 `ValidationError`；查询失败返回 `RepositoryError`。
+    /// 返回 `items`、`total`、`page` 和 `page_size`。
     pub async fn permission_list(
         &self,
         params: &PermissionListParams,
@@ -121,7 +113,8 @@ impl AccessControlService {
             .await
     }
 
-    /// 管理端登记权限定义时按统一值对象规范化 `resource:action`，再保存并返回管理视图。输入非法时拒绝；重复资源动作由唯一索引报冲突。
+    /// 管理端新增权限定义时，按权限值对象规范化 `resource:action`，将定义和审计一并写入，返回新定义。
+    /// 输入非法时拒绝；资源与动作重复时由唯一索引报告冲突。
     pub async fn create_permission(
         &self,
         req: CreatePermissionRequest,
@@ -159,7 +152,8 @@ impl AccessControlService {
         Ok(permission.into())
     }
 
-    /// 管理端修改权限定义的可变字段时，按请求中的期望版本写入并返回视图。资源动作和系统身份不可改；记录缺失或乐观锁不符时拒绝。
+    /// 管理端编辑权限定义时，按请求的期望版本更新可变字段并记录审计，返回更新后的定义。
+    /// 资源、动作及系统身份不可改；记录缺失或乐观锁冲突时拒绝。
     pub async fn update_permission(
         &self,
         id: &str,
@@ -200,7 +194,8 @@ impl AccessControlService {
         Ok(updated.into())
     }
 
-    /// 管理端退役普通权限定义时只软删除，保留历史身份，避免复用破坏审计与绑定。不存在或为系统内建权限时拒绝。
+    /// 管理端退役权限定义时，软删除普通定义并记录审计，保留历史标识供审计和绑定引用。
+    /// 记录不存在或属于系统内建权限时拒绝。
     pub async fn delete_permission(&self, id: &str, actor: &AuditActor) -> Result<()> {
         let access = ManagementAccess::new(
             self.authorization.clone(),
@@ -231,14 +226,8 @@ impl AccessControlService {
         .await
     }
 
-    /// 按用户查询角色绑定（W19 用户授权，含撤权历史）。
-    /// 返回按生效时间倒序排列的绑定视图。
-    ///
-    /// 失败情形：
-    /// * `ValidationError` - 用户 ID 缺失
-    ///
-    /// actor 为当前已认证账号。
-    /// `params`：查询参数（`user_id` 必填）。
+    /// 管理端查看 W19 用户授权记录时，按生效时间倒序返回指定用户的绑定留痕，含已撤销记录。
+    /// `user_id` 为空时返回 `ValidationError`；同一读取事务内在返回前复验查询资格。
     pub async fn user_role_list(
         &self,
         params: &UserRoleListParams,
@@ -264,19 +253,10 @@ impl AccessControlService {
             .await
     }
 
-    /// 分配用户角色（绑定记录 + 审计事件原子写入）。
+    /// 管理端登记角色分配时，原子写入绑定留痕和审计事件，返回新绑定；不修改 Casbin `g` 规则。
     ///
-    /// 目标角色必须存在（本域 `roles` 仓储读取）；同一用户同一角色同时仅一条
-    /// 未撤权绑定由部分唯一索引 `uk_user_roles_active` 承担（撤权后再授权）。
-    /// 授权事实仍由 Casbin `g` 规则承载（既有 `iam` 能力），本方法只维护
-    /// `user_role` 绑定留痕表。
-    ///
-    /// 返回新建的绑定视图。
-    ///
-    /// 失败情形：
-    /// * `ValidationError` - 请求体校验失败
-    /// * `NotFound` - 目标角色不存在
-    /// * `ConflictError` - 同一用户同一角色已有未撤权绑定（唯一索引透出）
+    /// 请求非法返回 `ValidationError`，角色不存在返回 `NotFound`。
+    /// 同一用户与角色只允许一条未撤销绑定；部分唯一索引 `uk_user_roles_active` 报告 `ConflictError`，撤销后可重新登记。
     pub async fn assign_user_role(
         &self,
         req: AssignUserRoleRequest,
@@ -319,18 +299,10 @@ impl AccessControlService {
         Ok(binding.into())
     }
 
-    /// 撤权（立即紧急撤权语义，必须记录结构化原因）。
+    /// 管理端撤销指定绑定记录时，要求结构化业务原因；在同一事务读取当前版本、乐观锁更新并写审计，返回保留的撤销记录。
+    /// 此入口维护绑定留痕；要立即取消实际访问资格，调用方须通过账号角色管理更新 Casbin 策略。
     ///
-    /// 撤权是审计动作，历史撤权记录累积保留；绑定读取、实体撤权、乐观锁
-    /// 更新和审计事件写入在同一事务内完成。已撤权绑定不可重复撤权。
-    ///
-    /// 返回撤权后的绑定视图。
-    ///
-    /// 失败情形：
-    /// * `NotFound` - 绑定不存在
-    /// * `ConflictError` - 并发修改或绑定已撤权
-    ///
-    /// `req`：撤权命令（只携带业务原因，当前版本由服务端读取）。
+    /// 绑定不存在返回 `NotFound`；并发更新冲突或记录已撤销时拒绝，请求无需提供版本。
     pub async fn revoke_user_role(
         &self,
         id: &str,
@@ -376,15 +348,10 @@ impl AccessControlService {
         Ok(updated.into())
     }
 
-    /// 分页查询审计事件（W19 §5.2 审计查询）。
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    /// 管理端打开 W19 §5.2 审计查询时，按操作者、动作类型、对象类型或结果等条件分页，在同一读取事务内复验后交付。
     ///
-    /// 失败情形：
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    /// * `RepositoryError` - 数据库查询失败
-    ///
-    /// actor 为当前已认证账号。
-    /// `params`：查询参数（`actor_id`/`action_type`/`object_type`/`result` 等）。
+    /// 分页参数非法或排序字段不在白名单时返回 `ValidationError`；查询失败返回 `RepositoryError`。
+    /// 返回 `items`、`total`、`page` 和 `page_size`。
     pub async fn audit_event_list(
         &self,
         params: &AuditEventListParams,
@@ -421,12 +388,7 @@ impl AccessControlService {
             .await
     }
 
-    // 按 ID 加载权限定义并校验期望版本。
-    // 返回加载的权限定义实体。
-    //
-    // 权限不存在返回 `NotFound`；版本不一致返回 `ConflictError`。
-    //
-    // `id`：权限定义 ID；`expected_version`：请求携带的期望版本。
+    // 编辑权限前按 ID 加载定义，与请求版本比对；定义缺失报 `NotFound`，版本不符报 `ConflictError`。
     async fn load_permission_with_version(
         &self,
         id: &str,
@@ -444,16 +406,8 @@ impl AccessControlService {
         Ok(permission)
     }
 
-    // 构造本域写入的审计事件（`audit_log → audit_event` 字段对齐形态）。
-    //
-    // 操作者名称快照取账号 `name`（账号不存在时退回登录账号语义的空安全
-    // 快照）；责任角色快照取账号类型；结果恒为成功。
-    //
-    // 返回新建的审计事件。
-    //
-    // 审计字段违反领域约束时返回错误。
-    //
-    // `changed_field_names`：变更字段名（只记录字段名和「已变更」）。
+    // 写事务前构造与 `audit_log` 字段对齐的成功审计事件；动作未登记或字段不合规时拒绝。
+    // 操作者快照取账号名称（无账号时用「系统操作人」）和账号类型；变更只留字段名，不留字段值。
     async fn build_audit_event(
         &self,
         actor: &AuditActor,
@@ -492,10 +446,8 @@ impl AccessControlService {
         )?)
     }
 
-    // 在一个事务内执行业务写入，成功后再追加审计事件。
-    //
-    // 调用方闭包负责业务写入；范围场景须在闭包内完成授权校验与
-    // `bump_policy_revision`。顺序固定为「业务写入 →（范围场景）revision bump → 审计」。
+    // 管理写入预检后开启事务，先复验入口权限，再执行业务闭包，成功才写审计；失败则一并回滚。
+    // 若闭包处理范围变更，须在其中校验范围授权，并在业务写入后、追加审计前推进策略版本。
     async fn with_audited_write<T, F>(
         &self,
         event: AuditEvent,

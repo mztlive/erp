@@ -10,7 +10,7 @@ use crate::entity::access_control::ResolvedScope;
 use crate::entity::authorization::{AccessFact, AccessRule, FactKind, RelationKey, RelationMatch};
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
-// 选品授权同时取证登记的附加读取权限，各入口可以由不同启用角色提供。
+/// 为选品预取客户或选型册的附加读取资格，各独立入口可由不同启用角色授予。
 pub(crate) fn qualifications(permission: &Permission) -> Vec<Permission> {
     let mut requested = Vec::new();
     if is_list(permission) {
@@ -24,7 +24,7 @@ pub(crate) fn qualifications(permission: &Permission) -> Vec<Permission> {
     requested
 }
 
-// 把客户和详情的范围分别绑定到自身入口，解析时不借用选品资格的角色集合。
+/// 按选品用途请求客户列表、客户详情或选型册详情的各自范围，不借用选品主入口的角色。
 pub(crate) fn scope_requests(permission: &Permission) -> Vec<(Permission, Permission)> {
     if is_list(permission) {
         return vec![(customer::LIST, customer::LIST)];
@@ -39,7 +39,7 @@ pub(crate) fn scope_requests(permission: &Permission) -> Vec<(Permission, Permis
     requested
 }
 
-// 选品根范围须与固定客户或详情前提同时成立；缺少任一入口资格或范围时不放行。
+/// 运行时把选品根范围与固定客户或详情前提取交集，缺少所需资格或范围时拒绝。
 pub(in crate::service::authorization) fn condition(
     permission: &Permission,
     qualified: &QualifiedPermissions,
@@ -49,11 +49,12 @@ pub(in crate::service::authorization) fn condition(
     condition_with(permission, Some(qualified), scopes, base)
 }
 
-// 校验选品接入时保留客户本人条件，覆盖可选资格未授予时所需的事实能力。
+/// 启动校验保留列表的客户本人条件，覆盖没有可选查看资格时必须支持的事实。
 pub(super) fn binding_condition(permission: &Permission, base: AccessRule) -> Result<AccessRule> {
     condition_with(permission, None, &ScopeLookup::Capability, base)
 }
 
+// 构造启动和运行时共用的选品规则：列表按客户范围及可选归属过滤，其他选品动作还须读真实客户，指定动作再检查选型册详情范围。
 fn condition_with(
     permission: &Permission,
     qualified: Option<&QualifiedPermissions>,
@@ -86,18 +87,22 @@ fn condition_with(
     Ok(AccessRule::all(conditions))
 }
 
+// 识别以选型册或方案为根的选品权限，其他资源不叠加本规则。
 fn is_selection(permission: &Permission) -> bool {
     matches!(permission.resource(), "sales_selection_booklet" | "sales_selection_proposal")
 }
+// 识别选型册或方案的列表动作，以采用独立客户列表范围。
 fn is_list(permission: &Permission) -> bool {
     is_selection(permission) && permission.action() == "list"
 }
 
+// 判断选型册动作是否另需独立详情读取，列表、详情和创建不重复要求。
 fn requires_read(permission: &Permission) -> bool {
     permission.resource() == "sales_selection_booklet"
         && !matches!(permission.action(), "list" | "get" | "create")
 }
 
+// 运行时核对独立读取入口是否有启用角色授予权限；启动能力校验不检查账号。
 fn require_qualification(qualified: Option<&QualifiedPermissions>, permission: &Permission) -> Result<()> {
     if qualified.is_none_or(|qualified| qualified.same_role(slice::from_ref(permission))) {
         Ok(())
@@ -107,6 +112,7 @@ fn require_qualification(qualified: Option<&QualifiedPermissions>, permission: &
     }
 }
 
+// 按独立入口及其自身范围权限查找范围，缺失时返回选品配置错误。
 fn find_scope<'a>(scopes: &ScopeLookup<'a>, permission: &Permission) -> Result<Cow<'a, ResolvedScope>> {
     scopes.get(permission, permission, || {
         tracing::debug!(%permission, "选品缺少独立范围");
@@ -114,6 +120,7 @@ fn find_scope<'a>(scopes: &ScopeLookup<'a>, permission: &Permission) -> Result<C
     })
 }
 
+// 列表只纳入实际客户非空且全部通过独立客户列表范围和归属条件的选品对象。
 fn customer_condition(scope: &ResolvedScope, ownership: AccessRule) -> Result<AccessRule> {
     let facts = BTreeSet::from([FactKind::Owner, FactKind::Organization]);
     let rule = AccessRule::all(vec![AccessRule::scope(scope, false), ownership]).requiring(&facts);
@@ -128,6 +135,7 @@ fn customer_condition(scope: &ResolvedScope, ownership: AccessRule) -> Result<Ac
     })
 }
 
+// 选品详情或写入须沿独立客户详情入口检查唯一真实客户，沿用详情自身的范围语义。
 fn customer_detail_condition(scope: &ResolvedScope) -> Result<AccessRule> {
     Ok(AccessRule::Independent {
         permission: customer::DETAIL,
@@ -140,6 +148,7 @@ fn customer_detail_condition(scope: &ResolvedScope) -> Result<AccessRule> {
     })
 }
 
+// 按独立选型册详情入口构造当前读取范围，要求负责人及组织事实，不借历史参与扩大范围。
 fn read_condition(scope: &ResolvedScope) -> AccessRule {
     AccessRule::Independent {
         permission: selection::ADMIN_IMAGE,
@@ -158,6 +167,7 @@ mod tests {
     use crate::entity::access_control::ScopeClause;
     use crate::entity::authorization::{FactValue, ObjectFacts, RelatedObjects};
 
+    // 构造公司或本人两种选品范围样本，不添加个人上限。
     fn scope(company: bool) -> ResolvedScope {
         ResolvedScope {
             role_clauses: vec![ScopeClause { company, self_owned: !company, ..Default::default() }],
@@ -165,6 +175,7 @@ mod tests {
         }
     }
 
+    // 构造归属已知的选型册事实，供修改负责人或添加客户关联。
     fn object(owner: &str) -> ObjectFacts {
         ObjectFacts {
             resource: "sales_selection_booklet".into(),
@@ -177,6 +188,7 @@ mod tests {
         }
     }
 
+    // 构造带单一实际客户关系的选型册样本，供独立客户范围及归属检查。
     fn list_object(owner: &str) -> ObjectFacts {
         let mut root = object("actor");
         let mut child = object(owner);
@@ -189,6 +201,7 @@ mod tests {
         root
     }
 
+    // 验证发布须独立具备选型册详情资格及其范围，并满足客户详情条件。
     #[test]
     fn write_requires_independent_get_qualification_and_get_scope() {
         let permission = selection::BOOKLET_PUBLISH;
@@ -215,6 +228,7 @@ mod tests {
         assert!(condition(&permission, &qualified, &ScopeLookup::Resolved(&[]), AccessRule::Allow).is_err());
     }
 
+    // 验证在能力范围且无额外全量查看资格时，选品启动条件与运行时结构一致。
     #[test]
     fn binding_matches_runtime_with_capability_scopes_and_no_optional_qualification() {
         let qualified = QualifiedPermissions::test_grants(&[
@@ -239,6 +253,7 @@ mod tests {
         }
     }
 
+    // 验证选品列表总须真实客户及独立范围，可选资格只去掉本人归属限制。
     #[test]
     fn customer_list_requires_scope_and_owned_customer_unless_optional_qualification_exists() {
         let permission = selection::BOOKLET_LIST;
@@ -262,6 +277,7 @@ mod tests {
         assert!(!rule.allows_object("actor", &list_object("other"), &BTreeSet::new()).unwrap());
     }
 
+    // 验证创建和详情要求客户详情资格，但不另加选型册详情资格。
     #[test]
     fn create_and_detail_require_customer_read_without_an_additional_booklet_get() {
         let qualified = QualifiedPermissions::test_grants(&[("customer", &[customer::DETAIL])]);
@@ -279,6 +295,7 @@ mod tests {
         }
     }
 
+    // 验证真实客户详情允许历史参与，再与个人上限取交集。
     #[test]
     fn customer_detail_preserves_history_before_the_personal_limit() {
         let qualified = QualifiedPermissions::test_grants(&[("customer", &[customer::DETAIL])]);

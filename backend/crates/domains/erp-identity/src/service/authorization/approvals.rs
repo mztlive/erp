@@ -22,6 +22,7 @@ use crate::repository::authorization::{
 };
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
+/// 判断固定入口是否须执行审批类型及来源检查，含库存调整撤回的专用分支。
 pub(super) fn supports(permission: &Permission) -> bool {
     [
         internal::APPROVAL_MANAGEMENT_READ,
@@ -34,7 +35,7 @@ pub(super) fn supports(permission: &Permission) -> bool {
     .contains(permission)
 }
 
-// 对象加载前一次取得各可能审批类型及来源所需资格；实际单据类型仍从持久化主体确定。
+/// 在加载审批对象前一次预取候选类型和来源所需资格；实际类型由冻结主体事实决定。
 pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     if !supports(permission) {
         return vec![];
@@ -56,21 +57,28 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     permissions
 }
 
+/// 登记冻结审批类型可使用的真实来源、取范围入口及整账附加资格。
 pub(super) struct ManagementSource {
+    /// 该来源的范围动作，同时标识真实业务资源，并非附加菜单门槛。
     pub(super) permission: Permission,
+    // 可关联此来源的冻结审批主体类型。
     subjects: &'static [&'static str],
+    // 读取完整资金来源时须并入同角色组合的整账资格。
     additional: Option<Permission>,
 }
 
 impl ManagementSource {
+    // 登记只按固定范围判断、不另需整账资格的审批来源。
     const fn scoped(permission: Permission, subjects: &'static [&'static str]) -> Self {
         Self { permission, subjects, additional: None }
     }
 
+    // 登记管理完整资金记录时还须同角色具有整账权限的审批来源。
     const fn whole_ledger(permission: Permission, subjects: &'static [&'static str]) -> Self {
         Self { permission, subjects, additional: Some(policy_permission::FINANCE_LEDGER_READ) }
     }
 
+    /// 构造管理资格组合时追加该真实来源要求的整账资格。
     pub(super) fn add_qualification(&self, required: &mut Vec<Permission>) {
         required.extend(self.additional.clone());
     }
@@ -104,14 +112,17 @@ static MANAGEMENT_SOURCES: &[ManagementSource] = &[
     ManagementSource::scoped(payable::ACCOUNT_DETAIL, &[resources::SUPPLIER_REFUND]),
 ];
 
+// 按冻结主体类型枚举允许的来源，供管理分区和升级候选共用。
 fn subject_sources(subject: &str) -> impl Iterator<Item = &'static ManagementSource> {
     MANAGEMENT_SOURCES.iter().filter(move |source| source.subjects.contains(&subject))
 }
 
+// 按冻结类型及真实资源定位来源政策，两个条件须同时匹配。
 fn subject_source(subject: &str, resource: &str) -> Option<&'static ManagementSource> {
     subject_sources(subject).find(|source| source.permission.resource() == resource)
 }
 
+/// 按冻结主体和真实来源的登记顺序展开审批管理列表分区，附上该类型的运行管理权限。
 pub(super) fn management_partitions()
 -> impl Iterator<Item = (&'static str, &'static Permission, &'static ManagementSource)> {
     approval_admin::TYPES.iter().flat_map(|(subject, _, admin)| {
@@ -120,6 +131,7 @@ pub(super) fn management_partitions()
     })
 }
 
+// 从真实实例的冻结类型和唯一完整来源确定管理资格；升级绑定使用定义管理，其余使用运行管理。
 fn requirement<'a>(
     entry: &Permission,
     object: &'a ObjectFacts,
@@ -147,6 +159,7 @@ fn requirement<'a>(
     Ok((admin, policy, source))
 }
 
+/// 按已登记真实资源取得固定来源动作，供候选加载现存来源。
 pub(super) fn source_permission(resource: &str) -> Result<Permission> {
     MANAGEMENT_SOURCES
         .iter()
@@ -155,6 +168,7 @@ pub(super) fn source_permission(resource: &str) -> Result<Permission> {
         .ok_or_else(|| Error::ValidationError("审批管理的真实来源未接入授权".into()))
 }
 
+/// 升级绑定前确认候选只带一个真实来源引用；未给资源时仅允许从该类型的唯一合法来源推断。
 pub(super) fn candidate_source(candidate: &ObjectFacts) -> Result<(RelationKey, String)> {
     let kind = candidate.subject_type.get()?;
     let source = match &candidate.subject_source_resource {
@@ -180,6 +194,7 @@ pub(super) fn candidate_source(candidate: &ObjectFacts) -> Result<(RelationKey, 
     Ok((key, source.permission.resource().into()))
 }
 
+/// 把管理入口转换为原业务动作，与实例列表及该冻结类型的管理权限组成同角色资格。
 pub(super) fn management_permissions(entry: &Permission, admin: &Permission) -> Vec<Permission> {
     let entry = if entry == &internal::APPROVAL_RECOVER {
         approval_instance::RESUME_CURRENT_APPROVER
@@ -191,6 +206,7 @@ pub(super) fn management_permissions(entry: &Permission, admin: &Permission) -> 
     vec![entry, approval_instance::INSTANCE_LIST, admin.clone()]
 }
 
+// 审批管理取证时要求同一启用角色授予整组操作权限，否则拒绝。
 fn ensure_admin(required: &[Permission], qualified: &QualifiedPermissions) -> Result<()> {
     if qualified.same_role(required) {
         Ok(())
@@ -200,7 +216,7 @@ fn ensure_admin(required: &[Permission], qualified: &QualifiedPermissions) -> Re
 }
 
 impl AuthorizationService {
-    // 审批对象取证后，以同次已解析身份检查真实业务来源，不开始新的读取阶段或换用执行器。
+    /// 根审批对象取证后沿原执行器检查真实来源。普通本人读取命中时不另查当前来源；库存撤回走专用条件。
     pub(super) async fn approval_sources(
         &self,
         proof: &AccessProof,
@@ -235,7 +251,7 @@ impl AuthorizationService {
         Ok(sources)
     }
 
-    // 在原读取阶段校验真实单据类型的管理资格、完整来源及显式记录授权，保留全部最早到期边界供交付复验。
+    // 在原读取阶段核对冻结类型管理资格、完整来源范围和可用记录补权，保留最早到期时点供交付检查。
     async fn approval_source(
         &self,
         proof: &AccessProof,
@@ -266,7 +282,7 @@ impl AuthorizationService {
         Ok(source_proof)
     }
 
-    // 普通审批读取未命中时再沿原快照加载管理分支需要的业务来源，不给正常本人读取追加当前来源要求。
+    // 普通审批读取未命中时，沿原快照重新加载管理分支需要的真实来源，要求实例版本和冻结类型保持不变。
     async fn management_facts(
         &self,
         proof: &AccessProof,
@@ -294,7 +310,7 @@ impl AuthorizationService {
     }
 }
 
-// 判断固定普通审批读取分支：现职责须满足同角色办理资格，历史参与只接受真实已决定记录。
+// 按发起人、真实已决定参与人或当前指派判断普通审批读取；当前指派还须同角色具备读取及决定权限。
 fn ordinary_readable(object: &ObjectFacts, actor: &str, qualified: &QualifiedPermissions) -> Result<bool> {
     let owner = object.owner_id.get()?;
     let assigned = object.assignee_id.get()?;
@@ -306,7 +322,7 @@ fn ordinary_readable(object: &ObjectFacts, actor: &str, qualified: &QualifiedPer
 }
 
 impl AuthorizationService {
-    // 用满足审批管理完整资格的角色解析真实来源范围，不额外要求该来源的菜单权限。
+    /// 由具备完整审批资格的角色解析真实来源并签发原阶段证明，不另要求来源菜单权限；记录版本、期限和复验参数。
     pub(super) async fn resolve_approval_source(
         &self,
         entry: &AccessContext,
@@ -354,6 +370,7 @@ impl AuthorizationService {
         Ok(proof)
     }
 
+    /// 以同一审批资格组合解析来源范围并收集版本和期限，供对象和列表共用；采购工作项详情沿用其专门条件。
     pub(super) async fn approval_source_condition(
         &self,
         context: &AccessContext,
@@ -380,7 +397,7 @@ impl AuthorizationService {
     }
 }
 
-// 管理资格统一解释来源范围；同一范围权限只解析一次，保留其首次出现顺序。
+/// 枚举管理资格须解释的实际来源范围，按权限去重并保留首次出现顺序。
 pub(super) fn management_scope_requests(source: &Permission) -> Result<Vec<Permission>> {
     if scope_spec::kind(source)? != ActionKind::Source {
         return Ok(vec![source.clone()]);
@@ -394,7 +411,7 @@ pub(super) fn management_scope_requests(source: &Permission) -> Result<Vec<Permi
         .collect())
 }
 
-// 为审批管理构建对象与列表共用的来源范围条件，同时保留读取补充和完整性要求。
+/// 构造审批对象和管理列表共用的来源条件，保留完整性要求及政策允许的记录读取补充。
 pub(super) fn scoped_source_condition(
     source: &Permission,
     scopes: &[(Permission, ResolvedScope)],
@@ -422,6 +439,7 @@ mod tests {
     use super::*;
     use crate::entity::authorization::{FactValue, RelatedObjects};
 
+    // 构造带冻结类型及唯一业务来源的审批实例样本，供管理资格测试。
     fn instance(subject_type: &str, source: &str) -> ObjectFacts {
         let child = ObjectFacts {
             resource: source.into(),
@@ -443,6 +461,7 @@ mod tests {
         }
     }
 
+    // 验证管理权限必须匹配冻结单据类型，且与完整入口资格来自同一启用角色。
     #[test]
     fn management_requires_the_actual_type_admin_in_the_same_enabled_role() {
         let entry = approval_instance::CANCEL_BLOCKED;
@@ -461,6 +480,7 @@ mod tests {
         );
     }
 
+    // 验证升级候选只能省略唯一合法的来源资源，不能隐式选择多来源分区。
     #[test]
     fn upgrade_candidate_only_defaults_a_unique_legal_source() {
         let mut candidate = instance("receipt_reversal", "customer_receipt");
@@ -491,6 +511,7 @@ mod tests {
         }
     }
 
+    // 验证升级绑定要求定义管理资格，并拒绝来源缺失或与冻结类型错配。
     #[test]
     fn binding_upgrade_uses_definition_admin_and_rejects_missing_or_wrong_sources() {
         let entry = approval_instance::UPGRADE_BINDING;

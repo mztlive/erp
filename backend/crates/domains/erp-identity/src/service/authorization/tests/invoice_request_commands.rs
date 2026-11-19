@@ -9,6 +9,7 @@ use crate::Error;
 use crate::entity::access_control::ScopeClause;
 use crate::entity::authorization::{AccessTarget, RelatedObjects, RelationKey};
 
+// 开票提交和撤回各自检查原动作资格，只用合格角色的范围判断销售来源。
 #[tokio::test]
 async fn invoice_request_commands_require_the_original_action_and_its_roles_source_scope() {
     for (entry, action, other_action) in [

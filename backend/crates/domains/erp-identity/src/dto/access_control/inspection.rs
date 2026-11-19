@@ -1,25 +1,27 @@
-//! 权限检查只返回判定与下一步，不返回其他人员的业务数据。
+//! 只读权限检查：返回分层判定和下一步建议，业务数据留在原读取入口。
 use serde::{Deserialize, Serialize};
 
 use crate::entity::access_control::scope_spec::{self, ScopeSource};
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Permission, Result};
 
-/// 管理员发起的只读访问检查。
+/// 管理员发起的只读权限检查，拒绝未知请求字段。
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AccessInspectionRequest {
+    /// 待检查的账号 ID；须含非空白内容，且最多 128 字节。
     pub user_id: String,
+    /// 已登记的权限资源代码，例如 `sales_order`。
     pub resource: String,
+    /// 该资源下已登记的动作代码，例如 `detail`。
     pub action: String,
+    /// 可选单据 ID；须含非空白内容，且最多 128 字节。省略时只检查配置。
     pub object_id: Option<String>,
 }
 
 impl AccessInspectionRequest {
-    /// 校验检查目标及已接线的资源动作。
-    /// 输入合法时成功。
-    ///
-    /// 目标为空、过长或具体对象检查不受支持时拒绝。
+    /// 校验账号 ID、可选单据 ID 和资源动作登记。
+    /// 提供单据 ID 时，仅接受销售单的 `detail` 和 `update`。
     pub fn validate(&self) -> Result<()> {
         if self.user_id.trim().is_empty() || self.user_id.len() > 128 {
             return Err(Error::ValidationError("请选择需要检查的人员".into()));
@@ -40,29 +42,31 @@ impl AccessInspectionRequest {
     }
 }
 
-/// 单层检查结果；review 表示尚需业务对象或命令内容才能判断。
+/// 权限检查中单个层级的判定和说明。
 #[derive(Serialize)]
 pub struct AccessInspectionStep {
+    /// 检查层级的展示名称。
     pub layer: String,
+    /// `passed` 为通过，`blocked` 为阻止，`review` 为待核实。缺少业务对象或命令上下文时保留待核实。
     pub status: String,
+    /// 面向使用者的判定原因和下一步建议。
     pub message: String,
 }
 
-/// 检查结果不作为后续业务请求的授权凭证。
+/// 只读权限检查报告；后续业务请求仍须重新授权。
 #[derive(Default, Serialize)]
 pub struct AccessInspectionView {
+    /// 按追加顺序展示的分层结果。
     pub steps: Vec<AccessInspectionStep>,
+    /// 实际解析的数据范围版本；未解析范围时为空。
     pub scope_version: Option<String>,
+    /// 范围解析使用的时点，以 UTC 的 RFC 3339 文本表示；未解析范围时为空。
     pub checked_at: Option<String>,
 }
 
 impl AccessInspectionView {
-    /// 缺少对象或任务上下文时只报告已完成的检查，不给出对象授权通过。
-    /// 动作通过、对象条件待检查的只读结果。
-    ///
-    /// 动作未接入时返回校验错误。
-    ///
-    /// `resource` 与 `action` 为已接入的动作。
+    /// 调用方确认操作权限后，生成缺少对象或任务上下文的报告。
+    /// 公司共享动作另标记岗位共享通过；对象条件一律待核实，未登记的动作返回校验错误。
     pub fn without_object(resource: &str, action: &str) -> Result<Self> {
         let description = scope_spec::action_description(resource, action)?;
         let mut view = Self::default();
@@ -89,8 +93,7 @@ impl AccessInspectionView {
         Ok(view)
     }
 
-    /// 追加明确的检查层结果。
-    /// `status`：passed、blocked 或 review；`message`：用户可读的原因与下一步。
+    /// 按调用顺序追加已判定的结果，状态使用 `passed`、`blocked` 或 `review`，说明面向使用者。
     pub fn push(&mut self, layer: &str, status: &str, message: &str) {
         self.steps.push(AccessInspectionStep {
             layer: layer.into(),
@@ -99,10 +102,8 @@ impl AccessInspectionView {
         });
     }
 
-    // 从服务端实际解析结果说明配置，不推测业务对象是否可见。
-    // 包含操作权限、范围和个人限制的检查报告。
-    //
-    // `access`：当前账号的同角色权限及范围解析结果。
+    /// 根据服务端解析结果报告操作权限及范围版本。存在角色范围条款时标记范围通过，具体对象仍须检查。
+    /// 个人上限仅收窄范围；没有角色范围条款时标记待核实。
     pub(crate) fn from_access(access: &AuthorizedDataScope) -> Self {
         let mut view = Self {
             scope_version: Some(access.scope_version.clone()),
@@ -132,6 +133,7 @@ impl AccessInspectionView {
 mod tests {
     use super::*;
 
+    // 验证公司共享动作通过岗位共享检查，具体对象仍待核实，且无范围版本。
     #[test]
     fn shared_policy_explains_company_access_without_claiming_task_eligibility() {
         let view = AccessInspectionView::without_object("product", "list").unwrap();
@@ -141,6 +143,7 @@ mod tests {
         assert!(view.scope_version.is_none());
     }
 
+    // 验证依赖来源或任务的动作只确认操作权限，其余条件待核实且无范围版本。
     #[test]
     fn contextual_policies_never_report_object_access_as_passed_or_blocked() {
         for (resource, action) in
@@ -153,6 +156,7 @@ mod tests {
         }
     }
 
+    // 验证销售单查看支持单据检查，提交可做配置检查，未知资源会被拒绝。
     #[test]
     fn validates_registered_actions_and_object_checks() {
         let mut request = AccessInspectionRequest {
@@ -172,7 +176,7 @@ mod tests {
         request.user_id.clear();
         assert!(request.validate().is_err());
     }
-    // 为范围检查单测创建真实授权解析上下文，不依赖数据库设施。
+    // 构造含固定版本和时点的范围解析结果，角色条款及个人上限起初为空。
     fn access() -> AuthorizedDataScope {
         use erp_core::common::time::Instant;
 
@@ -187,6 +191,7 @@ mod tests {
         }
     }
 
+    // 验证只有个人上限时范围待核实，加入角色条款后通过，并保留范围版本。
     #[test]
     fn empty_role_scope_is_review_and_personal_cap_never_grants_access() {
         use crate::access_control::ScopeClause;
@@ -203,6 +208,7 @@ mod tests {
         assert_eq!(view.steps.len(), 2);
     }
 
+    // 验证反序列化拒绝未知字段，参数校验拒绝纯空白单据 ID。
     #[test]
     fn request_rejects_unknown_fields_and_blank_object() {
         assert!(

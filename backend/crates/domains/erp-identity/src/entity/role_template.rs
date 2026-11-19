@@ -6,24 +6,26 @@ use serde::Serialize;
 use crate::entity::{Permission, PermissionSet, Role};
 use crate::{Error, Result};
 
-/// 内建岗位只提供普通可编辑角色，不包含超级管理员。
+/// 供部署时选择和显式生成的普通岗位角色模板，不包含超级管理员。
 #[derive(Debug, Clone, Serialize)]
 pub struct BuiltinRoleTemplate {
+    /// 生成角色所用的稳定岗位 ID。
     pub id: String,
+    /// 岗位模板及所生成角色的展示名称。
     pub name: String,
+    /// 用于选岗预览的职责和能力边界。
     pub description: String,
+    /// 模板生成时写入角色的直接权限，不含人员范围。
     pub permissions: Vec<Permission>,
+    /// 预览时提示管理员另行配置的范围、任务或责任。
     pub setup_requirements: Vec<String>,
+    /// 是否列入推荐模板；综合财务不推荐替代细分岗位。
     pub recommended: bool,
 }
 
 impl BuiltinRoleTemplate {
-    /// 根据共享岗位权限构造模板；财务整账资格随显式生成一同提供。
-    /// 去重后的普通岗位模板。
-    ///
-    /// 任一权限标识非法时拒绝。
-    ///
-    /// 稳定岗位身份、名称、职责及共享权限。
+    /// 构造部署岗位模板，解析、筛选并去重共享权限；非法权限标识返回错误。
+    /// 综合财务模板额外包含整账读取资格。
     pub fn new(id: &str, name: &str, description: &str, raw: &[&str]) -> Result<Self> {
         let mut permissions =
             raw.iter().map(Permission::parse).collect::<std::result::Result<Vec<_>, _>>()?;
@@ -48,7 +50,7 @@ impl BuiltinRoleTemplate {
         })
     }
 
-    // 生成内建模板时按岗位保留权限；管理层只读，技术岗位不自动获得业务审批和流程配置权限。
+    // 生成模板时限制管理层为业务只读和待办管理，排除技术岗的审批实例与流程权限。
     fn retain_position_permissions(id: &str, permissions: &mut Vec<Permission>) {
         match id {
             "role-management" => permissions.retain(|permission| {
@@ -62,7 +64,7 @@ impl BuiltinRoleTemplate {
         }
     }
 
-    // 为岗位模板预览列出上岗前需配置的范围和任务；生成角色不替管理员修改人员配置。
+    // 给出生成岗位后仍需管理员配置的范围、流程或责任；生成本身不写入这些配置。
     fn setup_requirements(id: &str) -> &'static [&'static str] {
         match id {
             "role-sales" => &[
@@ -101,12 +103,8 @@ impl BuiltinRoleTemplate {
         }
     }
 
-    /// 从综合财务模板派生审批、资金、发票三个互相独立的岗位。
-    /// 保留共同读取与附件能力、只开放岗位写操作的模板。
-    ///
-    /// 来源不是综合财务或静态权限错误时拒绝。
-    ///
-    /// `kind` 为明确的财务岗位。
+    /// 从综合财务模板派生指定的审批、资金或开票岗位，保留通用能力和该岗写权限。
+    /// 其他资源仅保留相应读取入口；非综合财务模板或无法解析的派生权限返回错误。
     pub fn finance(&self, kind: FinancePosition) -> Result<Self> {
         if self.id != "role-finance" {
             return Err(Error::ValidationError("财务岗位必须从综合财务模板派生".into()));
@@ -142,7 +140,7 @@ impl BuiltinRoleTemplate {
         })
     }
 
-    // 登记财务岗位在各资源上的实际读入口；冲正和供应商退款不增加独立列表权限。
+    // 将不允许写入的资源通配权限收窄为实际读入口，不为冲正或供应商退款增加列表权限。
     fn read_actions(resource: &str) -> &'static [&'static str] {
         match resource {
             "purchase_invoice_allocation" | "supplier_settlement_difference" => &["list"],
@@ -151,7 +149,7 @@ impl BuiltinRoleTemplate {
         }
     }
 
-    // 为财务岗位模板复用附件、本人后台任务及单据上下文的公共操作资格。
+    // 识别财务细分岗共同保留的撤销审批、附件和后台任务操作资格。
     fn shared_operation(permission: &Permission) -> bool {
         if permission.resource() == "approval_instance" && permission.action() == "cancel" {
             return true;
@@ -162,12 +160,7 @@ impl BuiltinRoleTemplate {
         )
     }
 
-    /// 解析一批模板选择，拒绝空集、重复和未知身份，保持用户选择顺序。
-    /// 仅包含服务端定义的模板。
-    ///
-    /// 不合法选择整批拒绝。
-    ///
-    /// 服务端目录与客户端选择的模板标识。
+    /// 根据服务端目录按请求顺序解析要生成的模板；空列表、重复或未知 ID 整批拒绝。
     pub fn select(catalog: &[Self], ids: &[String]) -> Result<Vec<Self>> {
         if ids.is_empty() {
             return Err(Error::ValidationError("请选择有效的内建岗位".into()));
@@ -199,13 +192,13 @@ pub enum FinancePosition {
 }
 
 impl FinancePosition {
-    // 在付款申请权限分配中，三个财务岗位都保留读取；关闭归财务、付款归出纳。
+    // 为财务分岗保留付款申请的列表和详情，仅财务总监可关闭、出纳可付款。
     fn allows_payment_request(self, action: &str) -> bool {
         matches!(action, "list" | "detail")
             || matches!((self, action), (Self::Director, "close") | (Self::Cashier, "pay"))
     }
 
-    // 输出财务岗位模板的固定身份与职责说明，以及上岗前须由管理员配置的责任。
+    // 提供财务细分岗的固定 ID、展示名称、职责及需另行配置的责任。
     fn metadata(self) -> (&'static str, &'static str, &'static str, &'static [&'static str]) {
         match self {
             Self::Director => (
@@ -232,7 +225,7 @@ impl FinancePosition {
         }
     }
 
-    // 生成财务角色模板时判断当前岗位能写哪类业务，其他财务业务保持只读。
+    // 确定财务细分岗可保留完整权限的资源；其他非共享资源只保留读取。
     fn allows_write(self, resource: &str) -> bool {
         match self {
             Self::Director => matches!(
@@ -272,11 +265,8 @@ pub enum BuiltinRoleState {
 }
 
 impl BuiltinRoleState {
-    /// 将包含软删除记录的角色读取结果映射为生成状态。
-    ///
-    /// 没有记录为 `Missing`，已软删除为 `Deleted`，已停用为 `Disabled`，其余为 `Existing`。只有 `Missing` 允许新建。
-    ///
-    /// `role`：按固定模板身份读取的角色；没有记录时为 `None`。
+    /// 将按固定 ID 读到的角色区分为缺失、软删除、停用或存在，软删除优先于停用。
+    /// 仅缺失的岗位允许生成，已有角色不覆盖也不恢复。
     pub fn from_role(role: Option<&Role>) -> Self {
         match role {
             None => Self::Missing,
@@ -291,7 +281,7 @@ impl BuiltinRoleState {
 mod tests {
     use super::*;
 
-    // 验证：超过目录数量的选择按具体重复或未知身份拒绝。
+    // 验证模板选择拒绝空集，并在选择过多时仍报告具体的重复或未知 ID。
     #[test]
     fn oversized_selection_reports_duplicate_or_unknown_template() {
         let catalog = [BuiltinRoleTemplate::new("role-sales", "销售", "销售岗位", &[]).unwrap()];

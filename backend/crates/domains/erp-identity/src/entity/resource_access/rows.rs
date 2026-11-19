@@ -3,27 +3,24 @@ use std::collections::BTreeSet;
 
 use super::{GrantSource, GrantTarget, ResourceGrant};
 
+/// 记录来源授权的分页同步状态，只保留本次目标集合和待建目标。
 pub(crate) struct GrantRows {
+    // 来源本次发布的完整读取目标，用于判定旧行是否仍应生效。
     targets: BTreeSet<GrantTarget>,
+    // 尚未在任何已处理页中找到对应授权行的目标。
     missing: BTreeSet<GrantTarget>,
+    // 已保存的来源记录版本，刷新时写入每条旧行。
     version: u64,
 }
 impl GrantRows {
-    // 冻结来源目标集合与本次版本。
-    // 只保存当前目标的分页差异状态。
-    //
-    // source 为已验证来源。
+    /// 用已验证的来源冻结目标与版本；扫描历史行前，所有目标均视为待新增。
     pub(crate) fn new(source: &GrantSource) -> Self {
         let targets = source.targets.iter().cloned().collect::<BTreeSet<_>>();
         Self { missing: targets.clone(), targets, version: source.base.version }
     }
 
-    // 更新当前页，所有历史行推进来源版本，移除已存在的待新增目标。
-    // 原地更新状态及来源版本。
-    //
-    // 不返回错误；持久化由仓储执行。
-    //
-    // rows 为当前来源的一页未删除记录。
+    /// 原地刷新当前页的未删除授权行，使仍在目标集合中的行生效，并将所有行推进到本次来源版本。
+    /// 从待新增集合剔除本页已存在的目标；仓储负责持久化。
     pub(crate) fn refresh(&mut self, rows: &mut [ResourceGrant]) {
         for row in rows {
             let target = GrantTarget { resource: row.resource, id: row.resource_id.clone() };
@@ -33,10 +30,7 @@ impl GrantRows {
         }
     }
 
-    // 历史页全部完成后返回仍需创建的目标。
-    // 唯一且有序的新增目标。
-    //
-    // self 为已经处理全部历史页的差异状态。
+    /// 处理完全部历史页后，取出仍需创建授权行的有序唯一目标。
     pub(crate) fn missing(self) -> BTreeSet<GrantTarget> {
         self.missing
     }
@@ -49,7 +43,7 @@ mod tests {
     use super::*;
     use crate::entity::resource_access::{ResourceKind, SourceKey};
 
-    // 验证：不同资源同名 ID 保持独立；移除目标失效，保留目标推进版本，新目标只创建一次。
+    // 验证跨页按资源和 ID 匹配；保留行和失效行都推进版本，仅缺行目标待新增，空目标使旧行失效。
     #[test]
     fn paged_delta_preserves_resource_identity_and_versions() {
         let mut source = GrantSource::new(SourceKey {

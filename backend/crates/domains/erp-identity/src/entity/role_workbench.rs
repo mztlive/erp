@@ -17,12 +17,8 @@ pub enum RoleWorkbench {
     Cashier,
 }
 impl RoleWorkbench {
-    /// 为显式生成的内建角色提供推荐映射。
-    /// 首批岗位的推荐集合；其他角色为空。
-    ///
-    /// 调用方仅在新建角色时持久化，不覆盖现有配置。
-    ///
-    /// `role_id` 为内建角色稳定编号，禁止按展示名称推断。
+    /// 按内建角色稳定 ID 返回推荐工作台，其他角色为空；不使用展示名称推断。
+    /// 仅在显式生成新角色时持久化，不覆盖现有配置。
     pub fn recommended(role_id: &str) -> BTreeSet<Self> {
         match role_id {
             "role-sales" => BTreeSet::from([Self::Sales]),
@@ -32,12 +28,7 @@ impl RoleWorkbench {
         }
     }
 
-    /// 核验岗位核心模块的入口条件。
-    /// 全部核心入口权限满足时返回 true。
-    ///
-    /// 不授予业务范围或任务执行资格。
-    ///
-    /// `permissions` 为当前账号的有效权限。
+    /// 检查账号有效权限是否覆盖该工作台的全部核心入口；不授予数据范围或任务执行资格。
     pub fn accessible(self, permissions: &[Permission]) -> bool {
         let required: &[&str] = match self {
             Self::Sales => &["sales_order:list", "sales_inquiry:list", "work_item:list"],
@@ -49,12 +40,7 @@ impl RoleWorkbench {
                 .is_ok_and(|required| permissions.iter().any(|grant| grant.covers(&required)))
         })
     }
-    /// 从启用角色的显式映射解析可用岗位。
-    /// 去重、稳定排序且满足核心权限的模板。
-    ///
-    /// 没有显式映射时返回空集合。
-    ///
-    /// `roles` 为账号实际绑定的角色；`permissions` 为有效权限。
+    /// 汇总启用绑定角色显式配置且满足核心入口权限的工作台，返回去重并稳定排序的集合。
     pub fn available(roles: &[Role], permissions: &[Permission]) -> BTreeSet<Self> {
         roles
             .iter()
@@ -69,6 +55,7 @@ mod tests {
     use super::super::role::RoleData;
     use super::*;
     use crate::RoleId;
+    // 验证没有有效角色映射或缺少核心权限时都不展示工作台。
     #[test]
     fn mapping_and_permissions_are_both_required() {
         let all = vec![Permission::parse("*:*").unwrap()];
@@ -82,6 +69,7 @@ mod tests {
         role.disabled = true;
         assert!(RoleWorkbench::available(&[role], &all).is_empty());
     }
+    // 验证旧角色不自动绑定工作台，显式配置后仍校验核心权限，并支持去重和清空映射。
     #[test]
     fn legacy_roles_and_explicit_updates_preserve_permission_boundary() {
         let role = Role::new(RoleId::parse("role-sales").unwrap(), RoleData::new("销售")).unwrap();
@@ -112,6 +100,7 @@ mod tests {
         assert!(RoleWorkbench::recommended("role-root").is_empty());
         assert!(RoleWorkbench::recommended("role-sysadmin").is_empty());
     }
+    // 验证反序列化拒绝未登记的工作台编码，相同编码只保留一项。
     #[test]
     fn unknown_templates_are_rejected_and_duplicates_collapsed() {
         assert!(serde_json::from_str::<RoleWorkbench>("\"WB-99\"").is_err());

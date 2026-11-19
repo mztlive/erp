@@ -12,70 +12,69 @@ use super::{audit_event_projection, sort_doc};
 use crate::entity::access_control::paging::PageParams;
 use crate::entity::access_control::{AuditEvent, AuditEventResult};
 
-/// 审计事件列表投影行（列表接口只取必要字段，禁止返回整文档）。
+/// 审计列表的最小投影，不返回事件整文档。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AuditEventRow {
-    /// 实体主键。
+    /// 审计事件的稳定 ID。
     pub id: String,
-    /// 操作者 ID。
+    /// 触发操作的账号 ID。
     pub actor_id: String,
-    /// 操作者名称快照。
+    /// 事件发生时记录的操作者显示名。
     pub actor_label: String,
-    /// 责任角色快照。
+    /// 事件发生时记录的责任角色。
     pub actor_role: String,
-    /// 动作代码。
+    /// 审计目录中的动作代码。
     pub action_type: String,
-    /// 业务对象类型代码。
+    /// 被操作的业务对象类型代码。
     pub object_type: String,
-    /// 业务对象 ID。
+    /// 被操作的业务记录 ID；无对象时为空。
     pub object_id: Option<String>,
-    /// 业务对象安全标题。
+    /// 可安全展示的业务对象标题。
     pub object_label: Option<String>,
-    /// 请求追踪号。
+    /// 关联请求的追踪号，用于串联同一请求的事件。
     pub request_id: Option<String>,
-    /// 最终结果。
+    /// 此次操作的最终结果。
     pub result: AuditEventResult,
-    /// 变更字段名（只记录字段名和「已变更」）。
+    /// 只记录哪些字段发生变化，不保留字段值。
     pub changed_field_names: Vec<String>,
-    /// 来源 IP。
+    /// 记录操作来源的 IP 地址（若有）。
     pub source_ip: Option<String>,
-    /// 创建时间（秒级时间戳，即事件发生时间）。
+    /// 事件发生时间，以 Unix 秒记录。
     pub created_at: u64,
 }
 
-/// 审计事件列表筛选条件。
+/// 审计列表的精确条件、关键词及分页选项。
 #[derive(Debug, Clone)]
 pub struct AuditEventFilter {
-    /// 操作者、动作、对象或追踪号字面量关键词。
+    /// 用字面量关键词匹配操作者、动作、对象或追踪字段。
     pub q: Option<String>,
-    /// 界面动作标签匹配的动作代码（逗号分隔），只作为关键词 OR 条件。
+    /// 逗号分隔的界面动作标签命中代码，仅并入关键词的 OR 条件。
     pub keyword_actions: Option<String>,
-    /// 审计事件稳定身份。
+    /// 按审计事件的稳定 ID 精确筛选。
     pub event_id: Option<String>,
-    /// 链路追踪号或请求号精确筛选。
+    /// 精确匹配链路追踪号或请求号之一。
     pub trace_id: Option<String>,
-    /// 创建时间下界（含，Unix 秒）。
+    /// 事件发生时间下界（含，Unix 秒）。
     pub created_from: Option<u64>,
-    /// 创建时间上界（不含，Unix 秒）。
+    /// 事件发生时间上界（不含，Unix 秒）。
     pub created_before: Option<u64>,
 
-    /// 操作者 ID（忽略大小写字面量模糊匹配）；`None` 表示不筛选。
+    /// 操作者 ID 的不区分大小写字面量匹配；未指定则不限制。
     pub actor_id: Option<String>,
-    /// 动作代码（忽略大小写字面量模糊匹配）；`None` 表示不筛选。
+    /// 动作代码的不区分大小写字面量匹配；未指定则不限制。
     pub action_type: Option<String>,
-    /// 业务对象类型代码；`None` 表示不筛选。
+    /// 精确匹配业务对象类型代码；未指定则不限制。
     pub object_type: Option<String>,
-    /// 业务对象 ID；`None` 表示不筛选。
+    /// 精确匹配业务记录 ID；未指定则不限制。
     pub object_id: Option<String>,
-    /// 最终结果；`None` 表示不筛选。
+    /// 按最终结果精确筛选；未指定则不限制。
     pub result: Option<AuditEventResult>,
-    /// 已验证的分页与排序。
+    /// 上层已校验的分页和排序参数。
     pub paging: PageParams,
 }
 
 impl Default for AuditEventFilter {
-    // 返回首页空筛选（`page: 1`，`page_size: 20`）。
-    // 返回筛选为空、降序的首页过滤条件。
+    // 默认不添加业务筛选，按创建时间倒序读取首页 20 条。
     fn default() -> Self {
         Self {
             q: None,
@@ -95,7 +94,7 @@ impl Default for AuditEventFilter {
 }
 
 impl QueryFilter for AuditEventFilter {
-    // 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    // 将列表条件下推到 MongoDB，并固定排除已删除记录。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "actor_id", self.actor_id.as_deref());
@@ -116,18 +115,14 @@ impl QueryFilter for AuditEventFilter {
     }
 }
 
-// 追加可选精确匹配条件（`None` 时不写入字段）。
-// `filter`：待追加的查询条件文档；`value`：可选精确值；`None` 表示不筛选。
+// 仅在指定值时追加字段的精确匹配条件。
 fn insert_exact_match(filter: &mut Document, field: &str, value: Option<&str>) {
     if let Some(value) = value {
         filter.insert(field, value);
     }
 }
 
-// 追加 `created_at` 时间范围条件（秒级时间戳，越界回落 `i64::MAX`）。
-//
-// `filter`：待追加的查询条件文档；`from`：区间下界（含）；`None` 表示不限制。
-// `before`：区间上界（不含）；`None` 表示不限制。
+// 为事件时间添加可选的半开区间，秒值超出 BSON 整数范围时取 `i64::MAX`。
 fn insert_time_range(filter: &mut Document, from: Option<u64>, before: Option<u64>) {
     let mut time = Document::new();
     if let Some(from) = from {
@@ -141,10 +136,7 @@ fn insert_time_range(filter: &mut Document, from: Option<u64>, before: Option<u6
     }
 }
 
-// 追加关键词全文子句（多字段字面量 OR）与动作标签子句。
-//
-// `filter`：待追加的查询条件文档；`q`：操作者/动作/对象/追踪号字面量关键词；`None` 表示不筛选。
-// `keyword_actions`：界面动作标签匹配的动作代码（逗号分隔）；`None` 表示不限制。
+// 有关键词时追加多字段字面量或动作标签的并集，再与原有结构化筛选求交。
 fn insert_keyword_clauses(filter: &mut Document, q: Option<&str>, keyword_actions: Option<&str>) {
     let Some(q) = q else {
         return;
@@ -173,27 +165,17 @@ fn insert_keyword_clauses(filter: &mut Document, q: Option<&str>, keyword_action
 }
 
 impl Pagination for AuditEventFilter {
-    // 返回页码与单页条数。
+    // 将已校验的页码和页大小交给通用分页逻辑。
     fn page_and_size(&self) -> (u64, u64) {
         (self.paging.page, u64::from(self.paging.page_size))
     }
 }
 
-/// 审计事件集合仓储的域特有查询。
+/// 为追加式审计事件集合提供列表查询，不提供软删除或恢复。
 #[allow(async_fn_in_trait)]
 pub trait AuditEventRepositoryExt {
-    /// 分页检索审计事件（投影查询）。
-    ///
-    /// 只返回 [`AuditEventRow`] 所需的审计字段，不加载整文档；`actor_id` /
-    /// `action_type` 按字面量忽略大小写模糊匹配（复用 `insert_literal_regex_filter`），
-    /// 对象/结果精确匹配覆盖 `idx_audit_events_object_created`。审计事件是
-    /// 追加式留痕，本集合**不提供**软删除/恢复方法。
-    ///
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    ///
-    /// `executor`：数据访问执行器，由 Service 决定是否位于事务中。
+    /// 用调用方执行器读取当前页投影行及同条件总数，不加载完整审计文档。
+    /// 操作者和动作按忽略大小写的字面量匹配；对象和结果精确匹配，使用 `idx_audit_events_object_created` 对应字段。查询、游标读取或计数失败直接返回错误。
     async fn search_audit_events(
         &self,
         filter: &AuditEventFilter,
@@ -202,6 +184,7 @@ pub trait AuditEventRepositoryExt {
 }
 
 impl AuditEventRepositoryExt for Repository<'_, AuditEvent> {
+    // 用同一筛选和执行器分别读取最小字段投影和总数，确保分页不改变计数口径。
     async fn search_audit_events(
         &self,
         filter: &AuditEventFilter,

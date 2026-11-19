@@ -1,4 +1,4 @@
-//! 域 D06 `access_control` 的 用户角色绑定 DTO。
+//! 管理端角色绑定留痕的查询和写入数据。实际角色授权由 Casbin 绑定决定。
 
 use application_core::non_blank;
 use erp_core::common::time::Instant;
@@ -9,37 +9,37 @@ use crate::entity::access_control::{UserRole, UserRoleData, UserRoleRevokeData};
 use crate::entity::rbac::RoleId;
 use crate::{Error, Result};
 
-/// 用户角色绑定响应视图（W19 用户授权；含撤权历史字段，只读展示）。
+/// W19 用户授权页的角色绑定记录，含分配、有效期和撤销历史，仅供展示。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct UserRoleView {
-    /// 实体主键。
+    /// 绑定记录 ID，供按记录撤销时引用。
     pub id: String,
-    /// 用户 ID。
+    /// 绑定记录所属的用户 ID。
     pub user_id: String,
-    /// 角色。
+    /// 留痕记录中的角色 ID。
     pub role_id: String,
-    /// 生效时间（秒级时间戳）。
+    /// 记录中的生效时间，以 Unix 秒表示。
     pub effective_from: Instant,
-    /// 到期时间（秒级时间戳）。
+    /// 记录中的到期时间，以 Unix 秒表示；空值表示未设到期时间。
     pub effective_to: Option<Instant>,
-    /// 分配人。
+    /// 登记分配的账号或系统身份。
     pub assigned_by: String,
-    /// 撤权时间（秒级时间戳）。
+    /// 记录被撤销的时间，以 Unix 秒表示；未撤销时为空。
     pub revoked_at: Option<Instant>,
-    /// 撤权执行人。
+    /// 执行记录撤销的账号或系统身份（若有）。
     pub revoked_by: Option<String>,
-    /// 撤权原因代码。
+    /// 撤销该记录时保存的结构化原因代码（若有）。
     pub revoke_reason_code: Option<String>,
-    /// 撤权原因说明。
+    /// 撤销该记录时保存的补充说明（若有）。
     pub revoke_reason_text: Option<String>,
-    /// 乐观锁版本。
+    /// 绑定记录当前的乐观锁版本。
     pub version: u64,
-    /// 创建时间（秒级时间戳）。
+    /// 绑定记录创建时间，以 Unix 秒表示。
     pub created_at: u64,
 }
 
 impl From<UserRole> for UserRoleView {
-    // 将用户角色绑定映射为管理响应，保留授予、有效期和撤权事实。
+    // 将留痕实体转为响应，保留分配、有效期和撤销信息。
     fn from(binding: UserRole) -> Self {
         Self {
             id: binding.base.id,
@@ -58,38 +58,33 @@ impl From<UserRole> for UserRoleView {
     }
 }
 
-/// 用户角色绑定列表查询参数（按用户展示，`user_id` 必填）。
+/// 按用户查询角色绑定留痕，包含已撤销记录。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UserRoleListParams {
-    /// 用户 ID。
+    /// 必填用户 ID，须含非空白内容，按原值匹配。
     #[validate(custom(function = "non_blank", message = "用户ID不能为空"))]
     pub user_id: String,
 }
 
-/// 分配用户角色请求（`effective_from` 缺省为当前时刻；分配人由服务端注入）。
+/// 登记角色分配留痕的请求。服务端填入分配人，Casbin 绑定保持原状。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct AssignUserRoleRequest {
-    /// 用户 ID。
+    /// 要登记绑定的用户 ID，须含非空白内容。
     #[validate(custom(function = "non_blank", message = "用户ID不能为空"))]
     pub user_id: String,
-    /// 角色（`RoleId` 解析校验）。
+    /// 要登记的角色 ID，由 `RoleId` 解析校验。
     pub role_id: RoleId,
-    /// 生效时间（秒级时间戳）；缺省为当前时刻。
+    /// 生效时间，以正数 Unix 秒表示；默认当前时刻。
     #[validate(range(min = 1, message = "生效时间必须大于 0"))]
     pub effective_from: Option<u64>,
-    /// 到期时间（秒级时间戳）；必须晚于生效时间。
+    /// 可选到期时间，以正数 Unix 秒表示；实体要求晚于生效时间。
     #[validate(range(min = 1, message = "到期时间必须大于 0"))]
     pub effective_to: Option<u64>,
 }
 
 impl AssignUserRoleRequest {
-    /// 转换为实体创建数据。
-    ///
-    /// 未提供生效时间时使用当前时刻。
-    ///
-    /// 输入无效或时间戳超出可表示范围时返回校验错误。
-    ///
-    /// `assigned_by`：分配人（账号或系统身份）。
+    /// 校验请求并解析秒级时间戳，生效时间默认取当前时刻；`assigned_by` 为分配账号或系统身份。
+    /// 请求不合法或时间戳超出表示范围时返回校验错误。到期时间与生效时间的顺序由实体校验。
     pub fn into_data(self, assigned_by: &str) -> Result<UserRoleData> {
         self.validate()?;
         Ok(UserRoleData {
@@ -102,20 +97,20 @@ impl AssignUserRoleRequest {
     }
 }
 
-/// 撤权命令（当前绑定版本由后端在事务内读取；撤权必须记录结构化原因）。
+/// 撤销绑定留痕的请求，须记录结构化原因；当前版本由服务端在事务内读取。
+/// 撤销后仍保留该记录，Casbin 实际绑定保持原状。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct RevokeUserRoleRequest {
-    /// 撤权原因代码（结构化，必填）。
+    /// 必填的结构化撤销原因代码，须含非空白内容，实体裁剪后限 64 个字符。
     #[validate(custom(function = "non_blank", message = "撤权原因代码不能为空"))]
     pub revoke_reason_code: String,
-    /// 撤权原因说明。
+    /// 可选的撤销原因说明，最多 64 个字符。
     #[validate(length(max = 64, message = "撤权原因过长"))]
     pub revoke_reason_text: Option<String>,
 }
 
 impl RevokeUserRoleRequest {
-    /// 转换为实体撤权数据。
-    /// 返回实体层撤权数据；没有原因说明时不写入说明。
+    /// 将原因代码和可选说明转为实体的绑定撤销数据。
     pub fn into_revoke_data(self) -> UserRoleRevokeData {
         let data = UserRoleRevokeData::new(self.revoke_reason_code);
         match self.revoke_reason_text {
@@ -125,7 +120,7 @@ impl RevokeUserRoleRequest {
     }
 }
 
-// 角色绑定请求进入实体前，将时间戳解析为有效时间点；符号溢出或超出日历表示范围时拒绝。
+// 登记绑定前将 Unix 秒转为时间点；超出有符号整数或日历的可表示范围时返回校验错误。
 fn parse_time(seconds: u64) -> Result<Instant> {
     let seconds =
         i64::try_from(seconds).map_err(|_| Error::ValidationError("时间戳超出可表示范围".into()))?;
@@ -136,6 +131,7 @@ fn parse_time(seconds: u64) -> Result<Instant> {
 mod tests {
     use super::*;
     use crate::RoleId;
+    // 验证时间转换拒绝零值和越界值，保留有效秒值，并默认当前时刻生效。
     #[test]
     fn role_assignment_rejects_invalid_times_and_preserves_seconds() {
         let request = |from, to| AssignUserRoleRequest {

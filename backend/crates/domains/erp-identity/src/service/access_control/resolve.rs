@@ -18,29 +18,31 @@ use crate::repository::OrganizationRepository;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
 use crate::{AccessControlExt, Error, Permission, QualifiedPermissions, Result};
 
-/// 已解析的数据范围、组织事实和依赖版本，仅在服务端使用。
+/// 服务端判定数据访问或生成检查报告时使用的一次范围解析结果。
 pub(crate) struct AuthorizedDataScope {
+    /// 本动作的有效范围条款和个人上限，供对象判定或查询使用。
     pub scope: ResolvedScope,
+    /// 按动作需求加载的组织事实，供同次授权判断组织关系。
     pub organizations: OrganizationState,
+    /// 本次角色资格取证使用的策略修订号。
     pub policy_version: u64,
+    /// 绑定本次授权依赖的稳定摘要，供复验和跨页比较使用。
     pub scope_version: String,
+    /// 解析组织关系和范围时采用的授权时点。
     pub as_of: Instant,
 }
 
-/// 身份域应用解析器，不持有其他业务域实体或数据库集合。
+/// 统一授权完成资格取证后使用的范围解析器，只访问身份域数据。
 #[derive(Clone)]
 pub(crate) struct DataScopeService {
+    // 解析范围时读取组织关系和人员配置的身份数据库。
     db: Database,
 }
 
 impl DataScopeService {
-    // 使用统一授权已取得的完整资格，只读取本次实际需要的范围设施。
-    // 仅由本动作合格角色产生的范围与依赖版本。
-    //
-    // 来源无效、完整资格不足或范围读取失败时返回错误。
-    //
-    // context 为目标动作上下文，source 为固定范围来源；required、qualified 为本次完整资格。
-    // executor 沿用调用方读取阶段。
+    /// 统一授权取证后，按固定范围来源解析目标动作的范围和版本。
+    /// 只使用各自具备全部必需权限的角色，沿用调用方的读取阶段和授权时点加载所需事实。
+    /// 范围来源无效、没有合格角色或读取失败时返回错误。
     pub(crate) async fn qualified(
         &self,
         context: &AccessContext,
@@ -86,13 +88,12 @@ impl DataScopeService {
         })
     }
 
-    // 绑定身份数据库；完整资格由统一授权服务传入。
-    // 返回资源动作范围解析器。
+    /// 统一授权需要解析数据范围时，用身份数据库构造解析器；完整资格在解析时传入。
     pub(crate) fn new(db: Database) -> Self {
         Self { db }
     }
 
-    // 按动作的组织依赖读取事实：管理或工作项范围可能需要全员关系，普通对象只加载操作人的组织目录，无组织规则不读库。
+    // 解析范围前按动作加载组织事实：管理或工作项可能需要全员关系，普通对象按需读取操作人的组织目录；无组织依赖时直接返回空状态。
     async fn scope_organizations(
         &self,
         actor_id: &str,
@@ -108,7 +109,8 @@ impl DataScopeService {
         }
     }
 
-    // 为已合格角色读取当前资源动作的人员规则或回退到登记的本人基础。角色证据不拼接，所有组织关系按同一授权时点解释。
+    // 取得同角色完整资格后，按固定来源动作和原授权时点解析范围。
+    // 需要人员范围时读取已保存的配置；未配置时按登记采用本人基础或返回拒绝范围。
     async fn resolved(
         &self,
         user: &str,
@@ -136,10 +138,8 @@ impl DataScopeService {
     }
 }
 
-// 身份、目标和来源、账号与策略版本，以及经本动作证明的角色、组织和范围。
-// v2 稳定编码摘要；保留跨页版本比较合同，旧摘要触发重新分页。
-//
-// user、target、source 绑定身份与动作；versions、roles、state、scope 为本次授权事实。
+// 范围解析完成后生成 v2 稳定摘要，绑定身份、目标与来源动作、账号和策略版本、合格角色、组织及范围。
+// 跨页读取时比较摘要，版本不符时重新分页。
 fn scope_version(
     user: &str,
     target: (&str, &str),
@@ -166,7 +166,8 @@ fn scope_version(
     hash.finish()
 }
 
-// 已有账号及启用角色满足完整动作后应用固定公司范围或人员配置。公司范围不再被旧人员配置缩小。
+// 解析已取证账号的范围时，先确认至少有一个有效的合格角色。
+// 岗位共享直接采用固定公司范围，其他动作再判断超管或人员范围。
 async fn resolve_configured_scope(
     spec: &scope_spec::ScopeSpec,
     qualified_roles: &[Role],
@@ -184,7 +185,7 @@ async fn resolve_configured_scope(
     resolve_scope(qualified_roles, person_scope).await
 }
 
-// 先识别符合系统身份的超管范围；其他资格才读取人员配置，失败须返回原错误而非退回公司范围。
+// 解析非共享动作的范围时，有效内建超管直接取得公司范围；其他角色读取人员配置，读取失败时原样返回错误。
 async fn resolve_scope(
     roles: &[Role],
     person_scope: impl Future<Output = Result<ResolvedScope>>,
@@ -204,7 +205,7 @@ mod tests {
     use crate::access_control::ScopedObject;
     use crate::entity::role::{ROOT_ROLE_ID, RoleData};
 
-    // 验证：岗位共享不读取旧的撤权、本人或部门配置，且不会变成销售授权。
+    // 验证岗位共享列表跳过旧人员限制，也无需主属部门；销售单列表仍保留人员范围的拒绝和读取错误。
     #[tokio::test]
     async fn shared_scope_ignores_person_limits_but_sales_keeps_them() {
         let roles = [Role::new(RoleId::parse("role-buyer").unwrap(), RoleData::new("采购")).unwrap()];
@@ -247,7 +248,7 @@ mod tests {
         assert!(matches!(failed, Err(Error::Forbidden(_))));
     }
 
-    // 验证：共享政策不补授动作资格，失效角色和空资格均拒绝。
+    // 验证岗位共享仍要求有效的动作角色，资格为空或角色已停用、删除时均拒绝。
     #[tokio::test]
     async fn shared_scope_requires_current_qualified_role() {
         let mut disabled = Role::new(RoleId::parse("role-buyer").unwrap(), RoleData::new("采购")).unwrap();
@@ -266,7 +267,7 @@ mod tests {
         }
     }
 
-    // 验证：已有超管不读人员配置；缺配置、旧撤权或读取错误均不改变固定范围。
+    // 验证有效内建超管跳过人员配置，缺省、旧撤权或读取故障均不影响其固定公司范围。
     #[tokio::test]
     async fn root_scope_does_not_poll_person_configuration() {
         let root =
@@ -281,7 +282,7 @@ mod tests {
         assert!(scope.user_limit.is_none());
     }
 
-    // 验证：普通账号即使名为 admin 也保留本人范围、撤权结果和读取错误。
+    // 验证普通角色即使与超管同名，也按人员配置处理 admin 的本人范围、撤权和读取错误。
     #[tokio::test]
     async fn ordinary_role_keeps_person_scope_and_errors() {
         let roles = [Role::new(RoleId::parse("role-custom").unwrap(), RoleData::new("超级管理员")).unwrap()];
@@ -300,7 +301,7 @@ mod tests {
         assert!(matches!(failed, Err(Error::Forbidden(message)) if message == "范围读取失败"));
     }
 
-    // 验证：内建角色失效后立即回到人员范围，不保留超管公司授权。
+    // 验证内建超管停用或删除后，解析采用人员范围的拒绝结果。
     #[tokio::test]
     async fn disabled_or_deleted_root_does_not_override_person_scope() {
         let mut root =
@@ -318,7 +319,7 @@ mod tests {
         assert_eq!(scope, PersonDataScope::denied());
     }
 
-    // 验证：共用公共事实仍须分别绑定每个来源和目标，所有授权版本变化均使游标失效。
+    // 固定范围摘要样例，并验证身份、目标与来源动作、授权版本或有效范围变化会让旧游标失效。
     #[test]
     fn scope_versions_keep_each_source_and_all_authorization_versions() {
         let role = Role::new(RoleId::parse("role-finance").unwrap(), RoleData::new("财务")).unwrap();
@@ -360,7 +361,7 @@ mod tests {
         assert_ne!(version, scope_version("finance", target, source, (2, 3), &roles, &state, &denied));
     }
 
-    // 验证：角色和条款顺序不改变范围版本；个人上限与条款字段变化仍使其失效。
+    // 验证角色和范围条款重排时摘要保持稳定，设置个人上限或改变上限维度时摘要随之变化。
     #[test]
     fn scope_versions_ignore_role_order_but_bind_limits_and_dimensions() {
         let roles = vec![

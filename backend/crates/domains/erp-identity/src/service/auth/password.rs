@@ -11,18 +11,19 @@ static PASSWORD_WORK_SLOTS: Semaphore = Semaphore::const_new(PASSWORD_WORK_LIMIT
 pub(crate) enum PasswordCheck {
     Mismatch,
     Current,
-    Upgraded(Secret),
+    Upgraded(
+        /// 旧密码通过验证后生成的 Argon2 凭证，由调用方按用例决定是否写入。
+        Secret
+    ),
 }
 
 impl PasswordCheck {
-    /// 当密码匹配当前或已迁移凭证时返回 `true`。
-    /// 当前密码有效时返回 `true`。
+    /// 验密后判断能否继续：当前凭证匹配和旧凭证匹配均为成功。
     pub fn is_match(&self) -> bool {
         !matches!(self, Self::Mismatch)
     }
 
-    /// 消费结果并取出由 legacy MD5 迁移得到的新凭证。
-    /// legacy 凭证匹配时返回升级后的凭证，否则返回 `None`。
+    /// 登录写回前取出匹配旧 MD5 密码后生成的新凭证，其他结果不需迁移。
     pub fn into_upgraded_secret(self) -> Option<Secret> {
         match self {
             Self::Upgraded(secret) => Some(secret),
@@ -31,17 +32,9 @@ impl PasswordCheck {
     }
 }
 
-/// 在有界阻塞任务中校验密码，并按需生成升级后的 Argon2 凭证。
-///
-/// `secret` 与 `password` 均由调用方转移所有权，保证阻塞任务不会借用
-/// async 栈上的敏感数据。信号量许可随阻塞任务生命周期持有，即使请求取消，
-/// 仍不会突破并发上限。
-///
-/// 返回密码匹配状态及可选升级凭证。
-///
-/// 当阻塞任务或密码处理失败时返回错误。
-///
-/// `secret`：已加载凭证；不可认证或不存在时传入 `None`。
+/// 登录或修改密码时在有界阻塞任务中验密，旧 MD5 匹配时生成 Argon2 凭证。
+/// 账号不存在或不可认证时传入 `None` 做占位验证；任务或密码处理失败返回错误。
+/// 任务拥有凭证、密码及信号量许可，不借用异步栈；请求取消也不会提前释放许可。
 pub async fn verify_password(secret: Option<Secret>, password: String) -> Result<PasswordCheck> {
     run_password_work(
         move || verify_password_sync(secret, password),
@@ -50,26 +43,14 @@ pub async fn verify_password(secret: Option<Secret>, password: String) -> Result
     .await
 }
 
-/// 在有界阻塞任务中为账号生成 Argon2 凭证。
-/// 返回已生成 Argon2 哈希的凭证。
-///
-/// 当密码或阻塞任务处理失败时返回错误。
-///
-/// `account`：已规范化登录账号。
+/// 开通或改密时为规范化登录账号生成 Argon2 凭证，避免在异步线程执行哈希。
+/// 密码校验或阻塞任务失败时不返回凭证。
 pub async fn hash_secret(account: LoginAccount, password: String) -> Result<Secret> {
     run_hashing(move || Secret::new(account, password)).await
 }
 
-/// 在共享有界阻塞边界执行一项领域密码哈希工作。
-///
-/// 调用方负责在闭包中保留所属领域的不变式；该函数只负责 Argon2 的资源
-/// 隔离、并发上限与领域错误传播。
-///
-/// 返回同步领域工作生成的值。
-///
-/// 当领域校验或阻塞任务处理失败时返回错误。
-///
-/// `work`：拥有全部输入且可能执行密码哈希的同步领域工作。
+/// 领域操作需要计算密码哈希时，将拥有全部输入的同步闭包交给共享限流的阻塞线程池。
+/// 领域不变式仍由闭包保证；返回其结果，保留领域错误并报告阻塞任务失败。
 pub async fn run_hashing<T, Work>(work: Work) -> Result<T>
 where
     T: Send + 'static,
@@ -78,8 +59,7 @@ where
     run_password_work(work, Error::from).await
 }
 
-// 在线程池执行密码哈希或验证时，将信号量许可交给实际的阻塞任务。
-// 即使调用请求已取消，许可仍由该工作持有，直到计算结束。
+// 调度密码工作前取得许可，由阻塞任务持有至计算结束，不随调用请求取消而释放。
 async fn run_password_work<T, Work, MapError>(work: Work, map_error: MapError) -> Result<T>
 where
     T: Send + 'static,
@@ -96,7 +76,7 @@ where
     result.map_err(map_error)
 }
 
-// 执行单次同步密码验证。只有旧格式凭证匹配时才派生替换用的 Argon2 哈希。
+// 在阻塞线程上完成验密；无凭证时做占位计算，只有旧格式密码匹配才生成 Argon2 哈希。
 fn verify_password_sync(secret: Option<Secret>, password: String) -> erp_core::Result<PasswordCheck> {
     let Some(mut secret) = secret else {
         Secret::verify_password_or_dummy(None, password.as_str());
@@ -120,6 +100,7 @@ mod tests {
     use crate::entity::{LoginAccount, Secret};
     use crate::error::Error;
 
+    // 验证密码计算在不同于异步调用方的线程执行。
     #[tokio::test]
     async fn password_work_should_run_off_the_async_worker() {
         let async_thread = std::thread::current().id();
@@ -128,6 +109,7 @@ mod tests {
         assert_ne!(async_thread, blocking_thread);
     }
 
+    // 验证不合规的密码在阻塞哈希后仍以领域校验错误返回。
     #[tokio::test]
     async fn password_validation_should_keep_domain_error_semantics() {
         let error = hash_secret(LoginAccount::new("admin01").unwrap(), String::new()).await.unwrap_err();
@@ -135,6 +117,7 @@ mod tests {
         assert!(matches!(error, Error::Logic(_)));
     }
 
+    // 验证当前哈希格式接受正确密码并拒绝错误密码。
     #[tokio::test]
     async fn modern_password_should_accept_match_and_reject_mismatch() {
         let secret =
@@ -147,6 +130,7 @@ mod tests {
         assert!(matches!(mismatched, PasswordCheck::Mismatch));
     }
 
+    // 验证无凭证的请求经占位校验边界后仍返回不匹配。
     #[tokio::test]
     async fn missing_secret_should_run_dummy_work_and_fail_closed() {
         let result = verify_password(None, "password123".to_string()).await.unwrap();
@@ -154,6 +138,7 @@ mod tests {
         assert!(matches!(result, PasswordCheck::Mismatch));
     }
 
+    // 验证旧 MD5 仅在密码匹配时迁移，且新凭证可按当前格式再次验证。
     #[tokio::test]
     async fn matching_legacy_password_should_return_upgraded_secret() {
         let secret: Secret = serde_json::from_value(serde_json::json!({

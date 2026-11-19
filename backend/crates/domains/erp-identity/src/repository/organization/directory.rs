@@ -17,12 +17,7 @@ use crate::repository::person_directory_query::DIRECTORY_LIMIT;
 use crate::{Error, Result};
 
 impl OrganizationRepository<'_> {
-    /// 只读取一个账号在授权时点的有效主属关系。
-    /// 返回至多两条未删除关系；两条已足以证明主属关系冲突，不读取其他组织集合。
-    ///
-    /// 数据库查询或成员事实反序列化失败时返回仓储错误。
-    ///
-    /// `user_id` 为明确账号；`at` 与调用方授权时点一致；沿用调用方执行器。
+    /// 在原执行器读取指定账号于授权时点的未删除主属关系，最多取两条以识别冲突，不查其他组织集合；数据库或反序列化错误直接返回。
     pub async fn primary_memberships(
         &self,
         user_id: &str,
@@ -41,12 +36,7 @@ impl OrganizationRepository<'_> {
         .await
     }
 
-    /// 读取账号当前主属关系及最近一条未来生效关系。
-    /// 至多两条当前关系及一条最近未来关系，用于完整性和到期边界判断。
-    ///
-    /// 查询或反序列化失败时返回仓储错误。
-    ///
-    /// user_id 为明确账号，at 为解释时点，executor 为调用方原执行器。
+    /// 使用同一执行器读取至多两条当前主属关系及最早生效的一条未来关系，供判断关系冲突和授权到期边界；查询或反序列化失败直接返回。
     pub async fn primary_membership_context(
         &self,
         user_id: &str,
@@ -66,22 +56,12 @@ impl OrganizationRepository<'_> {
         Ok(memberships)
     }
 
-    // 读取有界组织树，供路径启用检查使用。
-    // 当前未删除组织单元，不读取成员或管理关系。
-    //
-    // 超过组织上限或查询失败时拒绝。
-    //
-    // executor 为调用方执行器。
+    /// 用调用方执行器读取有界的未删除组织单元，供组织路径启用检查；不读成员或管理关系，超限或查询失败时拒绝。
     pub(crate) async fn units(&self, executor: &mut dyn Executor) -> Result<Vec<OrgUnit>> {
         bounded::<OrgUnit>(self.db, ORG_UNITS, doc! {}, executor).await
     }
 
-    // 读取目录授权所需的组织树和操作人当前关系。
-    // 有界组织树及操作人关系；不预加载其他人员或历史关系。
-    //
-    // 任一索引超过 10000 项或读取失败时整体拒绝。
-    //
-    // `actor_id` 为操作人，`at` 为同一授权时点，`executor` 为调用方事务。
+    /// 在目录用例事务内读取组织版本、有界组织树和操作人的当前主属关系，不预加载其他人员或历史关系；任一索引超过 10000 项或读取失败时整体拒绝。
     pub(crate) async fn directory_state(
         &self,
         actor_id: &str,
@@ -96,12 +76,7 @@ impl OrganizationRepository<'_> {
         })
     }
 
-    // 按账号或明确组织集合读取当前主属关系。
-    // 最多 10000 条当前关系，稳定排序；空身份集合不查库。
-    //
-    // 无限定、输入或结果超限、数据库失败均拒绝，不返回截断结果。
-    //
-    // `ids` 与 `orgs` 至少提供一个，均与数据库条件求交；`at` 与授权时点一致。
+    /// 在同一授权时点读取至多 10000 条当前主属关系，按 ID 排序。账号与组织至少指定一项，同时指定时取交集；空输入不查库，无限制、超限或数据库失败均不返回部分结果。
     pub(crate) async fn directory_memberships(
         &self,
         ids: Option<&[String]>,
@@ -130,7 +105,7 @@ impl OrganizationRepository<'_> {
     }
 }
 
-// 构造授权时点的成员过滤条件，保持开始包含、结束不包含的半开有效期语义。
+// 生成成员在授权时点的有效期条件，起点含、终点不含，空终点表示未设到期日。
 fn current_filter(at: Instant) -> Document {
     doc! {
         "valid_from": { "$lte": at.unix_secs() },
@@ -138,7 +113,7 @@ fn current_filter(at: Instant) -> Document {
     }
 }
 
-// 对有界组织查询最多读取上限加一条以发现溢出；超限拒绝整次读取，不将截断的组织事实当成完整结果。
+// 按 ID 排序读取未删除的组织事实，多查一条检测溢出，超限时拒绝而不截断。
 async fn bounded<T: DeserializeOwned + Send + Sync>(
     db: &Database,
     name: &str,
@@ -156,12 +131,7 @@ async fn bounded<T: DeserializeOwned + Send + Sync>(
 }
 
 impl OrganizationRepository<'_> {
-    /// 批量读取明确账号当前主属组织的可读名称。
-    /// 返回账号与有效组织名称；无关系或组织已停用时不补造名称。
-    ///
-    /// 查询超限、主属关系冲突或数据库错误时拒绝。
-    ///
-    /// `ids` 为调用方已授权展示的账号，`at` 为统一查询时点，沿用 `executor`。
+    /// 沿用调用方执行器及统一时点，为已获展示授权的账号批量查当前主属组织名称。无关系或组织停用时省略名称；超限、主属冲突或数据库错误时拒绝。
     pub async fn primary_org_names(
         &self,
         ids: &[String],
@@ -186,7 +156,7 @@ impl OrganizationRepository<'_> {
     }
 }
 
-// 给账号展示补齐唯一有效主属组织的名称；名称未查到时保留未知，不推测部门。
+// 只为主属关系唯一且关联组织启用、未删除的账号补齐组织名，不推测缺失名称。
 fn primary_names(
     ids: &[String],
     memberships: &[OrgMembership],
@@ -214,6 +184,7 @@ mod tests {
     use super::*;
     use crate::entity::organization::{OrgUnitKind, OrgValidity};
 
+    // 构造已启用的采购部门及一条具有明确起止时点的成员关系。
     fn fixture() -> (OrgMembership, OrgUnit) {
         let mut unit = OrgUnit {
             base: BaseModel::fake(),
@@ -240,6 +211,7 @@ mod tests {
         (membership, unit)
     }
 
+    // 验证仅当前有效成员且部门启用时才返回名称，区间终点和未知账号均不补名。
     #[test]
     fn names_require_current_membership_and_enabled_unit() {
         let (membership, mut unit) = fixture();
@@ -259,6 +231,7 @@ mod tests {
         assert!(primary_names(&ids, &[membership], &[unit], Instant::from_unix_secs(15)).unwrap().is_empty());
     }
 
+    // 验证当前主属关系重复时整次报错，不任择一个部门展示。
     #[test]
     fn conflicting_memberships_do_not_choose_an_arbitrary_department() {
         let (membership, unit) = fixture();

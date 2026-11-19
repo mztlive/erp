@@ -4,6 +4,7 @@ use erp_permissions::{approval_instance, purchase_order, sales_order};
 use super::*;
 use crate::entity::resource_access::SourceKey;
 
+// 构造带审批实例关系和业务来源的待办任务，供裁决校验读取。
 fn task(kind: &str, resource: &str) -> ObjectFacts {
     let mut task = object("approval_instance", "task", "user");
     task.subject_type = FactValue::Known(kind.into());
@@ -28,6 +29,7 @@ fn task(kind: &str, resource: &str) -> ObjectFacts {
     task
 }
 
+// 装配审批任务事实和默认具备实例读取、裁决权限的审批角色。
 fn setup(task: ObjectFacts) -> (AuthorizationService, Arc<Identity>, Arc<Facts>) {
     let identity = Arc::new(Identity::default());
     identity.state.lock().unwrap().grants =
@@ -39,6 +41,7 @@ fn setup(task: ObjectFacts) -> (AuthorizationService, Arc<Identity>, Arc<Facts>)
     (builder.build().unwrap(), identity, facts)
 }
 
+// 生成销售单或采购单在指定审批实例中授予当前接收人的来源键。
 fn key(resource: ResourceKind, instance: &str) -> SourceKey {
     SourceKey {
         rule: match resource {
@@ -52,6 +55,7 @@ fn key(resource: ResourceKind, instance: &str) -> SourceKey {
     }
 }
 
+// 在快照中提交固定任务和版本，触发真实审批裁决授权。
 async fn decide(service: &AuthorizationService) -> Result<()> {
     service
         .require(
@@ -63,6 +67,7 @@ async fn decide(service: &AuthorizationService) -> Result<()> {
         .await
 }
 
+// 裁决沿用合格审批角色对来源的范围，不额外要求来源菜单权限。
 #[tokio::test]
 async fn decision_uses_approver_role_scope_without_requiring_source_menu_permission() {
     for (kind, resource, permission) in [
@@ -81,6 +86,7 @@ async fn decision_uses_approver_role_scope_without_requiring_source_menu_permiss
     }
 }
 
+// 只有当前实例、当前接收人和匹配规则下的真实目标授权才能补足来源范围。
 #[tokio::test]
 async fn only_current_instance_recipient_rule_and_real_target_grant_can_supplement_scope() {
     for (kind, resource, target_kind) in [
@@ -121,6 +127,7 @@ async fn only_current_instance_recipient_rule_and_real_target_grant_can_suppleme
     }
 }
 
+// 来源错配、实例缺失、资格分散或任务改派时均不得裁决。
 #[tokio::test]
 async fn wrong_source_missing_instance_split_roles_and_reassignment_fail_closed() {
     let (service, identity, facts) = setup(task("sales_order", "sales_order"));

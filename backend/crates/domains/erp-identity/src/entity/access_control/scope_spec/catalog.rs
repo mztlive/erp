@@ -446,6 +446,7 @@ pub(super) static FIXED_ACTIONS: LazyLock<Vec<FixedAction>> = LazyLock::new(|| {
 
 mod functions;
 
+// 为固定权限登记无范围动作类别，供入口查找与范围配置拒绝使用。
 fn fixed(permission: &crate::Permission, kind: ActionKind) -> FixedAction {
     FixedAction { permission: permission.clone(), kind }
 }

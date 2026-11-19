@@ -17,90 +17,76 @@ const ASSIGNED_BY_MAX_LEN: usize = 128;
 /// 撤权原因代码最大长度。
 const REASON_CODE_MAX_LEN: usize = 64;
 
-/// 用户角色绑定创建数据。
+/// 创建用户角色绑定时使用的授权对象、有效期和分配来源。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UserRoleData {
-    /// 用户 ID。
+    /// 接收角色分配的用户账号 ID。
     pub user_id: String,
-    /// 角色（`entities::rbac::RoleId`，带解析校验）。
+    /// 本次分配的角色 ID，沿用 `RoleId` 的解析校验。
     pub role_id: RoleId,
-    /// 生效时间。
+    /// 绑定计划开始生效的时刻。
     pub effective_from: Instant,
-    /// 到期时间；必须晚于 `effective_from`。
+    /// 绑定计划到期的时刻；缺省表示无预设到期时间，有值时须晚于生效时间。
     pub effective_to: Option<Instant>,
-    /// 分配人（账号或系统身份）。
+    /// 发起角色分配的账号或系统身份标识。
     pub assigned_by: String,
 }
 
-/// 撤权数据。
+/// 撤销用户角色绑定时提交的审计原因。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UserRoleRevokeData {
-    /// 撤权原因代码（结构化，必填；W19 变更命令必须携带 reasonCode）。
+    /// W19 撤权命令必填的结构化原因代码（`reasonCode`）。
     pub revoke_reason_code: String,
-    /// 撤权原因说明。
+    /// 用于补充撤权背景的可选说明，纯空白视为缺省。
     pub revoke_reason_text: Option<String>,
 }
 
 impl UserRoleRevokeData {
-    /// 由必填撤权原因代码构造撤权数据。
-    /// 返回说明为空的撤权数据。
-    ///
-    /// `revoke_reason_code`：撤权原因代码。
+    /// 用结构化原因代码组装待校验的撤权数据，默认省略说明。
     pub fn new(revoke_reason_code: impl Into<String>) -> Self {
         Self { revoke_reason_code: revoke_reason_code.into(), revoke_reason_text: None }
     }
 
-    /// 设置撤权原因说明。
-    /// 返回更新后的撤权数据。
-    ///
-    /// `revoke_reason_text`：撤权原因说明。
+    /// 在撤权数据中附上补充说明，交由执行撤权时规范化。
     pub fn with_revoke_reason_text(mut self, revoke_reason_text: impl Into<String>) -> Self {
         self.revoke_reason_text = Some(revoke_reason_text.into());
         self
     }
 }
 
-/// 用户角色绑定实体（数据模型 §5.1）。
+/// 用户角色的分配与撤销留痕（数据模型 §5.1）；运行时角色资格由 Casbin 规则提供。
 ///
-/// 已有记录按当前、未来、已过期分开只读展示（W19 §5.1）；角色 ID 使用既有
-/// `entities::rbac::RoleId` 解析校验，不重定义。同一用户同一角色同时仅一条
-/// 有效绑定（跨行不变量，P3 事务 + P2 唯一索引）。
+/// 管理端按有效时段区分当前、待生效和已过期的记录供只读展示（W19 §5.1），并保留撤权历史。
+/// 事务写入时，部分唯一索引保证同一用户和角色最多只有一条未撤权记录。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct UserRole {
+    /// 扁平存储的绑定主键、乐观锁版本与时间戳。
     #[serde(flatten)]
     pub base: BaseModel,
-    /// 用户 ID。
+    /// 接受角色分配的用户账号 ID，供查询绑定历史。
     pub user_id: String,
-    /// 角色。
+    /// 本条记录关联的已校验角色 ID。
     pub role_id: RoleId,
-    /// 生效时间。
+    /// 绑定的起始时刻，用于区分已生效和待生效的分配。
     pub effective_from: Instant,
-    /// 到期时间。
+    /// 绑定的计划到期时刻；缺省表示无预设到期时间。
     pub effective_to: Option<Instant>,
-    /// 分配人。
+    /// 角色分配时留存的操作者账号或系统身份标识。
     pub assigned_by: String,
-    /// 撤权时间。
+    /// 实际执行撤权的时刻；有值即标记该绑定已撤销。
     pub revoked_at: Option<Instant>,
-    /// 撤权执行人。
+    /// 执行撤权的身份标识，供历史追溯。
     pub revoked_by: Option<String>,
-    /// 撤权原因代码。
+    /// 执行撤权时保存的结构化原因代码，未撤权时缺省。
     pub revoke_reason_code: Option<String>,
-    /// 撤权原因说明。
+    /// 执行撤权时保存的可选补充说明。
     pub revoke_reason_text: Option<String>,
 }
 
 impl UserRole {
-    /// 创建用户角色绑定。
-    ///
-    /// 完成 user_id/assigned_by 的校验与规范化（trim、非空、长度上限），
-    /// `role_id` 复用 `RoleId::parse` 校验；`effective_to` 必须晚于
-    /// `effective_from`。
-    ///
-    /// 返回新建的绑定（未撤权）。
-    ///
-    /// 当用户 ID/分配人为空或超长、角色 ID 非法或有效期倒挂时返回错误。
-    ///
-    /// `id`：实体主键（`erp_core::ids::UserRoleId`）。
+    /// 用调用方分配的 `id` 和已校验的 `RoleId` 构造未撤权绑定。
+    /// 用户 ID 和分配人裁剪后须非空且各限 128 字符；到期时刻须严格晚于生效时刻，
+    /// 输入违反任一约束时返回错误。
     pub fn new(id: UserRoleId, data: UserRoleData) -> Result<Self> {
         let user_id = normalize_required_text(data.user_id, "用户ID不能为空", USER_ID_MAX_LEN, "用户ID过长")?;
         let assigned_by =
@@ -124,12 +110,9 @@ impl UserRole {
         })
     }
 
-    /// 撤权。
-    ///
-    /// 撤权是安全动作（W19：立即紧急撤权），必须记录结构化原因；已撤权绑定
-    /// 不可重复撤权。
-    ///
-    /// 当绑定已撤权、原因代码为空/超长或执行人非法时返回错误。
+    /// 执行 W19 即时撤权，用 `at` 标记绑定已撤销并记录执行人及结构化原因。
+    /// 拒绝重复撤权；裁剪后原因代码和执行人须非空，代码与可选说明各限 64 字符、
+    /// 执行人限 128 字符。全部校验通过后才更新撤权字段。
     pub fn revoke(
         &mut self,
         data: UserRoleRevokeData,
@@ -171,6 +154,7 @@ mod tests {
     use super::{UserRole, UserRoleData, UserRoleRevokeData};
     use crate::entity::rbac::RoleId;
 
+    // 提供带固定有效期和首尾空白标识的销售角色分配样本。
     fn data() -> UserRoleData {
         UserRoleData {
             user_id: " user-1 ".to_string(),
@@ -181,7 +165,7 @@ mod tests {
         }
     }
 
-    // 验证用户 ID/分配人 去除首尾空白，角色 ID 保留既有解析。
+    // 确认创建时规范化用户 ID 和分配人，并沿用已解析的角色 ID。
     #[test]
     fn new_trims_text_and_keeps_role_id() {
         let binding = UserRole::new(UserRoleId::new("ur-1"), data()).unwrap();
@@ -190,28 +174,28 @@ mod tests {
         assert_eq!(binding.role_id, RoleId::parse("role-sales").unwrap());
     }
 
-    // 验证创建角色绑定时拒绝空白用户 ID。
+    // 确认全空白的用户 ID 无法用于创建角色绑定。
     #[test]
     fn new_rejects_empty_user_id() {
         let payload = UserRoleData { user_id: "  ".to_string(), ..data() };
         assert!(UserRole::new(UserRoleId::new("ur-1"), payload).is_err());
     }
 
-    // 验证角色 ID 经既有 RoleId 解析校验（非法字符被拒）。
+    // 确认角色 ID 解析拒绝非法字符并接受带连字符的 ASCII 标识。
     #[test]
     fn role_id_parse_rejects_invalid_value() {
         assert!(RoleId::parse("非法角色").is_err(), "RoleId 解析拒绝非法字符");
         assert!(RoleId::parse("role-sales").is_ok());
     }
 
-    // 验证关联不一致（有效期倒挂）时会被拒绝。
+    // 确认到期早于生效的分配无法创建绑定。
     #[test]
     fn new_rejects_reversed_effective_window() {
         let payload = UserRoleData { effective_to: Some(Instant::from_unix_secs(1_699_913_600)), ..data() };
         assert!(UserRole::new(UserRoleId::new("ur-1"), payload).is_err());
     }
 
-    // 验证：撤权：必须记录原因，撤权后失效，不可重复撤权。
+    // 确认撤权拒绝空白原因、保存原因代码和执行人，并阻止重复撤权。
     #[test]
     fn revoke_requires_reason_and_deactivates() {
         let mut binding = UserRole::new(UserRoleId::new("ur-1"), data()).unwrap();
@@ -243,6 +227,7 @@ mod tests {
         );
     }
 
+    // 确认撤权数据默认只含原因代码，也可显式附上说明。
     #[test]
     fn revoke_data_constructor_sets_code_only() {
         let data = UserRoleRevokeData::new("EMERGENCY_REVOKE");
@@ -252,7 +237,7 @@ mod tests {
         assert_eq!(noted.revoke_reason_text.as_deref(), Some("紧急撤权"));
     }
 
-    // 验证用户角色绑定经 JSON 序列化再读回时保留原实体值。
+    // 确认 JSON 序列化与反序列化保留完整的用户角色绑定。
     #[test]
     fn entity_roundtrips_through_bson() {
         let binding = UserRole::new(UserRoleId::new("ur-1"), data()).unwrap();

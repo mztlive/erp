@@ -7,21 +7,21 @@ use serde::{Deserialize, Serialize};
 use crate::dto::authorization_bundle::PolicyApplyResult;
 use crate::{Error, Result};
 
+/// 与授权变更一起持久化的命令回执，用于幂等重放原提交结果。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity)]
 pub struct PolicyReceipt {
+    /// 以稳定命令 ID 为主键的持久化元数据。
     #[serde(flatten)]
     pub base: BaseModel,
+    /// 供重放核对操作人、幂等身份和载荷的结构化命令记录。
     pub command: StructuredCommandReceipt,
+    /// 首次提交得到的策略版本、变更数量和关联命令 ID。
     pub result: PolicyApplyResult,
 }
 
 impl PolicyReceipt {
-    // 构造与授权变更同事务持久化的结果。
-    // 可由原执行器保存的独立回执。
-    //
-    // 命令身份无法构造结构化回执时拒绝。
-    //
-    // command 为稳定命令身份，result 为本次提交结果。
+    /// 用稳定命令身份和本次应用结果构造回执，供授权变更的同一事务保存。
+    /// 命令身份无法转换为结构化回执时返回错误。
     pub(crate) fn new(command: &CommandReceipt, result: PolicyApplyResult) -> Result<Self> {
         Ok(Self {
             base: BaseModel::new(command.id().to_owned()),
@@ -30,12 +30,8 @@ impl PolicyReceipt {
         })
     }
 
-    // 仅同操作人、同键和同载荷允许返回原结果。
-    // 标记为重放的原结果。
-    //
-    // 身份、载荷或结果关联不匹配时返回冲突。
-    //
-    // command 为当前请求重新计算的稳定命令身份。
+    /// 用当前请求计算的命令身份核对操作人、幂等键、载荷以及回执和结果的命令 ID。
+    /// 一致时返回标为重放的原结果；任一不符均返回冲突。
     pub(crate) fn replay(&self, command: &CommandReceipt) -> Result<PolicyApplyResult> {
         if command.match_structured(&self.command) != StructuredReceiptMatch::SamePayload
             || self.base.id != command.id()
@@ -54,6 +50,7 @@ impl PolicyReceipt {
 mod tests {
     use super::*;
 
+    // 固定应用动作和操作号，按参数生成不同操作人或载荷的测试命令。
     fn command(actor: &str, content: &str) -> CommandReceipt {
         CommandReceipt::from_payload(
             "policy-",
@@ -66,6 +63,7 @@ mod tests {
         .unwrap()
     }
 
+    // 验证同一命令重放保留原版本和变更数，操作人、载荷或结果关联变化均导致冲突。
     #[test]
     fn same_actor_and_payload_replay_original_result_and_others_fail_closed() {
         let original = command("operator", "original");

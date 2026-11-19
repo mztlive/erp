@@ -12,6 +12,7 @@ use crate::entity::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts};
 use crate::{AuthorizationService, Error};
 
+// 在完整装配上绑定目标资源事实，供交接或读取交付检查使用。
 fn bound(identity: Arc<Identity>, resource: &str, facts: Arc<Facts>) -> AuthorizationService {
     let mut builder = complete();
     builder.facilities = identity;
@@ -19,6 +20,7 @@ fn bound(identity: Arc<Identity>, resource: &str, facts: Arc<Facts>) -> Authoriz
     builder.build().unwrap()
 }
 
+// 构造交接后的归属候选，明确新负责人和组织。
 fn destination(resource: &str, owner: &str, org: &str) -> ObjectFacts {
     ObjectFacts {
         id: "record".into(),
@@ -27,14 +29,17 @@ fn destination(resource: &str, owner: &str, org: &str) -> ObjectFacts {
     }
 }
 
+// 为同样的归属补上固定记录标识和版本，以模拟交接前的持久化对象。
 fn persisted(resource: &str, owner: &str, org: &str) -> ObjectFacts {
     ObjectFacts { org_unit_id: FactValue::Known(Some(org.into())), ..object(resource, "record", owner) }
 }
 
+// 用固定原记录和给定归属候选组织交接目标。
 fn owner_change(candidate: ObjectFacts) -> AccessTarget {
     AccessTarget::OwnershipChange { id: "record".into(), candidate }
 }
 
+// 构造无个人限缩的公司范围，用于识别缺少归属事实与越权的区别。
 fn company_scope() -> ResolvedScope {
     ResolvedScope {
         role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
@@ -42,6 +47,7 @@ fn company_scope() -> ResolvedScope {
     }
 }
 
+// 结算交接保留公司范围，但仍要求原记录及目的归属事实完整。
 #[tokio::test]
 async fn settlement_handover_preserves_company_access_and_requires_complete_original_and_destination() {
     let permission = supplier_settlement::STATEMENT_HANDOVER;
@@ -83,6 +89,7 @@ async fn settlement_handover_preserves_company_access_and_requires_complete_orig
     ));
 }
 
+// 可配置范围的交接要在原归属和新归属两侧都应用个人限缩。
 #[tokio::test]
 async fn configurable_owner_changes_apply_personal_limit_to_both_original_and_destination() {
     let permission = sales_inquiry::COMMANDS_SALES_SAVE;
@@ -122,6 +129,7 @@ async fn configurable_owner_changes_apply_personal_limit_to_both_original_and_de
     }
 }
 
+// 履约列表取数后若到期便不得交付；成功交付会结束读取阶段。
 #[tokio::test]
 async fn fulfillment_list_delivery_rejects_expiry_after_the_query_and_ends_successful_read_stages() {
     let permission: Permission = supplier_fulfillment::ORDER_LIST;

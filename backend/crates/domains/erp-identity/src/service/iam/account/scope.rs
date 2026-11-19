@@ -8,12 +8,8 @@ use crate::entity::access_control::person_scope::{PersonDataScope, PersonScopeEx
 use crate::entity::access_control::scope_spec;
 use crate::{AccessControlExt, Result};
 
-// 显式初始化新超级管理员的公司范围；已有配置或撤销记录不重建。
-// 明确初始化完成。
-//
-// 数据库失败拒绝原事务。
-//
-// 数据库、人员及调用方事务。
+/// 仅在新建超级管理员的事务内，为每个可配置动作初始化公司人员范围；已有账号的配置或撤销记录保留原样。
+/// 复用创建账号的执行器，任一范围写入失败即返回错误，由调用方回滚原事务。
 pub(crate) async fn seed_company(db: &Database, user: &str, executor: &mut dyn Executor) -> Result<()> {
     for spec in scope_spec::specs() {
         if !spec.configurable() {

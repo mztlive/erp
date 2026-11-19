@@ -6,10 +6,11 @@ use super::{AccessFact, AccessRule, ObjectFacts, RelatedObjects, RelationMatch, 
 use crate::entity::resource_access::ResourceKind;
 use crate::{Error, Result};
 
+// 当前目标及来源已查证的记录级读取授权，按资源与记录 ID 匹配。
 type Grants = BTreeSet<(ResourceKind, String)>;
 
 impl AccessRule {
-    // 以和查询编译一致的条件判断精确对象；记录读取补充只从本次目标取得，不接受账号历史授权全集。
+    /// 用与查询编译共用的规则判断指定对象；逐支传播事实错误，记录授权只使用本次目标取证。
     pub(crate) fn allows_object(&self, actor: &str, object: &ObjectFacts, grants: &Grants) -> Result<bool> {
         match self {
             Self::Allow => Ok(true),
@@ -53,7 +54,7 @@ impl AccessRule {
         }
     }
 
-    // 在判断来源覆盖前核对完整引用与已读对象身份，确保缺失或无权来源不能在匹配前被丢弃。
+    // 拒绝重复、额外或资源错配的已读来源，再按匹配方式核对有权来源对全部引用的覆盖。
     fn allows_related(
         &self,
         actor: &str,
@@ -83,7 +84,7 @@ impl AccessRule {
         })
     }
 
-    // 收集当前规则实际使用的记录授权资源，供对象取证定向查询，不读取未使用的补充授权。
+    /// 递归收集规则实际使用的记录授权资源，供本次对象取证定向读取。
     pub(crate) fn grant_resources(&self, resources: &mut BTreeSet<ResourceKind>) {
         match self {
             Self::RecordReadGrant(resource) => {
@@ -103,7 +104,7 @@ impl AccessRule {
 }
 
 impl AccessFact {
-    // 以本次冻结的账号解释对象归属和参与事实，供上层组合规则逐项判定。
+    // 基于本次账号与对象事实评估单个条件，取证错误交给组合规则处理。
     fn matches_object(&self, actor: &str, object: &ObjectFacts) -> Result<bool> {
         Ok(match self {
             Self::Owned => object.owner_id.any(&object.owner_ids, |id| id == actor)?,
@@ -124,7 +125,7 @@ impl AccessFact {
 }
 
 impl ObjectFacts {
-    // 为对象复验整理可比较的事实集合：先核对完整性及展开上限，再按资源和身份稳定排序根对象和嵌套来源。
+    /// 为复验准备可比较的事实：校验对象树和展开上限后，递归按资源和 ID 排列根对象及来源。
     pub(crate) fn canonicalize(objects: &mut [Self]) -> Result<()> {
         let mut flattened = Vec::new();
         for object in objects.iter() {
@@ -135,7 +136,7 @@ impl ObjectFacts {
         Ok(())
     }
 
-    // 为对象复验统一已校验事实的排列；只重排成员，不去重或改写实际来源引用。
+    // 按资源和 ID 重排各层对象，保留原有成员、重复项和来源引用。
     fn sort(objects: &mut [Self]) {
         objects.sort_unstable_by(|a, b| (&a.resource, &a.id).cmp(&(&b.resource, &b.id)));
         for object in objects {
@@ -145,7 +146,8 @@ impl ObjectFacts {
         }
     }
 
-    // 为定向读取记录授权有界展开根对象及来源；超限或身份不完整时不能截断后继续放行。
+    /// 为定向取证展开根对象及来源；最多累计 1000 个对象，根深度为 0，最大深度为 8。
+    /// 身份或版本缺失、到期、来源引用非法或超限时返回错误。
     pub(crate) fn flatten<'a>(&'a self, output: &mut Vec<&'a Self>, depth: usize) -> Result<()> {
         if depth > 8 || output.len() >= 1000 || self.resource.is_empty() || self.version.is_empty() {
             return Err(Error::ValidationError("授权对象事实缺失或规模超限".into()));
@@ -167,7 +169,7 @@ impl ObjectFacts {
 }
 
 impl RelatedObjects {
-    // 对照实际来源对象核验原始引用身份，供覆盖规则据完整集合作判定。未读取到的引用须保留，不能当作不存在关系。
+    /// 校验来源引用格式，拒绝额外及重复的已读对象；未读到的引用留给覆盖规则判断。
     pub(crate) fn validate(&self) -> Result<()> {
         let ids = self.expected_ids.iter().map(String::as_str).collect::<Vec<_>>();
         ResourceTargets::new(&ids)?;
@@ -187,6 +189,7 @@ mod tests {
     use super::*;
     use crate::entity::authorization::{FactValue, RelatedObjects, RelationKey};
 
+    // 构造带负责人、已知无仓库且未指派的销售单来源。
     fn source(id: &str, owner: &str) -> ObjectFacts {
         ObjectFacts {
             resource: "sales_order".into(),
@@ -199,6 +202,7 @@ mod tests {
         }
     }
 
+    // 构造按指定匹配方式检查销售单来源负责人的规则。
     fn rule(mode: RelationMatch) -> AccessRule {
         AccessRule::Related {
             relation: RelationKey::parse("sales").unwrap(),
@@ -208,6 +212,7 @@ mod tests {
         }
     }
 
+    // 构造固定引用两张销售单的发票，并注入本次实际读到的来源。
     fn root(children: Vec<ObjectFacts>) -> ObjectFacts {
         ObjectFacts {
             resource: "invoice".into(),
@@ -225,6 +230,7 @@ mod tests {
         }
     }
 
+    // 验证完整对象要求所有引用均存在且有权，任一命中仅满足宽松的来源匹配。
     #[test]
     fn all_sources_requires_every_actual_reference_and_any_does_not_authorize_whole_object() {
         let grants = BTreeSet::new();
@@ -243,6 +249,7 @@ mod tests {
         assert!(!all.allows_object("u", &root(vec![]), &grants).unwrap());
     }
 
+    // 验证即使只要求一个来源命中，也拒绝重复、额外和资源错配的取证结果。
     #[test]
     fn duplicate_extra_and_wrong_resource_sources_are_errors() {
         for children in [
@@ -254,6 +261,7 @@ mod tests {
         }
     }
 
+    // 验证空引用无法满足全部来源规则，未装载关系和已到期事实均报错。
     #[test]
     fn empty_relations_missing_relations_and_expired_facts_never_pass() {
         let mut object = root(vec![]);
@@ -267,6 +275,7 @@ mod tests {
         assert!(object.flatten(&mut Vec::new(), 0).is_err());
     }
 
+    // 验证参与和历史参与不能视作任务指派，处理人须按当前事实单独匹配。
     #[test]
     fn task_assignment_is_distinct_from_participation_and_history() {
         let mut object = source("s1", "u");
@@ -282,6 +291,7 @@ mod tests {
         );
     }
 
+    // 验证记录读取授权只匹配指定资源与 ID，且仍受独立仓库范围约束。
     #[test]
     fn exact_record_grant_cannot_bypass_independent_scope() {
         let mut object = source("s1", "other");

@@ -12,108 +12,149 @@ use super::organization::*;
 use super::person_profile_change::PersonProfileChange;
 use crate::{Error, Result};
 
-/// 同一事务读取的组织事实集合。
+/// 同一事务中的组织事实快照，供变更计算和审计对照。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OrganizationState {
+    /// 快照对应的全局组织版本，用于拒绝过期写入。
     pub version: u64,
+    /// 组织拓扑中的节点，含停用节点。
     pub units: Vec<OrgUnit>,
+    /// 主属关系记录，用有效期区分历史、当前和未来归属。
     pub memberships: Vec<OrgMembership>,
-    /// 旧管理关系审计快照；不参与当前授权与组织变更约束。
+    /// 仅供旧审计读取的管理关系，当前授权和变更校验均不使用；空集合时省略。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub management: Vec<OrgManagementAssignment>,
 }
 
-/// 组织管理命令；实体身份在服务端产生，不接受静默覆盖。
+/// 版本化的组织管理命令；新实体 ID 由服务端生成，更新须匹配当前组织版本。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OrganizationOperation {
+    /// 在同一次变更中更新单人的姓名、角色或主属组织。
     UpdatePersonProfile {
+        /// 人员资料差异及用于并发校验的原始值。
         profile: PersonProfileChange,
     },
+    /// 创建启用的新组织节点。
     CreateUnit {
+        /// 新组织名称，创建时规范化并校验。
         name: String,
+        /// 启用的直接上级 ID，`None` 表示创建根节点。
         parent_id: Option<String>,
+        /// 新节点的部门或团队类别。
         kind: OrgUnitKind,
     },
+    /// 设置、替换或清除组织的当前负责人。
     SetLeader {
+        /// 要修改负责人指派的组织 ID。
         org_unit_id: String,
+        /// 新负责人账号 ID，`None` 表示明确清除指派。
         user_id: Option<String>,
     },
+    /// 调整节点的直接上级，变更后校验整棵树。
     MoveUnit {
+        /// 要迁移的组织节点 ID。
         org_unit_id: String,
+        /// 新的直接上级 ID，`None` 表示移为根节点。
         parent_id: Option<String>,
     },
+    /// 修改组织的展示名称。
     RenameUnit {
+        /// 要改名的组织 ID。
         org_unit_id: String,
+        /// 待规范化的新名称。
         name: String,
     },
+    /// 停用组织，保留节点和历史关系。
     DisableUnit {
+        /// 拟停用的组织 ID，须先处理成员和启用下级。
         org_unit_id: String,
     },
+    /// 自本次变更时点设置单个账号的主属组织。
     TransferMember {
+        /// 要调整主属关系的账号 ID。
         user_id: String,
+        /// 调岗后的主属组织 ID。
         org_unit_id: String,
     },
-    /// 一次事务内为多人调整主属组织；任一人失败则全部不生效。
+    /// 在同一事务内为多人调整主属组织，任一人失败即拒绝整批变更。
     TransferMembers {
+        /// 待调岗的账号 ID 列表，至少一项，各项须非空且唯一。
         user_ids: Vec<String>,
+        /// 本批人员共同调入的主属组织 ID。
         org_unit_id: String,
     },
+    /// 自本次变更时点结束当前主属关系。
     EndMembership {
+        /// 要结束主属关系的账号 ID。
         user_id: String,
     },
-    /// 仅保留历史请求读取；新写入由请求校验拒绝。
+    /// 旧管理关系授予命令，仅供审计读取，请求校验拒绝执行。
     GrantManagement {
+        /// 当时获授管理范围的账号 ID。
         user_id: String,
+        /// 当时绑定的授予角色 ID。
         role_id: String,
+        /// 原管理范围的起始组织 ID。
         org_unit_id: String,
+        /// 原授权是否覆盖起始组织的下级。
         include_descendants: bool,
+        /// 原授予请求的失效时点，`None` 表示无固定终点。
         valid_to: Option<Instant>,
     },
-    /// 仅保留历史请求读取；新写入由请求校验拒绝。
+    /// 旧管理关系撤销命令，仅供审计读取，请求校验拒绝执行。
     RevokeManagement {
+        /// 当时要撤销的管理关系 ID。
         assignment_id: String,
     },
 }
 
-/// 变更请求必须携带全局组织版本及幂等身份。
+/// 提交或预览组织变更的请求，携带并发校验和幂等回放所需信息。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct OrganizationChangeRequest {
+    /// 发起变更时看到的全局组织版本，过期时须刷新。
     pub expected_version: u64,
+    /// 在同一操作人下标识本次请求，重试时沿用。
     pub idempotency_key: String,
+    /// 组织调整的审计原因，应用命令时去除首尾空白。
     pub reason: String,
+    /// 本次请求携带的组织管理命令。
     pub change: OrganizationOperation,
 }
 
-/// 组织版本单例；所有拓扑及时间区间写入争用同一版本，阻止并发写偏差。
+/// 组织版本单例，串行化拓扑和有效期写入，防止并发写偏差。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity, PartialEq, Eq)]
 pub struct OrganizationRevision {
+    /// 全局版本单例的固定记录 ID 与持久化元数据。
     #[serde(flatten)]
     pub base: BaseModel,
+    /// 事务提交后可读的全局组织版本。
     pub revision: u64,
 }
 
-/// 幂等回执兼组织变更审计；不保存账号凭证。
+/// 组织变更的幂等回执与前后状态审计，记录业务事实和操作人 ID，不保存账号凭证。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity, PartialEq, Eq)]
 pub struct OrganizationChangeReceipt {
+    /// 回执记录的 ID 与持久化元数据；普通请求的 ID 由操作人和幂等键组成。
     #[serde(flatten)]
     pub base: BaseModel,
+    /// 发起变更的操作人 ID。
     pub actor_id: String,
+    /// 原始变更请求，用于检验重试载荷是否一致。
     pub request: OrganizationChangeRequest,
+    /// 变更命令应用前的组织事实及版本。
     pub before: OrganizationState,
+    /// 变更命令应用后的组织事实及版本。
     pub after: OrganizationState,
+    /// 计算变更时采用的服务端时点，也是本次关系变动的生效边界。
     pub as_of: Instant,
 }
 
 impl OrganizationChangeRequest {
-    /// 校验版本请求的原因、幂等键，并拒绝已停用的管理关系命令。
-    /// 命令、幂等键和原因都可用时无返回值。
-    ///
-    /// `GrantManagement` 与 `RevokeManagement` 返回校验错误。
-    /// `UpdatePersonProfile` 在展开子操作失败时传播其错误。
-    /// 幂等键为空、长于 128 字节，或含有字母、数字、下划线、短横线以外的字节时返回校验错误。
-    /// 原因去空白后为空或超过 1000 字时返回校验错误。
+    /// 在计算新状态前校验命令、幂等键和原因。
+    /// 拒绝已停用的授予与撤销管理命令；传播人员资料展开错误；批量调岗须有人员且账号 ID 非空、唯一。
+    /// 幂等键须为 1 至 128 字节的 ASCII 字母、数字、下划线或短横线；原因去首尾空白后须非空，原值最多 1000 字符。
     pub fn validate(&self) -> Result<()> {
         match &self.change {
             OrganizationOperation::GrantManagement { .. }
@@ -150,13 +191,9 @@ impl OrganizationChangeRequest {
 }
 
 impl OrganizationState {
-    /// 按当前版本准备变更结果，失败不修改调用方状态。
-    /// 返回版本加一后的新状态；调用方持有的 `self` 保持不变。
-    ///
-    /// 请求校验失败、期望版本不一致、命令应用失败、组织树无效、成员有效期非法或重叠，以及版本号溢出时返回对应错误。
-    ///
-    /// `request`：带期望版本、幂等键和命令的变更请求；`id`：本次新建组织或成员关系使用的身份。
-    /// `at`：本次变更时点。
+    /// 校验请求与期望版本后，在快照副本内按 `at` 应用命令，保留原状态。
+    /// `id` 用于本次新建的组织、主属关系或负责人指派；子操作使用派生 ID。
+    /// 命令、组织树及成员有效期（含重叠）均校验成功后将版本加一；版本溢出报错。
     pub fn changed(
         &self,
         request: &OrganizationChangeRequest,
@@ -179,17 +216,12 @@ impl OrganizationState {
         Ok(next)
     }
 
-    /// 查询当前唯一主属组织；重复关系失败关闭，不默认放入根组织。
-    /// 该时点唯一有效主属组织的 ID；没有有效关系时返回 `None`。
-    ///
-    /// 同一时点存在多条主属关系时返回 `Error::ConflictError`。
-    ///
-    /// `at`：判断时点。
+    /// 按快照查询账号在 `at` 的唯一有效主属组织 ID；无归属时返回 `None`，多条有效关系返回 `Error::ConflictError`。
     pub fn own_org(&self, user_id: &str, at: Instant) -> Result<Option<&str>> {
         OrgMembership::primary_org(&self.memberships, user_id, at)
     }
 
-    // 在组织状态校验中拒绝同一用户的主属有效期重叠，也检查尚未生效的关系，避免未来出现多条有效归属。
+    // 校验所有未软删除关系的区间，再按账号和起点检查相邻区间，提前拒绝未来归属重叠。
     fn validate_memberships(&self) -> Result<()> {
         let mut members = self.memberships.iter().filter(|m| !m.base.is_deleted()).collect::<Vec<_>>();
         members.sort_by_key(|m| (&m.user_id, m.validity.valid_from));
@@ -206,7 +238,7 @@ impl OrganizationState {
         Ok(())
     }
 
-    // 按组织命令类型应用领域变更。业务对象负责人和任务不属于组织聚合，不随组织关系自动迁移。
+    // 将命令应用到组织快照；资料更新只展开其中的调岗，业务单据负责人和任务保持原归属。
     fn apply(
         &mut self,
         change: &OrganizationOperation,
@@ -263,7 +295,7 @@ impl OrganizationState {
         Ok(())
     }
 
-    // 接收新增组织命令后创建节点；若指定父级，须先确认父组织及其全祖先路径均有效。
+    // 创建启用节点；指定上级时先确认该上级存在且全祖先链启用。
     fn create_unit(
         &mut self,
         name: &str,
@@ -287,7 +319,7 @@ impl OrganizationState {
         Ok(())
     }
 
-    // 更新组织节点的父级关系，变更入口统一校验整棵树是否成环。
+    // 在目标及新父级可用时调整父链，成环检查由变更后的整树校验负责。
     fn move_unit(&mut self, id: &str, parent_id: Option<&str>, actor: &str, reason: &str) -> Result<()> {
         if let Some(parent) = parent_id {
             self.ensure_enabled(parent)?;
@@ -296,14 +328,14 @@ impl OrganizationState {
         Ok(())
     }
 
-    // 处理改名命令时先规范化组织名称，再更新仍可用的节点与审计信息。
+    // 先校验并规范化新名称，再更新可用节点的名称及审计信息。
     fn rename_unit(&mut self, id: &str, name: &str, actor: &str, reason: &str) -> Result<()> {
         let name = normalize_required_text(name.into(), "组织名称不能为空", 100, "组织名称过长")?;
         self.unit_mut(id, actor, reason)?.name = name;
         Ok(())
     }
 
-    // 组织变更前取得有效节点的可变引用，并记下本次操作人和原因。
+    // 确认节点及其祖先链启用后，记录操作人和原因并返回节点的可变引用。
     fn unit_mut(&mut self, id: &str, actor: &str, reason: &str) -> Result<&mut OrgUnit> {
         self.ensure_enabled(id)?;
         let unit = self
@@ -317,7 +349,7 @@ impl OrganizationState {
         Ok(unit)
     }
 
-    // 停止组织使用前拒绝仍有有效或未来成员及下级关系的节点；未结业务由服务调用业务端口补验。
+    // 有尚未结束的主属记录或启用的直接下级时拒绝停用；未结业务由服务经业务端口另行校验。
     fn disable(&mut self, id: &str, actor: &str, reason: &str, at: Instant) -> Result<()> {
         let pending_members = self
             .memberships
@@ -332,7 +364,8 @@ impl OrganizationState {
         Ok(())
     }
 
-    // 按同一边界时间结束旧主属并建立新主属；与原开始时点相同时避免写出空有效期。
+    // 校验目标组织并拒绝调入原组织，再于同一时点结束旧主属、建立无终点的新主属。
+    // 旧关系恰在本次时点生效时，由结束逻辑拒绝空区间。
     fn transfer(
         &mut self,
         user: &str,
@@ -359,7 +392,7 @@ impl OrganizationState {
         Ok(())
     }
 
-    // 处理离开组织时结束当前有效的主属关系，不抹掉历史记录与变更原因。
+    // 将覆盖变更时点的主属关系截断至该时点并更新审计信息；起点等于结束时点时拒绝。
     fn end_membership(&mut self, user: &str, actor: &str, reason: &str, at: Instant) -> Result<()> {
         for membership in self.memberships.iter_mut().filter(|m| m.user_id == user && m.validity.contains(at))
         {
@@ -373,7 +406,7 @@ impl OrganizationState {
         Ok(())
     }
 
-    // 组织变更及成员分配前确认目标节点存在，并且整条祖先链均启用。
+    // 借助已校验的树确认目标存在，且目标至根的路径全部启用。
     fn ensure_enabled(&self, id: &str) -> Result<()> {
         if OrgTree::new(&self.units)?.expand(id, false)?.is_empty() {
             return Err(Error::ValidationError("组织已停用".into()));
@@ -386,6 +419,7 @@ impl OrganizationState {
 mod tests {
     use super::*;
 
+    // 验证负责人替换保留原快照、更新生效时点、隔离其他关系并拒绝旧版本重写。
     #[test]
     fn leader_changes_keep_history_and_do_not_change_membership_or_permissions() {
         let before = state();
@@ -416,6 +450,7 @@ mod tests {
         assert!(after.changed(&next, "assignment3", "admin", Instant::from_unix_secs(30)).is_err());
     }
 
+    // 构造版本为 1、含两个根部门及一条销售人员主属关系的初始快照。
     fn state() -> OrganizationState {
         OrganizationState {
             version: 1,
@@ -451,6 +486,7 @@ mod tests {
         }
     }
 
+    // 为待测命令补齐匹配初始快照的版本、固定幂等键和审计原因。
     fn request(change: OrganizationOperation) -> OrganizationChangeRequest {
         OrganizationChangeRequest {
             expected_version: 1,
@@ -460,7 +496,7 @@ mod tests {
         }
     }
 
-    // 验证：节点命令保留规范化、拓扑变更和审计信息，原状态不受影响。
+    // 验证创建、迁移及改名会更新拓扑、规范化名称和审计信息，并保留原快照。
     #[test]
     fn unit_commands_update_identity_topology_and_audit() {
         let before = state();
@@ -517,7 +553,7 @@ mod tests {
         assert_eq!(before.units[1].parent_id, None);
     }
 
-    // 验证：不存在节点、停用祖先和无效名称仍返回错误，不触发节点存在性断言。
+    // 验证未知节点、停用祖先和非法名称均以错误拒绝，并保留原快照。
     #[test]
     fn unit_commands_reject_missing_nodes_disabled_ancestors_and_invalid_names() {
         let mut before = state();
@@ -542,6 +578,7 @@ mod tests {
         }
     }
 
+    // 验证人员资料更新只生成一次调岗、版本只增一次，目标组织无效时保留原状态。
     #[test]
     fn profile_changes_membership_once_or_fails_whole_plan() {
         let before = state();
@@ -577,6 +614,7 @@ mod tests {
         assert!(before.management.is_empty());
     }
 
+    // 验证调岗边界前后分别解析到旧、新组织，历史记录和原快照均保留。
     #[test]
     fn transfer_closes_old_relation_and_preserves_the_original_state() {
         let before = state();
@@ -598,6 +636,7 @@ mod tests {
         assert_eq!(next.version, 2);
     }
 
+    // 验证整批人员同次调岗且仅提升一次版本；单人失败、重复名单或空名单拒绝整批。
     #[test]
     fn batch_transfer_moves_all_users_or_changes_nothing() {
         let mut before = state();
@@ -635,6 +674,7 @@ mod tests {
         assert!(request(empty).validate().is_err());
     }
 
+    // 验证旧版本、自成环和带成员停用均被拒绝，原版本与拓扑保持不变。
     #[test]
     fn stale_version_cycle_and_disable_with_members_are_rejected_without_partial_changes() {
         let before = state();
@@ -658,7 +698,7 @@ mod tests {
         assert_eq!(before.units[0].parent_id, None);
     }
 
-    // 验证：已停用的管理命令仍可读取审计，但预览、提交与回放入口均不得重新执行。
+    // 验证旧管理命令仍可序列化往返，重读后仍被请求校验和状态变更入口拒绝。
     #[test]
     fn legacy_management_commands_deserialize_but_cannot_change_state() {
         let before = state();
@@ -683,7 +723,7 @@ mod tests {
         assert!(before.management.is_empty());
     }
 
-    // 验证：历史管理关系不得继续阻止普通部门停用，历史本身保留不变。
+    // 验证含旧管理关系的快照可重读，部门仍可停用并原样保留历史关系。
     #[test]
     fn historical_management_does_not_block_department_disable() {
         let mut before = state();
@@ -714,7 +754,7 @@ mod tests {
         assert_eq!(after.management, before.management);
     }
 
-    // 验证：新快照省略旧管理关系，缺失字段和历史空数组均可读取。
+    // 验证空管理历史在新快照中省略，并兼容缺失字段和旧空数组。
     #[test]
     fn current_snapshots_omit_retired_management_and_accept_empty_history() {
         let before = state();
@@ -725,6 +765,7 @@ mod tests {
         assert_eq!(serde_json::from_value::<OrganizationState>(snapshot).unwrap(), before);
     }
 
+    // 验证主属查询拒绝重叠关系，变更请求校验拒绝空白幂等键。
     #[test]
     fn overlapping_memberships_and_invalid_idempotency_are_rejected() {
         let mut before = state();

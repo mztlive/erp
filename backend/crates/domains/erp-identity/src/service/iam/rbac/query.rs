@@ -21,13 +21,8 @@ use crate::repository::prelude::*;
 use crate::service::iam::management::ManagementAccess;
 use crate::{AccessControlExt, AuthorizationService, MongoCasbinAdapter};
 
-// 由批量直接权限装配角色响应项（两个列表入口共用该映射）。
-// 与输入角色一一对应的响应项；没有权限的角色使用映射中已有的空权限集合。
-//
-// 触发 panic 的条件：
-// 角色 ID 重复或权限映射缺少待装配角色时触发，表示调用方破坏了批量装配不变式。
-//
-// `roles`：ID 不重复的待装配角色；`permissions`：包含全部待装配角色 ID 的直接权限；命中项会被取出。
+// 两个角色列表共用此装配步骤：按输入顺序取出各角色的直接权限，也保留空权限角色。
+// 权限映射须覆盖所有待装配角色；角色 ID 重复或缺少映射项时触发 panic。
 fn role_items_from_map(roles: Vec<Role>, permissions: &mut HashMap<String, PermissionSet>) -> Vec<RoleItem> {
     roles
         .into_iter()
@@ -40,12 +35,8 @@ fn role_items_from_map(roles: Vec<Role>, permissions: &mut HashMap<String, Permi
 }
 
 impl RbacService {
-    /// 在调用方事务中读取仍启用的直接账号角色。
-    /// 返回排序去重且仍启用的角色 ID。
-    ///
-    /// 角色身份非法或数据库读取失败时返回错误。
-    ///
-    /// account_kind、account_id 为账号身份，executor 为原事务执行器。
+    /// 需要在原事务确认账号的有效直接绑定时，读取 Casbin 绑定和启用状态并返回排序去重后的角色 ID。
+    /// 角色 ID 非法或数据库读取失败时返回错误。
     pub async fn role_ids_with_executor(
         &self,
         account_kind: AccountKind,
@@ -68,12 +59,8 @@ impl RbacService {
         Ok(ids)
     }
 
-    /// 保留调用方快照中仍启用的角色。
-    /// 返回当前启用的类型化角色 ID；空候选不查询数据库。
-    ///
-    /// 角色数据非法或数据库读取失败时返回错误。
-    ///
-    /// ids 为候选角色，executor 沿用调用方事务。
+    /// 沿调用方执行器将候选筛为快照中仍启用的角色 ID；空候选直接返回空列表。
+    /// 角色 ID 非法或数据库读取失败时返回错误。
     pub async fn enabled_role_ids(&self, ids: &[RoleId], executor: &mut dyn Executor) -> Result<Vec<RoleId>> {
         if ids.is_empty() {
             return Ok(Vec::new());
@@ -88,12 +75,8 @@ impl RbacService {
             .collect::<StdResult<Vec<_>, _>>()?)
     }
 
-    /// 查询全部角色及其直接权限。
-    /// 返回带直接权限的角色列表；没有角色时为空列表。
-    ///
-    /// 当 MongoDB 或 Casbin policy 查询失败时返回错误。
-    ///
-    /// actor 为当前身份，authorization 为应用注入的共享授权服务。
+    /// 管理端查看角色时，在同一事务内检查列表权限并读取全部角色及其直接权限。
+    /// 无角色时返回空列表；授权、数据库或策略读取失败时返回错误。
     pub async fn role_list(
         self: &Arc<Self>,
         actor: &AuditActor,
@@ -114,13 +97,8 @@ impl RbacService {
             .await
     }
 
-    /// 查询全部可分配角色及其直接权限。
-    /// 返回操作人权限能够覆盖、且允许普通分配的角色。
-    ///
-    /// 当 MongoDB 或 Casbin policy 查询失败时返回错误。
-    ///
-    /// actor 为当前身份，authorization 为应用注入的共享授权服务。
-    /// `actor`：已认证操作人，用于按自身权限过滤。
+    /// 为普通角色分配提供候选：在同一事务中检查入口权限，并筛出启用、可分配且实际权限受操作人覆盖的角色。
+    /// 授予上限包含继承权限，响应只展示直接权限；授权、数据库或策略读取失败时返回错误。
     pub async fn assignable_role_list(
         self: &Arc<Self>,
         actor: &AuditActor,
@@ -149,7 +127,8 @@ impl RbacService {
             .await
     }
 
-    // 沿角色查询原执行器加载当前批次和继承关系，建立临时查询策略，不污染共享 Enforcer 缓存。
+    // 装配列表前沿原执行器加载角色及其继承链；需检查授予上限时一并加载操作人的策略。
+    // 结果只写入本次查询的临时 Enforcer。
     async fn role_query_policy(
         &self,
         roles: &[Role],
@@ -180,23 +159,16 @@ impl RbacService {
         Ok(policy.enforcer)
     }
 
-    /// 查询账号直接绑定的角色 ID。
-    /// 返回去掉 `role:` 前缀的直接角色 ID；未绑定时为空列表。
-    ///
-    /// 当 Casbin policy 加载失败时返回错误。
+    /// 从当前 Casbin 策略读取账号的直接绑定，返回去掉 `role:` 前缀的角色 ID；未绑定时为空列表。
+    /// 此入口只读绑定，策略加载或角色 ID 解析失败时返回错误。
     pub async fn role_ids(&self, account_kind: AccountKind, account_id: &str) -> Result<Vec<RoleId>> {
         let enforcer = self.fresh_enforcer().await?.read().await;
         role_ids_for_account(&enforcer, account_kind, account_id)
     }
 
-    /// 读取直接绑定某稳定角色的后台账号 ID。
-    /// 只反映当前 Casbin 绑定，不把角色撤销解释成查询资格终止。
-    ///
-    /// 返回排序后的后台账号 ID。非后台主体被忽略。
-    ///
+    /// 按固定角色 ID（不含 `role:` 前缀）读取直接绑定的后台账号，供人员目录资格同步使用。
+    /// 以当前 Casbin 绑定为准，`user_roles` 的撤销留痕不改变本查询结果；忽略非后台主体并排序去重。
     /// 策略加载失败时返回错误。
-    ///
-    /// `role_id`：稳定角色 ID，不含 `role:` 前缀。
     pub async fn direct_admin_ids_for_role(&self, role_id: &str) -> Result<Vec<String>> {
         let enforcer = self.fresh_enforcer().await?.read().await;
         let mut ids = enforcer
@@ -211,12 +183,8 @@ impl RbacService {
         Ok(ids)
     }
 
-    /// 批量查询同类账号直接绑定的角色 ID。
-    /// 返回账号 ID 到角色 ID 集合的映射；未绑定角色的账号对应空集合。
-    ///
-    /// 当 Casbin policy 加载失败时返回错误。
-    ///
-    /// `account_ids`：待查询的账号 ID 集合。
+    /// 从当前 Casbin 策略批量读取同类账号的直接角色绑定；未绑定账号对应空列表。
+    /// 空批次直接返回空映射；策略加载或角色 ID 解析失败时返回错误。
     pub async fn role_ids_by_accounts(
         &self,
         account_kind: AccountKind,
@@ -230,12 +198,8 @@ impl RbacService {
         collect_role_ids(&enforcer, account_kind, account_ids)
     }
 
-    // 在账号列表的原快照内批量读取直接角色绑定。
-    // 每个账号均有一项，未绑定角色时返回空集合。
-    //
-    // 策略损坏、角色身份非法或数据库读取失败时拒绝。
-    //
-    // account_kind、account_ids 为本批账号，executor 为列表授权的原执行器。
+    /// 装配账号列表时沿授权使用的执行器批量读取直接角色绑定；未绑定账号对应空列表。
+    /// 策略损坏、角色 ID 非法或数据库读取失败时返回错误。
     pub(crate) async fn account_roles(
         &self,
         account_kind: AccountKind,
@@ -254,10 +218,8 @@ impl RbacService {
         Ok(result)
     }
 
-    /// 查询账号通过角色继承获得的权限。
-    /// 返回去重后的隐式权限。
-    ///
-    /// Casbin policy 无法加载，或策略行无法解析为权限时返回错误。
+    /// 装配账号资料等展示信息时，从当前 Casbin 策略汇总账号的隐式权限（含角色继承）并去重。
+    /// 策略加载或权限解析失败时返回错误。
     pub async fn permissions(&self, account_kind: AccountKind, account_id: &str) -> Result<PermissionSet> {
         let policies = self
             .fresh_enforcer()
@@ -269,15 +231,18 @@ impl RbacService {
     }
 }
 
-/// 一次角色查询私有的策略图；每个主体只沿当前事务读取一次。
+// 一次角色列表查询的临时策略图；每个主体只沿原事务读取一次。
 struct QueryPolicy {
+    // 待展开的 Casbin 主体，包含查询起点和发现的父角色。
     pending: Vec<String>,
+    // 已安排读取的主体，用于去重及终止继承环。
     visited: HashSet<String>,
+    // 本次查询的内存 Enforcer，用于读取直接权限和计算继承权限。
     enforcer: Enforcer,
 }
 
 impl QueryPolicy {
-    // 为角色查询建立只用于本次快照计算的临时 Casbin 实例，不连接数据库或持久化策略。
+    // 从起始主体建立内存策略图，供列表在原快照内计算；关闭自动持久化。
     async fn new(subjects: Vec<String>) -> Result<Self> {
         let model = DefaultModel::from_str(RBAC_MODEL).await?;
         let mut enforcer = Enforcer::new(model, MemoryAdapter::default()).await?;
@@ -285,7 +250,7 @@ impl QueryPolicy {
         Ok(Self { pending: subjects, visited: HashSet::new(), enforcer })
     }
 
-    // 沿角色继承链确定下一批未读取的主体；重复引用或环不会触发反复读取。
+    // 为下一次批量读取取出至多 500 个未访问主体；重复引用和继承环在此去重。
     fn next_subjects(&mut self) -> Vec<String> {
         let mut subjects = Vec::new();
         while subjects.len() < 500 {
@@ -297,7 +262,7 @@ impl QueryPolicy {
         subjects
     }
 
-    // 将原快照查到的直接权限及完整父角色纳入本次临时策略，不从进程共享缓存补取。
+    // 读到主体策略后，将直接权限和继承边写入临时策略图，并把父角色排入后续读取。
     async fn include(
         &mut self,
         subject: &str,
@@ -316,14 +281,14 @@ impl QueryPolicy {
     }
 }
 
-// 按输入顺序装配角色响应，只展示直接权限；没有直接权限的角色仍保留。
+// 列表返回前按输入顺序装配直接权限，保留没有直接权限的角色。
 fn role_items(roles: Vec<Role>, policy: &Enforcer) -> Result<Vec<RoleItem>> {
     let ids = roles.iter().map(|role| role.base.id.clone()).collect::<Vec<_>>();
     let mut permissions = collect_role_permissions(policy, &ids)?;
     Ok(role_items_from_map(roles, &mut permissions))
 }
 
-// 使用同一事务策略图计算隐式权限并检查授予上限；对客户端仍只展示角色直接权限。
+// 装配分配候选时，用同一事务策略图核对操作人能否覆盖候选的继承权限，响应只展示直接权限。
 fn assignable_role_items(roles: Vec<Role>, actor: &AuditActor, policy: &Enforcer) -> Result<Vec<RoleItem>> {
     let actor_permissions = permissions_for_actor(policy, actor)?;
     let mut manageable = Vec::with_capacity(roles.len());
@@ -341,7 +306,7 @@ mod tests {
     use super::*;
     use crate::{Error, Permission, RoleData};
 
-    // 验证：实际批量读取结果可装配完整列表或筛选子集，空权限角色不会缺失。
+    // 验证批量权限映射可按输入顺序装配完整列表或子集，并保留空权限角色。
     #[tokio::test]
     async fn role_items_preserve_order_and_empty_permissions() {
         let model = DefaultModel::from_str(RBAC_MODEL).await.unwrap();
@@ -369,7 +334,7 @@ mod tests {
         assert!(items[0].permissions.is_empty());
     }
 
-    // 验证：角色响应和授予上限使用冻结策略，后续策略修改不混入当前列表。
+    // 验证直接权限展示和继承权限上限均使用同一冻结策略，隔离后续策略变化。
     #[tokio::test]
     async fn role_queries_keep_direct_permissions_and_inherited_limits_in_one_snapshot() {
         let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
@@ -392,7 +357,7 @@ mod tests {
         );
     }
 
-    // 验证：遍历完整父角色，但重复引用及循环不会重复读取同一主体。
+    // 验证完整遍历父角色时，重复引用和继承环中的每个主体只进入一次读取批次。
     #[tokio::test]
     async fn query_policy_visits_each_subject_once_even_with_cycles() {
         let mut policy = QueryPolicy::new(vec![role_key("a"), role_key("a")]).await.unwrap();
@@ -404,7 +369,7 @@ mod tests {
         assert_eq!(policy.visited, HashSet::from([role_key("a"), role_key("b")]));
     }
 
-    // 验证：损坏策略不能被列表输出或可分配性判断降级为零权限。
+    // 验证直接权限列表和可分配性判断均会拒绝损坏策略，避免将错误当成零权限。
     #[tokio::test]
     async fn role_queries_reject_invalid_snapshot_permissions() {
         let mut policy = QueryPolicy::new(vec![]).await.unwrap();
@@ -417,7 +382,7 @@ mod tests {
         ));
     }
 
-    // 在查询策略单测中通过生产装载入口准备两条独立继承链，避免测试用单独继承算法。
+    // 通过生产装载入口构造操作人和候选角色的独立继承链，供授予上限测试使用。
     async fn query_policy(actor_resource: &str, candidate_resource: &str) -> QueryPolicy {
         let mut policy = QueryPolicy::new(vec![]).await.unwrap();
         policy.include("user:admin:actor", vec![role_key("actor")], vec![]).await.unwrap();
@@ -434,7 +399,7 @@ mod tests {
         policy
     }
 
-    // 为角色查询测试创建可以普通分配的真实角色实体，不带系统角色保护标记。
+    // 为角色查询单测创建可普通分配的非系统角色。
     fn role(id: &str) -> Role {
         Role::new(RoleId::parse(id).unwrap(), RoleData::new(id)).unwrap()
     }

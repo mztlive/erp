@@ -18,29 +18,43 @@ tokio::task_local! {
     static PROOF_TIME: Cell<Instant>;
 }
 
+/// 服务端取证生成的内部证明，供查询编译及交付校验使用。
 #[cfg_attr(test, derive(Clone))]
 pub(crate) struct AccessProof {
+    /// 冻结账号、入口、资源、模型和授权时点的上下文。
     pub context: AccessContext,
+    /// 已解析的范围规则、复验方式及版本。
     pub resolved: ResolvedAccess,
+    /// 证明所属服务、执行边界和最早到期时点。
     pub validity: AccessValidity,
+    /// 本次角色范围及组织版本的展示元数据。
     pub scope: ScopeMetadata,
 }
 
+/// 身份和范围取证后的规则集合，供编译及非事务交付重放使用。
 #[derive(Clone)]
 pub(crate) struct ResolvedAccess {
+    /// 根查询及按需登记的整账、管理规则。
     pub rules: ResolvedRules,
+    /// 非事务交付时重做取证使用的固定入口类型。
     pub replay: Replay,
+    /// 身份和范围依赖的版本，参与生成查询摘要。
     pub version: String,
 }
 
+/// 同一次取证解析的根条件与可选附加过滤。
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct ResolvedRules {
+    /// 限制根查询可见记录的完整授权条件。
     pub root: AccessRule,
+    /// 可选的完整金额根规则，可复用根查询规则或独立取证。
     pub whole: Option<WholeRule>,
+    /// 可选的工作项管理范围过滤，供已授权结果计算按钮资格。
     pub management: Option<ResolvedFilter>,
 }
 
 impl ResolvedRules {
+    /// 返回解析后的整账规则，按登记复用根规则或借用独立规则，未登记时返回 `None`。
     pub(crate) fn whole_rule(&self) -> Option<&AccessRule> {
         match self.whole.as_ref()? {
             WholeRule::Root => Some(&self.root),
@@ -52,37 +66,57 @@ impl ResolvedRules {
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) enum WholeRule {
     Root,
-    Separate(AccessRule),
+    Separate(
+        /// 独立的完整金额读取规则，不沿用根查询的可见性过滤。
+        AccessRule
+    ),
 }
 
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) enum ResolvedFilter {
     Root,
-    Separate { context: Box<AccessContext>, rule: AccessRule },
+    Separate {
+        /// 辅助入口独立解析的授权上下文，不沿用根查询动作。
+        context: Box<AccessContext>,
+        /// 在辅助入口上下文中已解析的过滤规则。
+        rule: AccessRule
+    },
 }
 
 #[derive(Clone)]
 pub(crate) enum Replay {
     Target,
     ExactTask,
-    ApprovalSource { source: Permission, required: Vec<Permission> },
+    ApprovalSource {
+        /// 审批来源对象用于范围取证的入口权限。
+        source: Permission,
+        /// 重新取证时仍须满足的附加功能权限。
+        required: Vec<Permission>
+    },
 }
 
+/// 由本次范围取证产生的角色与组织元数据，不是独立授权凭证。
 #[derive(Clone)]
 pub(crate) struct ScopeMetadata {
+    /// 是否存在正向角色范围条款，不由个人限制或结果条数推断。
     pub has_role_scope: bool,
+    /// 参与范围求值的组织修订；未读取组织范围时为 0。
     pub organization_version: u64,
 }
 
+/// 授权证明或查询计划有效的服务、读取阶段及时间边界。
 #[derive(Clone)]
 pub(crate) struct AccessValidity {
+    /// 所有相关授权事实最早失效的时点，未设置时无固定期限。
     pub valid_until: Option<Instant>,
+    /// 取证所用执行器的原事务及读取阶段标识。
     pub boundary: ExecutionBoundary,
+    /// 签发该证明的服务实例标记，按实例身份比较。
     pub service: Arc<()>,
 }
 
 impl AccessValidity {
-    // 交付复验先核对凭证所属服务、执行边界及有效期。原快照不重读；非事务读取须重新取证实际依赖。
+    /// 交付时先校验执行边界、有效期和服务实例；仅非事务路径需要重新读取实际依赖，原快照不重复取证。
     pub(crate) fn needs_revalidation(&self, token: &Arc<()>, executor: &mut dyn Executor) -> Result<bool> {
         self.ensure_current(executor)?;
         if !Arc::ptr_eq(&self.service, token) {
@@ -91,7 +125,7 @@ impl AccessValidity {
         Ok(!self.boundary.is_snapshot())
     }
 
-    // 在授权解析或交付时校验执行器仍属于同一事务和读取阶段。越过原边界返回校验错误，到达有效期截止时刻返回 `DATA_SCOPE_CHANGED`。
+    /// 授权解析、执行或交付时校验原事务及读取阶段；跨边界返回校验错误，到期返回 `DATA_SCOPE_CHANGED`。
     pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
         if !self.boundary.is_current(executor) {
             return Err(Error::ValidationError("授权结果不能跨事务或读取阶段使用".into()));
@@ -107,63 +141,74 @@ impl AccessValidity {
         Ok(())
     }
 
-    // 在当前异步任务内控制证明校验时钟，退出作用域后恢复墙钟。
-    // 返回测试流程的结果。
-    //
-    // 不返回错误；测试流程的错误由返回值保留。
-    //
-    // now 为初始时刻，future 为执行真实授权及校验的测试流程。
+    /// 在当前测试任务内以 `now` 代替墙钟执行授权流程，返回流程自身结果，退出作用域后恢复墙钟。
     #[cfg(test)]
     pub(crate) async fn with_test_time<F: Future>(now: Instant, future: F) -> F::Output {
         PROOF_TIME.scope(Cell::new(now), future).await
     }
 
-    // 将当前测试任务的证明校验时钟推进到指定时刻。
-    // 后续证明校验使用指定时刻。
-    //
-    // 不返回错误；缺少测试时钟作用域时 panic。
-    //
-    // now 为精确校验时刻；调用必须位于 with_test_time 作用域内。
+    /// 修改当前任务后续校验证明使用的测试时钟；必须在 `with_test_time` 内调用，否则会 panic。
     #[cfg(test)]
     pub(crate) fn set_test_time(now: Instant) {
         PROOF_TIME.with(|time| time.set(now));
     }
 }
 
-/// 编译器生成的查询计划；业务不能自行构造。
+/// 授权编译器签发的 MongoDB 查询计划，业务不能自行构造或改变其绑定。
 #[derive(Clone)]
 pub struct CompiledAccess {
+    /// 签发时的账号、入口、资源、模型和授权时点。
     pub(crate) context: AccessContext,
+    /// 同次取证取得的功能资格和策略修订。
     pub(crate) qualified: QualifiedPermissions,
+    /// 查询可使用的服务实例、执行边界及到期时点。
     pub(crate) validity: AccessValidity,
+    /// 非事务交付重新取证所需的已解析规则与入口，快照路径不保存。
     pub(crate) revalidation: Option<Box<ResolvedAccess>>,
+    /// 本次组织修订及正向角色范围标记。
     pub(super) scope: ScopeMetadata,
+    /// 凭证固定绑定的根集合、记录身份字段和输出模型。
     pub(crate) model: QueryModel,
+    /// 完整 MongoDB 授权管道，含最终过滤及必要的投影和清理。
     pub(crate) stages: Vec<Document>,
+    /// 非事务交付时要逐项复验的动态业务映射依赖。
     pub(crate) dependencies: Vec<MappingDependency>,
+    /// 身份、范围和映射等实际依赖的稳定摘要，供跨页检查。
     pub(crate) version: String,
+    /// 按关系键索引的可见来源份额计划。
     pub(crate) sources: BTreeMap<RelationKey, SourcePlan>,
+    /// 可选的整账根过滤计划，可能复用根管道。
     pub(super) whole: Option<FilterPlan>,
+    /// 可选的工作项管理动作过滤计划，可能复用根管道。
     pub(super) management: Option<FilterPlan>,
 }
 
 #[derive(Clone)]
 pub(super) enum FilterPlan {
     Root,
-    Separate(Vec<Document>),
+    Separate(
+        /// 为辅助读取单独编译的 MongoDB 授权管道。
+        Vec<Document>
+    ),
 }
 
+/// 一次动态映射准备的证据，供非事务查询交付复验。
 #[derive(Clone)]
 pub(crate) struct MappingDependency {
+    /// 实际执行准备的映射实例，复验时沿用同一实例。
     pub mapping: Arc<dyn AccessMapping>,
+    /// 准备时的固定模型描述，供检测接入描述漂移。
     pub model: QueryModel,
+    /// 准备所属的完整授权上下文，包括独立入口动作及时点。
     pub context: AccessContext,
+    /// 动态准备当时返回的数据、可靠版本和可选到期时点。
     pub facts: MappingFacts,
+    /// 本次准备转换出的授权主键表达式，复验时检查是否变化。
     pub key: Bson,
 }
 
 impl MappingDependency {
-    // 非事务交付时沿原执行器重新准备相同映射，比较模型、动态事实、主键表达式、修订号和有效期，不用旧数据假装当前仍有效。
+    /// 非事务交付时用原执行器重新准备映射，核对模型、主键、动态事实、修订及有效期；事实或主键变化时返回 `DATA_SCOPE_CHANGED`。
     pub(crate) async fn validate(&self, executor: &mut dyn Executor) -> Result<()> {
         if *self.mapping.model() != self.model {
             return Err(Error::ValidationError("授权 Mapping 模型已改变".into()));
@@ -183,18 +228,22 @@ impl MappingDependency {
     }
 }
 
+/// 随根查询同次编译的来源份额子计划，不是独立对象凭证。
 #[derive(Clone)]
 pub(crate) struct SourcePlan {
+    /// 该份额引用的来源集合和记录身份描述。
     pub model: QueryModel,
+    /// 过滤当前入口可见来源的完整授权管道。
     pub stages: Vec<Document>,
 }
 
 impl CompiledAccess {
+    /// 判断是否已登记完整根读取计划，供复合资金结果选择整账路径。
     pub(crate) fn has_whole_plan(&self) -> bool {
         self.whole.is_some()
     }
 
-    /// 取得本次工作项查询的管理范围过滤，用于给已授权展示批次计算按钮资格。非工作项凭证拒绝；命令仍须单独执行 `require`。
+    /// 获取本次工作项的管理过滤，为已授权展示批次计算按钮资格；未登记时拒绝，办理仍须单独执行 `require`。
     pub fn management_stages(&self) -> Result<&[Document]> {
         match &self.management {
             Some(FilterPlan::Root) => Ok(self.stages()),
@@ -203,7 +252,7 @@ impl CompiledAccess {
         }
     }
 
-    /// 供固定根投影核对来源份额的集合和身份描述。没有登记该来源份额时拒绝；描述本身不签发来源对象凭证。
+    /// 返回指定来源份额的模型供固定根投影核对集合和身份；未登记时拒绝，模型本身不是来源对象凭证。
     pub fn source_model(&self, relation: &RelationKey) -> Result<&QueryModel> {
         self.sources
             .get(relation)
@@ -211,7 +260,7 @@ impl CompiledAccess {
             .ok_or_else(|| Error::ValidationError("本查询不提供此来源份额".into()))
     }
 
-    /// 供固定根投影读取来源份额时执行同次编译的数据库过滤。入口未登记该来源输出时拒绝，来源阶段不能扩大根输出边界。
+    /// 返回同次取证编译的来源份额过滤，供固定根投影执行；未登记时拒绝，不得用于扩大根输出边界。
     pub fn source_stages(&self, relation: &RelationKey) -> Result<&[Document]> {
         self.sources
             .get(relation)
@@ -219,7 +268,7 @@ impl CompiledAccess {
             .ok_or_else(|| Error::ValidationError("本查询不提供此来源份额".into()))
     }
 
-    /// 复合资金入口需要展示整账时，取得同次取证生成的根过滤；完整金额资格与全部真实来源均须通过。普通入口或份额子凭证不能用于整账读取。
+    /// 为复合资金入口取得本次整账根过滤；须同时满足完整金额资格及全部真实来源条件。普通入口或份额凭证未登记此计划时拒绝。
     pub fn whole_stages(&self) -> Result<&[Document]> {
         match &self.whole {
             Some(FilterPlan::Root) => Ok(self.stages()),
@@ -228,47 +277,37 @@ impl CompiledAccess {
         }
     }
 
-    // 身份域展示是否存在正向角色范围。
-    // 本次范围取证存在正向角色条款时为 true。
-    //
-    // 个人限制和查询结果为空不能替代本标记。
+    /// 读取本次取证是否存在正向角色范围条款，用于身份域展示；不能从个人限制或查询是否为空推断。
     pub(crate) fn has_role_scope(&self) -> bool {
         self.scope.has_role_scope
     }
 
-    /// 借用凭证绑定的真实账号，供同一授权批次补充展示资格。账号有效性仍须在交付时复验。
+    /// 借用凭证绑定的真实账号以补充同批次展示资格；交付仍须复验账号有效性。
     pub fn actor(&self) -> &AuditActor {
         &self.context.actor
     }
 
-    /// 读取凭证绑定的固定入口权限，供仓储核对用途；不能据此把凭证转给另一操作。
+    /// 取得凭证绑定的固定入口权限供仓储核对，只能用于原操作。
     pub fn permission(&self) -> &Permission {
         &self.context.permission
     }
 
-    /// 返回本次身份资格取证使用的权限策略修订。
-    /// 与查询凭证同次读取的策略修订，不能代替 validate。
-    ///
-    /// 不执行 I/O。
+    /// 返回同次功能资格取证的权限策略修订，不访问数据库，也不替代交付复验。
     pub fn policy_version(&self) -> u64 {
         self.qualified.policy_revision()
     }
 
-    /// 返回本次范围解析使用的组织修订。
-    /// 依赖组织的范围修订；未读取组织范围时为 0。
-    ///
-    /// 不执行 I/O。
+    /// 返回本次范围求值使用的组织修订；未读取组织范围时为 0，不访问数据库。
     pub fn organization_version(&self) -> u64 {
         self.scope.organization_version
     }
 
-    /// 读取编译时冻结的授权时点；范围和业务映射使用这一时点解释有效关系，不能改用当前墙钟重算条件。
+    /// 取得编译冻结的授权时点，以相同时间解释所有有效关系，不用墙钟重算条件。
     pub fn as_of(&self) -> Instant {
         self.context.as_of
     }
 
-    /// 仓储执行授权查询前核对凭证仍属于原执行器的同一事务和读取阶段，且未到任何有效期截止点。
-    /// 此步不访问数据库，不能代替结果交付前的 `AuthorizationService::validate`。
+    /// 仓储执行前核对原执行器、事务、读取阶段及有效期，不读取数据库；结果交付前仍须调用 `AuthorizationService::validate`。
     pub fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
         self.validity.ensure_current(executor)?;
         for dependency in &self.dependencies {
@@ -277,24 +316,24 @@ impl CompiledAccess {
         Ok(())
     }
 
-    /// 读取身份、范围及实际业务映射依赖的稳定摘要，供跨页游标检查授权上下文是否变化。摘要不是通用凭证，仓储执行前仍须检查边界，交付前仍须复验。
+    /// 获取实际身份、范围和业务映射依赖的稳定摘要，供跨页游标比较；不替代执行边界检查或交付复验。
     pub fn version(&self) -> String {
         self.version.clone()
     }
 
-    /// 借用固定模型的完整 MongoDB 授权阶段，包括最终权限过滤及临时字段清理。仓储先执行这些阶段，再做分页、计数或汇总；查询交付前仍须统一复验。
+    /// 借用含最终授权过滤和临时字段清理的完整管道；先授权，再分页、计数或汇总，交付前仍须复验。
     pub fn stages(&self) -> &[Document] {
         &self.stages
     }
 
-    /// 借用凭证绑定的根集合、行身份及模型描述，供仓储检查查询接入是否匹配；不能换到其他资源执行。
+    /// 借用固定根模型，供仓储核对集合、记录身份和资源是否匹配；不得换用其他资源。
     pub fn model(&self) -> &QueryModel {
         &self.model
     }
 }
 
 impl fmt::Debug for CompiledAccess {
-    // 打印授权凭证的诊断信息时只暴露查询模型，不打印账号身份或敏感业务事实。
+    // 诊断输出只包含模型描述，不打印账号身份或敏感业务事实。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.debug_struct("CompiledAccess").field("model", &self.model).finish_non_exhaustive()
     }

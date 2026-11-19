@@ -12,6 +12,7 @@ use super::fixtures::{Facts, Identity, actor, complete, object};
 use crate::entity::authorization::{AccessTarget, FactValue, RelatedObjects, RelationKey};
 use crate::{AuthorizationService, Error};
 
+// 在完整绑定上替换指定资源的事实和身份设施，执行内部入口授权。
 fn bound(identity: Arc<Identity>, resource: &str, facts: Arc<Facts>) -> AuthorizationService {
     let mut builder = complete();
     builder.facilities = identity;
@@ -19,11 +20,13 @@ fn bound(identity: Arc<Identity>, resource: &str, facts: Arc<Facts>) -> Authoriz
     builder.build().unwrap()
 }
 
+// 按用例设置实际角色权限，不额外授予被测内部入口。
 fn grant(identity: &Identity, roles: &[(&str, &[Permission])]) {
     identity.state.lock().unwrap().grants =
         roles.iter().map(|(role, permissions)| ((*role).into(), permissions.to_vec())).collect();
 }
 
+// 历史参与可补足客户详情读取，当前选用仍须落在当前范围内。
 #[tokio::test]
 async fn customer_history_allows_viewing_but_current_selection_requires_current_scope() {
     let identity = Arc::new(Identity::default());
@@ -70,6 +73,7 @@ async fn customer_history_allows_viewing_but_current_selection_requires_current_
     ));
 }
 
+// 文件流转须验证真实归属，即使该入口没有独立可授予的菜单权限。
 #[tokio::test]
 async fn file_transfer_requires_real_ownership_even_without_assignable_menu_permission() {
     let identity = Arc::new(Identity::default());
@@ -90,6 +94,7 @@ async fn file_transfer_requires_real_ownership_even_without_assignable_menu_perm
         .unwrap();
 }
 
+// 内部预览不要求独立菜单权限，但仍检查实际对象归属。
 #[tokio::test]
 async fn internal_previews_keep_owner_checks_without_requesting_a_menu_grant() {
     for permission in [internal::CATALOG_PREVIEW_DETAIL, internal::SALES_INQUIRY_IMPORT_PREVIEW] {
@@ -119,6 +124,7 @@ async fn internal_previews_keep_owner_checks_without_requesting_a_menu_grant() {
     }
 }
 
+// 后台任务管理员可读全量任务，领域导入任务的读取仍限于本人。
 #[tokio::test]
 async fn background_administrators_can_read_all_jobs_but_domain_import_reads_stay_owned() {
     let identity = Arc::new(Identity::default());
@@ -171,6 +177,7 @@ async fn background_administrators_can_read_all_jobs_but_domain_import_reads_sta
     ));
 }
 
+// 批量取消后台任务，必须同时具备功能权限和系统管理员角色。
 #[tokio::test]
 async fn cancelling_all_jobs_requires_both_function_grant_and_administrator_role() {
     let identity = Arc::new(Identity::default());
@@ -197,6 +204,7 @@ async fn cancelling_all_jobs_requires_both_function_grant_and_administrator_role
     }
 }
 
+// 供应商物料操作需具备所有独立业务资格，缺项时不得读取候选来源。
 #[tokio::test]
 async fn supplier_material_requires_every_independent_business_qualification() {
     let identity = Arc::new(Identity::default());
@@ -271,6 +279,7 @@ async fn supplier_material_requires_every_independent_business_qualification() {
     ));
 }
 
+// 质量现状查询在分页限额前取独立业务范围的交集，避免漏掉合格记录。
 #[tokio::test]
 async fn quality_current_query_intersects_independent_scopes_before_result_limits() {
     use std::collections::BTreeMap;
@@ -320,6 +329,7 @@ async fn quality_current_query_intersects_independent_scopes_before_result_limit
     service.validate(&access, &mut executor).await.unwrap();
 }
 
+// 质量现状查询需独立客户资格；客户范围为空时不得返回记录。
 #[tokio::test]
 async fn quality_current_query_requires_customer_qualification_and_preserves_empty_customer_scope() {
     use std::collections::BTreeMap;
@@ -358,6 +368,7 @@ async fn quality_current_query_requires_customer_qualification_and_preserves_emp
     service.validate(&access, &mut executor).await.unwrap();
 }
 
+// 质量现状的客户候选按客户列表资格过滤，不叠加历史参与读取。
 #[tokio::test]
 async fn quality_current_customer_candidates_use_list_qualification_without_historical_supplement() {
     use std::collections::BTreeMap;
@@ -385,6 +396,7 @@ async fn quality_current_customer_candidates_use_list_qualification_without_hist
     service.validate(&access, &mut executor).await.unwrap();
 }
 
+// 有预览权限也不能代替文件的真实上传人资格，或用错误目标申请流转。
 #[tokio::test]
 async fn transfer_requires_the_real_uploader_even_with_preview_permission() {
     let identity = Arc::new(Identity::default());
@@ -426,6 +438,7 @@ async fn transfer_requires_the_real_uploader_even_with_preview_permission() {
     ));
 }
 
+// 整账资格由同一角色的完整权限决定，不因查询绑定支持整账计划而自动获得。
 #[tokio::test]
 async fn whole_finance_qualification_comes_from_one_role_and_not_from_plan_binding() {
     use erp_permissions::{cost, policy_permission, sales_order};
@@ -454,6 +467,7 @@ async fn whole_finance_qualification_comes_from_one_role_and_not_from_plan_bindi
     service.validate(&access, &mut executor).await.unwrap();
 }
 
+// 供应商交接须同时通过原归属与目标归属的范围检查。
 #[tokio::test]
 async fn supplier_handover_checks_both_original_and_target_ownership() {
     use crate::entity::access_control::{ResolvedScope, ScopeClause};
@@ -497,6 +511,7 @@ async fn supplier_handover_checks_both_original_and_target_ownership() {
     }
 }
 
+// 结算命令按固定规则区分编制人和当前处理人，公司范围不能替代这些身份。
 #[tokio::test]
 async fn settlement_commands_use_central_preparer_and_assignee_policies() {
     use erp_permissions::supplier_settlement as settlement;
@@ -570,6 +585,7 @@ async fn settlement_commands_use_central_preparer_and_assignee_policies() {
     ));
 }
 
+// 抄送详情只返回本人收到的记录，交付后结束原读取阶段。
 #[tokio::test]
 async fn copy_detail_query_filters_recipient_and_finishes_its_original_read_stage() {
     use std::collections::BTreeMap;
@@ -597,6 +613,7 @@ async fn copy_detail_query_filters_recipient_and_finishes_its_original_read_stag
     assert!(access.ensure_current(&mut executor).is_err());
 }
 
+// 组织范围使用固定档案资格并绑定原快照读取阶段，不接受其他动作替代。
 #[tokio::test]
 async fn organization_scope_preserves_fixed_profile_qualification_and_snapshot_boundaries() {
     use erp_permissions::{admin, organization};

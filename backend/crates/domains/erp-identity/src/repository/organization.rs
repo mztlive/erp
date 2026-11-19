@@ -19,24 +19,19 @@ pub const ORG_MANAGEMENT: &str = "org_management_assignments";
 pub const ORG_REVISIONS: &str = "org_revisions";
 pub const ORG_CHANGES: &str = "org_changes";
 
-/// 身份域拥有的组织仓储，提供批量事实及原子变更所需操作。
+/// 身份域组织仓储，读取组织事实并在用例事务内保存原子变更。
 pub struct OrganizationRepository<'a> {
+    // 组织单元、成员、版本及回执所在的身份数据库。
     db: &'a Database,
 }
 
 impl<'a> OrganizationRepository<'a> {
-    /// 绑定数据库。
-    /// 返回仅拥有组织集合的仓储实例。
+    /// 绑定身份数据库，供组织管理和授权事实读取使用。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
-    /// 在调用方同一事务中读取版本与完整组织事实。
-    /// 返回组织单元、成员和版本；旧管理关系仅从历史回执读取；尚无版本文档时版本为 `0`。
-    ///
-    /// 任一集合读取失败时返回仓储错误，不返回残缺状态。
-    ///
-    /// `executor`：调用方事务或非事务执行器。
+    /// 在调用方同一事务读取组织版本、单元和成员；没有版本文档时以 0 开始。旧管理关系只从历史回执读取，任何集合读取失败都不返回部分状态。
     pub async fn state(&self, executor: &mut dyn Executor) -> Result<OrganizationState> {
         Ok(OrganizationState {
             version: self.revision(executor).await?.map(|value| value.revision).unwrap_or(0),
@@ -48,18 +43,12 @@ impl<'a> OrganizationRepository<'a> {
         })
     }
 
-    /// 读取当前组织版本，用于跨页重验与缓存失效。
-    /// 返回标识为 `organization` 的版本文档；尚无文档时返回 `None`。
-    ///
-    /// 底层读取失败时返回仓储错误。
+    /// 读取 `organization` 修订文档，供跨页复验和缓存失效使用；未初始化返回 `None`，读取失败返回仓储错误。
     pub async fn revision(&self, executor: &mut dyn Executor) -> Result<Option<OrganizationRevision>> {
         Repository::new(self.db, ORG_REVISIONS).find_by_id("organization", executor).await
     }
 
-    /// 查询幂等命令回执；仅组织管理用例可返回审计详情。
-    /// 返回匹配回执；不存在时返回 `None`。
-    ///
-    /// 底层读取失败时返回仓储错误。
+    /// 按幂等命令 ID 查询回执；缺失返回 `None`，读取失败返回仓储错误。仅组织管理用例能对外返回审计详情。
     pub async fn receipt(
         &self,
         id: &str,
@@ -68,15 +57,7 @@ impl<'a> OrganizationRepository<'a> {
         Repository::new(self.db, ORG_CHANGES).find_by_id(id, executor).await
     }
 
-    /// 推进全局版本，写入有变化的组织单元和成员，并创建含前后状态的变更回执。
-    ///
-    /// 不写入管理范围集合。必须传入同一业务事务执行器。
-    ///
-    /// 版本、变化的组织单元与成员以及回执都写入成功时无额外返回值。
-    ///
-    /// 版本与预期不符、回执键重复或任一写入失败时返回仓储错误，由调用方回滚。
-    ///
-    /// `receipt`：含预期版本和前后组织状态的变更回执；`executor`：调用方的同一事务执行器。
+    /// 在同一业务事务中推进组织版本，保存变化的单元和成员，并创建含前后状态的回执；不写管理范围集合。版本不符、回执键重复或写入失败时返回错误，由调用方回滚。
     pub async fn save(
         &self,
         receipt: &mut OrganizationChangeReceipt,
@@ -97,7 +78,7 @@ impl<'a> OrganizationRepository<'a> {
         Repository::new(self.db, ORG_CHANGES).create(receipt, executor).await
     }
 
-    // 组织写事务先竞争推进统一修订文档，以便并发移动及成员有效期变更不能绕过跨行校验。
+    // 先比较并推进统一修订，使并发组织移动或成员有效期变更无法绕过跨行校验。
     async fn advance(&self, expected: u64, next: u64, executor: &mut dyn Executor) -> Result<()> {
         let repository = Repository::<OrganizationRevision>::new(self.db, ORG_REVISIONS);
         let current = self.revision(executor).await?;
@@ -122,7 +103,7 @@ impl<'a> OrganizationRepository<'a> {
     }
 }
 
-// 持久化组织状态差异时只插入新增实体或更新变动行，沿用实体乐观锁并保留历史。
+// 对比组织实体前后状态，只插入新增行或用乐观锁更新变更行，保留历史记录。
 async fn save_changed<T>(
     db: &Database,
     collection: &str,
@@ -148,12 +129,7 @@ where
     Ok(())
 }
 
-/// 声明组织版本提交后的授权刷新来源。
-/// 组织事务完成后才可见的版本事件。
-///
-/// 不执行 I/O。
-///
-/// topic 为消费方主题。
+/// 为授权刷新消费者声明组织版本变更源，只暴露已提交的事务事件；构造不访问数据库。
 pub fn changes<T>(topic: T) -> ChangeSource<T> {
     ChangeSource::shared(ORG_REVISIONS, topic)
 }

@@ -4,12 +4,9 @@ use super::PREDEFINED_ROLES;
 use crate::Result;
 use crate::entity::role_template::{BuiltinRoleTemplate, FinancePosition};
 
-/// 取得部署岗位模板，包括细分财务岗位及可选综合财务。
-/// 服务端版本的完整岗位权限及上岗条件。
-///
-/// 静态模板权限非法时返回错误。
-///
-/// 模板不依赖数据库或演示账号。
+/// 在管理端预览或显式生成岗位前，构建含权限及上岗条件的服务端目录。
+/// 从综合财务派生财务总监、出纳和开票岗，保留综合财务供按需选择。
+/// 构建仅使用静态定义，无需数据库或演示账号；权限解析失败时返回错误。
 pub fn builtin_role_templates() -> Result<Vec<BuiltinRoleTemplate>> {
     let mut templates = Vec::new();
     for role in PREDEFINED_ROLES {
@@ -31,7 +28,8 @@ mod tests {
     use crate::entity::role_template::BuiltinRoleState;
     use crate::entity::{Permission, PermissionSet, Role, RoleData};
 
-    // 验证：财务任务真实要求的权限齐全，三个岗位的资金、审批和责任配置互相隔离。
+    // 检查出纳、开票和财务总监具备各自任务所需权限，资金、开票、审批与责任配置按岗位分离。
+    // 采购可提交付款申请；细分财务中仅出纳可付款、财务总监可关闭，综合及细分财务均可读取整账。
     #[test]
     fn finance_positions_cover_execution_and_separate_duties() {
         let catalog = builtin_role_templates().unwrap();
@@ -97,7 +95,8 @@ mod tests {
         }
     }
 
-    // 验证：模板选择在写入前整批拒绝非法、重复或空选择。
+    // 检查生成前的目录数量与推荐边界；选择保留请求顺序，空选、未知或重复岗位整批拒绝。
+    // 超级管理员不在候选目录中，所有模板均排除全资源通配。
     #[test]
     fn selection_is_bounded_and_rejects_unknown_or_duplicate_templates() {
         let catalog = builtin_role_templates().unwrap();
@@ -118,7 +117,8 @@ mod tests {
         }
     }
 
-    // 验证：管理层不改派或干预审批，技术岗位不自动获得业务审批资格。
+    // 检查有别于待办查看的改派、审批干预及后台任务取消权限不随管理层岗位授予。
+    // 系统管理员的审批决定及流程发布权限须另行授予。
     #[test]
     fn management_and_technical_templates_keep_job_boundaries() {
         let catalog = builtin_role_templates().unwrap();
@@ -142,7 +142,7 @@ mod tests {
         }
     }
 
-    // 验证：既有角色即使改名、停用或删除也不被模板恢复。
+    // 检查生成前的角色状态判定：仅缺失可新建，改名、停用或软删除的角色仍保留既有身份。
     #[test]
     fn existing_identity_is_preserved_in_every_state() {
         assert_eq!(BuiltinRoleState::from_role(None), BuiltinRoleState::Missing);

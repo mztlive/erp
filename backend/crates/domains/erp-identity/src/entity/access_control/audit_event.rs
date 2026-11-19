@@ -36,23 +36,22 @@ const SOURCE_IP_MAX_LEN: usize = 64;
 /// 设备上下文最大长度。
 const DEVICE_CONTEXT_MAX_LEN: usize = 256;
 
-/// 审计结果（W19 §5.2：成功、拒绝、失败、结果未知后的最终结论）。
+/// W19 §5.2 安全审计记录的动作结果，区分成功、拒绝、失败和暂无法确认。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AuditEventResult {
-    /// 成功。
+    /// 动作已确认成功。
     Success,
-    /// 拒绝。
+    /// 动作因权限或策略被拒绝。
     Denied,
-    /// 失败。
+    /// 动作执行失败。
     Failed,
-    /// 结果未知。
+    /// 动作结果暂无法确认，需以查证后的结论为准。
     Unknown,
 }
 
 impl AuditEventResult {
-    /// 返回结果的中文展示名。
-    /// 成功、拒绝、失败分别为「成功」「拒绝」「失败」，未知为「结果未知」。
+    /// 为审计界面提供「成功」「拒绝」「失败」「结果未知」四种中文标签。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Success => "成功",
@@ -62,8 +61,7 @@ impl AuditEventResult {
         }
     }
 
-    /// 取得结果的稳定代码。
-    /// 依次为 `SUCCESS`、`DENIED`、`FAILED`、`UNKNOWN`。
+    /// 返回与序列化一致的稳定代码：`SUCCESS`、`DENIED`、`FAILED` 或 `UNKNOWN`。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Success => "SUCCESS",
@@ -74,90 +72,81 @@ impl AuditEventResult {
     }
 }
 
-/// 审计事件创建数据。
+/// 追加身份治理审计事件前，由写入方提供的动作结果、快照和请求关联信息。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AuditEventData {
-    /// 操作者 ID。
+    /// 发起动作的账号或系统身份 ID。
     pub actor_id: String,
-    /// 操作者名称快照（使用当时显示名，不用当前角色覆盖）。
+    /// 动作发生时的操作者显示名，供历史展示使用。
     pub actor_label: String,
-    /// 动作发生时责任角色快照。
+    /// 动作发生时的责任角色标识，保留当时的身份上下文。
     pub actor_role: String,
-    /// 动作代码。
+    /// 用于分类和检索的审计动作代码，如 `user_role.assign`。
     pub action_type: String,
-    /// 业务对象类型代码。
+    /// 动作所涉及的对象类型代码，用于按业务类别追溯。
     pub object_type: String,
-    /// 业务对象 ID。
+    /// 已知的目标记录 ID；无具体记录时可缺省。
     pub object_id: Option<String>,
-    /// 业务对象安全标题。
+    /// 可安全展示的目标标题快照，须由写入方排除敏感内容。
     pub object_label: Option<String>,
-    /// 请求追踪号。
+    /// 入口请求的追踪号，用于关联同一请求产生的事件。
     pub request_id: Option<String>,
-    /// 链路追踪号。
+    /// 跨服务链路的追踪号，用于关联调用链记录。
     pub trace_id: Option<String>,
-    /// 最终结果。
+    /// 写入方在记录时掌握的动作结果。
     pub result: AuditEventResult,
-    /// 变更字段名（只记录字段名和「已变更」，不记录敏感旧值或新值）。
+    /// 以字段名标记「已变更」，不携带旧值或新值。
     pub changed_field_names: Vec<String>,
-    /// 安全摘要（带密钥摘要或不可逆摘要引用，不能据此离线枚举原值）。
+    /// 写入方提供的带密钥摘要或不可逆摘要引用，须防止离线枚举原值。
     pub safe_digest: Option<String>,
-    /// 来源 IP。
+    /// 入口已取得的来源 IP 地址文本。
     pub source_ip: Option<String>,
-    /// 设备上下文。
+    /// 入口已取得的安全设备上下文，如系统及版本。
     pub device_context: Option<String>,
 }
 
-/// 审计事件实体（数据模型 §4.5.4 / W19 §5.2）。
+/// 身份治理的追加式审计事件（数据模型 §4.5.4 / W19 §5.2），禁止编辑和删除。
 ///
-/// 追加式留痕，不可编辑、不可删除；敏感字段只记录「已变更」与摘要，不记录
-/// 完整旧值或新值（§4.5.4）。字段与既有 `entities::audit_log` 对齐（domains.md
-/// 注：`audit_log → audit_event` 字段对齐），事件追加使用 `BaseModel` 持久化
-/// 元数据，`created_at` 即事件发生时间。
+/// 留痕字段与 `audit_log` 的对应字段对齐。敏感字段仅保留变更标记和安全摘要，供历史追溯。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct AuditEvent {
+    /// 扁平存储的持久化元数据；`created_at` 用作事件发生时间。
     #[serde(flatten)]
     pub base: BaseModel,
-    /// 操作者 ID。
+    /// 发生动作的操作者 ID，供审计按身份筛选。
     pub actor_id: String,
-    /// 操作者名称快照。
+    /// 留痕时保存的操作者显示名，展示时沿用该快照。
     pub actor_label: String,
-    /// 责任角色快照。
+    /// 留痕时保存的责任角色，用于还原动作发生时的身份上下文。
     pub actor_role: String,
-    /// 动作代码。
+    /// 已记录的审计动作代码，供分类检索和目录映射。
     pub action_type: String,
-    /// 业务对象类型代码。
+    /// 审计目标的对象类型，和对象 ID 一起定位业务记录。
     pub object_type: String,
-    /// 业务对象 ID。
+    /// 审计目标的记录 ID，缺省表示未记录具体目标标识。
     pub object_id: Option<String>,
-    /// 业务对象安全标题。
+    /// 审计目标在动作发生时的安全展示标题。
     pub object_label: Option<String>,
-    /// 请求追踪号。
+    /// 已记录的入口请求追踪号，供按请求反查事件。
     pub request_id: Option<String>,
-    /// 链路追踪号。
+    /// 已记录的链路追踪号，供跨服务追查。
     pub trace_id: Option<String>,
-    /// 最终结果。
+    /// 事件中记录的动作结果，供审计筛选和展示。
     pub result: AuditEventResult,
-    /// 变更字段名（去重保序）。
+    /// 规范化后按首次出现顺序保存的唯一字段名，仅表达变更事实。
     pub changed_field_names: Vec<String>,
-    /// 安全摘要。
+    /// 用于安全追溯的摘要或摘要引用，完整敏感值不得入库。
     pub safe_digest: Option<String>,
-    /// 来源 IP。
+    /// 动作入口记录的来源 IP 文本，缺省表示未记录。
     pub source_ip: Option<String>,
-    /// 设备上下文。
+    /// 动作发生时留存的安全设备上下文，供排查使用。
     pub device_context: Option<String>,
 }
 
 impl AuditEvent {
-    /// 创建审计事件。
-    ///
-    /// 完成全部文本字段的校验与规范化（trim、非空、长度上限）；`changed_field_names`
-    /// 逐项 trim、去重、保序，数量不超过上限（防审计膨胀）。
-    ///
-    /// 返回新建的审计事件。
-    ///
-    /// 当必填字段为空/超长，或变更字段名数量越界时返回错误。
-    ///
-    /// `id`：实体主键（`erp_core::ids::AuditEventId`）。
+    /// 用调用方分配的 `id` 构造待追加事件，裁剪文本首尾空白并按字段限制字符数。
+    /// 必填文本为空、任一文本超长、变更字段名为空或原始字段名列表超过 64 项时返回错误；
+    /// 可选空白文本视为缺省，变更字段名去重并保留首次出现的顺序。
     pub fn new(id: AuditEventId, data: AuditEventData) -> Result<Self> {
         let actor_id =
             normalize_required_text(data.actor_id, "操作者ID不能为空", ACTOR_ID_MAX_LEN, "操作者ID过长")?;
@@ -209,12 +198,8 @@ impl AuditEvent {
     }
 }
 
-// 规范化变更字段名列表：trim、去重、保序、数量与长度上限。
-// 返回去重保序后的字段名列表。
-//
-// 当数量超过上限或任一字段名为空/超长时返回错误。
-//
-// `field_names`：原始字段名列表。
+// 去重前限制原始列表最多 64 项；逐项裁剪空白，拒绝空名和超过 128 字符的名称，
+// 再按首次出现的顺序保留不同字段，控制审计体积。
 fn normalize_field_names(field_names: Vec<String>) -> Result<Vec<String>> {
     if field_names.len() > MAX_CHANGED_FIELDS {
         return Err(Error::from(format!("变更字段名数量不能超过 {MAX_CHANGED_FIELDS}")));
@@ -237,6 +222,7 @@ mod tests {
 
     use super::{AuditEvent, AuditEventData, AuditEventResult};
 
+    // 构造带空白和重复变更字段名的销售单审批样本，供实体校验和往返测试复用。
     fn data() -> AuditEventData {
         AuditEventData {
             actor_id: " user-1 ".to_string(),
@@ -260,7 +246,7 @@ mod tests {
         }
     }
 
-    // 验证字段 去除首尾空白、字段名去重保序。
+    // 确认构造时裁剪操作者和目标等文本，保序去重变更字段名并保留动作结果。
     #[test]
     fn new_trims_fields_and_deduplicates_field_names() {
         let event = AuditEvent::new(AuditEventId::new("ae-1"), data()).unwrap();
@@ -272,14 +258,14 @@ mod tests {
         assert_eq!(event.result, AuditEventResult::Success);
     }
 
-    // 验证创建审计事件时拒绝空白动作类型。
+    // 确认动作代码只有空白时无法构造事件。
     #[test]
     fn new_rejects_empty_action_type() {
         let payload = AuditEventData { action_type: "  ".to_string(), ..data() };
         assert!(AuditEvent::new(AuditEventId::new("ae-1"), payload).is_err());
     }
 
-    // 验证字段名数量越界时会被拒绝。
+    // 确认变更字段名列表超过 64 项时拒绝写入输入。
     #[test]
     fn new_rejects_too_many_changed_fields() {
         let payload = AuditEventData {
@@ -289,14 +275,14 @@ mod tests {
         assert!(AuditEvent::new(AuditEventId::new("ae-1"), payload).is_err());
     }
 
-    // 验证超长对象标题时会被拒绝。
+    // 确认可选的安全标题有值时仍受 256 字符上限约束。
     #[test]
     fn new_rejects_overlong_object_label() {
         let payload = AuditEventData { object_label: Some("x".repeat(257)), ..data() };
         assert!(AuditEvent::new(AuditEventId::new("ae-1"), payload).is_err());
     }
 
-    // 锁定审计结果枚举的持久化代码和中文展示标签。
+    // 固定拒绝的序列化值、未知的稳定代码及成功和失败的中文标签。
     #[test]
     fn result_codes_and_labels_are_stable() {
         assert_eq!(serde_json::to_string(&AuditEventResult::Denied).unwrap(), "\"DENIED\"");
@@ -305,7 +291,7 @@ mod tests {
         assert_eq!(AuditEventResult::Success.label(), "成功");
     }
 
-    // 验证审计事件经 JSON 序列化再读回时保留原实体值。
+    // 确认 JSON 序列化与反序列化保留完整审计事件。
     #[test]
     fn entity_roundtrips_through_bson() {
         let event = AuditEvent::new(AuditEventId::new("ae-1"), data()).unwrap();

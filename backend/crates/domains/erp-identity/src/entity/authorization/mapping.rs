@@ -6,30 +6,43 @@ use serde_json::Value;
 use super::{FactKind, QueryModelKey};
 use crate::{Error, Result};
 
-/// 登记模型的查询行身份；一个模型固定一组记录和粒度。
+/// 启动时登记的查询模型，固定根集合、行身份、输出粒度及支持的事实维度。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryModel {
+    /// 查询模型的登记标识，用于绑定授权凭证。
     pub key: QueryModelKey,
+    /// 模型对应的业务资源，用于核对授权入口和来源关系。
     pub resource: String,
+    /// 查询根记录或关联来源所在的集合。
     pub collection: String,
+    /// 结果行的主键字段路径，受限视图也须保留此字段。
     pub id_field: String,
+    /// 固定输出粒度；受限视图同时声明可投影的字段。
     pub output: QueryOutput,
+    /// 映射能转换为查询条件的事实维度，供启动时校验规则所需能力。
     pub facts: BTreeSet<FactKind>,
 }
 
-/// 完整对象、单一来源份额和存在性视图必须登记不同模型。
+/// 查询的固定输出粒度；完整对象、单一来源份额与存在性视图各用独立模型。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryOutput {
+    /// 返回完整业务对象。
     Object,
-    Share { fields: BTreeSet<String> },
-    Existence { fields: BTreeSet<String> },
+    /// 返回单一来源的可见份额，每行只对应一个来源。
+    Share {
+        /// 允许投影的份额字段与行主键；金额仅取该份额。
+        fields: BTreeSet<String>
+    },
+    /// 仅暴露记录存在性的只读视图。
+    Existence {
+        /// 投影字段集合，必须且只能包含行主键。
+        fields: BTreeSet<String>
+    },
 }
 
 impl QueryModel {
-    /// 校验服务端查询模型。
-    /// 标识和路径可用于权限编译时成功。
-    ///
-    /// 拒绝非法模型或字段、缺少行主键的受限输出，以及包含额外字段的存在性输出。
+    /// 登记时校验资源、集合、行主键和投影路径；前三项非空且各最多 128 字节。
+    /// 受限输出必须包含行主键，存在性输出只允许该主键。
     pub fn validate(&self) -> Result<()> {
         for value in [&self.resource, &self.collection, &self.id_field] {
             if value.is_empty()
@@ -56,29 +69,27 @@ impl QueryModel {
     }
 }
 
-// 登记字段路径时拒绝空片段或占用授权编译器临时字段的片段，避免业务字段和聚合中间值冲突。
+// 路径片段须由 ASCII 字母、数字或下划线组成，且非空、避开编译器保留前缀 `__identity_`。
 fn valid_segment(value: &str) -> bool {
     !value.is_empty()
         && !value.starts_with("__identity_")
         && value.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
 }
 
-/// 映射准备的修订号和有效期。无修订号时只能用于调用方事务快照。
+/// 当前读取阶段准备的动态映射事实及其一致性边界；缺少修订号时仅用于调用方事务快照。
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MappingFacts {
-    /// 当前调用冻结的数据，Mapping 不得把准备结果写入共享实例。
+    /// 本次条件转换使用的冻结数据，仅随调用传递，禁止写入共享映射实例。
     pub data: Value,
+    /// 覆盖数据变更的修订号，供非事务读取在交付前重取并比较。
     pub version: Option<String>,
+    /// 任一依赖最早到期的时刻，到点后本次事实失效。
     pub valid_until: Option<Instant>,
 }
 
 impl MappingFacts {
-    /// 核验事实是否具有本执行方式所需的一致性证据。
-    /// 事实可继续使用时成功。
-    ///
-    /// 无版本的非事务读取、空版本或已经到期拒绝。
-    ///
-    /// transactional 表示使用调用方事务；now 为复验时间。
+    /// 在 `now` 核对动态事实：非事务读取要求修订号，提供的修订号必须非空。
+    /// `transactional` 表示使用调用方事务；到达有效期时返回 `DATA_SCOPE_CHANGED`。
     pub fn validate(&self, transactional: bool, now: Instant) -> Result<()> {
         if self.version.as_ref().is_some_and(|value| value.is_empty())
             || (!transactional && self.version.is_none())
@@ -96,6 +107,7 @@ impl MappingFacts {
 mod tests {
     use super::*;
 
+    // 验证份额模型允许合规投影，受限视图必须包含行主键且字段路径合法。
     #[test]
     fn restricted_models_require_row_identity_and_valid_paths() {
         let mut model = QueryModel {
@@ -117,6 +129,7 @@ mod tests {
         }
     }
 
+    // 验证事务可省略修订号、空修订号始终无效，且事实在到期时刻立即失效。
     #[test]
     fn facts_require_revision_or_transaction_and_expire_at_boundary() {
         let now = Instant::from_unix_secs(10);

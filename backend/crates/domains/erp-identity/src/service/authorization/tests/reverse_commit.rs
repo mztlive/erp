@@ -10,6 +10,7 @@ use super::fixtures::{Facts, Identity, actor, candidate, complete, object};
 use crate::Error;
 use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts, RelatedObjects, RelationKey};
 
+// 构造持久化的资金来源对象，并明确其各类下游引用为空。
 fn origin(resource: &str) -> ObjectFacts {
     ObjectFacts {
         relations: ["sales_source", "purchase_source", "settlement_source"]
@@ -20,6 +21,7 @@ fn origin(resource: &str) -> ObjectFacts {
     }
 }
 
+// 构造只带资金来源引用的提交候选，可另加一个空关系测试目标形状。
 fn commit_candidate(permission: &Permission, key: &str, other: Option<&str>) -> ObjectFacts {
     let mut value = candidate(permission.resource(), "user");
     value.relations.insert(
@@ -32,6 +34,7 @@ fn commit_candidate(permission: &Permission, key: &str, other: Option<&str>) -> 
     value
 }
 
+// 提交候选须有当前提交资格及完整真实来源，但不加载尚未创建的根记录。
 #[tokio::test]
 async fn commit_candidates_require_current_submit_and_full_real_source_without_loading_a_new_root() {
     for (permission, source_permission, key, other) in [

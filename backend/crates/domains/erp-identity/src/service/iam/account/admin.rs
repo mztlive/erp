@@ -27,43 +27,55 @@ use crate::service::iam::management::ManagementAccess;
 use crate::service::iam::{AuthorizedAccountManagement, AuthorizedRoleGrant, SharedRbacService};
 use crate::{AccessControlExt, AuthorizationService};
 
-/// 管理员服务
-///
-/// 提供管理员账号的创建、更新、删除及角色分配相关业务逻辑。
+/// 后台管理员账号用例，负责列表、账号维护、角色分配及超级管理员初始化。
 pub struct AdminService {
+    /// 身份数据库，用于读取账号及开启本域事务。
     pub(super) db: Database,
+    /// 共享 Casbin 角色授权服务，用于角色取证和策略写事务。
     pub(super) rbac: SharedRbacService,
 }
 
-/// 超级管理员初始化结果。
+/// 运维初始化完成后的账号标识及变更结果。
 #[derive(Debug, Clone)]
 pub struct InitializeSuperAdminResult {
-    /// 超级管理员账号ID。
+    /// 超级管理员账号 ID。
     pub admin_id: String,
-    /// 超级管理员账号名。
+    /// 规范化后的登录账号。
     pub account: String,
-    /// 是否新建了管理员账号。
+    /// 本次是否新建账号。
     pub created: bool,
-    /// 是否将已有账号从停用状态恢复为启用。
+    /// 是否恢复了原先不可登录或已软删除的账号。
     pub reactivated: bool,
-    /// 是否新增了 `role-root` 绑定。
+    /// 本次是否为新账号建立或为原先缺少绑定的账号补齐 `role-root`。
     pub root_role_bound: bool,
 }
 
-/// 超级管理员初始化后的合法状态。
+// 区分超级管理员是首次创建还是通过运维命令修复已有账号。
 enum SuperAdminInitialization {
-    Created(AccountCore),
-    Existing { account: AccountCore, reactivated: bool, root_role_bound: bool },
+    Created(
+        // 已初始化根角色绑定和公司人员范围的新账号。
+        AccountCore
+    ),
+    Existing {
+        // 完成资料更新和角色绑定后的账号。
+        account: AccountCore,
+        // 修复前是否不可登录或已软删除。
+        reactivated: bool,
+        // 修复前是否缺少 `role-root` 绑定。
+        root_role_bound: bool
+    },
 }
 
-/// 已应用账号领域更新并规范化角色集合的管理员更新上下文。
+// 管理员资料更新的事务外准备结果，供写事务选择资料或角色写入路径。
 struct AdminUpdateContext {
+    // 已应用领域更新的管理员账号，变更的密码已哈希。
     account: AccountCore,
+    // 目标管理资格对应的策略版本与可选的完整角色授予。
     authorization: AuthorizedAccountManagement,
 }
 
 impl SuperAdminInitialization {
-    // 将新建、恢复或补绑后的初始化状态拆为管理员账号及客户端需要的结果标记。
+    // 构造运维回执前拆出账号和新建、恢复启用、补绑根角色三个标记。
     fn into_parts(self) -> (AccountCore, bool, bool, bool) {
         match self {
             Self::Created(account) => (account, true, false, true),
@@ -75,12 +87,13 @@ impl SuperAdminInitialization {
 }
 
 impl AdminService {
-    /// 在应用装配时用身份库和共享 RBAC 服务构造管理员用例，不在构造时取证或写库。
+    /// 装配管理端或运维命令时接入身份数据库和共享 Casbin 角色授权服务，构造阶段只保存依赖。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
 
-    /// 通过管理员创建入口预检后，验证账号唯一性、密码和可授予角色，生成密码哈希。实际写事务重新检查入口与授予条件，并一并保存账号、角色绑定和审计。
+    /// 管理端新增账号时先预检入口，再检查账号是否被占用、校验密码并确认可授予的角色；密码哈希在事务外生成。
+    /// 写事务重验入口、授权策略版本及角色有效性，原子保存账号、Casbin 绑定和审计。
     ///
     /// 账号已占用、指定角色无效、权限不足或密码校验不通过时拒绝创建。
     pub async fn create_admin(
@@ -109,7 +122,9 @@ impl AdminService {
         Ok(())
     }
 
-    /// 供系统初始化流程准备内建根角色和系统管理员。结果区分新建账号、恢复启用和补齐根角色绑定；输入非法、账号冲突或持久化失败时返回错误。
+    /// 供运维 `init-admin` 确保内建根角色存在，并新建或修复超级管理员。
+    /// 修复时更新名称和密码、恢复启用并将角色集设为 `role-root`。回执标明新建、恢复和补绑。
+    /// 输入非法、同名账号类型不符、账号冲突或持久化失败时返回错误。
     pub async fn initialize_super_admin(
         &self,
         params: InitializeSuperAdminParams,
@@ -128,7 +143,8 @@ impl AdminService {
         })
     }
 
-    /// 供管理员管理页读取管理员和当前角色 ID。通过固定列表资格后在同一事务读取账号与角色绑定，返回前再次检查入口；授权或读取失败不返回部分列表。
+    /// 管理员列表在同一事务读取账号与 Casbin 直接角色绑定，返回前用原执行器再验列表入口。
+    /// 授权和读取均通过后才交付完整列表。
     pub async fn admin_list(
         &self,
         actor: &AuditActor,
@@ -166,7 +182,8 @@ impl AdminService {
             .await
     }
 
-    /// 管理端更新管理员姓名、密码、状态或角色时，先检查入口、目标管理资格及角色授予上限，再在写事务重验并保存。
+    /// 管理端更新管理员姓名、密码、状态或角色时，先检查入口、目标管理资格及角色授予上限。
+    /// 写事务重验入口和授权策略版本，保存资料、可选的完整角色替换及审计。
     ///
     /// 找不到目标、角色无效或试图停用当前登录账号时拒绝。
     pub async fn update_admin(
@@ -196,7 +213,7 @@ impl AdminService {
         Ok(())
     }
 
-    // 在写事务前加载并校验目标管理员、规范化可选角色，并准备资料变更；实际写入仍须重验管理授权。
+    // 写事务前校验目标管理员及可选的完整角色集，应用资料变更并哈希新密码；写入时仍须重验管理授权。
     async fn prepare_admin_update(
         &self,
         params: UpdateAdminParams,
@@ -222,7 +239,7 @@ impl AdminService {
         Ok(AdminUpdateContext { account, authorization })
     }
 
-    // 未变更角色时在同一个管理员写事务内更新账号资料并保存审计，不另开策略写事务。
+    // 未提交角色变更时，沿管理写事务只更新账号资料并保存审计，仍校验授权策略版本。
     async fn update_account_only(
         &self,
         mut account: AccountCore,
@@ -240,7 +257,8 @@ impl AdminService {
         .await
     }
 
-    /// 管理端仅换角色时替换目标管理员的完整角色集。写入前核对目标及新角色的授予资格；目标不存在或角色无效时拒绝。
+    /// 管理端仅更换角色时，校验目标及新角色的授予资格后，在写事务替换决定实际权限的 Casbin 角色集并记录审计。
+    /// 目标不存在、角色无效或写事务复验失败时拒绝。
     pub async fn update_admin_role(
         &self,
         params: UpdateAdminRoleParams,
@@ -280,7 +298,8 @@ impl AdminService {
         .await
     }
 
-    /// 通过管理员删除入口和目标管理资格后，在写事务内软删除管理员、清除其角色绑定并记录审计。目标不存在、资格或持久化校验失败均拒绝。
+    /// 管理端删除管理员时先校验入口和目标管理资格，再于写事务软删除账号、清除 Casbin 绑定并记录审计。
+    /// 目标不存在、资格不符或持久化失败时返回错误。
     pub async fn delete_admin(
         &self,
         id: String,
@@ -305,12 +324,7 @@ impl AdminService {
         self.delete_account_with_roles(account, audit, authorization.policy_revision(), access).await
     }
 
-    // 在同一事务中创建管理员账号并写入完整角色绑定。
-    // 账号、角色绑定和审计写入成功时返回成功。
-    //
-    // 当账号、角色绑定、事务提交或 policy 刷新失败时返回错误。
-    //
-    // `grant`：已校验的完整角色授予；`audit`：已准备的管理端资源审计。
+    // 管理端完成新账号和完整角色授予的准备后，在同一事务保存账号、Casbin 绑定及审计；写入或提交失败时返回错误。
     async fn create_account_with_roles(
         &self,
         account: AccountCore,
@@ -332,13 +346,7 @@ impl AdminService {
         .await
     }
 
-    // 在同一事务中更新管理员账号并覆盖完整角色绑定。
-    // 账号、角色绑定和审计更新成功时返回成功。
-    //
-    // 当账号、角色绑定、事务提交或 policy 刷新失败时返回错误。
-    //
-    // `account`：已应用领域更新的管理员实体；`grant`：已校验的替换后角色授予。
-    // `audit`：已准备的管理端资源审计。
+    // 资料更新包含角色变更时，在同一事务保存已更新的账号、替换完整 Casbin 绑定并写入审计；写入或提交失败时返回错误。
     async fn update_account_with_roles(
         &self,
         mut account: AccountCore,
@@ -360,7 +368,7 @@ impl AdminService {
         .await
     }
 
-    // 系统引导创建根管理员时，在同一初始化事务中保存账号和内建角色绑定。
+    // 首次创建超级管理员时，在同一系统策略事务保存账号、根角色绑定和公司人员范围。
     async fn create_system_account_with_roles(
         &self,
         account: AccountCore,
@@ -381,7 +389,7 @@ impl AdminService {
             .await
     }
 
-    // 初始化命中已有系统管理员时，按需在同一事务恢复账号并补齐 `role-root` 绑定。
+    // 运维修复已有管理员时，在同一系统策略事务按需恢复软删除记录、保存新资料，并将 Casbin 角色集替换为 `role-root`。
     async fn repair_system_account(
         &self,
         mut account: AccountCore,
@@ -410,12 +418,7 @@ impl AdminService {
             .await
     }
 
-    // 在同一事务中软删除管理员账号并清除全部角色绑定。
-    // 账号和绑定均删除成功时返回 `Ok(())`。
-    //
-    // 当账号、角色绑定、事务提交或 policy 刷新失败时返回错误。
-    //
-    // `audit`：已验证的管理操作审计日志；`policy_revision`：授权快照中的 policy 版本。
+    // 删除入口准备好审计后，以目标授权时的策略版本开启写事务，原子软删除账号、清除全部 Casbin 绑定并写审计。
     async fn delete_account_with_roles(
         &self,
         mut account: AccountCore,
@@ -436,8 +439,8 @@ impl AdminService {
         .await
     }
 
-    // 管理端写账号时按授权策略的期望版本开启事务，重验入口，并原子保存业务修改和审计。
-    // 系统初始化不走此入口，须使用 `run_system_policy_transaction`。
+    // 管理端账号写入统一在策略事务中重验入口和授权快照版本，并原子提交业务修改与审计。
+    // 提交后刷新本地 Casbin 策略；失败时记录错误，后续授权须先刷新成功。系统初始化使用独立的系统策略事务入口。
     async fn run_admin_account_write<T, F>(
         &self,
         policy_revision: u64,
@@ -461,7 +464,7 @@ impl AdminService {
             .await
     }
 
-    // 系统初始化按当前账号形状决定新建还是修复，目标是合法且启用的系统管理员及其 `role-root` 绑定。
+    // 运维初始化时按登录名查找账号（含软删除），决定新建还是修复，以取得启用且绑定 `role-root` 的管理员。
     async fn ensure_super_admin(
         &self,
         account: LoginAccount,
@@ -478,12 +481,8 @@ impl AdminService {
         Ok(SuperAdminInitialization::Created(admin))
     }
 
-    // 校验并原子修复已存在的超级管理员账号。
-    // 返回修复后的账号与实际写入状态。
-    //
-    // 账号不是系统管理员时返回业务错误；角色读取、密码处理或修复写入失败时返回对应错误。
-    //
-    // `current`：已存在账号。
+    // 运维初始化命中已有账号时，只修复系统管理员；先读取原状态和根角色绑定、准备新名称和密码，再原子写入。
+    // 按修复前状态生成结果标记；同名非管理员返回业务错误，角色读取、密码处理或写库失败沿用原错误。
     async fn ensure_existing_super_admin(
         &self,
         current: AccountCore,
@@ -519,10 +518,8 @@ impl AdminService {
         })
     }
 
-    // 创建系统超级管理员账号。
-    // 返回新建的管理员账号。
-    //
-    // 当参数校验或持久化失败时返回错误。
+    /// 启动引导或运维初始化确认账号缺失后，生成密码哈希并创建启用的管理员，同时绑定 `role-root` 和初始化公司人员范围。
+    /// 校验、哈希或持久化失败时返回错误。
     pub(super) async fn create_super_admin(
         &self,
         account: LoginAccount,
@@ -539,6 +536,7 @@ impl AdminService {
 mod tests {
     use crate::entity::account_core::ExistingSuperAdminState;
 
+    // 验证初始化状态分类覆盖启用、停用和软删除，且软删除优先于启用标记。
     #[test]
     fn existing_super_admin_state_covers_active_inactive_and_deleted_accounts() {
         assert_eq!(ExistingSuperAdminState::from_state(false, true), ExistingSuperAdminState::Active);
@@ -547,6 +545,7 @@ mod tests {
         assert_eq!(ExistingSuperAdminState::from_state(true, false), ExistingSuperAdminState::Deleted);
     }
 
+    // 验证修复停用或软删除账号均计为恢复启用，原本启用的账号不计入。
     #[test]
     fn inactive_and_deleted_super_admins_are_reported_as_reactivated() {
         assert!(!ExistingSuperAdminState::Active.reactivates());

@@ -13,12 +13,9 @@ use crate::service::auth::password;
 use crate::{AccessControlExt, Error, LoginAccount, Result};
 
 impl PortalIdentityService {
-    /// 从独立门户入口认证外部账号，不接受客户端身份类型。
-    /// 当前账号和绑定身份；组合层还须检查供应商启用事实后才能签发会话。
-    ///
-    /// 不存在、类型错误、停用、绑定撤销和密码错误均返回同一凭证错误。
-    ///
-    /// `request` 为固定登录允许字段。
+    /// 门户登录只按允许的登录字段认证供应商账号，不接收客户端指定的身份类型。
+    /// 不存在、类型不符、停用、绑定失效和密码错误均返回同一凭证错误。
+    /// 返回当前账号及绑定身份，组合层须再确认供应商已启用才能签发会话。
     pub async fn authenticate(&self, request: &PortalLoginPayload) -> Result<PortalActor> {
         request.validate()?;
         let login = LoginAccount::new(&request.account)?;
@@ -50,12 +47,8 @@ impl PortalIdentityService {
             .map_err(|_| invalid_credentials())
     }
 
-    /// 在每次门户访问或调用方写事务中重新读取账号和绑定。
-    /// 基于当前绑定的供应商归属及门户岗位，绝不采用客户端 supplier_id。
-    ///
-    /// 任一账号或绑定事实失效均拒绝；供应商停用仍由组合层继续检查。
-    ///
-    /// `account_id`、`account` 和两个版本来自已验证会话；`executor` 由调用方指定。
+    /// 每次门户访问及调用方写事务中，按已验证会话的账号 ID、登录名及两个版本重读账号和绑定。
+    /// 供应商归属及岗位只取当前绑定，不接受客户端指定；任一事实失效即拒绝，供应商启用另由组合层检查。
     pub async fn validate_session(
         &self,
         account_id: &str,
@@ -76,7 +69,7 @@ impl PortalIdentityService {
     }
 }
 
-// 统一报告供应商门户凭证失败，不泄露内部账号是否存在或供应商绑定的具体状态。
+// 门户登录失败时返回统一凭证错误，不暴露内部账号是否存在或供应商绑定状态。
 fn invalid_credentials() -> Error {
     Error::Unauthenticated("用户名或密码错误".into())
 }
@@ -88,6 +81,7 @@ mod tests {
     use crate::service::auth::password::{PasswordCheck, verify_password};
     use crate::{AccountCore, AccountCoreData, AccountStatus, LoginAccount, Secret};
 
+    // 验证内部账号即使用正确密码，也只能经过门户占位验密并得到不匹配。
     #[tokio::test]
     async fn internal_credentials_use_dummy_boundary_and_cannot_authenticate_portal() {
         let account = AccountCore::new(

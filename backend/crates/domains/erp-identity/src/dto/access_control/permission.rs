@@ -1,4 +1,4 @@
-//! 域 D06 `access_control` 的 权限定义 DTO。
+//! 管理端权限目录的查询和写入参数，以及权限定义响应。
 
 use application_core::{non_blank, normalized_text};
 use serde::{Deserialize, Serialize};
@@ -9,31 +9,31 @@ use crate::entity::access_control::{PermissionData, PermissionDefinition, Permis
 use crate::error::Result;
 use crate::repository::PermissionFilter;
 
-/// 权限定义响应视图（W19 权限目录）。
+/// 管理端权限目录（W19）的单项定义，供列表和写入响应共用。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PermissionView {
-    /// 实体主键。
+    /// 权限定义 ID。
     pub id: String,
-    /// 权限资源。
+    /// 规范化后的资源代码。
     pub resource: String,
-    /// 权限动作。
+    /// 规范化后的动作代码。
     pub action: String,
-    /// 展示名称。
+    /// 权限在界面中的显示名称。
     pub name: String,
-    /// 描述。
+    /// 权限用途说明（若有）。
     pub description: Option<String>,
-    /// 系统内建权限标记。
+    /// 标记系统内建权限；内建定义禁止删除。
     pub system: bool,
-    /// 停用标记。
+    /// 当前定义是否标记为停用。
     pub disabled: bool,
-    /// 乐观锁版本。
+    /// 当前定义版本，编辑时用作乐观锁。
     pub version: u64,
-    /// 创建时间（秒级时间戳）。
+    /// 定义创建时间，以 Unix 秒记录。
     pub created_at: u64,
 }
 
 impl From<PermissionDefinition> for PermissionView {
-    // 将权限定义映射为管理接口的展示字段，保留资源、动作及启停状态。
+    // 从实体生成目录响应，使用权限值中已规范化的资源与动作。
     fn from(permission: PermissionDefinition) -> Self {
         let resource = permission.permission().resource().to_owned();
         let action = permission.permission().action().to_owned();
@@ -51,29 +51,28 @@ impl From<PermissionDefinition> for PermissionView {
     }
 }
 
-/// 权限定义创建请求（`resource:action` 经实体复用 `rbac::Permission::parse` 规范化）。
+/// 创建权限定义；实体构造时用 `Permission::parse` 规范化 `resource:action`。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreatePermissionRequest {
-    /// 权限资源（如 `sales_order`）。
+    /// 非空白资源代码，例如 `sales_order`。
     #[validate(custom(function = "non_blank", message = "权限资源不能为空"))]
     pub resource: String,
-    /// 权限动作（如 `approve`）。
+    /// 非空白动作代码，例如 `approve`。
     #[validate(custom(function = "non_blank", message = "权限动作不能为空"))]
     pub action: String,
-    /// 展示名称。
+    /// 显示名称须含非空白内容；实体校验裁剪后的长度，上限为 64 个字符。
     #[validate(custom(function = "non_blank", message = "权限名称不能为空"))]
     pub name: String,
-    /// 描述。
+    /// 可选用途说明，最多 256 个字符。
     #[validate(length(max = 256, message = "权限描述过长"))]
     pub description: Option<String>,
-    /// 是否为系统内建权限（禁止删除/修改）；缺省视为自定义权限。
+    /// 是否标记为系统内建；默认 `false`。内建标记创建后固定，内建定义禁止删除。
     #[serde(default)]
     pub system: bool,
 }
 
 impl CreatePermissionRequest {
-    /// 转换为实体创建数据。
-    /// 返回实体层创建数据；没有描述时不写入描述。
+    /// 创建权限定义前将请求转为实体输入；未提供描述时不设置说明。
     pub fn into_data(self) -> PermissionData {
         let data = PermissionData::new(self.resource, self.action, self.name).with_system(self.system);
         match self.description {
@@ -83,25 +82,24 @@ impl CreatePermissionRequest {
     }
 }
 
-/// 权限定义更新请求（携带乐观锁版本，冲突返回 409）。
+/// 带乐观锁的权限定义更新请求，版本冲突返回 HTTP 409。
+/// 资源、动作和内建标记固定；内建定义也可更新名称、说明和停用标记。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct UpdatePermissionRequest {
-    /// 期望的乐观锁版本。
+    /// 请求期望的当前版本，最小为 1。
     #[validate(range(min = 1, message = "资料版本无效，请刷新页面后重试"))]
     pub version: u64,
-    /// 展示名称；缺省表示不修改。
+    /// 新的显示名称；省略时保留原值，提供时由实体校验。
     pub name: Option<String>,
-    /// 描述；缺省表示不修改。
+    /// 新的用途说明；省略时保留原值，提供空白文本时清空。
     pub description: Option<String>,
-    /// 停用标记；缺省表示不修改。
+    /// 新的停用标记；省略时保留原值。
     pub disabled: Option<bool>,
 }
 
 impl UpdatePermissionRequest {
-    /// 返回本次补丁显式携带的权限字段名。
-    ///
-    /// 按 `name`、`description`、`disabled` 的稳定合同顺序返回字段名；
-    /// 未携带任何可更新字段时返回空集合。
+    /// 供审计按 `name`、`description`、`disabled` 的固定顺序列出补丁中有值的字段名。
+    /// 仅判断是否提供值；无可更新字段时返回空列表。
     pub fn changed_field_names(&self) -> Vec<String> {
         let mut changed = Vec::new();
         if self.name.is_some() {
@@ -116,42 +114,36 @@ impl UpdatePermissionRequest {
         changed
     }
 
-    /// 转换为实体更新数据。
-    /// 返回只含本次补丁字段的实体层更新数据。
+    /// 将可更新字段转为实体补丁；版本由服务另行校验。
     pub fn into_update(self) -> PermissionUpdate {
         PermissionUpdate { name: self.name, description: self.description, disabled: self.disabled }
     }
 }
 
-/// 权限定义列表查询参数（分页参数与筛选字段扁平传递）。
+/// 权限目录的筛选和分页参数，按同一层级传入。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct PermissionListParams {
-    /// 权限资源模糊筛选（忽略大小写）。
+    /// 按资源代码做不区分大小写的字面量匹配。
     pub resource: Option<String>,
-    /// 停用标记筛选。
+    /// 精确匹配停用标记；省略时包含两种状态。
     pub disabled: Option<bool>,
-    /// 是否仅系统内建筛选。
+    /// 精确匹配内建标记：`true` 查内建权限，`false` 查自定义权限，省略时两者均查。
     pub system: Option<bool>,
-    /// 页码（1 起）。
+    /// 页码，从 1 开始；默认第 1 页。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
-    /// 单页条数（1–100）。
+    /// 单页条数，范围为 1–100；默认 20 条。
     #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
     pub page_size: Option<u32>,
-    /// 排序字段（白名单：`created_at`/`updated_at`）。
+    /// 排序字段，仅支持 `created_at` 和 `updated_at`；默认 `created_at`。
     pub sort_by: Option<String>,
-    /// 排序方向（`asc`/`desc`）。
+    /// 排序方向，接受 `asc` 或 `desc`；默认降序。
     pub sort_dir: Option<String>,
 }
 
 impl PermissionListParams {
-    // 归一化权限定义列表查询参数。
-    //
-    // 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
-    //
-    // 返回服务与仓储共用的规范化筛选条件。
-    //
-    // 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    /// 裁剪资源筛选项，忽略纯空白值，补齐分页和排序默认值后生成仓储筛选条件。
+    /// 分页越界、排序字段超出白名单或方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<PermissionFilter> {
         Ok(PermissionFilter {
             resource: normalized_text(self.resource.as_deref()),
@@ -169,6 +161,7 @@ mod tests {
     use super::*;
     use crate::access_control::PermissionId;
 
+    // 验证 BSON 投影与实体转换一致，资源和动作已规范化，且缺少资源字段时解码失败。
     #[test]
     fn projection_and_entity_conversion_share_the_response_contract() {
         let entity = PermissionDefinition::new(

@@ -38,6 +38,7 @@ pub(super) enum ScopeLookup<'a> {
 }
 
 impl<'a> ScopeLookup<'a> {
+    /// 按入口和来源同时查找运行时范围；启动校验生成来源能力范围，缺失时按调用场景报错。
     pub(super) fn get(
         &self,
         entry: &Permission,
@@ -55,7 +56,7 @@ impl<'a> ScopeLookup<'a> {
     }
 }
 
-// 取固定入口要求的完整同角色功能权限组合，不接受业务调用方改动所需集合。
+/// 取得固定入口须由同一启用角色授予的完整权限，范围复用入口沿用原动作组合，调用方不能拼装。
 pub(crate) fn same_role_permissions(permission: &Permission) -> Vec<Permission> {
     if let Some(source) = inventory_warehouses::source(permission) {
         return same_role_permissions(source);
@@ -101,7 +102,7 @@ pub(crate) fn same_role_permissions(permission: &Permission) -> Vec<Permission> 
     required
 }
 
-// 把固定数据规则转成对象判断与查询编译共用条件；任务办理与创建的专用规则另行处理。
+/// 生成对象和查询共用的普通条件，纳入固定事实维度、范围、责任和允许的读取补充；来源及精确任务另有专用规则。
 pub(crate) fn data_condition(permission: &Permission, scope: Option<&ResolvedScope>) -> Result<AccessRule> {
     if permission == &internal::WORK_ITEM_RECIPIENT {
         return Ok(AccessRule::Allow);
@@ -147,6 +148,7 @@ pub(crate) fn data_condition(permission: &Permission, scope: Option<&ResolvedSco
     }
 }
 
+// 识别覆盖默认目标形态的固定入口；未特判时交给动作类别，不把有任务或候选要求的操作降级为普通记录。
 fn specific_target(permission: &Permission, target: &AccessTarget) -> Option<bool> {
     if [
         returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
@@ -200,6 +202,7 @@ fn specific_target(permission: &Permission, target: &AccessTarget) -> Option<boo
     None
 }
 
+/// 在统一入口取证前检查目标形态；先应用固定例外，再按动作类别限制操作、记录、候选和精确任务。
 pub(super) fn ensure_target(permission: &Permission, target: &AccessTarget) -> Result<()> {
     let kind = scope_spec::kind(permission)?;
     if let Some(allowed) = specific_target(permission, target) {
@@ -241,7 +244,7 @@ pub(super) fn ensure_target(permission: &Permission, target: &AccessTarget) -> R
     if allowed { Ok(()) } else { Err(Error::ValidationError("此权限不支持该授权目标".into())) }
 }
 
-// 区分允许已有记录读取的动作与必须先进入快照事务的其他对象操作。
+/// 识别可走读取路径的固定动作；非读取对象操作必须先进入快照，精确任务仍另受快照限制。
 pub(super) fn is_read(permission: &Permission) -> bool {
     if let Some(source) = inventory_warehouses::source(permission) {
         return is_read(source);
@@ -296,7 +299,7 @@ pub(super) fn is_read(permission: &Permission) -> bool {
     )
 }
 
-// 按任务用途生成数据条件：普通读取可以按参与关系；内部材料及办理须当前指派，已完成采购任务还要本人参与。
+// 按任务用途生成数据条件：普通任务读取允许指派或参与，内部材料及办理要求当前指派，已完成采购任务还须本人参与；审批入口按固定事实和来源另查。
 fn task_data_condition(permission: &Permission) -> AccessRule {
     if permission == &internal::APPROVAL_INSTANCE_READ {
         return AccessRule::Allow.requiring(&BTreeSet::from([
@@ -326,7 +329,7 @@ fn task_data_condition(permission: &Permission) -> AccessRule {
     }
 }
 
-// 从固定目标合同取得必需维度，不以本次范围条款引用了哪些字段为准。公司或记录授权命中也不能掩盖事实缺失。
+// 按动作的固定数据合同声明必需事实，不取决于本次范围条款；公司范围或记录补权不能掩盖缺失。
 fn required_facts(permission: &Permission) -> Result<BTreeSet<FactKind>> {
     let spec = scope_spec::require_scope(permission)?;
     let mut facts = BTreeSet::new();
@@ -346,6 +349,7 @@ fn required_facts(permission: &Permission) -> Result<BTreeSet<FactKind>> {
     Ok(facts)
 }
 
+// 判断销售单或采购单的读取动作能否使用记录读取补充，不将其用于写入。
 fn record_grant(permission: &Permission) -> bool {
     matches!(
         permission.action(),
@@ -360,18 +364,18 @@ fn record_grant(permission: &Permission) -> bool {
     ) && matches!(permission.resource(), "sales_order" | "purchase_order")
 }
 
-// 按固定权限登记决定是否能编译查询，不用动作名称推断；可查询不意味相同权限的写入可绕过事务要求。
+/// 按固定登记校验权限是否能编译查询，不从动作名推断，也不放宽写入所需快照。
 pub(super) fn query_supported(permission: &Permission) -> Result<bool> {
     scope_spec::kind(permission)?;
     Ok(queries::permissions().any(|entry| entry == permission))
 }
 
-// 供 Builder 枚举已接入的全部固定权限规则，不用公共菜单目录代替实际可执行的规则集。
+/// 枚举范围目录中的固定入口供构建器检查绑定，不拿公共菜单替代实际规则集。
 pub(super) fn permissions() -> Vec<&'static Permission> {
     scope_spec::resources().into_iter().flat_map(scope_spec::actions).collect()
 }
 
-// 启动校验 Mapping 时展开所有可配置维度，不因某次启动人员范围未配置而漏掉能力检查。
+/// 为启动校验构造覆盖该动作全部可配置维度的范围，不按当前账号配置省略能力。
 pub(super) fn capability_scope(permission: &Permission) -> Result<ResolvedScope> {
     let spec = scope_spec::require_scope(permission)?;
     if matches!(scope_spec::runtime_source(spec)?.source(), scope_spec::ScopeSource::Company) {
@@ -404,7 +408,7 @@ pub(super) fn capability_scope(permission: &Permission) -> Result<ResolvedScope>
     Ok(ResolvedScope { role_clauses: vec![clause], user_limit: None })
 }
 
-// 启动时为固定规则列全 Mapping 可能需要的能力；请求期间仍按实际身份与范围编译条件。
+/// 启动时按输出粒度展开固定规则全部可能使用的 Mapping 能力；运行时仍以实际身份及范围构造过滤。
 pub(crate) fn binding_condition(permission: &Permission, output: &QueryOutput) -> Result<AccessRule> {
     let kind = scope_spec::kind(permission)?;
     if materials::supports(permission) {
@@ -456,7 +460,7 @@ pub(crate) fn binding_condition(permission: &Permission, output: &QueryOutput) -
     }
 }
 
-// 商品目录查询按真实供应商对象执行数据范围，拥有连接访问资格不等于能读取所有供应商。
+/// 将商品目录规则限定到全部真实供应商来源；连接访问资格不等于能读所有供应商。
 pub(super) fn supplier_catalog_condition(rule: AccessRule) -> Result<AccessRule> {
     Ok(AccessRule::Related {
         relation: RelationKey::parse("supplier")?,
@@ -466,18 +470,19 @@ pub(super) fn supplier_catalog_condition(rule: AccessRule) -> Result<AccessRule>
     })
 }
 
-// 为工作项查询指定固定的管理动作过滤，业务调用不能另选查询入口作为管理范围。
+/// 为工作项列表或详情选定固定管理过滤权限，不允许调用方另选范围入口。
 pub(crate) fn management_permission(permission: &Permission) -> Option<Permission> {
     (permission == &work_item::LIST || permission == &work_item::DETAIL).then_some(work_item::MANAGE)
 }
 
+/// 启动时为有独立管理过滤的入口生成完整能力条件，供 Mapping 随根条件一并校验。
 pub(super) fn management_binding_condition(permission: &Permission) -> Result<Option<AccessRule>> {
     management_permission(permission)
         .map(|management| data_condition(&management, Some(&capability_scope(&management)?)))
         .transpose()
 }
 
-// 从固定入口提取附加功能资格，为规则内部各分支准备独立取证；客户端不能添加或省略资格。
+/// 为一次身份取证汇总固定同角色、独立和可选资格，让各分支复用同次角色快照。
 pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     if let Some(required) = transfers::requirements(permission) {
         return required.to_vec();
@@ -500,6 +505,7 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     required
 }
 
+/// 判断一次身份快照是否满足固定同角色与独立资格，以及背景任务全部取消的附加管理员要求；文件任务按独立规则判断。
 pub(super) fn qualified(permission: &Permission, qualified: &QualifiedPermissions) -> bool {
     if transfers::supports(permission) {
         return transfers::qualified(permission, qualified);
@@ -510,7 +516,7 @@ pub(super) fn qualified(permission: &Permission, qualified: &QualifiedPermission
         && records::qualified(permission, qualified)
 }
 
-// 生成可公开的缺权说明时，仅在所有启用角色均未授予且能唯一识别公共权限时报告具体权限码。
+/// 拒绝时仅在能唯一确定某项公共权限且所有启用角色均未授予时报告权限码；角色拆分或多项缺失不报告单项。
 pub(super) fn missing_public_permission(
     permission: &Permission,
     task_required: &[Permission],
@@ -534,7 +540,7 @@ pub(super) fn missing_public_permission(
         .then(|| missing.clone())
 }
 
-// 查出精确任务办理目标独有的功能资格，防止把普通读取权限当成可以办理。
+/// 列出精确任务所需的同角色资格，补入结算审核或履约动作要求，不能用普通读取资格替代。
 pub(super) fn task_permissions(permission: &Permission) -> Vec<Permission> {
     let mut permissions = same_role_permissions(permission);
     if permission == &supplier_settlement::STATEMENT_REVIEW_DECIDE {
@@ -546,6 +552,7 @@ pub(super) fn task_permissions(permission: &Permission) -> Vec<Permission> {
     permissions
 }
 
+/// 识别允许按精确任务目标检查的固定入口，供绑定校验及运行时目标分派。
 pub(super) fn task_supported(permission: &Permission) -> bool {
     scope_spec::kind(permission)
         .is_ok_and(|kind| kind == ActionKind::Task && records::condition(permission).is_none())
@@ -567,10 +574,12 @@ pub(super) fn task_supported(permission: &Permission) -> bool {
         )
 }
 
+/// 仅让采购创建及付款授信列表使用精确任务条件编译查询，不改变其对象授权要求。
 pub(super) fn task_query(permission: &Permission) -> bool {
     permission == &purchase_order::CREATE || permission == &purchase_payment_request::CREDIT_LIST
 }
 
+/// 按入口选定精确任务事实端口；审批、采购询价及对账差异各用本资源，其他用工作项端口。
 pub(super) fn task_facts_resource(permission: &Permission) -> &str {
     if matches!(
         permission.resource(),
@@ -582,6 +591,7 @@ pub(super) fn task_facts_resource(permission: &Permission) -> &str {
     }
 }
 
+/// 构造精确任务责任条件：采购创建只查任务指派，普通任务叠加指派和原规则；工作项执行及接收者沿专用规则判断。
 pub(super) fn task_condition(permission: &Permission, base: Option<AccessRule>) -> Result<AccessRule> {
     if !task_supported(permission) {
         return Err(Error::ValidationError("此权限不支持精确任务".into()));
@@ -605,6 +615,7 @@ mod tests {
     use super::*;
     use crate::entity::authorization::{FactValue, ObjectFacts};
 
+    // 验证销售提交缺少唯一公开创建权限时，拒绝说明能定位该权限。
     #[test]
     fn reports_a_single_public_permission_missing_from_all_roles() {
         let roles = QualifiedPermissions::test_grants(&[("sales", &[sales_order::SUBMIT])]);
@@ -613,6 +624,7 @@ mod tests {
         assert_eq!(missing_public_permission(&sales_order::SUBMIT, &[], &roles), Some(sales_order::CREATE));
     }
 
+    // 验证同角色资格被拆分或多项权限全缺时，不将拒绝误报为缺少某一权限。
     #[test]
     fn reports_no_single_permission_for_a_split_role_or_multiple_missing_permissions() {
         let split = QualifiedPermissions::test_grants(&[
@@ -626,12 +638,14 @@ mod tests {
         assert_eq!(missing_public_permission(&sales_order::SUBMIT, &[], &empty), None);
     }
 
+    // 构造无个人上限的本人范围，供销售授权测试使用。
     fn scope() -> ResolvedScope {
         ResolvedScope {
             role_clauses: vec![ScopeClause { self_owned: true, ..Default::default() }],
             user_limit: None,
         }
     }
+    // 构造负责人为他人、测试账号曾参与的销售单事实。
     fn object() -> ObjectFacts {
         ObjectFacts {
             resource: "sales_order".into(),
@@ -643,6 +657,7 @@ mod tests {
             ..Default::default()
         }
     }
+    // 验证历史参与先与角色范围合并，再受个人上限限制；记录补权可恢复读取但不能交接。
     #[test]
     fn history_applies_before_personal_limit_and_record_grants_only_supplement_reads() {
         let mut scope = scope();
@@ -660,6 +675,7 @@ mod tests {
         assert!(allows(&sales_order::DETAIL, &scope, &grants));
         assert!(!allows(&sales_order::HANDOVER, &scope, &grants));
     }
+    // 验证空范围拒绝，且公司范围也不能掩盖必需负责人事实缺失。
     #[test]
     fn empty_scope_denies_and_missing_facts_fail_even_in_company_scope() {
         let mut object = object();
@@ -685,6 +701,7 @@ mod tests {
             Err(Error::ValidationError(_))
         ));
     }
+    // 验证已完成采购任务须当前指派且本人参与，参与事实缺失报接入错误。
     #[test]
     fn completed_procurement_task_needs_assignment_and_participation() {
         let rule = data_condition(&inquiry::COMMANDS_PROCUREMENT_RENEW, None).unwrap();

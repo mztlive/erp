@@ -16,21 +16,23 @@ use crate::repository::authorization::{
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
+/// 累计本次规则实际使用的范围依赖，供授权证明生成版本和有效期。
 #[derive(Default)]
 pub(super) struct Resolution {
+    /// 参与授权版本摘要的身份、人员范围及记录授权版本片段。
     pub(super) versions: Vec<String>,
+    /// 已纳入的组织范围中最早发生变化的时点。
     pub(super) valid_until: Option<Instant>,
+    /// 已纳入范围中的最大组织修订号，独立于策略修订号。
     pub(super) organization_version: u64,
+    /// 本次纳入的范围是否包含至少一项角色范围。
     pub(super) has_role_scope: bool,
 }
 
 impl AuthorizationService {
-    // 检查目标账号的完整功能资格，并按该资格解析本动作的固定范围来源。
-    // 范围动作返回本次合格角色的范围；其他动作返回 None，仍须取得对象或任务上下文。
-    //
-    // 账号失效、完整资格不足、未知动作及范围设施错误原样传播。
-    //
-    // actor、permission 为待检查身份及动作；executor 为检查人的原读取事务。
+    /// 为权限检查在检查人的原读取事务中验证目标账号的完整功能资格；范围动作返回合格角色的固定范围，其他动作返回 `None`，仍需对象或任务上下文。
+    ///
+    /// 账号失效、资格不足、未知动作及取证错误原样传播。
     pub(crate) async fn inspection_scope(
         &self,
         actor: &AuditActor,
@@ -51,7 +53,7 @@ impl AuthorizationService {
         self.resolve_scope(&context, permission, &qualified, executor).await.map(Some)
     }
 
-    // 统一授权读取业务对象前，一次取证账号及全部可用启用角色，为各固定分支提供同一身份快照。
+    /// 普通对象或管理操作取证前，一次取得该账号可用启用角色的功能资格，供各固定分支共用。
     pub(super) async fn qualify(
         &self,
         actor: &AuditActor,
@@ -61,6 +63,7 @@ impl AuthorizationService {
         self.qualify_target(actor, permission, false, executor).await
     }
 
+    // 在读取对象前检查固定入口及精确任务的同角色组合；任务接收者另按真实任务取证，缺权时仅报告可唯一识别的公开权限。
     async fn qualify_target(
         &self,
         actor: &AuditActor,
@@ -88,7 +91,7 @@ impl AuthorizationService {
         }))
     }
 
-    // 解析根目标时在证明中保存精确任务语义，确保非事务重验仍使用精确目标规则而不是普通记录权限。
+    /// 为根目标或查询取得资格、固定模型和授权时点并签发证明；保留精确任务语义，复验时不改用普通记录规则。
     pub(super) async fn resolve_target(
         &self,
         actor: &AuditActor,
@@ -110,7 +113,7 @@ impl AuthorizationService {
         Ok((proof, qualified))
     }
 
-    // 需要解析固定附加来源规则时，沿用已取证账号、角色和原读取阶段，不以新资格替换根身份。
+    /// 用已取证的身份在原阶段解析根目标或固定附加来源，收集规则、版本和期限，不以新资格替换根身份。
     pub(super) async fn resolve_context(
         &self,
         context: AccessContext,
@@ -169,7 +172,7 @@ impl AuthorizationService {
         Ok(proof)
     }
 
-    // 为工作项读取批次独立解析管理角色的范围，仍与根查询共享账号、有效期和读取阶段。
+    // 为工作项查询单独确定管理展示过滤；管理入口复用根规则，其他支持入口按管理角色范围计算，无资格则拒绝该分支。
     async fn management_filter(
         &self,
         context: &AccessContext,
@@ -197,6 +200,7 @@ impl AuthorizationService {
         Ok(Some(ResolvedFilter::Separate { context: Box::new(context), rule }))
     }
 
+    /// 为根规则及独立整账规则实际引用的资源读取记录授权修订号，用于凭证版本和交付复验。
     pub(super) async fn grant_versions(
         &self,
         actor: &AuditActor,
@@ -217,7 +221,7 @@ impl AuthorizationService {
         Ok(versions)
     }
 
-    // 精确任务目标保留入口基础范围并附加固定责任关系；普通对象继续使用该入口原数据规则。
+    // 按动作、对象或查询输出选择根和整账条件；精确任务按固定方式附加责任要求，不套用普通记录资格。
     async fn target_condition(
         &self,
         context: &AccessContext,
@@ -250,6 +254,7 @@ impl AuthorizationService {
         Ok(ResolvedRules { root, whole: None, management: None })
     }
 
+    // 解析普通对象的条件；为支持的固定入口取实际范围，只计算当前身份合资格的选型或客户分支，并汇入依赖。
     async fn condition(
         &self,
         context: &AccessContext,
@@ -306,7 +311,7 @@ impl AuthorizationService {
         }
     }
 
-    // 为商品目录解析真实供应商范围时，只使用独立供应商详情入口的合格角色，不能用连接菜单角色拼接数据范围。
+    // 读取连接商品目录时，只用独立供应商详情入口的合格角色解析真实供应商范围，不借用连接菜单角色。
     async fn supplier_catalog_scope(
         &self,
         context: &AccessContext,
@@ -321,6 +326,7 @@ impl AuthorizationService {
         rules::supplier_catalog_condition(rules::data_condition(&supplier::DETAIL, Some(&scope.scope))?)
     }
 
+    // 按入口与来源分别解析合格角色范围，生成根及整账条件。完整对象可复用根规则，份额、存在性和精确任务另保留完整对象条件。
     async fn source_condition(
         &self,
         context: &AccessContext,
@@ -360,6 +366,7 @@ impl AuthorizationService {
         }
     }
 
+    /// 将范围权限归到实际配置动作，再用当前入口的完整同角色资格读取同次范围。
     pub(super) async fn resolve_scope(
         &self,
         context: &AccessContext,
@@ -375,6 +382,7 @@ impl AuthorizationService {
 }
 
 impl Resolution {
+    /// 每解析一个范围即纳入其版本、组织修订、角色范围标记及最早失效时间。
     pub(super) fn include(&mut self, scope: &AuthorizedDataScope) {
         self.has_role_scope |= scope.scope.has_role_scope();
         self.versions.push(scope.scope_version.clone());
@@ -384,6 +392,7 @@ impl Resolution {
     }
 }
 
+/// 从组织成员关系的生效与到期时间中选出授权时点之后最早的变化，用作范围有效期上界。
 pub(super) fn scope_deadline(scope: &AuthorizedDataScope) -> Option<Instant> {
     scope
         .organizations

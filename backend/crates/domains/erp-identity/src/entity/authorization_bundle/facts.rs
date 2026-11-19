@@ -3,12 +3,8 @@ use super::plan::{PolicyRoleState, PolicyUserState};
 use crate::{Error, Permission, Result, Role, RoleIdSet};
 
 impl PolicyRoleState {
-    // 校验已读取的角色事实，禁止新建分支接回遗留继承权限。
-    // 完整普通角色事实；完全不存在的身份返回空。
-    //
-    // 继承、孤立授权、非后台主体或影响规模超限时拒绝。
-    //
-    // role 为可缺失实体，permissions、parents、subjects 为同一事务读取的 Casbin 事实。
+    /// 用同一事务中的角色实体和 Casbin 直接授权、父角色、绑定主体构造角色事实。
+    /// 实体和授权均不存在时返回 `None`；继承、孤立授权、非后台主体或超过 1000 个绑定主体时拒绝。
     pub(crate) fn from_parts(
         role: Option<Role>,
         permissions: Vec<Permission>,
@@ -48,12 +44,8 @@ impl PolicyRoleState {
 }
 
 impl PolicyUserState {
-    // 只接受实际角色键，不能静默丢弃文件无法表达的主体继承。
-    // 稳定排序的人员角色事实。
-    //
-    // 存在非角色分组或非法角色标识时拒绝。
-    //
-    // version 为账号版本，keys 为持久化直接分组键。
+    /// 保留账号版本，将持久化的直接分组键转换为排序去重的角色 ID。
+    /// 遇到非角色分组或非法角色标识时拒绝，避免丢失文件无法表达的主体关系。
     pub(crate) fn from_role_keys(version: u64, keys: Vec<String>) -> Result<Self> {
         if keys.iter().any(|key| !key.starts_with("role:")) {
             return Err(Error::ValidationError("人员绑定包含非角色分组，不能用1.0文件管理".into()));
@@ -67,6 +59,7 @@ mod tests {
     use super::*;
     use crate::{RoleData, RoleId};
 
+    // 验证只有实体及授权事实都缺失时才视为新身份，遗留继承、绑定和权限均会阻止新建。
     #[test]
     fn missing_role_with_parent_is_not_treated_as_a_fresh_identity() {
         let inherited = PolicyRoleState::from_parts(None, vec![], vec!["role:role-root".into()], vec![]);
@@ -78,6 +71,7 @@ mod tests {
         assert!(PolicyRoleState::from_parts(None, policies, vec![], vec![]).is_err());
     }
 
+    // 验证后台账号绑定完整计入影响范围，角色继承、其他主体和超限绑定均被拒绝。
     #[test]
     fn existing_role_preserves_complete_impact_and_rejects_unsupported_links() {
         let role = Role::new(RoleId::parse("reader").unwrap(), RoleData::new("销售只读")).unwrap();
@@ -97,6 +91,7 @@ mod tests {
         assert!(PolicyRoleState::from_parts(Some(role), vec![], vec!["role:parent".into()], vec![]).is_err());
     }
 
+    // 验证主体继承导致校验失败，合法直接角色去重后保留账号版本。
     #[test]
     fn person_group_inheritance_is_not_silently_removed_from_the_preview() {
         assert!(PolicyUserState::from_role_keys(1, vec!["user:admin:another".into()]).is_err());

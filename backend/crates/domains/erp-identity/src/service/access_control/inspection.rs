@@ -12,34 +12,31 @@ use crate::repository::access_control::person_scope::PersonDataScopeRepositoryEx
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{AccessControlExt, AccessTarget, AuthorizationService, Error, Permission, Result};
 
-/// 为跨域单据检查提供经授权的目标身份；不能作为登录或操作令牌。
+/// 只读身份检查的报告和后续单据检查所需的上下文；不能用作登录或操作凭证。
 pub struct InspectedAccess {
+    /// 已解析动作范围且请求指定单据时，提供目标账号身份，供调用方继续检查单据资格。
     pub actor: Option<AuditActor>,
+    /// 已完成的检查结论及待核验的业务条件，供管理员查看。
     pub view: AccessInspectionView,
 }
 
-/// 复用真实 DataScope 解析，不维护另一套鉴权算法。
+/// 管理员检查账号的操作资格和数据范围时，复用统一授权的范围解析。
 #[derive(Clone)]
 pub struct AccessInspectionService {
+    // 检查账号状态和人员范围配置时使用的身份数据库。
     db: Database,
+    // 应用注入的共享授权服务，用于核验检查人资格和解析目标账号权限。
     authorization: Arc<AuthorizationService>,
 }
 
 impl AccessInspectionService {
-    /// 绑定身份数据与权限服务。
-    /// 无 I/O 的检查服务。
-    ///
-    /// `authorization`：应用注入的共享授权服务。
+    /// 准备执行只读检查时，用身份数据库和应用的共享授权服务构造检查器；构造时不读取数据库。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }
 
-    /// 在调用方读取事务内检查账号和操作范围。
-    /// 服务端解析结果或明确的账号／操作拒绝原因。
-    ///
-    /// 检查人越权、参数错误、数据库或配置错误继续向上传递。
-    ///
-    /// `request`：目标账号与业务动作；`executor`：当前读取事务。
+    /// 管理员检查指定账号和动作时，在调用方的读取事务内先核验检查资格，再检查目标账号及其操作范围。
+    /// 目标账号无效或缺少动作资格时返回原因报告；检查人越权、参数错误、数据库或其他配置错误直接返回。
     pub async fn inspect(
         &self,
         operator: &AuditActor,
@@ -78,7 +75,8 @@ impl AccessInspectionService {
         }
     }
 
-    // 检查报告需要解释缺少部门关系时，读取只满足本操作的合格角色范围，给出可处理的原因。
+    // 动作范围解析后，仅对可配置来源说明人员配置、基础范围或缺少范围的情况。
+    // 部门关系本身不授予操作权限。
     async fn explain_relations(
         &self,
         actor: &AuditActor,
@@ -121,7 +119,7 @@ impl AccessInspectionService {
     }
 }
 
-// 报告已核对的配置和范围，不把没有具体对象事实的检查标成对象授权通过。
+// 动作资格通过后组装已核对的配置和范围报告。缺少对象事实时将对象资格保留为待核验；已解析范围且指定单据时交给调用方继续检查。
 fn inspected(
     actor: AuditActor,
     request: &AccessInspectionRequest,
@@ -141,7 +139,7 @@ fn inspected(
     Ok(InspectedAccess { actor: access.and(request.object_id.as_ref()).map(|_| actor), view })
 }
 
-// 检查未通过时生成解释结果，不返回可供后续读取使用的目标身份。
+// 目标账号无效或动作资格不足时，生成该层的拒绝报告并留空目标身份。
 fn denied(layer: &str, message: &str) -> InspectedAccess {
     let mut view = AccessInspectionView::default();
     view.push(layer, "blocked", message);
@@ -157,7 +155,7 @@ mod tests {
     use crate::entity::access_control::{ResolvedScope, ScopeClause};
     use crate::entity::organization_change::OrganizationState;
 
-    // 验证：已解析范围仅用于说明配置，没有具体对象时不能给出对象授权通过。
+    // 验证已解析范围时，无单据的对象检查仍待核验；指定单据后仅提供身份，单据范围由调用方检查。
     #[test]
     fn scoped_configuration_preserves_review_until_object_is_checked() {
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
@@ -189,7 +187,7 @@ mod tests {
         assert!(result.view.steps.iter().all(|step| step.layer != "具体单据范围"));
     }
 
-    // 验证：来源与任务检查只返回已合格动作和待取得上下文，不产生对象检查身份。
+    // 验证依赖来源或任务事实的动作只报告已通过的操作资格，其余步骤待核验，目标身份留空。
     #[test]
     fn contextual_configuration_requires_object_and_task_facts() {
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);

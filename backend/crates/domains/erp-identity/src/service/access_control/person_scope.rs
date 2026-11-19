@@ -15,12 +15,8 @@ use crate::repository::access_control::person_scope::PersonDataScopeRepositoryEx
 use crate::{AccessControlExt, Error, Result};
 
 impl AccessControlService {
-    /// 保存人员指定业务操作的完整附加授权列表，不改变角色操作权限。
-    /// 原子保存成功。
-    ///
-    /// 越权、过期版本、无效目标或缺动作资格拒绝整次保存。
-    ///
-    /// 固定人员、业务操作及完整范围、管理员。
+    /// 管理员保存人员范围时，完整替换所选业务动作的附加授权，不改变角色授予的操作权限。
+    /// 范围、审计及策略版本原子提交；越权、版本过期、目标无效或人员缺少动作资格时拒绝整次保存。
     pub async fn save_person_scope(
         &self,
         user: &str,
@@ -54,7 +50,7 @@ impl AccessControlService {
             .await
     }
 
-    // 保存人员范围前按动作重验有效资格和全部必须维度，并在同一事务核对目标实际存在性。
+    // 写入前重验人员仍具备所选可配置动作，再沿原事务核对命令中的目标；必需维度已在命令规范化时校验。
     async fn validate_person_scope(
         &self,
         user: &str,
@@ -74,12 +70,8 @@ impl AccessControlService {
         self.validate_person_scope_targets(req, organizations, executor).await
     }
 
-    // 按输入顺序校验目标，到首个明确组织目标时才装载一次组织树。
-    // 所有明确目标存在且可用于指定维度时成功。
-    //
-    // 部门失效、维度不匹配、未装配外域校验或读取失败时拒绝。
-    //
-    // req 为规范化范围，organizations 和 executor 来自原授权事务。
+    /// 保存或审核配置前，沿原事务按输入顺序核对规范化命令引用的目标是否存在且适用于指定维度。
+    /// 首次遇到明确部门目标才构建组织树；部门失效、维度不符、外域校验未装配或读取失败时拒绝。
     pub(super) async fn validate_person_scope_targets(
         &self,
         req: &PersonScopeCommand,
@@ -112,7 +104,7 @@ impl AccessControlService {
         Ok(())
     }
 
-    // 将所选动作一次性替换为本次人员范围，不改变同资源其他动作，也不软删占用唯一键的行。
+    // 范围校验通过后，在原事务确认旧配置可转换，再按动作更新或新增；不触碰未选动作，也不软删除占用唯一键的行。
     async fn replace_person_scope(
         &self,
         user: &str,

@@ -8,12 +8,7 @@ use mongodb::bson::{Bson, doc};
 use super::ORG_MEMBERSHIPS;
 use crate::ports::QueryFragment;
 
-/// 以当前唯一主属关系判断指定账号是否属于组织集合。
-/// 身份域拥有的关联存在性片段；组织匹配要求唯一关系；仅校验时允许没有关系，拒绝重叠关系。
-///
-/// 不执行 I/O；数据库错误由执行查询的仓储传播。
-///
-/// user 为服务端提供的账号表达式，orgs 为授权组织集合；None 只检查主属关系不重叠，at 为统一授权时点。
+/// 构造主属组织存在性片段，不执行 I/O。给定组织集合时，要求 `user` 在统一时点 `at` 有且仅有一条有效关系且归属命中；不指定组织时只拒绝重叠关系，允许没有关系。查询错误由执行方传播。
 pub fn primary_membership_query(user: Bson, orgs: Option<&BTreeSet<String>>, at: Instant) -> QueryFragment {
     let mut pipeline = vec![
         doc! { "$match": {

@@ -10,6 +10,7 @@ use persistence_core::testing::SnapshotExecutor;
 use super::fixtures::{Facts, Identity, actor, complete, object};
 use crate::{AccessTarget, Error};
 
+// 供给详情的单条读取和查询都要求独立详情资格，列表权限不能代替。
 #[tokio::test]
 async fn offering_detail_requires_its_own_qualification_for_record_and_query() {
     let identity = Arc::new(Identity::default());
@@ -58,6 +59,7 @@ async fn offering_detail_requires_its_own_qualification_for_record_and_query() {
     ));
 }
 
+// 供给详情查询必须绑定 Mapping，结果到期后不得交付。
 #[tokio::test]
 async fn offering_detail_query_requires_mapping_and_rejects_expired_delivery() {
     let mut missing = complete();

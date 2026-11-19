@@ -4,7 +4,7 @@ use crate::entity::authorization::{
 };
 
 impl Fingerprint {
-    // 编码授权规则作为版本的一部分。节点使用固定标记及字段顺序，`All`、`Any` 子分支按无序集合处理。
+    /// 将条件树绑定到授权版本：固定节点标记和字段顺序，交集与并集各自忽略分支排列。
     pub(crate) fn rule(&mut self, rule: &AccessRule) {
         match rule {
             AccessRule::Allow => self.text("allow"),
@@ -51,7 +51,7 @@ impl Fingerprint {
         }
     }
 
-    // 将条件事实写入授权摘要，使用固定维度标记，必要时附上该条件的 ID 集合。
+    // 先写事实维度，再按条件写入无序 ID 集合或期望的任务完成标记。
     fn fact(&mut self, fact: &AccessFact) {
         self.kind(&fact.kind());
         match fact {
@@ -69,7 +69,7 @@ impl Fingerprint {
         }
     }
 
-    // 为事实维度写入稳定指纹标记，不依赖 Rust 枚举名、顺序或调试输出。
+    // 使用固定协议文本标记事实维度，使枚举重命名或重排不改变编码。
     fn kind(&mut self, kind: &FactKind) {
         self.text(match kind {
             FactKind::Owner => "owner",
@@ -84,7 +84,7 @@ impl Fingerprint {
         });
     }
 
-    // 写入查询模型的稳定指纹字段：标识、资源、集合、主键、输出种类与字段，以及支持的事实维度。
+    /// 将模型标识、资源、集合、行主键、输出粒度及投影字段和支持的事实维度绑定到查询版本。
     pub(crate) fn model(&mut self, model: &QueryModel) {
         let QueryModel { key, resource, collection, id_field, output, facts } = model;
         self.text(key.as_str());
@@ -101,7 +101,7 @@ impl Fingerprint {
         self.unordered(facts, Self::kind);
     }
 
-    // 写入动态 Mapping 的修订号和到期时刻以绑定查询摘要；时刻保留秒及纳秒。
+    /// 写入动态映射的修订号与到期时刻以绑定依赖，时间保留秒和纳秒；准备数据不直接编码。
     pub(crate) fn facts(&mut self, facts: &MappingFacts) {
         let MappingFacts { version, valid_until, .. } = facts;
         self.optional(version.as_deref(), Self::text);
@@ -122,7 +122,7 @@ mod tests {
     use crate::entity::authorization::{QueryModelKey, RelationKey};
     use crate::entity::resource_access::ResourceKind;
 
-    // 验证：所有节点、事实维度和主体种类均具有独立编码。
+    // 验证样例节点的编码可区分并锁定固定摘要，交集重排不变且与并集有别。
     #[test]
     fn authorization_tags_and_branch_order_are_explicit() {
         let rules = vec![
@@ -171,7 +171,7 @@ mod tests {
         assert_ne!(hash(&AccessRule::All(branches.clone())), hash(&AccessRule::Any(branches)));
     }
 
-    // 验证：完成状态取值与参与事实分别影响授权版本。
+    // 验证任务完成、未完成和任务参与分别产生独立版本。
     #[test]
     fn task_completion_values_have_distinct_fingerprints() {
         let facts = [AccessFact::Completed(false), AccessFact::Completed(true), AccessFact::Participant];
@@ -186,7 +186,7 @@ mod tests {
         assert_eq!(hashes.len(), 3);
     }
 
-    // 验证：模型身份、集合、输出范围和事实内容均影响分页版本。
+    // 锁定模型与动态依赖的固定摘要，并验证模型字段、修订号和到期变化均影响版本。
     #[test]
     fn model_and_mapping_facts_bind_every_field() {
         let model = QueryModel {
@@ -236,6 +236,7 @@ mod tests {
         }
     }
 
+    // 验证即使内层数据条件相同，独立入口权限变化也会改变版本。
     #[test]
     fn independent_permission_is_bound_even_when_resolved_scope_is_identical() {
         let version = |action| {

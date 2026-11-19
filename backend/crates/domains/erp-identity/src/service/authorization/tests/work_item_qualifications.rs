@@ -15,7 +15,7 @@ use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts, Related
 use crate::entity::resource_access::ResourceKind;
 use crate::{AuthorizationService, Error};
 
-// 测试替身只接入角色和对象事实，任务资格组合仍走生产 `AuthorizationService`。
+// 只替换身份和工作项事实，形成、接收与展示仍使用正式授权规则。
 fn service(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     let mut builder = complete();
     builder.facilities = identity;
@@ -23,13 +23,13 @@ fn service(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     builder.build().unwrap()
 }
 
-// 为当前测试账号配置真实直接角色资格，供检查完整同角色组合。
+// 为接收和形成测试设置直接角色权限，便于区分同角色组合与独立来源资格。
 fn grant(identity: &Identity, roles: &[(&str, &[Permission])]) {
     identity.state.lock().unwrap().grants =
         roles.iter().map(|(role, permissions)| ((*role).into(), permissions.to_vec())).collect();
 }
 
-// 构造任务形成前的候选授权输入，只表达服务端知道的任务种类和来源种类。
+// 构造形成前的候选，仅写入服务端确认的任务种类和来源种类。
 fn candidate(kind: &str, source: &str) -> ObjectFacts {
     ObjectFacts {
         resource: "work_item".into(),
@@ -39,7 +39,7 @@ fn candidate(kind: &str, source: &str) -> ObjectFacts {
     }
 }
 
-// 在测试中保留他人为当前任务负责人，使接收人只能从真实业务来源证明自己的独立资格。
+// 构造负责人为他人的采购付款任务，使当前账号通过真实来源证明接收资格。
 fn task() -> ObjectFacts {
     ObjectFacts {
         id: "task".into(),
@@ -59,7 +59,7 @@ fn task() -> ObjectFacts {
     }
 }
 
-// 提供客户验收所需的执行权限组合，用来验证新入口不额外要求销售单详情。
+// 列出客户验收形成所需的五项执行权限，不加入销售单详情权限。
 fn acceptance() -> [Permission; 5] {
     [
         fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_LIST,
@@ -70,6 +70,7 @@ fn acceptance() -> [Permission; 5] {
     ]
 }
 
+// 形成结算任务只检查审核决定资格，不提前要求读取权限。
 #[tokio::test]
 async fn settlement_formation_requires_review_decision_without_adding_read_permissions() {
     let identity = Arc::new(Identity::default());
@@ -101,6 +102,7 @@ async fn settlement_formation_requires_review_decision_without_adding_read_permi
     ));
 }
 
+// 结算任务接收资格针对精确任务判断，读取和审核权限必须由同一角色持有。
 #[tokio::test]
 async fn settlement_recipient_requires_same_role_read_and_review_on_the_exact_task() {
     let identity = Arc::new(Identity::default());
@@ -154,6 +156,7 @@ async fn settlement_recipient_requires_same_role_read_and_review_on_the_exact_ta
     );
 }
 
+// 形成询价任务所需的执行动作必须由同一角色完整持有。
 #[tokio::test]
 async fn inquiry_formation_requires_complete_same_role_execution_permissions() {
     let identity = Arc::new(Identity::default());
@@ -197,6 +200,7 @@ async fn inquiry_formation_requires_complete_same_role_execution_permissions() {
     }
 }
 
+// 形成前只检查原执行权限子集，但不允许跨角色拼接。
 #[tokio::test]
 async fn formation_checks_execution_only_and_rejects_split_roles() {
     let identity = Arc::new(Identity::default());
@@ -236,6 +240,7 @@ async fn formation_checks_execution_only_and_rejects_split_roles() {
     }
 }
 
+// 形成返工任务仍要有工作项详情权限，不额外要求来源读取。
 #[tokio::test]
 async fn formation_retains_rework_detail_requirement_without_adding_source_read() {
     let identity = Arc::new(Identity::default());
@@ -265,6 +270,7 @@ async fn formation_retains_rework_detail_requirement_without_adding_source_read(
         .unwrap();
 }
 
+// 形成预检拒绝非法候选、未知种类、到期、非快照或账号停用。
 #[tokio::test]
 async fn formation_rejects_untrusted_shape_unknown_kind_expiry_and_non_snapshot() {
     let identity = Arc::new(Identity::default());
@@ -332,6 +338,7 @@ async fn formation_rejects_untrusted_shape_unknown_kind_expiry_and_non_snapshot(
     ));
 }
 
+// 接收资格以精确任务和真实来源为依据，不要求候选接收人已是当前所有者。
 #[tokio::test]
 async fn recipient_loads_exact_task_without_requiring_current_ownership() {
     let identity = Arc::new(Identity::default());
@@ -397,6 +404,7 @@ async fn recipient_loads_exact_task_without_requiring_current_ownership() {
     ));
 }
 
+// 任务的独立来源资格可由不同角色提供，但缺少真实来源时不得接收。
 #[tokio::test]
 async fn recipient_preserves_independent_source_roles_and_rejects_missing_real_source() {
     let identity = Arc::new(Identity::default());
@@ -437,6 +445,7 @@ async fn recipient_preserves_independent_source_roles_and_rejects_missing_real_s
     ));
 }
 
+// 履约任务接收沿用工作项读取角色，不附带订单菜单权限。
 #[tokio::test]
 async fn fulfillment_recipient_preserves_task_read_roles_without_adding_order_menu_permissions() {
     let identity = Arc::new(Identity::default());
@@ -498,6 +507,7 @@ async fn fulfillment_recipient_preserves_task_read_roles_without_adding_order_me
         .unwrap();
 }
 
+// 采购付款任务的接收资格保留历史参与和针对该采购单的显式读取补权。
 #[tokio::test]
 async fn recipient_purchase_source_retains_history_and_explicit_record_read_supplements() {
     let identity = Arc::new(Identity::default());
@@ -538,6 +548,7 @@ async fn recipient_purchase_source_retains_history_and_explicit_record_read_supp
         .unwrap();
 }
 
+// 列表中的任务资格投影与单个接收者检查采用同一套完整任务组合。
 #[tokio::test]
 async fn query_qualification_and_recipient_use_the_same_complete_task_combinations() {
     let identity = Arc::new(Identity::default());
@@ -582,6 +593,7 @@ async fn query_qualification_and_recipient_use_the_same_complete_task_combinatio
     }
 }
 
+// 资格投影只接受对应查询的有效凭证，拒绝到期或跨阶段复用。
 #[tokio::test]
 async fn query_qualification_rejects_other_queries_expiry_and_cross_stage_reuse() {
     let service = complete().build().unwrap();
@@ -606,6 +618,7 @@ async fn query_qualification_rejects_other_queries_expiry_and_cross_stage_reuse(
     assert!(matches!(access.decision_qualified(&mut executor), Err(Error::ValidationError(_))));
 }
 
+// 形成结算任务的资格不能替代按钮展示或实际办理所需的完整资格。
 #[tokio::test]
 async fn settlement_formation_does_not_prove_display_or_task_execution_qualification() {
     let identity = Arc::new(Identity::default());
@@ -655,6 +668,7 @@ async fn settlement_formation_does_not_prove_display_or_task_execution_qualifica
     }
 }
 
+// 执行权限子集显式为空也不能跳过展示所需的来源读取。
 #[tokio::test]
 async fn explicit_empty_execution_subset_still_requires_source_read_for_display() {
     let identity = Arc::new(Identity::default());
@@ -685,6 +699,7 @@ async fn explicit_empty_execution_subset_still_requires_source_read_for_display(
     }
 }
 
+// 展示返工资格时，来源读取和工作项详情必须属于同一角色。
 #[tokio::test]
 async fn rework_display_requires_source_and_work_item_detail_in_the_same_role() {
     let identity = Arc::new(Identity::default());
@@ -705,6 +720,7 @@ async fn rework_display_requires_source_and_work_item_detail_in_the_same_role() 
     }
 }
 
+// 任务种类和来源各自合法，也不代表未登记的组合可获授权。
 #[tokio::test]
 async fn known_kind_and_known_source_do_not_authorize_an_unregistered_pair() {
     let kind = "APPROVAL_REWORK";
@@ -752,6 +768,7 @@ async fn known_kind_and_known_source_do_not_authorize_an_unregistered_pair() {
     }
 }
 
+// 非事务查询中的可选资格若被撤销，原结果不得交付。
 #[tokio::test]
 async fn optional_qualification_revocation_invalidates_the_original_nontransaction_query() {
     let identity = Arc::new(Identity::default());

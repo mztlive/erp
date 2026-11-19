@@ -3,35 +3,38 @@ use application_core::{SortDir, normalize_sort};
 
 use crate::{Error, Result};
 
-/// 固定时间排序字段。
+/// 列表查询允许使用的时间排序字段。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TimeSort {
+    /// 按创建时间排序，缺省使用此字段。
     #[default]
     CreatedAt,
+    /// 按最后更新时间排序。
     UpdatedAt,
 }
 
-/// 边界校验后在查询和仓储间传递的分页参数。
+/// 权限目录和审计列表传给仓储的已校验分页与排序参数。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PageParams {
+    /// 从 1 开始的页码，用于计算查询偏移量。
     pub(crate) page: u64,
+    /// 单页最多读取的条数，范围为 1 至 100。
     pub(crate) page_size: u32,
+    /// 仓储用于排序的创建时间或更新时间。
     pub(crate) sort_by: TimeSort,
+    /// 时间排序方向，决定较早或较晚的记录优先返回。
     pub(crate) sort_dir: SortDir,
 }
 impl Default for PageParams {
-    // 未指定列表分页时使用第 1 页、每页 20 条，按创建时间倒序。
+    // 缺省读取按创建时间降序排列的第 1 页，每页 20 条。
     fn default() -> Self {
         Self { page: 1, page_size: 20, sort_by: TimeSort::CreatedAt, sort_dir: SortDir::Desc }
     }
 }
 impl PageParams {
-    /// 解析分页与固定时间排序。
-    /// 已验证参数；缺省使用首页、20 条、创建时间降序。
-    ///
-    /// 非法页码、页大小、排序字段或方向拒绝。
-    ///
-    /// sort_by、sort_dir 为请求排序，page、page_size 为可选分页。
+    /// 在查询前解析页码、单页条数及时间排序；缺省读取第 1 页 20 条，按创建时间降序。
+    /// 页码须大于 0，单页限 1 至 100 条；排序字段和方向裁剪空白后只接受
+    /// `created_at` 或 `updated_at`、`asc` 或 `desc`，纯空白走默认值，其余输入报错。
     pub fn parse(
         sort_by: &Option<String>,
         sort_dir: &Option<String>,
@@ -56,6 +59,7 @@ impl PageParams {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // 确认分页缺省值一致，非法分页与排序被拒绝，裁剪后合法的显式排序可用。
     #[test]
     fn pagination_rejects_invalid_values_and_preserves_defaults() {
         assert_eq!(PageParams::parse(&None, &None, None, None).unwrap(), PageParams::default());

@@ -13,20 +13,30 @@ pub(crate) enum ScopeSource {
     /// 使用本权限自己的人员配置。
     Current,
     /// 复用一个 `Current` 权限的配置；本权限不接受独立配置。
-    Permission(Permission),
+    Permission(
+        /// 提供人员范围配置的已登记权限。
+        Permission
+    ),
     /// 功能资格成立后采用公司范围，不读取人员配置。
     Company,
 }
 
-/// 一个权限的范围合同。字段只由静态目录填写。
+/// 静态目录为单个权限登记的范围合同，供配置、运行时解析及导入导出共用。
 #[derive(Debug, Clone)]
 pub(crate) struct ScopeSpec {
+    // 范围规格所绑定的精确权限。
     permission: Permission,
+    // 决定读取当前动作配置、复用其他权限范围或采用公司范围。
     source: ScopeSource,
+    // 是否为默认配置和附加授权保留本人负责分支。
     default_self: bool,
+    // 该业务资源允许选择的范围类型；同资源的动作须一致。
     scope_types: &'static [DataScopeType],
+    // 该动作可接受的范围维度。
     supported_dimensions: &'static [ScopeDimension],
+    // 显式范围条款必须覆盖的维度。
     required_dimensions: &'static [ScopeDimension],
+    // 是否允许历史参与作为读取范围的补充分支。
     allows_history: bool,
 }
 
@@ -39,8 +49,11 @@ pub(crate) enum ActionKind {
     Source,
 }
 
+/// 不登记范围规格的固定入口，用于区分任务、功能资格和真实来源。
 pub(super) struct FixedAction {
+    // 固定入口对应的精确权限。
     permission: Permission,
+    // 入口的校验类别；不得再次登记为范围入口。
     kind: ActionKind,
 }
 
@@ -52,6 +65,7 @@ pub(crate) enum OrganizationLoad {
     AllMembers,
 }
 
+/// 用固定目录数据构造范围规格，初始支持维度与必需维度相同。
 pub(super) fn scope(
     permission: &Permission,
     source: ScopeSource,
@@ -72,43 +86,53 @@ pub(super) fn scope(
 }
 
 impl ScopeSpec {
+    /// 返回规格绑定的权限，供目录查找和授权入口对照。
     pub(crate) fn permission(&self) -> &Permission {
         &self.permission
     }
 
+    /// 返回范围取得方式，供解析器选择人员配置、复用动作或公司范围。
     pub(crate) fn source(&self) -> &ScopeSource {
         &self.source
     }
 
+    /// 查询此入口是否有本人基础，供无显式人员配置时解析。
     pub(crate) fn default_self(&self) -> bool {
         self.default_self
     }
 
+    /// 返回该资源允许的范围类型，供配置校验。
     pub(crate) fn scope_types(&self) -> &'static [DataScopeType] {
         self.scope_types
     }
 
+    /// 返回该动作接受的维度，供配置界面和绑定校验。
     pub(crate) fn supported_dimensions(&self) -> &'static [ScopeDimension] {
         self.supported_dimensions
     }
 
+    /// 返回解析该动作时条款必须提供的维度。
     pub(crate) fn required_dimensions(&self) -> &'static [ScopeDimension] {
         self.required_dimensions
     }
 
+    /// 查询该入口是否允许把历史参与加入读取条件。
     pub(crate) fn allows_history(&self) -> bool {
         self.allows_history
     }
 
+    /// 仅在使用当前权限的人员配置时允许独立配置。
     pub(crate) fn configurable(&self) -> bool {
         matches!(self.source, ScopeSource::Current)
     }
 }
 
+// 借用尚未验证的静态范围目录，供目录验证自身时使用。
 fn raw_specs() -> &'static [ScopeSpec] {
     catalog::SPECS.as_slice()
 }
 
+/// 首次枚举范围目录时验证登记合同，之后复用已验证的目录；目录错误会终止调用。
 pub(crate) fn specs() -> &'static [ScopeSpec] {
     static CHECKED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
     CHECKED.get_or_init(|| {
@@ -117,17 +141,19 @@ pub(crate) fn specs() -> &'static [ScopeSpec] {
     raw_specs()
 }
 
+/// 按完整权限查找范围规格；不含任务等无范围入口。
 pub(crate) fn find(permission: &Permission) -> Option<&'static ScopeSpec> {
     raw_specs().iter().find(|spec| spec.permission == *permission)
 }
 
+/// 按资源和动作代码查找范围规格，不把无范围入口当作可配置动作。
 pub(crate) fn find_action(resource: &str, action: &str) -> Option<&'static ScopeSpec> {
     raw_specs()
         .iter()
         .find(|spec| spec.permission.resource() == resource && spec.permission.action() == action)
 }
 
-// 查询动作范围规格时，区分已接入但不定义独立范围与完全未知的动作；前者给出业务原因，后者保留接入错误。
+/// 取得权限的范围规格；区分已接入却不定义范围的入口与未登记入口。
 pub(crate) fn require_scope(permission: &Permission) -> Result<&'static ScopeSpec> {
     let _ = specs();
     if let Some(spec) = find(permission) {
@@ -139,6 +165,7 @@ pub(crate) fn require_scope(permission: &Permission) -> Result<&'static ScopeSpe
     Err(unwired(permission))
 }
 
+/// 从资源和动作取得范围规格；无范围入口返回原因，未知入口返回未开放错误。
 pub(crate) fn require_action(resource: &str, action: &str) -> Result<&'static ScopeSpec> {
     let _ = specs();
     if let Some(spec) = find_action(resource, action) {
@@ -153,16 +180,18 @@ pub(crate) fn require_action(resource: &str, action: &str) -> Result<&'static Sc
     Err(scope_unavailable(resource, action))
 }
 
-// 加载可直接用于解析的动作规格，只接受本权限配置或公司范围。复用来源的规格必须先解析到 `Current`。
+/// 按权限加载可直接计算的范围规格，只接受当前人员配置或公司范围。
 pub(crate) fn require_runtime(permission: &Permission) -> Result<&'static ScopeSpec> {
     let spec = require_scope(permission)?;
     runtime_only(spec)
 }
 
+/// 按资源和动作加载可直接计算的规格；复用入口须先定位其范围来源。
 pub(crate) fn require_runtime_action(resource: &str, action: &str) -> Result<&'static ScopeSpec> {
     runtime_only(require_action(resource, action)?)
 }
 
+// 拒绝未解析的范围复用规格，避免按入口自身读取人员配置。
 fn runtime_only(spec: &'static ScopeSpec) -> Result<&'static ScopeSpec> {
     match &spec.source {
         ScopeSource::Current | ScopeSource::Company => Ok(spec),
@@ -170,7 +199,7 @@ fn runtime_only(spec: &'static ScopeSpec) -> Result<&'static ScopeSpec> {
     }
 }
 
-// 沿动作登记找到真正读取人员配置或公司范围的来源。复用只指向 `Current`，不得形成循环。
+/// 找到实际读取人员配置或采用公司共享的规格；复用只允许指向另一条当前配置，不得成环。
 pub(crate) fn runtime_source(spec: &ScopeSpec) -> Result<&'static ScopeSpec> {
     match &spec.source {
         ScopeSource::Current | ScopeSource::Company => find(&spec.permission)
@@ -186,6 +215,7 @@ pub(crate) fn runtime_source(spec: &ScopeSpec) -> Result<&'static ScopeSpec> {
     }
 }
 
+/// 按资源和动作识别已登记的范围、任务、功能资格或来源入口；未知动作返回 `None`。
 pub(crate) fn action_kind(resource: &str, action: &str) -> Option<ActionKind> {
     if find_action(resource, action).is_some() {
         return Some(ActionKind::Scope);
@@ -196,10 +226,12 @@ pub(crate) fn action_kind(resource: &str, action: &str) -> Option<ActionKind> {
         .map(|entry| entry.kind)
 }
 
+/// 按完整权限识别入口分类；未登记时不允许继续授权。
 pub(crate) fn kind(permission: &Permission) -> Result<ActionKind> {
     kind_of(permission).ok_or_else(|| unwired(permission))
 }
 
+/// 编辑人员范围前确认动作允许独立配置，否则返回范围不可配置的原因。
 pub(crate) fn configurable_action(resource: &str, action: &str) -> Result<&'static ScopeSpec> {
     let spec = require_action(resource, action)?;
     if spec.configurable() {
@@ -208,15 +240,18 @@ pub(crate) fn configurable_action(resource: &str, action: &str) -> Result<&'stat
     Err(independent_scope_rejected(spec.permission()))
 }
 
+/// 判断指定动作是否使用自己的人员配置，供目录筛选。
 pub(crate) fn is_configurable(resource: &str, action: &str) -> bool {
     find_action(resource, action).is_some_and(ScopeSpec::configurable)
 }
 
+/// 判断资源是否已登记至少一个范围或固定动作。
 pub(crate) fn resource_is_known(resource: &str) -> bool {
     raw_specs().iter().any(|spec| spec.permission.resource() == resource)
         || catalog::FIXED_ACTIONS.iter().any(|entry| entry.permission.resource() == resource)
 }
 
+/// 枚举指定资源的范围动作和固定动作，包括内部入口。
 pub(crate) fn actions(resource: &str) -> Vec<&'static Permission> {
     let mut actions = raw_specs()
         .iter()
@@ -232,7 +267,7 @@ pub(crate) fn actions(resource: &str) -> Vec<&'static Permission> {
     actions
 }
 
-// 为人员范围配置页枚举公共目录动作；固定内部入口不成为可编辑候选。
+/// 为人员范围页面仅枚举公共权限目录中的动作，不展示固定内部入口。
 pub(crate) fn display_actions(resource: &str) -> Vec<&'static Permission> {
     actions(resource)
         .into_iter()
@@ -242,6 +277,7 @@ pub(crate) fn display_actions(resource: &str) -> Vec<&'static Permission> {
         .collect()
 }
 
+/// 验证目录后按首次登记顺序枚举资源，去除重复项。
 pub(crate) fn resources() -> Vec<&'static str> {
     let _ = specs();
     let mut resources = Vec::new();
@@ -257,6 +293,7 @@ pub(crate) fn resources() -> Vec<&'static str> {
     resources
 }
 
+/// 合并所选可配置动作支持的维度，保持首次出现顺序；忽略不可配置动作。
 pub(crate) fn configurable_dimensions(resource: &str, actions: &[String]) -> Vec<ScopeDimension> {
     let mut dimensions = Vec::new();
     for action in actions {
@@ -272,6 +309,7 @@ pub(crate) fn configurable_dimensions(resource: &str, actions: &[String]) -> Vec
     dimensions
 }
 
+/// 按资源的登记规格校验范围类型，拒绝未开放资源和不支持的类型。
 pub(crate) fn validate_scope_type(resource: &str, scope_type: DataScopeType) -> Result<()> {
     let spec = raw_specs().iter().find(|spec| spec.permission.resource() == resource).ok_or_else(|| {
         tracing::debug!(resource, "未登记授权策略");
@@ -286,6 +324,7 @@ pub(crate) fn validate_scope_type(resource: &str, scope_type: DataScopeType) -> 
     Ok(())
 }
 
+/// 逐动作校验绑定的目标维度，防止资源支持的维度被用于不支持它的动作。
 pub(crate) fn validate_binding(binding: &ScopeBinding) -> Result<()> {
     for action in &binding.actions {
         let spec = require_action(&binding.resource, action)?;
@@ -303,7 +342,7 @@ pub(crate) fn validate_binding(binding: &ScopeBinding) -> Result<()> {
     Ok(())
 }
 
-// 按范围解析需求选择组织取证规模：公司范围不取组织，治理委派读取全员关系，其余只加载操作人目录。
+/// 由范围规格决定组织取证规模：公司范围不加载；组织和工作项治理加载全员；其余加载操作人。
 pub(crate) fn organization_load(spec: &ScopeSpec) -> OrganizationLoad {
     if matches!(&spec.source, ScopeSource::Company) {
         return OrganizationLoad::None;
@@ -315,11 +354,13 @@ pub(crate) fn organization_load(spec: &ScopeSpec) -> OrganizationLoad {
     }
 }
 
+/// 按动作返回展示用的范围政策说明，不作为授权条件。
 pub(crate) fn action_description(resource: &str, action: &str) -> Result<&'static str> {
     let kind = action_kind(resource, action).ok_or_else(|| scope_unavailable(resource, action))?;
     Ok(describe(resource, find_action(resource, action), kind))
 }
 
+/// 汇总所选动作的政策说明；相同说明只展示一次，不同说明按动作列出，空动作集报错。
 pub(crate) fn policy_description(resource: &str, actions: &[String]) -> Result<String> {
     if actions.is_empty() {
         return Err(Error::ValidationError("缺少操作权限".into()));
@@ -335,6 +376,7 @@ pub(crate) fn policy_description(resource: &str, actions: &[String]) -> Result<S
     Ok(texts.iter().map(|(action, text)| format!("{action}：{text}")).collect::<Vec<_>>().join("；"))
 }
 
+/// 核对范围规格唯一、范围与固定分类互斥，并拒绝非法维度或成环的来源。
 pub(crate) fn validate_catalog() -> Result<()> {
     let mut seen = Vec::new();
     for spec in raw_specs() {
@@ -358,7 +400,7 @@ pub(crate) fn validate_catalog() -> Result<()> {
     validate_sources_acyclic(raw_specs())
 }
 
-// 启动校验时逐动作核对范围维度、记录读取补充及复用来源是否符合登记合同。
+// 核对单条规格的维度、本人基础、历史读取和复用来源是否符合静态目录约束。
 fn validate_scope(spec: &ScopeSpec) -> Result<()> {
     if spec.supported_dimensions.is_empty() || spec.scope_types.is_empty() {
         return Err(Error::ValidationError(format!("{} 缺少范围维度或类型", spec.permission)));
@@ -405,7 +447,7 @@ fn validate_scope(spec: &ScopeSpec) -> Result<()> {
     validate_scope_types(spec)
 }
 
-// 启动时检查同一资源提供一致的范围类型；各动作能配置的维度仍分别校验。
+// 校验同资源各动作的范围类型一致；维度仍按动作分别校验。
 fn validate_scope_types(spec: &ScopeSpec) -> Result<()> {
     let siblings =
         raw_specs().iter().filter(|other| other.permission.resource() == spec.permission.resource());
@@ -415,25 +457,30 @@ fn validate_scope_types(spec: &ScopeSpec) -> Result<()> {
     Ok(())
 }
 
+// 用权限的资源和动作值查找登记分类，供入口检查和错误区分。
 fn kind_of(permission: &Permission) -> Option<ActionKind> {
     action_kind(permission.resource(), permission.action())
 }
 
+// 将未登记的权限转换为范围未开放的校验错误。
 fn unwired(permission: &Permission) -> Error {
     scope_unavailable(permission.resource(), permission.action())
 }
 
+// 记录未开放动作的技术上下文，返回面向配置人员的校验提示。
 fn scope_unavailable(resource: &str, action: &str) -> Error {
     tracing::debug!(resource, action, "操作未开放数据范围配置");
     Error::ValidationError("所选操作尚未开放数据范围配置，请核对授权设置".into())
 }
 
+// 用已登记的政策说明解释为何不允许给指定权限单独配置范围。
 fn independent_scope_rejected(permission: &Permission) -> Error {
     let text = action_description(permission.resource(), permission.action())
         .unwrap_or("此动作没有独立数据范围配置");
     Error::ValidationError(format!("此操作不接受独立数据范围：{text}"))
 }
 
+// 按资源特例和入口分类选择中文说明；说明不参与授权判断。
 fn describe(resource: &str, spec: Option<&ScopeSpec>, kind: ActionKind) -> &'static str {
     match resource {
         "work_item" => {
@@ -476,6 +523,7 @@ fn describe(resource: &str, spec: Option<&ScopeSpec>, kind: ActionKind) -> &'sta
     }
 }
 
+// 沿目录中的复用关系查找缺失引用和环，避免运行时无限追溯。
 fn validate_sources_acyclic(entries: &[ScopeSpec]) -> Result<()> {
     for spec in entries {
         let mut cursor = spec;
@@ -499,6 +547,7 @@ mod tests {
     use super::*;
     use crate::entity::access_control::ScopeDimension;
 
+    // 验证真实目录的登记唯一且复用指向当前配置，并保持固定动作与未知动作的区别。
     #[test]
     fn catalog_sources_are_unique_current_and_acyclic() {
         validate_catalog().unwrap();
@@ -519,6 +568,7 @@ mod tests {
         assert!(require_action("approval_instance", "unknown").is_err());
     }
 
+    // 验证缺失引用、成环和多级范围复用分别被拒绝。
     #[test]
     fn missing_and_cyclic_sources_are_rejected() {
         const LEFT: Permission = Permission::new("scope_cycle_left", "list");
@@ -548,6 +598,7 @@ mod tests {
         assert!(runtime_source(&chained).is_err());
     }
 
+    // 验证仅当前来源可编辑范围，并核对本人基础、允许类型和权限规范化查询。
     #[test]
     fn configuration_admission_follows_current_source_only() {
         assert!(configurable_action("sales_inquiry", "detail").unwrap().default_self());
@@ -586,6 +637,7 @@ mod tests {
         assert_eq!(find(&normalized).unwrap().permission(), &erp_permissions::sales_order::DETAIL);
     }
 
+    // 验证公司共享不加载组织、普通范围加载操作人、治理动作加载全员，并保留多维结算范围。
     #[test]
     fn company_scope_skips_members_and_governance_loads_all() {
         let purchase = find_action("purchase_order", "detail").unwrap();

@@ -17,29 +17,21 @@ use crate::dto::{PersonDirectoryPage, PersonDirectoryQuery};
 use crate::entity::person_directory::{DirectoryListRequest, PersonDirectoryCategory};
 use crate::{AuthorizationService, Result};
 
-/// 人员目录用例。
+/// 提供后台、销售和采购人员的授权列表、已选回显和岗位查询资格管理。
 pub struct PersonDirectoryService {
+    // 人员档案、组织及目录资格所在的应用数据库。
     db: Database,
+    // 共享授权服务，统一生成目录过滤并核验管理目标权限。
     authorization: Arc<AuthorizationService>,
 }
 
 impl PersonDirectoryService {
-    /// 绑定身份库和统一授权服务。
-    /// 返回人员目录服务。
-    ///
-    /// `authorization`：应用注入的共享授权服务。
+    /// 绑定身份数据库和共享授权服务，供列表、回显和资格维护共用。
     pub fn new(db: Database, authorization: Arc<AuthorizationService>) -> Self {
         Self { db, authorization }
     }
 
-    /// 分页查询某一固定类别的人员目录。
-    /// 授权、资格与组织在同一个事务读取；本方法不接收业务列表条件。
-    ///
-    /// 返回目录页。
-    ///
-    /// 参数、权限、版本或读取失败时返回错误。
-    ///
-    /// `query`：目录自身的搜索、分页和组织筛选。
+    /// 按固定目录类别查询分页列表。授权、岗位资格和组织事实使用同一事务；调用方可指定目录自身的搜索和组织筛选。
     pub async fn list(
         &self,
         actor: AuditActor,
@@ -50,12 +42,7 @@ impl PersonDirectoryService {
         self.read(actor, category, Read::List(request)).await
     }
 
-    /// 按已选 ID 回显当前仍可读的人员。
-    /// 返回可读人员；无权或不存在的 ID 被省略。
-    ///
-    /// 无权限或读取失败时返回错误。
-    ///
-    /// `ids`：已选账号 ID。
+    /// 按已选账号 ID 回显当前仍可读的人员，适用于重新打开选择器。只返回仍满足目录资格和权限的账号。
     pub async fn selected(
         &self,
         actor: AuditActor,
@@ -65,7 +52,7 @@ impl PersonDirectoryService {
         self.read(actor, category, Read::Selected(ids)).await
     }
 
-    // 在一个事务中读取目录列表或已选人员，消费本次查询输入。
+    // 为列表或回显开启读取事务，并分派到对应的目录查询，使授权和展示使用同一快照。
     async fn read(
         &self,
         actor: AuditActor,

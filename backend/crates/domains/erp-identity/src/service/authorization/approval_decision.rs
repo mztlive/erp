@@ -13,12 +13,9 @@ use crate::repository::authorization::AccessProof;
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
 impl AuthorizationService {
-    // 办理角色同时承担来源范围；其他实例的读取授权不能放行本次决定。
-    // 本次决定所使用的完整来源证明；其他权限不追加证明。
-    //
-    // 来源或冻结实例缺失、范围未命中、资格或阶段变化时拒绝。
-    //
-    // proof为本次办理资格，facts为精确任务及其冻结实例、真实来源，executor为原快照。
+    /// 办理精确审批任务时，在原快照核对冻结实例和真实订单，用办理角色解析来源范围并保留来源证明；其他已登记单据不追加来源证明。
+    ///
+    /// 来源或冻结实例缺失、范围不符、资格失效或阶段变化均拒绝，其他实例的补权不能放行本次决定。
     pub(super) async fn approval_decision_sources(
         &self,
         proof: &AccessProof,
@@ -49,7 +46,7 @@ impl AuthorizationService {
         }
         Ok(proofs)
     }
-    // 审批决定先检查常规来源范围；未命中时，只允许该真实实例为当前账号建立的有效记录读取授权补足。
+    // 审批决定先检查真实单据的常规读取范围；未命中时，仅接受本实例给当前账号建立的有效记录读取授权。
     async fn require_decision_source(
         &self,
         proof: &AccessProof,
@@ -82,7 +79,7 @@ impl AuthorizationService {
     }
 }
 
-// 仅将销售单与采购单映射到审批分配的来源范围；其他单据按既有办理规则判断，不额外打开来源分支。
+// 按冻结任务类型找销售单或采购单的详情范围和分配补权键；其他已登记单据沿用既有办理条件，未知类型拒绝。
 fn order_source(task: &ObjectFacts) -> Result<Option<(Permission, ResourceKind, &'static str)>> {
     Ok(match task.subject_type.get()?.as_str() {
         "sales_order" => {

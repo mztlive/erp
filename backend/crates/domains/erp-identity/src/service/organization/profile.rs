@@ -15,12 +15,7 @@ use crate::service::authorization::OrganizationScope;
 use crate::{AccessControlExt, Error, Result};
 
 impl OrganizationService {
-    // 按变更内容重验组织配置权及账号管理边界，幂等回放也不能绕过撤权。
-    // 返回已证明 `org_unit:manage` 的授权上下文。
-    //
-    // 权限解析失败，或账号管理版本与本次授权版本不一致时返回冲突错误。
-    //
-    // `executor`：调用方事务执行器。
+    /// 按人员资料命令复核组织配置权限和账号管理边界。幂等回放也须重新授权；策略版本不一致时返回冲突。
     pub(super) async fn profile_access(
         &self,
         actor: &AuditActor,
@@ -64,12 +59,7 @@ impl OrganizationService {
         Ok(access)
     }
 
-    // 角色写入使用现有取消安全的 policy 事务，提交后刷新权限缓存。
-    // 已有回执时返回回放结果，否则返回本次提交的变更回执。
-    //
-    // 授权、回放载荷不一致或 policy 事务失败时返回错误。
-    //
-    // `request`：含幂等键和人员资料变更。
+    /// 通过策略写事务处理含角色调整的人员资料提交，原子记录变更或重放回执；提交后通过策略事务更新权限缓存。
     pub(super) async fn save_profile_roles(
         &self,
         actor: &AuditActor,
@@ -101,7 +91,7 @@ impl OrganizationService {
             .await
     }
 
-    // 组织人员资料预检只把策略修订号传给后续写事务；不能跨事务复用人员范围证明。
+    // 正式角色写入前先取得策略修订号，用于约束后续事务；正式事务会重新解析人员范围。
     async fn profile_roles_precheck(
         &self,
         actor: &AuditActor,
@@ -116,13 +106,7 @@ impl OrganizationService {
         Ok((access.policy_version, receipt))
     }
 
-    // 在账号资料事务内替换完整角色集，不另行提交。
-    // 没有角色变更时无返回值；否则角色绑定已写入调用方事务。
-    //
-    // 授权版本变化、缺少角色授予上下文或角色写入失败时返回错误。
-    //
-    // `change`：组织命令；不是人员资料更新时直接返回；`revision`：本次组织变更使用的 policy 版本。
-    // `executor`：调用方事务执行器。
+    /// 在人员资料事务中按本次策略版本替换全部角色绑定。只有角色变更命令会写入；授权上下文缺失或版本变化时返回错误。
     pub(super) async fn assign_profile_roles(
         &self,
         actor: &AuditActor,
@@ -150,13 +134,7 @@ impl OrganizationService {
         self.rbac.assign_roles(AccountKind::Admin, &profile.user_id, grant, executor).await
     }
 
-    // 预览校验姓名版本与值，提交时加入组织关系所在事务。
-    // 姓名与期望值一致，且在需要时已写入后无返回值。
-    //
-    // 人员不存在、姓名版本冲突、领域校验或账号更新失败时返回错误。
-    //
-    // `change`：组织命令；不是人员姓名更新时直接返回；`persist`：为真时把姓名写入调用方事务。
-    // `executor`：调用方事务执行器。
+    /// 在预览阶段校验姓名和值版本，在正式提交时用同一执行器更新姓名。人员缺失、版本冲突或领域校验失败时返回错误。
     pub(super) async fn update_profile_name(
         &self,
         change: &OrganizationOperation,

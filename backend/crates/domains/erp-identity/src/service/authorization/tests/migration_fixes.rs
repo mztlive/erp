@@ -15,11 +15,13 @@ use crate::entity::authorization::{AccessTarget, FactValue};
 use crate::repository::authorization::fixtures::execute;
 use crate::{AuthorizationService, CompiledAccess, Error};
 
+// 切换测试账号的有效角色权限，以区分发信与来源读取等独立资格。
 fn grant(identity: &Identity, roles: &[(&str, &[Permission])]) {
     identity.state.lock().unwrap().grants =
         roles.iter().map(|(role, permissions)| ((*role).into(), permissions.to_vec())).collect();
 }
 
+// 为迁移回归用例在完整装配上换入指定资源的事实端口。
 fn service(identity: Arc<Identity>, resource: &str, facts: Arc<Facts>) -> AuthorizationService {
     let mut builder = complete();
     builder.facilities = identity;
@@ -27,6 +29,7 @@ fn service(identity: Arc<Identity>, resource: &str, facts: Arc<Facts>) -> Author
     builder.build().unwrap()
 }
 
+// 构造公司或仅本人范围，供比较任务读取与管理投影。
 fn scope(company: bool) -> ResolvedScope {
     ResolvedScope {
         role_clauses: vec![ScopeClause { company, self_owned: !company, ..Default::default() }],
@@ -34,6 +37,7 @@ fn scope(company: bool) -> ResolvedScope {
     }
 }
 
+// 发送采购邮件需同时具备发信和采购单读取资格，缺任一项时不加载记录。
 #[tokio::test]
 async fn sending_purchase_email_requires_both_independent_grants_before_loading_the_record() {
     let identity = Arc::new(Identity::default());
@@ -61,6 +65,7 @@ async fn sending_purchase_email_requires_both_independent_grants_before_loading_
     ));
 }
 
+// 发送采购邮件只接受快照中的实际采购单，其他目标先于身份读取被拒绝。
 #[tokio::test]
 async fn sending_purchase_email_cannot_use_an_objectless_or_nontransaction_target() {
     let identity = Arc::new(Identity::default());
@@ -81,6 +86,7 @@ async fn sending_purchase_email_cannot_use_an_objectless_or_nontransaction_targe
     assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
 }
 
+// 工作项管理只能在原快照内检查持久化任务，不接受非事务预检或范围外任务。
 #[tokio::test]
 async fn work_item_management_accepts_the_original_snapshot_and_rejects_nontransaction_prechecks() {
     let identity = Arc::new(Identity::default());
@@ -105,6 +111,7 @@ async fn work_item_management_accepts_the_original_snapshot_and_rejects_nontrans
     ));
 }
 
+// 用待办样本运行授权管道，返回本人、他人和已删除样本中过滤后保留的标识。
 fn members(stages: &[Document]) -> Vec<String> {
     let rows = vec![
         doc! {"id":"mine","owner":"user","deleted_at":0,"detail_other":["mine"]},
@@ -118,6 +125,7 @@ fn members(stages: &[Document]) -> Vec<String> {
         .collect()
 }
 
+// 分别配置读取角色和管理角色的任务范围，再装配工作项授权服务。
 fn task_service(
     identity: Arc<Identity>,
     permission: &Permission,
@@ -131,6 +139,7 @@ fn task_service(
     service(identity, "work_item", Arc::new(Facts::default()))
 }
 
+// 任务读取和管理各用自己的角色范围，管理投影不提前结束原读取阶段。
 #[tokio::test]
 async fn task_read_and_management_use_their_own_roles_without_ending_the_read_stage() {
     for permission in [work_item::LIST, work_item::DETAIL] {
@@ -155,6 +164,7 @@ async fn task_read_and_management_use_their_own_roles_without_ending_the_read_st
     }
 }
 
+// 管理资格不足只清空管理投影，不影响读取；资格撤销后原结果不得交付。
 #[tokio::test]
 async fn missing_management_qualification_preserves_reads_and_revocation_invalidates_delivery() {
     let identity = Arc::new(Identity::default());
@@ -174,6 +184,7 @@ async fn missing_management_qualification_preserves_reads_and_revocation_invalid
     assert!(matches!(service.validate(&access, &mut executor).await, Err(Error::ConflictError(_))));
 }
 
+// 计算任务管理投影后仍使用原查询期限，到期的快照结果不得交付。
 #[tokio::test]
 async fn task_delivery_checks_the_original_deadline_after_management_projection() {
     let identity = Arc::new(Identity::default());

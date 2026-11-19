@@ -3,20 +3,24 @@ use mongodb::bson::{Document, doc};
 use crate::ports::QueryFragment;
 use crate::{Error, Result};
 
-/// 一个集合查询内的关联准备和最终条件；嵌套来源使用各自的字段作用域。
+/// 一个集合管道的关联准备和最终权限条件；嵌套来源另用独立别名作用域。
 #[derive(Default)]
 pub(super) struct Fragment {
+    /// 映射声明的固定准备阶段，先于授权关联执行。
     pub(super) stages: Vec<Document>,
+    // 以保序 BSON 字节去重的关联定义，登记次序决定临时别名。
     lookups: Vec<(Vec<u8>, Document)>,
+    /// 所有业务事实和必要记录条件组合后的最终授权谓词。
     pub(super) filter: Document,
 }
 
 impl Fragment {
+    /// 从映射的固定阶段打开新的集合管道和关联别名作用域。
     pub(super) fn with_stages(stages: Vec<Document>) -> Self {
         Self { stages, ..Self::default() }
     }
 
-    // 向同一集合管道登记关联并复用完全相同的 lookup；临时别名不跨来源子管道。
+    /// 登记关联并返回当前管道的临时别名；完整 BSON 编码相同时才复用，编码非法时拒绝。
     pub(super) fn lookup(&mut self, lookup: Document) -> Result<String> {
         // BSON 文档的 PartialEq 忽略字段顺序，不能用于合并含排序或嵌入文档比较的管道。
         let bytes = lookup.to_vec().map_err(|_| Error::ValidationError("授权关联无法编码为 BSON".into()))?;
@@ -31,7 +35,7 @@ impl Fragment {
         Ok(format!("__identity_fact_{index}"))
     }
 
-    // 把业务事实映射成谓词或关联存在性条件，准备关联数组时保留所有根记录供最终逻辑过滤。
+    /// 将字段事实或关联事实转为谓词；存在性关联最多取一行，不提前排除根记录。
     pub(super) fn fact(&mut self, fragment: QueryFragment) -> Result<Document> {
         match fragment {
             QueryFragment::Match(filter) => Ok(filter),
@@ -47,7 +51,7 @@ impl Fragment {
         }
     }
 
-    // 关联都已登记后生成最终授权过滤与临时字段清理阶段；别名只在当前集合的条件求值期间存在。
+    /// 依次输出固定准备、授权关联、完整过滤及临时字段清理阶段，不让别名泄漏到外部。
     pub(super) fn finish(self) -> Vec<Document> {
         let mut stages = self.stages;
         let mut aliases = Vec::new();
@@ -66,12 +70,12 @@ impl Fragment {
     }
 }
 
-// 用数组是否存在来判断关联命中，不展开元素或改变根记录条数。
+/// 检查关联数组是否有第一个元素，不展开记录或改变根记录数。
 pub(super) fn exists(alias: &str) -> Document {
     doc! { format!("{alias}.0"): { "$exists": true } }
 }
 
-// 组装完整授权谓词的与或分支；没有条件时拒绝，不把空集合解释为无范围限制。
+/// 按指定运算符合并授权谓词；无条件时显式拒绝，不当成不限范围。
 pub(super) fn combine(operator: &str, conditions: Vec<Document>) -> Document {
     if conditions.is_empty() {
         doc! { "$expr": false }
@@ -85,6 +89,7 @@ mod tests {
     use super::super::fixtures::execute;
     use super::*;
 
+    // 验证关联去重保留 BSON 字段顺序，并拒绝无法编码的管道。
     #[test]
     fn lookup_reuse_preserves_bson_field_order_and_rejects_invalid_encoding() {
         let mut fragment = Fragment::default();
@@ -105,6 +110,7 @@ mod tests {
         ));
     }
 
+    // 验证只有集合、绑定及谓词完全相同的关联才复用，且不改变授权成员。
     #[test]
     fn lookup_reuse_preserves_different_bindings_predicates_and_collections() {
         let mut fragment = Fragment::default();

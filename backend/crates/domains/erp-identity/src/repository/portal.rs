@@ -9,45 +9,33 @@ use crate::entity::portal::PortalBinding;
 /// 外部账号绑定仓储。
 pub type PortalBindingRepository<'a> = Repository<'a, PortalBinding>;
 
-/// 身份域持有的供应商账号绑定集合访问器。
+/// 统一取得身份域持有的供应商门户绑定集合。
 pub trait PortalIdentityExt {
     /// 绑定集合名，由仓储与索引共同使用。
     const PORTAL_BINDINGS: &'static str = "supplier_portal_bindings";
 
-    /// 获取供应商账号绑定仓储。
-    /// 本域绑定仓储。
+    /// 在处理供应商门户归属时取得账号绑定仓储。
     fn portal_bindings(&self) -> PortalBindingRepository<'_>;
 }
 
 impl PortalIdentityExt for Database {
-    // 绑定访问固定集合，禁止在组合层重新拼接集合名。
-    // 返回 `PORTAL_BINDINGS` 集合上的绑定仓储。
+    // 使用 `PORTAL_BINDINGS` 固定集合名，不由组合层重新拼接。
     fn portal_bindings(&self) -> PortalBindingRepository<'_> {
         PortalBindingRepository::new(self, Self::PORTAL_BINDINGS)
     }
 }
 
-/// 绑定仓储的账号与供应商归属查询。
+/// 为供应商账号绑定提供单账号和单供应商归属查询。
 #[allow(async_fn_in_trait)]
 pub trait PortalBindingRepositoryExt {
-    /// 查询指定账号的未删除绑定，包含已撤销关系。
-    /// 唯一绑定；未知账号返回空。
-    ///
-    /// 持久化访问失败时返回错误。
-    ///
-    /// `account_id` 为账号稳定身份；`executor` 为调用方事务。
+    /// 用调用方事务按稳定账号 ID 查唯一未删除绑定，包含已撤销关系；未知账号返回 `None`，持久化失败直接返回。
     async fn binding_for_account(
         &self,
         account_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<PortalBinding>>;
 
-    /// 查询某家供应商全部未删除实名账号绑定。
-    /// 包含启用及停用绑定，不扩大到其他供应商。
-    ///
-    /// 持久化访问失败时返回错误。
-    ///
-    /// `supplier_id` 为服务端已授权目标；`executor` 为调用方事务。
+    /// 用调用方事务读取已获授权的指定供应商全部未删除实名绑定，包含启用和停用账号；不得扩大到其他供应商，持久化失败直接返回。
     async fn supplier_bindings(
         &self,
         supplier_id: &str,
@@ -56,10 +44,7 @@ pub trait PortalBindingRepositoryExt {
 }
 
 impl PortalBindingRepositoryExt for PortalBindingRepository<'_> {
-    // 查询唯一账号绑定。只按 `account_id` 取一条记录，不按 `active` 收窄。
-    // 命中未删除绑定时返回该记录，已撤销关系仍包含在内；没有匹配时返回 `None`。
-    //
-    // 仓储查询失败时返回对应错误。
+    // 只按 `account_id` 取唯一未删除记录，不以启用状态隐藏撤销历史。
     async fn binding_for_account(
         &self,
         account_id: &str,
@@ -68,10 +53,7 @@ impl PortalBindingRepositoryExt for PortalBindingRepository<'_> {
         self.find_one_by_field("account_id", account_id, executor).await
     }
 
-    // 将供应商归属条件下推到 MongoDB，不在内存中排除其他供应商。
-    // 返回该供应商全部未删除绑定，包含启用和停用。
-    //
-    // 持久化访问失败时返回错误。
+    // 在 MongoDB 中按供应商 ID 限定未删除绑定，不通过内存过滤其他供应商。
     async fn supplier_bindings(
         &self,
         supplier_id: &str,

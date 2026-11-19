@@ -9,17 +9,16 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 const MAX_ID_LEN: usize = 128;
 
-/// 已校验的角色 ID。
+/// 用于角色记录与授权策略关联的规范角色 ID。
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct RoleId(String);
+pub struct RoleId(
+    // 保留原大小写的非空 ASCII 标识，构造时统一校验。
+    String
+);
 
 impl RoleId {
-    /// 解析并规范化角色 ID。
-    /// 返回只含 ASCII 字母、数字、`_`、`-`、`.` 且长度不超过 128 的角色 ID。
-    ///
-    /// 去空白后为空、长度超过 128，或含有上述以外的字符时返回错误。
-    ///
-    /// `value`：原始角色 ID；先去掉首尾空白。
+    /// 裁剪两端空白后解析角色 ID；空值、超过 128 字符或含非法字符时返回错误。
+    /// 仅接受 ASCII 字母、数字及 `_`、`-`、`.`。
     pub fn parse(value: impl AsRef<str>) -> Result<Self> {
         let value = value.as_ref().trim();
         if value.is_empty() {
@@ -35,36 +34,35 @@ impl RoleId {
         Ok(Self(value.to_string()))
     }
 
-    /// 返回角色 ID 字符串。
-    /// 返回规范化后的角色 ID。
+    /// 借用规范角色 ID 文本，供角色查找和策略键构造使用。
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
 impl fmt::Display for RoleId {
+    // 直接输出规范角色 ID，便于拼接策略主体键与展示。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.as_str())
     }
 }
 
 impl AsRef<str> for RoleId {
+    // 为接受字符串借用的接口提供规范角色 ID，无需复制。
     fn as_ref(&self) -> &str {
         self.as_str()
     }
 }
 
 impl Borrow<str> for RoleId {
+    // 允许集合按规范角色 ID 的字符串切片查找键。
     fn borrow(&self) -> &str {
         self.as_str()
     }
 }
 
 impl Serialize for RoleId {
-    // 将角色 ID 序列化为已规范化字符串。
-    // 返回序列化器写入该字符串后的结果。
-    //
-    // 序列化器拒绝写入时返回其错误。
+    // 将角色 ID 写成规范字符串，并直接传递序列化错误。
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -74,10 +72,7 @@ impl Serialize for RoleId {
 }
 
 impl<'de> Deserialize<'de> for RoleId {
-    // 从字符串反序列化角色 ID，并套用 `RoleId::parse` 的校验。
-    // 成功时返回已规范化的角色 ID。
-    //
-    // 输入不是字符串，或 `RoleId::parse` 拒绝该值时返回反序列化错误。
+    // 反序列化时要求字符串并经 `RoleId::parse` 规范化，类型或内容非法均报错。
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -87,18 +82,16 @@ impl<'de> Deserialize<'de> for RoleId {
     }
 }
 
-/// 已去空白、去重且保序的角色 ID 集合。
+/// 表示角色选择或角色绑定的一组规范 ID，序列化为去重且保序的数组。
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(from = "Vec<RoleId>", into = "Vec<RoleId>")]
-pub struct RoleIdSet(Vec<RoleId>);
+pub struct RoleIdSet(
+    // 按构造时确定的顺序保存首次出现的角色 ID。
+    Vec<RoleId>
+);
 
 impl RoleIdSet {
-    /// 解析角色 ID 集合，允许空集合。去重且保留首次出现的顺序。
-    /// 返回去空白、去重且保序的角色 ID 集合；输入为空时返回空集合。
-    ///
-    /// 当任一角色 ID 非法时返回错误。
-    ///
-    /// `role_ids`：原始角色 ID。
+    /// 逐项规范化角色 ID，去重并保留首次出现的顺序；接受空集合，任一项非法时报错。
     pub fn parse<I, S>(role_ids: I) -> Result<Self>
     where
         I: IntoIterator<Item = S>,
@@ -108,12 +101,8 @@ impl RoleIdSet {
         Ok(Self::from(values))
     }
 
-    /// 解析非空角色 ID 集合。去重且保留首次出现的顺序。
-    /// 返回至少含一个角色 ID 的去重保序集合。
-    ///
-    /// 当集合为空或任一角色 ID 非法时返回错误。
-    ///
-    /// `role_ids`：原始角色 ID。
+    /// 为至少需要一个角色的用例解析角色 ID，去重并保留首次出现的顺序。
+    /// 空集合或任一角色 ID 非法时返回错误。
     pub fn parse_non_empty<I, S>(role_ids: I) -> Result<Self>
     where
         I: IntoIterator<Item = S>,
@@ -124,10 +113,7 @@ impl RoleIdSet {
         Ok(role_ids)
     }
 
-    /// 检查当前用例要求至少一个角色。
-    /// 非空集合返回成功，保留已解析身份。
-    ///
-    /// 集合为空时返回至少选择一个角色的业务错误。
+    /// 在业务要求选角色时检查已解析的集合，空集合报须至少选择一个角色。
     pub fn ensure_non_empty(&self) -> Result<()> {
         if self.is_empty() {
             return Err(Error::from("至少选择一个角色"));
@@ -135,14 +121,8 @@ impl RoleIdSet {
         Ok(())
     }
 
-    /// 从 Casbin 角色主体键提取确定性的角色 ID 集合。
-    /// 非角色主体键必须忽略，输出顺序不得依赖 Casbin 返回顺序。
-    ///
-    /// 返回按角色 ID 排序并去重的集合；没有角色键时返回空集合。
-    ///
-    /// 任一 `role:` 后缀不是合法且已规范化的角色 ID 时返回错误。
-    ///
-    /// `role_keys`：Casbin 返回的主体键，只有 `role:` 前缀项属于角色。
+    /// 读取 Casbin 主体键时只提取 `role:` 后缀，按角色 ID 排序去重；没有角色键则返回空集。
+    /// 持久化后缀必须已规范化且合法，否则返回错误。
     pub fn from_casbin_role_keys<I, S>(role_keys: I) -> Result<Self>
     where
         I: IntoIterator<Item = S>,
@@ -166,6 +146,7 @@ impl RoleIdSet {
 }
 
 impl From<Vec<RoleId>> for RoleIdSet {
+    // 收拢已校验的角色 ID，保留每个 ID 首次出现的位置。
     fn from(values: Vec<RoleId>) -> Self {
         let mut seen = HashSet::new();
         Self(values.into_iter().filter(|id| seen.insert(id.clone())).collect())
@@ -173,6 +154,7 @@ impl From<Vec<RoleId>> for RoleIdSet {
 }
 
 impl From<RoleIdSet> for Vec<RoleId> {
+    // 交出内部有序数组，供序列化和角色列表返回使用。
     fn from(ids: RoleIdSet) -> Self {
         ids.0
     }
@@ -180,91 +162,65 @@ impl From<RoleIdSet> for Vec<RoleId> {
 
 impl Deref for RoleIdSet {
     type Target = [RoleId];
+    // 提供只读切片，使遍历或查询保留集合的顺序与去重约束。
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-/// 已去重并稳定排序的权限集合。
+/// 用于比较、合并和补齐授权策略的去重权限集合。
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct PermissionSet(Vec<Permission>);
+pub struct PermissionSet(
+    // 按资源、动作依次排序的权限项，相同权限只保留一项。
+    Vec<Permission>
+);
 
 impl PermissionSet {
-    /// 构建规范化权限集合。
-    /// 返回去重并按 `resource:action` 排序的权限集合。
-    ///
-    /// `permissions`：已解析的权限；重复项会被去掉。
+    /// 将已解析的权限去重，再按资源和动作排序，得到顺序确定的集合。
     pub fn new(permissions: impl IntoIterator<Item = Permission>) -> Self {
         let mut permissions = permissions.into_iter().collect::<HashSet<_>>().into_iter().collect::<Vec<_>>();
         permissions.sort();
         Self(permissions)
     }
 
-    /// 当当前集合覆盖目标集合中的每项权限时返回 `true`。
-    /// 覆盖语义与单项 [`Permission::covers`] 一致，包含 `*` 通配。
-    ///
-    /// 所有目标权限都至少被当前集合中的一项覆盖时返回 `true`。
-    ///
-    /// `required`：需要被覆盖的目标权限集合。
+    /// 检查每项所需权限是否都被当前集合中的某一项覆盖，沿用 [`Permission::covers`] 的通配规则。
     pub fn covers(&self, required: &Self) -> bool {
         required.0.iter().all(|required| self.covers_one(required))
     }
 
-    /// 当当前集合覆盖单项权限时返回 `true`。
-    /// 更宽通配覆盖更窄权限，例如 `customer:*` 覆盖 `customer:list`。
-    ///
-    /// 集合中存在一项能够授予该权限时返回 `true`。
-    ///
-    /// `required`：需要被覆盖的目标权限。
+    /// 检查是否存在能覆盖所需权限的授予项，例如 `customer:*` 覆盖 `customer:list`。
     pub fn covers_one(&self, required: &Permission) -> bool {
         self.0.iter().any(|permission| permission.covers(required))
     }
 
-    /// 返回目标集合中当前集合尚未覆盖的权限。
-    /// 已存在更宽通配的权限不会再作为缺失项返回；管理员额外授予的权限不影响判定。
-    ///
-    /// 返回去重排序后的缺失权限；已全部覆盖时返回空集合。
-    ///
-    /// `desired`：期望拥有的权限集合。
+    /// 从目标集合筛出尚未覆盖的权限，保留去重排序；精确或通配授予覆盖的项均计为已有。
+    /// 只按目标项判断缺失，全部覆盖时返回空集。
     pub fn missing_from(&self, desired: &Self) -> Self {
         Self::new(desired.0.iter().filter(|required| !self.covers_one(required)).cloned())
     }
 
-    /// 合并两个权限集合。
-    /// 合并只追加权限，不删除任一侧已有项。
-    ///
-    /// 返回去重并按 `resource:action` 排序的并集。
-    ///
-    /// `other`：需要并入的权限集合。
+    /// 合并两侧已有权限，去重后按资源和动作排序，保留额外授予项。
     pub fn union(&self, other: &Self) -> Self {
         Self::new(self.0.iter().cloned().chain(other.0.iter().cloned()))
     }
 
-    /// 若存在尚未覆盖的目标权限，返回并入这些权限后的新集合。
-    /// 只追加缺失项，保留当前集合中管理员额外授予的权限。
-    ///
-    /// 存在缺失权限时返回补齐后的集合；已全部覆盖时返回 `None`。
-    ///
-    /// `desired`：启动种子中的推荐权限。
+    /// 补齐种子角色尚未覆盖的推荐权限，保留管理员额外授予的权限；无需补齐时返回 `None`。
     pub fn with_missing(&self, desired: &Self) -> Option<Self> {
         let missing = self.missing_from(desired);
         if missing.is_empty() { None } else { Some(self.union(&missing)) }
     }
 
-    /// 当集合为空时返回 `true`。
-    /// 没有任何权限时返回 `true`。
+    /// 判断集合是否没有任何权限项，可用于跳过空的权限增量。
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
-    /// 返回规范化权限切片。
-    /// 返回内部权限的只读视图，顺序为稳定排序后的顺序。
+    /// 按确定顺序借用权限切片，供比较和遍历。
     pub fn as_slice(&self) -> &[Permission] {
         &self.0
     }
 
-    /// 转换为规范化权限集合。
-    /// 消耗 `self` 并返回内部权限的所有权。
+    /// 交出内部去重排序后的权限数组，供调用方接收或继续合并。
     pub fn into_vec(self) -> Vec<Permission> {
         self.0
     }
@@ -274,6 +230,7 @@ impl PermissionSet {
 mod tests {
     use super::{Permission, PermissionSet, RoleId, RoleIdSet};
 
+    // 验证角色 ID 数组读入时裁剪并去重，写出时维持规范数组，非法 ID 读入失败。
     #[test]
     fn role_set_wire_format_is_a_normalized_array() {
         let ids: RoleIdSet = serde_json::from_str(r#"[" role-a ","role-a","role-b"]"#).unwrap();
@@ -282,18 +239,20 @@ mod tests {
         assert!(serde_json::from_str::<RoleIdSet>(r#"["bad/id"]"#).is_err());
     }
 
+    // 验证裁剪空白后去重，并保留角色 ID 首次出现的顺序。
     #[test]
     fn role_ids_should_trim_deduplicate_and_preserve_order() {
         let role_ids = RoleIdSet::parse([" role-a ", "role-a", "role-b"]).unwrap();
         assert_eq!(role_ids.iter().map(RoleId::as_str).collect::<Vec<_>>(), vec!["role-a", "role-b"]);
     }
 
+    // 验证要求至少一个角色的解析入口拒绝空集合。
     #[test]
     fn role_ids_should_reject_empty_required_collection() {
         assert!(RoleIdSet::parse_non_empty(Vec::<String>::new()).is_err());
     }
 
-    // 验证：Casbin 角色键过滤非角色主体，并按角色 ID 确定性排序去重。
+    // 验证只提取角色主体并排序去重，同时拒绝空、非法或未规范化的角色键后缀。
     #[test]
     fn casbin_role_keys_are_filtered_and_sorted() {
         let role_ids =
@@ -308,6 +267,7 @@ mod tests {
         assert!(RoleIdSet::from_casbin_role_keys(["role:"]).is_err());
     }
 
+    // 验证权限集合去重，按精确和通配授权判断覆盖，并区分空集合。
     #[test]
     fn permission_set_should_normalize_and_enforce_subset() {
         let actor = PermissionSet::new([
@@ -330,6 +290,7 @@ mod tests {
         assert!(PermissionSet::default().is_empty());
     }
 
+    // 验证缺失清单只包含目标中未被当前权限覆盖的项，已有通配可满足具体动作。
     #[test]
     fn permission_set_should_report_uncovered_desired_permissions() {
         let current = PermissionSet::new([
@@ -346,6 +307,7 @@ mod tests {
         assert!(current.missing_from(&current).is_empty());
     }
 
+    // 验证补齐及合并所得权限有序且保留额外授权，无缺失时无需补齐。
     #[test]
     fn permission_set_should_append_missing_permissions_without_dropping_extras() {
         let current = PermissionSet::new([

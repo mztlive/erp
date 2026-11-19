@@ -4,72 +4,66 @@ use serde::Serialize;
 
 use crate::entity::organization::{OrgManagementAssignment, OrgMembership, OrgUnit};
 
-/// 组织配置查询展示视图。
+/// 组织管理页读取配置状态时返回，只展示配置边界内的组织事实与必要授权版本。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct OrganizationStateView {
-    /// 当前组织拓扑版本。
+    /// 当前组织配置版本，供后续提交检查并发变更。
     pub version: u64,
-    /// 当前配置边界内的组织节点。
+    /// 本次配置边界内可见的组织节点。
     pub units: Vec<OrgUnit>,
-    /// 当前配置边界内的主属成员关系。
+    /// 配置边界内可见的主属成员关系。
     pub memberships: Vec<OrgMembership>,
-    /// 当前配置边界内的管理授权。
+    /// 配置边界内可见的组织管理授权。
     pub management: Vec<OrgManagementAssignment>,
-    /// 人员展示与分派候选；不含联系方式。
+    /// 组织页面的人员标签与分派候选，不含联系方式。
     pub people: Vec<OrgPersonView>,
-    /// 管理授权展示与可选角色。
+    /// 用于解释管理授权和选择角色的角色资料。
     pub roles: Vec<OrgRoleView>,
-    /// 本次解析的范围版本。
+    /// 本次解析的配置范围版本，供客户端识别范围变化。
     pub scope_version: String,
-    /// 当前权限策略版本。
+    /// 读取组织状态时所用的权限策略版本。
     pub policy_version: u64,
-    /// 与 `version` 相同的组织版本，供客户端缓存失效。
+    /// 与 `version` 相同的组织版本，用于客户端缓存失效。
     pub organization_version: u64,
-    /// 解析时点（RFC3339 UTC）。
+    /// 解析本次配置边界的时点（RFC3339 UTC）。
     pub as_of: String,
-    /// 角色缺范围时为 `no_scope`；有规则但无节点时为空。
+    /// 缺少角色范围时为 `no_scope`；有范围但无节点时为空。
     pub empty_reason: Option<&'static str>,
-    /// 面向客户端的范围摘要，不含内部证明。
+    /// 配置边界的展示说明，不包含内部授权证明。
     pub scope_summary: &'static str,
-    /// 组织配置归属口径。
+    /// 配置归属使用的口径标识，不表示业务执行资格。
     pub ownership_basis: &'static str,
 }
 
-/// 组织页面人员展示；值使用稳定账号 ID。
+/// 组织页面展示成员和选择分派人员所需的账号摘要。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct OrgPersonView {
-    /// 账号 ID。
+    /// 用于引用或分派人员的稳定账号 ID。
     pub id: String,
-    /// 显示名。
+    /// 组织界面显示的人员名称。
     pub label: String,
-    /// 登录账号。
+    /// 用于在选择时区分同名人员的登录账号。
     pub account: String,
-    /// 是否为有效后台账号。
+    /// 该账号是否为允许登录的后台账号。
     pub active: bool,
-    /// 当前主属组织；无主属时为空。
+    /// 查询时点在配置边界内可见的主属组织 ID；不可见或无主属时为空。
     pub own_org_unit_id: Option<String>,
 }
 
-/// 组织页面角色展示；值使用稳定角色 ID。
+/// 组织管理授权展示和角色选择所用的角色摘要。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct OrgRoleView {
-    /// 角色 ID。
+    /// 管理授权引用的稳定角色 ID。
     pub id: String,
-    /// 角色名称。
+    /// 组织界面显示的角色名称。
     pub name: String,
-    /// 角色是否启用。
+    /// 角色启用标记；配置页只提供启用角色。
     pub enabled: bool,
 }
 
 impl OrganizationStateView {
-    /// 组合组织查询展示字段。
-    /// 缺范围标记 `no_scope`，不得补 Company；组织配置权不授予业务执行权。
-    ///
-    /// 含范围版本、空集原因和展示标签的查询视图。
-    ///
-    /// `visible`：已按配置边界裁剪的组织事实；`scope_version`：本次解析范围版本。
-    /// `policy_version`：权限策略版本；`as_of`：解析时点。
-    /// `no_scope`：角色是否缺少该动作范围。
+    /// 组织查询返回前组装已裁剪的配置事实、标签和授权版本。
+    /// 缺少角色范围只标记 `no_scope`，不补公司范围；配置权不授予业务执行权。
     pub fn compose(
         visible: crate::entity::organization_change::OrganizationState,
         scope_version: String,
@@ -103,6 +97,7 @@ mod tests {
     use super::*;
     use crate::entity::organization_change::OrganizationState;
 
+    // 验证缺范围时响应保留版本与配置口径，标记 `no_scope` 且不暴露内部角色条款。
     #[test]
     fn compose_marks_no_scope_without_inventing_company() {
         let view = OrganizationStateView::compose(

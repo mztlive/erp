@@ -3,11 +3,10 @@
 use super::{ResolvedScope, ScopeClause};
 use crate::entity::role::{ROOT_ROLE_ID, Role};
 
-// 为已通过当前账号、同角色完整动作权限证明的角色集合解析超管范围。
-//
-// 有效内建 root 返回不附加人员上限的公司范围，适用于全部已登记范围消费者。没有符合条件的角色时返回 `None`，由调用方继续解析人员范围。
-//
-// `qualified_roles`：调用方在当前事务中验证的角色，不得传入未经权限证明的角色。
+/// 从已验证的动作资格中解析超管范围。调用方须在当前事务中确认账号有效，且
+/// `qualified_roles` 中每个角色均具备完整动作权限。
+/// 启用且未删除的内建 `root` 为已登记的范围消费者提供无个人上限的全公司范围；
+/// 未命中时返回 `None`，由调用方继续解析人员范围。
 pub(crate) fn root_scope(qualified_roles: &[Role]) -> Option<ResolvedScope> {
     let root = qualified_roles
         .iter()
@@ -25,7 +24,7 @@ mod tests {
     use crate::access_control::ScopedObject;
     use crate::entity::role::RoleData;
 
-    // 验证：全公司范围覆盖非本人、其他部门、仓库和结算主体，不依赖参与关系。
+    // 确认超管范围没有个人上限，即使无归属或参与关系也可跨部门、仓库和结算主体。
     #[test]
     fn root_covers_all_business_dimensions_without_person_limit() {
         let root =
@@ -46,7 +45,7 @@ mod tests {
         ));
     }
 
-    // 验证：同名角色、普通角色、失效角色及未通过动作资格的空集合均不能取得治理范围。
+    // 确认空资格集合、同名自定义角色、非内建角色以及停用或已删除的 root 均无法取得超管范围。
     #[test]
     fn root_identity_and_enabled_system_role_are_required() {
         assert!(root_scope(&[]).is_none());

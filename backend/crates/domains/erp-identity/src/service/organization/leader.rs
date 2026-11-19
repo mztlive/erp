@@ -14,12 +14,7 @@ use crate::repository::OrganizationRepository;
 use crate::repository::organization::ORG_UNITS;
 use crate::{Error, Result, SharedRbacService};
 
-/// 查询申请人主属组织到根的完整有效路径，按最近同类组织取得负责人。
-/// 返回含唯一负责人及生效依据的组织节点。
-///
-/// 主属缺失或重复、组织失效、循环、层级超限、负责人缺失或读取失败时拒绝。
-///
-/// 数据库、申请人、团队或部门类型、同一解析时点及调用方执行器。
+/// 为审批解析申请人主属组织到根的有效路径，取最近的指定类型组织及其有效负责人。主属缺失或重复、组织停用、循环、层级超限、负责人缺失或读库失败时返回错误。
 pub async fn applicant_leader(
     db: &Database,
     applicant: &str,
@@ -50,19 +45,16 @@ pub async fn applicant_leader(
     OrgUnit::leader_on_path(path, kind, at)
 }
 
-/// 当前账号负责人预览；不返回人员账号或配置权限。
+/// 当前账号可用的审批负责人展示摘要，供审批前确认人员及所属组织。
 #[derive(Serialize)]
 pub struct LeaderPreview {
+    /// 已核验审批资格的负责人显示名。
     pub name: String,
+    /// 命中负责人规则的团队或部门名称。
     pub organization_name: String,
 }
 
-/// 在同一只读事务内预览当前内部账号的负责人及审批资格。
-/// 负责人姓名和来源组织。
-///
-/// 非内部账号、组织缺失、负责人或审批资格失效时拒绝。
-///
-/// 数据库、共享身份服务、认证账号和组织类型；不接受其他人员身份。
+/// 在同一事务内按当前后台账号解析负责人，并确认其同一启用角色同时授予审批读取及决定权限。成功时仅交付姓名和来源组织。
 pub async fn own_leader_preview(
     db: Database,
     identity: SharedRbacService,
@@ -111,6 +103,7 @@ pub async fn own_leader_preview(
 mod tests {
     use super::*;
     use crate::entity::organization::OrgLeader;
+    // 构造指定类型的测试组织，可选设置负责人，供路径和有效期场景使用。
     fn unit(id: &str, kind: OrgUnitKind, leader: Option<&str>) -> OrgUnit {
         let mut unit = OrgUnit::new(id.into(), id.into(), None, kind, "admin".into(), "测试".into()).unwrap();
         unit.leader = leader.map(|user| OrgLeader {
@@ -121,6 +114,7 @@ mod tests {
         });
         unit
     }
+    // 验证旧版组织记录仍能反序列化，显式清空负责人时会写出 `null`。
     #[test]
     fn legacy_units_read_and_cleared_leader_serializes_as_null() {
         let mut value = serde_json::to_value(unit("team", OrgUnitKind::Team, Some("leader"))).unwrap();
@@ -131,6 +125,7 @@ mod tests {
         assert_eq!(stored.get("leader"), Some(&serde_json::Value::Null));
     }
 
+    // 验证查找取最近的指定类型组织，该组织缺负责人时明确报错。
     #[test]
     fn nearest_kind_and_missing_leader_are_explicit() {
         let team = unit("一组", OrgUnitKind::Team, Some("组长"));
@@ -150,6 +145,7 @@ mod tests {
         missing.leader = None;
         assert!(OrgUnit::leader_on_path(vec![missing, department], OrgUnitKind::Team, at).is_err());
     }
+    // 验证上级组织停用或负责人尚未生效时，不能把该人作为当前审批负责人。
     #[test]
     fn disabled_ancestor_and_future_assignment_are_rejected() {
         let team = unit("一组", OrgUnitKind::Team, Some("组长"));

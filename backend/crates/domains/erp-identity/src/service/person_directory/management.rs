@@ -13,22 +13,20 @@ use crate::entity::person_directory::{PersonDirectoryCategory, PersonQueryQualif
 use crate::repository::prelude::*;
 use crate::{AccessControlExt, AccessTarget, AuthorizationService, Error, Result};
 
-/// 资格维护请求。新建不传版本，终止或再授予必须回传读取的版本。
+/// 显式授予、终止或恢复账号的目录查询资格所需信息。
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct QualificationChange {
+    /// 变更完成后的资格状态，例如有效或终止。
     pub status: PersonQueryStatus,
+    /// 读取资格时取得的乐观锁版本；首次授予时留空。
     pub version: Option<u64>,
+    /// 会写入资格记录及审计的维护原因，去除首尾空白后须为 1 到 500 字。
     pub reason: String,
 }
 
 impl PersonDirectoryService {
-    /// 读取或维护单个账号的查询资格；授权在事务内按目标账号及有效主属组织判定。
-    /// 返回该账号当前资格；尚无记录时返回 `None`。
-    ///
-    /// 非岗位类别、无范围、目标非后台账号、版本冲突或持久化失败时拒绝。
-    ///
-    /// `account_id`：目标后台账号 ID；`change`：为空时只读取；有值时按版本终止或再授予。
+    /// 在同一事务中按目标账号及其有效组织检查管理权限，再读取或维护销售、采购查询资格。只读请求可返回 `None`；提交变更时按记录版本处理冲突。
     pub async fn qualification(
         &self,
         actor: AuditActor,
@@ -52,7 +50,7 @@ impl PersonDirectoryService {
     }
 }
 
-// 在一个事务中校验目标范围并读写资格。
+// 沿原事务检查目标记录权限及后台账号类型，读取当前资格并视请求写入新状态和审计。
 async fn manage_target(
     db: &mongodb::Database,
     authorization: &AuthorizationService,
@@ -96,7 +94,7 @@ async fn manage_target(
     Ok(Some(updated))
 }
 
-// 处理显式目录资格维护时匹配期望版本并核验当前状态；终止的资格只能通过该入口显式恢复。
+// 按维护原因、记录版本和目标状态计算新资格。首次建立时须显式授予；已有终止资格可在匹配版本后恢复。
 fn apply_change(
     current: Option<PersonQueryQualification>,
     account_id: &str,
@@ -127,7 +125,7 @@ fn apply_change(
     Ok(row)
 }
 
-// 把目录资格变动及其不可变审计记录写入同一事务，避免管理变动丢失审计证据。
+// 在资格写入的同一事务记录操作人、资格 ID、变更字段及维护原因，便于追溯显式维护。
 async fn record_change(
     db: &mongodb::Database,
     actor: &AuditActor,
@@ -162,6 +160,7 @@ async fn record_change(
 mod tests {
     use super::*;
 
+    // 验证首次授予可以无版本创建，已有资格的终止和恢复要求当前版本，陈旧请求产生冲突。
     #[test]
     fn explicit_grant_termination_and_restore_require_current_version() {
         let actor = AuditActor::new("admin".into(), "admin".into(), AccountKind::Admin);

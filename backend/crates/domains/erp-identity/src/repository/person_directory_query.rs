@@ -18,36 +18,41 @@ use crate::{AccessControlExt, CompiledAccess, Error, Result};
 /// 单次候选搜索的可验证版本索引上限；超出时整体拒绝，不返回截断目录。
 pub const DIRECTORY_LIMIT: usize = 10_000;
 
-/// 服务层已解析的目录读取条件。
+/// 服务层已解析的目录业务筛选和分页条件，与授权凭证一起用于查询。
 pub struct DirectoryRead<'a> {
+    /// 决定目录资源和所需附加资格的人员类别。
     pub category: PersonDirectoryCategory,
+    /// 可选的主属组织 ID 集合，只收窄已授权候选。
     pub org_unit_ids: Option<&'a [String]>,
+    /// 可选的账号 ID 集合，供已选人员回显并限制查询候选。
     pub selected_ids: Option<&'a [String]>,
+    /// 在姓名或登录名中匹配的字面量关键词。
     pub search: Option<&'a str>,
+    /// 人员目录页码，从 1 开始。
     pub page: u64,
+    /// 当前页最多返回的人员条数。
     pub page_size: u32,
 }
 
-/// 一个数据库快照内的页、总数与有限内容版本索引。
+/// 同一快照和查询口径下的人员列表、总数及有界内容版本数据。
 #[derive(Default, Deserialize)]
 pub struct DirectoryResult {
+    /// 按姓名和稳定 ID 排序的当前页人员投影。
     pub items: Vec<PersonDirectoryItem>,
+    /// MongoDB 计数分面的结果行，无匹配时为空。
     pub totals: Vec<DirectoryTotal>,
+    /// 按 ID 排序的内容版本投影，不包含账号凭证。
     pub versions: Vec<Document>,
 }
 
-/// 与同一查询条件对应的总数。
+/// 目录聚合计数分面的单行结果。
 #[derive(Deserialize)]
 pub struct DirectoryTotal {
+    /// 分页前满足同一授权及业务筛选的账号数。
     pub count: i64,
 }
 
-/// 同事务执行目录聚合。
-/// 分页、总数及不含账号凭证的内容版本索引。
-///
-/// 数据库读取或版本索引超过上限时拒绝，不返回部分结果。
-///
-/// `read` 为已经完成范围解析的条件，`executor` 为用例事务。
+/// 先核对授权模型、执行阶段和有效期，再沿用用例事务执行完整授权与目录聚合。返回同口径的当前页、总数及不含账号凭证的内容版本数据；读库失败或版本索引超上限时不返回部分结果。
 pub async fn directory_page(
     db: &Database,
     read: &DirectoryRead<'_>,
@@ -68,7 +73,7 @@ pub async fn directory_page(
     Ok(result)
 }
 
-// 在人员目录执行前核对凭证绑定的固定资源及完整账号模型，不能把份额或其他资源凭证用于人员详情。
+// 仅接受当前目录类别对应的完整账号模型，拒绝其他资源、集合、主键或受限输出。
 fn ensure_model(model: &QueryModel, category: PersonDirectoryCategory) -> Result<()> {
     if model.resource != category.resource()
         || model.collection != "accounts"
@@ -80,7 +85,7 @@ fn ensure_model(model: &QueryModel, category: PersonDirectoryCategory) -> Result
     Ok(())
 }
 
-// 在数据库内组合中央授权、类别资格、计数及分页；按 ID 回显时先收窄身份再关联资格。
+// 在完整授权之后应用后台账号、已选 ID、关键词、组织和类别资格，再用同一候选集计算分页、总数和版本。
 fn directory_pipeline(read: &DirectoryRead<'_>, as_of: Instant) -> Result<Vec<Document>> {
     let mut filters =
         vec![doc! { "kind": AccountKind::Admin.as_str(), "deleted_at": NOT_DELETED_TIMESTAMP_BSON }];
@@ -115,7 +120,7 @@ fn directory_pipeline(read: &DirectoryRead<'_>, as_of: Instant) -> Result<Vec<Do
     Ok(pipeline)
 }
 
-// 把调用方部门筛选追加到中央授权查询，按授权时点的真实主属关系在计数和分页前收窄候选。
+// 按授权时点的唯一有效主属关系收窄部门候选，计数前移除临时关联字段。
 fn organization_filter(ids: &[String], as_of: Instant) -> Result<Vec<Document>> {
     let ids = ids.iter().cloned().collect();
     let QueryFragment::Exists { collection, bindings, pipeline } =
@@ -130,7 +135,7 @@ fn organization_filter(ids: &[String], as_of: Instant) -> Result<Vec<Document>> 
     ])
 }
 
-// 销售或采购人员目录按账号索引关联该类别查询资格；后台人员目录不查询这种附加资格。
+// 销售或采购目录按账号关联对应类别的有效查询资格，只提取资格版本；通用业务目录不加此条件。
 fn qualification_stages(category: PersonDirectoryCategory) -> Vec<Document> {
     vec![
         doc! { "$lookup": { "from": <Database as AccessControlExt>::PERSON_QUERY_QUALIFICATIONS,
@@ -142,7 +147,7 @@ fn qualification_stages(category: PersonDirectoryCategory) -> Vec<Document> {
     ]
 }
 
-/// 构造内容版本测试数据；Mongo 文档构造保留在仓储边界内。
+/// 构造只含内容版本的目录样本，让测试修改姓名和状态而不跨出仓储边界拼接 BSON。
 #[cfg(test)]
 pub(crate) fn version_fixture(name: &str, status: &str) -> DirectoryResult {
     DirectoryResult {
@@ -156,6 +161,7 @@ mod tests {
     use super::*;
     use crate::entity::authorization::QueryModelKey;
 
+    // 验证目录拒绝类别错配、其他账号集合和存在性视图。
     #[test]
     fn directory_rejects_other_resources_collections_and_partial_output() {
         let model = QueryModel {
@@ -176,6 +182,7 @@ mod tests {
         assert!(ensure_model(&partial, PersonDirectoryCategory::Sales).is_err());
     }
 
+    // 验证已选 ID 在资格关联前筛选，通用业务类别不追加角色或资格关联。
     #[test]
     fn selected_ids_precede_qualification_lookup_and_business_needs_no_role() {
         let ids = vec!["u1".into()];

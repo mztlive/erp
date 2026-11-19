@@ -13,6 +13,7 @@ use crate::entity::authorization::{
 use crate::repository::authorization::testing::management_members;
 use crate::{AuthorizationService, Error};
 
+// 装配销售单运行管理角色及可修改的审批实例事实，供列表和对象校验对照。
 fn setup() -> (AuthorizationService, Arc<Identity>, Arc<Facts>) {
     let identity = Arc::new(Identity::default());
     identity.state.lock().unwrap().grants =
@@ -36,6 +37,7 @@ fn setup() -> (AuthorizationService, Arc<Identity>, Arc<Facts>) {
     (builder.build().unwrap(), identity, facts)
 }
 
+// 审批管理列表按真实来源和主体类型过滤，和逐对象管理授权保持同一成员范围。
 #[tokio::test]
 async fn management_query_keeps_type_qualification_real_source_and_object_membership_together() {
     let (service, identity, facts) = setup();
@@ -85,6 +87,7 @@ async fn management_query_keeps_type_qualification_real_source_and_object_member
     ));
 }
 
+// 审批列表不能拼接其他角色的类型管理资格，也不能拿其他类型管理权代替。
 #[tokio::test]
 async fn management_query_does_not_splice_type_admin_from_another_role_or_other_type() {
     let (service, identity, _) = setup();
@@ -106,6 +109,7 @@ async fn management_query_does_not_splice_type_admin_from_another_role_or_other_
     service.validate(&access, &mut executor).await.unwrap();
 }
 
+// 退款管理列表仅在资金来源分区要求同角色整账权限。
 #[tokio::test]
 async fn refund_management_query_requires_same_role_ledger_only_for_funds_sources() {
     let (service, identity, _) = setup();
@@ -150,6 +154,7 @@ async fn refund_management_query_requires_same_role_ledger_only_for_funds_source
     }
 }
 
+// 审批管理列表保留范围有效期，交付时若到期或资格已撤销则拒绝。
 #[tokio::test]
 async fn management_query_retains_scope_expiry_and_rejects_revocation_before_delivery() {
     let (service, identity, _) = setup();

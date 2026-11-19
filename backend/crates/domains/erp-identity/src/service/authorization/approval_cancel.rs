@@ -10,7 +10,7 @@ use crate::repository::authorization::AccessProof;
 use crate::{Error, QualifiedPermissions, Result};
 
 impl AuthorizationService {
-    // 判断库存调整撤回的来源资格：原提交人不另查库存详情菜单，代办管理员须独立满足库存详情资格和实际仓库范围。
+    /// 撤回库存调整审批时核实真实调整与仓库。原提交人无需另证库存详情资格；代办管理员须具备同角色管理资格，并独立满足库存详情资格和实际仓库范围。
     pub(super) async fn stock_adjustment_cancel_sources(
         &self,
         proof: &AccessProof,

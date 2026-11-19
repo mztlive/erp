@@ -10,6 +10,7 @@ use crate::entity::authorization::{AccessTarget, FactValue};
 use crate::entity::resource_access::ResourceKind;
 use crate::{AuthorizationService, Error};
 
+// 销售变更草稿读取要求两项独立入口资格，只沿用当前修改范围，不接纳历史补权。
 #[tokio::test]
 async fn draft_read_requires_both_independent_entries_and_never_adds_historical_read_supplements() {
     let identity = Arc::new(Identity::default());

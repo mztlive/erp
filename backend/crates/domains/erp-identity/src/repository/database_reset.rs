@@ -8,12 +8,7 @@ use persistence_core::{Executor, ResetRetention};
 use crate::entity::database_reset::ensure_reset_admin;
 use crate::{AccessControlExt, AccountCoreRepositoryExt, Error, MongoCasbinAdapter, ROOT_ROLE_ID, Result};
 
-// 在调用方事务内核验 admin 身份并冻结必须保留的物理文档 ID。
-// 返回只含 admin 账号、内建超管角色及其直接授权规则和策略版本的保留集。
-//
-// admin 账号或超管角色不存在、操作人不是启用的 admin 超级管理员，或保留登记失败时返回错误。
-//
-// `executor`：调用方事务执行器。
+/// 全库重置前在调用方事务内确认操作者是启用的 `admin` 超管，并登记其账号、内建角色、直接授权规则及策略版本的物理文档 ID。账号或角色缺失、资格不符或登记失败时拒绝重置。
 pub(crate) async fn retention(
     db: &Database,
     actor: &AuditActor,

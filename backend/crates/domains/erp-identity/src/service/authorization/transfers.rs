@@ -50,17 +50,17 @@ const REQUIREMENTS: &[(&Permission, &[Permission])] = &[
     (&internal::DATA_TRANSFER_OFFERING_AVAILABILITY, &[supplier_offering::UPDATE_AVAILABILITY]),
 ];
 
-// 取任务转交预检登记的独立功能资格；候选任务输入不能更改资格集合。
+/// 列出文件任务转交预检的固定独立资格，候选任务不能改写权限集合。
 pub(super) fn requirements(permission: &Permission) -> Option<&'static [Permission]> {
     REQUIREMENTS.iter().find(|(entry, _)| *entry == permission).map(|(_, required)| *required)
 }
 
-// 识别允许无对象预检的固定入口，真正的任务对象授权不在这里降级成功能操作。
+/// 识别可做无对象功能预检的文件任务入口，实际任务仍需对象授权。
 pub(super) fn supports(permission: &Permission) -> bool {
     requirements(permission).is_some()
 }
 
-// 检查目标接收资格时分别按原规则取证，各独立资格可由不同的启用角色满足。
+/// 转交预检时逐项证明接收人具备固定功能资格；各项可以由不同启用角色授予。
 pub(super) fn qualified(permission: &Permission, qualified: &QualifiedPermissions) -> bool {
     requirements(permission)
         .is_some_and(|required| required.iter().all(|entry| qualified.same_role(std::slice::from_ref(entry))))
@@ -70,6 +70,7 @@ pub(super) fn qualified(permission: &Permission, qualified: &QualifiedPermission
 mod tests {
     use super::*;
 
+    // 验证供应商报价导出的各项资格可跨角色满足，但缺少任一项即拒绝。
     #[test]
     fn quote_export_preserves_independent_roles_and_all_required_qualifications() {
         let required = [
@@ -95,6 +96,7 @@ mod tests {
         }
     }
 
+    // 验证仅全部可授权客户导出额外要求对应资格，普通列表也不能冒充导出入口。
     #[test]
     fn customer_export_requires_the_extra_all_authorized_qualification_only_for_that_entry() {
         let listed = [customer::LIST];

@@ -16,27 +16,24 @@ use permission_tables::{
 };
 pub use templates::builtin_role_templates;
 
-/// 启动时仅准备组织基础与目录资格，不创建或补权业务角色。
-/// 基础数据检查完成。
-///
-/// 组织或目录持久化失败时返回错误。
-///
-/// `rbac` 为当前身份授权服务。
+/// API 启动时通过共享身份授权服务 `rbac` 为尚无组织节点的部署建立默认部门，再同步人员目录资格。
+/// 为直接绑定启用销售或采购角色的账号补齐缺失资格，保留既有记录，不创建业务角色或追加角色权限。
+/// 角色绑定以 Casbin 为准；组织初始化或目录同步失败时返回错误。
 pub async fn ensure_identity_foundation(rbac: &SharedRbacService) -> Result<()> {
     ensure_home_department(rbac.database().clone()).await?;
     sync_role_grants(rbac).await
 }
 
-/// 单条预定义角色的静态定义。
+/// 构建岗位模板时使用的静态角色定义，集中维护岗位身份、展示信息和基础权限。
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct PredefinedRoleDef {
-    /// 稳定角色 ID（写入 Mongo `roles.id` 与 Casbin `role:{id}`）。
+    /// 稳定角色 ID；生成时写入 MongoDB 的 `roles.id`，并用于构造 Casbin 主体 `role:{id}`。
     pub id: &'static str,
-    /// 展示名称。
+    /// 岗位目录展示及新角色命名所用的默认名称。
     pub name: &'static str,
-    /// 角色说明，帮助管理员理解岗位边界。
+    /// 模板构建时使用的默认职责说明，帮助管理员判断岗位边界。
     pub description: &'static str,
-    /// 推荐权限，格式均为 `resource:action`；支持 `resource:*` 动作通配。
+    /// 构建模板时解析的推荐权限，格式为 `resource:action`，支持 `resource:*` 动作通配。
     pub permissions: &'static [&'static str],
 }
 
@@ -98,12 +95,12 @@ mod tests {
     use crate::Result;
     use crate::entity::rbac::{Permission, PermissionSet};
 
-    // 在岗位职责测试中解析内建模板的静态权限表，使断言使用规范化权限值。
+    // 岗位职责测试用此函数解析静态权限表，以规范权限值比较动作和通配覆盖关系。
     fn parse_permissions(raw: &[&str]) -> Result<Vec<Permission>> {
         Ok(raw.iter().map(Permission::parse).collect::<std::result::Result<_, _>>()?)
     }
 
-    // 验证：显式采购模板授予门户职责和供应商维护权限，不授予内部账号管理。
+    // 确认生成采购岗位时授予供应商门户账号、目录、申请处理及供应商维护权限，内部账号管理另行授权。
     #[test]
     fn portal_permissions_are_explicit_procurement_template_grants() {
         let catalog = builtin_role_templates().unwrap();
@@ -125,7 +122,7 @@ mod tests {
         assert!(procurement.permissions.iter().all(|permission| permission.resource() != "account"));
     }
 
-    // 验证：抄送接收资格不通过岗位模板授予。
+    // 确认岗位模板均排除审批抄送权限；抄送接收资格独立于模板授权。
     #[test]
     fn copy_receiving_is_not_a_role_permission() {
         for template in builtin_role_templates().unwrap() {
@@ -133,7 +130,7 @@ mod tests {
         }
     }
 
-    // 验证：整账读取仅授予综合财务及三个细分财务模板。
+    // 检查最终模板的有效权限覆盖，确保整账读取仅授予综合财务及三个细分财务岗位。
     #[test]
     fn ledger_read_is_only_granted_to_finance_templates() {
         let ledger = Permission::parse("finance_ledger:read").unwrap();
@@ -151,7 +148,7 @@ mod tests {
         }
     }
 
-    // 验证：采购和销售选择已有公司，系统管理员维护公司。
+    // 核对选用与维护公司的岗位分工：销售、采购可查阅已有公司，系统管理员还可创建和更新。
     #[test]
     fn company_permissions_follow_role_duties() {
         let procurement = PermissionSet::new(parse_permissions(PROCUREMENT_PERMISSIONS).unwrap());
@@ -165,7 +162,7 @@ mod tests {
         }
     }
 
-    // 验证：岗位身份保持唯一，且不包含独立维护的超级管理员。
+    // 检查基础岗位 ID 的唯一性及 `role-` 前缀，确保独立初始化的 `role-root` 留在模板之外。
     #[test]
     fn predefined_role_ids_are_unique_and_stable() {
         let ids: Vec<_> = PREDEFINED_ROLES.iter().map(|role| role.id).collect();
@@ -177,6 +174,7 @@ mod tests {
         assert!(!ids.contains(&"role-root"), "root 由 ensure_root_role 单独维护")
     }
 
+    // 检查预设展示文本符合角色实体限制：名称须非空且最多 32 字符，职责说明最多 256 字符。
     #[test]
     fn predefined_role_names_fit_entity_limits() {
         for role in PREDEFINED_ROLES {
@@ -186,7 +184,7 @@ mod tests {
         }
     }
 
-    // 验证：财务模板不授予已退役的采购审核旁路权限。
+    // 检查综合财务的最终权限，防止模板通过直接授权或通配重新引入已退役的采购审核旁路。
     #[test]
     fn finance_template_excludes_retired_purchase_review_permission() {
         let catalog = builtin_role_templates().unwrap();
@@ -195,7 +193,7 @@ mod tests {
         assert!(!permissions.covers_one(&Permission::parse("purchase_order:review").unwrap()));
     }
 
-    // 验证：财务模板只读结算主体修订和销售变更。
+    // 确认综合财务可查阅结算主体、主体修订及销售变更；创建或更新主体修订、创建销售变更均不随岗授予。
     #[test]
     fn finance_template_reads_parties_and_sales_changes_without_writes() {
         let catalog = builtin_role_templates().unwrap();
@@ -216,7 +214,7 @@ mod tests {
         }
     }
 
-    // 验证：仓储审批采购变更需要读取对象，但不得获得创建或提交变更的职责。
+    // 确认仓储审批时可查询采购变更列表和详情，模板排除创建、提交及通配权限。
     #[test]
     fn warehouse_can_read_purchase_changes_for_approval() {
         let permissions = super::WAREHOUSE_PERMISSIONS;
@@ -227,6 +225,7 @@ mod tests {
         assert!(!permissions.contains(&"purchase_change_order:submit"));
     }
 
+    // 检查每张基础权限表非空，且每项均可解析出非空的资源和动作。
     #[test]
     fn all_predefined_permissions_are_parseable() {
         for role in PREDEFINED_ROLES {
@@ -239,6 +238,7 @@ mod tests {
         }
     }
 
+    // 检查供应商接口治理分工：采购维护业务资料并确认需求，系统管理员负责技术接入，运营不承担所列接入管理动作。
     #[test]
     fn supplier_connection_governance_permissions_follow_fixed_responsibility_roles() {
         let procurement = PREDEFINED_ROLES.iter().find(|role| role.id == "role-procurement").unwrap();
@@ -274,6 +274,7 @@ mod tests {
         }
     }
 
+    // 检查 W18 历史导入责任确认的列表、详情和完成权限，仅授予销售、采购、运营、仓储、财务。
     #[test]
     fn import_confirmation_permissions_match_fixed_responsibility_roles() {
         let responsibility_roles =
@@ -296,6 +297,7 @@ mod tests {
         }
     }
 
+    // 检查 W29 集成任务的处理和完成权限，仅授予销售、采购、运营、财务、系统管理员。
     #[test]
     fn integration_task_permissions_match_fixed_w29_roles() {
         let responsibility_roles =
@@ -312,6 +314,7 @@ mod tests {
         }
     }
 
+    // 按权限覆盖关系检查采购变更的列表和详情资格，并防止基础权限表单独登记采购变更审批动作。
     #[test]
     fn purchase_change_read_follows_review_responsibility_roles() {
         // 采购变更由仓储确认履约影响、财务复核；管理层可打开任务详情。各岗位必须能读取变更单，
@@ -339,6 +342,7 @@ mod tests {
         }
     }
 
+    // 检查库存调整任务所需的列表和详情资格仅由仓储、财务、管理层岗位模板覆盖。
     #[test]
     fn stock_adjustment_read_follows_review_responsibility_roles() {
         // 库存调整由财务复核（仓储可创建并代行）；管理层可打开任务详情。
@@ -360,7 +364,7 @@ mod tests {
         }
     }
 
-    // 验证：销售变更审批权限仅授予销售领导、采购和运营岗位。
+    // 核对销售变更审批动作的显式授予名单：销售领导、采购、运营。
     #[test]
     fn sales_change_approval_permissions_follow_assigned_roles() {
         let required = ["sales_change_order:approve"];
@@ -380,6 +384,7 @@ mod tests {
         }
     }
 
+    // 确认采购岗位在核算供应成本时具备查看供应商供货成本详情的权限。
     #[test]
     fn procurement_permissions_include_cost_visibility() {
         let permissions = PermissionSet::new(parse_permissions(PROCUREMENT_PERMISSIONS).unwrap());
@@ -387,6 +392,7 @@ mod tests {
         assert!(permissions.covers(&cost));
     }
 
+    // 确认采购岗位维护供应商资料时具备更新及查看敏感信息原文的权限。
     #[test]
     fn procurement_permissions_include_supplier_write_and_sensitive_reveal() {
         let permissions = PermissionSet::new(parse_permissions(PROCUREMENT_PERMISSIONS).unwrap());
@@ -396,6 +402,8 @@ mod tests {
         }
     }
 
+    // 检查采购具备销售变更、采购退货、库存查询和供应商结算协同权限。
+    // 供应商付款执行、结算单创建与确认、库存调整创建另行授权；集成异常、对账差异与导入批次仅开放详情。
     #[test]
     fn procurement_permissions_cover_assigned_duties_without_finance_writes() {
         let permissions = PermissionSet::new(parse_permissions(PROCUREMENT_PERMISSIONS).unwrap());
@@ -438,6 +446,7 @@ mod tests {
         }
     }
 
+    // 检查询价分工：销售发起并处理销售侧结果，采购处理内部报价与反馈；双方的这些动作分别授权。
     #[test]
     fn inquiry_position_permissions_separate_sales_results_and_internal_procurement() {
         let sales = PermissionSet::new(parse_permissions(SALES_PERMISSIONS).unwrap());
@@ -455,6 +464,8 @@ mod tests {
         }
     }
 
+    // 检查销售开单、撤销审批、签约及查看客户、可售 SKU 和采购责任所需的权限。
+    // 排除商品主数据列表、结算账户详情和客户范围详情。
     #[test]
     fn sales_permissions_include_core_sales_capabilities() {
         let permissions = parse_permissions(SALES_PERMISSIONS).unwrap();
@@ -488,7 +499,7 @@ mod tests {
         assert!(!permissions.iter().any(|p| p.covers(&Permission::parse("customer_scope:detail").unwrap())));
     }
 
-    // 验证：最终管理层模板只读，仅保留待办查看管理资格。
+    // 检查管理层模板以列表、详情和读取为限，仅为查看他人待办保留 `work_item:manage`。
     #[test]
     fn management_permissions_are_read_only() {
         let catalog = builtin_role_templates().unwrap();
@@ -502,7 +513,7 @@ mod tests {
         }
     }
 
-    // 验证：最终岗位模板必须使用显式工作流动作。
+    // 检查最终模板逐项授权工作项、审批流程及审批实例动作，避免通配放大工作流权限。
     #[test]
     fn workflow_permissions_are_explicit() {
         for template in builtin_role_templates().unwrap() {
@@ -517,7 +528,7 @@ mod tests {
         }
     }
 
-    // 验证：最终模板排除退役审批动作，系统管理员不自动获得流程或审批权限。
+    // 检查最终模板排除退役的审批恢复和诊断动作，系统管理员的流程及审批实例权限须另行授予。
     #[test]
     fn approval_templates_exclude_retired_actions_and_sysadmin_approval_access() {
         for template in builtin_role_templates().unwrap() {
@@ -537,6 +548,7 @@ mod tests {
         }
     }
 
+    // 检查系统管理员的技术岗位权限边界：账号增删改、角色分配或维护及全局通配均不随岗授予。
     #[test]
     fn sysadmin_does_not_include_account_or_role_admin() {
         let sysadmin = PREDEFINED_ROLES.iter().find(|role| role.id == "role-sysadmin").unwrap();
@@ -559,6 +571,7 @@ mod tests {
         }
     }
 
+    // 检查商品详情和列表资格按岗位独立配置，并确保采购继续由通配覆盖详情。
     #[test]
     fn product_detail_is_read_only_split_without_granting_list() {
         // 详情只读拆分：除采购外的新补角色拥有 detail 且不拥有 list；

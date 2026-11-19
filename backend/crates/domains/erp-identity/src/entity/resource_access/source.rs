@@ -16,12 +16,8 @@ pub enum ResourceKind {
     PurchaseOrder,
 }
 impl ResourceKind {
-    /// 固定读取范围动作，拒绝把记录读取权用于原单据写入。
-    /// 同资源列表采用 list，其余读取来源采用 detail。
-    ///
-    /// 同资源非读取动作拒绝；跨资源入口仍须由统一解析器校验功能权限。
-    ///
-    /// entry_permission 为服务端登记并解析的实际入口权限。
+    /// 根据服务端登记的实际入口选用记录读取动作：同资源仅支持 `list` 和 `detail`，跨资源沿用来源 `detail`。
+    /// 同资源其他动作拒绝；跨资源入口的功能资格仍由统一授权解析器校验。
     pub fn scope_action(self, entry_permission: &Permission) -> Result<&'static str> {
         if entry_permission.resource() == self.code() {
             return match entry_permission.action() {
@@ -32,8 +28,7 @@ impl ResourceKind {
         }
         Ok("detail")
     }
-    /// 取得固定资源代码。
-    /// 权限目录资源名。
+    /// 返回该记录类型在权限目录中的固定资源代码。
     pub fn code(self) -> &'static str {
         match self {
             Self::SalesOrder => resources::SALES_ORDER,
@@ -41,21 +36,21 @@ impl ResourceKind {
         }
     }
 }
-/// 来源稳定身份；规则版本升级不得改变该身份。
+/// 一个接收账号在同一业务来源和授权规则下的稳定身份；规则版本升级沿用此身份。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceKey {
+    /// 产生读取授权的规则标识，例如人工授权或订单审批分配。
     pub rule: String,
+    /// 规则所用业务事实的类型，用于区分任务、审批实例等业务身份。
     pub business_type: String,
+    /// 该类型下稳定的业务记录或命令 ID。
     pub business_id: String,
+    /// 读取授权的接收账号 ID；不同接收账号拥有独立来源。
     pub recipient: String,
 }
 impl SourceKey {
-    /// 校验并生成无分隔符碰撞的来源身份。
-    /// 结构化来源身份的完整 JSON 编码。
-    ///
-    /// 空值、超长或未规范化身份拒绝。
-    ///
-    /// 字段来自可信业务来源。
+    /// 校验可信业务提供的四个身份字段，并以完整 JSON 编码生成来源主键，避免分隔符拼接碰撞。
+    /// 字段为空、超过 128 字符或带首尾空白时拒绝。
     pub fn id(&self) -> Result<String> {
         for value in [&self.rule, &self.business_type, &self.business_id, &self.recipient] {
             if normalize_required_text_ref(value, "来源身份不能为空", 128, "来源身份过长")? != *value
@@ -66,19 +61,17 @@ impl SourceKey {
         Ok(serde_json::to_string(self)?)
     }
 }
-/// 读取目标；不包含写入或任务办理动作。
+/// 由资源类型和记录 ID 唯一标识的读取目标，权限仅限指定记录的读取。
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct GrantTarget {
+    /// 被授权记录的业务资源类型，同 ID 的不同资源各自独立。
     pub resource: ResourceKind,
+    /// 目标在所属资源中的业务记录 ID。
     pub id: String,
 }
 impl GrantTarget {
-    // 校验完整目标集合并去重。
-    // 排序后的唯一目标，空集表示明确清空。
-    //
-    // 超过 1000 项、空或未规范化身份拒绝。
-    //
-    // targets 为来源计算出的全部读取目标。
+    // 对完整目标集按资源和 ID 排序去重，空集合表示清空；去重前最多 1000 项。
+    // 单个 ID 为空、超过 128 字符或带首尾空白时拒绝。
     fn normalize(mut targets: Vec<Self>) -> Result<Vec<Self>> {
         if targets.len() > 1000 {
             return Err(Error::ValidationError("单来源最多 1000 个目标".into()));
@@ -95,31 +88,33 @@ impl GrantTarget {
         Ok(targets)
     }
 }
-/// 来源终止记录永久保留；审计人与原因随状态原子保存。
+/// 持久化单一读取授权来源的最新目标和版本；终止记录永久保留，操作人和原因与状态一并原子保存。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity)]
 pub struct GrantSource {
+    /// 以稳定来源 ID 为主键的记录元数据；其版本用于授权行复验。
     #[serde(flatten)]
     pub base: BaseModel,
+    /// 来源的规则、业务记录和接收账号组成的稳定身份。
     pub key: SourceKey,
+    /// 最近一次应用的授权规则版本；首次应用前为零。
     pub rule_version: u64,
+    /// 最近一次应用的可信业务事实版本；首次应用前为零。
     pub fact_version: u64,
+    /// 是否已永久撤销；终止后禁止应用后续结果。
     pub terminated: bool,
+    /// 最近一次发布的排序去重目标集；来源终止后仍保留以记录影响面。
     pub targets: Vec<GrantTarget>,
+    /// 最近一次实际应用或撤销的操作人标识，等待首次变更时为空。
     pub operator: String,
+    /// 最近一次实际应用或撤销的审计原因，等待首次变更时为空。
     pub reason: String,
 }
 impl GrantSource {
-    /// 取得当前来源影响的资源类型。
-    /// 去重后的资源类型，供修改前后取并集并递增授权修订号。
+    /// 提取当前目标涉及的资源类型，供发布前后取并集并递增相应授权修订号。
     pub fn resources(&self) -> BTreeSet<ResourceKind> {
         self.targets.iter().map(|target| target.resource).collect()
     }
-    /// 构造尚未应用事实的来源。
-    /// 等待首次应用的来源。
-    ///
-    /// 来源身份非法时拒绝。
-    ///
-    /// key 为稳定来源身份。
+    /// 校验稳定来源身份并创建待首次应用的来源，初始规则及事实版本为零，目标为空。
     pub fn new(key: SourceKey) -> Result<Self> {
         Ok(Self {
             base: BaseModel::new(key.id()?),
@@ -132,12 +127,9 @@ impl GrantSource {
             reason: String::new(),
         })
     }
-    /// 原子计算来源的新状态；失败不修改当前值。
-    /// 是否发生变化；完全相同的重放返回 false。
-    ///
-    /// 终止、版本倒退、同版本异载荷及非法输入拒绝。
-    ///
-    /// rule_version、fact_version 为可信正版本；targets 是完整结果；operator、reason 为审计事实。
+    /// 校验可信且大于零的规则版本与事实版本、全量目标和审计信息后，原子更新来源。
+    /// 终止、任一版本倒退、同版本目标不同或输入非法时拒绝，并保留原状态。
+    /// 两个版本和规范化目标均相同时返回 `false`，保留原审计信息；实际更新返回 `true`。
     pub fn apply(
         &mut self,
         rule_version: u64,
@@ -176,12 +168,8 @@ impl GrantSource {
         self.reason = reason;
         Ok(true)
     }
-    /// 永久终止单一来源，不影响其他来源。
-    /// 首次终止为 true，重放为 false。
-    ///
-    /// 操作人或原因非法时拒绝。
-    ///
-    /// operator、reason 为撤销审计事实。
+    /// 校验操作人和撤销原因后永久终止当前来源，并保存撤销审计信息；其他来源各自保留。
+    /// 首次终止返回 `true`，已终止时返回 `false` 并保留原审计信息；非法审计输入返回错误。
     pub fn revoke(&mut self, operator: &str, reason: &str) -> Result<bool> {
         let operator = normalize_required_text_ref(operator, "操作人不能为空", 128, "操作人过长")?;
         let reason = normalize_required_text_ref(reason, "撤销原因不能为空", 512, "原因过长")?;
@@ -195,33 +183,47 @@ impl GrantSource {
         Ok(true)
     }
 }
-/// 每个来源独立保存的读取行；有效性必须同时检查来源状态及版本。
+/// 单个来源对一条记录的读取授权行；判定有效性时须同时检查来源状态及版本。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity)]
 pub struct ResourceGrant {
+    /// 以来源、资源类型和目标 ID 定位的授权行元数据。
     #[serde(flatten)]
     pub base: BaseModel,
+    /// 获得该行读取授权的账号 ID，沿用来源接收人。
     pub recipient: String,
+    /// 关联的来源主键，用于核查撤销状态和当前版本。
     pub source_id: String,
+    /// 该行最近一次同步的来源记录版本，读取时必须与当前来源匹配。
     pub source_version: u64,
+    /// 该行授权读取的资源类型。
     pub resource: ResourceKind,
+    /// 该行授权读取的业务记录 ID。
     pub resource_id: String,
+    /// 持久化动作固定为 `read`，供读取授权查询匹配。
     pub action: String,
+    /// 目标是否仍在最近同步的来源结果中；有效读取仍要求来源未终止且版本一致。
     pub active: bool,
 }
 
-/// 来源全量结果；版本由正式事实提供，不能使用接收时间代替。
+/// 人工或自动入口提交的来源全量结果；规则和事实版本由可信依据提供，接收时间不参与版本排序。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceUpdate {
+    /// 要创建或更新的稳定来源身份。
     pub key: SourceKey,
+    /// 计算本次读取授权所用的规则版本。
     pub rule_version: u64,
+    /// 计算本次授权所依据的业务事实版本，用于拒绝过期结果。
     pub fact_version: u64,
+    /// 本次应生效的完整目标集合，空集合明确清除已有目标。
     pub targets: Vec<GrantTarget>,
+    /// 本次变更的审计原因，实际应用时写入来源。
     pub reason: String,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    // 构造等待首次应用的审批任务来源，固定接收账号供状态流转测试。
     fn source() -> GrantSource {
         GrantSource::new(SourceKey {
             rule: "approval".into(),
@@ -231,9 +233,11 @@ mod tests {
         })
         .unwrap()
     }
+    // 用给定 ID 构造销售单读取目标，便于拼出重复或冲突目标集。
     fn target(id: &str) -> GrantTarget {
         GrantTarget { resource: ResourceKind::SalesOrder, id: id.into() }
     }
+    // 验证目标排序去重保留资源类型，同版本等价目标重放返回无变化。
     #[test]
     fn targets_are_sorted_unique_and_keep_resource_identity() {
         let purchase = GrantTarget { resource: ResourceKind::PurchaseOrder, id: "a".into() };
@@ -248,6 +252,7 @@ mod tests {
                 .unwrap()
         );
     }
+    // 验证 1000 项上限按去重前的输入计数，超量失败保留原事实版本和目标。
     #[test]
     fn target_limit_applies_before_deduplication_and_failure_is_atomic() {
         let mut source = source();
@@ -259,6 +264,7 @@ mod tests {
         assert_eq!(source.fact_version, 1);
         assert_eq!(source.targets, vec![target("a")]);
     }
+    // 验证同资源只接受明确的列表和详情动作，跨资源入口使用来源详情动作。
     #[test]
     fn source_read_does_not_authorize_original_document_writes() {
         for (resource, permission, action) in [
@@ -283,6 +289,7 @@ mod tests {
             ));
         }
     }
+    // 验证等价目标可重放，同版本目标冲突或事实版本倒退被拒绝，撤销后永久拒绝应用。
     #[test]
     fn replay_conflict_order_and_permanent_termination() {
         let mut s = source();
@@ -298,6 +305,7 @@ mod tests {
         assert!(!s.revoke("admin", "重试").unwrap());
         assert!(s.apply(2, 3, vec![target("s1")], "worker", "重算").is_err());
     }
+    // 验证非法目标或撤销原因不改变状态，接收账号区分来源身份，并允许显式空目标。
     #[test]
     fn invalid_input_is_atomic_and_source_identity_is_unambiguous() {
         let mut s = source();

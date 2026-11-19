@@ -10,12 +10,8 @@ use crate::service::auth::password;
 use crate::{AccessControlExt, Error, LoginAccount, Result};
 
 impl PortalIdentityService {
-    /// 验证当前原密码并在事务外生成新凭证。
-    /// 保留本次会话版本的待写入密码命令。
-    ///
-    /// 原密码错误、会话过期或密码策略失败时拒绝。
-    ///
-    /// `actor` 为已验证门户人；`input` 为执行登录同等密码策略的修改请求。
+    /// 门户自助改密前，在事务外重验会话和原密码，按登录密码策略生成新凭证。
+    /// 原密码错误、会话失效或新密码不合规时拒绝；有效命令保留账号与绑定版本供写入时核对。
     pub async fn prepare_password(
         &self,
         actor: &PortalActor,
@@ -48,12 +44,8 @@ impl PortalIdentityService {
         Ok(PreparedPortalPassword { actor: current, secret })
     }
 
-    /// 在调用方事务中重验原会话并更新凭证，旧会话随账号版本失效。
-    /// 更新版本后的门户身份，供协议层明确重新登录或签发新会话。
-    ///
-    /// 账号、绑定、岗位或版本变化及持久化失败时拒绝。
-    ///
-    /// `prepared` 为已验证并哈希的命令；`executor` 为调用方事务。
+    /// 收到已验密并哈希的命令后，在调用方事务中重验原会话，再更新凭证使旧会话失效。
+    /// 账号、绑定、岗位或版本不再匹配及写入失败时拒绝；成功时返回新版本身份，供协议层要求重登或签发新会话。
     pub async fn password_update(
         &self,
         prepared: PreparedPortalPassword,

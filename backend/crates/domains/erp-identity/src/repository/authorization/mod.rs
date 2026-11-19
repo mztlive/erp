@@ -35,16 +35,21 @@ use crate::repository::fingerprint::BsonFingerprint;
 use crate::repository::resource_grants::grant_lookup;
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
-/// 一次编译共享动态准备结果及复验依赖；关联别名由各集合的 Fragment 管理。
+// 保存一次授权编译的映射准备、版本和复验边界；各集合独立管理关联别名。
 struct Compiler<'a> {
+    // 原调用方执行器，用于在同一读取阶段准备动态事实。
     executor: &'a mut dyn Executor,
+    // 取证时签发的执行边界，避免动态准备跨事务或阶段。
     boundary: ExecutionBoundary,
+    // 身份和映射依赖中最早的有效期截止时点。
     valid_until: Option<Instant>,
+    // 按映射实例和完整授权上下文缓存的本次动态准备结果。
     prepared: Vec<MappingDependency>,
+    // 动态准备的稳定摘要集合，参与生成查询版本。
     versions: Vec<String>,
 }
 
-// 接收服务端生成的完整授权证明，编译固定模型的过滤与投影，同时保留交付时需要检查的依赖。
+/// 用服务端签发的授权证明编译固定模型的根过滤、受限投影和已登记的份额、整账或管理计划。沿用原执行边界，聚合有效期和版本，仅在非事务路径保留交付复验依赖。
 pub(crate) async fn compile(
     proof: AccessProof,
     qualified: QualifiedPermissions,
@@ -125,7 +130,7 @@ pub(crate) async fn compile(
     Ok(compiled)
 }
 
-// 为份额计划收集根层来源关系的授权规则；嵌套关系仍由各自来源模型独立编译。
+// 为份额子计划收集根层来源规则及独立入口，去除重复分支；嵌套关系交其来源模型编译。
 fn source_rules(
     rule: &AccessRule,
     permission: Option<&Permission>,
@@ -151,7 +156,7 @@ fn source_rules(
 }
 
 impl Compiler<'_> {
-    // 来源份额和根查询沿用同次映射准备及执行边界。
+    // 为已登记的根层来源分别编译可见份额过滤，沿用同次准备缓存和执行边界，保留各分支入口上下文。
     async fn source_plans(
         &mut self,
         rule: &AccessRule,
@@ -185,7 +190,7 @@ impl Compiler<'_> {
         Ok(sources)
     }
 
-    // 构造根或来源模型的条件片段；各模型都应用有效行约束，即便公司范围分支也不读取已删除记录。
+    // 为根或来源模型开启独立关联作用域，结合固定阶段、有效记录条件和权限谓词，返回模型键表达式。
     fn model<'a>(
         &'a mut self,
         rule: &'a AccessRule,
@@ -201,7 +206,7 @@ impl Compiler<'_> {
         })
     }
 
-    // 编译独立资格条件时复用所在集合的关联作用域；来源子查询使用自己的作用域，避免临时别名冲突。
+    // 在调用方给定的关联作用域内用当前上下文准备映射并求交有效记录与授权条件，返回谓词和主键表达式。
     fn condition<'a>(
         &'a mut self,
         rule: &'a AccessRule,
@@ -222,7 +227,7 @@ impl Compiler<'_> {
         })
     }
 
-    // 编译时按 Mapping 实例及完整授权上下文缓存实际准备事实，仅在本次读取阶段复用。静态映射不制造空事实；有效期和资源标识仍须核验。
+    // 校验模型、资源和有效期后按实例与完整上下文缓存动态事实，仅限本次编译。静态映射不制造空事实，准备不得改变读取阶段。
     async fn prepare(
         &mut self,
         mapping: &Arc<dyn AccessMapping>,
@@ -279,7 +284,7 @@ impl Compiler<'_> {
         Ok(Some(facts))
     }
 
-    // 在当前查询模型内递归编译单个授权节点；规则登记过深时拒绝，不能截断后继续执行。
+    // 递归将授权节点转成当前模型的 MongoDB 谓词，校验必需维度与嵌套上限，遇到缺失或超限时拒绝而不截断。
     fn node<'a>(
         &'a mut self,
         rule: &'a AccessRule,
@@ -334,7 +339,7 @@ impl Compiler<'_> {
         })
     }
 
-    // 编译记录读取补充分支时，以当前模型主键查找该账号可用的有效来源，不把授权表变成根查询。
+    // 以当前模型的授权主键查找有效记录读取来源，作为补充分支，不把授权行用作根记录。
     fn read_grant(
         &mut self,
         resource: ResourceKind,
@@ -351,7 +356,7 @@ impl Compiler<'_> {
         Ok(exists(&alias))
     }
 
-    // 按真实引用编译来源条件；需要完整覆盖时比较全部原始引用与通过来源集合，不能先过滤掉缺失或无权引用。
+    // 按完整原始引用编译来源存在性及范围；需全部命中时比较原引用与通过的来源集合，不让缺失或无权引用消失。
     async fn related(
         &mut self,
         relation: (&RelationKey, &str, RelationMatch, &AccessRule),
@@ -408,7 +413,7 @@ impl Compiler<'_> {
     }
 }
 
-// 为来源分区计算完整引用是否存在的条件，仅形成谓词，不在关联准备时剔除根候选。
+// 按去重后的原始引用是否为空生成分区谓词，不在关联准备时剔除根候选。
 fn relation_presence(
     mapping: &dyn AccessMapping,
     relation: &RelationKey,
@@ -448,28 +453,42 @@ mod tests {
     use crate::service::authorization::rules::{self};
     use crate::{Permission, QualifiedPermissions};
 
+    // 可配置的编译器测试映射，用于模拟事实、来源、动态版本和动作敏感过滤。
     struct Mapping {
+        // 当前样本的模型、资源、集合及支持的事实维度。
         model: QueryModel,
+        // 未按关系单独登记时使用的默认来源映射。
         child: Option<Arc<dyn AccessMapping>>,
+        // `None` 表示静态；布尔值控制动态准备是否提供可靠版本。
         versioned: Option<bool>,
+        // 可推进的动态事实修订，测试变化是否使凭证失效。
         revision: AtomicU64,
+        // 动态准备执行次数，用于核对缓存是否按上下文复用。
         prepare_calls: AtomicU64,
+        // 按关系名称覆盖的来源映射实例。
         sources: BTreeMap<String, Arc<dyn AccessMapping>>,
+        // 是否为样本启用未删除记录筛选。
         live_only: bool,
+        // 覆盖默认 ID 字段的主键表达式，用于测试计算键。
         key_expression: Option<Bson>,
+        // 是否让事实、记录过滤及动态版本依赖当前入口动作。
         action_sensitive: bool,
     }
 
     impl AccessMapping for Mapping {
+        // 暴露样本登记的查询模型。
         fn model(&self) -> &QueryModel {
             &self.model
         }
+        // 优先返回测试指定的计算键，未指定时引用模型 ID 字段。
         fn key(&self, _: &AccessContext, _: Option<&MappingFacts>) -> Result<Bson> {
             Ok(self.key_expression.clone().unwrap_or_else(|| format!("${}", self.model.id_field).into()))
         }
+        // 仅在配置为动态映射时暴露准备接口。
         fn preparation(&self) -> Option<&dyn MappingPreparation> {
             self.versioned.map(|_| self as &dyn MappingPreparation)
         }
+        // 根据测试配置按当前动作或未删除状态限定有效样本记录。
         fn records(&self, context: &AccessContext, _: Option<&MappingFacts>) -> Result<QueryFragment> {
             Ok(QueryFragment::Match(if self.action_sensitive {
                 doc! { "record_action": context.permission.action() }
@@ -479,6 +498,7 @@ mod tests {
                 doc! {}
             }))
         }
+        // 将所有者、组织或历史参与事实转换为测试字段谓词或存在性关联，拒绝其他事实。
         fn predicate(
             &self,
             fact: &AccessFact,
@@ -506,6 +526,7 @@ mod tests {
                 _ => Err(Error::ValidationError("unsupported fact".into())),
             }
         }
+        // 从测试关系解析实际引用字段，并选用该关系专属映射或默认来源。
         fn relation(
             &self,
             key: &RelationKey,
@@ -532,6 +553,7 @@ mod tests {
 
     #[async_trait]
     impl MappingPreparation for Mapping {
+        // 按调用动作和模拟修订生成动态事实，记录准备次数，并可带入截止时间；静态样本不得调用。
         async fn prepare(&self, context: &AccessContext, _: &mut dyn Executor) -> Result<MappingFacts> {
             assert!(self.versioned.is_some(), "static mappings must never prepare");
             self.prepare_calls.fetch_add(1, Ordering::Relaxed);
@@ -555,6 +577,7 @@ mod tests {
         }
     }
 
+    // 构造共享样本集合的完整对象映射，默认提供带修订的动态事实及可选来源。
     fn mapping(resource: &str, child: Option<Arc<dyn AccessMapping>>) -> Arc<dyn AccessMapping> {
         Arc::new(Mapping {
             model: QueryModel {
@@ -576,17 +599,22 @@ mod tests {
         })
     }
 
+    // 一次测试查询的证明与映射配对，用于在指定执行边界编译。
     struct Query {
+        // 测试账号、固定规则及执行边界组成的原证明。
         proof: AccessProof,
+        // 与证明模型匹配、供真实编译器调用的测试映射。
         mapping: Arc<dyn AccessMapping>,
     }
 
     impl Query {
+        // 克隆样本证明并以空角色授权集调用真实查询编译器。
         async fn compile(&self, executor: &mut dyn Executor) -> Result<CompiledAccess> {
             compile(self.proof.clone(), QualifiedPermissions::test_grants(&[]), &self.mapping, executor).await
         }
     }
 
+    // 将规则绑定到测试账号、映射模型及当前执行器边界，生成可复用测试输入。
     fn query(rule: AccessRule, mapping: Arc<dyn AccessMapping>, executor: &dyn Executor) -> Query {
         let model = mapping.model().clone();
         Query {
@@ -614,6 +642,7 @@ mod tests {
         }
     }
 
+    // 验证编译凭证保留原授权证明的入口、账号和组织修订等元数据。
     #[tokio::test]
     async fn compiled_metadata_comes_from_the_original_authorization_proof() {
         let mut executor = ReadExecutor::default();
@@ -626,6 +655,7 @@ mod tests {
         assert_eq!(compiled.as_of(), as_of);
     }
 
+    // 验证并集分支准备来源关联时不会提前丢弃可由其他分支放行的记录。
     #[tokio::test]
     async fn union_prepares_relations_without_discarding_other_branches() {
         let mut executor = ReadExecutor::default();
@@ -659,6 +689,7 @@ mod tests {
         );
     }
 
+    // 验证读取补充使用映射主键，仍须满足独立范围约束。
     #[tokio::test]
     async fn grants_use_mapped_key_and_remain_inside_independent_constraints() {
         let mut executor = ReadExecutor::default();
@@ -687,6 +718,7 @@ mod tests {
         );
     }
 
+    // 验证全部来源规则生成非空检查，并比较原始引用与通过的完整集合。
     #[tokio::test]
     async fn all_sources_compiles_nonempty_complete_set_comparison() {
         let mut executor = ReadExecutor::default();
@@ -720,6 +752,7 @@ mod tests {
         assert_eq!(plan.dependencies.len(), 2);
     }
 
+    // 验证事实维度缺失、模型错配或授权资源不符时拒绝编译。
     #[tokio::test]
     async fn missing_dimensions_wrong_mapping_and_grant_resources_fail() {
         let mut executor = ReadExecutor::default();
@@ -733,6 +766,7 @@ mod tests {
         assert!(wrong_resource.compile(&mut executor).await.is_err());
     }
 
+    // 验证非事务查询不能依赖没有可靠修订号的动态事实。
     #[tokio::test]
     async fn unversioned_nontransaction_facts_are_rejected() {
         let mut executor = ReadExecutor::default();
@@ -750,6 +784,7 @@ mod tests {
         assert!(query(AccessRule::Allow, mapping.clone(), &executor).compile(&mut executor).await.is_err());
     }
 
+    // 验证拒绝规则生成显式为假的谓词，而不是省略查询过滤。
     #[tokio::test]
     async fn denied_query_compiles_false_instead_of_missing_filter() {
         let mut executor = ReadExecutor::default();
@@ -758,6 +793,7 @@ mod tests {
         assert_eq!(plan.stages, vec![doc! { "$match": { "$expr": false } }]);
     }
 
+    // 验证受限视图仅投影登记字段，且每行份额仅能对应一个来源。
     #[tokio::test]
     async fn partial_query_projects_only_registered_fields_and_share_has_one_source() {
         let mut executor = ReadExecutor::default();
@@ -800,6 +836,7 @@ mod tests {
         );
     }
 
+    // 验证动态修订变化使旧依赖复验失败，并改变新查询的跨页版本。
     #[tokio::test]
     async fn mapping_revision_changes_invalidate_dependencies_and_page_version() {
         let mut executor = ReadExecutor::default();
@@ -824,6 +861,7 @@ mod tests {
         assert_ne!(plan.version(), updated.version());
     }
 
+    // 验证证明到期或执行器进入新读取阶段后，不能据此编译凭证。
     #[tokio::test]
     async fn expired_proof_or_wrong_session_cannot_compile() {
         let mut executor = ReadExecutor::default();
@@ -837,6 +875,7 @@ mod tests {
         assert!(matches!(query.compile(&mut executor).await, Err(Error::ValidationError(_))));
     }
 
+    // 验证独立范围按自身动作转换并复验，不借用根操作上下文。
     #[tokio::test]
     async fn independent_scope_compiles_and_revalidates_its_own_action_context() {
         let mut executor = ReadExecutor::default();
@@ -878,6 +917,7 @@ mod tests {
         assert!(matches!(plan.dependencies[1].validate(&mut executor).await, Err(Error::ConflictError(_))));
     }
 
+    // 验证辅助过滤保留已解析入口的上下文及独立映射依赖。
     #[tokio::test]
     async fn auxiliary_filter_uses_the_resolved_context_and_keeps_its_own_mapping_dependency() {
         let mut executor = ReadExecutor::default();
@@ -929,6 +969,7 @@ mod tests {
         assert!(matches!(dependency.validate(&mut executor).await, Err(Error::ConflictError(_))));
     }
 
+    // 验证来源范围即使允许全部，引用对象仍须存在且未删除。
     #[tokio::test]
     async fn related_shared_scope_still_requires_live_source_record() {
         let mut executor = ReadExecutor::default();
@@ -957,6 +998,7 @@ mod tests {
             doc! { "$match": { "$and": [{ "deleted_at": 0 }, { "$expr": true }] } }.into()
         );
     }
+    // 验证记录读取授权和来源匹配都使用映射提供的计算主键。
     #[tokio::test]
     async fn calculated_keys_are_used_by_grants_and_related_record_matching() {
         let mut executor = ReadExecutor::default();
@@ -1000,6 +1042,7 @@ mod tests {
         );
     }
 
+    // 验证即便授权分支允许全部记录，仍须校验映射声明的必需事实。
     #[tokio::test]
     async fn required_mapping_facts_are_checked_even_when_rule_allows_every_record() {
         let mut executor = ReadExecutor::default();
@@ -1013,6 +1056,7 @@ mod tests {
         assert!(query(rule, mapping.clone(), &executor).compile(&mut executor).await.is_ok());
     }
 
+    // 验证静态询价映射不准备动态数据，列表与对象条件判定一致。
     #[tokio::test]
     async fn static_inquiry_mapping_needs_no_preparation_and_matches_the_object_condition() {
         let mut executor = ReadExecutor::default();
@@ -1069,6 +1113,7 @@ mod tests {
         }
     }
 
+    // 对比完整、缺失、无权及已删除来源样本的列表与对象授权成员。
     #[tokio::test]
     async fn source_query_and_object_membership_agree_for_complete_missing_denied_and_deleted_sources() {
         let mut executor = ReadExecutor::default();
@@ -1164,6 +1209,7 @@ mod tests {
         }
     }
 
+    // 验证多来源查询对每个相同依赖只准备、关联一次，且不改变授权成员。
     #[tokio::test]
     async fn multi_source_query_prepares_and_joins_each_source_once_without_changing_membership() {
         for dynamic in [false, true] {
@@ -1275,6 +1321,7 @@ mod tests {
         }
     }
 
+    // 验证缓存不会混用不同映射实例或不同授权上下文的动态事实。
     #[tokio::test]
     async fn preparation_cache_keeps_mapping_instances_and_contexts_separate() {
         let mut executor = ReadExecutor::default();
@@ -1332,6 +1379,7 @@ mod tests {
         assert_eq!(compiler.prepared.len(), 5);
     }
 
+    // 验证记录授权关联使用合法变量名，且只接受接收人、目标和版本相符的有效来源。
     #[tokio::test]
     async fn record_grant_query_uses_valid_variables_and_only_accepts_live_matching_sources() {
         let mut executor = ReadExecutor::default();
@@ -1383,6 +1431,7 @@ mod tests {
         assert_eq!(result, vec![doc! { "business_id": "allowed" }]);
     }
 
+    // 验证快照凭证不保存动态复验事实但保留到期限制，不能跨写入或事务复用。
     #[tokio::test]
     async fn snapshot_mapping_keeps_only_expiry_and_rejects_cross_write_or_transaction_reuse() {
         let mut executor = SnapshotExecutor::default();
@@ -1415,6 +1464,7 @@ mod tests {
         assert!(matches!(plan.ensure_current(&mut executor), Err(Error::ConflictError(_))));
     }
 
+    // 验证即使原快照不需重读，交付时也必须先核对服务实例和执行边界。
     #[tokio::test]
     async fn revalidation_mode_checks_service_and_boundary_before_skipping_snapshot_reads() {
         use persistence_core::NoTransaction;

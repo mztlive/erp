@@ -53,6 +53,7 @@ use crate::entity::resource_access::ResourceKind;
 use crate::repository::authorization::testing::{receipt_projection, task_members};
 use crate::{Error, ResourceTargets};
 
+// 完整绑定可通过启动校验；缺项、重复登记、未知项或资源错配均被拒绝。
 #[test]
 fn builder_accepts_complete_bindings_and_rejects_missing_duplicate_unknown_and_mismatched_bindings() {
     complete().build().unwrap();
@@ -94,6 +95,7 @@ fn builder_accepts_complete_bindings_and_rejects_missing_duplicate_unknown_and_m
     ));
 }
 
+// 服务启动前就校验查询所需的事实能力、来源关系和输出形状。
 #[test]
 fn builder_checks_fact_capabilities_sources_and_output_before_any_request() {
     let permission = &inquiry::QUERY_SALES_LIST;
@@ -117,6 +119,7 @@ fn builder_checks_fact_capabilities_sources_and_output_before_any_request() {
     assert!(matches!(builder.build(), Err(Error::ValidationError(_))));
 }
 
+// 采购创建用于查询时，映射必须提供任务负责人事实。
 #[test]
 fn builder_requires_assignment_for_purchase_creation_queries() {
     let permission = purchase_order::CREATE;
@@ -132,6 +135,7 @@ fn builder_requires_assignment_for_purchase_creation_queries() {
     ));
 }
 
+// 采购创建查询不支持份额或存在性输出，即使映射还缺少负责人事实。
 #[test]
 fn purchase_creation_query_binding_still_rejects_restricted_outputs() {
     let permission = purchase_order::CREATE;
@@ -152,6 +156,7 @@ fn purchase_creation_query_binding_still_rejects_restricted_outputs() {
     }
 }
 
+// 采购创建查询按负责人过滤；写入只接受服务端候选或带版本的精确任务。
 #[tokio::test]
 async fn purchase_creation_keeps_its_candidate_and_exact_task_contracts() {
     let permission = purchase_order::CREATE;
@@ -197,6 +202,7 @@ async fn purchase_creation_keeps_its_candidate_and_exact_task_contracts() {
     assert_eq!(facts.calls.load(Ordering::SeqCst), 1);
 }
 
+// 对象授权以已加载的归属为准，拒绝缺失事实；没有功能资格时不读取对象。
 #[tokio::test]
 async fn require_checks_real_owner_and_missing_facts_and_stops_before_facts_without_qualification() {
     let identity = Arc::new(Identity::default());
@@ -253,6 +259,7 @@ async fn require_checks_real_owner_and_missing_facts_and_stops_before_facts_with
     ));
 }
 
+// 创建只检查服务端候选归属；改归属须同时通过原对象和目标归属的检查。
 #[tokio::test]
 async fn candidates_and_ownership_change_check_server_destination_and_original() {
     let port = Arc::new(Facts::new(vec![object("sales_inquiry", "one", "user")]));
@@ -291,6 +298,7 @@ async fn candidates_and_ownership_change_check_server_destination_and_original()
     ));
 }
 
+// 精确任务需要当前版本和指派，附加权限不能由另一个角色补齐。
 #[tokio::test]
 async fn exact_tasks_require_version_assignment_and_same_role_extra_permission() {
     let task = ObjectFacts {
@@ -347,6 +355,7 @@ async fn exact_tasks_require_version_assignment_and_same_role_extra_permission()
     ));
 }
 
+// 询价列表按归属过滤；快照内交付不重取身份，普通读取交付复验身份和范围版本。
 #[tokio::test]
 async fn query_compiles_owner_condition_and_validate_respects_snapshot_and_read_dependencies() {
     let identity = Arc::new(Identity::default());
@@ -374,6 +383,7 @@ async fn query_compiles_owner_condition_and_validate_respects_snapshot_and_read_
     assert!(matches!(service.validate(&access, &mut ex).await, Err(Error::ConflictError(_))));
 }
 
+// 批量功能资格区分停用账号、无授权和权限分属不同角色的情况。
 #[tokio::test]
 async fn functional_queries_preserve_disabled_empty_and_independent_grants() {
     let identity = Arc::new(Identity::default());
@@ -406,6 +416,7 @@ async fn functional_queries_preserve_disabled_empty_and_independent_grants() {
     assert!(service.permissions(&actor(), &permissions, &mut ex).await.unwrap().is_none());
 }
 
+// 空数据范围只返回空结果；身份取证失败不得当成空范围交付。
 #[tokio::test]
 async fn query_denies_empty_scope_and_propagates_evidence_failures() {
     let identity = Arc::new(Identity::default());
@@ -424,6 +435,7 @@ async fn query_denies_empty_scope_and_propagates_evidence_failures() {
     ));
 }
 
+// 查询凭证只能用于原服务和原读取阶段，换执行器、重新查询或重启事务后不得复用。
 #[tokio::test]
 async fn credentials_reject_other_service_executor_next_query_restart_and_raw_session() {
     let service = service(Arc::new(Identity::default()), Arc::new(Facts::default()));
@@ -444,6 +456,7 @@ async fn credentials_reject_other_service_executor_next_query_restart_and_raw_se
     assert!(matches!(service.validate(&access, &mut ex).await, Err(Error::ValidationError(_))));
 }
 
+// 动态映射在查询时准备，已到期则拒绝；交付时非事务复验版本，快照内不重复准备。
 #[tokio::test]
 async fn dynamic_mapping_revisions_and_expiry_are_checked_by_public_delivery_api() {
     let mut map = mapping(&inquiry::QUERY_SALES_LIST);
@@ -476,6 +489,7 @@ async fn dynamic_mapping_revisions_and_expiry_are_checked_by_public_delivery_api
     ));
 }
 
+// 不能复验版本的动态映射只支持快照，准备过程中也不得切换读取阶段。
 #[tokio::test]
 async fn dynamic_mapping_without_revision_only_supports_snapshot_and_cannot_change_stage() {
     let mut map = mapping(&inquiry::QUERY_SALES_LIST);
@@ -499,6 +513,7 @@ async fn dynamic_mapping_without_revision_only_supports_snapshot_and_cannot_chan
     ));
 }
 
+// 整条记录授权不能替代功能权限，列表交付还要复验记录授权版本。
 #[tokio::test]
 async fn whole_record_reads_require_functional_permission_and_revalidate_grant_revision() {
     let identity = Arc::new(Identity::default());
@@ -526,6 +541,7 @@ async fn whole_record_reads_require_functional_permission_and_revalidate_grant_r
     ));
 }
 
+// 按真实引用加载创建所需的采购来源，拒绝不完整或由调用方冒充的来源。
 #[tokio::test]
 async fn source_creation_loads_actual_references_and_rejects_missing_or_fabricated_sources() {
     let identity = Arc::new(Identity::default());
@@ -569,6 +585,7 @@ async fn source_creation_loads_actual_references_and_rejects_missing_or_fabricat
     ));
 }
 
+// 退款的不同来源各按自己的合格角色和范围检查，不能互相代补。
 #[tokio::test]
 async fn independent_refund_origins_keep_their_own_scope_roles() {
     let permission = returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT;
@@ -623,6 +640,7 @@ async fn independent_refund_origins_keep_their_own_scope_roles() {
     ));
 }
 
+// 查询时不得换掉启动时绑定的来源映射。
 #[tokio::test]
 async fn startup_source_bindings_cannot_be_replaced_at_query_time() {
     let permission = receivable::ACCOUNT_LIST;
@@ -637,6 +655,7 @@ async fn startup_source_bindings_cannot_be_replaced_at_query_time() {
     ));
 }
 
+// 纯操作只判断功能权限，不接受拿记录目标替代无对象操作。
 #[tokio::test]
 async fn operation_only_permissions_use_rbac_and_cannot_be_replaced_with_record_targets() {
     let permission = integration_ops::ERROR_TASK_CREATE;
@@ -655,6 +674,7 @@ async fn operation_only_permissions_use_rbac_and_cannot_be_replaced_with_record_
     ));
 }
 
+// 构造付款任务引用的采购订单来源，用于检查组合资格。
 fn payment_sources() -> std::collections::BTreeMap<RelationKey, RelatedObjects> {
     [(
         RelationKey::parse("purchase_source").unwrap(),
@@ -666,6 +686,7 @@ fn payment_sources() -> std::collections::BTreeMap<RelationKey, RelatedObjects> 
     .into()
 }
 
+// 付款任务和列表都要求同一角色持有动作与详情权限；资格不足时不读取任务。
 #[tokio::test]
 async fn payment_requires_detail_on_the_same_role_for_tasks_and_queries() {
     let permission = purchase_payment_request::CREDIT_LIST;
@@ -708,6 +729,7 @@ async fn payment_requires_detail_on_the_same_role_for_tasks_and_queries() {
     ));
 }
 
+// 固定已有读取权限的查询绑定，防止目录调整时意外丢失。
 #[test]
 fn existing_read_permissions_keep_their_query_bindings() {
     for permission in super::rules::queries::permissions() {
@@ -715,6 +737,7 @@ fn existing_read_permissions_keep_their_query_bindings() {
     }
 }
 
+// 存在性查询只交付行标识，不能在映射中暴露其他载荷字段。
 #[tokio::test]
 async fn existence_bindings_reject_payload_and_only_deliver_the_row_identity() {
     let permission = receivable::CUSTOMER_RECEIPT_LIST;
@@ -743,6 +766,7 @@ async fn existence_bindings_reject_payload_and_only_deliver_the_row_identity() {
     assert_eq!(rows, json!([{"id": "receipt"}]));
 }
 
+// 固定收款列表在份额与整账资格下的来源计划和游标指纹。
 #[tokio::test]
 async fn receipt_query_keeps_plan_and_cursor_fingerprints() {
     use erp_permissions::policy_permission::FINANCE_LEDGER_READ;
@@ -781,6 +805,7 @@ async fn receipt_query_keeps_plan_and_cursor_fingerprints() {
     );
 }
 
+// 固定整条收款查询的根计划、三类来源计划及游标指纹。
 #[tokio::test]
 async fn full_receipt_query_keeps_root_source_and_cursor_fingerprints() {
     use erp_permissions::policy_permission::FINANCE_LEDGER_READ;
@@ -814,6 +839,7 @@ async fn full_receipt_query_keeps_root_source_and_cursor_fingerprints() {
     );
 }
 
+// 共用写入权限的任务查询可以列出合格任务，但不放宽精确目标或快照写入要求。
 #[tokio::test]
 async fn shared_write_permissions_support_queries_without_relaxing_task_or_transaction_checks() {
     for permission in [inquiry::QUERY_PROCUREMENT_INTERNAL_QUOTES, purchase_payment_request::CREDIT_LIST] {
@@ -876,6 +902,7 @@ async fn shared_write_permissions_support_queries_without_relaxing_task_or_trans
     }
 }
 
+// 内部报价任务的查询映射必须同时具备完成状态和参与人事实。
 #[test]
 fn internal_quote_query_requires_completion_and_participation_mapping() {
     let permission = inquiry::QUERY_PROCUREMENT_INTERNAL_QUOTES;
@@ -888,6 +915,7 @@ fn internal_quote_query_requires_completion_and_participation_mapping() {
     }
 }
 
+// 执行内部报价任务检查时，完成状态或参与人事实缺失即拒绝。
 #[tokio::test]
 async fn internal_quote_task_rejects_missing_completion_or_participation_facts() {
     let permission = inquiry::QUERY_PROCUREMENT_INTERNAL_QUOTES;
@@ -919,14 +947,20 @@ async fn internal_quote_task_rejects_missing_completion_or_participation_facts()
     }
 }
 
+// 在首次读取和非事务复验之间切换事实，用于模拟持久化数据变化。
 struct ReloadFacts {
+    // 初次授权所见的付款申请及其来源。
     first: Vec<ObjectFacts>,
+    // 复验时读取的付款申请及其来源。
     second: Vec<ObjectFacts>,
+    // 区分首次读取和后续读取的调用次数。
     calls: AtomicUsize,
 }
 
+// 用顺序可控的事实端口模拟非事务重复读取。
 #[async_trait]
 impl AccessFactsPort for ReloadFacts {
+    // 首次调用返回初始事实，后续调用返回复验事实。
     async fn load(
         &self,
         _: &AccessContext,
@@ -941,6 +975,7 @@ impl AccessFactsPort for ReloadFacts {
     }
 }
 
+// 构造两条各自引用同一组采购单的付款申请，作为复验基线。
 fn payment_requests() -> Vec<ObjectFacts> {
     ["request_a", "request_b"]
         .into_iter()
@@ -961,6 +996,7 @@ fn payment_requests() -> Vec<ObjectFacts> {
         .collect()
 }
 
+// 用指定的第二批事实走一遍非事务批量详情授权和复验。
 async fn reloaded_requests(second: Vec<ObjectFacts>) -> Result<()> {
     let port = Arc::new(ReloadFacts { first: payment_requests(), second, calls: AtomicUsize::new(0) });
     let mut builder = complete();
@@ -976,6 +1012,7 @@ async fn reloaded_requests(second: Vec<ObjectFacts>) -> Result<()> {
         .await
 }
 
+// 非事务复验按集合比较，根记录或来源的返回顺序变化不影响结果。
 #[tokio::test]
 async fn nontransaction_revalidation_ignores_root_and_source_order() {
     for (roots, sources) in [(true, false), (false, true), (true, true)] {
@@ -994,6 +1031,7 @@ async fn nontransaction_revalidation_ignores_root_and_source_order() {
     }
 }
 
+// 非事务复验拒绝版本、归属或引用集变化，也拒绝重复的根记录或来源。
 #[tokio::test]
 async fn nontransaction_revalidation_still_rejects_changed_facts_and_invalid_sets() {
     let mut version = payment_requests();

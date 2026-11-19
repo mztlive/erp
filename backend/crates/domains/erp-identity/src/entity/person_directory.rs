@@ -13,21 +13,20 @@ use crate::{Error, Result};
 const SEARCH_MAX_CHARS: usize = 200;
 const SCOPE_VERSION_MAX_CHARS: usize = 256;
 
-/// 已登记的人员查询类别。稳定代码不是角色显示名，也不等于建单或交接权限。
+/// 已登记的人员目录类别，稳定代码独立于角色显示名、建单和交接权限。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PersonDirectoryCategory {
-    /// 当前销售查询目录。授予来源仅为稳定角色 `role-sales`。
+    /// 销售人员目录，自动补记资格只认 `role-sales`。
     Sales,
-    /// 当前采购负责人查询目录。授予来源仅为稳定角色 `role-procurement`。
+    /// 采购负责人目录，自动补记资格只认 `role-procurement`。
     Procurement,
-    /// 通用后台人员查询，不依赖岗位资格。
+    /// 通用后台人员目录，无需岗位资格记录。
     Business,
 }
 
 impl PersonDirectoryCategory {
-    /// 取得持久化与接口使用的稳定类别代码。
-    /// 销售为 `sales`，采购为 `procurement`，后台人员为 `business`。
+    /// 返回接口与持久化共用的类别代码：`sales`、`procurement` 或 `business`。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Sales => "sales",
@@ -36,8 +35,7 @@ impl PersonDirectoryCategory {
         }
     }
 
-    /// 返回该目录的 DataScope 资源代码。
-    /// 销售为 `sales_person`，采购为 `procurement_person`，后台人员为 `business_person`。
+    /// 返回目录数据范围的资源代码：销售为 `sales_person`，采购为 `procurement_person`，后台人员为 `business_person`。
     pub fn resource(self) -> &'static str {
         match self {
             Self::Sales => "sales_person",
@@ -46,10 +44,8 @@ impl PersonDirectoryCategory {
         }
     }
 
-    /// 返回首次授予查询资格所观察的稳定角色 ID。
-    /// 销售领导、建单权限和业务单据归属都不能代替该角色 ID。
-    ///
-    /// 销售为 `Some("role-sales")`，采购为 `Some("role-procurement")`，后台人员返回 `None`。
+    /// 返回自动授予时观察的稳定角色 ID：销售为 `role-sales`，采购为 `role-procurement`，后台人员为 `None`。
+    /// 销售领导角色、建单权限和业务单据归属均不触发自动授予。
     pub fn grant_role_id(self) -> Option<&'static str> {
         match self {
             Self::Sales => Some("role-sales"),
@@ -58,10 +54,8 @@ impl PersonDirectoryCategory {
         }
     }
 
-    /// 按稳定角色 ID 识别会首次写入的查询类别。
-    /// 该角色是某目录的授予来源时返回类别；`role-sales` 与 `role-procurement` 以外，含后台人员，返回 `None`。
-    ///
-    /// `role_id`：本次分配结果中的角色 ID。
+    /// 由本次分配的角色识别可自动补记资格的目录。
+    /// 仅 `role-sales` 和 `role-procurement` 匹配，通用后台人员目录无对应角色。
     pub fn from_grant_role(role_id: &str) -> Option<Self> {
         match role_id {
             "role-sales" => Some(Self::Sales),
@@ -71,19 +65,18 @@ impl PersonDirectoryCategory {
     }
 }
 
-/// 查询资格状态。终止后不会因角色仍在或初始化重跑而恢复。
+/// 岗位目录资格状态；终止后须显式再授予，角色保留和初始化重跑都不会恢复资格。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PersonQueryStatus {
-    /// 可进入对应人员目录。
+    /// 满足对应岗位目录的资格条件，实际可见性仍由查询授权和筛选决定。
     Active,
-    /// 已终止，目录不再返回该账号。
+    /// 已结束该岗位目录资格，再授予前目录排除此账号。
     Terminated,
 }
 
 impl PersonQueryStatus {
-    /// 取得与序列化一致的稳定状态代码。
-    /// 有效为 `active`，已终止为 `terminated`。
+    /// 返回与序列化一致的状态代码：有效为 `active`，已终止为 `terminated`。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -92,57 +85,50 @@ impl PersonQueryStatus {
     }
 }
 
-/// 已有资格记录对“是否插入”的影响。
+/// 自动补记前查到的资格记录状态，用于区分首次授予和既有记录。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExistingGrant {
-    /// 尚无记录。
+    /// 账号在该目录尚无记录，可补记首次授予。
     Absent,
-    /// 查询资格仍有效。
+    /// 资格已有效，保留现有记录。
     Active,
-    /// 查询资格已终止。
+    /// 资格已终止，保留终止记录。
     Terminated,
 }
 
-/// 尚未存在记录时才插入。已有有效或已终止记录都保持原样。
-/// 角色撤销不是本函数的输入，不能据此删除资格；初始化重跑也不能恢复已终止记录。
-///
-/// 仅 `ExistingGrant::Absent` 时返回 `true`。
-///
-/// `existing`：当前账号与类别的资格记录状态。
+/// 自动授予时仅为尚无记录的账号和目录组合补记资格，保留有效及已终止的记录。
+/// 此判定只接受记录状态；角色撤销不删除资格，初始化重跑不恢复已终止资格。
 pub fn should_insert_grant(existing: ExistingGrant) -> bool {
     matches!(existing, ExistingGrant::Absent)
 }
 
-/// 人员查询资格。同一账号同一类别至多一条记录。
+/// 岗位目录的人员查询资格；每个账号和目录组合至多保留一条记录。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Entity)]
 pub struct PersonQueryQualification {
+    /// 资格记录 ID 与持久化元数据，版本用于显式维护的并发校验。
     #[serde(flatten)]
     pub base: BaseModel,
-    /// 账号稳定 ID。
+    /// 获授目录资格的后台账号稳定 ID。
     pub account_id: String,
-    /// 查询类别。
+    /// 此资格对应的岗位目录类别。
     pub category: PersonDirectoryCategory,
-    /// 资格状态。
+    /// 此账号的目录资格当前有效或已终止。
     pub status: PersonQueryStatus,
-    /// 首次授予时观察到的稳定角色 ID。
+    /// 自动首次授予时记录的稳定角色 ID；首次由人工授予时为空。
     pub grant_role_id: Option<String>,
-    /// 最近一次显式维护人；自动补记时为空。
+    /// 最近一次显式维护的操作人 ID；仅自动补记时为空。
     #[serde(default)]
     pub managed_by: Option<String>,
-    /// 显式维护原因。
+    /// 最近一次显式维护的审计原因，尚无显式维护时为空。
     #[serde(default)]
     pub management_reason: Option<String>,
-    /// 终止时间；未终止时为空。
+    /// 当前终止状态的生效时点，有效时为 `None`。
     pub terminated_at: Option<Instant>,
 }
 
 impl PersonQueryQualification {
-    /// 建立一条有效查询资格。
-    /// 授予角色固定取类别的稳定角色 ID，调用方不能改写成显示名或其他权限。
-    ///
-    /// 返回尚未终止的资格记录。
-    ///
-    /// 类别为 `Business`，或账号 ID 去空白后为空时返回 `Error::ValidationError`。
+    /// 构造尚未终止的岗位目录资格，授予角色取类别固定的稳定 ID。
+    /// `Business` 无需岗位资格，账号 ID 须含非空白字符；不满足时返回 `Error::ValidationError`。
     pub fn grant(
         id: impl Into<String>,
         account_id: impl Into<String>,
@@ -168,12 +154,8 @@ impl PersonQueryQualification {
         })
     }
 
-    /// 终止查询资格。重复终止拒绝，且不改变账号角色。
-    /// 首次终止时把状态改为 `Terminated` 并记下 `at`。不修改账号角色。
-    ///
-    /// 资格已经终止时返回 `Error::ConflictError`。
-    ///
-    /// `at`：终止时点。
+    /// 将目录资格标记为 `Terminated` 并记录终止时点 `at`，保留账号角色。
+    /// 重复终止返回 `Error::ConflictError`。
     pub fn terminate(&mut self, at: Instant) -> Result<()> {
         if self.status == PersonQueryStatus::Terminated {
             return Err(Error::ConflictError("查询资格已终止".into()));
@@ -184,32 +166,26 @@ impl PersonQueryQualification {
     }
 }
 
-/// 已规范化的目录列表条件。组织筛选只收窄候选，不扩大授权。
+/// 规范化后的人员目录分页条件；组织筛选只收窄授权范围内的人员。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DirectoryListRequest {
-    /// 姓名或登录账号的字面量搜索。
+    /// 对姓名或登录账号执行字面量匹配的搜索词，空白视为未指定。
     pub search: Option<String>,
-    /// 从 1 开始的页码。
+    /// 待读取的页码，从 1 开始，默认第 1 页。
     pub page: u64,
-    /// 页大小，最大 100。
+    /// 每页条数，默认 20，允许 1 至 100。
     pub page_size: u32,
-    /// 可选组织筛选。
+    /// 用于筛选人员主属关系的组织 ID，空集合表示不按组织筛选。
     pub org_unit_ids: Vec<String>,
-    /// 是否展开筛选组织的下级。
+    /// 是否将所选组织的下级纳入筛选，须先指定组织。
     pub include_descendants: bool,
-    /// 后续页携带的目录授权版本。
+    /// 客户端续页时回传的目录授权版本，用于检测查询条件或可见范围变化。
     pub scope_version: Option<String>,
 }
 
 impl DirectoryListRequest {
-    /// 校验并规范化目录查询参数。
-    /// 返回可执行的查询条件。
-    ///
-    /// 搜索超过 200 字、页码为 0、页大小不在 1 到 100、版本超长、第 2 页及以后缺少范围版本，或未指定组织却要求包含下级时返回校验错误。
-    ///
-    /// `search`：原始搜索词；`page`：原始页码；缺省为 1。
-    /// `page_size`：原始页大小；缺省为 20；`org_unit_ids`：已去重的组织 ID。
-    /// `scope_version`：客户端持有的目录版本。
+    /// 规范化搜索词和范围版本（分别最多 200 和 256 字符），复制调用方已去重的组织 ID。
+    /// 页码默认为 1，页大小默认为 20；拒绝第 0 页、页大小超出 1 至 100、续页缺少版本和无组织却要求展开下级。
     pub fn parse(
         search: Option<&str>,
         page: Option<u64>,
@@ -248,15 +224,10 @@ impl DirectoryListRequest {
     }
 }
 
-/// 当单个已具备资格的后台账号落在操作人的目录授权和组织筛选内时返回 `true`。
-///
-/// 协作参与和历史参与恒为否，不能借业务单据把人员读权限放大。
-/// 无主属组织的人员只可能命中公司或本人范围。
-///
-/// 候选可读且满足组织筛选时返回 `true`。
-///
-/// `scope`：已解析的 `sales_person:list` 或 `procurement_person:list` 范围；`actor_id`：当前操作人账号 ID。
-/// `primary_org`：候选在授权时点的主属组织；没有组织时为 `None`；`org_filter`：请求指定并已展开的组织集合；未指定组织筛选时为 `None`。
+/// 判断已具备目录资格的后台账号是否同时满足操作人的列表数据范围与组织筛选。
+/// `scope` 为对应目录已解析的列表范围，如 `sales_person:list` 或 `procurement_person:list`；本人按账号 ID 相等判定。
+/// 组织维度取授权时点的主属组织，`org_filter` 为已展开的筛选集合或 `None`；无主属组织时只可能命中公司或本人范围。
+/// 协作和历史参与恒为否，业务单据关系不会扩大目录可见性。
 pub fn candidate_in_directory(
     scope: &ResolvedScope,
     actor_id: &str,
@@ -280,6 +251,7 @@ pub fn candidate_in_directory(
     )
 }
 
+// 搜索词去除首尾空白，空白视为缺省，超过 200 个字符时报错。
 fn normalize_search(search: Option<&str>) -> Result<Option<String>> {
     let Some(search) = search.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
@@ -290,6 +262,7 @@ fn normalize_search(search: Option<&str>) -> Result<Option<String>> {
     Ok(Some(search.to_string()))
 }
 
+// 范围版本去除首尾空白，空白视为缺省，超过 256 个字符时报错。
 fn normalize_scope_version(scope_version: Option<&str>) -> Result<Option<String>> {
     let Some(version) = scope_version.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
@@ -312,6 +285,7 @@ mod tests {
     };
     use crate::entity::access_control::{ResolvedScope, ScopeClause};
 
+    // 构造无个人上限的公司范围，供目录可见性测试复用。
     fn company() -> ResolvedScope {
         ResolvedScope {
             role_clauses: vec![ScopeClause { company: true, ..ScopeClause::default() }],
@@ -319,6 +293,7 @@ mod tests {
         }
     }
 
+    // 验证销售自动授予只认固定销售角色，采购目录使用独立的数据范围资源代码。
     #[test]
     fn sales_grant_role_is_not_the_leader_or_create_permission() {
         assert_eq!(PersonDirectoryCategory::Sales.grant_role_id(), Some("role-sales"));
@@ -327,6 +302,7 @@ mod tests {
         assert_eq!(PersonDirectoryCategory::Procurement.resource(), "procurement_person");
     }
 
+    // 验证自动授予只补缺失记录，有效资格可终止一次，已终止记录不会被自动恢复。
     #[test]
     fn missing_grant_inserts_once_and_termination_is_not_restored() {
         assert!(should_insert_grant(ExistingGrant::Absent));
@@ -343,11 +319,13 @@ mod tests {
         assert_eq!(grant.status, PersonQueryStatus::Terminated);
     }
 
+    // 验证公司范围可纳入具备资格但没有主属组织或业务归属的人员。
     #[test]
     fn company_scope_includes_a_qualified_person_without_org_or_business() {
         assert!(candidate_in_directory(&company(), "manager", "sales-b", None, None));
     }
 
+    // 验证本人范围只可读自己，个人上限也能把公司范围收窄至本人。
     #[test]
     fn self_scope_and_user_limit_do_not_reveal_other_people() {
         let scope = ResolvedScope {
@@ -365,6 +343,7 @@ mod tests {
         assert!(!candidate_in_directory(&limited, "sales-a", "sales-b", None, None));
     }
 
+    // 验证仅有协作范围时，人员目录不会纳入候选账号。
     #[test]
     fn collaborative_scope_never_adds_a_person() {
         let scope = ResolvedScope {
@@ -374,6 +353,7 @@ mod tests {
         assert!(!candidate_in_directory(&scope, "leader", "sales-a", Some("org-1"), None));
     }
 
+    // 验证组织授权和请求筛选均按主属组织匹配，筛选可收窄公司范围。
     #[test]
     fn organization_scope_uses_primary_org_and_request_filter_only_narrows() {
         let scope = ResolvedScope {
@@ -393,6 +373,7 @@ mod tests {
         assert!(!candidate_in_directory(&company(), "finance", "sales-c", None, Some(&filter)));
     }
 
+    // 验证搜索长度、分页边界、续页版本、下级展开的前置条件及默认分页。
     #[test]
     fn list_request_rejects_bounds_and_descendant_without_org() {
         assert!(DirectoryListRequest::parse(Some(" 张三 "), None, None, &[], false, Some("  ")).is_ok());

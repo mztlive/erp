@@ -15,10 +15,12 @@ use crate::entity::authorization_bundle::{
 use crate::entity::rbac::PermissionSet;
 use crate::{AuthorizationService, Error, Permission, RoleId};
 
+// 构造空的当前版本授权文件，供各写入用例添加实际文档内容。
 fn document() -> PolicyDocument {
     PolicyDocument { version: PolicyVersion::V1, roles: vec![], bindings: vec![], data_scopes: vec![] }
 }
 
+// 按指定动作配置角色资格和公司范围，导出使用组织读取，预览和应用使用组织变更。
 fn configure(identity: &Identity, permission: &Permission, grants: Vec<(String, Vec<Permission>)>) {
     identity.state.lock().unwrap().grants = grants;
     let source = if permission == &access_control::POLICY_BUNDLE_EXPORT {
@@ -37,6 +39,7 @@ fn configure(identity: &Identity, permission: &Permission, grants: Vec<(String, 
         .extend([((permission.clone(), source.clone()), scope.clone()), ((source.clone(), source), scope)]);
 }
 
+// 对同一授权文件验证预览与应用，并逐项排除缺权限及跨角色补权限。
 async fn check_document_requirements(
     service: &AuthorizationService,
     identity: &Identity,
@@ -78,6 +81,7 @@ async fn check_document_requirements(
     }
 }
 
+// 授权文件按实际涉及的写入类型检查完整同角色资格。
 #[tokio::test]
 async fn documents_require_the_entire_same_role_combination_for_their_actual_write_kinds() {
     let identity = Arc::new(Identity::default());
@@ -122,6 +126,7 @@ async fn documents_require_the_entire_same_role_combination_for_their_actual_wri
     check_document_requirements(&service, &identity, &document, &required).await;
 }
 
+// 授权文件导出和公开操作都遵守同一固定公司范围。
 #[tokio::test]
 async fn export_and_public_operations_share_the_fixed_company_boundary() {
     let identity = Arc::new(Identity::default());
@@ -186,6 +191,7 @@ async fn export_and_public_operations_share_the_fixed_company_boundary() {
     ));
 }
 
+// 预览和应用使用相同授权目标，并生成相同的审查哈希。
 #[tokio::test]
 async fn preview_and_apply_preserve_the_same_authorized_target_and_review_hash() {
     let identity = Arc::new(Identity::default());

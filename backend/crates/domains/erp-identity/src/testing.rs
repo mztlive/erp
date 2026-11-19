@@ -6,13 +6,7 @@ use crate::entity::authorization::ObjectFacts;
 use crate::service::authorization::fixed;
 use crate::{AccessMapping, AuthorizationService, Permission, Result};
 
-/// 用固定身份、范围和对象事实执行真实授权服务。
-/// 不连接数据库、不替换授权规则的测试服务；仅声明的绑定可供测试使用。
-///
-/// 查询 Mapping 的模型、资源或固定规则能力不匹配时拒绝构造。
-///
-/// permissions 为同一启用角色授予的具体权限；scope、objects 为固定内存事实。
-/// mappings 为本次查询使用的实际 Mapping；未登记的查询保持拒绝。
+/// 从固定的同角色权限、人员范围和对象事实构造真实授权服务，供测试在内存中验证生产规则。查询使用显式传入的映射；模型、资源或能力不符时构造失败，未绑定查询保持拒绝。
 pub fn fixed_authorization(
     permissions: &[Permission],
     scope: ResolvedScope,
@@ -22,19 +16,12 @@ pub fn fixed_authorization(
     fixed::authorization(permissions, scope, objects, mappings)
 }
 
-/// 构造始终拒绝取证的测试授权服务。
-/// 用于验证输入拒绝和身份故障先于业务读取；全部查询具有不可执行的静态模型描述。
-///
-/// 有效查询进入身份设施后返回测试设施不可用错误；映射转换始终拒绝，不连接数据库。
+/// 提供静态查询模型和始终取证失败的身份设施，供测试验证参数、身份错误先于业务读取。该服务无需数据库，映射转换也会拒绝执行。
 pub fn unavailable_authorization() -> Arc<AuthorizationService> {
     AuthorizationService::unavailable_for_test()
 }
 
-/// 构造缺少查询绑定的测试授权服务。
-/// 没有Facts和Mapping的测试实例，用于验证查询绑定缺失的拒绝顺序。
-///
-/// 有效查询在身份取证前返回缺少Mapping错误；其他取证返回测试设施不可用错误，不连接数据库。
-/// 此入口只在test-support feature提供，禁止用于生产装配。
+/// 创建缺少事实端口和查询映射的服务，用于验证合法查询在身份取证前报告绑定缺失。其余取证会报告测试设施不可用；此入口仅供 `test-support` 使用。
 pub fn unbound_authorization() -> Arc<AuthorizationService> {
     AuthorizationService::unbound_for_test()
 }

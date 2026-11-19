@@ -11,59 +11,84 @@ use crate::entity::access_control::person_scope::{PersonDataScope, PersonScopeEx
 use crate::entity::role::ROOT_ROLE_ID;
 use crate::{Error, Permission, PermissionSet, Result, Role, RoleId};
 
+/// 同一快照中的角色实体、直接权限和直接绑定影响面，供规划及导出使用。
 #[derive(Clone, Serialize)]
 pub(crate) struct PolicyRoleState {
+    /// 持久化角色实体，提供名称、状态和更新所需版本。
     pub role: Role,
+    /// 角色直接授予的功能权限，保留精确权限和通配模式。
     pub permissions: Vec<Permission>,
+    /// 直接绑定此角色的后台账号 ID，供预览显示权限变更的影响面。
     pub affected_user_ids: Vec<String>,
 }
 
+/// 计划涉及的后台账号版本及直接角色分组快照。
 #[derive(Clone, Serialize)]
 pub(crate) struct PolicyUserState {
+    /// 账号版本，参与审核摘要以识别预览后的账号变更。
     pub version: u64,
+    /// 当前直接绑定的角色 ID，排序去重后用于差异比较。
     pub role_ids: Vec<RoleId>,
 }
 
+/// 服务端读出的目标授权快照，用于计算差异并约束预览可应用的事实。
 #[derive(Default, Serialize)]
 pub(crate) struct PolicyFacts {
+    /// 按角色 ID 索引的现存角色及直接授权事实。
     pub roles: BTreeMap<String, PolicyRoleState>,
+    /// 按后台账号 ID 索引的目标人员事实。
     pub users: BTreeMap<String, PolicyUserState>,
+    /// 从快照读取的逐人员、资源和动作范围记录，包含旧表达式。
     pub scopes: Vec<PersonDataScope>,
 }
 
+/// 有实际差异的角色创建或更新，供应用事务写入。
 pub(crate) struct PlannedRole {
+    /// 文件中的角色声明，提供稳定 ID 和目标名称。
     pub declaration: PolicyRole,
+    /// 按声明模式计算并校验后的完整直接权限集合。
     pub permissions: Vec<Permission>,
+    /// 当前角色实体；为空表示新建。
     pub existing: Option<Role>,
 }
 
+/// 有实际差异的单个后台人员直接角色绑定更新。
 pub(crate) struct PlannedBinding {
+    /// 需要写入角色分组的后台账号 ID。
     pub user_id: String,
+    /// 该账号在批次完成后应持有的完整直接角色集合。
     pub role_ids: Vec<RoleId>,
 }
 
+/// 有实际差异的单个人员、资源和动作范围写入。
 pub(crate) struct PlannedScope {
+    /// 配置归属的后台账号 ID。
     pub user_id: String,
+    /// 范围适用的业务资源代码。
     pub resource: String,
+    /// 本次替换的可配置动作。
     pub action: String,
+    /// 本次持久化的规范化追加范围表达式，允许空追加项。
     pub expression: PersonScopeExpression,
+    /// 当前范围记录及其版本；为空表示需要新建。
     pub existing: Option<PersonDataScope>,
 }
 
+/// 预览和应用共用的授权差异及写入步骤，按角色、绑定、范围的依赖顺序执行。
 pub(crate) struct PolicyPlan {
+    /// 供审核的规范化配置、逐项差异、规则说明和快照摘要。
     pub preview: PolicyPreview,
+    /// 需创建或更新的角色及其最终直接权限。
     pub roles: Vec<PlannedRole>,
+    /// 需更新的人员直接角色绑定。
     pub bindings: Vec<PlannedBinding>,
+    /// 需创建或替换的逐动作人员范围。
     pub scopes: Vec<PlannedScope>,
 }
 
 impl PolicyPlan {
-    // 从同一快照编译最终授权；操作人权限始终取批次开始前的事实。
-    // 可审核差异及服务端使用的写入计划。
-    //
-    // 越权、无效引用、范围不合规或摘要生成失败时拒绝。
-    //
-    // document 为规范化文件，facts 为目标事实，其余参数为冻结的操作人及版本。
+    /// 从规范化文件和同一快照的目标事实生成预览及写入计划，操作人的管理上限固定为批次前权限。
+    /// 审核摘要绑定操作人、策略及授权版本、文件、目标事实和预览内容；越权、无效引用、范围不合规或摘要生成失败时拒绝。
     pub(crate) fn build(
         document: PolicyDocument,
         facts: &PolicyFacts,
@@ -119,7 +144,7 @@ impl PolicyPlan {
         Ok(plan)
     }
 
-    // 规划角色新建或更新时同时检查目标原权限与计划权限，不允许操作人管理超出自身资格的角色。
+    // 规划角色名称和直接权限的变更；现存角色同时检查原权限和结果权限，新角色要求 `policy-` 前缀。
     fn role(&mut self, requested: &PolicyRole, facts: &PolicyFacts, actor: &PermissionSet) -> Result<()> {
         let current = facts.roles.get(requested.id.as_str());
         if let Some(current) = current {
@@ -155,7 +180,7 @@ impl PolicyPlan {
         Ok(())
     }
 
-    // 按本批结束时的角色权限计算绑定变更；仍检查目标原有权限上限，不能先缩权再绕过管理检查。
+    // 规划绑定时同时检查原角色权限和本批最终角色权限，防止通过同批缩权绕过操作人的管理上限。
     fn bindings(
         &mut self,
         document: &PolicyDocument,
@@ -194,7 +219,7 @@ impl PolicyPlan {
         Ok(())
     }
 
-    // 为选定动作规划范围替换之前，按该批次最终角色及绑定验证完整动作资格。
+    // 按本批最终绑定及权限检查动作资格，核对旧范围转换许可，仅为有差异的动作安排写入。
     fn scope(&mut self, scope: &PolicyScope, facts: &PolicyFacts) -> Result<()> {
         let user = facts.users.get(&scope.user_id).ok_or_else(|| Error::NotFound("人员不存在".into()))?;
         let role_ids = self
@@ -250,7 +275,7 @@ impl PolicyPlan {
         Ok(())
     }
 
-    // 解析规划后的直接角色权限；角色必须已存在或确在本批创建，未解析引用不能继续生成计划。
+    // 优先取批次规划后的直接权限，否则读取现存有效普通角色；无法解析的引用报错。
     fn role_permissions<'a>(&'a self, id: &str, facts: &'a PolicyFacts) -> Result<&'a [Permission]> {
         if let Some(role) = self.roles.iter().find(|r| r.declaration.id.as_str() == id) {
             return Ok(&role.permissions);
@@ -261,7 +286,7 @@ impl PolicyPlan {
     }
 }
 
-// 生成文件预览说明时列出隐含本人基础和岗位目录初始化需求，便于管理员审查并非文件显式写入的事项。
+// 为预览说明未列条目的保留规则、岗位目录的首次初始化以及清空各动作追加范围后的本人基础。
 fn policy_notes(document: &PolicyDocument) -> Result<Vec<String>> {
     let mut notes = vec![
         "文件未列对象保持原配置；replace 仅替换条目明确指定的集合。".into(),
@@ -281,7 +306,7 @@ fn policy_notes(document: &PolicyDocument) -> Result<Vec<String>> {
     Ok(notes)
 }
 
-// 按文件模式组合当前值与导入值；合并只增加，替换使用文件中完整的显式集合。
+// 合并时取现有值和文件值的并集，替换时仅取文件值；结果统一排序去重。
 fn merge<T: Clone + Ord>(mode: PolicyMode, current: &[T], requested: &[T]) -> Vec<T> {
     let mut values = if mode == PolicyMode::Merge { current.to_vec() } else { vec![] };
     values.extend_from_slice(requested);
@@ -290,12 +315,7 @@ fn merge<T: Clone + Ord>(mode: PolicyMode, current: &[T], requested: &[T]) -> Ve
     values
 }
 
-// 文件入口不得恢复或认领系统及失效角色。
-// 角色为有效普通角色时成功。
-//
-// 系统、停用或删除角色返回禁止访问。
-//
-// role 为持久化角色事实。
+/// 文件规划和导出只接受有效普通角色；持久化角色为系统、停用或已删除状态时返回禁止访问。
 pub(crate) fn ensure_role(role: &Role) -> Result<()> {
     if role.base.id == ROOT_ROLE_ID || role.system || role.disabled || role.base.is_deleted() {
         return Err(Error::Forbidden("策略文件不能管理系统、停用或已删除角色".into()));
@@ -303,7 +323,7 @@ pub(crate) fn ensure_role(role: &Role) -> Result<()> {
     Ok(())
 }
 
-// 审核计划写入的权限集合是否受授予上限覆盖，使用 `PermissionSet` 已有的权限覆盖语义。
+// 逐项用操作人的权限集合校验管理上限，沿用 `PermissionSet` 的精确及通配覆盖规则。
 fn ensure_subset(actor: &PermissionSet, required: &[Permission]) -> Result<()> {
     if !required.iter().all(|permission| actor.covers_one(permission)) {
         return Err(Error::Forbidden("不能管理或授予超出自身权限的角色".into()));
@@ -320,7 +340,7 @@ mod tests {
     use crate::entity::authorization_bundle::PolicyVersion;
     use crate::{RoleData, RoleId};
 
-    // 以固定元数据创建测试角色，使审核摘要断言不随测试时钟变化。
+    // 用固定元数据和指定权限构造测试角色，确保审核摘要不受时钟影响。
     fn role(id: &str, permissions: &[&str]) -> PolicyRoleState {
         let mut role = Role::new(RoleId::parse(id).unwrap(), RoleData::new("只读岗位")).unwrap();
         role.base = BaseModel::fake();
@@ -332,6 +352,7 @@ mod tests {
         }
     }
 
+    // 提供绑定只读角色的后台人员快照，初始无显式人员范围。
     fn facts() -> PolicyFacts {
         let mut facts = PolicyFacts::default();
         facts.roles.insert("reader".into(), role("reader", &["sales_order:list", "sales_order:detail"]));
@@ -342,10 +363,12 @@ mod tests {
         facts
     }
 
+    // 构造无管理条目的 1.0 文件，供测试逐项加入变更。
     fn document() -> PolicyDocument {
         PolicyDocument { version: PolicyVersion::V1, roles: vec![], bindings: vec![], data_scopes: vec![] }
     }
 
+    // 为指定销售单动作构造替换条目，各动作共享东区组织追加范围。
     fn scope(actions: &[&str]) -> PolicyScope {
         serde_json::from_value(json!({
             "user_id":"alice", "resource":"sales_order", "actions":actions, "mode":"replace",
@@ -357,6 +380,7 @@ mod tests {
         .unwrap()
     }
 
+    // 以固定操作人、策略版本及授权版本规划规范化文件，默认给予操作人全量权限。
     fn plan(document: PolicyDocument, facts: &PolicyFacts) -> Result<PolicyPlan> {
         PolicyPlan::build(
             document.normalized()?,
@@ -368,6 +392,7 @@ mod tests {
         )
     }
 
+    // 验证空集合、重复权限和同级通配可通过上限校验，跨资源或更宽通配被拒绝。
     #[test]
     fn permission_ceiling_keeps_empty_duplicate_and_wildcard_semantics() {
         let actor = PermissionSet::new([Permission::parse("sales_order:*").unwrap()]);
@@ -383,6 +408,7 @@ mod tests {
         }
     }
 
+    // 验证同批新建角色、绑定账号后，范围规划能使用新增角色授予的动作资格。
     #[test]
     fn new_role_binding_and_scope_use_final_batch_qualification() {
         let mut facts = facts();
@@ -405,6 +431,7 @@ mod tests {
         assert_eq!(plan.scopes[0].expression.alternatives[0][0].scope_targets, ["east"]);
     }
 
+    // 验证替换仅收回指定角色的权限并展示受影响账号，合并同一子集没有差异。
     #[test]
     fn replacing_permissions_revokes_only_selected_role_and_exposes_affected_users() {
         let mut value = document();
@@ -423,6 +450,7 @@ mod tests {
         assert!(super::tests::plan(value, &facts()).unwrap().preview.changes.is_empty());
     }
 
+    // 验证追加人员范围无法补足角色缺失的更新动作资格。
     #[test]
     fn adding_scope_cannot_grant_a_missing_action() {
         let mut value = document();
@@ -430,6 +458,7 @@ mod tests {
         assert!(matches!(plan(value, &facts()), Err(Error::ValidationError(_))));
     }
 
+    // 验证同批已收回的动作资格无法继续用于范围替换。
     #[test]
     fn same_batch_action_revocation_cannot_be_masked_by_old_permissions() {
         let mut value = document();
@@ -443,6 +472,7 @@ mod tests {
         assert!(matches!(plan(value, &facts()), Err(Error::ValidationError(_))));
     }
 
+    // 验证操作人即使要清空角色权限，仍须覆盖角色变更前的全部权限。
     #[test]
     fn narrow_operator_cannot_reduce_then_manage_a_stronger_role() {
         let mut value = document();
@@ -463,6 +493,7 @@ mod tests {
         assert!(matches!(result, Err(Error::Forbidden(_))));
     }
 
+    // 验证待替换的旧绑定引用系统、停用、删除或缺失角色时，计划拒绝生成。
     #[test]
     fn system_disabled_deleted_and_missing_roles_are_not_restored_or_bound() {
         for state in ["system", "disabled", "deleted", "missing"] {
@@ -488,6 +519,7 @@ mod tests {
         }
     }
 
+    // 验证重设相同范围无差异，清空追加项仍保留追加模型及其本人基础规则。
     #[test]
     fn repeated_desired_scope_is_noop_and_clearing_keeps_additive_base() {
         let mut value = document();
@@ -506,6 +538,7 @@ mod tests {
         assert!(cleared.bindings.is_empty());
     }
 
+    // 验证旧完整表达式须显式确认转换，且计划仅写入选定的列表动作。
     #[test]
     fn legacy_conversion_requires_explicit_opt_in_and_preserves_unselected_actions() {
         let mut facts = facts();
@@ -522,6 +555,7 @@ mod tests {
         assert_eq!(result.scopes[0].action, "list");
     }
 
+    // 验证相同输入的审核摘要稳定，操作人、策略版本、授权版本和目标账号版本变化会改变摘要。
     #[test]
     fn review_hash_changes_with_actor_version_payload_and_target_facts() {
         let mut value = document();
@@ -544,6 +578,7 @@ mod tests {
         assert_ne!(first, plan(value, &changed).unwrap().preview.review_hash);
     }
 
+    // 验证重导显式配置无差异，无法无损表达的旧完整范围拒绝导出。
     #[test]
     fn export_and_reimport_keep_current_explicit_authorization_unchanged() {
         let mut facts = facts();
@@ -558,6 +593,7 @@ mod tests {
         assert!(matches!(facts.export(4), Err(Error::ValidationError(_))));
     }
 
+    // 验证已丧失动作资格的范围阻止导出，原有角色权限保持不变。
     #[test]
     fn export_refuses_dormant_scopes_instead_of_implicitly_restoring_action_permission() {
         let mut facts = facts();
@@ -568,6 +604,7 @@ mod tests {
         );
     }
 
+    // 验证空替换清除指定角色的权限和人员绑定，未列出的人员范围保持原样。
     #[test]
     fn empty_replacements_revoke_bindings_and_permissions_without_touching_omitted_scopes() {
         let value = serde_json::from_value(json!({
@@ -586,6 +623,7 @@ mod tests {
         assert_eq!(result.preview.changes.len(), 2);
     }
 
+    // 验证重导空追加范围可清除导出之后新添的条款，并保留追加模型。
     #[test]
     fn exported_default_scopes_revoke_grants_added_after_export() {
         let mut facts = facts();
@@ -600,6 +638,7 @@ mod tests {
         assert!(restored.scopes[0].expression.alternatives.is_empty());
     }
 
+    // 验证条款和目标重排或重复时，规范化后的重导计划无差异。
     #[test]
     fn export_reimport_ignores_grant_and_target_order_and_duplicates() {
         let mut facts = facts();
@@ -615,6 +654,7 @@ mod tests {
         assert!(plan(exported.document, &facts).unwrap().preview.changes.is_empty());
     }
 
+    // 验证无本人基础的库存动作导出空追加项，任务和来源继承动作省略，重导无差异。
     #[test]
     fn export_keeps_empty_warehouse_scope_and_omits_task_and_source_inherited_scopes() {
         let mut facts = facts();
@@ -631,6 +671,7 @@ mod tests {
         assert!(plan(exported.document, &facts).unwrap().preview.changes.is_empty());
     }
 
+    // 验证共享资源保留角色权限，已退役范围仅记入说明，文件无法重新启用该范围。
     #[test]
     fn shared_scope_export_keeps_role_permissions_and_retires_old_limits() {
         let mut facts = facts();

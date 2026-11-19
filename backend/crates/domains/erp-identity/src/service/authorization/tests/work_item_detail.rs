@@ -21,6 +21,7 @@ use crate::ports::AccessFactsPort;
 use crate::repository::authorization::fixtures::execute;
 use crate::{AuthorizationService, CompiledAccess, Error, Result};
 
+// 将提供的身份和任务事实接入完整服务，用于对照列表与单条详情。
 fn service(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     let mut builder = complete();
     builder.facilities = identity;
@@ -28,11 +29,13 @@ fn service(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     builder.build().unwrap()
 }
 
+// 为详情用例配置所需角色授权，比较一般读取和管理路径。
 fn grant(identity: &Identity, roles: &[(&str, &[Permission])]) {
     identity.state.lock().unwrap().grants =
         roles.iter().map(|(role, required)| ((*role).into(), required.to_vec())).collect();
 }
 
+// 构造返工任务和其真实订单来源，可选择保留当前用户的历史参与。
 fn order_task(resource: &str, owner: &str, history: bool) -> ObjectFacts {
     let mut source = object(resource, "order", owner);
     if history {
@@ -50,6 +53,7 @@ fn order_task(resource: &str, owner: &str, history: bool) -> ObjectFacts {
     }
 }
 
+// 在给定任务行和来源样本上执行编译后的详情管道，返回可见任务标识。
 fn rows(
     access: &CompiledAccess,
     tasks: Vec<Document>,
@@ -61,6 +65,7 @@ fn rows(
         .collect()
 }
 
+// 任务详情列表与单条授权使用同一订单范围，不额外要求订单菜单权限。
 #[tokio::test]
 async fn detail_order_scope_matches_require_without_adding_order_menu_qualification() {
     for (resource, key, history_allowed) in
@@ -95,6 +100,7 @@ async fn detail_order_scope_matches_require_without_adding_order_menu_qualificat
     }
 }
 
+// 即使任务范围达到公司，采购历史补权和个人限缩仍按原规则判断。
 #[tokio::test]
 async fn company_task_scope_keeps_restricted_purchase_history_and_personal_limit() {
     for (company_source, owner, history, allowed) in [
@@ -155,6 +161,7 @@ async fn company_task_scope_keeps_restricted_purchase_history_and_personal_limit
     }
 }
 
+// 缺少订单来源的任务不能出现在详情查询中，但仍可出现在原任务列表。
 #[tokio::test]
 async fn missing_order_source_rejects_detail_without_filtering_the_original_list() {
     let identity = Arc::new(Identity::default());
@@ -171,6 +178,7 @@ async fn missing_order_source_rejects_detail_without_filtering_the_original_list
     service.validate(&detail, &mut executor).await.unwrap();
 }
 
+// 已有供应商读取资格可查看门户申请任务详情，但不会因此看见供给更新任务。
 #[tokio::test]
 async fn portal_detail_requires_original_supplier_read_without_adding_review_permissions() {
     let identity = Arc::new(Identity::default());
@@ -198,6 +206,7 @@ async fn portal_detail_requires_original_supplier_read_without_adding_review_per
     service.validate(&access, &mut executor).await.unwrap();
 }
 
+// 审批任务详情保留终态所有者的读取路径，裁决路径必须满足完整资格。
 #[tokio::test]
 async fn approval_detail_preserves_owner_terminal_and_complete_decision_qualification() {
     for can_decide in [false, true] {
@@ -224,6 +233,7 @@ async fn approval_detail_preserves_owner_terminal_and_complete_decision_qualific
     }
 }
 
+// 审批管理者读取任务详情须符合真实审批类型，且能完整读取来源。
 #[tokio::test]
 async fn approval_manager_detail_requires_the_real_type_and_complete_source_range() {
     for (manager, source_owner) in [(true, "user"), (false, "user"), (true, "other")] {
@@ -269,6 +279,7 @@ async fn approval_manager_detail_requires_the_real_type_and_complete_source_rang
     }
 }
 
+// 详情来源准备阶段产生的到期时间要纳入原读取凭证并在交付时检查。
 #[tokio::test]
 async fn detail_source_preparation_expiry_is_part_of_the_original_delivery_proof() {
     let mut builder = complete();
@@ -293,14 +304,20 @@ async fn detail_source_preparation_expiry_is_part_of_the_original_delivery_proof
     assert!(matches!(service.validate(&access, &mut executor).await, Err(Error::ConflictError(_))));
 }
 
+// 在审批任务详情复验时提供可能已变化的审批来源。
 struct ApprovalFacts {
+    // 首次读取用的审批实例及来源。
     original: ObjectFacts,
+    // 后续读取用的实例事实，用于模拟来源改动或缺失。
     current: ObjectFacts,
+    // 区分第一次和后续事实读取，并验证快照不重查。
     calls: AtomicU64,
 }
 
+// 按调用次序提供不同版本的审批事实，以对比快照与非事务读取。
 #[async_trait]
 impl AccessFactsPort for ApprovalFacts {
+    // 首次读取返回原始实例，其后返回当前实例。
     async fn load(
         &self,
         _: &AccessContext,
@@ -312,6 +329,7 @@ impl AccessFactsPort for ApprovalFacts {
     }
 }
 
+// 装配管理他人审批任务的角色、精确任务及可变化的审批来源。
 fn approval_manager_service(current: ObjectFacts) -> (AuthorizationService, Arc<ApprovalFacts>) {
     let identity = Arc::new(Identity::default());
     grant(
@@ -356,6 +374,7 @@ fn approval_manager_service(current: ObjectFacts) -> (AuthorizationService, Arc<
     (builder.build().unwrap(), sources)
 }
 
+// 构造管理路径的基准销售审批实例，其真实销售单归当前账号。
 fn management_instance() -> ObjectFacts {
     ObjectFacts {
         subject_type: FactValue::Known("sales_order".into()),
@@ -371,6 +390,7 @@ fn management_instance() -> ObjectFacts {
     }
 }
 
+// 非事务读取审批详情在成功前复验完整管理来源，归属、版本或缺失变化均不能通过。
 #[tokio::test]
 async fn approval_detail_revalidates_full_management_source_before_nontransaction_success() {
     for change in ["unchanged", "owner", "version", "missing"] {
@@ -404,6 +424,7 @@ async fn approval_detail_revalidates_full_management_source_before_nontransactio
     }
 }
 
+// 快照内读取审批详情复用原管理事实，不重新加载已变化的来源。
 #[tokio::test]
 async fn approval_detail_keeps_management_facts_in_the_original_snapshot_without_rereading() {
     let (service, facts) = approval_manager_service(management_instance());

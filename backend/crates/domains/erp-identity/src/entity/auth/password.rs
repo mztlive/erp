@@ -1,11 +1,7 @@
 use validator::ValidationError;
 
-// 校验管理员新密码的字符长度，保留空白与原始内容。
-// 字符数位于 6–32 时返回成功。
-//
-// 长度不合法时返回不含密码内容的字段校验错误。
-//
-// password 为待设置的明文密码。
+/// 设置管理员密码前按原文计算字符数，首尾空白也计入 6–32 字符的长度限制。
+/// 越界时返回不含密码内容的字段校验错误。
 pub(crate) fn validate_admin_password(password: &str) -> Result<(), ValidationError> {
     if (6..=32).contains(&password.chars().count()) {
         return Ok(());
@@ -17,6 +13,7 @@ pub(crate) fn validate_admin_password(password: &str) -> Result<(), ValidationEr
 mod tests {
     use super::validate_admin_password;
 
+    // 验证中英文按字符数应用相同边界，首尾空格计入长度，空密码被拒绝。
     #[test]
     fn password_length_counts_characters_and_preserves_spaces() {
         for (length, valid) in [(5, false), (6, true), (32, true), (33, false)] {

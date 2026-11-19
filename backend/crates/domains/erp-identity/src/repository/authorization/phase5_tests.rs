@@ -26,14 +26,21 @@ use crate::service::authorization::fixed;
 use crate::service::authorization::rules::sources::{Output, scoped_condition};
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
+// 扩展通用测试映射，用于覆盖固定阶段、时间边界和根记录约束。
 struct DecoratedMapping {
+    // 提供基础模型、条件及来源的测试映射实例。
     inner: Arc<Mapping>,
+    // 可在测试中变更的固定阶段，用于验证绑定后不可篡改。
     fixed: Mutex<Vec<Document>>,
+    // 测试设置的静态有效期截止时点。
     deadline: Option<Instant>,
+    // 启用时让根记录条件依赖当前入口权限。
     entry_sensitive: bool,
+    // 启用时要求根记录的来源完整性标记为真。
     require_integrity: bool,
 }
 impl DecoratedMapping {
+    // 以基础映射建立包装，默认不添加固定阶段、期限或附加记录限制。
     fn new(inner: Arc<Mapping>) -> Self {
         Self {
             inner,
@@ -45,24 +52,31 @@ impl DecoratedMapping {
     }
 }
 impl AccessMapping for DecoratedMapping {
+    // 保留基础映射的原模型描述，让包装只改变被测额外行为。
     fn model(&self) -> &QueryModel {
         self.inner.model()
     }
+    // 返回测试给定的固定准备阶段，允许测试模拟绑定后的描述变化。
     fn stages(&self) -> Vec<Document> {
         self.fixed.lock().unwrap().clone()
     }
+    // 将配置的静态截止时点提供给查询编译器。
     fn valid_until(&self, _: &AccessContext) -> Option<Instant> {
         self.deadline
     }
+    // 保留基础映射登记的来源实例及关系。
     fn relations(&self) -> BTreeMap<RelationKey, Arc<dyn AccessMapping>> {
         self.inner.relations()
     }
+    // 沿用基础映射的动态准备开关和实现。
     fn preparation(&self) -> Option<&dyn MappingPreparation> {
         self.inner.preparation()
     }
+    // 按原上下文和事实委托基础映射生成主键表达式。
     fn key(&self, context: &AccessContext, facts: Option<&MappingFacts>) -> Result<Bson> {
         self.inner.key(context, facts)
     }
+    // 按测试开关追加入口匹配或来源完整性检查，未启用时沿用基础记录条件。
     fn records(&self, context: &AccessContext, facts: Option<&MappingFacts>) -> Result<QueryFragment> {
         if self.entry_sensitive {
             return Ok(QueryFragment::Match(doc! {"deleted_at":0,"entry":context.permission.to_string()}));
@@ -72,6 +86,7 @@ impl AccessMapping for DecoratedMapping {
         }
         self.inner.records(context, facts)
     }
+    // 用基础映射转换事实，避免包装引入额外授权谓词。
     fn predicate(
         &self,
         fact: &AccessFact,
@@ -80,6 +95,7 @@ impl AccessMapping for DecoratedMapping {
     ) -> Result<QueryFragment> {
         self.inner.predicate(fact, context, facts)
     }
+    // 保留基础映射解析出的原始来源引用及实例。
     fn relation(
         &self,
         relation: &RelationKey,
@@ -90,6 +106,7 @@ impl AccessMapping for DecoratedMapping {
     }
 }
 
+// 为测试账号组装绑定原执行边界的证明，可附独立整账规则。
 fn proof(
     permission: Permission,
     rule: AccessRule,
@@ -118,6 +135,7 @@ fn proof(
         },
     }
 }
+// 冻结测试映射后调用真实编译器，返回预期成功的授权计划。
 async fn plan(
     permission: Permission,
     rule: AccessRule,
@@ -130,12 +148,15 @@ async fn plan(
     let frozen = FrozenMapping::freeze(mapping, &mut vec![], 0).unwrap();
     compile(proof, QualifiedPermissions::test_grants(&[]), &frozen, executor).await.unwrap()
 }
+// 提取样本投影中的记录 ID，便于断言查询成员。
 fn ids(rows: Vec<Document>) -> Vec<String> {
     rows.into_iter().map(|row| row.get_str("id").unwrap().to_string()).collect()
 }
+// 构造指定负责人及 ID 的未删除业务来源记录。
 fn row(id: &str, owner: &str) -> Document {
     doc! {"id":id,"owner":owner,"deleted_at":0}
 }
+// 构造销售来源任一命中的测试规则，用于受限根视图。
 fn relation(rule: AccessRule) -> AccessRule {
     AccessRule::Related {
         relation: RelationKey::parse("sales_source").unwrap(),
@@ -144,6 +165,7 @@ fn relation(rule: AccessRule) -> AccessRule {
         rule: Box::new(rule),
     }
 }
+// 以销售、采购和结算来源的本人范围生成收款份额与整账规则，按开关模拟完整金额资格。
 fn receipt_rules(ledger: bool) -> (AccessRule, AccessRule) {
     let permissions = if ledger {
         vec![receivable::CUSTOMER_RECEIPT_LIST, policy_permission::FINANCE_LEDGER_READ]
@@ -168,6 +190,7 @@ fn receipt_rules(ledger: bool) -> (AccessRule, AccessRule) {
     )
 }
 
+// 验证收款份额只保留本人且未删除的来源，且不授予整账读取或跨阶段复用。
 #[tokio::test]
 async fn source_portions_keep_only_owned_live_sources_and_never_imply_whole_ledger() {
     let mut executor = ReadExecutor::default();
@@ -197,6 +220,7 @@ async fn source_portions_keep_only_owned_live_sources_and_never_imply_whole_ledg
     assert!(matches!(plan.ensure_current(&mut executor), Err(Error::ValidationError(_))));
 }
 
+// 验证整账要求所有真实引用均可读，同时保留确实没有分摊来源的记录。
 #[tokio::test]
 async fn whole_ledger_requires_every_reference_and_keeps_real_zero_allocation_roots() {
     let mut executor = ReadExecutor::default();
@@ -218,6 +242,7 @@ async fn whole_ledger_requires_every_reference_and_keeps_real_zero_allocation_ro
     assert_eq!(ids(execute(roots, plan.stages(), &sources, &doc! {})), ["complete", "foreign", "missing"]);
 }
 
+// 验证来源满足规则也不能绕过根记录的存在性及完整性要求。
 #[tokio::test]
 async fn valid_source_conditions_do_not_bypass_root_record_integrity() {
     let mut executor = ReadExecutor::default();
@@ -250,6 +275,7 @@ async fn valid_source_conditions_do_not_bypass_root_record_integrity() {
     );
 }
 
+// 验证来源子计划沿用独立入口上下文，完全相同的动态准备只执行一次并可复验。
 #[tokio::test]
 async fn independent_source_plan_uses_its_entry_context_and_reuses_exact_preparation() {
     let mut executor = ReadExecutor::default();
@@ -293,6 +319,7 @@ async fn independent_source_plan_uses_its_entry_context_and_reuses_exact_prepara
     assert!(matches!(plan.dependencies[0].validate(&mut executor).await, Err(Error::ConflictError(_))));
 }
 
+// 验证整账复用根过滤后仍保留相同摘要、动态依赖和最早截止时间。
 #[tokio::test]
 async fn whole_root_reuse_keeps_dynamic_dependencies_and_deadline() {
     let permission = receivable::CUSTOMER_RECEIPT_LIST;
@@ -329,6 +356,7 @@ async fn whole_root_reuse_keeps_dynamic_dependencies_and_deadline() {
     .await;
 }
 
+// 验证静态映射不准备动态事实，声明的时限仍会令凭证到期。
 #[tokio::test]
 async fn static_deadline_needs_no_preparation_and_expires_the_compiled_plan() {
     let deadline = Instant::from_unix_secs(4_102_444_800);
@@ -367,6 +395,7 @@ async fn static_deadline_needs_no_preparation_and_expires_the_compiled_plan() {
     .await;
 }
 
+// 验证动态事实或有效期变化会阻止交付，跨读取阶段也不能复用。
 #[tokio::test]
 async fn dynamic_deadline_and_phase_changes_reject_delivery() {
     let mut executor = ReadExecutor::default();
@@ -387,6 +416,7 @@ async fn dynamic_deadline_and_phase_changes_reject_delivery() {
     assert!(matches!(plan.ensure_current(&mut executor), Err(Error::ValidationError(_))));
 }
 
+// 验证固定准备不允许过滤、展开或截断根记录，也不允许嵌套写阶段。
 #[test]
 fn fixed_mapping_stages_reject_root_filter_expansion_and_nested_writes() {
     for stage in [
@@ -405,6 +435,7 @@ fn fixed_mapping_stages_reject_root_filter_expansion_and_nested_writes() {
     }
 }
 
+// 验证固定关联保留没有匹配来源的根记录，且绑定后不能更换阶段。
 #[tokio::test]
 async fn fixed_lookup_preserves_missing_relations_and_is_immutable_after_binding() {
     let mut executor = ReadExecutor::default();
@@ -432,6 +463,7 @@ async fn fixed_lookup_preserves_missing_relations_and_is_immutable_after_binding
     ));
 }
 
+// 验证即使 BSON 文档值相等，改变固定排序键顺序仍会被拒绝。
 #[test]
 fn frozen_lookup_rejects_sort_key_reordering() {
     let root = Arc::new(DecoratedMapping::new(mapping(&sales_order::DETAIL)));

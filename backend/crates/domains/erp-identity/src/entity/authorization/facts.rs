@@ -3,19 +3,22 @@ use std::collections::BTreeSet;
 use super::{AccessFact, ObjectFacts};
 use crate::{Error, Result};
 
-/// 业务事实是否已读取；已知空值与未读取分别表示。
+/// 对象取证的读取状态，区分未取证、确认无值和已有值。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum FactValue<T> {
+    /// 事实尚未读取；规则需要该维度时报告接入错误。
     #[default]
     Missing,
-    Known(T),
+    /// 已确认的事实，允许空值或空集合。
+    Known(
+        /// 事实端口实际读取的值。
+        T
+    ),
 }
 
 impl<T> FactValue<T> {
-    /// 取得已经读取的事实。
-    /// 已知值；值本身可以为 None 或空集合。
-    ///
-    /// 未读取事实返回接入错误，不解释为条件不匹配。
+    /// 借用已确认的事实，原样保留 `None` 或空集合。
+    /// 事实未读取时返回接入错误，调用方须据此中止判断。
     pub fn get(&self) -> Result<&T> {
         match self {
             Self::Known(value) => Ok(value),
@@ -23,14 +26,14 @@ impl<T> FactValue<T> {
         }
     }
 
-    // 当事实已读取时返回 `true`。
+    // 检查端口是否已确认该事实，已知空值也算完成取证。
     fn loaded(&self) -> bool {
         matches!(self, Self::Known(_))
     }
 }
 
 impl FactValue<Option<String>> {
-    // 判断可单值或多值表达的事实是否完整；必须恰有一种表示，另一种不能掩盖重复或不完整取证。
+    // 检查单值或多值事实的装载状态；均未读取返回 `false`，同时提供两种表示返回错误。
     fn loaded_with(&self, values: &FactValue<BTreeSet<String>>) -> Result<bool> {
         if self.loaded() && values.loaded() {
             return Err(Error::ValidationError("单值和多值授权事实不能同时提供".into()));
@@ -38,7 +41,7 @@ impl FactValue<Option<String>> {
         Ok(self.loaded() || values.loaded())
     }
 
-    // 在已证明的单值或多值对象事实中执行成员判定，供具体范围维度匹配。
+    /// 在唯一已装载的表示中查找匹配成员；已知空值不命中，缺失或双重表示报错。
     pub(crate) fn any(
         &self,
         values: &FactValue<BTreeSet<String>>,
@@ -54,7 +57,7 @@ impl FactValue<Option<String>> {
     }
 }
 
-/// 可登记的事实维度；取值由对象端口或 Mapping 提供。
+/// 规则可要求取证的维度，由对象事实端口或查询映射提供。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FactKind {
     Owner,
@@ -69,7 +72,7 @@ pub enum FactKind {
 }
 
 impl AccessFact {
-    // 取得规则节点对应的事实维度，供启动能力校验和对象事实完整性检查使用。
+    /// 提取条件所需的事实维度，供启动时校验映射能力及运行时核对取证。
     pub(crate) fn kind(&self) -> FactKind {
         match self {
             Self::Owned => FactKind::Owner,
@@ -86,7 +89,7 @@ impl AccessFact {
 }
 
 impl ObjectFacts {
-    // 执行任何与或授权分支前，先检查必需对象事实已被实际读取。即便其他分支能够放行，未读取事实仍须拒绝。
+    /// 在组合条件求值前校验所有必需维度；缺失事实即使存在其他放行分支也返回接入错误。
     pub(crate) fn require_facts(&self, required: &BTreeSet<FactKind>) -> Result<()> {
         for kind in required {
             let loaded = match kind {
@@ -129,6 +132,7 @@ mod tests {
     use crate::entity::authorization::AccessRule;
     use crate::entity::resource_access::ResourceKind;
 
+    // 验证记录读取授权无法掩盖缺失的归属事实，确认无人负责后仍可由该授权放行。
     #[test]
     fn missing_fact_is_not_known_empty_and_cannot_be_hidden_by_a_grant() {
         let mut object = ObjectFacts { resource: "sales_order".into(), id: "s".into(), ..Default::default() };
@@ -144,6 +148,7 @@ mod tests {
         assert!(!AccessRule::Fact(AccessFact::Collaborating).allows_object("u", &object, &grants).unwrap());
     }
 
+    // 验证与无条件放行取并集后，仓库事实仍须先取证。
     #[test]
     fn explicit_required_fact_survives_unconditional_union() {
         let required = AccessRule::Allow.requiring(&[FactKind::Warehouse].into());
@@ -154,6 +159,7 @@ mod tests {
         assert!(rule.allows_object("u", &object, &BTreeSet::new()).unwrap());
     }
 
+    // 验证归一化并集和交集时，无条件节点不会消除普通事实的取证错误。
     #[test]
     fn ordinary_facts_cannot_be_erased_by_allow_or_deny_normalization() {
         let missing = ObjectFacts::default();
@@ -168,6 +174,7 @@ mod tests {
         }
     }
 
+    // 验证多负责人和多组织各自任一成员匹配即可满足本维度，两个维度仍须同时成立。
     #[test]
     fn multiple_owners_and_organizations_match_any_complete_member() {
         let object = ObjectFacts {
@@ -188,6 +195,7 @@ mod tests {
         assert!(!rule.allows_object("u", &non_owner, &BTreeSet::new()).unwrap());
     }
 
+    // 验证空集合属于已知事实，且单值与多值并存或完全缺失均使取证校验失败。
     #[test]
     fn empty_multi_value_facts_are_known_but_ambiguous_representations_fail() {
         let required = [FactKind::Owner, FactKind::Organization].into();

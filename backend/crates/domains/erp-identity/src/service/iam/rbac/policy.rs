@@ -8,41 +8,24 @@ use super::{ROLE_PREFIX, subject};
 use crate::entity::{Permission, PermissionSet, Role, RoleId, RoleIdSet};
 use crate::error::{Error, Result};
 
-// 把角色 ID 拼成 Casbin 角色主体。
-// 返回 `role:` 前缀加角色 ID。
-//
-// `role_id`：不含 `role:` 前缀的角色 ID。
+/// 读写 Casbin 策略时，为未带前缀的角色 ID 加上 `role:`，与账号主体区分。
 pub(super) fn role_key(role_id: &str) -> String {
     format!("{ROLE_PREFIX}{role_id}")
 }
 
-// 读取角色直接权限，不展开继承。
-// 返回去重后的直接权限。
-//
-// 策略行无法解析为权限时返回错误。
-//
-// `enforcer`：已加载的 Casbin Enforcer。
+/// 展示角色配置或核对种子、内建角色时，从已加载的 Enforcer 读取去重后的直接权限。
+/// 继承权限不计入；策略中的权限无法解析时返回错误。
 pub(super) fn permissions_for_role(enforcer: &Enforcer, role_id: &str) -> Result<PermissionSet> {
     parse_policy_permissions(enforcer.get_permissions_for_user(&role_key(role_id), None))
 }
 
-// 读取角色的隐式权限并收成权限集。
-// 返回包含继承权限的 `PermissionSet`。
-//
-// 策略行无法解析为权限时返回错误。
-//
-// `enforcer`：已加载的 Casbin Enforcer。
+/// 计算角色的授予或管理上限时，从已加载的 Enforcer 读取包含继承在内的隐式权限集；解析失败时返回错误。
 pub(super) fn implicit_permissions_for_role(enforcer: &Enforcer, role_id: &str) -> Result<PermissionSet> {
     let policies = enforcer.get_implicit_permissions_for_user(&role_key(role_id), None);
     parse_policy_permissions(policies)
 }
 
-// 按角色收集直接权限。
-// 返回角色 ID 到直接权限的映射。
-//
-// 任一角色的策略无法解析时返回错误。
-//
-// `enforcer`：已加载的 Casbin Enforcer。
+/// 批量组装角色展示结果时，从同一 Enforcer 快照收集各角色的直接权限；任一角色权限解析失败即返回错误。
 pub(super) fn collect_role_permissions(
     enforcer: &Enforcer,
     role_ids: &[String],
@@ -50,23 +33,13 @@ pub(super) fn collect_role_permissions(
     role_ids.iter().map(|role_id| Ok((role_id.clone(), permissions_for_role(enforcer, role_id)?))).collect()
 }
 
-// 读取操作人经角色继承得到的权限集。
-// 返回操作人的隐式权限集。
-//
-// 策略行无法解析为权限时返回错误。
-//
-// `enforcer`：已加载的 Casbin Enforcer。
+/// 管理写入预检时，按操作人的身份从已加载的 Enforcer 读取经角色继承的隐式权限上限；解析失败时返回错误。
 pub(super) fn permissions_for_actor(enforcer: &Enforcer, actor: &AuditActor) -> Result<PermissionSet> {
     let policies = enforcer.get_implicit_permissions_for_user(&subject(actor.kind(), actor.id()), None);
     parse_policy_permissions(policies)
 }
 
-// 读取账号经角色继承得到的权限集。
-// 返回该账号的隐式权限集。
-//
-// 策略行无法解析为权限时返回错误。
-//
-// `enforcer`：已加载的 Casbin Enforcer。
+/// 管理目标账号前，按账号类型与 ID 从已加载的 Enforcer 读取经角色继承的当前权限；解析失败时返回错误。
 pub(super) fn permissions_for_account(
     enforcer: &Enforcer,
     account_kind: AccountKind,
@@ -76,12 +49,7 @@ pub(super) fn permissions_for_account(
     parse_policy_permissions(policies)
 }
 
-// 合并多个角色的隐式权限。
-// 返回这些角色隐式权限的并集。
-//
-// 任一角色的策略无法解析时返回错误。
-//
-// `enforcer`：已加载的 Casbin Enforcer。
+/// 校验拟分配的角色集合时，从同一 Enforcer 快照合并各角色隐式权限，供授予上限检查；任一权限解析失败即返回错误。
 pub(super) fn permissions_for_roles(
     enforcer: &Enforcer,
     role_ids: &[impl AsRef<str>],
@@ -93,12 +61,8 @@ pub(super) fn permissions_for_roles(
     Ok(PermissionSet::new(permissions))
 }
 
-// 读取账号直接绑定的角色 ID。
-// 返回去掉 `role:` 前缀的角色 ID；非角色主体被忽略。
-//
-// 持久化角色键非法或未规范化时返回错误。
-//
-// `enforcer`：已加载的 Casbin Enforcer。
+/// 查询绑定或冻结资格快照时，读取账号直接绑定的角色 ID；跳过非角色主体，移除 `role:` 前缀。
+/// 持久化角色键非法或未规范化时返回错误。
 pub(super) fn role_ids_for_account(
     enforcer: &Enforcer,
     account_kind: AccountKind,
@@ -110,12 +74,8 @@ pub(super) fn role_ids_for_account(
     .into())
 }
 
-// 批量读取同类账号的直接角色绑定。
-// 返回账号 ID 到角色 ID 列表的映射；未绑定的账号对应空列表。
-//
-// 持久化角色键非法或未规范化时返回错误。
-//
-// `enforcer`：已加载的 Casbin Enforcer。
+/// 批量查询同类账号时，从同一 Enforcer 快照按账号收集直接角色 ID；无绑定的账号对应空列表。
+/// 持久化角色键非法或未规范化时返回错误。
 pub(super) fn collect_role_ids(
     enforcer: &Enforcer,
     account_kind: AccountKind,
@@ -127,12 +87,8 @@ pub(super) fn collect_role_ids(
         .collect()
 }
 
-// 把 Casbin 策略行解析为去重后的权限。
-// 返回可解析行组成的权限列表；列数不足的行被跳过。
-//
-// 资源或动作无法组成合法权限时返回错误。
-//
-// `policies`：Casbin 策略行，列至少包含主体、资源、动作。
+/// 读取 Casbin 权限时，将恰有主体、资源、动作三列的策略行解析为去重权限集，其余行跳过。
+/// 资源和动作无法组成合法权限时返回错误。
 pub(super) fn parse_policy_permissions(policies: Vec<Vec<String>>) -> Result<PermissionSet> {
     let mut permissions = Vec::new();
     for policy in policies {
@@ -144,10 +100,7 @@ pub(super) fn parse_policy_permissions(policies: Vec<Vec<String>>) -> Result<Per
     Ok(PermissionSet::new(permissions))
 }
 
-// 把权限展开为 Casbin 的资源、动作对。
-// 返回去重后的 `(resource, action)` 列表。
-//
-// `permissions`：待写入的权限。
+/// 写入角色策略前，将权限规范化并转换为去重的 `(resource, action)` 对，角色主体由写入方另行指定。
 pub(super) fn permission_pairs(permissions: Vec<Permission>) -> Vec<(String, String)> {
     PermissionSet::new(permissions)
         .into_vec()
@@ -156,18 +109,12 @@ pub(super) fn permission_pairs(permissions: Vec<Permission>) -> Vec<(String, Str
         .collect()
 }
 
-// 把缺失角色收成统一的不存在错误。
-// 角色存在时返回该角色。
-//
-// `role` 为 `None` 时返回 `NotFound`。
-//
-// `role`：仓储读到的可选角色。
+/// 管理命令读取必需角色后，提取仓储结果；角色缺失时统一返回 `NotFound`。
 pub(super) fn role_or_not_found(role: Option<Role>) -> Result<Role> {
     role.ok_or_else(|| Error::NotFound("角色不存在".to_string()))
 }
 
-// 当错误链里有提交结果未知时返回 `true`。
-// 自身或 `source` 链上出现 `CommitOutcomeUnknown` 或 `OutcomeUnknown` 时返回 `true`。
+/// 策略事务失败后检查错误及 `source` 链；遇到 `CommitOutcomeUnknown` 或 `OutcomeUnknown` 时标识提交结果未知，供调用方停用本地授权。
 pub(super) fn commit_outcome_unknown(error: &(dyn std::error::Error + 'static)) -> bool {
     let mut current = Some(error);
     while let Some(err) = current {
@@ -185,11 +132,7 @@ pub(super) fn commit_outcome_unknown(error: &(dyn std::error::Error + 'static)) 
     false
 }
 
-// 当 root 角色元数据与直接权限已是当前内建形态时返回 `true`。
-// 未删除、系统角色、未停用且直接权限恰为 `root_permission` 时返回 `true`。
-//
-// `role`：含软删除记录的 root 角色；`permissions`：该角色当前直接权限。
-// `root_permission`：期望的 `*:*` 权限。
+/// 初始化时判断内建 `role-root` 是否已就绪：角色未删除、已启用且为系统角色，直接权限恰为预期的 `*:*`。
 pub(super) fn root_role_is_current(
     role: &Role,
     permissions: &[Permission],
@@ -201,12 +144,7 @@ pub(super) fn root_role_is_current(
         && permissions == std::slice::from_ref(root_permission)
 }
 
-// 冻结 Enforcer 与事务快照 revision 必须完全一致。
-// 版本一致时无返回值。
-//
-// 版本不一致时返回 `Rbac`。
-//
-// `expected`：冻结 Enforcer 的 policy 版本；`visible`：调用方事务可见的版本。
+/// 使用策略快照前，比较冻结的 Enforcer 版本与事务可见版本；两者不完全一致时返回 `Rbac`。
 pub(super) fn ensure_policy_snapshot_revision(expected: u64, visible: u64) -> Result<()> {
     if expected == visible {
         return Ok(());

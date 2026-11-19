@@ -10,14 +10,7 @@ use crate::entity::person_directory::{
 use crate::repository::prelude::*;
 use crate::{AccessControlExt, Error, Result, RoleId};
 
-/// 为本次角色分配中新出现的目录来源角色补记查询资格。
-///
-/// 只在集合中出现 `role-sales` 或 `role-procurement` 时插入缺失记录。
-/// 集合里没有这些角色时不做任何删除。
-///
-/// 资格写入失败时返回错误，以便与角色分配一起回滚。
-///
-/// `role_ids`：分配后的完整角色集合；`executor`：调用方事务执行器。
+/// 分配角色时，为最终角色集合里包含销售或采购来源角色的账号补记对应查询资格。无对应角色时保留历史资格；写入失败须与角色分配一起回滚。
 pub async fn grant_assigned_roles(
     db: &Database,
     account_id: &str,
@@ -33,10 +26,7 @@ pub async fn grant_assigned_roles(
     Ok(())
 }
 
-/// 在没有资格记录时插入一条有效资格。
-/// 已终止记录保持终止。并发插入冲突视为另一事务已经写过，不再覆盖。
-///
-/// 非唯一冲突的写入失败时返回错误。
+/// 首次授予时插入有效资格，保留已有有效或终止记录。并发插入的唯一键冲突视为记录已存在，其余持久化错误原样返回。
 pub async fn ensure_grant(
     db: &Database,
     account_id: &str,

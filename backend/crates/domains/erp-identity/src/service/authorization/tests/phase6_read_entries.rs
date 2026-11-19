@@ -13,6 +13,7 @@ use crate::entity::access_control::{ResolvedScope, ScopeClause};
 use crate::repository::authorization::fixtures::execute;
 use crate::{AccessTarget, Error};
 
+// 期间费用依据只检查成本列表资格，不要求销售列表或对象范围。
 #[tokio::test]
 async fn period_basis_requires_cost_list_without_requiring_sales_list_or_object_scope() {
     let identity = Arc::new(Identity::default());
@@ -68,6 +69,7 @@ async fn period_basis_requires_cost_list_without_requiring_sales_list_or_object_
     ));
 }
 
+// 质量历史需独立客户资格，但结果仍沿用销售列表的记录范围。
 #[tokio::test]
 async fn quality_history_keeps_independent_customer_qualification_and_sales_list_membership() {
     let identity = Arc::new(Identity::default());
@@ -112,6 +114,7 @@ async fn quality_history_keeps_independent_customer_qualification_and_sales_list
     service.validate(&history, &mut executor).await.unwrap();
 }
 
+// 交付选项独立要求更新和详情权限，列表继续使用原详情范围。
 #[tokio::test]
 async fn delivery_options_requires_update_and_detail_independently_without_changing_detail_scope() {
     let identity = Arc::new(Identity::default());

@@ -24,11 +24,13 @@ use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::service::resource_access::ResourceGrantService;
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
+// 替换测试账号的角色授权，逐项核对管理入口的组合要求。
 fn grants(identity: &Identity, roles: &[(&str, &[Permission])]) {
     identity.state.lock().unwrap().grants =
         roles.iter().map(|(role, permissions)| ((*role).into(), permissions.to_vec())).collect();
 }
 
+// 构造指定审批主体类型的定义候选，不绑定持久化记录。
 fn candidate(subject: &str) -> AccessTarget {
     AccessTarget::Candidate(ObjectFacts {
         resource: "approval_process".into(),
@@ -37,19 +39,24 @@ fn candidate(subject: &str) -> AccessTarget {
     })
 }
 
+// 一旦资格检查误读授权目标或来源就失败的事实替身。
 struct NoGrantFacts;
 
+// 用必定失败的实现守住管理资格检查不读业务事实的边界。
 #[async_trait]
 impl ResourceGrantFacts for NoGrantFacts {
+    // 若资格检查尝试校验记录授权目标，立即让测试失败。
     async fn validate_targets(&self, _: &[GrantTarget], _: &mut dyn Executor) -> Result<()> {
         panic!("管理员资格检查不得读取授权目标")
     }
 
+    // 若资格检查尝试校验自动授权来源，立即让测试失败。
     async fn validate_source(&self, _: &SourceUpdate, _: &mut dyn Executor) -> Result<()> {
         panic!("管理员资格检查不得读取自动来源")
     }
 }
 
+// 记录授权管理沿用统一范围管理的完整资格，不接受缺项或无效目标。
 #[tokio::test]
 async fn record_grant_management_uses_the_complete_shared_scope_qualification() {
     let identity = Arc::new(Identity::default());
@@ -100,6 +107,7 @@ async fn record_grant_management_uses_the_complete_shared_scope_qualification() 
     ));
 }
 
+// 人员范围配置要求管理资格同角色且覆盖公司范围。
 #[tokio::test]
 async fn person_scope_entry_checks_same_role_company_boundary_in_unified_service() {
     for (entry, source) in [
@@ -147,6 +155,7 @@ async fn person_scope_entry_checks_same_role_company_boundary_in_unified_service
     }
 }
 
+// 修改审批定义既要入口权限也要实际主体类型的管理资格，只接受正确候选。
 #[tokio::test]
 async fn definition_mutations_require_entry_and_actual_type_before_allowing_the_candidate() {
     let identity = Arc::new(Identity::default());
@@ -198,6 +207,7 @@ async fn definition_mutations_require_entry_and_actual_type_before_allowing_the_
     }
 }
 
+// 运行管理员可以读取定义，但不能编辑定义或查询定义经办人候选。
 #[tokio::test]
 async fn runtime_admin_can_read_a_definition_but_cannot_edit_or_choose_definition_assignees() {
     let identity = Arc::new(Identity::default());
@@ -248,6 +258,7 @@ async fn runtime_admin_can_read_a_definition_but_cannot_edit_or_choose_definitio
         .unwrap();
 }
 
+// 读取审批定义候选前先检查快照，不用非事务预检读取身份。
 #[tokio::test]
 async fn definition_read_candidates_require_snapshot_before_reading_permissions() {
     let identity = Arc::new(Identity::default());
@@ -274,6 +285,7 @@ async fn definition_read_candidates_require_snapshot_before_reading_permissions(
     }
 }
 
+// 审批定义候选到期时报数据范围已变，不能继续使用授权结果。
 #[tokio::test]
 async fn expired_definition_candidates_report_data_scope_changed() {
     let identity = Arc::new(Identity::default());
@@ -299,10 +311,13 @@ async fn expired_definition_candidates_report_data_scope_changed() {
     }
 }
 
+// 在权限读取中推进读取阶段，模拟审批定义授权期间阶段失效。
 struct AdvancingDefinitionIdentity;
 
+// 只实现正常资格返回；调用对象范围或记录授权接口视为错误。
 #[async_trait]
 impl Facilities for AdvancingDefinitionIdentity {
+    // 推进执行器读取阶段后返回完整权限，模拟资格读取跨阶段。
     async fn permissions(
         &self,
         _: &AuditActor,
@@ -313,6 +328,7 @@ impl Facilities for AdvancingDefinitionIdentity {
         Ok(Some(QualifiedPermissions::test_grants(&[("role", permissions)])))
     }
 
+    // 若定义候选授权读取对象范围，立即让测试失败。
     async fn scope(
         &self,
         _: &AccessContext,
@@ -324,10 +340,12 @@ impl Facilities for AdvancingDefinitionIdentity {
         panic!("审批定义候选不得读取对象范围")
     }
 
+    // 若定义候选授权读取记录授权版本，立即让测试失败。
     async fn grant_revision(&self, _: &AuditActor, _: ResourceKind, _: &mut dyn Executor) -> Result<u64> {
         panic!("审批定义候选不得读取记录授权版本")
     }
 
+    // 若定义候选授权读取记录授权，立即让测试失败。
     async fn grants(
         &self,
         _: &AccessContext,
@@ -339,6 +357,7 @@ impl Facilities for AdvancingDefinitionIdentity {
     }
 }
 
+// 读取定义资格过程中若跨读取阶段，即使权限齐全也报数据范围已变。
 #[tokio::test]
 async fn definition_permissions_crossing_read_stages_report_data_scope_changed() {
     let mut builder = complete();
@@ -354,6 +373,7 @@ async fn definition_permissions_crossing_read_stages_report_data_scope_changed()
     }
 }
 
+// 数据迁移预检要求各自独立的固定业务资格，不授予内部权限码，也不接受对象候选。
 #[tokio::test]
 async fn transfer_prechecks_use_fixed_independent_qualifications_without_internal_grants() {
     let identity = Arc::new(Identity::default());

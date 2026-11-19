@@ -20,14 +20,7 @@ const BOOTSTRAP_REASON: &str = "初始化默认主属组织";
 const BOOTSTRAP_RECEIPT_ID: &str = "system:org-home-bootstrap-v1";
 const BOOTSTRAP_IDEMPOTENCY: &str = "org-home-bootstrap-v1";
 
-// 组织树为空时创建默认部门，并为当前有效后台账号写入主属关系。
-// 不得在已有组织树上自动调岗；不得把系统账号映射成销售人员。
-//
-// 已有组织、已有引导回执或引导完成后返回 `Ok`。
-//
-// 账号读取、组织校验或事务写入失败时拒绝。
-//
-// `db`：身份与组织集合所在数据库。
+/// 初始化空组织树时创建默认部门，并为当前有效后台账号建立主属关系。已有组织树或引导回执时保留现有配置，读取或写入错误原样返回。
 pub(crate) async fn ensure_home_department(db: Database) -> Result<()> {
     let stored = db.clone();
     db.client()
@@ -38,10 +31,7 @@ pub(crate) async fn ensure_home_department(db: Database) -> Result<()> {
         .await
 }
 
-// 在调用方事务内读取组织事实并按需持久化默认主属部门。
-// 已引导、无需引导或写入完成后返回 `Ok`。
-//
-// 组织校验或写入失败时拒绝。
+// 沿启动事务读取组织与账号，按需保存默认部门、主属关系和引导回执，使首次配置可安全重试。
 async fn persist_home_department(db: &Database, executor: &mut dyn Executor) -> Result<()> {
     let repository = OrganizationRepository::new(db);
     if repository.receipt(BOOTSTRAP_RECEIPT_ID, executor).await?.is_some() {
@@ -80,13 +70,7 @@ async fn persist_home_department(db: &Database, executor: &mut dyn Executor) -> 
     Ok(())
 }
 
-// 计算空组织树的默认部门与主属关系；已有节点时不改派。
-// 无需引导返回 `None`；需要引导时返回变更后的组织事实。
-//
-// 组织名称或主属关系校验失败时拒绝。
-//
-// `state`：当前组织事实；`account_ids`：需要写入主属关系的有效后台账号。
-// `at`：主属关系生效时点。
+// 根据当前组织事实和有效后台账号计算默认部门及成员变更。已有组织节点返回 `None`；组织名称或成员关系不合法时返回错误。
 fn plan_home_department(
     state: &OrganizationState,
     account_ids: &[String],
@@ -136,6 +120,7 @@ fn plan_home_department(
 mod tests {
     use super::*;
 
+    // 验证首次引导生成默认部门，并为传入的有效后台账号建立主属关系。
     #[test]
     fn empty_tree_creates_home_department_and_assigns_accounts() {
         let planned = plan_home_department(
@@ -152,6 +137,7 @@ mod tests {
         assert_eq!(planned.version, 3);
     }
 
+    // 验证已有组织节点时跳过默认部门计划，保留管理员的组织配置。
     #[test]
     fn existing_tree_is_left_untouched() {
         let mut state = OrganizationState { version: 1, ..OrganizationState::default() };

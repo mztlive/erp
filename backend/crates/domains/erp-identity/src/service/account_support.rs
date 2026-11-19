@@ -11,12 +11,7 @@ use crate::error::Result;
 use crate::repository::prelude::*;
 use crate::service::auth::password;
 
-/// 将可选账号收窄为指定后台类型，缺失或类型不符统一按不存在处理。
-/// 返回类型匹配的账号。
-///
-/// 账号不存在或类型不匹配时返回 `NotFound`，避免暴露同 ID 的其他账号类型。
-///
-/// `expected_kind`：调用场景要求的账号类型；`not_found_message`：统一的不存在提示。
+/// 按业务入口要求的后台账号类型取出实体。账号缺失或类型不匹配时统一返回 `NotFound`，避免暴露同一 ID 的其他身份。
 pub fn account_of_kind(
     account: Option<AccountCore>,
     expected_kind: AccountKind,
@@ -27,13 +22,7 @@ pub fn account_of_kind(
         .ok_or_else(|| crate::error::Error::NotFound(not_found_message.to_string()))
 }
 
-/// 确保账号可用。
-/// 校验通过返回 Ok。
-///
-/// 失败情形：
-/// * `ConflictError` - 账号已存在
-///
-/// `exclude_account_id`：可选排除账号ID（更新场景）；`executor`：数据访问执行器，由调用方决定是否位于事务中。
+/// 创建或改名账号前检查登录名是否已被占用。已软删除的账号仍占用登录名；更新时可通过 `exclude_account_id` 排除自身。
 pub async fn ensure_account_available(
     db: &Database,
     account: &LoginAccount,
@@ -50,16 +39,7 @@ pub async fn ensure_account_available(
     Err(crate::error::Error::ConflictError("账号已存在".into()))
 }
 
-/// 应用账号更新，并在包含密码时通过共享有界阻塞边界完成哈希。
-///
-/// 不含密码的 patch 直接执行轻量领域校验；包含密码时返回已完整应用更新的
-/// 账号，供调用方随后进入 MongoDB 事务或单集合写入。
-///
-/// 返回已应用领域更新、可安全持久化的账号。
-///
-/// 当领域校验或密码处理失败时返回错误。
-///
-/// `account`：当前账号实体。
+/// 在落库前应用账号变更并完成领域校验。涉及新密码时通过有界阻塞任务生成哈希，避免数据库事务等待密码计算。
 pub async fn apply_account_update(
     mut account: AccountCore,
     update: AccountCoreUpdate,
@@ -84,6 +64,7 @@ mod tests {
     use crate::entity::{AccountCore, AccountCoreData, AccountCoreUpdate, AccountStatus, LoginAccount};
     use crate::service::auth::password::{PasswordCheck, hash_secret, verify_password};
 
+    // 验证更新同时保存修改后的名称，并生成可用新密码验证的凭证，调用方可直接持久化返回的账号。
     #[tokio::test]
     async fn password_update_returns_fully_prepared_account() {
         let secret =
@@ -117,6 +98,7 @@ mod tests {
         ));
     }
 
+    // 验证缺失的账号按不存在返回，使业务入口可统一处理缺失或类型不符的身份。
     #[test]
     fn missing_account_has_not_found_semantics() {
         let result = account_of_kind(None, AccountKind::Admin, "管理员不存在");

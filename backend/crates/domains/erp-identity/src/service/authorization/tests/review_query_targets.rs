@@ -15,6 +15,7 @@ use crate::Error;
 use crate::entity::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts, RelatedObjects, RelationKey};
 
+// 纯功能读取在快照内检查自己的资格，无需查询映射，不允许拿普通查询替代。
 #[tokio::test]
 async fn function_reads_check_snapshot_qualification_without_query_bindings() {
     for permission in [
@@ -48,6 +49,7 @@ async fn function_reads_check_snapshot_qualification_without_query_bindings() {
     }
 }
 
+// 纯功能读取不依赖查询映射即可装配，尝试为它登记映射时应拒绝。
 #[test]
 fn function_reads_build_without_query_mappings_and_reject_mapping_registration() {
     let builder = complete();
@@ -64,6 +66,7 @@ fn function_reads_build_without_query_mappings_and_reject_mapping_registration()
     }
 }
 
+// 完成异常任务必须提供真实任务及正确版本，不能以无对象操作绕过检查。
 #[tokio::test]
 async fn exception_task_completion_cannot_replace_an_exact_task_with_an_operation() {
     let permission = supplier_offering::COMPLETE_SUPPLY_EXCEPTION_TASK;
@@ -96,6 +99,7 @@ async fn exception_task_completion_cannot_replace_an_exact_task_with_an_operatio
     ));
 }
 
+// 连接详情要求独立的供应商读取资格，读取连接目录仍要校验真实供应商范围。
 #[tokio::test]
 async fn connection_detail_needs_supplier_qualification_and_catalog_keeps_its_independent_scope() {
     let identity = Arc::new(Identity::default());
@@ -146,6 +150,7 @@ async fn connection_detail_needs_supplier_qualification_and_catalog_keeps_its_in
     ));
 }
 
+// 询价写资格预览使用调用方原快照，非事务调用不得读取事实。
 #[tokio::test]
 async fn inquiry_write_qualification_previews_require_the_callers_snapshot() {
     let mut builder = complete();
@@ -167,6 +172,7 @@ async fn inquiry_write_qualification_previews_require_the_callers_snapshot() {
     }
 }
 
+// 协议操作使用自己的资格，并要求实际连接及其来源完整。
 #[tokio::test]
 async fn protocol_operations_keep_their_own_qualification_and_complete_connection_sources() {
     for (entry, qualification) in [
@@ -220,6 +226,7 @@ async fn protocol_operations_keep_their_own_qualification_and_complete_connectio
     }
 }
 
+// 附件上传准备只检查固定功能资格，不接受调用方声明的对象或任务。
 #[tokio::test]
 async fn attachment_preparations_keep_fixed_function_qualification_and_reject_object_claims() {
     let cases = [

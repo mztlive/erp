@@ -12,7 +12,8 @@ use crate::entity::Permission;
 use crate::error::{Error, Result};
 
 impl RbacService {
-    // 首次使用本地策略执行器时从 MongoDB 加载 Enforcer；模型或策略读取失败不留下缓存结果供后续使用。
+    // 首次访问时按固定模型和 MongoDB 策略初始化本地 Enforcer；关闭自动保存，由策略事务负责写入。
+    // 模型或策略加载失败时保留未初始化状态，供下次重试。
     async fn enforcer(&self) -> Result<&RwLock<Enforcer>> {
         self.enforcer
             .get_or_try_init(|| async {
@@ -27,14 +28,8 @@ impl RbacService {
             .await
     }
 
-    // 返回已恢复到最新 MongoDB policy 的 Enforcer。
-    //
-    // 上一次持久化或 reload 失败后，任何鉴权和 policy 查询都会先重试 reload；
-    // reload 继续失败时直接返回错误，禁止使用旧授权缓存。
-    //
-    // 返回与当前数据库 policy 版本一致的 Enforcer 锁。
-    //
-    // 提交结果未知、策略持续变化或重新加载失败时返回错误。
+    /// 鉴权或查询策略前取得与数据库策略版本对齐的 Enforcer 锁；缓存过期时在写锁内复查并重载。
+    /// 提交结果未知时停止授权；策略持续变化或重载失败时直接返回错误，下次读取重试刷新，旧缓存保持不可用。
     pub(super) async fn fresh_enforcer(&self) -> Result<&RwLock<Enforcer>> {
         self.ensure_policy_consistency_known()?;
         let enforcer = self.enforcer().await?;
@@ -52,7 +47,7 @@ impl RbacService {
         Ok(enforcer)
     }
 
-    // 对照数据库策略版号判断进程内 Enforcer 缓存是否还能用于当前判定。
+    // 取用缓存和获取写锁后都检查过期标记及数据库版本，避免使用旧策略或重复刷新。
     async fn policy_cache_is_current(&self) -> Result<bool> {
         if self.policy_stale.load(Ordering::Acquire) {
             return Ok(false);
@@ -61,7 +56,7 @@ impl RbacService {
         Ok(self.loaded_policy_revision.load(Ordering::Acquire) == database_revision)
     }
 
-    // 缓存过期时重读 MongoDB 的稳定策略快照；刷新失败保留过期状态，不能继续使用旧授权。
+    // 初始化或刷新时用加载前后版本相同确认稳定快照；达到重试上限或读取失败时保持过期，禁止使用旧授权。
     async fn reload_enforcer(&self, enforcer: &mut Enforcer) -> Result<()> {
         self.policy_stale.store(true, Ordering::Release);
         for _ in 0..MAX_STABLE_POLICY_LOAD_ATTEMPTS {
@@ -77,43 +72,24 @@ impl RbacService {
         Err(Error::Rbac("授权策略持续变化，无法加载稳定快照，请稍后重试".to_string()))
     }
 
-    // 提交外部 policy 事务后，立即刷新本地 Enforcer。
-    //
-    // reload 失败时服务保持 stale；后续鉴权和 policy 查询会先重试，
-    // 在恢复前不会继续使用旧缓存。
-    //
-    // 本地 Enforcer 已对齐当前 policy 时无返回值。
-    //
-    // 当 MongoDB policy 无法重新加载时返回错误。
+    /// 策略事务提交后立即将本地 Enforcer 对齐数据库版本；刷新失败时返回错误，后续鉴权或查询须先刷新成功。
     pub(super) async fn refresh_policy(&self) -> Result<()> {
         self.fresh_enforcer().await.map(|_| ())
     }
 
-    /// 返回当前已稳定加载的授权策略版本。
-    /// 返回与本地 Enforcer 一致的 MongoDB policy revision。
-    ///
-    /// 策略缓存无法刷新或数据库版本读取失败时返回错误。
+    /// 复核策略版本时，先将本地 Enforcer 对齐数据库，再返回已稳定加载的版本；读取或刷新失败时返回错误。
     pub async fn current_policy_revision(&self) -> Result<u64> {
         self.fresh_enforcer().await?;
         Ok(self.loaded_policy_revision.load(Ordering::Acquire))
     }
 
-    /// 在指定执行器快照中读取授权策略版本。
-    /// 返回执行器所见的 policy revision。
-    ///
-    /// 数据库读取失败时返回错误。
-    ///
-    /// `executor`：数据库执行器，可为销售形式化事务会话。
+    /// 从调用方执行器所见的数据库快照读取策略版本，供销售形式化等事务在原快照内复核；读取失败时返回错误。
     pub async fn policy_revision_with_executor(&self, executor: &mut dyn Executor) -> Result<u64> {
         Ok(self.policy_store.policy_revision(executor).await?)
     }
 
-    /// 在一次 Enforcer 读锁下冻结账号角色及指定权限的逐角色授权结果。
-    /// 返回角色、各角色命中的权限以及当时的 policy 版本。
-    ///
-    /// Enforcer 无法刷新或权限匹配失败时返回错误。
-    ///
-    /// `permissions`：需要逐角色核对的权限；为空时只冻结角色列表。
+    /// 为功能资格检查在一次 Enforcer 读锁下冻结直接绑定的角色、各角色对指定权限的命中及策略版本。
+    /// `permissions` 为空时只取角色和版本；角色启用状态由调用方核验，刷新或匹配失败时返回错误。
     pub async fn role_permission_snapshot(
         &self,
         account_kind: AccountKind,
@@ -140,12 +116,8 @@ impl RbacService {
         })
     }
 
-    /// 证明冻结 Enforcer revision 与调用方事务快照可见 revision 完全一致。
-    /// 两个版本一致时无返回值。
-    ///
-    /// 版本读取失败或两边不一致时返回错误。
-    ///
-    /// `expected_revision`：冻结快照中的 policy 版本；`executor`：调用方事务执行器。
+    /// 使用冻结的授权事实前，在调用方原执行器中核对可见策略版本与 `expected_revision` 完全一致。
+    /// 版本读取失败或不一致时拒绝使用该快照。
     pub async fn ensure_policy_snapshot_with_executor(
         &self,
         expected_revision: u64,

@@ -9,6 +9,7 @@ use persistence_core::{Executor, NoTransaction, ReadExecutor};
 use super::fixtures::{Facts, Identity, actor, service};
 use crate::{AccessTarget, Error};
 
+// 银行账号字段揭示在快照内检查当前功能资格，不读取业务对象，撤权后立即拒绝。
 #[tokio::test]
 async fn bank_reveal_allows_current_field_qualifications_only_in_snapshot() {
     let identity = Arc::new(Identity::default());
@@ -33,6 +34,7 @@ async fn bank_reveal_allows_current_field_qualifications_only_in_snapshot() {
     assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
 }
 
+// 非快照、记录或任务目标均不适用于字段揭示，而且在查询身份前就应拒绝。
 #[tokio::test]
 async fn bank_reveal_rejects_non_snapshot_and_record_or_task_targets_before_identity() {
     let identity = Arc::new(Identity::default());

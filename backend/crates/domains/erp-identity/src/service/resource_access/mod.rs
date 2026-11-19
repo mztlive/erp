@@ -13,20 +13,18 @@ pub use crate::repository::resource_grants::queue::{
     GrantEventRepository as GrantEventService, GrantQueueHealth, GrantRecompute, GrantRule,
 };
 
-/// 人工授权及自动来源发布；可信事实由组合根装配。
+/// 管理记录读取授权来源，供管理员维护人工授权及后台处理器发布自动来源。
 #[derive(Clone)]
 pub struct ResourceGrantService {
+    // 账号、授权来源、授权行及事件所在的身份数据库。
     db: Database,
+    // 维护入口用来统一检查管理资格的进程共享授权服务。
     authorization: Arc<AuthorizationService>,
+    // 由组合根装配的可信业务事实端口，供来源发布和读取目标校验使用。
     facts: Arc<dyn ResourceGrantFacts>,
 }
 impl ResourceGrantService {
-    /// 装配授权来源管理服务。
-    /// 可发布及撤销来源的服务。
-    ///
-    /// 不执行 I/O。
-    ///
-    /// db 为身份数据库，authorization 为进程共享授权服务，facts 为可信业务事实端口。
+    /// 装配时构造授权来源管理服务，仅保存身份数据库、进程共享授权服务和可信业务事实端口。
     pub fn new(
         db: Database,
         authorization: Arc<AuthorizationService>,

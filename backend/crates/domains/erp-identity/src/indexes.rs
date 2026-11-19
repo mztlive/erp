@@ -10,10 +10,7 @@ use crate::repository::policy_receipt::POLICY_RECEIPTS;
 use crate::repository::portal::PortalIdentityExt;
 use crate::repository::{AccessControlExt, CASBIN_RULES};
 
-/// 创建外部账号绑定索引，供组合根逐集合登记。
-/// 已有重复身份或数据库失败时拒绝，撤销绑定仍占用原账号身份。
-///
-/// `db` 为身份领域数据库。
+/// 启动时为供应商门户绑定创建稳定 ID、账号唯一及按供应商查询索引。撤销绑定仍占用账号身份；已有重复数据或建索引失败时返回错误。
 pub async fn ensure_portal_indexes(db: &Database) -> Result<()> {
     create_indexes(
         db,
@@ -39,38 +36,20 @@ const USER_ROLES: &str = <mongodb::Database as AccessControlExt>::USER_ROLES;
 /// `audit_event` 集合名（单一来源：`AccessControlExt` 关联常量）。
 const AUDIT_EVENTS: &str = <mongodb::Database as AccessControlExt>::AUDIT_EVENTS;
 
-/// 创建本域集合的幂等命名索引。
-///
-/// 账号在软删除后仍保留原身份，因此 `account` 使用全局唯一索引，避免账号复用
-/// 破坏后续恢复语义。P2 追加部分落地 W19 配置化权限（数据模型 §5.1 / §4.6）：
-/// - `permission`：`(resource, action)` 全局唯一（定义目录身份），停用标记查询索引；
-/// - `user_role`：同一用户同一角色同时最多一条**未撤权**绑定（部分唯一索引，
-///   理由与回滚方式见 `user_role_indexes` 注释）；按用户分列展示索引；
-/// - `audit_event`：事实型审计留痕（§4.5.4），**不设 TTL**（长期保留），
-///   按操作者、业务对象、请求追踪号与时间倒序查询索引。
-///
-/// 账号、角色和授权相关索引全部创建成功时无额外返回值。
-///
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+/// 按启动顺序登记账号、角色和授权相关集合的命名索引。相同定义可重复登记；已有数据违反唯一约束或数据库拒绝建索引时停止。
 pub async fn ensure(db: &Database) -> Result<()> {
     ensure_accounts_and_roles(db).await?;
     ensure_authorization(db).await
 }
 
-/// 创建账号与角色索引，供启动根在审计日志索引之前调用。
-/// 账号与角色索引创建成功时无额外返回值。
-///
-/// 第一个索引创建失败时返回原持久化错误，不继续创建后续集合索引。
+/// 启动装配先登记账号和角色索引，以便后续创建审计日志索引。返回首次持久化错误。
 pub async fn ensure_accounts_and_roles(db: &Database) -> Result<()> {
     create_indexes(db, ACCOUNTS, account_indexes()).await?;
     create_indexes(db, ROLES, role_indexes()).await?;
     Ok(())
 }
 
-/// 创建身份授权与审计事件索引，供启动根在审计日志索引之后调用。
-/// 授权、审计与组织相关索引按原顺序创建成功时无额外返回值。
-///
-/// 按原集合顺序返回第一个持久化错误。
+/// 在应用审计日志索引就绪后登记身份的策略、范围、组织、记录授权及审计事件索引。首次建索引失败时停止。
 pub async fn ensure_authorization(db: &Database) -> Result<()> {
     create_indexes(db, CASBIN_RULES, casbin_indexes()).await?;
     create_indexes(db, PERMISSIONS, permission_indexes()).await?;
@@ -97,13 +76,13 @@ pub async fn ensure_authorization(db: &Database) -> Result<()> {
     Ok(())
 }
 
-// 为指定集合注册命名索引；使用相同定义重复注册时沿用已有索引。
+// 为指定集合应用命名索引定义。重启时可以用相同定义复用已有索引。
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
     db.collection::<Document>(collection).create_indexes(indexes).await?;
     Ok(())
 }
 
-// 定义账号集合的身份约束和列表查询索引。
+// 定义账号 ID 和登录名全局唯一约束，以及账号列表索引。软删除账号仍保留原登录名，避免恢复身份时发生冲突。
 fn account_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_accounts_id", doc! { "id": 1 }),
@@ -116,9 +95,7 @@ fn account_indexes() -> Vec<IndexModel> {
     ]
 }
 
-// 定义人员查询资格的身份唯一约束和按类别读取索引。
-//
-// 同一账号同一类别只有一条资格。终止后保留该行，初始化不能再插入第二条。
+// 为人员目录按类别查找资格提供索引，并保证一个账号在同一类别只有一条资格。保留终止记录可阻止初始化再次授予。
 fn person_query_qualification_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_person_query_qualifications_id", doc! { "id": 1 }),
@@ -133,7 +110,7 @@ fn person_query_qualification_indexes() -> Vec<IndexModel> {
     ]
 }
 
-// 定义角色身份约束和可分配角色查询索引。
+// 约束角色身份唯一，并为可分配角色列表提供查询索引。
 fn role_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_roles_id", doc! { "id": 1 }),
@@ -141,9 +118,7 @@ fn role_indexes() -> Vec<IndexModel> {
     ]
 }
 
-// 定义 Casbin 按主体或角色清理 policy 所需的查询索引。
-//
-// 规则身份由 MongoDB 内建的 `_id` 唯一索引保证。
+// 为 Casbin 按账号或角色查找和清理策略提供索引；策略行本身使用 MongoDB 的 `_id` 保证身份唯一。
 fn casbin_indexes() -> Vec<IndexModel> {
     vec![
         named_index("idx_casbin_ptype_value0", doc! { "sec": 1, "ptype": 1, "values.0": 1 }),
@@ -151,11 +126,7 @@ fn casbin_indexes() -> Vec<IndexModel> {
     ]
 }
 
-// 定义 `permission` 定义目录的身份约束与停用查询索引。
-//
-// `(resource, action)` 是权限定义身份（W19 权限目录按 `resource:action` 唯一
-// 维护），身份类字段全局唯一（与 accounts 处理一致）：软删除后仍保留定义，
-// 避免复用破坏审计与授权绑定语义。
+// 按资源和动作约束权限定义全局唯一，并加速停用状态查询。软删除保留原身份，保障已有绑定与历史审计仍能对应同一权限。
 fn permission_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_permissions_id", doc! { "id": 1 }),
@@ -164,20 +135,9 @@ fn permission_indexes() -> Vec<IndexModel> {
     ]
 }
 
-// 定义 `user_role` 的未撤权绑定唯一约束与按用户查询索引。
-//
-// 「同一用户同一角色同时仅一条有效绑定」（W19 §5.1）使用**部分唯一索引**
-// 落地：撤权是审计动作，历史撤权记录必须累积保留（按当前/未来/已过期分开
-// 只读展示），因此唯一性只约束 `revoked_at` 为空的未撤权绑定，不能做成
-// 全局唯一。到期未撤权的绑定再次授权时先走撤权命令，保证撤权审计链完整。
-//
-// 部分过滤表达式用 `{ revoked_at: null }`（空值相等）：实体 `revoked_at` 为
-// `None` 时按 BSON null 落库，空值相等同时命中「缺省字段」与「显式 null」，
-// 撤权写入时间戳后不再命中、唯一约束随之释放；MongoDB 8 不再支持
-// `$exists: false` 形态的部分索引表达式，故不用取反写法。
-//
-// 回滚方式：若业务规则收紧为「同一用户同一角色全生命周期只有一条绑定」，
-// 删除本部分唯一索引，改为全局唯一索引 `uk_user_roles_binding`。
+// 用部分唯一索引限制同一账号和角色只保留一条未撤销绑定，同时允许保留多条撤销历史。
+// 空值匹配显式 `null` 和缺失字段；写入撤销时间后释放唯一约束。已过期但未撤销的绑定须先经撤权命令处理，以完整记录审计。MongoDB 8 的部分索引不支持 `$exists: false`。
+// 若未来改为全生命周期仅允许一条绑定，需移除该部分唯一索引并改用全局唯一索引 `uk_user_roles_binding`。
 fn user_role_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_user_roles_id", doc! { "id": 1 }),
@@ -195,11 +155,7 @@ fn user_role_indexes() -> Vec<IndexModel> {
     ]
 }
 
-// 定义 `audit_event` 的追加式审计查询索引。
-//
-// 审计事件是事实型留痕（§4.5.4，不可编辑、不可删除、**不设 TTL**，长期保留），
-// 无自然业务唯一键，用 `id` 唯一索引防止重复身份静默写入；按操作者、业务
-// 对象、请求追踪号与时间倒序覆盖安全审计查询路径。
+// 以稳定 ID 防止重复追加审计事件，并加速按操作人、业务对象、请求追踪号和时间查阅。审计历史长期保留，索引不自动清理过期资料。
 fn audit_event_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_audit_events_id", doc! { "id": 1 }),
@@ -213,7 +169,7 @@ fn audit_event_indexes() -> Vec<IndexModel> {
     ]
 }
 
-// 启动时创建组织稳定身份、成员有效期和管理范围索引；跨行并发约束仍由组织全局版本事务保证。
+// 启动时建立组织稳定 ID、成员有效期和管理范围查询索引；跨记录的写入一致性由全局组织版本事务保证。
 async fn ensure_organizations(db: &Database) -> Result<()> {
     use crate::repository::organization::*;
     for collection in [ORG_UNITS, ORG_MEMBERSHIPS, ORG_MANAGEMENT, ORG_REVISIONS, ORG_CHANGES] {
@@ -253,10 +209,7 @@ async fn ensure_organizations(db: &Database) -> Result<()> {
     .await
 }
 
-/// 确保当前人员范围的唯一键和查询索引。
-/// 新集合索引就绪。
-///
-/// 重复数据或 DDL 失败时拒绝迁移。
+/// 为人员范围配置登记记录 ID 和账号、资源、动作组合的唯一索引，防止同一动作有多个配置。历史重复数据或建索引失败时返回错误。
 pub async fn ensure_person_scopes(db: &Database) -> Result<()> {
     create_indexes(
         db,
@@ -270,7 +223,7 @@ pub async fn ensure_person_scopes(db: &Database) -> Result<()> {
     Ok(())
 }
 
-// 安装指定记录读取授权链路使用的索引，覆盖授权、来源、分配事件和不可变审计。
+// 登记记录读取授权及其来源、事件、审计所需索引，支持按接收人、目标和来源修订号快速核对有效授权。
 async fn ensure_resource_grants(db: &Database) -> Result<()> {
     create_indexes(
         db,
@@ -298,7 +251,7 @@ async fn ensure_resource_grants(db: &Database) -> Result<()> {
     ensure_resource_grant_events(db).await
 }
 
-// 为来源与相关审计注册稳定主键和来源身份索引，服务发布回读及管理查询。
+// 为自动和人工授权来源及审计登记唯一身份和查询索引，支持发布后回查及管理员按来源或接收人查看。
 async fn ensure_resource_grant_sources(db: &Database) -> Result<()> {
     create_indexes(
         db,
@@ -331,7 +284,7 @@ async fn ensure_resource_grant_sources(db: &Database) -> Result<()> {
     .await
 }
 
-// 为授权事件注册幂等身份、领取顺序和精确业务来源索引，分别服务追加、消费和回读。
+// 为授权事件建立幂等键和领取、恢复、来源检索索引，支持事件追加、后台消费和精确回读。
 async fn ensure_resource_grant_events(db: &Database) -> Result<()> {
     create_indexes(
         db,
@@ -358,7 +311,7 @@ async fn ensure_resource_grant_events(db: &Database) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    // 验证按稳定主键读取或乐观锁更新的集合均声明 `id` 唯一索引，避免退化为集合扫描。
+    // 验证权限和角色绑定可以按唯一稳定 ID 定位记录，供读取与乐观锁更新使用。
     #[test]
     fn collections_look_up_by_unique_stable_id() {
         for indexes in [super::permission_indexes(), super::user_role_indexes()] {
@@ -375,6 +328,7 @@ mod tests {
         account_indexes, audit_event_indexes, casbin_indexes, permission_indexes, user_role_indexes,
     };
 
+    // 验证账号 ID 和登录名均全局唯一，软删除也不会释放身份。
     #[test]
     fn account_identity_indexes_are_globally_unique() {
         let indexes = account_indexes();
@@ -392,6 +346,7 @@ mod tests {
         }
     }
 
+    // 验证 Casbin 分组规则的主体与角色都可通过相应字段索引查找。
     #[test]
     fn casbin_indexes_cover_both_grouping_policy_positions() {
         let indexes = casbin_indexes();
@@ -399,6 +354,7 @@ mod tests {
         assert!(indexes.iter().any(|index| index.keys.contains_key("values.1")));
     }
 
+    // 验证资源与动作组成全局唯一权限身份，并保留按停用状态检索的索引。
     #[test]
     fn permission_identity_is_globally_unique() {
         let indexes = permission_indexes();
@@ -416,6 +372,7 @@ mod tests {
         assert!(indexes.iter().any(|index| index.keys == doc! { "disabled": 1 }));
     }
 
+    // 验证账号与角色的唯一约束只覆盖未撤销绑定，保留撤权历史及按账号、有效期查询能力。
     #[test]
     fn user_role_uniqueness_is_partial_over_unrevoked_bindings() {
         let indexes = user_role_indexes();
@@ -436,6 +393,7 @@ mod tests {
         assert!(indexes.iter().any(|index| { index.keys == doc! { "user_id": 1, "effective_from": -1 } }));
     }
 
+    // 验证审计可按稳定 ID、操作人、业务对象和请求追踪号定位。
     #[test]
     fn audit_event_indexes_cover_actor_object_and_request_trace() {
         let indexes = audit_event_indexes();

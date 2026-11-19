@@ -8,13 +8,7 @@ use crate::access_control::ScopeDimension;
 /// 结算主体及仓库目标的配置校验；只校验身份，不提供正向授权。
 #[async_trait]
 pub trait ScopeTargetPort: Send + Sync {
-    /// 批量核验显式目标。
-    /// 全部目标在所属领域存在时成功。
-    ///
-    /// 目标缺失、维度未接线及仓储错误必须拒绝配置。
-    ///
-    /// `dimension`：已注册的目标身份维度；`ids`：不超过模型上限的目标 ID。
-    /// `executor`：范围配置原事务。
+    /// 保存人员范围配置前，在原事务内向所属业务域批量确认结算主体或仓库 ID 存在。目标缺失、维度未接入或读取失败时拒绝配置。
     async fn validate_targets(
         &self,
         dimension: ScopeDimension,

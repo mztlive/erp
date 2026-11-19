@@ -4,14 +4,10 @@ use persistence_core::{Executor, Repository, Result};
 
 use crate::entity::access_control::person_scope::PersonDataScope;
 
+/// 为当前人员数据范围集合提供按人查询，不读取旧范围集合。
 #[allow(async_fn_in_trait)]
 pub trait PersonDataScopeRepositoryExt {
-    /// 读取人员全部范围，可按业务及动作限定。
-    /// 返回按资源、动作稳定排序的未删除配置。
-    ///
-    /// 数据库错误原样返回。
-    ///
-    /// `resource`：可选业务标识；`None` 表示不限业务；`action`：可选动作标识；`None` 表示不限动作。
+    /// 读取指定人员的未删除范围，按资源和动作稳定排序。资源与动作均可省略，省略时不限制对应维度；数据库错误原样返回。
     async fn for_person(
         &self,
         user: &str,
@@ -21,6 +17,7 @@ pub trait PersonDataScopeRepositoryExt {
     ) -> Result<Vec<PersonDataScope>>;
 }
 impl PersonDataScopeRepositoryExt for Repository<'_, PersonDataScope> {
+    // 将人员与可选资源、动作条件下推到数据库，再按资源和动作排序。
     async fn for_person(
         &self,
         user: &str,

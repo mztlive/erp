@@ -6,12 +6,7 @@ use crate::entity::organization::OrgTree;
 use crate::repository::OrganizationRepository;
 use crate::{Error, Result};
 
-/// 校验显式目标组织整条路径均启用。
-/// 只做启用检查，不提供任何范围授权；需拒绝公司组织的调用方先自检。
-///
-/// 未指定组织或路径全部启用时成功。
-///
-/// 目标组织停用时拒绝。
+/// 业务写入引用显式组织前，确认目标到根的整条路径均启用；空目标直接通过。调用方另行检查范围授权及是否允许公司级目标。
 pub async fn ensure_org_enabled(
     db: &Database,
     target_org: Option<&str>,

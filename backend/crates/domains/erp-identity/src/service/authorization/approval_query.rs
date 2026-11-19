@@ -10,7 +10,7 @@ use super::{AuthorizationService, rules};
 use crate::entity::authorization::{AccessContext, AccessRule, RelationKey, RelationMatch};
 use crate::{Permission, QualifiedPermissions, Result};
 
-// 以冻结主体类型和来源资源生成审批列表关联键，键不含任何请求或账号状态。
+// 仅用冻结主体类型和来源资源生成关联键，要求管理列表分区匹配唯一完整来源。
 fn relation(subject: &str, source: &Permission, rule: AccessRule) -> Result<AccessRule> {
     Ok(AccessRule::Related {
         relation: RelationKey::parse(format!("management_{subject}_{}", source.resource()))?,
@@ -20,7 +20,7 @@ fn relation(subject: &str, source: &Permission, rule: AccessRule) -> Result<Acce
     })
 }
 
-// 启动登记审批列表时构造涵盖全部固定分区及嵌套来源的能力条件，不按当前操作人的资格删减。
+/// 启动时展开全部审批管理分区及嵌套来源，供校验 Mapping 能力，不按本次账号资格删减。
 pub(super) fn query_binding_condition() -> Result<AccessRule> {
     let mut partitions = Vec::new();
     for (subject, _, policy) in management_partitions() {
@@ -38,7 +38,7 @@ pub(super) fn query_binding_condition() -> Result<AccessRule> {
 }
 
 impl AuthorizationService {
-    // 为实例列表按同次身份取证生成分区；每一真实单据类型使用自己的管理资格来限制来源范围。
+    /// 编译审批管理列表时，用同次资格仅展开当前账号有权管理的类型，并由合格角色解释本分区的真实来源范围。
     pub(super) async fn approval_query_condition(
         &self,
         context: &AccessContext,
@@ -76,6 +76,7 @@ impl AuthorizationService {
 mod tests {
     use super::*;
 
+    // 验证复合审批来源请求按权限去重，并保留各权限首次出现的顺序。
     #[test]
     fn scope_requests_keep_the_first_occurrence_of_each_scope_permission() {
         use erp_permissions::{purchase_order, returns, sales_order, supplier_settlement};
@@ -86,6 +87,7 @@ mod tests {
         );
     }
 
+    // 验证启动绑定完整保留有序的类型和来源分区，且每个分区都要求唯一完整来源。
     #[test]
     fn binding_preserves_every_approval_partition_in_order() {
         let AccessRule::Any(partitions) = query_binding_condition().unwrap() else {

@@ -12,7 +12,7 @@ use crate::entity::authorization::{AccessTarget, FactValue};
 use crate::entity::resource_access::ResourceKind;
 use crate::{AuthorizationService, Error};
 
-// 枚举要验证的采购入口及实际来源动作，使断言运行真实固定规则而非只读规则表。
+// 独立列出各采购写入口、来源动作组合和业务动作资格，用于比对正式规则。
 fn entries() -> Vec<(Permission, Vec<Permission>, Permission)> {
     vec![
         (
@@ -48,7 +48,7 @@ fn entries() -> Vec<(Permission, Vec<Permission>, Permission)> {
     ]
 }
 
-// 测试中将采购真实事实形状接入生产 Builder，身份设施由不访问数据库的替身提供。
+// 将采购单事实和内存身份接入正式装配，不访问数据库。
 fn service(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     let mut builder = complete();
     builder.facilities = identity;
@@ -56,6 +56,7 @@ fn service(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     builder.build().unwrap()
 }
 
+// 采购入口与来源资格可分别由不同角色满足，缺任一项都在读取事实前拒绝。
 #[tokio::test]
 async fn purchase_entries_reject_missing_entry_or_source_before_facts_and_accept_independent_roles() {
     for (entry, source, independent) in entries() {
@@ -91,6 +92,7 @@ async fn purchase_entries_reject_missing_entry_or_source_before_facts_and_accept
     }
 }
 
+// 采购草稿除入口资格外，还要求同一来源角色同时具备两项来源动作权限。
 #[tokio::test]
 async fn purchase_draft_requires_one_role_with_both_source_actions_besides_entry_qualification() {
     let identity = Arc::new(Identity::default());
@@ -115,6 +117,7 @@ async fn purchase_draft_requires_one_role_with_both_source_actions_besides_entry
     assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
 }
 
+// 采购入口保留来源范围限制，历史读取不能补足写入来源资格。
 #[tokio::test]
 async fn purchase_entries_preserve_source_limits_and_never_accept_historical_read_supplements() {
     for (entry, source, independent) in entries() {
@@ -151,6 +154,7 @@ async fn purchase_entries_preserve_source_limits_and_never_accept_historical_rea
     }
 }
 
+// 采购写入口只接受快照事务中的持久化来源记录，不接受候选或其他目标。
 #[tokio::test]
 async fn purchase_entries_require_persisted_records_and_snapshot_write_authorization() {
     let service = service(Arc::new(Identity::default()), Arc::new(Facts::default()));

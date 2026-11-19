@@ -10,25 +10,24 @@ const TARGET_MAX_LEN: usize = 128;
 /// 范围目标数量上限。
 const MAX_TARGETS: usize = 128;
 
-/// 当前人员数据范围支持的固定策略类型。
+/// 人员范围支持的固定类型，决定匹配依据以及是否需要解析目标。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub enum DataScopeType {
-    /// 公司级。
+    /// 公司级范围，直接覆盖对象且无需目标。
     Company,
-    /// 组织。
+    /// 按绑定的维度和模式解析组织范围目标。
     Organization,
-    /// 团队。
+    /// 团队范围，沿用组织类的目标解析规则。
     Team,
-    /// 本人负责。
+    /// 按业务对象的本人负责事实限定范围。
     SelfOwned,
-    /// 协作参与。
+    /// 按业务对象的协作参与事实限定范围。
     Collaborative,
 }
 
 impl DataScopeType {
-    /// 返回范围类型的中文展示名。
-    /// 依次为「公司级」「组织」「团队」「本人负责」「协作参与」。
+    /// 返回用于界面或校验提示的中文名称，依次为「公司级」「组织」「团队」「本人负责」「协作参与」。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Company => "公司级",
@@ -39,8 +38,7 @@ impl DataScopeType {
         }
     }
 
-    /// 取得范围类型的稳定代码。
-    /// 依次为 `company`、`organization`、`team`、`self_owned`、`collaborative`。
+    /// 返回与存储协议一致的稳定代码：`company`、`organization`、`team`、`self_owned`、`collaborative`。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Company => "company",
@@ -51,19 +49,14 @@ impl DataScopeType {
         }
     }
 
-    /// 当范围类型需要显式范围目标时返回 `true`。
-    /// `Organization` 与 `Team` 返回 `true`。公司、本人负责和协作参与返回 `false`。
+    /// 组织与团队进入目标解析，显式模式须提供目标列表；公司、本人负责和协作参与无需目标。
     pub fn requires_targets(self) -> bool {
         matches!(self, Self::Organization | Self::Team)
     }
 }
 
-// 规范化范围目标列表：按范围类型校验携带一致性、数量上限与逐项 trim/去重。
-// 返回去重保序后的目标列表。
-//
-// 当目标数量越界、目标为空/超长或范围类型不允许携带目标时返回错误。
-//
-// `scope_type`：范围类型；`targets`：原始目标列表。
+/// 规范化显式目标：组织和团队要求去重前有 1 至 128 项，其他类型只接受空列表。
+/// 每项去除首尾空白后须为 1 至 128 个字符，只允许 ASCII 字母、数字、下划线或短横线；去重时保留首次出现顺序。
 pub(crate) fn normalize_scope_targets(
     scope_type: DataScopeType,
     targets: Vec<String>,
@@ -99,7 +92,7 @@ pub(crate) fn normalize_scope_targets(
 mod tests {
     use super::{DataScopeType, MAX_TARGETS, TARGET_MAX_LEN, normalize_scope_targets};
 
-    // 验证：显式身份去空白、去重保序，同时接受数量和长度边界。
+    // 验证显式标识去除首尾空白并按首次出现顺序去重，数量及长度达到上限仍可接受。
     #[test]
     fn explicit_targets_are_normalized_with_stable_order() {
         let targets = vec![" team-1 ".into(), "team-2".into(), "team-1".into()];
@@ -110,7 +103,7 @@ mod tests {
         assert_eq!(normalize_scope_targets(DataScopeType::Team, vec![target.clone()]).unwrap(), [target]);
     }
 
-    // 验证：目标形态、数量、身份内容和长度非法时不得生成可用范围。
+    // 验证目标缺失、空白、通配符、显示名及数量或长度超限均被拒绝。
     #[test]
     fn explicit_targets_reject_invalid_identity_and_capacity() {
         for targets in [
@@ -125,7 +118,7 @@ mod tests {
         }
     }
 
-    // 验证：隐式范围不接受静态目标，范围代码保持现有序列化协议。
+    // 验证隐式范围只接受空目标，序列化仍使用原有类型代码。
     #[test]
     fn implicit_scopes_reject_targets_and_keep_wire_codes() {
         for (kind, code) in [

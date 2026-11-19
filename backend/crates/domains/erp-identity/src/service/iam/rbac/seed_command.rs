@@ -12,12 +12,9 @@ use crate::service::iam::management::ManagementAccess;
 use crate::{AccessControlExt, AuthorizationService, CreateRoleParams, Error, Result, UpdateRoleParams};
 
 impl RbacService {
-    /// 以发起人的权限创建固定种子角色，或补齐已有同身份角色的缺失权限。
-    /// 创建或补齐返回 true，已满足声明返回 false。
-    ///
+    /// 显式初始化时按固定 ID 创建种子角色，或为同名同 ID 的现有角色追加缺失权限，保留原授予。
+    /// 写入按发起人权限和策略版本校验并记录审计；创建或补齐返回 `true`，已满足时返回 `false`。
     /// 越权、受保护或失效角色、身份冲突、策略版本变化及持久化失败时拒绝。
-    ///
-    /// id 为固定种子键，params 为名称和权限，actor 为发起人，authorization 为共享授权服务。
     pub async fn ensure_seeded_role(
         self: &Arc<Self>,
         id: &str,
@@ -72,7 +69,7 @@ mod tests {
     use crate::entity::role::Role;
     use crate::{Permission, RoleId};
 
-    // 验证：使用正式合并规则覆盖旧销售角色缺少新目录权限的场景及重复执行。
+    // 验证旧销售角色保留已有通配授权、补齐新增目录权限，重复执行无变更。
     #[test]
     fn seeded_permissions_fill_missing_directory_without_removing_existing_grants() {
         let role = Role::new(RoleId::parse("role-demo-sales").unwrap(), RoleData::new("演示销售")).unwrap();
@@ -89,7 +86,7 @@ mod tests {
         assert!(role.seeded_permissions("演示销售", &merged, &desired).unwrap().is_none());
     }
 
-    // 验证：删除、停用、系统角色和身份冲突均不能被种子悄悄恢复。
+    // 验证种子拒绝名称冲突、停用、软删除、系统角色及保留的 root ID。
     #[test]
     fn seeded_permissions_reject_conflicting_and_inactive_roles() {
         let current = PermissionSet::default();

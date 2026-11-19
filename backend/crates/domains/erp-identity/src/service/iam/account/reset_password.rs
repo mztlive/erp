@@ -9,30 +9,24 @@ use crate::error::{Error, Result};
 use crate::repository::prelude::*;
 use crate::service::account_support::{account_of_kind, apply_account_update};
 
-/// 管理员密码重置结果。
+/// 运维重置密码后的账号标识及启用状态。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResetAdminPasswordResult {
-    /// 管理员账号 ID。
+    /// 本次完成密码重置的管理员账号 ID。
     pub admin_id: String,
-    /// 管理员登录账号。
+    /// 规范化后的管理员登录账号。
     pub account: String,
-    /// 重置后账号是否仍处于可登录状态。
+    /// 账号是否启用；重置沿用原状态。
     pub active: bool,
 }
 
 impl AdminService {
-    /// 重置已有管理员密码，不改名称、状态或角色绑定。
+    /// 供运维 `reset-password` 为已有且未删除的管理员更换密码，也适用于受普通更新入口保护的 `role-root` 账号。
     ///
-    /// 已绑定 `role-root` 的超级管理员不能走普通账号更新入口，因此本方法只更新
-    /// `accounts` 集合中的密码哈希。账号不存在、类型不符或已软删除时失败，不会创建或提升账号。
+    /// 仅修改 `accounts` 中的密码哈希，沿用名称、状态和角色；返回账号 ID、登录名及启用状态。恢复超级管理员须使用 `init-admin`。
     ///
-    /// 返回被重置账号的 ID、登录名与当前启用状态。
-    ///
-    /// 失败情形：
-    /// * `ValidationError` - 账号或密码不合法
-    /// * `NotFound` - 管理员不存在或账号类型不是管理员
-    /// * `BusinessLogicError` - 账号已软删除
-    /// * `RepositoryError` - 数据库读写失败
+    /// 账号或密码非法返回 `ValidationError`，账号缺失或类型不符返回 `NotFound`，软删除返回 `BusinessLogicError`。
+    /// 一般数据库读写失败返回 `RepositoryError`，已分类的冲突沿用仓储错误映射。
     pub async fn reset_admin_password(
         &self,
         params: ResetAdminPasswordParams,
@@ -58,12 +52,7 @@ impl AdminService {
     }
 }
 
-// 将仓储结果收窄为可重置密码的未删除管理员。
-// 返回类型匹配且未删除的管理员账号。
-//
-// 账号缺失或类型不符时返回 `NotFound`；已软删除时返回业务错误。
-//
-// `account`：按登录账号查出的可选账号，包含软删除记录。
+// 重置前检查按登录名查到的记录（含软删除）；缺失或类型不符返回 `NotFound`，软删除返回业务错误，其余管理员可重置。
 fn existing_admin_for_password_reset(account: Option<AccountCore>) -> Result<AccountCore> {
     let account = account_of_kind(account, AccountKind::Admin, "管理员不存在")?;
     if account.base.is_deleted() {
@@ -80,7 +69,7 @@ mod tests {
     use super::existing_admin_for_password_reset;
     use crate::entity::{AccountCore, AccountStatus, LoginAccount, Secret};
 
-    // 以指定的软删除状态构造最小后台管理员，用于密码重置边界的单测。
+    // 为重置资格测试构造启用的管理员，并按需标记为软删除。
     fn account(deleted: bool) -> AccountCore {
         let secret = Secret::new(LoginAccount::new("admin01").unwrap(), "password123").unwrap();
         AccountCore {
@@ -99,17 +88,20 @@ mod tests {
         }
     }
 
+    // 验证登录账号缺失时返回 `NotFound`。
     #[test]
     fn missing_account_is_not_found() {
         assert!(matches!(existing_admin_for_password_reset(None), Err(crate::error::Error::NotFound(_))));
     }
 
+    // 验证软删除优先于启用状态，已删除管理员重置密码时返回业务错误。
     #[test]
     fn deleted_admin_cannot_reset_password() {
         let error = existing_admin_for_password_reset(Some(account(true))).unwrap_err();
         assert!(matches!(error, crate::error::Error::BusinessLogicError(_)));
     }
 
+    // 验证启用且未软删除的管理员通过重置检查并保留其账号 ID。
     #[test]
     fn active_admin_is_accepted_for_password_reset() {
         let account = existing_admin_for_password_reset(Some(account(false))).unwrap();

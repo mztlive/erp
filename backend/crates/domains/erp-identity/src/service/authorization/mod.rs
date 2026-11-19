@@ -40,19 +40,23 @@ use crate::{
     AccessFactsPort, AccessMapping, CompiledAccess, Error, Permission, QualifiedPermissions, Result,
 };
 
-/// 共享授权服务。只保存身份设施及校验后的不可变实现绑定。
+/// 统一执行 ERP 业务授权；只持有身份设施和已校验的固定绑定，不保存请求状态。
 #[derive(Clone)]
 pub struct AuthorizationService {
+    // 读取本次账号资格、人员范围及记录授权的身份设施。
     facilities: Arc<dyn Facilities>,
+    // 按资源绑定真实对象及其来源的事实端口。
     facts: BTreeMap<String, Arc<dyn AccessFactsPort>>,
+    // 按查询权限绑定已冻结的根模型及来源映射。
     mappings: BTreeMap<Permission, Arc<dyn AccessMapping>>,
+    // 标识签发服务；克隆共享标识，独立装配的服务不能互验凭证。
     token: Arc<()>,
 }
 
 impl AuthorizationService {
-    /// 为按钮展示或可选字段检查单项功能权限。有效账号有启用角色授予该权限时返回 `true`；非法权限和取证故障不降级为 `false`。
+    /// 为按钮或可选字段检查单项功能资格：有效账号须有启用角色授予该权限。非法权限和取证故障不转为 `false`。
     ///
-    /// 业务读取或写入仍须通过 `query` 或 `require`，不能复用此结果作为对象凭证。
+    /// 此结果不证明对象资格，业务读取或写入仍须调用 `query` 或 `require`。
     pub async fn has_permission(
         &self,
         actor: &AuditActor,
@@ -65,9 +69,9 @@ impl AuthorizationService {
             .is_some_and(|qualified| qualified.same_role(slice::from_ref(permission))))
     }
 
-    /// 批量检查当前账号的功能资格，不读取对象事实或数据范围。失效账号返回 `None`，非法权限及取证错误原样传播。
+    /// 一次读取当前账号的多项功能资格，不读取对象或范围。账号失效返回 `None`，非法权限和取证错误原样传播。
     ///
-    /// 若多项权限必须来自同一启用角色，使用 `QualifiedPermissions::same_role`；各项独立命中并不能证明同角色资格。
+    /// 需要多个权限出自同一启用角色时，使用 `QualifiedPermissions::same_role`，不能把独立命中视为同角色资格。
     pub async fn permissions(
         &self,
         actor: &AuditActor,
@@ -77,10 +81,9 @@ impl AuthorizationService {
         self.facilities.permissions(actor, permissions, executor).await
     }
 
-    /// 在列表、总数、汇总或查询式导出之前，按固定权限和已登记 Mapping 编译完整数据库授权条件。
+    /// 列表、计数、汇总或查询式导出前，按固定权限及已绑定的 Mapping 编译完整数据库授权过滤。
     ///
-    /// 仓储在分页或统计之前执行条件；用例须沿原执行器调用 `validate` 后才能交付结果。
-    /// 未知或不支持的权限、缺少绑定、资格不足以及依赖或执行边界错误均拒绝。
+    /// 仓储须先执行授权过滤再分页或统计；用例沿原执行器调用 `validate` 后才能交付。未知或不支持的权限、绑定缺失、资格不足及依赖或阶段错误均拒绝。
     pub async fn query(
         &self,
         actor: &AuditActor,
@@ -112,28 +115,23 @@ impl AuthorizationService {
 }
 
 impl CompiledAccess {
-    /// 返回本次工作项展示批次的固定完整执行资格。
-    /// 同次查询的启用角色完整覆盖该种类的固定资格时为 true；不证明任务可办理。
+    /// 按已授权任务的真实种类和来源，用当前批次的启用角色检查同角色完整执行资格，仅供展示。
     ///
-    /// 非工作项展示查询、未知种类、跨阶段或到期时拒绝；交付前仍须 validate 原查询。
-    ///
-    /// kind、source 为已授权任务的真实种类和来源类型；executor 为原读取执行器。
+    /// 拒绝非工作项展示查询、未知种类、跨阶段及到期凭证。须使用原读取执行器，交付前仍须复验；通过不代表可以办理任务。
     pub fn execution_qualified(&self, kind: &str, source: &str, executor: &mut dyn Executor) -> Result<bool> {
         self.ensure_work_item_view(executor)?;
         work_items::execution_qualified(kind, source, &self.qualified)
     }
 
-    /// 返回本次工作项展示批次的固定审批决定资格。
-    /// 同次查询的启用角色同时覆盖抄送历史与提交决定时为 true；不签发办理凭证。
+    /// 检查当前工作项展示批次是否有启用角色同时具备抄送历史与提交决定权限，不签发办理凭证。
     ///
-    /// 非工作项展示查询、跨阶段或到期时拒绝；交付前仍须 validate 原查询。
-    ///
-    /// executor 为生成当前查询的原读取执行器。
+    /// 须使用原读取执行器，拒绝非展示查询、跨阶段及到期凭证，交付前仍须复验。
     pub fn decision_qualified(&self, executor: &mut dyn Executor) -> Result<bool> {
         self.ensure_work_item_view(executor)?;
         Ok(work_items::decision_qualified(&self.qualified))
     }
 
+    // 投影操作按钮前，确认凭证来自固定工作项展示入口，且原读取阶段和期限仍有效。
     fn ensure_work_item_view(&self, executor: &mut dyn Executor) -> Result<()> {
         if !work_items::view_permission(self.permission()) {
             return Err(Error::ValidationError("此查询不提供工作项操作展示资格".into()));
@@ -141,7 +139,7 @@ impl CompiledAccess {
         self.ensure_current(executor)
     }
 
-    /// 供复合资金投影判断当前启用角色是否具有整账功能资格，不证明来源可读。返回整账前仍须执行完整来源过滤并复验原查询凭证。
+    /// 供复合资金投影检查是否有整账计划及同角色功能资格。返回整账前仍须执行完整来源过滤并复验原查询凭证。
     pub fn has_whole_qualification(&self) -> bool {
         self.has_whole_plan() && rules::sources::whole_qualified(self.permission(), &self.qualified)
     }

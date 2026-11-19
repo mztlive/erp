@@ -4,30 +4,53 @@ use erp_core::{Error, Result};
 use super::scope_type::normalize_scope_targets;
 use super::{DataScopeType, ScopeBinding, ScopeDimension, ScopeTargetMode};
 
-/// 已校验目标；各模式只携带适用字段，不改变持久化协议。
+/// 已校验的人员范围目标，各模式只携带适用信息，沿用原有持久化协议。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ScopeTarget {
+    /// 公司级范围，无需具体目标身份。
     Company,
+    /// 依据对象的本人负责事实匹配。
     SelfOwned,
+    /// 依据对象的协作参与事实匹配。
     Collaborative,
-    OrgExplicit { ids: Vec<String>, include_descendants: bool },
-    OwnOrg { include_descendants: bool },
-    SettlementParties(Vec<String>),
-    Warehouses(Vec<String>),
+    /// 使用显式内部组织目标，解析时按标记展开组织树。
+    OrgExplicit {
+        /// 经规范化的内部组织标识，供组织树展开。
+        ids: Vec<String>,
+        /// 是否将显式组织目标的有效下级纳入范围。
+        include_descendants: bool
+    },
+    /// 解析时以账号的有效成员关系确定目标组织。
+    OwnOrg {
+        /// 是否将本人组织的有效下级纳入范围。
+        include_descendants: bool
+    },
+    /// 以对象结算主体匹配显式目标。
+    SettlementParties(
+        /// 经规范化的结算主体标识。
+        Vec<String>
+    ),
+    /// 以对象仓库匹配显式目标。
+    Warehouses(
+        /// 经规范化的仓库标识。
+        Vec<String>
+    ),
 }
-/// 旧角色范围额外允许管理部门；人员表达式不承载该变体。
+/// 绑定解析结果，区分人员目标与旧角色专用的管理部门模式。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum BoundScopeTarget {
-    Personal(ScopeTarget),
+    /// 允许进入人员范围表达式的已验证目标。
+    Personal(
+        /// 按各维度和模式解释的目标内容。
+        ScopeTarget
+    ),
+    /// 仅旧角色协议接受的动态管理部门标记。
     ManagedOrgs,
 }
 impl BoundScopeTarget {
-    // 校验原始字段组合并规范化显式身份。
-    // 已验证的内部目标形态。
-    //
-    // 非法模式组合、目标身份或数量拒绝。
-    //
-    // binding、kind、targets 为持久化或请求中的原始字段。
+    /// 将存储或请求中的目标字段解析成内部形态；无目标类型须省略目标设置，显式模式须提供目标。
+    /// 动态模式只接受内部组织且目标须为空；下级标记仅对显式内部组织和本人组织必填。
+    /// 显式目标会规范化，非法字段组合、身份或数量返回错误。
     pub(crate) fn parse(binding: &ScopeBinding, kind: DataScopeType, targets: &[String]) -> Result<Self> {
         if !kind.requires_targets() {
             if binding.target_mode.is_some() || binding.include_descendants.is_some() || !targets.is_empty() {
@@ -57,7 +80,7 @@ impl BoundScopeTarget {
         Self::from_shape(binding, kind, targets, mode)
     }
 
-    // 范围字段已通过模式组合检查后，将其封装为绑定目标；不在此接受任意字段组合。
+    // 字段组合校验通过后，按模式及维度构造目标；显式模式在此规范化标识。
     fn from_shape(
         binding: &ScopeBinding,
         kind: DataScopeType,
@@ -84,8 +107,7 @@ impl BoundScopeTarget {
     }
 }
 impl ScopeTarget {
-    // 返回显式目标身份；动态与隐式范围不携带静态目标。
-    // 已验证的静态目标切片。
+    /// 借用已规范化的显式目标标识；动态或隐式范围返回空切片。
     pub(crate) fn ids(&self) -> &[String] {
         match self {
             Self::OrgExplicit { ids, .. } | Self::SettlementParties(ids) | Self::Warehouses(ids) => ids,

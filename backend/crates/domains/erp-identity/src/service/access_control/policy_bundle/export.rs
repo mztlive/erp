@@ -9,12 +9,10 @@ use crate::entity::authorization_bundle::PolicyDocument;
 use crate::{Error, Result};
 
 impl PolicyBundleService {
-    /// 导出明确选择的角色及人员当前配置。
-    /// 可再次预览的文件、版本及不能保存为追加项的系统规则。
+    /// 导出显式选中的角色和人员的当前配置，供后续预览。角色和人员各最多选择 100 个。
     ///
-    /// 越权、目标失效、复杂旧配置或角色继承时拒绝。
-    ///
-    /// request 为最多100个角色及100个人员的选择，actor 为认证身份。
+    /// 按已认证身份校验权限，返回配置文件、策略版本，并单独说明不能保存为追加项的系统规则。
+    /// 越权、目标失效、旧配置无法无损表达或存在角色继承时拒绝导出。
     pub async fn export(&self, request: ExportPolicyRequest, actor: AuditActor) -> Result<PolicyExport> {
         let selection = request.selection()?;
         let service = self.clone();
@@ -28,7 +26,7 @@ impl PolicyBundleService {
             .await
     }
 
-    // 在同一个只读快照取证和导出，核对读取的策略缓存与原执行阶段一致，不将跨快照结果写入文件。
+    // 导出时在同一只读快照中授权、取数并生成文件，交付前复验策略快照、读取阶段和有效期。
     async fn export_steps(
         &self,
         selection: PolicyDocument,

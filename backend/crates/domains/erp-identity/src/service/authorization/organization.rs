@@ -12,28 +12,27 @@ use crate::entity::authorization::AccessContext;
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Result};
 
-/// 只在身份域组织配置用例中保留本次范围、期限及阶段。
+/// 组织配置取得的域内范围凭据，绑定原快照读取阶段和组织期限。
 pub(crate) struct OrganizationScope {
+    // 同次授权解析出的范围、组织事实和策略版本。
     access: AuthorizedDataScope,
+    // 签发时的快照事务及读取阶段。
     boundary: ExecutionBoundary,
+    // 成员关系变化导致范围失效的最早时点。
     valid_until: Option<Instant>,
 }
 
 impl Deref for OrganizationScope {
     type Target = AuthorizedDataScope;
 
+    // 借出已解析的范围和组织事实，不重新取证或刷新原凭据。
     fn deref(&self) -> &Self::Target {
         &self.access
     }
 }
 
 impl OrganizationScope {
-    // 组织预览、交付及首次写入前核验原快照和全部范围期限。
-    // 原快照阶段与组织范围有效期均满足时成功。
-    //
-    // 跨事务、跨阶段或关系到期时拒绝。
-    //
-    // executor 为取得组织范围的原事务执行器。
+    /// 组织预览、交付或首次写入前，沿原执行器检查快照阶段和范围期限；跨事务或阶段、关系到期时拒绝。
     pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
         if !self.boundary.is_current(executor) {
             return Err(Error::ValidationError("组织范围不能跨事务或读取阶段使用".into()));
@@ -46,12 +45,7 @@ impl OrganizationScope {
 }
 
 impl AuthorizationService {
-    // 为组织配置的固定域内入口取得单次范围。
-    // 同一次完整资格、组织范围及边界；不向业务域开放政策选择。
-    //
-    // 入口不支持、资格不完整、非快照或组织设施失败时拒绝。
-    //
-    // actor 为当前身份，permission 为固定组织入口，executor 为原快照事务。
+    /// 为固定组织配置入口在原快照取得同次完整资格、人员范围和组织事实，不开放政策选择。入口不支持、资格不足、非快照或取证失败时拒绝。
     pub(crate) async fn organization_scope(
         &self,
         actor: &AuditActor,

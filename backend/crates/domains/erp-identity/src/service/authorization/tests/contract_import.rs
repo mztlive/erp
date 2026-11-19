@@ -10,6 +10,7 @@ use super::fixtures::{Facts, Identity, actor, candidate, complete, object, servi
 use crate::entity::authorization::FactValue;
 use crate::{AccessTarget, Error};
 
+// 合同识别任务实时检查原合同创建资格，不为功能操作读取业务事实。
 #[tokio::test]
 async fn import_tasks_require_current_contract_creation_qualification_without_business_fact_reads() {
     let identity = Arc::new(Identity::default());
@@ -47,6 +48,7 @@ async fn import_tasks_require_current_contract_creation_qualification_without_bu
     assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
 }
 
+// 识别只接受快照中的无对象操作，其资格不能替代合同归档候选授权。
 #[tokio::test]
 async fn import_entry_rejects_non_snapshot_and_cannot_replace_contract_candidate_authorization() {
     let identity = Arc::new(Identity::default());
@@ -77,6 +79,7 @@ async fn import_entry_rejects_non_snapshot_and_cannot_replace_contract_candidate
     ));
 }
 
+// 供应商下单候选和幂等回放均要求原下单资格，并按各自当前归属判断。
 #[tokio::test]
 async fn supplier_place_candidates_and_replays_share_qualification_and_current_owner_rules() {
     let identity = Arc::new(Identity::default());
@@ -115,6 +118,7 @@ async fn supplier_place_candidates_and_replays_share_qualification_and_current_o
     }
 }
 
+// 销售分享要求独立固定资格，并按合同写入范围判断实际对象。
 #[tokio::test]
 async fn sales_sharing_uses_fixed_independent_qualification_and_the_contract_write_scope() {
     let identity = Arc::new(Identity::default());

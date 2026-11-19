@@ -10,7 +10,7 @@ use crate::error::{Error, Result};
 use crate::repository::prelude::AccountCoreRepositoryExt;
 use crate::service::iam::ensure_root_role;
 
-/// 根据是否已有管理员账号决定启动时要不要创建。
+// 启动引导按同名账号的存在性和类型选择创建或保留。
 #[derive(Debug)]
 enum SuperAdminBootstrapPlan {
     Create,
@@ -18,16 +18,10 @@ enum SuperAdminBootstrapPlan {
 }
 
 impl AdminService {
-    /// 仅在超级管理员账号不存在时，按启动配置创建并绑定 `role-root`。
+    /// 服务启动配置了初始密码时调用：确保根角色存在，仅在同名账号缺失时创建管理员并绑定 `role-root`。
     ///
-    /// 账号已存在时直接返回，不修改密码、状态或角色。并发启动抢到唯一索引时
-    /// 也按已存在处理，避免另一个副本把已写入的密码覆盖掉。
-    ///
-    /// 创建完成或已有账号无需改动时返回成功。
-    ///
-    /// 参数不合法、同名账号不是系统管理员，或创建过程中的非重复冲突失败时返回错误。
-    ///
-    /// `params`：账号、初始密码与名称。
+    /// 已有管理员（含软删除）保留原密码、状态和角色；并发创建冲突后查到同名管理员也按成功处理。
+    /// 参数非法、同名账号类型不符、复查仍无同名账号或其他创建失败时返回错误。
     pub async fn bootstrap_super_admin_if_absent(&self, params: InitializeSuperAdminParams) -> Result<()> {
         let (account, password, name) = params.into_validated_parts()?;
         ensure_root_role(&self.rbac).await?;
@@ -54,7 +48,7 @@ impl AdminService {
         }
     }
 
-    // 初始化按账号名读取包括软删除在内的记录，并辨别是否已有系统管理员，避免用同名普通账号冒充。
+    // 启动首次查询或创建冲突复查时读取同名账号（含软删除）；区分缺失、系统管理员和其他账号类型。
     async fn load_account(&self, account: &LoginAccount) -> Result<Option<bool>> {
         Ok(self
             .db
@@ -65,7 +59,7 @@ impl AdminService {
     }
 }
 
-// 根据已读取的账号分类生成系统初始化步骤：缺少时创建，已是系统管理员时进入现有账号处理。
+// 启动读库后按账号分类决策：缺失则创建，已有管理员则原样保留，其他类型返回业务错误。
 fn plan_super_admin_bootstrap(existing_is_admin: Option<bool>) -> Result<SuperAdminBootstrapPlan> {
     match existing_is_admin {
         None => Ok(SuperAdminBootstrapPlan::Create),
@@ -76,7 +70,7 @@ fn plan_super_admin_bootstrap(existing_is_admin: Option<bool>) -> Result<SuperAd
     }
 }
 
-// 初始化创建遇到账号唯一冲突后重新读取，判断是否由并发初始化先写入该账号。
+// 并发创建冲突复查后，确认同名管理员已存在时返回成功；仍缺失时保留原冲突，同名其他类型沿用业务错误。
 fn finish_bootstrap_create_conflict(
     existing_is_admin: Option<bool>,
     conflict: Error,
@@ -96,6 +90,7 @@ mod tests {
     use super::{finish_bootstrap_create_conflict, plan_super_admin_bootstrap};
     use crate::error::Error;
 
+    // 验证启动时缺失账号才安排创建，已有管理员原样保留。
     #[test]
     fn absent_account_is_created_and_existing_admin_is_left_unchanged() {
         assert!(matches!(plan_super_admin_bootstrap(None), Ok(super::SuperAdminBootstrapPlan::Create)));
@@ -105,12 +100,14 @@ mod tests {
         ));
     }
 
+    // 验证同名非管理员通过业务错误阻止启动引导创建账号。
     #[test]
     fn non_admin_account_blocks_bootstrap() {
         let error = plan_super_admin_bootstrap(Some(false)).unwrap_err();
         assert!(matches!(error, Error::BusinessLogicError(_)));
     }
 
+    // 验证冲突复查识别已创建的同名管理员，缺失时保留原冲突，类型不符时报告业务错误。
     #[test]
     fn create_conflict_keeps_existing_admin_and_preserves_other_conflicts() {
         let conflict = Error::ConflictError("唯一索引冲突".to_string());

@@ -10,6 +10,7 @@ use super::fixtures::{Facts, Identity, actor, complete, object};
 use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts};
 use crate::{AuthorizationService, Error};
 
+// 接入对账差异事实，以便通过公共入口测试无正式任务的处理动作。
 fn service(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     let mut builder = complete();
     builder.facilities = identity;
@@ -17,6 +18,7 @@ fn service(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     builder.build().unwrap()
 }
 
+// 构造真实差异记录，按用例设置当前处理人或明确不指派。
 fn difference(handler: Option<&str>) -> ObjectFacts {
     ObjectFacts {
         assignee_id: FactValue::Known(handler.map(str::to_string)),
@@ -24,6 +26,7 @@ fn difference(handler: Option<&str>) -> ObjectFacts {
     }
 }
 
+// 只有具备完整资格且仍为当前处理人的账号可以直接处理差异。
 #[tokio::test]
 async fn direct_difference_decision_requires_current_handler_and_complete_qualification() {
     let identity = Arc::new(Identity::default());
@@ -58,6 +61,7 @@ async fn direct_difference_decision_requires_current_handler_and_complete_qualif
     assert_eq!(facts.calls.load(Ordering::SeqCst), reads);
 }
 
+// 没有正式任务时拒绝伪造任务和非事务预检，而且不读取身份或事实。
 #[tokio::test]
 async fn direct_difference_decision_rejects_fake_tasks_and_nontransaction_prechecks() {
     let identity = Arc::new(Identity::default());

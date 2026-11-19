@@ -10,7 +10,7 @@ use crate::entity::authorization::AccessContext;
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
-// 为组织配置相关的授权管理操作选取其固定组织权限，不从调用者输入推定边界。
+/// 将授权管理入口配对到固定组织读取或变更权限，调用方不能另选范围来源。
 pub(super) fn source(permission: &Permission) -> Option<Permission> {
     if [access_control::PERSON_SCOPE_LIST, access_control::POLICY_BUNDLE_EXPORT].contains(permission) {
         Some(organization::LIST)
@@ -27,7 +27,7 @@ pub(super) fn source(permission: &Permission) -> Option<Permission> {
     }
 }
 
-// 组织授权管理用例要求同一启用角色同时证明公司组织范围的入口权限和配置资格。
+/// 为授权管理操作汇总须由同一启用角色提供的配置及组织权限；文件操作复用其固定基础资格。
 pub(super) fn requirements(permission: &Permission) -> Option<Vec<Permission>> {
     if let Some(required) = super::policy_bundles::requirements(permission, None) {
         return Some(required);
@@ -37,7 +37,7 @@ pub(super) fn requirements(permission: &Permission) -> Option<Vec<Permission>> {
 }
 
 impl AuthorizationService {
-    // 统一授权处理管理操作时，按固定入口读取并校验公司级组织范围。
+    /// 执行无对象管理操作前，按固定组织权限核验公司级范围；未登记范围来源的操作无需此检查。
     pub(super) async fn require_operation_scope(
         &self,
         actor: &AuditActor,
@@ -58,7 +58,7 @@ impl AuthorizationService {
         Ok(())
     }
 
-    // 管理操作先证明同角色公司范围，再把同次策略与组织事实交给本域配置用例，避免使用另一快照。
+    /// 核验同角色完整资格解析出的公司组织范围，拒绝收窄的个人上限或到期范围，并返回同次策略及组织事实供配置用例使用。
     pub(super) async fn company_operation_scope(
         &self,
         context: &AccessContext,

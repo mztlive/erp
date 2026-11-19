@@ -1,31 +1,19 @@
-//! 域 D06 `access_control` 的 DTO（Handler 直接复用，禁止在 handler 内重复定义同构类型）。
+//! 管理端的权限目录、人员范围、权限检查、角色绑定留痕和审计列表数据。
 //!
-//! 字段名与 HTTP 契约一致（api-contract.md）：分页参数 `page`/`page_size`/
-//! `sort_by`/`sort_dir` 扁平传递；时间一律秒级时间戳；本域无金额字段。
-//!
-//! 角色/账号/Casbin 能力已有 `services::iam` 承载，本域 DTO 只覆盖增补的
-//! `permission` 目录、`data_scope`、`user_role` 绑定记录与 `audit_event` 查询
-//! （domains.md：D06 只做 data_scope 增补与 audit_log→audit_event 字段对齐）。
+//! HTTP 处理函数须直接复用此处的请求和响应类型。`page`、`page_size`、`sort_by`、`sort_dir`
+//! 与筛选字段同层传递。绑定和审计时间用 Unix 秒；权限检查的 `checked_at` 用 RFC 3339 文本。
+//! 账号、角色与实际 Casbin 绑定由 `service::iam` 管理。
 
-/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
+/// 管理端共用分页响应：`items`、`total`、`page` 和 `page_size`。
 pub use application_core::PageView;
-/// 排序方向。
+/// 列表使用的升序或降序。
 pub use application_core::SortDir;
-/// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
-///
-/// # 参数
-/// * `sort_by` - 可选排序字段；空白视为未提供
-/// * `sort_dir` - 可选排序方向；空白视为未提供
-/// * `allowed_fields` - 白名单
-///
-/// # 返回
-/// 返回 `(排序字段, 方向)`；未提供时默认 `("created_at", Desc)`。
-///
-/// # 错误
-/// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
+/// 供测试复用的排序校验。忽略两端空白，缺省或全空白时使用 `("created_at", Desc)` 的对应默认项。
+/// 显式字段须在 `allowed_fields` 中，方向须为 `asc` 或 `desc`，否则返回 `ValidationError`。
 #[cfg(test)]
 pub(crate) use application_core::normalize_sort;
 
+/// 权限目录和审计列表共用的已校验分页参数。
 pub use crate::entity::access_control::paging::PageParams;
 
 pub mod audit_event;
@@ -48,6 +36,7 @@ mod tests {
     };
     use crate::entity::access_control::AuditEventResult;
 
+    // 验证排序字段白名单，已知字段可带首尾空白，未指定方向时按降序。
     #[test]
     fn sort_whitelist_rejects_unknown_fields() {
         assert!(normalize_sort(&Some("actor_id".to_string()), &None, &["created_at"]).is_err());
@@ -57,6 +46,7 @@ mod tests {
         assert_eq!(direction, SortDir::Desc);
     }
 
+    // 验证资源筛选裁剪空白、保留显式分页，并拒绝越界分页。
     #[test]
     fn permission_list_params_normalize_and_validate() {
         let params = PermissionListParams {
@@ -77,12 +67,14 @@ mod tests {
         assert!(invalid.validate().is_err());
     }
 
+    // 验证未提供筛选条件时，权限资源和审计操作者字段默认为空。
     #[test]
     fn tier_a_list_params_default_to_empty() {
         assert!(PermissionListParams::default().resource.is_none());
         assert!(AuditEventListParams::default().actor_id.is_none());
     }
 
+    // 验证两种仓储筛选器默认第 1 页、每页 20 条，权限目录默认降序。
     #[test]
     fn tier_c_repository_filters_default_to_first_page_size_20() {
         use crate::repository::{AuditEventFilter, PermissionFilter};
@@ -97,6 +89,7 @@ mod tests {
         assert_eq!(PermissionFilter::default().paging.sort_dir, SortDir::Desc);
     }
 
+    // 验证创建请求默认标为自定义权限，并将资源代码传给实体。
     #[test]
     fn permission_create_request_keeps_fields() {
         let request: CreatePermissionRequest = serde_json::from_value(json!({
@@ -110,6 +103,7 @@ mod tests {
         assert_eq!(data.resource, "sales_order");
     }
 
+    // 验证空补丁返回空字段列表，空描述与 `false` 仍按固定顺序列入。
     #[test]
     fn permission_update_reports_changed_fields_in_contract_order() {
         let empty = UpdatePermissionRequest { version: 1, name: None, description: None, disabled: None };
@@ -124,6 +118,7 @@ mod tests {
         assert_eq!(complete.changed_field_names(), vec!["name", "description", "disabled"]);
     }
 
+    // 验证省略生效时间时使用当前秒，并保留用户、服务端分配人和到期时间。
     #[test]
     fn user_role_assign_request_defaults_effective_from_now() {
         let request: AssignUserRoleRequest = serde_json::from_value(json!({
@@ -139,6 +134,7 @@ mod tests {
         assert!(data.effective_to.is_some());
     }
 
+    // 验证审计查询裁剪操作者 ID、保留结果筛选并补齐默认分页大小。
     #[test]
     fn audit_event_list_params_normalize() {
         let params = AuditEventListParams {

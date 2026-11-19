@@ -10,7 +10,7 @@ use super::fixtures::{Facts, Identity, actor, service};
 use crate::entity::access_control::ScopeClause;
 use crate::{Error, Permission};
 
-// 验证：检查与业务授权共用同角色完整资格，不接受单动作或跨角色拼接。
+// 范围检查与业务授权共用同角色完整资格，拒绝单动作授权或跨角色拼接。
 #[tokio::test]
 async fn scoped_inspection_requires_complete_same_role_qualification() {
     let permission = sales_inquiry::COMMANDS_SALES_CREATE;
@@ -40,7 +40,7 @@ async fn scoped_inspection_requires_complete_same_role_qualification() {
     assert!(scope.scope.has_role_scope());
 }
 
-// 验证：范围来源复用客户设置，但只使用合同动作本次合格的角色。
+// 合同检查沿用客户范围配置，但只采用已满足本次合同动作资格的角色。
 #[tokio::test]
 async fn permission_source_uses_current_target_roles_and_fixed_origin() {
     let identity = Arc::new(Identity::default());
@@ -62,7 +62,7 @@ async fn permission_source_uses_current_target_roles_and_fixed_origin() {
     assert_eq!(access.scope.role_clauses, vec![ScopeClause { self_owned: true, ..Default::default() }]);
 }
 
-// 验证：来源与任务动作完成资格后仍不产生对象范围结论。
+// 来源与任务动作可以检查完整资格，但检查结果不代表对象已获授权。
 #[tokio::test]
 async fn contextual_inspection_qualifies_all_permissions_without_object_approval() {
     let identity = Arc::new(Identity::default());
@@ -113,7 +113,7 @@ async fn contextual_inspection_qualifies_all_permissions_without_object_approval
     );
 }
 
-// 验证：无效身份与取证失败不得退化为已通过的配置检查。
+// 配置检查保留账号停用、权限不足和身份设施故障的区别。
 #[tokio::test]
 async fn inspection_preserves_identity_denials_and_facility_errors() {
     let identity = Arc::new(Identity::default());

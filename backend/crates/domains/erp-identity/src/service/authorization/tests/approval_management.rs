@@ -12,6 +12,7 @@ use crate::entity::access_control::ResolvedScope;
 use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts, RelatedObjects, RelationKey};
 use crate::{Error, Permission};
 
+// 构造指派给他人且关联当前用户销售单的审批实例。
 fn instance() -> ObjectFacts {
     ObjectFacts {
         resource: "approval_instance".into(),
@@ -32,6 +33,7 @@ fn instance() -> ObjectFacts {
         ..Default::default()
     }
 }
+// 为管理测试绑定指定角色、审批实例和它引用的真实销售单。
 fn setup(grants: Vec<(String, Vec<Permission>)>, root: ObjectFacts) -> (AuthorizationService, Arc<Identity>) {
     let identity = Arc::new(Identity::default());
     identity.state.lock().unwrap().grants = grants;
@@ -43,6 +45,7 @@ fn setup(grants: Vec<(String, Vec<Permission>)>, root: ObjectFacts) -> (Authoriz
         .insert("sales_order".into(), Arc::new(Facts::new(vec![object("sales_order", "order", "user")])));
     (builder.build().unwrap(), identity)
 }
+// 返回销售单审批解除阻塞用例所用的管理角色权限。
 fn grants() -> Vec<Permission> {
     vec![
         approval_instance::CANCEL_BLOCKED,
@@ -52,6 +55,7 @@ fn grants() -> Vec<Permission> {
     ]
 }
 
+// 销售单审批管理者即便未获指派，也能管理真实来源完整且可读的实例。
 #[tokio::test]
 async fn non_assigned_type_administrator_can_manage_a_fully_readable_real_source() {
     let (service, identity) = setup(vec![("manager".into(), grants())], instance());
@@ -67,6 +71,7 @@ async fn non_assigned_type_administrator_can_manage_a_fully_readable_real_source
     assert_eq!(identity.permissions_calls.load(Ordering::SeqCst), 1);
 }
 
+// 实例读取和类型管理资格不得跨角色拼接，其他主体类型的管理权也不能替代。
 #[tokio::test]
 async fn management_rejects_split_role_admin_and_a_different_subject_type_admin() {
     let all = grants();
@@ -100,6 +105,7 @@ async fn management_rejects_split_role_admin_and_a_different_subject_type_admin(
     ));
 }
 
+// 具备类型管理资格仍不能管理来源不完整的审批实例。
 #[tokio::test]
 async fn management_rejects_an_incomplete_real_source_even_with_type_admin() {
     let mut root = instance();
@@ -118,6 +124,7 @@ async fn management_rejects_an_incomplete_real_source_even_with_type_admin() {
     ));
 }
 
+// 用合格管理角色的来源范围校验对象，不额外要求来源菜单资格。
 #[tokio::test]
 async fn management_uses_admin_source_scope_without_adding_source_menu_qualification() {
     let mut missing = grants();
@@ -148,6 +155,7 @@ async fn management_uses_admin_source_scope_without_adding_source_menu_qualifica
     ));
 }
 
+// 未提交实例升级时从服务端补齐真实来源，不采信调用方提供的候选对象。
 #[tokio::test]
 async fn unsubmitted_upgrade_hydrates_real_sources_and_rejects_caller_objects() {
     let granted = vec![
@@ -186,6 +194,7 @@ async fn unsubmitted_upgrade_hydrates_real_sources_and_rejects_caller_objects() 
     ));
 }
 
+// 非事务管理复验沿用原管理动作的来源范围，不误用独立详情入口的范围。
 #[tokio::test]
 async fn non_transactional_management_revalidates_the_original_admin_scope_context() {
     let granted = vec![approval_instance::INSTANCE_LIST, approval_admin::SALES_ORDER_RUNTIME];
@@ -221,6 +230,7 @@ async fn non_transactional_management_revalidates_the_original_admin_scope_conte
     ));
 }
 
+// 收款审批的整账权限必须与管理资格同角色，所有真实来源也须完整可读。
 #[tokio::test]
 async fn receipt_management_keeps_ledger_in_the_same_admin_role_and_requires_whole_sources() {
     let entry = approval_instance::CANCEL_BLOCKED;
@@ -316,6 +326,7 @@ async fn receipt_management_keeps_ledger_in_the_same_admin_role_and_requires_who
     ));
 }
 
+// 最后一次异步复验结束后仍要检查先前来源记录下来的到期时间。
 #[tokio::test]
 async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalidation() {
     use std::collections::BTreeSet;
@@ -336,14 +347,21 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
     use crate::service::access_control::resolve::AuthorizedDataScope;
     use crate::{QualifiedPermissions, Result};
 
+    // 让复验后段可推进时钟，以模拟先解析的审批来源在放行前到期。
     struct ExpiringSources {
+        // 提供默认权限、范围和记录授权的身份替身。
         identity: Identity,
+        // 销售来源组织关系失效的时间，也是模拟时钟推进的目标。
         deadline: Instant,
+        // 区分采购来源首次范围读取与复验的计数。
         purchase_reads: AtomicU64,
+        // 控制是否在采购来源复验期间触发销售来源到期。
         expire_during_revalidation: bool,
     }
+    // 在默认身份设施上增加来源期限和复验时钟控制。
     #[async_trait]
     impl Facilities for ExpiringSources {
+        // 沿用原身份替身的角色权限判定。
         async fn permissions(
             &self,
             actor: &AuditActor,
@@ -352,6 +370,7 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
         ) -> Result<Option<QualifiedPermissions>> {
             self.identity.permissions(actor, permissions, executor).await
         }
+        // 给销售来源挂上到期关系，并可在再次读取采购来源范围时推进时钟。
         async fn scope(
             &self,
             context: &AccessContext,
@@ -382,6 +401,7 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
             }
             Ok(access)
         }
+        // 复用原身份替身提供的记录授权版本。
         async fn grant_revision(
             &self,
             actor: &AuditActor,
@@ -390,6 +410,7 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
         ) -> Result<u64> {
             self.identity.grant_revision(actor, resource, executor).await
         }
+        // 沿用原身份替身按目标过滤的记录授权。
         async fn grants(
             &self,
             context: &AccessContext,
@@ -453,6 +474,7 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
     }
 }
 
+// 提交人和历史参与人读取实例不依赖当前业务来源。
 #[tokio::test]
 async fn ordinary_instance_reads_do_not_require_current_business_sources() {
     for history in [false, true] {
@@ -474,6 +496,7 @@ async fn ordinary_instance_reads_do_not_require_current_business_sources() {
     }
 }
 
+// 以当前审批责任读取实例时，实例读取和裁决资格必须由同一角色持有。
 #[tokio::test]
 async fn current_instance_responsibility_requires_same_role_decision_qualification() {
     let mut root = instance();
@@ -513,6 +536,7 @@ async fn current_instance_responsibility_requires_same_role_decision_qualificati
     );
 }
 
+// 普通实例读取回退到管理授权时保留来源记录授权，但不能放过缺失来源。
 #[tokio::test]
 async fn ordinary_instance_management_fallback_keeps_source_grants_and_rejects_missing_sources() {
     use async_trait::async_trait;
@@ -522,12 +546,17 @@ async fn ordinary_instance_management_fallback_keeps_source_grants_and_rejects_m
     use crate::entity::resource_access::ResourceKind;
     use crate::{AccessFactsPort, Result};
 
+    // 按普通读取或管理回退提供不同展开程度的审批事实。
     struct ConditionalFacts {
+        // 普通实例读取返回的未展开根对象。
         root: ObjectFacts,
+        // 管理读取使用的实例和来源事实。
         expanded: ObjectFacts,
     }
+    // 模拟事实端口按读取动作选择来源展开方式。
     #[async_trait]
     impl AccessFactsPort for ConditionalFacts {
+        // 只在管理读取入口返回带业务来源关系的实例。
         async fn load(
             &self,
             context: &AccessContext,

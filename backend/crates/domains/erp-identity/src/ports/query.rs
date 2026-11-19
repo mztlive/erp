@@ -11,9 +11,10 @@ pub enum QueryFragment {
     Exists { collection: String, bindings: Document, pipeline: Vec<Document> },
 }
 
-/// 根记录保存的完整来源 ID 集合与来源模型。
-/// expected_ids 是 MongoDB 数组表达式；缺失和 null 由编译器解释为空集。
+/// 查询编译使用的来源关系描述，承载根记录引用的完整 ID 集合以及对应来源模型。
 pub struct RelationMapping {
+    /// 产出所有来源 ID 的 MongoDB 数组表达式；缺失和 `null` 按空集合处理。
     pub expected_ids: Bson,
+    /// 启动时为该关系登记的来源映射，供编译器生成来源有效性及访问范围条件。
     pub mapping: Arc<dyn AccessMapping>,
 }

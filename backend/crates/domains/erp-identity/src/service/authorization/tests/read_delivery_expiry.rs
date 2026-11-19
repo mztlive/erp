@@ -7,7 +7,7 @@ use persistence_core::{Executor, ReadExecutor};
 use super::fixtures::{actor, complete};
 use crate::Error;
 
-// 沿真实 `query` 和 `validate` 路径验证正常交付，以及读取完成后到期时必须拒绝交付。
+// 沿真实查询和交付路径验证：有效凭证可交付，读取完成后到期则拒绝。
 async fn require_current_delivery(executor: &mut dyn Executor) {
     let service = complete().build().unwrap();
     for permission in [
@@ -30,11 +30,13 @@ async fn require_current_delivery(executor: &mut dyn Executor) {
     }
 }
 
+// 快照内的详情和复制链接也不能交付已到期的查询结果。
 #[tokio::test]
 async fn snapshot_detail_and_copy_link_queries_reject_expired_delivery() {
     require_current_delivery(&mut SnapshotExecutor::default()).await;
 }
 
+// 非事务的详情和复制链接同样在最终交付时检查到期。
 #[tokio::test]
 async fn non_transactional_detail_and_copy_link_queries_reject_expired_delivery() {
     require_current_delivery(&mut ReadExecutor::default()).await;

@@ -31,10 +31,7 @@ pub(crate) enum ExistingSuperAdminState {
 }
 
 impl ExistingSuperAdminState {
-    // 根据软删除与登录状态确定恢复语义。
-    // 已软删除时返回 `Deleted`；否则可登录返回 `Active`，不可登录返回 `Inactive`。
-    //
-    // `is_deleted`：账号是否已软删除；`is_active`：账号状态是否允许登录。
+    /// 超管初始化时先按软删除标记识别待恢复账号，其余按登录状态区分启用和停用。
     pub(crate) fn from_state(is_deleted: bool, is_active: bool) -> Self {
         if is_deleted {
             return Self::Deleted;
@@ -42,84 +39,85 @@ impl ExistingSuperAdminState {
         if is_active { Self::Active } else { Self::Inactive }
     }
 
-    // 返回初始化是否恢复了不可登录或已删除账号。
-    // 非 `Active` 时返回 `true`。
+    /// 初始化结果用此标记记录原先停用或已软删除的超管账号是否被恢复。
     pub(crate) fn reactivates(self) -> bool {
         !matches!(self, Self::Active)
     }
 }
 
 impl AccountStatus {
-    /// 当状态可登录时返回 `true`。
-    /// 处于 `Active` 时返回 `true`。
+    /// 判断账号状态是否允许登录，只有启用状态通过。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
 }
 
-/// 统一账号创建数据。
+/// 新建统一账号时传入实体的凭证、显示名称、身份类型及初始状态。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AccountCoreData {
+    /// 已处理的登录凭证，内含登录名和密码哈希。
     pub secret: Secret,
+    /// 待实体裁剪首尾空白并校验的显示名称。
     pub name: String,
+    /// 新账号所属的身份域。
     pub kind: AccountKind,
+    /// 新账号的初始登录状态。
     pub status: AccountStatus,
 }
 
 impl AccountCoreData {
-    /// 构造初始启用的后台管理员数据。
-    /// 类型固定为管理员、状态为 Active 的创建数据。
-    ///
-    /// 不返回错误；名称由账号实体校验。
-    ///
-    /// secret 为已处理凭证，name 为待规范化名称。
+    /// 用已处理的凭证准备启用状态的后台管理员账号，显示名称留给实体校验。
     pub fn admin(secret: Secret, name: String) -> Self {
         Self { secret, name, kind: AccountKind::Admin, status: AccountStatus::Active }
     }
 
-    /// 构造初始启用的供应商账号数据。
-    /// 类型固定为供应商、状态为 Active 的创建数据。
-    ///
-    /// 不返回错误；名称由账号实体校验。
-    ///
-    /// secret 为已处理凭证，name 为待规范化名称。
+    /// 用已处理的凭证准备启用状态的供应商账号，显示名称留给实体校验。
     pub fn supplier(secret: Secret, name: String) -> Self {
         Self { secret, name, kind: AccountKind::Supplier, status: AccountStatus::Active }
     }
 }
 
-/// 统一账号更新数据。
+/// 统一账号的局部更新，未提供的字段沿用原值。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct AccountCoreUpdate {
+    /// 待规范化的新显示名称。
     pub name: Option<String>,
+    /// 用于生成替换哈希的新明文密码。
     pub password: Option<String>,
+    /// 决定后续登录资格的目标账号状态。
     pub status: Option<AccountStatus>,
 }
 
-/// 统一账号实体。
+/// 后台与供应商共用的持久化账号，承载登录凭证、身份类型、状态和个人资料。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct AccountCore {
+    /// 持久化元数据，含稳定账号 ID、版本和软删除标记。
     #[serde(flatten)]
     pub base: BaseModel,
+    /// 展开为账号记录顶层字段的登录名和密码哈希。
     #[serde(flatten, default)]
     pub secret: Secret,
+    /// 用于展示的账号名称。
     pub name: String,
+    /// 用于区分后台和供应商认证入口的身份类型。
     pub kind: AccountKind,
+    /// 登录状态，旧记录缺省时视为启用。
     #[serde(default)]
     pub status: AccountStatus,
+    /// 账号的可选联系邮箱。
     #[serde(default)]
     pub email: Option<String>,
+    /// 账号的可选联系电话。
     #[serde(default)]
     pub phone: Option<String>,
+    /// 账号的可选头像地址。
     #[serde(default)]
     pub avatar: Option<String>,
 }
 
 impl AccountCore {
-    /// 创建统一账号，并把登录账号再按后台长度上限校验。
-    /// 返回名称已规范化、联系方式和头像为空的新账号。
-    ///
-    /// 名称不合法或登录账号超出后台长度时返回错误。
+    /// 创建账号时裁剪显示名称并校验非空及 64 字符上限，登录名额外遵守后台 32 字符上限。
+    /// 任一校验失败时返回错误；新账号的联系方式和头像为空。
     pub fn new(id: String, data: AccountCoreData) -> Result<Self> {
         let mut secret = data.secret;
         let name = normalize_required_text(data.name, "账号名称不能为空", NAME_MAX_LEN, "账号名称过长")?;
@@ -138,10 +136,8 @@ impl AccountCore {
         })
     }
 
-    /// 更新统一账号。
-    /// 校验通过后就地更新；未提供的字段保持不变。
-    ///
-    /// 名称或密码不合法时返回错误。状态本身不产生错误。
+    /// 就地依次更新给定的名称、密码和状态，省略的字段沿用原值。
+    /// 名称校验或密码处理失败时中止；密码处理失败前名称可能已更新。
     pub fn update(&mut self, update: AccountCoreUpdate) -> Result<()> {
         self.apply_name(update.name)?;
         self.apply_password(update.password)?;
@@ -149,37 +145,24 @@ impl AccountCore {
         Ok(())
     }
 
-    /// 当账号可登录时返回 `true`。
-    /// 仅当 `status` 为 `Active` 时返回 `true`，不检查软删除。
+    /// 仅按启用状态判断登录资格；软删除由调用方检查。
     pub fn can_login(&self) -> bool {
         self.status.is_active()
     }
 
-    /// 返回仅供后台认证边界使用的当前凭证。
-    ///
-    /// 本方法不验证密码、不选择哈希算法，也不改变错误文案；认证 Service 必须
-    /// 继续负责等成本校验和对外失败脱敏。
-    ///
-    /// 账号类型匹配且状态允许登录时返回凭证借用，否则返回 `None`。
-    ///
-    /// `expected_kind`：本次认证入口要求的账号类型。
+    /// 仅在账号启用且类型符合认证入口要求时借出凭证，否则返回 `None`。
+    /// 密码验证、验证成本平衡和对外错误脱敏由认证服务负责。
     pub fn authentication_secret_for(&self, expected_kind: AccountKind) -> Option<&Secret> {
         (self.kind == expected_kind && self.can_login()).then_some(&self.secret)
     }
 
-    /// 当持久化账号仍与已签发的会话身份完全一致时返回 `true`。
-    /// 账号仍可登录，且账号、类型与版本全部一致时返回 `true`。
-    ///
-    /// `version`：会话签发时的账号版本。
+    /// 复验会话签发时的登录名、账号类型和版本，并要求当前状态仍允许登录；软删除由调用方检查。
     pub fn matches_session_identity(&self, account: &str, kind: AccountKind, version: u64) -> bool {
         self.authentication_secret_for(kind)
             .is_some_and(|secret| secret.account() == account && self.base.version == version)
     }
 
-    /// 校验账号当前允许登录并参与业务操作。
-    /// 账号处于 `Active` 时返回 `Ok(())`。
-    ///
-    /// 账号被冻结或归档时返回错误。
+    /// 业务操作要求可登录身份时检查账号状态，冻结或归档返回业务错误。
     pub fn ensure_can_login(&self) -> Result<()> {
         if self.can_login() {
             return Ok(());
@@ -187,32 +170,22 @@ impl AccountCore {
         Err(Error::from("账号已停用，不能参与需要可登录身份的业务操作"))
     }
 
-    /// 当账号类型匹配期望值时返回 `true`。
-    /// 类型匹配时返回 `true`。
-    ///
-    /// `expected`：期望账号类型。
+    /// 判断持久化账号类型是否符合调用方要求的身份域。
     pub fn is_kind(&self, expected: AccountKind) -> bool {
         self.kind == expected
     }
 
-    /// 当账号为当前可承担后台责任的有效账号时返回 `true`。
-    /// 审批责任人等后台职责必须同时满足身份类型与账号状态，不得只判断其中一项。
-    ///
-    /// 账号类型为后台管理员且状态允许登录时返回 `true`。
+    /// 筛选审批责任人等后台职责的候选账号，同时要求后台管理员类型和启用状态。
     pub fn is_active_backoffice(&self) -> bool {
         self.is_kind(AccountKind::Admin) && self.can_login()
     }
 
-    /// 当本次授权身份为当前有效后台账号时返回 `true`。
-    /// 账号可用且类型一致时为 true。
-    ///
-    /// kind 为已认证操作人的账号类型。
+    /// 授权前确认操作人类型与持久化账号一致，且该后台账号启用、未软删除。
     pub fn is_authorization_actor(&self, kind: AccountKind) -> bool {
         !self.base.is_deleted() && self.is_active_backoffice() && self.kind == kind
     }
 
-    // 应用名称更新。
-    // 当名称不合法时返回错误。
+    // 提供新名称时先裁剪并校验非空及长度，再替换显示名称。
     fn apply_name(&mut self, name: Option<String>) -> Result<()> {
         if let Some(name) = name {
             self.name = normalize_required_text(name, "账号名称不能为空", NAME_MAX_LEN, "账号名称过长")?;
@@ -220,8 +193,7 @@ impl AccountCore {
         Ok(())
     }
 
-    // 应用密码更新。
-    // 当密码为空或密码哈希失败时返回错误。
+    // 提供新密码时先计算哈希再替换凭证；空密码或哈希失败保留原密码哈希。
     fn apply_password(&mut self, password: Option<String>) -> Result<()> {
         if let Some(password) = password {
             self.secret.change_password(password)?;
@@ -229,7 +201,7 @@ impl AccountCore {
         Ok(())
     }
 
-    // 应用状态更新。
+    // 直接应用给定的账号状态；省略时保留原登录资格。
     fn apply_status(&mut self, status: Option<AccountStatus>) {
         if let Some(status) = status {
             self.status = status;
@@ -237,7 +209,7 @@ impl AccountCore {
     }
 }
 
-// 规范化后台账号名，并应用后台账号专属的长度约束，供账号创建与登录相关实体使用。
+// 在通用登录名规范化后检查后台 32 字符上限，供统一账号创建复用。
 fn backoffice_login_account(account: impl Into<String>) -> Result<LoginAccount> {
     let account = LoginAccount::new(account)?;
     if account.as_str().chars().count() > LoginAccount::BACKOFFICE_MAX_LEN {
@@ -252,6 +224,7 @@ mod tests {
     use super::{AccountCore, AccountCoreData, AccountCoreUpdate, AccountKind, AccountStatus};
     use crate::entity::auth::{LoginAccount, Secret};
 
+    // 用固定登录凭证搭配指定类型和状态，构造账号规则测试数据。
     fn sample_account(kind: AccountKind, status: AccountStatus) -> AccountCore {
         AccountCore::new(
             "account-1".to_string(),
@@ -265,6 +238,7 @@ mod tests {
         .unwrap()
     }
 
+    // 验证后台与供应商账号按正确类型启用、裁剪名称，并留空联系方式和头像。
     #[test]
     fn constructors_create_active_accounts_without_contacts() {
         let secret = Secret::new(LoginAccount::new("sample").unwrap(), "password123").unwrap();
@@ -280,6 +254,7 @@ mod tests {
         }
     }
 
+    // 验证后台授权拒绝身份类型不符、冻结、归档和软删除的账号。
     #[test]
     fn authorization_actor_rejects_inactive_deleted_and_wrong_kind() {
         let mut account = sample_account(AccountKind::Admin, AccountStatus::Active);
@@ -296,13 +271,14 @@ mod tests {
         assert!(!account.is_authorization_actor(AccountKind::Admin));
     }
 
+    // 验证后台账号可匹配管理员身份类型。
     #[test]
     fn is_kind_should_match_only_expected_kind() {
         let account = sample_account(AccountKind::Admin, AccountStatus::Active);
         assert!(account.is_kind(AccountKind::Admin));
     }
 
-    // 验证：有效后台责任账号必须同时满足后台身份与可登录状态。
+    // 验证后台账号只有处于启用状态才能承担后台职责。
     #[test]
     fn active_backoffice_requires_login_eligibility() {
         let active = sample_account(AccountKind::Admin, AccountStatus::Active);
@@ -314,6 +290,7 @@ mod tests {
         assert!(!archived.is_active_backoffice());
     }
 
+    // 验证后台认证能借用启用账号的凭证，冻结账号返回空。
     #[test]
     fn authentication_secret_requires_matching_active_kind() {
         let active = sample_account(AccountKind::Admin, AccountStatus::Active);
@@ -323,6 +300,7 @@ mod tests {
         assert!(suspended.authentication_secret_for(AccountKind::Admin).is_none());
     }
 
+    // 验证登录名、版本或登录状态变化时，原会话身份复验失败。
     #[test]
     fn session_identity_requires_account_kind_status_and_version() {
         let active = sample_account(AccountKind::Admin, AccountStatus::Active);
@@ -334,6 +312,7 @@ mod tests {
         assert!(!suspended.matches_session_identity("sample", AccountKind::Admin, 1));
     }
 
+    // 验证登录资格检查通过启用账号，并拒绝冻结和归档状态。
     #[test]
     fn login_eligibility_accepts_active_and_rejects_inactive_states() {
         assert!(sample_account(AccountKind::Admin, AccountStatus::Active).ensure_can_login().is_ok());
@@ -341,6 +320,7 @@ mod tests {
         assert!(sample_account(AccountKind::Admin, AccountStatus::Archived).ensure_can_login().is_err());
     }
 
+    // 验证通过通用登录名校验的 33 字符账号仍超出后台上限。
     #[test]
     fn new_should_reject_account_longer_than_backoffice_limit() {
         let secret = Secret::new(LoginAccount::new("a".repeat(33)).unwrap(), "password123").unwrap();
@@ -357,6 +337,7 @@ mod tests {
         assert!(result.is_err());
     }
 
+    // 验证更新名称、密码和状态时保留已有邮箱、电话和头像。
     #[test]
     fn update_preserves_existing_contacts() {
         let mut account = sample_account(AccountKind::Admin, AccountStatus::Active);
@@ -379,6 +360,7 @@ mod tests {
         assert_eq!(account.avatar.as_deref(), Some("https://example.com/avatar.png"));
     }
 
+    // 验证冻结会关闭登录资格，重新启用后恢复登录资格。
     #[test]
     fn update_should_suspend_and_reactivate_login_eligibility() {
         let mut account = sample_account(AccountKind::Admin, AccountStatus::Active);

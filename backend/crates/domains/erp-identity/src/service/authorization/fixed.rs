@@ -16,12 +16,9 @@ use crate::repository::authorization::binding::{FrozenMapping, validate_rule};
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{AccessFactsPort, AccessMapping, Permission, QualifiedPermissions, Result};
 
-// 组装有限测试绑定；不调用或放宽生产 Builder 的完整性校验。
-// 执行生产 require/query/validate 的共享服务。
-//
-// 模型、资源、重复映射或固定规则能力校验失败时拒绝构造。
-//
-// permissions、scope、objects 为固定身份事实；mappings 为测试消费的实际查询映射。
+/// 用固定权限、范围、对象事实及本次 Mapping 装配内存测试服务，仍执行生产 `require`、`query` 和 `validate`。
+///
+/// 不调用生产构建器的全量绑定检查，也不放宽它；对选用映射仍拒绝重复登记、资源或模型错配及固定规则能力不足。
 pub(crate) fn authorization(
     permissions: &[Permission],
     scope: ResolvedScope,
@@ -55,13 +52,17 @@ pub(crate) fn authorization(
     }))
 }
 
+// 为授权测试提供单启用角色及固定人员范围的内存身份设施。
 struct FixedIdentity {
+    // 测试角色拥有的完整权限集合，读取时与请求取交集。
     permissions: Vec<Permission>,
+    // 每次范围解析返回的固定人员范围。
     scope: ResolvedScope,
 }
 
 #[async_trait]
 impl Facilities for FixedIdentity {
+    // 以一个固定启用角色授予请求与样本共有的权限，保留同角色资格的生产判断。
     async fn permissions(
         &self,
         actor: &AuditActor,
@@ -77,6 +78,7 @@ impl Facilities for FixedIdentity {
         Ok(Some(QualifiedPermissions::test_grants_for(actor, &[("fixed-role", &granted)])))
     }
 
+    // 返回测试范围及稳定版本，并沿用请求的授权时点。
     async fn scope(
         &self,
         context: &AccessContext,
@@ -94,10 +96,12 @@ impl Facilities for FixedIdentity {
         })
     }
 
+    // 为不模拟记录授权变更的测试返回固定修订号。
     async fn grant_revision(&self, _: &AuditActor, _: ResourceKind, _: &mut dyn Executor) -> Result<u64> {
         Ok(1)
     }
 
+    // 返回空补权集合，使测试只按配置的资格与范围判断。
     async fn grants(
         &self,
         _: &AccessContext,
@@ -109,10 +113,15 @@ impl Facilities for FixedIdentity {
     }
 }
 
-struct FixedFacts(Vec<ObjectFacts>);
+// 按资源和目标 ID 读取预先提供的内存事实，不访问数据库。
+struct FixedFacts(
+    // 供事实端口按请求资源和 ID 筛选的固定对象集合。
+    Vec<ObjectFacts>
+);
 
 #[async_trait]
 impl AccessFactsPort for FixedFacts {
+    // 返回资源与目标 ID 同时匹配的样本，由生产授权流程校验结果完整性。
     async fn load(
         &self,
         context: &AccessContext,
@@ -139,6 +148,7 @@ mod tests {
     use crate::Error;
     use crate::entity::authorization::AccessTarget;
 
+    // 验证内存绑定不会绕过生产无对象入口的权限和快照约束。
     #[tokio::test]
     async fn fixed_facilities_preserve_production_permission_and_snapshot_rejection() {
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);

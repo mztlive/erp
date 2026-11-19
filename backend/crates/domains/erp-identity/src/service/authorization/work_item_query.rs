@@ -22,6 +22,7 @@ enum DetailPartition {
     ApprovalManagement,
 }
 
+// 按稳定顺序列出通用、订单、门户及审批详情分区，供启动校验和运行时共用。
 fn detail_partitions() -> impl Iterator<Item = DetailPartition> {
     [
         DetailPartition::Other,
@@ -34,7 +35,7 @@ fn detail_partitions() -> impl Iterator<Item = DetailPartition> {
 }
 
 impl DetailPartition {
-    // 每类详情分支应以唯一完整来源为准；自引用只用于无需额外来源的任务分区。
+    // 将详情分区约束到唯一完整来源；无需额外来源的分区使用任务自身关联。
     fn related(&self, rule: AccessRule) -> Result<AccessRule> {
         let (key, resource) = match self {
             Self::Other => ("detail_other", "work_item"),
@@ -52,6 +53,7 @@ impl DetailPartition {
     }
 }
 
+// 构造本人审批任务的详情条件；没有决定资格时只准看已完成的本人任务。
 fn approval_owner(can_decide: bool) -> AccessRule {
     let owned = AccessRule::Fact(AccessFact::Owned);
     if can_decide {
@@ -61,7 +63,7 @@ fn approval_owner(can_decide: bool) -> AccessRule {
     }
 }
 
-// 启动时检查全部详情来源及独立管理过滤，不按账号资格省略分支。
+/// 启动时覆盖全部详情分区和独立管理过滤，不按账号资格裁剪 Mapping 校验范围。
 pub(super) fn binding_condition(base: AccessRule) -> Result<AccessRule> {
     let partitions = detail_partitions()
         .map(|partition| {
@@ -83,7 +85,7 @@ pub(super) fn binding_condition(base: AccessRule) -> Result<AccessRule> {
 }
 
 impl AuthorizationService {
-    // 为详情查询将来源数据范围绑定到根任务的同次身份、组织有效期、策略修订和执行阶段。
+    /// 编译工作项详情时将各来源范围绑定到根任务同次身份、策略修订、组织期限和读取阶段。
     pub(super) async fn work_item_query_condition(
         &self,
         context: &AccessContext,
@@ -140,7 +142,7 @@ impl AuthorizationService {
         Ok(AccessRule::all(vec![base, AccessRule::any(partitions)]))
     }
 
-    // 精确任务详情必须执行其固定来源权限；普通列表只执行自己的条件，不被详情来源收窄。
+    /// 精确任务详情须证明其固定真实来源可读；普通列表仍只执行自己的条件，不被详情来源收窄。
     pub(super) async fn work_item_detail_sources(
         &self,
         proof: &AccessProof,
@@ -163,7 +165,7 @@ impl AuthorizationService {
         Ok(sources)
     }
 
-    // 供应商任务详情以材料原有读取资格判定，完整任务办理另由其固定入口核验审核资格。
+    // 按持久化申请种类检查门户材料的固定读取资格；真正办理另由对应入口核验审核资格。
     async fn portal_task_read(
         &self,
         proof: &AccessProof,
@@ -191,7 +193,7 @@ impl AuthorizationService {
         Ok(access)
     }
 
-    // 原审批责任人按已有读取及决定资格核对来源；管理读者则须通过真实类型的管理资格和业务来源数据范围。
+    /// 先核对审批任务读取资格。原责任人可读已完成任务，未完成还须决定资格；其他读者须另证真实类型管理资格与来源范围。
     pub(super) async fn approval_task_sources(
         &self,
         proof: &AccessProof,
@@ -234,6 +236,7 @@ mod tests {
     use super::*;
     use crate::entity::authorization::QueryOutput;
 
+    // 验证启动条件在覆盖全部详情分区后，仍单独校验工作项管理过滤。
     #[test]
     fn binding_checks_management_after_all_detail_partitions() {
         let binding = rules::binding_condition(&work_item::DETAIL, &QueryOutput::Object).unwrap();

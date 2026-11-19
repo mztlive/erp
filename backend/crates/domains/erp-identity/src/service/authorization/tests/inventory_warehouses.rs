@@ -16,7 +16,7 @@ use crate::repository::authorization::fixtures::execute;
 use crate::service::authorization::{AuthorizationService, rules};
 use crate::{AccessTarget, Error, Permission};
 
-// 原库存动作作为独立测试期望，不从被测登记推导。
+// 独立列出八个仓库入口预期复用的库存动作，不从被测登记推导。
 fn entries() -> [(Permission, Permission); 8] {
     [
         (internal::INVENTORY_BALANCE_WAREHOUSES, inventory::STOCK_BALANCE_LIST),
@@ -30,6 +30,7 @@ fn entries() -> [(Permission, Permission); 8] {
     ]
 }
 
+// 构造仓库标识与仓库事实一致的持久化对象，所有权不属于测试账号。
 fn warehouse(id: &str) -> ObjectFacts {
     ObjectFacts {
         warehouse_id: FactValue::Known(Some(id.into())),
@@ -37,6 +38,7 @@ fn warehouse(id: &str) -> ObjectFacts {
     }
 }
 
+// 接入指定身份和真实仓库替身，走正式库存授权装配。
 fn service(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     let mut builder = complete();
     builder.facilities = identity;
@@ -44,6 +46,7 @@ fn service(identity: Arc<Identity>, facts: Arc<Facts>) -> AuthorizationService {
     builder.build().unwrap()
 }
 
+// 将测试角色对给定库存来源的范围收窄到指定仓库。
 fn scope(identity: &Identity, source: &Permission, ids: &[&str]) {
     identity.role_scopes.lock().unwrap().clear();
     identity.role_scopes.lock().unwrap().insert(
@@ -52,6 +55,7 @@ fn scope(identity: &Identity, source: &Permission, ids: &[&str]) {
     );
 }
 
+// 仓库入口沿用原库存资格和仓库范围，不需要向角色授予内部权限码。
 #[tokio::test]
 async fn warehouse_entries_reuse_original_inventory_permissions_and_scope_without_granting_internal_codes() {
     let identity = Arc::new(Identity::default());
@@ -94,6 +98,7 @@ async fn warehouse_entries_reuse_original_inventory_permissions_and_scope_withou
     }
 }
 
+// 调整单仓库检查要求写入与详情资格同角色，并拒绝不存在的仓库。
 #[tokio::test]
 async fn adjustment_warehouse_checks_preserve_same_role_detail_and_reject_missing_real_warehouses() {
     let identity = Arc::new(Identity::default());
@@ -139,6 +144,7 @@ async fn adjustment_warehouse_checks_preserve_same_role_detail_and_reject_missin
     }
 }
 
+// 仓库入口不接受伪造候选，仓库记录也不能代替调整单写入目标。
 #[tokio::test]
 async fn warehouse_targets_cannot_be_fabricated_candidates_or_replace_existing_adjustment_objects() {
     let identity = Arc::new(Identity::default());
@@ -176,6 +182,7 @@ async fn warehouse_targets_cannot_be_fabricated_candidates_or_replace_existing_a
     ));
 }
 
+// 提供范围内、范围外和已删除的仓库样本，不依赖库存行。
 fn warehouse_rows() -> Vec<Document> {
     vec![
         doc! {"id":"allowed", "warehouse_id":"allowed", "deleted_at":0},
@@ -184,6 +191,7 @@ fn warehouse_rows() -> Vec<Document> {
     ]
 }
 
+// 有权的空仓库仍可查到，空仓库授权范围则不能扩成全量。
 #[tokio::test]
 async fn warehouse_existence_is_independent_of_empty_inventory_and_empty_scope_never_becomes_unrestricted() {
     let identity = Arc::new(Identity::default());
@@ -213,6 +221,7 @@ async fn warehouse_existence_is_independent_of_empty_inventory_and_empty_scope_n
     }
 }
 
+// 仓库列表交付后，库存查询进入新的非事务读取阶段，旧凭证不能复用。
 #[tokio::test]
 async fn warehouse_delivery_then_inventory_query_uses_a_new_nontransaction_read_stage() {
     let identity = Arc::new(Identity::default());

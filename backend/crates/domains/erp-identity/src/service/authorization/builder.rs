@@ -10,15 +10,18 @@ use crate::entity::authorization::QueryOutput;
 use crate::repository::authorization::binding::{FrozenMapping, validate_rule};
 use crate::{AccessFactsPort, AccessMapping, Error, Permission, Result, SharedRbacService};
 
-/// 只绑定实现；目标能力、完整资格及数据条件均由 identity 固定。
+/// 应用启动时装配授权实现；目标能力、完整资格和数据规则均由 identity 固定。
 pub struct AuthorizationBuilder {
+    /// 构建后供共享服务使用的身份取证设施。
     pub(super) facilities: Arc<dyn Facilities>,
+    /// 构建期间按资源登记的对象事实端口。
     pub(super) facts: BTreeMap<String, Arc<dyn AccessFactsPort>>,
+    /// 构建期间按权限登记、尚待冻结校验的查询映射。
     pub(super) mappings: BTreeMap<Permission, Arc<dyn AccessMapping>>,
 }
 
 impl AuthorizationService {
-    /// 应用组合根启动时，用同一身份库和共享 RBAC 服务创建 Builder。此步不访问数据库；绑定完整性由后续登记和 `build` 校验。
+    /// 应用启动时用身份库和共享 RBAC 创建构建器；此步不读库，绑定在登记及 `build` 时校验。
     pub fn builder(db: Database, rbac: SharedRbacService) -> AuthorizationBuilder {
         AuthorizationBuilder {
             facilities: Arc::new(IdentityFacilities { db, rbac }),
@@ -29,7 +32,7 @@ impl AuthorizationService {
 }
 
 impl AuthorizationBuilder {
-    /// 启动时为固定资源登记唯一的对象事实端口，供单条与批量授权读取真实根对象。未知、仅功能资格或重复的资源登记均拒绝。
+    /// 为固定资源登记唯一事实端口，供单条和批量授权读取真实对象；未知、仅功能资格或重复的资源登记均拒绝。
     pub fn facts(mut self, resource: &str, facts: Arc<dyn AccessFactsPort>) -> Result<Self> {
         if !scope_spec::actions(resource)
             .iter()
@@ -43,7 +46,7 @@ impl AuthorizationBuilder {
         Ok(self)
     }
 
-    /// 启动时为查询权限固定根模型及来源 Mapping，调用请求不能改选实现。权限不支持查询、重复登记或模型错配时拒绝。
+    /// 启动时为查询权限登记根模型及来源 Mapping，请求不能改选；不支持查询、重复登记或模型资源错配均拒绝。
     pub fn mapping(mut self, permission: &Permission, mapping: Arc<dyn AccessMapping>) -> Result<Self> {
         if !rules::query_supported(permission)? {
             return Err(Error::ValidationError(format!("此权限不支持 query：{permission}")));
@@ -58,7 +61,7 @@ impl AuthorizationBuilder {
         Ok(self)
     }
 
-    /// 应用启动时核对所有固定规则的 Facts、Mapping、来源能力和输出粒度，校验通过后冻结描述并构造无请求状态的共享授权服务。缺失或错配的绑定不能降级。
+    /// 启动时核对固定规则所需的 Facts、Mapping、来源能力与输出粒度，冻结映射并构造无请求状态的共享服务。缺失或错配时拒绝启动，不降级。
     pub fn build(self) -> Result<AuthorizationService> {
         scope_spec::validate_catalog()?;
         self.ensure_complete()?;
@@ -86,6 +89,7 @@ impl AuthorizationBuilder {
         })
     }
 
+    // 冻结映射前检查固定权限的根对象、精确任务及查询绑定是否齐全，并确认固定对象规则可以构造。
     fn ensure_complete(&self) -> Result<()> {
         for permission in rules::permissions() {
             let function = scope_spec::kind(permission)? == ActionKind::Function;

@@ -15,12 +15,8 @@ use crate::service::iam::management::ManagementAccess;
 use crate::{AccessControlExt, AuthorizationService, RoleId};
 
 impl RbacService {
-    /// 创建角色并写入 Casbin 权限策略。
-    /// 返回创建后的角色实体。
-    ///
-    /// 当角色校验、持久化或 Casbin policy 写入失败时返回错误。
-    ///
-    /// authorization 为应用注入的共享授权服务。
+    /// 普通管理入口通过共享授权服务预检创建资格和授予上限，再生成角色 ID。
+    /// 在策略事务内复核入口并原子写入角色、直接权限与审计；校验或写入失败时返回错误。
     pub async fn create_role(
         self: &Arc<Self>,
         params: CreateRoleParams,
@@ -42,12 +38,8 @@ impl RbacService {
             .await
     }
 
-    // 在原 policy 事务内核验创建入口，再写入角色、权限与审计。
-    // 原子持久化后的角色。
-    //
-    // 入口拒绝、权限版本变化或角色与策略写入失败时回滚。
-    //
-    // role、permissions 为通过子集校验的目标，audit、revision 为原授权版本，access 为当前管理入口。
+    /// 管理入口或显式种子命令预检后，接收通过子集校验的角色和权限，并在指定版本的策略事务内复核创建入口。
+    /// 角色、直接权限与预备审计一并提交；入口拒绝、版本变化或任一写入失败时回滚。
     pub(super) async fn create_managed_role(
         self: &Arc<Self>,
         role: Role,
@@ -71,13 +63,8 @@ impl RbacService {
         .await
     }
 
-    /// 更新角色信息并按需覆盖权限。
-    /// 返回更新后的角色实体。
-    ///
-    /// 当角色不存在、校验失败或持久化失败时返回错误。
-    ///
-    /// authorization 为应用注入的共享授权服务。
-    /// `params`：可选名称与权限更新。
+    /// 普通管理入口通过共享授权服务预检编辑资格，校验角色可修改及现有和拟授予权限均在管理上限内。
+    /// 按 `params` 更新名称、工作台或整套直接权限；空更新也写审计。角色不存在、校验或持久化失败时返回错误。
     pub async fn update_role(
         self: &Arc<Self>,
         id: &str,
@@ -116,12 +103,8 @@ impl RbacService {
         }
     }
 
-    /// 删除非系统角色及其 Casbin policy/绑定。
-    /// 角色实体与关联 policy 原子删除成功时返回 `Ok(())`。
-    ///
-    /// 当角色不存在、角色为系统角色或删除失败时返回错误。
-    ///
-    /// authorization 为应用注入的共享授权服务。
+    /// 普通管理入口通过共享授权服务预检删除资格，排除内建 `role-root` 和系统角色，并校验现有权限在管理上限内。
+    /// 在策略事务中复核入口，原子软删角色、清理 Casbin 权限与绑定并写审计；角色不存在、校验或写入失败时返回错误。
     pub async fn delete_role(
         self: &Arc<Self>,
         id: &str,
@@ -138,7 +121,7 @@ impl RbacService {
         self.delete_role_with_policy(role, audit, authorized.policy_revision, access).await
     }
 
-    // 当角色编辑请求成功但没有字段需要改动时，仍保存该次操作的审计记录。
+    // 编辑请求未提供任何改动时，仍在策略事务内复核编辑入口、保存成功审计，并返回原角色。
     async fn audit_role_update(
         self: &Arc<Self>,
         role: Role,
@@ -155,7 +138,7 @@ impl RbacService {
         .await
     }
 
-    // 只修改角色属性的命令在一个事务内保存角色更新及审计，不改写角色权限集合。
+    // 编辑仅涉及名称或工作台时，复核事务内入口并保存角色和审计，保留现有权限集合。
     async fn update_role_attributes(
         self: &Arc<Self>,
         mut role: Role,
@@ -176,17 +159,9 @@ impl RbacService {
         .await
     }
 
-    // 在同一事务中 CAS touch 角色并覆盖权限。
-    //
-    // 角色写触碰会递增版本与更新时间，使权限更新、角色绑定和角色删除在多实例部署下
-    // 对同一角色产生写冲突，避免删除后遗留 policy 引用。
-    //
-    // 返回写触碰后的角色。
-    //
-    // 角色不存在、policy 版本不匹配或角色、权限、审计写入失败时返回错误。
-    //
-    // `permissions`：替换后的完整直接权限；`audit`：可选的已准备资源审计；有值时与权限写入同一事务。
-    // `expected_revision`：授权快照要求的 policy 版本；为空时不比较版本。
+    /// 仅替换权限时，在同一事务内复核管理入口、按版本更新角色并覆盖整套直接权限，按需保存预备审计。
+    /// 更新角色版本和时间戳，让跨实例的权限更新、角色绑定与角色删除产生写冲突，避免残留策略引用。
+    /// 返回更新后的角色；`expected_revision` 有值时须匹配授权版本，角色缺失、版本冲突或写入失败时返回错误。
     pub(super) async fn replace_role_permissions(
         self: &Arc<Self>,
         role_id: &str,
@@ -218,16 +193,9 @@ impl RbacService {
         .await
     }
 
-    // 使用指定 ID 在同一事务中创建角色实体并写入完整权限规则。
-    //
-    // 仅内建角色初始化或经授权的显式种子命令可以指定固定 ID；普通管理入口由 `Self::create_role` 生成 ID。
-    //
-    // 返回已创建的角色。
-    //
-    // 角色数据不合法、ID 冲突、policy 版本不匹配或权限、审计写入失败时返回错误。
-    //
-    // `permissions`：首次写入的完整直接权限；`audit`：可选的已准备资源审计。
-    // `expected_revision`：授权快照要求的 policy 版本；为空时不比较版本。
+    /// 内建角色初始化或经授权的显式种子命令可指定固定 ID；普通管理入口由 [`Self::create_role`] 生成 ID。
+    /// 在同一事务写入角色、完整直接权限及可选的预备审计；`expected_revision` 有值时须匹配授权版本。
+    /// 角色数据无效、ID 冲突、版本不符或写入失败时返回错误。
     pub(super) async fn create_role_with_id(
         self: &Arc<Self>,
         id: String,
@@ -256,16 +224,14 @@ impl RbacService {
         .await
     }
 
-    // 读取角色自身的直接权限，不展开继承关系。
-    // 返回该角色的直接权限集。
-    //
-    // Enforcer 无法刷新，或策略行无法解析为权限时返回错误。
+    /// 补齐已有种子角色前，从最新 Enforcer 读取角色自身的直接权限，继承权限不计入。
+    /// 策略刷新或权限解析失败时返回错误。
     pub(super) async fn direct_role_permissions(&self, role_id: &str) -> Result<PermissionSet> {
         let enforcer = self.fresh_enforcer().await?.read().await;
         permissions_for_role(&enforcer, role_id)
     }
 
-    // 角色编辑同时修改权限时，在同一个事务保存角色实体并替换整套权限规则，避免部分更新。
+    // 编辑同时涉及角色属性和权限时，复核事务内入口，一并保存角色、整套直接权限及审计。
     async fn update_role_with_permissions(
         self: &Arc<Self>,
         mut role: Role,
@@ -291,12 +257,8 @@ impl RbacService {
         .await
     }
 
-    // 原子修复内建 root 角色元数据与完整权限。
-    // 返回已恢复为系统角色、启用且只保留该权限的角色。
-    //
-    // 角色恢复、更新或权限替换失败时返回错误。
-    //
-    // `role`：当前 root 角色，允许处于软删除状态；`root_permission`：要写回的 `*:*` 权限。
+    /// 初始化发现内建 `role-root` 偏离预期时，在同一事务按需恢复软删除记录，设为启用的系统角色并仅保留直接权限 `*:*`。
+    /// 恢复、角色更新或权限替换失败时返回错误。
     pub(super) async fn repair_root_role(
         self: &Arc<Self>,
         mut role: Role,
@@ -321,7 +283,7 @@ impl RbacService {
         .await
     }
 
-    // 提交角色删除时，在一个策略事务内软删角色并清理其权限规则及账号绑定，避免留下仍生效的策略。
+    // 删除预检后，在策略事务内复核入口，原子软删角色、清理权限与账号绑定并写审计，避免策略残留。
     async fn delete_role_with_policy(
         self: &Arc<Self>,
         mut role: Role,

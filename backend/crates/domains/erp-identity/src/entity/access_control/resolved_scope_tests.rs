@@ -1,6 +1,7 @@
 //! 范围维度的交集与身份隔离。
 use super::*;
 
+// 准备用于维度交集测试的对象，只附带指定的组织身份。
 fn object(org: &str) -> ScopedObject<'_> {
     ScopedObject {
         owned: false,
@@ -12,6 +13,7 @@ fn object(org: &str) -> ScopedObject<'_> {
     }
 }
 
+// 验证条款须提供必需维度，对象须同时匹配组织和仓库，同名标识不能跨维度匹配。
 #[test]
 fn missing_required_dimension_denies_and_independent_dimensions_intersect() {
     let only_org = ScopeClause { org_unit_ids: BTreeSet::from(["one".into()]), ..Default::default() };
