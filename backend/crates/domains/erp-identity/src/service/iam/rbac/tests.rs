@@ -7,16 +7,32 @@ use erp_core::AccountKind;
 use persistence_core::Executor;
 
 use super::{
-    RBAC_MODEL, ROOT_ROLE_ID, RbacService, RolePermissionSnapshot, collect_role_ids,
-    collect_role_permissions, commit_outcome_unknown, ensure_all_roles_assignable, ensure_management_subset,
-    ensure_permission_subset, ensure_policy_snapshot_revision, ensure_roles_delegable,
-    ensure_target_roles_manageable, parse_policy_permissions, permission_pairs, permissions_for_roles,
-    role_key, role_or_not_found, root_role_is_current,
+    AuthorizedAccountManagement, RBAC_MODEL, ROOT_ROLE_ID, RbacService, RolePermissionSnapshot,
+    collect_role_ids, collect_role_permissions, commit_outcome_unknown, ensure_all_roles_assignable,
+    ensure_management_subset, ensure_permission_subset, ensure_policy_snapshot_revision,
+    ensure_roles_delegable, ensure_target_roles_manageable, parse_policy_permissions, permission_pairs,
+    permissions_for_roles, role_key, role_or_not_found, root_role_is_current,
 };
-use crate::RoleId;
 use crate::entity::{Permission, PermissionSet, Role, RoleData};
 use crate::error::Error;
 use crate::ports::{IdentityAuditPort, PreparedResourceAudit};
+use crate::{RoleId, RoleIdSet};
+
+#[test]
+fn account_management_grant_uses_the_same_revision_and_distinguishes_empty_replacement() {
+    let unchanged = AuthorizedAccountManagement { policy_revision: 7, replacement_roles: None };
+    assert!(unchanged.into_role_grant().is_none());
+
+    for roles in [vec![], vec![RoleId::parse("reader").unwrap()]] {
+        let roles = RoleIdSet::from(roles);
+        let managed =
+            AuthorizedAccountManagement { policy_revision: 7, replacement_roles: Some(roles.clone()) };
+        let revision = managed.policy_revision();
+        let grant = managed.into_role_grant().unwrap();
+        assert_eq!(grant.policy_revision(), revision);
+        assert_eq!(grant.role_ids, roles);
+    }
+}
 
 // 为策略事务收尾测试提供无需审计设施的端口替身。
 struct NoopAudit;

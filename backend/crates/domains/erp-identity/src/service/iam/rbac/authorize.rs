@@ -85,10 +85,10 @@ impl RbacService {
 
         let roles = self.load_management_roles(&target_role_ids, requested_role_ids.as_ref()).await?;
         ensure_target_roles_manageable(&target_role_ids, &roles)?;
-        let role_grant = requested_role_ids
-            .map(|role_ids| authorized_role_grant(role_ids, policy_revision, &roles))
-            .transpose()?;
-        Ok(AuthorizedAccountManagement { policy_revision, role_grant })
+        if let Some(role_ids) = &requested_role_ids {
+            ensure_requested_roles_assignable(role_ids, &roles)?;
+        }
+        Ok(AuthorizedAccountManagement { policy_revision, replacement_roles: requested_role_ids })
     }
 
     /// 创建角色或补齐种子角色前，规范化拟授予权限并校验其在操作人的当前隐式权限内。
@@ -265,20 +265,15 @@ pub(super) fn ensure_target_roles_manageable(
     Ok(())
 }
 
-// 账号管理请求含替换集合时，从已加载角色中确认请求全部存在、启用且为非系统角色，再冻结角色集合与策略版本。
-fn authorized_role_grant(
-    role_ids: RoleIdSet,
-    policy_revision: u64,
-    roles: &HashMap<String, Role>,
-) -> Result<AuthorizedRoleGrant> {
+// 先确认替换集合中的角色均存在，再检查是否允许通过普通入口分配。
+fn ensure_requested_roles_assignable(role_ids: &RoleIdSet, roles: &HashMap<String, Role>) -> Result<()> {
     let requested_roles =
         role_ids.iter().filter_map(|role_id| roles.get(role_id.as_str())).collect::<Vec<_>>();
     ensure_all_roles_assignable(role_ids.len(), requested_roles.len())?;
     requested_roles.into_iter().try_for_each(|role| {
         role.ensure_assignable()
             .map_err(|_| Error::Forbidden("系统角色或已停用角色不能通过普通接口分配".into()))
-    })?;
-    Ok(AuthorizedRoleGrant { role_ids, policy_revision })
+    })
 }
 
 /// 授予角色或权限前，要求操作人权限覆盖待授予集合；越出授予上限时返回 `Forbidden`。

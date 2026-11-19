@@ -39,12 +39,12 @@ impl RbacService {
         let action = if planned.existing.is_some() { "role.update" } else { "role.create" };
         let mut role = match planned.existing {
             Some(mut role) => {
-                role.update(RoleUpdate { name: Some(planned.declaration.name), ..Default::default() })?;
+                role.update(RoleUpdate { name: Some(planned.name), ..Default::default() })?;
                 self.db.roles().update(&mut role, executor).await?;
                 role
             },
             None => {
-                let role = Role::new(planned.declaration.id, RoleData::new(planned.declaration.name))?;
+                let role = Role::new(planned.id, RoleData::new(planned.name))?;
                 self.db.roles().create(&role, executor).await?;
                 role
             },

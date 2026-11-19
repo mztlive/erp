@@ -6,18 +6,9 @@ use persistence_core::{Executor, Transactional};
 use super::AccessControlService;
 use crate::dto::person_scope::{PersonBusinessOption, PersonScopeView, RetiredPersonScope};
 use crate::entity::access_control::scope_spec;
-use crate::entity::organization_change::OrganizationState;
 use crate::repository::OrganizationRepository;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
-use crate::{AccessControlExt, AccessTarget, Error, Result, RoleRepositoryExt};
-
-/// 人员范围入口授权通过后，从当前事务取得的事实，供配置读取和写入校验复用。
-pub(super) struct PersonScopeFacts {
-    /// 当前策略修订号，供配置展示及后续保存做版本比对。
-    pub(super) policy_version: u64,
-    /// 同一事务读到的组织状态，供显式部门目标校验。
-    pub(super) organizations: OrganizationState,
-}
+use crate::{AccessControlExt, AccessTarget, Error, Permission, Result, RoleRepositoryExt};
 
 impl AccessControlService {
     /// 管理员打开人员范围配置页时，同一事务返回既有范围（含退役项）、当前操作候选和保存用的策略版本。
@@ -30,9 +21,19 @@ impl AccessControlService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let policy_version =
-                        service.authorize_person_scope(&actor, false, executor).await?.policy_version;
-                    let businesses = service.person_business_options(&user, executor).await?;
+                    let policy_version = service.authorize_person_scope(&actor, false, executor).await?;
+                    // 沿用配置读取的组织快照检查，即使响应仅使用策略版本。
+                    OrganizationRepository::new(&service.db).state(executor).await?;
+                    let granted = service.person_granted_actions(&user, None, executor).await?;
+                    let businesses = granted
+                        .chunk_by(|left, right| left.resource() == right.resource())
+                        .map(|actions| {
+                            PersonBusinessOption::from_granted(
+                                actions[0].resource(),
+                                actions.iter().map(|permission| permission.action().into()).collect(),
+                            )
+                        })
+                        .collect::<Result<Vec<_>>>()?;
                     let items =
                         service.db.person_data_scopes().for_person(&user, None, None, executor).await?;
                     let retired_items = items.iter().filter_map(RetiredPersonScope::from_scope).collect();
@@ -42,41 +43,26 @@ impl AccessControlService {
             .await
     }
 
-    /// 读取或保存人员范围前，由同一有效角色满足公司配置边界和对应读写权限，再用原事务读取策略版本和组织事实。
-    /// 缺少配置资格、策略漂移或持久化读取失败时拒绝。
+    /// 在原事务检查人员范围入口的公司级配置资格，并返回当前策略版本。
     pub(super) async fn authorize_person_scope(
         &self,
         actor: &AuditActor,
         write: bool,
         executor: &mut dyn Executor,
-    ) -> Result<PersonScopeFacts> {
+    ) -> Result<u64> {
         let entry =
             if write { &access_control::PERSON_SCOPE_SAVE } else { &access_control::PERSON_SCOPE_LIST };
         self.authorization.require(actor, entry, AccessTarget::Operation, executor).await?;
-        Ok(PersonScopeFacts {
-            policy_version: self.rbac.policy_revision_with_executor(executor).await?,
-            organizations: OrganizationRepository::new(&self.db).state(executor).await?,
-        })
+        self.rbac.policy_revision_with_executor(executor).await
     }
 
-    /// 打开配置页时，沿当前事务列出全部已登记业务的操作候选；各动作可由不同启用角色授予。
-    /// 非有效后台账号返回空列表；人员不存在、策略漂移或读取失败时拒绝。
-    pub(super) async fn person_business_options(
-        &self,
-        user: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<PersonBusinessOption>> {
-        self.person_business_options_for(user, None, executor).await
-    }
-
-    /// 展示配置或重验保存资格时，按指定资源（未指定则按全部登记资源）证明各动作由当前启用角色授予。
-    /// 资格快照须与原事务策略一致；人员不存在、策略漂移或读取失败时拒绝。
-    pub(super) async fn person_business_options_for(
+    /// 沿原事务读取启用角色授予的公共动作，按目录顺序返回。
+    pub(super) async fn person_granted_actions(
         &self,
         user: &str,
         resource: Option<&str>,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<PersonBusinessOption>> {
+    ) -> Result<Vec<Permission>> {
         let account = self
             .db
             .accounts()
@@ -87,35 +73,24 @@ impl AccessControlService {
             return Ok(vec![]);
         }
 
-        let resources = match resource {
-            Some(resource) if scope_spec::resource_is_known(resource) => vec![resource],
+        let actions = match resource {
+            Some(resource) if scope_spec::resource_is_known(resource) => {
+                scope_spec::display_actions(resource)
+            },
             Some(_) => return Ok(vec![]),
-            None => scope_spec::resources(),
+            None => scope_spec::resources().into_iter().flat_map(scope_spec::display_actions).collect(),
         };
-        let permissions = resources
-            .iter()
-            .flat_map(|resource| scope_spec::display_actions(resource))
-            .cloned()
-            .collect::<Vec<_>>();
-
-        let rbac = self.rbac.clone();
-        let snapshot = rbac.role_permission_snapshot(account.kind, user, &permissions).await?;
-        rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
+        let mut permissions = actions.into_iter().cloned().collect::<Vec<_>>();
+        let snapshot = self.rbac.role_permission_snapshot(account.kind, user, &permissions).await?;
+        self.rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
         let roles = self.db.roles().enabled_roles(snapshot.role_ids(), executor).await?;
 
-        let mut options = Vec::new();
-        for resource in resources {
-            let mut granted: Vec<String> = Vec::new();
-            for permission in scope_spec::display_actions(resource) {
-                let ids = snapshot.granting_role_ids(permission);
-                if roles.iter().any(|role| ids.iter().any(|id| id.as_str() == role.base.id)) {
-                    granted.push(permission.action().into());
-                }
-            }
-            if !granted.is_empty() {
-                options.push(PersonBusinessOption::from_granted(resource, granted)?);
-            }
-        }
-        Ok(options)
+        permissions.retain(|permission| {
+            snapshot
+                .granting_role_ids(permission)
+                .iter()
+                .any(|id| roles.iter().any(|role| id.as_str() == role.base.id))
+        });
+        Ok(permissions)
     }
 }

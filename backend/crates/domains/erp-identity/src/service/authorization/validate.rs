@@ -11,15 +11,15 @@ impl AuthorizationService {
     /// 依赖变化或到期返回 `DATA_SCOPE_CHANGED`，调用方须丢弃结果；设施错误保持原类别。成功后结束当前读取阶段。
     pub async fn validate(&self, access: &CompiledAccess, executor: &mut dyn Executor) -> Result<()> {
         if access.validity.needs_revalidation(&self.token, executor)? {
-            let resolved = access
+            let revalidation = access
                 .revalidation
                 .as_deref()
                 .ok_or_else(|| Error::ValidationError("缺少查询授权复验依据".into()))?;
-            self.revalidate(&access.context, resolved, executor).await?;
+            self.revalidate(&access.context, &revalidation.resolved, executor).await?;
             access.validity.ensure_current(executor)?;
-        }
-        for dependency in &access.dependencies {
-            dependency.validate(executor).await?;
+            for dependency in &revalidation.dependencies {
+                dependency.validate(executor).await?;
+            }
         }
 
         access.ensure_current(executor)?;

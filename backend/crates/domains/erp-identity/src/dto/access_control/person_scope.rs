@@ -204,16 +204,7 @@ impl SavePersonScopeRequest {
     /// 在写事务中检查本资源所选动作的现有配置。覆盖旧完整表达式须显式确认，
     /// 避免静默加入本人范围或移除旧上限。
     pub fn ensure_legacy_conversion(&self, existing: &[PersonDataScope]) -> Result<()> {
-        if !self.replace_legacy
-            && existing.iter().any(|scope| {
-                scope.resource == self.resource
-                    && self.actions.contains(&scope.action)
-                    && !scope.expression.additive
-            })
-        {
-            return Err(Error::ValidationError("存在旧范围配置，请明确确认转换为基础范围加附加授权".into()));
-        }
-        Ok(())
+        ensure_legacy_conversion(&self.resource, &self.actions, self.replace_legacy, existing)
     }
 
     /// 为本次保存的指定动作生成附加表达式；无适用授权时附加列表为空。
@@ -231,6 +222,22 @@ impl SavePersonScopeRequest {
             condition: None,
         }
     }
+}
+
+pub(crate) fn ensure_legacy_conversion<'a>(
+    resource: &str,
+    actions: &[String],
+    replace_legacy: bool,
+    existing: impl IntoIterator<Item = &'a PersonDataScope>,
+) -> Result<()> {
+    if !replace_legacy
+        && existing.into_iter().any(|scope| {
+            scope.resource == resource && actions.contains(&scope.action) && !scope.expression.additive
+        })
+    {
+        return Err(Error::ValidationError("存在旧范围配置，请明确确认转换为基础范围加附加授权".into()));
+    }
+    Ok(())
 }
 
 impl PersonScopeGrant {
@@ -283,7 +290,7 @@ impl PersonScopeGrant {
             let spec = scope_spec::configurable_action(resource, action)?;
             if !company
                 && spec
-                    .required_dimensions()
+                    .dimensions()
                     .iter()
                     .any(|dimension| !self.terms.iter().any(|term| term.target_dimension == *dimension))
             {
@@ -442,7 +449,10 @@ mod tests {
 
         let mut invalid = input.grants[1].clone();
         let error = invalid.normalize(&input.resource, &input.actions).unwrap_err();
-        assert!(error.to_string().contains("supplier_deposit:resolve"));
+        assert!(matches!(
+            error,
+            Error::ValidationError(message) if message == "附加授权的范围设置不完整，请补齐所选操作要求的范围"
+        ));
 
         input.grants[1].terms.push(party);
         let command = input.normalized().unwrap();

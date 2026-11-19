@@ -8,11 +8,13 @@ use super::AccessControlService;
 use crate::access_control::ScopeDimension;
 use crate::dto::person_scope::PersonScopeCommand;
 use crate::entity::access_control::person_scope::PersonDataScope;
+use crate::entity::access_control::scope_spec;
 use crate::entity::access_control::scope_target::ScopeTarget;
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
+use crate::repository::OrganizationRepository;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
-use crate::{AccessControlExt, Error, Result};
+use crate::{AccessControlExt, Error, Permission, Result};
 
 impl AccessControlService {
     /// 管理员保存人员范围时，完整替换所选业务动作的附加授权，不改变角色授予的操作权限。
@@ -39,8 +41,12 @@ impl AccessControlService {
             .clone()
             .run_authorized_policy_transaction(req.expected_policy_version, move |executor| {
                 Box::pin(async move {
-                    let access = service.authorize_person_scope(&actor, true, executor).await?;
-                    service.validate_person_scope(&user, &req, &access.organizations, executor).await?;
+                    service.authorize_person_scope(&actor, true, executor).await?;
+                    let organizations = OrganizationRepository::new(&service.db).state(executor).await?;
+                    let granted =
+                        service.person_granted_actions(&user, Some(&req.resource), executor).await?;
+                    ensure_granted_actions(&granted, &req.actions)?;
+                    service.validate_person_scope_targets(req.targets(), &organizations, executor).await?;
 
                     service.replace_person_scope(&user, &req, executor).await?;
                     service.db.audit_events().create(&event, executor).await?;
@@ -50,36 +56,16 @@ impl AccessControlService {
             .await
     }
 
-    // 写入前重验人员仍具备所选可配置动作，再沿原事务核对命令中的目标；必需维度已在命令规范化时校验。
-    async fn validate_person_scope(
-        &self,
-        user: &str,
-        req: &PersonScopeCommand,
-        organizations: &OrganizationState,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let options = self.person_business_options_for(user, Some(&req.resource), executor).await?;
-        let option = options
-            .iter()
-            .find(|o| o.resource == req.resource)
-            .ok_or_else(|| Error::ValidationError("此人没有该业务操作权限".into()))?;
-        if req.actions.iter().any(|a| !option.configurable_actions.contains(a)) {
-            return Err(Error::ValidationError("请选择此人当前具备的操作".into()));
-        }
-
-        self.validate_person_scope_targets(req, organizations, executor).await
-    }
-
     /// 保存或审核配置前，沿原事务按输入顺序核对规范化命令引用的目标是否存在且适用于指定维度。
     /// 首次遇到明确部门目标才构建组织树；部门失效、维度不符、外域校验未装配或读取失败时拒绝。
     pub(super) async fn validate_person_scope_targets(
         &self,
-        req: &PersonScopeCommand,
+        targets: &[ScopeTarget],
         organizations: &OrganizationState,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut tree = None;
-        for target in req.targets() {
+        for target in targets {
             match target {
                 ScopeTarget::OrgExplicit { ids, .. } => {
                     if tree.is_none() {
@@ -132,5 +118,46 @@ impl AccessControlService {
             }
         }
         Ok(())
+    }
+}
+
+// `granted` 只包含同一业务的公共动作，保留无业务资格与部分动作缺失的错误区别。
+fn ensure_granted_actions(granted: &[Permission], actions: &[String]) -> Result<()> {
+    if granted.is_empty() {
+        return Err(Error::ValidationError("此人没有该业务操作权限".into()));
+    }
+    if actions.iter().any(|action| {
+        !granted.iter().any(|permission| {
+            permission.action() == action && scope_spec::is_configurable(permission.resource(), action)
+        })
+    }) {
+        return Err(Error::ValidationError("请选择此人当前具备的操作".into()));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_permissions::{customer, purchase_order};
+
+    use super::*;
+
+    #[test]
+    fn save_checks_granted_configurable_actions() {
+        let list = ["list".into()];
+        let list_and_detail = ["list".into(), "detail".into()];
+        assert!(ensure_granted_actions(&[customer::LIST, customer::DETAIL], &list_and_detail).is_ok());
+        assert!(matches!(
+            ensure_granted_actions(&[], &list),
+            Err(Error::ValidationError(message)) if message == "此人没有该业务操作权限"
+        ));
+        for (granted, actions) in
+            [(customer::LIST, list_and_detail.as_slice()), (purchase_order::LIST, list.as_slice())]
+        {
+            assert!(matches!(
+                ensure_granted_actions(&[granted], actions),
+                Err(Error::ValidationError(message)) if message == "请选择此人当前具备的操作"
+            ));
+        }
     }
 }

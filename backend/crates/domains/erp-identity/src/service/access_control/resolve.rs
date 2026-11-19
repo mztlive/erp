@@ -66,14 +66,26 @@ impl DataScopeService {
         let load = scope_spec::organization_load(spec);
         let state = self.scope_organizations(context.actor.id(), load, context.as_of, executor).await?;
         let target = (context.permission.resource(), context.permission.action());
-        let origin = (source.resource(), source.action());
-        let scope =
-            self.resolved(context.actor.id(), &roles, origin, &state, context.as_of, executor).await?;
+        let (user, at) = (context.actor.id(), context.as_of);
+        let (resource, action) = (source.resource(), source.action());
+        let scope = resolve_configured_scope(spec, &roles, async {
+            state.own_org(user, at)?;
+            let configs =
+                self.db.person_data_scopes().for_person(user, Some(resource), Some(action), executor).await?;
+            match configs.first() {
+                Some(config) => config.resolve(&state, at),
+                None if spec.default_self() => {
+                    PersonDataScope::default_for(user, resource, action).resolve(&state, at)
+                },
+                None => Ok(PersonDataScope::denied()),
+            }
+        })
+        .await?;
 
         let scope_version = scope_version(
             context.actor.id(),
             target,
-            origin,
+            (resource, action),
             (qualified.account_version, qualified.policy_revision()),
             &roles,
             &state,
@@ -107,34 +119,6 @@ impl DataScopeService {
             OrganizationLoad::Actor => repository.directory_state(actor_id, at, executor).await,
             OrganizationLoad::None => Ok(OrganizationState::default()),
         }
-    }
-
-    // 取得同角色完整资格后，按固定来源动作和原授权时点解析范围。
-    // 需要人员范围时读取已保存的配置；未配置时按登记采用本人基础或返回拒绝范围。
-    async fn resolved(
-        &self,
-        user: &str,
-        roles: &[Role],
-        resource_action: (&str, &str),
-        state: &OrganizationState,
-        at: Instant,
-        executor: &mut dyn Executor,
-    ) -> Result<ResolvedScope> {
-        let (resource, action) = resource_action;
-        let spec = scope_spec::require_runtime_action(resource, action)?;
-        resolve_configured_scope(spec, roles, async {
-            state.own_org(user, at)?;
-            let configs =
-                self.db.person_data_scopes().for_person(user, Some(resource), Some(action), executor).await?;
-            match configs.first() {
-                Some(config) => config.resolve(state, at),
-                None if spec.default_self() => {
-                    PersonDataScope::default_for(user, resource, action).resolve(state, at)
-                },
-                None => Ok(PersonDataScope::denied()),
-            }
-        })
-        .await
     }
 }
 
@@ -200,6 +184,11 @@ async fn resolve_scope(
 mod tests {
     use std::collections::BTreeSet;
 
+    use erp_permissions::{
+        catalog, purchase_order, sales_order, supplier, supplier_fulfillment, supplier_offering,
+        supplier_settlement,
+    };
+
     use super::*;
     use crate::RoleId;
     use crate::access_control::ScopedObject;
@@ -209,15 +198,15 @@ mod tests {
     #[tokio::test]
     async fn shared_scope_ignores_person_limits_but_sales_keeps_them() {
         let roles = [Role::new(RoleId::parse("role-buyer").unwrap(), RoleData::new("采购")).unwrap()];
-        for resource in [
-            "product",
-            "supplier",
-            "supplier_offering",
-            "purchase_order",
-            "supplier_fulfillment_order",
-            "supplier_settlement_statement",
+        for permission in [
+            catalog::PRODUCT_PRODUCT_LIST,
+            supplier::LIST,
+            supplier_offering::LIST,
+            purchase_order::LIST,
+            supplier_fulfillment::ORDER_LIST,
+            supplier_settlement::STATEMENT_LIST,
         ] {
-            let spec = scope_spec::require_runtime_action(resource, "list").unwrap();
+            let spec = scope_spec::require_runtime(&permission).unwrap();
             let scope = resolve_configured_scope(spec, &roles, async {
                 panic!("共享资源不得读取旧人员范围或要求主属部门");
             })
@@ -237,7 +226,7 @@ mod tests {
             ));
         }
 
-        let sales = scope_spec::require_runtime_action("sales_order", "list").unwrap();
+        let sales = scope_spec::require_runtime(&sales_order::LIST).unwrap();
         let denied =
             resolve_configured_scope(sales, &roles, async { Ok(PersonDataScope::denied()) }).await.unwrap();
         assert!(!denied.has_role_scope());
@@ -258,7 +247,7 @@ mod tests {
         deleted.base.deleted_at = 1;
         for roles in [vec![], vec![disabled], vec![deleted]] {
             let result = resolve_configured_scope(
-                scope_spec::require_runtime_action("product", "list").unwrap(),
+                scope_spec::require_runtime(&catalog::PRODUCT_PRODUCT_LIST).unwrap(),
                 &roles,
                 async { panic!("无动作资格不得读取人员范围") },
             )

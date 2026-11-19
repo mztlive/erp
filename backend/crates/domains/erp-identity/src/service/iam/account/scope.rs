@@ -25,7 +25,7 @@ pub(crate) async fn seed_company(db: &Database, user: &str, executor: &mut dyn E
                 history_read: false,
                 alternatives: vec![vec![PersonScopeTerm {
                     scope_type: DataScopeType::Company,
-                    target_dimension: spec.supported_dimensions()[0],
+                    target_dimension: spec.dimensions()[0],
                     target_mode: None,
                     include_descendants: None,
                     scope_targets: vec![],

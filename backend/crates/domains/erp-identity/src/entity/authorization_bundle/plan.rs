@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 
 use super::{PolicyDocument, PolicyMode, PolicyRole, PolicyScope};
 use crate::dto::authorization_bundle::{PolicyChange, PolicyPreview};
+use crate::dto::person_scope::ensure_legacy_conversion;
 use crate::entity::access_control::person_scope::{PersonDataScope, PersonScopeExpression};
 use crate::entity::role::ROOT_ROLE_ID;
 use crate::{Error, Permission, PermissionSet, Result, Role, RoleId};
@@ -44,8 +45,8 @@ pub(crate) struct PolicyFacts {
 
 /// 有实际差异的角色创建或更新，供应用事务写入。
 pub(crate) struct PlannedRole {
-    /// 文件中的角色声明，提供稳定 ID 和目标名称。
-    pub declaration: PolicyRole,
+    pub id: RoleId,
+    pub name: String,
     /// 按声明模式计算并校验后的完整直接权限集合。
     pub permissions: Vec<Permission>,
     /// 当前角色实体；为空表示新建。
@@ -87,7 +88,7 @@ pub(crate) struct PolicyPlan {
 }
 
 impl PolicyPlan {
-    /// 从规范化文件和同一快照的目标事实生成预览及写入计划，操作人的管理上限固定为批次前权限。
+    /// 从已规范化的文件和同一快照的目标事实生成预览及写入计划，操作人的管理上限固定为批次前权限。
     /// 审核摘要绑定操作人、策略及授权版本、文件、目标事实和预览内容；越权、无效引用、范围不合规或摘要生成失败时拒绝。
     pub(crate) fn build(
         document: PolicyDocument,
@@ -102,7 +103,7 @@ impl PolicyPlan {
                 document: document.clone(),
                 policy_version,
                 changes: vec![],
-                policy_notes: policy_notes(&document)?,
+                policy_notes: policy_notes(&document),
                 review_hash: CommandReceipt::from_payload(
                     "preview-", actor_id, "preview", "policy", "preview", &document,
                 )?
@@ -172,7 +173,8 @@ impl PolicyPlan {
                 affected_user_ids: current.map(|r| r.affected_user_ids.clone()).unwrap_or_default(),
             });
             self.roles.push(PlannedRole {
-                declaration: requested.clone(),
+                id: requested.id.clone(),
+                name: requested.name.clone(),
                 permissions,
                 existing: current.map(|r| r.role.clone()),
             });
@@ -234,10 +236,8 @@ impl PolicyPlan {
         }
         let permissions = PermissionSet::new(permissions);
 
-        let request = scope.request(self.preview.policy_version)?;
-        let existing =
-            facts.scopes.iter().filter(|s| s.user_id == scope.user_id).cloned().collect::<Vec<_>>();
-        request.ensure_legacy_conversion(&existing)?;
+        let existing = || facts.scopes.iter().filter(|s| s.user_id == scope.user_id);
+        ensure_legacy_conversion(&scope.resource, &scope.actions, scope.replace_legacy, existing())?;
 
         for action in &scope.actions {
             let required = Permission::parse(format!("{}:{action}", scope.resource))?;
@@ -248,9 +248,10 @@ impl PolicyPlan {
                 )));
             }
 
-            let current = existing.iter().find(|s| s.resource == scope.resource && s.action == *action);
-            let expression = scope.canonical_expression(action, &request.expression(action))?;
-            let previous = current.map(|s| scope.canonical_expression(action, &s.expression)).transpose()?;
+            let current = existing().find(|s| s.resource == scope.resource && s.action == *action);
+            let expression = scope.expression(action)?;
+            let previous =
+                current.map(|s| scope.canonical_existing_expression(action, &s.expression)).transpose()?;
             if previous.as_ref() == Some(&expression)
                 || (current.is_none() && expression.alternatives.is_empty())
             {
@@ -277,7 +278,7 @@ impl PolicyPlan {
 
     // 优先取批次规划后的直接权限，否则读取现存有效普通角色；无法解析的引用报错。
     fn role_permissions<'a>(&'a self, id: &str, facts: &'a PolicyFacts) -> Result<&'a [Permission]> {
-        if let Some(role) = self.roles.iter().find(|r| r.declaration.id.as_str() == id) {
+        if let Some(role) = self.roles.iter().find(|r| r.id.as_str() == id) {
             return Ok(&role.permissions);
         }
         let role = facts.roles.get(id).ok_or_else(|| Error::ValidationError(format!("角色不存在：{id}")))?;
@@ -287,15 +288,14 @@ impl PolicyPlan {
 }
 
 // 为预览说明未列条目的保留规则、岗位目录的首次初始化以及清空各动作追加范围后的本人基础。
-fn policy_notes(document: &PolicyDocument) -> Result<Vec<String>> {
+fn policy_notes(document: &PolicyDocument) -> Vec<String> {
     let mut notes = vec![
         "文件未列对象保持原配置；replace 仅替换条目明确指定的集合。".into(),
         "角色绑定沿用销售和采购岗位目录资格的首次初始化；解绑不自动终止查询资格。".into(),
     ];
     for scope in &document.data_scopes {
-        let request = scope.request(0)?;
-        for action in &request.actions {
-            let baseline = if PersonScopeExpression::default_self(&request.resource, action) {
+        for action in &scope.actions {
+            let baseline = if PersonScopeExpression::default_self(&scope.resource, action) {
                 "本人负责的数据与追加范围求并，清空追加范围仍保留本人基础"
             } else {
                 "无本人基础，清空追加范围后该动作无独立数据范围"
@@ -303,7 +303,7 @@ fn policy_notes(document: &PolicyDocument) -> Result<Vec<String>> {
             notes.push(format!("{}/{}:{action}：{baseline}", scope.user_id, scope.resource));
         }
     }
-    Ok(notes)
+    notes
 }
 
 // 合并时取现有值和文件值的并集，替换时仅取文件值；结果统一排序去重。
@@ -483,7 +483,7 @@ mod tests {
             .unwrap(),
         );
         let result = PolicyPlan::build(
-            value,
+            value.normalized().unwrap(),
             &facts(),
             "operator",
             &PermissionSet::new(vec![Permission::parse("sales_order:list").unwrap()]),
@@ -560,6 +560,7 @@ mod tests {
     fn review_hash_changes_with_actor_version_payload_and_target_facts() {
         let mut value = document();
         value.data_scopes.push(scope(&["list"]));
+        let value = value.normalized().unwrap();
         let facts = facts();
         let first = plan(value.clone(), &facts).unwrap().preview.review_hash;
         assert_eq!(first, plan(value.clone(), &facts).unwrap().preview.review_hash);
@@ -576,6 +577,30 @@ mod tests {
         let mut changed = facts;
         changed.users.get_mut("alice").unwrap().version += 1;
         assert_ne!(first, plan(value, &changed).unwrap().preview.review_hash);
+    }
+
+    #[test]
+    fn multi_action_scope_keeps_the_review_hash_and_branch_order() {
+        let mut value = document();
+        let mut scope = scope(&["list", "detail"]);
+        let mut detail_only = scope.grants[0].clone();
+        detail_only.actions = vec!["detail".into()];
+        detail_only.terms[0].scope_targets = vec![" west ".into(), "east".into(), "east".into()];
+        let mut duplicate = scope.grants[0].clone();
+        duplicate.actions = vec!["detail".into()];
+        scope.grants.extend([detail_only, duplicate]);
+        value.data_scopes.push(scope);
+
+        let preview = plan(value, &facts()).unwrap().preview;
+        assert_eq!(
+            preview.changes.iter().map(|change| change.target.as_str()).collect::<Vec<_>>(),
+            ["alice/sales_order/detail", "alice/sales_order/list"]
+        );
+        assert_eq!(preview.changes[0].after["alternatives"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            preview.review_hash.as_str(),
+            "sha256-v1:c78de8ed3986c04b891ddc79a0db77d732a82d4f149182082cdf8610adfd7e39"
+        );
     }
 
     // 验证重导显式配置无差异，无法无损表达的旧完整范围拒绝导出。

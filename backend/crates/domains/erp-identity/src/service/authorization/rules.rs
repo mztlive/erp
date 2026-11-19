@@ -333,7 +333,7 @@ fn task_data_condition(permission: &Permission) -> AccessRule {
 fn required_facts(permission: &Permission) -> Result<BTreeSet<FactKind>> {
     let spec = scope_spec::require_scope(permission)?;
     let mut facts = BTreeSet::new();
-    for dimension in spec.required_dimensions() {
+    for dimension in spec.dimensions() {
         match dimension {
             ScopeDimension::InternalOrg => {
                 facts.extend([FactKind::Owner, FactKind::Organization]);
@@ -384,7 +384,7 @@ pub(super) fn capability_scope(permission: &Permission) -> Result<ResolvedScope>
             user_limit: None,
         });
     }
-    let dimensions = spec.supported_dimensions();
+    let dimensions = spec.dimensions();
     let clause = ScopeClause {
         self_owned: dimensions.contains(&ScopeDimension::InternalOrg),
         collaborative: spec.scope_types().contains(&DataScopeType::Collaborative),

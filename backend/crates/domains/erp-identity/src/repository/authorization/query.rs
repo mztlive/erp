@@ -68,7 +68,7 @@ pub(crate) enum WholeRule {
     Root,
     Separate(
         /// 独立的完整金额读取规则，不沿用根查询的可见性过滤。
-        AccessRule
+        AccessRule,
     ),
 }
 
@@ -79,7 +79,7 @@ pub(crate) enum ResolvedFilter {
         /// 辅助入口独立解析的授权上下文，不沿用根查询动作。
         context: Box<AccessContext>,
         /// 在辅助入口上下文中已解析的过滤规则。
-        rule: AccessRule
+        rule: AccessRule,
     },
 }
 
@@ -91,7 +91,7 @@ pub(crate) enum Replay {
         /// 审批来源对象用于范围取证的入口权限。
         source: Permission,
         /// 重新取证时仍须满足的附加功能权限。
-        required: Vec<Permission>
+        required: Vec<Permission>,
     },
 }
 
@@ -163,16 +163,14 @@ pub struct CompiledAccess {
     pub(crate) qualified: QualifiedPermissions,
     /// 查询可使用的服务实例、执行边界及到期时点。
     pub(crate) validity: AccessValidity,
-    /// 非事务交付重新取证所需的已解析规则与入口，快照路径不保存。
-    pub(crate) revalidation: Option<Box<ResolvedAccess>>,
+    /// 非事务交付的复验依据，快照路径不保存。
+    pub(crate) revalidation: Option<Box<QueryRevalidation>>,
     /// 本次组织修订及正向角色范围标记。
     pub(super) scope: ScopeMetadata,
     /// 凭证固定绑定的根集合、记录身份字段和输出模型。
     pub(crate) model: QueryModel,
     /// 完整 MongoDB 授权管道，含最终过滤及必要的投影和清理。
     pub(crate) stages: Vec<Document>,
-    /// 非事务交付时要逐项复验的动态业务映射依赖。
-    pub(crate) dependencies: Vec<MappingDependency>,
     /// 身份、范围和映射等实际依赖的稳定摘要，供跨页检查。
     pub(crate) version: String,
     /// 按关系键索引的可见来源份额计划。
@@ -188,8 +186,15 @@ pub(super) enum FilterPlan {
     Root,
     Separate(
         /// 为辅助读取单独编译的 MongoDB 授权管道。
-        Vec<Document>
+        Vec<Document>,
     ),
+}
+
+/// 已解析规则和本次动态准备的依赖，共同用于非快照交付复验。
+#[derive(Clone)]
+pub(crate) struct QueryRevalidation {
+    pub(crate) resolved: ResolvedAccess,
+    pub(crate) dependencies: Vec<MappingDependency>,
 }
 
 /// 一次动态映射准备的证据，供非事务查询交付复验。
@@ -310,8 +315,10 @@ impl CompiledAccess {
     /// 仓储执行前核对原执行器、事务、读取阶段及有效期，不读取数据库；结果交付前仍须调用 `AuthorizationService::validate`。
     pub fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
         self.validity.ensure_current(executor)?;
-        for dependency in &self.dependencies {
-            dependency.facts.validate(false, Instant::now())?;
+        if let Some(revalidation) = &self.revalidation {
+            for dependency in &revalidation.dependencies {
+                dependency.facts.validate(false, Instant::now())?;
+            }
         }
         Ok(())
     }

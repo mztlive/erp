@@ -15,7 +15,7 @@ pub(crate) enum ScopeSource {
     /// 复用一个 `Current` 权限的配置；本权限不接受独立配置。
     Permission(
         /// 提供人员范围配置的已登记权限。
-        Permission
+        Permission,
     ),
     /// 功能资格成立后采用公司范围，不读取人员配置。
     Company,
@@ -32,10 +32,8 @@ pub(crate) struct ScopeSpec {
     default_self: bool,
     // 该业务资源允许选择的范围类型；同资源的动作须一致。
     scope_types: &'static [DataScopeType],
-    // 该动作可接受的范围维度。
-    supported_dimensions: &'static [ScopeDimension],
-    // 显式范围条款必须覆盖的维度。
-    required_dimensions: &'static [ScopeDimension],
+    // 该动作接受的范围维度，显式条款须覆盖全部维度。
+    dimensions: &'static [ScopeDimension],
     // 是否允许历史参与作为读取范围的补充分支。
     allows_history: bool,
 }
@@ -65,7 +63,7 @@ pub(crate) enum OrganizationLoad {
     AllMembers,
 }
 
-/// 用固定目录数据构造范围规格，初始支持维度与必需维度相同。
+/// 用固定目录数据构造范围规格。
 pub(super) fn scope(
     permission: &Permission,
     source: ScopeSource,
@@ -79,8 +77,7 @@ pub(super) fn scope(
         source,
         default_self,
         scope_types,
-        supported_dimensions: dimensions,
-        required_dimensions: dimensions,
+        dimensions,
         allows_history,
     }
 }
@@ -106,14 +103,9 @@ impl ScopeSpec {
         self.scope_types
     }
 
-    /// 返回该动作接受的维度，供配置界面和绑定校验。
-    pub(crate) fn supported_dimensions(&self) -> &'static [ScopeDimension] {
-        self.supported_dimensions
-    }
-
-    /// 返回解析该动作时条款必须提供的维度。
-    pub(crate) fn required_dimensions(&self) -> &'static [ScopeDimension] {
-        self.required_dimensions
+    /// 返回该动作支持且要求显式条款覆盖的维度。
+    pub(crate) fn dimensions(&self) -> &'static [ScopeDimension] {
+        self.dimensions
     }
 
     /// 查询该入口是否允许把历史参与加入读取条件。
@@ -183,16 +175,6 @@ pub(crate) fn require_action(resource: &str, action: &str) -> Result<&'static Sc
 /// 按权限加载可直接计算的范围规格，只接受当前人员配置或公司范围。
 pub(crate) fn require_runtime(permission: &Permission) -> Result<&'static ScopeSpec> {
     let spec = require_scope(permission)?;
-    runtime_only(spec)
-}
-
-/// 按资源和动作加载可直接计算的规格；复用入口须先定位其范围来源。
-pub(crate) fn require_runtime_action(resource: &str, action: &str) -> Result<&'static ScopeSpec> {
-    runtime_only(require_action(resource, action)?)
-}
-
-// 拒绝未解析的范围复用规格，避免按入口自身读取人员配置。
-fn runtime_only(spec: &'static ScopeSpec) -> Result<&'static ScopeSpec> {
     match &spec.source {
         ScopeSource::Current | ScopeSource::Company => Ok(spec),
         ScopeSource::Permission(_) => Err(independent_scope_rejected(&spec.permission)),
@@ -300,7 +282,7 @@ pub(crate) fn configurable_dimensions(resource: &str, actions: &[String]) -> Vec
         let Some(spec) = find_action(resource, action).filter(|spec| spec.configurable()) else {
             continue;
         };
-        for dimension in spec.supported_dimensions {
+        for dimension in spec.dimensions {
             if !dimensions.contains(dimension) {
                 dimensions.push(*dimension);
             }
@@ -328,7 +310,7 @@ pub(crate) fn validate_scope_type(resource: &str, scope_type: DataScopeType) -> 
 pub(crate) fn validate_binding(binding: &ScopeBinding) -> Result<()> {
     for action in &binding.actions {
         let spec = require_action(&binding.resource, action)?;
-        if !spec.supported_dimensions.contains(&binding.target_dimension) {
+        if !spec.dimensions.contains(&binding.target_dimension) {
             let dimension = match binding.target_dimension {
                 ScopeDimension::InternalOrg => "内部组织",
                 ScopeDimension::SettlementParty => "结算主体",
@@ -397,22 +379,19 @@ pub(crate) fn validate_catalog() -> Result<()> {
         }
     }
 
-    validate_sources_acyclic(raw_specs())
+    Ok(())
 }
 
 // 核对单条规格的维度、本人基础、历史读取和复用来源是否符合静态目录约束。
 fn validate_scope(spec: &ScopeSpec) -> Result<()> {
-    if spec.supported_dimensions.is_empty() || spec.scope_types.is_empty() {
+    if spec.dimensions.is_empty() || spec.scope_types.is_empty() {
         return Err(Error::ValidationError(format!("{} 缺少范围维度或类型", spec.permission)));
-    }
-    if spec.required_dimensions.iter().any(|dimension| !spec.supported_dimensions.contains(dimension)) {
-        return Err(Error::ValidationError(format!("{} 的必需维度超出支持维度", spec.permission)));
     }
 
     if spec.default_self && !matches!(&spec.source, ScopeSource::Current) {
         return Err(Error::ValidationError(format!("{} 不能声明本人基础", spec.permission)));
     }
-    if spec.default_self && spec.required_dimensions != [ScopeDimension::InternalOrg] {
+    if spec.default_self && spec.dimensions != [ScopeDimension::InternalOrg] {
         return Err(Error::ValidationError(format!("{} 的本人基础只能使用内部组织", spec.permission)));
     }
 
@@ -430,13 +409,13 @@ fn validate_scope(spec: &ScopeSpec) -> Result<()> {
     {
         return Err(Error::ValidationError(format!("{} 的历史读取只适用于读取", spec.permission)));
     }
-    if spec.allows_history && spec.required_dimensions != [ScopeDimension::InternalOrg] {
+    if spec.allows_history && spec.dimensions != [ScopeDimension::InternalOrg] {
         return Err(Error::ValidationError(format!("{} 的历史读取只能使用内部组织", spec.permission)));
     }
 
     let source = runtime_source(spec)?;
     if let ScopeSource::Permission(_) = &spec.source
-        && source.supported_dimensions.iter().any(|dimension| !spec.supported_dimensions.contains(dimension))
+        && source.dimensions.iter().any(|dimension| !spec.dimensions.contains(dimension))
     {
         return Err(Error::ValidationError(format!(
             "{} 不支持来源 {} 的范围维度",
@@ -523,25 +502,6 @@ fn describe(resource: &str, spec: Option<&ScopeSpec>, kind: ActionKind) -> &'sta
     }
 }
 
-// 沿目录中的复用关系查找缺失引用和环，避免运行时无限追溯。
-fn validate_sources_acyclic(entries: &[ScopeSpec]) -> Result<()> {
-    for spec in entries {
-        let mut cursor = spec;
-        let mut guard = 0;
-        while let ScopeSource::Permission(permission) = &cursor.source {
-            guard += 1;
-            if guard > entries.len() || permission == &spec.permission {
-                return Err(Error::ValidationError(format!("{} 的范围来源成环", spec.permission)));
-            }
-            cursor = entries
-                .iter()
-                .find(|entry| entry.permission == *permission)
-                .ok_or_else(|| Error::ValidationError(format!("{} 的范围来源缺失", spec.permission)))?;
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -572,19 +532,16 @@ mod tests {
     #[test]
     fn missing_and_cyclic_sources_are_rejected() {
         const LEFT: Permission = Permission::new("scope_cycle_left", "list");
-        const RIGHT: Permission = Permission::new("scope_cycle_right", "list");
         const MISSING: Permission = Permission::new("scope_cycle_missing", "list");
         let org: &[ScopeDimension] = &[ScopeDimension::InternalOrg];
         let types: &[DataScopeType] = &[DataScopeType::Company];
 
-        let cycle = [
-            scope(&LEFT, ScopeSource::Permission(RIGHT.clone()), false, types, org, false),
-            scope(&RIGHT, ScopeSource::Permission(LEFT.clone()), false, types, org, false),
-        ];
-        assert!(validate_sources_acyclic(&cycle).is_err());
+        let missing = scope(&LEFT, ScopeSource::Permission(MISSING), false, types, org, false);
+        assert!(runtime_source(&missing).is_err());
 
-        let missing = [scope(&LEFT, ScopeSource::Permission(MISSING.clone()), false, types, org, false)];
-        assert!(validate_sources_acyclic(&missing).is_err());
+        let list = erp_permissions::contract::LIST;
+        let cycle = scope(&list, ScopeSource::Permission(list.clone()), false, types, org, false);
+        assert!(runtime_source(&cycle).is_err());
 
         let chained = scope(
             &LEFT,
@@ -649,7 +606,7 @@ mod tests {
         );
         assert_eq!(organization_load(find_action("org_unit", "list").unwrap()), OrganizationLoad::AllMembers);
         assert_eq!(
-            find_action("supplier_deposit", "resolve").unwrap().required_dimensions(),
+            find_action("supplier_deposit", "resolve").unwrap().dimensions(),
             &[ScopeDimension::InternalOrg, ScopeDimension::SettlementParty]
         );
     }

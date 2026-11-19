@@ -74,11 +74,7 @@ impl PolicyBundleService {
         let facts = self.facts(&document, executor).await?;
         for scope in &document.data_scopes {
             self.access
-                .validate_person_scope_targets(
-                    &scope.request(authorization.policy_version)?,
-                    &authorization.organizations,
-                    executor,
-                )
+                .validate_person_scope_targets(&scope.targets()?, &authorization.organizations, executor)
                 .await?;
         }
 

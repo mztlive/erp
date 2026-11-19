@@ -130,7 +130,7 @@ async fn refund_management_query_requires_same_role_ledger_only_for_funds_source
         };
         let access =
             service.query(&actor(), &internal::APPROVAL_MANAGEMENT_READ, &mut executor).await.unwrap();
-        let AccessRule::Any(partitions) = &access.revalidation.as_ref().unwrap().rules.root else {
+        let AccessRule::Any(partitions) = &access.revalidation.as_ref().unwrap().resolved.rules.root else {
             panic!("管理列表必须保留两个退款类型的账户来源");
         };
         let keys = partitions

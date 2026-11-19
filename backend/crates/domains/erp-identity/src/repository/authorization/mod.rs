@@ -23,7 +23,7 @@ pub(crate) use query::{
     AccessProof, AccessValidity, Replay, ResolvedAccess, ResolvedFilter, ResolvedRules, ScopeMetadata,
     WholeRule,
 };
-use query::{FilterPlan, MappingDependency, SourcePlan};
+use query::{FilterPlan, MappingDependency, QueryRevalidation, SourcePlan};
 
 use crate::entity::authorization::{
     AccessContext, AccessRule, MappingFacts, QueryOutput, RelationKey, RelationMatch,
@@ -111,16 +111,19 @@ pub(crate) async fn compile(
         hash.sequence(stages, Fingerprint::document);
     });
 
-    let is_snapshot = compiler.boundary.is_snapshot();
+    let revalidation = if compiler.boundary.is_snapshot() {
+        None
+    } else {
+        Some(Box::new(QueryRevalidation { resolved, dependencies: compiler.prepared }))
+    };
     let compiled = CompiledAccess {
         context,
         qualified,
         validity,
-        revalidation: (!is_snapshot).then(|| Box::new(resolved)),
+        revalidation,
         scope,
         model: model.clone(),
         stages,
-        dependencies: if is_snapshot { vec![] } else { compiler.prepared },
         version: version.finish(),
         sources,
         whole,
@@ -130,16 +133,14 @@ pub(crate) async fn compile(
     Ok(compiled)
 }
 
-// 为份额子计划收集根层来源规则及独立入口，去除重复分支；嵌套关系交其来源模型编译。
-fn source_rules(
-    rule: &AccessRule,
-    permission: Option<&Permission>,
-    output: &mut BTreeMap<RelationKey, Vec<(Option<Permission>, AccessRule)>>,
-) {
+type SourceRules<'a> = BTreeMap<&'a RelationKey, Vec<(Option<&'a Permission>, &'a AccessRule)>>;
+
+// 为份额子计划借用根层来源规则及独立入口；重复分支保留首次出现的位置。
+fn source_rules<'a>(rule: &'a AccessRule, permission: Option<&'a Permission>, output: &mut SourceRules<'a>) {
     match rule {
         AccessRule::Related { relation, rule, .. } => {
-            let rules = output.entry(relation.clone()).or_default();
-            let branch = (permission.cloned(), rule.as_ref().clone());
+            let rules = output.entry(relation).or_default();
+            let branch = (permission, rule.as_ref());
             if !rules.contains(&branch) {
                 rules.push(branch);
             }
@@ -169,7 +170,7 @@ impl Compiler<'_> {
         for (key, rules) in rules {
             let child = mapping
                 .relations()
-                .remove(&key)
+                .remove(key)
                 .ok_or_else(|| Error::ValidationError("缺少来源 Mapping".into()))?;
             let mut fragment = Fragment::with_stages(child.stages());
             let mut conditions = Vec::new();
@@ -177,15 +178,15 @@ impl Compiler<'_> {
                 let context = AccessContext {
                     resource: child.model().resource.clone(),
                     model: Some(child.model().key.clone()),
-                    permission: entry.unwrap_or_else(|| root.permission.clone()),
+                    permission: entry.unwrap_or(&root.permission).clone(),
                     ..root.clone()
                 };
-                conditions.push(self.condition(&rule, &child, &context, &mut fragment, 0).await?.0);
+                conditions.push(self.condition(rule, &child, &context, &mut fragment, 0).await?.0);
             }
 
             fragment.filter = combine("$or", conditions);
             let stages = fragment.finish();
-            sources.insert(key, SourcePlan { model: child.model().clone(), stages });
+            sources.insert(key.clone(), SourcePlan { model: child.model().clone(), stages });
         }
         Ok(sources)
     }
@@ -452,6 +453,38 @@ mod tests {
     use crate::service::authorization::rules::sources::{Output, data_condition as source_condition};
     use crate::service::authorization::rules::{self};
     use crate::{Permission, QualifiedPermissions};
+
+    #[test]
+    fn source_rules_deduplicate_by_entry_and_rule_in_first_seen_order() {
+        let key = RelationKey::parse("sale").unwrap();
+        let related = |rule| AccessRule::Related {
+            relation: key.clone(),
+            resource: "sales_order".into(),
+            mode: RelationMatch::ExactlyOne,
+            rule: Box::new(rule),
+        };
+        let independent =
+            |permission, rule| AccessRule::Independent { permission, rule: Box::new(related(rule)) };
+        let owned = AccessRule::Fact(AccessFact::Owned);
+        let rule = AccessRule::Any(vec![
+            independent(sales_order::DETAIL, owned.clone()),
+            related(AccessRule::Allow),
+            independent(sales_order::DETAIL, owned.clone()),
+            independent(sales_order::LIST, owned.clone()),
+            related(owned.clone()),
+        ]);
+        let mut grouped = BTreeMap::new();
+        source_rules(&rule, None, &mut grouped);
+        assert_eq!(
+            grouped.values().next().unwrap().as_slice(),
+            &[
+                (Some(&sales_order::DETAIL), &owned),
+                (None, &AccessRule::Allow),
+                (Some(&sales_order::LIST), &owned),
+                (None, &owned),
+            ]
+        );
+    }
 
     // 可配置的编译器测试映射，用于模拟事实、来源、动态版本和动作敏感过滤。
     struct Mapping {
@@ -749,7 +782,7 @@ mod tests {
             .unwrap();
         assert!(conditions[0].as_document().unwrap().contains_key("$gt"));
         assert!(conditions[1].as_document().unwrap().contains_key("$setEquals"));
-        assert_eq!(plan.dependencies.len(), 2);
+        assert_eq!(plan.revalidation.as_ref().unwrap().dependencies.len(), 2);
     }
 
     // 验证事实维度缺失、模型错配或授权资源不符时拒绝编译。
@@ -853,10 +886,11 @@ mod tests {
         });
         let query = query(AccessRule::Allow, live.clone(), &executor);
         let plan = query.compile(&mut executor).await.unwrap();
-        assert!(plan.dependencies[0].validate(&mut executor).await.is_ok());
+        let dependency = &plan.revalidation.as_ref().unwrap().dependencies[0];
+        assert!(dependency.validate(&mut executor).await.is_ok());
 
         live.revision.store(2, Ordering::Relaxed);
-        assert!(matches!(plan.dependencies[0].validate(&mut executor).await, Err(Error::ConflictError(_))));
+        assert!(matches!(dependency.validate(&mut executor).await, Err(Error::ConflictError(_))));
         let updated = query.compile(&mut executor).await.unwrap();
         assert_ne!(plan.version(), updated.version());
     }
@@ -896,11 +930,12 @@ mod tests {
         };
         let query = query(rule, mapping.clone(), &executor);
         let plan = query.compile(&mut executor).await.unwrap();
-        assert_eq!(plan.dependencies.len(), 2);
-        assert_eq!(plan.dependencies[0].context.permission.action(), "list");
-        assert_eq!(plan.dependencies[1].context.permission.action(), "detail");
-        assert_eq!(plan.dependencies[1].facts.version.as_deref(), Some("facts-detail-v1"));
-        assert!(plan.dependencies[1].facts.valid_until.is_some());
+        let dependencies = &plan.revalidation.as_ref().unwrap().dependencies;
+        assert_eq!(dependencies.len(), 2);
+        assert_eq!(dependencies[0].context.permission.action(), "list");
+        assert_eq!(dependencies[1].context.permission.action(), "detail");
+        assert_eq!(dependencies[1].facts.version.as_deref(), Some("facts-detail-v1"));
+        assert!(dependencies[1].facts.valid_until.is_some());
         assert_eq!(
             plan.stages,
             vec![doc! { "$match": { "$and": [
@@ -911,10 +946,10 @@ mod tests {
                 ] }
             ] } }]
         );
-        assert!(plan.dependencies[1].validate(&mut executor).await.is_ok());
+        assert!(dependencies[1].validate(&mut executor).await.is_ok());
 
         mapping.revision.store(2, Ordering::Relaxed);
-        assert!(matches!(plan.dependencies[1].validate(&mut executor).await, Err(Error::ConflictError(_))));
+        assert!(matches!(dependencies[1].validate(&mut executor).await, Err(Error::ConflictError(_))));
     }
 
     // 验证辅助过滤保留已解析入口的上下文及独立映射依赖。
@@ -940,9 +975,10 @@ mod tests {
         });
 
         let plan = query.compile(&mut executor).await.unwrap();
-        assert_eq!(plan.dependencies.len(), 2);
-        assert_eq!(plan.dependencies[0].context, query.proof.context);
-        let dependency = &plan.dependencies[1];
+        let dependencies = &plan.revalidation.as_ref().unwrap().dependencies;
+        assert_eq!(dependencies.len(), 2);
+        assert_eq!(dependencies[0].context, query.proof.context);
+        let dependency = &dependencies[1];
         assert_eq!(dependency.context, context);
         assert_eq!(dependency.facts.version.as_deref(), Some("facts-detail-v1"));
         assert_eq!(plan.validity.valid_until, dependency.facts.valid_until);
@@ -963,7 +999,7 @@ mod tests {
         query.proof.resolved.rules.management = Some(ResolvedFilter::Root);
         let root = query.compile(&mut executor).await.unwrap();
         assert_eq!(root.management_stages().unwrap(), root.stages());
-        assert_eq!(root.dependencies.len(), 1);
+        assert_eq!(root.revalidation.as_ref().unwrap().dependencies.len(), 1);
 
         mapping.revision.store(2, Ordering::Relaxed);
         assert!(matches!(dependency.validate(&mut executor).await, Err(Error::ConflictError(_))));
@@ -1082,7 +1118,7 @@ mod tests {
         let rule = rules::data_condition(&sales_inquiry::QUERY_SALES_LIST, Some(&scope)).unwrap();
         let query = query(rule.clone(), mapping.clone(), &executor);
         let plan = query.compile(&mut executor).await.unwrap();
-        assert!(plan.dependencies.is_empty());
+        assert!(plan.revalidation.as_ref().unwrap().dependencies.is_empty());
 
         let samples = [("own", "u", "other"), ("team", "other", "team"), ("denied", "other", "other")];
         let rows = samples
@@ -1154,7 +1190,7 @@ mod tests {
         let mut query = query(rule.clone(), root.clone(), &executor);
         query.proof.context.permission = permission;
         let plan = query.compile(&mut executor).await.unwrap();
-        assert!(plan.dependencies.is_empty());
+        assert!(plan.revalidation.as_ref().unwrap().dependencies.is_empty());
 
         let sources = [("s1", "u", 0), ("s2", "u", 0), ("denied", "other", 0), ("deleted", "u", 1)];
         let collections = [("access_sources".into(), sources.iter().map(|(id, owner, deleted)| doc! {
@@ -1307,9 +1343,12 @@ mod tests {
                 }
 
                 let snapshot = executor.boundary().unwrap().is_snapshot();
-                assert_eq!(plan.dependencies.len(), if dynamic && !snapshot { 4 } else { 0 });
-                for dependency in &plan.dependencies {
-                    dependency.validate(executor.as_mut()).await.unwrap();
+                assert_eq!(plan.revalidation.is_none(), snapshot);
+                if let Some(revalidation) = &plan.revalidation {
+                    assert_eq!(revalidation.dependencies.len(), if dynamic { 4 } else { 0 });
+                    for dependency in &revalidation.dependencies {
+                        dependency.validate(executor.as_mut()).await.unwrap();
+                    }
                 }
                 for source in [&sales, &purchase, &settlement] {
                     assert_eq!(
@@ -1448,7 +1487,6 @@ mod tests {
         });
         let query = query(AccessRule::Allow, mapping.clone(), &executor);
         let mut plan = query.compile(&mut executor).await.unwrap();
-        assert!(plan.dependencies.is_empty());
         assert!(plan.revalidation.is_none());
         assert!(plan.validity.valid_until.is_some());
         mapping.revision.store(2, Ordering::Relaxed);

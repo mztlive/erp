@@ -167,8 +167,8 @@ impl AuthorizedRoleGrant {
 pub struct AuthorizedAccountManagement {
     // 目标账号管理检查所用的策略版本，供写事务重验。
     policy_revision: u64,
-    // 请求更换角色时在同一策略快照校验的授予上下文；空值表示保留绑定。
-    role_grant: Option<AuthorizedRoleGrant>,
+    // 同一快照校验过的替换角色集合；None 表示保留绑定。
+    replacement_roles: Option<RoleIdSet>,
 }
 
 impl AuthorizedAccountManagement {
@@ -179,7 +179,8 @@ impl AuthorizedAccountManagement {
 
     /// 准备账号写入时消费管理上下文，取出同一快照校验的授予上下文；未请求更换角色时返回 `None`。
     pub fn into_role_grant(self) -> Option<AuthorizedRoleGrant> {
-        self.role_grant
+        self.replacement_roles
+            .map(|role_ids| AuthorizedRoleGrant { role_ids, policy_revision: self.policy_revision })
     }
 }
 

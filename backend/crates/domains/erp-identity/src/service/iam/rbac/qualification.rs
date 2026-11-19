@@ -90,7 +90,7 @@ impl RbacService {
         let snapshot = self.role_permission_snapshot(actor.kind(), actor.id(), permissions).await?;
         let roles = self.db.roles().enabled_roles(snapshot.role_ids(), executor).await?;
         self.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
-        Ok(Some(qualified(snapshot, &roles, actor, account.base.version, AccountSummary::from(&account))))
+        Ok(Some(qualified(snapshot, roles, actor, account.base.version, AccountSummary::from(&account))))
     }
 }
 
@@ -125,14 +125,14 @@ impl QualifiedPermissions {
             roles.push(role);
         }
         let snapshot = RolePermissionSnapshot { role_ids, grants: map, policy_revision: 1 };
-        qualified(snapshot, &roles, actor, 1, AccountSummary::new(actor.id(), actor.kind(), true))
+        qualified(snapshot, roles, actor, 1, AccountSummary::new(actor.id(), actor.kind(), true))
     }
 }
 
 // 取证完成后按启用角色过滤授权，并用账号、策略及本批启用角色版本构造身份版本。
 fn qualified(
     mut snapshot: RolePermissionSnapshot,
-    roles: &[Role],
+    roles: Vec<Role>,
     actor: &AuditActor,
     account_version: u64,
     account: AccountSummary,
@@ -148,7 +148,7 @@ fn qualified(
         actor.kind(),
         snapshot.policy_revision()
     );
-    QualifiedPermissions { snapshot, account, version, roles: roles.to_vec(), account_version }
+    QualifiedPermissions { snapshot, account, version, roles, account_version }
 }
 
 #[cfg(test)]
@@ -178,14 +178,14 @@ mod tests {
         };
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
         let roles = [role("a"), role("b")];
-        let both = qualified(snapshot.clone(), &roles, &actor, 1, account());
+        let both = qualified(snapshot.clone(), roles.to_vec(), &actor, 1, account());
         assert!(both.permissions().covers_one(&read));
         assert!(both.permissions().covers_one(&write));
         assert!(!both.same_role(&[read.clone(), write.clone()]));
         assert!(both.same_role(std::slice::from_ref(&read)));
         assert!(!both.same_role(&[]));
 
-        let reduced = qualified(snapshot, &roles[..1], &actor, 1, account());
+        let reduced = qualified(snapshot, vec![role("a")], &actor, 1, account());
         assert!(reduced.permissions().covers_one(&read));
         assert!(!reduced.permissions().covers_one(&write));
         assert!(reduced.roles(&write).is_empty());
@@ -206,16 +206,22 @@ mod tests {
         };
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
         let mut roles = [role("a")];
-        let original = qualified(snapshot.clone(), &roles, &actor, 1, account());
+        let original = qualified(snapshot.clone(), roles.to_vec(), &actor, 1, account());
         assert!(original.same_role(&[read, write]));
         assert_eq!(original.account(), &account());
         assert_eq!(original.account().display_name, "审批人");
 
-        assert_ne!(original.version(), qualified(snapshot.clone(), &roles, &actor, 2, account()).version());
+        assert_ne!(
+            original.version(),
+            qualified(snapshot.clone(), roles.to_vec(), &actor, 2, account()).version()
+        );
         roles[0].base.version += 1;
-        assert_ne!(original.version(), qualified(snapshot.clone(), &roles, &actor, 1, account()).version());
+        assert_ne!(
+            original.version(),
+            qualified(snapshot.clone(), roles.to_vec(), &actor, 1, account()).version()
+        );
 
-        let empty = qualified(snapshot, &[], &actor, 1, account());
+        let empty = qualified(snapshot, vec![], &actor, 1, account());
         assert!(empty.permissions().into_vec().is_empty());
     }
 
@@ -230,8 +236,8 @@ mod tests {
             policy_revision: 7,
         };
         let actor = AuditActor::new("user".into(), "login".into(), AccountKind::Admin);
-        let enabled = qualified(snapshot.clone(), &[role(id.as_str())], &actor, 1, account());
-        let disabled = qualified(snapshot, &[], &actor, 1, account());
+        let enabled = qualified(snapshot.clone(), vec![role(id.as_str())], &actor, 1, account());
+        let disabled = qualified(snapshot, vec![], &actor, 1, account());
         assert_eq!(enabled.roles(&preview), vec![id]);
         assert!(disabled.roles(&preview).is_empty());
         assert!(enabled.same_role(std::slice::from_ref(&preview)));

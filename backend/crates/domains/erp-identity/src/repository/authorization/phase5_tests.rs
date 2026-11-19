@@ -294,8 +294,8 @@ async fn independent_source_plan_uses_its_entry_context_and_reuses_exact_prepara
     };
     let plan = plan(receivable::CUSTOMER_RECEIPT_LIST, rule.clone(), Some(rule), root, &mut executor).await;
     assert_eq!(child.prepares.load(Ordering::SeqCst), 1);
-    assert_eq!(plan.dependencies.len(), 1);
-    assert_eq!(plan.dependencies[0].context.permission, sales_order::DETAIL);
+    assert_eq!(plan.revalidation.as_ref().unwrap().dependencies.len(), 1);
+    assert_eq!(plan.revalidation.as_ref().unwrap().dependencies[0].context.permission, sales_order::DETAIL);
 
     let rows = vec![
         doc! {"id":"own","owner":"user","deleted_at":0,"entry":"sales_order:detail"},
@@ -316,7 +316,10 @@ async fn independent_source_plan_uses_its_entry_context_and_reuses_exact_prepara
     );
 
     child.revision.store(2, Ordering::SeqCst);
-    assert!(matches!(plan.dependencies[0].validate(&mut executor).await, Err(Error::ConflictError(_))));
+    assert!(matches!(
+        plan.revalidation.as_ref().unwrap().dependencies[0].validate(&mut executor).await,
+        Err(Error::ConflictError(_))
+    ));
 }
 
 // 验证整账复用根过滤后仍保留相同摘要、动态依赖和最早截止时间。
@@ -345,11 +348,14 @@ async fn whole_root_reuse_keeps_dynamic_dependencies_and_deadline() {
     assert_eq!(reused.validity.valid_until, original.validity.valid_until);
     assert_eq!(reused.validity.valid_until, Some(deadline));
     for plan in [&original, &reused] {
-        assert_eq!(plan.dependencies.len(), 1);
-        plan.dependencies[0].validate(&mut executor).await.unwrap();
+        assert_eq!(plan.revalidation.as_ref().unwrap().dependencies.len(), 1);
+        plan.revalidation.as_ref().unwrap().dependencies[0].validate(&mut executor).await.unwrap();
     }
     root.revision.store(2, Ordering::SeqCst);
-    assert!(matches!(reused.dependencies[0].validate(&mut executor).await, Err(Error::ConflictError(_))));
+    assert!(matches!(
+        reused.revalidation.as_ref().unwrap().dependencies[0].validate(&mut executor).await,
+        Err(Error::ConflictError(_))
+    ));
     AccessValidity::with_test_time(deadline, async {
         assert!(matches!(reused.ensure_current(&mut executor), Err(Error::ConflictError(_))));
     })
@@ -382,7 +388,7 @@ async fn static_deadline_needs_no_preparation_and_expires_the_compiled_plan() {
 
         let plan = service.query(&actor, &sales_order::DETAIL, &mut executor).await.unwrap();
         assert_eq!(plan.validity.valid_until, Some(deadline));
-        assert!(plan.dependencies.is_empty());
+        assert!(plan.revalidation.as_ref().unwrap().dependencies.is_empty());
         service.validate(&plan, &mut executor).await.unwrap();
 
         let plan = service.query(&actor, &sales_order::DETAIL, &mut executor).await.unwrap();
@@ -410,7 +416,10 @@ async fn dynamic_deadline_and_phase_changes_reject_delivery() {
     assert_eq!(root.prepares.load(Ordering::SeqCst), 1);
 
     *root.expires.lock().unwrap() = Some(Instant::from_unix_secs(1));
-    assert!(matches!(plan.dependencies[0].validate(&mut executor).await, Err(Error::ConflictError(_))));
+    assert!(matches!(
+        plan.revalidation.as_ref().unwrap().dependencies[0].validate(&mut executor).await,
+        Err(Error::ConflictError(_))
+    ));
 
     executor.next_read();
     assert!(matches!(plan.ensure_current(&mut executor), Err(Error::ValidationError(_))));

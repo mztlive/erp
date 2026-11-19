@@ -151,7 +151,7 @@ impl PersonDataScope {
     /// 动作没有范围规格或表达式非法时返回校验错误。
     pub fn resolve(&self, state: &OrganizationState, at: Instant) -> Result<ResolvedScope> {
         let spec = scope_spec::require_action(&self.resource, &self.action)?;
-        self.compile(state, spec.required_dimensions(), spec.allows_history(), at)
+        self.compile(state, spec.dimensions(), spec.allows_history(), at)
     }
 
     // 按动作的必需维度和历史读取政策编译查询、对象判定共用的范围，丢弃空分支及缺维度分支。

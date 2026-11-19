@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use super::{PolicyDocument, PolicyMode, PolicyScope};
 use crate::dto::person_scope::{PersonScopeCommand, PersonScopeGrant, SavePersonScopeRequest};
 use crate::entity::access_control::person_scope::PersonScopeExpression;
+use crate::entity::access_control::scope_target::ScopeTarget;
 use crate::entity::role::{ROOT_ROLE_ID, Role, RoleData};
 use crate::{Error, Permission, Result};
 
@@ -107,9 +108,28 @@ impl PolicyScope {
         Ok(())
     }
 
-    /// 将指定动作的已存或待写追加范围按正式模型规范化，供差异比较；非法追加条款返回错误。
-    /// 旧完整表达式、启用历史读取或带条件的表达式保持原样。
-    pub(super) fn canonical_expression(
+    // 按已规范化文件中的授权、条款顺序重建目标；同一授权内去重。
+    pub(crate) fn targets(&self) -> Result<Vec<ScopeTarget>> {
+        let mut targets = Vec::new();
+        for grant in &self.grants {
+            let start = targets.len();
+            for term in &grant.terms {
+                let target = term.target(&self.resource, &grant.actions)?;
+                if !targets[start..].contains(&target) {
+                    targets.push(target);
+                }
+            }
+        }
+        Ok(targets)
+    }
+
+    /// 从已规范化的文件生成逐动作表达式。投影后归并相同条款，并沿用单动作授权的序列化顺序。
+    pub(super) fn expression(&self, action: &str) -> Result<PersonScopeExpression> {
+        action_expression(&self.grants, action)
+    }
+
+    /// 对照文件前重新校验已存的追加范围。旧完整表达式及旧历史或交集字段保持原样。
+    pub(super) fn canonical_existing_expression(
         &self,
         action: &str,
         expression: &PersonScopeExpression,
@@ -117,17 +137,19 @@ impl PolicyScope {
         if !expression.additive || expression.history_read || expression.condition.is_some() {
             return Ok(expression.clone());
         }
-        let mut scope = Self {
+        let command = SavePersonScopeRequest {
+            resource: self.resource.clone(),
             actions: vec![action.into()],
             grants: expression
                 .alternatives
                 .iter()
                 .map(|terms| PersonScopeGrant { actions: vec![action.into()], terms: terms.clone() })
                 .collect(),
-            ..self.clone()
-        };
-        scope.normalize_grants()?;
-        Ok(scope.request(0)?.expression(action))
+            replace_legacy: self.replace_legacy,
+            expected_policy_version: 0,
+        }
+        .normalized()?;
+        action_expression(&command.grants, action)
     }
 
     /// 用传入的策略版本构造正式的人员范围保存命令，供导入校验和提取逐动作表达式。
@@ -142,6 +164,22 @@ impl PolicyScope {
         }
         .normalized()
     }
+}
+
+fn action_expression(grants: &[PersonScopeGrant], action: &str) -> Result<PersonScopeExpression> {
+    // 投影为同一动作后，授权 JSON 中只有 terms 不同，按它排序与原顺序等价。
+    let mut keyed = grants
+        .iter()
+        .filter(|grant| grant.actions.iter().any(|value| value == action))
+        .map(|grant| Ok((serde_json::to_string(&grant.terms)?, &grant.terms)))
+        .collect::<Result<Vec<_>>>()?;
+    keyed.sort_by(|a, b| a.0.cmp(&b.0));
+    keyed.dedup_by(|a, b| a.0 == b.0);
+    Ok(PersonScopeExpression {
+        additive: true,
+        alternatives: keyed.into_iter().map(|(_, terms)| terms.clone()).collect(),
+        ..Default::default()
+    })
 }
 
 /// 去除外部人员 ID 的首尾空白；结果为空、超过 128 字节或含控制字符时返回校验错误。
@@ -180,6 +218,34 @@ mod tests {
         assert_eq!(value.bindings[0].role_ids.len(), 1);
         assert_eq!(value.bindings[0].mode, PolicyMode::Merge);
         assert_eq!(value.clone().normalized().unwrap(), value);
+    }
+
+    #[test]
+    fn normalized_targets_match_save_command_order() {
+        let mut value = document();
+        value.data_scopes.push(serde_json::from_value(json!({
+            "user_id":"alice", "resource":"sales_order", "actions":["list", "detail"], "mode":"replace",
+            "grants":[
+                {"actions":["list"], "terms":[
+                    {"scope_type":"team", "target_dimension":"internal_org", "target_mode":"explicit",
+                     "include_descendants":false, "scope_targets":[" west ", "east"]},
+                    {"scope_type":"organization", "target_dimension":"internal_org", "target_mode":"explicit",
+                     "include_descendants":false, "scope_targets":["east", "west"]}
+                ]},
+                {"actions":["detail"], "terms":[
+                    {"scope_type":"organization", "target_dimension":"internal_org", "target_mode":"explicit",
+                     "include_descendants":true, "scope_targets":["north"]}
+                ]}
+            ]
+        })).unwrap());
+        let normalized = value.normalized().unwrap();
+        let scope = &normalized.data_scopes[0];
+        let targets = scope.targets().unwrap();
+        assert_eq!(targets, scope.request(0).unwrap().targets());
+        assert_eq!(
+            targets.iter().map(ScopeTarget::ids).collect::<Vec<_>>(),
+            [&["north"][..], &["east", "west"]]
+        );
     }
 
     // 验证重复角色在规范化时失败，绑定期限和拒绝效果等未知字段在反序列化时失败。
