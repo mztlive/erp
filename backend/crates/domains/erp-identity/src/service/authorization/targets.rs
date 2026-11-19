@@ -7,8 +7,7 @@ use std::sync::Arc;
 use erp_core::common::time::Instant;
 use persistence_core::{ExecutionBoundary, Executor};
 
-use super::approvals;
-use super::rules;
+use super::{approvals, rules};
 use crate::entity::authorization::{
     AccessContext, AccessRule, AccessTarget, ObjectFacts, RelationKey, RelationMatch, ResourceTargets,
 };
@@ -50,7 +49,7 @@ impl TargetFacts {
         bindings: &FactsBindings,
         context: &AccessContext,
         rule: &AccessRule,
-        target: &AccessTarget,
+        target: AccessTarget,
         executor: &mut dyn Executor,
     ) -> Result<Self> {
         if context.resource != context.permission.resource() {
@@ -59,21 +58,21 @@ impl TargetFacts {
         let boundary =
             executor.boundary().ok_or_else(|| Error::ValidationError("目标读取缺少执行边界".into()))?;
 
-        let (ids, candidate, version) = match target {
-            AccessTarget::Records(ids) => (Some(Cow::Borrowed(ids)), None, None),
-            AccessTarget::Candidate(candidate) => (None, Some(candidate), None),
-            AccessTarget::OwnershipChange { id, candidate } => {
-                (Some(Cow::Owned(ResourceTargets::new(&[id])?)), Some(candidate), None)
+        let (ids, version) = match &target {
+            AccessTarget::Records(ids) => (Some(Cow::Borrowed(ids)), None),
+            AccessTarget::Candidate(_) => (None, None),
+            AccessTarget::OwnershipChange { id, .. } => {
+                (Some(Cow::Owned(ResourceTargets::new(&[id])?)), None)
             },
             AccessTarget::Task { id, version } => {
                 if version.is_empty() {
                     return Err(Error::ValidationError("必须提供精确任务版本".into()));
                 }
-                (Some(Cow::Owned(ResourceTargets::new(&[id])?)), None, Some(version))
+                (Some(Cow::Owned(ResourceTargets::new(&[id])?)), Some(version))
             },
             AccessTarget::Operation => return Err(Error::ValidationError("无对象目标不能读取事实".into())),
         };
-        rules::ensure_target(&context.permission, target)?;
+        rules::ensure_target(&context.permission, &target)?;
         if (version.is_some() || !rules::is_read(&context.permission)) && !boundary.is_snapshot() {
             return Err(Error::ValidationError("对象写入授权必须使用快照事务".into()));
         }
@@ -90,9 +89,11 @@ impl TargetFacts {
         } else {
             Vec::new()
         };
-        let candidate = match candidate {
-            Some(candidate) => Some(load_candidate(bindings, context, rule, candidate, executor).await?),
-            None => None,
+        let candidate = match target {
+            AccessTarget::Candidate(candidate) | AccessTarget::OwnershipChange { candidate, .. } => {
+                Some(load_candidate(bindings, context, rule, candidate, executor).await?)
+            },
+            _ => None,
         };
 
         let result = Self { objects, candidate, boundary };
@@ -234,11 +235,10 @@ async fn load_candidate(
     bindings: &FactsBindings,
     context: &AccessContext,
     rule: &AccessRule,
-    candidate: &ObjectFacts,
+    mut candidate: ObjectFacts,
     executor: &mut dyn Executor,
 ) -> Result<ObjectFacts> {
     candidate.ensure_candidate(&context.resource)?;
-    let mut candidate = candidate.clone();
     let mut resources = BTreeMap::new();
     source_resources(rule, &mut resources)?;
     if approvals::supports(&context.permission) {
@@ -407,7 +407,7 @@ mod tests {
             &BTreeMap::new(),
             &context,
             &rule,
-            &AccessTarget::Candidate(candidate.clone()),
+            AccessTarget::Candidate(candidate.clone()),
             &mut executor,
         )
         .await
@@ -420,7 +420,7 @@ mod tests {
                 &BTreeMap::new(),
                 &context,
                 &rule,
-                &AccessTarget::Candidate(candidate.clone()),
+                AccessTarget::Candidate(candidate.clone()),
                 &mut ReadExecutor::default()
             )
             .await,
@@ -433,7 +433,7 @@ mod tests {
                 &BTreeMap::new(),
                 &context,
                 &rule,
-                &AccessTarget::Candidate(wrong),
+                AccessTarget::Candidate(wrong),
                 &mut executor
             )
             .await,
@@ -461,7 +461,7 @@ mod tests {
                 &bindings,
                 &context,
                 &rule,
-                &AccessTarget::OwnershipChange { id: "original".into(), candidate },
+                AccessTarget::OwnershipChange { id: "original".into(), candidate },
                 &mut executor,
             )
             .await
@@ -491,7 +491,7 @@ mod tests {
             &bindings,
             &context,
             &rule,
-            &AccessTarget::OwnershipChange { id: "original".into(), candidate: destination },
+            AccessTarget::OwnershipChange { id: "original".into(), candidate: destination },
             &mut executor,
         )
         .await
@@ -549,7 +549,7 @@ mod tests {
                 &bindings,
                 &context,
                 &rule,
-                &AccessTarget::Candidate(input_candidate.clone()),
+                AccessTarget::Candidate(input_candidate.clone()),
                 &mut executor,
             )
             .await
@@ -576,7 +576,7 @@ mod tests {
             &BTreeMap::new(),
             &context,
             &AccessRule::Allow,
-            &AccessTarget::Task { id: "task".into(), version: "1".into() },
+            AccessTarget::Task { id: "task".into(), version: "1".into() },
             &mut executor,
         )
         .await;
@@ -604,7 +604,7 @@ mod tests {
             &bindings,
             &context,
             &rule,
-            &AccessTarget::Task { id: "task".into(), version: "v2".into() },
+            AccessTarget::Task { id: "task".into(), version: "v2".into() },
             &mut executor,
         )
         .await
@@ -615,7 +615,7 @@ mod tests {
                 &bindings,
                 &context,
                 &rule,
-                &AccessTarget::Task { id: "task".into(), version: "v1".into() },
+                AccessTarget::Task { id: "task".into(), version: "v1".into() },
                 &mut executor
             )
             .await,
@@ -626,7 +626,7 @@ mod tests {
                 &bindings,
                 &context,
                 &rule,
-                &AccessTarget::Task { id: "business-id".into(), version: "v2".into() },
+                AccessTarget::Task { id: "business-id".into(), version: "v2".into() },
                 &mut executor
             )
             .await,
@@ -637,7 +637,7 @@ mod tests {
                 &bindings,
                 &context,
                 &rule,
-                &AccessTarget::record("task").unwrap(),
+                AccessTarget::record("task").unwrap(),
                 &mut executor
             )
             .await,
@@ -664,7 +664,7 @@ mod tests {
             &BTreeMap::new(),
             &context,
             &rule,
-            &AccessTarget::Candidate(candidate.clone()),
+            AccessTarget::Candidate(candidate.clone()),
             &mut executor,
         )
         .await

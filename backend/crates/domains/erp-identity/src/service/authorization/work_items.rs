@@ -367,11 +367,12 @@ impl AuthorizationService {
     pub(super) async fn work_item_sources(
         &self,
         proof: &AccessProof,
+        qualified: &QualifiedPermissions,
         facts: &TargetFacts,
         executor: &mut dyn Executor,
     ) -> Result<SourceEvidence> {
         if proof.context.permission == work_item::DETAIL {
-            return self.work_item_detail_sources(proof, facts, executor).await;
+            return self.work_item_detail_sources(proof, qualified, facts, executor).await;
         }
         if ![internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT].contains(&proof.context.permission) {
             return Ok(SourceEvidence::default());
@@ -381,23 +382,27 @@ impl AuthorizationService {
         for object in facts.roots() {
             if object.subject_type.get()? == "DOCUMENT_APPROVAL" {
                 requirements("DOCUMENT_APPROVAL", object.subject_source_resource.get()?)?;
-                sources.extend(self.approval_task_sources(proof, object, executor).await?);
+                sources.extend(self.approval_task_sources(proof, qualified, object, executor).await?);
                 continue;
             }
 
             if !execution_qualified(
                 object.subject_type.get()?,
                 object.subject_source_resource.get()?,
-                &proof.qualified,
+                qualified,
             )? {
                 return Err(Error::Forbidden("当前账号不具备同角色完整任务办理资格".into()));
             }
 
             if let Some(resource) = order_resource(object.subject_source_resource.get()?) {
-                sources.proofs.push(self.work_item_order(proof, facts, object, resource, executor).await?);
+                sources
+                    .proofs
+                    .push(self.work_item_order(proof, qualified, facts, object, resource, executor).await?);
             }
             if object.subject_source_resource.get()? == "supplier_portal_request" {
-                sources.proofs.extend(self.work_item_portal(proof, facts, object, executor).await?);
+                sources
+                    .proofs
+                    .extend(self.work_item_portal(proof, qualified, facts, object, executor).await?);
             }
         }
         Ok(sources)
@@ -407,6 +412,7 @@ impl AuthorizationService {
     pub(super) async fn work_item_order(
         &self,
         proof: &AccessProof,
+        qualified: &QualifiedPermissions,
         facts: &TargetFacts,
         object: &ObjectFacts,
         resource: &str,
@@ -416,7 +422,7 @@ impl AuthorizationService {
         let permission = if resource == "sales_order" { sales_order::DETAIL } else { purchase_order::DETAIL };
         let context = AccessContext { permission: work_item::DETAIL, ..proof.context.clone() };
         let access = self
-            .resolve_approval_source(&context, &permission, &[work_item::DETAIL], &proof.qualified, executor)
+            .resolve_approval_source(&context, &permission, &[work_item::DETAIL], qualified, executor)
             .await?;
         self.check_work_item_source(&access, facts, source, executor).await?;
         Ok(access)
@@ -426,6 +432,7 @@ impl AuthorizationService {
     async fn work_item_portal(
         &self,
         proof: &AccessProof,
+        qualified: &QualifiedPermissions,
         facts: &TargetFacts,
         object: &ObjectFacts,
         executor: &mut dyn Executor,
@@ -436,12 +443,12 @@ impl AuthorizationService {
 
         let mut sources = Vec::new();
         for permission in [request.read.clone(), request.review.clone()] {
-            if !rules::qualified(&permission, &proof.qualified) {
+            if !rules::qualified(&permission, qualified) {
                 return Err(Error::Forbidden("当前账号不具备任务真实申请的业务资格".into()));
             }
             let context =
                 AccessContext { permission, resource: source.resource.clone(), ..proof.context.clone() };
-            let access = self.resolve_context(context, None, false, &proof.qualified, executor).await?;
+            let access = self.resolve_context(context, None, false, qualified, executor).await?;
             self.check_work_item_source(&access, facts, source, executor).await?;
             sources.push(access);
         }

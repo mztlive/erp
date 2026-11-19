@@ -156,7 +156,6 @@ mod tests {
     use super::*;
     use crate::entity::access_control::{ResolvedScope, ScopeClause};
     use crate::entity::organization_change::OrganizationState;
-    use crate::service::access_control::resolve::DataScopeFacts;
 
     // 验证：已解析范围仅用于说明配置，没有具体对象时不能给出对象授权通过。
     #[test]
@@ -168,7 +167,7 @@ mod tests {
             action: "detail".into(),
             object_id: None,
         };
-        let access = AuthorizedDataScope::test_fixture(DataScopeFacts {
+        let access = AuthorizedDataScope {
             scope: ResolvedScope {
                 role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
                 user_limit: None,
@@ -177,7 +176,7 @@ mod tests {
             policy_version: 1,
             scope_version: "current".into(),
             as_of: Instant::from_unix_secs(100),
-        });
+        };
 
         let result = inspected(actor.clone(), &request, Some(&access)).unwrap();
         assert!(result.actor.is_none());

@@ -21,18 +21,19 @@ use persistence_core::{ExecutionBoundary, Executor};
 pub use query::CompiledAccess;
 pub(crate) use query::{
     AccessProof, AccessValidity, Replay, ResolvedAccess, ResolvedFilter, ResolvedRules, ScopeMetadata,
+    WholeRule,
 };
-use query::{ManagementPlan, MappingDependency, SourcePlan};
+use query::{FilterPlan, MappingDependency, SourcePlan};
 
 use crate::entity::authorization::{
-    AccessContext, AccessRule, MappingFacts, QueryModel, QueryOutput, RelationKey, RelationMatch,
+    AccessContext, AccessRule, MappingFacts, QueryOutput, RelationKey, RelationMatch,
 };
 use crate::entity::fingerprint::Fingerprint;
 use crate::entity::resource_access::ResourceKind;
 use crate::ports::AccessMapping;
 use crate::repository::fingerprint::BsonFingerprint;
 use crate::repository::resource_grants::grant_lookup;
-use crate::{Error, Permission, Result};
+use crate::{Error, Permission, QualifiedPermissions, Result};
 
 /// 一次编译共享动态准备结果及复验依赖；关联别名由各集合的 Fragment 管理。
 struct Compiler<'a> {
@@ -46,15 +47,13 @@ struct Compiler<'a> {
 // 接收服务端生成的完整授权证明，编译固定模型的过滤与投影，同时保留交付时需要检查的依赖。
 pub(crate) async fn compile(
     proof: AccessProof,
+    qualified: QualifiedPermissions,
     mapping: &Arc<dyn AccessMapping>,
-    model: &QueryModel,
     executor: &mut dyn Executor,
 ) -> Result<CompiledAccess> {
-    let AccessProof { context, qualified, resolved, mut validity, scope } = proof;
+    let AccessProof { context, resolved, mut validity, scope } = proof;
     validity.ensure_current(executor)?;
-    if mapping.model() != model {
-        return Err(Error::ValidationError("Mapping 描述与启动绑定不一致".into()));
-    }
+    let model = mapping.model();
 
     let mut compiler = Compiler {
         executor,
@@ -65,11 +64,23 @@ pub(crate) async fn compile(
     };
     let (fragment, _) = compiler.model(&resolved.rules.root, mapping, &context, 0).await?;
     let mut stages = fragment.finish();
-    let (sources, whole) = compiler.plans(&resolved.rules, &context, mapping).await?;
+    let whole = match &resolved.rules.whole {
+        Some(WholeRule::Root) if model.output == QueryOutput::Object => Some(FilterPlan::Root),
+        Some(WholeRule::Root) => return Err(Error::ValidationError("受限查询需要独立整账过滤".into())),
+        Some(WholeRule::Separate(rule)) => {
+            Some(FilterPlan::Separate(compiler.model(rule, mapping, &context, 0).await?.0.finish()))
+        },
+        None => None,
+    };
+    let sources = if whole.is_some() {
+        compiler.source_plans(&resolved.rules.root, &context, mapping).await?
+    } else {
+        BTreeMap::new()
+    };
     let management = match &resolved.rules.management {
-        Some(ResolvedFilter::Root) => Some(ManagementPlan::Root),
+        Some(ResolvedFilter::Root) => Some(FilterPlan::Root),
         Some(ResolvedFilter::Separate { context, rule }) => {
-            Some(ManagementPlan::Separate(compiler.model(rule, mapping, context, 0).await?.0.finish()))
+            Some(FilterPlan::Separate(compiler.model(rule, mapping, context, 0).await?.0.finish()))
         },
         None => None,
     };
@@ -86,13 +97,13 @@ pub(crate) async fn compile(
     version.text(&resolved.version);
     version.model(model);
     version.unordered(&compiler.versions, |hash, value| hash.text(value));
-    version.sequence(&stages, |hash, stage| hash.bson(&Bson::Document(stage.clone())));
+    version.sequence(&stages, Fingerprint::document);
     let management_stages = match &management {
-        Some(ManagementPlan::Separate(stages)) => Some(stages),
+        Some(FilterPlan::Separate(stages)) => Some(stages),
         _ => None,
     };
     version.optional(management_stages, |hash, stages| {
-        hash.sequence(stages, |hash, stage| hash.bson(&Bson::Document(stage.clone())));
+        hash.sequence(stages, Fingerprint::document);
     });
 
     let is_snapshot = compiler.boundary.is_snapshot();
@@ -140,20 +151,15 @@ fn source_rules(
 }
 
 impl Compiler<'_> {
-    // 复合资金查询需要来源份额和整账时，使用同一次身份、范围及映射准备编译两类固定计划，沿用根执行边界。
-    async fn plans(
+    // 来源份额和根查询沿用同次映射准备及执行边界。
+    async fn source_plans(
         &mut self,
-        resolved: &ResolvedRules,
+        rule: &AccessRule,
         root: &AccessContext,
         mapping: &Arc<dyn AccessMapping>,
-    ) -> Result<(BTreeMap<RelationKey, SourcePlan>, Option<Vec<Document>>)> {
-        let Some(whole_rule) = &resolved.whole else {
-            return Ok((BTreeMap::new(), None));
-        };
-        let whole = self.model(whole_rule, mapping, root, 0).await?.0.finish();
-
+    ) -> Result<BTreeMap<RelationKey, SourcePlan>> {
         let mut rules = BTreeMap::new();
-        source_rules(&resolved.root, None, &mut rules);
+        source_rules(rule, None, &mut rules);
         let mut sources = BTreeMap::new();
         for (key, rules) in rules {
             let child = mapping
@@ -176,7 +182,7 @@ impl Compiler<'_> {
             let stages = fragment.finish();
             sources.insert(key, SourcePlan { model: child.model().clone(), stages });
         }
-        Ok((sources, Some(whole)))
+        Ok(sources)
     }
 
     // 构造根或来源模型的条件片段；各模型都应用有效行约束，即便公司范围分支也不读取已删除记录。
@@ -573,12 +579,11 @@ mod tests {
     struct Query {
         proof: AccessProof,
         mapping: Arc<dyn AccessMapping>,
-        model: QueryModel,
     }
 
     impl Query {
         async fn compile(&self, executor: &mut dyn Executor) -> Result<CompiledAccess> {
-            compile(self.proof.clone(), &self.mapping, &self.model, executor).await
+            compile(self.proof.clone(), QualifiedPermissions::test_grants(&[]), &self.mapping, executor).await
         }
     }
 
@@ -593,13 +598,12 @@ mod tests {
                     model: Some(model.key.clone()),
                     as_of: Instant::now(),
                 },
-                qualified: crate::QualifiedPermissions::test_grants(&[]),
                 resolved: ResolvedAccess {
                     rules: ResolvedRules { root: rule, whole: None, management: None },
                     replay: Replay::Target,
                     version: "identity-v1".into(),
                 },
-                scope: ScopeMetadata { has_role_scope: false, policy_version: 7, organization_version: 11 },
+                scope: ScopeMetadata { has_role_scope: false, organization_version: 11 },
                 validity: AccessValidity {
                     valid_until: None,
                     boundary: executor.boundary().unwrap(),
@@ -607,7 +611,6 @@ mod tests {
                 },
             },
             mapping,
-            model,
         }
     }
 
@@ -618,7 +621,7 @@ mod tests {
         let query = query(AccessRule::Allow, mapping.clone(), &executor);
         let as_of = query.proof.context.as_of;
         let compiled = query.compile(&mut executor).await.unwrap();
-        assert_eq!(compiled.policy_version(), 7);
+        assert_eq!(compiled.policy_version(), QualifiedPermissions::test_grants(&[]).policy_revision());
         assert_eq!(compiled.organization_version(), 11);
         assert_eq!(compiled.as_of(), as_of);
     }

@@ -20,7 +20,7 @@ use crate::entity::organization_change::OrganizationState;
 use crate::entity::resource_access::{GrantTarget, ResourceKind, SourceKey};
 use crate::ports::AccessFactsPort;
 pub(super) use crate::repository::authorization::testing::{inquiry_members, mapping};
-use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeFacts};
+use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
 pub(super) struct IdentityState {
@@ -134,7 +134,7 @@ impl Facilities for Identity {
             });
         }
 
-        Ok(AuthorizedDataScope::test_fixture(DataScopeFacts {
+        Ok(AuthorizedDataScope {
             scope: scoped_roles.unwrap_or_else(|| {
                 self.scopes
                     .lock()
@@ -156,7 +156,7 @@ impl Facilities for Identity {
             policy_version: 1,
             scope_version: self.revision.load(Ordering::SeqCst).to_string(),
             as_of: context.as_of,
-        }))
+        })
     }
     async fn grant_revision(&self, _: &AuditActor, _: ResourceKind, _: &mut dyn Executor) -> Result<u64> {
         Ok(self.grant_revision.load(Ordering::SeqCst))

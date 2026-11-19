@@ -96,7 +96,7 @@ impl AuthorizationService {
             .get(permission)
             .ok_or_else(|| Error::ValidationError("缺少查询 Mapping 绑定".into()))?;
 
-        let proof = self
+        let (proof, qualified) = self
             .resolve_target(
                 actor,
                 permission,
@@ -107,7 +107,7 @@ impl AuthorizationService {
             )
             .await?;
 
-        compile(proof, mapping, mapping.model(), executor).await
+        compile(proof, qualified, mapping, executor).await
     }
 }
 
@@ -143,6 +143,6 @@ impl CompiledAccess {
 
     /// 供复合资金投影判断当前启用角色是否具有整账功能资格，不证明来源可读。返回整账前仍须执行完整来源过滤并复验原查询凭证。
     pub fn has_whole_qualification(&self) -> bool {
-        self.whole.is_some() && rules::sources::whole_qualified(self.permission(), &self.qualified)
+        self.has_whole_plan() && rules::sources::whole_qualified(self.permission(), &self.qualified)
     }
 }

@@ -144,17 +144,20 @@ impl AuthorizationService {
     pub(super) async fn work_item_detail_sources(
         &self,
         proof: &AccessProof,
+        qualified: &QualifiedPermissions,
         facts: &TargetFacts,
         executor: &mut dyn Executor,
     ) -> Result<SourceEvidence> {
         let mut sources = SourceEvidence::default();
         for object in facts.roots() {
             if object.subject_type.get()? == "DOCUMENT_APPROVAL" {
-                sources.extend(self.approval_task_sources(proof, object, executor).await?);
+                sources.extend(self.approval_task_sources(proof, qualified, object, executor).await?);
             } else if let Some(resource) = order_resource(object.subject_source_resource.get()?) {
-                sources.proofs.push(self.work_item_order(proof, facts, object, resource, executor).await?);
+                sources
+                    .proofs
+                    .push(self.work_item_order(proof, qualified, facts, object, resource, executor).await?);
             } else if object.subject_source_resource.get()? == "supplier_portal_request" {
-                sources.proofs.push(self.portal_task_read(proof, facts, object, executor).await?);
+                sources.proofs.push(self.portal_task_read(proof, qualified, facts, object, executor).await?);
             }
         }
         Ok(sources)
@@ -164,6 +167,7 @@ impl AuthorizationService {
     async fn portal_task_read(
         &self,
         proof: &AccessProof,
+        qualified: &QualifiedPermissions,
         facts: &TargetFacts,
         object: &ObjectFacts,
         executor: &mut dyn Executor,
@@ -172,7 +176,7 @@ impl AuthorizationService {
         let request = portal_request(source.subject_type.get()?)
             .ok_or_else(|| Error::ValidationError("任务材料真实申请类型未登记".into()))?;
         let permission = request.read.clone();
-        if !rules::qualified(&permission, &proof.qualified) {
+        if !rules::qualified(&permission, qualified) {
             return Err(Error::Forbidden("当前账号不具备任务材料读取资格".into()));
         }
 
@@ -182,7 +186,7 @@ impl AuthorizationService {
             model: None,
             ..proof.context.clone()
         };
-        let access = self.resolve_context(context, None, false, &proof.qualified, executor).await?;
+        let access = self.resolve_context(context, None, false, qualified, executor).await?;
         self.check_work_item_source(&access, facts, source, executor).await?;
         Ok(access)
     }
@@ -191,14 +195,15 @@ impl AuthorizationService {
     pub(super) async fn approval_task_sources(
         &self,
         proof: &AccessProof,
+        qualified: &QualifiedPermissions,
         task: &ObjectFacts,
         executor: &mut dyn Executor,
     ) -> Result<SourceEvidence> {
-        if !proof.qualified.permissions().covers_one(&approval_instance::COPIES_HISTORY) {
+        if !qualified.permissions().covers_one(&approval_instance::COPIES_HISTORY) {
             return Err(Error::Forbidden("当前账号不具备审批任务读取资格".into()));
         }
         if task.owner_id.get()?.as_deref() == Some(proof.context.actor.id())
-            && (*task.completed.get()? || decision_qualified(&proof.qualified))
+            && (*task.completed.get()? || decision_qualified(qualified))
         {
             return Ok(SourceEvidence::default());
         }
@@ -210,14 +215,14 @@ impl AuthorizationService {
             model: None,
             ..proof.context.clone()
         };
-        let access = self.resolve_context(context, None, false, &proof.qualified, executor).await?;
+        let access = self.resolve_context(context, None, false, qualified, executor).await?;
 
         let target = AccessTarget::record(&instance.id)?;
         let facts =
-            TargetFacts::load(&self.facts, &access.context, &access.resolved.rules.root, &target, executor)
+            TargetFacts::load(&self.facts, &access.context, &access.resolved.rules.root, target, executor)
                 .await?;
 
-        let mut proofs = self.approval_sources(&access, &facts, executor).await?;
+        let mut proofs = self.approval_sources(&access, qualified, &facts, executor).await?;
         let context = access.context.clone();
         proofs.push(access);
         Ok(SourceEvidence { proofs, facts: vec![(context, facts)] })

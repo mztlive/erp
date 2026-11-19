@@ -65,6 +65,7 @@ impl AuthorizationService {
                     executor,
                 )
                 .await
+                .map(|(proof, _)| proof)
             },
         }
         .map_err(revalidation_error)?;

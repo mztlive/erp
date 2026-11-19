@@ -165,7 +165,7 @@ async fn purchase_creation_keeps_its_candidate_and_exact_task_contracts() {
     let mut read = ReadExecutor::default();
     let access = service.query(&actor(), &permission, &mut read).await.unwrap();
     assert_eq!(
-        task_members(&access, &[("mine", "user", false, ""), ("theirs", "other", false, "")]),
+        task_members(access.stages(), &[("mine", "user", false, ""), ("theirs", "other", false, "")]),
         ["mine"]
     );
     service.validate(&access, &mut read).await.unwrap();
@@ -782,6 +782,39 @@ async fn receipt_query_keeps_plan_and_cursor_fingerprints() {
 }
 
 #[tokio::test]
+async fn full_receipt_query_keeps_root_source_and_cursor_fingerprints() {
+    use erp_permissions::policy_permission::FINANCE_LEDGER_READ;
+
+    use crate::entity::fingerprint::Fingerprint;
+    use crate::repository::fingerprint::BsonFingerprint;
+
+    let permission = receivable::CUSTOMER_RECEIPT_LIST;
+    let identity = Arc::new(Identity::default());
+    identity.state.lock().unwrap().grants =
+        vec![("finance".into(), vec![permission.clone(), FINANCE_LEDGER_READ])];
+    let mut builder = complete();
+    builder.facilities = identity;
+    let service = builder.build().unwrap();
+    let mut executor = ReadExecutor::default();
+    let access = service.query(&actor(), &permission, &mut executor).await.unwrap();
+    assert_eq!(access.model().output, QueryOutput::Object);
+    assert!(std::ptr::eq(access.stages(), access.whole_stages().unwrap()));
+    assert!(access.has_whole_qualification());
+    let mut sources = Fingerprint::new("full-receipt-source-plans-test");
+    for key in ["sales_source", "purchase_source", "settlement_source"] {
+        sources.sequence(
+            access.source_stages(&RelationKey::parse(key).unwrap()).unwrap(),
+            Fingerprint::document,
+        );
+    }
+    service.validate(&access, &mut executor).await.unwrap();
+    assert_eq!(
+        (access.version().as_str(), sources.finish().as_str()),
+        ("b26f237dfd02ee15dbec15a16a55a9c4", "d6fed4f8ff65a20744df24dd30066b05")
+    );
+}
+
+#[tokio::test]
 async fn shared_write_permissions_support_queries_without_relaxing_task_or_transaction_checks() {
     for permission in [inquiry::QUERY_PROCUREMENT_INTERNAL_QUOTES, purchase_payment_request::CREDIT_LIST] {
         let mut builder = complete();
@@ -811,13 +844,19 @@ async fn shared_write_permissions_support_queries_without_relaxing_task_or_trans
 
         let mut ex = ReadExecutor::default();
         let access = service.query(&actor(), &permission, &mut ex).await.unwrap();
-        let members = task_members(&access, &samples);
+        let members = task_members(access.stages(), &samples);
         let expected = if permission == inquiry::QUERY_PROCUREMENT_INTERNAL_QUOTES {
             vec!["open", "participated"]
         } else {
             vec!["open", "completed", "participated"]
         };
         assert_eq!(members, expected);
+        if permission == purchase_payment_request::CREDIT_LIST {
+            assert_eq!(
+                task_members(access.whole_stages().unwrap(), &samples),
+                ["open", "completed", "participated", "unassigned"]
+            );
+        }
         service.validate(&access, &mut ex).await.unwrap();
 
         for (id, ..) in samples {

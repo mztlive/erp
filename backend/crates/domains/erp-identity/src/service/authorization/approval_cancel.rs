@@ -7,13 +7,14 @@ use super::targets::TargetFacts;
 use super::work_items::exact_source;
 use crate::entity::authorization::AccessContext;
 use crate::repository::authorization::AccessProof;
-use crate::{Error, Result};
+use crate::{Error, QualifiedPermissions, Result};
 
 impl AuthorizationService {
     // 判断库存调整撤回的来源资格：原提交人不另查库存详情菜单，代办管理员须独立满足库存详情资格和实际仓库范围。
     pub(super) async fn stock_adjustment_cancel_sources(
         &self,
         proof: &AccessProof,
+        qualified: &QualifiedPermissions,
         facts: &TargetFacts,
         executor: &mut dyn Executor,
     ) -> Result<Vec<AccessProof>> {
@@ -36,8 +37,7 @@ impl AuthorizationService {
                 approval_instance::INSTANCE_LIST,
                 approval_admin::STOCK_ADJUSTMENT_RUNTIME,
             ];
-            if !proof.qualified.same_role(&required)
-                || !proof.qualified.same_role(&[inventory::STOCK_ADJUSTMENT_DETAIL])
+            if !qualified.same_role(&required) || !qualified.same_role(&[inventory::STOCK_ADJUSTMENT_DETAIL])
             {
                 return Err(Error::Forbidden("撤回需要原提交人或完整运行管理及独立库存详情资格".into()));
             }
@@ -48,7 +48,7 @@ impl AuthorizationService {
                 model: None,
                 ..proof.context.clone()
             };
-            let access = self.resolve_context(context, None, false, &proof.qualified, executor).await?;
+            let access = self.resolve_context(context, None, false, qualified, executor).await?;
             self.check_work_item_source(&access, facts, source, executor).await?;
             sources.push(access);
         }

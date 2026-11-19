@@ -124,18 +124,17 @@ mod tests {
     use super::*;
     use crate::entity::access_control::ResolvedScope;
     use crate::entity::organization_change::OrganizationState;
-    use crate::service::access_control::resolve::DataScopeFacts;
 
     #[test]
     fn file_delivery_rejects_expiry_new_read_phases_and_restarted_transactions() {
         let mut executor = SnapshotExecutor::default();
-        let scope = AuthorizedDataScope::test_fixture(DataScopeFacts {
+        let scope = AuthorizedDataScope {
             scope: ResolvedScope { role_clauses: vec![], user_limit: None },
             organizations: OrganizationState::default(),
             policy_version: 1,
             scope_version: "1".into(),
             as_of: Instant::from_unix_secs(1),
-        });
+        };
         let mut access =
             PolicyBundleAccess { scope, boundary: executor.boundary().unwrap(), valid_until: None };
         access.ensure_current(&mut executor).unwrap();

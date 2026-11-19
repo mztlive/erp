@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_permissions::sales_order;
-use mongodb::bson::{Bson, doc};
+use mongodb::bson::{Bson, Document, doc};
 use persistence_core::Executor;
 use serde_json::{Value, to_value};
 
@@ -212,7 +212,7 @@ pub(crate) fn receipt_projection(access: &CompiledAccess) -> Value {
     to_value(rows).unwrap()
 }
 
-pub(crate) fn task_members(access: &CompiledAccess, tasks: &[(&str, &str, bool, &str)]) -> Vec<String> {
+pub(crate) fn task_members(stages: &[Document], tasks: &[(&str, &str, bool, &str)]) -> Vec<String> {
     let rows = tasks
         .iter()
         .map(|(id, assignee, completed, participant)| {
@@ -224,6 +224,6 @@ pub(crate) fn task_members(access: &CompiledAccess, tasks: &[(&str, &str, bool, 
         .collect();
     let sources =
         [("purchase_order_rows".into(), vec![doc! {"id":"purchase", "owner":"user", "deleted_at":0}])].into();
-    let rows = execute(rows, access.stages(), &sources, &doc! {});
+    let rows = execute(rows, stages, &sources, &doc! {});
     rows.into_iter().map(|row| row.get_str("id").unwrap().to_owned()).collect()
 }

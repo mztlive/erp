@@ -15,7 +15,7 @@ use super::fixtures::execute;
 use super::testing::{Mapping, mapping};
 use super::{
     AccessProof, AccessValidity, CompiledAccess, Replay, ResolvedAccess, ResolvedRules, ScopeMetadata,
-    compile,
+    WholeRule, compile,
 };
 use crate::entity::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::authorization::{
@@ -105,13 +105,12 @@ fn proof(
             model: Some(model.key.clone()),
             as_of: Instant::now(),
         },
-        qualified: QualifiedPermissions::test_grants(&[]),
         resolved: ResolvedAccess {
-            rules: ResolvedRules { root: rule, whole: whole_rule, management: None },
+            rules: ResolvedRules { root: rule, whole: whole_rule.map(WholeRule::Separate), management: None },
             replay: Replay::Target,
             version: "phase5".into(),
         },
-        scope: ScopeMetadata { has_role_scope: false, policy_version: 1, organization_version: 1 },
+        scope: ScopeMetadata { has_role_scope: false, organization_version: 1 },
         validity: AccessValidity {
             valid_until: None,
             boundary: executor.boundary().unwrap(),
@@ -129,7 +128,7 @@ async fn plan(
     let model = mapping.model().clone();
     let proof = proof(permission, rule, whole, &model, executor);
     let frozen = FrozenMapping::freeze(mapping, &mut vec![], 0).unwrap();
-    compile(proof, &frozen, &model, executor).await.unwrap()
+    compile(proof, QualifiedPermissions::test_grants(&[]), &frozen, executor).await.unwrap()
 }
 fn ids(rows: Vec<Document>) -> Vec<String> {
     rows.into_iter().map(|row| row.get_str("id").unwrap().to_string()).collect()
@@ -295,6 +294,42 @@ async fn independent_source_plan_uses_its_entry_context_and_reuses_exact_prepara
 }
 
 #[tokio::test]
+async fn whole_root_reuse_keeps_dynamic_dependencies_and_deadline() {
+    let permission = receivable::CUSTOMER_RECEIPT_LIST;
+    let mut root = mapping(&permission);
+    Arc::get_mut(&mut root).unwrap().dynamic = true;
+    let deadline = Instant::from_unix_secs(4_102_444_800);
+    *root.expires.lock().unwrap() = Some(deadline);
+    let frozen = FrozenMapping::freeze(root.clone(), &mut vec![], 0).unwrap();
+    let mut executor = ReadExecutor::default();
+    let rule = AccessRule::Fact(AccessFact::Owned);
+    let original = proof(permission, rule.clone(), Some(rule), frozen.model(), &executor);
+    let mut reused = original.clone();
+    reused.resolved.rules.whole = Some(WholeRule::Root);
+    let original =
+        compile(original, QualifiedPermissions::test_grants(&[]), &frozen, &mut executor).await.unwrap();
+    let reused =
+        compile(reused, QualifiedPermissions::test_grants(&[]), &frozen, &mut executor).await.unwrap();
+
+    assert_eq!(root.prepares.load(Ordering::SeqCst), 2);
+    assert_eq!(original.version(), reused.version());
+    assert_eq!(original.whole_stages().unwrap(), reused.whole_stages().unwrap());
+    assert!(std::ptr::eq(reused.stages(), reused.whole_stages().unwrap()));
+    assert_eq!(reused.validity.valid_until, original.validity.valid_until);
+    assert_eq!(reused.validity.valid_until, Some(deadline));
+    for plan in [&original, &reused] {
+        assert_eq!(plan.dependencies.len(), 1);
+        plan.dependencies[0].validate(&mut executor).await.unwrap();
+    }
+    root.revision.store(2, Ordering::SeqCst);
+    assert!(matches!(reused.dependencies[0].validate(&mut executor).await, Err(Error::ConflictError(_))));
+    AccessValidity::with_test_time(deadline, async {
+        assert!(matches!(reused.ensure_current(&mut executor), Err(Error::ConflictError(_))));
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn static_deadline_needs_no_preparation_and_expires_the_compiled_plan() {
     let deadline = Instant::from_unix_secs(4_102_444_800);
     let before = Instant::from_unix_secs(deadline.unix_secs() - 1);
@@ -378,7 +413,8 @@ async fn fixed_lookup_preserves_missing_relations_and_is_immutable_after_binding
     let frozen = FrozenMapping::freeze(root.clone(), &mut vec![], 0).unwrap();
     let proof =
         proof(sales_order::DETAIL, AccessRule::Fact(AccessFact::Owned), None, root.model(), &executor);
-    let plan = compile(proof.clone(), &frozen, root.model(), &mut executor).await.unwrap();
+    let plan =
+        compile(proof.clone(), QualifiedPermissions::test_grants(&[]), &frozen, &mut executor).await.unwrap();
     assert_eq!(
         ids(execute(
             vec![row("own", "user"), row("other", "other")],
@@ -391,7 +427,7 @@ async fn fixed_lookup_preserves_missing_relations_and_is_immutable_after_binding
 
     root.fixed.lock().unwrap().clear();
     assert!(matches!(
-        compile(proof, &frozen, root.model(), &mut executor).await,
+        compile(proof, QualifiedPermissions::test_grants(&[]), &frozen, &mut executor).await,
         Err(Error::ValidationError(_))
     ));
 }

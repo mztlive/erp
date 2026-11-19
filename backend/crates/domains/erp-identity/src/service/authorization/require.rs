@@ -56,7 +56,7 @@ impl AuthorizationService {
             return Ok(());
         }
 
-        self.require_target(actor, permission, &target, executor).await
+        self.require_target(actor, permission, target, executor).await
     }
 
     // 验证已有记录、候选归属或精确任务时，加载完整根对象、实际来源及本次用到的记录授权。
@@ -65,16 +65,16 @@ impl AuthorizationService {
         &self,
         actor: &AuditActor,
         permission: &Permission,
-        target: &AccessTarget,
+        target: AccessTarget,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let proof = self
+        let (proof, qualified) = self
             .resolve_target(
                 actor,
                 permission,
                 None,
                 None,
-                matches!(target, AccessTarget::Task { .. }),
+                matches!(&target, AccessTarget::Task { .. }),
                 executor,
             )
             .await?;
@@ -84,11 +84,13 @@ impl AuthorizationService {
                 .await?;
 
         let sources = if approvals::supports(permission) {
-            SourceEvidence::from_proofs(self.approval_sources(&proof, &facts, executor).await?)
+            SourceEvidence::from_proofs(self.approval_sources(&proof, &qualified, &facts, executor).await?)
         } else if permission == &approval_instance::SUBMIT_DECISION {
-            SourceEvidence::from_proofs(self.approval_decision_sources(&proof, &facts, executor).await?)
+            SourceEvidence::from_proofs(
+                self.approval_decision_sources(&proof, &qualified, &facts, executor).await?,
+            )
         } else {
-            self.work_item_sources(&proof, &facts, executor).await?
+            self.work_item_sources(&proof, &qualified, &facts, executor).await?
         };
 
         let grants = self.target_grants(&proof.context, &proof.resolved.rules.root, &facts, executor).await?;

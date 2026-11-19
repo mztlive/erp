@@ -9,8 +9,6 @@ use crate::entity::organization_change::{
     OrganizationChangeReceipt, OrganizationChangeRequest, OrganizationOperation, OrganizationState,
 };
 use crate::service::access_control::resolve::AuthorizedDataScope;
-#[cfg(test)]
-use crate::service::access_control::resolve::DataScopeFacts;
 use crate::{Error, Result};
 
 // 以组织对象身份判断配置边界，不使用“同部门”作为权限。
@@ -223,13 +221,13 @@ mod tests {
     }
 
     fn access_with(scope: ResolvedScope, organizations: OrganizationState) -> AuthorizedDataScope {
-        AuthorizedDataScope::test_fixture(DataScopeFacts {
+        AuthorizedDataScope {
             scope,
             organizations,
             policy_version: 1,
             scope_version: "scope-v".into(),
             as_of: Instant::from_unix_secs(10),
-        })
+        }
     }
 
     fn company_access(organizations: OrganizationState) -> AuthorizedDataScope {

@@ -21,7 +21,6 @@ tokio::task_local! {
 #[cfg_attr(test, derive(Clone))]
 pub(crate) struct AccessProof {
     pub context: AccessContext,
-    pub qualified: QualifiedPermissions,
     pub resolved: ResolvedAccess,
     pub validity: AccessValidity,
     pub scope: ScopeMetadata,
@@ -37,8 +36,23 @@ pub(crate) struct ResolvedAccess {
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct ResolvedRules {
     pub root: AccessRule,
-    pub whole: Option<AccessRule>,
+    pub whole: Option<WholeRule>,
     pub management: Option<ResolvedFilter>,
+}
+
+impl ResolvedRules {
+    pub(crate) fn whole_rule(&self) -> Option<&AccessRule> {
+        match self.whole.as_ref()? {
+            WholeRule::Root => Some(&self.root),
+            WholeRule::Separate(rule) => Some(rule),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) enum WholeRule {
+    Root,
+    Separate(AccessRule),
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -57,7 +71,6 @@ pub(crate) enum Replay {
 #[derive(Clone)]
 pub(crate) struct ScopeMetadata {
     pub has_role_scope: bool,
-    pub policy_version: u64,
     pub organization_version: u64,
 }
 
@@ -130,12 +143,12 @@ pub struct CompiledAccess {
     pub(crate) dependencies: Vec<MappingDependency>,
     pub(crate) version: String,
     pub(crate) sources: BTreeMap<RelationKey, SourcePlan>,
-    pub(crate) whole: Option<Vec<Document>>,
-    pub(super) management: Option<ManagementPlan>,
+    pub(super) whole: Option<FilterPlan>,
+    pub(super) management: Option<FilterPlan>,
 }
 
 #[derive(Clone)]
-pub(super) enum ManagementPlan {
+pub(super) enum FilterPlan {
     Root,
     Separate(Vec<Document>),
 }
@@ -177,11 +190,15 @@ pub(crate) struct SourcePlan {
 }
 
 impl CompiledAccess {
+    pub(crate) fn has_whole_plan(&self) -> bool {
+        self.whole.is_some()
+    }
+
     /// 取得本次工作项查询的管理范围过滤，用于给已授权展示批次计算按钮资格。非工作项凭证拒绝；命令仍须单独执行 `require`。
     pub fn management_stages(&self) -> Result<&[Document]> {
         match &self.management {
-            Some(ManagementPlan::Root) => Ok(self.stages()),
-            Some(ManagementPlan::Separate(stages)) => Ok(stages),
+            Some(FilterPlan::Root) => Ok(self.stages()),
+            Some(FilterPlan::Separate(stages)) => Ok(stages),
             None => Err(Error::ValidationError("此查询没有管理动作过滤".into())),
         }
     }
@@ -204,7 +221,11 @@ impl CompiledAccess {
 
     /// 复合资金入口需要展示整账时，取得同次取证生成的根过滤；完整金额资格与全部真实来源均须通过。普通入口或份额子凭证不能用于整账读取。
     pub fn whole_stages(&self) -> Result<&[Document]> {
-        self.whole.as_deref().ok_or_else(|| Error::ValidationError("此查询没有完整根读取计划".into()))
+        match &self.whole {
+            Some(FilterPlan::Root) => Ok(self.stages()),
+            Some(FilterPlan::Separate(stages)) => Ok(stages),
+            None => Err(Error::ValidationError("此查询没有完整根读取计划".into())),
+        }
     }
 
     // 身份域展示是否存在正向角色范围。
@@ -230,7 +251,7 @@ impl CompiledAccess {
     ///
     /// 不执行 I/O。
     pub fn policy_version(&self) -> u64 {
-        self.scope.policy_version
+        self.qualified.policy_revision()
     }
 
     /// 返回本次范围解析使用的组织修订。

@@ -13,7 +13,7 @@ use crate::entity::authorization::{AccessContext, ObjectFacts, ResourceTargets};
 use crate::entity::organization_change::OrganizationState;
 use crate::entity::resource_access::ResourceKind;
 use crate::repository::authorization::binding::{FrozenMapping, validate_rule};
-use crate::service::access_control::resolve::{AuthorizedDataScope, DataScopeFacts};
+use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{AccessFactsPort, AccessMapping, Permission, QualifiedPermissions, Result};
 
 // 组装有限测试绑定；不调用或放宽生产 Builder 的完整性校验。
@@ -86,13 +86,11 @@ impl Facilities for FixedIdentity {
         _: &mut dyn Executor,
     ) -> Result<AuthorizedDataScope> {
         Ok(AuthorizedDataScope {
-            facts: DataScopeFacts {
-                scope: self.scope.clone(),
-                organizations: OrganizationState::default(),
-                policy_version: 1,
-                scope_version: "fixed-scope-v1".into(),
-                as_of: context.as_of,
-            },
+            scope: self.scope.clone(),
+            organizations: OrganizationState::default(),
+            policy_version: 1,
+            scope_version: "fixed-scope-v1".into(),
+            as_of: context.as_of,
         })
     }
 

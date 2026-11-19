@@ -1,7 +1,6 @@
 //! DataScope v2 唯一应用解析入口，复用现有 RBAC 版本和同角色权限证明。
 
 use std::future::Future;
-use std::ops::Deref;
 
 use erp_core::common::time::Instant;
 use mongodb::Database;
@@ -19,42 +18,13 @@ use crate::repository::OrganizationRepository;
 use crate::repository::access_control::person_scope::PersonDataScopeRepositoryExt;
 use crate::{AccessControlExt, Error, Permission, QualifiedPermissions, Result};
 
-/// 服务端授权上下文；原始范围和组织事实不直接序列化给客户端。
+/// 已解析的数据范围、组织事实和依赖版本，仅在服务端使用。
 pub(crate) struct AuthorizedDataScope {
-    pub(crate) facts: DataScopeFacts,
-}
-
-/// 授权解析器产生的事实数据；构造事实本身不授予授权资格。
-/// 消费者可按查询需要补充组织关系，不将其视为不可变的原始授权快照。
-pub(crate) struct DataScopeFacts {
     pub scope: ResolvedScope,
     pub organizations: OrganizationState,
     pub policy_version: u64,
     pub scope_version: String,
     pub as_of: Instant,
-}
-
-impl Deref for AuthorizedDataScope {
-    type Target = DataScopeFacts;
-
-    // 以只读方式借用本次解析事实；不提供可变解引用。
-    fn deref(&self) -> &Self::Target {
-        &self.facts
-    }
-}
-
-#[cfg(test)]
-impl AuthorizedDataScope {
-    /// 为行为测试构造授权夹具，生产依赖不得启用 test-support。
-    /// # 参数
-    /// facts 为测试声明的身份与范围。
-    /// # 返回
-    /// 仅用于测试的授权上下文。
-    /// # 错误
-    /// 不执行 I/O。
-    pub(crate) fn test_fixture(facts: DataScopeFacts) -> Self {
-        Self { facts }
-    }
 }
 
 /// 身份域应用解析器，不持有其他业务域实体或数据库集合。
@@ -108,13 +78,11 @@ impl DataScopeService {
             &scope,
         );
         Ok(AuthorizedDataScope {
-            facts: DataScopeFacts {
-                scope,
-                organizations: state,
-                policy_version: qualified.policy_revision(),
-                scope_version,
-                as_of: context.as_of,
-            },
+            scope,
+            organizations: state,
+            policy_version: qualified.policy_revision(),
+            scope_version,
+            as_of: context.as_of,
         })
     }
 

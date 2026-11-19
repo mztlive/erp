@@ -11,6 +11,7 @@ use crate::entity::authorization::{AccessContext, AccessRule, QueryModel, QueryO
 use crate::entity::fingerprint::Fingerprint;
 use crate::repository::authorization::{
     AccessProof, AccessValidity, Replay, ResolvedAccess, ResolvedFilter, ResolvedRules, ScopeMetadata,
+    WholeRule,
 };
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Permission, QualifiedPermissions, Result};
@@ -96,7 +97,7 @@ impl AuthorizationService {
         as_of: Option<Instant>,
         task: bool,
         executor: &mut dyn Executor,
-    ) -> Result<AccessProof> {
+    ) -> Result<(AccessProof, QualifiedPermissions)> {
         let qualified = self.qualify_target(actor, permission, task, executor).await?;
         let context = AccessContext {
             actor: actor.clone(),
@@ -105,7 +106,8 @@ impl AuthorizationService {
             model: model.map(|model| model.key.clone()),
             as_of: as_of.unwrap_or_else(Instant::now),
         };
-        self.resolve_context(context, model, task, &qualified, executor).await
+        let proof = self.resolve_context(context, model, task, &qualified, executor).await?;
+        Ok((proof, qualified))
     }
 
     // 需要解析固定附加来源规则时，沿用已取证账号、角色和原读取阶段，不以新资格替换根身份。
@@ -140,7 +142,7 @@ impl AuthorizationService {
         let mut version = Fingerprint::new("authorization-proof-v3");
         version.unordered(&resolution.versions, |hash, value| hash.text(value));
         version.rule(&rules.root);
-        version.optional(rules.whole.as_ref(), Fingerprint::rule);
+        version.optional(rules.whole_rule(), Fingerprint::rule);
         let management_rule = match &rules.management {
             Some(ResolvedFilter::Separate { rule, .. }) => Some(rule),
             _ => None,
@@ -151,7 +153,6 @@ impl AuthorizationService {
 
         let proof = AccessProof {
             context,
-            qualified: qualified.clone(),
             resolved: ResolvedAccess {
                 rules,
                 replay: if task { Replay::ExactTask } else { Replay::Target },
@@ -162,11 +163,7 @@ impl AuthorizationService {
                 service: self.token.clone(),
                 valid_until: resolution.valid_until,
             },
-            scope: ScopeMetadata {
-                has_role_scope,
-                policy_version: qualified.policy_revision(),
-                organization_version: resolution.organization_version,
-            },
+            scope: ScopeMetadata { has_role_scope, organization_version: resolution.organization_version },
         };
         proof.validity.ensure_current(executor)?;
         Ok(proof)
@@ -208,7 +205,7 @@ impl AuthorizationService {
     ) -> Result<Vec<String>> {
         let mut resources = BTreeSet::new();
         rules.root.grant_resources(&mut resources);
-        if let Some(whole) = &rules.whole {
+        if let Some(WholeRule::Separate(whole)) = &rules.whole {
             whole.grant_resources(&mut resources);
         }
 
@@ -231,24 +228,17 @@ impl AuthorizationService {
         executor: &mut dyn Executor,
     ) -> Result<ResolvedRules> {
         let kind = scope_spec::kind(&context.permission)?;
-        let (base, whole) = match kind {
+        let base = match kind {
             ActionKind::Source => {
-                let (root, whole) = self
-                    .source_condition(
-                        context,
-                        qualified,
-                        if task { None } else { output },
-                        resolution,
-                        executor,
-                    )
-                    .await?;
-                (root, Some(whole))
+                let (root, whole) =
+                    self.source_condition(context, qualified, output, task, resolution, executor).await?;
+                return Ok(ResolvedRules { root, whole: Some(whole), management: None });
             },
             ActionKind::Function if task => {
                 let root = rules::task_condition(&context.permission, None)?;
                 return Ok(ResolvedRules { root, whole: None, management: None });
             },
-            _ => (self.condition(context, qualified, kind, resolution, executor).await?, None),
+            _ => self.condition(context, qualified, kind, resolution, executor).await?,
         };
         let root = if task {
             rules::task_condition(&context.permission, Some(base))?
@@ -257,7 +247,7 @@ impl AuthorizationService {
         } else {
             base
         };
-        Ok(ResolvedRules { root, whole, management: None })
+        Ok(ResolvedRules { root, whole: None, management: None })
     }
 
     async fn condition(
@@ -295,7 +285,7 @@ impl AuthorizationService {
                     let source_context = AccessContext { permission: entry.clone(), ..context.clone() };
                     let scope = self.resolve_scope(&source_context, &source, qualified, executor).await?;
                     resolution.include(&scope);
-                    scopes.push((entry, source, scope.facts.scope));
+                    scopes.push((entry, source, scope.scope));
                 }
                 let scopes = rules::ScopeLookup::Resolved(&scopes);
 
@@ -336,9 +326,10 @@ impl AuthorizationService {
         context: &AccessContext,
         qualified: &QualifiedPermissions,
         output: Option<&QueryOutput>,
+        task: bool,
         resolution: &mut Resolution,
         executor: &mut dyn Executor,
-    ) -> Result<(AccessRule, AccessRule)> {
+    ) -> Result<(AccessRule, WholeRule)> {
         let mut scopes = Vec::new();
         let mut used = BTreeSet::new();
         for (entry, source) in rules::sources::scope_requests(&context.permission)? {
@@ -351,19 +342,22 @@ impl AuthorizationService {
             let source_context = AccessContext { permission: entry.clone(), ..context.clone() };
             let scope = self.resolve_scope(&source_context, &source, qualified, executor).await?;
             resolution.include(&scope);
-            scopes.push((entry, source, scope.facts.scope));
+            scopes.push((entry, source, scope.scope));
         }
 
         let condition =
             |output| rules::sources::scoped_condition(&context.permission, qualified, &scopes, output);
         let whole = condition(rules::sources::Output::Object)?;
-        let root = match output {
-            None | Some(QueryOutput::Object) => whole.clone(),
+        if task {
+            let root = rules::task_condition(&context.permission, Some(whole.clone()))?;
+            return Ok((root, WholeRule::Separate(whole)));
+        }
+        match output {
+            None | Some(QueryOutput::Object) => Ok((whole, WholeRule::Root)),
             Some(QueryOutput::Share { .. } | QueryOutput::Existence { .. }) => {
-                condition(rules::sources::Output::Share)?
+                Ok((condition(rules::sources::Output::Share)?, WholeRule::Separate(whole)))
             },
-        };
-        Ok((root, whole))
+        }
     }
 
     pub(super) async fn resolve_scope(

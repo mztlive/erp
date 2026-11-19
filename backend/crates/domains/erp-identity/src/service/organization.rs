@@ -80,10 +80,10 @@ impl OrganizationService {
         access.ensure_current(executor)?;
         Ok(OrganizationStateView::compose(
             visible,
-            access.facts.scope_version.clone(),
-            access.facts.policy_version,
-            access.facts.as_of.as_utc().to_rfc3339(),
-            !access.facts.scope.has_role_scope(),
+            access.scope_version.clone(),
+            access.policy_version,
+            access.as_of.as_utc().to_rfc3339(),
+            !access.scope.has_role_scope(),
             people,
             roles,
         ))
@@ -184,7 +184,7 @@ impl OrganizationService {
 
         if persist {
             self.update_profile_name(&receipt.request.change, true, executor).await?;
-            self.assign_profile_roles(actor, &receipt.request.change, access.facts.policy_version, executor)
+            self.assign_profile_roles(actor, &receipt.request.change, access.policy_version, executor)
                 .await?;
             repository.save(&mut receipt, executor).await?;
         }

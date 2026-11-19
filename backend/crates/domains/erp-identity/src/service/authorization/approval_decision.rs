@@ -10,7 +10,7 @@ use super::work_items::exact_source;
 use crate::entity::authorization::ObjectFacts;
 use crate::entity::resource_access::{GrantTarget, ResourceKind, SourceKey};
 use crate::repository::authorization::AccessProof;
-use crate::{Error, Permission, Result};
+use crate::{Error, Permission, QualifiedPermissions, Result};
 
 impl AuthorizationService {
     // 办理角色同时承担来源范围；其他实例的读取授权不能放行本次决定。
@@ -22,6 +22,7 @@ impl AuthorizationService {
     pub(super) async fn approval_decision_sources(
         &self,
         proof: &AccessProof,
+        qualified: &QualifiedPermissions,
         facts: &TargetFacts,
         executor: &mut dyn Executor,
     ) -> Result<Vec<AccessProof>> {
@@ -39,7 +40,7 @@ impl AuthorizationService {
                     &proof.context,
                     &permission,
                     &[approval_instance::INSTANCE_LIST, approval_instance::SUBMIT_DECISION],
-                    &proof.qualified,
+                    qualified,
                     executor,
                 )
                 .await?;

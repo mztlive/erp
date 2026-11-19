@@ -204,6 +204,7 @@ impl AuthorizationService {
     pub(super) async fn approval_sources(
         &self,
         proof: &AccessProof,
+        qualified: &QualifiedPermissions,
         facts: &TargetFacts,
         executor: &mut dyn Executor,
     ) -> Result<Vec<AccessProof>> {
@@ -211,13 +212,13 @@ impl AuthorizationService {
             return Ok(vec![]);
         }
         if proof.context.permission == inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL {
-            return self.stock_adjustment_cancel_sources(proof, facts, executor).await;
+            return self.stock_adjustment_cancel_sources(proof, qualified, facts, executor).await;
         }
 
         let mut sources = Vec::new();
         for object in facts.roots() {
             if proof.context.permission == internal::APPROVAL_INSTANCE_READ
-                && ordinary_readable(object, proof.context.actor.id(), &proof.qualified)?
+                && ordinary_readable(object, proof.context.actor.id(), qualified)?
             {
                 continue;
             }
@@ -229,7 +230,7 @@ impl AuthorizationService {
             };
             let source_facts = expanded.as_ref().unwrap_or(facts);
             let object = expanded.as_ref().and_then(|facts| facts.roots().next()).unwrap_or(object);
-            sources.push(self.approval_source(proof, object, source_facts, executor).await?);
+            sources.push(self.approval_source(proof, qualified, object, source_facts, executor).await?);
         }
         Ok(sources)
     }
@@ -238,6 +239,7 @@ impl AuthorizationService {
     async fn approval_source(
         &self,
         proof: &AccessProof,
+        qualified: &QualifiedPermissions,
         object: &ObjectFacts,
         facts: &TargetFacts,
         executor: &mut dyn Executor,
@@ -245,16 +247,10 @@ impl AuthorizationService {
         let entry = &proof.context.permission;
         let (admin, policy, source) = requirement(entry, object)?;
         let mut required = management_permissions(entry, admin);
-        ensure_admin(&required, &proof.qualified)?;
+        ensure_admin(&required, qualified)?;
         policy.add_qualification(&mut required);
         let mut source_proof = self
-            .resolve_approval_source(
-                &proof.context,
-                &policy.permission,
-                &required,
-                &proof.qualified,
-                executor,
-            )
+            .resolve_approval_source(&proof.context, &policy.permission, &required, qualified, executor)
             .await?;
 
         let grants = self
@@ -285,7 +281,7 @@ impl AuthorizationService {
             AccessContext { permission: internal::APPROVAL_MANAGEMENT_READ, ..proof.context.clone() };
         let target = AccessTarget::record(&object.id)?;
         let expanded_facts =
-            TargetFacts::load(&self.facts, &context, &AccessRule::Allow, &target, executor).await?;
+            TargetFacts::load(&self.facts, &context, &AccessRule::Allow, target, executor).await?;
 
         let expanded = expanded_facts
             .roots()
@@ -337,7 +333,6 @@ impl AuthorizationService {
 
         let proof = AccessProof {
             context,
-            qualified: qualified.clone(),
             resolved: ResolvedAccess {
                 rules,
                 replay: Replay::ApprovalSource { source: source.clone(), required: required.to_vec() },
@@ -352,7 +347,6 @@ impl AuthorizationService {
             },
             scope: ScopeMetadata {
                 has_role_scope: resolution.has_role_scope,
-                policy_version: qualified.policy_revision(),
                 organization_version: resolution.organization_version,
             },
         };
@@ -374,7 +368,7 @@ impl AuthorizationService {
             let origin = scope_spec::runtime_source(scope_spec::require_scope(&scope_source)?)?.permission();
             let scope = self.facilities.scope(context, origin, required, qualified, executor).await?;
             resolution.include(&scope);
-            scopes.push((scope_source, scope.scope.clone()));
+            scopes.push((scope_source, scope.scope));
         }
 
         if context.permission == work_item::DETAIL && source == &purchase_order::DETAIL {

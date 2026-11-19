@@ -362,7 +362,7 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
         ) -> Result<AuthorizedDataScope> {
             let mut access = self.identity.scope(context, source, required, qualified, executor).await?;
             if source == &sales_order::DETAIL {
-                access.facts.organizations.memberships.push(OrgMembership {
+                access.organizations.memberships.push(OrgMembership {
                     base: BaseModel::fake(),
                     user_id: actor().id().into(),
                     org_unit_id: "sales".into(),
