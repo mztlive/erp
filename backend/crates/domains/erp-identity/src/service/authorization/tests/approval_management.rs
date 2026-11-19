@@ -251,6 +251,21 @@ async fn receipt_management_keeps_ledger_in_the_same_admin_role_and_requires_who
         RelatedObjects { expected_ids: ["receipt".into()].into(), objects: vec![receipt] },
     );
 
+    let mut wrong_type = base.clone();
+    wrong_type[2] = approval_admin::RECEIPT_REVERSAL_RUNTIME;
+    let (service, _) = setup(vec![("manager".into(), wrong_type)], root.clone());
+    assert!(matches!(
+        service
+            .require(
+                &actor(),
+                &entry,
+                AccessTarget::record("instance").unwrap(),
+                &mut SnapshotExecutor::default()
+            )
+            .await,
+        Err(Error::Forbidden(message)) if message == "当前账号不具备该主体类型的同角色完整审批管理资格"
+    ));
+
     let split = vec![
         ("manager".into(), base.clone()),
         ("ledger".into(), vec![policy_permission::FINANCE_LEDGER_READ]),
@@ -265,7 +280,7 @@ async fn receipt_management_keeps_ledger_in_the_same_admin_role_and_requires_who
                 &mut SnapshotExecutor::default()
             )
             .await,
-        Err(Error::Forbidden(_))
+        Err(Error::Forbidden(message)) if message == "审批管理的真实来源缺少完整同角色资格"
     ));
 
     let mut combined = base;

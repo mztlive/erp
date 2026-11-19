@@ -16,89 +16,16 @@ use crate::{Error, QualifiedPermissions, Result};
 
 const DECISION: &[Permission] = &[approval_instance::COPIES_HISTORY, approval_instance::SUBMIT_DECISION];
 
-const READ_PERMISSIONS: &[(&str, &str, Permission)] = &[
-    ("SALES_INQUIRY_PROCESSING", "sales_inquiry", sales_inquiry::QUERY_PROCUREMENT_DETAIL),
-    ("PURCHASE_PAYMENT_ARRANGEMENT", "purchase_order", purchase_order::DETAIL),
-    ("SUPPLIER_PORTAL_REVIEW", "supplier_portal_request", supplier_portal::ADMIN_IMPACTS),
-    ("PROCUREMENT_ORDER_CREATION", "sales_order", purchase_order::CREATE),
-    ("PURCHASE_RETURN_INVOICE", "purchase_order", purchase_order::DETAIL),
-    ("PURCHASE_RETURN_REFUND", "purchase_order", purchase_order::DETAIL),
-    ("PURCHASE_SOURCE_UPDATE", "purchase_order", purchase_order::DETAIL),
-    ("FULFILLMENT_OPERATION", "purchase_receipt", fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_POST),
-    ("FULFILLMENT_OPERATION", "delivery", fulfillment::DELIVERY_DELIVERY_POST),
-    (
-        "FULFILLMENT_OPERATION",
-        "electronic_delivery",
-        fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
-    ),
-    (
-        "FULFILLMENT_OPERATION",
-        "service_fulfillment",
-        fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
-    ),
-    ("CUSTOMER_ACCEPTANCE_REGISTRATION", "sales_order", sales_order::DETAIL),
-    ("DOCUMENT_APPROVAL", "sales_order", sales_order::DETAIL),
-    ("SUPPLIER_PAYMENT_EXECUTION", "purchase_payment_request", purchase_payment_request::DETAIL),
-    ("SALES_INVOICE_EXECUTION", "receivable_account", receivable::ACCOUNT_DETAIL),
-    ("SUPPLIER_SETTLEMENT_REVIEW", "supplier_settlement_statement", supplier_settlement::STATEMENT_DETAIL),
-    ("IMPORT_BUSINESS_CONFIRMATION", "LEGACY_IMPORT_BATCH", legacy_import::BATCH_DETAIL),
-    ("INTEGRATION_RESULT_UNKNOWN", "integration_error_task", integration_ops::ERROR_TASK_DETAIL),
-    ("BUSINESS_EXCEPTION", "integration_error_task", integration_ops::ERROR_TASK_DETAIL),
-    ("BUSINESS_EXCEPTION", "reconciliation_difference", integration_ops::DIFFERENCE_DETAIL),
-    ("INTEGRATION_RESULT_UNKNOWN", "reconciliation_difference", integration_ops::DIFFERENCE_DETAIL),
-    ("INTEGRATION_RESULT_UNKNOWN", "SUPPLIER_FULFILLMENT_ORDER", supplier_fulfillment::ORDER_DETAIL),
-    ("BUSINESS_EXCEPTION", "SUPPLIER_FULFILLMENT_ORDER", supplier_fulfillment::ORDER_DETAIL),
-    ("BUSINESS_EXCEPTION", "SUPPLIER_OFFERING", supplier_offering::LIST),
-    ("DOCUMENT_APPROVAL", "voucher_sales_order", sales_order::DETAIL),
-    ("DOCUMENT_APPROVAL", "sales_change_order", sales_review::SALES_CHANGE_ORDER_DETAIL),
-    ("DOCUMENT_APPROVAL", "purchase_order", purchase_order::DETAIL),
-    ("DOCUMENT_APPROVAL", "purchase_change_order", purchase_order::PURCHASE_CHANGE_DETAIL),
-    ("DOCUMENT_APPROVAL", "stock_adjustment", inventory::STOCK_ADJUSTMENT_DETAIL),
-    ("DOCUMENT_APPROVAL", "purchase_payment_request", purchase_payment_request::DETAIL),
-    ("DOCUMENT_APPROVAL", "sales_invoice_request", receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL),
-    ("DOCUMENT_APPROVAL", "customer_receipt", receivable::ACCOUNT_DETAIL),
-    ("DOCUMENT_APPROVAL", "customer_refund", receivable::ACCOUNT_DETAIL),
-    ("DOCUMENT_APPROVAL", "receipt_reversal", receivable::ACCOUNT_DETAIL),
-    ("DOCUMENT_APPROVAL", "supplier_refund", purchase_order::DETAIL),
-    ("DOCUMENT_APPROVAL", "payment_reversal", purchase_order::DETAIL),
-    ("APPROVAL_REWORK", "sales_order", sales_order::DETAIL),
-    ("APPROVAL_REWORK", "voucher_sales_order", sales_order::DETAIL),
-    ("APPROVAL_REWORK", "sales_change_order", sales_review::SALES_CHANGE_ORDER_DETAIL),
-    ("APPROVAL_REWORK", "purchase_order", purchase_order::DETAIL),
-    ("APPROVAL_REWORK", "purchase_change_order", purchase_order::PURCHASE_CHANGE_DETAIL),
-    ("APPROVAL_REWORK", "stock_adjustment", inventory::STOCK_ADJUSTMENT_DETAIL),
-    ("APPROVAL_REWORK", "purchase_payment_request", purchase_payment_request::DETAIL),
-    ("APPROVAL_REWORK", "sales_invoice_request", receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL),
-    ("APPROVAL_REWORK", "customer_receipt", receivable::ACCOUNT_DETAIL),
-    ("APPROVAL_REWORK", "customer_refund", receivable::ACCOUNT_DETAIL),
-    ("APPROVAL_REWORK", "receipt_reversal", receivable::ACCOUNT_DETAIL),
-    ("APPROVAL_REWORK", "supplier_refund", purchase_order::DETAIL),
-    ("APPROVAL_REWORK", "payment_reversal", purchase_order::DETAIL),
-];
+const REWORK_EXECUTION: &[Permission] = &[work_item::DETAIL];
 
-const EXECUTION: &[(&str, &str, &[Permission])] = &[
-    (
-        "INTEGRATION_RESULT_UNKNOWN",
-        "SUPPLIER_FULFILLMENT_ORDER",
-        &[
-            supplier_fulfillment::EXECUTION_SETUP_SUPPLIER_ORDER_EXECUTION_SETUP,
-            supplier_fulfillment::ORDER_INVESTIGATION,
-            supplier_fulfillment::ORDER_TASK_COMPLETION,
-        ],
-    ),
-    (
-        "BUSINESS_EXCEPTION",
-        "SUPPLIER_FULFILLMENT_ORDER",
-        &[
-            supplier_fulfillment::EXECUTION_SETUP_SUPPLIER_ORDER_EXECUTION_SETUP,
-            supplier_fulfillment::ORDER_INVESTIGATION,
-            supplier_fulfillment::ORDER_TASK_COMPLETION,
-        ],
-    ),
-    ("BUSINESS_EXCEPTION", "SUPPLIER_OFFERING", &[supplier_offering::COMPLETE_SUPPLY_EXCEPTION_TASK]),
+type TaskRequirements = (&'static str, &'static str, Permission, &'static [Permission]);
+
+// 每个配对分别登记读取权限和执行子集；部分读取权限也是形成前预检的必需资格。
+static TASK_REQUIREMENTS: &[TaskRequirements] = &[
     (
         "SALES_INQUIRY_PROCESSING",
         "sales_inquiry",
+        sales_inquiry::QUERY_PROCUREMENT_DETAIL,
         &[
             sales_inquiry::QUERY_PROCUREMENT_DETAIL,
             sales_inquiry::COMMANDS_PROCUREMENT_SAVE_FEEDBACK,
@@ -106,29 +33,22 @@ const EXECUTION: &[(&str, &str, &[Permission])] = &[
         ],
     ),
     (
-        "SUPPLIER_SETTLEMENT_REVIEW",
-        "supplier_settlement_statement",
-        &[supplier_settlement::STATEMENT_REVIEW_DECIDE],
-    ),
-    ("PROCUREMENT_ORDER_CREATION", "sales_order", &[purchase_order::CREATE]),
-    (
         "PURCHASE_PAYMENT_ARRANGEMENT",
         "purchase_order",
+        purchase_order::DETAIL,
         &[purchase_order::DETAIL, purchase_payment_request::CREATE, purchase_payment_request::SUBMIT],
     ),
     (
-        "PURCHASE_RETURN_REFUND",
-        "purchase_order",
-        &[
-            purchase_order::DETAIL,
-            payable::SUPPLIER_PAYMENT_LIST,
-            payable::SUPPLIER_PAYMENT_DETAIL,
-            returns::DRAFT_UPDATE_SUPPLIER_REFUND_UPDATE,
-        ],
+        "SUPPLIER_PORTAL_REVIEW",
+        "supplier_portal_request",
+        supplier_portal::ADMIN_IMPACTS,
+        &[supplier_portal::ADMIN_APPLICATION, supplier_portal::ADMIN_REVIEW],
     ),
+    ("PROCUREMENT_ORDER_CREATION", "sales_order", purchase_order::CREATE, &[purchase_order::CREATE]),
     (
         "PURCHASE_RETURN_INVOICE",
         "purchase_order",
+        purchase_order::DETAIL,
         &[
             purchase_order::DETAIL,
             supplier::DETAIL,
@@ -139,13 +59,21 @@ const EXECUTION: &[(&str, &str, &[Permission])] = &[
         ],
     ),
     (
-        "SUPPLIER_PORTAL_REVIEW",
-        "supplier_portal_request",
-        &[supplier_portal::ADMIN_APPLICATION, supplier_portal::ADMIN_REVIEW],
+        "PURCHASE_RETURN_REFUND",
+        "purchase_order",
+        purchase_order::DETAIL,
+        &[
+            purchase_order::DETAIL,
+            payable::SUPPLIER_PAYMENT_LIST,
+            payable::SUPPLIER_PAYMENT_DETAIL,
+            returns::DRAFT_UPDATE_SUPPLIER_REFUND_UPDATE,
+        ],
     ),
+    ("PURCHASE_SOURCE_UPDATE", "purchase_order", purchase_order::DETAIL, &[]),
     (
         "FULFILLMENT_OPERATION",
         "purchase_receipt",
+        fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_POST,
         &[
             fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_LIST,
             fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_DETAIL,
@@ -156,6 +84,7 @@ const EXECUTION: &[(&str, &str, &[Permission])] = &[
     (
         "FULFILLMENT_OPERATION",
         "delivery",
+        fulfillment::DELIVERY_DELIVERY_POST,
         &[
             fulfillment::DELIVERY_DELIVERY_LIST,
             fulfillment::DELIVERY_DELIVERY_DETAIL,
@@ -166,6 +95,7 @@ const EXECUTION: &[(&str, &str, &[Permission])] = &[
     (
         "FULFILLMENT_OPERATION",
         "electronic_delivery",
+        fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
         &[
             fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_LIST,
             fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
@@ -174,6 +104,7 @@ const EXECUTION: &[(&str, &str, &[Permission])] = &[
     (
         "FULFILLMENT_OPERATION",
         "service_fulfillment",
+        fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
         &[
             fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_LIST,
             fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
@@ -182,6 +113,7 @@ const EXECUTION: &[(&str, &str, &[Permission])] = &[
     (
         "CUSTOMER_ACCEPTANCE_REGISTRATION",
         "sales_order",
+        sales_order::DETAIL,
         &[
             fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_LIST,
             fulfillment::ACCEPTANCE_EVIDENCE_CUSTOMER_ACCEPTANCE_EVIDENCE,
@@ -190,14 +122,17 @@ const EXECUTION: &[(&str, &str, &[Permission])] = &[
             sales_order::EVIDENCE_SALES_ORDER_EVIDENCE_DOWNLOAD,
         ],
     ),
+    ("DOCUMENT_APPROVAL", "sales_order", sales_order::DETAIL, &[]),
     (
         "SUPPLIER_PAYMENT_EXECUTION",
         "purchase_payment_request",
+        purchase_payment_request::DETAIL,
         &[purchase_payment_request::MATERIALS_SUBMISSION, purchase_payment_request::CREDIT_LIST],
     ),
     (
         "SALES_INVOICE_EXECUTION",
         "receivable_account",
+        receivable::ACCOUNT_DETAIL,
         &[
             receivable::ACCOUNT_LIST,
             receivable::ACCOUNT_DETAIL,
@@ -209,16 +144,79 @@ const EXECUTION: &[(&str, &str, &[Permission])] = &[
             receivable::INVOICE_FILES_INVOICE_COMMIT_WITH_FILES,
         ],
     ),
+    (
+        "SUPPLIER_SETTLEMENT_REVIEW",
+        "supplier_settlement_statement",
+        supplier_settlement::STATEMENT_DETAIL,
+        &[supplier_settlement::STATEMENT_REVIEW_DECIDE],
+    ),
+    ("IMPORT_BUSINESS_CONFIRMATION", "LEGACY_IMPORT_BATCH", legacy_import::BATCH_DETAIL, &[]),
+    ("INTEGRATION_RESULT_UNKNOWN", "integration_error_task", integration_ops::ERROR_TASK_DETAIL, &[]),
+    ("BUSINESS_EXCEPTION", "integration_error_task", integration_ops::ERROR_TASK_DETAIL, &[]),
+    ("BUSINESS_EXCEPTION", "reconciliation_difference", integration_ops::DIFFERENCE_DETAIL, &[]),
+    ("INTEGRATION_RESULT_UNKNOWN", "reconciliation_difference", integration_ops::DIFFERENCE_DETAIL, &[]),
+    (
+        "INTEGRATION_RESULT_UNKNOWN",
+        "SUPPLIER_FULFILLMENT_ORDER",
+        supplier_fulfillment::ORDER_DETAIL,
+        &[
+            supplier_fulfillment::EXECUTION_SETUP_SUPPLIER_ORDER_EXECUTION_SETUP,
+            supplier_fulfillment::ORDER_INVESTIGATION,
+            supplier_fulfillment::ORDER_TASK_COMPLETION,
+        ],
+    ),
+    (
+        "BUSINESS_EXCEPTION",
+        "SUPPLIER_FULFILLMENT_ORDER",
+        supplier_fulfillment::ORDER_DETAIL,
+        &[
+            supplier_fulfillment::EXECUTION_SETUP_SUPPLIER_ORDER_EXECUTION_SETUP,
+            supplier_fulfillment::ORDER_INVESTIGATION,
+            supplier_fulfillment::ORDER_TASK_COMPLETION,
+        ],
+    ),
+    (
+        "BUSINESS_EXCEPTION",
+        "SUPPLIER_OFFERING",
+        supplier_offering::LIST,
+        &[supplier_offering::COMPLETE_SUPPLY_EXCEPTION_TASK],
+    ),
+    ("DOCUMENT_APPROVAL", "voucher_sales_order", sales_order::DETAIL, &[]),
+    ("DOCUMENT_APPROVAL", "sales_change_order", sales_review::SALES_CHANGE_ORDER_DETAIL, &[]),
+    ("DOCUMENT_APPROVAL", "purchase_order", purchase_order::DETAIL, &[]),
+    ("DOCUMENT_APPROVAL", "purchase_change_order", purchase_order::PURCHASE_CHANGE_DETAIL, &[]),
+    ("DOCUMENT_APPROVAL", "stock_adjustment", inventory::STOCK_ADJUSTMENT_DETAIL, &[]),
+    ("DOCUMENT_APPROVAL", "purchase_payment_request", purchase_payment_request::DETAIL, &[]),
+    ("DOCUMENT_APPROVAL", "sales_invoice_request", receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL, &[]),
+    ("DOCUMENT_APPROVAL", "customer_receipt", receivable::ACCOUNT_DETAIL, &[]),
+    ("DOCUMENT_APPROVAL", "customer_refund", receivable::ACCOUNT_DETAIL, &[]),
+    ("DOCUMENT_APPROVAL", "receipt_reversal", receivable::ACCOUNT_DETAIL, &[]),
+    ("DOCUMENT_APPROVAL", "supplier_refund", purchase_order::DETAIL, &[]),
+    ("DOCUMENT_APPROVAL", "payment_reversal", purchase_order::DETAIL, &[]),
+    ("APPROVAL_REWORK", "sales_order", sales_order::DETAIL, REWORK_EXECUTION),
+    ("APPROVAL_REWORK", "voucher_sales_order", sales_order::DETAIL, REWORK_EXECUTION),
+    ("APPROVAL_REWORK", "sales_change_order", sales_review::SALES_CHANGE_ORDER_DETAIL, REWORK_EXECUTION),
+    ("APPROVAL_REWORK", "purchase_order", purchase_order::DETAIL, REWORK_EXECUTION),
+    ("APPROVAL_REWORK", "purchase_change_order", purchase_order::PURCHASE_CHANGE_DETAIL, REWORK_EXECUTION),
+    ("APPROVAL_REWORK", "stock_adjustment", inventory::STOCK_ADJUSTMENT_DETAIL, REWORK_EXECUTION),
+    ("APPROVAL_REWORK", "purchase_payment_request", purchase_payment_request::DETAIL, REWORK_EXECUTION),
+    (
+        "APPROVAL_REWORK",
+        "sales_invoice_request",
+        receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL,
+        REWORK_EXECUTION,
+    ),
+    ("APPROVAL_REWORK", "customer_receipt", receivable::ACCOUNT_DETAIL, REWORK_EXECUTION),
+    ("APPROVAL_REWORK", "customer_refund", receivable::ACCOUNT_DETAIL, REWORK_EXECUTION),
+    ("APPROVAL_REWORK", "receipt_reversal", receivable::ACCOUNT_DETAIL, REWORK_EXECUTION),
+    ("APPROVAL_REWORK", "supplier_refund", purchase_order::DETAIL, REWORK_EXECUTION),
+    ("APPROVAL_REWORK", "payment_reversal", purchase_order::DETAIL, REWORK_EXECUTION),
 ];
 
 // 集中预取各登记任务种类可能用到的功能权限；与本次操作匹配的组合须由持久化任务事实确定。
 pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     if permission == &internal::WORK_ITEM_EXECUTION_QUALIFICATION {
-        return EXECUTION
-            .iter()
-            .flat_map(|(_, _, required)| required.iter().cloned())
-            .chain([work_item::DETAIL])
-            .collect();
+        return TASK_REQUIREMENTS.iter().flat_map(|(_, _, _, execution)| execution.iter().cloned()).collect();
     }
     if ![internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT].contains(permission)
         && !view_permission(permission)
@@ -226,9 +224,10 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
         return vec![];
     }
 
-    let mut required =
-        READ_PERMISSIONS.iter().map(|(_, _, permission)| permission.clone()).collect::<Vec<_>>();
-    required.extend(EXECUTION.iter().flat_map(|(_, _, required)| required.iter().cloned()));
+    let mut required = TASK_REQUIREMENTS
+        .iter()
+        .flat_map(|(_, _, read, execution)| std::iter::once(read).chain(*execution).cloned())
+        .collect::<Vec<_>>();
     required.push(work_item::DETAIL);
     required.extend_from_slice(DECISION);
 
@@ -248,29 +247,11 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     required
 }
 
-// 为办理判断真实任务类型与业务来源对应的固定功能组合，不认识的种类配对拒绝。
-fn requirements(kind: &str, source: &str) -> Result<Vec<Permission>> {
-    let read = READ_PERMISSIONS
+fn requirements(kind: &str, source: &str) -> Result<&'static TaskRequirements> {
+    TASK_REQUIREMENTS
         .iter()
-        .find(|(task, resource, _)| *task == kind && *resource == source)
-        .ok_or_else(|| Error::ValidationError("任务类型或业务对象未登记完整办理资格".into()))?;
-    let mut required = execution_requirements(kind, source).to_vec();
-    required.push(read.2.clone());
-    required.sort();
-    required.dedup();
-    Ok(required)
-}
-
-// 办理资格与任务形成前预检共用固定执行子集；返工仍保留原有工作项详情要求。
-fn execution_requirements(kind: &str, source: &str) -> &'static [Permission] {
-    if kind == "APPROVAL_REWORK" {
-        return const { &[work_item::DETAIL] };
-    }
-    EXECUTION
-        .iter()
-        .find(|(task, resource, _)| *task == kind && *resource == source)
-        .map(|(_, _, required)| *required)
-        .unwrap_or_default()
+        .find(|(task, resource, _, _)| *task == kind && *resource == source)
+        .ok_or_else(|| Error::ValidationError("任务类型或业务对象未登记完整办理资格".into()))
 }
 
 // 识别本批工作项显示所用的固定入口，不能借其他资源或权限取得同一展示资格。
@@ -284,7 +265,12 @@ pub(crate) fn execution_qualified(
     source: &str,
     qualified: &QualifiedPermissions,
 ) -> Result<bool> {
-    Ok(qualified.same_role(&requirements(kind, source)?))
+    let (_, _, read, execution) = requirements(kind, source)?;
+    let mut required = execution.to_vec();
+    if !required.contains(read) {
+        required.push(read.clone());
+    }
+    Ok(qualified.same_role(&required))
 }
 
 // 审批决定按钮沿用原有同角色功能资格；返回值只供展示，不能代替任务授权。
@@ -302,10 +288,9 @@ fn candidate_requirements(object: &ObjectFacts) -> Result<&'static [Permission]>
         return Err(Error::ValidationError("任务资格候选只能提供服务端种类和来源类型".into()));
     }
 
-    let kind = object.subject_type.get()?.as_str();
-    let source = object.subject_source_resource.get()?.as_str();
-    requirements(kind, source)?;
-    Ok(execution_requirements(kind, source))
+    let (_, _, _, execution) =
+        requirements(object.subject_type.get()?, object.subject_source_resource.get()?)?;
+    Ok(execution)
 }
 
 impl AuthorizationService {

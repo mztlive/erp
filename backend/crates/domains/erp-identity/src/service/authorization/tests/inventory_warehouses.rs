@@ -16,6 +16,7 @@ use crate::repository::authorization::fixtures::execute;
 use crate::service::authorization::{AuthorizationService, rules};
 use crate::{AccessTarget, Error, Permission};
 
+// 原库存动作作为独立测试期望，不从被测登记推导。
 fn entries() -> [(Permission, Permission); 8] {
     [
         (internal::INVENTORY_BALANCE_WAREHOUSES, inventory::STOCK_BALANCE_LIST),
@@ -72,12 +73,21 @@ async fn warehouse_entries_reuse_original_inventory_permissions_and_scope_withou
             Err(Error::Forbidden(_))
         ));
 
+        let access = authorization.query(&actor(), &entry, &mut executor).await.unwrap();
+        let rows = execute(warehouse_rows(), access.stages(), &BTreeMap::new(), &doc! {});
+        assert_eq!(rows.iter().map(|row| row.get_str("id").unwrap()).collect::<Vec<_>>(), ["allowed"]);
+        authorization.validate(&access, &mut executor).await.unwrap();
+
         let before = facts.calls.load(Ordering::SeqCst);
         identity.state.lock().unwrap().grants = vec![("role".into(), vec![entry.clone()])];
         assert!(matches!(
             authorization
                 .require(&actor(), &entry, AccessTarget::record("allowed").unwrap(), &mut executor)
                 .await,
+            Err(Error::Forbidden(_))
+        ));
+        assert!(matches!(
+            authorization.query(&actor(), &entry, &mut executor).await,
             Err(Error::Forbidden(_))
         ));
         assert_eq!(facts.calls.load(Ordering::SeqCst), before);

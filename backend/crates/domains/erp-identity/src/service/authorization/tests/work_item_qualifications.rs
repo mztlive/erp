@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use erp_core::common::time::Instant;
 use erp_permissions::{
-    Permission, approval_instance, fulfillment, internal, purchase_order, purchase_payment_request,
-    sales_inquiry, sales_order, supplier_settlement, work_item,
+    Permission, approval_instance, fulfillment, integration_ops, internal, inventory, purchase_order,
+    purchase_payment_request, sales_inquiry, sales_order, supplier_settlement, work_item,
 };
 use persistence_core::testing::SnapshotExecutor;
 use persistence_core::{Executor, ReadExecutor};
@@ -604,6 +604,152 @@ async fn query_qualification_rejects_other_queries_expiry_and_cross_stage_reuse(
     let access = service.query(&actor(), &work_item::LIST, &mut executor).await.unwrap();
     executor.restart();
     assert!(matches!(access.decision_qualified(&mut executor), Err(Error::ValidationError(_))));
+}
+
+#[tokio::test]
+async fn settlement_formation_does_not_prove_display_or_task_execution_qualification() {
+    let identity = Arc::new(Identity::default());
+    let kind = "SUPPLIER_SETTLEMENT_REVIEW";
+    let source = "supplier_settlement_statement";
+    let item = ObjectFacts {
+        subject_type: FactValue::Known(kind.into()),
+        subject_source_resource: FactValue::Known(source.into()),
+        assignee_id: FactValue::Known(None),
+        completed: FactValue::Known(true),
+        ..object("work_item", "task", "user")
+    };
+    let service = service(identity.clone(), Arc::new(Facts::new(vec![item])));
+    let required = [supplier_settlement::STATEMENT_REVIEW_DECIDE, supplier_settlement::STATEMENT_DETAIL];
+    let task_reader = [work_item::LIST, work_item::DETAIL];
+    let target = AccessTarget::Task { id: "task".into(), version: "v1".into() };
+
+    for (reviewer, other_reader, allowed) in [
+        (&required[..1], &required[..0], false),
+        (&required[..1], &required[1..], false),
+        (&required[..], &required[..0], true),
+    ] {
+        grant(&identity, &[("task-reader", &task_reader), ("reviewer", reviewer), ("other", other_reader)]);
+        let mut executor = SnapshotExecutor::default();
+        service
+            .require(
+                &actor(),
+                &internal::WORK_ITEM_EXECUTION_QUALIFICATION,
+                AccessTarget::Candidate(candidate(kind, source)),
+                &mut executor,
+            )
+            .await
+            .unwrap();
+
+        let access = service.query(&actor(), &work_item::LIST, &mut executor).await.unwrap();
+        assert_eq!(access.execution_qualified(kind, source, &mut executor).unwrap(), allowed);
+        service.validate(&access, &mut executor).await.unwrap();
+
+        for permission in [internal::WORK_ITEM_RECIPIENT, internal::WORK_ITEM_EXECUTE] {
+            let result = service.require(&actor(), &permission, target.clone(), &mut executor).await;
+            if allowed {
+                result.unwrap();
+            } else {
+                assert!(matches!(result, Err(Error::Forbidden(_))), "{result:?}");
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn explicit_empty_execution_subset_still_requires_source_read_for_display() {
+    let identity = Arc::new(Identity::default());
+    let service = service(identity.clone(), Arc::new(Facts::default()));
+    let mut executor = SnapshotExecutor::default();
+
+    let source_read = [integration_ops::ERROR_TASK_DETAIL];
+    for (source_reader, allowed) in [(&source_read[..0], false), (&source_read[..], true)] {
+        grant(&identity, &[("task-reader", &[work_item::LIST]), ("source-reader", source_reader)]);
+        service
+            .require(
+                &actor(),
+                &internal::WORK_ITEM_EXECUTION_QUALIFICATION,
+                AccessTarget::Candidate(candidate("BUSINESS_EXCEPTION", "integration_error_task")),
+                &mut executor,
+            )
+            .await
+            .unwrap();
+
+        let access = service.query(&actor(), &work_item::LIST, &mut executor).await.unwrap();
+        assert_eq!(
+            access
+                .execution_qualified("BUSINESS_EXCEPTION", "integration_error_task", &mut executor)
+                .unwrap(),
+            allowed,
+        );
+        service.validate(&access, &mut executor).await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn rework_display_requires_source_and_work_item_detail_in_the_same_role() {
+    let identity = Arc::new(Identity::default());
+    let service = service(identity.clone(), Arc::new(Facts::default()));
+    let required = [work_item::DETAIL, inventory::STOCK_ADJUSTMENT_DETAIL];
+    for (rework, allowed) in [(&required[..1], false), (&required[..], true)] {
+        grant(
+            &identity,
+            &[("list-reader", &[work_item::LIST]), ("rework", rework), ("source-reader", &required[1..])],
+        );
+        let mut executor = SnapshotExecutor::default();
+        let access = service.query(&actor(), &work_item::LIST, &mut executor).await.unwrap();
+        assert_eq!(
+            access.execution_qualified("APPROVAL_REWORK", "stock_adjustment", &mut executor).unwrap(),
+            allowed,
+        );
+        service.validate(&access, &mut executor).await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn known_kind_and_known_source_do_not_authorize_an_unregistered_pair() {
+    let kind = "APPROVAL_REWORK";
+    let source = "integration_error_task";
+    let item = ObjectFacts {
+        subject_type: FactValue::Known(kind.into()),
+        subject_source_resource: FactValue::Known(source.into()),
+        assignee_id: FactValue::Known(None),
+        completed: FactValue::Known(true),
+        ..object("work_item", "task", "user")
+    };
+    let service = service(Arc::new(Identity::default()), Arc::new(Facts::new(vec![item])));
+    let mut executor = SnapshotExecutor::default();
+
+    let access = service.query(&actor(), &work_item::LIST, &mut executor).await.unwrap();
+    assert!(matches!(
+        access.execution_qualified(kind, source, &mut executor),
+        Err(Error::ValidationError(_))
+    ));
+    service.validate(&access, &mut executor).await.unwrap();
+
+    assert!(matches!(
+        service
+            .require(
+                &actor(),
+                &internal::WORK_ITEM_EXECUTION_QUALIFICATION,
+                AccessTarget::Candidate(candidate(kind, source)),
+                &mut executor,
+            )
+            .await,
+        Err(Error::ValidationError(_))
+    ));
+    for permission in [internal::WORK_ITEM_RECIPIENT, internal::WORK_ITEM_EXECUTE] {
+        assert!(matches!(
+            service
+                .require(
+                    &actor(),
+                    &permission,
+                    AccessTarget::Task { id: "task".into(), version: "v1".into() },
+                    &mut executor,
+                )
+                .await,
+            Err(Error::ValidationError(_))
+        ));
+    }
 }
 
 #[tokio::test]

@@ -8,15 +8,13 @@ use erp_permissions::{
     warehouse, work_item,
 };
 
-pub(crate) const PERMISSIONS: &[Permission] = &[
-    internal::INVENTORY_BALANCE_WAREHOUSES,
-    internal::INVENTORY_BALANCE_DETAIL_WAREHOUSES,
-    internal::INVENTORY_MOVEMENT_WAREHOUSES,
-    internal::INVENTORY_RESERVATION_WAREHOUSES,
-    internal::INVENTORY_ADJUSTMENT_WAREHOUSES,
-    internal::INVENTORY_ADJUSTMENT_DETAIL_WAREHOUSES,
-    internal::INVENTORY_CREATE_WAREHOUSES,
-    internal::INVENTORY_UPDATE_WAREHOUSES,
+use crate::entity::access_control::scope_spec::INVENTORY_WAREHOUSE_ENTRIES;
+
+pub(in crate::service::authorization) fn permissions() -> impl Iterator<Item = &'static Permission> {
+    INVENTORY_WAREHOUSE_ENTRIES.iter().map(|(entry, _)| entry).chain(PERMISSIONS)
+}
+
+const PERMISSIONS: &[Permission] = &[
     internal::CUSTOMER_QUALITY_HISTORY,
     internal::PURCHASE_DELIVERY_OPTIONS_READ,
     internal::SALES_CHANGE_DRAFT_READ,

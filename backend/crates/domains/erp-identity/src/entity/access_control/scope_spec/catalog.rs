@@ -12,6 +12,7 @@ use erp_permissions::{
 
 use super::super::{DataScopeType, ScopeDimension};
 use super::{ActionKind, FixedAction, ScopeSource, scope};
+use crate::Permission;
 
 const ALL: &[DataScopeType] = &[
     DataScopeType::Company,
@@ -29,8 +30,20 @@ const DEPOSIT_DIMS: &[ScopeDimension] = &[ScopeDimension::InternalOrg, ScopeDime
 const CURRENT: ScopeSource = ScopeSource::Current;
 const COMPANY: ScopeSource = ScopeSource::Company;
 
+// 仓库入口同时复用原库存动作的资格和范围，且全部支持查询。
+pub(crate) static INVENTORY_WAREHOUSE_ENTRIES: &[(Permission, Permission)] = &[
+    (internal::INVENTORY_BALANCE_WAREHOUSES, inventory::STOCK_BALANCE_LIST),
+    (internal::INVENTORY_BALANCE_DETAIL_WAREHOUSES, inventory::STOCK_BALANCE_DETAIL),
+    (internal::INVENTORY_MOVEMENT_WAREHOUSES, inventory::STOCK_MOVEMENT_LIST),
+    (internal::INVENTORY_RESERVATION_WAREHOUSES, inventory::STOCK_RESERVATION_LIST),
+    (internal::INVENTORY_ADJUSTMENT_WAREHOUSES, inventory::STOCK_ADJUSTMENT_LIST),
+    (internal::INVENTORY_ADJUSTMENT_DETAIL_WAREHOUSES, inventory::STOCK_ADJUSTMENT_DETAIL),
+    (internal::INVENTORY_CREATE_WAREHOUSES, inventory::STOCK_ADJUSTMENT_CREATE),
+    (internal::INVENTORY_UPDATE_WAREHOUSES, inventory::STOCK_ADJUSTMENT_UPDATE),
+];
+
 pub(super) static SPECS: LazyLock<Vec<super::ScopeSpec>> = LazyLock::new(|| {
-    vec![
+    let mut specs = vec![
         scope(
             &internal::SALES_CREATE_AND_SUBMIT,
             ScopeSource::Permission(sales_order::CREATE),
@@ -116,70 +129,11 @@ pub(super) static SPECS: LazyLock<Vec<super::ScopeSpec>> = LazyLock::new(|| {
             ORG,
             false,
         ),
-        scope(
-            &internal::INVENTORY_BALANCE_WAREHOUSES,
-            ScopeSource::Permission(inventory::STOCK_BALANCE_LIST),
-            false,
-            ALL,
-            WAREHOUSE,
-            false,
-        ),
-        scope(
-            &internal::INVENTORY_BALANCE_DETAIL_WAREHOUSES,
-            ScopeSource::Permission(inventory::STOCK_BALANCE_DETAIL),
-            false,
-            ALL,
-            WAREHOUSE,
-            false,
-        ),
-        scope(
-            &internal::INVENTORY_MOVEMENT_WAREHOUSES,
-            ScopeSource::Permission(inventory::STOCK_MOVEMENT_LIST),
-            false,
-            ALL,
-            WAREHOUSE,
-            false,
-        ),
-        scope(
-            &internal::INVENTORY_RESERVATION_WAREHOUSES,
-            ScopeSource::Permission(inventory::STOCK_RESERVATION_LIST),
-            false,
-            ALL,
-            WAREHOUSE,
-            false,
-        ),
-        scope(
-            &internal::INVENTORY_ADJUSTMENT_WAREHOUSES,
-            ScopeSource::Permission(inventory::STOCK_ADJUSTMENT_LIST),
-            false,
-            ALL,
-            WAREHOUSE,
-            false,
-        ),
-        scope(
-            &internal::INVENTORY_ADJUSTMENT_DETAIL_WAREHOUSES,
-            ScopeSource::Permission(inventory::STOCK_ADJUSTMENT_DETAIL),
-            false,
-            ALL,
-            WAREHOUSE,
-            false,
-        ),
-        scope(
-            &internal::INVENTORY_CREATE_WAREHOUSES,
-            ScopeSource::Permission(inventory::STOCK_ADJUSTMENT_CREATE),
-            false,
-            ALL,
-            WAREHOUSE,
-            false,
-        ),
-        scope(
-            &internal::INVENTORY_UPDATE_WAREHOUSES,
-            ScopeSource::Permission(inventory::STOCK_ADJUSTMENT_UPDATE),
-            false,
-            ALL,
-            WAREHOUSE,
-            false,
-        ),
+    ];
+    specs.extend(INVENTORY_WAREHOUSE_ENTRIES.iter().map(|(entry, source)| {
+        scope(entry, ScopeSource::Permission(source.clone()), false, ALL, WAREHOUSE, false)
+    }));
+    specs.extend([
         scope(&inventory::STOCK_ADJUSTMENT_LIST, CURRENT, false, ALL, WAREHOUSE, false),
         scope(&inventory::STOCK_ADJUSTMENT_DETAIL, CURRENT, false, ALL, WAREHOUSE, false),
         scope(&inventory::STOCK_ADJUSTMENT_CREATE, CURRENT, false, ALL, WAREHOUSE, false),
@@ -389,7 +343,8 @@ pub(super) static SPECS: LazyLock<Vec<super::ScopeSpec>> = LazyLock::new(|| {
         scope(&access::PERSON_DIRECTORY_LIST_BUSINESS_PEOPLE, CURRENT, false, PERSON, ORG, false),
         scope(&access::PERSON_DIRECTORY_LIST_SALESPEOPLE, CURRENT, false, PERSON, ORG, false),
         scope(&access::PERSON_DIRECTORY_LIST_PROCUREMENT_PEOPLE, CURRENT, false, PERSON, ORG, false),
-    ]
+    ]);
+    specs
 });
 
 pub(super) static FIXED_ACTIONS: LazyLock<Vec<FixedAction>> = LazyLock::new(|| {

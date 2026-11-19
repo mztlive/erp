@@ -6,14 +6,11 @@ use std::{cell::Cell, future::Future};
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_permissions::work_item;
 use mongodb::bson::{Bson, Document};
 use persistence_core::{ExecutionBoundary, Executor};
 
 use crate::entity::authorization::{AccessContext, AccessRule, MappingFacts, QueryModel, RelationKey};
 use crate::ports::AccessMapping;
-use crate::service::authorization::rules::sources;
-use crate::service::authorization::work_items;
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
 #[cfg(test)]
@@ -29,7 +26,7 @@ pub(crate) struct AccessProof {
     pub task: bool,
     pub rule: AccessRule,
     pub whole_rule: Option<AccessRule>,
-    pub management_rule: Option<AccessRule>,
+    pub management_filter: Option<ResolvedFilter>,
     pub has_role_scope: bool,
     pub version: String,
     pub valid_until: Option<Instant>,
@@ -37,6 +34,12 @@ pub(crate) struct AccessProof {
     pub organization_version: u64,
     pub boundary: ExecutionBoundary,
     pub service: Arc<()>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) enum ResolvedFilter {
+    Root,
+    Separate { context: Box<AccessContext>, rule: AccessRule },
 }
 
 #[derive(Clone)]
@@ -104,7 +107,13 @@ pub struct CompiledAccess {
     pub(crate) version: String,
     pub(crate) sources: BTreeMap<RelationKey, SourcePlan>,
     pub(crate) whole: Option<Vec<Document>>,
-    pub(crate) management: Option<Vec<Document>>,
+    pub(super) management: Option<ManagementPlan>,
+}
+
+#[derive(Clone)]
+pub(super) enum ManagementPlan {
+    Root,
+    Separate(Vec<Document>),
 }
 
 #[derive(Clone)]
@@ -144,42 +153,13 @@ pub(crate) struct SourcePlan {
 }
 
 impl CompiledAccess {
-    /// 返回本次工作项展示批次的固定完整执行资格。
-    /// 同次查询的启用角色完整覆盖该种类的固定资格时为 true；不证明任务可办理。
-    ///
-    /// 非工作项展示查询、未知种类、跨阶段或到期时拒绝；交付前仍须 validate 原查询。
-    ///
-    /// kind、source 为已授权任务的真实种类和来源类型；executor 为原读取执行器。
-    pub fn execution_qualified(&self, kind: &str, source: &str, executor: &mut dyn Executor) -> Result<bool> {
-        self.ensure_work_item_view(executor)?;
-        work_items::execution_qualified(kind, source, &self.proof.qualified)
-    }
-
-    /// 返回本次工作项展示批次的固定审批决定资格。
-    /// 同次查询的启用角色同时覆盖抄送历史与提交决定时为 true；不签发办理凭证。
-    ///
-    /// 非工作项展示查询、跨阶段或到期时拒绝；交付前仍须 validate 原查询。
-    ///
-    /// executor 为生成当前查询的原读取执行器。
-    pub fn decision_qualified(&self, executor: &mut dyn Executor) -> Result<bool> {
-        self.ensure_work_item_view(executor)?;
-        Ok(work_items::decision_qualified(&self.proof.qualified))
-    }
-
-    // 读取工作项按钮资格前核对本次固定展示入口、原读取阶段和有效期；展示结果不能脱离原查询依赖复用。
-    fn ensure_work_item_view(&self, executor: &mut dyn Executor) -> Result<()> {
-        if !work_items::view_permission(&self.proof.context.permission) {
-            return Err(Error::ValidationError("此查询不提供工作项操作展示资格".into()));
-        }
-        self.ensure_current(executor)
-    }
-
     /// 取得本次工作项查询的管理范围过滤，用于给已授权展示批次计算按钮资格。非工作项凭证拒绝；命令仍须单独执行 `require`。
     pub fn management_stages(&self) -> Result<&[Document]> {
-        if self.proof.context.permission == work_item::MANAGE {
-            return Ok(&self.stages);
+        match &self.management {
+            Some(ManagementPlan::Root) => Ok(self.stages()),
+            Some(ManagementPlan::Separate(stages)) => Ok(stages),
+            None => Err(Error::ValidationError("此查询没有管理动作过滤".into())),
         }
-        self.management.as_deref().ok_or_else(|| Error::ValidationError("此查询没有管理动作过滤".into()))
     }
 
     /// 供固定根投影核对来源份额的集合和身份描述。没有登记该来源份额时拒绝；描述本身不签发来源对象凭证。
@@ -209,12 +189,6 @@ impl CompiledAccess {
     // 个人限制和查询结果为空不能替代本标记。
     pub(crate) fn has_role_scope(&self) -> bool {
         self.proof.has_role_scope
-    }
-
-    /// 供复合资金投影判断当前启用角色是否具有整账功能资格，不证明来源可读。返回整账前仍须执行完整来源过滤并复验原查询凭证。
-    pub fn has_whole_qualification(&self) -> bool {
-        self.whole.is_some()
-            && sources::whole_qualified(&self.proof.context.permission, &self.proof.qualified)
     }
 
     /// 借用凭证绑定的真实账号，供同一授权批次补充展示资格。账号有效性仍须在交付时复验。

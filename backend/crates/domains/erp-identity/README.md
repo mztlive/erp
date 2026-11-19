@@ -16,6 +16,17 @@ identity 固定授权规则，事实读取器和 Mapping 在 server 的 `wiring/
 
 共享服务不保存当前账号、事务、候选对象或授权结果。每次检查使用本次调用的执行器读取权限、范围和对象事实。
 
+## 授权规则从哪里读
+
+| 要了解的问题 | 代码入口 |
+| --- | --- |
+| 库存仓库入口沿用哪个库存动作的资格和范围？ | [`scope_spec/catalog.rs` 的 `INVENTORY_WAREHOUSE_ENTRIES`](src/entity/access_control/scope_spec/catalog.rs) 同时供范围登记、资格检查和可查询入口枚举使用。 |
+| 收款、付款怎样区分完整对象、可见份额和存在性？ | [`rules/sources.rs`](src/service/authorization/rules/sources.rs) 按真实来源构造条件；[`resolve.rs`](src/service/authorization/resolve.rs) 根据查询输出选择条件，并保留整账条件。 |
+| 工作项的预检、按钮展示和实际办理各要求什么？ | [`work_items.rs` 的 `TASK_REQUIREMENTS`](src/service/authorization/work_items.rs) 按任务种类和真实来源登记读取权限与执行子集，同文件中的各入口按用途取用。 |
+| 审批对象或升级候选可以对应哪些真实来源？ | [`approvals.rs` 的 `MANAGEMENT_SOURCES`](src/service/authorization/approvals.rs) 登记合法来源及整账附加资格；[`approval_query.rs`](src/service/authorization/approval_query.rs) 按同一登记构造管理列表。 |
+
+跟踪一次查询时，从 [`resolve.rs`](src/service/authorization/resolve.rs) 看本次账号、动作和范围如何决定规则，再看[查询编译](src/repository/authorization/mod.rs)如何用 Mapping 将规则转换为 MongoDB 过滤条件，最后看 [`validate.rs`](src/service/authorization/validate.rs) 如何在交付前复验凭证。
+
 ## 业务授权 API
 
 | 用途                                     | 方法                                   | 返回                                   |

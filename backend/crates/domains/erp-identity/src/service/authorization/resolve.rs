@@ -9,7 +9,7 @@ use super::{AuthorizationService, rules};
 use crate::entity::access_control::scope_spec::{self, ActionKind};
 use crate::entity::authorization::{AccessContext, AccessRule, QueryModel, QueryOutput};
 use crate::entity::fingerprint::Fingerprint;
-use crate::repository::authorization::AccessProof;
+use crate::repository::authorization::{AccessProof, ResolvedFilter};
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
@@ -131,8 +131,8 @@ impl AuthorizationService {
                 executor,
             )
             .await?;
-        let management_rule =
-            self.management_condition(&context, qualified, &mut resolution, executor).await?;
+        let management_filter =
+            self.management_filter(&context, qualified, &mut resolution, executor).await?;
 
         resolution.versions.extend(
             self.grant_versions(&context.actor, &rule, resolution.whole_rule.as_ref(), executor).await?,
@@ -142,7 +142,11 @@ impl AuthorizationService {
         version.unordered(&resolution.versions, |hash, value| hash.text(value));
         version.rule(&rule);
         version.optional(resolution.whole_rule.as_ref(), Fingerprint::rule);
-        version.optional(management_rule.as_ref(), Fingerprint::rule);
+        let management_rule = match &management_filter {
+            Some(ResolvedFilter::Separate { rule, .. }) => Some(rule),
+            _ => None,
+        };
+        version.optional(management_rule, Fingerprint::rule);
         version.boolean(task);
         version.optional(model, Fingerprint::model);
 
@@ -153,7 +157,7 @@ impl AuthorizationService {
             task,
             rule,
             whole_rule: resolution.whole_rule,
-            management_rule,
+            management_filter,
             has_role_scope: resolution.has_role_scope,
             version: version.finish(),
             valid_until: resolution.valid_until,
@@ -167,28 +171,33 @@ impl AuthorizationService {
     }
 
     // 为工作项读取批次独立解析管理角色的范围，仍与根查询共享账号、有效期和读取阶段。
-    async fn management_condition(
+    async fn management_filter(
         &self,
         context: &AccessContext,
         qualified: &QualifiedPermissions,
         resolution: &mut Resolution,
         executor: &mut dyn Executor,
-    ) -> Result<Option<AccessRule>> {
-        let Some(permission) =
-            context.model.as_ref().and_then(|_| rules::management_permission(&context.permission))
-        else {
+    ) -> Result<Option<ResolvedFilter>> {
+        if context.model.is_none() {
+            return Ok(None);
+        }
+        if context.permission == work_item::MANAGE {
+            return Ok(Some(ResolvedFilter::Root));
+        }
+        let Some(permission) = rules::management_permission(&context.permission) else {
             return Ok(None);
         };
-        if !qualified.same_role(&rules::same_role_permissions(&permission)) {
-            return Ok(Some(AccessRule::Deny));
-        }
-
         let context = AccessContext { permission, ..context.clone() };
-        let scope = self.resolve_scope(&context, &context.permission, qualified, executor).await?;
-        let has_role_scope = resolution.has_role_scope;
-        resolution.include(&scope);
-        resolution.has_role_scope = has_role_scope;
-        Ok(Some(rules::data_condition(&context.permission, Some(&scope.scope))?))
+        let rule = if qualified.same_role(&rules::same_role_permissions(&context.permission)) {
+            let scope = self.resolve_scope(&context, &context.permission, qualified, executor).await?;
+            let has_role_scope = resolution.has_role_scope;
+            resolution.include(&scope);
+            resolution.has_role_scope = has_role_scope;
+            rules::data_condition(&context.permission, Some(&scope.scope))?
+        } else {
+            AccessRule::Deny
+        };
+        Ok(Some(ResolvedFilter::Separate { context: Box::new(context), rule }))
     }
 
     async fn grant_versions(
@@ -333,17 +342,17 @@ impl AuthorizationService {
             scopes.push((entry, source, scope.scope.clone()));
         }
 
-        let output = match output {
-            None | Some(QueryOutput::Object) => rules::sources::Output::Object,
-            Some(_) => rules::sources::Output::Share,
+        let condition =
+            |output| rules::sources::scoped_condition(&context.permission, qualified, &scopes, output);
+        let whole = condition(rules::sources::Output::Object)?;
+        let root = match output {
+            None | Some(QueryOutput::Object) => whole.clone(),
+            Some(QueryOutput::Share { .. } | QueryOutput::Existence { .. }) => {
+                condition(rules::sources::Output::Share)?
+            },
         };
-        resolution.whole_rule = Some(rules::sources::scoped_condition(
-            &context.permission,
-            qualified,
-            &scopes,
-            rules::sources::Output::Object,
-        )?);
-        rules::sources::scoped_condition(&context.permission, qualified, &scopes, output)
+        resolution.whole_rule = Some(whole);
+        Ok(root)
     }
 
     pub(super) async fn resolve_scope(

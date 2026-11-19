@@ -630,7 +630,7 @@ async fn payment_requires_detail_on_the_same_role_for_tasks_and_queries() {
 
 #[test]
 fn existing_read_permissions_keep_their_query_bindings() {
-    for permission in super::rules::queries::PERMISSIONS {
+    for permission in super::rules::queries::permissions() {
         empty().mapping(permission, mapping(permission)).unwrap();
     }
 }

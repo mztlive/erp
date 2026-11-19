@@ -37,8 +37,7 @@ impl AuthorizationService {
         Arc::new(Self {
             facilities: Arc::new(Unavailable),
             facts: BTreeMap::new(),
-            mappings: rules::queries::PERMISSIONS
-                .iter()
+            mappings: rules::queries::permissions()
                 .map(|permission| {
                     let mapping: Arc<dyn AccessMapping> = Arc::new(UnavailableMapping {
                         model: QueryModel {
@@ -111,7 +110,7 @@ mod tests {
     async fn every_registered_query_fails_at_identity_before_any_mapping_conversion() {
         let authorization = AuthorizationService::unavailable_for_test();
         let actor = AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin);
-        for permission in rules::queries::PERMISSIONS {
+        for permission in rules::queries::permissions() {
             let mapping = authorization.mappings.get(permission).unwrap();
             mapping.model().validate().unwrap();
             assert_eq!(mapping.model().resource, permission.resource());
@@ -130,7 +129,7 @@ mod tests {
     async fn unbound_queries_preserve_missing_binding_errors_before_identity_failure() {
         let authorization = AuthorizationService::unbound_for_test();
         let actor = AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin);
-        for permission in rules::queries::PERMISSIONS {
+        for permission in rules::queries::permissions() {
             assert!(
                 matches!(authorization.query(&actor, permission, &mut SnapshotExecutor::default()).await,
                 Err(Error::ValidationError(reason)) if reason == "缺少查询 Mapping 绑定"),
@@ -142,7 +141,7 @@ mod tests {
     #[test]
     fn unavailable_query_mapping_cannot_generate_an_authorized_key_or_filter() {
         let authorization = AuthorizationService::unavailable_for_test();
-        let permission = &rules::queries::PERMISSIONS[0];
+        let permission = rules::queries::permissions().next().unwrap();
         let mapping = authorization.mappings.get(permission).unwrap();
         let context = AccessContext {
             actor: AuditActor::new("reader".into(), "reader".into(), AccountKind::Admin),

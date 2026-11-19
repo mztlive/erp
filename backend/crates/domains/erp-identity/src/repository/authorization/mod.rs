@@ -19,8 +19,8 @@ use futures_util::future::BoxFuture;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{ExecutionBoundary, Executor};
 pub use query::CompiledAccess;
-use query::SourcePlan;
-pub(crate) use query::{AccessProof, ApprovalSource, MappingDependency};
+pub(crate) use query::{AccessProof, ApprovalSource, MappingDependency, ResolvedFilter};
+use query::{ManagementPlan, SourcePlan};
 
 use crate::entity::authorization::{
     AccessContext, AccessRule, MappingFacts, QueryModel, QueryOutput, RelationKey, RelationMatch,
@@ -30,7 +30,6 @@ use crate::entity::resource_access::ResourceKind;
 use crate::ports::AccessMapping;
 use crate::repository::fingerprint::BsonFingerprint;
 use crate::repository::resource_grants::grant_lookup;
-use crate::service::authorization::rules;
 use crate::{Error, Permission, Result};
 
 /// 一次编译共享动态准备结果及复验依赖；关联别名由各集合的 Fragment 管理。
@@ -64,7 +63,13 @@ pub(crate) async fn compile(
     let (fragment, _) = compiler.model(&proof.rule, mapping, &proof.context, 0).await?;
     let mut stages = fragment.finish();
     let (sources, whole) = compiler.plans(proof, mapping).await?;
-    let management = compiler.management(proof, mapping).await?;
+    let management = match &proof.management_filter {
+        Some(ResolvedFilter::Root) => Some(ManagementPlan::Root),
+        Some(ResolvedFilter::Separate { context, rule }) => {
+            Some(ManagementPlan::Separate(compiler.model(rule, mapping, context, 0).await?.0.finish()))
+        },
+        None => None,
+    };
     if let QueryOutput::Share { fields } | QueryOutput::Existence { fields } = &model.output {
         let mut projection = doc! { "_id": 0 };
         for field in fields {
@@ -80,7 +85,11 @@ pub(crate) async fn compile(
     version.model(model);
     version.unordered(&compiler.versions, |hash, value| hash.text(value));
     version.sequence(&stages, |hash, stage| hash.bson(&Bson::Document(stage.clone())));
-    version.optional(management.as_ref(), |hash, stages| {
+    let management_stages = match &management {
+        Some(ManagementPlan::Separate(stages)) => Some(stages),
+        _ => None,
+    };
+    version.optional(management_stages, |hash, stages| {
         hash.sequence(stages, |hash, stage| hash.bson(&Bson::Document(stage.clone())));
     });
 
@@ -124,19 +133,6 @@ fn source_rules(
 }
 
 impl Compiler<'_> {
-    // 工作项展示需要管理按钮时，在根查询同一读取阶段编译固定管理规则；不发起另一份授权查询。
-    async fn management(
-        &mut self,
-        proof: &AccessProof,
-        mapping: &Arc<dyn AccessMapping>,
-    ) -> Result<Option<Vec<Document>>> {
-        let Some(rule) = &proof.management_rule else { return Ok(None) };
-        let permission = rules::management_permission(&proof.context.permission)
-            .ok_or_else(|| Error::ValidationError("管理动作过滤与查询入口不匹配".into()))?;
-        let context = AccessContext { permission, ..proof.context.clone() };
-        Ok(Some(self.model(rule, mapping, &context, 0).await?.0.finish()))
-    }
-
     // 复合资金查询需要来源份额和整账时，使用同一次身份、范围及映射准备编译两类固定计划，沿用根执行边界。
     async fn plans(
         &mut self,
@@ -593,7 +589,7 @@ mod tests {
                 qualified: crate::QualifiedPermissions::test_grants(&[]),
                 task: false,
                 whole_rule: None,
-                management_rule: None,
+                management_filter: None,
                 has_role_scope: false,
                 rule,
                 version: "identity-v1".into(),
@@ -870,6 +866,57 @@ mod tests {
 
         mapping.revision.store(2, Ordering::Relaxed);
         assert!(matches!(plan.dependencies[1].validate(&mut executor).await, Err(Error::ConflictError(_))));
+    }
+
+    #[tokio::test]
+    async fn auxiliary_filter_uses_the_resolved_context_and_keeps_its_own_mapping_dependency() {
+        let mut executor = ReadExecutor::default();
+        let mapping = Arc::new(Mapping {
+            model: mapping("sales_order", None).model().clone(),
+            child: None,
+            versioned: Some(true),
+            revision: AtomicU64::new(1),
+            prepare_calls: AtomicU64::new(0),
+            sources: BTreeMap::new(),
+            live_only: false,
+            key_expression: None,
+            action_sensitive: true,
+        });
+        let mut query = query(AccessRule::Allow, mapping.clone(), &executor);
+        let context = AccessContext { permission: sales_order::DETAIL, ..query.proof.context.clone() };
+        query.proof.management_filter = Some(ResolvedFilter::Separate {
+            context: Box::new(context.clone()),
+            rule: AccessRule::Fact(AccessFact::Owned),
+        });
+
+        let plan = query.compile(&mut executor).await.unwrap();
+        assert_eq!(plan.dependencies.len(), 2);
+        assert_eq!(plan.dependencies[0].context, query.proof.context);
+        let dependency = &plan.dependencies[1];
+        assert_eq!(dependency.context, context);
+        assert_eq!(dependency.facts.version.as_deref(), Some("facts-detail-v1"));
+        assert_eq!(plan.proof.valid_until, dependency.facts.valid_until);
+        assert_eq!(
+            plan.management_stages().unwrap(),
+            &[doc! { "$match": { "$and": [
+                { "record_action": "detail" },
+                { "sales_owner_user_id": "u", "owner_action": "detail" }
+            ] } }]
+        );
+        dependency.validate(&mut executor).await.unwrap();
+        query.proof.management_filter =
+            Some(ResolvedFilter::Separate { context: Box::new(context), rule: AccessRule::Deny });
+        let denied = query.compile(&mut executor).await.unwrap();
+        assert_eq!(plan.stages(), denied.stages());
+        assert_ne!(plan.version(), denied.version());
+
+        query.proof.management_filter = Some(ResolvedFilter::Root);
+        let root = query.compile(&mut executor).await.unwrap();
+        assert_eq!(root.management_stages().unwrap(), root.stages());
+        assert_eq!(root.dependencies.len(), 1);
+
+        mapping.revision.store(2, Ordering::Relaxed);
+        assert!(matches!(dependency.validate(&mut executor).await, Err(Error::ConflictError(_))));
     }
 
     #[tokio::test]
@@ -1282,15 +1329,21 @@ mod tests {
         let query = query(AccessRule::RecordReadGrant(ResourceKind::SalesOrder), mapping.clone(), &executor);
         let plan = query.compile(&mut executor).await.unwrap();
 
-        let grants = ["allowed", "stale", "wrong_user", "wrong_target"]
-            .iter()
-            .map(|id| {
-                doc! {
-                    "recipient": "u", "resource": "sales_order", "action": "read", "active": true,
-                    "deleted_at": 0, "resource_id": *id, "source_id": *id, "source_version": 1
-                }
-            })
-            .collect();
+        let grants = [
+            ("allowed", "allowed"),
+            ("allowed", "second-source"),
+            ("stale", "stale"),
+            ("wrong_user", "wrong_user"),
+            ("wrong_target", "wrong_target"),
+        ]
+        .into_iter()
+        .map(|(id, source)| {
+            doc! {
+                "recipient": "u", "resource": "sales_order", "action": "read", "active": true,
+                "deleted_at": 0, "resource_id": id, "source_id": source, "source_version": 1
+            }
+        })
+        .collect();
         let source = |id: &str, user: &str, version: i32, target: &str| {
             doc! {
                 "id": id, "key": { "recipient": user }, "terminated": false, "deleted_at": 0,
@@ -1303,6 +1356,7 @@ mod tests {
                 "resource_grant_sources".into(),
                 vec![
                     source("allowed", "u", 1, "allowed"),
+                    source("second-source", "u", 1, "allowed"),
                     source("stale", "u", 2, "stale"),
                     source("wrong_user", "other", 1, "wrong_user"),
                     source("wrong_target", "u", 1, "other"),

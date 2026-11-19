@@ -63,7 +63,7 @@ impl AuthorizationService {
         if current.version != proof.version
             || current.rule != proof.rule
             || current.whole_rule != proof.whole_rule
-            || current.management_rule != proof.management_rule
+            || current.management_filter != proof.management_filter
         {
             return Err(changed());
         }

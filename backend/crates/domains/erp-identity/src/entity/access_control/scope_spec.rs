@@ -1,6 +1,7 @@
 //! 按权限保存的内部范围定义。配置、解析和导入导出共用这一份。
 mod catalog;
 
+pub(crate) use catalog::INVENTORY_WAREHOUSE_ENTRIES;
 use erp_permissions::MODULES;
 
 use crate::entity::access_control::{DataScopeType, ScopeBinding, ScopeDimension};

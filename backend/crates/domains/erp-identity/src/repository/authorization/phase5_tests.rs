@@ -107,7 +107,7 @@ fn proof(
         task: false,
         rule,
         whole_rule,
-        management_rule: None,
+        management_filter: None,
         has_role_scope: false,
         version: "phase5".into(),
         valid_until: None,

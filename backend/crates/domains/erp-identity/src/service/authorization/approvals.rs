@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 
 use erp_permissions::{
     approval_admin, approval_instance, internal, inventory, payable, policy_permission, purchase_order,
-    purchase_payment_request, receivable, sales_order, work_item,
+    purchase_payment_request, receivable, resources, sales_order, work_item,
 };
 use persistence_core::Executor;
 
@@ -45,7 +45,7 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
         permissions.push(definition.clone());
         permissions.push(runtime.clone());
     }
-    permissions.push(policy_permission::FINANCE_LEDGER_READ);
+    permissions.extend(MANAGEMENT_SOURCES.iter().filter_map(|source| source.additional.clone()));
     if permission == &inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL {
         permissions.push(inventory::STOCK_ADJUSTMENT_DETAIL);
     }
@@ -54,21 +54,74 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     permissions
 }
 
-pub(super) fn source_permissions() -> Vec<Permission> {
-    vec![
-        sales_order::DETAIL,
-        purchase_order::DETAIL,
-        inventory::STOCK_ADJUSTMENT_DETAIL,
-        purchase_payment_request::DETAIL,
-        receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL,
-        receivable::CUSTOMER_RECEIPT_DETAIL,
-        receivable::ACCOUNT_DETAIL,
-        payable::SUPPLIER_PAYMENT_DETAIL,
-        payable::ACCOUNT_DETAIL,
-    ]
+pub(super) struct ManagementSource {
+    pub(super) permission: Permission,
+    subjects: &'static [&'static str],
+    additional: Option<Permission>,
 }
 
-fn requirement<'a>(entry: &Permission, object: &'a ObjectFacts) -> Result<(Permission, &'a ObjectFacts)> {
+impl ManagementSource {
+    const fn scoped(permission: Permission, subjects: &'static [&'static str]) -> Self {
+        Self { permission, subjects, additional: None }
+    }
+
+    const fn whole_ledger(permission: Permission, subjects: &'static [&'static str]) -> Self {
+        Self { permission, subjects, additional: Some(policy_permission::FINANCE_LEDGER_READ) }
+    }
+
+    pub(super) fn add_qualification(&self, required: &mut Vec<Permission>) {
+        required.extend(self.additional.clone());
+    }
+}
+
+// 分区先按冻结类型登记顺序，再按同一类型的真实来源顺序展开。
+static MANAGEMENT_SOURCES: &[ManagementSource] = &[
+    ManagementSource::scoped(
+        sales_order::DETAIL,
+        &[resources::SALES_ORDER, resources::VOUCHER_SALES_ORDER, resources::SALES_CHANGE_ORDER],
+    ),
+    ManagementSource::scoped(
+        purchase_order::DETAIL,
+        &[resources::PURCHASE_ORDER, resources::PURCHASE_CHANGE_ORDER],
+    ),
+    ManagementSource::scoped(inventory::STOCK_ADJUSTMENT_DETAIL, &[resources::STOCK_ADJUSTMENT]),
+    ManagementSource::scoped(purchase_payment_request::DETAIL, &[resources::PURCHASE_PAYMENT_REQUEST]),
+    ManagementSource::scoped(
+        receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL,
+        &[resources::SALES_INVOICE_REQUEST],
+    ),
+    ManagementSource::whole_ledger(
+        receivable::CUSTOMER_RECEIPT_DETAIL,
+        &[resources::CUSTOMER_RECEIPT, resources::RECEIPT_REVERSAL, resources::CUSTOMER_REFUND],
+    ),
+    ManagementSource::scoped(receivable::ACCOUNT_DETAIL, &[resources::CUSTOMER_REFUND]),
+    ManagementSource::whole_ledger(
+        payable::SUPPLIER_PAYMENT_DETAIL,
+        &[resources::PAYMENT_REVERSAL, resources::SUPPLIER_REFUND],
+    ),
+    ManagementSource::scoped(payable::ACCOUNT_DETAIL, &[resources::SUPPLIER_REFUND]),
+];
+
+fn subject_sources(subject: &str) -> impl Iterator<Item = &'static ManagementSource> {
+    MANAGEMENT_SOURCES.iter().filter(move |source| source.subjects.contains(&subject))
+}
+
+fn subject_source(subject: &str, resource: &str) -> Option<&'static ManagementSource> {
+    subject_sources(subject).find(|source| source.permission.resource() == resource)
+}
+
+pub(super) fn management_partitions()
+-> impl Iterator<Item = (&'static str, &'static Permission, &'static ManagementSource)> {
+    approval_admin::TYPES.iter().flat_map(|(subject, _, admin)| {
+        let subject = *subject;
+        subject_sources(subject).map(move |source| (subject, admin, source))
+    })
+}
+
+fn requirement<'a>(
+    entry: &Permission,
+    object: &'a ObjectFacts,
+) -> Result<(&'static Permission, &'static ManagementSource, &'a ObjectFacts)> {
     let subject_type = object.subject_type.get()?;
     let (_, definition, runtime) = approval_admin::TYPES
         .iter()
@@ -87,52 +140,32 @@ fn requirement<'a>(entry: &Permission, object: &'a ObjectFacts) -> Result<(Permi
     if related.expected_ids.len() != 1 {
         return Err(Error::ValidationError("审批管理的完整来源集合不符".into()));
     }
-    if !allows_source(subject_type, &source.resource) {
-        return Err(Error::ValidationError("审批冻结类型与真实授权来源不匹配".into()));
-    }
-    Ok((admin.clone(), source))
-}
-
-pub(super) fn allows_source(subject_type: &str, resource: &str) -> bool {
-    match subject_type {
-        "sales_order" | "voucher_sales_order" | "sales_change_order" => resource == "sales_order",
-        "purchase_order" | "purchase_change_order" => resource == "purchase_order",
-        "stock_adjustment" => resource == "stock_adjustment",
-        "sales_invoice_request" => resource == "sales_invoice_request",
-        "purchase_payment_request" => resource == "purchase_payment_request",
-        "customer_receipt" | "receipt_reversal" => resource == "customer_receipt",
-        "payment_reversal" => resource == "supplier_payment",
-        "customer_refund" => matches!(resource, "customer_receipt" | "receivable_account"),
-        "supplier_refund" => matches!(resource, "supplier_payment" | "payable_account"),
-        _ => false,
-    }
+    let policy = subject_source(subject_type, &source.resource)
+        .ok_or_else(|| Error::ValidationError("审批冻结类型与真实授权来源不匹配".into()))?;
+    Ok((admin, policy, source))
 }
 
 pub(super) fn source_permission(resource: &str) -> Result<Permission> {
-    source_permissions()
-        .into_iter()
-        .find(|permission| permission.resource() == resource)
+    MANAGEMENT_SOURCES
+        .iter()
+        .find(|source| source.permission.resource() == resource)
+        .map(|source| source.permission.clone())
         .ok_or_else(|| Error::ValidationError("审批管理的真实来源未接入授权".into()))
 }
 
 pub(super) fn candidate_source(candidate: &ObjectFacts) -> Result<(RelationKey, String)> {
     let kind = candidate.subject_type.get()?;
-    let resource = match &candidate.subject_source_resource {
-        FactValue::Known(resource) => resource.as_str(),
-        FactValue::Missing => match kind.as_str() {
-            "sales_order" | "voucher_sales_order" | "sales_change_order" => "sales_order",
-            "purchase_order" | "purchase_change_order" => "purchase_order",
-            "stock_adjustment" => "stock_adjustment",
-            "sales_invoice_request" => "sales_invoice_request",
-            "purchase_payment_request" => "purchase_payment_request",
-            "customer_receipt" | "receipt_reversal" => "customer_receipt",
-            "payment_reversal" => "supplier_payment",
-            _ => return Err(Error::ValidationError("审批升级候选缺少真实来源资源身份".into())),
+    let source = match &candidate.subject_source_resource {
+        FactValue::Known(resource) => subject_source(kind, resource)
+            .ok_or_else(|| Error::ValidationError("审批升级的真实来源与主体类型错配".into()))?,
+        FactValue::Missing => {
+            let mut sources = subject_sources(kind);
+            let (Some(source), None) = (sources.next(), sources.next()) else {
+                return Err(Error::ValidationError("审批升级候选缺少真实来源资源身份".into()));
+            };
+            source
         },
     };
-    if !allows_source(kind, resource) {
-        return Err(Error::ValidationError("审批升级的真实来源与主体类型错配".into()));
-    }
 
     let key = RelationKey::parse("subject_source")?;
     let related = candidate
@@ -142,7 +175,7 @@ pub(super) fn candidate_source(candidate: &ObjectFacts) -> Result<(RelationKey, 
     if related.expected_ids.len() != 1 || !related.objects.is_empty() {
         return Err(Error::ValidationError("审批升级候选只能提供唯一真实来源引用".into()));
     }
-    Ok((key, resource.into()))
+    Ok((key, source.permission.resource().into()))
 }
 
 pub(super) fn management_permissions(entry: &Permission, admin: &Permission) -> Vec<Permission> {
@@ -156,9 +189,8 @@ pub(super) fn management_permissions(entry: &Permission, admin: &Permission) -> 
     vec![entry, approval_instance::INSTANCE_LIST, admin.clone()]
 }
 
-fn ensure_admin(entry: &Permission, admin: Permission, qualified: &QualifiedPermissions) -> Result<()> {
-    let required = management_permissions(entry, &admin);
-    if qualified.same_role(&required) {
+fn ensure_admin(required: &[Permission], qualified: &QualifiedPermissions) -> Result<()> {
+    if qualified.same_role(required) {
         Ok(())
     } else {
         Err(Error::Forbidden("当前账号不具备该主体类型的同角色完整审批管理资格".into()))
@@ -208,16 +240,19 @@ impl AuthorizationService {
         facts: &TargetFacts,
         executor: &mut dyn Executor,
     ) -> Result<AccessProof> {
-        let (admin, source) = requirement(&proof.context.permission, object)?;
-        ensure_admin(&proof.context.permission, admin.clone(), &proof.qualified)?;
-        let permission = source_permission(&source.resource)?;
-        let mut required = management_permissions(&proof.context.permission, &admin);
-        if matches!(source.resource.as_str(), "customer_receipt" | "supplier_payment") {
-            required.push(policy_permission::FINANCE_LEDGER_READ);
-        }
-
+        let entry = &proof.context.permission;
+        let (admin, policy, source) = requirement(entry, object)?;
+        let mut required = management_permissions(entry, admin);
+        ensure_admin(&required, &proof.qualified)?;
+        policy.add_qualification(&mut required);
         let mut source_proof = self
-            .resolve_approval_source(&proof.context, &permission, &required, &proof.qualified, executor)
+            .resolve_approval_source(
+                &proof.context,
+                &policy.permission,
+                &required,
+                &proof.qualified,
+                executor,
+            )
             .await?;
 
         let grants = self.target_grants(&source_proof.context, &source_proof.rule, facts, executor).await?;
@@ -325,7 +360,7 @@ impl AuthorizationService {
             task: false,
             rule,
             whole_rule: None,
-            management_rule: None,
+            management_filter: None,
             has_role_scope: resolution.has_role_scope,
             version: version.finish(),
             valid_until: resolution.valid_until,
@@ -427,30 +462,55 @@ mod tests {
     fn management_requires_the_actual_type_admin_in_the_same_enabled_role() {
         let entry = approval_instance::CANCEL_BLOCKED;
         let object = instance("sales_order", "sales_order");
-        let (admin, _) = requirement(&entry, &object).unwrap();
-        let required = [entry.clone(), approval_instance::INSTANCE_LIST, admin.clone()];
-        assert!(
-            ensure_admin(&entry, admin.clone(), &QualifiedPermissions::test_grants(&[("role", &required)]))
-                .is_ok()
-        );
+        let (admin, _, _) = requirement(&entry, &object).unwrap();
+        let required = management_permissions(&entry, admin);
+        assert!(ensure_admin(&required, &QualifiedPermissions::test_grants(&[("role", &required)])).is_ok());
 
         let split =
             QualifiedPermissions::test_grants(&[("entry", &required[..2]), ("admin", &required[2..])]);
-        assert!(matches!(ensure_admin(&entry, admin.clone(), &split), Err(Error::Forbidden(_))));
+        assert!(matches!(ensure_admin(&required, &split), Err(Error::Forbidden(_))));
 
-        let wrong_type =
-            [entry.clone(), approval_instance::INSTANCE_LIST, approval_admin::PURCHASE_ORDER_RUNTIME];
+        let wrong_type = [entry, approval_instance::INSTANCE_LIST, approval_admin::PURCHASE_ORDER_RUNTIME];
         assert!(
-            ensure_admin(&entry, admin, &QualifiedPermissions::test_grants(&[("wrong", &wrong_type)]))
-                .is_err()
+            ensure_admin(&required, &QualifiedPermissions::test_grants(&[("wrong", &wrong_type)])).is_err()
         );
+    }
+
+    #[test]
+    fn upgrade_candidate_only_defaults_a_unique_legal_source() {
+        let mut candidate = instance("receipt_reversal", "customer_receipt");
+        candidate.relations.values_mut().next().unwrap().objects.clear();
+        let (key, resource) = candidate_source(&candidate).unwrap();
+        assert_eq!(key.as_str(), "subject_source");
+        assert_eq!(resource, "customer_receipt");
+
+        for (kind, legal, wrong) in [
+            ("customer_refund", ["customer_receipt", "receivable_account"], "payable_account"),
+            ("supplier_refund", ["supplier_payment", "payable_account"], "receivable_account"),
+        ] {
+            candidate.subject_type = FactValue::Known(kind.into());
+            candidate.subject_source_resource = FactValue::Missing;
+            assert!(matches!(
+                candidate_source(&candidate),
+                Err(Error::ValidationError(message)) if message == "审批升级候选缺少真实来源资源身份"
+            ));
+            for source in legal {
+                candidate.subject_source_resource = FactValue::Known(source.into());
+                assert_eq!(candidate_source(&candidate).unwrap().1, source);
+            }
+            candidate.subject_source_resource = FactValue::Known(wrong.into());
+            assert!(matches!(
+                candidate_source(&candidate),
+                Err(Error::ValidationError(message)) if message == "审批升级的真实来源与主体类型错配"
+            ));
+        }
     }
 
     #[test]
     fn binding_upgrade_uses_definition_admin_and_rejects_missing_or_wrong_sources() {
         let entry = approval_instance::UPGRADE_BINDING;
         let mut object = instance("receipt_reversal", "customer_receipt");
-        assert_eq!(requirement(&entry, &object).unwrap().0, approval_admin::RECEIPT_REVERSAL_DEFINITION);
+        assert_eq!(requirement(&entry, &object).unwrap().0, &approval_admin::RECEIPT_REVERSAL_DEFINITION);
         object.subject_type = FactValue::Known("purchase_order".into());
         assert!(requirement(&entry, &object).is_err());
         object.subject_type = FactValue::Missing;

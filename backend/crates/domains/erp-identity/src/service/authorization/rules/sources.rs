@@ -8,8 +8,6 @@ use erp_permissions::{
 use super::same_role_permissions;
 use crate::entity::access_control::ResolvedScope;
 use crate::entity::access_control::scope_spec::{self, ActionKind};
-#[cfg(test)]
-use crate::entity::authorization::{AccessContext, ObjectFacts};
 use crate::entity::authorization::{AccessFact, AccessRule, FactKind, RelationKey, RelationMatch};
 use crate::entity::resource_access::ResourceKind;
 use crate::{Error, Permission, QualifiedPermissions, Result};
@@ -62,21 +60,13 @@ pub(crate) fn qualifications(permission: &Permission) -> Result<Vec<Permission>>
 
 // 启动验证来源 Mapping 时检查所有固定执行分支，不因当前账号或人员范围暂未启用某分支而跳过。
 pub(super) fn binding_condition(permission: &Permission, output: Output) -> Result<AccessRule> {
-    let partitions =
-        conditions_with(permission, &|_| true, &|_, source| super::capability_scope(source), output)?;
-    let mut rule = AccessRule::any(partitions.iter().map(Partition::condition).collect::<Result<_>>()?);
-    if permission == &receivable::CUSTOMER_RECEIPT_SUBMIT {
-        rule = AccessRule::all(vec![rule, AccessRule::Fact(AccessFact::Owned)])
-            .requiring(&BTreeSet::from([FactKind::Owner]));
-    }
-    Ok(rule)
+    condition_with(permission, &|_| true, &|_, source| super::capability_scope(source), output)
 }
 
-/// 查询转换必须同时应用分区条件和数据条件，不能只编译 rule。
-pub(super) struct Partition {
+struct Partition {
     present: Vec<Source>,
     absent: Vec<Source>,
-    pub rule: AccessRule,
+    rule: AccessRule,
     nested: Option<(Source, Vec<Partition>)>,
 }
 
@@ -169,29 +159,28 @@ pub(crate) fn whole_qualified(permission: &Permission, qualified: &QualifiedPerm
             || qualified.same_role(&[permission.clone(), policy_permission::FINANCE_LEDGER_READ]))
 }
 
-// 按真实完整来源构造固定数据分区。不能用授权已经通过的子集选择分区，否则会把部分覆盖误作整账资格。
-#[cfg(test)]
-pub(super) fn conditions(
+// 收款提交必须在完整来源分区之外同时满足收款记录的经办责任。
+fn condition_with(
     permission: &Permission,
-    qualified: &QualifiedPermissions,
-    scopes: &[(Permission, ResolvedScope)],
+    qualifies: &dyn Fn(&[Permission]) -> bool,
+    scopes: &dyn Fn(&Permission, &Permission) -> Result<ResolvedScope>,
     output: Output,
-) -> Result<Vec<Partition>> {
-    conditions_with(
-        permission,
-        &|required| qualified.same_role(required),
-        &|_, permission| {
-            scopes
-                .iter()
-                .find(|(key, _)| key == permission)
-                .map(|(_, scope)| scope.clone())
-                .ok_or_else(|| Error::ValidationError(format!("缺少来源范围：{permission}")))
-        },
-        output,
-    )
+) -> Result<AccessRule> {
+    let partitions = partitions_with(permission, qualifies, scopes, output)?;
+    let rule = partition_condition(&partitions)?;
+    if permission == &receivable::CUSTOMER_RECEIPT_SUBMIT {
+        return Ok(AccessRule::all(vec![rule, AccessRule::Fact(AccessFact::Owned)])
+            .requiring(&BTreeSet::from([FactKind::Owner])));
+    }
+    Ok(rule)
 }
 
-fn conditions_with(
+fn partition_condition(partitions: &[Partition]) -> Result<AccessRule> {
+    Ok(AccessRule::any(partitions.iter().map(Partition::condition).collect::<Result<_>>()?))
+}
+
+// 按真实完整来源确定分区，不能用已获准来源的子集判断是否具备整账资格。
+fn partitions_with(
     permission: &Permission,
     qualifies: &dyn Fn(&[Permission]) -> bool,
     scopes: &dyn Fn(&Permission, &Permission) -> Result<ResolvedScope>,
@@ -295,13 +284,7 @@ pub(crate) fn scoped_condition(
             .map(|(_, _, scope)| scope.clone())
             .ok_or_else(|| Error::ValidationError(format!("缺少来源范围：{entry} -> {source}")))
     };
-    let partitions = conditions_with(permission, &|required| qualified.same_role(required), &lookup, output)?;
-    let mut rule = AccessRule::any(partitions.iter().map(Partition::condition).collect::<Result<_>>()?);
-    if permission == &receivable::CUSTOMER_RECEIPT_SUBMIT {
-        rule = AccessRule::all(vec![rule, AccessRule::Fact(AccessFact::Owned)])
-            .requiring(&BTreeSet::from([FactKind::Owner]));
-    }
-    Ok(rule)
+    condition_with(permission, &|required| qualified.same_role(required), &lookup, output)
 }
 
 // 审批管理取证已证明完整同角色功能组合后，只用这组合格角色解析来源范围，不额外要求来源菜单。
@@ -316,11 +299,11 @@ pub(crate) fn management_condition(
             .map(|(_, scope)| scope.clone())
             .ok_or_else(|| Error::ValidationError("缺少审批管理来源范围".into()))
     };
-    let partitions = conditions_with(permission, &|_| true, &lookup, Output::Object)?;
-    Ok(AccessRule::any(partitions.iter().map(Partition::condition).collect::<Result<_>>()?))
+    let partitions = partitions_with(permission, &|_| true, &lookup, Output::Object)?;
+    partition_condition(&partitions)
 }
 
-// 将来源分区与实际来源数据条件编成同一表达式，单条对象授权与列表查询使用相同语义。
+// 局部测试提供按来源索引的范围，最终条件仍走实际规则。
 #[cfg(test)]
 pub(crate) fn data_condition(
     permission: &Permission,
@@ -328,13 +311,18 @@ pub(crate) fn data_condition(
     scopes: &[(Permission, ResolvedScope)],
     output: Output,
 ) -> Result<AccessRule> {
-    let partitions = conditions(permission, qualified, scopes, output)?;
-    let mut rule = AccessRule::any(partitions.iter().map(Partition::condition).collect::<Result<_>>()?);
-    if permission == &receivable::CUSTOMER_RECEIPT_SUBMIT {
-        rule = AccessRule::all(vec![rule, AccessRule::Fact(AccessFact::Owned)])
-            .requiring(&BTreeSet::from([FactKind::Owner]));
-    }
-    Ok(rule)
+    condition_with(
+        permission,
+        &|required| qualified.same_role(required),
+        &|_, permission| {
+            scopes
+                .iter()
+                .find(|(key, _)| key == permission)
+                .map(|(_, scope)| scope.clone())
+                .ok_or_else(|| Error::ValidationError(format!("缺少来源范围：{permission}")))
+        },
+        output,
+    )
 }
 
 impl Partition {
@@ -355,30 +343,11 @@ impl Partition {
                 mode: RelationMatch::ExactlyOne,
                 rule: Box::new(AccessRule::Independent {
                     permission: source.permission(),
-                    rule: Box::new(AccessRule::any(
-                        partitions.iter().map(Self::condition).collect::<Result<_>>()?,
-                    )),
+                    rule: Box::new(partition_condition(partitions)?),
                 }),
             });
         }
         Ok(AccessRule::all(rules))
-    }
-
-    // 按原始关系判断来源分区。只有已确认无引用才匹配空分区，缺读或损坏不能当作无来源。
-    #[cfg(test)]
-    pub(super) fn matches(&self, object: &ObjectFacts) -> Result<bool> {
-        let mut matches = true;
-        for source in self.present.iter().chain(&self.absent) {
-            let relation = object
-                .relations
-                .get(&RelationKey::parse(source.relation())?)
-                .ok_or_else(|| Error::ValidationError("来源分区事实未读取".into()))?;
-            if relation.expected_ids.is_empty() && !relation.objects.is_empty() {
-                return Err(Error::ValidationError("来源分区身份错配".into()));
-            }
-            matches &= self.present.contains(source) != relation.expected_ids.is_empty();
-        }
-        Ok(matches)
     }
 }
 
@@ -393,7 +362,7 @@ fn refund_conditions(
         let permission = source.permission();
         let allowed = qualifies(&same_role_permissions(&permission));
         let nested =
-            if allowed { conditions_with(&permission, qualifies, scopes, Output::Object)? } else { vec![] };
+            if allowed { partitions_with(&permission, qualifies, scopes, Output::Object)? } else { vec![] };
         partitions.push(Partition {
             present: vec![*source],
             absent: sources.iter().copied().filter(|item| item != source).collect(),
@@ -404,30 +373,14 @@ fn refund_conditions(
     Ok(partitions)
 }
 
-impl Partition {
-    // 递归检查退款实际资金根是否满足相同分区规则，不能只对可见来源子集完成完整性校验。
-    #[cfg(test)]
-    fn allows(
-        &self,
-        context: &AccessContext,
-        object: &ObjectFacts,
-        grants: &BTreeSet<(ResourceKind, String)>,
-    ) -> Result<bool> {
-        self.condition()?.allows_object(context.actor.id(), object, grants)
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use application_core::AuditActor;
-    use erp_core::AccountKind;
-    use erp_core::common::time::Instant;
     use erp_permissions::{cost, purchase_payment_request, returns};
 
     use super::*;
     use crate::entity::access_control::ScopeClause;
     use crate::entity::access_control::scope_spec::{self, ActionKind};
-    use crate::entity::authorization::{FactValue, RelatedObjects};
+    use crate::entity::authorization::{FactValue, ObjectFacts, RelatedObjects};
 
     fn qualifications(permission: &Permission, ledger: bool) -> QualifiedPermissions {
         let mut required = same_role_permissions(permission);
@@ -460,15 +413,6 @@ mod tests {
                 },
             ),
         ]
-    }
-    fn context(permission: &Permission) -> AccessContext {
-        AccessContext {
-            actor: AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin),
-            permission: permission.clone(),
-            resource: permission.resource().into(),
-            model: None,
-            as_of: Instant::now(),
-        }
     }
     fn child(id: &str, owner: &str) -> ObjectFacts {
         ObjectFacts {
@@ -507,11 +451,7 @@ mod tests {
         scopes: &[(Permission, ResolvedScope)],
         grants: &BTreeSet<(ResourceKind, String)>,
     ) -> Result<bool> {
-        data_condition(permission, qualified, scopes, Output::Object)?.allows_object(
-            context(permission).actor.id(),
-            object,
-            grants,
-        )
+        data_condition(permission, qualified, scopes, Output::Object)?.allows_object("actor", object, grants)
     }
     #[test]
     fn cost_source_uses_scope_or_grant_and_requires_complete_facts_and_sources() {
@@ -551,9 +491,8 @@ mod tests {
         let permission = cost::ENTRY_LIST;
         let object = root(&permission, vec![child("s1", "actor")]);
         let qualified = qualifications(&permission, false);
-        let partitions = conditions(&permission, &qualified, &scopes(), Output::Share).unwrap();
-        assert!(partitions.iter().any(|partition| partition.matches(&object).unwrap()
-            && partition.allows(&context(&permission), &object, &BTreeSet::new()).unwrap()));
+        let share = data_condition(&permission, &qualified, &scopes(), Output::Share).unwrap();
+        assert!(share.allows_object("actor", &object, &BTreeSet::new()).unwrap());
         assert!(!check(&permission, &qualified, &object, &scopes(), &BTreeSet::new()).unwrap());
 
         let create = cost::ENTRY_CREATE;
@@ -606,9 +545,8 @@ mod tests {
         let qualified = qualifications(&permission, false);
         let object = root(&permission, vec![child("s1", "actor"), child("s2", "other")]);
         assert!(!check(&permission, &qualified, &object, &scopes(), &BTreeSet::new()).unwrap());
-        let shares = conditions(&permission, &qualified, &scopes(), Output::Share).unwrap();
-        assert!(shares.iter().any(|partition| partition.matches(&object).unwrap()
-            && partition.allows(&context(&permission), &object, &BTreeSet::new()).unwrap()));
+        let share = data_condition(&permission, &qualified, &scopes(), Output::Share).unwrap();
+        assert!(share.allows_object("actor", &object, &BTreeSet::new()).unwrap());
 
         let ledger = qualifications(&permission, true);
         assert!(!check(&permission, &ledger, &object, &scopes(), &BTreeSet::new()).unwrap());
@@ -628,6 +566,44 @@ mod tests {
         ));
     }
     #[test]
+    fn receipt_submit_uses_the_same_final_condition_and_requires_both_handler_and_sources() {
+        let permission = receivable::CUSTOMER_RECEIPT_SUBMIT;
+        let qualified = qualifications(&permission, false);
+        let source = sales_order::DETAIL;
+        let scope = super::super::capability_scope(&source).unwrap();
+        let runtime_scopes = [(permission.clone(), source.clone(), scope.clone())];
+        let rule = scoped_condition(&permission, &qualified, &runtime_scopes, Output::Object).unwrap();
+        assert_eq!(binding_condition(&permission, Output::Object).unwrap(), rule);
+        assert_eq!(
+            data_condition(&permission, &qualified, &[(source, scope)], Output::Object).unwrap(),
+            rule
+        );
+        assert!(matches!(
+            scoped_condition(&permission, &qualified, &runtime_scopes, Output::Share),
+            Err(Error::ValidationError(_))
+        ));
+
+        let mut receipt = root(&permission, vec![]);
+        let grants = BTreeSet::new();
+        receipt.owner_id = FactValue::Known(Some("actor".into()));
+        assert!(rule.allows_object("actor", &receipt, &grants).unwrap());
+        receipt.owner_id = FactValue::Known(Some("other".into()));
+        assert!(!rule.allows_object("actor", &receipt, &grants).unwrap());
+        receipt.owner_id = FactValue::Missing;
+        assert!(matches!(rule.allows_object("actor", &receipt, &grants), Err(Error::ValidationError(_))));
+
+        let mut sale = child("s1", "other");
+        sale.collaborators = FactValue::Known(BTreeSet::new());
+        let mut receipt = root(&permission, vec![sale]);
+        receipt.owner_id = FactValue::Known(Some("actor".into()));
+        assert!(!rule.allows_object("actor", &receipt, &grants).unwrap());
+        let grants = [(ResourceKind::SalesOrder, "s1".into())].into();
+        assert!(rule.allows_object("actor", &receipt, &grants).unwrap());
+        receipt.relations.clear();
+        assert!(matches!(rule.allows_object("actor", &receipt, &grants), Err(Error::ValidationError(_))));
+    }
+
+    #[test]
     fn all_registered_source_actions_execute_and_commands_reject_share_output() {
         for resource in scope_spec::resources() {
             for permission in scope_spec::actions(resource) {
@@ -646,7 +622,7 @@ mod tests {
 
         let permission = purchase_payment_request::CREATE;
         assert!(matches!(
-            conditions(&permission, &qualifications(&permission, false), &scopes(), Output::Share),
+            data_condition(&permission, &qualifications(&permission, false), &scopes(), Output::Share),
             Err(Error::ValidationError(_))
         ));
     }

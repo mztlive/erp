@@ -2,12 +2,14 @@
 use std::sync::Arc;
 
 use erp_core::common::time::Instant;
-use erp_permissions::{approval_admin, approval_instance, internal};
+use erp_permissions::{approval_admin, approval_instance, internal, policy_permission};
 use persistence_core::ReadExecutor;
 use persistence_core::testing::SnapshotExecutor;
 
 use super::fixtures::{Facts, Identity, actor, complete, object};
-use crate::entity::authorization::{AccessTarget, FactValue, ObjectFacts, RelatedObjects, RelationKey};
+use crate::entity::authorization::{
+    AccessRule, AccessTarget, FactValue, ObjectFacts, RelatedObjects, RelationKey,
+};
 use crate::repository::authorization::testing::management_members;
 use crate::{AuthorizationService, Error};
 
@@ -102,6 +104,50 @@ async fn management_query_does_not_splice_type_admin_from_another_role_or_other_
     let access = service.query(&actor(), &internal::APPROVAL_MANAGEMENT_READ, &mut executor).await.unwrap();
     assert_eq!(management_members(&access), ["purchase"]);
     service.validate(&access, &mut executor).await.unwrap();
+}
+
+#[tokio::test]
+async fn refund_management_query_requires_same_role_ledger_only_for_funds_sources() {
+    let (service, identity, _) = setup();
+    let refund_admin = vec![
+        approval_instance::INSTANCE_LIST,
+        approval_admin::CUSTOMER_REFUND_RUNTIME,
+        approval_admin::SUPPLIER_REFUND_RUNTIME,
+    ];
+    let ledger = policy_permission::FINANCE_LEDGER_READ;
+    let mut executor = SnapshotExecutor::default();
+    for combined in [false, true] {
+        identity.state.lock().unwrap().grants = if combined {
+            let mut grants = refund_admin.clone();
+            grants.push(ledger.clone());
+            vec![("manager".into(), grants)]
+        } else {
+            vec![("manager".into(), refund_admin.clone()), ("ledger".into(), vec![ledger.clone()])]
+        };
+        let access =
+            service.query(&actor(), &internal::APPROVAL_MANAGEMENT_READ, &mut executor).await.unwrap();
+        let AccessRule::Any(partitions) = &access.proof.rule else {
+            panic!("管理列表必须保留两个退款类型的账户来源");
+        };
+        let keys = partitions
+            .iter()
+            .map(|partition| match partition {
+                AccessRule::Related { relation, .. } => relation.as_str(),
+                _ => panic!("退款分区必须检查真实来源"),
+            })
+            .collect::<Vec<_>>();
+        let expected: &[&str] = if combined {
+            &[
+                "management_customer_refund_customer_receipt",
+                "management_customer_refund_receivable_account",
+                "management_supplier_refund_supplier_payment",
+                "management_supplier_refund_payable_account",
+            ]
+        } else {
+            &["management_customer_refund_receivable_account", "management_supplier_refund_payable_account"]
+        };
+        assert_eq!(keys.as_slice(), expected);
+    }
 }
 
 #[tokio::test]

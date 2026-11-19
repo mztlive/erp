@@ -44,7 +44,7 @@ pub(crate) enum TargetForm {
 // 取固定入口要求的完整同角色功能权限组合，不接受业务调用方改动所需集合。
 pub(crate) fn same_role_permissions(permission: &Permission) -> Vec<Permission> {
     if let Some(source) = inventory_warehouses::source(permission) {
-        return same_role_permissions(&source);
+        return same_role_permissions(source);
     }
     if transfers::supports(permission) {
         return vec![];
@@ -226,7 +226,7 @@ pub(super) fn ensure_target(permission: &Permission, kind: ActionKind, target: T
 // 区分允许已有记录读取的动作与必须先进入快照事务的其他对象操作。
 pub(super) fn is_read(permission: &Permission) -> bool {
     if let Some(source) = inventory_warehouses::source(permission) {
-        return is_read(&source);
+        return is_read(source);
     }
     if transfers::supports(permission) {
         return true;
@@ -345,7 +345,7 @@ fn record_grant(permission: &Permission) -> bool {
 // 按固定权限登记决定是否能编译查询，不用动作名称推断；可查询不意味相同权限的写入可绕过事务要求。
 pub(super) fn query_supported(permission: &Permission) -> Result<bool> {
     scope_spec::kind(permission)?;
-    Ok(queries::PERMISSIONS.contains(permission))
+    Ok(queries::permissions().any(|entry| entry == permission))
 }
 
 // 供 Builder 枚举已接入的全部固定权限规则，不用公共菜单目录代替实际可执行的规则集。

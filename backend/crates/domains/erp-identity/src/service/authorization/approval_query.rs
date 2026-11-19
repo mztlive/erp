@@ -1,8 +1,8 @@
 //! 管理列表按冻结类型和唯一真实来源编译完整对象条件。
-use erp_permissions::{approval_admin, internal, policy_permission};
+use erp_permissions::internal;
 use persistence_core::Executor;
 
-use super::approvals::{allows_source, management_permissions, scoped_source_condition, source_permissions};
+use super::approvals::{management_partitions, management_permissions, scoped_source_condition};
 use super::resolve::Resolution;
 use super::{AuthorizationService, rules};
 use crate::entity::access_control::scope_spec::{self, ActionKind};
@@ -22,19 +22,18 @@ fn relation(subject: &str, source: &Permission, rule: AccessRule) -> Result<Acce
 // 启动登记审批列表时构造涵盖全部固定分区及嵌套来源的能力条件，不按当前操作人的资格删减。
 pub(super) fn query_binding_condition() -> Result<AccessRule> {
     let mut partitions = Vec::new();
-    for (subject, _, _) in approval_admin::TYPES {
-        for source in source_permissions().into_iter().filter(|p| allows_source(subject, p.resource())) {
-            let requests = if scope_spec::kind(&source)? == ActionKind::Source {
-                rules::sources::scope_requests(&source)?
-            } else {
-                vec![(source.clone(), source.clone())]
-            };
-            let scopes = requests
-                .into_iter()
-                .map(|(_, source)| Ok((source.clone(), rules::capability_scope(&source)?)))
-                .collect::<Result<Vec<_>>>()?;
-            partitions.push(relation(subject, &source, scoped_source_condition(&source, &scopes)?)?);
-        }
+    for (subject, _, policy) in management_partitions() {
+        let source = &policy.permission;
+        let requests = if scope_spec::kind(source)? == ActionKind::Source {
+            rules::sources::scope_requests(source)?
+        } else {
+            vec![(source.clone(), source.clone())]
+        };
+        let scopes = requests
+            .into_iter()
+            .map(|(_, source)| Ok((source.clone(), rules::capability_scope(&source)?)))
+            .collect::<Result<Vec<_>>>()?;
+        partitions.push(relation(subject, source, scoped_source_condition(source, &scopes)?)?);
     }
     Ok(AccessRule::any(partitions))
 }
@@ -49,31 +48,66 @@ impl AuthorizationService {
         executor: &mut dyn Executor,
     ) -> Result<AccessRule> {
         let mut partitions = Vec::new();
-        for (subject, _, admin) in approval_admin::TYPES {
-            let required = management_permissions(&internal::APPROVAL_MANAGEMENT_READ, admin);
-            for source in source_permissions().into_iter().filter(|p| allows_source(subject, p.resource())) {
-                let mut required = required.clone();
-                if matches!(source.resource(), "customer_receipt" | "supplier_payment") {
-                    required.push(policy_permission::FINANCE_LEDGER_READ);
-                }
-                if !qualified.same_role(&required) {
-                    continue;
-                }
-
-                let source_context = AccessContext { resource: source.resource().into(), ..context.clone() };
-                let rule = self
-                    .approval_source_condition(
-                        &source_context,
-                        &source,
-                        &required,
-                        qualified,
-                        resolution,
-                        executor,
-                    )
-                    .await?;
-                partitions.push(relation(subject, &source, rule)?);
+        for (subject, admin, policy) in management_partitions() {
+            let source = &policy.permission;
+            let mut required = management_permissions(&internal::APPROVAL_MANAGEMENT_READ, admin);
+            policy.add_qualification(&mut required);
+            if !qualified.same_role(&required) {
+                continue;
             }
+
+            let source_context = AccessContext { resource: source.resource().into(), ..context.clone() };
+            let rule = self
+                .approval_source_condition(
+                    &source_context,
+                    source,
+                    &required,
+                    qualified,
+                    resolution,
+                    executor,
+                )
+                .await?;
+            partitions.push(relation(subject, source, rule)?);
         }
         Ok(AccessRule::any(partitions))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn binding_preserves_every_approval_partition_in_order() {
+        let AccessRule::Any(partitions) = query_binding_condition().unwrap() else {
+            panic!("管理列表必须保留全部固定审批分区");
+        };
+        let keys = partitions
+            .iter()
+            .map(|partition| match partition {
+                AccessRule::Related { relation, mode: RelationMatch::ExactlyOne, .. } => relation.as_str(),
+                _ => panic!("管理列表分区必须要求唯一完整来源"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            keys,
+            [
+                "management_sales_order_sales_order",
+                "management_voucher_sales_order_sales_order",
+                "management_sales_change_order_sales_order",
+                "management_purchase_order_purchase_order",
+                "management_purchase_change_order_purchase_order",
+                "management_stock_adjustment_stock_adjustment",
+                "management_sales_invoice_request_sales_invoice_request",
+                "management_purchase_payment_request_purchase_payment_request",
+                "management_customer_receipt_customer_receipt",
+                "management_customer_refund_customer_receipt",
+                "management_customer_refund_receivable_account",
+                "management_supplier_refund_supplier_payment",
+                "management_supplier_refund_payable_account",
+                "management_receipt_reversal_customer_receipt",
+                "management_payment_reversal_supplier_payment",
+            ]
+        );
     }
 }
