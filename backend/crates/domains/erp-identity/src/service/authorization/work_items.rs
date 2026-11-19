@@ -15,7 +15,6 @@ use crate::repository::authorization::AccessProof;
 use crate::{Error, QualifiedPermissions, Result};
 
 const DECISION: &[Permission] = &[approval_instance::COPIES_HISTORY, approval_instance::SUBMIT_DECISION];
-
 const REWORK_EXECUTION: &[Permission] = &[work_item::DETAIL];
 
 const PURCHASE_RECEIPT_EXECUTION: &[Permission] = &[
@@ -123,7 +122,6 @@ static TASK_REQUIREMENTS: &[TaskRequirements] = &[
         SERVICE_FULFILLMENT_EXECUTION,
     ),
     ("CUSTOMER_ACCEPTANCE_REGISTRATION", "sales_order", sales_order::DETAIL, CUSTOMER_ACCEPTANCE_EXECUTION),
-    ("DOCUMENT_APPROVAL", "sales_order", sales_order::DETAIL, &[]),
     (
         "SUPPLIER_PAYMENT_EXECUTION",
         "purchase_payment_request",
@@ -174,37 +172,35 @@ static TASK_REQUIREMENTS: &[TaskRequirements] = &[
         supplier_offering::LIST,
         &[supplier_offering::COMPLETE_SUPPLY_EXCEPTION_TASK],
     ),
-    ("DOCUMENT_APPROVAL", "voucher_sales_order", sales_order::DETAIL, &[]),
-    ("DOCUMENT_APPROVAL", "sales_change_order", sales_review::SALES_CHANGE_ORDER_DETAIL, &[]),
-    ("DOCUMENT_APPROVAL", "purchase_order", purchase_order::DETAIL, &[]),
-    ("DOCUMENT_APPROVAL", "purchase_change_order", purchase_order::PURCHASE_CHANGE_DETAIL, &[]),
-    ("DOCUMENT_APPROVAL", "stock_adjustment", inventory::STOCK_ADJUSTMENT_DETAIL, &[]),
-    ("DOCUMENT_APPROVAL", "purchase_payment_request", purchase_payment_request::DETAIL, &[]),
-    ("DOCUMENT_APPROVAL", "sales_invoice_request", receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL, &[]),
-    ("DOCUMENT_APPROVAL", "customer_receipt", receivable::ACCOUNT_DETAIL, &[]),
-    ("DOCUMENT_APPROVAL", "customer_refund", receivable::ACCOUNT_DETAIL, &[]),
-    ("DOCUMENT_APPROVAL", "receipt_reversal", receivable::ACCOUNT_DETAIL, &[]),
-    ("DOCUMENT_APPROVAL", "supplier_refund", purchase_order::DETAIL, &[]),
-    ("DOCUMENT_APPROVAL", "payment_reversal", purchase_order::DETAIL, &[]),
-    ("APPROVAL_REWORK", "sales_order", sales_order::DETAIL, REWORK_EXECUTION),
-    ("APPROVAL_REWORK", "voucher_sales_order", sales_order::DETAIL, REWORK_EXECUTION),
-    ("APPROVAL_REWORK", "sales_change_order", sales_review::SALES_CHANGE_ORDER_DETAIL, REWORK_EXECUTION),
-    ("APPROVAL_REWORK", "purchase_order", purchase_order::DETAIL, REWORK_EXECUTION),
-    ("APPROVAL_REWORK", "purchase_change_order", purchase_order::PURCHASE_CHANGE_DETAIL, REWORK_EXECUTION),
-    ("APPROVAL_REWORK", "stock_adjustment", inventory::STOCK_ADJUSTMENT_DETAIL, REWORK_EXECUTION),
-    ("APPROVAL_REWORK", "purchase_payment_request", purchase_payment_request::DETAIL, REWORK_EXECUTION),
-    (
-        "APPROVAL_REWORK",
-        "sales_invoice_request",
-        receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL,
-        REWORK_EXECUTION,
-    ),
-    ("APPROVAL_REWORK", "customer_receipt", receivable::ACCOUNT_DETAIL, REWORK_EXECUTION),
-    ("APPROVAL_REWORK", "customer_refund", receivable::ACCOUNT_DETAIL, REWORK_EXECUTION),
-    ("APPROVAL_REWORK", "receipt_reversal", receivable::ACCOUNT_DETAIL, REWORK_EXECUTION),
-    ("APPROVAL_REWORK", "supplier_refund", purchase_order::DETAIL, REWORK_EXECUTION),
-    ("APPROVAL_REWORK", "payment_reversal", purchase_order::DETAIL, REWORK_EXECUTION),
 ];
+
+// 审批和返工的来源读取一致，返工形成前另需工作项详情资格。
+static APPROVAL_TASK_SOURCES: &[(&str, Permission)] = &[
+    ("sales_order", sales_order::DETAIL),
+    ("voucher_sales_order", sales_order::DETAIL),
+    ("sales_change_order", sales_review::SALES_CHANGE_ORDER_DETAIL),
+    ("purchase_order", purchase_order::DETAIL),
+    ("purchase_change_order", purchase_order::PURCHASE_CHANGE_DETAIL),
+    ("stock_adjustment", inventory::STOCK_ADJUSTMENT_DETAIL),
+    ("purchase_payment_request", purchase_payment_request::DETAIL),
+    ("sales_invoice_request", receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL),
+    ("customer_receipt", receivable::ACCOUNT_DETAIL),
+    ("customer_refund", receivable::ACCOUNT_DETAIL),
+    ("receipt_reversal", receivable::ACCOUNT_DETAIL),
+    ("supplier_refund", purchase_order::DETAIL),
+    ("payment_reversal", purchase_order::DETAIL),
+];
+
+fn task_requirements()
+-> impl Iterator<Item = (&'static str, &'static str, &'static Permission, &'static [Permission])> {
+    TASK_REQUIREMENTS.iter().map(|(kind, source, read, execution)| (*kind, *source, read, *execution)).chain(
+        [("DOCUMENT_APPROVAL", &[][..]), ("APPROVAL_REWORK", REWORK_EXECUTION)].into_iter().flat_map(
+            |(kind, execution)| {
+                APPROVAL_TASK_SOURCES.iter().map(move |(source, read)| (kind, *source, read, execution))
+            },
+        ),
+    )
+}
 
 /// 为履约类精确任务选取固定执行资格；供应商履约仅为订单调查入口返回相应组合。
 pub(super) fn fulfillment_task_permissions(permission: &Permission) -> &'static [Permission] {
@@ -268,7 +264,7 @@ pub(super) fn portal_request(kind: &str) -> Option<&'static PortalRequest> {
 /// 在读取任务前一次预取相关功能资格；实际组合由入口用途及持久化任务种类和来源决定。
 pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     if permission == &internal::WORK_ITEM_EXECUTION_QUALIFICATION {
-        return TASK_REQUIREMENTS.iter().flat_map(|(_, _, _, execution)| execution.iter().cloned()).collect();
+        return task_requirements().flat_map(|(_, _, _, execution)| execution.iter().cloned()).collect();
     }
     if ![internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT].contains(permission)
         && !view_permission(permission)
@@ -276,9 +272,8 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
         return vec![];
     }
 
-    let mut required = TASK_REQUIREMENTS
-        .iter()
-        .flat_map(|(_, _, read, execution)| std::iter::once(read).chain(*execution).cloned())
+    let mut required = task_requirements()
+        .flat_map(|(_, _, read, execution)| std::iter::once(read).chain(execution).cloned())
         .collect::<Vec<_>>();
     required.push(work_item::DETAIL);
     required.extend_from_slice(DECISION);
@@ -292,12 +287,40 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     required
 }
 
-// 按任务真实种类与业务来源配对查找读取和办理资格；未登记组合拒绝。
-fn requirements(kind: &str, source: &str) -> Result<&'static TaskRequirements> {
-    TASK_REQUIREMENTS
-        .iter()
-        .find(|(task, resource, _, _)| *task == kind && *resource == source)
+// 按任务真实种类与业务来源配对查找读取和办理资格；索引与展示结果的位置一致。
+fn requirements(kind: &str, source: &str) -> Result<(usize, &'static Permission, &'static [Permission])> {
+    task_requirements()
+        .enumerate()
+        .find(|(_, (task, resource, _, _))| *task == kind && *resource == source)
+        .map(|(index, (_, _, read, execution))| (index, read, execution))
         .ok_or_else(|| Error::ValidationError("任务类型或业务对象未登记完整办理资格".into()))
+}
+
+/// 同次查询取证的操作按钮资格，按固定任务登记顺序保存。
+#[derive(Clone)]
+pub(crate) struct DisplayQualifications {
+    // 每个已登记任务组合的同角色读取及执行资格。
+    execution: Vec<bool>,
+    /// 同角色审批决定资格。
+    pub(crate) decision: bool,
+}
+
+impl DisplayQualifications {
+    /// 从同次身份快照计算全部已登记任务组合的展示资格。
+    pub(crate) fn new(qualified: &QualifiedPermissions) -> Self {
+        Self {
+            execution: task_requirements()
+                .map(|(_, _, read, execution)| qualified.same_role_with(read, execution))
+                .collect(),
+            decision: decision_qualified(qualified),
+        }
+    }
+
+    /// 返回固定任务组合的展示资格，未知组合报错。
+    pub(crate) fn execution(&self, kind: &str, source: &str) -> Result<bool> {
+        let (index, _, _) = requirements(kind, source)?;
+        Ok(self.execution[index])
+    }
 }
 
 /// 识别提供工作项按钮资格的固定列表、详情和管理查询，其他资源不能复用该展示能力。
@@ -311,12 +334,8 @@ pub(crate) fn execution_qualified(
     source: &str,
     qualified: &QualifiedPermissions,
 ) -> Result<bool> {
-    let (_, _, read, execution) = requirements(kind, source)?;
-    let mut required = execution.to_vec();
-    if !required.contains(read) {
-        required.push(read.clone());
-    }
-    Ok(qualified.same_role(&required))
+    let (_, read, execution) = requirements(kind, source)?;
+    Ok(qualified.same_role_with(read, execution))
 }
 
 /// 检查同一启用角色是否具备审批历史及提交决定资格；仅供按钮展示，不能代替任务授权。
@@ -334,8 +353,7 @@ fn candidate_requirements(object: &ObjectFacts) -> Result<&'static [Permission]>
         return Err(Error::ValidationError("任务资格候选只能提供服务端种类和来源类型".into()));
     }
 
-    let (_, _, _, execution) =
-        requirements(object.subject_type.get()?, object.subject_source_resource.get()?)?;
+    let (_, _, execution) = requirements(object.subject_type.get()?, object.subject_source_resource.get()?)?;
     Ok(execution)
 }
 

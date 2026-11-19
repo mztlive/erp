@@ -408,6 +408,17 @@ pub(super) fn capability_scope(permission: &Permission) -> Result<ResolvedScope>
     Ok(ResolvedScope { role_clauses: vec![clause], user_limit: None })
 }
 
+// 保持选型、质量附加条件的构造顺序，启动校验传入能力范围，运行时传入同次取证结果。
+pub(super) fn scoped_extensions(
+    permission: &Permission,
+    qualified: Option<&QualifiedPermissions>,
+    scopes: &ScopeLookup<'_>,
+    base: AccessRule,
+) -> Result<AccessRule> {
+    let base = selection::condition(permission, qualified, scopes, base)?;
+    quality::condition(permission, qualified, scopes, base)
+}
+
 /// 启动时按输出粒度展开固定规则全部可能使用的 Mapping 能力；运行时仍以实际身份及范围构造过滤。
 pub(crate) fn binding_condition(permission: &Permission, output: &QueryOutput) -> Result<AccessRule> {
     let kind = scope_spec::kind(permission)?;
@@ -439,13 +450,8 @@ pub(crate) fn binding_condition(permission: &Permission, output: &QueryOutput) -
         },
         _ if *output != QueryOutput::Object => Err(Error::ValidationError("此权限不支持受限输出".into())),
         ActionKind::Scope => {
-            let rule = quality::binding_condition(
-                permission,
-                selection::binding_condition(
-                    permission,
-                    data_condition(permission, Some(&capability_scope(permission)?))?,
-                )?,
-            )?;
+            let base = data_condition(permission, Some(&capability_scope(permission)?))?;
+            let rule = scoped_extensions(permission, None, &ScopeLookup::Capability, base)?;
             if task_query(permission) {
                 // 创建候选仍使用范围条件，查询另须支持精确任务的指派条件。
                 return Ok(AccessRule::all(vec![rule, task_condition(permission, None)?]));

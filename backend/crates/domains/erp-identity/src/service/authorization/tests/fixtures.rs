@@ -136,8 +136,7 @@ impl Facilities for Identity {
             role_scopes.keys().any(|(_, permission)| permission == source).then(|| ResolvedScope {
                 role_clauses: qualified
                     .roles_for_all(required)
-                    .into_iter()
-                    .filter_map(|role| role_scopes.get(&(role.to_string(), source.clone())).cloned())
+                    .filter_map(|role| role_scopes.get(&(role.base.id.clone(), source.clone())).cloned())
                     .collect(),
                 user_limit: None,
             });

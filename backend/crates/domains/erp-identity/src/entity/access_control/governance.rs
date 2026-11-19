@@ -7,9 +7,9 @@ use crate::entity::role::{ROOT_ROLE_ID, Role};
 /// `qualified_roles` 中每个角色均具备完整动作权限。
 /// 启用且未删除的内建 `root` 为已登记的范围消费者提供无个人上限的全公司范围；
 /// 未命中时返回 `None`，由调用方继续解析人员范围。
-pub(crate) fn root_scope(qualified_roles: &[Role]) -> Option<ResolvedScope> {
+pub(crate) fn root_scope<'a>(qualified_roles: impl IntoIterator<Item = &'a Role>) -> Option<ResolvedScope> {
     let root = qualified_roles
-        .iter()
+        .into_iter()
         .any(|role| role.base.id == ROOT_ROLE_ID && role.system && !role.disabled && !role.base.is_deleted());
     root.then(|| ResolvedScope {
         role_clauses: vec![ScopeClause { company: true, ..Default::default() }],

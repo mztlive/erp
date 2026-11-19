@@ -13,7 +13,7 @@ use crate::entity::access_control::paging::PageParams;
 use crate::entity::access_control::{PermissionDefinition, UserRole};
 
 /// 权限目录的资源、状态筛选及分页参数。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PermissionFilter {
     /// 资源代码按不区分大小写的字面量匹配；未指定则不限制。
     pub resource: Option<String>,
@@ -23,13 +23,6 @@ pub struct PermissionFilter {
     pub system: Option<bool>,
     /// 上层已校验的分页和排序参数。
     pub paging: PageParams,
-}
-
-impl Default for PermissionFilter {
-    // 默认不限制资源或状态，按创建时间倒序读取首页 20 条。
-    fn default() -> Self {
-        Self { resource: None, disabled: None, system: None, paging: PageParams::default() }
-    }
 }
 
 impl QueryFilter for PermissionFilter {

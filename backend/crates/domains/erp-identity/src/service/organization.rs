@@ -22,7 +22,7 @@ use crate::ports::OrganizationBusinessPort;
 use crate::repository::OrganizationRepository;
 use crate::repository::prelude::*;
 use crate::service::access_control::resolve::AuthorizedDataScope;
-use crate::service::authorization::OrganizationScope;
+use crate::service::authorization::SnapshotScope;
 use crate::{AccessControlExt, AuthorizationService, Error, Result, SharedRbacService};
 
 /// 提供组织配置读取、影响预览和事务提交，并通过业务事实确认组织能否停用。
@@ -171,7 +171,7 @@ impl OrganizationService {
     }
 
     // 通过共享授权服务取得组织配置上下文，供组织配置页面读取使用。
-    async fn access(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<OrganizationScope> {
+    async fn access(&self, actor: &AuditActor, executor: &mut dyn Executor) -> Result<SnapshotScope> {
         self.authorization.organization_scope(actor, &organization::LIST, executor).await
     }
 

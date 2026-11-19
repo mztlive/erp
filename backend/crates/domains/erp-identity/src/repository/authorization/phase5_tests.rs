@@ -13,8 +13,8 @@ use super::binding::FrozenMapping;
 use super::fixtures::execute;
 use super::testing::{Mapping, mapping};
 use super::{
-    AccessProof, AccessValidity, CompiledAccess, Replay, ResolvedAccess, ResolvedRules, ScopeMetadata,
-    WholeRule, compile,
+    AccessProof, AccessValidity, CompiledAccess, QueryQualifications, Replay, ResolvedAccess, ResolvedRules,
+    ScopeMetadata, WholeRule, compile,
 };
 use crate::entity::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::authorization::{
@@ -131,7 +131,7 @@ fn plan(
     let model = mapping.model().clone();
     let proof = proof(permission, rule, whole, &model, executor);
     let frozen = FrozenMapping::freeze(mapping, &mut vec![], 0).unwrap();
-    compile(proof, QualifiedPermissions::test_grants(&[]), &frozen, executor).unwrap()
+    compile(proof, QueryQualifications::default(), &frozen, executor).unwrap()
 }
 // 提取样本投影中的记录 ID，便于断言查询成员。
 fn ids(rows: Vec<Document>) -> Vec<String> {
@@ -308,8 +308,8 @@ async fn whole_root_reuse_preserves_version_and_deadline() {
     let original = proof(permission, rule.clone(), Some(rule), frozen.model(), &executor);
     let mut reused = original.clone();
     reused.resolved.rules.whole = Some(WholeRule::Root);
-    let original = compile(original, QualifiedPermissions::test_grants(&[]), &frozen, &mut executor).unwrap();
-    let reused = compile(reused, QualifiedPermissions::test_grants(&[]), &frozen, &mut executor).unwrap();
+    let original = compile(original, QueryQualifications::default(), &frozen, &mut executor).unwrap();
+    let reused = compile(reused, QueryQualifications::default(), &frozen, &mut executor).unwrap();
 
     assert_eq!(original.version(), reused.version());
     assert_eq!(original.whole_stages().unwrap(), reused.whole_stages().unwrap());
@@ -406,8 +406,7 @@ fn fixed_lookup_preserves_missing_relations_and_is_immutable_after_binding() {
     let frozen = FrozenMapping::freeze(root.clone(), &mut vec![], 0).unwrap();
     let proof =
         proof(sales_order::DETAIL, AccessRule::Fact(AccessFact::Owned), None, root.model(), &executor);
-    let plan =
-        compile(proof.clone(), QualifiedPermissions::test_grants(&[]), &frozen, &mut executor).unwrap();
+    let plan = compile(proof.clone(), QueryQualifications::default(), &frozen, &mut executor).unwrap();
     assert_eq!(
         ids(execute(
             vec![row("own", "user"), row("other", "other")],
@@ -420,7 +419,7 @@ fn fixed_lookup_preserves_missing_relations_and_is_immutable_after_binding() {
 
     root.fixed.lock().unwrap().clear();
     assert!(matches!(
-        compile(proof, QualifiedPermissions::test_grants(&[]), &frozen, &mut executor),
+        compile(proof, QueryQualifications::default(), &frozen, &mut executor),
         Err(Error::ValidationError(_))
     ));
 }

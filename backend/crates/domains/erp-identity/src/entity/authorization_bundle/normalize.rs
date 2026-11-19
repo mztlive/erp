@@ -2,9 +2,11 @@
 use std::collections::BTreeSet;
 
 use super::{PolicyDocument, PolicyMode, PolicyScope};
-use crate::dto::person_scope::{PersonScopeCommand, PersonScopeGrant, SavePersonScopeRequest};
+use crate::access_control::{ScopeDimension, ScopeTargetMode};
+use crate::dto::person_scope::{
+    PersonScopeCommand, PersonScopeGrant, SavePersonScopeRequest, normalize_grants,
+};
 use crate::entity::access_control::person_scope::PersonScopeExpression;
-use crate::entity::access_control::scope_target::ScopeTarget;
 use crate::entity::role::{ROOT_ROLE_ID, Role, RoleData};
 use crate::{Error, Permission, Result};
 
@@ -96,10 +98,9 @@ impl PolicyDocument {
 impl PolicyScope {
     // 复用范围保存命令规范化动作和条款，再按条款的序列化值排序，使比较与审核摘要保持稳定。
     fn normalize_grants(&mut self) -> Result<()> {
-        let request = self.request(0)?.into_request();
-        self.actions = request.actions;
-        let mut keyed = request
-            .grants
+        let grants =
+            normalize_grants(&self.resource, &mut self.actions, std::mem::take(&mut self.grants), None)?;
+        let mut keyed = grants
             .into_iter()
             .map(|grant| Ok((serde_json::to_string(&grant)?, grant)))
             .collect::<Result<Vec<_>>>()?;
@@ -108,19 +109,20 @@ impl PolicyScope {
         Ok(())
     }
 
-    // 按已规范化文件中的授权、条款顺序重建目标；同一授权内去重。
-    pub(crate) fn targets(&self) -> Result<Vec<ScopeTarget>> {
-        let mut targets = Vec::new();
-        for grant in &self.grants {
-            let start = targets.len();
-            for term in &grant.terms {
-                let target = ScopeTarget::parse(term)?;
-                if !targets[start..].contains(&target) {
-                    targets.push(target);
-                }
-            }
-        }
-        Ok(targets)
+    // 只有显式目标需查库；沿规范化文件的条款顺序借用 ID，同一授权内去重。
+    pub(crate) fn targets(&self) -> impl Iterator<Item = (ScopeDimension, &[String])> + '_ {
+        self.grants.iter().flat_map(|grant| {
+            grant.terms.iter().enumerate().filter_map(move |(index, term)| {
+                let first = !grant.terms[..index].iter().any(|previous| {
+                    previous.target_mode == Some(ScopeTargetMode::Explicit)
+                        && previous.target_dimension == term.target_dimension
+                        && previous.include_descendants == term.include_descendants
+                        && previous.scope_targets == term.scope_targets
+                });
+                (term.target_mode == Some(ScopeTargetMode::Explicit) && first)
+                    .then_some((term.target_dimension, term.scope_targets.as_slice()))
+            })
+        })
     }
 
     /// 从已规范化的文件生成逐动作表达式。投影后归并相同条款，并沿用单动作授权的序列化顺序。
@@ -137,19 +139,13 @@ impl PolicyScope {
         if !expression.additive || expression.history_read || expression.condition.is_some() {
             return Ok(expression.clone());
         }
-        let command = SavePersonScopeRequest {
-            resource: self.resource.clone(),
-            actions: vec![action.into()],
-            grants: expression
-                .alternatives
-                .iter()
-                .map(|terms| PersonScopeGrant { actions: vec![action.into()], terms: terms.clone() })
-                .collect(),
-            replace_legacy: self.replace_legacy,
-            expected_policy_version: 0,
-        }
-        .normalized()?;
-        action_expression(&command.grants, action)
+        let grants = expression
+            .alternatives
+            .iter()
+            .map(|terms| PersonScopeGrant { actions: vec![action.into()], terms: terms.clone() })
+            .collect();
+        let grants = normalize_grants(&self.resource, &mut vec![action.into()], grants, None)?;
+        action_expression(&grants, action)
     }
 
     /// 用传入的策略版本构造正式的人员范围保存命令，供导入校验和提取逐动作表达式。
@@ -240,10 +236,10 @@ mod tests {
         })).unwrap());
         let normalized = value.normalized().unwrap();
         let scope = &normalized.data_scopes[0];
-        let targets = scope.targets().unwrap();
-        assert_eq!(targets, scope.request(0).unwrap().targets());
+        let targets = scope.targets().collect::<Vec<_>>();
+        assert!(targets.iter().copied().eq(scope.request(0).unwrap().targets()));
         assert_eq!(
-            targets.iter().map(ScopeTarget::ids).collect::<Vec<_>>(),
+            targets.iter().map(|(_, ids)| *ids).collect::<Vec<_>>(),
             [&["north"][..], &["east", "west"]]
         );
     }

@@ -71,10 +71,10 @@ impl PolicyBundleService {
             return Ok((receipt.replay(&command)?, false));
         }
 
-        if authorization.scope.policy_version != request.expected_policy_version {
+        if authorization.policy_version != request.expected_policy_version {
             return Err(Error::ConflictError("授权版本已变化，请重新预览".into()));
         }
-        let (plan, preview) = self.plan(request.document, &actor, &authorization.scope, executor).await?;
+        let (plan, preview) = self.plan(request.document, &actor, &authorization, executor).await?;
         if preview.review_hash != request.review_hash {
             return Err(Error::ConflictError("审核文件或目标事实已变化，请重新预览".into()));
         }

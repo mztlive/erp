@@ -24,9 +24,13 @@ pub struct QualifiedPermissions {
 
 impl QualifiedPermissions {
     /// 解析数据范围时，选取本次取证中各自覆盖全部要求的启用角色。
-    pub(crate) fn roles_for_all(&self, required: &[Permission]) -> Vec<RoleId> {
-        self.snapshot.granting_role_ids_for_all(required)
+    pub(crate) fn roles_for_all<'a>(
+        &'a self,
+        required: &'a [Permission],
+    ) -> impl Iterator<Item = &'a Role> + Clone {
+        self.roles.iter().filter(move |role| self.snapshot.role_covers(&role.base.id, required.iter()))
     }
+
     /// 读取有效内部账号的无凭证摘要，供调用方使用与权限取证一致的显示名。
     pub fn account(&self) -> &AccountSummary {
         &self.account
@@ -40,7 +44,14 @@ impl QualifiedPermissions {
 
     /// 检查是否有一个启用角色同时授予全部指定权限；空要求或没有共同角色时返回 `false`。
     pub fn same_role(&self, permissions: &[Permission]) -> bool {
-        !self.snapshot.granting_role_ids_for_all(permissions).is_empty()
+        self.roles_for_all(permissions).next().is_some()
+    }
+
+    /// 检查同一启用角色覆盖必需的读取权限和完整执行子集。
+    pub(crate) fn same_role_with(&self, read: &Permission, execution: &[Permission]) -> bool {
+        self.roles
+            .iter()
+            .any(|role| self.snapshot.role_covers(&role.base.id, std::iter::once(read).chain(execution)))
     }
 
     /// 汇总本批由启用角色授予的具体权限，供逐项资格查询；各项可由不同角色授予。

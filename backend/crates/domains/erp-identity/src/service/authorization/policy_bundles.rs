@@ -2,35 +2,17 @@
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_permissions::{access_control, admin, organization};
-use persistence_core::{ExecutionBoundary, Executor};
+use persistence_core::Executor;
 
-use super::resolve::scope_deadline;
-use super::{AuthorizationService, operations};
+use super::{AuthorizationService, SnapshotScope, operations};
 use crate::entity::authorization::AccessContext;
 use crate::entity::authorization_bundle::PolicyDocument;
-use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Permission, Result};
 
-/// 授权文件用例的原快照范围凭据；交付只核对阶段和期限，不重读同一快照。
-pub(crate) struct PolicyBundleAccess {
-    /// 已授权的组织范围、组织事实和策略版本，供文件计划校验。
-    pub(crate) scope: AuthorizedDataScope,
-    // 授权文件读取时所属的原快照与读取阶段。
-    boundary: ExecutionBoundary,
-    // 组织事实可能变化而使文件授权失效的最早时点。
-    valid_until: Option<Instant>,
-}
-
-impl PolicyBundleAccess {
-    /// 文件交付前沿原执行器核对快照阶段与期限；事务、阶段或期限失效时拒绝。
-    pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
-        if !self.boundary.is_current(executor) {
-            return Err(Error::ValidationError("授权文件读取跨越执行阶段".into()));
-        }
-        if self.valid_until.is_some_and(|until| until <= Instant::now()) {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：授权文件读取已到期".into()));
-        }
-        Ok(())
+impl SnapshotScope {
+    /// 授权文件交付前核对原快照及范围期限，保留文件入口的错误信息。
+    pub(crate) fn ensure_policy_bundle_current(&self, executor: &mut dyn Executor) -> Result<()> {
+        self.check(executor, "授权文件读取跨越执行阶段", "DATA_SCOPE_CHANGED：授权文件读取已到期")
     }
 }
 
@@ -73,7 +55,7 @@ impl AuthorizationService {
         permission: &Permission,
         document: Option<&PolicyDocument>,
         executor: &mut dyn Executor,
-    ) -> Result<PolicyBundleAccess> {
+    ) -> Result<SnapshotScope> {
         executor.next_read();
         let required = requirements(permission, document)
             .ok_or_else(|| Error::ValidationError("未知授权文件入口".into()))?;
@@ -105,8 +87,8 @@ impl AuthorizationService {
         if !boundary.is_current(executor) {
             return Err(Error::ValidationError("授权文件检查跨越执行阶段".into()));
         }
-        let result = PolicyBundleAccess { valid_until: scope_deadline(&access), scope: access, boundary };
-        result.ensure_current(executor)?;
+        let result = SnapshotScope::new(access, boundary);
+        result.ensure_policy_bundle_current(executor)?;
         Ok(result)
     }
 }
@@ -118,6 +100,7 @@ mod tests {
     use super::*;
     use crate::entity::access_control::ResolvedScope;
     use crate::entity::organization_change::OrganizationState;
+    use crate::service::access_control::resolve::AuthorizedDataScope;
 
     // 验证文件凭据在范围到期、新读取阶段或事务重启后均不能交付。
     #[test]
@@ -130,20 +113,19 @@ mod tests {
             scope_version: "1".into(),
             as_of: Instant::from_unix_secs(1),
         };
-        let mut access =
-            PolicyBundleAccess { scope, boundary: executor.boundary().unwrap(), valid_until: None };
-        access.ensure_current(&mut executor).unwrap();
+        let mut access = SnapshotScope::new(scope, executor.boundary().unwrap());
+        access.ensure_policy_bundle_current(&mut executor).unwrap();
 
         access.valid_until = Some(Instant::from_unix_secs(1));
-        assert!(matches!(access.ensure_current(&mut executor), Err(Error::ConflictError(_))));
+        assert!(matches!(access.ensure_policy_bundle_current(&mut executor), Err(Error::ConflictError(_))));
 
         access.valid_until = None;
         executor.next_read();
-        assert!(matches!(access.ensure_current(&mut executor), Err(Error::ValidationError(_))));
+        assert!(matches!(access.ensure_policy_bundle_current(&mut executor), Err(Error::ValidationError(_))));
 
         access.boundary = executor.boundary().unwrap();
-        access.ensure_current(&mut executor).unwrap();
+        access.ensure_policy_bundle_current(&mut executor).unwrap();
         executor.restart();
-        assert!(matches!(access.ensure_current(&mut executor), Err(Error::ValidationError(_))));
+        assert!(matches!(access.ensure_policy_bundle_current(&mut executor), Err(Error::ValidationError(_))));
     }
 }

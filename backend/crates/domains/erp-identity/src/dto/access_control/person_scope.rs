@@ -42,14 +42,9 @@ impl Deref for PersonScopeCommand {
     }
 }
 impl PersonScopeCommand {
-    /// 消耗命令，取出规范化请求供授权文件使用。
-    pub(crate) fn into_request(self) -> SavePersonScopeRequest {
-        self.request
-    }
-
-    /// 借出命令中的范围目标，供写事务核对显式引用是否存在且有效。
-    pub(crate) fn targets(&self) -> &[ScopeTarget] {
-        &self.targets
+    /// 按首次出现顺序借出写事务需要校验的显式目标。
+    pub(crate) fn targets(&self) -> impl Iterator<Item = (ScopeDimension, &[String])> + '_ {
+        self.targets.iter().filter_map(ScopeTarget::explicit)
     }
 }
 
@@ -168,26 +163,8 @@ impl SavePersonScopeRequest {
     /// 动作去重后须有 1 至 32 个，且均可独立配置；原始授权列表最多 32 条。
     /// 按服务端登记逐条校验并去除等价授权。空授权列表只保留各动作的基础范围。
     pub fn normalized(mut self) -> Result<PersonScopeCommand> {
-        self.actions.sort();
-        self.actions.dedup();
-        if self.actions.is_empty() || self.actions.len() > 32 || self.grants.len() > 32 {
-            return Err(Error::ValidationError("请选择操作，附加授权最多32项".into()));
-        }
-        for action in &self.actions {
-            scope_spec::configurable_action(&self.resource, action)?;
-        }
-
-        let mut grants = Vec::new();
         let mut targets = Vec::new();
-        for mut grant in self.grants {
-            let grant_targets = grant.normalize(&self.resource, &self.actions)?;
-            if !grants.contains(&grant) {
-                targets.extend(grant_targets);
-                grants.push(grant);
-            }
-        }
-
-        self.grants = grants;
+        self.grants = normalize_grants(&self.resource, &mut self.actions, self.grants, Some(&mut targets))?;
         Ok(PersonScopeCommand { request: self, targets })
     }
 
@@ -214,6 +191,35 @@ impl SavePersonScopeRequest {
     }
 }
 
+// 文件、已有配置比较和交互保存共用静态校验；只有交互保存需保留原输入的校验顺序。
+pub(crate) fn normalize_grants(
+    resource: &str,
+    actions: &mut Vec<String>,
+    grants: Vec<PersonScopeGrant>,
+    mut targets: Option<&mut Vec<ScopeTarget>>,
+) -> Result<Vec<PersonScopeGrant>> {
+    actions.sort();
+    actions.dedup();
+    if actions.is_empty() || actions.len() > 32 || grants.len() > 32 {
+        return Err(Error::ValidationError("请选择操作，附加授权最多32项".into()));
+    }
+    for action in actions.iter() {
+        scope_spec::configurable_action(resource, action)?;
+    }
+
+    let mut normalized = Vec::new();
+    for mut grant in grants {
+        let grant_targets = grant.normalize(resource, actions, targets.is_some())?;
+        if !normalized.contains(&grant) {
+            if let Some(targets) = targets.as_deref_mut() {
+                targets.extend(grant_targets);
+            }
+            normalized.push(grant);
+        }
+    }
+    Ok(normalized)
+}
+
 pub(crate) fn ensure_legacy_conversion<'a>(
     resource: &str,
     actions: &[String],
@@ -234,7 +240,12 @@ impl PersonScopeGrant {
     // 动作去重后须为本次保存动作的非空子集；每条授权须有 1 至 16 个原始范围项。
     // 逐项校验范围类型、动作支持的维度和目标形态，拒绝角色专用的管理部门模式。
     // 本人及协作范围仅用于内部组织维度。范围项规范化并去重后，校验必需维度并返回目标。
-    fn normalize(&mut self, resource: &str, actions: &[String]) -> Result<Vec<ScopeTarget>> {
+    fn normalize(
+        &mut self,
+        resource: &str,
+        actions: &[String],
+        keep_target_order: bool,
+    ) -> Result<Vec<ScopeTarget>> {
         self.actions.sort();
         self.actions.dedup();
         if self.actions.is_empty()
@@ -255,14 +266,20 @@ impl PersonScopeGrant {
             }
             term.scope_targets.sort();
             term.scope_targets.dedup();
-            let target = ScopeTarget::parse(&term)?;
+            let ids = std::mem::take(&mut term.scope_targets);
+            let target = ScopeTarget::parse_with_ids(&term, ids)?;
             scope_spec::validate_target_dimension(resource, &self.actions, term.target_dimension)?;
             scope_spec::validate_scope_type(resource, term.scope_type)?;
-            term.scope_targets = target.ids().to_vec();
+            term.scope_targets = if let Some((_, ids)) = target.explicit().filter(|_| keep_target_order) {
+                let stored_ids = ids.to_vec();
+                if !targets.contains(&target) {
+                    targets.push(target);
+                }
+                stored_ids
+            } else {
+                target.into_ids()
+            };
             term.scope_targets.sort();
-            if !targets.contains(&target) {
-                targets.push(target);
-            }
             keyed.push((serde_json::to_string(&term)?, term));
         }
 
@@ -438,7 +455,7 @@ mod tests {
         ];
 
         let mut invalid = input.grants[1].clone();
-        let error = invalid.normalize(&input.resource, &input.actions).unwrap_err();
+        let error = invalid.normalize(&input.resource, &input.actions, false).unwrap_err();
         assert!(matches!(
             error,
             Error::ValidationError(message) if message == "附加授权的范围设置不完整，请补齐所选操作要求的范围"
@@ -457,7 +474,7 @@ mod tests {
         duplicate.grants.push(duplicate.grants[0].clone());
         let command = duplicate.normalized().unwrap();
         assert_eq!(command.grants.len(), 1);
-        assert_eq!(command.targets().len(), command.grants[0].terms.len());
+        assert_eq!(command.targets().count(), 0);
 
         let mut over_limit = request();
         over_limit.grants = vec![over_limit.grants[0].clone(); 33];
@@ -483,16 +500,10 @@ mod tests {
         };
         input.grants[0].terms.extend([org.clone(), org]);
         let command = input.normalized().unwrap();
-        assert_eq!(
-            command.targets(),
-            &[
-                ScopeTarget::SelfOwned,
-                ScopeTarget::OrgExplicit {
-                    ids: vec!["two".into(), "one".into()],
-                    include_descendants: false
-                },
-            ]
-        );
+        let targets = command.targets().collect::<Vec<_>>();
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].0, ScopeDimension::InternalOrg);
+        assert_eq!(targets[0].1, ["two", "one"]);
         let expression = command.expression("detail");
         assert_eq!(expression.alternatives[0].len(), 2);
         assert_eq!(expression.alternatives[0][0].scope_targets, ["one", "two"]);

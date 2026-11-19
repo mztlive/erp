@@ -11,7 +11,7 @@ use crate::entity::organization_change::{
     OrganizationChangeReceipt, OrganizationChangeRequest, OrganizationOperation,
 };
 use crate::repository::OrganizationRepository;
-use crate::service::authorization::OrganizationScope;
+use crate::service::authorization::SnapshotScope;
 use crate::{AccessControlExt, Error, Result};
 
 impl OrganizationService {
@@ -21,7 +21,7 @@ impl OrganizationService {
         actor: &AuditActor,
         change: &OrganizationOperation,
         executor: &mut dyn Executor,
-    ) -> Result<OrganizationScope> {
+    ) -> Result<SnapshotScope> {
         let profile = match change {
             OrganizationOperation::UpdatePersonProfile { profile }
                 if profile.name.is_some() || profile.role_ids.is_some() =>

@@ -55,8 +55,8 @@ impl PolicyBundleService {
                         )
                         .await?;
 
-                    let (_, preview) = service.plan(document, &actor, &authorization.scope, executor).await?;
-                    authorization.ensure_current(executor)?;
+                    let (_, preview) = service.plan(document, &actor, &authorization, executor).await?;
+                    authorization.ensure_policy_bundle_current(executor)?;
                     Ok(preview)
                 })
             })
@@ -82,7 +82,7 @@ impl PolicyBundleService {
         let facts = self.facts(roles, document.user_ids(), executor).await?;
         for scope in &document.data_scopes {
             self.access
-                .validate_person_scope_targets(&scope.targets()?, &authorization.organizations, executor)
+                .validate_person_scope_targets(scope.targets(), &authorization.organizations, executor)
                 .await?;
         }
 

@@ -52,14 +52,8 @@ impl DataScopeService {
         executor: &mut dyn Executor,
     ) -> Result<AuthorizedDataScope> {
         let spec = scope_spec::require_runtime(source)?;
-        let ids = qualified.roles_for_all(required);
-        let roles = qualified
-            .roles
-            .iter()
-            .filter(|role| ids.iter().any(|id| id.as_str() == role.base.id))
-            .cloned()
-            .collect::<Vec<_>>();
-        if roles.is_empty() {
+        let roles = qualified.roles_for_all(required);
+        if roles.clone().next().is_none() {
             return Err(Error::Forbidden("没有启用角色提供本操作的完整权限".into()));
         }
 
@@ -68,7 +62,7 @@ impl DataScopeService {
         let target = (context.permission.resource(), context.permission.action());
         let (user, at) = (context.actor.id(), context.as_of);
         let (resource, action) = (source.resource(), source.action());
-        let scope = resolve_configured_scope(spec, &roles, async {
+        let scope = resolve_configured_scope(spec, roles.clone(), async {
             state.own_org(user, at)?;
             let configs =
                 self.db.person_data_scopes().for_person(user, Some(resource), Some(action), executor).await?;
@@ -87,7 +81,7 @@ impl DataScopeService {
             target,
             (resource, action),
             (qualified.account_version, qualified.policy_revision()),
-            &roles,
+            roles,
             &state,
             &scope,
         );
@@ -124,12 +118,12 @@ impl DataScopeService {
 
 // 范围解析完成后生成 v2 稳定摘要，绑定身份、目标与来源动作、账号和策略版本、合格角色、组织及范围。
 // 跨页读取时比较摘要，版本不符时重新分页。
-fn scope_version(
+fn scope_version<'a>(
     user: &str,
     target: (&str, &str),
     source: (&str, &str),
     versions: (u64, u64),
-    roles: &[Role],
+    roles: impl IntoIterator<Item = &'a Role>,
     state: &OrganizationState,
     scope: &ResolvedScope,
 ) -> String {
@@ -152,12 +146,12 @@ fn scope_version(
 
 // 解析已取证账号的范围时，先确认至少有一个有效的合格角色。
 // 岗位共享直接采用固定公司范围，其他动作再判断超管或人员范围。
-async fn resolve_configured_scope(
+async fn resolve_configured_scope<'a>(
     spec: &scope_spec::ScopeSpec,
-    qualified_roles: &[Role],
+    qualified_roles: impl Iterator<Item = &'a Role> + Clone,
     person_scope: impl Future<Output = Result<ResolvedScope>>,
 ) -> Result<ResolvedScope> {
-    if !qualified_roles.iter().any(|role| !role.disabled && !role.base.is_deleted()) {
+    if !qualified_roles.clone().any(|role| !role.disabled && !role.base.is_deleted()) {
         return Err(Error::Forbidden("没有启用角色提供本操作的完整权限".into()));
     }
     if matches!(spec.source(), ScopeSource::Company) {
@@ -170,8 +164,8 @@ async fn resolve_configured_scope(
 }
 
 // 解析非共享动作的范围时，有效内建超管直接取得公司范围；其他角色读取人员配置，读取失败时原样返回错误。
-async fn resolve_scope(
-    roles: &[Role],
+async fn resolve_scope<'a>(
+    roles: impl IntoIterator<Item = &'a Role>,
     person_scope: impl Future<Output = Result<ResolvedScope>>,
 ) -> Result<ResolvedScope> {
     match root_scope(roles) {
@@ -207,7 +201,7 @@ mod tests {
             supplier_settlement::STATEMENT_LIST,
         ] {
             let spec = scope_spec::require_runtime(&permission).unwrap();
-            let scope = resolve_configured_scope(spec, &roles, async {
+            let scope = resolve_configured_scope(spec, roles.iter(), async {
                 panic!("共享资源不得读取旧人员范围或要求主属部门");
             })
             .await
@@ -227,10 +221,11 @@ mod tests {
         }
 
         let sales = scope_spec::require_runtime(&sales_order::LIST).unwrap();
-        let denied =
-            resolve_configured_scope(sales, &roles, async { Ok(PersonDataScope::denied()) }).await.unwrap();
+        let denied = resolve_configured_scope(sales, roles.iter(), async { Ok(PersonDataScope::denied()) })
+            .await
+            .unwrap();
         assert!(!denied.has_role_scope());
-        let failed = resolve_configured_scope(sales, &roles, async {
+        let failed = resolve_configured_scope(sales, roles.iter(), async {
             Err(Error::Forbidden("人员范围失效".into()))
         })
         .await;
@@ -248,7 +243,7 @@ mod tests {
         for roles in [vec![], vec![disabled], vec![deleted]] {
             let result = resolve_configured_scope(
                 scope_spec::require_runtime(&catalog::PRODUCT_PRODUCT_LIST).unwrap(),
-                &roles,
+                roles.iter(),
                 async { panic!("无动作资格不得读取人员范围") },
             )
             .await;

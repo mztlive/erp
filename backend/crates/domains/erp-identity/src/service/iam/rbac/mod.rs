@@ -106,30 +106,24 @@ impl RolePermissionSnapshot {
 
     /// 按冻结角色顺序返回授予指定权限的角色 ID，供判定单项权限及其授予来源。
     pub fn granting_role_ids(&self, permission: &Permission) -> Vec<RoleId> {
-        self.role_ids
-            .iter()
-            .filter(|role_id| {
-                self.grants.get(*role_id).is_some_and(|permissions| permissions.contains(permission))
-            })
-            .cloned()
-            .collect()
+        self.granting_role_ids_for_all(std::slice::from_ref(permission))
     }
 
     /// 校验同角色资格时，在每个角色内核对全部要求，按冻结顺序返回能独立授予整组权限的角色 ID。
     /// 禁止合并不同角色的授权结果；`permissions` 为空时返回空列表。
     pub fn granting_role_ids_for_all(&self, permissions: &[Permission]) -> Vec<RoleId> {
-        if permissions.is_empty() {
-            return Vec::new();
-        }
         self.role_ids
             .iter()
-            .filter(|role_id| {
-                self.grants
-                    .get(*role_id)
-                    .is_some_and(|grants| permissions.iter().all(|permission| grants.contains(permission)))
-            })
+            .filter(|role_id| self.role_covers(role_id.as_str(), permissions.iter()))
             .cloned()
             .collect()
+    }
+
+    fn role_covers<'a>(&self, role_id: &str, mut required: impl Iterator<Item = &'a Permission>) -> bool {
+        self.grants.get(role_id).is_some_and(|grants| {
+            required.next().is_some_and(|first| grants.contains(first))
+                && required.all(|permission| grants.contains(permission))
+        })
     }
 
     /// 仅在授权已拒绝时，用完整功能权限要求区分单项缺权与同一有效角色配置不满足。

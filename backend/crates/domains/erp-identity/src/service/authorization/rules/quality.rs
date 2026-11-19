@@ -18,23 +18,8 @@ pub(crate) fn scope_requests(permission: &Permission) -> Vec<(Permission, Permis
     if current(permission) { vec![(customer::LIST, customer::LIST)] } else { vec![] }
 }
 
-/// 运行时把销售基础条件与全部真实客户的当前范围取交集。
-pub(in crate::service::authorization) fn condition(
-    permission: &Permission,
-    qualified: &QualifiedPermissions,
-    scopes: &ScopeLookup<'_>,
-    base: AccessRule,
-) -> Result<AccessRule> {
-    condition_with(permission, Some(qualified), scopes, base)
-}
-
-/// 启动时展开质量当前态的客户能力条件，校验销售根和客户来源所需事实。
-pub(super) fn binding_condition(permission: &Permission, base: AccessRule) -> Result<AccessRule> {
-    condition_with(permission, None, &ScopeLookup::Capability, base)
-}
-
 // 为质量当前态叠加客户独立资格及范围；启动可不检查具体账号，其他动作保留原销售条件。
-fn condition_with(
+pub(super) fn condition(
     permission: &Permission,
     qualified: Option<&QualifiedPermissions>,
     scopes: &ScopeLookup<'_>,
@@ -135,7 +120,7 @@ mod tests {
         let scopes = [(customer::LIST, customer::LIST, scope(customer_company))];
         condition(
             &internal::CUSTOMER_QUALITY_CURRENT,
-            &qualified,
+            Some(&qualified),
             &ScopeLookup::Resolved(&scopes),
             AccessRule::scope(&scope(sales_company), false),
         )
@@ -151,8 +136,8 @@ mod tests {
         let scope = super::super::capability_scope(&customer::LIST).unwrap();
         let scopes = [(customer::LIST, customer::LIST, scope)];
         assert_eq!(
-            binding_condition(&permission, base.clone()).unwrap(),
-            condition(&permission, &qualified, &ScopeLookup::Resolved(&scopes), base).unwrap()
+            condition(&permission, None, &ScopeLookup::Capability, base.clone()).unwrap(),
+            condition(&permission, Some(&qualified), &ScopeLookup::Resolved(&scopes), base).unwrap()
         );
     }
 
@@ -205,7 +190,7 @@ mod tests {
         assert!(matches!(
             condition(
                 &internal::CUSTOMER_QUALITY_CURRENT,
-                &qualified,
+                Some(&qualified),
                 &ScopeLookup::Resolved(&[]),
                 AccessRule::Allow
             ),
@@ -216,7 +201,7 @@ mod tests {
         assert!(matches!(
             condition(
                 &internal::CUSTOMER_QUALITY_CURRENT,
-                &qualified,
+                Some(&qualified),
                 &ScopeLookup::Resolved(&[]),
                 AccessRule::Allow
             ),

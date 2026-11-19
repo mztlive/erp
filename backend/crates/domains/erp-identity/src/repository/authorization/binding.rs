@@ -62,10 +62,18 @@ impl FrozenMapping {
 
     // 运行时对照冻结描述和原始 BSON 字节，拒绝模型或固定阶段变化。
     fn ensure_model(&self) -> Result<()> {
-        if self.inner.model() != &self.model || encode_stages(&self.inner.stages())? != self.stage_bytes {
+        if self.inner.model() != &self.model || !self.same_stages()? {
             return Err(Error::ValidationError("Mapping 描述在构造后改变".into()));
         }
         Ok(())
+    }
+
+    fn same_stages(&self) -> Result<bool> {
+        let stages = self.inner.stages();
+        stages.iter().enumerate().try_fold(stages.len() == self.stage_bytes.len(), |same, (index, stage)| {
+            let bytes = encode_stage(stage)?;
+            Ok(same && self.stage_bytes.get(index) == Some(&bytes))
+        })
     }
 
     /// 返回启动时校验的模型，不依赖原映射当前描述。
@@ -122,10 +130,11 @@ impl FrozenMapping {
 
 // 将固定阶段逐项编码为 BSON 字节，以便比较时保留字段先后顺序。
 fn encode_stages(stages: &[Document]) -> Result<Vec<Vec<u8>>> {
-    stages
-        .iter()
-        .map(|stage| stage.to_vec().map_err(|_| Error::ValidationError("Mapping 固定阶段无法编码".into())))
-        .collect()
+    stages.iter().map(encode_stage).collect()
+}
+
+fn encode_stage(stage: &Document) -> Result<Vec<u8>> {
+    stage.to_vec().map_err(|_| Error::ValidationError("Mapping 固定阶段无法编码".into()))
 }
 
 // 启动时只允许 `$lookup`、`$set`、`$addFields` 固定准备，不得筛选、展开或分页根记录，也不得写库。

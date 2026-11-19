@@ -10,7 +10,8 @@ use mongodb::bson::Document;
 use persistence_core::{ExecutionBoundary, Executor};
 
 use crate::entity::authorization::{AccessContext, AccessRule, QueryModel, RelationKey};
-use crate::{Error, Permission, QualifiedPermissions, Result};
+use crate::service::authorization::work_items::DisplayQualifications;
+use crate::{Error, Permission, Result};
 
 #[cfg(test)]
 tokio::task_local! {
@@ -153,13 +154,24 @@ impl AccessValidity {
     }
 }
 
+/// 交付时仍需读取的资格，不持有账号或角色实体。
+#[derive(Clone, Default)]
+pub(crate) struct QueryQualifications {
+    /// 同次功能资格取证的策略修订。
+    pub(crate) policy_version: u64,
+    /// 仅工作项展示入口保存预先判定的按钮资格。
+    pub(crate) work_item_display: Option<DisplayQualifications>,
+    /// 是否同时具备整账计划及同角色完整金额读取资格。
+    pub(crate) whole_qualified: bool,
+}
+
 /// 授权编译器签发的 MongoDB 查询计划，业务不能自行构造或改变其绑定。
 #[derive(Clone)]
 pub struct CompiledAccess {
     /// 签发时的账号、入口、资源、模型和授权时点。
     pub(crate) context: AccessContext,
-    /// 同次取证取得的功能资格和策略修订。
-    pub(crate) qualified: QualifiedPermissions,
+    /// 同次取证中供查询交付使用的资格摘要。
+    pub(crate) qualifications: QueryQualifications,
     /// 查询可使用的服务实例、执行边界及到期时点。
     pub(crate) validity: AccessValidity,
     /// 非事务交付的复验依据，快照路径不保存。
@@ -199,11 +211,6 @@ pub(crate) struct SourcePlan {
 }
 
 impl CompiledAccess {
-    /// 判断是否已登记完整根读取计划，供复合资金结果选择整账路径。
-    pub(crate) fn has_whole_plan(&self) -> bool {
-        self.whole.is_some()
-    }
-
     /// 获取本次工作项的管理过滤，为已授权展示批次计算按钮资格；未登记时拒绝，办理仍须单独执行 `require`。
     pub fn management_stages(&self) -> Result<&[Document]> {
         match &self.management {
@@ -255,7 +262,7 @@ impl CompiledAccess {
 
     /// 返回同次功能资格取证的权限策略修订，不访问数据库，也不替代交付复验。
     pub fn policy_version(&self) -> u64 {
-        self.qualified.policy_revision()
+        self.qualifications.policy_version
     }
 
     /// 返回本次范围求值使用的组织修订；未读取组织范围时为 0，不访问数据库。

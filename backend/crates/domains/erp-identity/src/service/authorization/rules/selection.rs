@@ -39,23 +39,8 @@ pub(crate) fn scope_requests(permission: &Permission) -> Vec<(Permission, Permis
     requested
 }
 
-/// 运行时把选品根范围与固定客户或详情前提取交集，缺少所需资格或范围时拒绝。
-pub(in crate::service::authorization) fn condition(
-    permission: &Permission,
-    qualified: &QualifiedPermissions,
-    scopes: &ScopeLookup<'_>,
-    base: AccessRule,
-) -> Result<AccessRule> {
-    condition_with(permission, Some(qualified), scopes, base)
-}
-
-/// 启动校验保留列表的客户本人条件，覆盖没有可选查看资格时必须支持的事实。
-pub(super) fn binding_condition(permission: &Permission, base: AccessRule) -> Result<AccessRule> {
-    condition_with(permission, None, &ScopeLookup::Capability, base)
-}
-
 // 构造启动和运行时共用的选品规则：列表按客户范围及可选归属过滤，其他选品动作还须读真实客户，指定动作再检查选型册详情范围。
-fn condition_with(
+pub(super) fn condition(
     permission: &Permission,
     qualified: Option<&QualifiedPermissions>,
     scopes: &ScopeLookup<'_>,
@@ -207,7 +192,7 @@ mod tests {
         let permission = selection::BOOKLET_PUBLISH;
         let qualified = QualifiedPermissions::test_grants(&[("write", slice::from_ref(&permission))]);
         assert!(matches!(
-            condition(&permission, &qualified, &ScopeLookup::Resolved(&[]), AccessRule::Allow),
+            condition(&permission, Some(&qualified), &ScopeLookup::Resolved(&[]), AccessRule::Allow),
             Err(Error::Forbidden(_))
         ));
         let qualified = QualifiedPermissions::test_grants(&[
@@ -220,12 +205,15 @@ mod tests {
             (customer::DETAIL, customer::DETAIL, scope(true)),
         ];
         let rule =
-            condition(&permission, &qualified, &ScopeLookup::Resolved(&scopes), AccessRule::Allow).unwrap();
+            condition(&permission, Some(&qualified), &ScopeLookup::Resolved(&scopes), AccessRule::Allow)
+                .unwrap();
         let mut root = list_object("actor");
         assert!(rule.allows_object("actor", &root, &BTreeSet::new()).unwrap());
         root.owner_id = FactValue::Known(Some("other".into()));
         assert!(!rule.allows_object("actor", &root, &BTreeSet::new()).unwrap());
-        assert!(condition(&permission, &qualified, &ScopeLookup::Resolved(&[]), AccessRule::Allow).is_err());
+        assert!(
+            condition(&permission, Some(&qualified), &ScopeLookup::Resolved(&[]), AccessRule::Allow).is_err()
+        );
     }
 
     // 验证在能力范围且无额外全量查看资格时，选品启动条件与运行时结构一致。
@@ -246,8 +234,8 @@ mod tests {
                 .collect();
             let base = AccessRule::Fact(AccessFact::Owned);
             assert_eq!(
-                binding_condition(&permission, base.clone()).unwrap(),
-                condition(&permission, &qualified, &ScopeLookup::Resolved(&scopes), base).unwrap(),
+                condition(&permission, None, &ScopeLookup::Capability, base.clone()).unwrap(),
+                condition(&permission, Some(&qualified), &ScopeLookup::Resolved(&scopes), base).unwrap(),
                 "{permission}"
             );
         }
@@ -260,7 +248,8 @@ mod tests {
         let scopes = [(customer::LIST, customer::LIST, scope(true))];
         let ordinary = QualifiedPermissions::test_grants(&[("read", &[customer::LIST])]);
         let rule =
-            condition(&permission, &ordinary, &ScopeLookup::Resolved(&scopes), AccessRule::Allow).unwrap();
+            condition(&permission, Some(&ordinary), &ScopeLookup::Resolved(&scopes), AccessRule::Allow)
+                .unwrap();
         assert!(rule.allows_object("actor", &list_object("actor"), &BTreeSet::new()).unwrap());
         assert!(!rule.allows_object("actor", &list_object("other"), &BTreeSet::new()).unwrap());
 
@@ -268,12 +257,14 @@ mod tests {
             ("read", &[customer::LIST]),
             ("all", &[customer::ALL_AUTHORIZED_LIST]),
         ]);
-        let rule = condition(&permission, &all, &ScopeLookup::Resolved(&scopes), AccessRule::Allow).unwrap();
+        let rule =
+            condition(&permission, Some(&all), &ScopeLookup::Resolved(&scopes), AccessRule::Allow).unwrap();
         assert!(rule.allows_object("actor", &list_object("other"), &BTreeSet::new()).unwrap());
         assert!(rule.allows_object("actor", &object("actor"), &BTreeSet::new()).is_err());
 
         let limited = [(customer::LIST, customer::LIST, scope(false))];
-        let rule = condition(&permission, &all, &ScopeLookup::Resolved(&limited), AccessRule::Allow).unwrap();
+        let rule =
+            condition(&permission, Some(&all), &ScopeLookup::Resolved(&limited), AccessRule::Allow).unwrap();
         assert!(!rule.allows_object("actor", &list_object("other"), &BTreeSet::new()).unwrap());
     }
 
@@ -283,13 +274,14 @@ mod tests {
         let qualified = QualifiedPermissions::test_grants(&[("customer", &[customer::DETAIL])]);
         let scopes = [(customer::DETAIL, customer::DETAIL, scope(true))];
         for permission in [selection::BOOKLET_CREATE, selection::ADMIN_IMAGE, selection::PROPOSAL_DETAIL] {
-            let rule = condition(&permission, &qualified, &ScopeLookup::Resolved(&scopes), AccessRule::Allow)
-                .unwrap();
+            let rule =
+                condition(&permission, Some(&qualified), &ScopeLookup::Resolved(&scopes), AccessRule::Allow)
+                    .unwrap();
             assert!(rule.allows_object("actor", &list_object("other"), &BTreeSet::new()).unwrap());
             assert_eq!(qualifications(&permission), vec![customer::DETAIL]);
             let missing = QualifiedPermissions::test_grants(&[]);
             assert!(matches!(
-                condition(&permission, &missing, &ScopeLookup::Resolved(&scopes), AccessRule::Allow),
+                condition(&permission, Some(&missing), &ScopeLookup::Resolved(&scopes), AccessRule::Allow),
                 Err(Error::Forbidden(_))
             ));
         }
@@ -306,7 +298,7 @@ mod tests {
         let scopes = [(customer::DETAIL, customer::DETAIL, customer_scope.clone())];
         let rule = condition(
             &selection::ADMIN_IMAGE,
-            &qualified,
+            Some(&qualified),
             &ScopeLookup::Resolved(&scopes),
             AccessRule::Allow,
         )
@@ -317,7 +309,7 @@ mod tests {
         let scopes = [(customer::DETAIL, customer::DETAIL, customer_scope)];
         let rule = condition(
             &selection::ADMIN_IMAGE,
-            &qualified,
+            Some(&qualified),
             &ScopeLookup::Resolved(&scopes),
             AccessRule::Allow,
         )

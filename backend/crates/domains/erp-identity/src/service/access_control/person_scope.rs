@@ -9,7 +9,6 @@ use crate::access_control::ScopeDimension;
 use crate::dto::person_scope::PersonScopeCommand;
 use crate::entity::access_control::person_scope::PersonDataScope;
 use crate::entity::access_control::scope_spec;
-use crate::entity::access_control::scope_target::ScopeTarget;
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
 use crate::repository::OrganizationRepository;
@@ -58,33 +57,26 @@ impl AccessControlService {
 
     /// 保存或审核配置前，沿原事务按输入顺序核对规范化命令引用的目标是否存在且适用于指定维度。
     /// 首次遇到明确部门目标才构建组织树；部门失效、维度不符、外域校验未装配或读取失败时拒绝。
-    pub(super) async fn validate_person_scope_targets(
+    pub(super) async fn validate_person_scope_targets<'a>(
         &self,
-        targets: &[ScopeTarget],
+        targets: impl IntoIterator<Item = (ScopeDimension, &'a [String])>,
         organizations: &OrganizationState,
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut tree = None;
-        for target in targets {
-            match target {
-                ScopeTarget::OrgExplicit { ids, .. } => {
-                    if tree.is_none() {
-                        tree = Some(OrgTree::new(&organizations.units)?);
+        for (dimension, ids) in targets {
+            if dimension == ScopeDimension::InternalOrg {
+                if tree.is_none() {
+                    tree = Some(OrgTree::new(&organizations.units)?);
+                }
+                for id in ids {
+                    if tree.as_ref().expect("首次显式组织目标已加载组织树").expand(id, false)?.is_empty()
+                    {
+                        return Err(Error::ValidationError("目标部门已停用".into()));
                     }
-                    for id in ids {
-                        if tree.as_ref().expect("首次显式组织目标已加载组织树").expand(id, false)?.is_empty()
-                        {
-                            return Err(Error::ValidationError("目标部门已停用".into()));
-                        }
-                    }
-                },
-                ScopeTarget::SettlementParties(ids) => {
-                    self.targets.validate_targets(ScopeDimension::SettlementParty, ids, executor).await?
-                },
-                ScopeTarget::Warehouses(ids) => {
-                    self.targets.validate_targets(ScopeDimension::Warehouse, ids, executor).await?
-                },
-                _ => {},
+                }
+            } else {
+                self.targets.validate_targets(dimension, ids, executor).await?;
             }
         }
         Ok(())

@@ -15,17 +15,17 @@ pub enum AccessFact {
     /// 对象至少一个归属组织落在指定范围内。
     OrganizationIn(
         /// 范围条款允许的组织 ID 集合。
-        BTreeSet<String>
+        BTreeSet<String>,
     ),
     /// 对象的结算主体落在指定范围内。
     SettlementPartyIn(
         /// 范围条款允许的结算主体 ID 集合。
-        BTreeSet<String>
+        BTreeSet<String>,
     ),
     /// 对象的所属仓库落在指定范围内。
     WarehouseIn(
         /// 范围条款允许的仓库 ID 集合。
-        BTreeSet<String>
+        BTreeSet<String>,
     ),
     /// 当前账号是历史参与人，供允许历史读取的规则使用。
     HistoryParticipant,
@@ -36,7 +36,7 @@ pub enum AccessFact {
     /// 比较任务实际完成标记，由身份域与指派、参与条件组合。
     Completed(
         /// 规则要求的完成标记取值。
-        bool
+        bool,
     ),
 }
 
@@ -50,43 +50,43 @@ pub(crate) enum AccessRule {
     /// 要求所有分支满足，空交集拒绝访问。
     All(
         /// 必须共同成立的条件分支。
-        Vec<Self>
+        Vec<Self>,
     ),
     /// 至少一个分支满足，空并集拒绝访问。
     Any(
         /// 可分别满足此节点的条件分支。
-        Vec<Self>
+        Vec<Self>,
     ),
     /// 匹配当前对象的一项事实条件。
     Fact(
         /// 对象取证与查询映射共用的条件。
-        AccessFact
+        AccessFact,
     ),
     /// 求值前先核验对象事实完整性。
     Required {
         /// 内层条件执行前必须装载的事实维度。
         facts: BTreeSet<FactKind>,
         /// 完整性检查通过后执行的条件。
-        rule: Box<Self>
+        rule: Box<Self>,
     },
     /// 按独立入口的权限上下文解释内层数据条件。
     Independent {
         /// 单独取证并绑定到查询版本的功能权限。
         permission: Permission,
         /// 以授予该权限的有效角色计算的数据条件。
-        rule: Box<Self>
+        rule: Box<Self>,
     },
     /// 以有效的指定记录授权补充读取范围。
     RecordReadGrant(
         /// 记录授权须匹配的资源类型。
-        ResourceKind
+        ResourceKind,
     ),
     /// 检查已核验的来源关系是否有实际引用。
     RelationPresence {
         /// 待读取或映射的来源关系登记键。
         relation: RelationKey,
         /// `true` 要求有实际引用，`false` 要求引用为空。
-        present: bool
+        present: bool,
     },
     /// 对真实来源执行内层条件，再判断来源覆盖。
     Related {
@@ -97,7 +97,7 @@ pub(crate) enum AccessRule {
         /// 判断有权来源是否足以覆盖实际引用的方式。
         mode: RelationMatch,
         /// 对每个来源对象分别执行的条件。
-        rule: Box<Self>
+        rule: Box<Self>,
     },
 }
 
@@ -193,27 +193,19 @@ impl AccessRule {
         Self::all(dimensions)
     }
 
-    /// 用所属领域按本次账号及时点准备的快照判断范围，记录读取授权分支始终不命中。
+    /// 用调用方准备的范围事实求值；记录补权和完整对象取证只在对象授权中执行。
     pub(crate) fn allows_scope(&self, object: &ScopedObject<'_>) -> bool {
-        self.evaluate(object, &|_| false)
-    }
-
-    /// 对范围事实递归求值，记录授权由有效来源校验后的回调确认。
-    /// 此入口缺少完整对象取证，所需事实预检及来源类节点均不放行。
-    pub(crate) fn evaluate(
-        &self,
-        object: &ScopedObject<'_>,
-        granted: &impl Fn(ResourceKind) -> bool,
-    ) -> bool {
         match self {
             Self::Allow => true,
-            Self::Deny => false,
-            Self::All(rules) => !rules.is_empty() && rules.iter().all(|rule| rule.evaluate(object, granted)),
-            Self::Any(rules) => rules.iter().any(|rule| rule.evaluate(object, granted)),
+            Self::All(rules) => !rules.is_empty() && rules.iter().all(|rule| rule.allows_scope(object)),
+            Self::Any(rules) => rules.iter().any(|rule| rule.allows_scope(object)),
             Self::Fact(fact) => fact.matches_scope(object),
-            Self::RecordReadGrant(resource) => granted(*resource),
-            Self::Independent { rule, .. } => rule.evaluate(object, granted),
-            Self::Related { .. } | Self::RelationPresence { .. } | Self::Required { .. } => false,
+            Self::Independent { rule, .. } => rule.allows_scope(object),
+            Self::Deny
+            | Self::RecordReadGrant(_)
+            | Self::Related { .. }
+            | Self::RelationPresence { .. }
+            | Self::Required { .. } => false,
         }
     }
 }
@@ -343,12 +335,19 @@ mod tests {
             AccessRule::scope(&scope, false),
             AccessRule::RecordReadGrant(ResourceKind::SalesOrder),
         ]);
-        let granted = |resource| resource == ResourceKind::SalesOrder;
-        assert!(read.evaluate(&object(), &granted));
-        assert!(!read.evaluate(&object(), &|_| false));
-        assert!(!AccessRule::scope(&scope, false).evaluate(&object(), &granted));
+        let record = ObjectFacts {
+            resource: "sales_order".into(),
+            id: "sale".into(),
+            collaborators: FactValue::Known(BTreeSet::new()),
+            ..Default::default()
+        };
+        let grants = [(ResourceKind::SalesOrder, record.id.clone())].into();
+        assert!(read.allows_object("user", &record, &grants).unwrap());
+        assert!(!read.allows_object("user", &record, &BTreeSet::new()).unwrap());
+        assert!(!read.allows_scope(&object()));
+        assert!(!AccessRule::scope(&scope, false).allows_object("user", &record, &grants).unwrap());
 
         let protected = AccessRule::all(vec![read, AccessRule::Fact(AccessFact::Collaborating)]);
-        assert!(!protected.evaluate(&object(), &granted));
+        assert!(!protected.allows_object("user", &record, &grants).unwrap());
     }
 }

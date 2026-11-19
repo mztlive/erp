@@ -12,17 +12,17 @@ use crate::entity::authorization::AccessContext;
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Result};
 
-/// 组织配置取得的域内范围凭据，绑定原快照读取阶段和组织期限。
-pub(crate) struct OrganizationScope {
+/// 域内范围凭据，绑定原快照读取阶段和组织期限。
+pub(crate) struct SnapshotScope {
     // 同次授权解析出的范围、组织事实和策略版本。
     access: AuthorizedDataScope,
     // 签发时的快照事务及读取阶段。
-    boundary: ExecutionBoundary,
+    pub(super) boundary: ExecutionBoundary,
     // 成员关系变化导致范围失效的最早时点。
-    valid_until: Option<Instant>,
+    pub(super) valid_until: Option<Instant>,
 }
 
-impl Deref for OrganizationScope {
+impl Deref for SnapshotScope {
     type Target = AuthorizedDataScope;
 
     // 借出已解析的范围和组织事实，不重新取证或刷新原凭据。
@@ -31,14 +31,23 @@ impl Deref for OrganizationScope {
     }
 }
 
-impl OrganizationScope {
-    /// 组织预览、交付或首次写入前，沿原执行器检查快照阶段和范围期限；跨事务或阶段、关系到期时拒绝。
+impl SnapshotScope {
+    /// 绑定同次范围及其最早失效时点，签发入口负责在交付前核对原快照。
+    pub(super) fn new(access: AuthorizedDataScope, boundary: ExecutionBoundary) -> Self {
+        Self { valid_until: scope_deadline(&access), access, boundary }
+    }
+
+    /// 组织预览、交付或首次写入前检查原快照阶段与范围期限。
     pub(crate) fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
+        self.check(executor, "组织范围不能跨事务或读取阶段使用", "DATA_SCOPE_CHANGED：组织范围已到期")
+    }
+
+    pub(super) fn check(&self, executor: &mut dyn Executor, wrong_stage: &str, expired: &str) -> Result<()> {
         if !self.boundary.is_current(executor) {
-            return Err(Error::ValidationError("组织范围不能跨事务或读取阶段使用".into()));
+            return Err(Error::ValidationError(wrong_stage.into()));
         }
         if self.valid_until.is_some_and(|until| Instant::now() >= until) {
-            return Err(Error::ConflictError("DATA_SCOPE_CHANGED：组织范围已到期".into()));
+            return Err(Error::ConflictError(expired.into()));
         }
         Ok(())
     }
@@ -51,7 +60,7 @@ impl AuthorizationService {
         actor: &AuditActor,
         permission: &Permission,
         executor: &mut dyn Executor,
-    ) -> Result<OrganizationScope> {
+    ) -> Result<SnapshotScope> {
         if ![organization::LIST, organization::CHANGE, internal::ORGANIZATION_PERSON_PROFILE_CHANGE]
             .contains(permission)
         {
@@ -74,7 +83,7 @@ impl AuthorizationService {
         };
         let access = self.resolve_scope(&context, permission, &qualified, executor).await?;
 
-        let scope = OrganizationScope { valid_until: scope_deadline(&access), access, boundary };
+        let scope = SnapshotScope::new(access, boundary);
         scope.ensure_current(executor)?;
         Ok(scope)
     }

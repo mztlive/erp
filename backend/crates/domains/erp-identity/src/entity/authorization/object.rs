@@ -16,16 +16,13 @@ impl AccessRule {
             Self::Allow => Ok(true),
             Self::Deny => Ok(false),
             Self::All(rules) | Self::Any(rules) => {
-                let mut results = Vec::new();
+                let all = matches!(self, Self::All(_));
+                let mut matches = all && !rules.is_empty();
                 for rule in rules {
-                    results.push(rule.allows_object(actor, object, grants)?);
+                    let allowed = rule.allows_object(actor, object, grants)?;
+                    matches = if all { matches && allowed } else { matches || allowed };
                 }
-                Ok(!results.is_empty()
-                    && if matches!(self, Self::All(_)) {
-                        results.iter().all(|v| *v)
-                    } else {
-                        results.iter().any(|v| *v)
-                    })
+                Ok(matches)
             },
             Self::Fact(fact) => fact.matches_object(actor, object),
             Self::Required { facts, rule } => {

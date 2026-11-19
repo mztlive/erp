@@ -12,7 +12,7 @@ mod materials;
 mod operations;
 mod organization;
 mod policy_bundles;
-pub(crate) use organization::OrganizationScope;
+pub(crate) use organization::SnapshotScope;
 mod require;
 mod resolve;
 pub(crate) mod rules;
@@ -36,7 +36,7 @@ use facilities::Facilities;
 use persistence_core::Executor;
 
 use crate::repository::authorization::binding::FrozenMapping;
-use crate::repository::authorization::compile;
+use crate::repository::authorization::{QueryQualifications, compile};
 use crate::{AccessFactsPort, CompiledAccess, Error, Permission, QualifiedPermissions, Result};
 
 /// 统一执行 ERP 业务授权；只持有身份设施和已校验的固定绑定，不保存请求状态。
@@ -109,7 +109,14 @@ impl AuthorizationService {
             )
             .await?;
 
-        compile(proof, qualified, mapping, executor)
+        let qualifications = QueryQualifications {
+            policy_version: qualified.policy_revision(),
+            work_item_display: work_items::view_permission(permission)
+                .then(|| work_items::DisplayQualifications::new(&qualified)),
+            whole_qualified: proof.resolved.rules.whole.is_some()
+                && rules::sources::whole_qualified(permission, &qualified),
+        };
+        compile(proof, qualifications, mapping, executor)
     }
 }
 
@@ -118,28 +125,29 @@ impl CompiledAccess {
     ///
     /// 拒绝非工作项展示查询、未知种类、跨阶段及到期凭证。须使用原读取执行器，交付前仍须复验；通过不代表可以办理任务。
     pub fn execution_qualified(&self, kind: &str, source: &str, executor: &mut dyn Executor) -> Result<bool> {
-        self.ensure_work_item_view(executor)?;
-        work_items::execution_qualified(kind, source, &self.qualified)
+        self.work_item_display(executor)?.execution(kind, source)
     }
 
     /// 检查当前工作项展示批次是否有启用角色同时具备抄送历史与提交决定权限，不签发办理凭证。
     ///
     /// 须使用原读取执行器，拒绝非展示查询、跨阶段及到期凭证，交付前仍须复验。
     pub fn decision_qualified(&self, executor: &mut dyn Executor) -> Result<bool> {
-        self.ensure_work_item_view(executor)?;
-        Ok(work_items::decision_qualified(&self.qualified))
+        Ok(self.work_item_display(executor)?.decision)
     }
 
     // 投影操作按钮前，确认凭证来自固定工作项展示入口，且原读取阶段和期限仍有效。
-    fn ensure_work_item_view(&self, executor: &mut dyn Executor) -> Result<()> {
-        if !work_items::view_permission(self.permission()) {
-            return Err(Error::ValidationError("此查询不提供工作项操作展示资格".into()));
-        }
-        self.ensure_current(executor)
+    fn work_item_display(&self, executor: &mut dyn Executor) -> Result<&work_items::DisplayQualifications> {
+        let display = self
+            .qualifications
+            .work_item_display
+            .as_ref()
+            .ok_or_else(|| Error::ValidationError("此查询不提供工作项操作展示资格".into()))?;
+        self.ensure_current(executor)?;
+        Ok(display)
     }
 
     /// 供复合资金投影检查是否有整账计划及同角色功能资格。返回整账前仍须执行完整来源过滤并复验原查询凭证。
     pub fn has_whole_qualification(&self) -> bool {
-        self.has_whole_plan() && rules::sources::whole_qualified(self.permission(), &self.qualified)
+        self.qualifications.whole_qualified
     }
 }

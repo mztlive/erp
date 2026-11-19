@@ -42,11 +42,13 @@ pub(crate) enum ScopeTarget {
 impl ScopeTarget {
     /// 校验人员范围项的目标字段并规范化显式标识；角色管理部门模式不会产生人员目标。
     pub(crate) fn parse(term: &PersonScopeTerm) -> Result<Self> {
+        Self::parse_with_ids(term, term.scope_targets.clone())
+    }
+
+    /// 消费待规范化的显式 ID，供拥有输入的保存路径避免复制。
+    pub(crate) fn parse_with_ids(term: &PersonScopeTerm, ids: Vec<String>) -> Result<Self> {
         if !term.scope_type.requires_targets() {
-            if term.target_mode.is_some()
-                || term.include_descendants.is_some()
-                || !term.scope_targets.is_empty()
-            {
+            if term.target_mode.is_some() || term.include_descendants.is_some() || !ids.is_empty() {
                 return Err(CoreError::from("公司、本人及协作范围不得携带组织目标设置").into());
             }
             return Ok(match term.scope_type {
@@ -61,7 +63,7 @@ impl ScopeTarget {
         if mode != ScopeTargetMode::Explicit && term.target_dimension != ScopeDimension::InternalOrg {
             return Err(CoreError::from("动态范围仅支持内部组织").into());
         }
-        if (mode == ScopeTargetMode::Explicit) == term.scope_targets.is_empty() {
+        if (mode == ScopeTargetMode::Explicit) == ids.is_empty() {
             return Err(CoreError::from("显式模式必须指定目标，动态模式不得混入静态目标").into());
         }
         // 先校验目标形态，再拒绝合法形态的旧管理部门模式。
@@ -81,7 +83,7 @@ impl ScopeTarget {
                 include_descendants: term.include_descendants.expect("本人组织已要求下级标记"),
             }),
             ScopeTargetMode::Explicit => {
-                let ids = normalize_scope_targets(term.scope_type, term.scope_targets.clone())?;
+                let ids = normalize_scope_targets(term.scope_type, ids)?;
                 Ok(match term.target_dimension {
                     ScopeDimension::InternalOrg => Self::OrgExplicit {
                         ids,
@@ -94,11 +96,21 @@ impl ScopeTarget {
         }
     }
 
-    /// 借用已规范化的显式目标标识；动态或隐式范围返回空切片。
-    pub(crate) fn ids(&self) -> &[String] {
+    /// 事务只校验显式目标的存在性，动态和隐式范围由运行时解释。
+    pub(crate) fn explicit(&self) -> Option<(ScopeDimension, &[String])> {
+        match self {
+            Self::OrgExplicit { ids, .. } => Some((ScopeDimension::InternalOrg, ids)),
+            Self::SettlementParties(ids) => Some((ScopeDimension::SettlementParty, ids)),
+            Self::Warehouses(ids) => Some((ScopeDimension::Warehouse, ids)),
+            _ => None,
+        }
+    }
+
+    /// 移出显式目标 ID，供规范化后的条款继续持有。
+    pub(crate) fn into_ids(self) -> Vec<String> {
         match self {
             Self::OrgExplicit { ids, .. } | Self::SettlementParties(ids) | Self::Warehouses(ids) => ids,
-            _ => &[],
+            _ => Vec::new(),
         }
     }
 }

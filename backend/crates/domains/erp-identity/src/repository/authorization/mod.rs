@@ -19,8 +19,8 @@ use mongodb::bson::{Bson, Document, doc};
 use persistence_core::Executor;
 pub use query::CompiledAccess;
 pub(crate) use query::{
-    AccessProof, AccessValidity, Replay, ResolvedAccess, ResolvedFilter, ResolvedRules, ScopeMetadata,
-    WholeRule,
+    AccessProof, AccessValidity, QueryQualifications, Replay, ResolvedAccess, ResolvedFilter, ResolvedRules,
+    ScopeMetadata, WholeRule,
 };
 use query::{FilterPlan, SourcePlan};
 
@@ -29,7 +29,7 @@ use crate::entity::fingerprint::Fingerprint;
 use crate::entity::resource_access::ResourceKind;
 use crate::repository::fingerprint::BsonFingerprint;
 use crate::repository::resource_grants::grant_lookup;
-use crate::{Error, Permission, QualifiedPermissions, Result};
+use crate::{Error, Permission, Result};
 
 // 汇总本次授权编译所遇到的最早有效期。
 struct Compiler {
@@ -40,7 +40,7 @@ struct Compiler {
 /// 用服务端签发的授权证明编译固定模型的根过滤、受限投影和已登记的份额、整账或管理计划。沿用原执行边界，聚合有效期和版本，仅在非事务路径保留已解析规则用于交付复验。
 pub(crate) fn compile(
     proof: AccessProof,
-    qualified: QualifiedPermissions,
+    qualifications: QueryQualifications,
     mapping: &FrozenMapping,
     executor: &mut dyn Executor,
 ) -> Result<CompiledAccess> {
@@ -97,7 +97,7 @@ pub(crate) fn compile(
     let revalidation = (!validity.boundary.is_snapshot()).then(|| Box::new(resolved));
     let compiled = CompiledAccess {
         context,
-        qualified,
+        qualifications,
         validity,
         revalidation,
         scope,
@@ -532,7 +532,8 @@ mod tests {
     impl Query {
         // 克隆样本证明并以空角色授权集调用真实查询编译器。
         fn compile(&self, executor: &mut dyn Executor) -> Result<CompiledAccess> {
-            compile(self.proof.clone(), QualifiedPermissions::test_grants(&[]), &self.mapping, executor)
+            let qualifications = QueryQualifications { policy_version: 1, ..Default::default() };
+            compile(self.proof.clone(), qualifications, &self.mapping, executor)
         }
     }
 
@@ -572,7 +573,7 @@ mod tests {
         let query = query(AccessRule::Allow, mapping.clone(), &executor);
         let as_of = query.proof.context.as_of;
         let compiled = query.compile(&mut executor).unwrap();
-        assert_eq!(compiled.policy_version(), QualifiedPermissions::test_grants(&[]).policy_revision());
+        assert_eq!(compiled.policy_version(), 1);
         assert_eq!(compiled.organization_version(), 11);
         assert_eq!(compiled.as_of(), as_of);
     }

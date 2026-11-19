@@ -217,8 +217,8 @@ async fn preview_and_apply_preserve_the_same_authorized_target_and_review_hash()
             &PolicyFacts::default(),
             actor().id(),
             &PermissionSet::new(required.clone()),
-            access.scope.policy_version,
-            &access.scope.scope_version,
+            access.policy_version,
+            &access.scope_version,
         )
         .unwrap();
         hashes.push(preview.review_hash);

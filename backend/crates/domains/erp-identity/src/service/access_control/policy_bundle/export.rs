@@ -47,15 +47,15 @@ impl PolicyBundleService {
         if roles.iter().any(|id| !facts.roles.contains_key(id)) {
             return Err(Error::NotFound("所选角色不存在".into()));
         }
-        let output = facts.export(authorization.scope.policy_version)?;
+        let output = facts.export(authorization.policy_version)?;
         output.document.validate_catalog(&self.catalog)?;
 
         self.access
             .rbac
             .clone()
-            .ensure_policy_snapshot_with_executor(authorization.scope.policy_version, executor)
+            .ensure_policy_snapshot_with_executor(authorization.policy_version, executor)
             .await?;
-        authorization.ensure_current(executor)?;
+        authorization.ensure_policy_bundle_current(executor)?;
         Ok(output)
     }
 }

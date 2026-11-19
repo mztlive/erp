@@ -294,12 +294,7 @@ impl AuthorizationService {
                 }
                 let scopes = rules::ScopeLookup::Resolved(&scopes);
 
-                rules::quality::condition(
-                    &context.permission,
-                    qualified,
-                    &scopes,
-                    rules::selection::condition(&context.permission, qualified, &scopes, base)?,
-                )
+                rules::scoped_extensions(&context.permission, Some(qualified), &scopes, base)
             },
             ActionKind::Task => Ok(rules::records::resolved(
                 &context.permission,

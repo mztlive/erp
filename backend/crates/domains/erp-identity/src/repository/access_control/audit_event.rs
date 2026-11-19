@@ -44,7 +44,7 @@ pub struct AuditEventRow {
 }
 
 /// 审计列表的精确条件、关键词及分页选项。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AuditEventFilter {
     /// 用字面量关键词匹配操作者、动作、对象或追踪字段。
     pub q: Option<String>,
@@ -71,26 +71,6 @@ pub struct AuditEventFilter {
     pub result: Option<AuditEventResult>,
     /// 上层已校验的分页和排序参数。
     pub paging: PageParams,
-}
-
-impl Default for AuditEventFilter {
-    // 默认不添加业务筛选，按创建时间倒序读取首页 20 条。
-    fn default() -> Self {
-        Self {
-            q: None,
-            keyword_actions: None,
-            event_id: None,
-            trace_id: None,
-            created_from: None,
-            created_before: None,
-            actor_id: None,
-            action_type: None,
-            object_type: None,
-            object_id: None,
-            result: None,
-            paging: PageParams::default(),
-        }
-    }
 }
 
 impl QueryFilter for AuditEventFilter {
