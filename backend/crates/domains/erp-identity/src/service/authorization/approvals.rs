@@ -8,12 +8,12 @@ use erp_permissions::{
 use persistence_core::Executor;
 
 use super::resolve::Resolution;
-use super::targets::{Target, TargetFacts};
+use super::targets::TargetFacts;
 use super::{AuthorizationService, rules};
 use crate::entity::access_control::ResolvedScope;
 use crate::entity::access_control::scope_spec::{self, ActionKind};
 use crate::entity::authorization::{
-    AccessContext, AccessRule, FactKind, FactValue, ObjectFacts, RelationKey, ResourceTargets,
+    AccessContext, AccessRule, AccessTarget, FactKind, FactValue, ObjectFacts, RelationKey,
 };
 use crate::entity::fingerprint::Fingerprint;
 use crate::entity::resource_access::ResourceKind;
@@ -278,10 +278,9 @@ impl AuthorizationService {
 
         let context =
             AccessContext { permission: internal::APPROVAL_MANAGEMENT_READ, ..proof.context.clone() };
-        let targets = ResourceTargets::new(&[object.id.as_str()])?;
+        let target = AccessTarget::record(&object.id)?;
         let expanded_facts =
-            TargetFacts::load(&self.facts, &context, &AccessRule::Allow, Target::Records(&targets), executor)
-                .await?;
+            TargetFacts::load(&self.facts, &context, &AccessRule::Allow, &target, executor).await?;
 
         let expanded = expanded_facts
             .roots()

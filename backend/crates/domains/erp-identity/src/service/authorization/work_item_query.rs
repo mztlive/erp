@@ -3,11 +3,11 @@ use erp_permissions::{approval_instance, internal, purchase_order, sales_order, 
 use persistence_core::Executor;
 
 use super::resolve::Resolution;
-use super::targets::{SourceEvidence, Target, TargetFacts};
+use super::targets::{SourceEvidence, TargetFacts};
 use super::work_items::{decision_qualified, exact_source, order_resource};
 use super::{AuthorizationService, approval_query, materials, rules};
 use crate::entity::authorization::{
-    AccessContext, AccessFact, AccessRule, ObjectFacts, RelationKey, RelationMatch, ResourceTargets,
+    AccessContext, AccessFact, AccessRule, AccessTarget, ObjectFacts, RelationKey, RelationMatch,
 };
 use crate::repository::authorization::AccessProof;
 use crate::{Error, Permission, QualifiedPermissions, Result};
@@ -216,15 +216,8 @@ impl AuthorizationService {
         };
         let access = self.resolve_context(context, None, false, &proof.qualified, executor).await?;
 
-        let targets = ResourceTargets::new(&[instance.id.as_str()])?;
-        let facts = TargetFacts::load(
-            &self.facts,
-            &access.context,
-            &access.rule,
-            Target::Records(&targets),
-            executor,
-        )
-        .await?;
+        let target = AccessTarget::record(&instance.id)?;
+        let facts = TargetFacts::load(&self.facts, &access.context, &access.rule, &target, executor).await?;
 
         let mut proofs = self.approval_sources(&access, &facts, executor).await?;
         let context = access.context.clone();

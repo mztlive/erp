@@ -63,13 +63,6 @@ pub(super) fn binding_condition(permission: &Permission, output: Output) -> Resu
     condition_with(permission, &|_| true, &|_, source| super::capability_scope(source), output)
 }
 
-struct Partition {
-    present: Vec<Source>,
-    absent: Vec<Source>,
-    rule: AccessRule,
-    nested: Option<(Source, Vec<Partition>)>,
-}
-
 impl Source {
     // 由固定来源规则取得稳定关联键；业务提供该键的真实关系，不自行改选来源。
     fn relation(self) -> &'static str {
@@ -166,8 +159,7 @@ fn condition_with(
     scopes: &dyn Fn(&Permission, &Permission) -> Result<ResolvedScope>,
     output: Output,
 ) -> Result<AccessRule> {
-    let partitions = partitions_with(permission, qualifies, scopes, output)?;
-    let rule = partition_condition(&partitions)?;
+    let rule = source_condition(permission, qualifies, scopes, output)?;
     if permission == &receivable::CUSTOMER_RECEIPT_SUBMIT {
         return Ok(AccessRule::all(vec![rule, AccessRule::Fact(AccessFact::Owned)])
             .requiring(&BTreeSet::from([FactKind::Owner])));
@@ -175,17 +167,13 @@ fn condition_with(
     Ok(rule)
 }
 
-fn partition_condition(partitions: &[Partition]) -> Result<AccessRule> {
-    Ok(AccessRule::any(partitions.iter().map(Partition::condition).collect::<Result<_>>()?))
-}
-
 // 按真实完整来源确定分区，不能用已获准来源的子集判断是否具备整账资格。
-fn partitions_with(
+fn source_condition(
     permission: &Permission,
     qualifies: &dyn Fn(&[Permission]) -> bool,
     scopes: &dyn Fn(&Permission, &Permission) -> Result<ResolvedScope>,
     output: Output,
-) -> Result<Vec<Partition>> {
+) -> Result<AccessRule> {
     if scope_spec::kind(permission)? != ActionKind::Source {
         return Err(Error::ValidationError("此入口不使用来源分区规则".into()));
     }
@@ -215,15 +203,15 @@ fn partitions_with(
             continue;
         }
 
-        let (present, absent): (Vec<_>, Vec<_>) =
-            sources.iter().enumerate().partition(|(index, _)| mask & (1 << index) != 0);
-        let present = present.into_iter().map(|(_, source)| *source).collect::<Vec<_>>();
-        let absent = absent.into_iter().map(|(_, source)| *source).collect::<Vec<_>>();
-
-        let rules = present
+        let rules = sources
             .iter()
-            .filter(|source| output == Output::Object || share_source(permission, **source))
-            .map(|source| source_rule(permission, *source, scopes, output))
+            .copied()
+            .enumerate()
+            .filter(|(index, source)| {
+                source_present(mask, *index)
+                    && (output == Output::Object || share_source(permission, *source))
+            })
+            .map(|(_, source)| source_rule(permission, source, scopes, output))
             .collect::<Result<Vec<_>>>()?;
         let rule = if ledger && !ledger_allowed {
             AccessRule::Deny
@@ -234,9 +222,29 @@ fn partitions_with(
         } else {
             AccessRule::all(rules)
         };
-        partitions.push(Partition { present, absent, rule, nested: None });
+        partitions.push(AccessRule::all(with_presence(rule, &sources, mask)?));
     }
-    Ok(partitions)
+    Ok(AccessRule::any(partitions))
+}
+
+fn source_present(mask: usize, index: usize) -> bool {
+    mask & (1 << index) != 0
+}
+
+fn with_presence(rule: AccessRule, sources: &[Source], mask: usize) -> Result<Vec<AccessRule>> {
+    let mut rules = vec![rule];
+    // 先检查存在的引用，再检查缺席的引用，保持规则和查询阶段的顺序。
+    for present in [true, false] {
+        for (index, source) in sources.iter().enumerate() {
+            if source_present(mask, index) == present {
+                rules.push(AccessRule::RelationPresence {
+                    relation: RelationKey::parse(source.relation())?,
+                    present,
+                });
+            }
+        }
+    }
+    Ok(rules)
 }
 
 // 为实际来源保留普通范围或有效记录授权的读取分支，不再附加来源菜单功能权限。
@@ -299,8 +307,7 @@ pub(crate) fn management_condition(
             .map(|(_, scope)| scope.clone())
             .ok_or_else(|| Error::ValidationError("缺少审批管理来源范围".into()))
     };
-    let partitions = partitions_with(permission, &|_| true, &lookup, Output::Object)?;
-    partition_condition(&partitions)
+    source_condition(permission, &|_| true, &lookup, Output::Object)
 }
 
 // 局部测试提供按来源索引的范围，最终条件仍走实际规则。
@@ -325,52 +332,30 @@ pub(crate) fn data_condition(
     )
 }
 
-impl Partition {
-    // 为当前分区保留原始完整关系的存在条件，不能预先剔除未获准来源后再判定根记录所属分区。
-    fn condition(&self) -> Result<AccessRule> {
-        let mut rules = vec![self.rule.clone()];
-        for source in self.present.iter().chain(&self.absent) {
-            rules.push(AccessRule::RelationPresence {
-                relation: RelationKey::parse(source.relation())?,
-                present: self.present.contains(source),
-            });
-        }
-
-        if let Some((source, partitions)) = &self.nested {
-            rules.push(AccessRule::Related {
-                relation: RelationKey::parse(source.relation())?,
-                resource: source.permission().resource().into(),
-                mode: RelationMatch::ExactlyOne,
-                rule: Box::new(AccessRule::Independent {
-                    permission: source.permission(),
-                    rule: Box::new(partition_condition(partitions)?),
-                }),
-            });
-        }
-        Ok(AccessRule::all(rules))
-    }
-}
-
 // 退款条件要求唯一真实资金根、各入口自己的详情资格，以及原经办责任，不能只凭其中一项读取。
 fn refund_conditions(
     sources: &[Source],
     qualifies: &dyn Fn(&[Permission]) -> bool,
     scopes: &dyn Fn(&Permission, &Permission) -> Result<ResolvedScope>,
-) -> Result<Vec<Partition>> {
+) -> Result<AccessRule> {
     let mut partitions = Vec::new();
-    for source in sources {
+    for (index, source) in sources.iter().enumerate() {
         let permission = source.permission();
-        let allowed = qualifies(&same_role_permissions(&permission));
-        let nested =
-            if allowed { partitions_with(&permission, qualifies, scopes, Output::Object)? } else { vec![] };
-        partitions.push(Partition {
-            present: vec![*source],
-            absent: sources.iter().copied().filter(|item| item != source).collect(),
-            rule: AccessRule::Fact(AccessFact::Owned),
-            nested: Some((*source, nested)),
+        let nested = if qualifies(&same_role_permissions(&permission)) {
+            source_condition(&permission, qualifies, scopes, Output::Object)?
+        } else {
+            AccessRule::Deny
+        };
+        let mut rules = with_presence(AccessRule::Fact(AccessFact::Owned), sources, 1 << index)?;
+        rules.push(AccessRule::Related {
+            relation: RelationKey::parse(source.relation())?,
+            resource: permission.resource().into(),
+            mode: RelationMatch::ExactlyOne,
+            rule: Box::new(AccessRule::Independent { permission, rule: Box::new(nested) }),
         });
+        partitions.push(AccessRule::all(rules));
     }
-    Ok(partitions)
+    Ok(AccessRule::any(partitions))
 }
 
 #[cfg(test)]

@@ -4,9 +4,8 @@ use application_core::AuditActor;
 use erp_permissions::internal;
 use persistence_core::Executor;
 
-use super::targets::{Target, TargetFacts};
+use super::targets::TargetFacts;
 use super::{AuthorizationService, definitions, operations, rules};
-use crate::entity::access_control::scope_spec;
 use crate::entity::authorization::{AccessContext, AccessRule, AccessTarget, ResourceTargets};
 use crate::entity::resource_access::ResourceKind;
 use crate::{Error, Permission, Result};
@@ -23,16 +22,15 @@ impl AuthorizationService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         executor.next_read();
-        let kind = scope_spec::kind(permission)?;
-        let form = target.form();
-        rules::ensure_target(permission, kind, form)?;
-        if (form == rules::TargetForm::Operation
-            || form == rules::TargetForm::Task
+        rules::ensure_target(permission, &target)?;
+        let operation = matches!(&target, AccessTarget::Operation);
+        if (operation
+            || matches!(&target, AccessTarget::Task { .. })
             || !rules::is_read(permission)
             || operations::source(permission).is_some())
             && !executor.boundary().is_some_and(|boundary| boundary.is_snapshot())
         {
-            let message = if form == rules::TargetForm::Operation && rules::is_read(permission) {
+            let message = if operation && rules::is_read(permission) {
                 "无对象操作及其业务读取必须使用快照事务"
             } else {
                 "写入授权必须使用快照事务"
@@ -44,11 +42,11 @@ impl AuthorizationService {
             return self.require_work_item_qualification(actor, &target, executor).await;
         }
 
-        if form == rules::TargetForm::Candidate && definitions::entry(permission).is_some() {
+        if matches!(&target, AccessTarget::Candidate(_)) && definitions::entry(permission).is_some() {
             return self.require_definition(actor, permission, &target, executor).await;
         }
 
-        if matches!(target, AccessTarget::Operation) {
+        if operation {
             let boundary = executor.boundary();
             let qualified = self.qualify(actor, permission, executor).await?;
             self.require_operation_scope(actor, permission, &qualified, executor).await?;
@@ -81,8 +79,7 @@ impl AuthorizationService {
             )
             .await?;
 
-        let facts =
-            TargetFacts::load(&self.facts, &proof.context, &proof.rule, target.borrowed()?, executor).await?;
+        let facts = TargetFacts::load(&self.facts, &proof.context, &proof.rule, target, executor).await?;
 
         let mut source_proofs = self.approval_sources(&proof, &facts, executor).await?;
         source_proofs.extend(self.approval_decision_sources(&proof, &facts, executor).await?);
@@ -138,27 +135,5 @@ impl AuthorizationService {
             grants.extend(authorized.into_iter().map(|id| (resource, id)));
         }
         Ok(grants)
-    }
-}
-
-impl AccessTarget {
-    fn form(&self) -> rules::TargetForm {
-        match self {
-            Self::Operation => rules::TargetForm::Operation,
-            Self::Records(_) => rules::TargetForm::Record,
-            Self::Candidate(_) => rules::TargetForm::Candidate,
-            Self::OwnershipChange { .. } => rules::TargetForm::OwnershipChange,
-            Self::Task { .. } => rules::TargetForm::Task,
-        }
-    }
-
-    fn borrowed(&self) -> Result<Target<'_>> {
-        Ok(match self {
-            Self::Records(ids) => Target::Records(ids),
-            Self::Candidate(candidate) => Target::Candidate(candidate),
-            Self::OwnershipChange { id, candidate } => Target::OwnershipChange { id, candidate },
-            Self::Task { id, version } => Target::Task { id, version },
-            Self::Operation => return Err(Error::ValidationError("无对象目标不能读取事实".into())),
-        })
     }
 }

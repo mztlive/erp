@@ -664,6 +664,44 @@ async fn existence_bindings_reject_payload_and_only_deliver_the_row_identity() {
 }
 
 #[tokio::test]
+async fn receipt_query_keeps_plan_and_cursor_fingerprints() {
+    use erp_permissions::policy_permission::FINANCE_LEDGER_READ;
+
+    use crate::entity::fingerprint::Fingerprint;
+    use crate::repository::fingerprint::BsonFingerprint;
+
+    let permission = receivable::CUSTOMER_RECEIPT_LIST;
+    let identity = Arc::new(Identity::default());
+    let mut map = mapping(&permission);
+    Arc::get_mut(&mut map).unwrap().model.output = QueryOutput::Existence { fields: ["id".into()].into() };
+    let mut builder = complete();
+    builder.facilities = identity.clone();
+    builder.mappings.insert(permission.clone(), map);
+    let service = builder.build().unwrap();
+    let sales_source = RelationKey::parse("sales_source").unwrap();
+    let mut fingerprints = Vec::new();
+
+    for grants in [vec![permission.clone()], vec![permission.clone(), FINANCE_LEDGER_READ]] {
+        identity.state.lock().unwrap().grants = vec![("finance".into(), grants)];
+        let mut executor = ReadExecutor::default();
+        let access = service.query(&actor(), &permission, &mut executor).await.unwrap();
+        let mut plans = Fingerprint::new("receipt-source-plans-test");
+        plans.sequence(access.whole_stages().unwrap(), Fingerprint::document);
+        plans.sequence(access.source_stages(&sales_source).unwrap(), Fingerprint::document);
+        fingerprints.push((access.version(), plans.finish()));
+        service.validate(&access, &mut executor).await.unwrap();
+    }
+
+    assert_eq!(
+        fingerprints,
+        [
+            ("439a3e5d8e24eedf4ae4461f308c9001".into(), "066677e8522a9e6bcf3dd84e756c147e".into()),
+            ("6c42ba6db4e51b53c20bb8c4c54cca3b".into(), "44323f26c0035dc090357ccc101509c1".into()),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn shared_write_permissions_support_queries_without_relaxing_task_or_transaction_checks() {
     for permission in [inquiry::QUERY_PROCUREMENT_INTERNAL_QUOTES, purchase_payment_request::CREDIT_LIST] {
         let mut builder = complete();

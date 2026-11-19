@@ -5,15 +5,15 @@ use erp_permissions::{approval_admin, approval_process, internal};
 use persistence_core::{ExecutionBoundary, Executor};
 
 use super::AuthorizationService;
-use super::rules::TargetForm;
 use crate::entity::authorization::{AccessTarget, ObjectFacts};
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
 // 审批定义用例按固定入口确定目标形态；对定义写入必须带实际单据类型，不能仅证菜单权限。
-pub(super) fn target(permission: &Permission, form: TargetForm) -> Option<bool> {
+pub(super) fn target(permission: &Permission, target: &AccessTarget) -> Option<bool> {
     entry(permission).map(|_| {
-        form == TargetForm::Candidate
-            || (permission == &approval_process::DEFINITION_DETAIL && form == TargetForm::Operation)
+        matches!(target, AccessTarget::Candidate(_))
+            || (permission == &approval_process::DEFINITION_DETAIL
+                && matches!(target, AccessTarget::Operation))
     })
 }
 

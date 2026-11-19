@@ -26,20 +26,10 @@ use super::{
 use crate::entity::access_control::scope_spec::{self, ActionKind};
 use crate::entity::access_control::{DataScopeType, ResolvedScope, ScopeClause, ScopeDimension};
 use crate::entity::authorization::{
-    AccessFact, AccessRule, FactKind, QueryOutput, RelationKey, RelationMatch,
+    AccessFact, AccessRule, AccessTarget, FactKind, QueryOutput, RelationKey, RelationMatch,
 };
 use crate::entity::resource_access::ResourceKind;
 use crate::{Error, Permission, Result};
-
-/// 调用方可以提交的目标形态。权限自己决定哪些形态有效。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum TargetForm {
-    Operation,
-    Record,
-    Candidate,
-    OwnershipChange,
-    Task,
-}
 
 // 取固定入口要求的完整同角色功能权限组合，不接受业务调用方改动所需集合。
 pub(crate) fn same_role_permissions(permission: &Permission) -> Vec<Permission> {
@@ -133,7 +123,7 @@ pub(crate) fn data_condition(permission: &Permission, scope: Option<&ResolvedSco
     }
 }
 
-fn specific_target(permission: &Permission, target: TargetForm) -> Option<bool> {
+fn specific_target(permission: &Permission, target: &AccessTarget) -> Option<bool> {
     if [
         returns::CUSTOMER_REFUND_CUSTOMER_REFUND_SUBMIT,
         returns::SUPPLIER_REFUND_SUPPLIER_REFUND_SUBMIT,
@@ -144,33 +134,34 @@ fn specific_target(permission: &Permission, target: TargetForm) -> Option<bool> 
     ]
     .contains(permission)
     {
-        return Some(matches!(target, TargetForm::Candidate | TargetForm::Record));
+        return Some(matches!(target, AccessTarget::Candidate(_) | AccessTarget::Records(_)));
     }
     if [internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT].contains(permission) {
-        return Some(target == TargetForm::Task);
+        return Some(matches!(target, AccessTarget::Task { .. }));
     }
     if permission == &internal::WORK_ITEM_EXECUTION_QUALIFICATION {
-        return Some(target == TargetForm::Candidate);
+        return Some(matches!(target, AccessTarget::Candidate(_)));
     }
     if let Some(allowed) = definitions::target(permission, target) {
         return Some(allowed);
     }
     if approvals::supports(permission) {
         return Some(
-            target == TargetForm::Record
-                || (permission == &approval_instance::UPGRADE_BINDING && target == TargetForm::Candidate),
+            matches!(target, AccessTarget::Records(_))
+                || (permission == &approval_instance::UPGRADE_BINDING
+                    && matches!(target, AccessTarget::Candidate(_))),
         );
     }
     if permission == &supplier_offering::COMPLETE_SUPPLY_EXCEPTION_TASK {
-        return Some(target == TargetForm::Task);
+        return Some(matches!(target, AccessTarget::Task { .. }));
     }
     if permission == &purchase_payment_request::CREDIT_LIST || permission == &receivable::INVOICE_POST {
-        return Some(target == TargetForm::Task);
+        return Some(matches!(target, AccessTarget::Task { .. }));
     }
-    if target == TargetForm::Task && task_supported(permission) {
+    if matches!(target, AccessTarget::Task { .. }) && task_supported(permission) {
         return Some(true);
     }
-    if permission == &sales_order::SUBMIT && target == TargetForm::Candidate {
+    if permission == &sales_order::SUBMIT && matches!(target, AccessTarget::Candidate(_)) {
         return Some(true);
     }
     if [
@@ -180,12 +171,13 @@ fn specific_target(permission: &Permission, target: TargetForm) -> Option<bool> 
     ]
     .contains(permission)
     {
-        return Some(target == TargetForm::Candidate);
+        return Some(matches!(target, AccessTarget::Candidate(_)));
     }
     None
 }
 
-pub(super) fn ensure_target(permission: &Permission, kind: ActionKind, target: TargetForm) -> Result<()> {
+pub(super) fn ensure_target(permission: &Permission, target: &AccessTarget) -> Result<()> {
+    let kind = scope_spec::kind(permission)?;
     if let Some(allowed) = specific_target(permission, target) {
         return if allowed {
             Ok(())
@@ -195,29 +187,31 @@ pub(super) fn ensure_target(permission: &Permission, kind: ActionKind, target: T
     }
 
     let allowed = match kind {
-        ActionKind::Function => matches!(target, TargetForm::Operation),
+        ActionKind::Function => matches!(target, AccessTarget::Operation),
         ActionKind::Task => {
             if records::condition(permission).is_some() {
-                matches!(target, TargetForm::Record)
+                matches!(target, AccessTarget::Records(_))
             } else {
-                matches!(target, TargetForm::Task)
+                matches!(target, AccessTarget::Task { .. })
             }
         },
         ActionKind::Source => {
             if permission.action() == "create" {
-                matches!(target, TargetForm::Candidate)
+                matches!(target, AccessTarget::Candidate(_))
             } else if permission == &purchase_payment_request::UPDATE
                 || permission == &receivable::CUSTOMER_RECEIPT_SUBMIT
             {
-                matches!(target, TargetForm::Record | TargetForm::OwnershipChange)
+                matches!(target, AccessTarget::Records(_) | AccessTarget::OwnershipChange { .. })
             } else {
-                matches!(target, TargetForm::Record)
+                matches!(target, AccessTarget::Records(_))
             }
         },
         ActionKind::Scope => match permission.action() {
-            "create" => matches!(target, TargetForm::Candidate),
-            "update" | "handover" => matches!(target, TargetForm::Record | TargetForm::OwnershipChange),
-            _ => matches!(target, TargetForm::Record),
+            "create" => matches!(target, AccessTarget::Candidate(_)),
+            "update" | "handover" => {
+                matches!(target, AccessTarget::Records(_) | AccessTarget::OwnershipChange { .. })
+            },
+            _ => matches!(target, AccessTarget::Records(_)),
         },
     };
     if allowed { Ok(()) } else { Err(Error::ValidationError("此权限不支持该授权目标".into())) }

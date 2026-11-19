@@ -1,5 +1,6 @@
 //! 已有记录、服务端候选和精确任务的事实执行。
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -7,10 +8,9 @@ use erp_core::common::time::Instant;
 use persistence_core::{ExecutionBoundary, Executor};
 
 use super::approvals;
-use super::rules::{self, TargetForm};
-use crate::entity::access_control::scope_spec;
+use super::rules;
 use crate::entity::authorization::{
-    AccessContext, AccessRule, ObjectFacts, RelationKey, RelationMatch, ResourceTargets,
+    AccessContext, AccessRule, AccessTarget, ObjectFacts, RelationKey, RelationMatch, ResourceTargets,
 };
 use crate::entity::resource_access::ResourceKind;
 use crate::ports::AccessFactsPort;
@@ -19,19 +19,10 @@ use crate::{Error, Result};
 
 type FactsBindings = BTreeMap<String, Arc<dyn AccessFactsPort>>;
 
-/// 创建候选没有持久化版本；原对象和任务始终从拥有领域读取。
-pub(super) enum Target<'a> {
-    Records(&'a ResourceTargets),
-    Candidate(&'a ObjectFacts),
-    OwnershipChange { id: &'a str, candidate: &'a ObjectFacts },
-    Task { id: &'a str, version: &'a str },
-}
-
 pub(super) struct TargetFacts {
     objects: Vec<ObjectFacts>,
     candidate: Option<ObjectFacts>,
     boundary: ExecutionBoundary,
-    task: bool,
 }
 
 /// 来源证明保留独立加载的完整事实，供原读取阶段统一复验和最终期限检查。
@@ -55,7 +46,7 @@ impl TargetFacts {
         bindings: &FactsBindings,
         context: &AccessContext,
         rule: &AccessRule,
-        target: Target<'_>,
+        target: &AccessTarget,
         executor: &mut dyn Executor,
     ) -> Result<Self> {
         if context.resource != context.permission.resource() {
@@ -64,41 +55,43 @@ impl TargetFacts {
         let boundary =
             executor.boundary().ok_or_else(|| Error::ValidationError("目标读取缺少执行边界".into()))?;
 
-        let (form, ids, candidate, version) = match target {
-            Target::Records(ids) => (TargetForm::Record, ids.clone(), None, None),
-            Target::Candidate(candidate) => {
-                (TargetForm::Candidate, ResourceTargets::new(&[])?, Some(candidate), None)
+        let (ids, candidate, version) = match target {
+            AccessTarget::Records(ids) => (Some(Cow::Borrowed(ids)), None, None),
+            AccessTarget::Candidate(candidate) => (None, Some(candidate), None),
+            AccessTarget::OwnershipChange { id, candidate } => {
+                (Some(Cow::Owned(ResourceTargets::new(&[id])?)), Some(candidate), None)
             },
-            Target::OwnershipChange { id, candidate } => {
-                (TargetForm::OwnershipChange, ResourceTargets::new(&[id])?, Some(candidate), None)
-            },
-            Target::Task { id, version } => {
+            AccessTarget::Task { id, version } => {
                 if version.is_empty() {
                     return Err(Error::ValidationError("必须提供精确任务版本".into()));
                 }
-                (TargetForm::Task, ResourceTargets::new(&[id])?, None, Some(version))
+                (Some(Cow::Owned(ResourceTargets::new(&[id])?)), None, Some(version))
             },
+            AccessTarget::Operation => return Err(Error::ValidationError("无对象目标不能读取事实".into())),
         };
-        rules::ensure_target(&context.permission, scope_spec::kind(&context.permission)?, form)?;
-        if (form == TargetForm::Task || !rules::is_read(&context.permission)) && !boundary.is_snapshot() {
+        rules::ensure_target(&context.permission, target)?;
+        if (version.is_some() || !rules::is_read(&context.permission)) && !boundary.is_snapshot() {
             return Err(Error::ValidationError("对象写入授权必须使用快照事务".into()));
         }
-        if !matches!(form, TargetForm::Candidate) && ids.ids().is_empty() {
-            return Err(Error::ValidationError("授权目标不能为空".into()));
-        }
 
-        let task = matches!(form, TargetForm::Task);
-        let objects = load_target_records(bindings, context, &ids, task, executor).await?;
-        if version.is_some_and(|version| objects[0].version != version) {
-            return Err(Error::ConflictError("任务版本已改变".into()));
-        }
-
+        let objects = if let Some(ids) = ids.as_deref() {
+            if ids.ids().is_empty() {
+                return Err(Error::ValidationError("授权目标不能为空".into()));
+            }
+            let objects = load_records(bindings, context, ids, version.is_some(), executor).await?;
+            if version.is_some_and(|version| objects[0].version != *version) {
+                return Err(Error::ConflictError("任务版本已改变".into()));
+            }
+            objects
+        } else {
+            Vec::new()
+        };
         let candidate = match candidate {
             Some(candidate) => Some(load_candidate(bindings, context, rule, candidate, executor).await?),
             None => None,
         };
 
-        let result = Self { objects, candidate, boundary, task };
+        let result = Self { objects, candidate, boundary };
         if !result.boundary.is_current(executor) {
             return Err(Error::ValidationError("目标读取跨越执行阶段".into()));
         }
@@ -162,11 +155,13 @@ impl TargetFacts {
         context: &AccessContext,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if !self.boundary.is_snapshot() {
+        if !self.boundary.is_current(executor) {
+            return Err(Error::ValidationError("目标检查跨越执行阶段".into()));
+        }
+        if !self.boundary.is_snapshot() && !self.objects.is_empty() {
             let ids = self.objects.iter().map(|object| object.id.as_str()).collect::<Vec<_>>();
             let current =
-                load_target_records(bindings, context, &ResourceTargets::new(&ids)?, self.task, executor)
-                    .await?;
+                load_records(bindings, context, &ResourceTargets::new(&ids)?, false, executor).await?;
             if current != self.objects {
                 return Err(Error::ConflictError("DATA_SCOPE_CHANGED：对象事实已改变".into()));
             }
@@ -176,38 +171,20 @@ impl TargetFacts {
     }
 }
 
-// 精确任务只从固定任务事实端口获取真实目标，按原入口权限解释，不允许调用方替换事实提供者。
-async fn load_target_records(
+// 精确任务从固定任务端口读取，返回对象仍按原入口资源核对。
+async fn load_records(
     bindings: &FactsBindings,
     context: &AccessContext,
     ids: &ResourceTargets,
     task: bool,
     executor: &mut dyn Executor,
 ) -> Result<Vec<ObjectFacts>> {
-    if !task {
-        return load_records(bindings, context, ids, executor).await;
-    }
-    let resource = rules::task_facts_resource(&context.permission);
-    let port = bindings.get(resource).ok_or_else(|| Error::ValidationError("缺少任务 Facts 绑定".into()))?;
-    let mut objects = port.load(context, ids, executor).await?;
-    ids.ensure_objects(&context.resource, &objects)?;
-    ObjectFacts::canonicalize(&mut objects)?;
-    Ok(objects)
-}
-
-// 批量检查必须一次核对返回的完整根集合；未找到记录不能当成读到了空事实。
-async fn load_records(
-    bindings: &FactsBindings,
-    context: &AccessContext,
-    ids: &ResourceTargets,
-    executor: &mut dyn Executor,
-) -> Result<Vec<ObjectFacts>> {
-    if ids.ids().is_empty() {
-        return Ok(vec![]);
-    }
-    let port = bindings
-        .get(&context.resource)
-        .ok_or_else(|| Error::ValidationError("缺少对象 Facts 绑定".into()))?;
+    let (resource, missing) = if task {
+        (rules::task_facts_resource(&context.permission), "缺少任务 Facts 绑定")
+    } else {
+        (context.resource.as_str(), "缺少对象 Facts 绑定")
+    };
+    let port = bindings.get(resource).ok_or_else(|| Error::ValidationError(missing.into()))?;
     let mut objects = port.load(context, ids, executor).await?;
     ids.ensure_objects(&context.resource, &objects)?;
     ObjectFacts::canonicalize(&mut objects)?;
@@ -392,7 +369,7 @@ mod tests {
             &BTreeMap::new(),
             &context,
             &rule,
-            Target::Candidate(&candidate),
+            &AccessTarget::Candidate(candidate.clone()),
             &mut executor,
         )
         .await
@@ -405,7 +382,7 @@ mod tests {
                 &BTreeMap::new(),
                 &context,
                 &rule,
-                Target::Candidate(&candidate),
+                &AccessTarget::Candidate(candidate.clone()),
                 &mut ReadExecutor::default()
             )
             .await,
@@ -414,8 +391,14 @@ mod tests {
 
         let wrong = ObjectFacts { version: "persisted-v1".into(), ..candidate };
         assert!(matches!(
-            TargetFacts::load(&BTreeMap::new(), &context, &rule, Target::Candidate(&wrong), &mut executor)
-                .await,
+            TargetFacts::load(
+                &BTreeMap::new(),
+                &context,
+                &rule,
+                &AccessTarget::Candidate(wrong),
+                &mut executor
+            )
+            .await,
             Err(Error::ValidationError(_))
         ));
     }
@@ -440,7 +423,7 @@ mod tests {
                 &bindings,
                 &context,
                 &rule,
-                Target::OwnershipChange { id: "original", candidate: &candidate },
+                &AccessTarget::OwnershipChange { id: "original".into(), candidate },
                 &mut executor,
             )
             .await
@@ -470,7 +453,7 @@ mod tests {
             &bindings,
             &context,
             &rule,
-            Target::OwnershipChange { id: "original", candidate: &destination },
+            &AccessTarget::OwnershipChange { id: "original".into(), candidate: destination },
             &mut executor,
         )
         .await
@@ -528,7 +511,7 @@ mod tests {
                 &bindings,
                 &context,
                 &rule,
-                Target::Candidate(&input_candidate),
+                &AccessTarget::Candidate(input_candidate.clone()),
                 &mut executor,
             )
             .await
@@ -555,7 +538,7 @@ mod tests {
             &BTreeMap::new(),
             &context,
             &AccessRule::Allow,
-            Target::Task { id: "task", version: "1" },
+            &AccessTarget::Task { id: "task".into(), version: "1".into() },
             &mut executor,
         )
         .await;
@@ -576,13 +559,14 @@ mod tests {
             ..Default::default()
         };
         let port = Arc::new(Facts { objects: vec![task], ..Default::default() });
-        let bindings: FactsBindings = [(context.resource.clone(), port as Arc<dyn AccessFactsPort>)].into();
+        let bindings: FactsBindings =
+            [(context.resource.clone(), port.clone() as Arc<dyn AccessFactsPort>)].into();
         let mut executor = SnapshotExecutor::default();
         let facts = TargetFacts::load(
             &bindings,
             &context,
             &rule,
-            Target::Task { id: "task", version: "v2" },
+            &AccessTarget::Task { id: "task".into(), version: "v2".into() },
             &mut executor,
         )
         .await
@@ -593,7 +577,7 @@ mod tests {
                 &bindings,
                 &context,
                 &rule,
-                Target::Task { id: "task", version: "v1" },
+                &AccessTarget::Task { id: "task".into(), version: "v1".into() },
                 &mut executor
             )
             .await,
@@ -604,7 +588,7 @@ mod tests {
                 &bindings,
                 &context,
                 &rule,
-                Target::Task { id: "business-id", version: "v2" },
+                &AccessTarget::Task { id: "business-id".into(), version: "v2".into() },
                 &mut executor
             )
             .await,
@@ -615,12 +599,21 @@ mod tests {
                 &bindings,
                 &context,
                 &rule,
-                Target::Records(&ResourceTargets::new(&["task"]).unwrap()),
+                &AccessTarget::record("task").unwrap(),
                 &mut executor
             )
             .await,
             Err(Error::ValidationError(_))
         ));
+
+        let reads = port.calls.lock().unwrap().len();
+        facts.revalidate(&bindings, &context, &mut executor).await.unwrap();
+        executor.next_read();
+        assert!(matches!(
+            facts.revalidate(&bindings, &context, &mut executor).await,
+            Err(Error::ValidationError(message)) if message == "目标检查跨越执行阶段"
+        ));
+        assert_eq!(port.calls.lock().unwrap().len(), reads);
     }
 
     #[tokio::test]
@@ -633,7 +626,7 @@ mod tests {
             &BTreeMap::new(),
             &context,
             &rule,
-            Target::Candidate(&candidate),
+            &AccessTarget::Candidate(candidate.clone()),
             &mut executor,
         )
         .await
@@ -675,7 +668,6 @@ mod tests {
             objects: children,
         };
         let build = |related: RelatedObjects| TargetFacts {
-            task: false,
             objects: vec![],
             boundary: executor.boundary().unwrap(),
             candidate: Some(ObjectFacts {
