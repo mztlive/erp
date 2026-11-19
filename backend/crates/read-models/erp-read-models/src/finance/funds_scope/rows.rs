@@ -176,6 +176,9 @@ pub struct ScopedSupplierPaymentRow {
     pub visible_allocated_share: Amount,
     /// 整单付款金额；部分授权为 null。
     pub amount: Option<Amount>,
+    /// 仅完整详情返回有效付款金额。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_amount: Option<Amount>,
     /// 整单已核销合计；部分授权为 null。
     pub allocated_total: Option<Amount>,
     /// 未分配余额；部分授权为 null。

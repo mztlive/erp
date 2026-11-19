@@ -37,7 +37,7 @@ impl FundsAccess {
             },
             "receivable_account" => self.guard_receivable_account(actor, id, executor).await.map(|()| true),
             "supplier_payment" => self
-                .load_supplier_payment_detail(id, actor, executor)
+                .load_supplier_payment_detail(id, actor, executor, false)
                 .await
                 .map(|row| !row.data.permission_limited),
             "payable_account" => self

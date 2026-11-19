@@ -8,7 +8,6 @@ import type {
     PaymentGuidance,
     PaymentAllocationLine,
     PaymentReversalRow,
-    PaymentReversalSummary,
     PaymentRow,
     PurchaseInvoiceRow,
     SupplierAccountsQuery,
@@ -45,6 +44,7 @@ import {
     supplierRefundStatusLabel,
     supplierRefundStatusTone,
 } from "@/features/supplier-payables/lib/supplier-refund-approval"
+import type { ScopedSupplierPaymentWire } from "./scoped"
 
 // ─── Backend DTOs ──────────────────────────────────────────────────────────
 
@@ -258,14 +258,6 @@ export function instantToIso(secs: number | undefined | null): string {
     return new Date(secs * 1000).toISOString()
 }
 
-function maskBank(raw?: string | null): string {
-    const v = (raw ?? "").trim()
-    if (!v) return "未填写"
-    if (v.includes("*")) return v
-    if (v.length <= 4) return `****${v}`
-    return `****${v.slice(-4)}`
-}
-
 function mapPaymentRecipient(
     recipient?: BackendPaymentRecipient | null,
 ): PayableRow["paymentRecipient"] {
@@ -424,69 +416,29 @@ export function payableEntryTypeLabel(entryType: string | undefined): string {
     return ENTRY_TYPE_LABEL[entryType] ?? "应付分录"
 }
 
-/**
- * 把付款 HTTP 视图投影为列表/详情行。
- *
- * @param p 付款 HTTP 载荷。
- */
-export function projectPayment(p: BackendSupplierPayment): PaymentRow {
+/** 付款列表和详情共用范围裁剪；仅详情提供有效付款金额。 */
+export function projectPayment(
+    p: ScopedSupplierPaymentWire & { effective_amount?: string },
+): PaymentRow {
     const status = mapPaymentStatus(p.status)
-    const allowed: string[] = ["VIEW_DETAIL"]
-    if (status === "POSTED") {
-        allowed.push("REVERSE_PAYMENT", "REVERSE", "REFUND")
-    }
+    const whole = p.permission_limited === false
     return {
         paymentId: p.id,
         paymentNo: p.payment_no,
         supplierId: p.supplier_id,
-        supplierName: businessLabelOrPlaceholder(
-            p.supplier_name,
-            p.supplier_id,
-            MISSING_SUPPLIER_NAME,
-        ),
+        supplierName: MISSING_SUPPLIER_NAME,
         paidAt: instantToIso(p.paid_at),
-        amount: p.amount,
-        reversedAmount: p.reversed_amount,
-        effectiveAmount: p.effective_amount,
-        bankReferenceMasked: maskBank(p.bank_reference),
-        bankReceipt: p.bank_receipt
-            ? {
-                  assetId: p.bank_receipt.asset_id,
-                  fileName: p.bank_receipt.file_name,
-                  contentType: p.bank_receipt.content_type,
-                  byteSize: p.bank_receipt.byte_size,
-              }
-            : undefined,
-        allocatedTotal: p.allocated_total,
-        unallocatedAmount: p.unallocated_amount,
+        amount: whole ? p.amount : null,
+        effectiveAmount: whole ? (p.effective_amount ?? null) : null,
+        permissionLimited: !whole,
+        allocatedTotal: whole ? p.allocated_total : null,
+        unallocatedAmount: whole ? p.unallocated_amount : null,
         status,
         statusLabel: supplierPaymentStatusLabel(p.status),
         statusTone: supplierPaymentStatusTone(p.status),
-        baselineVersion: p.version,
         allocations: (p.allocations ?? []).map(projectPaymentAllocation),
-        allowedActions: allowed,
+        allowedActions: ["VIEW_DETAIL"],
         actionBlockers: [],
-        paymentRecipient: mapPaymentRecipient(p.payment_recipient),
-        relatedReversals: (p.related_reversals ?? []).map(
-            projectPaymentReversalSummary,
-        ),
-    }
-}
-
-/** 把付款响应里的关联冲正裁剪为付款列表摘要。 */
-function projectPaymentReversalSummary(
-    reversal: BackendPaymentReversalSummary,
-): PaymentReversalSummary {
-    const status = mapFinancialDocumentStatus(reversal.status)
-    return {
-        reversalId: reversal.id,
-        reversalNo: reversal.reversal_no,
-        reasonText: reversal.reason_text,
-        amount: reversal.amount,
-        occurredAt: instantToIso(reversal.occurred_at),
-        status,
-        statusLabel: paymentReversalStatusLabel(reversal.status),
-        statusTone: paymentReversalStatusTone(reversal.status),
     }
 }
 

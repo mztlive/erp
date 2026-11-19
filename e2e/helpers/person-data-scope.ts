@@ -83,7 +83,7 @@ export function appendWarehouseScope(
 }
 
 /** 保存空成功结果；范围写入接口允许标准信封 data 为 null。 */
-async function savePersonScope(token: string, userId: string, body: PersonScopeSave): Promise<void> {
+export async function savePersonScope(token: string, userId: string, body: PersonScopeSave): Promise<void> {
     const path = `/admin/person-data-scopes/${encodeURIComponent(userId)}`
     const response = await fetch(`${API_BASE}${path}`, {
         method: "PUT",

@@ -6,13 +6,14 @@ import { randomUUID } from "node:crypto";
 
 import { expect, test, type Page, type Response as BrowserResponse } from "../helpers/test";
 import { API_BASE, apiGet, apiToken } from "../helpers/api";
-import { createCustomerViaUi } from "../helpers/customers";
 import { ensureWarehouseStockScope, ensureZeroBalanceDimension } from "../helpers/inventory";
 import { loginViaUi } from "../helpers/login";
+import { expectToast } from "../helpers/ui";
+import { workPage } from "../helpers/workspace-page";
 
 const VISIBLE = { timeout: 30_000 } as const;
 
-type Envelope<T> = { success?: boolean; errorMessage?: string; data: T };
+type Envelope<T> = { success?: boolean; errorMessage?: string; code?: string; data: T };
 type Account = { id: string; account: string; name: string; role_ids: string[] };
 type Role = { id: string; name: string; permissions: string[] };
 type BuiltinRoleCatalog = {
@@ -27,10 +28,11 @@ type BuiltinRoleCatalog = {
 };
 type Node = {
   node_id: string;
-  node_key: string;
   node_name: string;
   display_order: number;
+  assignee_source: "SPECIFIED" | "APPLICANT_TEAM_LEADER" | "APPLICANT_DEPARTMENT_LEADER";
   assignee_user_id: string;
+  additional_assignees?: Array<{ participant_id: string }>;
 };
 type Definition = {
   definition_id: string;
@@ -39,6 +41,7 @@ type Definition = {
   status: "DRAFT" | "PUBLISHED" | "RETIRED";
   name: string;
   nodes: Node[];
+  copy_rules?: Array<{ trigger: string; node_order: number | null; recipient_user_ids: string[] }>;
 };
 type Adjustment = {
   adjustment: { id: string };
@@ -48,6 +51,16 @@ type Adjustment = {
   };
   lines: Array<{ id: string }>;
 };
+
+function nodeSettings(node: Node) {
+  return {
+    node_name: node.node_name,
+    display_order: node.display_order,
+    assignee_source: node.assignee_source,
+    assignee_user_id: node.assignee_user_id,
+    additional_assignee_user_ids: (node.additional_assignees ?? []).map((person) => person.participant_id),
+  };
+}
 
 async function call<T>(method: string, path: string, token: string, body?: unknown) {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -107,11 +120,11 @@ test("[flow-24] 角色、人员统一保存与权限撤销不会扩大客户数�
 
   await test.step("管理员在角色页面创建受限角色并在人员页面创建账号", async () => {
     await admin.goto("/system/roles/new");
-    await admin.locator("#governance-admin-role-form-name").fill(roleName);
-    await admin.locator("#governance-admin-role-form-permissions-search").fill("客户");
-    await admin.getByRole("checkbox", { name: "客户 · 查看列表", exact: true }).check();
+    await workPage(admin).locator("#governance-admin-role-form-name").fill(roleName);
+    await workPage(admin).locator("#governance-admin-role-form-permissions-search").fill("客户");
+    await workPage(admin).getByRole("checkbox", { name: "客户 · 查看列表", exact: true }).check();
     await uiWrite(admin, "POST", "/admin/roles", () =>
-      admin.locator("#governance-admin-role-form-submit").click(),
+      workPage(admin).locator("#governance-admin-role-form-submit").click(),
     );
   });
   const role = (await apiGet<Role[]>(token, "/admin/roles")).find((row) => row.name === roleName);
@@ -119,15 +132,16 @@ test("[flow-24] 角色、人员统一保存与权限撤销不会扩大客户数�
   expect(role!.permissions).toEqual(["customer:list"]);
 
   await admin.goto("/system/accounts");
-  await admin.locator("#governance-admin-accounts-create").click();
-  const dialog = admin.getByRole("dialog", { name: "新建账号" });
+  await workPage(admin).locator("#governance-admin-accounts-create").click();
+  const dialog = workPage(admin).getByRole("dialog", { name: "新建账号" });
   await dialog.locator("#governance-admin-account-dialog-account").fill(accountName);
   await dialog.locator("#governance-admin-account-dialog-name").fill(initialName);
   await dialog.locator("#governance-admin-account-dialog-password").fill("123456");
-  await dialog
-    .getByRole("checkbox", { name: new RegExp(`^${roleName}`) })
-    .first()
-    .check();
+  await dialog.locator("#governance-admin-account-dialog-roles-trigger").click();
+  const roleSearch = workPage(admin).getByRole("searchbox", { name: "搜索角色" });
+  await roleSearch.fill(roleName);
+  await workPage(admin).locator(`[role="checkbox"][aria-label=${JSON.stringify(roleName)}]`).check();
+  await roleSearch.press("Escape");
   await uiWrite(admin, "POST", "/admin/admins", () =>
     dialog.locator("#governance-admin-account-dialog-submit").click(),
   );
@@ -140,18 +154,18 @@ test("[flow-24] 角色、人员统一保存与权限撤销不会扩大客户数�
 
   await test.step("人员资料通过预览统一保存，刷新后姓名和角色持久化", async () => {
     await admin.goto(`/system/accounts/${account!.id}`);
-    await admin.locator("#account-profile-edit").click();
-    await admin.locator("#account-profile-name").fill(updatedName);
-    await admin.locator("#account-profile-reason").fill("E2E 核对人员资料统一提交");
+    await workPage(admin).locator("#account-profile-edit").click();
+    await workPage(admin).locator("#account-profile-name").fill(updatedName);
+    await workPage(admin).locator("#account-profile-reason").fill("E2E 核对人员资料统一提交");
     await uiWrite(admin, "POST", "/admin/org-units/preview", () =>
-      admin.locator("#account-profile-save").click(),
+      workPage(admin).locator("#account-profile-save").click(),
     );
-    await expect(admin.getByText("请确认本次修改", { exact: true })).toBeVisible(VISIBLE);
+    await expect(workPage(admin).getByText("请确认本次修改", { exact: true })).toBeVisible(VISIBLE);
     await uiWrite(admin, "POST", "/admin/org-units/change", () =>
-      admin.locator("#account-profile-save").click(),
+      workPage(admin).locator("#account-profile-save").click(),
     );
     await admin.reload();
-    await expect(admin.getByText(updatedName, { exact: true }).first()).toBeVisible(VISIBLE);
+    await expect(workPage(admin).getByText(updatedName, { exact: true }).first()).toBeVisible(VISIBLE);
     const saved = (await apiGet<Account[]>(token, "/admin/admins")).find(
       (row) => row.id === account!.id,
     );
@@ -163,19 +177,23 @@ test("[flow-24] 角色、人员统一保存与权限撤销不会扩大客户数�
   const sales = await salesContext.newPage();
   await loginViaUi(sales, "xiaoshou");
   const customerName = `E2E 他人负责客户 ${suffix}`;
-  await createCustomerViaUi(sales, {
-    legalName: customerName,
-    paymentTermLabel: "货到 15 天",
-    contact: { name: "验收联系人", phone: "13800138024" },
-    address: "北京市朝阳区验收路 24 号",
-  });
   const salesToken = await apiToken("xiaoshou");
+  const customer = await ok<{ customer_id: string }>("POST", "/admin/customer-profiles", salesToken, {
+    legal_name: customerName,
+    default_payment_term_id: "POSTPAY_NET15",
+    effective_from: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date()),
+    change_reason: "E2E 人员范围验收",
+    idempotency_key: randomUUID(),
+  });
   const salesCustomers = await apiGet<{ items: Array<{ id: string; legal_name: string }> }>(
     salesToken,
     "/admin/customers",
     { keyword: customerName, page: 1, page_size: 100 },
   );
-  expect(salesCustomers.items.some((row) => row.legal_name === customerName)).toBe(true);
+  expect(salesCustomers.items).toContainEqual(expect.objectContaining({
+    id: customer.customer_id,
+    legal_name: customerName,
+  }));
 
   await test.step("本人真实登录获得角色动作；他人负责客户仍不可见；角色撤权即时生效", async () => {
     const personContext = await browser.newContext();
@@ -188,7 +206,7 @@ test("[flow-24] 角色、人员统一保存与权限撤销不会扩大客户数�
       person.locator("#governance-auth-login-submit").click(),
     );
     await person.waitForURL((url) => url.pathname === "/sales/customers");
-    await expect(person.getByRole("heading", { name: "客户中心", exact: true })).toBeVisible(
+    await expect(workPage(person).getByRole("heading", { name: "客户中心", exact: true })).toBeVisible(
       VISIBLE,
     );
     const personToken = signedIn.token;
@@ -199,11 +217,45 @@ test("[flow-24] 角色、人员统一保存与权限撤销不会扩大客户数�
     );
     expect(visible.items).toEqual([]);
     await admin.goto(`/system/roles/${role!.id}/edit`);
-    await admin.getByRole("checkbox", { name: "客户 · 查看列表", exact: true }).uncheck();
+    await workPage(admin).locator("#governance-admin-role-form-permissions-search").fill("客户");
+    await workPage(admin).getByRole("checkbox", { name: "客户 · 查看列表", exact: true }).uncheck();
     await uiWrite(admin, "PUT", `/admin/roles/${role!.id}`, () =>
-      admin.locator("#governance-admin-role-form-submit").click(),
+      workPage(admin).locator("#governance-admin-role-form-submit").click(),
     );
-    expect((await call("GET", "/admin/customers", personToken)).status).toBe(403);
+    const denied = await call("GET", "/admin/customers", personToken);
+    expect(denied.status).toBe(403);
+    expect(denied.parsed.code).toBe("PERMISSION_DENIED");
+
+    const deniedRequestIds = new Set<string>();
+    person.on("response", (reply) => {
+      if (reply.status() === 403 && reply.request().method() === "GET" && new URL(reply.url()).pathname === "/admin/customers") {
+        const requestId = reply.headers()["x-trace-id"];
+        if (requestId) deniedRequestIds.add(requestId);
+      }
+    });
+    await person.reload();
+    await expect.poll(() => deniedRequestIds.size).toBeGreaterThan(0);
+    await expect(person.locator("#system-feedback-open")).toHaveAccessibleName(/系统提示，[1-9]/);
+    await person.locator("#system-feedback-open").click();
+    const feedback = person.getByRole("dialog", { name: "系统提示" });
+    await expect(feedback.locator("#system-feedback-current")).toHaveAttribute("aria-pressed", "true");
+    const problem = feedback.getByRole("article", { name: "当前账号无权查看此项内容" });
+    await expect(problem).toContainText("来源工作页 · 客户中心", VISIBLE);
+    await problem.getByText("技术详情", { exact: true }).click();
+    await expect(problem.getByText("PERMISSION_DENIED", { exact: true })).toBeVisible();
+    const requestId = problem.getByText("请求编号", { exact: true }).locator("xpath=following-sibling::dd[1]");
+    await expect(requestId).toBeVisible();
+    expect(deniedRequestIds.has((await requestId.innerText()).trim())).toBe(true);
+    await feedback.locator("#system-feedback-all").click();
+    await expect(problem).toBeVisible();
+    await feedback.locator("#system-feedback-close").click();
+
+    await person.locator("#workspace-topbar-account-trigger").click();
+    await person.locator("#workspace-topbar-account-logout").click();
+    await expect(person).toHaveURL(/\/login$/);
+    expect(await person.evaluate(() => localStorage.getItem("erp.token"))).toBeNull();
+    await person.goto("/sales/customers");
+    await expect(person).toHaveURL(/\/login\?returnTo=%2Fsales%2Fcustomers$/);
     await personContext.close();
   });
 
@@ -225,7 +277,7 @@ test("[flow-24] 角色、人员统一保存与权限撤销不会扩大客户数�
     ];
     expect(denied.map((reply) => reply.status)).toEqual([403, 403, 403]);
     await sales.goto("/system/approval-processes/stock_adjustment");
-    await expect(sales.getByText("当前账号不能查看审批流程定义。", { exact: true })).toBeVisible(
+    await expect(workPage(sales).getByText("当前账号不能查看审批流程定义。", { exact: true })).toBeVisible(
       VISIBLE,
     );
   });
@@ -237,10 +289,8 @@ test("[flow-24] 角色、人员统一保存与权限撤销不会扩大客户数�
     const catalog = await apiGet<BuiltinRoleCatalog>(token, "/admin/role-templates");
     const missing = catalog.templates.filter((row) => row.recommended && row.can_generate);
     await admin.goto("/system/access-audit?view=roles");
-    await admin.locator("#roles-builtin-open").click();
-    const dialog = admin.getByRole("dialog").filter({
-      has: admin.getByRole("heading", { name: "生成岗位角色", exact: true }),
-    });
+    await workPage(admin).locator("#roles-builtin-open").click();
+    const dialog = workPage(admin).getByRole("dialog", { name: "生成岗位角色", exact: true });
     await expect(dialog.locator("#roles-builtin-role-sales-select")).toBeDisabled();
     for (const template of catalog.templates.filter((row) => !row.can_generate)) {
       await expect(dialog.locator(`#roles-builtin-${template.id}-select`)).toBeDisabled();
@@ -250,7 +300,7 @@ test("[flow-24] 角色、人员统一保存与权限撤销不会扩大客户数�
         admin,
         "POST",
         "/admin/role-templates/generate",
-        () => admin.locator("#roles-builtin-generate").click(),
+        () => workPage(admin).locator("#roles-builtin-generate").click(),
       );
       expect(generated.map((row) => row.id).sort()).toEqual(missing.map((row) => row.id).sort());
       expect(generated.every((row) => row.created)).toBe(true);
@@ -338,41 +388,34 @@ test("[flow-24] 审批草稿校验、发布、退役保持旧单据绑定及历�
 
   let draft: Definition;
   try {
-    await test.step("复制当前版本创建草稿；来源和节点名称校验保留草稿", async () => {
+    await test.step("校验流程名称并复制当前版本；不完整节点不得保存", async () => {
       await page.goto("/system/approval-processes/stock_adjustment");
-      await page.locator("#governance-approval-processes-detail-create-draft").click();
-      const dialog = page.getByRole("dialog", { name: "新建草稿" });
-      await dialog
-        .locator("#governance-approval-processes-detail-create-draft-dialog-name")
-        .fill(`E2E 库存审批 ${suffix}`);
-      await dialog
-        .locator("#governance-approval-processes-detail-create-draft-dialog-submit")
-        .click();
-      await expect(dialog.getByText("请选择草稿来源", { exact: true })).toBeVisible(VISIBLE);
-      await dialog
-        .locator(
-          "#governance-approval-processes-detail-create-draft-dialog-draft-source-current-published",
-        )
-        .check();
+      await workPage(page).locator("#governance-approval-processes-detail-create-draft").click();
+      const dialog = workPage(page).getByRole("dialog", { name: "新建审批草稿" });
+      const draftName = dialog.locator("#governance-approval-processes-detail-create-draft-dialog-name");
+      const submit = dialog.locator("#governance-approval-processes-detail-create-draft-dialog-submit");
+      await draftName.fill(" ");
+      await submit.click();
+      await expect(dialog.getByText("请输入审批流程名称", { exact: true })).toBeVisible(VISIBLE);
+      await draftName.fill(`E2E 库存审批 ${suffix}`);
+      const copyCurrent = dialog.getByRole("radio", { name: "复制当前版本", exact: true });
+      await copyCurrent.click();
+      await expect(copyCurrent).toBeChecked();
       draft = await uiWrite<Definition>(
         page,
         "POST",
         "/admin/approval-process-definitions/drafts",
-        () =>
-          dialog
-            .locator("#governance-approval-processes-detail-create-draft-dialog-submit")
-            .click(),
+        () => submit.click(),
       );
       expect(draft.status).toBe("DRAFT");
-      expect(draft.nodes.map((row) => row.assignee_user_id)).toEqual(
-        original.nodes.map((row) => row.assignee_user_id),
-      );
-      const name = page
+      expect(draft.nodes.map(nodeSettings)).toEqual(original.nodes.map(nodeSettings));
+      expect(draft.copy_rules ?? []).toEqual(original.copy_rules ?? []);
+      const name = workPage(page)
         .locator('[id^="governance-approval-processes-detail-editor-nodes-node-"][id$="-name"]')
         .first();
       await name.fill("");
       await expect(
-        page.locator("#governance-approval-processes-detail-editor-save"),
+        workPage(page).locator("#governance-approval-processes-detail-editor-save"),
       ).toBeDisabled();
       expect(
         (
@@ -383,21 +426,24 @@ test("[flow-24] 审批草稿校验、发布、退役保持旧单据绑定及历�
         ).definition_lock_version,
       ).toBe(draft.definition_lock_version);
       await name.fill(`E2E 财务复核 ${suffix}`);
-      await expect(page.locator("#governance-approval-processes-detail-editor-save")).toBeEnabled();
+      await expect(workPage(page).locator("#governance-approval-processes-detail-editor-save")).toBeEnabled();
       draft = await uiWrite<Definition>(
         page,
         "PUT",
         `/admin/approval-process-definitions/${draft.definition_id}/nodes`,
-        () => page.locator("#governance-approval-processes-detail-editor-save").click(),
+        () => workPage(page).locator("#governance-approval-processes-detail-editor-save").click(),
       );
       expect(draft.nodes[0]!.node_name).toBe(`E2E 财务复核 ${suffix}`);
+      await expectToast(page, "草稿已保存");
     });
 
     await test.step("发布新版本退役旧定义；旧草稿仍绑定创建时版本；已发布定义不可改写", async () => {
-      await page.locator("#governance-approval-processes-detail-publish").click();
-      const publishDialog = page.getByRole("dialog", { name: "发布审批流程" });
+      const publish = workPage(page).locator("#governance-approval-processes-detail-publish");
+      await expect(publish).toBeEnabled(VISIBLE);
+      await publish.click();
+      const publishDialog = workPage(page).getByRole("dialog", { name: "发布审批流程" });
       await expect(
-        publishDialog.getByText("发布后当前已发布版本将退役。已绑定单据和进行中的审批不受影响。", {
+        publishDialog.getByText("发布后，新发起的单据将按此版本审批；已创建或审批中的单据仍按原流程继续执行。", {
           exact: true,
         }),
       ).toBeVisible(VISIBLE);
@@ -430,10 +476,9 @@ test("[flow-24] 审批草稿校验、发布、退役保持旧单据绑定及历�
         {
           expected_definition_lock_version: String(published.definition_lock_version),
           nodes: published.nodes.map((node) => ({
+            ...nodeSettings(node),
             node_id: node.node_id,
             node_name: "禁止改写",
-            display_order: node.display_order,
-            assignee_user_id: node.assignee_user_id,
           })),
           idempotency_key: randomUUID(),
         },
@@ -453,20 +498,22 @@ test("[flow-24] 审批草稿校验、发布、退役保持旧单据绑定及历�
       });
       expect(newBound.approval.definition.id).toBe(published.definition_id);
       await page.goto("/system/approval-processes/stock_adjustment");
-      await expect(page.getByRole("heading", { name: published.name, exact: true })).toBeVisible(
+      await expect(workPage(page).getByRole("heading", { name: published.name, exact: true })).toBeVisible(
         VISIBLE,
       );
-      await expect(page.locator("#governance-approval-processes-detail-editor-save")).toHaveCount(
+      await expect(workPage(page).locator("#governance-approval-processes-detail-editor-save")).toHaveCount(
         0,
       );
-      await page.locator("#governance-approval-processes-detail-retire").click();
+      await workPage(page).locator("#governance-approval-processes-detail-more").click();
+      await workPage(page).getByRole("menuitem", { name: "停用当前版本" }).click();
+      const retireDialog = workPage(page).getByRole("dialog", { name: "停用审批流程" });
       await uiWrite<Definition>(
         page,
         "POST",
         `/admin/approval-process-definitions/${published.definition_id}/retire`,
-        () => page.locator("#governance-approval-processes-retire-dialog-confirm").click(),
+        () => retireDialog.locator("#governance-approval-processes-retire-dialog-confirm").click(),
       );
-      await expect(page.getByText("配置缺失", { exact: true }).first()).toBeVisible(VISIBLE);
+      await expect(workPage(page).getByText("配置缺失", { exact: true }).first()).toBeVisible(VISIBLE);
       const refused = await call("POST", "/admin/stock-adjustments", warehouseToken, {
         ...createBody,
         adjustment_no: `E24-REFUSED-${suffix}`,
@@ -508,11 +555,8 @@ test("[flow-24] 审批草稿校验、发布、退役保持旧单据绑定及历�
         token,
         {
           expected_definition_lock_version: String(restore.definition_lock_version),
-          nodes: original.nodes.map((node) => ({
-            node_name: node.node_name,
-            display_order: node.display_order,
-            assignee_user_id: node.assignee_user_id,
-          })),
+          nodes: original.nodes.map(nodeSettings),
+          copy_rules: original.copy_rules ?? [],
           idempotency_key: randomUUID(),
         },
       );
@@ -526,19 +570,8 @@ test("[flow-24] 审批草稿校验、发布、退役保持旧单据绑定及历�
         },
       );
       expect(restored.status).toBe("PUBLISHED");
-      expect(
-        restored.nodes.map(({ node_name, display_order, assignee_user_id }) => ({
-          node_name,
-          display_order,
-          assignee_user_id,
-        })),
-      ).toEqual(
-        original.nodes.map(({ node_name, display_order, assignee_user_id }) => ({
-          node_name,
-          display_order,
-          assignee_user_id,
-        })),
-      );
+      expect(restored.nodes.map(nodeSettings)).toEqual(original.nodes.map(nodeSettings));
+      expect(restored.copy_rules ?? []).toEqual(original.copy_rules ?? []);
     }
   }
 });

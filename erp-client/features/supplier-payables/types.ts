@@ -179,29 +179,29 @@ export type PaymentRow = Readonly<{
     supplierId: string
     supplierName: string
     paidAt: string
-    amount: string
-    reversedAmount: string
-    effectiveAmount: string
-    bankReferenceMasked: string
+    amount: string | null
+    reversedAmount?: string
+    effectiveAmount: string | null
+    permissionLimited: boolean
+    bankReferenceMasked?: string
     bankReceipt?: Readonly<{
         assetId: string
         fileName: string
         contentType: string
         byteSize: number
     }>
-    allocatedTotal: string
-    unallocatedAmount: string
+    allocatedTotal: string | null
+    unallocatedAmount: string | null
     status: PaymentStatus
     statusLabel: string
     statusTone: StatusTone
-    baselineVersion: number
     allocations: readonly PaymentAllocationLine[]
     allowedActions: readonly string[]
     actionBlockers: readonly ActionBlocker[]
     reversedByPaymentId?: string
     reverseOfPaymentId?: string
     paymentRecipient?: PaymentRecipient
-    relatedReversals: readonly PaymentReversalSummary[]
+    relatedReversals?: readonly PaymentReversalSummary[]
 }>
 
 /** SupplierRefund 为 PROCESS_REQUIRED：行投影携带只读审批区。 */

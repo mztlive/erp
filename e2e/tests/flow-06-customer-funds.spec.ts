@@ -13,6 +13,7 @@
  * - 销售单开票进度完成态文案是「已开齐」，不是文档表格里的「已完成」。
  * - 财务岗位分别使用财务总监、出纳和开票员角色；caiwu 仅复核，不具备回款创建或提交权限。
  */
+import { workPage } from "../helpers/workspace-page"
 import { archiveContractViaUi } from "../helpers/contracts"
 import {
     expectSalesOrderContractSummary,
@@ -32,7 +33,14 @@ import {
     submitSalesInvoiceRequest,
 } from "../helpers/invoices"
 import { loginViaUi, openLoggedInWorkspace } from "../helpers/login"
-import { expectReceiptPreview, submitReceiptReversalRequest } from "../helpers/receipts"
+import {
+    expectReceiptPreview,
+    receiptAllocationRow,
+    selectReceiptAllocations,
+    startReceiptSession,
+    submitReceiptReversalRequest,
+    uploadReceiptEvidence,
+} from "../helpers/receipts"
 import { assertReceiptRegistrationDraft, expectReceiptCounterparty } from "../helpers/receipt-registration"
 import { API_BASE, apiGet, apiToken } from "../helpers/api"
 import {
@@ -74,7 +82,7 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
         try {
             // ── 1. 销售：客户 + 合同 + 两张实物销售单（同主体，覆盖一张回款核销多单）──
             await loginViaUi(page, "xiaoshou")
-            await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
+            await expect(workPage(page).getByRole("heading", { name: "待我处理" })).toBeVisible({
                 timeout: LONG,
             })
 
@@ -150,14 +158,14 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
 
             await fukuan.page.goto("/finance/customer-accounts?view=receipt")
             await waitHeading(fukuan.page, "客户往来")
-            await fukuan.page.locator("#customer-receivables-toolbar-search").fill(receipt1No)
-            await fukuan.page.locator("#customer-receivables-toolbar-search").press("Enter")
-            await fukuan.page.getByRole("row").filter({ hasText: receipt1No }).click()
+            await workPage(fukuan.page).locator("#customer-receivables-toolbar-search").fill(receipt1No)
+            await workPage(fukuan.page).locator("#customer-receivables-toolbar-search").press("Enter")
+            await workPage(fukuan.page).getByRole("row").filter({ hasText: receipt1No }).click()
             await expectReceiptPreview(fukuan.page, receipt1No)
-            await expect(fukuan.page.getByText("待核销回款", { exact: true }).locator("..")).toContainText("212.00")
+            await expect(workPage(fukuan.page).getByText("待核销回款", { exact: true }).locator("..")).toContainText("212.00")
             const draftNo = `DRAFT-F06-${stamp}`
             await test.step("已过账回款不可继续编辑，已有草稿保留到账信息并可提交审批", async () => {
-                await expect(fukuan.page.locator("#customer-receivables-preview-receipt-continue-allocate")).toHaveCount(0)
+                await expect(workPage(fukuan.page).locator("#customer-receivables-preview-receipt-continue-allocate")).toHaveCount(0)
                 const token = await apiToken("fukuan")
                 // UTC 10 月 1 日 16:30 对应上海 10 月 2 日 00:30，覆盖跨日回显。
                 const receivedAt = Date.UTC(2026, 9, 1, 16, 30) / 1000
@@ -178,31 +186,32 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
                 // 沿同主体的真实应收来源进入草稿，名称来自冻结销售依据。
                 await fukuan.page.goto(`/finance/customer-accounts?view=receivable&previewKind=receipt&previewId=${encodeURIComponent(draft.data.id)}`)
                 await expectReceiptPreview(fukuan.page, draftNo)
-                await fukuan.page.locator("#customer-receivables-preview-receipt-continue-allocate").click()
-                await expect(fukuan.page.getByRole("heading", { name: "编辑回款草稿", exact: true })).toBeVisible()
-                await expect(fukuan.page.locator("#customer-receivables-session-amount")).toHaveValue("100.00")
-                await expect(fukuan.page.locator("#customer-receivables-session-received-at")).toContainText("2026-10-02 00:30:00")
+                await workPage(fukuan.page).locator("#customer-receivables-preview-receipt-continue-allocate").click()
+                await expect(workPage(fukuan.page).getByRole("heading", { name: "编辑回款草稿", exact: true })).toBeVisible()
+                await expect(workPage(fukuan.page).locator("#customer-receivables-session-amount")).toHaveValue("100.00")
+                await expect(workPage(fukuan.page).locator("#customer-receivables-session-received-at")).toContainText("2026-10-02 00:30:00")
                 await expectReceiptCounterparty(fukuan.page, legalName)
-                await expect(fukuan.page.locator("#customer-receivables-session-bank-reference")).toHaveValue(`BANK-DRAFT-F06-${stamp}`)
+                await expect(workPage(fukuan.page).locator("#customer-receivables-session-bank-reference")).toHaveValue(`BANK-DRAFT-F06-${stamp}`)
                 for (const id of ["amount", "received-at", "bank-reference"]) {
-                    const field = fukuan.page.locator(`#customer-receivables-session-${id}`)
+                    const field = workPage(fukuan.page).locator(`#customer-receivables-session-${id}`)
                     await expect(field).toBeEnabled()
                 }
                 const revisedBankReference = `BANK-DRAFT-REVISED-F06-${stamp}`
-                await fukuan.page.locator("#customer-receivables-session-bank-reference").fill(revisedBankReference)
-                await addPoolTarget(fukuan.page, orderA.orderNo)
+                await workPage(fukuan.page).locator("#customer-receivables-session-bank-reference").fill(revisedBankReference)
+                await selectReceiptAllocations(fukuan.page, [orderA.orderNo])
+                await uploadReceiptEvidence(fukuan.page)
                 await setAllocationAmount(fukuan.page, orderA.orderNo, "100.00")
                 const screenshot = test.info().outputPath("receipt-registration-existing-draft.png")
                 await fukuan.page.screenshot({ path: screenshot, animations: "disabled" })
                 await test.info().attach("已有回款草稿继续核销", { path: screenshot, contentType: "image/png" })
-                await fukuan.page.locator("#customer-receivables-session-submit").click()
+                await workPage(fukuan.page).locator("#customer-receivables-session-submit").click()
                 const committed = fukuan.page.waitForResponse((response) =>
                     response.request().method() === "POST" && response.url().includes("/admin/customer-receipts/commit"),
                 )
                 const savedDraft = fukuan.page.waitForResponse((response) =>
-                    response.request().method() === "POST" && new URL(response.url()).pathname === "/admin/customer-receipts/drafts",
+                    response.request().method() === "POST" && new URL(response.url()).pathname === "/admin/customer-receipts/drafts/with-files",
                 )
-                await fukuan.page.locator("#customer-receivables-session-receipt-confirm-dialog-confirm").click()
+                await workPage(fukuan.page).locator("#customer-receivables-session-receipt-confirm-dialog-confirm").click()
                 const savedResponse = await savedDraft
                 expect(savedResponse.ok(), await savedResponse.text()).toBeTruthy()
                 const saved = (await savedResponse.json()) as { data: { id: string; version: number } }
@@ -252,19 +261,20 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
             await expectInvoicing(page, "未开")
             await expectNotClosed(page)
             await expectFulfillmentNotStarted(page)
-            await page.getByRole("tab", { name: /^采购/ }).click()
-            await expect(page.getByTestId("sales-order-purchase-status")).toContainText(
-                "供给未完全覆盖",
+            await expect(workPage(page).locator("#sales-order-follow-up-delivery").locator("..")).toContainText(
+                "待采购",
                 { timeout: TIMEOUT },
             )
-            await expect(page.getByText("本单还没有采购单。")).toBeVisible({ timeout: TIMEOUT })
+            expect(await apiGet<{ purchase_order_count: number }>(
+                await apiToken("xiaoshou"), `/admin/sales-orders/${orderA.id}`,
+            )).toMatchObject({ purchase_order_count: 0 })
 
             await page.goto(`/sales/orders/${orderB.id}`)
             await expectCollection(page, "已结清")
             await expectNotClosed(page)
 
             // ── 5. 销售申请开票 → 财务审批 → 开票人 W01 登记；开票完成不是关闭条件 ──
-            await submitSalesInvoiceRequest(page, {
+            const invoiceRequestId = await submitSalesInvoiceRequest(page, {
                 salesOrderId: orderA.id,
                 amount: UNIT_PRICE,
                 taxNumber: creditCode,
@@ -275,7 +285,7 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
             await caiwuInvoice.context.close()
 
             const kaipiao = await openRole(browser, extra, "kaipiao")
-            const registeredInvoice = await registerSalesInvoiceFromWorkspace(kaipiao.page, orderA.orderNo, legalName)
+            const registeredInvoice = await registerSalesInvoiceFromWorkspace(kaipiao.page, orderA.orderNo, invoiceRequestId)
             await kaipiao.context.close()
 
             await page.goto(`/sales/orders/${orderA.id}`)
@@ -311,13 +321,13 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
 
             const fukuan4 = await openRole(browser, extra, "fukuan")
             await fukuan4.page.goto("/finance/customer-accounts?view=receipt")
-            await expect(fukuan4.page.getByRole("heading", { name: "客户往来" })).toBeVisible({
+            await expect(workPage(fukuan4.page).getByRole("heading", { name: "客户往来" })).toBeVisible({
                 timeout: LONG,
             })
-            await fukuan4.page.locator("#customer-receivables-toolbar-search").fill(receipt2No)
-            await fukuan4.page.locator("#customer-receivables-toolbar-search").press("Enter")
+            await workPage(fukuan4.page).locator("#customer-receivables-toolbar-search").fill(receipt2No)
+            await workPage(fukuan4.page).locator("#customer-receivables-toolbar-search").press("Enter")
             await expect(
-                fukuan4.page.getByRole("row").filter({ hasText: receipt2No }).first().getByText("已冲正"),
+                workPage(fukuan4.page).getByRole("row").filter({ hasText: receipt2No }).first().getByText("已冲正"),
             ).toBeVisible({ timeout: LONG })
             await fukuan4.context.close()
 
@@ -391,13 +401,13 @@ function contractPdfFile() {
 }
 
 async function factValue(page: Page, label: string) {
-    const dt = page.locator('[data-slot="formal-action-result"] dt', { hasText: label })
+    const dt = workPage(page).locator('[data-slot="formal-action-result"] dt', { hasText: label })
     await expect(dt).toBeVisible({ timeout: TIMEOUT })
     return (await dt.locator("xpath=following-sibling::dd[1]").innerText()).trim()
 }
 
 async function waitHeading(page: Page, name: string | RegExp) {
-    await expect(page.getByRole("heading", { name })).toBeVisible({ timeout: LONG })
+    await expect(workPage(page).getByRole("heading", { name })).toBeVisible({ timeout: LONG })
 }
 
 // ─── 客户 / 合同 / 销售单 ─────────────────────────────────────────────────
@@ -412,12 +422,12 @@ async function createCustomer(
         creditCode: input.creditCode,
         paymentTermLabel: "货到 30 天",
     })
-    await page.locator("#customers-directory-search").fill(input.legalName)
-    await page.locator("#customers-directory-search").press("Enter")
-    const open = page.getByRole("link", { name: input.shortName })
+    await workPage(page).locator("#customers-directory-search").fill(input.legalName)
+    await workPage(page).locator("#customers-directory-search").press("Enter")
+    const open = workPage(page).getByRole("link", { name: input.shortName })
     await expect(open).toBeVisible({ timeout: LONG })
     await open.click()
-    await expect(page.getByRole("heading", { name: input.legalName })).toBeVisible({
+    await expect(workPage(page).getByRole("heading", { name: input.legalName })).toBeVisible({
         timeout: LONG,
     })
     const match = page.url().match(/\/sales\/customers\/([^/?#]+)/)
@@ -434,14 +444,14 @@ async function uploadContract(
     )
     await archiveContractViaUi(page, { contractNo: input.contractNo, customerName: input.legalName, pdf: contractPdfFile(), paymentTerms: "货到 30 天" })
     // 同页 toast 描述也含合同编号：限定首个（列表行按钮）避开严格模式。
-    await expect(page.getByText(input.contractNo).first()).toBeVisible({ timeout: LONG })
+    await expect(workPage(page).getByText(input.contractNo).first()).toBeVisible({ timeout: LONG })
 }
 
 // 负责销售是展示名，不是输入框：必须等于侧栏账号菜单里的当前用户，且不能停在占位文案。
 async function expectLoggedInSalesOwner(page: Page, timeout: number) {
     const placeholders = ["加载当前用户…", "无法获取登录用户", "当前用户未就绪"]
-    const accountName = page.locator("#workspace-sidebar-account-trigger span.font-medium")
-    const ownerName = page.locator("#sales-orders-create-header-owner-name > span").nth(1)
+    const accountName = page.locator("#workspace-topbar-account-trigger span.truncate.font-medium")
+    const ownerName = workPage(page).locator("#sales-orders-create-header-owner-name > span").nth(1)
     await expect(accountName).toBeVisible({ timeout })
     await expect(ownerName).toBeVisible({ timeout })
     await expect(async () => {
@@ -466,57 +476,57 @@ async function createAndSubmitPhysicalSalesOrder(
 
     await chooseOption(
         page,
-        page.locator("#sales-orders-create-header-welfare-scene"),
-        "年节礼包",
-        "年节",
+        workPage(page).locator("#sales-orders-create-header-welfare-scene"),
+        "礼包",
+        "礼包",
     )
 
-    await page.locator("#sales-orders-create-line-items-add").click()
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "添加商品" })).toBeVisible({
+    await workPage(page).locator("#sales-orders-create-line-items-add").click()
+    await expect(workPage(page).getByRole("dialog").getByRole("heading", { name: "添加商品" })).toBeVisible({
         timeout: TIMEOUT,
     })
-    const skuSearch = page.locator("#sales-orders-sku-picker-filter-search")
+    const skuSearch = workPage(page).locator("#sales-orders-sku-picker-filter-search")
     await skuSearch.fill(SKU_NAME)
     await skuSearch.press("Enter")
-    const skuCheckbox = page.getByRole("checkbox", { name: new RegExp(`选择 ${SKU_NAME}`) })
+    const skuCheckbox = workPage(page).getByRole("checkbox", { name: new RegExp(`选择 ${SKU_NAME}`) })
     await expect(skuCheckbox.first()).toBeVisible({ timeout: LONG })
     await skuCheckbox.first().check()
-    await page.locator("#sales-orders-sku-picker-confirm").click()
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "添加商品" })).toBeHidden({
+    await workPage(page).locator("#sales-orders-sku-picker-confirm").click()
+    await expect(workPage(page).getByRole("dialog").getByRole("heading", { name: "添加商品" })).toBeHidden({
         timeout: TIMEOUT,
     })
     // 搜索框回显筛选 chips 且同名多处出现：用行内更换按钮精确命中已选行。
-    await expect(page.getByRole("button", { name: new RegExp(`更换销售项目[\\s\\S]*${SKU_NAME}`) }).first()).toBeVisible({
+    await expect(workPage(page).getByRole("button", { name: new RegExp(`更换销售项目[\\s\\S]*${SKU_NAME}`) }).first()).toBeVisible({
         timeout: TIMEOUT,
     })
-    await expect(page.getByTestId(/sales-line-procurement-owner-/)).not.toContainText(
+    await expect(workPage(page).getByTestId(/sales-line-procurement-owner-/)).not.toContainText(
         "暂未确定采购负责人",
         { timeout: LONG },
     )
     await fillSalesLineUnitPrice(page, UNIT_PRICE)
 
-    await page.locator("#sales-orders-create-batch-due-date-open").click()
-    await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), todayIso())
-    await page.locator("#sales-orders-create-batch-due-date-apply").click()
+    await workPage(page).locator("#sales-orders-create-batch-due-date-open").click()
+    await pickCalendarDay(page, workPage(page).locator("#sales-orders-create-batch-due-date"), todayIso())
+    await workPage(page).locator("#sales-orders-create-batch-due-date-apply").click()
     await expectToast(page, "已批量设置交期")
 
     // 残留错误/成功 toast 会盖住提交按钮：先清再点，盖住不散时走 DOM 派发。
-    await clickWithoutToastOverlay(page, page.locator("#sales-orders-create-submit"), async () =>
-        page
+    await clickWithoutToastOverlay(page, workPage(page).locator("#sales-orders-create-submit"), async () =>
+        workPage(page)
             .getByRole("dialog")
             .getByRole("heading", { name: "提交销售单" })
             .isVisible()
             .catch(() => false),
     )
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "提交销售单" })).toBeVisible({
+    await expect(workPage(page).getByRole("dialog").getByRole("heading", { name: "提交销售单" })).toBeVisible({
         timeout: TIMEOUT,
     })
     // settled 只做即时判断：第一次点按前页面必然还在新建页，等 URL 只会白等。
-    await clickWithoutToastOverlay(page, page.locator("#sales-orders-submit-confirm-confirm"), async () =>
+    await clickWithoutToastOverlay(page, workPage(page).locator("#sales-orders-submit-confirm-confirm"), async () =>
         !/\/sales\/orders\?mode=create/.test(page.url()),
     )
     await expect(page).toHaveURL(/\/sales\/orders\/[^/?#]+/, { timeout: LONG })
-    await expect(page.getByText("审批中", { exact: true }).first()).toBeVisible({ timeout: LONG })
+    await expect(workPage(page).getByText("审批中", { exact: true }).first()).toBeVisible({ timeout: LONG })
 
     const id = page.url().split("/sales/orders/")[1]?.split(/[?#]/)[0] ?? ""
     expect(id).toBeTruthy()
@@ -526,8 +536,8 @@ async function createAndSubmitPhysicalSalesOrder(
 }
 
 async function expectEffectiveSalesOrder(page: Page, orderNo: string) {
-    await expect(page.locator("header").getByText(orderNo)).toBeVisible({ timeout: LONG })
-    await expect(page.getByText("已生效", { exact: true }).first()).toBeVisible({ timeout: LONG })
+    await expect(workPage(page).locator("header").getByText(orderNo)).toBeVisible({ timeout: LONG })
+    await expect(workPage(page).getByText("已生效", { exact: true }).first()).toBeVisible({ timeout: LONG })
     await expectCollection(page, "未收")
     await expectInvoicing(page, "未开")
     await expectNotClosed(page)
@@ -546,13 +556,13 @@ async function expectInvoicing(page: Page, label: "未开" | "部分开票" | "�
 }
 
 async function expectFulfillmentNotStarted(page: Page) {
-    await expect(page.getByText("未开始", { exact: true }).first()).toBeVisible({
+    await expect(workPage(page).getByText("未开始", { exact: true }).first()).toBeVisible({
         timeout: TIMEOUT,
     })
 }
 
 async function expectNotClosed(page: Page) {
-    const identity = page
+    const identity = workPage(page)
         .getByRole("heading", { level: 1 })
         .locator("xpath=ancestor::header[1]")
     await expect(identity.getByText("已生效", { exact: true })).toBeVisible({ timeout: LONG })
@@ -568,46 +578,8 @@ async function approveWorkspaceTask(page: Page, typeLabel: string, hint: string)
 
 // ─── 回款核销 ──────────────────────────────────────────────────────────────
 
-async function startReceiptSession(page: Page, customerName: string) {
-    await page.goto("/finance/customer-accounts")
-    await waitHeading(page, "客户往来")
-    const register = page.locator("#customer-receivables-header-register-receipt")
-    await expect(register).toBeEnabled({ timeout: LONG })
-    await register.click()
-    const sessionHeading = page.getByRole("heading", { name: "登记回款", exact: true })
-    const picker = page.getByRole("dialog").filter({ hasText: "登记回款 — 选择往来主体" })
-    await Promise.race([
-        sessionHeading.waitFor({ state: "visible", timeout: LONG }),
-        picker.waitFor({ state: "visible", timeout: LONG }),
-    ])
-    if (await picker.isVisible().catch(() => false)) {
-        await chooseOption(
-            page,
-            picker.locator("#customer-receivables-party-picker-input"),
-            customerName,
-            customerName,
-        )
-        await page.locator("#customer-receivables-party-picker-confirm").click()
-    }
-    await expect(sessionHeading).toBeVisible({ timeout: LONG })
-    await expect(page.getByRole("heading", { name: "关联销售单应收" })).toBeVisible({
-        timeout: TIMEOUT,
-    })
-}
-
-async function addPoolTarget(page: Page, orderNo: string) {
-    const item = page
-        .locator("#customer-receivables-session-allocations")
-        .getByRole("row")
-        .filter({ hasText: orderNo })
-    await expect(item).toBeVisible({ timeout: TIMEOUT })
-    const selection = item.getByRole("checkbox")
-    if (!(await selection.isChecked())) await selection.check()
-    await expect(selection).toBeChecked()
-}
-
 async function setAllocationAmount(page: Page, orderNo: string, amount: string) {
-    const amountBox = page.getByLabel(new RegExp(`${orderNo}.*本次核销金额`))
+    const amountBox = receiptAllocationRow(page, orderNo).locator('input[id$="-amount"]')
     await expect(amountBox).toBeVisible({ timeout: TIMEOUT })
     await amountBox.fill(amount)
 }
@@ -624,18 +596,18 @@ async function registerReceiptAllocatingBothOrders(
     },
 ) {
     await startReceiptSession(page, input.customerName)
-    await page.locator("#customer-receivables-session-amount").fill(input.amount)
-    await page.locator("#customer-receivables-session-bank-reference").fill(input.bankReference)
+    await workPage(page).locator("#customer-receivables-session-amount").fill(input.amount)
+    await workPage(page).locator("#customer-receivables-session-bank-reference").fill(input.bankReference)
 
-    await addPoolTarget(page, input.orderNos[0])
+    await selectReceiptAllocations(page, input.orderNos, input.verifyDraft)
+    await uploadReceiptEvidence(page)
     await setAllocationAmount(page, input.orderNos[0], input.allocationAmounts?.[0] ?? SPLIT_AMOUNT)
-    await addPoolTarget(page, input.orderNos[1])
     await setAllocationAmount(page, input.orderNos[1], input.allocationAmounts?.[1] ?? SPLIT_AMOUNT)
 
     if (input.verifyDraft) await assertReceiptRegistrationDraft(page, input)
 
-    await page.locator("#customer-receivables-session-submit").click()
-    await expect(page.getByRole("heading", { name: /提交回款|确认提交回款/ })).toBeVisible({
+    await workPage(page).locator("#customer-receivables-session-submit").click()
+    await expect(workPage(page).getByRole("heading", { name: /提交回款|确认提交回款/ })).toBeVisible({
         timeout: TIMEOUT,
     })
     const committed = page.waitForResponse(
@@ -644,7 +616,7 @@ async function registerReceiptAllocatingBothOrders(
             response.url().includes("/admin/customer-receipts/commit"),
         { timeout: 60_000 },
     )
-    await page.locator("#customer-receivables-session-receipt-confirm-dialog-confirm").click()
+    await workPage(page).locator("#customer-receivables-session-receipt-confirm-dialog-confirm").click()
     const response = await committed
     expect(response.ok(), await response.text()).toBeTruthy()
     const body = (await response.json()) as { data?: { id?: string; receipt_no?: string; counterparty_party_id?: string } }
@@ -654,11 +626,10 @@ async function registerReceiptAllocatingBothOrders(
     expect(receiptId).not.toBe("")
     const counterpartyPartyId = body.data?.counterparty_party_id ?? ""
     expect(counterpartyPartyId).not.toBe("")
-    const close = page.locator("#customer-receivables-session-result-close")
-    if (await close.isVisible().catch(() => false)) {
-        await close.click()
-        await waitHeading(page, "客户往来")
-    }
+    const close = workPage(page).locator("#receipt-registration-result-return")
+    await expect(close).toBeVisible({ timeout: LONG })
+    await close.click()
+    await waitHeading(page, "客户往来")
     return { receiptNo, receiptId, counterpartyPartyId }
 }
 
@@ -668,11 +639,9 @@ async function assertCaiwuCannotSubmitReceipt(
 ) {
     await page.goto("/finance/customer-accounts")
     await waitHeading(page, "客户往来")
-    const register = page.locator("#customer-receivables-header-register-receipt")
-    await expect(register).toBeVisible({ timeout: LONG })
-    await expect(register).toBeDisabled()
-    await expect(register).toHaveAttribute("title", /当前账号没有执行此操作的权限/)
-    await expect(page.getByRole("heading", { name: "登记回款", exact: true })).toHaveCount(0)
+    const register = workPage(page).locator("#customer-receivables-header-register-receipt")
+    await expect(register).toHaveCount(0)
+    await expect(workPage(page).getByRole("heading", { name: "登记回款", exact: true })).toHaveCount(0)
 
     type Receivable = {
         id: string
@@ -715,7 +684,7 @@ async function assertCaiwuCannotSubmitReceipt(
     expect(receiptsBefore.items).toEqual([])
     expect(receiptsBefore.total).toBe(0)
 
-    // 身份、到账金额及分录均取自真实有效来源，拒绝必须来自岗位权限而非非法载荷。
+    // 合法来源和金额分别触发草稿权限与提交人岗位分离规则。
     const receipt = {
         receipt_no: `DENIED-F06-${input.stamp}`,
         counterparty_party_id: account.counterparty_party_id,
@@ -732,19 +701,19 @@ async function assertCaiwuCannotSubmitReceipt(
         idempotency_key: `denied-f06-${input.stamp}`,
     }
     const token = await apiToken("caiwu")
-    for (const [endpoint, data] of [
-        ["/admin/customer-receipts", receipt],
-        ["/admin/customer-receipts/commit", submit],
+    for (const [endpoint, data, status, code, reason] of [
+        ["/admin/customer-receipts", receipt, 403, "PERMISSION_DENIED", "当前账号没有这项操作权限"],
+        ["/admin/customer-receipts/commit", submit, 400, "INVALID_REQUEST", "提交人不得审批自己的单据"],
     ] as const) {
         const response = await page.request.post(`${API_BASE}${endpoint}`, {
             headers: { Authorization: `Bearer ${token}` },
             data,
         })
         const result = (await response.json()) as { success?: boolean; code?: string; errorMessage?: string }
-        expect(response.status(), result.errorMessage).toBe(403)
+        expect(response.status(), result.errorMessage).toBe(status)
         expect(result.success).toBe(false)
-        expect(result.code).toBe("PERMISSION_DENIED")
-        expect(result.errorMessage).toContain("当前账号没有执行此操作的权限")
+        expect(result.code).toBe(code)
+        expect(result.errorMessage).toContain(reason)
     }
     const receiptsAfter = await readReceipts()
     expect(receiptsAfter.items, "拒绝创建和提交后，不得产生回款草稿或审批中回款").toEqual(receiptsBefore.items)
@@ -760,16 +729,16 @@ async function assertCaiwuCannotSubmitReceipt(
 async function registerSalesInvoiceFromWorkspace(
     page: Page,
     orderNo: string,
-    customerName: string,
+    requestId: string,
 ) {
     const result = await completeSalesInvoiceFromWorkspace(page, {
-        orderNo, customerName, amount: UNIT_PRICE, evidenceName: `FP${Date.now()}`,
+        requestId, orderNo, amount: UNIT_PRICE, evidenceName: `FP${Date.now()}`,
     })
     await page.goto(`/finance/customer-accounts?view=sales_invoice&previewKind=invoice&previewId=${result.invoiceId}`)
-    await expect(page.getByText("发票号码：附件登记", { exact: true })).toBeVisible({ timeout: LONG })
-    await expect(page.getByText("未单独采集", { exact: true })).toHaveCount(2)
-    await expect(page.locator("#customer-receivables-preview-invoice-red")).toHaveCount(0)
-    await expect(page.locator("#customer-receivables-preview-invoice-continue-allocate")).toHaveCount(0)
+    await expect(workPage(page).getByText("发票号码：附件登记", { exact: true })).toBeVisible({ timeout: LONG })
+    await expect(workPage(page).getByText("未单独采集", { exact: true })).toHaveCount(2)
+    await expect(workPage(page).locator("#customer-receivables-preview-invoice-red")).toHaveCount(0)
+    await expect(workPage(page).locator("#customer-receivables-preview-invoice-continue-allocate")).toHaveCount(0)
     return result
 }
 
@@ -778,14 +747,14 @@ async function registerSalesInvoiceFromWorkspace(
 async function submitReceiptReversal(page: Page, receiptNo: string) {
     await page.goto("/finance/customer-accounts?view=receipt")
     await waitHeading(page, "客户往来")
-    await page.locator("#customer-receivables-view-receipt").click()
-    await page.locator("#customer-receivables-toolbar-search").fill(receiptNo)
-    await page.locator("#customer-receivables-toolbar-search").press("Enter")
-    const row = page.getByRole("row").filter({ hasText: receiptNo })
+    await workPage(page).locator("#customer-receivables-view-receipt").click()
+    await workPage(page).locator("#customer-receivables-toolbar-search").fill(receiptNo)
+    await workPage(page).locator("#customer-receivables-toolbar-search").press("Enter")
+    const row = workPage(page).getByRole("row").filter({ hasText: receiptNo })
     await expect(row.first()).toBeVisible({ timeout: LONG })
     await row.first().click()
     await expectReceiptPreview(page, receiptNo)
-    await page.locator("#customer-receivables-preview-receipt-reverse").click()
+    await workPage(page).locator("#customer-receivables-preview-receipt-reverse").click()
     const committed = page.waitForResponse(
         (response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/admin/receipt-reversals/commit",
         { timeout: 90_000 },

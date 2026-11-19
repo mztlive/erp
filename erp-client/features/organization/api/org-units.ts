@@ -58,7 +58,7 @@ type BackendState = {
     version: number
     units: BackendOrgUnit[]
     memberships: BackendMembership[]
-    management: BackendManagement[]
+    management?: BackendManagement[]
 }
 
 type BackendStateView = BackendState & {
@@ -132,7 +132,7 @@ function mapState(row: BackendState) {
         version: row.version,
         units: row.units.map(mapUnit),
         memberships: row.memberships.map(mapMembership),
-        management: row.management.map(mapManagement),
+        management: (row.management ?? []).map(mapManagement),
     }
 }
 

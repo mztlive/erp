@@ -9,7 +9,6 @@ const INVOICE_REASON_CODES = new Set([
 
 export type WorkspaceInvoiceDescriptor = Readonly<{
     receivableAccountId: string
-    salesOrderId: string
 }>
 
 /**
@@ -23,7 +22,6 @@ export function workspaceInvoiceDescriptor(
         | "handlerKey"
         | "businessObjectType"
         | "businessObjectId"
-        | "rootBusinessObjectId"
         | "ownerRole"
         | "reasonCode"
     >,
@@ -37,35 +35,16 @@ export function workspaceInvoiceDescriptor(
 
     const objectType = item.businessObjectType.trim().toLowerCase()
     const receivableAccountId = item.businessObjectId.trim()
-    const salesOrderId = item.rootBusinessObjectId?.trim() ?? ""
     if (
         objectType !== "receivable_account" ||
         item.ownerRole !== "role-finance" ||
         !INVOICE_REASON_CODES.has(item.reasonCode ?? "") ||
-        !receivableAccountId ||
-        !salesOrderId ||
-        salesOrderId === receivableAccountId
+        !receivableAccountId
     ) {
         return null
     }
 
-    return { receivableAccountId, salesOrderId }
-}
-
-/**
- * 核对应收子账与工作项冻结的销售来源是否一致。
- */
-export function workspaceInvoiceMatchesReceivable(
-    descriptor: WorkspaceInvoiceDescriptor,
-    receivable: {
-        accountId: string
-        salesOrderId: string
-    },
-): boolean {
-    return (
-        receivable.accountId === descriptor.receivableAccountId &&
-        receivable.salesOrderId === descriptor.salesOrderId
-    )
+    return { receivableAccountId }
 }
 
 /** 只在本次正式开票覆盖提交前全部待开票金额时离开当前任务。 */

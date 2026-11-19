@@ -283,9 +283,9 @@ export function useSubmitPurchaseChangeMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: submitPurchaseChange,
-        onSuccess: async (result) => {
+        onSuccess: (result) => {
             if (result.status !== "succeeded") return
-            await invalidatePurchaseOrderApprovalCaches(queryClient)
+            void invalidatePurchaseOrderApprovalCaches(queryClient)
         },
     })
 }

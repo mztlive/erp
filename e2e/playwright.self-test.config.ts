@@ -7,6 +7,6 @@ export default defineConfig({
     workers: 1,
     timeout: 30_000,
     reporter: "list",
-    outputDir: "../logs/e2e-helper-self-tests",
+    outputDir: process.env.ERP_E2E_OUTPUT_DIR ?? "../logs/e2e-helper-self-tests",
     use: { headless: true, serviceWorkers: "allow" },
 })

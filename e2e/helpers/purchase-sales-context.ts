@@ -1,8 +1,10 @@
+import { workPage } from "./workspace-page"
 import fs from "node:fs/promises"
 
 import { expect, type Locator, type Page, type Response } from "./test"
 import { API_BASE, apiGet, apiToken } from "./api"
 import { ACCOUNTS } from "./accounts"
+import { workspaceTaskId } from "./ui"
 
 const VISIBLE = { timeout: 20_000 }
 
@@ -225,12 +227,12 @@ export async function openFrozenApprovalMaterials(
     instanceId: string
     materials: FrozenApprovalMaterials
 }> {
-    const currentTask = page
+    const currentTask = workPage(page)
         .getByRole("region", { name: "当前工作台任务", exact: true })
         .filter({ visible: true })
     await expect(currentTask).toHaveCount(1, VISIBLE)
     await expect(currentTask).toBeVisible(VISIBLE)
-    const workItemId = new URL(page.url()).searchParams.get("currentWorkItemId")
+    const workItemId = workspaceTaskId(page) ?? new URL(page.url()).searchParams.get("currentWorkItemId")
     expect(workItemId, "冻结资料必须从已选定的当前审批任务打开").toBeTruthy()
     const action = sourceRevisionId
         ? currentTask
@@ -249,14 +251,6 @@ export async function openFrozenApprovalMaterials(
     const actionId = await action.getAttribute("id")
     if (sourceRevisionId) {
         expect(actionId).toMatch(/^workspace-purchase-approval-.+-source-/)
-    } else {
-        expect(
-            [
-                `workspace-task-detail-read-${idSegment(workItemId!)}`,
-                `workspace-task-detail-preview-submission-${idSegment(workItemId!)}`,
-            ],
-            "完整销售资料入口必须属于 URL 选定的当前审批任务",
-        ).toContain(actionId)
     }
     const [response] = await Promise.all([
         page.waitForResponse(
@@ -274,13 +268,22 @@ export async function openFrozenApprovalMaterials(
         expect(actionId).toBe(
             `workspace-purchase-approval-${idSegment(instanceId)}-source-${idSegment(sourceRevisionId)}`,
         )
+    } else {
+        expect(
+            [
+                `workspace-sales-approval-${idSegment(instanceId)}-preview`,
+                `workspace-task-detail-read-${idSegment(workItemId!)}`,
+                `workspace-task-detail-preview-submission-${idSegment(workItemId!)}`,
+            ],
+            "完整销售资料入口必须属于当前审批实例或 URL 选定的任务",
+        ).toContain(actionId)
     }
     const result = (await response.json()) as {
         success: boolean
         data: FrozenApprovalMaterials
     }
     expect(result.success).toBe(true)
-    const dialog = page.getByRole("dialog", {
+    const dialog = workPage(page).getByRole("dialog", {
         name: sourceRevisionId ? "销售单预览" : /提交资料$/,
         exact: true,
     })
@@ -492,7 +495,7 @@ export async function expectApprovalMaterialPreviewAndDownload(
                     item.request().method() === "GET" &&
                     new URL(item.url()).pathname === `${path}/preview`,
             ),
-        page.locator(`#${prefix}-preview`).click(),
+        workPage(page).locator(`#${prefix}-preview`).click(),
     ])
     try {
         const previewUrl = new URL(materialPage.url())
@@ -502,15 +505,15 @@ export async function expectApprovalMaterialPreviewAndDownload(
         await expectMaterialHeaders(response, bytes)
         expect(response.headers()["content-type"]).toBe(file.content_type)
         await expect(
-            materialPage.getByRole("heading", {
+            workPage(materialPage).getByRole("heading", {
                 name: file.file_name,
                 exact: true,
             }),
         ).toBeVisible(VISIBLE)
         await expectPresentedBlob(
             file.content_type === "application/pdf"
-                ? materialPage.locator("#approval-material-preview-document")
-                : materialPage.getByRole("img", {
+                ? workPage(materialPage).locator("#approval-material-preview-document")
+                : workPage(materialPage).getByRole("img", {
                       name: file.file_name,
                       exact: true,
                   }),
@@ -527,7 +530,7 @@ export async function expectApprovalMaterialPreviewAndDownload(
                 item.request().method() === "GET" &&
                 new URL(item.url()).pathname === `${path}/download`,
         ),
-        page.locator(`#${prefix}-download`).click(),
+        workPage(page).locator(`#${prefix}-download`).click(),
     ])
     await expectMaterialHeaders(downloadedResponse, bytes)
     expect(downloadedResponse.headers()["content-type"]).toBe(
@@ -649,32 +652,31 @@ export async function expectPurchaseSalesContext(
     expect([403, 404], "未关联文件不得借当前采购下载").toContain(denied.status)
 
     await page.goto(`/procurement/orders/${center.id}`)
-    await page.getByRole("tab", { name: /^概览/ }).click()
-    const purchaseTable = page.getByRole("table", { name: "采购明细" })
-    await expect(
-        purchaseTable.locator('th[data-column-id="salesUnitPrice"]'),
-    ).toBeVisible(VISIBLE)
-    await expect(
-        purchaseTable.locator('th[data-column-id="salesUnitPrice"]'),
-    ).toContainText("客户成交含税单价")
+    await workPage(page).getByRole("tab", { name: /^概览/ }).click()
+    const purchaseTable = workPage(page).getByRole("table", { name: "采购明细" })
+    const columnIndex = async (name: string) => {
+        const header = purchaseTable.getByRole("columnheader", { name, exact: true })
+        await expect(header).toBeVisible(VISIBLE)
+        return header.evaluate((cell) => (cell as HTMLTableCellElement).cellIndex)
+    }
+    const salesPriceColumn = await columnIndex("客户成交含税单价")
+    const purchaseCostColumn = await columnIndex("采购含税单价")
     const purchaseRow = purchaseTable
         .getByRole("row")
         .filter({ hasText: options.skuName })
-        .first()
+    await expect(purchaseRow).toHaveCount(1, VISIBLE)
     await expect(
-        purchaseRow.locator(
-            'td[data-column-id="salesUnitPrice"] [data-slot="money-value-number"]',
-        ),
+        purchaseRow.getByRole("cell").nth(salesPriceColumn)
+            .locator('[data-slot="money-value-number"]'),
     ).toHaveText(displayedCurrency(options.salesUnitPrice))
     expect(purchaseLines[0]!.unit_cost_gross).toBeTruthy()
     await expect(
-        purchaseRow.locator(
-            'td[data-column-id="unitCost"] [data-slot="money-value-number"]',
-        ),
+        purchaseRow.getByRole("cell").nth(purchaseCostColumn)
+            .locator('[data-slot="money-value-number"]'),
     ).toHaveText(displayedCurrency(purchaseLines[0]!.unit_cost_gross!))
     const prefix = `procurement-orders-source-sales-${idSegment(center.id)}`
-    await page.locator(`#${prefix}-open`).click()
-    const sheet = page.getByRole("dialog", {
+    await workPage(page).locator(`#${prefix}-open`).click()
+    const sheet = workPage(page).getByRole("dialog", {
         name: options.customerName,
         exact: true,
     })

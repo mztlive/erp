@@ -1,3 +1,4 @@
+import { workPage } from "./workspace-page"
 import { expect, type Locator, type Page } from "@playwright/test"
 
 import {
@@ -78,11 +79,11 @@ async function expectPaymentTermWritten(
     if (!code) return
 
     await input.click()
-    const option = page.locator(
+    const option = workPage(page).locator(
         `#customers-form-payment-term-option-${toOptionSegment(code)}`,
     )
     if (!(await option.isVisible().catch(() => false))) {
-        await page.locator("#customers-form-payment-term-trigger").click()
+        await workPage(page).locator("#customers-form-payment-term-trigger").click()
     }
     await expect(option).toBeVisible({ timeout: 5_000 })
     await option.click()
@@ -187,7 +188,7 @@ async function readDialogDiagnostics(
         parts.push(`拒绝: ${(await rejected.innerText()).trim()}`)
     }
 
-    const errorToast = page.locator('[data-slot="toast"]').filter({
+    const errorToast = workPage(page).locator('[data-slot="toast"]').filter({
         hasText: /失败|无法|错误|未完成|频繁/,
     })
     if (await errorToast.first().isVisible().catch(() => false)) {
@@ -203,11 +204,11 @@ async function readDialogDiagnostics(
 }
 
 function createSucceeded(page: Page, dialog: Locator): Locator {
-    const toast = page.locator('[data-slot="toast"]').filter({ hasText: "客户已创建" })
-    const titled = page.locator('[data-slot="toast-title"]').filter({
+    const toast = workPage(page).locator('[data-slot="toast"]').filter({ hasText: "客户已创建" })
+    const titled = workPage(page).locator('[data-slot="toast-title"]').filter({
         hasText: "客户已创建",
     })
-    const text = page.getByText("客户已创建")
+    const text = workPage(page).getByText("客户已创建")
     const complete = dialog.locator("#customers-form-complete")
     return titled.or(toast).or(text).or(complete)
 }
@@ -222,11 +223,11 @@ export async function createCustomerViaUi(
     input: CreateCustomerViaUiInput,
 ): Promise<void> {
     await page.goto("/sales/customers")
-    await expect(page.getByRole("heading", { name: "客户中心" })).toBeVisible({
+    await expect(workPage(page).getByRole("heading", { name: "客户中心" })).toBeVisible({
         timeout: UI_TIMEOUT,
     })
-    await page.locator("#customers-directory-create").click()
-    const dialog = page.getByRole("dialog", { name: "新建客户" })
+    await workPage(page).locator("#customers-directory-create").click()
+    const dialog = workPage(page).getByRole("dialog", { name: "新建客户" })
     await expect(dialog).toBeVisible({ timeout: UI_TIMEOUT })
 
     await dialog.locator("#customers-form-legal-name").fill(input.legalName)
@@ -301,7 +302,7 @@ export async function createCustomerViaUi(
                         status = `rejected:${(await rejected.innerText()).trim()}`
                         return status
                     }
-                    const errorToast = page.locator('[data-slot="toast"]').filter({
+                    const errorToast = workPage(page).locator('[data-slot="toast"]').filter({
                         hasText: /失败|无法|错误|未完成|频繁/,
                     })
                     if (await errorToast.first().isVisible().catch(() => false)) {

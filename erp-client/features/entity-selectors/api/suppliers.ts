@@ -38,7 +38,10 @@ export async function searchSuppliers(
         sort_by: "supplier_no",
         sort_dir: "asc",
     })
-    return { ...page, items: page.items.map(supplierItem) }
+    const result = { ...page, items: page.items.map(supplierItem) }
+    // 公司共享范围未读取组织版本，0 不代表组织修订。
+    if (result.organization_version === 0) delete result.organization_version
+    return result
 }
 
 export async function fetchSupplierOption(

@@ -9,6 +9,7 @@ mod entry_migration;
 mod fixtures;
 mod integration_difference;
 mod inventory_warehouses;
+mod invoice_request_commands;
 mod management_contract;
 mod migration_fixes;
 mod phase5;

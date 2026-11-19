@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "test:e2e": "bash ../scripts/run-flow.sh",
-    "test:e2e:list": "playwright test --list",
+    "test:e2e:list": "playwright test --list --reporter=list",
     "test:helpers": "playwright test --config playwright.self-test.config.ts",
     "trace:slow": "node scripts/trace-slow-steps.mjs"
   },

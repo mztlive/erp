@@ -1,3 +1,4 @@
+import { workPage } from "./workspace-page"
 import { expect, type Page } from "@playwright/test"
 
 import { API_BASE, apiGet, apiToken } from "./api"
@@ -114,8 +115,8 @@ export async function rejectFinancialOriginal(
     page: Page,
     reason: string,
 ): Promise<void> {
-    await page.getByRole("button", { name: "驳回", exact: true }).click()
-    const dialog = page.getByRole("dialog", { name: "确认驳回", exact: true })
+    await workPage(page).getByRole("button", { name: "驳回", exact: true }).click()
+    const dialog = workPage(page).getByRole("dialog", { name: "确认驳回", exact: true })
     await expect(dialog).toBeVisible({ timeout: 40_000 })
     await dialog.getByLabel(/^驳回原因\s*\*?$/).fill(reason)
     const applied = page.waitForResponse(
@@ -144,9 +145,9 @@ export async function reviseFinancialOriginal(
     const before = await readFinancialOriginal(input.kind, input.id)
     expect(before.id).toBe(input.id)
     expect(before.receipt_no ?? before.reversal_no).toBe(input.documentNo)
-    expect(before.status).toBe("IN_APPROVAL")
-    expect(before.approval.instance.status).toBe("RUNNING")
-    expect(before.approval.instance.current_round_no).toBe(2)
+    expect(before.status).toBe("REJECTED")
+    expect(before.approval.instance.status).toBe("REJECTED")
+    expect(before.approval.instance.current_round_no).toBe(1)
     const beforeSubjectVersion = await readFinancialApprovalVersion(
         input.kind,
         input.id,
@@ -159,26 +160,14 @@ export async function reviseFinancialOriginal(
         [previewKey]: input.id,
     })
     await page.goto(`/finance/${definition.side}-accounts?${params}`)
-    const revise = page.getByRole("button", { name: "修改原单", exact: true })
+    const revise = workPage(page).getByRole("button", { name: "修改原单", exact: true })
     await expect(revise).toBeEnabled({ timeout: 40_000 })
     await revise.click()
-    const cancel = page.getByRole("dialog", { name: "修改原单", exact: true })
-    await expect(cancel).toBeVisible({ timeout: 40_000 })
-    await cancel.getByLabel(/^原因\s*\*?$/).fill("按驳回意见补齐原单依据")
-    await cancel
-        .getByRole("button", { name: "撤回并修改原单", exact: true })
-        .click()
-    const editor = page.getByRole("dialog", {
+    const editor = workPage(page).getByRole("dialog", {
         name: `修改${definition.label}`,
         exact: true,
     })
     await expect(editor).toBeVisible({ timeout: 40_000 })
-    const draft = await readFinancialOriginal(input.kind, input.id)
-    expect(draft.status).toBe("draft")
-    expect(draft.approval.instance.id).toBe(before.approval.instance.id)
-    expect(draft.approval.instance.status).toBe("CANCELLED")
-    expect(draft.receipt_no ?? draft.reversal_no).toBe(input.documentNo)
-    expect(draft.amount).toBe(before.amount)
     await expect(editor.getByLabel(/^金额\s*\*?$/)).toHaveValue(before.amount, {
         timeout: 40_000,
     })
@@ -187,6 +176,8 @@ export async function reviseFinancialOriginal(
     await editor
         .getByLabel(new RegExp(`^${changedField}\\s*\\*?$`))
         .fill(input.changedText)
+    const resubmissionReason = "按驳回意见补齐原单依据"
+    await editor.getByLabel(/^重新提交说明\s*\*?$/).fill(resubmissionReason)
     const resourcePath = `/admin/${definition.resource}/${input.id}`
     const saved = page.waitForResponse(
         (response) =>
@@ -207,19 +198,22 @@ export async function reviseFinancialOriginal(
     expect(savedResponse.ok(), await savedResponse.text()).toBeTruthy()
     const savedDraft = (await savedResponse.json()).data as FinancialOriginal
     expect(savedDraft.id).toBe(input.id)
-    expect(savedDraft.version).toBeGreaterThan(draft.version)
+    expect(savedDraft.version).toBeGreaterThan(before.version)
+    expect(savedDraft.status).toBe("REJECTED")
     const response = await submitted
     expect(response.ok(), await response.text()).toBeTruthy()
     const command = response.request().postDataJSON() as {
         expected_version: number
         idempotency_key: string
+        resubmission_reason: string
         allocations?: FinancialOriginal["pending_allocations"]
     }
     expect(command.expected_version).toBe(savedDraft.version)
     expect(command.idempotency_key).toBeTruthy()
+    expect(command.resubmission_reason).toBe(resubmissionReason)
     if (input.kind === "customer_receipt") {
         expect(command.allocations).toEqual(before.pending_allocations)
-        expect(draft.pending_allocations).toEqual(before.pending_allocations)
+        expect(savedDraft.pending_allocations).toEqual(before.pending_allocations)
     }
     await expect(editor).toBeHidden({ timeout: 40_000 })
     const current = await readFinancialOriginal(input.kind, input.id)
@@ -239,7 +233,7 @@ export async function reviseFinancialOriginal(
         "original_customer_receipt_id",
         "original_supplier_payment_id",
     ] as const) {
-        expect(draft[field]).toBe(before[field])
+        expect(savedDraft[field]).toBe(before[field])
         expect(current[field]).toBe(before[field])
     }
     expect(current.approval.instance.id).not.toBe(before.approval.instance.id)

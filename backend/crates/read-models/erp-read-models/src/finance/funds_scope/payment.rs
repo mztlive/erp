@@ -96,7 +96,7 @@ impl FundsAccess {
             .client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { this.load_supplier_payment_detail(&id, &actor, executor).await })
+                Box::pin(async move { this.load_supplier_payment_detail(&id, &actor, executor, true).await })
             })
             .await
     }
@@ -313,6 +313,7 @@ impl FundsAccess {
     //
     // 调用参数：
     // * `id` - 供应商付款主键。
+    // * `include_effective_amount` - 仅详情交付需要；来源资格核验无需额外取数。
     //
     // 返回当前获授权付款份额及来源版本凭据。
     //
@@ -322,6 +323,7 @@ impl FundsAccess {
         id: &str,
         actor: &AuditActor,
         executor: &mut dyn Executor,
+        include_effective_amount: bool,
     ) -> Result<FundsScopedResult<ScopedSupplierPaymentRow>> {
         let (_access, authorization) = self
             .resolve_with_purchase(actor, &payable_permissions::SUPPLIER_PAYMENT_DETAIL, executor)
@@ -361,7 +363,17 @@ impl FundsAccess {
             return Err(Error::NotFound("供应商付款单不存在".into()));
         }
 
-        let data = cut_payment_row(&row, row_links, &matched, whole);
+        let mut data = cut_payment_row(&row, row_links, &matched, whole);
+        if whole && include_effective_amount {
+            let payment = self
+                .db
+                .supplier_payments()
+                .find_by_id(&row.id, executor)
+                .await?
+                .ok_or_else(|| Error::NotFound("供应商付款单不存在".into()))?;
+            data.effective_amount = Some(payment.effective_amount());
+        }
+
         let mut parts = vec![format!("{}:{}", row.id, row.version)];
         for order in matched.iter().filter_map(|id| facts.get(id)) {
             parts.push(format!("{}:{:?}:{}", id, order.owner_user_id, order.version));
@@ -484,6 +496,7 @@ pub(super) fn cut_payment_row(
         created_at: row.created_at,
         visible_allocated_share: payment_sum_signed(links, matched),
         amount: whole_amount(whole, row.amount),
+        effective_amount: None,
         allocated_total: whole_amount(whole, net),
         unallocated_amount: whole_amount(whole, row.amount.checked_sub(net)),
         allocations: Some(views),
@@ -562,6 +575,7 @@ mod tests {
         assert!(partial.amount.is_none());
         assert!(partial.allocated_total.is_none());
         assert!(partial.unallocated_amount.is_none());
+        assert!(serde_json::to_value(&partial).unwrap().get("effective_amount").is_none());
         assert_eq!(
             partial.allocations.unwrap().iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
             vec!["a"]
@@ -570,6 +584,7 @@ mod tests {
         let whole = cut_payment_row(&row, &links, &matched, true);
         assert_eq!(whole.visible_allocated_share, "60".parse().unwrap());
         assert_eq!(whole.amount, Some("120".parse().unwrap()));
+        assert!(serde_json::to_value(&whole).unwrap().get("effective_amount").is_none());
         assert_eq!(whole.allocations.unwrap().len(), 3);
         assert_eq!(whole.unallocated_amount, Some("10".parse().unwrap()));
     }

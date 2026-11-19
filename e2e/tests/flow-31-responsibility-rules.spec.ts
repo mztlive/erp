@@ -2,6 +2,7 @@
  * 财务与采购责任配置：页面维护、服务端资格、唯一性、版本和逐行预览。
  * 规则在隔离数据库内修改；不把规则配置等同于正式任务的责任事实。
  */
+import { workPage } from "../helpers/workspace-page"
 import { expect, test, type Page, type Response } from "../helpers/test"
 import { API_BASE, apiGet, apiToken } from "../helpers/api"
 import { openLoggedInWorkspace } from "../helpers/login"
@@ -12,7 +13,8 @@ type Rule = {
     id: string
     version: number
     status: string
-    owner_user_id: string
+    owner_user_ids: string[]
+    strategy: string
     scope?: string
     counterparty_id?: string
     sku_id?: string
@@ -110,15 +112,25 @@ async function saveRule(
                 item.request().method() === method &&
                 new URL(item.url()).pathname === endpoint,
         ),
-        page.locator(`#${buttonId}`).click(),
+        workPage(page).locator(`#${buttonId}`).click(),
     ])
     if (expectedBody) {
         expect(response.request().postDataJSON()).toMatchObject(expectedBody)
     }
     const rule = await uiResult<Rule>(response)
-    await expect(page.locator('[data-slot="dialog-content"]')).toBeHidden()
+    await expect(workPage(page).locator('[data-slot="dialog-content"]')).toBeHidden()
     await dismissToasts(page)
     return rule
+}
+
+async function selectOwner(page: Page, id: string, account: string, userId: string) {
+    const input = workPage(page).locator(`#${id}`)
+    await input.click()
+    await input.fill(account)
+    await workPage(page).locator(`#${id}-option-${userId}`).click()
+    await expect(workPage(page).locator(`#${id}-chip-${userId}-remove`)).toBeVisible()
+    if (await input.getAttribute("aria-expanded") === "true") await input.press("Escape")
+    await expect(input).toHaveAttribute("aria-expanded", "false")
 }
 
 test("[flow-31] 财务责任规则页面维护、执行资格和服务端版本保护", async ({
@@ -156,25 +168,20 @@ test("[flow-31] 财务责任规则页面维护、执行资格和服务端版本�
         operation: "SUPPLIER_PAYMENT",
         scope: "COUNTERPARTY",
         counterparty_id: supplier!.id,
-        owner_user_id: owner!.user_id,
+        owner_user_ids: [owner!.user_id],
+        strategy: "ROUND_ROBIN",
         status: "active",
     }
 
     await page.goto("/finance/responsibilities")
-    await page.locator("#finance-responsibilities-create").click()
+    await workPage(page).locator("#finance-responsibilities-create").click()
     await chooseOption(
         page,
-        page.locator("#finance-responsibilities-rule-counterparty"),
+        workPage(page).locator("#finance-responsibilities-rule-counterparty"),
         new RegExp(supplier!.supplier_no),
         supplier!.supplier_no,
     )
-    await chooseOption(
-        page,
-        page.locator("#finance-responsibilities-rule-owner"),
-        /·\s*fukuan$/,
-        "fukuan",
-    )
-    await expect(page.locator("#finance-responsibilities-rule-owner")).toHaveValue(/·\s*fukuan$/)
+    await selectOwner(page, "finance-responsibilities-rule-owner", "fukuan", owner!.user_id)
     const created = await saveRule(
         page,
         "POST",
@@ -195,7 +202,7 @@ test("[flow-31] 财务责任规则页面维护、执行资格和服务端版本�
             token,
             "PUT",
             `/admin/finance-responsibility-rules/${created.id}`,
-            { ...input, owner_user_id: sales!.id, version: created.version },
+            { ...input, owner_user_ids: [sales!.id], version: created.version },
             [400, 409, 422],
         )
         await rejected(
@@ -211,18 +218,18 @@ test("[flow-31] 财务责任规则页面维护、执行资格和服务端版本�
         )
         expect(after).toHaveLength(rules.length + 1)
         expect(after.find((item) => item.id === created.id)).toMatchObject({
-            owner_user_id: owner!.user_id,
+            owner_user_ids: [owner!.user_id],
             version: 1,
             status: "active",
         })
     })
 
-    await page
+    await workPage(page)
         .getByRole("row")
         .filter({ hasText: supplier!.supplier_no })
         .click()
-    const financeEnabled = page.locator("#finance-responsibilities-rule-enabled")
-    await expect(page.getByRole("dialog", { name: "编辑财务责任规则", exact: true })).toBeVisible()
+    const financeEnabled = workPage(page).locator("#finance-responsibilities-rule-enabled")
+    await expect(workPage(page).getByRole("dialog", { name: "编辑财务责任规则", exact: true })).toBeVisible()
     await expect(financeEnabled).toHaveAttribute("aria-checked", "true")
     await financeEnabled.press("Space")
     await expect(financeEnabled).toHaveAttribute("aria-checked", "false")
@@ -269,7 +276,8 @@ test("[flow-31] 财务责任规则页面维护、执行资格和服务端版本�
             operation: "SALES_INVOICE",
             scope: "COUNTERPARTY",
             counterparty_id: customer.id,
-            owner_user_id: invoiceOwner!.user_id,
+            owner_user_ids: [invoiceOwner!.user_id],
+            strategy: "ROUND_ROBIN",
             status: "active",
         }
         const invoiceRule = await command<Rule>(
@@ -349,20 +357,14 @@ test("[flow-31] 精确采购责任优先、停用回退、逐行失败和版本�
     })
 
     await page.goto("/master-data/procurement-responsibilities")
-    await page.locator("#procurement-responsibility-rules-create").click()
+    await workPage(page).locator("#procurement-responsibility-rules-create").click()
     await chooseOption(
         page,
-        page.locator("#procurement-responsibility-rules-dialog-sku"),
+        workPage(page).locator("#procurement-responsibility-rules-dialog-sku"),
         new RegExp(sku!.sku_no),
         sku!.sku_no,
     )
-    await chooseOption(
-        page,
-        page.locator("#procurement-responsibility-rules-dialog-owner"),
-        /·\s*caigou$/,
-        "caigou",
-    )
-    await expect(page.locator("#procurement-responsibility-rules-dialog-owner")).toHaveValue(/·\s*caigou$/)
+    await selectOwner(page, "procurement-responsibility-rules-dialog-owner", "caigou", owner!.id)
     const created = await saveRule(
         page,
         "POST",
@@ -372,7 +374,8 @@ test("[flow-31] 精确采购责任优先、停用回退、逐行失败和版本�
     expect(created).toMatchObject({
         rule_type: "SKU",
         sku_id: sku!.sku_id,
-        owner_user_id: owner!.id,
+        owner_user_ids: [owner!.id],
+        strategy: "ROUND_ROBIN",
         status: "active",
         version: 1,
     })
@@ -407,9 +410,9 @@ test("[flow-31] 精确采购责任优先、停用回退、逐行失败和版本�
         [400, 422],
     )
 
-    await page.getByRole("row").filter({ hasText: sku!.sku_no }).click()
-    const procurementEnabled = page.locator("#procurement-responsibility-rules-dialog-enabled")
-    await expect(page.getByRole("dialog", { name: "编辑采购责任规则", exact: true })).toBeVisible()
+    await workPage(page).getByRole("row").filter({ hasText: sku!.sku_no }).click()
+    const procurementEnabled = workPage(page).locator("#procurement-responsibility-rules-dialog-enabled")
+    await expect(workPage(page).getByRole("dialog", { name: "编辑采购责任规则", exact: true })).toBeVisible()
     await expect(procurementEnabled).toHaveAttribute("aria-checked", "true")
     await procurementEnabled.press("Space")
     await expect(procurementEnabled).toHaveAttribute("aria-checked", "false")
@@ -423,15 +426,15 @@ test("[flow-31] 精确采购责任优先、停用回退、逐行失败和版本�
     const input = {
         rule_type: "SKU",
         sku_id: sku!.sku_id,
-        owner_user_id: owner!.id,
+        owner_user_ids: [owner!.id],
+        strategy: "ROUND_ROBIN",
         status: "active",
-        version: 1,
     }
     await rejected(
         token,
         "PUT",
         `/admin/procurement-responsibility-rules/${created.id}`,
-        input,
+        { ...input, version: created.version },
         [400, 409],
     )
     await rejected(

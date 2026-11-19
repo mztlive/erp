@@ -6,10 +6,11 @@
  * 三价维护、商品池查询、销售数量与手填成交价及审批均通过页面办理；参考价不自动成为成交价。
  * 供应商成本与公司销售参考价使用不同数值，验证改公司价不改供给成本。
  */
+import { workPage } from "../helpers/workspace-page"
 import { archiveContractViaUi } from "../helpers/contracts"
 import { selectExistingContractForSalesOrder } from "../helpers/sales-orders"
-import fs from "node:fs/promises"
 import path from "node:path"
+import { readImportWorkbook } from "../helpers/import-workbook"
 
 import {
     test,
@@ -287,13 +288,13 @@ async function maintainPrices(
 ): Promise<void> {
     await page.goto(`/master-data/products/${productId}`)
     await expect(
-        page.getByRole("heading", { name: "规格与 SKU", exact: true }),
+        workPage(page).getByRole("heading", { name: "规格与 SKU", exact: true }),
     ).toBeVisible(VISIBLE)
-    await page.locator("#product-section-sku").scrollIntoViewIfNeeded()
+    await workPage(page).locator("#product-section-sku").scrollIntoViewIfNeeded()
     if (uploadImage) {
         const [chooser] = await Promise.all([
             page.waitForEvent("filechooser"),
-            page
+            workPage(page)
                 .getByRole("group", { name: /主图/ })
                 .first()
                 .getByRole("button", { name: "选择主图" })
@@ -311,11 +312,11 @@ async function maintainPrices(
         ["集采起订量", prices.bulk_min_quantity],
         ["市场价", prices.market_price],
     ]) {
-        await page.getByLabel(`默认规格 ${label}`, { exact: true }).fill(value!)
+        await workPage(page).getByLabel(`默认规格 ${label}`, { exact: true }).fill(value!)
     }
     await dismissToasts(page)
-    await page.locator("#master-data-product-detail-header-submit").click()
-    const dialog = page.getByRole("dialog", { name: "保存更新", exact: true })
+    await workPage(page).locator("#master-data-product-detail-header-submit").click()
+    const dialog = workPage(page).getByRole("dialog", { name: "保存更新", exact: true })
     await expect(dialog).toBeVisible(VISIBLE)
     await dialog
         .locator("#master-data-product-detail-effective-reason")
@@ -336,17 +337,23 @@ async function maintainPrices(
     await dismissToasts(page)
 }
 
-async function poolSku(token: string, skuNo: string): Promise<SellableSku> {
-    const result = await apiGet<ApiPage<SellableSku>>(
-        token,
-        "/admin/sellable-skus",
-        {
-            q: skuNo,
-            page_size: 100,
-        },
-    )
-    expect(result.items).toHaveLength(1)
-    return result.items[0]!
+async function expectPoolPrices(
+    token: string,
+    skuNo: string,
+    prices: Prices,
+): Promise<SellableSku> {
+    let items: SellableSku[] = []
+    await expect.poll(async () => {
+        const result = await apiGet<ApiPage<SellableSku>>(
+            token,
+            "/admin/sellable-skus",
+            { q: skuNo, page_size: 100 },
+        )
+        items = result.items
+        return items
+    }, { message: `公司商品池应发布 ${skuNo} 的最新参考价`, timeout: VISIBLE.timeout })
+        .toMatchObject([{ sku_no: skuNo, ...prices }])
+    return items[0]!
 }
 
 async function expectPriceCell(
@@ -366,7 +373,7 @@ async function expectContractReady(
     page: Page,
     contractNo: string,
 ): Promise<void> {
-    const section = page.locator(
+    const section = workPage(page).locator(
         'section[aria-labelledby="sales-create-contract-title"]',
     )
     await expect(
@@ -377,7 +384,7 @@ async function expectContractReady(
         VISIBLE,
     )
     await expect(section.getByRole("heading", { name: "合同信息", exact: true })).toBeVisible(VISIBLE)
-    await expect(page.locator("#sales-orders-create-customer").locator("input, button, [role=combobox]")).toHaveCount(
+    await expect(workPage(page).locator("#sales-orders-create-customer").locator("input, button, [role=combobox]")).toHaveCount(
         0,
         VISIBLE,
     )
@@ -401,7 +408,7 @@ async function saveDraft(
                 item.request().method() === method &&
                 new URL(item.url()).pathname === endpoint,
         ),
-        page.locator("#sales-orders-create-save-draft").click(),
+        workPage(page).locator("#sales-orders-create-save-draft").click(),
     ])
     const result = await readUiResult<{ id?: string }>(response)
     const id = salesOrderId || result.id
@@ -462,8 +469,7 @@ test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及�
 
     const { page } = await openLoggedInWorkspace(browser, "xiaoshou")
     const salesToken = await apiToken("xiaoshou")
-    const selected = await poolSku(salesToken, product.skuNo)
-    expect(selected).toMatchObject(PRICES)
+    const selected = await expectPoolPrices(salesToken, product.skuNo, PRICES)
     expect(selected.supplier_codes.sort()).toEqual(["SUP-DEV-WEEK", "SUP-HZSF"])
     expect(selected.supplier_count).toBe(2)
 
@@ -472,9 +478,9 @@ test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及�
             `/master-data/sellable-items?q=${encodeURIComponent(product.skuNo)}&layout=table`,
         )
         await expect(
-            page.getByRole("heading", { name: "公司商品池", exact: true }),
+            workPage(page).getByRole("heading", { name: "公司商品池", exact: true }),
         ).toBeVisible(VISIBLE)
-        const table = page.locator("#master-data-sellable-items-list-table")
+        const table = workPage(page).locator("#master-data-sellable-items-list-table")
         const row = table.getByRole("row").filter({ hasText: product.skuNo })
         await expect(row).toHaveCount(1)
         for (const [label, value] of [
@@ -487,7 +493,7 @@ test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及�
         await expectPriceCell(table, row, "供应商编号", "SUP-HZSF")
         await expectPriceCell(table, row, "供应商编号", "SUP-DEV-WEEK")
         await row.getByText(product.skuName, { exact: true }).click()
-        const preview = page.getByRole("dialog", {
+        const preview = workPage(page).getByRole("dialog", {
             name: product.skuName,
             exact: true,
         })
@@ -511,27 +517,30 @@ test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及�
             .click()
         const [download] = await Promise.all([
             page.waitForEvent("download"),
-            page.locator("#master-data-sellable-items-list-export").click(),
+            workPage(page).locator("#master-data-sellable-items-list-export").click(),
         ])
-        expect(download.suggestedFilename()).toMatch(/\.csv$/)
-        const output = testInfo.outputPath("company-pool-prices.csv")
+        expect(download.suggestedFilename()).toBe("公司商品池.xlsx")
+        const output = testInfo.outputPath("company-pool-prices.xlsx")
         await download.saveAs(output)
-        const csv = await fs.readFile(output, "utf8")
-        for (const value of [
-            product.skuNo,
-            "一件代发价",
-            "129.00",
-            "集采价",
-            "119.00",
-            "市场价",
-            "159.00",
-            "供应商编号",
-            "SUP-HZSF",
-            "SUP-DEV-WEEK",
-        ]) {
-            expect(csv).toContain(value)
+        const sheet = (await readImportWorkbook(output)).getWorksheet("选品")!
+        expect(sheet.rowCount).toBe(3)
+        const columns = new Map<string, number>()
+        sheet.getRow(2).eachCell((cell, column) => columns.set(cell.text, column))
+        const item = sheet.getRow(3)
+        for (const [label, value] of Object.entries({
+            "SKU 编号": product.skuNo,
+            "一件代发价（含税）": "129.00",
+            "集采价（含税）": "119.00",
+            "市场价（含税）": "159.00",
+            "集采起订量": "10",
+        })) {
+            expect(columns.has(label), `导出须包含 ${label}`).toBe(true)
+            expect(item.getCell(columns.get(label)!).text).toBe(value)
         }
-        expect(csv).not.toContain("出厂价")
+        expect(columns.has("供应商编号")).toBe(true)
+        expect(item.getCell(columns.get("供应商编号")!).text.split("、").sort())
+            .toEqual(["SUP-DEV-WEEK", "SUP-HZSF"])
+        expect([...columns.keys()].some((label) => label.includes("出厂价"))).toBe(false)
     })
 
     const customerName = `E2E 四价客户 ${suffix}`
@@ -545,7 +554,7 @@ test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及�
         address: "北京市朝阳区四价验收路 20 号",
     })
     await page.goto("/sales/contracts")
-    await page.locator("#page-actions-action-upload").click()
+    await workPage(page).locator("#page-actions-action-upload").click()
     await archiveContractViaUi(page, { contractNo, customerName, pdf: path.resolve(process.cwd(), "fixtures/sample-contract.pdf") })
 
     await page.goto("/sales/orders?mode=create")
@@ -553,11 +562,11 @@ test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及�
     await expectContractReady(page, contractNo)
     await chooseOption(
         page,
-        page.locator("#sales-orders-create-header-welfare-scene"),
-        "年节礼包",
+        workPage(page).locator("#sales-orders-create-header-welfare-scene"),
+        "礼包",
     )
-    await page.locator("#sales-orders-create-line-items-add").click()
-    const picker = page.getByRole("dialog", { name: "添加商品" })
+    await workPage(page).locator("#sales-orders-create-line-items-add").click()
+    const picker = workPage(page).getByRole("dialog", { name: "添加商品" })
     await expect(picker).toBeVisible(VISIBLE)
     const search = picker.locator(
         "#sales-orders-sku-picker-filter-search",
@@ -569,11 +578,11 @@ test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及�
         .check()
     await picker.locator("#sales-orders-sku-picker-confirm").click()
     await expect(picker).toBeHidden(VISIBLE)
-    const quantity = page.locator(
+    const quantity = workPage(page).locator(
         'input[id^="sales-orders-create-line-"][id$="-quantity"]',
     )
-    const price = page.getByLabel("含税成交单价", { exact: true })
-    const autoPricing = page.getByRole("button", {
+    const price = workPage(page).getByLabel("含税成交单价", { exact: true })
+    const autoPricing = workPage(page).getByRole("button", {
         name: "按数量取价",
         exact: true,
     })
@@ -590,13 +599,13 @@ test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及�
             await expect(price).toHaveValue("125.00")
         }
     })
-    await page.locator("#sales-orders-create-batch-due-date-open").click()
+    await workPage(page).locator("#sales-orders-create-batch-due-date-open").click()
     await pickCalendarDay(
         page,
-        page.locator("#sales-orders-create-batch-due-date"),
+        workPage(page).locator("#sales-orders-create-batch-due-date"),
         businessDate(7),
     )
-    await page.locator("#sales-orders-create-batch-due-date-apply").click()
+    await workPage(page).locator("#sales-orders-create-batch-due-date-apply").click()
     await expectToast(page, "已批量设置交期")
     const firstSaved = await saveDraft(page, contractNo)
     const salesOrderId = firstSaved.order.id
@@ -689,7 +698,10 @@ test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及�
         await expect(price).toHaveValue("119.00")
         await dismissToasts(page)
         await submitCreatedSalesOrder(page)
-        const submitDialog = page.getByRole("dialog", { name: "提交销售单" })
+        const submitDialog = workPage(page).getByRole("dialog", { name: "提交销售单" })
+        await submitDialog.locator("#sales-orders-submit-confirm-confirm").click()
+        const negativeProfit = workPage(page).getByRole("alertdialog", { name: "预估毛利为负", exact: true })
+        await expect(negativeProfit).toBeVisible(VISIBLE)
         const [submittedResponse] = await Promise.all([
             page.waitForResponse(
                 (item) =>
@@ -697,9 +709,7 @@ test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及�
                     new URL(item.url()).pathname ===
                         `/admin/sales-orders/${salesOrderId}/submit`,
             ),
-            submitDialog
-                .locator("#sales-orders-submit-confirm-confirm")
-                .click(),
+            negativeProfit.getByRole("button", { name: "仍然提交", exact: true }).click(),
         ])
         await readUiResult(submittedResponse)
         const submitted = await apiGet<SalesOrder>(
@@ -755,15 +765,15 @@ test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及�
             open_total: "1190.00",
             open_invoiceable_total: "1190.00",
         })
-        await maintainPrices(procurementPage, product.productId, {
+        const revisedPrices = {
             sales_visible_price_gross: "149.00",
             bulk_price_gross: "99.00",
             bulk_min_quantity: "3",
             market_price: "179.00",
-        })
-        const changedPool = await poolSku(salesToken, product.skuNo)
+        }
+        await maintainPrices(procurementPage, product.productId, revisedPrices)
+        const changedPool = await expectPoolPrices(salesToken, product.skuNo, revisedPrices)
         expect(changedPool.sku_revision_id).not.toBe(selected.sku_revision_id)
-        expect(changedPool.bulk_price_gross).toBe("99.00")
         const unchanged = await apiGet<SalesOrder>(
             salesToken,
             `/admin/sales-orders/${salesOrderId}`,
@@ -781,10 +791,10 @@ test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及�
         expect(unchangedReceivables.items).toEqual(receivables.items)
         await page.goto(`/sales/orders/${salesOrderId}`)
         await expect(
-            page.getByRole("heading", { name: customerName, exact: true }),
+            workPage(page).getByRole("heading", { name: customerName, exact: true }),
         ).toBeVisible(VISIBLE)
         await expect(
-            page.getByText("已生效", { exact: true }).first(),
+            workPage(page).getByText("已生效", { exact: true }).first(),
         ).toBeVisible(VISIBLE)
     })
 

@@ -8,7 +8,7 @@ export function PreviewAmount({
     children,
 }: {
     label: string
-    value: string
+    value: string | null
     children?: ReactNode
 }) {
     return (

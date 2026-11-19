@@ -2,6 +2,7 @@
  * [flow-35] 付清授权关闭、原付款冲正和改派出纳的恢复资格。
  * 所有业务与账号变更走正式命令；只读临时库核对 API 未暴露的任务责任键。
  */
+import { workPage } from "../helpers/workspace-page"
 import { execFileSync } from "node:child_process"
 import { randomUUID } from "node:crypto"
 
@@ -9,8 +10,8 @@ import { test, expect, type Page } from "../helpers/test"
 import { API_BASE, apiGet, apiToken } from "../helpers/api"
 import { analyticsDate, createAnalyticsPurchase, prepareAnalyticsOrders } from "../helpers/financial-analytics"
 import { openLoggedInWorkspace } from "../helpers/login"
-import { BANK_RECEIPT_FILE, purchasePaymentRequestCommand, type PaymentRequestCandidate, type PurchasePaymentRequestResult } from "../helpers/payments"
-import { approveCurrentDocument, openWorkspaceTask } from "../helpers/ui"
+import { BANK_RECEIPT_FILE, openPurchasePaymentExecutionTask, purchasePaymentRequestCommand, type PaymentRequestCandidate, type PurchasePaymentRequestResult } from "../helpers/payments"
+import { workspaceTaskId, approveCurrentDocument, expectWorkspaceQueue, matchingWorkspaceTaskRows, openWorkspaceTask } from "../helpers/ui"
 
 const ROOT = "/admin/purchase-payment-requests"
 type Detail = PurchasePaymentRequestResult & {
@@ -91,14 +92,14 @@ async function submitApproved(page: Page, finance: Page, row: PaymentRequestCand
 }
 
 async function pay(page: Page, request: Detail, amount: string) {
-    await openWorkspaceTask(page, /供应商付款处理|待付款申请/, request.request_no, "finance")
-    expect(new URL(page.url()).searchParams.get("currentWorkItemId")).toBe(request.work_item_id)
-    await page.locator("#ppr-pay-amount").fill(amount)
-    await page.locator("#ppr-pay-bank-receipt-input").setInputFiles(BANK_RECEIPT_FILE)
-    await page.locator("#ppr-pay-submit").click()
+    await openPurchasePaymentExecutionTask(page, request)
+    expect(workspaceTaskId(page)).toBe(request.work_item_id)
+    await workPage(page).locator("#ppr-pay-amount").fill(amount)
+    await workPage(page).locator("#ppr-pay-bank-receipt-input").setInputFiles(BANK_RECEIPT_FILE)
+    await workPage(page).locator("#ppr-pay-submit").click()
     const committed = page.waitForResponse((response) => response.request().method() === "POST" &&
         new URL(response.url()).pathname === `${ROOT}/${request.id}/payments/commit`, { timeout: 60_000 })
-    await page.locator("#ppr-pay-confirm-confirm").click()
+    await workPage(page).locator("#ppr-pay-confirm-confirm").click()
     const response = await committed
     const body = await response.json() as { success: boolean; errorMessage?: string; data: { id: string; amount: string; status: string } }
     expect(response.ok(), body.errorMessage).toBe(true)
@@ -184,8 +185,9 @@ test("付清后显式关闭授权再冲正；改派任务恢复现任出纳，�
         expect(reversed.current_lines[0]!.current_available_total).toBe(first.available_total)
         expect(reversed.work_item_id).toBe(originalTask.id)
         expect((await apiGet<Task>(adminToken, `/admin/work-items/${originalTask.id}`)).status).toBe("COMPLETED")
-        await cashier.page.goto("/workspace?family=finance")
-        await expect(cashier.page.getByRole("button", { name: /供应商付款处理|待付款申请/ }).filter({ hasText: completed.request_no })).toHaveCount(0)
+        await cashier.page.goto("/workspace/tasks")
+        await expectWorkspaceQueue(cashier.page)
+        await expect(matchingWorkspaceTaskRows(cashier.page, "待执行采购付款", completed.request_no)).toHaveCount(0)
     } finally { await changeBank(procurement.page, adminToken, first.supplier_id, true) }
     const availableAgain = (await candidates(procurementToken)).find((row) => row.payable_account_id === first.payable_account_id)!
     expect(availableAgain.available_total).toBe(first.available_total)
@@ -220,12 +222,15 @@ test("付清后显式关闭授权再冲正；改派任务恢复现任出纳，�
         expect(storedBefore.responsibility_key).toContain(`:request:${toReassign.id}`)
         const eligible = await apiGet<Array<{ user_id: string }>>(adminToken, `/admin/work-items/${before.id}/reassign-candidates`)
         expect(eligible.some((account) => account.user_id === target.id), "新出纳必须经真实完整执行资格筛选").toBe(true)
-        const assigned = await write<Task>(procurement.page, adminToken, "POST", `/admin/work-items/${before.id}/reassign`, {
+        const assigned = await write<Pick<Task, "id" | "task_version">>(procurement.page, adminToken, "POST", `/admin/work-items/${before.id}/reassign`, {
             expected_task_version: before.task_version, target_user_id: target.id,
             reason: "E2E 当前付款任务交接给合格新出纳，不改默认责任", idempotency_key: randomUUID(),
         })
-        expect(assigned.owner_user_id).toBe(target.id)
+        expect(assigned.id).toBe(before.id)
         expect(assigned.task_version).not.toBe(before.task_version)
+        expect(await apiGet<Task>(replacementToken, `/admin/work-items/${before.id}`)).toMatchObject({
+            id: assigned.id, owner_user_id: target.id, status: "OPEN", task_version: assigned.task_version,
+        })
         expect(storedTaskIdentity(before.id)).toMatchObject({
             responsibility_key: storedBefore.responsibility_key, owner_user_id: target.id, status: "OPEN",
         })
@@ -260,8 +265,8 @@ test("付清后显式关闭授权再冲正；改派任务恢复现任出纳，�
         const identityBeforeDenied = storedTaskIdentity(before.id)
         const reversalBeforeDenied = await apiGet<{ status: string }>(adminToken, `/admin/payment-reversals/${nextReversal.id}`)
         await openWorkspaceTask(finance.page, /付款冲正审批/, nextReversal.reversal_no, "approval")
-        await finance.page.getByRole("button", { name: /^(通过|同意审批)$/ }).first().click()
-        const confirmation = finance.page.getByRole("dialog", { name: "确认通过" })
+        await workPage(finance.page).getByRole("button", { name: /^(通过(?:审批)?|同意审批)$/ }).first().click()
+        const confirmation = workPage(finance.page).getByRole("dialog", { name: "确认通过" })
         const rejected = finance.page.waitForResponse((response) => response.request().method() === "POST" &&
             new URL(response.url()).pathname === "/admin/approval-decisions", { timeout: 60_000 })
         await confirmation.locator('[id$="-decision-dialog-submit"]').click()
@@ -278,7 +283,7 @@ test("付清后显式关闭授权再冲正；改派任务恢复现任出纳，�
         expect(storedTaskIdentity(before.id)).toEqual(identityBeforeDenied)
         expect((await apiGet<{ status: string }>(adminToken, `/admin/payment-reversals/${nextReversal.id}`)).status).toBe(reversalBeforeDenied.status)
         await write(procurement.page, adminToken, "PUT", `/admin/admins/${target.id}/role`, { role_ids: defaultCashier.role_ids })
-        await finance.page.goto("/workspace?family=approval")
+        await finance.page.goto("/workspace/tasks")
         await finishReversal(finance.page, adminToken, nextReversal)
         expect((await detail(procurementToken, restored.id)).current_lines[0]!.current_reserved_total).toBe("2.00")
         expect(storedTaskIdentity(before.id)).toMatchObject({

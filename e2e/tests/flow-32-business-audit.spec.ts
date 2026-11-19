@@ -7,7 +7,8 @@ import { randomUUID } from "node:crypto"
 
 import { test, expect, type Page } from "../helpers/test"
 import { API_BASE, apiGet, apiToken } from "../helpers/api"
-import { openLoggedInWorkspace } from "../helpers/login"
+import { resolveAccount } from "../helpers/accounts"
+import { workPage } from "../helpers/workspace-page"
 
 type Envelope<T> = {
     success?: boolean
@@ -443,14 +444,13 @@ test("业务命令回放保持一份供给和成功审计；页面展示真实�
     })
 
     await test.step("业务审计列表及详情使用保存的安全事件，不展示原始请求正文", async () => {
-        const { page } = await openLoggedInWorkspace(browser, "admin")
-        await page.goto(
-            `/system/audit?source=business&business_number=${prefix}`,
-        )
+        const context = await browser.newContext()
+        const page = await context.newPage()
+        await loginAuditPage(page, resolveAccount("admin"), `source=business&business_number=${prefix}`)
         await expect(
-            page.locator("#operations-audit-source-business"),
+            workPage(page).locator("#operations-audit-source-business"),
         ).toBeVisible()
-        const row = page.locator(`[data-row-id="${handoverAudit!.id}"]`)
+        const row = workPage(page).locator(`[data-row-id="${handoverAudit!.id}"]`)
         await expect(row).toBeVisible()
         await expect(row).toContainText(fixture.adminActor.name)
         await expect(row).toContainText("供给交接")
@@ -458,7 +458,7 @@ test("业务命令回放保持一份供给和成功审计；页面展示真实�
         await expect(row).toContainText("执行成功")
         await expect(row).toContainText("无字段变化")
         await row.click()
-        const details = page.getByRole("dialog")
+        const details = workPage(page).getByRole("dialog")
         await expect(details).toContainText(fixture.adminActor.name)
         await expect(details).toContainText("交接结果")
         await expect(details).toContainText("已交接")
@@ -474,6 +474,7 @@ test("业务命令回放保持一份供给和成功审计；页面展示真实�
         await expect(details).toContainText(created.offering_id)
         await expect(details).not.toContainText(fixture.body.change_reason)
         await expect(details).not.toContainText(fixture.body.idempotency_key)
+        await context.close()
     })
 })
 
@@ -513,19 +514,17 @@ async function auditOnlyAccount(
 async function loginAuditPage(
     page: Page,
     identity: { account: string; password: string },
-    source: string,
+    query: string,
 ) {
     await page.goto(
-        `/login?returnTo=${encodeURIComponent(`/system/audit?source=${source}`)}`,
+        `/login?returnTo=${encodeURIComponent(`/system/audit?${query}`)}`,
     )
     await page.locator("#governance-auth-login-account").fill(identity.account)
-    await page
-        .locator("#governance-auth-login-password")
-        .fill(identity.password)
+    await page.locator("#governance-auth-login-password").fill(identity.password)
     await page.locator("#governance-auth-login-submit").click()
     await page.waitForURL((url) => url.pathname === "/system/audit")
     await expect(
-        page.getByRole("heading", { name: "审计查询", exact: true }),
+        workPage(page).getByRole("heading", { name: "审计查询", exact: true }),
     ).toBeVisible()
 }
 
@@ -603,16 +602,16 @@ test("只有业务审计或权限审计权限的账号均可独立查询，不�
                         forbiddenReads.push(new URL(response.url()).pathname)
                     }
                 })
-                await loginAuditPage(page, item.login, item.source)
+                await loginAuditPage(page, item.login, `source=${item.source}`)
                 expect(new URL(page.url()).searchParams.get("source")).toBe(
                     item.source,
                 )
                 await expect(
-                    page.locator(`#operations-audit-source-${item.hiddenTab}`),
+                    workPage(page).locator(`#operations-audit-source-${item.hiddenTab}`),
                 ).toHaveCount(0)
-                await expect(page.locator(`#${item.table}`)).toBeVisible()
+                await expect(workPage(page).locator(`#${item.table}`)).toBeVisible()
                 await expect(
-                    page.getByText("查询失败", { exact: true }),
+                    workPage(page).getByText("查询失败", { exact: true }),
                 ).toHaveCount(0)
                 expect(
                     forbiddenReads,
@@ -630,8 +629,8 @@ test("只有业务审计或权限审计权限的账号均可独立查询，不�
                 const reply = await loaded
                 expect(reply.status()).toBe(200)
                 expect((await reply.json()).success).not.toBe(false)
-                await expect(page.locator(`#${item.table}`)).toBeVisible()
-                await expect(page.getByRole("dialog")).toHaveCount(0)
+                await expect(workPage(page).locator(`#${item.table}`)).toBeVisible()
+                await expect(workPage(page).getByRole("dialog")).toHaveCount(0)
                 expect(
                     catalogReads,
                     "审计URL中的真实subjectId不得触发人员或角色目录读取",

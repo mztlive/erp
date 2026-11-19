@@ -14,6 +14,7 @@
  * - W12 不保留旧登记付款入口；财务审核人不得调用新申请付款或旧应付直付命令。
  * - 付款详情无提交审批入口；SupplierPayment 不得出现审批实例/审批任务。
  */
+import { workPage } from "../helpers/workspace-page"
 import { archiveContractViaUi } from "../helpers/contracts";
 import { expectSalesOrderContractSummary, fillSalesLineUnitPrice } from "../helpers/sales-orders";
 import { BANK_RECEIPT_FILE, openAuthorizedSupplierPaymentTask, purchasePaymentRequestCommand, supplierPaymentTaskPattern, type PurchasePaymentRequestResult } from "../helpers/payments";
@@ -46,6 +47,7 @@ import {
     readHeaderDocumentNumber,
     selectWorkspaceFamily,
     expectSourcingCounts,
+    expectWorkspaceQueue,
 } from "../helpers/ui"
 
 test.use(headedAwareViewport({ width: 1440, height: 960 }));
@@ -326,15 +328,15 @@ function contractPdfPath(): string {
 }
 
 async function gotoWorkspace(page: Page): Promise<void> {
-    await page.goto("/workspace");
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
+    await page.goto("/workspace/tasks");
+    await expect(workPage(page).getByRole("heading", { name: "待我处理" })).toBeVisible({
         timeout: 20_000,
     });
 }
 
 async function approveOpenTask(page: Page, nodeName?: string | RegExp): Promise<void> {
     if (nodeName) {
-        await expect(page.getByText(nodeName).first()).toBeVisible({ timeout: 20_000 });
+        await expect(workPage(page).getByText(nodeName).first()).toBeVisible({ timeout: 20_000 });
     }
     await approveCurrentDocument(page);
 }
@@ -345,14 +347,14 @@ function taskNameWithHint(label: string, hint: string): RegExp {
 }
 
 async function assertNoSupplierPaymentApproval(page: Page): Promise<void> {
-    await expect(page.getByText("供应商付款单审批")).toHaveCount(0);
-    await expect(page.getByText("SupplierPayment")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "提交审批" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "撤回审批" })).toHaveCount(0);
+    await expect(workPage(page).getByText("供应商付款单审批")).toHaveCount(0);
+    await expect(workPage(page).getByText("SupplierPayment")).toHaveCount(0);
+    await expect(workPage(page).getByRole("button", { name: "提交审批" })).toHaveCount(0);
+    await expect(workPage(page).getByRole("button", { name: "撤回审批" })).toHaveCount(0);
 }
 
 async function uploadReceipt(page: Page, label: string): Promise<void> {
-    await page.locator("#ppr-pay-bank-receipt-input").setInputFiles({
+    await workPage(page).locator("#ppr-pay-bank-receipt-input").setInputFiles({
         name: label,
         mimeType: "image/png",
         buffer: RECEIPT_PNG,
@@ -365,11 +367,6 @@ async function openRole(
 ): Promise<{ page: Page; close: () => Promise<void> }> {
     const session = await openLoggedInWorkspace(browser, role);
     return { page: session.page, close: () => session.context.close() };
-}
-
-async function switchSupplierView(page: Page, view: "payable" | "payment" | "purchase_invoice") {
-    // 前端 id 经 toAutomationIdSegment 归一：下划线转连字符。
-    await page.locator(`#supplier-payables-view-tabs-trigger-${view.replace(/_/g, "-")}`).click();
 }
 
 test("供应商票款：W01 付款任务分次入账、进项发票核销与付款冲正", async ({
@@ -393,7 +390,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
 
     // ── 1. 销售：客户 + 合同 + 销售单提交 ────────────────────────────────
     await loginViaUi(page, "xiaoshou");
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
+    await expect(workPage(page).getByRole("heading", { name: "待我处理" })).toBeVisible({
         timeout: 20_000,
     });
 
@@ -403,27 +400,27 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
         creditCode,
         paymentTermLabel: "货到 30 天",
     });
-    await page.locator("#customers-directory-search").fill(customerShort);
-    await page.locator("#customers-directory-search").press("Enter");
+    await workPage(page).locator("#customers-directory-search").fill(customerShort);
+    await workPage(page).locator("#customers-directory-search").press("Enter");
     // 客户目录行内仅展示简称与编号（法定名称只在详情页标题展示）。
-    await expect(page.getByText(customerShort).first()).toBeVisible({ timeout: 20_000 });
+    await expect(workPage(page).getByText(customerShort).first()).toBeVisible({ timeout: 20_000 });
 
     await page.goto("/sales/orders?mode=create");
-    await expect(page.getByRole("heading", { name: /新建销售单|业务信息/ })).toBeVisible({
+    await expect(workPage(page).getByRole("heading", { name: /新建销售单|业务信息/ })).toBeVisible({
         timeout: 20_000,
     });
     await archiveContractViaUi(page, { contractNo, customerName: customerLegal, pdf: contractPdfPath() })
-    await expect(page.locator("#sales-orders-create-customer")).toContainText(new RegExp(customerLegal))
+    await expect(workPage(page).locator("#sales-orders-create-customer")).toContainText(new RegExp(customerLegal))
 
     await chooseOption(
         page,
-        page.locator("#sales-orders-create-header-welfare-scene"),
-        "年节礼包",
+        workPage(page).locator("#sales-orders-create-header-welfare-scene"),
+        "礼包",
     );
     await expectSalesOrderContractSummary(page, { paymentTerms: "货到 15 天" });
 
-    await page.getByRole("button", { name: "添加商品" }).first().click();
-    const skuDialog = page.getByRole("dialog", { name: "添加商品" });
+    await workPage(page).getByRole("button", { name: "添加商品" }).first().click();
+    const skuDialog = workPage(page).getByRole("dialog", { name: "添加商品" });
     await expect(skuDialog).toBeVisible({ timeout: 20_000 });
     const skuSearch = skuDialog.locator("#sales-orders-sku-picker-filter-search");
     await skuSearch.fill(SKU_NAME);
@@ -434,69 +431,67 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await expect(skuDialog).toBeHidden({ timeout: 20_000 });
     // 同名多处出现（搜索 chip、已选 chip）：用行内更换按钮精确命中已选行。
     await expect(
-        page.getByRole("button", { name: new RegExp(`更换销售项目[\\s\\S]*${SKU_NAME}`) }).first(),
+        workPage(page).getByRole("button", { name: new RegExp(`更换销售项目[\\s\\S]*${SKU_NAME}`) }).first(),
     ).toBeVisible({
         timeout: 20_000,
     });
-    await expect(page.getByTestId(/sales-line-procurement-owner-/)).not.toContainText(
+    await expect(workPage(page).getByTestId(/sales-line-procurement-owner-/)).not.toContainText(
         "暂未确定",
         { timeout: 20_000 },
     );
     await fillSalesLineUnitPrice(page, UNIT_PRICE);
 
-    await page.locator("#sales-orders-create-batch-due-date-open").click()
-    await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), isoDate());
-    await page.locator("#sales-orders-create-batch-due-date-apply").click();
+    await workPage(page).locator("#sales-orders-create-batch-due-date-open").click()
+    await pickCalendarDay(page, workPage(page).locator("#sales-orders-create-batch-due-date"), isoDate());
+    await workPage(page).locator("#sales-orders-create-batch-due-date-apply").click();
     await expectToast(page, "已批量设置交期");
 
-    await page.locator("#sales-orders-create-submit").click();
-    const submitSales = page.getByRole("dialog", { name: "提交销售单" });
+    await workPage(page).locator("#sales-orders-create-submit").click();
+    const submitSales = workPage(page).getByRole("dialog", { name: "提交销售单" });
     await expect(submitSales).toBeVisible({ timeout: 20_000 });
     await submitSales.locator("#sales-orders-submit-confirm-confirm").click();
-    await expect(page.getByRole("heading", { name: customerLegal })).toBeVisible({
+    await expect(workPage(page).getByRole("heading", { name: customerLegal })).toBeVisible({
         timeout: 20_000,
     });
-    await expect(page.getByText("审批中").first()).toBeVisible({ timeout: 20_000 });
+    await expect(workPage(page).getByText("审批中").first()).toBeVisible({ timeout: 20_000 });
     salesOrderNo = await readHeaderDocumentNumber(page);
     expect(salesOrderNo.length).toBeGreaterThan(0);
     // ── 2. 采购：销售单通过 → 供给分配创建采购单并立即提交审批 ──────────
     const caigou = await openRole(browser, "caigou");
     const caigouPage = caigou.page;
     await openWorkspaceTask(caigouPage, /销售单审批/, salesOrderNo, "approval");
-    await expect(caigouPage.getByRole("button", { name: /^(通过|同意审批)$/ })).toBeVisible({
-        timeout: 20_000,
-    });
     await approveOpenTask(caigouPage);
 
-    await openWorkspaceTask(caigouPage, /待供给分配/, salesOrderNo, "procurement");
-    await expect(caigouPage.getByRole("heading", { name: "供给分配" })).toBeVisible({
+    await openWorkspaceTask(caigouPage, /待安排采购/, salesOrderNo, "procurement");
+    await expect(workPage(caigouPage).getByRole("heading", { name: "供给分配" })).toBeVisible({
         timeout: 20_000,
     });
     await expectSourcingCounts(caigouPage, 1);
     // 本流程后续验证入库；显式选择同一供应商的入仓方案，并填写目标仓。
-    await expect(caigouPage.getByRole("region", { name: "供给商品列表" })).toBeVisible({ timeout: 20_000 })
-    const missingWarehouse = caigouPage.getByText(/请选择采购入库目标仓/)
+    await expect(workPage(caigouPage).getByRole("region", { name: "供给商品列表" })).toBeVisible({ timeout: 20_000 })
+    const missingWarehouse = workPage(caigouPage).getByText(/请选择采购入库目标仓/)
     await expandSourcingEditor(caigouPage)
-    const purchaseSource = caigouPage.getByRole("region", { name: "当前商品供给编辑" })
+    const purchaseSource = workPage(caigouPage).getByRole("dialog", { name: /^供给分配 · / })
         .locator('[id$="-sourcing-option"]')
     await expect(purchaseSource).toHaveCount(1)
     await chooseOption(caigouPage, purchaseSource, /杭州狮峰.*入仓/, "入仓")
-    const warehouseInput = caigouPage
+    const warehouseInput = workPage(caigouPage)
         .locator('[id^="procurement-orders-create-row-"][id$="-warehouse"]')
         .first()
     await expect(warehouseInput).toBeVisible({ timeout: 20_000 })
     await chooseOption(caigouPage, warehouseInput, /BJ-TZ-01|北京通州/, "BJ-TZ-01")
     await expect(missingWarehouse).toHaveCount(0, { timeout: 20_000 })
+    await workPage(caigouPage).locator("#sourcing-product-adjust-done").click()
     await confirmSupplyAllocation(caigouPage, /已创建 1 张采购单并提交审批|已将缺口拆成/)
 
     await caigouPage.goto("/procurement/orders");
-    await expect(caigouPage.getByRole("heading", { name: "采购单", exact: true })).toBeVisible({
+    await expect(workPage(caigouPage).getByRole("heading", { name: "采购单", exact: true })).toBeVisible({
         timeout: 20_000,
     });
-    const poSearch = caigouPage.locator("#procurement-orders-list-search");
+    const poSearch = workPage(caigouPage).locator("#procurement-orders-list-search");
     await poSearch.fill(salesOrderNo);
     await poSearch.press("Enter");
-    const poRow = caigouPage
+    const poRow = workPage(caigouPage)
         .locator("#procurement-orders-list-table")
         .getByRole("row")
         .filter({ hasText: salesOrderNo });
@@ -504,10 +499,11 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     purchaseNo = ((await poRow.getByRole("button", { name: /打开采购单/ }).textContent()) ?? "").trim();
     expect(purchaseNo.length).toBeGreaterThan(0);
 
-    await gotoWorkspace(caigouPage);
-    await caigouPage.getByRole("button", { name: /^我发起的/ }).click();
+    await caigouPage.goto("/workspace/approvals");
+    await expect(workPage(caigouPage).getByRole("heading", { name: "我发起的审批", exact: true })).toBeVisible();
+    await expectWorkspaceQueue(caigouPage);
     await expect(
-        caigouPage.getByRole("button", { name: taskNameWithHint("采购单审批", purchaseNo) }),
+        workPage(caigouPage).getByRole("row", { name: taskNameWithHint("采购单审批", purchaseNo) }),
     ).toBeVisible({ timeout: 20_000 });
     await assertNoSupplierPaymentApproval(caigouPage);
 
@@ -532,31 +528,31 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await gotoWorkspace(caiwuPage);
     await selectWorkspaceFamily(caiwuPage, "finance");
     await expect(
-        caiwuPage.getByRole("button", { name: supplierPaymentTaskPattern(purchaseNo) }),
+        workPage(caiwuPage).getByRole("row", { name: supplierPaymentTaskPattern(purchaseNo) }),
     ).toHaveCount(0);
     await selectWorkspaceFamily(caiwuPage, "approval");
     await assertNoSupplierPaymentApproval(caiwuPage);
     await expect(
-        caiwuPage.getByRole("button", { name: taskNameWithHint("采购单审批", purchaseNo) }),
+        workPage(caiwuPage).getByRole("row", { name: taskNameWithHint("采购单审批", purchaseNo) }),
     ).toHaveCount(0);
 
     await caiwuPage.goto("/finance/supplier-accounts");
-    await expect(caiwuPage.getByRole("heading", { name: "供应商往来" })).toBeVisible({
+    await expect(workPage(caiwuPage).getByRole("heading", { name: "供应商往来" })).toBeVisible({
         timeout: 20_000,
     });
-    await expect(caiwuPage.getByText(/狮峰/).first()).toBeVisible({ timeout: 20_000 });
-    await expect(caiwuPage.getByText("未结").first()).toBeVisible({ timeout: 20_000 });
-    await expect(caiwuPage.locator("button#supplier-payables-header-register-payment")).toHaveCount(0);
-    const supplierWorkspace = caiwuPage.locator('[data-slot="page-scaffold"]').filter({
-        has: caiwuPage.getByRole("heading", { name: "供应商往来", exact: true }),
+    await expect(workPage(caiwuPage).getByText(/狮峰/).first()).toBeVisible({ timeout: 20_000 });
+    await expect(workPage(caiwuPage).getByText("未结").first()).toBeVisible({ timeout: 20_000 });
+    await expect(workPage(caiwuPage).locator("button#supplier-payables-header-register-payment")).toHaveCount(0);
+    const supplierWorkspace = workPage(caiwuPage).locator('[data-slot="page-scaffold"]').filter({
+        has: workPage(caiwuPage).getByRole("heading", { name: "供应商往来", exact: true }),
     });
     await expect(supplierWorkspace).toHaveCount(1);
     // 财审从工作台处理申请；供应商往来页首不再提供申请或付款入口。
     const paymentRequestLink = supplierWorkspace.getByRole("group", { name: "页面操作", exact: true })
         .locator('a[href="/procurement/payment-requests"]');
     await expect(paymentRequestLink).toHaveCount(0);
-    await expect(caiwuPage.getByRole("button", { name: "登记付款", exact: true })).toHaveCount(0);
-    await expect(caiwuPage.locator("#ppr-pay-submit")).toHaveCount(0);
+    await expect(workPage(caiwuPage).getByRole("button", { name: "登记付款", exact: true })).toHaveCount(0);
+    await expect(workPage(caiwuPage).locator("#ppr-pay-submit")).toHaveCount(0);
 
     // ── 4. 出纳：W01 付款任务核对收款账户，分两次确认入账 ──────────────
     const fukuan = await openRole(browser, "fukuan");
@@ -564,25 +560,25 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await gotoWorkspace(fukuanPage);
     await selectWorkspaceFamily(fukuanPage, "approval");
     await assertNoSupplierPaymentApproval(fukuanPage);
-    await expect(fukuanPage.getByRole("button", { name: /单据审批|付款冲正审批/ })).toHaveCount(0);
+    await expect(workPage(fukuanPage).getByRole("button", { name: /单据审批|付款冲正审批/ })).toHaveCount(0);
 
     const approvedRequest = await openAuthorizedSupplierPaymentTask(fukuanPage, purchaseNo);
     await assertFinanceCannotPayApprovedRequest(caiwuPage, approvedRequest);
-    await expect(fukuanPage.getByLabel("当前付款任务").getByRole("heading", { name: "付款与收款信息" })).toBeVisible({
+    await expect(workPage(fukuanPage).getByLabel("当前付款任务").getByRole("heading", { name: "付款与收款信息" })).toBeVisible({
         timeout: 20_000,
     });
-    const paymentTask = fukuanPage.getByLabel("当前付款任务");
+    const paymentTask = workPage(fukuanPage).getByLabel("当前付款任务");
     await expect(paymentTask.getByText("收款户名")).toBeVisible({ timeout: 20_000 });
     await expect(paymentTask.getByText("开户行")).toBeVisible();
     await expect(paymentTask.getByText("收款账号", { exact: true })).toBeVisible();
     await expect(paymentTask.getByText(/招商银行/).first()).toBeVisible({ timeout: 20_000 });
     await expect(paymentTask.getByRole("button", { name: "显示收款账号" })).toBeVisible();
     await paymentTask.getByRole("button", { name: "显示收款账号" }).click();
-    await expect(fukuanPage.getByText(/5719|8012/).first()).toBeVisible({ timeout: 20_000 });
+    await expect(workPage(fukuanPage).getByText(/5719|8012/).first()).toBeVisible({ timeout: 20_000 });
     await assertNoSupplierPaymentApproval(fukuanPage);
-    await expect(fukuanPage.locator("#ppr-pay-submit")).toBeVisible();
+    await expect(workPage(fukuanPage).locator("#ppr-pay-submit")).toBeVisible();
 
-    const pendingAmount = fukuanPage.locator("#ppr-pay-amount");
+    const pendingAmount = workPage(fukuanPage).locator("#ppr-pay-amount");
     expect(approvedRequest.lines, "本流程付款申请应只包含当前采购来源").toHaveLength(1);
     const initialUnpaid = approvedRequest.lines.reduce((total, line) =>
         total + amountCents(line.requested_amount) - amountCents(line.paid_amount) - amountCents(line.closed_amount), 0n);
@@ -594,11 +590,11 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     flow.firstAmount = split.first;
     flow.restAmount = split.rest;
 
-    const amountInput = fukuanPage.locator("#ppr-pay-amount");
+    const amountInput = workPage(fukuanPage).locator("#ppr-pay-amount");
     await amountInput.fill(flow.firstAmount);
     await uploadReceipt(fukuanPage, "bank-receipt-1.png");
-    await fukuanPage.locator("#ppr-pay-submit").click();
-    const payConfirm = fukuanPage.getByRole("alertdialog").filter({ hasText: "确认登记付款" });
+    await workPage(fukuanPage).locator("#ppr-pay-submit").click();
+    const payConfirm = workPage(fukuanPage).getByRole("alertdialog").filter({ hasText: "确认登记付款" });
     await expect(payConfirm).toBeVisible({ timeout: 20_000 });
     await expect(payConfirm.getByText(flow.firstAmount)).toBeVisible();
     await expect(payConfirm.getByText("提交审批")).toHaveCount(0);
@@ -622,23 +618,23 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     expect(afterFirst.lines[0]!.paid_amount).toBe(flow.firstAmount);
     expect(amountCents(afterFirst.lines[0]!.requested_amount) - amountCents(afterFirst.lines[0]!.paid_amount) - amountCents(afterFirst.lines[0]!.closed_amount)).toBe(amountCents(flow.restAmount));
 
-    await expect(fukuanPage.getByLabel("当前付款任务").getByRole("heading", { name: "付款与收款信息" })).toBeVisible({
+    await expect(workPage(fukuanPage).getByLabel("当前付款任务").getByRole("heading", { name: "付款与收款信息" })).toBeVisible({
         timeout: 20_000,
     });
-    await expect(fukuanPage.locator("#ppr-pay-submit")).toBeVisible({
+    await expect(workPage(fukuanPage).locator("#ppr-pay-submit")).toBeVisible({
         timeout: 20_000,
     });
-    await expect(fukuanPage.getByRole("region", { name: "付款任务摘要" })).toContainText(
+    await expect(workPage(fukuanPage).getByRole("region", { name: "付款任务摘要" })).toContainText(
         flow.restAmount,
         { timeout: 20_000 },
     );
 
-    const amountInput2 = fukuanPage.locator("#ppr-pay-amount");
+    const amountInput2 = workPage(fukuanPage).locator("#ppr-pay-amount");
     await expect(amountInput2, "部分付款成功后下一笔须按刷新后的未付批准额度预填").toHaveValue(flow.restAmount, { timeout: 20_000 });
     await amountInput2.fill(flow.restAmount);
     await uploadReceipt(fukuanPage, "bank-receipt-2.png");
-    await fukuanPage.locator("#ppr-pay-submit").click();
-    const payConfirm2 = fukuanPage.getByRole("alertdialog").filter({ hasText: "确认登记付款" });
+    await workPage(fukuanPage).locator("#ppr-pay-submit").click();
+    const payConfirm2 = workPage(fukuanPage).getByRole("alertdialog").filter({ hasText: "确认登记付款" });
     await expect(payConfirm2).toBeVisible({ timeout: 20_000 });
     const commit2 = fukuanPage
         .waitForResponse(
@@ -650,44 +646,47 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await payConfirm2.locator("#ppr-pay-confirm-confirm").click();
     const secondResponse = await commit2;
     expect(secondResponse.ok()).toBeTruthy();
-    expect((await secondResponse.json()).data).toMatchObject({ status: "posted", amount: flow.restAmount, allocated_total: flow.restAmount, unallocated_amount: "0.00" });
+    const secondPayment = (await secondResponse.json()).data as { id: string; payment_no: string; amount: string };
+    expect(secondPayment).toMatchObject({ status: "posted", amount: flow.restAmount, allocated_total: flow.restAmount, unallocated_amount: "0.00" });
+    expect(secondPayment.id).toBeTruthy();
+    expect(secondPayment.payment_no).toBeTruthy();
 
     await gotoWorkspace(fukuanPage);
     await selectWorkspaceFamily(fukuanPage, "finance");
     await expect(
-        fukuanPage.getByRole("button", { name: supplierPaymentTaskPattern(purchaseNo) }),
+        workPage(fukuanPage).locator(`tr[data-row-id=${JSON.stringify(approvedRequest.work_item_id)}]`),
     ).toHaveCount(0, {
         timeout: 20_000,
     });
     await assertNoSupplierPaymentApproval(fukuanPage);
 
     await fukuanPage.goto("/finance/supplier-accounts?view=payment");
-    await switchSupplierView(fukuanPage, "payment");
-    await expect(fukuanPage.getByText("已过账").first()).toBeVisible({ timeout: 20_000 });
-    await fukuanPage.getByRole("row").filter({ hasText: "已过账" }).first().click();
-    await expect(fukuanPage.getByRole("button", { name: "冲正" }).first()).toBeVisible({
-        timeout: 20_000,
-    });
-    await fukuanPage.keyboard.press("Escape");
-    await switchSupplierView(fukuanPage, "payable");
-    await expect(fukuanPage.getByText("已结清").first()).toBeVisible({ timeout: 20_000 });
+    const secondPaymentRow = workPage(fukuanPage).getByRole("row").filter({ hasText: secondPayment.payment_no });
+    await expect(secondPaymentRow.getByText("已过账", { exact: true })).toBeVisible();
+    await secondPaymentRow.click();
+    await expect(workPage(fukuanPage).locator("#supplier-payables-preview-record-reverse")).toBeVisible();
+    await workPage(fukuanPage).locator("#supplier-payables-preview-record-dismiss").click();
+    await workPage(fukuanPage).locator("#supplier-payables-view-tabs-trigger-payable").click();
+    const payableRow = workPage(fukuanPage).getByRole("row").filter({ hasText: purchaseNo });
+    const payableStatus = payableRow.locator('[data-slot="badge"][data-context="list"]');
+    await expect(payableStatus.filter({ hasText: /^已结清$/ })).toBeVisible();
 
     // ── 5. 开票岗：登记进项发票并核销（与付款分轨） ──────────────────────
     const invoice = await openRole(browser, "kaipiao");
     const invoicePage = invoice.page;
     await invoicePage.goto("/finance/supplier-accounts");
-    await expect(invoicePage.getByRole("heading", { name: "供应商往来" })).toBeVisible({
+    await expect(workPage(invoicePage).getByRole("heading", { name: "供应商往来" })).toBeVisible({
         timeout: 20_000,
     });
-    await invoicePage.locator("#supplier-payables-header-register-invoice").click();
-    const pickSupplier = invoicePage.getByRole("dialog", { name: /选择供应商 · 登记进项发票/ });
+    await workPage(invoicePage).locator("#supplier-payables-header-register-invoice").click();
+    const pickSupplier = workPage(invoicePage).getByRole("dialog", { name: /选择供应商 · 登记进项发票/ });
     await expect(pickSupplier).toBeVisible({ timeout: 20_000 });
     // 下拉回车会在供应商 id 写入前关掉对话框，确认按钮一直禁用然后被拆掉。只点选项，再等确认可用。
     const supplierInput = pickSupplier.locator("#supplier-payables-pick-supplier-select");
     await expect(supplierInput).toBeVisible({ timeout: 20_000 });
     await supplierInput.click();
     await supplierInput.fill(SUPPLIER_SHORT);
-    const supplierOption = invoicePage
+    const supplierOption = workPage(invoicePage)
         .locator('[id^="supplier-payables-pick-supplier-select-option-"]')
         .filter({ hasText: "杭州狮峰茶叶有限公司" });
     await expect(supplierOption.first()).toBeVisible({ timeout: 20_000 });
@@ -695,60 +694,36 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     const confirmSupplier = pickSupplier.locator("#supplier-payables-pick-supplier-confirm");
     await expect(confirmSupplier).toBeEnabled({ timeout: 20_000 });
     await confirmSupplier.click();
-    await expect(invoicePage.getByRole("heading", { name: "登记进项发票" })).toBeVisible({
+    await expect(workPage(invoicePage).getByRole("heading", { name: "登记进项发票" })).toBeVisible({
         timeout: 20_000,
     });
-    await expect(invoicePage.getByRole("button", { name: "提交审批" })).toHaveCount(0);
-    // 池内会混入其他采购单和零余额目标。多行一起核销时必须逐笔填税额，
-    // 只填表头税额会让提交一直禁用。只保留本采购单的正余额行。
-    // Base UI 把 id 放在隐藏 input 上，aria-label「选择 采购单号」在可见复选框上。
-    const poolSection = invoicePage.locator('section[aria-label="同供应商待核销池"]');
-    const poolChecks = poolSection.locator('[role="checkbox"][aria-label^="选择"]');
-    await expect(poolChecks.first()).toBeVisible({ timeout: 20_000 });
-    const checkCount = await poolChecks.count();
-    for (let i = 0; i < checkCount; i += 1) {
-        if ((await poolChecks.nth(i).getAttribute("aria-checked")) !== "true") {
-            await poolChecks.nth(i).click();
-        }
-    }
-    await invoicePage.locator("#supplier-payables-allocation-pool-fill-all").click();
-    const amountCells = await poolSection
-        .locator('input[id$="-amount"]')
-        .evaluateAll((els) =>
-            els.map((el) => ({
-                id: el.id,
-                value: (el as HTMLInputElement).value,
-            })),
-        );
-    let grossCents = 0;
-    for (const cell of amountCells) {
-        const input = poolSection.locator(`[id="${cell.id}"]`);
-        const card = input.locator("xpath=ancestor::div[.//*[@role='checkbox']][1]");
-        const choiceLabel =
-            (await card.locator('[role="checkbox"]').first().getAttribute("aria-label")) ?? "";
-        const cents = Math.round(Number(parseAmount(cell.value || "0")) * 100);
-        const belongsToOrder = choiceLabel.includes(purchaseNo);
-        if (!belongsToOrder || cents <= 0) {
-            const box = card.locator('[role="checkbox"]').first();
-            if ((await box.getAttribute("aria-checked")) === "true") {
-                await box.click();
-            }
-            continue;
-        }
-        grossCents += cents;
-    }
-    if (grossCents <= 0) throw new Error("进项发票池内无正余额目标可核销");
-    const gross = (grossCents / 100).toFixed(2);
+    await expect(workPage(invoicePage).getByRole("button", { name: "提交审批" })).toHaveCount(0);
+    const allocationTable = workPage(invoicePage).getByRole("region", { name: "核销明细", exact: true });
+    const purchaseAllocation = allocationTable.getByRole("row").filter({
+        has: workPage(invoicePage).getByRole("cell", { name: purchaseNo, exact: true }),
+    });
+    await expect(purchaseAllocation).toHaveCount(1);
+    const allocationCheck = purchaseAllocation.getByRole("checkbox", { name: `选择 ${purchaseNo}`, exact: true });
+    if (!(await allocationCheck.isChecked())) await allocationCheck.click();
+    await expect(allocationCheck).toBeChecked();
+    await expect(allocationTable.locator('tbody [role="checkbox"][aria-checked="true"]')).toHaveCount(1);
+    const amount = purchaseAllocation.getByRole("textbox", { name: `${purchaseNo} 本次核销金额`, exact: true });
+    await expect(amount).toBeEnabled();
+    const gross = parseAmount(await amount.inputValue());
+    expect(amountCents(gross)).toBeGreaterThan(0n);
     const { net, tax } = splitGross(gross);
-    await invoicePage.locator("#supplier-payables-allocation-form-gross-amount").fill(gross);
-    await invoicePage.locator("#supplier-payables-allocation-form-invoice-no").fill(invoiceNo);
-    await invoicePage.locator("#supplier-payables-allocation-form-net-amount").fill(net);
-    await invoicePage.locator("#supplier-payables-allocation-form-tax-amount").fill(tax);
+    await workPage(invoicePage).locator("#supplier-payables-allocation-form-gross-amount").fill(gross);
+    await workPage(invoicePage).locator("#supplier-payables-allocation-form-invoice-no").fill(invoiceNo);
+    await workPage(invoicePage).locator("#supplier-payables-allocation-form-net-amount").fill(net);
+    await workPage(invoicePage).locator("#supplier-payables-allocation-form-tax-amount").fill(tax);
+    await workPage(invoicePage).locator("#supplier-payables-invoice-files-input").setInputFiles({
+        name: `${invoiceNo}.pdf`, mimeType: "application/pdf", buffer: fs.readFileSync(contractPdfPath()),
+    });
     await expect(
-        invoicePage.locator("#supplier-payables-allocation-form-submit"),
+        workPage(invoicePage).locator("#supplier-payables-allocation-form-submit"),
     ).toBeEnabled({ timeout: 20_000 });
-    await invoicePage.locator("#supplier-payables-allocation-form-submit").click();
-    const invoiceConfirm = invoicePage.getByRole("alertdialog").filter({
+    await workPage(invoicePage).locator("#supplier-payables-allocation-form-submit").click();
+    const invoiceConfirm = workPage(invoicePage).getByRole("alertdialog").filter({
         hasText: "确认登记进项发票并核销",
     });
     await expect(invoiceConfirm).toBeVisible({ timeout: 20_000 });
@@ -762,49 +737,34 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
         );
     await invoiceConfirm.locator("#supplier-payables-invoice-allocate-confirm-confirm").click();
     expect((await invoiceCommit).ok()).toBeTruthy();
-    await expect(invoicePage.getByText("进项发票已登记").first()).toBeVisible({ timeout: 20_000 });
-    await invoicePage.locator("#supplier-payables-allocation-result-close").click();
-    await switchSupplierView(invoicePage, "purchase_invoice");
-    await expect(invoicePage.getByText(invoiceNo).first()).toBeVisible({ timeout: 20_000 });
-    await expect(invoicePage.getByText("已登记").first()).toBeVisible({ timeout: 20_000 });
+    await expect(workPage(invoicePage).getByText("进项发票已登记").first()).toBeVisible({ timeout: 20_000 });
+    await workPage(invoicePage).locator("#supplier-payables-allocation-result-close").click();
+    await expect(workPage(invoicePage).getByRole("heading", { name: "供应商往来" })).toBeVisible();
+    await invoicePage.goto("/finance/supplier-accounts?view=purchase_invoice");
+    const invoiceRow = workPage(invoicePage).getByRole("row").filter({ hasText: invoiceNo });
+    await expect(invoiceRow.getByText("已登记", { exact: true })).toBeVisible();
 
     // ── 6. 负向：caiwu 不得自己提交付款冲正 ──────────────────────────
-    await caiwuPage.goto("/finance/supplier-accounts?view=payment");
-    await caiwuPage.locator("#supplier-payables-view-tabs-trigger-payment").click();
-    const caiwuReverse = caiwuPage.getByRole("button", { name: "冲正" }).first();
-    if (await caiwuReverse.isVisible()) {
-        await caiwuReverse.click();
-        const reverseDlg = caiwuPage.getByRole("dialog", { name: /付款冲正/ });
-        await expect(reverseDlg).toBeVisible({ timeout: 20_000 });
-        await reverseDlg
-            .locator("#supplier-payables-reversal-request-reason")
-            .fill("caiwu不得提交冲正");
-        await reverseDlg.locator("#supplier-payables-reversal-request-submit").click();
-        const reverseConfirm = caiwuPage.getByRole("dialog").filter({ hasText: /提交冲正|确认提交/ });
-        const deniedText = /冲正失败|岗位分离|不得|不能提交|禁止|提交人/;
-        // 确认层与失败提示谁先出现走哪条：确认层未打开时，失败提示已在请求弹窗或页面横幅。
-        // 竞速只认请求弹窗和横幅里的提示，避免页面上本来就有的「提交人」等字样让确认层被跳过。
-        const deniedInPlace = reverseDlg
-            .getByText(deniedText)
-            .or(caiwuPage.getByRole("alert").filter({ hasText: deniedText }));
-        if (await optionalStepVisible(reverseConfirm, deniedInPlace, 8_000)) {
-            await reverseConfirm
-                .locator("#supplier-payables-reversal-submit-confirm-confirm")
-                .click();
-        }
-        await expect(caiwuPage.getByText(deniedText).first()).toBeVisible({ timeout: 20_000 });
-        await caiwuPage.keyboard.press("Escape");
-    }
+    const caiwuToken = await apiToken("caiwu");
+    const deniedReversal = await caiwuPage.request.post(`${API_BASE}/admin/payment-reversals/commit`, {
+        headers: { Authorization: `Bearer ${caiwuToken}` },
+        data: {
+            source_fact_id: secondPayment.id,
+            amount: secondPayment.amount,
+            reason: "财务总监不得提交付款冲正",
+            idempotency_key: `denied-f07-${secondPayment.payment_no}`,
+        },
+    });
+    const deniedResult = await deniedReversal.json();
+    expect(deniedReversal.status(), deniedResult.errorMessage).toBe(403);
+    expect(deniedResult).toMatchObject({ success: false, code: "PERMISSION_DENIED" });
 
     // ── 7. 出纳提交付款冲正 → 采购确认依据 → 财务审批入账 ────────────
     await fukuanPage.goto("/finance/supplier-accounts?view=payment");
-    await fukuanPage.locator("#supplier-payables-view-tabs-trigger-payment").click();
-    await fukuanPage.getByRole("row").filter({ hasText: "已过账" }).first().click();
-    await expect(fukuanPage.getByRole("button", { name: "冲正" }).first()).toBeVisible({
-        timeout: 20_000,
-    });
-    await fukuanPage.getByRole("button", { name: "冲正" }).first().click();
-    const reversalRequest = fukuanPage.getByRole("dialog", { name: /付款冲正/ });
+    await expect(secondPaymentRow.getByText("已过账", { exact: true })).toBeVisible();
+    await secondPaymentRow.click();
+    await workPage(fukuanPage).locator("#supplier-payables-preview-record-reverse").click();
+    const reversalRequest = workPage(fukuanPage).getByRole("dialog", { name: /付款冲正/ });
     await expect(reversalRequest).toBeVisible({ timeout: 20_000 });
     await reversalRequest
         .locator("#supplier-payables-reversal-request-reason")
@@ -814,16 +774,16 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
         { timeout: 90_000 },
     )
     await reversalRequest.locator("#supplier-payables-reversal-request-submit").click();
-    const reversalSubmit = fukuanPage.getByRole("alertdialog", {
+    const reversalSubmit = workPage(fukuanPage).getByRole("alertdialog", {
         name: /确认提交冲正|提交冲正/,
     });
-    const reversalSubmitted = fukuanPage.getByText(/冲正已提交审批/);
+    const reversalSubmitted = workPage(fukuanPage).getByText(/冲正已提交审批/);
     if (await optionalStepVisible(reversalSubmit, reversalSubmitted)) {
         await reversalSubmit
             .locator("#supplier-payables-reversal-submit-confirm-confirm")
             .click();
     }
-    await expect(fukuanPage.getByText(/冲正已提交审批/).first()).toBeVisible({
+    await expect(workPage(fukuanPage).getByText(/冲正已提交审批/).first()).toBeVisible({
         timeout: 20_000,
     });
     const reversalResponse = await reversalCommitted
@@ -831,6 +791,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     const reversal = (await reversalResponse.json()).data as { id: string; reversal_no: string }
     expect(reversal.id).toBeTruthy()
     expect(reversal.reversal_no).toBeTruthy()
+    expect(reversal).toMatchObject({ original_supplier_payment_id: secondPayment.id, amount: secondPayment.amount })
 
     await openWorkspaceTask(caigouPage, /付款冲正审批/, reversal.reversal_no, "approval");
     await rejectFinancialOriginal(caigouPage, "付款冲正原因需补齐，修改原冲正单后重提")
@@ -847,15 +808,18 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await approveOpenTask(caiwuPage, "财务总监审批");
 
     await fukuanPage.goto("/finance/supplier-accounts?view=payment");
-    await switchSupplierView(fukuanPage, "payment");
-    await expect(fukuanPage.getByText("已冲正").first()).toBeVisible({ timeout: 20_000 });
-    await switchSupplierView(fukuanPage, "payable");
-    await expect(fukuanPage.getByText(/未结|部分结清/).first()).toBeVisible({ timeout: 20_000 });
+    await expect(secondPaymentRow.getByText("已冲正", { exact: true })).toBeVisible();
+    await workPage(fukuanPage).locator("#supplier-payables-view-tabs-trigger-payable").click();
+    await expect(payableStatus.filter({ hasText: /^部分结清$/ })).toBeVisible();
 
     await gotoWorkspace(fukuanPage);
     await selectWorkspaceFamily(fukuanPage, "finance");
+    const reopened = await apiGet<PaymentRequestDetail>(
+        await apiToken("caigou"), `/admin/purchase-payment-requests/${approvedRequest.id}`,
+    );
+    expect(reopened.work_item_id).toBeTruthy();
     await expect(
-        fukuanPage.getByRole("button", { name: supplierPaymentTaskPattern(purchaseNo) }),
+        workPage(fukuanPage).locator(`tr[data-row-id=${JSON.stringify(reopened.work_item_id)}]`),
     ).toBeVisible({
         timeout: 20_000,
     });

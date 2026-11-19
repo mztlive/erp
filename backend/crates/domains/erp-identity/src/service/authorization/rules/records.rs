@@ -90,6 +90,8 @@ static REQUIREMENTS: LazyLock<Vec<(Permission, Vec<Permission>)>> = LazyLock::ne
         (internal::CUSTOMER_CREATED_RESULT_READ, vec![customer::CREATE]),
         (internal::SUPPLIER_PROFILE_COMMAND_READ, vec![supplier::PROFILE_COMMAND_DETAIL]),
         (internal::INVOICE_REQUEST_AMOUNTS_READ, vec![receivable::INVOICE_REQUEST_INVOICE_REQUEST_AMOUNTS]),
+        (internal::INVOICE_REQUEST_SUBMIT_SOURCE, vec![receivable::INVOICE_REQUEST_INVOICE_REQUEST_SUBMIT]),
+        (internal::INVOICE_REQUEST_CANCEL_SOURCE, vec![receivable::INVOICE_REQUEST_INVOICE_REQUEST_CANCEL]),
         (internal::CONTRACT_IMPORT, vec![contract::CREATE]),
         (internal::CONTRACT_SALES_ACCESS, vec![contract::TERMINATE]),
         (internal::CATALOG_ADOPTION, vec![supplier_api::ADOPTIONS_PREVIEW]),

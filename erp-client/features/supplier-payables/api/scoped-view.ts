@@ -115,7 +115,7 @@ export async function fetchSupplierScopeDetail(
         const result = await apiGet<FundsScopedPaymentResultWire>(
             `/admin/supplier-payments/${encodeURIComponent(id)}`,
         )
-        return { kind, payment: result.data }
+        return { kind, payment: result }
     })
 }
 

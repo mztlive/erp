@@ -1,6 +1,7 @@
 "use client"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
 import * as React from "react"
 import Link from "next/link"
@@ -74,6 +75,14 @@ export function SupplierAccountRecordPreview({
         Boolean(payment) ||
         unallocated?.track === "payment"
     const profile = useAccountProfileQuery()
+    const effectiveAmount =
+        kind === "payment" &&
+        payment?.permissionLimited === false &&
+        payment.status === "POSTED" &&
+        payment.effectiveAmount != null &&
+        compareDecimal(payment.effectiveAmount, "0", 6) > 0
+            ? payment.effectiveAmount
+            : undefined
     const canPostAllocation = hasPermission(
         profile.data?.permissions,
         "purchase_invoice_allocation:post",
@@ -149,7 +158,12 @@ export function SupplierAccountRecordPreview({
                                 查看详情
                             </Button>
                         ) : null}
-                        {payment?.allowedActions.includes("REVERSE") ? (
+                        {payment &&
+                        effectiveAmount !== undefined &&
+                        hasPermission(
+                            profile.data?.permissions,
+                            "payment_reversal:submit",
+                        ) ? (
                             <Button
                                 id="supplier-payables-preview-record-reverse"
                                 variant="outline"
@@ -159,7 +173,7 @@ export function SupplierAccountRecordPreview({
                                         kind: "payment",
                                         id: payment.paymentId,
                                         no: payment.paymentNo,
-                                        amount: payment.effectiveAmount,
+                                        amount: effectiveAmount,
                                         supplierName: payment.supplierName,
                                     })
                                 }}
@@ -167,7 +181,12 @@ export function SupplierAccountRecordPreview({
                                 冲正
                             </Button>
                         ) : null}
-                        {payment?.allowedActions.includes("REFUND") ? (
+                        {payment &&
+                        effectiveAmount !== undefined &&
+                        hasPermission(
+                            profile.data?.permissions,
+                            "supplier_refund:submit",
+                        ) ? (
                             <Button
                                 id="supplier-payables-preview-record-refund"
                                 variant="outline"
@@ -178,7 +197,7 @@ export function SupplierAccountRecordPreview({
                                         sourcePaymentNo: payment.paymentNo,
                                         supplierId: payment.supplierId,
                                         supplierName: payment.supplierName,
-                                        amount: payment.effectiveAmount,
+                                        amount: effectiveAmount,
                                     })
                                 }}
                             >

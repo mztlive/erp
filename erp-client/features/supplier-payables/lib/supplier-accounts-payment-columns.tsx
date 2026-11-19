@@ -39,10 +39,7 @@ export function buildPaymentColumns(input: {
             },
             cell: ({ row }) => (
                 <div className="text-end text-sm">
-                    <MoneyValue
-                        value={row.original.effectiveAmount}
-                        taxBasis="gross"
-                    />
+                    <MoneyValue value={row.original.amount} taxBasis="gross" />
                     <div className="text-xs text-muted-foreground">
                         未付款{" "}
                         <MoneyValue value={row.original.unallocatedAmount} />
@@ -65,7 +62,7 @@ export function buildPaymentColumns(input: {
             header: "关联冲正",
             meta: { label: "关联冲正", width: "default" },
             cell: ({ row }) => {
-                const [latest, ...older] = row.original.relatedReversals
+                const [latest, ...older] = row.original.relatedReversals ?? []
                 if (!latest) {
                     return (
                         <span className="text-sm text-muted-foreground">—</span>

@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 # 单个流程的完整 E2E 编排（每个 spec 文件即一个流程）：
-#   1. 确保前后端服务已启动（已启动则复用）；
-#   2. reset-db.sh 以 ERP_RESET_ONLY=1 清空业务数据（保留账号/主数据/已发布审批定义，
-#      不停止 web-api）；若健康检查失败才重启；
-#   3. 发布审批定义（已发布则跳过）；全量模式默认使用独立数据库并行；
-#   4. 执行对应 playwright spec。
+#   默认使用隔离数据库和每分片独立的 API、Worker，可通过 E2E_BASE_URL 复用外置盘前端构建。
+#   E2E_ISOLATE=0 时使用共享开发库，运行前清理业务数据并补齐审批定义。
 #
 # 用法:
 #   bash scripts/run-flow.sh e2e/tests/flow-01-sales-warehouse.spec.ts
@@ -13,6 +10,7 @@
 #   bash scripts/run-flow.sh all          # 6 个独立数据库并行运行全部 spec
 #   E2E_WORKERS=4 bash scripts/run-flow.sh all  # 调整隔离并行数
 #   E2E_ISOLATE=0 bash scripts/run-flow.sh all  # 原共享开发库串行模式
+#   E2E_BASE_URL=http://127.0.0.1:3100 E2E_SOURCE_CONFIG=/Volumes/Kingston/erp-e2e/source.toml bash scripts/run-flow.sh all
 #   E2E_RESET=0 bash scripts/run-flow.sh e2e/tests/xxx.spec.ts   # 跳过 reset（调试用）
 #   E2E_ALLOW_REMOTE_RESET=1 bash scripts/run-flow.sh e2e/tests/xxx.spec.ts  # 远程开发库需显式放行
 #   E2E_HEADED=1 bash scripts/run-flow.sh e2e/tests/xxx.spec.ts  # 有界面观察浏览器操作
@@ -148,6 +146,19 @@ run_one() {
     return "${status}"
 }
 
+if [[ "${ISOLATE}" == "1" ]]; then
+    echo "-- 隔离流程：独立数据库/API/Worker，源库仅作只读基线 --"
+    if [[ -z "${E2E_BASE_URL:-}" ]]; then
+        E2E_SKIP_BACKEND=1 bash "${SCRIPT_DIR}/ensure-services.sh"
+    fi
+    status=0
+    python3 "${SCRIPT_DIR}/run-e2e-parallel.py" "${TARGET}" \
+        --config "${E2E_SOURCE_CONFIG:-${REPO_ROOT}/backend/config.toml}" || status=$?
+    echo "-- 隔离编排总耗时（含服务准备）：$((SECONDS - RUN_STARTED))s --"
+    exit "${status}"
+fi
+[[ "${ISOLATE}" == "0" ]] || { echo "错误: E2E_ISOLATE 只能是 0 或 1" >&2; exit 2; }
+
 if [[ "${TARGET}" == "all" ]]; then
     shopt -s nullglob
     specs=("${E2E_DIR}"/tests/*.spec.ts)
@@ -155,15 +166,6 @@ if [[ "${TARGET}" == "all" ]]; then
         echo "未找到 ${E2E_DIR}/tests/*.spec.ts" >&2
         exit 1
     fi
-    if [[ "${ISOLATE}" == "1" ]]; then
-        echo "-- 全量流程：独立数据库/API 并行，开发库仅作只读基线 --"
-        E2E_SKIP_BACKEND=1 bash "${SCRIPT_DIR}/ensure-services.sh"
-        status=0
-        python3 "${SCRIPT_DIR}/run-e2e-parallel.py" all || status=$?
-        echo "-- 全量编排总耗时（含服务准备）：$((SECONDS - RUN_STARTED))s --"
-        exit "${status}"
-    fi
-    [[ "${ISOLATE}" == "0" ]] || { echo "错误: E2E_ISOLATE 只能是 0 或 1" >&2; exit 2; }
     echo ""
     echo "############################################################"
     echo "# 全量流程：reset 一次后一次跑 Playwright"

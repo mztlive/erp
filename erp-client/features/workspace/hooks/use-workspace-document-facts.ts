@@ -36,16 +36,12 @@ export function useWorkspaceDocumentFacts(item: WorkspaceWorkItem) {
             profile?.userid,
             profile?.policy_version,
             profile?.organization_version,
+            item.workItemType,
             item.businessObjectType,
             item.businessObjectId,
             item.subjectVersion,
         ],
-        queryFn: () =>
-            fetchWorkspaceDocumentFacts({
-                businessObjectType: item.businessObjectType,
-                businessObjectId: item.businessObjectId,
-                subjectVersion: item.subjectVersion,
-            }),
+        queryFn: () => fetchWorkspaceDocumentFacts(item),
         enabled: enabled && Boolean(profile),
         staleTime: 0,
         retry: false,

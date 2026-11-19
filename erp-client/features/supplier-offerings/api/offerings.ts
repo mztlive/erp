@@ -78,26 +78,36 @@ export function completeSupplierSupplyExceptionTask(
     )
 }
 
-export function fetchSupplierOfferings(
+export async function fetchSupplierOfferings(
     query: SupplierOfferingListQuery,
 ): Promise<SupplierOfferingPage> {
-    return apiGet<SupplierOfferingPage>("/admin/supplier-offerings", {
-        q: query.q?.trim() || undefined,
-        sku_id: query.skuId || undefined,
-        sku_no: query.skuNo?.trim() || undefined,
-        product_no: query.productNo?.trim() || undefined,
-        supplier_id: query.supplierId || undefined,
-        status: query.status || undefined,
-        source_type: query.sourceType || undefined,
-        availability_status: query.availabilityStatus || undefined,
-        owner_user_ids: query.ownerUserIds || undefined,
-        procurement_owner_user_ids: query.procurementOwnerUserIds || undefined,
-        scope_version: query.scopeVersion || undefined,
-        page: query.page ?? 1,
-        page_size: query.pageSize ?? 50,
-        sort_by: "created_at",
-        sort_dir: "desc",
-    })
+    const page = await apiGet<SupplierOfferingPage>(
+        "/admin/supplier-offerings",
+        {
+            q: query.q?.trim() || undefined,
+            sku_id: query.skuId || undefined,
+            sku_no: query.skuNo?.trim() || undefined,
+            product_no: query.productNo?.trim() || undefined,
+            supplier_id: query.supplierId || undefined,
+            status: query.status || undefined,
+            source_type: query.sourceType || undefined,
+            availability_status: query.availabilityStatus || undefined,
+            owner_user_ids: query.ownerUserIds || undefined,
+            procurement_owner_user_ids:
+                query.procurementOwnerUserIds || undefined,
+            scope_version: query.scopeVersion || undefined,
+            page: query.page ?? 1,
+            page_size: query.pageSize ?? 50,
+            sort_by: "created_at",
+            sort_dir: "desc",
+        },
+    )
+    if (page.organization_version !== 0) return page
+
+    // 公司共享范围未读取组织版本，0 不代表组织修订。
+    const result = { ...page }
+    delete result.organization_version
+    return result
 }
 
 /** 按多个稳定 SKU 读取全部供给关系，供商品列表判断与明细弹窗复用。 */

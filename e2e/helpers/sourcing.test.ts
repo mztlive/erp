@@ -9,6 +9,7 @@ async function mockSupplyAllocation(
     page: Page,
     options: {
         previewOpen: boolean
+        taskRoute?: boolean
         reply?: { status: number; body: object }
     },
 ): Promise<() => number> {
@@ -37,7 +38,8 @@ async function mockSupplyAllocation(
             })
         },
     )
-    await page.route(`${HELPER_ORIGIN}/workspace`, async (route) => {
+    const taskPath = "/workspace/tasks/task-A"
+    await page.route(`${HELPER_ORIGIN}${options.taskRoute ? taskPath : "/preview"}`, async (route) => {
         await route.fulfill({
             contentType: "text/html; charset=utf-8",
             body: `
@@ -72,6 +74,11 @@ async function mockSupplyAllocation(
                         if (!response.ok || !body.success) return;
                         preview.hidden = true;
                         overlay.hidden = true;
+                        if (${Boolean(options.taskRoute)}) {
+                            history.replaceState(null, '', '/workspace');
+                            document.body.innerHTML = '<h1>Task queue</h1>';
+                            return;
+                        }
                         const toast = document.createElement('div');
                         toast.setAttribute('data-slot', 'toast');
                         toast.textContent = '供给分配已完成';
@@ -81,7 +88,7 @@ async function mockSupplyAllocation(
             `,
         })
     })
-    await page.goto(`${HELPER_ORIGIN}/workspace`)
+    await page.goto(`${HELPER_ORIGIN}${options.taskRoute ? taskPath : "/preview"}`)
     return () => commits
 }
 
@@ -116,6 +123,16 @@ for (const previewOpen of [true, false]) {
         },
     )
 }
+
+test("供给分配完成后以离开已完成任务为准", async ({ page }) => {
+    const commits = await mockSupplyAllocation(page, { previewOpen: true, taskRoute: true })
+
+    const result = await confirmSupplyAllocation(page)
+
+    expect(result.work_item_status).toBe("COMPLETED")
+    expect(commits()).toBe(1)
+    await expect(page.getByRole("heading", { name: "Task queue" })).toBeVisible()
+})
 
 test("供给分配业务拒绝立即报告，不等待成功提示或重新提交", async ({ page }) => {
     const commits = await mockSupplyAllocation(page, {

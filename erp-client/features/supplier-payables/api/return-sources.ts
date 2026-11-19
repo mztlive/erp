@@ -1,11 +1,7 @@
 import { fetchCompleteList } from "@/lib/collect-pages"
 import { fetchSupplierPartyId } from "@/features/entity-selectors/api/suppliers"
-import {
-    projectInvoice,
-    projectPayment,
-    type BackendInvoice,
-    type BackendSupplierPayment,
-} from "./mappers"
+import { projectInvoice, projectPayment, type BackendInvoice } from "./mappers"
+import type { ScopedSupplierPaymentWire } from "./scoped"
 import type { PaymentRow, PurchaseInvoiceRow } from "../types"
 
 /** 退货款和红票分别读取各自来源，不要求经办人同时具备付款、开票权限。 */
@@ -28,7 +24,7 @@ export async function fetchReturnSources(
         )
         return { payments: [], invoices: page.items.map(projectInvoice) }
     }
-    const page = await fetchCompleteList<BackendSupplierPayment>(
+    const page = await fetchCompleteList<ScopedSupplierPaymentWire>(
         "/admin/supplier-payments",
         {
             supplier_id: supplierId,

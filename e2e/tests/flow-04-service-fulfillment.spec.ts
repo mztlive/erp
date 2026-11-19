@@ -11,6 +11,7 @@
  * - 客户验收成功 toast 描述使用「已过账」（与 docs/erp-phase-1.md §10.1 不用「过账」不一致）
  * - ServiceFulfillment / CustomerAcceptance 为 NO_APPROVAL，工作台原地确认，不出现审批决定栏
  */
+import { workPage } from "../helpers/workspace-page"
 import { archiveContractViaUi } from "../helpers/contracts"
 import {
     fillSalesLineUnitPrice,
@@ -27,16 +28,22 @@ import { openLoggedInWorkspace } from "../helpers/login"
 import { ensureDefaultProcurementOwner } from "../helpers/procurement"
 import { verifyServiceTaskReassignment } from "../helpers/task-reassignment"
 import {
+    workspaceTaskRows,
     approveCurrentDocument,
     chooseOption,
     dismissToasts,
     expectToast,
     openFulfillmentWorkspaceForm,
     openWorkspaceTask,
+    openWorkspaceTaskRow,
     pickCalendarDay,
     readHeaderDocumentNumber,
     selectWorkspaceFamily,
+    selectWorkspaceScope,
     expectSourcingCounts,
+    expectWorkspaceQueue,
+    matchingWorkspaceTaskRows,
+    workspaceTaskId,
 } from "../helpers/ui"
 
 const TIMEOUT = 20_000
@@ -94,7 +101,7 @@ async function stableGoto(page: Page, href: string) {
 
 async function gotoHeading(page: Page, href: string, heading: string | RegExp) {
     await stableGoto(page, href)
-    await expect(page.getByRole("heading", { name: heading })).toBeVisible({
+    await expect(workPage(page).getByRole("heading", { name: heading })).toBeVisible({
         timeout: TIMEOUT,
     })
 }
@@ -136,24 +143,24 @@ async function contractPdf(): Promise<
 }
 
 async function refreshWorkspace(page: Page) {
-    await stableGoto(page, "/workspace")
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(
+    await stableGoto(page, "/workspace/tasks")
+    await expect(workPage(page).getByRole("heading", { name: "待我处理" })).toBeVisible(
         { timeout: TIMEOUT },
     )
-    const refresh = page.locator("#workspace-home-refresh")
+    const refresh = workPage(page).locator("#workspace-home-refresh")
     if (await refresh.isVisible()) await refresh.click()
 }
 
 async function clearWorkspaceSearch(page: Page) {
-    const search = page.locator("#workspace-queue-toolbar-search-input")
+    const search = workPage(page).locator("#workspace-queue-toolbar-search-input")
     // 工作台筛选栏当前暂停展示；无搜索框时只刷新队列。
     if (await search.isVisible().catch(() => false)) {
         await search.fill("")
         await search.press("Enter")
     }
-    const refresh = page
+    const refresh = workPage(page)
         .locator("#workspace-home-refresh")
-        .or(page.getByRole("button", { name: "刷新", exact: true }))
+        .or(workPage(page).getByRole("button", { name: "刷新", exact: true }))
     if (
         await refresh
             .first()
@@ -174,8 +181,8 @@ async function expectNoTasksForOrder(
     action: string,
     hints: readonly string[],
 ) {
-    const list = page.getByRole("list", { name: "待办列表" })
-    const empty = page.getByText(
+    const list = workPage(page).getByRole("region", { name: "任务队列" })
+    const empty = workPage(page).getByText(
         /当前没有待处理事项|当前筛选没有待办|范围内没有待办/,
     )
     await expect(list.or(empty).first()).toBeVisible({ timeout: TIMEOUT })
@@ -183,16 +190,16 @@ async function expectNoTasksForOrder(
     const pattern = new RegExp(
         `(?:${action})[\\s\\S]*(?:${hint})|(?:${hint})[\\s\\S]*(?:${action})`,
     )
-    await expect(list.getByRole("button", { name: pattern })).toHaveCount(0)
+    await expect(workspaceTaskRows(page).and(workPage(page).getByRole("row", { name: pattern }))).toHaveCount(0)
 }
 
 // 负责销售是展示名，不是输入框：必须等于侧栏账号菜单里的当前用户，且不能停在占位文案。
 async function expectLoggedInSalesOwner(page: Page, timeout: number) {
     const placeholders = ["加载当前用户…", "无法获取登录用户", "当前用户未就绪"]
     const accountName = page.locator(
-        "#workspace-sidebar-account-trigger span.font-medium",
+        "#workspace-topbar-account-trigger span.truncate.font-medium",
     )
-    const ownerName = page
+    const ownerName = workPage(page)
         .locator("#sales-orders-create-header-owner-name > span")
         .nth(1)
     await expect(accountName).toBeVisible({ timeout })
@@ -239,14 +246,14 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
             address: "北京市朝阳区测试路 1 号",
         })
         await expect(
-            sales.page.getByRole("link", { name: `E2E服务${stamp.slice(-6)}` }),
+            workPage(sales.page).getByRole("link", { name: `E2E服务${stamp.slice(-6)}` }),
         ).toBeVisible({
             timeout: TIMEOUT,
         })
 
         // 3. 销售上传合同 PDF（系统不新建合同正文）
         await gotoHeading(sales.page, "/sales/contracts", /^合同$/)
-        await sales.page.locator("#page-actions-action-upload").click()
+        await workPage(sales.page).locator("#page-actions-action-upload").click()
         await archiveContractViaUi(sales.page, {
             contractNo,
             customerName: legalName,
@@ -255,116 +262,116 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
         })
         // 合同列表行是按钮（打开合同），不是链接。
         await expect(
-            sales.page.getByRole("button", { name: `打开合同 ${contractNo}` }),
+            workPage(sales.page).getByRole("button", { name: `打开合同 ${contractNo}` }),
         ).toBeVisible({ timeout: TIMEOUT })
 
         // 4. 销售开线下服务销售单并提交（采购确认节点不选供给）
         // 列表页同时有 h1「销售单」与 h2「销售单 N 条」：锚定全名避开严格模式。
         await gotoHeading(sales.page, "/sales/orders", /^销售单$/)
-        await sales.page.locator("#sales-orders-list-header-create").click()
+        await workPage(sales.page).locator("#sales-orders-list-header-create").click()
         await expect(
-            sales.page
+            workPage(sales.page)
                 .getByRole("heading", { name: "新建销售单" })
-                .or(sales.page.getByRole("heading", { name: "业务信息" })),
+                .or(workPage(sales.page).getByRole("heading", { name: "业务信息" })),
         ).toBeVisible({ timeout: TIMEOUT })
         await selectExistingContractForSalesOrder(sales.page, contractNo)
-        await expect(sales.page.getByLabel("业务性质")).toBeVisible({
+        await expect(workPage(sales.page).getByLabel("业务性质")).toBeVisible({
             timeout: TIMEOUT,
         })
         await expect(
-            sales.page.locator("#sales-orders-create-customer"),
+            workPage(sales.page).locator("#sales-orders-create-customer"),
         ).toContainText(new RegExp(legalName))
         await expectLoggedInSalesOwner(sales.page, TIMEOUT)
         await chooseOption(
             sales.page,
-            sales.page.locator("#sales-orders-create-header-welfare-scene"),
-            "年节礼包",
+            workPage(sales.page).locator("#sales-orders-create-header-welfare-scene"),
+            "礼包",
         )
         // 付款条件必填缺一不可，否则提交按钮保持禁用（与 flow-03 同款）。
         await expect(
-            sales.page.locator("#sales-orders-create-header-payment-terms"),
+            workPage(sales.page).locator("#sales-orders-create-header-payment-terms"),
         ).toContainText("货到 30 天")
-        await expect(sales.page.locator("#sales-orders-create-header-payment-terms").locator("input, button, [role=combobox]")).toHaveCount(0)
+        await expect(workPage(sales.page).locator("#sales-orders-create-header-payment-terms").locator("input, button, [role=combobox]")).toHaveCount(0)
 
-        await sales.page
+        await workPage(sales.page)
             .getByRole("button", { name: "添加商品" })
             .first()
             .click()
         await expect(
-            sales.page.getByRole("heading", { name: "添加商品" }),
+            workPage(sales.page).getByRole("heading", { name: "添加商品" }),
         ).toBeVisible({ timeout: TIMEOUT })
-        const skuSearch = sales.page.locator(
+        const skuSearch = workPage(sales.page).locator(
             "#sales-orders-sku-picker-filter-search",
         )
         await skuSearch.fill(SERVICE_SKU_NO)
         await skuSearch.press("Enter")
         // 搜索框会把关键词回显为筛选 chips（搜索：…）：用精确匹配只认表格行。
         await expect(
-            sales.page.getByText(SERVICE_SKU_NO, { exact: true }),
+            workPage(sales.page).getByText(SERVICE_SKU_NO, { exact: true }),
         ).toBeVisible({ timeout: TIMEOUT })
-        await sales.page
+        await workPage(sales.page)
             .getByRole("checkbox", {
                 name: new RegExp(`选择 ${SERVICE_SKU_NAME}`),
             })
             .click()
-        await sales.page.locator("#sales-orders-sku-picker-confirm").click()
+        await workPage(sales.page).locator("#sales-orders-sku-picker-confirm").click()
         await expect(
-            sales.page.getByRole("heading", { name: "添加商品" }),
+            workPage(sales.page).getByRole("heading", { name: "添加商品" }),
         ).toBeHidden({ timeout: TIMEOUT })
         await expect(
-            sales.page.getByText(SERVICE_SKU_NAME).first(),
+            workPage(sales.page).getByText(SERVICE_SKU_NAME).first(),
         ).toBeVisible({ timeout: TIMEOUT })
         await expect(
-            sales.page.locator(
+            workPage(sales.page).locator(
                 '[data-testid^="sales-line-procurement-owner-"]',
             ),
         ).not.toContainText("暂未确定采购负责人", { timeout: TIMEOUT })
 
-        await sales.page.getByLabel("数量").fill("2")
+        await workPage(sales.page).getByLabel("数量").fill("2")
         await fillSalesLineUnitPrice(sales.page, "180.00")
         // 批量交期控件改名：用稳定 id 打开日历再跨月点选（与 flow-03 同款）。
-        await sales.page
+        await workPage(sales.page)
             .locator("#sales-orders-create-batch-due-date-open")
             .click()
         await pickCalendarDay(
             sales.page,
-            sales.page.locator("#sales-orders-create-batch-due-date"),
+            workPage(sales.page).locator("#sales-orders-create-batch-due-date"),
             dueIso,
         )
-        await sales.page
+        await workPage(sales.page)
             .locator("#sales-orders-create-batch-due-date-apply")
             .click()
         await expectToast(sales.page, "已批量设置交期")
 
         await clickWithoutToastOverlay(
             sales.page,
-            sales.page.locator("#sales-orders-create-submit"),
+            workPage(sales.page).locator("#sales-orders-create-submit"),
             async () =>
-                await sales.page
+                await workPage(sales.page)
                     .getByRole("heading", { name: "提交销售单" })
                     .isVisible()
                     .catch(() => false),
         )
         await expect(
-            sales.page.getByRole("heading", { name: "提交销售单" }),
+            workPage(sales.page).getByRole("heading", { name: "提交销售单" }),
         ).toBeVisible({ timeout: TIMEOUT })
-        await expect(sales.page.getByText("审批中").first()).toBeVisible()
+        await expect(workPage(sales.page).getByText("审批中").first()).toBeVisible()
         // 批量交期 toast 常盖住确认按钮：先清 toast 再点，盖住不散时走 DOM 派发。
         // 确认点按后对话框关闭即提交成功：透过 settled 提前返回，避免对已卸载按钮重试。
-        const submitDialog = sales.page.getByRole("dialog", {
+        const submitDialog = workPage(sales.page).getByRole("dialog", {
             name: "提交销售单",
         })
         // settled 只做即时判断：第一次点按前页面必然还在新建页，等 URL 只会白等。
         await clickWithoutToastOverlay(
             sales.page,
-            sales.page.locator("#sales-orders-submit-confirm-confirm"),
+            workPage(sales.page).locator("#sales-orders-submit-confirm-confirm"),
             async () => !/\/sales\/orders\?mode=create/.test(sales.page.url()),
         )
         await expect(submitDialog).toBeHidden({ timeout: TIMEOUT })
         await sales.page.waitForURL(/\/sales\/orders\/[^/?]+/, {
             timeout: TIMEOUT,
         })
-        await expect(sales.page.getByText("审批中").first()).toBeVisible({
+        await expect(workPage(sales.page).getByText("审批中").first()).toBeVisible({
             timeout: TIMEOUT,
         })
         const salesOrderUrl = sales.page.url()
@@ -376,10 +383,20 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
 
         // 负向：提交人不得审批自己的销售单
         await refreshWorkspace(sales.page)
-        await sales.page.locator("#workspace-queue-scope-started").click()
-        await clearWorkspaceSearch(sales.page)
+        await selectWorkspaceScope(sales.page, "managed")
+        await expect(matchingWorkspaceTaskRows(sales.page, "销售单审批", orderNo)
+            .getByRole("button", { name: /^处理/ })).toHaveCount(0)
+        await sales.page.goto("/workspace/approvals")
+        await expectWorkspaceQueue(sales.page)
+        const ownApproval = matchingWorkspaceTaskRows(sales.page, "销售单审批", orderNo)
+        await expect(ownApproval).toHaveCount(1)
+        const instanceId = await ownApproval.getAttribute("data-row-id")
+        expect(instanceId).toBeTruthy()
+        await ownApproval.getByRole("button", { name: /^查看/ }).click()
+        await expect.poll(() => workspaceTaskId(sales.page), { timeout: TIMEOUT }).toBe(instanceId)
+        await expect(workPage(sales.page).getByRole("region", { name: "当前工作台任务" })).toBeVisible()
         await expect(
-            sales.page.getByRole("button", { name: /^(通过|同意审批)$/ }),
+            workPage(sales.page).getByRole("button", { name: /^(通过|通过审批|同意审批)$/ }),
         ).toHaveCount(0)
 
         // 负向：采购确认通过前，本单不得履约、不得供给分配、不得关闭
@@ -392,7 +409,7 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
         ])
         await selectWorkspaceFamily(procurement.page, "procurement")
         await clearWorkspaceSearch(procurement.page)
-        await expectNoTasksForOrder(procurement.page, "待供给分配", [
+        await expectNoTasksForOrder(procurement.page, "待安排采购", [
             orderNo,
             legalName,
         ])
@@ -405,24 +422,24 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
             "approval",
         )
         await expect(
-            procurement.page.getByText("采购确认").first(),
+            workPage(procurement.page).getByText("采购确认").first(),
         ).toBeVisible({ timeout: TIMEOUT })
         await expect(
-            procurement.page.getByRole("button", { name: /^(通过|同意审批)$/ }),
+            workPage(procurement.page).getByRole("button", { name: /^(通过|通过审批|同意审批)$/ }),
         ).toBeVisible({ timeout: TIMEOUT })
         await expect(
-            procurement.page.getByTestId("purchase-create-preview"),
+            workPage(procurement.page).getByTestId("purchase-create-preview"),
         ).toHaveCount(0)
         await approveCurrentDocument(procurement.page)
 
         await sales.page.goto(`/sales/orders/${salesOrderId}`)
         // 审批通过后生效若尚未落定：短间隔刷新重查，生效即走，最长约 2 分钟。
-        const identity = sales.page
+        const identity = workPage(sales.page)
             .getByRole("heading", { name: legalName })
             .locator("xpath=..")
         await expect(async () => {
             await expect(
-                sales.page.getByRole("heading", { name: legalName }),
+                workPage(sales.page).getByRole("heading", { name: legalName }),
             ).toBeVisible({ timeout: TIMEOUT })
             if (!(await identity.getByText("已生效").count())) {
                 await sales.page.reload()
@@ -434,7 +451,7 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
         })
         await expect(identity.getByText("已关闭")).toHaveCount(0)
         await expect(
-            sales.page.locator("#sales-orders-detail-start-change"),
+            workPage(sales.page).locator("#sales-orders-detail-start-change"),
         ).toBeVisible()
 
         // 负向：销售单刚生效时本单不得履约（须先完成供给分配且采购单生效）
@@ -448,32 +465,32 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
 
         // 6. 供给分配：线下服务只能推荐采购，不得分配现有库存；确认后立即提交采购单
         if (
-            (await procurement.page
+            (await workPage(procurement.page)
                 .getByRole("heading", { name: "供给分配" })
                 .count()) === 0
         ) {
             await openWorkspaceTask(
                 procurement.page,
-                /待供给分配/,
+                /待安排采购/,
                 orderNo,
                 "procurement",
             )
         }
         await expect(
-            procurement.page.getByRole("heading", { name: "供给分配" }),
+            workPage(procurement.page).getByRole("heading", { name: "供给分配" }),
         ).toBeVisible({ timeout: TIMEOUT })
-        const sourcingTask = procurement.page.getByRole("region", {
+        const sourcingTask = workPage(procurement.page).getByRole("region", {
             name: "当前供给分配任务",
         })
-        const currentOrder = sourcingTask
-            .getByText(orderNo, { exact: true })
-            .filter({ visible: true })
-        await expect(currentOrder).toHaveCount(1, { timeout: TIMEOUT })
-        await expect(currentOrder).toBeVisible({ timeout: TIMEOUT })
+        const sourcingId = workspaceTaskId(procurement.page)
+        expect(sourcingId).toBeTruthy()
+        expect(await apiGet<{ business_object_id: string }>(
+            await apiToken("caigou"), `/admin/work-items/${sourcingId}`,
+        )).toMatchObject({ business_object_id: salesOrderId })
         const serviceRow = sourcingTask
             .getByRole("region", { name: "供给商品列表", exact: true })
             .getByRole("row", {
-                name: `查看 ${SERVICE_ITEM_NAME} 的供给方案`,
+                name: SERVICE_ITEM_NAME,
                 exact: true,
             })
         await expect(serviceRow).toHaveCount(1)
@@ -494,7 +511,7 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
             -"-edit".length,
         )
         await expect(
-            serviceRow.getByRole("switch", {
+            serviceRow.getByRole("checkbox", {
                 name: `本次分配 ${SERVICE_ITEM_NAME}`,
                 exact: true,
             }),
@@ -504,20 +521,20 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
             sourcingTask.getByText("现货", { exact: true }),
         ).toHaveCount(0)
         await serviceEdit.click()
-        const serviceEditor = sourcingTask.getByRole("region", {
-            name: "当前商品供给编辑",
+        const serviceEditor = workPage(procurement.page).getByRole("dialog", {
+            name: `供给分配 · ${SERVICE_ITEM_NAME}`,
             exact: true,
         })
         await expect(serviceEditor).toHaveCount(1)
         await expect(
             serviceEditor.getByRole("heading", {
-                name: SERVICE_ITEM_NAME,
+                name: `供给分配 · ${SERVICE_ITEM_NAME}`,
                 exact: true,
             }),
         ).toBeVisible({ timeout: TIMEOUT })
         await expect(
             serviceEditor.locator(
-                `#sourcing-editor-${serviceSourceLineId}-participation`,
+                `#sourcing-product-adjust-${serviceSourceLineId}-participation`,
             ),
         ).toBeChecked()
         const serviceSource = serviceEditor
@@ -533,7 +550,7 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
             .filter({ visible: true })
         await expect(serviceSource).toHaveCount(1)
         await expect(serviceSource).toHaveValue(
-            "北京安达家电服务有限公司 · 线下服务",
+            /北京安达家电服务有限公司.* · 线下服务/,
         )
         const sourceControlId = await serviceSource.getAttribute("id")
         expect(sourceControlId).toBeTruthy()
@@ -566,8 +583,10 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
             }
         }
 
+        await serviceEditor.locator("#sourcing-product-adjust-done").click()
+        await expect(serviceEditor).toBeHidden()
         await sourcingTask.locator("#procurement-orders-create-preview").click()
-        const sourcingPreview = procurement.page.getByRole("dialog", {
+        const sourcingPreview = workPage(procurement.page).getByRole("dialog", {
             name: "预览供给分配",
             exact: true,
         })
@@ -634,7 +653,7 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
             .getByRole("region", { name: "采购明细", exact: true })
             .getByRole("row")
             .filter({
-                has: procurement.page
+                has: workPage(procurement.page)
                     .getByRole("cell")
                     .filter({ hasText: SERVICE_ITEM_NAME }),
             })
@@ -706,23 +725,21 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
         const servicePurchaseNo: string = submitBody.data.orders[0].purchase_no
         expect(servicePurchaseId).toBeTruthy()
         expect(servicePurchaseNo).toBeTruthy()
-        await expect(
-            procurement.page.getByText("已创建 1 张采购单并提交审批。"),
-        ).toBeVisible({ timeout: TIMEOUT })
+        await expect.poll(() => workspaceTaskId(procurement.page), { timeout: TIMEOUT }).not.toBe(sourcingId)
 
         // 负向：不得留下未提交草稿；不得零张采购单
         await gotoHeading(procurement.page, "/procurement/orders", /^采购单$/)
-        await procurement.page
+        await workPage(procurement.page)
             .locator("#procurement-orders-list-search")
             .fill(orderNo)
-        await procurement.page
+        await workPage(procurement.page)
             .locator("#procurement-orders-list-search")
             .press("Enter")
-        const createdPurchaseRow = procurement.page
+        const createdPurchaseRow = workPage(procurement.page)
             .locator("#procurement-orders-list-table")
             .getByRole("row")
             .filter({
-                has: procurement.page.locator(
+                has: workPage(procurement.page).locator(
                     `#procurement-orders-list-row-${servicePurchaseId}-open`,
                 ),
             })
@@ -758,7 +775,7 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
             new RegExp(`/sales/orders/${salesOrderId}\\?`),
         )
         await expect(
-            procurement.page
+            workPage(procurement.page)
                 .getByRole("table")
                 .getByText("草稿", { exact: true }),
         ).toHaveCount(0)
@@ -780,15 +797,15 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
             "approval",
         )
         await expect(
-            finance.page.getByText("采购部门审批").first(),
+            workPage(finance.page).getByText("采购部门审批").first(),
         ).toBeVisible({ timeout: TIMEOUT })
         await approveCurrentDocument(finance.page)
 
         await gotoHeading(procurement.page, "/procurement/orders", /^采购单$/)
-        await procurement.page
+        await workPage(procurement.page)
             .locator("#procurement-orders-list-search")
             .fill(orderNo)
-        await procurement.page
+        await workPage(procurement.page)
             .locator("#procurement-orders-list-search")
             .press("Enter")
         await expect(createdPurchaseRow).toHaveCount(1, { timeout: TIMEOUT })
@@ -802,7 +819,7 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
             createdPurchaseRow.getByText("已生效", { exact: true }),
         ).toBeVisible({ timeout: TIMEOUT })
         await expect(
-            procurement.page
+            workPage(procurement.page)
                 .getByRole("table")
                 .getByText("草稿", { exact: true }),
         ).toHaveCount(0)
@@ -844,32 +861,29 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
         // 每轮先确保面板打开再重填（覆盖写等幂，草稿存在也不怕）。
         for (let attempt = 0; ; attempt += 1) {
             if (
-                (await serviceOwner.page
+                (await workPage(serviceOwner.page)
                     .locator('[aria-label="线下服务表单"]')
                     .count()) === 0
             ) {
-                await openWorkspaceTask(
-                    serviceOwner.page,
-                    /履约处理/,
-                    "北京安达",
-                    "fulfillment",
-                )
+                await refreshWorkspace(serviceOwner.page)
+                await selectWorkspaceFamily(serviceOwner.page, "fulfillment")
+                await openWorkspaceTaskRow(serviceOwner.page, transferred.taskId)
                 await openFulfillmentWorkspaceForm(serviceOwner.page)
                 // 任务标题使用采购单身份，实际履约表单必须为线下服务。
                 await expect(
-                    serviceOwner.page.locator('[aria-label="线下服务表单"]'),
+                    workPage(serviceOwner.page).locator('[aria-label="线下服务表单"]'),
                 ).toBeVisible({
                     timeout: TIMEOUT,
                 })
             }
             try {
                 await expect(
-                    serviceOwner.page.locator('[aria-label="线下服务表单"]'),
+                    workPage(serviceOwner.page).locator('[aria-label="线下服务表单"]'),
                 ).toBeVisible({ timeout: 10_000 })
-                await serviceOwner.page.getByLabel("本次完成数量").fill("2")
+                await workPage(serviceOwner.page).getByLabel("本次完成数量").fill("2")
                 await chooseOption(
                     serviceOwner.page,
-                    serviceOwner.page.locator(
+                    workPage(serviceOwner.page).locator(
                         "#fulfillment-operations-service-form-result",
                     ),
                     "成功",
@@ -880,11 +894,11 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
                 // 日历点选当天一次即落定起止同一天（截图证实触发器已显示完整范围）：直接用全局 id 定位，
                 // 不经过 popover 链（同页可能残留其他弹层导致 last() 错位）。第二次点选反而会重置范围。
                 // 弹层开关受工作台轮询干扰偶发打不开：轮询触发器直到当天按钮出现，最多 4 轮。
-                const serviceDay = serviceOwner.page
+                const serviceDay = workPage(serviceOwner.page)
                     .locator(`button[id$="-day-${todayIso}"]:not([disabled])`)
                     .first()
                 for (let round = 0; round < 4; round += 1) {
-                    await serviceOwner.page
+                    await workPage(serviceOwner.page)
                         .locator(
                             "#fulfillment-operations-service-form-service-time",
                         )
@@ -899,25 +913,25 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
                 }
                 await expect(serviceDay).toBeVisible({ timeout: 10_000 })
                 await serviceDay.click({ force: true })
-                const fromTime = serviceOwner.page.locator(
+                const fromTime = workPage(serviceOwner.page).locator(
                     "#fulfillment-operations-service-form-service-time-from-time",
                 )
-                const toTime = serviceOwner.page.locator(
+                const toTime = workPage(serviceOwner.page).locator(
                     "#fulfillment-operations-service-form-service-time-to-time",
                 )
                 await expect(fromTime).toBeEnabled({ timeout: 10_000 })
                 await expect(toTime).toBeEnabled({ timeout: 10_000 })
                 await fromTime.fill("09:00")
                 await toTime.fill("11:00")
-                const timeDone = serviceOwner.page.locator(
+                const timeDone = workPage(serviceOwner.page).locator(
                     "#fulfillment-operations-service-form-service-time-done",
                 )
                 await expect(timeDone).toBeEnabled({ timeout: 10_000 })
                 await timeDone.click({ force: true })
-                await serviceOwner.page
+                await workPage(serviceOwner.page)
                     .getByLabel("服务地点")
                     .fill("北京市大兴区旧宫镇客户现场")
-                await serviceOwner.page
+                await workPage(serviceOwner.page)
                     .locator(
                         "#fulfillment-operations-service-form-evidence-input",
                     )
@@ -926,7 +940,7 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
                         mimeType: "image/png",
                         buffer: PNG_1X1,
                     })
-                await serviceOwner.page
+                await workPage(serviceOwner.page)
                     .getByLabel("完成说明")
                     .fill("已上门安装并完成现场验收")
                 break
@@ -935,21 +949,21 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
             }
         }
         await expect(
-            serviceOwner.page.getByRole("button", {
-                name: /^(通过|同意审批)$/,
+            workPage(serviceOwner.page).getByRole("button", {
+                name: /^(通过|通过审批|同意审批)$/,
             }),
         ).toHaveCount(0)
         await expect(
-            serviceOwner.page.getByRole("button", {
+            workPage(serviceOwner.page).getByRole("button", {
                 name: "驳回",
                 exact: true,
             }),
         ).toHaveCount(0)
-        await expect(serviceOwner.page.getByText("审批摘要")).toHaveCount(0)
-        await serviceOwner.page
+        await expect(workPage(serviceOwner.page).getByText("审批摘要")).toHaveCount(0)
+        await workPage(serviceOwner.page)
             .locator("#fulfillment-operations-work-surface-confirm")
             .click()
-        const serviceConfirmation = serviceOwner.page.getByRole("alertdialog", {
+        const serviceConfirmation = workPage(serviceOwner.page).getByRole("alertdialog", {
             name: "确认服务完成？",
             exact: true,
         })
@@ -982,11 +996,11 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
         expect(serviceBody.data).not.toHaveProperty("approval")
         await expect(serviceConfirmation).toBeHidden({ timeout: TIMEOUT })
         await expect(
-            serviceOwner.page.getByRole("button", {
-                name: /^(通过|同意审批)$/,
+            workPage(serviceOwner.page).getByRole("button", {
+                name: /^(通过|通过审批|同意审批)$/,
             }),
         ).toHaveCount(0)
-        await expect(serviceOwner.page.getByText("当前节点")).toHaveCount(0)
+        await expect(workPage(serviceOwner.page).getByRole("region", { name: "当前履约任务", exact: true })).toHaveCount(0)
 
         const completedTask = await apiGet<{
             status: string
@@ -1005,26 +1019,26 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
             "fulfillment",
         )
         await expect(
-            sales.page.getByRole("button", { name: "登记客户验收" }),
+            workPage(sales.page).getByRole("button", { name: "登记客户验收" }),
         ).toBeVisible({ timeout: TIMEOUT })
         await expect(
-            sales.page.getByRole("button", { name: /^(通过|同意审批)$/ }),
+            workPage(sales.page).getByRole("button", { name: /^(通过|通过审批|同意审批)$/ }),
         ).toHaveCount(0)
-        await sales.page
+        await workPage(sales.page)
             .locator("#sales-orders-acceptance-register-open")
             .click()
         await expect(
-            sales.page.getByRole("heading", { name: "登记客户验收" }),
+            workPage(sales.page).getByRole("heading", { name: "登记客户验收" }),
         ).toBeVisible({ timeout: TIMEOUT })
-        await expect(sales.page.getByText("服务履约").first()).toBeVisible({
+        await expect(workPage(sales.page).getByText("服务履约").first()).toBeVisible({
             timeout: TIMEOUT,
         })
         await uploadAcceptanceEvidence(sales.page)
-        await sales.page
+        await workPage(sales.page)
             .locator("#sales-orders-acceptance-register-submit")
             .click()
         await expect(
-            sales.page.getByRole("heading", { name: "确认客户验收" }),
+            workPage(sales.page).getByRole("heading", { name: "确认客户验收" }),
         ).toBeVisible({ timeout: TIMEOUT })
         const accepted = sales.page.waitForResponse(
             (response) =>
@@ -1033,7 +1047,7 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
                     "/admin/customer-acceptances/commit",
             { timeout: 90_000 },
         )
-        await sales.page
+        await workPage(sales.page)
             .locator("#sales-orders-acceptance-confirm-confirm")
             .click()
         const acceptanceResponse = await accepted
@@ -1051,17 +1065,16 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
                 evidence_attachment_id: evidenceId,
             },
         )
-        await expectToast(sales.page, "客户验收已登记")
         await expect(
-            sales.page.getByRole("heading", { name: "登记客户验收" }),
+            workPage(sales.page).getByRole("heading", { name: "登记客户验收" }),
         ).toBeHidden({ timeout: TIMEOUT })
         await expect(
-            sales.page.getByRole("button", { name: /^(通过|同意审批)$/ }),
+            workPage(sales.page).getByRole("button", { name: /^(通过|通过审批|同意审批)$/ }),
         ).toHaveCount(0)
 
         // 10. 里程碑：履约完成但应收未结清，销售单不得关闭；本流程未开变更单
         await sales.page.goto(`/sales/orders/${salesOrderId}`)
-        const closingIdentity = sales.page
+        const closingIdentity = workPage(sales.page)
             .getByRole("heading", { name: legalName })
             .locator("xpath=..")
         await expect(closingIdentity.getByText("已生效")).toBeVisible({
@@ -1069,17 +1082,18 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
         })
         await expect(closingIdentity.getByText("已关闭")).toHaveCount(0)
         await expect(
-            sales.page
-                .getByText("履约")
+            workPage(sales.page)
+                .getByLabel("履约与票款进度", { exact: true })
+                .getByRole("heading", { name: "采购与交付", exact: true })
                 .locator("xpath=..")
-                .getByText("已完成"),
+                .getByText("已完成", { exact: true }),
         ).toBeVisible({
             timeout: TIMEOUT,
         })
-        await expect(sales.page.getByText("改单草稿")).toHaveCount(0)
-        await expect(sales.page.getByText("销售变更单审批")).toHaveCount(0)
+        await expect(workPage(sales.page).getByText("改单草稿")).toHaveCount(0)
+        await expect(workPage(sales.page).getByText("销售变更单审批")).toHaveCount(0)
         await expect(
-            sales.page.locator("#sales-orders-detail-start-change"),
+            workPage(sales.page).locator("#sales-orders-detail-start-change"),
         ).toBeVisible()
     } finally {
         await Promise.all([

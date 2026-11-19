@@ -6,7 +6,7 @@
  */
 import { readFile } from "node:fs/promises";
 
-import { expect, test, type Page, type Response } from "../helpers/test";
+import { expect, test, type Locator, type Page } from "../helpers/test";
 import { API_BASE, apiGet, apiToken } from "../helpers/api";
 import {
   analyticsCommand,
@@ -17,6 +17,7 @@ import {
 } from "../helpers/financial-analytics";
 import { openLoggedInWorkspace } from "../helpers/login";
 import { ensureDefaultProcurementOwner } from "../helpers/procurement";
+import { workPage } from "../helpers/workspace-page";
 
 const VISIBLE = { timeout: 20_000 };
 type Amounts = {
@@ -136,7 +137,7 @@ async function uiReport(
   await page.goto(`/analytics/profit-loss?${params}`);
   const result = await response;
   expect(result.ok(), await result.text()).toBe(true);
-  await expect(page.getByRole("heading", { name: "实际经营盈亏", exact: true })).toBeVisible(
+  await expect(workPage(page).getByRole("heading", { name: "实际经营盈亏", exact: true })).toBeVisible(
     VISIBLE,
   );
   return ((await result.json()) as { data: Report }).data;
@@ -159,30 +160,69 @@ async function failedCommand(token: string, endpoint: string, body: unknown, sta
   return result;
 }
 
-async function exportCsv(
+async function downloadCsvTransfer(
   page: Page,
-): Promise<{ csv: string; response: Response; rowCount: number }> {
-  const [download, response] = await Promise.all([
-    page.waitForEvent("download"),
-    page.waitForResponse(
-      (item) =>
-        item.request().method() === "POST" &&
-        new URL(item.url()).pathname === "/admin/actual-profit-loss/exports",
-    ),
-    page.locator("#actual-profit-loss-header-export").click(),
+  button: Locator,
+  kind: "profit_loss" | "receivables" | "supplier_payables",
+) {
+  const job = page
+    .waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/account/data-transfers" &&
+        response.request().postDataJSON().kind === kind,
+      { timeout: 90_000 },
+    )
+    .then(async (response) => {
+      expect(response.ok(), await response.text()).toBe(true);
+      const { data } = (await response.json()) as { data: { id: string } };
+      expect(data.id).toBeTruthy();
+      return { id: data.id, input: response.request().postDataJSON().input as unknown };
+    });
+  const result = page.waitForResponse(
+    async (response) => {
+      const path = new URL(response.url()).pathname;
+      if (response.request().method() !== "GET" || !/^\/account\/data-transfers\/[^/]+\/result$/.test(path)) {
+        return false;
+      }
+      return path === `/account/data-transfers/${(await job).id}/result`;
+    },
+    { timeout: 90_000 },
+  );
+  const [download, response, { input }] = await Promise.all([
+    page.waitForEvent("download", { timeout: 90_000 }),
+    result,
+    job,
+    button.click(),
   ]);
   expect(response.ok(), await response.text()).toBe(true);
-  expect(download.suggestedFilename()).toMatch(/实际盈亏.*\.csv$/);
+  const { data: file } = (await response.json()) as {
+    data: { file_name: string; content_base64: string; metadata: Record<string, unknown> };
+  };
+  expect(download.suggestedFilename()).toBe(file.file_name);
   expect(await download.failure()).toBeNull();
-  const location = await download.path();
-  expect(location).toBeTruthy();
-  const file = await readFile(location!);
-  const result = (await response.json()).data as { csvContent: string; rowCount: number };
-  expect(file).toEqual(Buffer.from(`\uFEFF${result.csvContent}`, "utf8"));
-  return { csv: result.csvContent, response, rowCount: result.rowCount };
+  const path = await download.path();
+  expect(path).toBeTruthy();
+  const bytes = await readFile(path!);
+  const content = Buffer.from(file.content_base64, "base64");
+  const bom = Buffer.from("\uFEFF");
+  expect(bytes).toEqual(kind === "profit_loss" ? Buffer.concat([bom, content]) : content);
+  const csv = bytes.toString("utf8");
+  expect(csv.startsWith("\uFEFF")).toBe(true);
+  return { csv: csv.slice(1), fileName: file.file_name, input, metadata: file.metadata };
 }
 
-/** 真实应收/应付导出必须包含当前单据、金额和两次绑定同一范围的查询。 */
+async function exportCsv(page: Page) {
+  const result = await downloadCsvTransfer(
+    page,
+    workPage(page).locator("#actual-profit-loss-header-export"),
+    "profit_loss",
+  );
+  expect(result.fileName).toMatch(/实际盈亏.*\.csv$/);
+  return result;
+}
+
+/** 真实应收/应付导出必须包含当前单据、金额与范围版本。 */
 async function expectFundsCsv(
   page: Page,
   kind: "customer" | "supplier",
@@ -218,52 +258,27 @@ async function expectFundsCsv(
   expect(result.total).toBe(1);
   expect(result.items).toHaveLength(1);
   expect(result.items[0]!.gross_total).toBe(gross);
-  const requests: URL[] = [];
-  const collect = (response: Response) => {
-    const url = new URL(response.url());
-    if (url.pathname === endpoint && url.searchParams.get(wireParameter) === documentId) {
-      requests.push(url);
-    }
-  };
-  page.on("response", collect);
-  try {
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      page
-        .locator(`#${customer ? "customer-receivables" : "supplier-payables"}-scope-export`)
-        .click(),
-    ]);
-    expect(download.suggestedFilename()).toMatch(
-      customer ? /客户往来-应收-范围-.*\.csv$/ : /供应商往来-应付-范围-.*\.csv$/,
-    );
-    expect(await download.failure()).toBeNull();
-    const path = await download.path();
-    expect(path).toBeTruthy();
-    const content = (await readFile(path!)).toString("utf8");
-    expect(content.startsWith("\uFEFF")).toBe(true);
-    const rows = content.slice(1).split("\r\n");
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toContain(customer ? '"销售单"' : '"来源单据"');
-    expect(rows[1]).toContain(`"${documentId}"`);
-    const account = result.items[0]!;
-    expect(account.visible_settled_share).toMatch(/^0(?:\.0+)?$/);
-    expect(account.settled_total).toMatch(/^0(?:\.0+)?$/);
-    expect(account.open_total).toBe(gross);
-    expect(rows[1]).toContain(
-      `"${account.visible_settled_share}","${gross}","${account.settled_total}","${gross}"`,
-    );
-    expect(rows[1]).toContain(`"${result.scope_version}"`);
-    expect(requests.some((url) => url.searchParams.get("page_size") === "100")).toBe(true);
-    expect(
-      requests.some(
-        (url) =>
-          url.searchParams.get("page_size") === "1" &&
-          url.searchParams.get("scope_version") === result.scope_version,
-      ),
-    ).toBe(true);
-  } finally {
-    page.off("response", collect);
-  }
+  const view = customer ? "receivable" : "payable";
+  const exported = await downloadCsvTransfer(
+    page,
+    workPage(page).locator(`#${customer ? "customer-receivables" : "supplier-payables"}-scope-export`),
+    customer ? "receivables" : "supplier_payables",
+  );
+  expect(exported.fileName).toBe(customer ? "客户应收.csv" : "供应商应付.csv");
+  expect(exported.input).toMatchObject({ view, [wireParameter]: documentId });
+  expect(exported.metadata).toMatchObject({ row_count: 1, scope_version: result.scope_version });
+  const rows = exported.csv.split("\r\n");
+  expect(rows).toHaveLength(2);
+  expect(rows[0]).toContain(customer ? '"销售单"' : '"采购单"');
+  expect(rows[1]).toContain(`"${documentId}"`);
+  const account = result.items[0]!;
+  expect(account.visible_settled_share).toMatch(/^0(?:\.0+)?$/);
+  expect(account.settled_total).toMatch(/^0(?:\.0+)?$/);
+  expect(account.open_total).toBe(gross);
+  expect(rows[1]).toContain(
+    `"${account.visible_settled_share}","${gross}","${account.settled_total}","${gross}"`,
+  );
+  expect(rows[1]).toContain(`"${result.scope_version}"`);
 }
 
 /** 双口径按正式含税收入统计；零税订单与盈亏净收入可精确对拍。 */
@@ -317,7 +332,7 @@ async function expectCurrentAndHistoryQuality(
     });
     expect(view.rows.total).toBe(1);
   }
-  expect(current.ownershipBasis).toBe("customer_current_assignment");
+  expect(current.ownershipBasis).toBe("sales_order_current_responsibility");
   expect(history.ownershipBasis).toBe("sales_order_first_effective_attribution");
   expect(orders[0].owner_user_id).toBeTruthy();
   expect(orders[1].owner_user_id).toBe(orders[0].owner_user_id);
@@ -479,35 +494,33 @@ test("flow-23 成本归集与盈亏：未覆盖留空、阶段隔离、实际金
       fixture.orders,
       report.totals.netSalesRevenue,
     );
-    await expect(admin.page.getByRole("row").filter({ hasText: orderA.order_no })).toContainText(
-      expectedProfit,
-    );
-    await expect(admin.page.getByRole("row").filter({ hasText: orderB.order_no })).toContainText(
-      "不可用（未覆盖）",
-    );
-    await admin.page.locator(`#actual-profit-loss-row-${orderA.id}-fulfillment-cost`).click();
-    await expect(admin.page.getByRole("heading", { name: "成本记录", exact: true })).toBeVisible(
-      VISIBLE,
-    );
-    await admin.page.locator(`#actual-profit-loss-cost-entry-${actual.id}`).click();
-    const sheet = admin.page.getByRole("dialog", { name: "成本记录", exact: true });
+    const analytics = workPage(admin.page);
+    const profitCell = (order: AnalyticsOrder) => analytics.getByRole("row")
+      .filter({ hasText: order.order_no })
+      .locator('[data-column-id="actualProfitLossNet"]');
+    await expect(profitCell(orderA)).toContainText(expectedProfit);
+    await expect(profitCell(orderB)).toHaveText("待归集成本");
+    await analytics.locator(`#actual-profit-loss-row-${orderA.id}-fulfillment-cost`).click();
+    const sheet = analytics.getByRole("dialog", { name: "成本记录", exact: true });
+    await expect(sheet).toBeVisible(VISIBLE);
+    await sheet.locator(`#actual-profit-loss-cost-entry-${actual.id}`).click();
     await expect(sheet).toContainText("配送");
     await expect(sheet).toContainText("20.00");
     await expect(sheet).toContainText(actualExpense.source_document_id);
-    await admin.page.locator("#actual-profit-loss-cost-detail-dismiss").click();
+    await sheet.locator("#actual-profit-loss-cost-detail-dismiss").click();
     const exported = await exportCsv(admin.page);
-    expect(exported.rowCount).toBe(2);
+    expect(exported.metadata.rowCount).toBe(2);
     expect(exported.csv).toContain(`"${orderA.order_no}"`);
     expect(exported.csv).toContain(`"${orderB.order_no}"`);
     expect(exported.csv).toContain(
       `"200.00","${source.procurementNet}","20.00","5.00","${expectedProfit}"`,
     );
-    expect(exported.response.request().postDataJSON()).toMatchObject({
+    expect(exported.input).toMatchObject({
       customer_id: fixture.customerId,
       scope_version: report.scopeVersion,
     });
     const filtered = await uiReport(admin.page, fixture.customerId, {
-      costTypes: "delivery",
+      costType: "delivery",
       q: orderA.order_no,
     });
     expect(filtered.rows.total).toBe(1);
@@ -517,7 +530,13 @@ test("flow-23 成本归集与盈亏：未覆盖留空、阶段隔离、实际金
       actualProfitLossNet: expectedProfit,
     });
     const filteredExport = await exportCsv(admin.page);
-    expect(filteredExport.rowCount).toBe(1);
+    expect(filteredExport.metadata.rowCount).toBe(1);
+    expect(filteredExport.input).toMatchObject({
+      customer_id: fixture.customerId,
+      scope_version: filtered.scopeVersion,
+      cost_types: "delivery",
+      q: orderA.order_no,
+    });
     expect(filteredExport.csv).toContain(orderA.order_no);
     expect(filteredExport.csv).not.toContain(orderB.order_no);
     await expectFundsCsv(admin.page, "customer", orderA.id, "200.00");

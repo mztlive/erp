@@ -2,16 +2,17 @@
  * [flow-36] 付款申请 review 回归：同主体历史更名与同会话付款后的先款履约缓存。
  * 只通过正式建档、销售、采购、任务改派和付款入口形成事实；不写库伪造来源或权限。
  */
+import { businessDocument, workPage } from "../helpers/workspace-page"
 import { randomUUID } from "node:crypto"
 
 import { test, expect, type Page } from "../helpers/test"
 import { API_BASE, apiGet, apiToken } from "../helpers/api"
-import { analyticsDate, createAnalyticsPurchase } from "../helpers/financial-analytics"
+import { analyticsDate, approveSourcedPurchase, createAnalyticsPurchase } from "../helpers/financial-analytics"
 import { openLoggedInWorkspace } from "../helpers/login"
 import { BANK_RECEIPT_FILE, purchasePaymentRequestCommand, type PaymentRequestCandidate, type PurchasePaymentRequestResult } from "../helpers/payments"
 import { assignReviewTask, createReviewFixture, createReviewOrder, reviewCommand, type ReviewCompany } from "../helpers/ppr-review-fixture"
 import { confirmSupplyAllocation, expandSourcingEditor } from "../helpers/sourcing"
-import { approveCurrentDocument, chooseOption, openFulfillmentWorkspaceForm, openWorkspaceTask } from "../helpers/ui"
+import { workspaceTaskId, approveCurrentDocument, chooseOption, openFulfillmentWorkspaceForm, openWorkspaceTask } from "../helpers/ui"
 
 const ROOT = "/admin/purchase-payment-requests"
 const VISIBLE = { timeout: 20_000 }
@@ -51,7 +52,7 @@ async function createSubmitted(page: Page, rows: PaymentRequestCandidate[]) {
 
 function taskButton(page: Page, taskId: string) {
     const segment = taskId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-    return page.locator(`[id="workspace-task-${segment}"]`)
+    return workPage(page).locator(`[id="workspace-task-${segment}"]`)
 }
 
 test.describe.configure({ mode: "serial" })
@@ -104,7 +105,7 @@ test("同一公司正常更名后，历史名称不同的采购可以合并提�
     expect((await apiGet<ReviewCompany>(adminToken, `/admin/companies/${original.id}`)).legal_name).toBe(renamedName)
 })
 
-test("同一合格账号付款后返回已缓存的先款履约任务，立即解除门槛且不重新加载页面", async ({ browser }) => {
+test("同一合格账号付款后返回已缓存的入库任务，预付提醒立即更新且不重新加载页面", async ({ browser }) => {
     test.setTimeout(6 * 60 * 1000)
     const procurement = await openLoggedInWorkspace(browser, "caigou")
     const adminToken = await apiToken("admin")
@@ -113,15 +114,16 @@ test("同一合格账号付款后返回已缓存的先款履约任务，立即�
     const suffix = `cache-${Date.now().toString(36)}`
     const fixture = await createReviewFixture(procurement.page, adminToken, salesToken, suffix)
     const order = await createReviewOrder(procurement.page, procurementToken, salesToken, fixture, suffix, "goods")
-    await openWorkspaceTask(procurement.page, "待供给分配", order.order_no, "procurement")
+    await openWorkspaceTask(procurement.page, "待安排采购", order.order_no, "procurement")
     await expandSourcingEditor(procurement.page, "狮峰明前龙井礼盒")
-    const editor = procurement.page.getByRole("region", { name: "当前商品供给编辑", exact: true })
-    await chooseOption(procurement.page, editor.locator('[id$="-sourcing-option"]:visible'), "杭州狮峰茶叶有限公司 · 集采入仓", "入仓")
+    const editor = workPage(procurement.page).getByRole("dialog", { name: /^供给分配 · / })
+    await chooseOption(procurement.page, editor.locator('[id$="-sourcing-option"]:visible'), /杭州狮峰茶叶有限公司.* · 集采入仓/, "入仓")
     await chooseOption(procurement.page, editor.locator('[id$="-warehouse"]:visible'), "BJ-TZ-01", "BJ-TZ-01")
-    await confirmSupplyAllocation(procurement.page)
+    await editor.locator("#sourcing-product-adjust-done").click()
+    const allocation = await confirmSupplyAllocation(procurement.page)
+    expect(allocation.orders).toHaveLength(1)
     const purchaseApprover = await openLoggedInWorkspace(browser, "caigoushenpi")
-    await openWorkspaceTask(purchaseApprover.page, "采购单审批", order.order_no, "approval")
-    await approveCurrentDocument(purchaseApprover.page)
+    await approveSourcedPurchase(purchaseApprover.page, allocation.orders[0]!.purchase_order_id)
     const queue = await apiGet<{ items: Array<{
         work_item_id: string; operation_id: string; purchase_order_id: string; gate_state: string;
     }> }>(await apiToken("cangchu"), "/admin/work-items/fulfillment-queue", {
@@ -145,26 +147,28 @@ test("同一合格账号付款后返回已缓存的先款履约任务，立即�
     await assignReviewTask(procurement.page, adminToken, approved.work_item_id!, "admin")
     const executor = await openLoggedInWorkspace(browser, "admin")
     const page = executor.page
-    // 当前工作台不展示类型筛选；全部任务列表允许直接切换本人两类任务，无需导航页面。
-    await page.goto("/workspace")
+    await page.goto("/workspace/tasks")
     await expect(taskButton(page, approved.work_item_id!)).toBeVisible(VISIBLE)
+    const tabs = page.getByRole("tablist", { name: "已打开的工作页" })
+    const queueTab = tabs.getByRole("tab", { name: "待我处理", exact: true })
     await taskButton(page, receipt.work_item_id).click()
-    let form = await openFulfillmentWorkspaceForm(page)
-    await form.locator('[id^="fulfillment-operations-receipt-form-received-quantity-"]').first().fill("1")
-    await chooseOption(page, form.locator('[id^="fulfillment-operations-receipt-form-quality-result-"]').first(), "合格", "合格")
-    await expect(form.locator("#fulfillment-operations-work-surface-confirm")).toBeDisabled(VISIBLE)
-    const gateTrigger = form.locator("#prepayment-gate")
-    await expect(gateTrigger).toHaveCount(1)
-    let gate = gateTrigger
-    if (await gateTrigger.getAttribute("data-slot") === "collapsible-trigger") {
-        if (await gateTrigger.getAttribute("aria-expanded") !== "true") await gateTrigger.click()
-        gate = form.locator('#fulfillment-dialog-gate-details[data-slot="prepayment-gate"]')
-    }
-    await expect(gate).toHaveAttribute("data-allowed", "false", VISIBLE)
-    const cachedAt = await page.evaluate(() => performance.now())
+    await expect.poll(() => workspaceTaskId(page), VISIBLE).toBe(receipt.work_item_id)
+    const form = await openFulfillmentWorkspaceForm(page)
+    const receiptTabId = await tabs.getByRole("tab", { selected: true }).getAttribute("id")
+    const receiptTab = tabs.locator(`[id=${JSON.stringify(receiptTabId)}]`)
+    const quantity = form.locator('[id^="fulfillment-operations-receipt-form-received-quantity-"]').first()
+    const quality = form.locator('[id^="fulfillment-operations-receipt-form-quality-result-"]').first()
+    const confirmReceipt = form.locator("#fulfillment-operations-work-surface-confirm")
+    await quantity.fill("1")
+    await chooseOption(page, quality, "合格", "合格")
+    await expect(confirmReceipt, "预付不足只提示，不阻止实际入库").toBeEnabled(VISIBLE)
+    await expect(form.getByText("预付待完成", { exact: true })).toBeVisible(VISIBLE)
+    await form.locator("#fulfillment-operations-more-actions").click()
+    await workPage(page).locator("#fulfillment-operations-work-surface-discard").click()
     const documentToken = randomUUID()
-    await page.evaluate((token) => {
-        document.documentElement.dataset.pprReviewDocument = token
+    const cachedAt = await businessDocument(page).evaluate((html, token) => {
+        html.dataset.pprReviewDocument = token
+        return performance.now()
     }, documentToken)
     let documentNavigations = 0
     let paymentApplied = false
@@ -179,36 +183,36 @@ test("同一合格账号付款后返回已缓存的先款履约任务，立即�
         return paymentApplied && response.ok() && url.pathname === "/admin/work-items/fulfillment-queue" &&
             url.searchParams.get("operation_id") === receipt.operation_id
     }, { timeout: 45_000 })
-    await form.locator('[data-slot="dialog-close"]').click()
-    await expect(form).toBeHidden(VISIBLE)
-    // 从缓存触发段开始仅使用 SPA 控件，禁止 goto、reload、刷新待办或更换账号。
+    // 通过工作页签切换，保留原入库文档及其查询缓存。
+    await queueTab.click()
     await taskButton(page, approved.work_item_id!).click()
-    await expect(page.locator("#ppr-pay-form")).toBeVisible(VISIBLE)
+    await expect(workPage(page).locator("#ppr-pay-form")).toBeVisible(VISIBLE)
     const line = approved.lines[0]!
-    await expect(page.locator("#ppr-pay-amount")).toHaveValue(line.requested_amount)
-    await page.locator("#ppr-pay-bank-receipt-input").setInputFiles(BANK_RECEIPT_FILE)
-    await page.locator("#ppr-pay-submit").click()
+    await expect(workPage(page).locator("#ppr-pay-amount")).toHaveValue(line.requested_amount)
+    await workPage(page).locator("#ppr-pay-bank-receipt-input").setInputFiles(BANK_RECEIPT_FILE)
+    await workPage(page).locator("#ppr-pay-submit").click()
     const posted = page.waitForResponse((response) => response.request().method() === "POST" &&
         new URL(response.url()).pathname === `${ROOT}/${approved.id}/payments/commit`)
-    await page.locator("#ppr-pay-confirm-confirm").click()
+    await workPage(page).locator("#ppr-pay-confirm-confirm").click()
     const paymentResponse = await posted
     expect(paymentResponse.ok(), await paymentResponse.text()).toBe(true)
     expect((await paymentResponse.json()).data.status).toBe("posted")
-    await expect(page.locator("#ppr-pay-confirm-confirm")).toBeHidden(VISIBLE)
-    // 付清会自动切换下一条并恢复队列焦点；等待收尾完成再开表单，避免旧回调关闭刚打开的弹窗。
-    await expect(taskButton(page, approved.work_item_id!)).toHaveCount(0, VISIBLE)
-    await expect(page.getByRole("status").filter({ hasText: /^任务已完成，已切换到采购入库/ })).toHaveCount(1, VISIBLE)
-    await expect(taskButton(page, receipt.work_item_id)).toBeFocused(VISIBLE)
-    await expect.poll(() => new URL(page.url()).searchParams.get("currentWorkItemId"), VISIBLE).toBe(receipt.work_item_id)
-    form = await openFulfillmentWorkspaceForm(page)
-    await form.locator('[id^="fulfillment-operations-receipt-form-received-quantity-"]').first().fill("1")
-    await chooseOption(page, form.locator('[id^="fulfillment-operations-receipt-form-quality-result-"]').first(), "合格", "合格")
+    await receiptTab.click()
+    await expect(receiptTab).toHaveAttribute("aria-selected", "true", VISIBLE)
+    await expect.poll(() => workspaceTaskId(page), VISIBLE).toBe(receipt.work_item_id)
     const refreshed = await refreshedQueue
     const refreshedEnvelope = await refreshed.json() as { data: { items: Array<{ operation_id: string; gate_state: string }> } }
     expect(refreshedEnvelope.data.items.find((item) => item.operation_id === receipt.operation_id)?.gate_state).toBe("SATISFIED")
-    await expect(form.locator("#fulfillment-operations-work-surface-confirm")).toBeEnabled(VISIBLE)
-    expect(await page.evaluate(() => performance.now()) - cachedAt, "必须在旧查询60秒有效期内验证主动失效，不能等待缓存自然过期").toBeLessThan(60_000)
+    await expect(form.getByText("预付待完成", { exact: true })).toHaveCount(0, VISIBLE)
+    await expect(form.locator("#prepayment-gate")).toHaveAttribute("data-allowed", "true", VISIBLE)
+    await quantity.fill("1")
+    await chooseOption(page, quality, "合格", "合格")
+    await expect(confirmReceipt).toBeEnabled(VISIBLE)
+    const retainedDocument = await businessDocument(page).evaluate((html) => ({
+        marker: html.dataset.pprReviewDocument, timestamp: performance.now(),
+    }))
+    expect(retainedDocument.marker, "付款前后必须保留同一入库文档及其 QueryClient").toBe(documentToken)
+    expect(retainedDocument.timestamp - cachedAt, "必须在旧查询60秒有效期内验证主动失效，不能等待缓存自然过期").toBeLessThan(60_000)
     expect(documentNavigations, "验证过程不得通过整页导航清除 Query 缓存").toBe(0)
-    expect(await page.evaluate(() => document.documentElement.dataset.pprReviewDocument), "付款前后必须保留同一 document 及其 QueryClient").toBe(documentToken)
     expect((await apiGet<Detail>(procurementToken, `${ROOT}/${submitted.id}`)).status).toBe("paid")
 })

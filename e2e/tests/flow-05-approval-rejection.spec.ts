@@ -2,19 +2,13 @@
  * 流程: [flow-05] 销售单审批驳回、修改原单重提与作废
  * 文档: docs/erp-phase-1.md §4.4、§7.3.1；approval-workflow-contract.md §4.4.2–§4.4.4、§11
  * 账号: xiaoshou（提交）→ caigou（采购确认节点驳回/通过）；admin 仅补采购责任默认调度人
- *
- * 文档-代码差异（以代码为准）:
- * 1. 驳回后业务状态仍是审批中（IN_APPROVAL），作废接口只允许 DRAFT→VOIDED；
- *    前端销售单没有「作废」按钮，场景 C 必须先撤回再走 POST /admin/sales-orders/{id}/void。
- * 2. 驳回后禁止变更单：按钮「发起改单」仍渲染但 disabled，title=服务端 blocker。
- * 3. 页头「版本」展示的是 currentRevisionNo（尚未生效 / vN），不是审批 subject_version；
- *    subject_version 取详情 GET /admin/sales-orders/{id} 的 submissions[].submission_no。
+ * 驳回结束原审批并退回提交人；按原内容或修改后重提均创建新审批实例。
+ * 原审批及提交保留，未生效销售单不产生供给或履约任务。
  */
+import { workPage } from "../helpers/workspace-page"
 import { archiveContractViaUi, SIGNING_COMPANY } from "../helpers/contracts"
 import { fillSalesLineUnitPrice, selectExistingContractForSalesOrder } from "../helpers/sales-orders"
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { test, expect, type Browser, type Locator, type Page } from '../helpers/test'
 
@@ -27,6 +21,7 @@ import {
   dismissToasts,
   expectToast,
   openWorkspaceTask,
+  selectWorkspaceFamily,
   pickCalendarDay,
 } from '../helpers/ui'
 
@@ -35,7 +30,6 @@ const API_BASE = process.env.API_BASE || 'http://127.0.0.1:10001'
 const SKU_NAME = '狮峰明前龙井礼盒'
 const UNIT_PRICE = '1288.00'
 const REJECT_REASON = '无法履约，成本上涨，交期不满足'
-const WITHDRAW_REASON = '与客户改数量后重提'
 const VOID_HTTP_NOTE = '销售单草稿作废无页面按钮，走已发布 POST /admin/sales-orders/{id}/void'
 
 type OrderSnapshot = {
@@ -68,20 +62,7 @@ function uniqueCreditCode(): string {
   return `91110108MA01${stamp}`.slice(0, 18).padEnd(18, '0')
 }
 
-function contractPdfPath(): string {
-  const repoPath = path.join(process.cwd(), 'fixtures', 'sample-contract.pdf')
-  if (fs.existsSync(repoPath)) return repoPath
-  const fallback = path.join(os.tmpdir(), 'erp-flow-05-sample-contract.pdf')
-  if (!fs.existsSync(fallback)) {
-    fs.writeFileSync(
-      fallback,
-      Buffer.from(
-        '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000101 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF\n',
-      ),
-    )
-  }
-  return fallback
-}
+const CONTRACT_PDF = fileURLToPath(new URL('../fixtures/sample-contract.pdf', import.meta.url))
 
 async function clickWithoutToastOverlay(
   page: Page,
@@ -146,24 +127,24 @@ async function ensureDefaultDispatcher(browser: Browser): Promise<void> {
 async function startNewSalesOrder(page: Page): Promise<void> {
   await page.goto('/sales/orders?mode=create')
   await expect(
-    page
+    workPage(page)
       .getByRole('heading', { name: '新建销售单' })
-      .or(page.getByRole('heading', { name: '业务信息' })),
+      .or(workPage(page).getByRole('heading', { name: '业务信息' })),
   ).toBeVisible(VISIBLE)
-  await expect(page.locator('#sales-orders-create-entry-upload')).toBeVisible(VISIBLE)
+  await expect(workPage(page).locator('#sales-orders-create-entry-upload')).toBeVisible(VISIBLE)
 }
 
 async function uploadContract(
   page: Page,
   input: { customerName: string; contractNo: string; today: Date },
 ): Promise<void> {
-  await archiveContractViaUi(page, { contractNo: input.contractNo, customerName: input.customerName, pdf: contractPdfPath(), validTo: isoDate(addDays(input.today, 7)) })
-  await expect(page.locator("#sales-orders-create-customer")).toContainText(new RegExp(input.customerName))
+  await archiveContractViaUi(page, { contractNo: input.contractNo, customerName: input.customerName, pdf: CONTRACT_PDF, validTo: isoDate(addDays(input.today, 7)) })
+  await expect(workPage(page).locator("#sales-orders-create-customer")).toContainText(new RegExp(input.customerName))
 }
 
 async function pickSkuAndFillLine(page: Page, due: Date, quantity: string): Promise<void> {
-  await page.locator('#sales-orders-create-line-items-add').click()
-  const picker = page.getByRole('dialog', { name: '添加商品' })
+  await workPage(page).locator('#sales-orders-create-line-items-add').click()
+  const picker = workPage(page).getByRole('dialog', { name: '添加商品' })
   await expect(picker).toBeVisible(VISIBLE)
   await picker.locator("#sales-orders-sku-picker-filter-search").fill(SKU_NAME)
   await picker.locator("#sales-orders-sku-picker-filter-search").press('Enter')
@@ -173,28 +154,28 @@ async function pickSkuAndFillLine(page: Page, due: Date, quantity: string): Prom
   await picker.getByRole('button', { name: /加入所选/ }).click()
   await expect(picker).toBeHidden(VISIBLE)
   await expect(
-    page.getByRole('button', { name: new RegExp(`更换销售项目 ${SKU_NAME}`) }),
+    workPage(page).getByRole('button', { name: new RegExp(`更换销售项目 ${SKU_NAME}`) }),
   ).toBeVisible(VISIBLE)
-  await expect(page.locator('[data-testid^="sales-line-procurement-owner-"]')).toContainText(
+  await expect(workPage(page).locator('[data-testid^="sales-line-procurement-owner-"]')).toContainText(
     /陈国平|采购/,
     VISIBLE,
   )
-  await page.getByLabel('数量').first().fill(quantity)
+  await workPage(page).getByLabel('数量').first().fill(quantity)
   await fillSalesLineUnitPrice(page, UNIT_PRICE)
-  await page.locator('#sales-orders-create-batch-due-date-open').click()
-  await pickCalendarDay(page, page.locator('#sales-orders-create-batch-due-date'), isoDate(due))
-  await page.locator('#sales-orders-create-batch-due-date-apply').click()
+  await workPage(page).locator('#sales-orders-create-batch-due-date-open').click()
+  await pickCalendarDay(page, workPage(page).locator('#sales-orders-create-batch-due-date'), isoDate(due))
+  await workPage(page).locator('#sales-orders-create-batch-due-date-apply').click()
   await expectToast(page, '已批量设置交期')
 }
 
 async function submitSalesOrder(page: Page, quantity: string): Promise<OrderSnapshot> {
-  await clickWithoutToastOverlay(page, page.locator('#sales-orders-create-submit'), async () =>
-    page
+  await clickWithoutToastOverlay(page, workPage(page).locator('#sales-orders-create-submit'), async () =>
+    workPage(page)
       .getByRole('dialog', { name: '提交销售单' })
       .isVisible()
       .catch(() => false),
   )
-  const confirm = page.getByRole('dialog', { name: '提交销售单' })
+  const confirm = workPage(page).getByRole('dialog', { name: '提交销售单' })
   await expect(confirm).toBeVisible(VISIBLE)
   // 批量交期 toast 常盖住确认按钮：先清 toast 再点，盖住不散时走 DOM 派发。
   // settled 只做即时判断：第一次点按前页面必然还在新建页，等 URL 只会白等。
@@ -208,8 +189,8 @@ async function submitSalesOrder(page: Page, quantity: string): Promise<OrderSnap
   expect(id.length).toBeGreaterThan(8)
   const detail = await fetchSalesOrder(page, id)
   const orderNo = String(detail.order_no ?? '')
-  await expect(page.getByText('审批中').first()).toBeVisible(VISIBLE)
-  await expect(page.getByText(orderNo).first()).toBeVisible(VISIBLE)
+  await expect(workPage(page).getByText('审批中').first()).toBeVisible(VISIBLE)
+  await expect(workPage(page).getByText(orderNo).first()).toBeVisible(VISIBLE)
   const line = ((
     detail.working_copy as
       | { lines?: Array<{ quantity?: string; unit_price_gross?: string }> }
@@ -230,7 +211,7 @@ async function submitSalesOrder(page: Page, quantity: string): Promise<OrderSnap
 }
 
 async function fillSalesHeader(page: Page): Promise<void> {
-  await chooseOption(page, page.getByLabel('福利场景'), '年节礼包')
+  await chooseOption(page, workPage(page).getByLabel('福利场景'), '礼包')
 }
 
 async function attachContract(
@@ -242,7 +223,7 @@ async function attachContract(
     return
   }
   await selectExistingContractForSalesOrder(page, input.contractNo)
-  await expect(page.locator("#sales-orders-create-customer")).toContainText(input.customerName)
+  await expect(workPage(page).locator("#sales-orders-create-customer")).toContainText(input.customerName)
 }
 
 async function createAndSubmitOrder(
@@ -258,7 +239,6 @@ async function createAndSubmitOrder(
 
 async function openApprovalTask(page: Page, orderNo: string): Promise<void> {
   await openWorkspaceTask(page, '销售单审批', orderNo, 'approval')
-  await expect(page.getByText(orderNo).first()).toBeVisible(VISIBLE)
 }
 
 async function decideOnWorkspace(
@@ -270,80 +250,116 @@ async function decideOnWorkspace(
     await approveCurrentDocument(page)
     return
   }
-  await page.getByRole('button', { name: /^驳回$/ }).click()
-  const dialog = page.getByRole('dialog', { name: '确认驳回' })
+  await workPage(page).getByRole('button', { name: /^驳回$/ }).click()
+  const dialog = workPage(page).getByRole('dialog', { name: '确认驳回' })
   await expect(dialog).toBeVisible(VISIBLE)
   await dialog.getByLabel('驳回原因').fill(reason ?? REJECT_REASON)
-  await dialog.getByRole('button', { name: '确认驳回' }).click()
+  const [response] = await Promise.all([
+    page.waitForResponse((reply) =>
+      reply.request().method() === 'POST' && new URL(reply.url()).pathname === '/admin/approval-decisions',
+    ),
+    dialog.getByRole('button', { name: '确认驳回' }).click(),
+  ])
+  const body = await response.json() as { success: boolean; errorMessage?: string }
+  expect(response.ok() && body.success, `驳回失败（HTTP ${response.status()}）：${body.errorMessage ?? ''}`).toBe(true)
   await expect(dialog).toBeHidden(VISIBLE)
 }
 
 async function openSalesOrder(page: Page, order: OrderSnapshot): Promise<void> {
   await page.goto(`/sales/orders/${order.id}`)
-  await expect(page.getByText(order.orderNo).first()).toBeVisible(VISIBLE)
+  await expect(workPage(page).getByText(order.orderNo).first()).toBeVisible(VISIBLE)
 }
 
-async function assertRejectedNotEffective(page: Page, order: OrderSnapshot): Promise<void> {
-  await openSalesOrder(page, order)
-  await expect(page.getByText('审批中').first()).toBeVisible(VISIBLE)
-  await expect(page.getByText('已生效')).toHaveCount(0)
-  await expect(page.getByText(/尚未生效|审批中/).first()).toBeVisible(VISIBLE)
-  await page.getByRole('tab', { name: /^审批/ }).click()
-  await expect(page.getByText('第 2 轮').first()).toBeVisible(VISIBLE)
-  await expect(page.getByText('采购确认').first()).toBeVisible(VISIBLE)
-  await expect(page.getByText('最近驳回')).toBeVisible(VISIBLE)
-  await expect(page.getByText(REJECT_REASON).first()).toBeVisible(VISIBLE)
-  const changeBtn = page.locator('#sales-orders-detail-start-change')
-  await expect(changeBtn).toBeVisible(VISIBLE)
-  await expect(changeBtn).toBeDisabled()
-  await expect(changeBtn).toHaveAttribute(
-    'title',
-    '本单还在确认/审批中，请先处理完当前待办，再发起改单。',
+async function expectSalesQuantity(page: Page, quantity: string): Promise<void> {
+  await workPage(page).getByRole('tab', { name: /^交付与验收/ }).click()
+  const row = workPage(page).getByRole('region', { name: '销售明细与交付' }).getByRole('row').filter({ hasText: SKU_NAME })
+  await expect(row).toHaveCount(1)
+  await expect(row.getByRole('cell').nth(1)).toHaveText(
+    new RegExp(`^${Number(quantity)}(?:\\.0+)?\\s*盒$`),
   )
-  await page.getByRole('tab', { name: /^概览/ }).click()
-  await expect(page.getByText(SKU_NAME).first()).toBeVisible(VISIBLE)
-  await expect(page.getByText(new RegExp(`${order.quantity}\\s+盒`)).first()).toBeVisible(VISIBLE)
-  await page.getByRole('tab', { name: /^采购/ }).click()
-  await expect(page.getByTestId('sales-order-purchase-status')).toContainText('待采购')
-  await expect(page.getByRole('link', { name: '继续分配供给' })).toHaveCount(0)
-  const live = await fetchSalesOrder(page, order.id)
-  expect(String(live.commercial_status ?? live.commercialStatus)).not.toBe('EFFECTIVE')
-  expect(String(live.review_status ?? live.reviewStatus)).toMatch(/IN_APPROVAL/)
-  expect(submissionNoOf(live)).toBe(order.submissionNo)
+}
+
+function approvalInstance(detail: Record<string, unknown>) {
+  return (detail.approval as {
+    instance?: { id: string; status: string; latest_rejection: string | null; current_round_no: number }
+  } | undefined)?.instance
+}
+
+async function expectRejectedOrder(page: Page, order: OrderSnapshot) {
+  const detail = await fetchSalesOrder(page, order.id)
+  expect(detail).toMatchObject({
+    id: order.id,
+    order_no: order.orderNo,
+    commercial_status: 'DRAFT',
+    review_status: 'REJECTED',
+    current_revision_id: null,
+    purchase_order_count: 0,
+    purchase_creation_access: { allowed: false, task_count: 0 },
+  })
+  expect(submissionNoOf(detail)).toBe(order.submissionNo)
+  const instance = approvalInstance(detail)
+  expect(instance).toMatchObject({
+    status: 'REJECTED', latest_rejection: REJECT_REASON, current_round_no: 1,
+  })
+  return { detail, instanceId: instance!.id }
+}
+
+async function openRejectedOrderTask(page: Page, order: OrderSnapshot): Promise<void> {
+  await openWorkspaceTask(page, '驳回待处理', order.orderNo, 'approval')
+  await expect(workPage(page).getByText('本次审批已驳回', { exact: true })).toBeVisible(VISIBLE)
+  await expect(workPage(page).getByText(REJECT_REASON, { exact: true }).first()).toBeVisible(VISIBLE)
+  await expect(workPage(page).getByRole('button', { name: /^(通过|通过审批|同意审批|发起改单)$/ })).toHaveCount(0)
+}
+
+async function enterRejectedOrderEditor(page: Page, order: OrderSnapshot): Promise<void> {
+  await openRejectedOrderTask(page, order)
+  await workPage(page).getByRole('button', { name: '修改或重新提交', exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`/sales/orders/${order.id}(?:\\?|$)`), VISIBLE)
+  await expect(workPage(page).getByText('已驳回', { exact: true }).first()).toBeVisible(VISIBLE)
+  await expect(workPage(page).getByRole('heading', { name: '销售明细', exact: true })).toBeVisible(VISIBLE)
+}
+
+async function resubmitRejectedOrder(page: Page, order: OrderSnapshot, reason: string) {
+  const submit = workPage(page).locator('#sales-orders-create-submit')
+  await expect(submit).toBeEnabled(VISIBLE)
+  await dismissToasts(page)
+  await submit.click()
+  const dialog = workPage(page).getByRole('dialog', { name: '提交销售单' })
+  const confirm = dialog.locator('#sales-orders-submit-confirm-confirm')
+  await expect(confirm).toBeDisabled(VISIBLE)
+  await dialog.getByLabel('重新提交说明').fill(reason)
+  const [response] = await Promise.all([
+    page.waitForResponse((reply) => reply.request().method() === 'POST' &&
+      new URL(reply.url()).pathname === `/admin/sales-orders/${order.id}/submit`,
+    ),
+    confirm.click(),
+  ])
+  const payload = await response.text()
+  expect(response.ok(), payload).toBe(true)
+  expect(JSON.parse(payload).success, payload).toBe(true)
+  await expect(workPage(page).getByText('审批中', { exact: true }).first()).toBeVisible(VISIBLE)
+  return fetchSalesOrder(page, order.id)
+}
+
+async function expectNoQueueTask(page: Page, family: string, orderNo: string, label: RegExp): Promise<void> {
+  await page.goto(`/workspace/tasks`)
+  await selectWorkspaceFamily(page, family)
+  const queue = workPage(page).getByRole('region', { name: '任务队列', exact: true })
+  const rows = queue.locator('[id^="workspace-task-table-row-"]')
+  const empty = queue.getByText(/没有符合条件的事项|当前没有待处理事项/)
+  await expect(rows.first().or(empty).first()).toBeVisible(VISIBLE)
+  await expect(queue.getByRole('row', { name: label }).and(
+    queue.getByRole('row', { name: new RegExp(orderNo) }),
+  )).toHaveCount(0)
 }
 
 async function assertNoSupplyOrFulfillmentTask(page: Page, orderNo: string): Promise<void> {
-  await page.goto('/workspace')
-  // 后端搜索不匹配单号，填单号会把列表滤空导致断言恒成立；直接断言无匹配任务。
-  await expect(
-    page.getByRole('button', {
-      name: new RegExp(`待供给分配[\\s\\S]*${orderNo}|${orderNo}[\\s\\S]*待供给分配`),
-    }),
-  ).toHaveCount(0)
-  await expect(
-    page.getByRole('button', { name: new RegExp(`履约处理[\\s\\S]*${orderNo}`) }),
-  ).toHaveCount(0)
-}
-
-async function withdrawApproval(page: Page, order: OrderSnapshot): Promise<void> {
-  await openSalesOrder(page, order)
-  await page.locator('#sales-orders-detail-cancel-approval-trigger').click()
-  await expect(page.locator('#sales-orders-detail-cancel-approval-trigger')).toHaveText('修改原单')
-  const dialog = page.getByRole('alertdialog', { name: '修改原单' })
-  await expect(dialog).toBeVisible(VISIBLE)
-  await dialog.getByLabel('撤回原因').fill(WITHDRAW_REASON)
-  await dialog.locator('#sales-orders-detail-cancel-approval-confirm').click()
-  // 成功 toast 仅展示数秒，点按超时（按钮随框卸载）后再断言必错过：以框关闭 + 回到可编辑草稿为准。
-  await expect(dialog).toBeHidden(VISIBLE)
-  // 撤回后就地进入草稿编辑：标题是客户名，不再有「编辑销售单 / 业务信息」。
-  await expect(page.getByText('草稿').first()).toBeVisible(VISIBLE)
-  await expect(page.locator('#sales-orders-create-customer')).toBeVisible(VISIBLE)
-  await expect(page.getByRole('heading', { name: '销售明细', exact: true })).toBeVisible(VISIBLE)
-  await expect(page.getByRole('button', { name: '添加商品' })).toBeVisible(VISIBLE)
+  await expectNoQueueTask(page, 'procurement', orderNo, /待安排采购|供给分配/)
+  await expectNoQueueTask(page, 'fulfillment', orderNo, /履约处理/)
 }
 
 async function voidDraftViaHttp(page: Page, order: OrderSnapshot): Promise<void> {
-  await expect(page.getByRole('button', { name: /作废/ })).toHaveCount(0)
+  await expect(workPage(page).getByRole('button', { name: /作废/ })).toHaveCount(0)
   const detail = await fetchSalesOrder(page, order.id)
   const version = Number(detail.version ?? 1)
   const token = await bearerToken(page)
@@ -357,9 +373,31 @@ async function voidDraftViaHttp(page: Page, order: OrderSnapshot): Promise<void>
   expect(response.ok(), `${VOID_HTTP_NOTE}; HTTP ${response.status()}`).toBeTruthy()
 }
 
+function expectResubmission(
+  detail: Record<string, unknown>, order: OrderSnapshot, oldInstanceId: string, quantity: string,
+): void {
+  expect(detail).toMatchObject({ id: order.id, order_no: order.orderNo, review_status: 'IN_APPROVAL' })
+  const instance = approvalInstance(detail)
+  expect(instance).toMatchObject({ status: 'RUNNING', current_round_no: 1 })
+  expect(instance?.id).not.toBe(oldInstanceId)
+  const submissions = detail.submissions as Array<{
+    submission_no: number
+    status: string
+    lines: Array<{ quantity: string; unit_price_gross: string }>
+  }>
+  const old = submissions.find((item) => item.submission_no === order.submissionNo)
+  const latest = submissions.find((item) => item.submission_no === submissionNoOf(detail))
+  expect(old?.status).toBe('REJECTED')
+  expect(old?.lines[0]?.quantity).toBe(order.quantity)
+  expect(old?.lines[0]?.unit_price_gross).toBe(order.unitPrice)
+  expect(latest?.lines[0]?.unit_price_gross).toBe(order.unitPrice)
+  expect(Number(latest?.lines[0]?.quantity)).toBe(Number(quantity))
+  expect(submissionNoOf(detail)).toBeGreaterThan(order.submissionNo)
+}
+
 test.describe.configure({ mode: 'serial' })
 
-test('销售单审批驳回后可照原条件承接、修改原单重提或作废', async ({ browser }) => {
+test('销售单终态驳回后可按原内容重提、修改后重提或作废', async ({ browser }) => {
   test.setTimeout(12 * 60 * 1000)
   const today = new Date()
   const due = addDays(today, 7)
@@ -394,164 +432,69 @@ test('销售单审批驳回后可照原条件承接、修改原单重提或作�
       }))
     expect(orderA.submissionNo).toBeGreaterThan(0)
 
-    await test.step('采购在采购确认节点驳回', async () => {
+    await test.step('场景 A：终态驳回后，提交人说明依据并按原内容重提', async () => {
       await openApprovalTask(procurement.page, orderA.orderNo)
-      await expect(procurement.page.getByText('第 1 轮').first()).toBeVisible(VISIBLE)
-      await expect(procurement.page.getByText('采购确认').first()).toBeVisible(VISIBLE)
-      await decideOnWorkspace(procurement.page, '驳回', REJECT_REASON)
-    })
-
-    await test.step('驳回后不生效、内容与 subject_version 不变、轮次加一、禁止变更单', async () => {
-      await assertRejectedNotEffective(sales.page, orderA)
+      await expect(workPage(procurement.page).getByText('第 1 轮').first()).toBeVisible(VISIBLE)
+      await expect(workPage(procurement.page).getByText('采购确认').first()).toBeVisible(VISIBLE)
+      await decideOnWorkspace(procurement.page, '驳回')
+      const rejected = await expectRejectedOrder(sales.page, orderA)
       await assertNoSupplyOrFulfillmentTask(procurement.page, orderA.orderNo)
-      await openApprovalTask(procurement.page, orderA.orderNo)
-      await expect(procurement.page.getByText('第 2 轮').first()).toBeVisible(VISIBLE)
-      await expect(procurement.page.getByText('采购确认').first()).toBeVisible(VISIBLE)
-      await expect(
-        procurement.page.getByRole('button', {
-          name: new RegExp(`待供给分配[\\s\\S]*${orderA.orderNo}`),
-        }),
-      ).toHaveCount(0)
-    })
+      await expectNoQueueTask(procurement.page, 'approval', orderA.orderNo, /销售单审批/)
 
-    await test.step('场景A 照原条件承接：不撤回不改单，新一轮通过后生效', async () => {
+      await enterRejectedOrderEditor(sales.page, orderA)
+      const resubmitted = await resubmitRejectedOrder(sales.page, orderA, '已核实供给，按原内容重新提交')
+      expectResubmission(resubmitted, orderA, rejected.instanceId, orderA.quantity)
       await openApprovalTask(procurement.page, orderA.orderNo)
       await decideOnWorkspace(procurement.page, '通过')
       await openSalesOrder(sales.page, orderA)
-      await expect(sales.page.getByText('已生效').first()).toBeVisible(VISIBLE)
-      const live = await fetchSalesOrder(sales.page, orderA.id)
-      expect(live.commercial_status ?? live.commercialStatus).toBe('EFFECTIVE')
-      expect(submissionNoOf(live)).toBe(orderA.submissionNo)
+      await expect(workPage(sales.page).getByText('已生效').first()).toBeVisible(VISIBLE)
+      expect((await fetchSalesOrder(sales.page, orderA.id)).commercial_status).toBe('EFFECTIVE')
     })
 
-    const orderB = await test.step('场景B 建单提交并驳回', async () => {
-      const created = await createAndSubmitOrder(sales.page, {
-        customerName,
-        contractNo,
-        today,
-        due,
-        quantity: '2',
+    await test.step('场景 B：保留同一单号及旧提交，修改数量后重提并生效', async () => {
+      const order = await createAndSubmitOrder(sales.page, {
+        customerName, contractNo, today, due, quantity: '2',
       })
-      await openApprovalTask(procurement.page, created.orderNo)
-      await decideOnWorkspace(procurement.page, '驳回', REJECT_REASON)
-      await assertRejectedNotEffective(sales.page, created)
-      return created
-    })
-
-    await test.step('场景B 修改原单：保留单号和旧提交，改量重提后生效', async () => {
-      const beforeEdit = await fetchSalesOrder(sales.page, orderB.id)
-      const originalSubmissions = beforeEdit.submissions
-      const originalInstanceId = (beforeEdit.approval as { instance?: { id?: string } } | undefined)
-        ?.instance?.id
-      await withdrawApproval(sales.page, orderB)
-      await expect(sales.page).toHaveURL(new RegExp(`/sales/orders/${orderB.id}`), VISIBLE)
-      const editable = await fetchSalesOrder(sales.page, orderB.id)
-      expect(editable.id).toBe(orderB.id)
-      expect(editable.order_no).toBe(orderB.orderNo)
-      expect(editable.commercial_status).toBe('DRAFT')
-      expect(editable.review_status).toBe('NOT_SUBMITTED')
-      expect(editable.submissions).toEqual(originalSubmissions)
-      expect(
-        (editable.approval as { instance?: { status?: string } } | undefined)?.instance?.status,
-      ).toBe('CANCELLED')
-      await expect(sales.page.getByRole('button', { name: '发起改单' })).toHaveCount(0)
-      // 继续编辑会异步回填合同修订、客户和结算主体；等表单实际同步后再编辑重提。
-      const revision = sales.page.getByText(`合同编号：${contractNo} · v1`, { exact: true })
-      await expect(revision).toBeVisible(VISIBLE)
-      await expect(sales.page.locator('#sales-orders-create-customer')).toContainText(new RegExp(customerName), VISIBLE)
-      await expect(sales.page.locator('#sales-orders-create-settlement')).toHaveValue(new RegExp(SIGNING_COMPANY), VISIBLE)
-      await expect(revision.locator('..').getByText('加载中…', { exact: true })).toBeHidden(VISIBLE)
-      await sales.page.getByLabel('数量').first().fill('5')
-      // 改数后工作副本自动保存完成前提交保持禁用：等提交可用再点，避免确认框空关。
-      await expect(sales.page.locator('#sales-orders-create-submit')).toBeEnabled(VISIBLE)
-      await clickWithoutToastOverlay(
-        sales.page,
-        sales.page.locator('#sales-orders-create-submit'),
-        async () =>
-          sales.page
-            .getByRole('dialog', { name: '提交销售单' })
-            .isVisible()
-            .catch(() => false),
-      )
-      const confirm = sales.page.getByRole('dialog', { name: '提交销售单' })
-      await expect(confirm).toBeVisible(VISIBLE)
-      // 重提时页面本来就在详情页，不能用 URL 是否含单据 id 判定（恒为真导致跳过点按）：
-      // 改以确认框关闭为准，后续轮次号与审批中状态再验证提交确实发生。
-      await expect(confirm.locator('#sales-orders-submit-confirm-confirm')).toBeEnabled(VISIBLE)
-      const resubmitting = sales.page
-        .waitForResponse(
-          (response) =>
-            response.request().method() === 'POST' &&
-            response.url().includes(`/sales-orders/${orderB.id}/submit`),
-          { timeout: 20_000 },
-        )
-        .catch(() => undefined)
-      await clickWithoutToastOverlay(
-        sales.page,
-        confirm.locator('#sales-orders-submit-confirm-confirm'),
-        async () => !(await confirm.isVisible().catch(() => true)),
-      )
-      const resubmitResponse = await resubmitting
-      expect(resubmitResponse?.ok()).toBe(true)
-      await expect(sales.page).toHaveURL(new RegExp(`/sales/orders/${orderB.id}`), VISIBLE)
-      const resubmitted = await fetchSalesOrder(sales.page, orderB.id)
-      expect(resubmitted.id).toBe(orderB.id)
-      expect(resubmitted.order_no).toBe(orderB.orderNo)
-      const submissions = resubmitted.submissions as Array<{
-        submission_no: number
-        lines: Array<{ quantity: string }>
-      }>
-      expect(
-        submissions.find((item) => item.submission_no === orderB.submissionNo)?.lines[0]?.quantity,
-      ).toBe(orderB.quantity)
-      expect(
-        (resubmitted.approval as { instance?: { id?: string } } | undefined)?.instance?.id,
-      ).not.toBe(originalInstanceId)
-      const newSubmissionNo = submissionNoOf(resubmitted)
-      expect(
-        submissions.find((item) => item.submission_no === newSubmissionNo)?.lines[0]?.quantity,
-      ).toMatch(/^5(?:\.0+)?$/)
-      expect(newSubmissionNo).toBeGreaterThan(orderB.submissionNo)
-      await expect(sales.page.getByText('审批中').first()).toBeVisible(VISIBLE)
-      await openApprovalTask(procurement.page, orderB.orderNo)
+      await openApprovalTask(procurement.page, order.orderNo)
+      await decideOnWorkspace(procurement.page, '驳回')
+      const rejected = await expectRejectedOrder(sales.page, order)
+      await enterRejectedOrderEditor(sales.page, order)
+      await expect(workPage(sales.page).getByText(`合同编号：${contractNo} · v1`, { exact: true })).toBeVisible(VISIBLE)
+      await expect(workPage(sales.page).locator('#sales-orders-create-customer')).toContainText(customerName, VISIBLE)
+      await expect(workPage(sales.page).locator('#sales-orders-create-settlement')).toHaveValue(new RegExp(SIGNING_COMPANY), VISIBLE)
+      await workPage(sales.page).getByLabel('数量').first().fill('5')
+      const resubmitted = await resubmitRejectedOrder(sales.page, order, '按客户确认后的数量重新提交')
+      expectResubmission(resubmitted, order, rejected.instanceId, '5')
+      const previous = (resubmitted.submissions as Array<{ submission_no: number }>)
+        .filter((item) => item.submission_no === order.submissionNo)
+      expect(previous).toEqual((rejected.detail.submissions as Array<{ submission_no: number }>)
+        .filter((item) => item.submission_no === order.submissionNo))
+      await openApprovalTask(procurement.page, order.orderNo)
       await decideOnWorkspace(procurement.page, '通过')
-      await openSalesOrder(sales.page, orderB)
-      await expect(sales.page.getByText('已生效').first()).toBeVisible(VISIBLE)
-      await sales.page.getByRole('tab', { name: /^概览/ }).click()
-      await expect(sales.page.getByText(/5\s+盒/)).toBeVisible(VISIBLE)
-      const live = await fetchSalesOrder(sales.page, orderB.id)
-      expect(live.commercial_status ?? live.commercialStatus).toBe('EFFECTIVE')
-      expect(submissionNoOf(live)).toBe(newSubmissionNo)
+      await openSalesOrder(sales.page, order)
+      await expect(workPage(sales.page).getByText('已生效').first()).toBeVisible(VISIBLE)
+      await expectSalesQuantity(sales.page, '5')
+      const live = await fetchSalesOrder(sales.page, order.id)
+      expect(live.commercial_status).toBe('EFFECTIVE')
+      expect(submissionNoOf(live)).toBe(submissionNoOf(resubmitted))
     })
 
-    const orderC = await test.step('场景C 建单提交并驳回', async () => {
-      const created = await createAndSubmitOrder(sales.page, {
-        customerName,
-        contractNo,
-        today,
-        due,
-        quantity: '2',
+    await test.step('场景 C：作废终态驳回的销售单，关闭提交人的驳回待办', async () => {
+      const order = await createAndSubmitOrder(sales.page, {
+        customerName, contractNo, today, due, quantity: '2',
       })
-      await openApprovalTask(procurement.page, created.orderNo)
-      await decideOnWorkspace(procurement.page, '驳回', REJECT_REASON)
-      await assertRejectedNotEffective(sales.page, created)
-      await expect(sales.page.getByRole('button', { name: /作废/ })).toHaveCount(0)
-      return created
-    })
-
-    await test.step('场景C 撤回后作废，主状态已作废', async () => {
-      await withdrawApproval(sales.page, orderC)
-      await voidDraftViaHttp(sales.page, orderC)
+      await openApprovalTask(procurement.page, order.orderNo)
+      await decideOnWorkspace(procurement.page, '驳回')
+      const rejected = await expectRejectedOrder(sales.page, order)
+      await enterRejectedOrderEditor(sales.page, order)
+      await voidDraftViaHttp(sales.page, order)
       await sales.page.reload()
-      await expect(sales.page.getByText('已作废').first()).toBeVisible(VISIBLE)
-      await expect(sales.page.getByText('本单已作废，不再进入履约或结案。')).toBeVisible(VISIBLE)
-      const live = await fetchSalesOrder(sales.page, orderC.id)
-      expect(live.commercial_status ?? live.commercialStatus).toBe('VOIDED')
-      const changeBtn = sales.page.locator('#sales-orders-detail-start-change')
-      await expect(changeBtn).toBeVisible(VISIBLE)
-      await expect(changeBtn).toBeDisabled()
-      await expect(changeBtn).toHaveAttribute('title', /已作废|不能发起改单/)
-      await assertNoSupplyOrFulfillmentTask(procurement.page, orderC.orderNo)
+      await expect(workPage(sales.page).getByText('已作废', { exact: true }).first()).toBeVisible(VISIBLE)
+      const live = await fetchSalesOrder(sales.page, order.id)
+      expect(live.commercial_status).toBe('VOIDED')
+      expect(approvalInstance(live)).toMatchObject({ id: rejected.instanceId, status: 'REJECTED' })
+      await assertNoSupplyOrFulfillmentTask(procurement.page, order.orderNo)
+      await expectNoQueueTask(sales.page, 'approval', order.orderNo, /驳回待处理/)
     })
   } finally {
     await sales.context.close()

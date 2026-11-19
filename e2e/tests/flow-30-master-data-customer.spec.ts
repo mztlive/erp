@@ -4,6 +4,7 @@
  * 所有请求使用隔离运行传入的真实 API，页面写入独立测试资料，不修改固定主数据。
  * 客户经营质量验证当前归属、真实筛选及服务端 CSV；零订单客户不证明财务计算。
  */
+import { workPage } from "../helpers/workspace-page"
 import fs from "node:fs/promises"
 
 import { test, expect, type Page, type Response } from "../helpers/test"
@@ -20,6 +21,8 @@ type Dictionary = {
     version: number
     status: "active" | "disabled"
     parent_category_id?: string | null
+    brand_code?: string
+    category_code?: string
     unit_code?: string
     symbol?: string
     quantity_scale?: number
@@ -174,10 +177,9 @@ async function readDictionary(
 async function createCategory(
     page: Page,
     name: string,
-    code: string,
     child = false,
 ): Promise<Dictionary> {
-    await page
+    await workPage(page)
         .locator(
             child
                 ? "#master-data-category-workspace-create-child"
@@ -185,14 +187,15 @@ async function createCategory(
         )
         .click()
     const prefix = "#master-data-category-create-dialog"
-    await page.locator(`${prefix}-name`).fill(name)
-    await page.locator(`${prefix}-code`).fill(code)
-    await chooseOption(page, page.locator(`${prefix}-product-kind`), "实物")
-    await page.locator(`${prefix}-change-reason`).fill("E2E 分类树维护")
+    await workPage(page).locator(`${prefix}-name`).fill(name)
+    await expect(workPage(page).locator(`${prefix}-code`)).toHaveCount(0)
+    await chooseOption(page, workPage(page).locator(`${prefix}-product-kind`), "实物")
+    await workPage(page).locator(`${prefix}-change-reason`).fill("E2E 分类树维护")
     const saved = uiResponse(page, "POST", "/admin/product-categories")
-    await page.locator(`${prefix}-submit`).click()
+    await workPage(page).locator(`${prefix}-submit`).click()
     const category = await resultOf<Dictionary>(await saved)
-    await expect(page.locator(`${prefix}-name`)).toBeHidden(VISIBLE)
+    expect(category.category_code).toMatch(/\S/)
+    await expect(workPage(page).locator(`${prefix}-name`)).toBeHidden(VISIBLE)
     await dismissToasts(page)
     return category
 }
@@ -239,44 +242,49 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                             resource === "brands"
                                 ? "master-data-brand"
                                 : "master-data-unit-of-measures-list"
-                        const code = `E2E-${resource === "brands" ? "BR" : "UOM"}-${suffix}`
+                        const unitCode = `E2E-UOM-${suffix}`
                         const name = `E2E ${resource === "brands" ? "品牌" : "单位"} ${suffix}`
                         await page.goto(`/master-data/${resource}`)
-                        await page
+                        await workPage(page)
                             .locator(`#master-data-${resource}-list-create`)
                             .click()
                         const createPrefix = `#${base}-create-dialog`
-                        await page.locator(`${createPrefix}-name`).fill(name)
-                        await page.locator(`${createPrefix}-code`).fill(code)
+                        await workPage(page).locator(`${createPrefix}-name`).fill(name)
                         if (resource === "unit-of-measures") {
-                            await page
+                            await workPage(page).locator(`${createPrefix}-code`).fill(unitCode)
+                            await workPage(page)
                                 .locator(`${createPrefix}-symbol`)
                                 .fill("组")
                             await chooseOption(
                                 page,
-                                page.locator(`${createPrefix}-quantity-scale`),
+                                workPage(page).locator(`${createPrefix}-quantity-scale`),
                                 "2",
                             )
+                        } else {
+                            await expect(workPage(page).locator(`${createPrefix}-code`)).toHaveCount(0)
                         }
-                        await page
+                        await workPage(page)
                             .locator(`${createPrefix}-change-reason`)
                             .fill("E2E 独立字典资料")
                         const creating = uiResponse(page, "POST", endpoint)
-                        await page.locator(`${createPrefix}-submit`).click()
+                        await workPage(page).locator(`${createPrefix}-submit`).click()
                         const created = await resultOf<Dictionary>(
                             await creating,
                         )
+                        const code = (resource === "brands" ? created.brand_code : created.unit_code) ?? ""
+                        expect(code).not.toBe("")
                         expect(created).toMatchObject({
                             name,
                             status: "active",
                         })
                         if (resource === "unit-of-measures")
                             expect(created).toMatchObject({
+                                unit_code: unitCode,
                                 symbol: "组",
                                 quantity_scale: 2,
                             })
                         await expect(
-                            page.locator(`${createPrefix}-name`),
+                            workPage(page).locator(`${createPrefix}-name`),
                         ).toBeHidden(VISIBLE)
 
                         await rejected(
@@ -298,28 +306,25 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                             /已存在|重复|duplicate|唯一/i,
                         )
                         await dismissToasts(page)
-                        await page
+                        await workPage(page)
                             .locator(`button[data-row-id="${created.id}"]`)
                             .click()
-                        await page
+                        await workPage(page)
                             .locator(`#master-data-${resource}-preview-revise`)
                             .click()
                         const revisePrefix = `#${base}-revise-dialog`
-                        await page
+                        await workPage(page)
                             .locator(`${revisePrefix}-name`)
                             .fill(`${name} 更新`)
+                        const codeField = workPage(page).locator(`${revisePrefix}-code`)
+                        await expect(codeField).not.toBeEditable()
+                        await expect(codeField).toHaveValue(code)
                         if (resource === "unit-of-measures") {
-                            await expect(
-                                page.locator(`${revisePrefix}-code`),
-                            ).toBeDisabled()
-                            await expect(
-                                page.locator(`${revisePrefix}-code`),
-                            ).toHaveValue(code)
-                            await page
+                            await workPage(page)
                                 .locator(`${revisePrefix}-symbol`)
                                 .fill("套")
                         }
-                        await page
+                        await workPage(page)
                             .locator(`${revisePrefix}-change-reason`)
                             .fill("E2E 更新字典名称")
                         const updating = uiResponse(
@@ -327,7 +332,7 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                             "PUT",
                             `${endpoint}/${created.id}`,
                         )
-                        await page.locator(`${revisePrefix}-submit`).click()
+                        await workPage(page).locator(`${revisePrefix}-submit`).click()
                         const updated = await resultOf<Dictionary>(
                             await updating,
                         )
@@ -361,13 +366,13 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                         await page.goto(
                             `/master-data/${resource}?q=${encodeURIComponent(code)}`,
                         )
-                        await page
+                        await workPage(page)
                             .locator(`button[data-row-id="${created.id}"]`)
                             .click()
-                        await page
+                        await workPage(page)
                             .locator(`#master-data-${resource}-preview-disable`)
                             .click()
-                        const dialog = page.getByRole("dialog").last()
+                        const dialog = workPage(page).getByRole("dialog").last()
                         await dialog
                             .locator("#master-data-shared-disable-reason")
                             .fill("E2E 停用独立字典")
@@ -390,7 +395,7 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                             `/master-data/${resource}?q=${encodeURIComponent(code)}&lifecycleStatus=disabled`,
                         )
                         await expect(
-                            page.locator(`button[data-row-id="${created.id}"]`),
+                            workPage(page).locator(`button[data-row-id="${created.id}"]`),
                         ).toContainText("停用")
                         await command(
                             adminToken,
@@ -401,7 +406,7 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                             adminToken,
                             endpoint,
                             {
-                                q: code,
+                                ...(resource === "brands" ? { brand_code: code } : { unit_code: code }),
                                 page_size: 100,
                             },
                         )
@@ -425,13 +430,11 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
             const first = await createCategory(
                 page,
                 `E2E 一级分类 ${suffix}`,
-                `E2E-C1-${suffix}`,
             )
             await expect(page).toHaveURL(new RegExp(`category=${first.id}`))
             const child = await createCategory(
                 page,
                 `E2E 子分类 ${suffix}`,
-                `E2E-CC-${suffix}`,
                 true,
             )
             expect(child.parent_category_id).toBe(first.id)
@@ -447,25 +450,23 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
             const second = await createCategory(
                 page,
                 secondName,
-                `E2E-C2-${suffix}`,
             )
 
             await page.goto(`/master-data/categories?category=${child.id}`)
-            await page.locator("#master-data-category-workspace-edit").click()
+            await workPage(page).locator("#master-data-category-workspace-edit").click()
             const prefix = "#master-data-category-revise-dialog"
-            await expect(page.locator(`${prefix}-code`)).toHaveAttribute(
-                "readonly",
-                "",
-            )
-            await page
+            const codeField = workPage(page).locator(`${prefix}-code`)
+            await expect(codeField).not.toBeEditable()
+            await expect(codeField).toHaveValue(child.category_code!)
+            await workPage(page)
                 .locator(`${prefix}-name`)
                 .fill(`E2E 子分类更新 ${suffix}`)
             await chooseOption(
                 page,
-                page.locator(`${prefix}-parent`),
+                workPage(page).locator(`${prefix}-parent`),
                 secondName,
             )
-            await page
+            await workPage(page)
                 .locator(`${prefix}-change-reason`)
                 .fill("E2E 同时更新名称与上级")
             const updating = uiResponse(
@@ -473,7 +474,7 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                 "PUT",
                 `/admin/product-categories/${child.id}`,
             )
-            await page.locator(`${prefix}-submit`).click()
+            await workPage(page).locator(`${prefix}-submit`).click()
             const updated = await resultOf<Dictionary>(await updating)
             expect(updated).toMatchObject({
                 id: child.id,
@@ -481,7 +482,7 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                 name: `E2E 子分类更新 ${suffix}`,
             })
             await expect(
-                page.locator("#category-workspace-scroll"),
+                workPage(page).locator("#category-workspace-scroll"),
             ).toContainText(secondName)
             await rejected(
                 adminToken,
@@ -537,30 +538,30 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
         const { context, page } = await openLoggedInWorkspace(browser, "admin")
         try {
             await page.goto("/master-data/companies")
-            await page.locator("#companies-create").click()
-            await page
+            await workPage(page).locator("#companies-create").click()
+            await workPage(page)
                 .locator("#company-form-legal-name")
                 .fill(`E2E 公司主体 ${suffix}`)
-            await page
+            await workPage(page)
                 .locator("#company-form-short-name")
                 .fill(`E2E 公司 ${suffix}`)
-            await page
+            await workPage(page)
                 .locator("#company-form-aliases")
                 .fill("测试公司甲、测试公司乙")
             const creating = uiResponse(page, "POST", "/admin/companies")
-            await page.locator("#company-form-submit").click()
+            await workPage(page).locator("#company-form-submit").click()
             company = await resultOf<Company>(await creating)
             expect([...company.aliases].sort()).toEqual(
                 ["测试公司甲", "测试公司乙"].sort(),
             )
-            const row = page
+            const row = workPage(page)
                 .getByRole("row")
                 .filter({ hasText: company.legal_name })
             await row.locator('[id^="company-edit-"]').click()
-            await page
+            await workPage(page)
                 .locator("#company-form-short-name")
                 .fill(`E2E 公司修订 ${suffix}`)
-            await page
+            await workPage(page)
                 .locator("#company-form-aliases")
                 .fill("测试公司乙、测试公司丙")
             const updating = uiResponse(
@@ -568,7 +569,7 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                 "PUT",
                 `/admin/companies/${company.id}`,
             )
-            await page.locator("#company-form-submit").click()
+            await workPage(page).locator("#company-form-submit").click()
             const updated = await resultOf<Company>(await updating)
             expect([...updated.aliases].sort()).toEqual(
                 ["测试公司乙", "测试公司丙"].sort(),
@@ -673,25 +674,25 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
         try {
             await page.goto(`/master-data/suppliers/${created.supplier_id}`)
             await expect(
-                page.locator("#master-data-supplier-basic-name"),
+                workPage(page).locator("#master-data-supplier-basic-name"),
             ).toHaveValue(commandBody.short_name)
-            await page
+            await workPage(page)
                 .locator("#master-data-supplier-basic-name")
                 .fill(`${commandBody.short_name} 更新`)
-            await page
+            await workPage(page)
                 .locator("#master-data-supplier-editor-tab-commercial")
                 .click()
             await chooseOption(
                 page,
-                page.locator(
+                workPage(page).locator(
                     "#master-data-supplier-commercial-payment-term-combobox",
                 ),
                 "先款 30%",
             )
-            await page
+            await workPage(page)
                 .locator("#master-data-supplier-document-header-submit")
                 .click()
-            await page
+            await workPage(page)
                 .locator("#supplier-save-reason")
                 .fill("E2E 供应商商务条款修订")
             const updating = uiResponse(
@@ -699,7 +700,7 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                 "PUT",
                 `/admin/supplier-profiles/${created.supplier_id}`,
             )
-            await page
+            await workPage(page)
                 .locator(
                     "#master-data-supplier-supplier-save-reason-dialog-button-2",
                 )
@@ -751,11 +752,14 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                 /版本|冲突|数据已被其他请求修改|version|conflict/i,
             )
             await page.reload()
+            await workPage(page)
+                .locator("#master-data-supplier-editor-tab-basic")
+                .click()
             await expect(
-                page.locator("#master-data-supplier-basic-name"),
+                workPage(page).locator("#master-data-supplier-basic-name"),
             ).toHaveValue(`${commandBody.short_name} 更新`)
             await expect(
-                page.locator("#master-data-supplier-basic-company"),
+                workPage(page).locator("#master-data-supplier-basic-company"),
             ).toHaveValue(commandBody.legal_name)
         } finally {
             await context.close()
@@ -944,13 +948,13 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                 version: ownerAssignment.version,
             },
             [400, 409, 422],
-            /负责人|OWNER|换任|替换|结束/,
+            /至少保留一名有效负责销售|负责人|OWNER|换任|替换|结束/,
         )
 
         const { context, page } = await openLoggedInWorkspace(browser, "admin")
         try {
             await page.goto(`/sales/customers/${customer.id}`)
-            const phoneValue = page
+            const phoneValue = workPage(page)
                 .locator('[data-slot="sensitive-value"]')
                 .filter({ hasText: "测试联系人手机：" })
             await expect(phoneValue.locator("code")).not.toHaveText(phone)
@@ -971,35 +975,38 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                 })
                 .click()
             await expect(phoneValue.locator("code")).not.toHaveText(phone)
-            const addressValue = page
+            const addressValue = workPage(page)
                 .locator('[data-slot="sensitive-value"]')
                 .filter({ hasText: "经营地址：" })
             await addressValue.getByRole("button").click()
             await expect(addressValue.locator("code")).toHaveText(address)
 
-            await page.locator("#customers-detail-tab-audit").click()
-            await page
-                .locator("#customers-detail-audit-manage-assignments")
-                .click()
-            await chooseOption(
-                page,
-                page.locator("#customers-assignment-dialog-owner"),
-                "李思勇",
-            )
-            await page.locator("#customer-assignment-from").fill(businessDate())
-            await page
-                .locator("#customers-assignment-dialog-reason")
-                .fill("E2E 调整客户负责销售")
-            const assigning = uiResponse(
-                page,
-                "POST",
-                `/admin/customers/${customer.id}/assignments`,
-            )
-            await page.locator("#customers-assignment-dialog-submit").click()
+            await workPage(page).locator("#customers-detail-tab-audit").click()
+            const frame = workPage(page)
+            const manageAssignments = frame.locator("#customers-detail-audit-manage-assignments")
+            const submitAssignment = frame.locator("#customers-assignment-dialog-submit")
+            const reason = frame.locator("#customers-assignment-dialog-reason")
+            const assignmentPath = `/admin/customers/${customer.id}/assignments`
+            await manageAssignments.click()
+            await frame.locator("#customers-assignment-dialog-owner").click()
+            const picker = frame.getByRole("dialog", { name: "选择销售人员", exact: true })
+            await picker.getByRole("textbox", { name: "搜索姓名或部门" }).fill("李思勇")
+            await picker.getByRole("radio", { name: /李思勇/ }).check()
+            await picker.getByRole("button", { name: "确认选择", exact: true }).click()
+            await reason.fill("E2E 添加接任客户负责销售")
+            const assigning = uiResponse(page, "POST", assignmentPath)
+            await submitAssignment.click()
             await resultOf(await assigning)
-            await expect(
-                page.locator("#customers-assignment-dialog-submit"),
-            ).toBeHidden(VISIBLE)
+            await expect(submitAssignment).toBeHidden(VISIBLE)
+
+            await manageAssignments.click()
+            await frame.locator(`#customers-assignment-end-${ownerAssignment.id}`).click()
+            await pickCalendarDay(page, frame.locator("#customer-assignment-to"), businessDate())
+            await reason.fill("E2E 结束原客户负责销售")
+            const ending = uiResponse(page, "POST", assignmentPath)
+            await submitAssignment.click()
+            await resultOf(await ending)
+            await expect(submitAssignment).toBeHidden(VISIBLE)
             customer = await apiGet<CustomerProfile>(
                 adminToken,
                 `/admin/customer-profiles/${customer.id}`,
@@ -1018,7 +1025,7 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                 )?.valid_to,
             ).toBe(businessDate())
             await expect(
-                page.getByText("李思勇", { exact: true }).first(),
+                workPage(page).getByText("李思勇", { exact: true }).first(),
             ).toBeVisible()
         } finally {
             await context.close()
@@ -1057,7 +1064,7 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                 orderCount: 0,
                 grossTotal: "0.00",
             })
-            const qualitySection = page.getByRole("region", {
+            const qualitySection = workPage(page).getByRole("region", {
                 name: "客户经营质量双口径",
             })
             await expect(
@@ -1065,33 +1072,39 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                     .getByRole("row")
                     .filter({ hasText: customerName }),
             ).toContainText("李思勇")
+            const transfers = "/account/data-transfers"
             const download = page.waitForEvent("download")
-            const exporting = uiResponse(
-                page,
-                "POST",
-                "/admin/customer-quality/current/exports",
-            )
-            await page.locator("#customers-quality-dual-current-export").click()
-            const file = await resultOf<{
-                rowCount: number
-                csvContent: string
-                fileName: string
-            }>(await exporting)
-            expect(file.rowCount).toBe(1)
-            expect(file.csvContent).toContain("现任负责人")
-            expect(file.csvContent).toContain(customerName)
-            expect(file.csvContent).toContain("李思勇")
-            expect(file.csvContent).toContain("0.00")
+            const exporting = page.waitForResponse((response) => {
+                const request = response.request()
+                return request.method() === "POST" &&
+                    new URL(response.url()).pathname === transfers &&
+                    request.postDataJSON()?.kind === "customer_quality_current"
+            })
+            await workPage(page).locator("#customers-quality-dual-current-export").click()
+            const exportResponse = await exporting
+            expect(exportResponse.request().postDataJSON().input).toMatchObject({
+                from, to, customer_id: customer.id,
+            })
+            const job = await resultOf<{ id: string }>(exportResponse)
             const downloaded = await download
-            expect(downloaded.suggestedFilename()).toBe(file.fileName)
+            const file = await apiGet<{
+                file_name: string
+                content_base64: string
+                metadata: { rowCount: number }
+            }>(adminToken, `${transfers}/${job.id}/result`)
+            const csv = Buffer.from(file.content_base64, "base64").toString("utf8")
+            expect(file.metadata.rowCount).toBe(1)
+            expect(csv).toContain("现任负责人")
+            expect(csv).toContain(customerName)
+            expect(csv).toContain("李思勇")
+            expect(csv).toContain("0.00")
+            expect(downloaded.suggestedFilename()).toBe(file.file_name)
             const downloadedPath = await downloaded.path()
             expect(downloadedPath).toBeTruthy()
-            expect(await fs.readFile(downloadedPath!, "utf8")).toBe(
-                `\uFEFF${file.csvContent}`,
-            )
+            expect(await fs.readFile(downloadedPath!, "utf8")).toBe(`\uFEFF${csv}`)
 
             const noResultQuery = `无匹配客户-${suffix}`
-            await page
+            await workPage(page)
                 .locator("#customers-quality-dual-search")
                 .fill(noResultQuery)
             const searching = page.waitForResponse((response) => {
@@ -1101,7 +1114,7 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                     url.searchParams.get("q") === noResultQuery
                 )
             })
-            await page.locator("#customers-quality-dual-apply").click()
+            await workPage(page).locator("#customers-quality-dual-apply").click()
             expect(
                 (await resultOf<QualityView>(await searching)).rows.total,
             ).toBe(0)
@@ -1109,34 +1122,34 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                 qualitySection.getByText("当前筛选无客户结果", { exact: true }),
             ).toBeVisible()
             await expect(
-                page.locator("#customers-quality-dual-current-export"),
+                workPage(page).locator("#customers-quality-dual-current-export"),
             ).toBeDisabled()
             await expect(page).toHaveURL(
                 new RegExp(`dualQ=${encodeURIComponent(noResultQuery)}`),
             )
-            await page.locator("#customers-quality-dual-clear").click()
+            await workPage(page).locator("#customers-quality-dual-clear").click()
             await expect(
-                page.locator("#customers-quality-dual-search"),
+                workPage(page).locator("#customers-quality-dual-search"),
             ).toHaveValue("")
 
             await page.goto(
                 `/analytics/customer-quality?dualCustomerId=${customer.id}`,
             )
             await expect(
-                page.getByText("期间配置加载失败", { exact: true }),
+                workPage(page).getByText("期间配置加载失败", { exact: true }),
             ).toBeVisible()
             await expect(qualitySection).toBeHidden()
             await expect(
-                page.locator("#customers-quality-blocker-apply"),
+                workPage(page).locator("#customers-quality-blocker-apply"),
             ).toBeDisabled()
             await pickCalendarDay(
                 page,
-                page.locator("#customers-quality-blocker-from"),
+                workPage(page).locator("#customers-quality-blocker-from"),
                 to,
             )
             await pickCalendarDay(
                 page,
-                page.locator("#customers-quality-blocker-to"),
+                workPage(page).locator("#customers-quality-blocker-to"),
                 to,
             )
             const explicitPeriodQuery = page.waitForResponse((response) => {
@@ -1148,7 +1161,7 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
                     url.searchParams.get("customer_id") === customer.id
                 )
             })
-            await page.locator("#customers-quality-blocker-apply").click()
+            await workPage(page).locator("#customers-quality-blocker-apply").click()
             expect(
                 (await resultOf<QualityView>(await explicitPeriodQuery)).rows
                     .items[0],
@@ -1159,7 +1172,7 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
             await expect(page).toHaveURL(new RegExp(`from=${to}`))
             await expect(page).toHaveURL(new RegExp(`to=${to}`))
             await expect(
-                page.getByText("期间配置加载失败", { exact: true }),
+                workPage(page).getByText("期间配置加载失败", { exact: true }),
             ).toBeVisible()
             await expect(
                 qualitySection

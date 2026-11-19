@@ -15,13 +15,23 @@ type Envelope<T> = {
  */
 export async function apiLogin(identity: LoginIdentity): Promise<string> {
     const cred = resolveAccount(identity)
-    const data = await request<{ token?: string }>("POST", "/login", {
+    const options = {
         body: {
             account: cred.account,
             password: cred.password,
             account_kind: "admin",
         },
-    })
+    }
+    let data: { token?: string }
+    for (let attempt = 0; ; attempt++) {
+        try {
+            data = await request<typeof data>("POST", "/login", options)
+            break
+        } catch (error) {
+            if (!(error instanceof RateLimited) || attempt >= 2) throw error
+            await new Promise((resolve) => setTimeout(resolve, error.delay))
+        }
+    }
     const token = data?.token?.trim()
     if (!token) {
         throw new Error(`API 登录失败: ${cred.account}`)
@@ -70,6 +80,17 @@ export async function apiGet<T>(
     return request<T>("GET", full, { token })
 }
 
+export function loginRetryDelay(header: string | null | undefined): number {
+    const seconds = Number(header)
+    return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds * 1_000) + 250 : 35_000
+}
+
+class RateLimited extends Error {
+    constructor(message: string, readonly delay: number) {
+        super(message)
+    }
+}
+
 async function request<T>(
     method: string,
     path: string,
@@ -113,9 +134,9 @@ async function request<T>(
         throw new Error(`API ${method} ${path} 未授权`)
     }
     if (!response.ok || parsed?.success === false) {
-        throw new Error(
-            `API ${method} ${path} 失败（HTTP ${response.status}）: ${parsed?.errorMessage ?? text}`,
-        )
+        const message = `API ${method} ${path} 失败（HTTP ${response.status}）: ${parsed?.errorMessage ?? text}`
+        if (response.status === 429) throw new RateLimited(message, loginRetryDelay(response.headers.get("retry-after")))
+        throw new Error(message)
     }
     if (parsed?.data === undefined || parsed.data === null) {
         throw new Error(`API ${method} ${path} 响应缺少 data`)

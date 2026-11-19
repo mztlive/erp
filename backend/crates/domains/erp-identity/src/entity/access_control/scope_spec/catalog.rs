@@ -470,6 +470,8 @@ pub(super) static FIXED_ACTIONS: LazyLock<Vec<FixedAction>> = LazyLock::new(|| {
         fixed(&receivable::INVOICE_DETAIL, ActionKind::Source),
         fixed(&receivable::INVOICE_REQUEST_INVOICE_REQUEST_LIST, ActionKind::Source),
         fixed(&receivable::INVOICE_REQUEST_INVOICE_REQUEST_DETAIL, ActionKind::Source),
+        fixed(&internal::INVOICE_REQUEST_SUBMIT_SOURCE, ActionKind::Source),
+        fixed(&internal::INVOICE_REQUEST_CANCEL_SOURCE, ActionKind::Source),
         fixed(&payable::ACCOUNT_LIST, ActionKind::Source),
         fixed(&payable::ACCOUNT_DETAIL, ActionKind::Source),
         fixed(&payment::LIST, ActionKind::Source),

@@ -1,10 +1,44 @@
+import { workPage } from "./workspace-page"
 import { basename } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { expect, type Page } from "@playwright/test"
 
 import { toAutomationIdSegment } from "../../erp-client/lib/automation-id"
-import { chooseOption, UI_TIMEOUT } from "./ui"
+import { apiGet } from "./api"
+import { chooseOption, openWorkspaceTaskRow, selectWorkspaceFamily, UI_TIMEOUT } from "./ui"
+
+type FulfillmentTaskSource = {
+    salesOrderId: string
+    purchaseOrderId?: string
+    operation: "RECEIPT" | "SUPPLIER_DIRECT" | "WAREHOUSE_SHIP" | "ELECTRONIC" | "SERVICE"
+}
+
+export async function openFulfillmentTaskForSource(page: Page, source: FulfillmentTaskSource) {
+    const token = await page.evaluate(() => localStorage.getItem("erp.token"))
+    expect(token, "履约任务应由当前登录账号读取").toBeTruthy()
+    const queue = await apiGet<{
+        total: number
+        items: Array<{ work_item_id: string; sales_order_id: string; purchase_order_id?: string; operation_type: string }>
+    }>(token!, "/admin/work-items/fulfillment-queue", {
+        sales_order_id: source.salesOrderId,
+        purchase_order_id: source.purchaseOrderId,
+        operation_types: source.operation,
+        timezone: "Asia/Shanghai",
+        page: 1,
+        page_size: 10,
+    })
+    expect(queue.total, "应有唯一匹配来源和类型的履约任务").toBe(1)
+    expect(queue.items).toHaveLength(1)
+    const task = queue.items[0]!
+    expect(task).toMatchObject({ sales_order_id: source.salesOrderId, operation_type: source.operation })
+    if (source.purchaseOrderId) expect(task.purchase_order_id).toBe(source.purchaseOrderId)
+    expect(task.work_item_id).toBeTruthy()
+
+    await page.goto("/workspace/tasks")
+    await selectWorkspaceFamily(page, "fulfillment")
+    await openWorkspaceTaskRow(page, task.work_item_id)
+}
 
 const ACCEPTANCE_EVIDENCE = fileURLToPath(
     new URL("../fixtures/sample-contract.pdf", import.meta.url),
@@ -15,7 +49,7 @@ export async function uploadAcceptanceEvidence(
     page: Page,
     fixturePath = ACCEPTANCE_EVIDENCE,
 ): Promise<void> {
-    const dialog = page.getByRole("dialog", {
+    const dialog = workPage(page).getByRole("dialog", {
         name: "登记客户验收",
         exact: true,
     })
@@ -31,6 +65,20 @@ export async function uploadAcceptanceEvidence(
     })
 }
 
+export async function fillFirstDeliveryParcel(page: Page, trackingNo: string, carrier: string) {
+    const form = workPage(page).getByRole("region", { name: "按地址登记发货包裹", exact: true })
+    await expect(form).toBeVisible({ timeout: UI_TIMEOUT })
+    const tracking = form.getByRole("textbox", { name: "包裹1物流单号", exact: true })
+    if (!(await tracking.isVisible())) {
+        await form.getByRole("button", { name: "登记首个包裹物流", exact: true }).click()
+    }
+    await tracking.fill(trackingNo)
+    const prefix = (await tracking.getAttribute("id"))?.replace(/-tracking$/, "")
+    expect(prefix).toBeTruthy()
+    await chooseOption(page, form.locator(`#${prefix}-carrier`), carrier)
+    return form
+}
+
 export type DeliveryTrackingKind = "ship" | "direct"
 
 export type DeliveryTrackingEntryInput = {
@@ -42,7 +90,7 @@ export type DeliveryTrackingEntryInput = {
 )
 
 function deliveryTrackingInputs(page: Page, kind: DeliveryTrackingKind) {
-    const region = page.locator(
+    const region = workPage(page).locator(
         `[aria-label="${kind === "ship" ? "公司仓发表单" : "供应商直发表单"}"]`,
     )
     return {

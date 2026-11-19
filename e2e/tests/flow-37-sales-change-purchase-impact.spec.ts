@@ -17,6 +17,7 @@
  * 2. 从详情「继续改单」改为 2 次并填写原因，经仓储与财务审批生效后，待更新关闭、销售处理完成。
  * 3. 供应商无法供应：改单「移除」商品（数量 0），审批材料预判缺口 2 次，生效后缺口回到供给分配。
  */
+import { workPage } from "../helpers/workspace-page"
 import { randomUUID } from "node:crypto"
 
 import { test, expect, type Page } from "../helpers/test"
@@ -28,8 +29,7 @@ import {
     type AnalyticsOrder,
 } from "../helpers/financial-analytics"
 import { openLoggedInWorkspace } from "../helpers/login"
-import { expandSourcingEditor } from "../helpers/sourcing"
-import { approveCurrentDocument, openWorkspaceTask } from "../helpers/ui"
+import { approveCurrentDocument, openWorkspaceTask, openWorkspaceTaskRow, selectWorkspaceFamily, selectWorkspaceScope } from "../helpers/ui"
 
 const VISIBLE = { timeout: 20_000 }
 const SERVICE_SKU = "SVC-INSTALL-01"
@@ -150,6 +150,8 @@ async function createServiceSale(
                         quantity: "4",
                         base_unit_code: "CI",
                         unit_price_gross: "100.00",
+                        procurement_supply_price_gross: "35.00",
+                        procurement_price_basis: "BULK",
                         pricing_mode: "MANUAL",
                     },
                 },
@@ -165,15 +167,14 @@ async function createServiceSale(
 
 /** 供给分配创建采购并提交审批，不审批，返回采购单号与 ID。 */
 async function allocateWithoutApproval(page: Page, order: AnalyticsOrder) {
-    await openWorkspaceTask(page, "待供给分配", order.order_no, "procurement")
-    await expandSourcingEditor(page, "家电上门安装")
-    await page.locator("#procurement-orders-create-preview").click()
+    await openWorkspaceTask(page, "待安排采购", order.order_no, "procurement")
+    await workPage(page).locator("#procurement-orders-create-preview").click()
     const submitted = page.waitForResponse(
         (response) =>
             response.request().method() === "POST" &&
             new URL(response.url()).pathname === "/admin/purchase-orders/from-sourcing",
     )
-    await page.locator("#procurement-orders-create-preview-confirm").click({ force: true })
+    await workPage(page).locator("#procurement-orders-create-preview-confirm").click({ force: true })
     const response = await submitted
     expect(response.ok(), await response.text()).toBe(true)
     const result = (await response.json()).data as { orders: Array<{ purchase_order_id: string; purchase_no: string }> }
@@ -212,9 +213,9 @@ async function changeQuantity(
         idempotency_key: randomUUID(),
     })
     if (onSubmitted) await onSubmitted(change.id)
-    await openWorkspaceTask(approvers.procurement, /销售变更单审批/, order.order_no, "approval")
+    await openWorkspaceTask(approvers.procurement, "销售变更单审批", change.id, "approval")
     await approveCurrentDocument(approvers.procurement)
-    await openWorkspaceTask(approvers.finance, /销售变更单审批/, order.order_no, "approval")
+    await openWorkspaceTask(approvers.finance, "销售变更单审批", change.id, "approval")
     await approveCurrentDocument(approvers.finance)
     return change.id
 }
@@ -263,17 +264,24 @@ test("销售减量后审批中采购退回草稿并派待办，修改原单后�
     const effectiveChange = await apiGet<SalesChangeDetail>(procurementToken, `/admin/sales-change-orders/${changeId}`)
     expect(effectiveChange.procurement).toMatchObject({ predicted: false, total: 1, open: 1, completed: false })
 
-    await openWorkspaceTask(procurement.page, /采购依据更新|依据待更新/, undefined, "procurement")
+    const impactTasks = await apiGet<{ items: Array<{ id: string; business_object_id: string }> }>(procurementToken, "/admin/work-items", {
+        scope: "mine", work_item_type: "PURCHASE_SOURCE_UPDATE", purchase_order_ids: purchase.purchase_order_id, page_size: 20,
+    })
+    const impactTask = impactTasks.items.filter((item) => item.business_object_id === purchase.purchase_order_id)
+    expect(impactTask).toHaveLength(1)
+    await procurement.page.goto("/workspace/tasks")
+    await selectWorkspaceFamily(procurement.page, "procurement")
+    await openWorkspaceTaskRow(procurement.page, impactTask[0]!.id)
     await procurement.page.goto(`/procurement/orders/${purchase.purchase_order_id}`)
-    const notice = procurement.page.locator("#procurement-orders-detail-source-update")
-    await expect(notice).toContainText("采购依据待更新", VISIBLE)
+    const notice = workPage(procurement.page).locator("#procurement-orders-detail-source-update")
+    await expect(notice).toContainText("关联销售单已变更，待核对采购单", VISIBLE)
     await expect(notice).toContainText("销售数量 4 → 2")
-    await expect(procurement.page.locator("#procurement-orders-detail-source-update-maintain")).toBeEnabled()
+    await expect(workPage(procurement.page).locator("#procurement-orders-detail-source-update-maintain")).toBeEnabled()
 
     // 2. 修改原单：数量改为 2 次保存，依据换到新版本、待提交审批；提交后待办与记录关闭。
-    await procurement.page.locator("#procurement-orders-detail-source-update-edit").click()
+    await workPage(procurement.page).locator("#procurement-orders-detail-source-update-edit").click()
     const itemLine = withdrawn.lines.find((line) => line.line_type === "ITEM_SERVICE")!
-    const quantityInput = procurement.page.locator(
+    const quantityInput = workPage(procurement.page).locator(
         `#procurement-orders-detail-edit-row-${itemLine.line_id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}-quantity`,
     )
     await expect(quantityInput).toBeVisible(VISIBLE)
@@ -283,7 +291,7 @@ test("销售减量后审批中采购退回草稿并派待办，修改原单后�
             response.request().method() === "POST" &&
             new URL(response.url()).pathname === `/admin/purchase-orders/${purchase.purchase_order_id}/draft`,
     )
-    await procurement.page.locator(`#procurement-orders-detail-edit-save-${purchase.purchase_order_id}`).click()
+    await workPage(procurement.page).locator(`#procurement-orders-detail-edit-save-${purchase.purchase_order_id}`).click()
     const savedResponse = await saved
     expect(savedResponse.ok(), await savedResponse.text()).toBe(true)
     const awaiting = await apiGet<SalesChangeDetail>(procurementToken, `/admin/sales-change-orders/${changeId}`)
@@ -305,8 +313,8 @@ test("销售减量后审批中采购退回草稿并派待办，修改原单后�
             response.request().method() === "POST" &&
             new URL(response.url()).pathname === `/admin/purchase-orders/${purchase.purchase_order_id}/submit`,
     )
-    await procurement.page.locator(`#procurement-orders-detail-edit-submit-${purchase.purchase_order_id}`).click()
-    await procurement.page.locator("#procurement-orders-detail-submit-confirm-confirm").click()
+    await workPage(procurement.page).locator(`#procurement-orders-detail-edit-submit-${purchase.purchase_order_id}`).click()
+    await workPage(procurement.page).locator("#procurement-orders-detail-submit-confirm-confirm").click()
     const resubmittedResponse = await resubmitted
     expect(resubmittedResponse.ok(), await resubmittedResponse.text()).toBe(true)
     await expect
@@ -347,6 +355,29 @@ async function post(page: Page, token: string, path: string, data: unknown) {
     return (await response.json()) as { success: boolean; errorMessage?: string }
 }
 
+async function openPurchaseApproval(
+    page: Page,
+    role: "caigoushenpi" | "cangchu" | "caiwu",
+    purchaseOrderId: string,
+    documentId: string,
+) {
+    const token = await apiToken(role)
+    const readTasks = async (scope: "mine" | "managed") => {
+        const { items } = await apiGet<{ items: Array<{ id: string; business_object_id: string }> }>(
+            token, "/admin/work-items", {
+                scope, work_item_type: "DOCUMENT_APPROVAL", purchase_order_ids: purchaseOrderId, page_size: 20,
+            },
+        )
+        return items.filter((item) => item.business_object_id === documentId)
+    }
+    const mine = await readTasks("mine")
+    const tasks = mine.length ? mine : await readTasks("managed")
+    expect(tasks).toHaveLength(1)
+    await page.goto("/workspace/tasks")
+    if (!mine.length) await selectWorkspaceScope(page, "managed")
+    await openWorkspaceTaskRow(page, tasks[0]!.id)
+}
+
 /** 在详情打开改单弹窗，改数量、填原因并提交审批，再经仓储与财务审批生效。 */
 async function changePurchaseInDialog(
     pages: { procurement: Page; warehouse: Page; finance: Page },
@@ -356,8 +387,8 @@ async function changePurchaseInDialog(
 ) {
     const page = pages.procurement
     await page.goto(`/procurement/orders/${purchase.purchase_order_id}`)
-    await page.locator("#procurement-orders-detail-change").click()
-    const dialog = page.getByRole("dialog", { name: "采购改单", exact: true })
+    await workPage(page).locator("#procurement-orders-detail-change").click()
+    const dialog = workPage(page).getByRole("dialog", { name: "采购改单", exact: true })
     await expect(dialog).toBeVisible(VISIBLE)
     if (edit.remove) await dialog.locator('button[id$="-remove"]').click()
     else await dialog.locator('input[id^="purchase-change-edit-"][id$="-quantity"]').fill(edit.quantity!)
@@ -373,9 +404,9 @@ async function changePurchaseInDialog(
     await expect(dialog).toBeHidden(VISIBLE)
     const changeId = new URL(response.url()).pathname.split("/").at(-2)!
     if (onSubmitted) await onSubmitted(changeId)
-    await openWorkspaceTask(pages.warehouse, /采购变更单审批/, purchase.purchase_no, "approval")
+    await openPurchaseApproval(pages.warehouse, "cangchu", purchase.purchase_order_id, changeId)
     await approveCurrentDocument(pages.warehouse)
-    await openWorkspaceTask(pages.finance, /采购变更单审批/, purchase.purchase_no, "approval")
+    await openPurchaseApproval(pages.finance, "caiwu", purchase.purchase_order_id, changeId)
     await approveCurrentDocument(pages.finance)
     return changeId
 }
@@ -394,7 +425,7 @@ test("已生效采购遇销售减量：改单调减到位才能生效，移除�
 
     const order = await createServiceSale(salesToken, adminToken, procurement.page, `${suffix}e`)
     const purchase = await allocateWithoutApproval(procurement.page, order)
-    await openWorkspaceTask(approver.page, /采购单审批/, purchase.purchase_no, "approval")
+    await openPurchaseApproval(approver.page, "caigoushenpi", purchase.purchase_order_id, purchase.purchase_order_id)
     await approveCurrentDocument(approver.page)
     const effective = await apiGet<PurchaseCenter & { version: number }>(
         procurementToken,
@@ -439,7 +470,7 @@ test("已生效采购遇销售减量：改单调减到位才能生效，移除�
 
     // 2. 继续改单：改为 2 次，审批生效后待更新关闭，销售变更显示采购处理完成。
     await procurement.page.goto(`/procurement/orders/${purchase.purchase_order_id}`)
-    await expect(procurement.page.locator("#procurement-orders-detail-change")).toContainText("继续改单", VISIBLE)
+    await expect(workPage(procurement.page).locator("#procurement-orders-detail-change")).toContainText("继续改单", VISIBLE)
     await changePurchaseInDialog(pages, purchase, {
         remove: false,
         quantity: "2",
@@ -475,5 +506,5 @@ test("已生效采购遇销售减量：改单调减到位才能生效，移除�
     expect(removed.lines.find((line) => line.line_type === "ITEM_SERVICE")!.quantity).toMatch(/^0(?:\.0+)?$/)
     const reopened = await apiGet<SalesCoverage>(procurementToken, `/admin/sales-orders/${order.id}`)
     expect(reopened.purchase_coverage.remaining_quantity).toMatch(/^2(?:\.0+)?$/)
-    await openWorkspaceTask(procurement.page, "待供给分配", order.order_no, "procurement")
+    await openWorkspaceTask(procurement.page, "待安排采购", order.order_no, "procurement")
 })

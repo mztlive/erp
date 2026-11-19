@@ -143,6 +143,28 @@ def shard_config(source: dict, uri: str, db_name: str, port: int, run_id: str, s
     return "\n".join(f"{json.dumps(key)} = {toml_value(value)}" for key, value in result.items()) + "\n"
 
 
+def worker_shard_config(api_config: str, port: int, run_id: str, shard: int) -> str:
+    result = tomllib.loads(api_config)
+    result["app"]["port"] = port
+    loopback = f"http://127.0.0.1:{port}"
+    # Worker startup requires a tracking adapter; keep external supplier traffic on loopback.
+    result.pop("jd_vop", None)
+    result["dangaoshushu"] = {
+        "enabled": True,
+        "base_url": f"https://127.0.0.1:{port}",
+        "channel_no": "e2e-local",
+        "private_key": secrets.token_hex(32),
+    }
+    # DB-backed jobs run locally; isolated workers must never register with a shared scheduler.
+    result["xxl_job"] = {
+        "admin_url": loopback,
+        "executor_url": loopback,
+        "app_name": f"erp-e2e-{run_id.replace('_', '-')}-{shard}",
+        "access_token": secrets.token_hex(32),
+    }
+    return "\n".join(f"{json.dumps(key)} = {toml_value(value)}" for key, value in result.items()) + "\n"
+
+
 def assert_owned_database(db_name: str, run_id: str, shard: int) -> None:
     """Permit cleanup only for the exact database generated for this shard."""
     expected = f"erp_e2e_{run_id}_{shard}"
@@ -268,7 +290,7 @@ class Redactor:
         for key, value in config.items():
             if isinstance(value, dict):
                 self.add_config(value)
-            elif isinstance(value, str) and value and (key == "uri" or any(part in key for part in ("password", "secret", "access_key", "session_token"))):
+            elif isinstance(value, str) and value and (key == "uri" or any(part in key for part in ("password", "secret", "private_key", "access_key", "access_token", "session_token"))):
                 self.values.add(value)
                 if key == "uri":
                     parsed = urlsplit(value)
@@ -331,7 +353,8 @@ class Runner:
         self.args = args
         self.env = dict(os.environ)
         self.run_id = datetime.datetime.now().strftime("%Y%m%dt%H%M%S") + "_" + secrets.token_hex(6)
-        self.report_dir = ROOT / "logs" / "e2e" / self.run_id
+        report_root = Path(self.env.get("E2E_REPORT_ROOT") or ROOT / "logs" / "e2e").expanduser().resolve()
+        self.report_dir = report_root / self.run_id
         self.report_dir.mkdir(parents=True, mode=0o700)
         self.report_dir.chmod(0o700)
         self.started = time.monotonic()
@@ -376,11 +399,11 @@ class Runner:
         if code:
             raise RunnerError(f"{Path(args[0]).name} 执行失败（退出码 {code}），日志：{log}")
 
-    async def health(self, api_base: str, backend: Process) -> None:
+    async def health(self, api_base: str, backend: Process, service: str = "web-api") -> None:
         deadline = time.monotonic() + 120
         while time.monotonic() < deadline:
             if backend.process.returncode is not None:
-                raise RunnerError("隔离 web-api 启动失败，详见该 shard 的 backend.log")
+                raise RunnerError(f"隔离 {service} 启动失败，详见该 shard 的日志")
             try:
                 reader, writer = await asyncio.wait_for(asyncio.open_connection("127.0.0.1", int(api_base.rsplit(":", 1)[1])), 2)
                 writer.write(b"GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
@@ -393,7 +416,7 @@ class Runner:
             except (OSError, asyncio.TimeoutError):
                 pass
             await asyncio.sleep(0.3)
-        raise RunnerError("隔离 web-api 在 120 秒内未就绪")
+        raise RunnerError(f"隔离 {service} 在 120 秒内未就绪")
 
     async def start_managed_mongo(self, settings: dict[str, str]) -> str:
         """Own one temporary replica set whose entire data directory is external."""
@@ -573,7 +596,7 @@ print('Dropped E2E database: ' + name);
         batch["durations_seconds"] = {key: round(value, 3) for key, value in batch["durations_seconds"].items()}
         return batch
 
-    async def run_shard(self, shard: int, port: int) -> dict:
+    async def run_shard(self, shard: int, port: int, worker_port: int) -> dict:
         started = time.monotonic()
         report_dir = self.report_dir / f"shard-{shard}"
         report_dir.mkdir(mode=0o700)
@@ -591,6 +614,7 @@ print('Dropped E2E database: ' + name);
         plan = self.plan[shard - 1]
         result = {"shard": shard, "database": db_name, "api_base": api_base, "status": "failed", "cleanup": "not_created", "report_dir": str(report_dir), "durations_seconds": {}, "planned_files": plan["files"], "estimated_seconds": plan["estimated_seconds"]}
         backend = None
+        worker = None
         database_created = False
         env = {
             **self.env, "API_BASE": api_base, "ERP_E2E_CONFIG_PATH": str(config),
@@ -643,10 +667,18 @@ print('Dropped E2E database: ' + name);
                 private_write(report_dir / "backend.pid", str(backend.process.pid) + "\n")
                 await self.health(api_base, backend)
                 result["durations_seconds"]["backend_restart"] = round(time.monotonic() - restart_started, 3)
+            worker_config = self.temp / f"shard-{shard}-worker.toml"
+            worker_text = worker_shard_config(text, worker_port, self.run_id, shard)
+            self.redact.add_config(tomllib.loads(worker_text))
+            private_write(worker_config, worker_text)
+            worker = await self.spawn([str(self.worker_binary), "--config-path", str(worker_config)], report_dir / "worker.log", env, BACKEND)
+            await self.health(f"http://127.0.0.1:{worker_port}", worker, "erp-worker")
             result["durations_seconds"]["backend_prepare"] = round(time.monotonic() - phase, 3)
             batch = await self.run_files(plan["files"], shard, config, db_name, env, report_dir)
             result["durations_seconds"].update(batch.pop("durations_seconds"))
             result.update(batch)
+            if worker.process.returncode is not None:
+                raise RunnerError("隔离 erp-worker 在测试期间退出，详见该 shard 的 worker.log")
         except RunnerError as error:
             result["status"] = "failed"
             result["error"] = self.redact(str(error))
@@ -660,6 +692,8 @@ print('Dropped E2E database: ' + name);
             self.progress(f"[shard {shard}] {result['error']}")
         finally:
             phase = time.monotonic()
+            if worker:
+                await worker.stop()
             if backend:
                 await backend.stop()
             (report_dir / "backend.pid").unlink(missing_ok=True)
@@ -726,8 +760,10 @@ print('Dropped E2E database: ' + name);
                 if not metadata:
                     raise RunnerError("cargo metadata 没有返回 target_directory")
                 self.binary = Path(metadata["target_directory"]) / "debug/web-api"
-                if not self.binary.is_file() or not os.access(self.binary, os.X_OK):
-                    raise RunnerError("未找到 debug/web-api；请先运行 cd backend && cargo build -p erp-server --locked")
+                self.worker_binary = self.binary.with_name("erp-worker")
+                for binary in (self.binary, self.worker_binary):
+                    if not binary.is_file() or not os.access(binary, os.X_OK):
+                        raise RunnerError(f"未找到 debug/{binary.name}；请先运行 cd backend && cargo build -p erp-server --bins --locked")
                 self.archive = self.temp / "source.archive"
                 mongo_config = self.temp / "mongo-source.yaml"
                 private_write(mongo_config, json.dumps({"uri": uri_for_database(self.source_uri, self.source_db)}))
@@ -743,7 +779,7 @@ print('Dropped E2E database: ' + name);
                 # Reserve distinct ports while choosing them; release immediately before spawning.
                 reservations = []
                 try:
-                    for _ in range(self.args.workers):
+                    for _ in range(2 * self.args.workers):
                         reservation = socket.socket()
                         reservation.bind(("0.0.0.0", 0))
                         reservations.append(reservation)
@@ -753,7 +789,7 @@ print('Dropped E2E database: ' + name);
                         reservation.close()
                 # Even preparation/cleanup failures outside a shard's main try must
                 # await every other shard before deleting shared temporary files.
-                results = await asyncio.gather(*(self.run_shard(index, port) for index, port in enumerate(ports, 1)), return_exceptions=True)
+                results = await asyncio.gather(*(self.run_shard(index, port, worker_port) for index, (port, worker_port) in enumerate(zip(ports[::2], ports[1::2]), 1)), return_exceptions=True)
                 for shard, result in enumerate(results, 1):
                     if isinstance(result, BaseException):
                         existing = next((item for item in self.summary["shards"] if item["shard"] == shard), None)

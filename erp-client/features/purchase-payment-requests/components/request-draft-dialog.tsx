@@ -519,7 +519,10 @@ function RequestDraftForm({
                                                     unknown ||
                                                     !values.selectedIds.length
                                                 }
-                                                onClick={moveNext}
+                                                onClick={(event) => {
+                                                    event.preventDefault()
+                                                    moveNext()
+                                                }}
                                             >
                                                 下一步：填写申请
                                             </Button>

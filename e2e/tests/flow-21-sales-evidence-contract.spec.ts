@@ -1,9 +1,10 @@
 /**
  * 流程: [flow-21] 客户信用代码可空、无合同销售凭证、受限采购审批资料与后补合同。
  * 合同: docs/erp-phase-1.md §7.3.6。
- * 账号: xiaoshou（客户、合同、销售）→ caigou（采购责任和销售审批）。
+ * 账号: xitong（采购调度规则）→ xiaoshou（客户、合同、销售）→ caigou（销售审批）。
  * 全部业务写入走真实页面或已授权 API；凭证使用真实 PDF/PNG 文件，禁止 mock。
  */
+import { workPage } from "../helpers/workspace-page"
 import { archiveContractViaUi, SIGNING_COMPANY } from "../helpers/contracts"
 import fs from "node:fs/promises"
 import path from "node:path"
@@ -198,9 +199,9 @@ async function reviseCreditCode(
     creditCode: string,
 ): Promise<CustomerProfile> {
     await page.goto(`/sales/customers/${customerId}`)
-    await page.locator("#customers-detail-overview-edit").click()
-    await page.locator("#customers-form-credit-code").fill(creditCode)
-    await page
+    await workPage(page).locator("#customers-detail-overview-edit").click()
+    await workPage(page).locator("#customers-form-credit-code").fill(creditCode)
+    await workPage(page)
         .locator("#customers-form-change-reason")
         .fill(creditCode ? "E2E 补录信用代码" : "E2E 清除非必填信用代码")
     const [response] = await Promise.all([
@@ -210,7 +211,7 @@ async function reviseCreditCode(
                 new URL(item.url()).pathname ===
                     `/admin/customer-profiles/${customerId}`,
         ),
-        page.locator("#customers-form-submit").click(),
+        workPage(page).locator("#customers-form-submit").click(),
     ])
     await readUiResult(response)
     const profile = await apiGet<CustomerProfile>(
@@ -229,7 +230,8 @@ async function uploadContract(
     paymentTerms = "货到 15 天",
 ): Promise<Contract> {
     await page.goto("/sales/contracts")
-    await page.locator("#page-actions-action-upload").click()
+    const pageActions = workPage(page).getByLabel("页面操作", { exact: true })
+    await expect(pageActions.getByRole("button", { name: "上传合同 PDF", exact: true })).toBeVisible()
     await archiveContractViaUi(page, {
         contractNo,
         customerName,
@@ -255,15 +257,15 @@ async function createNoContractDraft(
     evidence: "pdf" | "png",
 ): Promise<{ order: SalesOrder; body: CreateBody }> {
     await page.goto("/sales/orders?mode=create")
-    await page.locator("#sales-orders-create-entry-evidence").click()
+    await workPage(page).locator("#sales-orders-create-entry-evidence").click()
     await chooseOption(
         page,
-        page.locator("#sales-orders-create-customer"),
+        workPage(page).locator("#sales-orders-create-customer"),
         customerName,
     )
     await chooseOption(
         page,
-        page.locator("#sales-orders-create-settlement"),
+        workPage(page).locator("#sales-orders-create-settlement"),
         SIGNING_COMPANY,
     )
     const [uploadedResponse] = await Promise.all([
@@ -273,7 +275,7 @@ async function createNoContractDraft(
                 new URL(response.url()).pathname ===
                     "/admin/file-assets/upload",
         ),
-        page.locator("#sales-orders-create-evidence-input").setInputFiles(
+        workPage(page).locator("#sales-orders-create-evidence-input").setInputFiles(
             evidence === "pdf"
                 ? PDF_PATH
                 : {
@@ -286,17 +288,17 @@ async function createNoContractDraft(
     const uploaded = await readUiResult<{ id: string }>(uploadedResponse)
     await chooseOption(
         page,
-        page.locator("#sales-orders-create-header-welfare-scene"),
-        "年节礼包",
+        workPage(page).locator("#sales-orders-create-header-welfare-scene"),
+        "礼包",
     )
     await chooseOption(
         page,
-        page.locator("#sales-orders-create-header-payment-terms"),
+        workPage(page).locator("#sales-orders-create-header-payment-terms"),
         "货到 15 天",
     )
-    await page.locator("#sales-orders-create-header-tax-rate").fill("13")
-    await page.locator("#sales-orders-create-line-items-add").click()
-    const picker = page.getByRole("dialog", { name: "添加商品" })
+    await workPage(page).locator("#sales-orders-create-header-tax-rate").fill("13")
+    await workPage(page).locator("#sales-orders-create-line-items-add").click()
+    const picker = workPage(page).getByRole("dialog", { name: "添加商品" })
     await expect(picker).toBeVisible(VISIBLE)
     const search = picker.locator(
         "#sales-orders-sku-picker-filter-search",
@@ -309,15 +311,15 @@ async function createNoContractDraft(
         .check()
     await picker.locator("#sales-orders-sku-picker-confirm").click()
     await expect(picker).toBeHidden(VISIBLE)
-    await page.locator('input[id^="sales-orders-create-line-"][id$="-quantity"]').fill("2")
-    await page.getByLabel("含税成交单价", { exact: true }).fill("137.00")
-    await page.locator("#sales-orders-create-batch-due-date-open").click()
+    await workPage(page).locator('input[id^="sales-orders-create-line-"][id$="-quantity"]').fill("2")
+    await workPage(page).getByLabel("含税成交单价", { exact: true }).fill("137.00")
+    await workPage(page).locator("#sales-orders-create-batch-due-date-open").click()
     await pickCalendarDay(
         page,
-        page.locator("#sales-orders-create-batch-due-date"),
+        workPage(page).locator("#sales-orders-create-batch-due-date"),
         dueDate(),
     )
-    await page.locator("#sales-orders-create-batch-due-date-apply").click()
+    await workPage(page).locator("#sales-orders-create-batch-due-date-apply").click()
     await expectToast(page, "已批量设置交期")
     await dismissToasts(page)
     const [response] = await Promise.all([
@@ -326,7 +328,7 @@ async function createNoContractDraft(
                 item.request().method() === "POST" &&
                 new URL(item.url()).pathname === "/admin/sales-orders",
         ),
-        page.locator("#sales-orders-create-save-draft").click(),
+        workPage(page).locator("#sales-orders-create-save-draft").click(),
     ])
     const created = await readUiResult<{ id: string }>(response)
     const body = response.request().postDataJSON() as CreateBody
@@ -387,8 +389,8 @@ async function supplementContract(
         )
     } else {
         await page.goto(`/sales/orders/${original.id}?section=documents`)
-        await page.locator("#sales-order-documents-supplement-contract").click()
-        const dialog = page.getByRole("dialog", { name: "补录销售合同" })
+        await workPage(page).locator("#sales-order-documents-supplement-contract").click()
+        const dialog = workPage(page).getByRole("dialog", { name: "补录销售合同" })
         await expect(dialog).toBeVisible(VISIBLE)
         await chooseOption(
             page,
@@ -410,7 +412,7 @@ async function supplementContract(
         await readUiResult(response)
         await expect(dialog).toBeHidden(VISIBLE)
         await expect(
-            page.locator("#sales-order-documents-supplement-contract"),
+            workPage(page).locator("#sales-order-documents-supplement-contract"),
         ).toHaveCount(0)
     }
     const bound = await apiGet<SalesOrder>(
@@ -453,19 +455,19 @@ async function expectContractFilter(
     await page.goto(
         `/sales/orders?q=${encodeURIComponent(customer.current_revision.legal_name)}&layout=table`,
     )
-    await page.locator("#sales-orders-list-filter-more-toggle").click()
+    await workPage(page).locator("#sales-orders-list-filter-more-toggle").click()
     await chooseOption(
         page,
-        page.locator("#sales-orders-list-filter-has-contract"),
+        workPage(page).locator("#sales-orders-list-filter-has-contract"),
         hasContract ? "有合同" : "无合同",
     )
     // 面板内“应用”提交全部筛选并关闭浮层；直接关闭会撤销未应用的条件。
-    await page.locator("#sales-orders-list-filter-more-apply").click()
-    await expect(page.locator("#sales-orders-list-filter-panel")).toBeHidden()
+    await workPage(page).locator("#sales-orders-list-filter-more-apply").click()
+    await expect(workPage(page).locator("#sales-orders-list-filter-panel")).toBeHidden()
     await expect(page).toHaveURL(
         new RegExp(`hasContract=${hasContract ? "yes" : "no"}`),
     )
-    const table = page.locator("#sales-orders-list-table")
+    const table = workPage(page).locator("#sales-orders-list-table")
     await expect(
         table.getByRole("row").filter({ hasText: included.order_no }),
     ).toHaveCount(1)
@@ -473,7 +475,7 @@ async function expectContractFilter(
         table.getByRole("row").filter({ hasText: excluded.order_no }),
     ).toHaveCount(0)
     await expect(
-        page.getByText(`合同状态：${hasContract ? "有合同" : "无合同"}`, {
+        workPage(page).getByText(`合同状态：${hasContract ? "有合同" : "无合同"}`, {
             exact: true,
         }),
     ).toBeVisible()
@@ -495,11 +497,8 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
 }, testInfo) => {
     test.setTimeout(10 * 60 * 1000)
     const suffix = Date.now().toString(36).toUpperCase()
-    const { page: procurementPage } = await openLoggedInWorkspace(
-        browser,
-        "caigou",
-    )
-    await ensureDefaultProcurementOwner(procurementPage)
+    const { page: governancePage } = await openLoggedInWorkspace(browser, "xitong")
+    await ensureDefaultProcurementOwner(governancePage)
     const { page } = await openLoggedInWorkspace(browser, "xiaoshou")
     const token = await apiToken("xiaoshou")
     let customer!: CustomerProfile
@@ -683,7 +682,10 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
     await test.step("采购无销售、合同或通用文件权限仍可核对销售审批凭证，后补合同不得回填", async () => {
         await page.goto(`/sales/orders/${imageDraft.order.id}`)
         await submitCreatedSalesOrder(page)
-        const dialog = page.getByRole("dialog", { name: "提交销售单" })
+        const dialog = workPage(page).getByRole("dialog", { name: "提交销售单" })
+        await dialog.locator("#sales-orders-submit-confirm-confirm").click()
+        const negativeProfit = workPage(page).getByRole("alertdialog", { name: "预估毛利为负", exact: true })
+        await expect(negativeProfit).toBeVisible(VISIBLE)
         const [submittedResponse] = await Promise.all([
             page.waitForResponse(
                 (response) =>
@@ -691,7 +693,7 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
                     new URL(response.url()).pathname ===
                         `/admin/sales-orders/${imageDraft.order.id}/submit`,
             ),
-            dialog.locator("#sales-orders-submit-confirm-confirm").click(),
+            negativeProfit.getByRole("button", { name: "仍然提交", exact: true }).click(),
         ])
         await readUiResult(submittedResponse)
         const submitted = await apiGet<SalesOrder>(
@@ -764,7 +766,7 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
                         },
                     ],
                 })
-                const materialsDialog = restrictedPage.getByRole("dialog", {
+                const materialsDialog = workPage(restrictedPage).getByRole("dialog", {
                     name: /提交资料$/,
                 })
                 await expect(
@@ -800,7 +802,7 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
                         "当前审批实例不得读取另一销售单上传的凭证",
                     ).toBe(404)
                 }
-                await restrictedPage
+                await workPage(restrictedPage)
                     .locator("#workspace-document-paper-dialog-close")
                     .click()
                 await approveCurrentDocument(restrictedPage)
@@ -940,10 +942,10 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
         ).toEqual(voided)
         await page.goto(`/sales/orders/${voided.id}?section=documents`)
         await expect(
-            page.getByText("已作废", { exact: true }).first(),
+            workPage(page).getByText("已作废", { exact: true }).first(),
         ).toBeVisible(VISIBLE)
         await expect(
-            page.locator("#sales-order-documents-supplement-contract"),
+            workPage(page).locator("#sales-order-documents-supplement-contract"),
         ).toHaveCount(0)
     })
 

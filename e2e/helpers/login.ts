@@ -1,7 +1,8 @@
+import { workPage } from "./workspace-page"
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test"
 
 import { resolveAccount, type LoginIdentity } from "./accounts"
-import { rememberApiToken } from "./api"
+import { loginRetryDelay, rememberApiToken } from "./api"
 import { headedContextOptions, maximizePageIfHeaded } from "./headed"
 
 export type { LoginIdentity }
@@ -12,6 +13,7 @@ export type LoggedInSession = {
 }
 
 const LOGIN_TIMEOUT = 40_000
+export const WORKSPACE_TASKS_PATH = "/workspace/tasks"
 
 /**
  * 用登录页账号密码登录当前 page。
@@ -59,11 +61,7 @@ export async function loginViaUi(
             break
         }
         if (response.status() === 429 && attempt < 2) {
-            const seconds = Number(response.headers()["retry-after"])
-            const delay = Number.isFinite(seconds) && seconds > 0
-                ? Math.ceil(seconds * 1_000) + 250
-                : 35_000
-            await page.waitForTimeout(delay)
+            await page.waitForTimeout(loginRetryDelay(response.headers()["retry-after"]))
             continue
         }
         throw new Error(
@@ -74,10 +72,9 @@ export async function loginViaUi(
     await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
         timeout: LOGIN_TIMEOUT,
     })
-    // returnTo 可能指向业务页。直接打开工作台，无需先等一个不会出现的标题。
-    if (new URL(page.url()).pathname !== "/workspace") await page.goto("/workspace")
-    const workspace = page.getByRole("heading", { name: "我的工作台" })
-    await expect(workspace).toBeVisible({ timeout: LOGIN_TIMEOUT })
+    // 登录默认进入岗位首页；流程测试统一从独立待办页开始。
+    if (new URL(page.url()).pathname !== WORKSPACE_TASKS_PATH) await page.goto(WORKSPACE_TASKS_PATH)
+    await expect(workPage(page).getByRole("heading", { name: "待我处理", exact: true })).toBeVisible({ timeout: LOGIN_TIMEOUT })
 }
 
 const sessionPool = new WeakMap<Browser, Map<string, LoggedInSession>>()
@@ -100,7 +97,7 @@ function trackWorkspaceFreshness(page: Page): void {
     })
     page.on("framenavigated", (frame) => {
         if (frame !== page.mainFrame()) return
-        if (new URL(frame.url()).pathname !== "/workspace") freshWorkspacePages.delete(page)
+        if (new URL(frame.url()).pathname !== WORKSPACE_TASKS_PATH) freshWorkspacePages.delete(page)
     })
 }
 
@@ -114,7 +111,7 @@ function markWorkspaceFresh(page: Page): void {
  * 不必再 goto；标记只能用一次。
  */
 export function takeFreshWorkspace(page: Page): boolean {
-    const fresh = freshWorkspacePages.has(page) && new URL(page.url()).pathname === "/workspace"
+    const fresh = freshWorkspacePages.has(page) && new URL(page.url()).pathname === WORKSPACE_TASKS_PATH
     freshWorkspacePages.delete(page)
     return fresh
 }
@@ -122,8 +119,8 @@ export function takeFreshWorkspace(page: Page): boolean {
 async function openWorkspace(page: Page): Promise<void> {
     // 复用会话时页面可能已停在空工作台，必须硬导航才能重新拉待办。
     trackWorkspaceFreshness(page)
-    await page.goto("/workspace")
-    const workspace = page.getByRole("heading", { name: "我的工作台" })
+    await page.goto(WORKSPACE_TASKS_PATH)
+    const workspace = workPage(page).getByRole("heading", { name: "待我处理", exact: true })
     await expect(workspace).toBeVisible({ timeout: LOGIN_TIMEOUT })
     markWorkspaceFresh(page)
 }
@@ -186,7 +183,7 @@ export async function newLoggedInContext(
  *   const { page, context } = await openLoggedInWorkspace(browser, "xiaoshou")
  *
  * 登录页 id：`#governance-auth-login-account` / `#governance-auth-login-password` /
- * `#governance-auth-login-submit`；成功后 heading「我的工作台」。
+ * `#governance-auth-login-submit`；成功后打开「待我处理」。
  */
 export async function openLoggedInWorkspace(
     browser: Browser,

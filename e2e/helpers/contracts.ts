@@ -1,3 +1,4 @@
+import { workPage } from "./workspace-page"
 import { execFileSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { expect, type Page } from "./test"
@@ -16,8 +17,8 @@ export async function archiveContractViaUi(page: Page, input: {
 }) {
     const fromSalesOrder = new URL(page.url()).pathname.startsWith("/sales/orders")
     const workspace = fromSalesOrder
-        ? page.locator("#sales-orders-create-contract-import")
-        : page.getByRole("dialog", { name: /^导入合同(?:新版本)?$/ })
+        ? workPage(page).locator("#sales-orders-create-contract-import")
+        : workPage(page).getByRole("dialog", { name: /^导入合同(?:新版本)?$/ })
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" })
     const fields = {
         customer_name: input.customerName,
@@ -39,8 +40,8 @@ export async function archiveContractViaUi(page: Page, input: {
         await route.continue({ url: `${API_BASE}${url.pathname}` })
     }, { times: 1 })
     const upload = fromSalesOrder
-        ? page.locator("#sales-orders-create-entry-upload-input")
-        : page.locator("#contracts-list-upload-input")
+        ? workPage(page).locator("#sales-orders-create-entry-upload-input")
+        : workPage(page).locator("#contracts-list-upload-input")
     await upload.setInputFiles(input.pdf)
     await expect(workspace).toBeVisible()
     const customer = workspace.locator("#contract-import-customer")

@@ -143,7 +143,7 @@ export function SupplierPaymentDetailBody({
                                 taxBasis="gross"
                             />
                         }
-                        description="原付款金额减去已过账冲正金额"
+                        description="原付款金额扣除已过账冲正与现金退款"
                     />
                     <ReadOnlyField
                         id="supplier-payables-payment-detail-field-reversed-amount-input"
@@ -377,6 +377,8 @@ function ReadOnlyField({
 
 /** 原付款上的冲正追踪记录；审批中的记录不参与付款金额计算。 */
 function PaymentReversalHistory({ row }: { row: PaymentRow }) {
+    if (!row.relatedReversals) return <p>当前付款详情未提供冲正记录。</p>
+
     return (
         <>
             <p className="text-sm text-muted-foreground">

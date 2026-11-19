@@ -82,7 +82,10 @@ export function useInvoiceFiles(invoiceId: string) {
     return { query, download }
 }
 
-export function useCustomerReceiptFiles(receiptId: string, draft: boolean) {
+export function useCustomerReceiptFiles(
+    receiptId: string | undefined,
+    draft: boolean,
+) {
     const query = useQuery({
         queryKey: [
             ...queryKeyRoots.customerReceivables,
@@ -90,13 +93,16 @@ export function useCustomerReceiptFiles(receiptId: string, draft: boolean) {
             receiptId,
             draft,
         ],
-        queryFn: () => fetchCustomerReceiptFiles(receiptId, draft),
+        queryFn: () => fetchCustomerReceiptFiles(receiptId!, draft),
+        enabled: Boolean(receiptId),
         staleTime: 0,
     })
     const download = useMutation({
         meta: { suppressErrorToast: true },
-        mutationFn: (file: FinancialFile) =>
-            downloadCustomerReceiptFile(receiptId, draft, file),
+        mutationFn: (file: FinancialFile) => {
+            if (!receiptId) throw new Error("缺少回款单引用")
+            return downloadCustomerReceiptFile(receiptId, draft, file)
+        },
         onError: (error) =>
             toast.add({
                 type: "error",

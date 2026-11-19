@@ -121,6 +121,7 @@ function useInvalidate() {
     }
 }
 export function useSaveRequestMutation() {
+    const client = useQueryClient()
     const invalidate = useInvalidate()
     return useMutation({
         mutationFn: (input: {
@@ -128,8 +129,17 @@ export function useSaveRequestMutation() {
             id?: string
             version?: number
         }) => saveRequest(input.data, input.id, input.version),
-        onSuccess: () => {
-            // 保存已成功，关联列表的后台刷新不延长表单提交状态。
+        onSuccess: async (saved, { id }) => {
+            if (id) {
+                const queryKey = paymentRequestKeys.detail(id)
+                await client.cancelQueries({ queryKey, exact: true })
+                // 保存回执先推进提交版本；完整材料仍由详情查询重新读取。
+                client.setQueryData<typeof saved>(queryKey, (current) =>
+                    current && current.version < saved.version
+                        ? { ...current, version: saved.version }
+                        : current,
+                )
+            }
             void invalidate()
         },
     })

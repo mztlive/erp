@@ -1,3 +1,4 @@
+import { workPage } from "./workspace-page"
 import { randomUUID } from "node:crypto"
 import { readFileSync } from "node:fs"
 
@@ -5,7 +6,7 @@ import { expect, type Page } from "@playwright/test"
 
 import { API_BASE, apiGet, apiToken } from "./api"
 import { openLoggedInWorkspace } from "./login"
-import { approveCurrentDocument, openFulfillmentWorkspaceForm, openWorkspaceTask } from "./ui"
+import { approveCurrentDocument, openFulfillmentWorkspaceForm, openWorkspaceTask, openWorkspaceTaskRow, selectWorkspaceFamily } from "./ui"
 
 export const BANK_RECEIPT_FILE = {
     name: "e2e-bank-receipt.png",
@@ -37,7 +38,7 @@ const paymentRequestByPurchase = new Map<string, string>()
 export function supplierPaymentTaskPattern(purchaseNo: string): RegExp {
     const requestNo = paymentRequestByPurchase.get(purchaseNo) ?? purchaseNo
     const escaped = requestNo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    return new RegExp(`(?:供应商付款处理|待付款申请)[\\s\\S]*${escaped}|${escaped}[\\s\\S]*(?:供应商付款处理|待付款申请)`)
+    return new RegExp(`(?:待执行采购付款)[\\s\\S]*${escaped}|${escaped}[\\s\\S]*(?:待执行采购付款)`)
 }
 
 export type PaymentRequestCandidate = {
@@ -136,33 +137,35 @@ export async function authorizePurchasePaymentRequest(
     return approved
 }
 
+export async function openPurchasePaymentExecutionTask(
+    page: Page,
+    request: Pick<PurchasePaymentRequestResult, "work_item_id">,
+) {
+    expect(request.work_item_id, "已批准申请须绑定正式出纳任务").toBeTruthy()
+    const taskId = request.work_item_id!
+    await page.goto("/workspace/tasks")
+    await selectWorkspaceFamily(page, "finance")
+    await openWorkspaceTaskRow(page, taskId)
+    return taskId
+}
+
 /** 打开本采购已批准申请的付款任务；没有申请时先完成采购申请和财务审核。 */
 export async function openAuthorizedSupplierPaymentTask(
     page: Page,
     purchaseNo?: string,
 ): Promise<PurchasePaymentRequestResult> {
-    await page.goto("/workspace?family=finance")
-    await expect(page.locator("#workspace-home-refresh")).toBeEnabled({ timeout: 20_000 })
+    await page.goto("/workspace/tasks")
+    await expect(workPage(page).locator("#workspace-home-refresh")).toBeEnabled({ timeout: 20_000 })
     const token = await apiToken("caigou")
     const requests = await apiGet<{ items: PurchasePaymentRequestResult[] }>(token, "/admin/purchase-payment-requests", { page: 1, page_size: 100 })
     let request = requests.items.find((item) => ["approved", "partially_paid"].includes(item.status) &&
         (!purchaseNo || item.lines.some((line) => line.source_snapshot?.purchase_preview.purchase_no === purchaseNo)))
     if (!request) {
         request = await authorizePurchasePaymentRequest(page, purchaseNo)
-        await page.goto("/workspace?family=finance")
+        await page.goto("/workspace/tasks")
     }
     if (purchaseNo) paymentRequestByPurchase.set(purchaseNo, request.request_no)
-    expect(request.work_item_id, "已批准申请须绑定正式出纳任务").toBeTruthy()
-    const taskId = request.work_item_id!
-    const taskSegment = taskId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-    const task = page.locator(`[id="workspace-task-${taskSegment}"]`)
-    await expect(task).toHaveCount(1, { timeout: 20_000 })
-    await expect(task).toBeVisible({ timeout: 20_000 })
-    await expect(task).toContainText(request.request_no)
-    await task.click()
-    await expect(task).toHaveAttribute("aria-current", "true", { timeout: 20_000 })
-    await expect.poll(() => new URL(page.url()).searchParams.get("currentWorkItemId"), { timeout: 20_000 }).toBe(taskId)
-    // 任务可能已经自动选中，Query 缓存也可能已加载；正式读取精确任务上下文核对身份。
+    const taskId = await openPurchasePaymentExecutionTask(page, request)
     const cashierToken = await apiToken("fukuan")
     const profile = await apiGet<{ userid: string; account: string }>(cashierToken, "/account/profile")
     const authority = await apiGet<{
@@ -179,7 +182,7 @@ export async function openAuthorizedSupplierPaymentTask(
     const context = await apiGet<PurchasePaymentRequestResult>(cashierToken, `/admin/work-items/${taskId}/purchase-payment-request`)
     expect(context).toMatchObject({ id: request.id, work_item_id: taskId, submission_version: request.submission_version })
     expect(["approved", "partially_paid"]).toContain(context.status)
-    const surface = page.getByRole("region", { name: "当前工作台任务" })
+    const surface = workPage(page).getByRole("region", { name: "当前工作台任务" })
     await expect(surface.getByRole("region", { name: "付款任务摘要" })).toBeVisible({ timeout: 20_000 })
     await expect(surface.locator("#ppr-pay-form")).toBeVisible({ timeout: 20_000 })
     await expect(surface.locator("#ppr-pay-amount")).toBeVisible({ timeout: 20_000 })
@@ -199,10 +202,10 @@ export async function payOnlySupplierTask(
         expectedByAccount.set(line.payable_account_id, remaining)
     }
     const total = [...expectedByAccount.values()].reduce((sum, amount) => sum + amount, 0n)
-    await page.locator("#ppr-pay-amount").fill(`${total / 100n}.${String(total % 100n).padStart(2, "0")}`)
-    await page.locator("#ppr-pay-bank-receipt-input").setInputFiles(BANK_RECEIPT_FILE)
-    await page.locator("#ppr-pay-submit").click()
-    const dialog = page.getByRole("alertdialog").filter({ hasText: "确认登记付款" })
+    await workPage(page).locator("#ppr-pay-amount").fill(`${total / 100n}.${String(total % 100n).padStart(2, "0")}`)
+    await workPage(page).locator("#ppr-pay-bank-receipt-input").setInputFiles(BANK_RECEIPT_FILE)
+    await workPage(page).locator("#ppr-pay-submit").click()
+    const dialog = workPage(page).getByRole("alertdialog").filter({ hasText: "确认登记付款" })
     await expect(dialog).toBeVisible()
     await expect(dialog.getByText("提交审批")).toHaveCount(0)
     const committed = page.waitForResponse(
@@ -250,8 +253,8 @@ export async function expectProcurementPaymentReceipt(
         "currentWorkItemId",
     )!
     expect(payment.allocations.some((row) => row.source_document_no === purchaseNo), "回单必须属于当前履约来源采购的实际付款分配").toBe(true)
-    const opened = page.getByRole("dialog")
-        .filter({ has: page.locator('[aria-label="当前履约任务"]') })
+    const opened = workPage(page).getByRole("dialog")
+        .filter({ has: workPage(page).locator('[aria-label="当前履约任务"]') })
         .filter({ visible: true })
     const wasOpen = await opened.count()
     expect([0, 1]).toContain(wasOpen)
@@ -264,10 +267,10 @@ export async function expectProcurementPaymentReceipt(
     }
     expect(new URL(page.url()).searchParams.get("currentWorkItemId")).toBe(workItemId)
     const segment = workItemId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-    const task = page.locator(`[id="workspace-task-${segment}"]`)
+    const task = workPage(page).locator(`[id="workspace-task-${segment}"]`)
     await expect(task).toHaveCount(1)
     await expect(task).toHaveAttribute("aria-current", "true")
-    const surface = page.getByRole("region", { name: "当前工作台任务", exact: true })
+    const surface = workPage(page).getByRole("region", { name: "当前工作台任务", exact: true })
     const procurementPayment = surface.getByRole("region", { name: "采购付款", exact: true })
     await expect(procurementPayment).toBeVisible({ timeout: 20_000 })
     const receipts = procurementPayment.getByRole("region", { name: "付款回单", exact: true })

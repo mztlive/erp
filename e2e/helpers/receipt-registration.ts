@@ -1,8 +1,9 @@
+import { workPage } from "./workspace-page"
 import { expect, test, type Page, type Request } from "./test"
 
 /** 当前结算主体由会话来源锁定，以静态摘要显示，不提供编辑控件。 */
 export async function expectReceiptCounterparty(page: Page, customerName: string) {
-    const party = page.getByText("结算主体", { exact: true }).locator("..")
+    const party = workPage(page).getByText("结算主体", { exact: true }).locator("..")
     await expect(party.getByText(customerName, { exact: true })).toBeVisible()
     await expect(party.locator("input, button, [role=combobox]")).toHaveCount(0)
 }
@@ -16,18 +17,17 @@ export async function assertReceiptRegistrationDraft(
         bankReference: string
     },
 ): Promise<void> {
-    const table = page.locator("#customer-receivables-session-allocations")
+    const table = workPage(page).locator("#customer-receivables-session-allocations")
     const rowA = table.getByRole("row").filter({ hasText: input.orderNos[0] })
     const rowB = table.getByRole("row").filter({ hasText: input.orderNos[1] })
     const amountA = rowA.locator('input[id$="-amount"]')
     const amountB = rowB.locator('input[id$="-amount"]')
-    const receiptAmount = page.locator("#customer-receivables-session-amount")
-    const search = page.locator(
-        "#customer-receivables-session-allocation-search",
-    )
-    const submit = page.locator("#customer-receivables-session-submit")
-    const footer = page.getByRole("complementary", { name: "本次回款" })
-    const validation = page.locator("#customer-receivables-session-validation")
+    const receiptAmount = workPage(page).locator("#customer-receivables-session-amount")
+    const submit = workPage(page).locator("#customer-receivables-session-submit")
+    const footer = workPage(page).getByRole("complementary", { name: "本次回款" })
+    const validation = workPage(page).locator("#customer-receivables-session-validation")
+    const factValidation = workPage(page).locator("#customer-receivables-session-fact-validation")
+    const confirm = workPage(page).getByRole("alertdialog", { name: /提交回款/ })
     const commits: Request[] = []
     const pageErrors: string[] = []
     const consoleErrors: string[] = []
@@ -49,47 +49,38 @@ export async function assertReceiptRegistrationDraft(
     const initialViewport = page.viewportSize()
 
     try {
-        await test.step("主体锁定、搜索保留选择与核销金额", async () => {
+        await test.step("主体锁定，批量选择保留两笔核销金额", async () => {
             await expectReceiptCounterparty(page, input.customerName)
-            await search.fill(input.orderNos[1])
-            await expect(rowA).toHaveCount(0)
-            await expect(rowB.getByRole("checkbox")).toBeChecked()
-            await expect(table).toContainText("已选 2 笔")
-            await search.fill("不存在的应收项目")
-            await expect(table).toContainText("已选分配保持不变")
-            await expect(table).toContainText("已选 2 笔")
-            await search.clear()
+            await expect(table).toContainText("2 笔应收")
             await expect(amountA).toHaveValue("644.00")
             await expect(amountB).toHaveValue("644.00")
         })
 
-        await test.step("非法金额、超额及搜索结果外的错误定位", async () => {
+        await test.step("非法金额、超额及校验错误定位", async () => {
             await amountA.fill("-1.00")
-            await expect(submit).toBeDisabled()
+            await submit.click()
+            await expect(confirm).toHaveCount(0)
             await expect(amountA).toHaveAttribute("aria-invalid", "true")
-            await search.fill(input.orderNos[1])
             await validation
                 .getByRole("button")
                 .filter({ hasText: "核销金额必须大于零" })
                 .click()
-            await expect(search).toHaveValue("")
             await expect(amountA).toBeFocused()
             for (const invalid of ["abc", "12.345"]) {
                 await amountA.fill(invalid)
                 await expect(rowA).toContainText("请填写有效的核销金额")
-                await expect(submit).toBeDisabled()
+                await submit.click()
+                await expect(confirm).toHaveCount(0)
             }
             await amountA.fill("1288.01")
             await expect(rowA).toContainText("核销金额不可超过当前可核销余额")
-            await expect(submit).toBeDisabled()
-            await amountA.fill("644.00")
+            await submit.click()
+            await expect(confirm).toHaveCount(0)
             await amountA.fill("0.00")
             await amountB.fill("0.00")
-            // 零金额分配须取消关联，不能作为一条有效核销提交。
-            await expect(footer.getByRole("status")).toContainText(
-                "核销金额必须大于零",
-            )
-            await expect(submit).toBeDisabled()
+            await expect(footer.getByRole("status")).toContainText("核销金额必须大于零")
+            await submit.click()
+            await expect(confirm).toHaveCount(0)
             await amountA.fill("644.00")
             await amountB.fill("644.00")
             await receiptAmount.fill("1000.00")
@@ -97,24 +88,25 @@ export async function assertReceiptRegistrationDraft(
             await expect(
                 footer.getByText("超出回款金额", { exact: true }).locator(".."),
             ).toContainText("288.00")
-            await expect(submit).toBeDisabled()
+            await submit.click()
+            await expect(confirm).toHaveCount(0)
             await receiptAmount.fill("12.345")
-            await expect(validation).toContainText("请填写有效的非负金额")
-            await expect(submit).toBeDisabled()
+            await expect(factValidation).toContainText("请填写大于零的到账金额，最多保留两位小数。")
+            await submit.click()
+            await expect(confirm).toHaveCount(0)
             await receiptAmount.fill("1500.00")
         })
 
         await test.step("取消关联可撤销，允许保留待核销余额", async () => {
-            await rowB.getByRole("checkbox").uncheck()
-            await expect(amountB).toHaveCount(0)
+            await rowB.locator('button[id$="-remove"]').click()
+            await expect(rowB).toHaveCount(0)
             await expect(
                 footer.getByText("未核销金额", { exact: true }).locator(".."),
             ).toContainText("856.00")
             await expect(submit).toBeEnabled()
-            await page
+            await workPage(page)
                 .locator("#customer-receivables-session-undo-remove")
                 .click()
-            await expect(rowB.getByRole("checkbox")).toBeChecked()
             await expect(amountB).toHaveValue("644.00")
             await expect(
                 footer.getByText("未核销金额", { exact: true }).locator(".."),
@@ -123,23 +115,25 @@ export async function assertReceiptRegistrationDraft(
         })
 
         await test.step("保存草稿及未保存更改离开保护", async () => {
-            await page
+            await workPage(page)
                 .locator("#customer-receivables-session-save-draft")
                 .click()
-            await expect(page.getByText(/^已保存 /)).toBeVisible()
+            await expect(workPage(page).getByText(/^已保存 /)).toBeVisible()
+            await expect(
+                workPage(page).getByRole("button", { name: "下载 sample-contract.pdf" }),
+            ).toBeVisible()
             await expect(amountA).toHaveValue("644.00")
             await expect(amountB).toHaveValue("644.00")
-            const bankReference = page.locator(
+            const bankReference = workPage(page).locator(
                 "#customer-receivables-session-bank-reference",
             )
             await bankReference.fill(`${input.bankReference}-未保存`)
-            await page.locator("#customer-receivables-session-close").click()
-            await expect(page.getByRole("alertdialog")).toContainText(
-                "回款登记尚有未保存的更改",
-            )
-            await page
-                .locator("#customer-receivables-session-discard-dialog-cancel")
-                .click()
+            const guarded = await page.evaluate(() => {
+                const event = new Event("beforeunload", { cancelable: true })
+                window.dispatchEvent(event)
+                return event.defaultPrevented
+            })
+            expect(guarded).toBe(true)
             await expect(bankReference).toHaveValue(
                 `${input.bankReference}-未保存`,
             )
@@ -147,8 +141,8 @@ export async function assertReceiptRegistrationDraft(
         })
 
         await test.step("审批确认展示主体、金额与待核销余额，取消不提交", async () => {
+            await expect(submit).not.toHaveAttribute("title", "请上传回款凭证")
             await submit.click()
-            const confirm = page.getByRole("alertdialog")
             await expect(confirm).toContainText(input.customerName)
             await expect(confirm).toContainText("1,500.00")
             await expect(confirm).toContainText("1,288.00")
@@ -160,7 +154,7 @@ export async function assertReceiptRegistrationDraft(
             await test
                 .info()
                 .attach("回款提交确认", { path, contentType: "image/png" })
-            await page
+            await workPage(page)
                 .locator(
                     "#customer-receivables-session-receipt-confirm-dialog-cancel",
                 )
@@ -181,9 +175,9 @@ export async function assertReceiptRegistrationDraft(
                 await page.setViewportSize(viewport)
                 await submit.scrollIntoViewIfNeeded()
                 await expect(submit).toBeInViewport()
-                const dimensions = await page.evaluate(() => ({
-                    width: document.documentElement.clientWidth,
-                    scrollWidth: document.documentElement.scrollWidth,
+                const dimensions = await workPage(page).locator("html").evaluate((documentRoot) => ({
+                    width: documentRoot.clientWidth,
+                    scrollWidth: documentRoot.scrollWidth,
                 }))
                 expect(
                     dimensions.scrollWidth,

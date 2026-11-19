@@ -19,7 +19,7 @@ export type PaymentRelatedDocumentRef = Readonly<{
     payableAccountId?: string
     sourceHref?: string
     sourceType?: PayableSourceType
-    amount: string
+    amount: string | null
     statusLabel: string
     statusTone: "success" | "warning"
 }>

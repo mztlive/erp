@@ -25,12 +25,18 @@ export type ScopedPayableAccountWire = Readonly<{
 
 export type FundsPaymentAllocationWire = Readonly<{
     id: string
+    supplier_payment_id?: string | null
+    supplier_deposit_usage_id?: string | null
     allocation_seq: number
-    allocation_action: string
-    payable_entry_id?: string | null
-    allocated_amount?: string | null
-    allocated_at?: number | null
-    reverses_allocation_id?: string | null
+    allocation_action: "apply" | "reverse"
+    payable_entry_id: string
+    payable_account_id: string | null
+    source_type: string | null
+    source_document_id: string | null
+    source_document_no: string | null
+    allocated_amount: string
+    allocated_at: number
+    reverses_allocation_id: string | null
 }>
 
 export type ScopedSupplierPaymentWire = Readonly<{
@@ -108,5 +114,6 @@ export type FundsScopedPurchaseAllocationPageWire =
     FundsScopedPageWire<ScopedPurchaseInvoiceAllocationWire>
 export type FundsScopedPayableResultWire =
     FundsScopedResultWire<ScopedPayableAccountWire>
-export type FundsScopedPaymentResultWire =
-    FundsScopedResultWire<ScopedSupplierPaymentWire>
+export type FundsScopedPaymentResultWire = ScopedSupplierPaymentWire &
+    Omit<FundsScopedResultWire<ScopedSupplierPaymentWire>, "data"> &
+    Readonly<{ effective_amount?: string }>

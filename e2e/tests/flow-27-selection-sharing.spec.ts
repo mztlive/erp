@@ -5,12 +5,14 @@
  * 校验密码保护、独立提货额度、个人地址、公开白名单、服务端金额、
  * 会话冲突、成功回放、冻结方案与真实导出，不模拟业务响应。
  */
+import { workPage } from "../helpers/workspace-page"
 import { test, expect, type Page, type Response } from "../helpers/test"
 import { API_BASE, apiGet, apiToken } from "../helpers/api"
 import { createCustomerViaUi } from "../helpers/customers"
 import { openLoggedInWorkspace } from "../helpers/login"
 import { chooseOption, dismissToasts } from "../helpers/ui"
 import { readImportWorkbook } from "../helpers/import-workbook"
+import { toAutomationIdSegment } from "../../erp-client/lib/automation-id"
 import { prepareLegacySelectionBook } from "../helpers/selection-legacy"
 
 test.beforeEach(() => {
@@ -185,7 +187,7 @@ async function clickWrite<T>(page: Page, selector: string, endpoint: string) {
                 candidate.request().method() === "POST" &&
                 new URL(candidate.url()).pathname === endpoint,
         ),
-        page.locator(selector).click(),
+        workPage(page).locator(selector).click(),
     ])
     return {
         data: await uiResult<T>(response),
@@ -248,9 +250,9 @@ async function unlockViaUi(
     password: string,
     voucherCode?: string,
 ) {
-    await page.locator("#sales-selection-public-password").fill(password)
+    await workPage(page).locator("#sales-selection-public-password").fill(password)
     if (voucherCode)
-        await page
+        await workPage(page)
             .locator("#sales-selection-public-voucher-code")
             .fill(voucherCode)
     const result = await clickWrite<{ access_token: string; page: PublicView }>(
@@ -313,7 +315,7 @@ async function assertLocked(
 
 async function fillRecipient(page: Page, recipient: Recipient) {
     for (const [key, value] of Object.entries(recipient)) {
-        await page
+        await workPage(page)
             .locator(`#sales-selection-public-recipient-${key}`)
             .fill(value)
     }
@@ -354,6 +356,10 @@ function assertPublicFields(value: unknown) {
         "bulk_supply_price_gross",
         "bulk_price_gross",
         "market_price",
+        "reference_prices",
+        "dropship_price_gross",
+        "original_price",
+        "markup_percent",
         "cost",
         "storage_object_key",
         "sales_owner_user_id",
@@ -568,14 +574,14 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
             `/master-data/sellable-items?q=${encodeURIComponent(prefix)}`,
         )
         await expect(
-            salesPage.getByText(fixture.skus[0]!.name, { exact: true }).first(),
+            workPage(salesPage).getByText(fixture.skus[0]!.name, { exact: true }).first(),
         ).toBeVisible({
             timeout: 20_000,
         })
-        await salesPage
+        await workPage(salesPage)
             .locator("#master-data-sellable-items-launch-selection")
             .click()
-        const dialog = salesPage.getByRole("dialog", {
+        const dialog = workPage(salesPage).getByRole("dialog", {
             name: "发起选品",
             exact: true,
         })
@@ -655,10 +661,8 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
                         `/display-items/${removed.item_id}`,
                     ),
             ),
-            salesPage
-                .locator(`[id^="sales-selection-preview-"][id$="-delete"]`)
-                .filter({ hasText: "删除该项" })
-                .nth(selectedBook.items.indexOf(removed))
+            workPage(salesPage)
+                .locator(`#sales-selection-preview-${toAutomationIdSegment(removed.item_id)}-delete`)
                 .click(),
         ])
         selectedBook = await uiResult<Book>(response)
@@ -730,7 +734,7 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
             Buffer.from(await image.arrayBuffer()).byteLength,
         ).toBeGreaterThan(0)
         await expect(
-            salesPage.locator(
+            workPage(salesPage).locator(
                 '[id^="sales-selection-preview-"][id$="-delete"]',
             ),
         ).toHaveCount(0)
@@ -750,10 +754,10 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
         expect(legacyUnlock.response.status).toBe(403)
         expect(legacyUnlock.envelope.success).toBe(false)
         await salesPage.reload()
-        await salesPage
+        await workPage(salesPage)
             .locator("#sales-selection-detail-access-password")
             .click()
-        await salesPage
+        await workPage(salesPage)
             .locator("#sales-selection-access-password-input")
             .fill(accessPassword)
         await clickWrite<Book>(
@@ -785,9 +789,9 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
     await test.step("移动端保存选择由服务端计价，非法项与过期会话不得覆盖已存选择", async () => {
         await customerPage.goto(publicPath)
         await expect(
-            customerPage.getByText(selected.name, { exact: true }),
+            workPage(customerPage).getByText(selected.name, { exact: true }),
         ).toHaveCount(0)
-        await customerPage
+        await workPage(customerPage)
             .locator("#sales-selection-public-password")
             .fill("incorrect-password")
         const [denied] = await Promise.all([
@@ -796,26 +800,26 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
                     response.request().method() === "POST" &&
                     new URL(response.url()).pathname.endsWith("/unlock"),
             ),
-            customerPage.locator("#sales-selection-public-unlock").click(),
+            workPage(customerPage).locator("#sales-selection-public-unlock").click(),
         ])
         expect(((await denied.json()) as Envelope<unknown>).success).toBe(false)
         await expect(
-            customerPage.locator("#sales-selection-public-password"),
+            workPage(customerPage).locator("#sales-selection-public-password"),
         ).toBeVisible()
         accessToken = (
             await unlockViaUi(customerPage, publicToken, accessPassword)
         ).access_token
         await expect(
-            customerPage.getByText(selected.name, { exact: true }).first(),
+            workPage(customerPage).getByText(selected.name, { exact: true }).first(),
         ).toBeVisible({
             timeout: 20_000,
         })
-        await customerPage
+        await workPage(customerPage)
             .locator(
                 `label[for="sales-selection-public-select-${selected.item_id}"]`,
             )
             .click()
-        await customerPage
+        await workPage(customerPage)
             .locator(`#sales-selection-public-qty-${selected.item_id}`)
             .fill("3")
         const saved = await clickWrite<PublicView>(
@@ -895,7 +899,7 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
         ).toBe(saved.data.session_version)
         await customerPage.reload()
         await expect(
-            customerPage.locator(
+            workPage(customerPage).locator(
                 `#sales-selection-public-qty-${selected.item_id}`,
             ),
         ).toHaveValue("3")
@@ -926,7 +930,7 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
         expect(oldLink.envelope.success).toBe(false)
         await customerPage.reload()
         await expect(
-            customerPage.getByRole("heading", {
+            workPage(customerPage).getByRole("heading", {
                 name: "选品链接已失效",
                 exact: true,
             }),
@@ -942,7 +946,7 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
             await unlockViaUi(customerPage, publicToken, accessPassword)
         ).access_token
         await expect(
-            customerPage.locator(
+            workPage(customerPage).locator(
                 `#sales-selection-public-qty-${selected.item_id}`,
             ),
         ).toHaveValue("3")
@@ -962,7 +966,7 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
         expect(submitted.data.kind).toBe("RECEIPT")
         expect(submitted.data.receipt?.total_amount).toBe("75.00")
         await expect(
-            customerPage.getByRole("heading", {
+            workPage(customerPage).getByRole("heading", {
                 name: "选品已提交",
                 exact: true,
             }),
@@ -1041,17 +1045,17 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
         expect(lateSave.kind).toBe("RECEIPT")
         expect(lateSave.receipt).toEqual(submitted.data.receipt)
         await salesPage.goto(`/sales/selection/${selectedBook.id}`)
-        await salesPage.locator("#sales-selection-detail-open-proposal").click()
+        await workPage(salesPage).locator("#sales-selection-detail-open-proposal").click()
         await expect(
-            salesPage.getByRole("heading", { name: customerName, exact: true }),
+            workPage(salesPage).getByRole("heading", { name: customerName, exact: true }),
         ).toBeVisible({
             timeout: 20_000,
         })
         await expect(
-            salesPage.getByText(proposal.proposal_no, { exact: true }),
+            workPage(salesPage).getByText(proposal.proposal_no, { exact: true }),
         ).toBeVisible()
         await expect(
-            salesPage.getByText(selected.name, { exact: true }),
+            workPage(salesPage).getByText(selected.name, { exact: true }),
         ).toBeVisible()
         await salesPage.goto(`/sales/selection/${selectedBook.id}`)
         await clickWrite<Book>(
@@ -1094,7 +1098,7 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
         expect(revokedImage.ok, "撤销链接后图片读取资格同时失效").toBe(false)
         await customerPage.reload()
         await expect(
-            customerPage.getByRole("heading", {
+            workPage(customerPage).getByRole("heading", {
                 name: "选品已结束",
                 exact: true,
             }),
@@ -1176,13 +1180,13 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
         assertPublicFields(mallView)
         const mallItem = mallView.items[0]!
         await assertLocked(mallToken, mallItem)
-        await customerPage
+        await workPage(customerPage)
             .locator(
                 `label[for="sales-selection-public-select-${mallItem.item_id}"]`,
             )
             .click()
         await expect(
-            customerPage.locator('[id^="sales-selection-public-qty-"]'),
+            workPage(customerPage).locator('[id^="sales-selection-public-qty-"]'),
         ).toHaveCount(0)
         const confirmed = await clickWrite<PublicView>(
             customerPage,
@@ -1377,14 +1381,14 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
             `/master-data/sellable-items?q=${encodeURIComponent(prefix)}`,
         )
         await expect(
-            salesPage.getByText(fixture.skus[0]!.name, { exact: true }).first(),
+            workPage(salesPage).getByText(fixture.skus[0]!.name, { exact: true }).first(),
         ).toBeVisible({
             timeout: 20_000,
         })
-        await salesPage
+        await workPage(salesPage)
             .locator("#master-data-sellable-items-launch-selection")
             .click()
-        const dialog = salesPage.getByRole("dialog", {
+        const dialog = workPage(salesPage).getByRole("dialog", {
             name: "发起选品",
             exact: true,
         })
@@ -1443,10 +1447,10 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
         expect(voucherBook.per_person_budget).toBe("60.00")
         await salesPage.goto(`/sales/selection/${voucherBook.id}`)
         await expect(
-            salesPage.locator("#sales-selection-detail-export-vouchers"),
+            workPage(salesPage).locator("#sales-selection-detail-export-vouchers"),
         ).toBeDisabled()
         await expect(
-            salesPage.getByText("发布后生成提货码", { exact: true }),
+            workPage(salesPage).getByText("发布后生成提货码", { exact: true }),
         ).toBeVisible()
         expect(
             await apiGet<Voucher[]>(
@@ -1508,7 +1512,7 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
             await page.goto(publicPath)
             if (index === 0) {
                 await expect(
-                    page.locator("#sales-selection-public-password"),
+                    workPage(page).locator("#sales-selection-public-password"),
                 ).toBeVisible()
                 await assertMobileWidth(page)
             }
@@ -1528,13 +1532,13 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
             expect(unlocked.page.recipient).toBeNull()
             expect(unlocked.page.per_person_budget).toBe("60.00")
             await expect(
-                page.locator("#sales-selection-public-budget-remaining"),
+                workPage(page).locator("#sales-selection-public-budget-remaining"),
             ).toHaveText("剩余额度 ¥60.00")
             itemA = unlocked.page.items.find((item) => item.price === "25.00")!
             itemB = unlocked.page.items.find((item) => item.price === "35.00")!
             if (index === 0) {
                 await expect(
-                    page.locator("#sales-selection-public-save"),
+                    workPage(page).locator("#sales-selection-public-save"),
                 ).toBeVisible()
                 await assertMobileWidth(page)
             }
@@ -1545,16 +1549,16 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
 
     await test.step("甲保存 50 元选品，服务端拒绝超额且不覆盖已存结果，乙看不到甲的选品", async () => {
         const pageA = pages[0]!
-        await pageA
+        await workPage(pageA)
             .locator(
                 `label[for="sales-selection-public-select-${itemA.item_id}"]`,
             )
             .click()
-        await pageA
+        await workPage(pageA)
             .locator(`#sales-selection-public-qty-${itemA.item_id}`)
             .fill("2")
         await expect(
-            pageA.locator("#sales-selection-public-budget-remaining"),
+            workPage(pageA).locator("#sales-selection-public-budget-remaining"),
         ).toHaveText("剩余额度 ¥10.00")
         const saved = await clickWrite<PublicView>(
             pageA,
@@ -1566,54 +1570,54 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
         expect(saved.data.choices).toEqual([
             { item_id: itemA.item_id, quantity: 2, line_amount: "50.00" },
         ])
-        await pageA
+        await workPage(pageA)
             .locator(`#sales-selection-public-qty-${itemA.item_id}`)
             .fill("1")
-        await pageA
+        await workPage(pageA)
             .locator(
                 `label[for="sales-selection-public-select-${itemB.item_id}"]`,
             )
             .click()
         await expect(
-            pageA.locator("#sales-selection-public-budget-remaining"),
+            workPage(pageA).locator("#sales-selection-public-budget-remaining"),
         ).toHaveText("剩余额度 ¥0.00")
         await expect(
-            pageA.locator("#sales-selection-public-save"),
+            workPage(pageA).locator("#sales-selection-public-save"),
         ).toBeEnabled()
         await expect(
-            pageA.locator("#sales-selection-public-review"),
+            workPage(pageA).locator("#sales-selection-public-review"),
         ).toBeEnabled()
-        await pageA
+        await workPage(pageA)
             .locator(
                 `label[for="sales-selection-public-select-${itemB.item_id}"]`,
             )
             .click()
-        await pageA
+        await workPage(pageA)
             .locator(`#sales-selection-public-qty-${itemA.item_id}`)
             .fill("3")
         await expect(
-            pageA.locator("#sales-selection-public-budget-remaining"),
+            workPage(pageA).locator("#sales-selection-public-budget-remaining"),
         ).toHaveText("剩余额度 ¥-15.00")
         await expect(
-            pageA.locator("#sales-selection-public-budget"),
+            workPage(pageA).locator("#sales-selection-public-budget"),
         ).toContainText("已超额")
         await expect(
-            pageA.locator("#sales-selection-public-save"),
+            workPage(pageA).locator("#sales-selection-public-save"),
         ).toBeDisabled()
         await expect(
-            pageA.locator("#sales-selection-public-review"),
+            workPage(pageA).locator("#sales-selection-public-review"),
         ).toBeDisabled()
-        await pageA
+        await workPage(pageA)
             .locator(`#sales-selection-public-qty-${itemA.item_id}`)
             .fill("2")
         await expect(
-            pageA.locator("#sales-selection-public-budget-remaining"),
+            workPage(pageA).locator("#sales-selection-public-budget-remaining"),
         ).toHaveText("剩余额度 ¥10.00")
         await expect(
-            pageA.locator("#sales-selection-public-save"),
+            workPage(pageA).locator("#sales-selection-public-save"),
         ).toBeEnabled()
         await expect(
-            pageA.locator("#sales-selection-public-review"),
+            workPage(pageA).locator("#sales-selection-public-review"),
         ).toBeEnabled()
         const exceeded = await request<PublicView>(
             "POST",
@@ -1637,16 +1641,16 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
         expect((await publicView(publicToken, grants[1])).choices).toEqual([])
         await pages[1]!.reload()
         await expect(
-            pages[1]!.locator(
+            workPage(pages[1]!).locator(
                 `#sales-selection-public-select-${itemA.item_id}`,
             ),
         ).not.toBeChecked()
         await pageA.reload()
         await expect(
-            pageA.locator(`#sales-selection-public-qty-${itemA.item_id}`),
+            workPage(pageA).locator(`#sales-selection-public-qty-${itemA.item_id}`),
         ).toHaveValue("2")
         await expect(
-            pageA.locator("#sales-selection-public-password"),
+            workPage(pageA).locator("#sales-selection-public-password"),
         ).toHaveCount(0)
     })
 
@@ -1704,23 +1708,23 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
             >
             await route.abort("failed")
         })
-        await pageA.locator("#sales-selection-public-submit").click()
+        await workPage(pageA).locator("#sales-selection-public-submit").click()
         await expect(
-            pageA.locator("#sales-selection-public-reconcile"),
+            workPage(pageA).locator("#sales-selection-public-reconcile"),
         ).toBeVisible()
         expect(interruptedBody?.recipient).toEqual(recipients[0])
         for (const [key, value] of Object.entries(recipients[0]!))
             await expect(
-                pageA.locator(`#sales-selection-public-recipient-${key}`),
+                workPage(pageA).locator(`#sales-selection-public-recipient-${key}`),
             ).toHaveValue(value)
         await pageA.unroute(submitRoute)
         await pageA.reload()
         await expect(
-            pageA.locator("#sales-selection-public-reconcile"),
+            workPage(pageA).locator("#sales-selection-public-reconcile"),
         ).toBeVisible()
         for (const [key, value] of Object.entries(recipients[0]!))
             await expect(
-                pageA.locator(`#sales-selection-public-recipient-${key}`),
+                workPage(pageA).locator(`#sales-selection-public-recipient-${key}`),
             ).toHaveValue(value)
         await assertMobileWidth(pageA)
         const submitted = await clickWrite<PublicView>(
@@ -1781,12 +1785,12 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
         expect(laterSave.recipient).toEqual(recipients[0])
         await pageA.reload()
         await expect(
-            pageA.getByRole("heading", { name: "选品已提交", exact: true }),
+            workPage(pageA).getByRole("heading", { name: "选品已提交", exact: true }),
         ).toBeVisible({ timeout: 20_000 })
-        await expect(pageA.getByLabel("收件信息")).toContainText(
+        await expect(workPage(pageA).getByLabel("收件信息")).toContainText(
             recipients[0]!.phone,
         )
-        await expect(pageA.getByLabel("收件信息")).toContainText(
+        await expect(workPage(pageA).getByLabel("收件信息")).toContainText(
             recipients[0]!.address,
         )
         await assertMobileWidth(pageA)
@@ -1808,7 +1812,7 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
         expect(independentB.receipt).toBeFalsy()
         expect(independentB.recipient).toBeNull()
         const pageB = pages[1]!
-        await pageB
+        await workPage(pageB)
             .locator(
                 `label[for="sales-selection-public-select-${itemB.item_id}"]`,
             )
@@ -1829,10 +1833,10 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
 
     await test.step("销售更换访问密码后旧授权失效，新密码保留个人回执和未提交选择", async () => {
         await salesPage.goto(`/sales/selection/${voucherBook.id}`)
-        await salesPage
+        await workPage(salesPage)
             .locator("#sales-selection-detail-access-password")
             .click()
-        await salesPage
+        await workPage(salesPage)
             .locator("#sales-selection-access-password-input")
             .fill(replacementPassword)
         await clickWrite<Book>(
@@ -1917,7 +1921,7 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
         for (const index of [2, 3]) {
             const page = pages[index]!
             const item = index === 2 ? itemA : itemB
-            await page
+            await workPage(page)
                 .locator(
                     `label[for="sales-selection-public-select-${item.item_id}"]`,
                 )
@@ -2007,7 +2011,7 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
             )
             await pages[index]!.reload()
             await expect(
-                pages[index]!.getByRole("heading", {
+                workPage(pages[index]!).getByRole("heading", {
                     name: "选品已提交",
                     exact: true,
                 }),
@@ -2100,7 +2104,7 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
         await salesPage.goto(`/sales/selection/${voucherBook.id}`)
         for (const recipient of recipients)
             await expect(
-                salesPage.getByText(recipient.name).first(),
+                workPage(salesPage).getByText(recipient.name).first(),
             ).toBeVisible()
         for (const [kind, filename, sheetName] of [
             [
@@ -2116,7 +2120,7 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
         ]) {
             const [download] = await Promise.all([
                 salesPage.waitForEvent("download"),
-                salesPage
+                workPage(salesPage)
                     .locator(`#sales-selection-detail-export-${kind}`)
                     .click(),
             ])
@@ -2205,7 +2209,7 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
         for (const page of pages) {
             await page.reload()
             await expect(
-                page.getByRole("heading", { name: "选品已结束", exact: true }),
+                workPage(page).getByRole("heading", { name: "选品已结束", exact: true }),
             ).toBeVisible({ timeout: 20_000 })
         }
         const frozen = await apiGet<SelectionDetail[]>(
@@ -2353,17 +2357,17 @@ test("[flow-27] 套餐提货券保留商品来源、同码并发唯一方案及�
                 [firstPackage, "2"],
                 [secondPackage, "1"],
             ] as const) {
-                await page
+                await workPage(page)
                     .locator(
                         `label[for="sales-selection-public-select-${item.item_id}"]`,
                     )
                     .click()
-                await page
+                await workPage(page)
                     .locator(`#sales-selection-public-qty-${item.item_id}`)
                     .fill(quantity)
             }
             await expect(
-                page.locator("#sales-selection-public-budget-remaining"),
+                workPage(page).locator("#sales-selection-public-budget-remaining"),
             ).toHaveText("剩余额度 ¥10.00")
             const saved = await clickWrite<PublicView>(
                 page,
@@ -2510,7 +2514,7 @@ test("[flow-27] 套餐提货券保留商品来源、同码并发唯一方案及�
                     expect(replay.recipient).toEqual(recipients[0])
                     await pages[index]!.reload()
                     await expect(
-                        pages[index]!.getByRole("heading", {
+                        workPage(pages[index]!).getByRole("heading", {
                             name: "选品已提交",
                             exact: true,
                         }),
@@ -2547,7 +2551,7 @@ test("[flow-27] 套餐提货券保留商品来源、同码并发唯一方案及�
                 )
             ).access_token
             for (const item of [firstPackage, secondPackage])
-                await page
+                await workPage(page)
                     .locator(
                         `label[for="sales-selection-public-select-${item.item_id}"]`,
                     )
@@ -2588,9 +2592,9 @@ test("[flow-27] 套餐提货券保留商品来源、同码并发唯一方案及�
                 { times: 1 },
             )
             try {
-                await page.locator("#sales-selection-public-submit").click()
+                await workPage(page).locator("#sales-selection-public-submit").click()
                 await expect(
-                    page.locator("#sales-selection-public-reconcile"),
+                    workPage(page).locator("#sales-selection-public-reconcile"),
                 ).toBeVisible()
             } finally {
                 await page.unroute(matcher)
@@ -2603,9 +2607,9 @@ test("[flow-27] 套餐提货券保留商品来源、同码并发唯一方案及�
             )
             await page.reload()
             await expect(
-                page.getByRole("heading", { name: "选品已提交", exact: true }),
+                workPage(page).getByRole("heading", { name: "选品已提交", exact: true }),
             ).toBeVisible()
-            await expect(page.getByLabel("收件信息")).toContainText(
+            await expect(workPage(page).getByLabel("收件信息")).toContainText(
                 recipients[1]!.address,
             )
             expect(originalBody, "响应丢失后必须保留原提交命令").toBeTruthy()
@@ -2728,7 +2732,7 @@ test("[flow-27] 套餐提货券保留商品来源、同码并发唯一方案及�
             await salesPage.reload()
             const [download] = await Promise.all([
                 salesPage.waitForEvent("download"),
-                salesPage
+                workPage(salesPage)
                     .locator("#sales-selection-detail-export-selection-details")
                     .click(),
             ])

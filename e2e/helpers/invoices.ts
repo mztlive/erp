@@ -1,8 +1,8 @@
+import { workPage } from "./workspace-page"
 import { readFileSync } from "node:fs"
 import { expect, type Page, type Response } from "@playwright/test"
 
 import { API_BASE, apiGet, apiToken } from "./api"
-import { openWorkspaceTask } from "./ui"
 
 const TIMEOUT = 20_000
 
@@ -47,11 +47,11 @@ export async function uploadInvoiceEvidence(
     page: Page,
     files: InvoiceEvidenceFile[],
 ): Promise<void> {
-    await page
+    await workPage(page)
         .locator("#customer-receivables-session-invoice-files-input")
         .setInputFiles(files)
     for (const file of files) {
-        await expect(page.getByLabel(file.name, { exact: true })).toBeVisible({
+        await expect(workPage(page).getByLabel(file.name, { exact: true })).toBeVisible({
             timeout: TIMEOUT,
         })
     }
@@ -120,19 +120,32 @@ export async function expectInvoiceEvidenceComplete(
     return body.data.id
 }
 
+/** 按已批准申请的正式任务 ID 打开销项开票；队列摘要可能隐藏往来主体。 */
+async function openSalesInvoiceExecutionTask(page: Page, requestId: string): Promise<string> {
+    const request = await apiGet<{ status: string; work_item_id: string | null }>(
+        await apiToken("xiaoshou"), `/admin/sales-invoice-requests/${requestId}`,
+    )
+    expect(request.status).toBe("approved")
+    expect(request.work_item_id).toBeTruthy()
+    const taskId = request.work_item_id!
+    await page.goto(`/workspace/tasks/${encodeURIComponent(taskId)}`)
+    await expect(workPage(page).getByLabel("当前开票任务", { exact: true })).toBeVisible({ timeout: TIMEOUT })
+    return taskId
+}
+
 /** W01 只上传附件，由服务端按剩余批准额度一次完成开票。 */
 export async function completeSalesInvoiceFromWorkspace(
     page: Page,
-    input: { orderNo: string; customerName: string; amount: string; evidenceName: string },
+    input: { requestId: string; orderNo: string; amount: string; evidenceName: string },
 ) {
-    await openWorkspaceTask(page, "销项开票", input.customerName, "finance")
-    const task = page.getByLabel("当前开票任务", { exact: true })
+    await openSalesInvoiceExecutionTask(page, input.requestId)
+    const task = workPage(page).getByLabel("当前开票任务", { exact: true })
     await expect(task).toBeVisible({ timeout: TIMEOUT })
-    await expect(page.locator("#workspace-invoice-source-sales")).toContainText(input.orderNo)
+    await expect(workPage(page).getByText(`销售单 ${input.orderNo}`, { exact: true })).toBeVisible({ timeout: TIMEOUT })
     await expect(task.getByRole("heading", { name: "实际发票信息" })).toBeVisible()
-    await expect(page.locator("#customer-receivables-session-invoice-no")).toHaveCount(0)
-    await expect(page.locator("#customer-receivables-session-gross-amount")).toHaveCount(0)
-    const confirm = page.locator("#workspace-invoice-confirm")
+    await expect(workPage(page).locator("#customer-receivables-session-invoice-no")).toHaveCount(0)
+    await expect(workPage(page).locator("#customer-receivables-session-gross-amount")).toHaveCount(0)
+    const confirm = workPage(page).locator("#workspace-invoice-confirm")
     await expect(confirm).toBeDisabled()
     const files = invoiceEvidenceFiles(input.evidenceName)
     await uploadInvoiceEvidence(page, files)
@@ -151,13 +164,10 @@ export async function completeSalesInvoiceFromWorkspace(
 /** 红冲必须有完整票面事实；使用当前开票员及正式任务登记蓝票，不直接写库。 */
 export async function registerDetailedSalesInvoice(
     page: Page,
-    input: { orderNo: string; customerName: string; invoiceNo: string; amount: string; netAmount: string; taxAmount: string },
+    input: { requestId: string; orderNo: string; invoiceNo: string; amount: string; netAmount: string; taxAmount: string },
 ) {
-    await openWorkspaceTask(page, "销项开票", input.customerName, "finance")
-    await expect(page.getByLabel("当前开票任务", { exact: true })).toBeVisible({ timeout: TIMEOUT })
-    await expect(page.locator("#workspace-invoice-source-sales")).toContainText(input.orderNo)
-    const taskId = new URL(page.url()).searchParams.get("currentWorkItemId")
-    expect(taskId).toBeTruthy()
+    const taskId = await openSalesInvoiceExecutionTask(page, input.requestId)
+    await expect(workPage(page).getByText(`销售单 ${input.orderNo}`, { exact: true })).toBeVisible({ timeout: TIMEOUT })
     const token = await apiToken("kaipiao")
     const task = await apiGet<{
         id: string; task_version: string; business_object_type: string;
@@ -240,7 +250,7 @@ export async function expectSalesInvoiceEvidence(
     expect(body.data).toHaveLength(input.files.length)
     await page.goto(`/sales/orders/${input.salesOrderId}?section=invoice`)
     await expect(
-        page.getByRole("heading", { name: "已开发票", exact: true }),
+        workPage(page).getByRole("heading", { name: "已开发票", exact: true }),
     ).toBeVisible({
         timeout: TIMEOUT,
     })
@@ -253,19 +263,19 @@ export async function expectSalesInvoiceEvidence(
             byte_size: expected.buffer.length,
         })
         const downloadPath = `${listPath}/${input.invoiceId}/${file!.file_asset_id}/download`
-        const row = page
+        const row = workPage(page)
             .getByRole("listitem")
             .filter({ hasText: expected.name })
         // 发票号码显示在所属发票记录的标题，文件行只列文件名与下载。
         await expect(
-            page.getByRole("article").filter({ has: row }),
+            workPage(page).getByRole("article").filter({ has: row }),
         ).toContainText(input.invoiceNo ?? "附件登记", { timeout: TIMEOUT })
         const [download, response] = await Promise.all([
             page.waitForEvent("download"),
             page.waitForResponse(
                 (result) => new URL(result.url()).pathname === downloadPath,
             ),
-            row.getByRole("button", { name: "下载", exact: true }).click(),
+            row.getByRole("button", { name: `下载 ${expected.name}`, exact: true }).click(),
         ])
         expect(download.suggestedFilename()).toBe(expected.name)
         expect(await download.failure()).toBeNull()
@@ -306,19 +316,19 @@ export async function submitSalesInvoiceRequest(
         content?: string
         reason?: string
     },
-): Promise<void> {
+): Promise<string> {
     await page.goto(`/sales/orders/${input.salesOrderId}?section=invoice`)
-    const create = page.locator("#invoice-request-create")
+    const create = workPage(page).locator("#invoice-request-create")
     await expect(create).toBeEnabled({ timeout: TIMEOUT })
     await create.click()
-    await expect(page.getByRole("heading", { name: "申请开票" })).toBeVisible({
+    await expect(workPage(page).getByRole("heading", { name: "申请开票" })).toBeVisible({
         timeout: TIMEOUT,
     })
-    await expect(page.getByText(/本单可申请/)).toBeVisible({ timeout: TIMEOUT })
+    await expect(workPage(page).getByText(/本单可申请/)).toBeVisible({ timeout: TIMEOUT })
 
-    await page.locator("#invoice-request-amount").fill(input.amount)
-    const title = page.locator("#invoice-request-title")
-    const taxNumber = page.locator("#invoice-request-tax-number")
+    await workPage(page).locator("#invoice-request-amount").fill(input.amount)
+    const title = workPage(page).locator("#invoice-request-title")
+    const taxNumber = workPage(page).locator("#invoice-request-tax-number")
     await expect(title).toHaveAttribute("readonly", "")
     await expect(taxNumber).toHaveAttribute("readonly", "")
     if (input.title) {
@@ -328,12 +338,12 @@ export async function submitSalesInvoiceRequest(
     }
     await expect(taxNumber).toHaveValue(input.taxNumber, { timeout: TIMEOUT })
     const frozenTitle = await title.inputValue()
-    await page.locator("#invoice-request-content").fill(input.content ?? "商品")
-    await page
+    await workPage(page).locator("#invoice-request-content").fill(input.content ?? "商品")
+    await workPage(page)
         .locator("#invoice-request-reason")
         .fill(input.reason ?? "销售单已生效，申请开票")
 
-    const submit = page.locator("#invoice-request-submit")
+    const submit = workPage(page).locator("#invoice-request-submit")
     await expect(submit).toBeEnabled({ timeout: TIMEOUT })
     const posted = page.waitForResponse(
         (response) =>
@@ -352,12 +362,16 @@ export async function submitSalesInvoiceRequest(
         },
     })
     await expect(
-        page
+        workPage(page)
             .locator('[aria-label="开票申请详情"]')
-            .or(page.getByText("正在读取开票申请"))
-            .or(page.getByRole("button", { name: "撤回申请" }))
+            .or(workPage(page).getByText("正在读取开票申请"))
+            .or(workPage(page).getByRole("button", { name: "撤回申请" }))
             .first(),
     ).toBeVisible({ timeout: TIMEOUT })
-    await expect(page.locator("#invoice-request-form")).toHaveCount(0)
-    await expect(page.locator("#invoice-request-submit")).toHaveCount(0)
+    await expect(workPage(page).locator("#invoice-request-form")).toHaveCount(0)
+    await expect(workPage(page).locator("#invoice-request-submit")).toHaveCount(0)
+    const result = (await response.json()) as { data: { id: string; status: string } }
+    expect(result.data.status).toBe("in_approval")
+    expect(result.data.id).toBeTruthy()
+    return result.data.id
 }

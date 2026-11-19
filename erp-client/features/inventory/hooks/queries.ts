@@ -94,9 +94,9 @@ export function useSubmitAdjustmentMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: submitAdjustment,
-        onSuccess: async (result) => {
+        onSuccess: (result) => {
             if (result.status === "succeeded") {
-                await Promise.all([
+                void Promise.all([
                     queryClient.invalidateQueries({
                         queryKey: inventoryKeys.all,
                     }),

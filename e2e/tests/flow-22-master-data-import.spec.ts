@@ -1,9 +1,10 @@
 /**
  * [flow-22] 真实 XLSX 导入与后台任务结果。
  * 商品走浏览器分片直传、服务端解析和逐行建档；供应商走页面工作簿解析、加密源数据和逐行建档。
- * 验证同 SPU 多 SKU、公司参考价与供给成本边界、重复跳过、失败行保留及失败工作簿下载。
+ * 验证同 SPU 多 SKU、公司参考价与供给成本边界、失败行原子拒绝、重复跳过及供应商失败工作簿下载。
  * 全部写入由页面办理；API 仅核对生产结果和同一提交的幂等回放。
  */
+import { workPage } from "../helpers/workspace-page"
 import { test, expect, type Page, type Response } from "../helpers/test"
 import { API_BASE, apiGet, apiToken } from "../helpers/api"
 import { newLoggedInContext } from "../helpers/login"
@@ -21,23 +22,18 @@ const PRODUCT_HEADERS = [
     "产品副图",
     "品牌",
     "产品类别",
-    "产品类别编码",
     "产品名称",
     "产品规格",
-    "一件代发成本价（含税运）",
-    "集采成本价（含税）",
-    "一件代发底价（含税运）",
-    "集采底价（含税）",
-    "集采起订量",
-    "一件代发快递",
-    "市场价",
-    "供应商名称",
+    "供应商代发成本价（含税，元）",
+    "供应商集采成本价（含税，元）",
+    "供应商集采起订量",
+    "市场参考价（元）",
     "供应商编号",
-    "食品产品有效期",
-    "生产批次",
-    "是否自营产品",
-    "自营产品库存",
-    "商品税率",
+    "供应商订货编码",
+    "进项税率（%）",
+    "代发价（含税）",
+    "集采价（含税）",
+    "集采起订量",
 ]
 const SUPPLIER_HEADERS = [
     "供应商编号",
@@ -136,16 +132,16 @@ async function finishedJob(token: string, jobId: string): Promise<Job> {
 
 async function openJobResults(page: Page, job: Job, expectedRows: number) {
     await page.goto("/governance/background-jobs")
-    await page
+    await workPage(page)
         .locator("#governance-background-jobs-toolbar-search-input")
         .fill(job.job_no)
-    await page.locator("#governance-background-jobs-toolbar-query").click()
-    const row = page
+    await workPage(page).locator("#governance-background-jobs-toolbar-query").click()
+    const row = workPage(page)
         .locator("#governance-background-jobs-table tbody tr")
         .filter({ hasText: job.job_no })
     await expect(row).toHaveCount(1, VISIBLE)
     await row.click()
-    const sheet = page.getByRole("dialog")
+    const sheet = workPage(page).getByRole("dialog")
     await expect(sheet.getByRole("heading", { name: "逐项结果" })).toBeVisible(
         VISIBLE,
     )
@@ -156,15 +152,15 @@ async function openJobResults(page: Page, job: Job, expectedRows: number) {
             .getByText("部分成功", { exact: true }),
     ).toBeVisible(VISIBLE)
     await expect(
-        page.locator("#governance-background-jobs-preview-cancel"),
+        workPage(page).locator("#governance-background-jobs-preview-cancel"),
     ).toHaveCount(0)
     return sheet
 }
 
 async function importProducts(page: Page, filePath: string): Promise<Job> {
     await page.goto("/master-data/products")
-    await page.locator("#master-data-products-list-import").click()
-    await page.locator("#product-import-file").setInputFiles(filePath)
+    await workPage(page).locator("#master-data-products-list-import").click()
+    await workPage(page).locator("#product-import-file").setInputFiles(filePath)
     const completed = page.waitForResponse(
         (response) =>
             response.request().method() === "POST" &&
@@ -173,9 +169,9 @@ async function importProducts(page: Page, filePath: string): Promise<Job> {
             ),
         { timeout: 90_000 },
     )
-    await page.locator("#product-import-submit").click()
+    await workPage(page).locator("#product-import-submit").click()
     const job = await responseData<Job>(await completed)
-    await expect(page.locator("#product-import-dialog")).toHaveCount(0, VISIBLE)
+    await expect(workPage(page).locator("#product-import-dialog")).toHaveCount(0, VISIBLE)
     return job
 }
 
@@ -193,22 +189,24 @@ function productRow(input: {
         [1, `00${input.suffix}${input.specification === "单盒" ? "1" : "2"}`],
         [5, input.brand],
         [6, input.category],
-        [8, input.name],
-        [9, input.specification],
-        [10, "12.00"],
-        [11, "11.00"],
-        [12, "49.00"],
-        [13, "45.00"],
-        [14, "10"],
-        [16, "59.00"],
-        [17, "导入文件内的供应商不会自动建供给"],
-        [18, "0000123"],
+        [7, input.name],
+        [8, input.specification],
+        [9, "12.00"],
+        [10, "11.00"],
+        [11, "3"],
+        [12, "59.00"],
+        [13, "SUP-HZSF"],
+        [14, input.productNo + (input.specification === "单盒" ? "-001" : "-002")],
+        [15, "9"],
+        [16, "49.00"],
+        [17, "45.00"],
+        [18, "10"],
     ] as const)
         row[index] = value
     return row
 }
 
-test("[flow-22] 商品报价表分片直传：同 SPU 多 SKU、失败行与重复重导", async ({
+test("[flow-22] 商品和供给联合导入：同 SPU 多 SKU、失败行与重复重导", async ({
     browser,
 }, testInfo) => {
     test.setTimeout(240_000)
@@ -322,7 +320,7 @@ test("[flow-22] 商品报价表分片直传：同 SPU 多 SKU、失败行与重�
     )
     expect(skus.items.map((sku) => sku.sku_no).sort()).toEqual([
         `${productNo}-01`,
-        `${productNo}-02`,
+        `SKU-${productNo}-02`,
     ])
     const revisions = await apiGet<ApiPage<SkuRevision>>(
         token,
@@ -345,28 +343,41 @@ test("[flow-22] 商品报价表分片直传：同 SPU 多 SKU、失败行与重�
             market_price: "59.00",
         })
     }
-    const offerings = await apiGet<ApiPage<unknown>>(
-        token,
-        "/admin/supplier-offerings",
-        {
-            product_no: productNo,
-            page: 1,
-            page_size: 100,
-        },
+    type ImportedOffering = {
+        id: string; sku_id: string; supplier_no: string; supplier_sku_code: string; source_type: string
+        dropship_supply_price_gross: string; bulk_supply_price_gross: string
+        bulk_minimum_order_quantity: string; input_tax_rate: string; available_quantity: string
+        current_revision_id: string; availability_version: number
+    }
+    const readOfferings = async () => (await apiGet<ApiPage<ImportedOffering>>(
+        token, "/admin/supplier-offerings", { product_no: productNo, page: 1, page_size: 100 },
+    )).items.sort((first, second) => first.supplier_sku_code.localeCompare(second.supplier_sku_code))
+    const offerings = await readOfferings()
+    expect(offerings.map((offering) => offering.supplier_sku_code)).toEqual([`${productNo}-001`, `${productNo}-002`])
+    expect(offerings.map((offering) => offering.sku_id)).toEqual(
+        [...skus.items].sort((first, second) => first.sku_no.localeCompare(second.sku_no)).map((sku) => sku.id),
     )
-    expect(
-        offerings.total,
-        "商品导入不得以供应商名称、编号或成本价隐式创建供给",
-    ).toBe(0)
+    for (const offering of offerings) {
+        expect(offering).toMatchObject({ supplier_no: "SUP-HZSF", source_type: "EXCEL" })
+        expect(Number(offering.dropship_supply_price_gross)).toBe(12)
+        expect(Number(offering.bulk_supply_price_gross)).toBe(11)
+        expect(Number(offering.bulk_minimum_order_quantity)).toBe(3)
+        expect(Number(offering.input_tax_rate)).toBe(0.09)
+        expect(Number(offering.available_quantity)).toBe(999)
+    }
+    expect((await apiGet<ApiPage<unknown>>(token, "/admin/products", { keyword: `${productNo}-BAD`, page: 1, page_size: 100 })).total).toBe(0)
+    for (const sku of skus.items) {
+        expect((await apiGet<ApiPage<unknown>>(token, "/admin/stock-balances", { sku_id: sku.id, page: 1, page_size: 100 })).total).toBe(0)
+    }
     await page.goto(`/master-data/products/${productId}`)
     await expect(
-        page.getByRole("heading", { name: productName, exact: true }),
+        workPage(page).getByRole("heading", { name: productName, exact: true }),
     ).toBeVisible(VISIBLE)
     await expect(
-        page.getByText(`${productNo}-01`, { exact: false }),
+        workPage(page).getByText(`${productNo}-01`, { exact: false }),
     ).toBeVisible(VISIBLE)
     await expect(
-        page.getByText(`${productNo}-02`, { exact: false }),
+        workPage(page).getByText(`${productNo}-02`, { exact: false }),
     ).toBeVisible(VISIBLE)
 
     const replay = await finishedJob(
@@ -391,6 +402,7 @@ test("[flow-22] 商品报价表分片直传：同 SPU 多 SKU、失败行与重�
     expect(
         after.items.map((sku) => [sku.id, sku.current_revision_id]).sort(),
     ).toEqual(skus.items.map((sku) => [sku.id, sku.current_revision_id]).sort())
+    expect(await readOfferings()).toEqual(offerings)
 })
 
 test("[flow-22] 供应商模板：逐行创建与跳过、失败下载和原提交人权限", async ({
@@ -440,9 +452,9 @@ test("[flow-22] 供应商模板：逐行创建与跳过、失败下载和原提�
         [valid, duplicate, invalid, formula],
     )
     await page.goto("/master-data/suppliers")
-    await page.locator("#master-data-suppliers-list-import").click()
-    await page.locator("#supplier-import-file").setInputFiles(file)
-    const dialog = page.locator("#supplier-import-dialog")
+    await workPage(page).locator("#master-data-suppliers-list-import").click()
+    await workPage(page).locator("#supplier-import-file").setInputFiles(file)
+    const dialog = workPage(page).locator("#supplier-import-dialog")
     await expect(
         dialog.getByText("已读取 4 行，提交后后台逐行导入。", { exact: false }),
     ).toBeVisible(VISIBLE)
@@ -455,7 +467,7 @@ test("[flow-22] 供应商模板：逐行创建与跳过、失败下载和原提�
             new URL(response.url()).pathname ===
                 "/admin/supplier-profiles/import/jobs",
     )
-    await page.locator("#supplier-import-submit").click()
+    await workPage(page).locator("#supplier-import-submit").click()
     const submittedResponse = await submitted
     const requestBody = submittedResponse.request().postDataJSON()
     const job = await finishedJob(
@@ -528,7 +540,7 @@ test("[flow-22] 供应商模板：逐行创建与跳过、失败下载和原提�
         sheet.getByText(invalidName.slice(0, 30), { exact: true }),
     ).toBeVisible()
     const downloaded = page.waitForEvent("download")
-    await page.locator("#supplier-import-download-failures").click()
+    await workPage(page).locator("#supplier-import-download-failures").click()
     const download = await downloaded
     expect(download.suggestedFilename()).toBe("供应商导入失败行.xlsx")
     const downloadPath = testInfo.outputPath("供应商失败行.xlsx")

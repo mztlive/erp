@@ -73,6 +73,8 @@ export async function createReviewOrder(
                     fulfillment_due_at: Math.floor(Date.now() / 1000) + 30 * 86400,
                     quantity: kind === "service" ? "2" : "1", base_unit_code: kind === "service" ? "CI" : "HE",
                     unit_price_gross: kind === "service" ? "100.00" : "1000.00", pricing_mode: "MANUAL",
+                    procurement_supply_price_gross: kind === "service" ? "65.00" : "100.00",
+                    procurement_price_basis: "BULK",
                 },
             }],
         },
@@ -90,12 +92,14 @@ export async function assignReviewTask(page: Page, token: string, taskId: string
     const candidates = await apiGet<Array<{ user_id: string; account: string }>>(token, `/admin/work-items/${taskId}/reassign-candidates`)
     const target = candidates.find((candidate) => candidate.account === account)
     expect(target, `当前任务的完整业务资格候选必须包含 ${account}`).toBeTruthy()
-    const assigned = await reviewCommand<ReviewTask>(page, token, "POST", `/admin/work-items/${taskId}/reassign`, {
+    const assigned = await reviewCommand<Pick<ReviewTask, "id" | "task_version">>(page, token, "POST", `/admin/work-items/${taskId}/reassign`, {
         expected_task_version: task.task_version, target_user_id: target!.user_id,
         reason: "E2E 同一合格账号验证付款后的履约缓存更新", idempotency_key: randomUUID(),
     })
-    expect(assigned).toMatchObject({ id: taskId, owner_user_id: target!.user_id, status: "OPEN" })
+    expect(assigned.id).toBe(taskId)
+    expect(assigned.task_version).not.toBe(task.task_version)
     const qualified = await apiGet<ReviewTask>(token, `/admin/work-items/${taskId}`)
+    expect(qualified).toMatchObject({ id: taskId, task_version: assigned.task_version, owner_user_id: target!.user_id, status: "OPEN" })
     expect(qualified.allowed_actions).toContain("PROCESS")
     return qualified
 }

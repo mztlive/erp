@@ -40,6 +40,7 @@ import {
     useSaveAllocationDraftMutation,
 } from "@/features/customer-receivables/hooks/queries"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
+import { useCustomerReceiptFiles } from "@/features/file-assets/hooks/business-finance-files"
 import type {
     AllocationDraftLine,
     AllocationSessionView,
@@ -121,6 +122,12 @@ export function useAllocationSession({
 
     const isReceipt = session.mode === "receipt"
     const existing = Boolean(session.existingFactId)
+    const savedReceiptFiles = useCustomerReceiptFiles(
+        isReceipt && session.status === "draft"
+            ? session.existingFactId
+            : undefined,
+        true,
+    ).query
 
     const form = useAppForm({
         defaultValues: factDefaultValues(session.fact, isReceipt),
@@ -282,12 +289,17 @@ export function useAllocationSession({
     )
 
     const issues: ValidationIssue[] = []
-    const hasExistingReceiptFiles =
-        existing && (session.fact.receiptFileNames?.length ?? 0) > 0
+    const hasExistingReceiptFiles = (savedReceiptFiles.data?.length ?? 0) > 0
+    const missingReceiptFileMessage =
+        existing && savedReceiptFiles.isFetching
+            ? "正在读取已保存回款凭证"
+            : existing && savedReceiptFiles.isError
+              ? "请重试读取已保存回款凭证，或重新上传"
+              : "请上传回款凭证"
     const invoiceFileError = isReceipt
         ? invoiceFilesError(formValues.receiptFiles, "回款凭证") ||
           (formValues.receiptFiles.length === 0 && !hasExistingReceiptFiles
-              ? "请上传回款凭证"
+              ? missingReceiptFileMessage
               : undefined)
         : invoiceFilesError(formValues.invoiceFiles)
     if (invoiceFileError) {

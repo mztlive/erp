@@ -157,9 +157,15 @@ export function WorkspaceFulfillmentTask({
                                     controller.operation.gate.state ===
                                         "BLOCKED" &&
                                     operationType !== "WAREHOUSE_SHIP" && (
-                                        <FulfillmentPaymentBadges
-                                            operation={controller.operation}
-                                        />
+                                        <>
+                                            <StatusBadge
+                                                label="预付待完成"
+                                                tone="warning"
+                                            />
+                                            <FulfillmentPaymentBadges
+                                                operation={controller.operation}
+                                            />
+                                        </>
                                     )}
                             </>
                         }

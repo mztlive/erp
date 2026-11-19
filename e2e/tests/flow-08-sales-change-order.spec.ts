@@ -3,10 +3,11 @@
  * 文档: docs/erp-phase-1.md §6.5.1 + §4.4（生效后才允许变更单）
  * 账号: xiaoshou（提交销售单/变更单）、caigou（销售单采购确认 + 变更单履约影响）、caiwu（变更单财务复核）
  *
- * 验收约束：销售变更必须实际修改完整目标后提交；驳回后以「修改原单」撤回，
+ * 验收约束：销售变更必须实际修改完整目标后提交；终态驳回后继续编辑原单，
  * 原变更单 ID 与基准版本不变，重提形成新提交与新审批实例，历史提交及原 v1 不被改写。
  * 末节点通过自动生成 v2；未生效的变更不改变销售金额、应收和采购状态。
  */
+import { workPage } from "../helpers/workspace-page"
 import { archiveContractViaUi } from "../helpers/contracts"
 import fs from "node:fs"
 import os from "node:os"
@@ -64,6 +65,7 @@ type SalesCenter = {
     id: string
     order_no: string
     current_revision_id: string | null
+    can_start_sales_change_order: boolean
     revisions: Array<{
         id: string
         revision_no: number
@@ -103,8 +105,8 @@ async function gotoNav(page: Page, name: string, hrefId: string) {
 }
 
 async function rejectOpenTask(page: Page, reason: string) {
-    await page.getByRole("button", { name: "驳回" }).click()
-    const dialog = page.getByRole("dialog", { name: "确认驳回" })
+    await workPage(page).getByRole("button", { name: "驳回" }).click()
+    const dialog = workPage(page).getByRole("dialog", { name: "确认驳回" })
     await expect(dialog).toBeVisible({ timeout: TIMEOUT })
     await dialog.getByLabel("驳回原因").fill(reason)
     await dialog.getByRole("button", { name: "确认驳回" }).click()
@@ -125,31 +127,31 @@ async function createPhysicalSalesOrder(
 ) {
     await gotoNav(page, "销售单", "workspace-sidebar-nav-sales-orders")
     await expect(
-        page.getByRole("heading", { name: "销售单", exact: true }),
+        workPage(page).getByRole("heading", { name: "销售单", exact: true }),
     ).toBeVisible({
         timeout: TIMEOUT,
     })
-    await page.locator("#sales-orders-list-header-create").click()
+    await workPage(page).locator("#sales-orders-list-header-create").click()
     await expect(
-        page
+        workPage(page)
             .getByRole("heading", { name: "新建销售单" })
-            .or(page.getByRole("heading", { name: "业务信息" })),
+            .or(workPage(page).getByRole("heading", { name: "业务信息" })),
     ).toBeVisible({
         timeout: TIMEOUT,
     })
     await archiveContractViaUi(page, { contractNo, customerName, pdf: contractPdfPath(), paymentTerms: "货到 30 天" })
-    await expect(page.locator("#sales-orders-create-customer")).toContainText(new RegExp(customerName))
+    await expect(workPage(page).locator("#sales-orders-create-customer")).toContainText(new RegExp(customerName))
 
     await chooseOption(
         page,
-        page.locator("#sales-orders-create-header-welfare-scene"),
-        "年节礼包",
+        workPage(page).locator("#sales-orders-create-header-welfare-scene"),
+        "礼包",
     )
-    await expect(page.locator("#sales-orders-create-header-payment-terms")).toContainText("货到 30 天")
-    await expect(page.locator("#sales-orders-create-header-payment-terms").locator("input, button, [role=combobox]")).toHaveCount(0)
+    await expect(workPage(page).locator("#sales-orders-create-header-payment-terms")).toContainText("货到 30 天")
+    await expect(workPage(page).locator("#sales-orders-create-header-payment-terms").locator("input, button, [role=combobox]")).toHaveCount(0)
 
-    await page.locator("#sales-orders-create-line-items-add").click()
-    const skuDialog = page.getByRole("dialog", { name: "添加商品" })
+    await workPage(page).locator("#sales-orders-create-line-items-add").click()
+    const skuDialog = workPage(page).getByRole("dialog", { name: "添加商品" })
     await expect(skuDialog).toBeVisible({ timeout: TIMEOUT })
     await skuDialog
         .locator("#sales-orders-sku-picker-filter-search")
@@ -158,7 +160,7 @@ async function createPhysicalSalesOrder(
         .locator("#sales-orders-sku-picker-filter-search")
         .press("Enter")
     const skuRow = skuDialog.getByRole("row").filter({
-        has: page.getByText(SKU_NO, { exact: true }),
+        has: workPage(page).getByText(SKU_NO, { exact: true }),
     })
     await expect(skuRow).toHaveCount(1, { timeout: TIMEOUT })
     await expect(skuRow).toBeVisible({ timeout: TIMEOUT })
@@ -167,8 +169,8 @@ async function createPhysicalSalesOrder(
     await skuRow.getByRole("checkbox").check()
     await skuDialog.getByRole("button", { name: /加入所选（/ }).click()
     await expect(skuDialog).toHaveCount(0, { timeout: TIMEOUT })
-    const selectedLine = page.getByRole("row").filter({
-        has: page.getByRole("button", {
+    const selectedLine = workPage(page).getByRole("row").filter({
+        has: workPage(page).getByRole("button", {
             name: new RegExp(`^更换销售项目 ${SKU_NAME}`),
         }),
     })
@@ -181,24 +183,24 @@ async function createPhysicalSalesOrder(
     await unitPrice.fill("1288.00")
     await expect(unitPrice).toHaveValue(UNIT_PRICE_RE)
 
-    await page.getByLabel("数量").fill(LINE_QTY)
-    await page.locator("#sales-orders-create-batch-due-date-open").click()
+    await workPage(page).getByLabel("数量").fill(LINE_QTY)
+    await workPage(page).locator("#sales-orders-create-batch-due-date-open").click()
     await pickCalendarDay(
         page,
-        page.locator("#sales-orders-create-batch-due-date"),
+        workPage(page).locator("#sales-orders-create-batch-due-date"),
         plusDaysIso(21),
     )
-    await page.locator("#sales-orders-create-batch-due-date-apply").click()
+    await workPage(page).locator("#sales-orders-create-batch-due-date-apply").click()
     await expectToast(page, "已批量设置交期")
 
     await expect(
-        page.getByText("暂未确定采购负责人，请联系管理员维护采购责任规则"),
+        workPage(page).getByText("暂未确定采购负责人，请联系管理员维护采购责任规则"),
     ).toHaveCount(0, {
         timeout: TIMEOUT,
     })
 
-    await page.locator("#sales-orders-create-submit").click()
-    const submitDialog = page.getByRole("dialog", { name: "提交销售单" })
+    await workPage(page).locator("#sales-orders-create-submit").click()
+    const submitDialog = workPage(page).getByRole("dialog", { name: "提交销售单" })
     await expect(submitDialog).toBeVisible({ timeout: TIMEOUT })
     await dismissToasts(page)
     await submitDialog
@@ -207,7 +209,7 @@ async function createPhysicalSalesOrder(
     await page.waitForURL(/\/sales\/orders\/(?!.*mode=create)[^/?]+/, {
         timeout: TIMEOUT,
     })
-    await expect(page.getByText("审批中", { exact: true }).first()).toBeVisible(
+    await expect(workPage(page).getByText("审批中", { exact: true }).first()).toBeVisible(
         {
             timeout: TIMEOUT,
         },
@@ -217,22 +219,18 @@ async function createPhysicalSalesOrder(
     return match[1]
 }
 
-async function openSalesOrder(page: Page, salesOrderId: string) {
+async function openSalesOrder(page: Page, salesOrderId: string, customerName: string) {
     await page.goto(`/sales/orders/${salesOrderId}`)
-    await expect(page.locator("#sales-orders-detail-start-change")).toBeVisible(
-        {
-            timeout: TIMEOUT,
-        },
-    )
+    await expect(workPage(page).getByRole("heading", { name: customerName, exact: true })).toBeVisible({ timeout: TIMEOUT })
 }
 
 async function expectChangeBlocked(page: Page) {
     await expect(
-        page.locator("#sales-orders-detail-start-change"),
+        workPage(page).locator("#sales-orders-detail-start-change"),
     ).toBeDisabled({
         timeout: TIMEOUT,
     })
-    await expect(page.locator("#sales-orders-create-submit")).toHaveCount(0)
+    await expect(workPage(page).locator("#sales-orders-create-submit")).toHaveCount(0)
 }
 
 test.describe("flow-08 销售变更单（未履约）", () => {
@@ -266,79 +264,72 @@ test.describe("flow-08 销售变更单（未履约）", () => {
                 customerName,
                 contractNo,
             )
-            await expect(sales.page.getByText(GROSS_RE).first()).toBeVisible({
+            await expect(workPage(sales.page).getByText(GROSS_RE).first()).toBeVisible({
                 timeout: TIMEOUT,
             })
             await expectChangeBlocked(sales.page)
 
-            // 2. 负向：审批中不得发起改单
-            await openWorkspaceTask(
-                procurement.page,
-                /销售单审批/,
-                customerName,
-                "approval",
-            )
-            await expect(
-                procurement.page.getByText("采购确认").first(),
-            ).toBeVisible({
-                timeout: TIMEOUT,
-            })
-            await rejectOpenTask(
-                procurement.page,
-                "交期无法承诺，先驳回验证不得开变更单",
-            )
+            const orderNo = await readHeaderDocumentNumber(sales.page)
+            // 2. 终态驳回后不能发起改单，提交人必须重提原销售单。
+            await openWorkspaceTask(procurement.page, /销售单审批/, orderNo, "approval")
+            await expect(workPage(procurement.page).getByText("采购确认").first()).toBeVisible({ timeout: TIMEOUT })
+            const salesRejection = "交期无法承诺，先驳回验证不得开变更单"
+            await rejectOpenTask(procurement.page, salesRejection)
 
-            await openSalesOrder(sales.page, salesOrderId)
-            await expect(
-                sales.page.getByText("审批中", { exact: true }).first(),
-            ).toBeVisible({
-                timeout: TIMEOUT,
-            })
-            await sales.page.getByRole("tab", { name: /审批/ }).click()
-            await expect(sales.page.getByText("最近驳回").first()).toBeVisible({
-                timeout: TIMEOUT,
-            })
+            await openWorkspaceTask(sales.page, "驳回待处理", orderNo, "approval")
+            await expect(workPage(sales.page).getByText(salesRejection, { exact: true }).first()).toBeVisible()
+            await workPage(sales.page).getByRole("button", { name: "修改或重新提交", exact: true }).click()
+            await expect(sales.page).toHaveURL(new RegExp(`/sales/orders/${salesOrderId}(?:\\?|$)`))
+            await expect(workPage(sales.page).getByText("已驳回", { exact: true }).first()).toBeVisible()
+            await expect(workPage(sales.page).locator("#sales-orders-detail-start-change")).toHaveCount(0)
+
+            await workPage(sales.page).locator("#sales-orders-create-submit").click()
+            const resubmit = workPage(sales.page).getByRole("dialog", { name: "提交销售单" })
+            const confirmResubmit = resubmit.locator("#sales-orders-submit-confirm-confirm")
+            await expect(confirmResubmit).toBeDisabled()
+            await resubmit.getByLabel("重新提交说明").fill("已重新确认原交期，按原内容提交")
+            const [resubmittedOrder] = await Promise.all([
+                sales.page.waitForResponse((response) => response.request().method() === "POST" &&
+                    new URL(response.url()).pathname === `/admin/sales-orders/${salesOrderId}/submit`),
+                confirmResubmit.click(),
+            ])
+            expect(resubmittedOrder.ok()).toBe(true)
+            expect((await resubmittedOrder.json()).success).toBe(true)
+            await expect(workPage(sales.page).getByText("审批中", { exact: true }).first()).toBeVisible()
             await expectChangeBlocked(sales.page)
 
-            // 3. 采购再通过，销售单生效；不得出现已建采购单/已履约
-            await openWorkspaceTask(
-                procurement.page,
-                /销售单审批/,
-                customerName,
-                "approval",
-            )
+            // 3. 采购审批重提的原销售单；生效后仍不得出现已建采购单或已履约。
+            await openWorkspaceTask(procurement.page, /销售单审批/, orderNo, "approval")
             await approveCurrentDocument(procurement.page)
 
-            await openSalesOrder(sales.page, salesOrderId)
+            await openSalesOrder(sales.page, salesOrderId, customerName)
             await expect(
-                sales.page.getByText("已生效", { exact: true }).first(),
+                workPage(sales.page).getByText("已生效", { exact: true }).first(),
             ).toBeVisible({
                 timeout: TIMEOUT,
             })
-            await expect(sales.page.getByText(/版本\s*v1/)).toBeVisible({
+            await expect(workPage(sales.page).getByText(/版本\s*v1/)).toBeVisible({
                 timeout: TIMEOUT,
             })
             await expect(
-                sales.page.getByText("未开始", { exact: true }).first(),
+                workPage(sales.page).getByText("未开始", { exact: true }).first(),
             ).toBeVisible({
                 timeout: TIMEOUT,
             })
             await expect(
-                sales.page.locator("#sales-orders-detail-start-change"),
+                workPage(sales.page).locator("#sales-orders-detail-start-change"),
             ).toBeEnabled()
             await expect(
-                sales.page.locator("#sales-orders-create-submit"),
+                workPage(sales.page).locator("#sales-orders-create-submit"),
             ).toHaveCount(0)
 
-            await sales.page.getByRole("tab", { name: /采购/ }).click()
             await expect(
-                sales.page.getByTestId("sales-order-purchase-status"),
-            ).toContainText("供给未完全覆盖", {
+                workPage(sales.page).locator("#sales-order-follow-up-delivery").locator(".."),
+            ).toContainText("待采购", {
                 timeout: TIMEOUT,
             })
 
             const salesToken = await apiToken("xiaoshou")
-            const orderNo = await readHeaderDocumentNumber(sales.page)
             const original = await apiGet<SalesCenter>(
                 salesToken,
                 `/admin/sales-orders/${salesOrderId}`,
@@ -354,7 +345,7 @@ test.describe("flow-08 销售变更单（未履约）", () => {
                     response.request().method() === "POST" &&
                     response.url().endsWith("/admin/sales-change-orders"),
             )
-            await sales.page
+            await workPage(sales.page)
                 .locator("#sales-orders-detail-start-change")
                 .click()
             const created = (await (await createdResponse).json()).data as {
@@ -363,13 +354,13 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             expect(created.id).toBeTruthy()
             const changeOrderId = created.id
             // 发起改单直接进入编辑弹窗，无单独确认层。
-            const edit = sales.page.getByRole("dialog", {
+            const edit = workPage(sales.page).getByRole("dialog", {
                 name: "销售改单",
                 exact: true,
             })
             await expect(edit).toBeVisible({ timeout: TIMEOUT })
             await edit
-                .locator('textarea[id^="sales-change-edit-"][id$="-reason"]')
+                .getByLabel("变更原因")
                 .fill("客户追加福利数量，调整销售成交单价")
             await edit
                 .locator('input[id^="sales-change-edit-"][id$="-quantity"]')
@@ -402,12 +393,13 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             expect(submittedHttp.ok(), submittedBody).toBe(true)
             expect(JSON.parse(submittedBody).success, submittedBody).toBe(true)
             await expect(edit).toBeHidden({ timeout: TIMEOUT })
+            await openSalesOrder(sales.page, salesOrderId, customerName)
+            const changesTab = workPage(sales.page).getByRole("tab", { name: /^变更与售后/ })
+            await expect(changesTab).toContainText("改单中", { timeout: TIMEOUT })
+            await changesTab.click()
             await expectChangeBlocked(sales.page)
-            await expect(
-                sales.page.getByRole("tab", { name: /版本/ }),
-            ).toContainText("改单中", {
-                timeout: TIMEOUT,
-            })
+            expect(await apiGet<SalesCenter>(salesToken, `/admin/sales-orders/${salesOrderId}`))
+                .toMatchObject({ can_start_sales_change_order: false })
             const firstSubmission = await apiGet<ChangeDetail>(
                 salesToken,
                 `/admin/sales-change-orders/${changeOrderId}`,
@@ -419,7 +411,7 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             expect(firstTarget.lines[0].goods?.unit_price_gross).toMatch(
                 /^1300(?:\.0+)?$/,
             )
-            await expect(sales.page.getByText(GROSS_RE).first()).toBeVisible({
+            await expect(workPage(sales.page).getByText(GROSS_RE).first()).toBeVisible({
                 timeout: TIMEOUT,
             })
 
@@ -427,34 +419,21 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             await openWorkspaceTask(
                 procurement.page,
                 /销售变更单审批/,
-                orderNo,
+                changeOrderId,
                 "approval",
             )
             await approveCurrentDocument(procurement.page)
             await openWorkspaceTask(
                 finance.page,
                 /销售变更单审批/,
-                orderNo,
+                changeOrderId,
                 "approval",
             )
             await rejectOpenTask(finance.page, CHANGE_REJECTION)
-            await openSalesOrder(sales.page, salesOrderId)
-            await sales.page.getByRole("tab", { name: /版本/ }).click()
-            await sales.page
-                .getByRole("button", { name: "修改原单", exact: true })
-                .click()
-            const revise = sales.page.getByRole("dialog", {
-                name: "修改原单",
-                exact: true,
-            })
-            await expect(revise).toBeVisible({ timeout: TIMEOUT })
-            await revise
-                .locator('textarea[id$="-cancel-dialog-reason"]')
-                .fill("按财务驳回意见修改原销售变更单并重提")
-            await revise
-                .getByRole("button", { name: "撤回并修改原单", exact: true })
-                .click()
-            await expect(revise).toBeHidden({ timeout: TIMEOUT })
+            await openSalesOrder(sales.page, salesOrderId, customerName)
+            await workPage(sales.page).getByRole("tab", { name: /^变更与售后/ }).click()
+            await expect(workPage(sales.page).getByText(CHANGE_REJECTION, { exact: true }).first()).toBeVisible()
+            await workPage(sales.page).locator("#sales-orders-change-edit-original").click()
             await expect(edit).toBeVisible({ timeout: TIMEOUT })
             const reopened = await apiGet<ChangeDraft>(
                 salesToken,
@@ -467,7 +446,7 @@ test.describe("flow-08 销售变更单（未履约）", () => {
                 `/admin/sales-change-orders/${changeOrderId}`,
             )
             expect(draftDetail.id).toBe(changeOrderId)
-            expect(draftDetail.status).toBe("DRAFT")
+            expect(draftDetail.status).toBe("REJECTED")
             expect(draftDetail.current_submission_id).toBe(
                 firstSubmission.current_submission_id,
             )
@@ -475,11 +454,11 @@ test.describe("flow-08 销售变更单（未履约）", () => {
                 firstSubmission.target_content_hash,
             )
             const oldInstanceId = firstSubmission.approval.instance!.id
-            const cancelled = await apiGet<{ status: string }>(
+            const rejectedInstance = await apiGet<{ status: string }>(
                 salesToken,
                 `/admin/approval-instances/${oldInstanceId}`,
             )
-            expect(cancelled.status).toBe("CANCELLED")
+            expect(rejectedInstance.status).toBe("REJECTED")
             const oldHistory = await apiGet<{
                 items: Array<{ result: string; decision_reason: string | null }>
             }>(salesToken, `/admin/approval-instances/${oldInstanceId}/history`)
@@ -492,10 +471,11 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             ).toBeTruthy()
             expect(
                 oldHistory.items.some((item) => item.result === "CANCELLED"),
-            ).toBeTruthy()
+            ).toBe(false)
             await edit
-                .locator('textarea[id^="sales-change-edit-"][id$="-reason"]')
+                .getByLabel("变更原因")
                 .fill("按财务驳回意见重新确认客户福利数量")
+            await edit.getByLabel("重新提交说明").fill("已按财务意见重新核对客户确认的数量")
             await edit
                 .locator('input[id^="sales-change-edit-"][id$="-quantity"]')
                 .fill("4")
@@ -552,11 +532,11 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             await openWorkspaceTask(
                 procurement.page,
                 /销售变更单审批/,
-                orderNo,
+                changeOrderId,
                 "approval",
             )
             await expect(
-                procurement.page.getByText("采购确认履约影响").first(),
+                workPage(procurement.page).getByText("采购确认履约影响").first(),
             ).toBeVisible({
                 timeout: TIMEOUT,
             })
@@ -564,45 +544,45 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             await openWorkspaceTask(
                 finance.page,
                 /销售变更单审批/,
-                orderNo,
+                changeOrderId,
                 "approval",
             )
             await expect(
-                finance.page.getByText("财务复核金额与应收").first(),
+                workPage(finance.page).getByText("财务复核金额与应收").first(),
             ).toBeVisible({
                 timeout: TIMEOUT,
             })
             await approveCurrentDocument(finance.page)
 
             // 6. v2 采用重提目标（4 × 1300）；v1 完整历史继续保留。
-            await openSalesOrder(sales.page, salesOrderId)
+            await openSalesOrder(sales.page, salesOrderId, customerName)
             await expect(
-                sales.page.getByText("已生效", { exact: true }).first(),
+                workPage(sales.page).getByText("已生效", { exact: true }).first(),
             ).toBeVisible({
                 timeout: TIMEOUT,
             })
-            await expect(sales.page.getByText(/版本\s*v2/)).toBeVisible({
+            await expect(workPage(sales.page).getByText(/版本\s*v2/)).toBeVisible({
                 timeout: TIMEOUT,
             })
             await expect(
-                sales.page.getByText(CHANGED_GROSS_RE).first(),
+                workPage(sales.page).getByText(CHANGED_GROSS_RE).first(),
             ).toBeVisible({
                 timeout: TIMEOUT,
             })
             await expect(
-                sales.page.getByText("未开始", { exact: true }).first(),
+                workPage(sales.page).getByText("未开始", { exact: true }).first(),
             ).toBeVisible()
             await expect(
-                sales.page.locator("#sales-orders-detail-start-change"),
+                workPage(sales.page).locator("#sales-orders-detail-start-change"),
             ).toBeEnabled()
 
-            await sales.page.getByRole("tab", { name: /版本/ }).click()
+            await workPage(sales.page).getByRole("tab", { name: /^变更与售后/ }).click()
             await expect(
-                sales.page.getByText("v2", { exact: true }).first(),
+                workPage(sales.page).getByText("v2", { exact: true }).first(),
             ).toBeVisible({
                 timeout: TIMEOUT,
             })
-            await expect(sales.page.getByText("当前在用")).toBeVisible()
+            await expect(workPage(sales.page).getByText("当前在用")).toBeVisible()
             const effective = await apiGet<SalesCenter>(
                 salesToken,
                 `/admin/sales-orders/${salesOrderId}`,
@@ -623,51 +603,51 @@ test.describe("flow-08 销售变更单（未履约）", () => {
                 )?.gross_amount,
             ).toMatch(/^5200(?:\.0+)?$/)
             await expect(
-                sales.page.getByText("销售变更单").first(),
+                workPage(sales.page).getByText("销售变更单").first(),
             ).toBeVisible()
             await expect(
-                sales.page.getByRole("button", { name: "提交改单" }),
+                workPage(sales.page).getByRole("button", { name: "提交改单" }),
             ).toHaveCount(0)
 
-            await sales.page.getByRole("tab", { name: /采购/ }).click()
             await expect(
-                sales.page.getByTestId("sales-order-purchase-status"),
-            ).toContainText("供给未完全覆盖")
+                workPage(sales.page).locator("#sales-order-follow-up-delivery").locator(".."),
+            ).toContainText("待采购")
 
-            await sales.page.getByRole("tab", { name: "应收", exact: true }).click()
+            await workPage(sales.page).locator("#sales-order-follow-up-receivable").click()
             await expect(
-                sales.page.getByText(/待收|未结|未收/).first(),
+                workPage(sales.page).getByText(/待收|未结|未收/).first(),
             ).toBeVisible({
                 timeout: TIMEOUT,
             })
             await expect(
-                sales.page.getByText(CHANGED_GROSS_RE).first(),
+                workPage(sales.page).getByText(CHANGED_GROSS_RE).first(),
             ).toBeVisible()
 
             // 7. 新改单草稿可作废：作废后 v2 不变，可重新发起改单。
-            await openSalesOrder(sales.page, salesOrderId)
+            await openSalesOrder(sales.page, salesOrderId, customerName)
             const draftResponse = sales.page.waitForResponse(
                 (response) =>
                     response.request().method() === "POST" &&
                     response.url().endsWith("/admin/sales-change-orders"),
             )
-            await sales.page
+            await workPage(sales.page)
                 .locator("#sales-orders-detail-start-change")
                 .click()
             const voidTarget = (await (await draftResponse).json()).data as {
                 id: string
             }
-            const draftEdit = sales.page.getByRole("dialog", {
+            const draftEdit = workPage(sales.page).getByRole("dialog", {
                 name: "销售改单",
                 exact: true,
             })
             await expect(draftEdit).toBeVisible({ timeout: TIMEOUT })
-            await draftEdit.getByRole("button", { name: "取消" }).click()
+            await draftEdit.getByRole("button", { name: "关闭改单", exact: true }).click()
+            await expect(draftEdit).toBeHidden({ timeout: TIMEOUT })
+            await workPage(sales.page).getByRole("tab", { name: /^变更与售后/ }).click()
             await expect(
-                sales.page.locator("#sales-orders-detail-start-change"),
+                workPage(sales.page).locator("#sales-orders-detail-start-change"),
             ).toContainText("继续改单", { timeout: TIMEOUT })
-            await sales.page.getByRole("tab", { name: /版本/ }).click()
-            await sales.page.locator("#sales-orders-change-void-trigger").click()
+            await workPage(sales.page).locator("#sales-orders-change-void-trigger").click()
             const voidResponse = sales.page.waitForResponse(
                 (response) =>
                     response.request().method() === "POST" &&
@@ -677,7 +657,7 @@ test.describe("flow-08 销售变更单（未履约）", () => {
                             `/admin/sales-change-orders/${voidTarget.id}/void`,
                         ),
             )
-            await sales.page
+            await workPage(sales.page)
                 .getByRole("alertdialog")
                 .getByRole("button", { name: "确认作废" })
                 .click()
@@ -688,7 +668,7 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             )
             expect(voided.status).toBe("VOIDED")
             await expect(
-                sales.page.locator("#sales-orders-detail-start-change"),
+                workPage(sales.page).locator("#sales-orders-detail-start-change"),
             ).toContainText("发起改单", { timeout: TIMEOUT })
             const afterVoid = await apiGet<SalesCenter>(
                 salesToken,

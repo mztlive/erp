@@ -85,8 +85,8 @@ async function mockLogin(page: Page, replies: readonly LoginReply[]): Promise<()
                         const response = await fetch('/login', { method: 'POST' });
                         const result = await response.json();
                         if (response.ok && result.success !== false) {
-                            history.replaceState(null, '', '/workspace');
-                            document.body.innerHTML = '<h1>我的工作台</h1>';
+                            history.replaceState(null, '', '/workspace/tasks');
+                            document.body.innerHTML = '<h1>待我处理</h1>';
                         }
                     });
                 </script>
@@ -117,7 +117,7 @@ test("UI 登录按 Retry-After 重试，并复用服务器返回的实际 JWT", 
     expect(attempts()).toBe(2)
     expect(Date.now() - started).toBeGreaterThanOrEqual(1_000)
     expect(Date.now() - started).toBeLessThan(4_000)
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "待我处理" })).toBeVisible()
     await expect(apiToken({ account: "helper-rate-limited-user", password: "helper-password" }))
         .resolves.toBe("helper-response-jwt")
 })

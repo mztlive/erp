@@ -1,13 +1,13 @@
+import { workPage } from "./workspace-page"
 import { randomUUID } from "node:crypto";
 
 import { expect, type Page } from "./test";
-import { API_BASE, apiGet } from "./api";
-import { approveCurrentDocument, openWorkspaceTask } from "./ui";
-import { expandSourcingEditor } from "./sourcing";
+import { API_BASE, apiGet, apiToken } from "./api";
+import { approveCurrentDocument, openWorkspaceTask, openWorkspaceTaskRow } from "./ui";
 import { openLoggedInWorkspace } from "./login";
 import { uploadAcceptanceEvidence } from "./fulfillment";
+import { confirmSupplyAllocation } from "./sourcing";
 
-const VISIBLE = { timeout: 20_000 };
 const SERVICE_SKU = "SVC-INSTALL-01";
 const IMAGE = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=",
@@ -153,6 +153,8 @@ export async function prepareAnalyticsOrders(
               quantity: "2",
               base_unit_code: "CI",
               unit_price_gross: "100.00",
+              procurement_supply_price_gross: "65.00",
+              procurement_price_basis: "BULK",
               pricing_mode: "MANUAL",
             },
           },
@@ -178,32 +180,42 @@ export async function prepareAnalyticsOrders(
 
 export type AnalyticsPurchase = { purchaseId: string; procurementNet: string; procurementGross: string; service: { id: string; version: number; purchase_order_id: string } };
 
+/** 采购审批按本人队列中的正式任务 ID 打开。 */
+export async function approveSourcedPurchase(page: Page, purchaseId: string): Promise<void> {
+  const token = await apiToken("caigoushenpi");
+  const matching = async () => {
+    const queue = await apiGet<{ items: Array<{
+      id: string; business_object_id: string; business_object_type: string; allowed_actions: string[];
+    }> }>(token, "/admin/work-items", {
+      scope: "mine", work_item_type: "DOCUMENT_APPROVAL", purchase_order_ids: purchaseId, page_size: 20,
+    });
+    return queue.items.filter((item) => item.business_object_id === purchaseId && item.business_object_type === "purchase_order");
+  };
+  await expect.poll(async () => (await matching()).length).toBe(1);
+  const [task] = await matching();
+  expect(task!.allowed_actions).toContain("APPROVE");
+  const filters = encodeURIComponent(JSON.stringify({ purchase_orders: [purchaseId] }));
+  await page.goto(`/workspace/tasks?filters=${filters}`);
+  await openWorkspaceTaskRow(page, task!.id);
+  await approveCurrentDocument(page);
+}
+
 /** 创建并通过一张真实采购，付款和履约仍由后续正式命令分别执行。 */
 export async function createAnalyticsPurchase(
   order: AnalyticsOrder,
   procurementPage: Page,
   procurementToken: string,
 ): Promise<AnalyticsPurchase> {
-  await openWorkspaceTask(procurementPage, "待供给分配", order.order_no, "procurement");
-  await expandSourcingEditor(procurementPage, "家电上门安装");
-  await procurementPage.locator("#procurement-orders-create-preview").click();
-  const submitted = procurementPage.waitForResponse(
-    (response) =>
-      response.request().method() === "POST" &&
-      new URL(response.url()).pathname === "/admin/purchase-orders/from-sourcing",
-  );
-  await procurementPage
-    .locator("#procurement-orders-create-preview-confirm")
-    .click({ force: true });
-  const response = await submitted;
-  expect(response.ok(), await response.text()).toBe(true);
-  await expect(procurementPage.getByText("已创建 1 张采购单并提交审批。")).toBeVisible(VISIBLE);
+  await openWorkspaceTask(procurementPage, "待安排采购", order.order_no, "procurement");
+  const allocation = await confirmSupplyAllocation(procurementPage);
+  expect(allocation.orders).toHaveLength(1);
+  expect(allocation.stock_reservations).toHaveLength(0);
+  expect(allocation.work_item_status).toBe("COMPLETED");
   const browser = procurementPage.context().browser();
   if (!browser) throw new Error("采购审批需要浏览器上下文");
   const approver = await openLoggedInWorkspace(browser, "caigoushenpi");
   try {
-    await openWorkspaceTask(approver.page, "采购单审批", order.order_no, "approval");
-    await approveCurrentDocument(approver.page);
+    await approveSourcedPurchase(approver.page, allocation.orders[0]!.purchase_order_id);
   } finally {
     await approver.context.close();
   }
@@ -262,16 +274,16 @@ export async function completeAnalyticsService(
   });
   expect(confirmed.ok, await confirmed.clone().text()).toBe(true);
   await openWorkspaceTask(salesPage, "客户验收登记", order.order_no, "fulfillment");
-  await salesPage.locator("#sales-orders-acceptance-register-open").click();
+  await workPage(salesPage).locator("#sales-orders-acceptance-register-open").click();
   await uploadAcceptanceEvidence(salesPage);
-  await salesPage.locator("#sales-orders-acceptance-register-submit").click();
+  await workPage(salesPage).locator("#sales-orders-acceptance-register-submit").click();
   const accepted = salesPage.waitForResponse(
     (item) =>
       item.request().method() === "POST" &&
       new URL(item.url()).pathname === "/admin/customer-acceptances/commit",
     { timeout: 60_000 },
   );
-  await salesPage.locator("#sales-orders-acceptance-confirm-confirm").click();
+  await workPage(salesPage).locator("#sales-orders-acceptance-confirm-confirm").click();
   const acceptance = await accepted;
   expect(acceptance.ok(), await acceptance.text()).toBe(true);
   return {

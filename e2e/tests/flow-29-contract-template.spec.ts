@@ -1,3 +1,4 @@
+import { businessDocument, workPage } from "../helpers/workspace-page"
 import { readFile } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 
@@ -46,7 +47,6 @@ type Application = {
 type ApplicationInput = { command_id: string; template_id: string; purpose: string }
 type Counter = { group: Group; year: number; last_sequence: number; version: number | null }
 type Envelope<T> = { success: boolean; data?: T; errorMessage?: string }
-let restoreQualifications: (() => Promise<void>) | undefined
 
 async function jsonRequest<T>(token: string, path: string, input: unknown, method = "POST") {
     const response = await fetch(`${API_BASE}${path}`, {
@@ -139,40 +139,6 @@ async function createCompany(token: string, group: string, suffix: string): Prom
     })
 }
 
-/** 既有岗位角色允许自定义；在隔离库显式授予本流程资格，结束后恢复原绑定。 */
-async function prepareQualifications(token: string, suffix: string): Promise<void> {
-    const accounts = await apiGet<Array<{ id: string; account: string; role_ids: string[] }>>(token, "/admin/admins")
-    const saved: Array<{ id: string; roles: string[]; temporary: string }> = []
-    restoreQualifications = async () => {
-        for (const item of saved.reverse()) {
-            const restored = await jsonRequest(token, `/admin/admins/${item.id}/role`, { role_ids: item.roles }, "PUT")
-            expect(restored.response.ok, restored.body.errorMessage).toBe(true)
-            expect(restored.body.success).toBe(true)
-            const removed = await jsonRequest(token, `/admin/roles/${item.temporary}`, undefined, "DELETE")
-            expect(removed.response.ok, removed.body.errorMessage).toBe(true)
-            expect(removed.body.success).toBe(true)
-        }
-    }
-    for (const spec of [
-        { account: "xitong", permissions: ["contract_template:list", "contract_template:manage", "company:list", "company:detail"] },
-        { account: "xiaoshou", permissions: ["contract_template:list", "contract_application:list", "contract_application:create", "contract_application:download"] },
-    ]) {
-        const account = accounts.find((row) => row.account === spec.account)
-        expect(account, `固定岗位账号 ${spec.account}`).toBeTruthy()
-        const temporary = await command<string>(token, "/admin/roles", { name: `E2E 合同资格 ${spec.account} ${suffix}`, permissions: spec.permissions })
-        saved.push({ id: account!.id, roles: [...account!.role_ids], temporary })
-        const bound = await jsonRequest(token, `/admin/admins/${account!.id}/role`, { role_ids: [...account!.role_ids, temporary] }, "PUT")
-        expect(bound.response.ok, bound.body.errorMessage).toBe(true)
-        expect(bound.body.success).toBe(true)
-    }
-}
-
-test.afterEach(async () => {
-    const restore = restoreQualifications
-    restoreQualifications = undefined
-    if (restore) await restore()
-})
-
 async function saveCompany(token: string, company: Company, changes: Partial<Company>): Promise<Company> {
     const { id, party_no, version, legal_name, short_name, aliases, unified_credit_code, status } = { ...company, ...changes }
     const input = { party_no, version, legal_name, short_name, aliases, unified_credit_code, status }
@@ -186,19 +152,19 @@ const applyInput = (template: Template, purpose: string): ApplicationInput => ({
 const applicationPath = "/admin/contract-applications"
 
 async function browserApply(page: Page, template: Template, purpose: string) {
-    await page.locator(`#contract-template-apply-${template.id}`).click()
-    await page.locator("#template-apply-purpose").fill(purpose)
+    await workPage(page).locator(`#contract-template-apply-${template.id}`).click()
+    await workPage(page).locator("#template-apply-purpose").fill(purpose)
     const [response, download] = await Promise.all([
         page.waitForResponse((candidate) => candidate.request().method() === "POST" && new URL(candidate.url()).pathname === applicationPath),
         page.waitForEvent("download"),
-        page.locator("#template-apply-submit").click(),
+        workPage(page).locator("#template-apply-submit").click(),
     ])
     const result = await uiData<Application>(response)
     expect(download.suggestedFilename()).toBe(`${result.contract_no}.docx`)
-    await expect(page.locator("#template-apply-dialog")).toContainText(result.contract_no)
+    await expect(workPage(page).locator("#template-apply-dialog")).toContainText(result.contract_no)
     const input = response.request().postDataJSON() as ApplicationInput
     const bytes = await readFile((await download.path())!)
-    await page.locator("#template-apply-done").click()
+    await workPage(page).locator("#template-apply-done").click()
     return { result, input, bytes }
 }
 
@@ -217,13 +183,12 @@ async function apiDownload(token: string, id: string): Promise<Buffer> {
 test("[flow-29] Word 模板维护、编号申请恢复、历史文件及权限和流水边界", async ({ browser }, testInfo) => {
     test.setTimeout(6 * 60 * 1000)
     // 本流程包含流水耗尽验收，只允许在可整体销毁的隔离数据库执行。
-    expect(Boolean(process.env.ERP_E2E_CONFIG_PATH) || process.env.ERP_E2E_ISOLATED === "1",
+    expect(Boolean(process.env.ERP_E2E_CONFIG_PATH) && process.env.ERP_E2E_ISOLATED === "1",
         "flow-29 必须通过 python3 scripts/run-e2e-parallel.py e2e/tests/flow-29-contract-template.spec.ts 执行，禁止消耗开发库流水").toBe(true)
     const suffix = Date.now().toString(36).toUpperCase()
     const marker = `FLOW29-${suffix}`
     const parts = contractDocxParts(marker)
     const adminToken = await apiToken("admin")
-    await prepareQualifications(adminToken, suffix)
     const { page: manager } = await openLoggedInWorkspace(browser, "xitong")
     const managerToken = await apiToken("xitong")
     const { page: sales } = await openLoggedInWorkspace(browser, "xiaoshou")
@@ -242,10 +207,10 @@ test("[flow-29] Word 模板维护、编号申请恢复、历史文件及权限�
 
     await test.step("管理员浏览器上传两节含图片 Word，样张保留正文且不占号", async () => {
         await manager.goto("/sales/contract-templates")
-        await manager.locator("#contract-templates-page-action-upload").click()
-        await manager.locator("#template-upload-name").fill(`E2E 合同模板 ${suffix}`)
-        await chooseOption(manager, manager.locator("#template-upload-company"), company.legal_name)
-        await manager.locator("#template-upload-file-input").setInputFiles({
+        await workPage(manager).locator("#contract-templates-page-action-upload").click()
+        await workPage(manager).locator("#template-upload-name").fill(`E2E 合同模板 ${suffix}`)
+        await chooseOption(manager, workPage(manager).locator("#template-upload-company"), company.legal_name)
+        await workPage(manager).locator("#template-upload-file-input").setInputFiles({
             name: "contract.docx", mimeType: DOCX_MIME, buffer: zipParts(parts),
         })
         const [response] = await Promise.all([
@@ -254,17 +219,17 @@ test("[flow-29] Word 模板维护、编号申请恢复、历史文件及权限�
                 (candidate) => candidate.request().method() === "POST" && new URL(candidate.url()).pathname === "/admin/contract-templates",
                 { timeout: 60_000 },
             ),
-            manager.locator("#template-upload-submit").click(),
+            workPage(manager).locator("#template-upload-submit").click(),
         ])
         main = await uiData<Template>(response)
         templates.set("FSY", main)
         expect(main).toMatchObject({ enabled: true, group: "FSY", company_id: company.id, company_name: company.legal_name, file_name: "contract.docx" })
         expect(main).not.toHaveProperty("object_key")
-        await expect(manager.locator("#template-upload-dialog")).toHaveCount(0)
+        await expect(workPage(manager).locator("#template-upload-dialog")).toHaveCount(0)
         const [sampleResponse, download] = await Promise.all([
             manager.waitForResponse((candidate) => new URL(candidate.url()).pathname === `/admin/contract-templates/${main.id}/sample`),
             manager.waitForEvent("download"),
-            manager.locator(`#contract-template-sample-${main.id}`).click(),
+            workPage(manager).locator(`#contract-template-sample-${main.id}`).click(),
         ])
         expect(sampleResponse.headers()["content-type"]).toBe(DOCX_MIME)
         expect(sampleResponse.headers()["content-disposition"]).toContain("FSY-S-SAMPLE.docx")
@@ -311,10 +276,10 @@ test("[flow-29] Word 模板维护、编号申请恢复、历史文件及权限�
             templates.set(group, body.data!)
         }
         await sales.goto("/sales/contract-templates")
-        await expect(sales.locator(`#contract-template-apply-${main.id}`)).toBeVisible()
-        await expect(sales.locator("#contract-templates-page-action-upload")).toHaveCount(0)
-        await expect(sales.locator("#contract-templates-page-action-counter")).toHaveCount(0)
-        await expect(sales.locator(`[id^="contract-template-status-"]`)).toHaveCount(0)
+        await expect(workPage(sales).locator(`#contract-template-apply-${main.id}`)).toBeVisible()
+        await expect(workPage(sales).locator("#contract-templates-page-action-upload")).toHaveCount(0)
+        await expect(workPage(sales).locator("#contract-templates-page-action-counter")).toHaveCount(0)
+        await expect(workPage(sales).locator(`[id^="contract-template-status-"]`)).toHaveCount(0)
         const deniedUpload = await upload(salesToken, company, "FSY", "越权上传", parts)
         expect(deniedUpload.response.status).toBe(403)
         await rejected(salesToken, `/admin/contract-templates/${main.id}/status`, { version: main.version, enabled: false }, 403, /权限/)
@@ -337,11 +302,11 @@ test("[flow-29] Word 模板维护、编号申请恢复、历史文件及权限�
         for (const group of ["ZHYF", "GYL", "BDKJ"] as const) expect(counter(after, group)).toEqual(counter(initial, group))
         expect(await command(salesToken, applicationPath, first.input)).toEqual(first.result)
         await rejected(salesToken, applicationPath, { ...first.input, purpose: "修改申请用途" }, 409, /已登记/)
-        await sales.locator("#contract-applications-view").click()
-        await expect(sales.locator("#contract-applications-table")).toContainText(first.result.contract_no)
+        await workPage(sales).locator("#contract-applications-view").click()
+        await expect(workPage(sales).locator("#contract-applications-table")).toContainText(first.result.contract_no)
         const [download] = await Promise.all([
             sales.waitForEvent("download"),
-            sales.locator(`#contract-application-download-${first.result.id}`).click(),
+            workPage(sales).locator(`#contract-application-download-${first.result.id}`).click(),
         ])
         expect(download.suggestedFilename()).toBe(`${first.result.contract_no}.docx`)
         expect(await readFile((await download.path())!)).toEqual(first.bytes)
@@ -357,7 +322,7 @@ test("[flow-29] Word 模板维护、编号申请恢复、历史文件及权限�
         }
         const archives = await apiGet<ApiPage<{ contract_no: string }>>(salesToken, "/admin/contracts", { q: first.result.contract_no })
         expect(archives.items).toHaveLength(0)
-        await sales.locator("#contract-templates-view").click()
+        await workPage(sales).locator("#contract-templates-view").click()
     })
 
     await test.step("真实服务器提交后丢失响应，刷新恢复同一请求且仅消耗一次流水", async () => {
@@ -374,53 +339,53 @@ test("[flow-29] Word 模板维护、编号申请恢复、历史文件及权限�
         }
         await sales.route("**/admin/contract-applications", dropResponse)
         try {
-            await sales.locator(`#contract-template-apply-${main.id}`).click()
-            await sales.locator("#template-apply-purpose").fill(`待核对用途 ${suffix}`)
-            await sales.locator("#template-apply-submit").click()
-            await expect(sales.locator("#template-apply-dialog [role=alert]")).toContainText("结果暂未确认")
-            await expect(sales.locator("#template-apply-purpose")).toBeDisabled()
+            await workPage(sales).locator(`#contract-template-apply-${main.id}`).click()
+            await workPage(sales).locator("#template-apply-purpose").fill(`待核对用途 ${suffix}`)
+            await workPage(sales).locator("#template-apply-submit").click()
+            await expect(workPage(sales).locator("#template-apply-dialog [role=alert]")).toContainText("结果暂未确认")
+            await expect(workPage(sales).locator("#template-apply-purpose")).toBeDisabled()
         } finally {
             await sales.unroute("**/admin/contract-applications", dropResponse)
         }
         expect(committed.id).toBeTruthy()
         await sales.reload()
-        await sales.locator("#contract-application-resume").click()
-        await expect(sales.locator("#template-apply-purpose")).toHaveValue(originalInput.purpose)
-        await expect(sales.locator("#template-apply-purpose")).toBeDisabled()
+        await workPage(sales).locator("#contract-application-resume").click()
+        await expect(workPage(sales).locator("#template-apply-purpose")).toHaveValue(originalInput.purpose)
+        await expect(workPage(sales).locator("#template-apply-purpose")).toBeDisabled()
         const [response, download] = await Promise.all([
             sales.waitForResponse((candidate) => candidate.request().method() === "POST" && new URL(candidate.url()).pathname === applicationPath),
             sales.waitForEvent("download"),
-            sales.locator("#template-apply-submit").click(),
+            workPage(sales).locator("#template-apply-submit").click(),
         ])
         expect(response.request().postDataJSON()).toEqual(originalInput)
         expect(await uiData<Application>(response)).toEqual(committed)
         expect(download.suggestedFilename()).toBe(`${committed.contract_no}.docx`)
-        await sales.locator("#template-apply-done").click()
-        await expect(sales.locator("#contract-application-resume")).toHaveCount(0)
+        await workPage(sales).locator("#template-apply-done").click()
+        await expect(workPage(sales).locator("#contract-application-resume")).toHaveCount(0)
         expect(counter(await counters(managerToken), "FSY").last_sequence).toBe(counter(before, "FSY").last_sequence + 1)
     })
 
     await test.step("Word 下载失败后通过原记录重下载，其他编号组独立分配", async () => {
         const zhyf = templates.get("ZHYF")!
         await sales.route("**/admin/contract-applications/*/download", (route) => route.abort("failed"), { times: 1 })
-        await sales.locator(`#contract-template-apply-${zhyf.id}`).click()
-        await sales.locator("#template-apply-purpose").fill("下载失败后重试")
+        await workPage(sales).locator(`#contract-template-apply-${zhyf.id}`).click()
+        await workPage(sales).locator("#template-apply-purpose").fill("下载失败后重试")
         const [response] = await Promise.all([
             sales.waitForResponse((candidate) => candidate.request().method() === "POST" && new URL(candidate.url()).pathname === applicationPath),
-            sales.locator("#template-apply-submit").click(),
+            workPage(sales).locator("#template-apply-submit").click(),
         ])
         const result = await uiData<Application>(response)
-        await expect(sales.locator("#template-apply-dialog [role=alert]")).toBeVisible()
-        await expect(sales.locator("#template-apply-redownload")).toBeEnabled()
+        await expect(workPage(sales).locator("#template-apply-dialog [role=alert]")).toBeVisible()
+        await expect(workPage(sales).locator("#template-apply-redownload")).toBeEnabled()
         const afterFailedDownload = await counters(managerToken)
         expect(counter(afterFailedDownload, "ZHYF").last_sequence).toBe(counter(initial, "ZHYF").last_sequence + 1)
         const [download] = await Promise.all([
             sales.waitForEvent("download"),
-            sales.locator("#template-apply-redownload").click(),
+            workPage(sales).locator("#template-apply-redownload").click(),
         ])
         expect(download.suggestedFilename()).toBe(`${result.contract_no}.docx`)
         await expectStampedContractDocx(sales, await readFile((await download.path())!), parts, result.contract_no, marker)
-        await sales.locator("#template-apply-done").click()
+        await workPage(sales).locator("#template-apply-done").click()
         expect(await counters(managerToken)).toEqual(afterFailedDownload)
         for (const group of ["GYL", "BDKJ"] as const) {
             const result = await command<Application>(salesToken, applicationPath, applyInput(templates.get(group)!, `${group} 独立流水`))
@@ -454,9 +419,10 @@ test("[flow-29] Word 模板维护、编号申请恢复、历史文件及权限�
 
     await test.step("模板停用与旧版本拒绝，原申请仍下载原正文；替换模板沿用公司编号组", async () => {
         await manager.reload()
+        await workPage(manager).locator(`#contract-template-more-${main.id}`).click()
         const [response] = await Promise.all([
             manager.waitForResponse((candidate) => candidate.request().method() === "POST" && new URL(candidate.url()).pathname === `/admin/contract-templates/${main.id}/status`),
-            manager.locator(`#contract-template-status-${main.id}`).click(),
+            workPage(manager).locator(`#contract-template-status-${main.id}`).click(),
         ])
         const disabled = await uiData<Template>(response)
         expect(disabled).toMatchObject({ enabled: false, version: main.version + 1, company_id: main.company_id, group: "FSY" })
@@ -474,8 +440,8 @@ test("[flow-29] Word 模板维护、编号申请恢复、历史文件及权限�
         expect(wrongGroup.body.errorMessage).toMatch(/沿用原编号组/)
         expect(await counters(managerToken)).toEqual(before)
         await sales.reload()
-        await expect(sales.locator(`#contract-template-apply-${main.id}`)).toHaveCount(0)
-        await expect(sales.locator(`#contract-template-apply-${replacement.body.data!.id}`)).toBeVisible()
+        await expect(workPage(sales).locator(`#contract-template-apply-${main.id}`)).toHaveCount(0)
+        await expect(workPage(sales).locator(`#contract-template-apply-${replacement.body.data!.id}`)).toBeVisible()
     })
 
     await test.step("公司改名仍沿用 GYL，停用公司拒绝新申请且保留历史快照", async () => {
@@ -520,7 +486,9 @@ test("[flow-29] Word 模板维护、编号申请恢复、历史文件及权限�
             body: JSON.stringify({ ...applyInput(templates.get("ZHYF")!, "不得指定其他申请人"), applicant_id: "other-applicant" }),
         })
         expect(nominated.status).toBe(422)
-        expect(await nominated.text()).toContain("unknown field")
+        const rejectedApplicant = await nominated.json() as Envelope<never>
+        expect(rejectedApplicant).toMatchObject({ success: false, code: "REQUEST_FIELD_INVALID" })
+        expect(rejectedApplicant.errorMessage).not.toContain("other-applicant")
         expect(await counters(managerToken)).toEqual(before)
     })
 
@@ -529,40 +497,40 @@ test("[flow-29] Word 模板维护、编号申请恢复、历史文件及权限�
         await sales.route("**/admin/contract-templates?*", failList)
         try {
             await sales.reload()
-            await expect(sales.locator("#contract-templates-retry")).toBeVisible()
-            await expect(sales.locator("[role=alert]").first()).toBeVisible()
+            await expect(workPage(sales).locator("#contract-templates-retry")).toBeVisible()
+            await expect(workPage(sales).locator("[role=alert]").first()).toBeVisible()
         } finally {
             await sales.unroute("**/admin/contract-templates?*", failList)
         }
-        await sales.locator("#contract-templates-retry").click()
-        await expect(sales.locator(`#contract-template-apply-${templates.get("ZHYF")!.id}`)).toBeVisible()
+        await workPage(sales).locator("#contract-templates-retry").click()
+        await expect(workPage(sales).locator(`#contract-template-apply-${templates.get("ZHYF")!.id}`)).toBeVisible()
         await sales.setViewportSize({ width: 760, height: 900 })
-        await expect(sales.locator(`#contract-template-apply-${templates.get("ZHYF")!.id}`)).toBeVisible()
-        await sales.locator("#contract-applications-view").click()
-        await expect(sales.locator(`#contract-application-download-${first.result.id}`)).toBeVisible()
-        const salesDimensions = await sales.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }))
+        await expect(workPage(sales).locator(`#contract-template-apply-${templates.get("ZHYF")!.id}`)).toBeVisible()
+        await workPage(sales).locator("#contract-applications-view").click()
+        await expect(workPage(sales).locator(`#contract-application-download-${first.result.id}`)).toBeVisible()
+        const salesDimensions = await businessDocument(sales).evaluate((root) => ({ width: root.clientWidth, scroll: root.scrollWidth }))
         expect(salesDimensions.scroll).toBeLessThanOrEqual(salesDimensions.width + 1)
         await manager.setViewportSize({ width: 760, height: 900 })
-        await expect(manager.locator("#contract-templates-page-action-upload")).toBeVisible()
-        await expect(manager.locator("#contract-templates-page-action-counter")).toBeVisible()
-        const managerDimensions = await manager.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }))
+        await expect(workPage(manager).locator("#contract-templates-page-action-upload")).toBeVisible()
+        await expect(workPage(manager).locator("#contract-templates-page-action-counter")).toBeVisible()
+        const managerDimensions = await businessDocument(manager).evaluate((root) => ({ width: root.clientWidth, scroll: root.scrollWidth }))
         expect(managerDimensions.scroll).toBeLessThanOrEqual(managerDimensions.width + 1)
         await sales.setViewportSize({ width: 1440, height: 900 })
         await manager.setViewportSize({ width: 1440, height: 900 })
     })
 
     await test.step("浏览器向前校准流水，回退与旧版本拒绝，9999 后不生成新号", async () => {
-        await manager.locator("#contract-templates-page-action-counter").click()
+        await workPage(manager).locator("#contract-templates-page-action-counter").click()
         const before = counter(await counters(managerToken), "FSY")
-        await manager.locator("#template-counter-fsy-last").fill(String(before.last_sequence + 2))
+        await workPage(manager).locator("#template-counter-fsy-last").fill(String(before.last_sequence + 2))
         const [response] = await Promise.all([
             manager.waitForResponse((candidate) => candidate.request().method() === "POST" && new URL(candidate.url()).pathname === "/admin/contract-number-counters"),
-            manager.locator("#template-counter-fsy-save").click(),
+            workPage(manager).locator("#template-counter-fsy-save").click(),
         ])
         const advanced = await uiData<Counter>(response)
         expect(advanced.last_sequence).toBe(before.last_sequence + 2)
-        await expect(manager.locator("#template-counter-fsy-last")).toHaveValue(String(advanced.last_sequence))
-        await manager.locator("#template-counter-close").click()
+        await expect(workPage(manager).locator("#template-counter-fsy-last")).toHaveValue(String(advanced.last_sequence))
+        await workPage(manager).locator("#template-counter-close").click()
         await rejected(managerToken, "/admin/contract-number-counters", { ...before, last_sequence: advanced.last_sequence + 1 }, 409, /流水已变化/)
         await rejected(managerToken, "/admin/contract-number-counters", { ...advanced, last_sequence: advanced.last_sequence - 1 }, 400, /只能向前/)
         const bdkj = counter(await counters(managerToken), "BDKJ")

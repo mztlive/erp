@@ -250,7 +250,12 @@ async function fetchExactOperationQueue(
             if (operation.sourceVersion !== filters.taskSourceVersion)
                 throw new Error("关联履约资料版本已变化，请刷新任务后重试")
         }
-        if (matchesFilters && !filters.taskSourceVersion) {
+        const needsPaymentGate =
+            operationType === "RECEIPT" || operationType === "SUPPLIER_DIRECT"
+        if (
+            matchesFilters &&
+            (!filters.taskSourceVersion || needsPaymentGate)
+        ) {
             const gatePage = decodeFulfillmentQueuePage(
                 await apiGet<unknown>("/admin/work-items/fulfillment-queue", {
                     operation_id: filters.operationId,

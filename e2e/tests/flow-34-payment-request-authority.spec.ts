@@ -3,6 +3,7 @@
  * 来源、审批、账户修订、付款及冲正均使用正式命令；不写库伪造批准或占用。
  * 合同：docs/purchase-payment-request-contract.md PPR-03/04/10/11/14。
  */
+import { workPage } from "../helpers/workspace-page"
 import { randomUUID } from "node:crypto"
 import { readFileSync } from "node:fs"
 
@@ -11,6 +12,7 @@ import { API_BASE, apiGet, apiToken } from "../helpers/api"
 import {
     analyticsCommand,
     analyticsDate,
+    approveSourcedPurchase,
     createAnalyticsPurchase,
     prepareAnalyticsOrders,
     uploadAnalyticsEvidence,
@@ -18,20 +20,22 @@ import {
     type AnalyticsPurchase,
 } from "../helpers/financial-analytics"
 import { openLoggedInWorkspace } from "../helpers/login"
-import { expandSourcingEditor } from "../helpers/sourcing"
+import { confirmSupplyAllocation, expandSourcingEditor } from "../helpers/sourcing"
 import {
     BANK_RECEIPT_FILE,
+    openPurchasePaymentExecutionTask,
     purchasePaymentRequestCommand,
     type PaymentRequestCandidate,
     type PurchasePaymentRequestResult,
 } from "../helpers/payments"
-import { approveCurrentDocument, chooseOption, openWorkspaceTask } from "../helpers/ui"
+import { workspaceTaskId, approveCurrentDocument, expectWorkspaceQueue, matchingWorkspaceTaskRows, chooseOption, openWorkspaceTask } from "../helpers/ui"
 
 const ROOT = "/admin/purchase-payment-requests"
 const VISIBLE = { timeout: 20_000 }
 const SOURCE_PERMISSION = /^(?:sales|purchase_order|contract|file_asset)(?:_|:)/
 
 type Detail = PurchasePaymentRequestResult & {
+    approval: { instance: { current_task_id: string | null } | null }
     supplier_id: string
     payer_party_id: string
     payee_account: { account_id: string; version: number }
@@ -174,8 +178,13 @@ async function expectTaskMaterials(
     page: Page, token: string, request: Detail, sourceEvidence: string, unrelatedEvidence: string,
     unrelatedRequest: Detail, family: "approval" | "finance",
 ) {
-    await openWorkspaceTask(page, family === "approval" ? /付款申请/ : /供应商付款处理|待付款申请/, request.request_no, family)
-    const workItemId = new URL(page.url()).searchParams.get("currentWorkItemId")!
+    if (family === "approval") {
+        const taskId = request.approval.instance?.current_task_id
+        expect(taskId, "财务审核必须关联正式审批任务").toBeTruthy()
+        await page.goto(`/workspace/tasks/${taskId}`)
+        await expect(workPage(page).getByRole("region", { name: "采购付款申请任务", exact: true })).toBeVisible(VISIBLE)
+    } else await openPurchasePaymentExecutionTask(page, request)
+    const workItemId = workspaceTaskId(page)!
     expect(workItemId, "材料读取必须携带正式当前任务身份").toBeTruthy()
     const context = await apiGet<Detail>(token, `/admin/work-items/${workItemId}/purchase-payment-request`)
     expect(context.id).toBe(request.id)
@@ -184,26 +193,31 @@ async function expectTaskMaterials(
     expect(context.attachments).toEqual(request.attachments)
     expect(context.purchase_previews).toHaveLength(2)
     expect(context.sales_previews).toHaveLength(2)
+    if (family === "approval") {
+        await expect(workPage(page).getByRole("region", { name: "申请提交时的采购与销售单据", exact: true })).toBeVisible(VISIBLE)
+    } else {
+        await expect(workPage(page).locator("#ppr-pay-form")).toBeVisible(VISIBLE)
+    }
     for (const purchase of context.purchase_previews) {
         await expectDenied(page, token, `/admin/purchase-orders/${purchase.purchase_order_id}`)
-        const preview = page.locator(`#ppr-purchase-preview-${segment(purchase.purchase_order_id)}`)
+        const preview = workPage(page).locator(`#ppr-purchase-preview-${segment(purchase.purchase_order_id)}`)
         if (family === "approval") {
             await preview.click()
-            const paper = page.getByRole("dialog", { name: "采购单完整预览" })
+            const paper = workPage(page).getByRole("dialog", { name: "采购单完整预览" })
             await expect(paper).toContainText(purchase.purchase_no)
             await expect(paper).toContainText("采购成本")
-            await page.locator("#ppr-paper-close").click()
+            await workPage(page).locator("#ppr-paper-close").click()
         } else {
             await expect(preview).toHaveCount(0)
         }
     }
     for (const sales of context.sales_previews) {
         await expectDenied(page, token, `/admin/sales-orders/${sales.sales_order_id}`)
-        const preview = page.locator(`#ppr-sales-preview-${segment(sales.revision_id)}`)
+        const preview = workPage(page).locator(`#ppr-sales-preview-${segment(sales.revision_id)}`)
         if (family === "approval") {
             await preview.click()
-            await expect(page.getByRole("dialog", { name: "销售单完整预览" })).toContainText("客户成交金额")
-            await page.locator("#ppr-paper-close").click()
+            await expect(workPage(page).getByRole("dialog", { name: "销售单完整预览" })).toContainText("客户成交金额")
+            await workPage(page).locator("#ppr-paper-close").click()
         } else {
             await expect(preview).toHaveCount(0)
         }
@@ -214,7 +228,7 @@ async function expectTaskMaterials(
     expect(read.ok(), await read.text()).toBe(true)
     expect(read.headers()["cache-control"]).toBe("private, no-store")
     expect((await read.body()).length).toBeGreaterThan(0)
-    const attachment = page.locator(`#ppr-attachment-${segment(sourceEvidence)}-download`)
+    const attachment = workPage(page).locator(`#ppr-attachment-${segment(sourceEvidence)}-download`)
     if (family === "approval") {
         const [download] = await Promise.all([
             page.waitForEvent("download"),
@@ -227,7 +241,7 @@ async function expectTaskMaterials(
     } else {
         // 出纳执行面只展示付款信息；任务材料读取资格仍由上述专用接口复验。
         await expect(attachment).toHaveCount(0)
-        await expect(page.locator("#ppr-pay-amount")).toBeVisible(VISIBLE)
+        await expect(workPage(page).locator("#ppr-pay-amount")).toBeVisible(VISIBLE)
     }
     // 即使当前审批人另有另一申请任务，也不能借本任务展开其来源或附件。
     await expectDenied(page, token, `${ROOT}/${request.id}/materials/${unrelatedEvidence}/download?work_item_id=${workItemId}`)
@@ -236,12 +250,13 @@ async function expectTaskMaterials(
 }
 
 /** 浏览器发出正式 multipart 付款命令，返回可用于后续状态准入拒绝的完整命令依据。 */
-async function payOne(page: Page, amount = "1.00", succeeds = true) {
-    await page.locator("#ppr-pay-amount").fill(amount)
-    await page.locator("#ppr-pay-bank-receipt-input").setInputFiles(BANK_RECEIPT_FILE)
-    await page.locator("#ppr-pay-submit").click()
+async function payOne(page: Page, amount = "1.00", blockedBy?: RegExp) {
+    const succeeds = !blockedBy
+    await workPage(page).locator("#ppr-pay-amount").fill(amount)
+    await workPage(page).locator("#ppr-pay-bank-receipt-input").setInputFiles(BANK_RECEIPT_FILE)
+    await workPage(page).locator("#ppr-pay-submit").click()
     const responsePending = page.waitForResponse((response) => response.request().method() === "POST" && /\/payments\/commit$/.test(new URL(response.url()).pathname), { timeout: 60_000 })
-    await page.locator("#ppr-pay-confirm-confirm").click()
+    await workPage(page).locator("#ppr-pay-confirm-confirm").click()
     const response = await responsePending
     const body = await response.json() as { success: boolean; errorMessage?: string; data: { id: string; amount: string; status: string } }
     expect(response.ok(), body.errorMessage).toBe(succeeds)
@@ -251,9 +266,9 @@ async function payOne(page: Page, amount = "1.00", succeeds = true) {
     expect(encoded, "浏览器付款必须包含完整正式命令").not.toBeNull()
     const command = JSON.parse(encoded![1]!) as PaymentCommand
     expect(command.payment.amount).toBe(amount)
-    if (!succeeds) {
+    if (blockedBy) {
         expect([409, 422], body.errorMessage).toContain(response.status())
-        expect(body.errorMessage).toMatch(/账户|账号|版本|变化|停用/)
+        expect(body.errorMessage).toMatch(blockedBy)
     }
     return { result: body.data, command }
 }
@@ -293,7 +308,7 @@ async function rejectUnrelatedReceipt(page: Page, token: string, request: Detail
     const body = await denied.json() as { success: boolean; errorMessage?: string }
     expect(denied.status(), body.errorMessage).toBe(400)
     expect(body.success).toBe(false)
-    expect(body.errorMessage).toMatch(/上传本次银行回单/)
+    expect(body.errorMessage).toMatch(/本次付款登记上传银行回单.*不得引用既有附件/)
     const unchanged = await detail(await apiToken("caigou"), request.id)
     expect(unchanged.version).toBe(request.version)
     expect(unchanged.lines).toEqual(request.lines)
@@ -322,8 +337,8 @@ async function changeBank(page: Page, token: string, supplierId: string, bank: b
 }
 
 async function approveRejectedByAccount(page: Page) {
-    await page.getByRole("button", { name: /^(通过|同意审批)$/ }).first().click()
-    const dialog = page.getByRole("dialog", { name: "确认通过" })
+    await workPage(page).getByRole("button", { name: /^(通过(?:审批)?|同意审批)$/ }).first().click()
+    const dialog = workPage(page).getByRole("dialog", { name: "确认通过" })
     const responsePending = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/admin/approval-decisions", { timeout: 60_000 })
     await dialog.locator('[id$="-decision-dialog-submit"]').click()
     const response = await responsePending
@@ -360,7 +375,7 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
         draft: { editor_user_id: fixture.orders[0].owner_user_id, requested_contract_revision_id: null,
             no_contract_terms: { settlement_party_id: secondCompany.id, payment_term_code: "POSTPAY_NET15", payment_term_name: "货到 15 天", invoice_type: "增值税专用发票", tax_point: "0" },
             lines: [{ line_no: 1, line_type: "GOODS_SERVICE", sales_tax_rate: "0", item_name_snapshot: "家电上门安装（标准台）", spec_snapshot: "标准台", unit_snapshot: "次",
-                goods: { sku_id: sku.sku_id, sku_revision_id: sku.sku_revision_id, service_region: "北京", fulfillment_due_at: Math.floor(Date.now() / 1000) + 30 * 86400, quantity: "2", base_unit_code: "CI", unit_price_gross: "100.00", pricing_mode: "MANUAL" } }],
+                goods: { sku_id: sku.sku_id, sku_revision_id: sku.sku_revision_id, service_region: "北京", fulfillment_due_at: Math.floor(Date.now() / 1000) + 30 * 86400, quantity: "2", base_unit_code: "CI", unit_price_gross: "100.00", procurement_supply_price_gross: "65.00", procurement_price_basis: "BULK", pricing_mode: "MANUAL" } }],
         },
     })
     await openWorkspaceTask(procurement.page, "销售单审批", created.order_no, "approval")
@@ -390,26 +405,21 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
         draft: { editor_user_id: fixture.orders[0].owner_user_id, requested_contract_revision_id: null,
             no_contract_terms: { settlement_party_id: firstRows[0]!.payer_party_id, payment_term_code: "POSTPAY_NET15", payment_term_name: "货到 15 天", invoice_type: "增值税专用发票", tax_point: "0" },
             lines: [{ line_no: 1, line_type: "GOODS_SERVICE", sales_tax_rate: "0", item_name_snapshot: "狮峰明前龙井礼盒 250g", spec_snapshot: "250g/盒", unit_snapshot: "盒",
-                goods: { sku_id: physicalSku.sku_id, sku_revision_id: physicalSku.sku_revision_id, fulfillment_due_at: Math.floor(Date.now() / 1000) + 30 * 86400, quantity: "6", base_unit_code: "HE", unit_price_gross: "1000.00", pricing_mode: "MANUAL" } }],
+                goods: { sku_id: physicalSku.sku_id, sku_revision_id: physicalSku.sku_revision_id, fulfillment_due_at: Math.floor(Date.now() / 1000) + 30 * 86400, quantity: "6", base_unit_code: "HE", unit_price_gross: "1000.00", procurement_supply_price_gross: "800.00", procurement_price_basis: "BULK", pricing_mode: "MANUAL" } }],
         },
     })
     await openWorkspaceTask(procurement.page, "销售单审批", physicalSale.order_no, "approval")
     await approveCurrentDocument(procurement.page)
-    await openWorkspaceTask(procurement.page, "待供给分配", physicalSale.order_no, "procurement")
-    await expandSourcingEditor(procurement.page, "狮峰明前龙井礼盒")
-    const warehouse = procurement.page.getByRole("combobox", { name: "仓库", exact: true })
-    if (await warehouse.count()) await chooseOption(procurement.page, warehouse.first(), /北京通州仓|BJ-TZ-01/, "BJ-TZ-01")
-    await procurement.page.locator("#procurement-orders-create-preview").click()
-    const physicalPending = procurement.page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/admin/purchase-orders/from-sourcing")
-    await procurement.page.locator("#procurement-orders-create-preview-confirm").click()
-    const physicalResponse = await physicalPending
-    expect(physicalResponse.ok(), await physicalResponse.text()).toBe(true)
-    const physicalResult = (await physicalResponse.json()).data as { orders: Array<{ purchase_order_id: string; purchase_no: string }> }
+    await openWorkspaceTask(procurement.page, "待安排采购", physicalSale.order_no, "procurement")
+    const editor = await expandSourcingEditor(procurement.page, "狮峰明前龙井礼盒")
+    await chooseOption(procurement.page, editor.locator('[id$="-sourcing-option"]:visible'), /杭州狮峰茶叶有限公司.* · 集采入仓/, "入仓")
+    await chooseOption(procurement.page, editor.locator('[id$="-warehouse"]:visible'), "BJ-TZ-01", "BJ-TZ-01")
+    await editor.locator("#sourcing-product-adjust-done").click()
+    const physicalResult = await confirmSupplyAllocation(procurement.page)
     expect(physicalResult.orders).toHaveLength(1)
     const physicalPurchase = physicalResult.orders[0]!
     const purchaseApprover = await openLoggedInWorkspace(browser, "caigoushenpi")
-    await openWorkspaceTask(purchaseApprover.page, "采购单审批", physicalPurchase.purchase_no, "approval")
-    await approveCurrentDocument(purchaseApprover.page)
+    await approveSourcedPurchase(purchaseApprover.page, physicalPurchase.purchase_order_id)
     const supplierRowsBefore = await candidates(procurementToken)
     const otherSupplier = supplierRowsBefore.find((row) => row.purchase_order_id === physicalPurchase.purchase_order_id)!
     expect(otherSupplier.payer_party_id).toBe(firstRows[0]!.payer_party_id)
@@ -440,20 +450,25 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
         expect(after.reserved_total).toBe(before.reserved_total)
     }
     await procurement.page.goto("/procurement/payment-requests")
-    await procurement.page.locator("#purchase-payment-requests-create").click()
+    await workPage(procurement.page).locator("#purchase-payment-requests-create").click()
     const selectedRows = [...firstRows, secondRow, otherSupplier]
     for (const row of selectedRows) {
-        await procurement.page.locator(`#ppr-select-${segment(row.payable_account_id)}`).check()
+        await workPage(procurement.page).locator(`#ppr-select-${segment(row.payable_account_id)}`).check()
     }
-    await procurement.page.locator("#ppr-create-next").click()
-    await expect(procurement.page.locator('#ppr-create-form [data-slot="collapsible-trigger"][id^="ppr-group-"]')).toHaveCount(3)
+    await workPage(procurement.page).locator("#ppr-create-next").click()
+    const groupNavigation = workPage(procurement.page).getByRole("navigation", { name: "付款申请列表", exact: true })
+    await expect(groupNavigation.getByRole("button")).toHaveCount(3)
     for (const rows of [firstRows, [secondRow], [otherSupplier]]) {
         const first = rows[0]!
-        const trigger = procurement.page.locator(`#ppr-group-${segment(`${first.supplier_id}:${first.payer_party_id}`)}-trigger`)
+        const id = `ppr-group-${segment(`${first.supplier_id}:${first.payer_party_id}`)}`
+        const trigger = groupNavigation.locator(`#${id}-trigger`)
         await expect(trigger).toContainText(first.supplier_name)
-        await expect(trigger).toContainText(`${rows.length} 张采购单 · ${first.payer_party_name}`)
-        if (await trigger.getAttribute("aria-expanded") !== "true") await trigger.click()
-        const group = procurement.page.locator('[data-slot="collapsible"]').filter({ has: trigger })
+        await expect(trigger).toContainText(`付款主体：${first.payer_party_name}`)
+        await expect(trigger).toContainText(`${rows.length} 张采购单`)
+        await trigger.click()
+        await expect(trigger).toHaveAttribute("aria-current", "true")
+        const group = workPage(procurement.page).locator(`#${id}-panel`)
+        await expect(group).toBeVisible()
         await expect(group.locator('input[id^="ppr-create-line-"]')).toHaveCount(rows.length)
         for (const row of rows) {
             await expect(group.locator(`#ppr-create-line-${segment(row.payable_account_id)}`)).toBeVisible()
@@ -462,23 +477,25 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
             await expect(group.locator(`#ppr-create-line-${segment(excluded.payable_account_id)}`)).toHaveCount(0)
         }
     }
-    await procurement.page.locator("#ppr-create-dialog-close").click()
+    await workPage(procurement.page).locator("#ppr-create-dialog-close").click()
 
     const linkedEvidence = await uploadAnalyticsEvidence(procurementToken)
     const main = await createSubmitted(procurement.page, firstRows, [linkedEvidence])
     const other = await createSubmitted(procurement.page, [secondRow])
-    const finance = await openLoggedInWorkspace(browser, "caiwu")
-    const financeToken = await apiToken("caiwu")
     const restoreFinance = await taskOnlyRole(procurement.page, adminToken, "caiwu", suffix)
     try {
-        await expectTaskMaterials(finance.page, financeToken, main, linkedEvidence, unrelatedEvidence, other, "approval")
-        await approveCurrentDocument(finance.page)
+        const finance = await openLoggedInWorkspace(browser, "caiwu")
+        try {
+            await expectTaskMaterials(finance.page, await apiToken("caiwu"), main, linkedEvidence, unrelatedEvidence, other, "approval")
+            await approveCurrentDocument(finance.page)
+        } finally { await finance.context.close() }
     } finally { await restoreFinance() }
     const approved = await detail(procurementToken, main.id)
     expect(approved.status).toBe("approved")
+    const finance = await openLoggedInWorkspace(browser, "caiwu")
+    const restoreCashier = await taskOnlyRole(procurement.page, adminToken, "fukuan", suffix)
     const cashier = await openLoggedInWorkspace(browser, "fukuan")
     const cashierToken = await apiToken("fukuan")
-    const restoreCashier = await taskOnlyRole(procurement.page, adminToken, "fukuan", suffix)
     let paid: Awaited<ReturnType<typeof payOne>>
     try {
         const workItemId = await expectTaskMaterials(cashier.page, cashierToken, approved, linkedEvidence, unrelatedEvidence, other, "finance")
@@ -533,8 +550,9 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
         expect(reversed.current_lines.find((item) => item.payable_account_id === line.payable_account_id)?.current_reserved_total).toMatch(/^0(?:\.0+)?$/)
         expect((await candidates(procurementToken)).find((item) => item.payable_account_id === line.payable_account_id)?.available_total).toBe(line.requested_amount)
     }
-    await cashier.page.goto("/workspace?family=finance")
-    await expect(cashier.page.getByRole("button", { name: /供应商付款处理|待付款申请/ }).filter({ hasText: main.request_no })).toHaveCount(0)
+    await cashier.page.goto("/workspace/tasks")
+    await expectWorkspaceQueue(cashier.page)
+    await expect(matchingWorkspaceTaskRows(cashier.page, "待执行采购付款", main.request_no)).toHaveCount(0)
     const closedPay = await rawPayment(cashier.page, cashierToken, reversed, paid!.command)
     expect(closedPay.ok(), "冲正后不能通过旧申请执行新付款").toBe(false)
     expect([403, 409, 422], await closedPay.text()).toContain(closedPay.status())
@@ -563,9 +581,9 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
     await approveCurrentDocument(finance.page)
     const paymentApproved = await detail(procurementToken, pendingPayment.id)
     expect(paymentApproved.status).toBe("approved")
-    await openWorkspaceTask(cashier.page, /供应商付款处理|待付款申请/, pendingPayment.request_no, "finance")
+    await openPurchasePaymentExecutionTask(cashier.page, paymentApproved)
     await changeBank(procurement.page, adminToken, secondRow.supplier_id, true, suffix)
-    await payOne(cashier.page, "1.00", false)
+    await payOne(cashier.page, "1.00", /账户|账号/)
     const blocked = await detail(procurementToken, pendingPayment.id)
     expect(blocked.status).toBe("approved")
     expect(blocked.payee_account).toEqual(paymentApproved.payee_account)
@@ -583,8 +601,8 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
     await approveCurrentDocument(finance.page)
     const changeApproved = await detail(procurementToken, pendingChange.id)
     expect(changeApproved.status).toBe("approved")
-    await openWorkspaceTask(cashier.page, /供应商付款处理|待付款申请/, pendingChange.request_no, "finance")
-    const sourcePurchase = await apiGet<{ id: string; version: number; purchase_no: string; current_revision_id: string; totals: { gross: string } }>(procurementToken, `/admin/purchase-orders/${changeCandidate.purchase_order_id}`)
+    await openPurchasePaymentExecutionTask(cashier.page, changeApproved)
+    const sourcePurchase = await apiGet<{ id: string; version: number; current_revision_id: string; totals: { gross: string } }>(procurementToken, `/admin/purchase-orders/${changeCandidate.purchase_order_id}`)
     const started = await write<{ change_id: string }>(procurement.page, procurementToken, "POST", `/admin/purchase-orders/${sourcePurchase.id}/changes`, {
         expected_lock_version: sourcePurchase.version, reason: "E2E 已批准未付申请的正式采购减额", idempotency_key: randomUUID(),
     })
@@ -595,9 +613,13 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
         expected_lock_version: changeDraft.version, payment_term_code: changeDraft.payment_term_code, lines: targetLines, idempotency_key: randomUUID(),
     })
     const warehouseReviewer = await openLoggedInWorkspace(browser, "cangchu")
-    await openWorkspaceTask(warehouseReviewer.page, /采购变更单审批/, sourcePurchase.purchase_no, "approval")
-    await approveCurrentDocument(warehouseReviewer.page)
-    await openWorkspaceTask(finance.page, /采购变更单审批/, sourcePurchase.purchase_no, "approval")
+    try {
+        await openWorkspaceTask(warehouseReviewer.page, /采购变更单审批/, started.change_id, "approval")
+        await approveCurrentDocument(warehouseReviewer.page)
+    } finally {
+        await warehouseReviewer.context.close()
+    }
+    await openWorkspaceTask(finance.page, /采购变更单审批/, started.change_id, "approval")
     await approveCurrentDocument(finance.page)
     const reducedPurchase = await apiGet<{ current_revision_id: string; totals: { gross: string } }>(procurementToken, `/admin/purchase-orders/${sourcePurchase.id}`)
     expect(reducedPurchase.current_revision_id).not.toBe(sourcePurchase.current_revision_id)
@@ -606,7 +628,7 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
     expect(sourceChanged.purchase_previews[0]!.revision_id).toBe(sourcePurchase.current_revision_id)
     expect(sourceChanged.current_lines[0]!.source_changed).toBe(true)
     expect(sourceChanged.current_lines[0]!.current_reserved_total).toBe("1.00")
-    await payOne(cashier.page, "1.00", false)
+    await payOne(cashier.page, "1.00", /采购正式版本|批准采购来源/)
     const stillApproved = await detail(procurementToken, changeApproved.id)
     expect(stillApproved.status).toBe("approved")
     expect(stillApproved.version).toBe(changeApproved.version)
@@ -627,8 +649,8 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
     const salesHeadApproved = await detail(procurementToken, salesHeadRequest.id)
     expect(salesHeadApproved.status).toBe("approved")
     expect(salesHeadApproved.payments).toHaveLength(0)
-    await openWorkspaceTask(cashier.page, /供应商付款处理|待付款申请/, salesHeadApproved.request_no, "finance")
-    const originalSalesHeadTask = new URL(cashier.page.url()).searchParams.get("currentWorkItemId")!
+    await openPurchasePaymentExecutionTask(cashier.page, salesHeadApproved)
+    const originalSalesHeadTask = workspaceTaskId(cashier.page)!
     expect(originalSalesHeadTask).toBeTruthy()
     const purchaseBeforeSalesChange = await apiGet<PurchaseSource>(procurementToken, `/admin/purchase-orders/${untouchedPurchase.purchaseId}`)
     const salesBeforeChange = await apiGet<SalesHead>(salesToken, `/admin/sales-orders/${purchaseBeforeSalesChange.sales_order_id}`)
@@ -650,9 +672,9 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
     await write(procurement.page, salesToken, "POST", `/admin/sales-change-orders/${salesChange.id}/submit-impact`, {
         version: savedSalesChange.version, idempotency_key: randomUUID(),
     })
-    await openWorkspaceTask(procurement.page, /销售变更单审批/, salesBeforeChange.order_no, "approval")
+    await openWorkspaceTask(procurement.page, /销售变更单审批/, salesChange.id, "approval")
     await approveCurrentDocument(procurement.page)
-    await openWorkspaceTask(finance.page, /销售变更单审批/, salesBeforeChange.order_no, "approval")
+    await openWorkspaceTask(finance.page, /销售变更单审批/, salesChange.id, "approval")
     await approveCurrentDocument(finance.page)
     const salesAfterChange = await apiGet<SalesHead>(salesToken, `/admin/sales-orders/${salesBeforeChange.id}`)
     expect(salesAfterChange.commercial_status).toBe("EFFECTIVE")
@@ -663,8 +685,8 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
     expect(salesAfterChange.purchase_coverage).toMatchObject({ source_changed: false, affected_purchase_count: 0 })
     const salesViewer = await openLoggedInWorkspace(browser, "xiaoshou")
     await salesViewer.page.goto(`/sales/orders/${salesBeforeChange.id}?section=overview`)
-    await expect(salesViewer.page.getByTestId("sales-order-procurement-progress").first()).toBeVisible(VISIBLE)
-    await expect(salesViewer.page.locator("#sales-order-overview-source-changed-notice")).toHaveCount(0)
+    await expect(workPage(salesViewer.page).locator("#sales-order-follow-up-delivery")).toBeVisible(VISIBLE)
+    await expect(workPage(salesViewer.page).getByText(/\d+\s*张采购单依据待更新/)).toHaveCount(0)
     const purchaseAfterSalesChange = await apiGet<PurchaseSource>(procurementToken, `/admin/purchase-orders/${untouchedPurchase.purchaseId}`)
     expect(purchaseAfterSalesChange.current_revision_id).toBe(purchaseBeforeSalesChange.current_revision_id)
     expect(purchaseAfterSalesChange.source_sales_order.revision_id).toBe(salesBeforeChange.current_revision_id)
@@ -675,7 +697,7 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
     expect(salesSourceUnchanged.version).toBe(salesHeadApproved.version)
     expect(salesSourceUnchanged.current_lines[0]!.source_changed).toBe(false)
     expect(salesSourceUnchanged.current_lines[0]!.current_reserved_total).toBe("1.00")
-    const salesHeadPayment = await payOne(cashier.page, "1.00", true)
+    const salesHeadPayment = await payOne(cashier.page, "1.00")
     expect(salesHeadPayment.command.payment_request_id).toBe(salesHeadApproved.id)
     expect(salesHeadPayment.command.work_item_id).toBe(originalSalesHeadTask)
     expect(salesHeadPayment.result.status).toBe("posted")

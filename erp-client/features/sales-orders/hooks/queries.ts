@@ -272,8 +272,8 @@ export function useSubmitSalesChangeOrderMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: submitSalesChangeOrder,
-        onSuccess: async (_data, variables) => {
-            await Promise.all([
+        onSuccess: (_data, variables) => {
+            void Promise.all([
                 queryClient.invalidateQueries({
                     queryKey: salesOrderKeys.detail(variables.salesOrderId),
                 }),

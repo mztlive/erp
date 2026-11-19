@@ -71,6 +71,7 @@ export function shouldLoadDocumentFacts(input: {
  * 按单据类型读取工作台只读事实。未知类型返回 null。
  */
 export async function fetchWorkspaceDocumentFacts(input: {
+    workItemType: string
     businessObjectType: string
     businessObjectId: string
     subjectVersion: string
@@ -79,7 +80,7 @@ export async function fetchWorkspaceDocumentFacts(input: {
     if (!id) return null
     const kind = normalizeObjectType(input.businessObjectType)
     if (SALES_ORDER_TYPES.has(kind))
-        return loadSalesOrderFacts(id, input.subjectVersion)
+        return loadSalesOrderFacts(id, input.subjectVersion, input.workItemType)
     if (RECEIPT_TYPES.has(kind))
         return loadCustomerReceiptFacts(id, input.subjectVersion)
     if (PAYMENT_REVERSAL_TYPES.has(kind)) {
@@ -106,12 +107,27 @@ type CustomerReceiptDto = Readonly<{
 async function loadSalesOrderFacts(
     salesOrderId: string,
     subjectVersion: string,
+    workItemType: string,
 ): Promise<WorkspaceDocumentFacts | null> {
     const detail = await apiGet<BackendSalesOrderDetail>(
         `/admin/sales-orders/${encodeURIComponent(salesOrderId)}`,
     )
     if (detail.id !== salesOrderId)
         throw new Error("关联销售单不一致，请刷新任务后重试")
+    if (workItemType === "CUSTOMER_ACCEPTANCE_REGISTRATION") {
+        const revision = detail.revisions.find(
+            (entry) => entry.id === detail.current_revision_id,
+        )
+        if (String(detail.version) !== subjectVersion || !revision)
+            throw new Error("验收任务对应的销售单版本已变化，请刷新任务后重试")
+        return {
+            ...salesContentToFacts(detail.business_type, {
+                ...revision,
+                lines: revision.commercial_lines ?? [],
+            }),
+            documentNumber: detail.order_no,
+        }
+    }
     // 供给分配绑定提交记录 ID；提交序号与修订 ID 继续按各自引用精确匹配。
     const submission = detail.submissions.find(
         (entry) =>

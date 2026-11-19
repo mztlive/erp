@@ -1,6 +1,7 @@
+import { workPage } from "./workspace-page"
 import { expect, type Locator, type Page } from "@playwright/test"
 
-import { takeFreshWorkspace } from "./login"
+import { takeFreshWorkspace, WORKSPACE_TASKS_PATH } from "./login"
 
 /**
  * 通用 UI 操作。spec 不要再复制 expectToast / chooseOption / pickCalendarDay /
@@ -21,9 +22,7 @@ import { takeFreshWorkspace } from "./login"
  * - combobox：字段 id 落在 input 上，选项 `#${id}-option-<value>`，`[data-slot="combobox-item"]`
  * - 日历：刚打开的 `[data-slot="popover-content"]` 内的 `[data-slot="calendar"]`，
  *   日期 `#${id}-calendar-month-YYYY-MM-01-day-YYYY-MM-DD`
- * - 工作台：heading「我的工作台」、`#workspace-family-filter-trigger`、
- *   `#workspace-family-nav-{all|approval|procurement|fulfillment|finance|exception}`、
- *   list「待办列表」、范围按钮「待我处理 / 范围内待办」、region「当前工作台任务」
+ * - 待办页：表格「待办事项」、任务范围「待我处理 / 范围内待办」、独立详情「当前工作台任务」
  * - 审批：按钮「同意审批」/「通过」、对话框「确认通过」、`[id$="-decision-dialog-submit"]`
  */
 
@@ -45,28 +44,7 @@ export type WorkspaceFamily =
     | "异常"
     | string
 
-const WORKSPACE_FAMILY_LABEL: Record<string, string> = {
-    all: "全部",
-    approval: "审批",
-    procurement: "采购",
-    fulfillment: "履约",
-    finance: "财务",
-    exception: "异常",
-    全部: "全部",
-    审批: "审批",
-    采购: "采购",
-    履约: "履约",
-    财务: "财务",
-    异常: "异常",
-}
-
-const WORKSPACE_FAMILY_KEY: Record<string, string> = {
-    all: "all",
-    approval: "approval",
-    procurement: "procurement",
-    fulfillment: "fulfillment",
-    finance: "finance",
-    exception: "exception",
+const WORKSPACE_FAMILY_KEYS: Record<string, string> = {
     全部: "all",
     审批: "approval",
     采购: "procurement",
@@ -75,18 +53,25 @@ const WORKSPACE_FAMILY_KEY: Record<string, string> = {
     异常: "exception",
 }
 
-/** 把中文任务类型或英文 family 收成 URL / `#workspace-family-nav-*` 用的键。 */
-export function workspaceFamilyKey(family: string): string {
-    return WORKSPACE_FAMILY_KEY[family] ?? family
+const WORKSPACE_FAMILY_TYPES: Record<string, string[]> = {
+    all: [],
+    approval: ["DOCUMENT_APPROVAL", "APPROVAL_REWORK"],
+    procurement: ["SALES_INQUIRY_PROCESSING", "SUPPLIER_PORTAL_REVIEW", "PROCUREMENT_ORDER_CREATION", "PURCHASE_PAYMENT_ARRANGEMENT", "PURCHASE_SOURCE_UPDATE"],
+    fulfillment: ["FULFILLMENT_OPERATION", "CUSTOMER_ACCEPTANCE_REGISTRATION"],
+    finance: ["PURCHASE_RETURN_REFUND", "PURCHASE_RETURN_INVOICE", "SUPPLIER_PAYMENT_EXECUTION", "SALES_INVOICE_EXECUTION", "SUPPLIER_SETTLEMENT_REVIEW"],
+    exception: ["IMPORT_BUSINESS_CONFIRMATION", "INTEGRATION_RESULT_UNKNOWN", "BUSINESS_EXCEPTION"],
 }
 
-function workspaceFamilyLabel(family: string): string {
-    return WORKSPACE_FAMILY_LABEL[family] ?? family
+function workspaceFamilyTypes(family: string): string[] {
+    const key = WORKSPACE_FAMILY_KEYS[family] ?? family
+    const types = WORKSPACE_FAMILY_TYPES[key]
+    if (!types) throw new Error(`未知待办类型组：${family}`)
+    return types.map((type) => `task:${type}`)
 }
 
 function visibleToast(page: Page, title: string | RegExp): Locator {
-    const root = page.locator('[data-slot="toast"]').filter({ hasText: title })
-    const titled = page.locator('[data-slot="toast-title"]').filter({ hasText: title })
+    const root = workPage(page).locator('[data-slot="toast"]').filter({ hasText: title })
+    const titled = workPage(page).locator('[data-slot="toast-title"]').filter({ hasText: title })
     return titled.or(root)
 }
 
@@ -112,7 +97,7 @@ export async function expectToast(
 export async function dismissToasts(page: Page): Promise<void> {
     await page.mouse.move(8, 8).catch(() => undefined)
     for (let i = 0; i < 5; i += 1) {
-        const dismiss = page
+        const dismiss = workPage(page)
             .locator('[data-slot="toast"]')
             .getByRole("button", { name: "关闭提示", includeHidden: true })
             .filter({ visible: true })
@@ -123,12 +108,12 @@ export async function dismissToasts(page: Page): Promise<void> {
 }
 
 function visibleComboboxPopup(page: Page, controlledId?: string | null): Locator {
-    const opened = page.locator(
+    const opened = workPage(page).locator(
         '[data-slot="combobox-content"][data-open]:not([data-closed]):not([data-ending-style]):visible',
     )
     // aria-controls 指向 Popup 内的 Listbox。不要把上一个字段的退场浮层算进当前选择。
     return controlledId
-        ? opened.filter({ has: page.locator(`[id=${JSON.stringify(controlledId)}]`) })
+        ? opened.filter({ has: workPage(page).locator(`[id=${JSON.stringify(controlledId)}]`) })
         : opened
 }
 
@@ -189,8 +174,8 @@ export async function chooseOption(
     await expect(input).toHaveAttribute("aria-controls", /.+/, { timeout: UI_TIMEOUT })
     const controlledId = await input.getAttribute("aria-controls")
     const popup = visibleComboboxPopup(page, controlledId)
-    const ownedPopup = page.locator('[data-slot="combobox-content"]').filter({
-        has: page.locator(`[id=${JSON.stringify(controlledId)}]`),
+    const ownedPopup = workPage(page).locator('[data-slot="combobox-content"]').filter({
+        has: workPage(page).locator(`[id=${JSON.stringify(controlledId)}]`),
     })
 
     const listed = comboboxOption(popup, inputId, option)
@@ -264,15 +249,15 @@ export async function pickCalendarDay(
     const fieldId = await trigger.getAttribute("id")
     await trigger.click()
 
-    const opened = page
+    const opened = workPage(page)
         .locator('[data-slot="popover-content"]:visible')
-        .filter({ has: page.locator('[data-slot="calendar"]') })
+        .filter({ has: workPage(page).locator('[data-slot="calendar"]') })
     // 同一页可能还有未关掉的日历，或外层浮层套着日期浮层。优先当前字段、且自身不再嵌套浮层的那一个。
     const owned = fieldId
-        ? opened.filter({ has: page.locator(`[id^="${fieldId}-calendar"]`) })
+        ? opened.filter({ has: workPage(page).locator(`[id^="${fieldId}-calendar"]`) })
         : opened
     const popover = owned
-        .filter({ hasNot: page.locator('[data-slot="popover-content"]') })
+        .filter({ hasNot: workPage(page).locator('[data-slot="popover-content"]') })
         .last()
     // 范围日历可能并排两个月，各有一个 calendar。先收窄到浮层再 first，避免 strict mode。
     const calendar = popover.locator('[data-slot="calendar"]').first()
@@ -361,15 +346,11 @@ function escapeRe(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
-function labelSource(label: string | RegExp): string {
-    return typeof label === "string" ? label : label.source
-}
-
 /**
- * 确认已进入 W01 我的工作台。
+ * 确认已进入当前待办队列。
  */
 export async function expectWorkspace(page: Page): Promise<void> {
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
+    await expect(workPage(page).getByRole("heading", { name: /^(待我处理|范围内待办)$/ })).toBeVisible({
         timeout: UI_TIMEOUT,
     })
 }
@@ -379,10 +360,10 @@ export async function expectWorkspace(page: Page): Promise<void> {
  * 页头 identityOnly 不再渲染金额条。
  */
 export function salesOrderAmountSummary(page: Page) {
-    return page
+    return workPage(page)
         .locator('[aria-label="销售单摘要"]')
-        .or(page.locator('[aria-label="销售单金额摘要"]'))
-        .or(page.locator('[data-slot="metric-strip"]'))
+        .or(workPage(page).locator('[aria-label="销售单金额摘要"]'))
+        .or(workPage(page).locator('[data-slot="metric-strip"]'))
         .first()
 }
 
@@ -419,11 +400,11 @@ export async function optionalStepVisible(
  * 当前任务按履约类型显示登记入口，使用同一 workItem 的原生 id 打开对应表单。
  */
 export async function openFulfillmentWorkspaceForm(page: Page) {
-    const opened = page
+    const opened = workPage(page)
         .getByRole("dialog")
-        .filter({ has: page.locator('[aria-label="当前履约任务"]') })
+        .filter({ has: workPage(page).locator('[aria-label="当前履约任务"]') })
         .filter({ visible: true })
-    const task = page.getByRole("region", {
+    const task = workPage(page).getByRole("region", {
         name: "当前工作台任务",
         exact: true,
     })
@@ -432,22 +413,25 @@ export async function openFulfillmentWorkspaceForm(page: Page) {
             name: /^(登记发货|登记入库|登记电子交付|登记服务完成|处理履约)$/,
         })
         .and(task.locator('button[id^="workspace-fulfillment-process-"]'))
-    await expect(opened.or(trigger).filter({ visible: true })).toHaveCount(1, {
-        timeout: UI_TIMEOUT,
+    const inline = task.getByRole("region", { name: "当前履约任务", exact: true }).filter({
+        has: workPage(page).locator('[aria-label$="表单"]:visible, #fulfillment-packing-form:visible'),
+        visible: true,
     })
-    if (await opened.count()) {
-        await expectFulfillmentForm(opened)
-        return opened
+    await expect(opened.or(inline).or(trigger).filter({ visible: true }).first()).toBeVisible({ timeout: UI_TIMEOUT })
+    const surface = opened.or(inline)
+    if (await surface.count()) {
+        await expectFulfillmentForm(surface)
+        return surface
     }
     const triggerId = await trigger.getAttribute("id")
     expect(triggerId).toMatch(/^workspace-fulfillment-process-.+/)
     const taskId = triggerId!.slice("workspace-fulfillment-process-".length)
-    const dialog = page.locator(
+    const dialog = workPage(page).locator(
         `[role="dialog"][id=${JSON.stringify(`workspace-fulfillment-process-dialog-${taskId}`)}]`,
     )
     const action = (await trigger.innerText()).trim()
     const formLabels: Record<string, string[]> = {
-        登记发货: ["供应商直发表单", "公司仓发表单"],
+        登记发货: ["按地址登记发货包裹", "供应商直发表单", "公司仓发表单"],
         登记入库: ["入库表单"],
         登记电子交付: ["电子交付表单"],
         登记服务完成: ["线下服务表单"],
@@ -466,7 +450,7 @@ export async function openFulfillmentWorkspaceForm(page: Page) {
 
 async function expectFulfillmentForm(
     dialog: Locator,
-    labels = ["供应商直发表单", "公司仓发表单", "入库表单", "电子交付表单", "线下服务表单"],
+    labels = ["按地址登记发货包裹", "供应商直发表单", "公司仓发表单", "入库表单", "电子交付表单", "线下服务表单"],
 ) {
     const form = dialog.locator(
         labels.map((label) => `[aria-label=${JSON.stringify(label)}]`).join(", "),
@@ -482,7 +466,7 @@ export async function readHeaderDocumentNumber(
     page: Page,
     numberLabel = "单号",
 ): Promise<string> {
-    const node = page
+    const node = workPage(page)
         .locator("header")
         .getByText(new RegExp(`^${numberLabel}[:：]`))
         .first()
@@ -496,75 +480,55 @@ export async function readHeaderDocumentNumber(
     return number!
 }
 
-/**
- * 工作台任务类型下拉。`family` 可以是 approval 或「审批」。
- * 生产 id：`#workspace-family-filter-trigger`、`#workspace-family-nav-{key}`。
- */
-export async function selectWorkspaceFamily(
-    page: Page,
-    family: WorkspaceFamily,
-): Promise<void> {
-    const key = workspaceFamilyKey(family)
-    const wanted = workspaceFamilyLabel(family)
-    const trigger = page
-        .locator("#workspace-family-filter-trigger")
-        .or(page.getByRole("button", { name: /任务类型：/ }))
-        .first()
-    if (await trigger.isVisible().catch(() => false)) {
-        const current =
-            (await trigger.getAttribute("aria-label")) ||
-            (await trigger.innerText())
-        if (current.includes(wanted) && current.includes("任务类型")) return
-        await trigger.click()
-        const item = page
-            .locator(`#workspace-family-nav-${key}`)
-            .or(
-                page.getByRole("menuitemradio", {
-                    name: new RegExp(`^${wanted}`),
-                }),
-            )
-            .first()
-        await expect(item).toBeVisible({ timeout: UI_TIMEOUT })
-        await item.click()
-        await expect(trigger).toContainText(wanted, { timeout: UI_TIMEOUT })
-        return
-    }
-
-    const next = new URL(page.url())
-    if (!next.pathname.startsWith("/workspace")) {
-        next.pathname = "/workspace"
-        next.search = ""
-    }
-    if (key === "all") next.searchParams.delete("family")
-    else next.searchParams.set("family", key)
-    const href = `${next.pathname}${next.search}`
-    if (!page.url().endsWith(href) && !page.url().includes(`${href}&`)) {
-        await page.goto(href)
-    }
+/** 为旧流程使用的类型组设置当前待办页的正式事项类型筛选。 */
+export async function selectWorkspaceFamily(page: Page, family: WorkspaceFamily): Promise<void> {
+    const current = new URL(page.url())
+    const queue = current.pathname === WORKSPACE_TASKS_PATH
+    const search = queue ? current.searchParams : new URLSearchParams()
+    const filters = JSON.parse(search.get("filters") ?? "{}") as Record<string, unknown>
+    const types = workspaceFamilyTypes(family)
+    if (types.length) filters.item_types = types
+    else delete filters.item_types
+    if (Object.keys(filters).length) search.set("filters", JSON.stringify(filters))
+    else search.delete("filters")
+    search.delete("page")
+    const query = search.toString()
+    const href = `${WORKSPACE_TASKS_PATH}${query ? `?${query}` : ""}`
+    if (!queue || `${current.pathname}${current.search}` !== href) await page.goto(href)
     await expectWorkspace(page)
+    await expectWorkspaceQueue(page)
 }
 
-function workspaceTaskButtons(page: Page): Locator {
-    return page.getByRole("list", { name: "待办列表" }).getByRole("button")
+export function workspaceTaskRows(page: Page): Locator {
+    return workPage(page).locator('tr[id^="workspace-task-table-row-"][data-row-id][tabindex="0"]')
 }
 
-function workspaceTaskLocator(
-    page: Page,
-    typeLabel: string | RegExp,
-    hint?: string,
-): Locator {
-    const list = page.getByRole("list", { name: "待办列表" })
-    const label = `(?:${labelSource(typeLabel)})`
-    const pattern = hint
-        ? new RegExp(
-              `${label}[\\s\\S]*${escapeRe(hint)}|${escapeRe(hint)}[\\s\\S]*${label}`,
-          )
-        : new RegExp(label)
-    // 只匹配列表内任务。页级「审批|履约」会误中范围页签「我发起的审批」。
-    return list
-        .getByRole("button", { name: pattern })
-        .or(list.getByRole("button").filter({ hasText: pattern }))
-        .first()
+export async function expectWorkspaceQueue(page: Page): Promise<void> {
+    const queue = workPage(page).getByRole("region", { name: "任务队列", exact: true })
+    await expect(queue).toBeVisible({ timeout: UI_TIMEOUT })
+    await expect(workPage(page).locator("#workspace-home-refresh")).toBeEnabled({ timeout: UI_TIMEOUT })
+}
+
+export function workspaceTaskId(page: Page): string | null {
+    const match = /^\/workspace\/(?:tasks|approvals)\/([^/]+)$/.exec(new URL(page.url()).pathname)
+    return match ? decodeURIComponent(match[1]!) : null
+}
+
+export async function selectWorkspaceScope(page: Page, scope: "inbox" | "managed"): Promise<void> {
+    const select = workPage(page).locator("#workspace-task-scope")
+    await select.click()
+    await workPage(page).locator(`#workspace-task-scope-option-${scope}`).click()
+    await expect(workPage(page).getByRole("heading", { name: scope === "inbox" ? "待我处理" : "范围内待办", exact: true })).toBeVisible()
+    await expectWorkspaceQueue(page)
+}
+
+export function matchingWorkspaceTaskRows(page: Page, typeLabel: string | RegExp, hint?: string): Locator {
+    const rows = workspaceTaskRows(page)
+    const label = typeof typeLabel === "string" ? new RegExp(escapeRe(typeLabel)) : typeLabel
+    const typed = rows.and(workPage(page).getByRole("row", { name: label })).or(rows.filter({ hasText: label }))
+    if (!hint) return typed
+    const source = new RegExp(escapeRe(hint))
+    return typed.and(rows.and(workPage(page).getByRole("row", { name: source })).or(rows.filter({ hasText: source })))
 }
 
 /** 验证当前供给任务实际可见的桌面或紧凑摘要，避免同时读取隐藏布局。 */
@@ -573,7 +537,7 @@ export async function expectSourcingCounts(
     purchaseOrders?: number,
     stockReservations?: number,
 ): Promise<void> {
-    const footer = page.getByRole("region", { name: "当前工作台任务" })
+    const footer = workPage(page).getByRole("region", { name: "当前工作台任务" })
         .locator('[data-slot="workspace-task-footer"]:visible')
     await expect(footer).toHaveCount(1, { timeout: UI_TIMEOUT })
     const totals = footer.locator("dl:visible").or(
@@ -589,112 +553,56 @@ export async function expectSourcingCounts(
     }
 }
 
-/**
- * 打开 W01 待办。不要往 `#workspace-queue-toolbar-search-input` 填单号/往来方，
- * 后端搜索不匹配这些字段，会把列表滤空。
- *
- * 页面若是 `openLoggedInWorkspace` 刚整页加载、之后没发过写请求的工作台，就不再 goto；
- * 其余情况都硬导航，保证待办是最新的。
- *
- * 默认口径是待我处理。列表里没有带 hint 的任务、且
- * `#workspace-queue-scope-managed` 可见且未按下时，再点「范围内待办」重找。
- * 没有 `work_item:manage` 的账号不渲染该按钮，不得空等。
- * 任务已经在待我处理中则不切换口径。有 hint 时不改点同类型第一条。
- *
- * `typeLabel` 可以是「销售单审批」或 `待供给分配|供给分配` 这种正则源。
- * `hint` 匹配可访问名称（单号、往来方）或可见文本。
- */
+/** 从最新的待办队列打开匹配事项，并核对独立详情地址上的任务 ID。 */
 export async function openWorkspaceTask(
     page: Page,
     typeLabel: string | RegExp,
     hint?: string,
     family?: WorkspaceFamily,
 ): Promise<void> {
-    const key = family ? workspaceFamilyKey(family) : undefined
-    const href = !key || key === "all" ? "/workspace" : `/workspace?family=${key}`
-    // 切角色刚整页加载过的工作台直接用，只在页内切任务类型；否则硬导航重新拉待办。
-    if (!takeFreshWorkspace(page)) {
-        await page.goto(href)
-    }
-    await expectWorkspace(page)
+    if (!takeFreshWorkspace(page)) await page.goto(WORKSPACE_TASKS_PATH)
     if (family) await selectWorkspaceFamily(page, family)
+    else await expectWorkspaceQueue(page)
 
-    const list = page.getByRole("list", { name: "待办列表" })
-    const empty = page.getByText(
-        /当前没有待处理事项|当前筛选没有待办|范围内没有待办/,
-    )
-    // 供给分配可自动展开为全屏；先返回队列，再按正式任务标签及来源 hint 选择。
-    const exitFullscreen = page.getByRole("button", { name: "退出全屏", exact: true })
-    await expect.poll(async () =>
-        (await list.isVisible().catch(() => false)) ||
-        (await empty.first().isVisible().catch(() => false)) ||
-        (await exitFullscreen.isVisible().catch(() => false)),
-        { timeout: UI_TIMEOUT },
-    ).toBe(true)
-    if (await exitFullscreen.isVisible().catch(() => false)) await exitFullscreen.click()
-    await expect(list.or(empty).first()).toBeVisible({ timeout: UI_TIMEOUT })
-
-    const task = workspaceTaskLocator(page, typeLabel, hint)
-    const scopeGroup = page.getByRole("group", { name: "工作视图" })
-    await expect(scopeGroup).toBeVisible({ timeout: UI_TIMEOUT })
-    let searchedManaged = false
-    const managed = page.locator("#workspace-queue-scope-managed")
-    if (
-        !(await task.isVisible().catch(() => false)) &&
-        (await managed.isVisible().catch(() => false))
-    ) {
-        const onManaged = (await managed.getAttribute("aria-pressed")) === "true"
-        if (!onManaged) {
-            searchedManaged = true
-            await managed.click()
-            await expect(managed).toHaveAttribute("aria-pressed", "true", {
-                timeout: UI_TIMEOUT,
-            })
-            await expect(list.or(empty).first()).toBeVisible({ timeout: UI_TIMEOUT })
-        }
+    const task = matchingWorkspaceTaskRows(page, typeLabel, hint).first()
+    if (!(await task.isVisible())) {
+        const scope = workPage(page).locator("#workspace-task-scope")
+        if (await scope.isVisible()) await selectWorkspaceScope(page, "managed")
     }
-
-    let selectedTaskId = ""
     try {
         await expect(task).toBeVisible({ timeout: UI_TIMEOUT })
-        selectedTaskId = (await task.getAttribute("id")) ?? ""
-        expect(selectedTaskId, "所选待办须有正式任务身份").toMatch(/^workspace-task-.+/)
-        await task.click()
     } catch {
-        const labels = await workspaceTaskButtons(page)
-            .evaluateAll((nodes) =>
-                nodes.map((node) => node.getAttribute("aria-label") || node.textContent || ""),
-            )
-            .catch(() => [] as string[])
-        const emptyText = (await empty.allTextContents()).join(" ").trim()
-        const scopeNote = searchedManaged ? "（已查看待我处理与范围内待办）" : ""
-        throw new Error(
-            `工作台未找到任务: ${String(typeLabel)}${hint ? ` / ${hint}` : ""}${scopeNote}\n现有: ${labels.filter(Boolean).join(" | ") || emptyText || "（空）"}`,
+        const rows = await workspaceTaskRows(page).evaluateAll((nodes) =>
+            nodes.map((node) => node.getAttribute("aria-label") || node.textContent || ""),
         )
+        throw new Error(`待办中找不到任务：${String(typeLabel)}${hint ? ` / ${hint}` : ""}\n当前事项：${rows.join(" | ") || "（空）"}`)
     }
-    // 已自动显示详情时 region 会立刻可见，仍须等待此次选择写入真实任务身份。
-    await expect.poll(() => {
-        const id = new URL(page.url()).searchParams.get("currentWorkItemId") ?? ""
-        const segment = id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-        return id ? `workspace-task-${segment}` : ""
-    }, { timeout: UI_TIMEOUT }).toBe(selectedTaskId)
-    await expect(page.getByRole("region", { name: "当前工作台任务" })).toBeVisible({
-        timeout: UI_TIMEOUT,
-    })
+    const id = await task.getAttribute("data-row-id")
+    expect(id, "待办行须具有正式任务身份").toBeTruthy()
+    await openWorkspaceTaskRow(page, id!)
+}
+
+/** 任务材料与任务身份独立；已知工作项 ID 时直接定位当前队列行。 */
+export async function openWorkspaceTaskRow(page: Page, id: string): Promise<void> {
+    const selected = workspaceTaskRows(page).and(workPage(page).locator(`[data-row-id=${JSON.stringify(id)}]`))
+    await expect(selected).toBeVisible({ timeout: UI_TIMEOUT })
+    await selected.press("Enter")
+    await expect.poll(() => workspaceTaskId(page), { timeout: UI_TIMEOUT }).toBe(id)
+    await expect(workPage(page).getByRole("region", { name: "当前工作台任务" })).toBeVisible({ timeout: UI_TIMEOUT })
 }
 
 /**
  * 工作台或对象中心审批通过。按钮文案：工作台「同意审批」，其它页「通过」。
  */
 export async function approveCurrentDocument(page: Page): Promise<void> {
-    const approve = page
+    const approve = workPage(page)
         .locator('[id$="-approve"]')
         .filter({ hasText: /通过|同意审批/ })
-        .or(page.getByRole("button", { name: /^(通过|同意审批)$/ }))
+        .or(workPage(page).getByRole("button", { name: /^(通过|同意审批)$/ }))
         .first()
     await expect(approve).toBeVisible({ timeout: UI_TIMEOUT })
     await approve.click()
-    const dialog = page.getByRole("dialog", { name: "确认通过" })
+    const dialog = workPage(page).getByRole("dialog", { name: "确认通过" })
     await expect(dialog).toBeVisible({ timeout: UI_TIMEOUT })
     const confirm = dialog
         .locator('[id$="-decision-dialog-submit"]')

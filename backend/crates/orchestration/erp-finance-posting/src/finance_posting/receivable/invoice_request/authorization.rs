@@ -3,7 +3,7 @@ use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_identity::AccessTarget;
-use erp_permissions::{Permission, receivable};
+use erp_permissions::{Permission, internal, receivable};
 use erp_read_models::finance::receivable::ReceivableReadService;
 use erp_read_models::finance::receivable::invoice_request::InvoiceRequestView;
 use mongodb::Database;
@@ -30,6 +30,13 @@ impl RequestAction {
         match self {
             Self::Submit => receivable::INVOICE_REQUEST_INVOICE_REQUEST_SUBMIT,
             Self::Cancel => receivable::INVOICE_REQUEST_INVOICE_REQUEST_CANCEL,
+        }
+    }
+
+    fn source_permission(self) -> Permission {
+        match self {
+            Self::Submit => internal::INVOICE_REQUEST_SUBMIT_SOURCE,
+            Self::Cancel => internal::INVOICE_REQUEST_CANCEL_SOURCE,
         }
     }
 }
@@ -75,6 +82,7 @@ impl RequestAccess for MongoAccess<'_> {
         let service = &self.rbac.authorization;
         Ok(service.has_permission(actor, &action.permission(), executor).await?)
     }
+
     async fn readable(
         &self,
         actor: &AuditActor,
@@ -85,7 +93,7 @@ impl RequestAccess for MongoAccess<'_> {
         match self
             .rbac
             .authorization
-            .require(actor, &action.permission(), AccessTarget::record(id)?, executor)
+            .require(actor, &action.source_permission(), AccessTarget::record(id)?, executor)
             .await
             .map_err(Error::from)
         {
@@ -94,6 +102,7 @@ impl RequestAccess for MongoAccess<'_> {
             Err(error) => Err(error),
         }
     }
+
     async fn committed(
         &self,
         command: &CommandReceipt,
@@ -103,6 +112,7 @@ impl RequestAccess for MongoAccess<'_> {
             .committed_resource_id(command, executor)
             .await?)
     }
+
     async fn view(&self, id: &str, executor: &mut dyn Executor) -> Result<Self::View> {
         Ok(ReceivableReadService::new(self.db.clone())
             .invoice_request_detail_with_executor(id, executor)

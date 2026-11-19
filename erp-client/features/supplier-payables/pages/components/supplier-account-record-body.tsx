@@ -169,7 +169,7 @@ export function SupplierAccountRecordBody({
                 )}
             </PreviewSection>
             <SupplierSourceDocuments scope={{ allocations }} />
-            {payment?.relatedReversals.length ? (
+            {payment?.relatedReversals?.length ? (
                 <PreviewSection title="关联冲正">
                     <ul className="space-y-3">
                         {payment.relatedReversals.map((reversal) => (
@@ -205,9 +205,11 @@ export function SupplierAccountRecordBody({
                 <PreviewNote>{allocationReason}</PreviewNote>
             ) : (
                 <PreviewNote>
-                    {isPayment
-                        ? "已过账付款不可编辑；纠错请办理冲正或退款。"
-                        : "收票分配与付款独立；发票纠错请办理红票。"}
+                    {payment?.permissionLimited
+                        ? "仅显示权限范围内的核销明细。"
+                        : isPayment
+                          ? "已过账付款不可编辑；纠错请办理冲正或退款。"
+                          : "收票分配与付款独立；发票纠错请办理红票。"}
                 </PreviewNote>
             )}
         </div>

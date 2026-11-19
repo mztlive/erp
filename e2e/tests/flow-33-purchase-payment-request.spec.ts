@@ -3,6 +3,7 @@
  * 生产建档及正式单据命令形成来源；浏览器执行申请录入、财审和付款，API 验证额度及生命周期。
  * 合同：docs/purchase-payment-request-contract.md PPR-01/02/05/06/07/08/09/12/13/14。
  */
+import { workPage } from "../helpers/workspace-page"
 import { randomUUID } from "node:crypto"
 
 import { test, expect, type Page, type Response } from "../helpers/test"
@@ -10,8 +11,8 @@ import { API_BASE, apiGet, apiToken } from "../helpers/api"
 import { analyticsDate, createAnalyticsPurchase, prepareAnalyticsOrders, uploadAnalyticsEvidence, type AnalyticsPurchase } from "../helpers/financial-analytics"
 import { rejectFinancialOriginal } from "../helpers/financial-draft-edit"
 import { openLoggedInWorkspace } from "../helpers/login"
-import { BANK_RECEIPT_FILE, purchasePaymentRequestCommand, type PaymentRequestCandidate, type PurchasePaymentRequestResult } from "../helpers/payments"
-import { approveCurrentDocument, chooseOption, openWorkspaceTask, pickCalendarDay } from "../helpers/ui"
+import { BANK_RECEIPT_FILE, openPurchasePaymentExecutionTask, purchasePaymentRequestCommand, type PaymentRequestCandidate, type PurchasePaymentRequestResult } from "../helpers/payments"
+import { workspaceTaskId, approveCurrentDocument, expectWorkspaceQueue, matchingWorkspaceTaskRows, chooseOption, openWorkspaceTask, pickCalendarDay } from "../helpers/ui"
 
 const ROOT = "/admin/purchase-payment-requests"
 const VISIBLE = { timeout: 20_000 }
@@ -74,21 +75,21 @@ async function revisePeriodProfile(page: Page, token: string, supplierId: string
         const editor = await openLoggedInWorkspace(browser, "admin")
         try {
             await editor.page.goto(`/master-data/suppliers/${supplierId}`)
-            await expect(editor.page.locator("#master-data-supplier-basic-name")).toBeVisible(VISIBLE)
-            await editor.page.locator("#master-data-supplier-editor-tab-commercial").click()
-            const reconciliation = editor.page.locator("#master-data-supplier-commercial-reconciliation-cycle-combobox")
+            await expect(workPage(editor.page).locator("#master-data-supplier-basic-name")).toBeVisible(VISIBLE)
+            await workPage(editor.page).locator("#master-data-supplier-editor-tab-commercial").click()
+            const reconciliation = workPage(editor.page).locator("#master-data-supplier-commercial-reconciliation-cycle-combobox")
             await chooseOption(editor.page, reconciliation, "每月对账")
             await expect(reconciliation).toHaveValue("每月对账")
-            await chooseOption(editor.page, editor.page.locator("#master-data-supplier-commercial-settlement-combobox"), "季结")
-            await editor.page.locator("#master-data-supplier-commercial-payment-days").fill("15")
+            await chooseOption(editor.page, workPage(editor.page).locator("#master-data-supplier-commercial-settlement-combobox"), "季结")
+            await workPage(editor.page).locator("#master-data-supplier-commercial-payment-days").fill("15")
             await expect(reconciliation, "修改付款周期不得覆盖已选对账频率").toHaveValue("每月对账")
-            await expect(editor.page.locator("#master-data-supplier-commercial-settlement-combobox")).toHaveValue("季结")
-            await expect(editor.page.locator("#master-data-supplier-commercial-payment-days")).toHaveValue("15")
-            await editor.page.locator("#master-data-supplier-document-header-submit").click()
-            await editor.page.locator("#supplier-save-reason").fill("E2E 季度付款独立保留每月对账，正式采购按商档冻结")
+            await expect(workPage(editor.page).locator("#master-data-supplier-commercial-settlement-combobox")).toHaveValue("季结")
+            await expect(workPage(editor.page).locator("#master-data-supplier-commercial-payment-days")).toHaveValue("15")
+            await workPage(editor.page).locator("#master-data-supplier-document-header-submit").click()
+            await workPage(editor.page).locator("#supplier-save-reason").fill("E2E 季度付款独立保留每月对账，正式采购按商档冻结")
             const saved = editor.page.waitForResponse((item) => item.request().method() === "PUT" &&
                 new URL(item.url()).pathname === `/admin/supplier-profiles/${supplierId}`, { timeout: 60_000 })
-            await editor.page.locator("#master-data-supplier-supplier-save-reason-dialog-button-2").click()
+            await workPage(editor.page).locator("#master-data-supplier-supplier-save-reason-dialog-button-2").click()
             const response = await saved
             expect(response.request().postDataJSON()).toMatchObject({
                 expected_party_version: source.party_version, expected_supplier_version: source.version,
@@ -98,9 +99,9 @@ async function revisePeriodProfile(page: Page, token: string, supplierId: string
             const envelope = await response.json() as { success: boolean; errorMessage?: string }
             expect(envelope.success, envelope.errorMessage).toBe(true)
             await editor.page.reload()
-            await editor.page.locator("#master-data-supplier-editor-tab-commercial").click()
-            await expect(editor.page.locator("#master-data-supplier-commercial-settlement-combobox")).toHaveValue("季结")
-            await expect(editor.page.locator("#master-data-supplier-commercial-payment-days")).toHaveValue("15")
+            await workPage(editor.page).locator("#master-data-supplier-editor-tab-commercial").click()
+            await expect(workPage(editor.page).locator("#master-data-supplier-commercial-settlement-combobox")).toHaveValue("季结")
+            await expect(workPage(editor.page).locator("#master-data-supplier-commercial-payment-days")).toHaveValue("15")
             await expect(reconciliation).toHaveValue("每月对账")
         } finally {
             await editor.context.close()
@@ -303,16 +304,9 @@ async function openPaymentRequestTask(page: Page, token: string, request: Detail
         submission_version: current.submission_version, version: current.version, status: current.status,
     })
     expect(exactLineBalances(context), "任务上下文必须与即时授权详情的逐行金额、当前占用和应付分录完全一致").toEqual(exactLineBalances(current))
-    await page.goto(`/workspace?family=finance&currentWorkItemId=${encodeURIComponent(taskId)}`)
-    const segment = taskId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-    const task = page.locator(`[id="workspace-task-${segment}"]`)
-    await expect(task).toHaveCount(1, VISIBLE)
-    await expect(task).toBeVisible(VISIBLE)
-    await expect(task).toContainText(request.request_no)
-    await task.click()
-    await expect(task).toHaveAttribute("aria-current", "true", VISIBLE)
-    await expect.poll(() => new URL(page.url()).searchParams.get("currentWorkItemId"), VISIBLE).toBe(taskId)
-    const surface = page.getByRole("region", { name: "当前工作台任务" })
+    await openPurchasePaymentExecutionTask(page, request)
+    await expect.poll(() => workspaceTaskId(page), VISIBLE).toBe(taskId)
+    const surface = workPage(page).getByRole("region", { name: "当前工作台任务" })
     await expect(surface.getByRole("region", { name: "付款任务摘要" })).toBeVisible(VISIBLE)
     await expect(surface.locator("#ppr-pay-form")).toBeVisible(VISIBLE)
     await expect(surface.locator("#ppr-pay-amount")).toHaveValue(money(context.lines.reduce((total, line) =>
@@ -328,10 +322,10 @@ function uiPaymentCommand(response: Response) {
 }
 
 async function commitUiPayment(page: Page, amount: string, filename: string, loseResponse = false) {
-    await page.locator("#ppr-pay-amount").fill(amount)
-    await page.locator("#ppr-pay-bank-receipt-input").setInputFiles({ ...BANK_RECEIPT_FILE, name: filename })
-    await page.locator("#ppr-pay-submit").click()
-    const dialog = page.getByRole("alertdialog").filter({ hasText: "确认登记付款" })
+    await workPage(page).locator("#ppr-pay-amount").fill(amount)
+    await workPage(page).locator("#ppr-pay-bank-receipt-input").setInputFiles({ ...BANK_RECEIPT_FILE, name: filename })
+    await workPage(page).locator("#ppr-pay-submit").click()
+    const dialog = workPage(page).getByRole("alertdialog").filter({ hasText: "确认登记付款" })
     await expect(dialog).toBeVisible(VISIBLE)
     if (loseResponse) {
         type SavedCommand = { url: string; headers: Record<string, string>; bytes: Buffer; result: { id: string; payment_no: string; amount: string; status: string } }
@@ -369,7 +363,7 @@ async function commitUiPayment(page: Page, amount: string, filename: string, los
     }
     const cashierToken = await apiToken("fukuan")
     const readerToken = await apiToken("caigou")
-    const workItemId = new URL(page.url()).searchParams.get("currentWorkItemId")
+    const workItemId = workspaceTaskId(page)
     expect(workItemId, "正式付款须锁定当前出纳任务").toBeTruthy()
     const request = await apiGet<Detail>(cashierToken, `/admin/work-items/${workItemId}/purchase-payment-request`)
     const readback = async () => ({
@@ -387,17 +381,16 @@ async function commitUiPayment(page: Page, amount: string, filename: string, los
     expect(originalCommand.idempotency_key).toMatch(/^ppr-pay:/)
     expect(moneyCents(originalCommand.payment.amount)).toBe(moneyCents(amount))
     if (response.status() === 429) {
-        expect(await response.json()).toMatchObject({ status: 429, code: "RATE_LIMITED", retryable: true, success: false, data: null })
+        const rejection = await response.json()
+        expect(rejection).toMatchObject({ status: 429, code: "RATE_LIMITED", retryable: true, success: false, data: null, errorMessage: expect.any(String) })
         const retryAfter = response.headers()["retry-after"]
         expect(retryAfter, "准入拒绝必须给出明确等待秒数").toMatch(/^[1-9]\d*$/)
         expect(Number(retryAfter), "上传滑动窗口为 60 秒").toBeLessThanOrEqual(60)
         expect(await readback(), "handler 前限流拒绝不得写入付款、核销或申请占用").toEqual(before)
         await expect(dialog).toBeVisible(VISIBLE)
-        await expect(dialog.getByText("请求过于频繁，请稍后重试", { exact: true })).toBeVisible(VISIBLE)
+        await expect(dialog.getByRole("alert")).toContainText(rejection.errorMessage, VISIBLE)
         await expect(dialog.locator("#ppr-pay-confirm-confirm")).toBeEnabled(VISIBLE)
-        // 所有上传入口按账号共享 10 次/60 秒。释放完整窗口，后续真实关闭/付款竞争也必须获准进入 handler。
-        await page.waitForTimeout(60_000)
-        await page.waitForTimeout(250)
+        await page.waitForTimeout(Number(retryAfter) * 1_000 + 250)
         expect(await readback(), "等待期间原申请、已付款事实及应付占用必须完全不变").toEqual(before)
         const retried = waitForCommit()
         await dialog.locator("#ppr-pay-confirm-confirm").click()
@@ -447,8 +440,9 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
 
     // PPR-01/08：只有应付不会派发出纳任务，旧入口不能登记付款。
     const cashier = await openLoggedInWorkspace(browser, "fukuan")
-    await cashier.page.goto("/workspace?family=finance")
-    await expect(cashier.page.getByRole("button", { name: /供应商付款处理|待付款申请/ })).toHaveCount(0)
+    await cashier.page.goto("/workspace/tasks")
+    await expectWorkspaceQueue(cashier.page)
+    await expect(matchingWorkspaceTaskRows(cashier.page, "待执行采购付款")).toHaveCount(0)
     const legacy = await rawCommand(cashier.page, await apiToken("fukuan"), "/admin/supplier-payments/commit", {})
     expect(legacy.ok(), "采购应付旧直付入口必须拒绝").toBe(false)
 
@@ -513,8 +507,9 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
     await rejectFinancialOriginal(finance.page, "本期对账金额需由采购重新核对")
     const rejected = await detail(procurementToken, winner.id)
     expect(rejected.status).toBe("rejected")
-    await finance.page.goto("/workspace?family=approval")
-    await expect(finance.page.getByRole("button", { name: /付款申请/ }).filter({ hasText: winner.request_no })).toHaveCount(0)
+    await finance.page.goto("/workspace/tasks")
+    await expectWorkspaceQueue(finance.page)
+    await expect(matchingWorkspaceTaskRows(finance.page, /付款申请/, winner.request_no)).toHaveCount(0)
     expect((await candidates(procurementToken)).find((row) => row.payable_account_id === rows[0]!.payable_account_id)?.available_total).toBe(rows[0]!.available_total)
 
     // 为未批准状态准入保留一条真实审批中申请；之后使用真实已批准付款任务发送完整命令。
@@ -527,34 +522,43 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
     // PPR-02：浏览器勾选采购、核对预填金额后批量提交，同一付款关系合并为一份正式申请。
     const availableForBatch = await candidates(procurementToken)
     await procurement.page.goto("/procurement/payment-requests")
-    await procurement.page.locator("#purchase-payment-requests-create").click()
+    await workPage(procurement.page).locator("#purchase-payment-requests-create").click()
     for (const row of rows) {
         const segment = row.payable_account_id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-        await procurement.page.locator(`[id="ppr-select-${segment}"]`).check()
+        await workPage(procurement.page).locator(`[id="ppr-select-${segment}"]`).check()
     }
-    await procurement.page.locator("#ppr-create-next").click()
-    await expect(procurement.page.locator("#ppr-create-submit")).toHaveText("提交 1 份付款申请")
-    const amountInputs = procurement.page.locator('input[id^="ppr-create-line-"]')
+    const batchPosts: string[] = []
+    procurement.page.on("request", (request) => {
+        if (request.method() === "POST" && new URL(request.url()).pathname === `${ROOT}/batch`) {
+            batchPosts.push(request.url())
+        }
+    })
+    await workPage(procurement.page).locator("#ppr-create-next").click()
+    await expect(workPage(procurement.page).locator("#ppr-create-submit")).toHaveText("提交 1 份付款申请")
+    expect(batchPosts, "下一步仅打开填写界面").toHaveLength(0)
+    const amountInputs = workPage(procurement.page).locator('input[id^="ppr-create-line-"]')
     await expect(amountInputs).toHaveCount(2, VISIBLE)
     for (const row of rows) {
-        const input = procurement.page.locator(`[id="ppr-create-line-${row.payable_account_id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}"]`)
+        const input = workPage(procurement.page).locator(`[id="ppr-create-line-${row.payable_account_id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}"]`)
         const current = availableForBatch.find((candidate) => candidate.payable_account_id === row.payable_account_id)!
         await expect(input, "周期结算按当前可申请余额预填，不得覆盖已存在的申请占用").toHaveValue(money(moneyCents(current.available_total)))
         await input.fill(multiAmounts.get(row.payable_account_id)!)
     }
-    await pickCalendarDay(procurement.page, procurement.page.locator("#ppr-create-desired-payment-date"), analyticsDate())
-    await procurement.page.locator("#ppr-create-description").fill("采购已完成本期对账，按两张采购分别申请")
-    await procurement.page.locator("#ppr-create-attachments").setInputFiles({ ...BANK_RECEIPT_FILE, name: "ppr-own-draft-evidence.png" })
+    await pickCalendarDay(procurement.page, workPage(procurement.page).locator("#ppr-create-desired-payment-date"), analyticsDate())
+    await workPage(procurement.page).locator("#ppr-create-description").fill("采购已完成本期对账，按两张采购分别申请")
+    await workPage(procurement.page).locator("#ppr-create-attachments").setInputFiles({ ...BANK_RECEIPT_FILE, name: "ppr-own-draft-evidence.png" })
     const saved = procurement.page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `${ROOT}/batch`)
-    await procurement.page.locator("#ppr-create-submit").click()
+    await workPage(procurement.page).locator("#ppr-create-submit").click()
     const batchResponse = await saved
+    expect(batchPosts, "明确提交后只发出一次批量申请").toHaveLength(1)
     expect(batchResponse.ok(), await batchResponse.text()).toBe(true)
     const batchRequests = (await batchResponse.json()).data as Detail[]
     expect(batchRequests).toHaveLength(1)
     const batchRequest = batchRequests[0]!
     expect(batchRequest.status, "新建入口须直接完成财审提交").toBe("in_approval")
     expect(batchRequest.lines.map((line) => line.payable_account_id).sort()).toEqual(rows.map((row) => row.payable_account_id).sort())
-    await procurement.page.locator(`#ppr-result-${batchRequest.id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`).click()
+    await workPage(procurement.page).locator(`#ppr-result-${batchRequest.id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`).click()
+    await expect.poll(() => new URL(procurement.page.url()).pathname, VISIBLE).toBe(`/procurement/payment-requests/${encodeURIComponent(batchRequest.id)}`)
     // 已提交申请正式撤回后沿原单修改，继续覆盖草稿取消确认、附件归属及重新提交的未知结果恢复。
     await purchasePaymentRequestCommand(procurement.page, "caigou", "POST", `${ROOT}/${batchRequest.id}/withdraw`, {
         expected_version: batchRequest.version, reason: "补充本次对账说明后沿原申请重新提交", idempotency_key: randomUUID(),
@@ -568,20 +572,21 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
     const inheritedAttachmentIds = initialDraftView.attachments.map((file) => file.file_asset_id)
         .filter((id) => !ownDraftAttachmentIds.includes(id))
     expect(inheritedAttachmentIds, "完整材料展示必须包含正式销售来源附件").toContain(fixture.evidenceId)
-    const draftMaterials = procurement.page.getByRole("region", { name: "冻结采购销售与审核材料", exact: true })
+    await workPage(procurement.page).getByRole("tab", { name: "审核材料", exact: true }).click()
+    const draftMaterials = workPage(procurement.page).getByRole("region", { name: "申请提交时的采购与销售单据", exact: true })
     await expect(draftMaterials.getByText("ppr-own-draft-evidence.png", { exact: true })).toBeVisible(VISIBLE)
     const sourceEvidenceSegment = fixture.evidenceId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
     await expect(draftMaterials.locator(`[id="ppr-attachment-${sourceEvidenceSegment}-download"]`)).toBeVisible(VISIBLE)
-    await expect(procurement.page.locator("#ppr-detail-submit")).toBeVisible(VISIBLE)
-    await procurement.page.locator("#ppr-detail-submit").click()
+    await expect(workPage(procurement.page).locator("#ppr-detail-submit")).toBeVisible(VISIBLE)
+    await workPage(procurement.page).locator("#ppr-detail-submit").click()
     // Review D：未发送的确认取消后允许修改草稿；第一次真实提交必须使用保存后的版本。
-    await procurement.page.locator("#ppr-submit-confirm-cancel").click()
-    await procurement.page.locator("#ppr-detail-edit").click()
+    await workPage(procurement.page).locator("#ppr-submit-confirm-cancel").click()
+    await workPage(procurement.page).locator("#ppr-detail-edit").click()
     const revisedReason = "采购已重新核对两张采购，本次按最新草稿提交财务审核"
-    await procurement.page.locator("#ppr-create-description").fill(revisedReason)
+    await workPage(procurement.page).locator("#ppr-create-description").fill(revisedReason)
     const editedResponsePending = procurement.page.waitForResponse((response) => response.request().method() === "PUT" &&
         new URL(response.url()).pathname === `${ROOT}/${multi.id}`)
-    await procurement.page.locator("#ppr-create-submit").click()
+    await workPage(procurement.page).locator("#ppr-create-submit").click()
     const editedResponse = await editedResponsePending
     expect(editedResponse.ok(), await editedResponse.text()).toBe(true)
     const revisedDraft = (await editedResponse.json()).data as Detail
@@ -590,8 +595,10 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
     expect(revisedDraft.data.attachment_ids, "编辑必须完整保留本申请自有附件").toEqual(ownDraftAttachmentIds)
     expect(revisedDraft.data.attachment_ids.some((id) => inheritedAttachmentIds.includes(id)), "来源附件只供完整材料展示，不得混入草稿命令自有附件").toBe(false)
     expect(editedResponse.request().postDataJSON().data.attachment_ids).toEqual(ownDraftAttachmentIds)
-    await procurement.page.locator(`#ppr-result-${multi.id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`).click()
-    await expect(procurement.page.locator("#ppr-create-dialog")).toBeHidden(VISIBLE)
+    const savedEditor = workPage(procurement.page).getByRole("dialog", { name: "已保存申请修改", exact: true })
+    await expect(savedEditor).toContainText(revisedDraft.request_no)
+    await savedEditor.locator("#ppr-create-done").press("Enter")
+    await expect(savedEditor).toBeHidden(VISIBLE)
     // 服务端先提交成功，再丢失响应；未知结果必须查询原次命令，而不能改草稿或新建审批。
     let firstSubmitCommand: unknown
     let completeSubmission: (result: { ok: boolean; success: boolean }) => void = () => undefined
@@ -604,19 +611,19 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
         completeSubmission({ ok: response.ok(), success: envelope.success })
         await route.abort("failed")
     }, { times: 1 })
-    await procurement.page.locator("#ppr-detail-submit").click()
-    await procurement.page.locator("#ppr-submit-confirm-confirm").click()
+    await workPage(procurement.page).locator("#ppr-detail-submit").click()
+    await workPage(procurement.page).locator("#ppr-submit-confirm-confirm").click()
     expect(await appliedSubmission, "取消后修改的草稿第一次实际提交必须成功，不能触发旧版本冲突").toEqual({ ok: true, success: true })
     expect(firstSubmitCommand).toMatchObject({ expected_version: revisedDraft.version })
     await expect.poll(async () => (await detail(procurementToken, multi.id)).status).toBe("in_approval")
     const applied = await detail(procurementToken, multi.id)
-    await expect(procurement.page.getByText("提交结果暂无法确认，请再次确认本次提交以查询原次结果。", { exact: true })).toBeVisible(VISIBLE)
-    await procurement.page.locator("#ppr-submit-confirm-cancel").click()
-    await expect(procurement.page.locator("#ppr-detail-edit")).toBeDisabled(VISIBLE)
-    await procurement.page.locator("#ppr-detail-submit").click()
+    await expect(workPage(procurement.page).locator("#ppr-submit-confirm-confirm")).toHaveText("查询本次提交结果", VISIBLE)
+    await workPage(procurement.page).locator("#ppr-submit-confirm-cancel").click()
+    await expect(workPage(procurement.page).locator("#ppr-detail-edit")).toBeDisabled(VISIBLE)
+    await workPage(procurement.page).locator("#ppr-detail-submit").click()
     const retriedSubmission = procurement.page.waitForResponse((response) => response.request().method() === "POST" &&
         new URL(response.url()).pathname === `${ROOT}/${multi.id}/submit`)
-    await procurement.page.locator("#ppr-submit-confirm-confirm").click()
+    await workPage(procurement.page).locator("#ppr-submit-confirm-confirm").click()
     const retriedResponse = await retriedSubmission
     expect(retriedResponse.request().postDataJSON(), "未知结果重试必须沿用原版本和幂等键").toEqual(firstSubmitCommand)
     expect(retriedResponse.ok(), await retriedResponse.text()).toBe(true)
@@ -633,7 +640,7 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
     expect(new Set(frozen.sales_previews.map((row) => row.sales_order_id)).size).toBe(2)
     expect(frozen.total_amount).toBe(money([...multiAmounts.values()].reduce((total, amount) => total + moneyCents(amount), 0n)))
     await openWorkspaceTask(finance.page, /付款申请/, multi.request_no, "approval")
-    for (const row of rows) await expect(finance.page.getByText(row.purchase_no).first()).toBeVisible(VISIBLE)
+    for (const row of rows) await expect(workPage(finance.page).getByText(row.purchase_no).first()).toBeVisible(VISIBLE)
     await approveCurrentDocument(finance.page)
     const approved = await detail(procurementToken, multi.id)
     expect(approved.status).toBe("approved")
@@ -772,9 +779,9 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
         expect(await raceReadback(), "等待准入窗口不得改变付款、逐行净已付、应付或申请占用").toEqual(beforeRaceWindow)
     })
     await openPaymentRequestTask(cashier.page, cashierToken, partial)
-    await cashier.page.locator("#ppr-pay-amount").fill(money(moneyCents(firstLine.requested_amount) - moneyCents(half)))
-    await cashier.page.locator("#ppr-pay-bank-receipt-input").setInputFiles({ ...BANK_RECEIPT_FILE, name: "ppr-close-payment-race.png" })
-    await cashier.page.locator("#ppr-pay-submit").click()
+    await workPage(cashier.page).locator("#ppr-pay-amount").fill(money(moneyCents(firstLine.requested_amount) - moneyCents(half)))
+    await workPage(cashier.page).locator("#ppr-pay-bank-receipt-input").setInputFiles({ ...BANK_RECEIPT_FILE, name: "ppr-close-payment-race.png" })
+    await workPage(cashier.page).locator("#ppr-pay-submit").click()
     let settled: (responses: boolean[]) => void = () => undefined
     let raceStatuses: { payment: number; closed: number } | undefined
     const raced = new Promise<boolean[]>((resolve) => { settled = resolve })
@@ -792,7 +799,7 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
         settled([paid.ok(), closed.ok()])
         await route.fulfill({ response: paid })
     }, { times: 1 })
-    await cashier.page.locator("#ppr-pay-confirm-confirm").click()
+    await workPage(cashier.page).locator("#ppr-pay-confirm-confirm").click()
     const racingResults = await raced
     expect(raceStatuses!.payment, "关闭/付款竞争必须通过真实准入，不能以限流代替财务版本互斥").not.toBe(429)
     expect(raceStatuses!.closed, "关闭/付款竞争必须由业务版本判定").not.toBe(429)
@@ -821,6 +828,7 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
             expect(moneyCents(candidate!.available_total)).toBe(available)
         } else if (candidate) expect(moneyCents(candidate.available_total)).toBe(0n)
     }
-    await cashier.page.goto("/workspace?family=finance")
-    await expect(cashier.page.getByRole("button", { name: /供应商付款处理|待付款申请/ }).filter({ hasText: multi.request_no })).toHaveCount(0)
+    await cashier.page.goto("/workspace/tasks")
+    await expectWorkspaceQueue(cashier.page)
+    await expect(matchingWorkspaceTaskRows(cashier.page, "待执行采购付款", multi.request_no)).toHaveCount(0)
 })

@@ -22,6 +22,12 @@ SPEC.loader.exec_module(runner)
 
 
 class IsolationContracts(unittest.TestCase):
+    def test_report_root_override_keeps_playwright_artifacts_outside_checkout(self):
+        with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, {"E2E_REPORT_ROOT": temp}):
+            run = runner.Runner(argparse.Namespace(target="all", workers=1, config="unused"))
+            self.assertEqual(run.report_dir.parent, Path(temp).resolve())
+            self.assertTrue(run.report_dir.is_dir())
+
     def test_lpt_covers_real_specs_once_keeps_multitest_files_whole_and_s2_last(self):
         files = sorted(str(path.relative_to(runner.E2E)) for path in (runner.E2E / "tests").rglob("*.spec.ts"))
         weights = runner.duration_weights()
@@ -139,6 +145,18 @@ class IsolationContracts(unittest.TestCase):
         self.assertEqual(result["s3"]["key_prefix"], "e2e/run/2")
         self.assertEqual(result["s3"]["secret_access_key"], "s3-secret")
 
+    def test_worker_uses_same_shard_database_without_registering_in_shared_scheduler(self):
+        source = {"app": {"port": 10001, "secret": "source-secret"}, "database": {}, "s3": {},
+                  "xxl_job": {"admin_url": "https://shared.invalid"}}
+        api_text = runner.shard_config(source, "mongodb://localhost/new", "new", 11002, "run", 2)
+        api = tomllib.loads(api_text)
+        worker = tomllib.loads(runner.worker_shard_config(api_text, 11003, "run", 2))
+        for key in ("database", "s3"):
+            self.assertEqual(api[key], worker[key])
+        self.assertEqual(worker["app"], {**api["app"], "port": 11003})
+        self.assertEqual(worker["xxl_job"]["admin_url"], "http://127.0.0.1:11003")
+        self.assertEqual(worker["xxl_job"]["app_name"], "erp-e2e-run-2")
+
     def test_private_config_and_logs_do_not_publish_credentials(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "config.toml"
@@ -222,6 +240,7 @@ class ProcessCleanup(unittest.IsolatedAsyncioTestCase):
             binary.parent.mkdir()
             binary.write_text("not executed")
             binary.chmod(0o700)
+            binary.with_name("erp-worker").symlink_to(binary)
             with patch.object(runner, "ROOT", root):
                 target = runner.Runner(argparse.Namespace(target="all", workers=1, config="unused"))
             target.progress = lambda text: None
@@ -273,6 +292,7 @@ class ProcessCleanup(unittest.IsolatedAsyncioTestCase):
             binary.parent.mkdir(parents=True)
             binary.write_text("not executed")
             binary.chmod(0o700)
+            binary.with_name("erp-worker").symlink_to(binary)
             with patch.object(runner, "ROOT", root):
                 target = runner.Runner(argparse.Namespace(target="all", workers=1, config=str(config)))
             target.progress = lambda text: None
@@ -287,7 +307,8 @@ class ProcessCleanup(unittest.IsolatedAsyncioTestCase):
                 capture.append(json.dumps({"target_directory": str(root / "target")}))
                 return Mock(wait=AsyncMock(return_value=0))
 
-            async def shard(index, port):
+            async def shard(index, port, worker_port):
+                self.assertNotEqual(port, worker_port)
                 self.assertEqual(target.target_uri, target_uri)
                 result = {"shard": index, "status": "passed", "cleanup": "dropped"}
                 target.summary["shards"].append(result)

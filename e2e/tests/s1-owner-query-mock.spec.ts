@@ -1,11 +1,10 @@
 /**
- * S1 浏览器检查：登录真实本地服务后，拦截四类列表 API，
- * 用 105/102/3 条模拟数据验证同名候选人、跨页与导出。
+ * S1 浏览器检查：模拟登录、人员目录、四类列表及文件任务，
+ * 用 105/102/3 条数据验证同名候选人、跨页与下载。
  * 不作为真实库、组织范围或业务验收证据。
  */
-import { expect, test, type Page } from "../helpers/test"
-
-import { loginViaUi } from "../helpers/login"
+import { expect, test, type FrameLocator, type Page } from "../helpers/test"
+import { workPage as activeWorkPage } from "../helpers/workspace-page"
 
 const OWNER_A = "user-a"
 const OWNER_B = "user-b"
@@ -25,6 +24,7 @@ const PICKER_LABEL_A = "张三 · zhang-a"
 const PICKER_LABEL_B = "张三 · zhang-b（已停用）"
 
 type Kind = "customers" | "contracts" | "sales" | "purchases"
+type TransferRequest = { kind: string; input: { owner_user_ids?: string }; request_id: string }
 
 function envelope(data: unknown) {
     return { status: 200, errorMessage: "", data, success: true }
@@ -349,7 +349,6 @@ function payload(kind: Kind, url: string) {
 async function installMocks(page: Page, requests: { kind: Kind; url: string; ownerIds: string[]; page: number; pageSize: number }[]) {
     const fulfill = async (kind: Kind, route: { request: () => { url: () => string; method: () => string }; fulfill: (r: Record<string, unknown>) => Promise<void> }) => {
         const url = route.request().url()
-        requests.push({ kind, url, ownerIds: parseOwnerIds(url), ...pageParams(url) })
         const cors = {
             "access-control-allow-origin": "*",
             "access-control-allow-headers": "*",
@@ -359,6 +358,7 @@ async function installMocks(page: Page, requests: { kind: Kind; url: string; own
             await route.fulfill({ status: 204, headers: cors })
             return
         }
+        requests.push({ kind, url, ownerIds: parseOwnerIds(url), ...pageParams(url) })
         await route.fulfill({
             status: 200,
             contentType: "application/json",
@@ -429,7 +429,7 @@ async function fulfillJson(
     const cors = {
         "access-control-allow-origin": "*",
         "access-control-allow-headers": "*",
-        "access-control-allow-methods": "GET,OPTIONS",
+        "access-control-allow-methods": "GET,POST,OPTIONS",
     }
     if (route.request().method() === "OPTIONS") {
         await route.fulfill({ status: 204, headers: cors })
@@ -443,23 +443,44 @@ async function fulfillJson(
     })
 }
 
-async function selectOwner(page: Page, inputId: string, userId: string) {
-    await page.locator(`#${inputId}`).click()
-    const optionA = page.locator(`#${inputId}-option-${OWNER_A}`)
-    const optionB = page.locator(`#${inputId}-option-${OWNER_B}`)
+async function selectOwner(workPage: FrameLocator | Page, inputId: string, userId: string) {
+    await workPage.locator(`#${inputId}`).click()
+    const optionA = workPage.locator(`#${inputId}-option-${OWNER_A}`)
+    const optionB = workPage.locator(`#${inputId}-option-${OWNER_B}`)
     await expect(optionA).toBeVisible()
     await expect(optionB).toBeVisible()
     await expect(optionA.getByText(PICKER_LABEL_A, { exact: true })).toBeVisible()
     await expect(optionB.getByText(PICKER_LABEL_B, { exact: true })).toBeVisible()
-    await expect(optionB.getByText("已停用")).toBeVisible()
-    await page.locator(`#${inputId}-option-${userId}`).click()
+    await workPage.locator(`#${inputId}-option-${userId}`).click()
+    await workPage.locator(`#${inputId}`).press("Escape")
 }
 
 test("S1 mock API owner filter, export and 390px", async ({ page }) => {
     const requests: { kind: Kind; url: string; ownerIds: string[]; page: number; pageSize: number }[] = []
-    await page.goto("/login")
-    await loginViaUi(page, "admin")
+    const context = page.context()
+    const apiOrigin = new URL(process.env.ERP_E2E_SOURCE_API_BASE ?? "http://127.0.0.1:10001").origin
+    await context.route(`${apiOrigin}/**`, (route) => route.abort())
+    await context.route(`${apiOrigin}/login`, (route) => fulfillJson(route, { token: "s1-browser-token" }))
+    await context.route(`${apiOrigin}/account/profile`, (route) => fulfillJson(route, {
+        userid: "s1-user",
+        account: "s1-user",
+        name: "S1 测试账号",
+        subject: "user:admin:s1-user",
+        account_kind: "admin",
+        role_ids: [],
+        permissions: [
+            "customer:list", "contract:list", "sales_order:list", "purchase_order:list",
+            "sales_person:list", "procurement_person:list", "org_unit:list",
+        ],
+    }))
     await installMocks(page, requests)
+    await page.goto("/login?returnTo=%2Fsales%2Fcustomers")
+    await page.locator("#governance-auth-login-account").fill("s1-user")
+    await page.locator("#governance-auth-login-password").fill("s1-password")
+    await page.locator("#governance-auth-login-submit").click()
+    await expect(page).toHaveURL(/\/sales\/customers$/)
+
+    const workPage = activeWorkPage(page)
 
     const cases: Array<{
         name: string
@@ -471,7 +492,6 @@ test("S1 mock API owner filter, export and 390px", async ({ page }) => {
         count3: string
         ready: string
         marker: string
-        openMore?: string
     }> = [
         {
             name: "customers",
@@ -494,7 +514,6 @@ test("S1 mock API owner filter, export and 390px", async ({ page }) => {
             count3: "共 3 份合同",
             ready: "共 105 份合同",
             marker: "HT-A-1",
-            openMore: "#card-contracts-list-more-filters-trigger",
         },
         {
             name: "sales",
@@ -505,7 +524,6 @@ test("S1 mock API owner filter, export and 390px", async ({ page }) => {
             tableId: "sales-orders-list-table",
             count3: "共 3 张销售单",
             ready: "共 105 张销售单",
-            openMore: "#sales-orders-list-filter-more-toggle",
             marker: "SO-A-1",
         },
         {
@@ -524,87 +542,93 @@ test("S1 mock API owner filter, export and 390px", async ({ page }) => {
     for (const spec of cases) {
         requests.length = 0
         await page.goto(spec.path)
-        await expect(page.locator(`#${spec.tableId} [data-row-id]`).first()).toBeVisible({ timeout: 20_000 })
-        await expect(page.getByText(spec.marker).first()).toBeVisible()
-        await expect(page.getByText(spec.ready).first()).toBeVisible()
+        await expect(workPage.locator(`#${spec.tableId} [data-row-id]`).first()).toBeVisible({ timeout: 20_000 })
+        await expect(workPage.getByText(spec.marker).first()).toBeVisible()
+        await expect(workPage.getByText(spec.ready).first()).toBeVisible()
         expect(requests.some((item) => item.kind === spec.kind), `${spec.name} mock hit`).toBeTruthy()
-        if (spec.openMore) await page.locator(spec.openMore).click()
-        await selectOwner(page, spec.ownerId, OWNER_B)
-        await page.locator(spec.applyId).click()
-        await expect(page.getByRole("status").filter({ hasText: spec.count3 }).first()).toBeVisible({ timeout: 20_000 })
+        await selectOwner(workPage, spec.ownerId, OWNER_B)
+        await workPage.locator(spec.applyId).click()
+        await expect(workPage.getByRole("status").filter({ hasText: spec.count3 }).first()).toBeVisible({ timeout: 20_000 })
         const req = [...requests].reverse().find((item) => item.kind === spec.kind)
         expect(req?.ownerIds, spec.name).toEqual([OWNER_B])
-        await expect(page.locator(`#${spec.tableId} [data-row-id]`)).toHaveCount(3)
+        await expect(workPage.locator(`#${spec.tableId} [data-row-id]`)).toHaveCount(3)
         expect(new URL(page.url()).searchParams.get("ownerUserIds")).toBe(OWNER_B)
     }
 
     requests.length = 0
     await page.goto("/sales/orders")
-    await expect(page.getByRole("status").filter({ hasText: "共 105 张销售单" }).first()).toBeVisible({ timeout: 20_000 })
-    await page.locator("#sales-orders-list-filter-more-toggle").click()
-    await selectOwner(page, "sales-orders-list-owner", OWNER_A)
-    await page.locator("#sales-orders-list-filter-apply").click()
-    await expect(page.getByRole("status").filter({ hasText: "共 102 张销售单" }).first()).toBeVisible()
+    await expect(workPage.getByRole("status").filter({ hasText: "共 105 张销售单" }).first()).toBeVisible({ timeout: 20_000 })
+    await selectOwner(workPage, "sales-orders-list-owner", OWNER_A)
+    await workPage.locator("#sales-orders-list-filter-apply").click()
+    await expect(workPage.getByRole("status").filter({ hasText: "共 102 张销售单" }).first()).toBeVisible()
     await page.reload()
-    await expect(page.getByRole("status").filter({ hasText: "共 102 张销售单" }).first()).toBeVisible()
+    await expect(workPage.getByRole("status").filter({ hasText: "共 102 张销售单" }).first()).toBeVisible()
     expect(new URL(page.url()).searchParams.get("ownerUserIds")).toBe(OWNER_A)
     const page6 = new URL(page.url())
     page6.searchParams.set("page", "6")
     await page.goto(`${page6.pathname}?${page6.searchParams.toString()}`)
-    await expect(page.getByRole("status").filter({ hasText: "共 102 张销售单" }).first()).toBeVisible()
-    await expect(page.locator("#sales-orders-list-table [data-row-id]")).toHaveCount(2)
+    await expect(workPage.getByRole("status").filter({ hasText: "共 102 张销售单" }).first()).toBeVisible()
+    await expect(workPage.locator("#sales-orders-list-table [data-row-id]")).toHaveCount(2)
 
-    requests.length = 0
-    const downloadPromise = page.waitForEvent("download")
-    await page.locator("#sales-orders-list-header-export").click()
-    const download = await downloadPromise
-    const exportReqs = requests.filter((item) => item.kind === "sales" && item.pageSize === 100)
-    const collected = exportReqs.reduce((sum, item) => {
-        const remaining = 102 - (item.page - 1) * 100
-        return sum + Math.max(0, Math.min(100, remaining))
-    }, 0)
-    expect(collected).toBe(102)
-    const path = await download.path()
-    expect(path).toBeTruthy()
-    if (path) {
-        const fs = await import("node:fs/promises")
-        const text = await fs.readFile(path, "utf8")
-        const lines = text
-            .split(/\r?\n/)
-            .map((line) => line.replace(/^\uFEFF/, ""))
-            .filter((line) => line && !line.startsWith("#") && !line.startsWith("销售单号"))
-        expect(lines.length).toBe(102)
-    }
+    const transfers: TransferRequest[] = []
+    const transferId = "s1-sales-export"
+    const fileName = "S1销售单.csv"
+    const job = { id: transferId, job_no: "S1-EXPORT", status: "succeeded", result_file_asset_id: "s1-file" }
+    const exportedOrders = sales.filter((row) => row.owner_user_id === OWNER_A)
+    const csv = ["销售单号", ...exportedOrders.map((row) => row.order_no)].join("\n")
+    await page.context().route(/\/account\/data-transfers(?:\?.*)?$/, async (route) => {
+        if (route.request().method() === "POST") {
+            transfers.push(route.request().postDataJSON() as TransferRequest)
+        }
+        await fulfillJson(route, job)
+    })
+    await page.context().route(`**/account/data-transfers/${transferId}`, (route) => fulfillJson(route, job))
+    await page.context().route(`**/account/data-transfers/${transferId}/result`, (route) =>
+        fulfillJson(route, {
+            file_name: fileName,
+            content_type: "text/csv; charset=utf-8",
+            content_base64: Buffer.from(csv).toString("base64"),
+            metadata: { row_count: exportedOrders.length },
+        }),
+    )
+    const [download] = await Promise.all([
+        page.waitForEvent("download"),
+        workPage.locator("#sales-orders-list-header-export").click(),
+    ])
+    expect(transfers).toEqual([expect.objectContaining({
+        kind: "sales_orders",
+        input: expect.objectContaining({ owner_user_ids: OWNER_A }),
+        request_id: expect.any(String),
+    })])
+    expect(download.suggestedFilename()).toBe(fileName)
+    const stream = await download.createReadStream()
+    const chunks: Buffer[] = []
+    for await (const chunk of stream) chunks.push(chunk)
+    const content = Buffer.concat(chunks).toString("utf8")
+    expect(content).toBe(csv)
+    await expect(workPage.getByText(/已生成 CSV 文件，共 102 行/)).toBeVisible()
 
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto(`/sales/orders?ownerUserIds=${OWNER_B}`)
-    await expect(page.getByRole("status").filter({ hasText: "共 3 张销售单" }).first()).toBeVisible()
-    await expect(page.getByText("负责销售：已选 1 人")).toBeVisible()
-    const salesMore = page.locator("#sales-orders-list-filter-more-toggle")
-    await salesMore.click()
-    const salesPanel = page.locator("#sales-orders-list-filter-panel")
-    if (!(await salesPanel.isVisible())) await salesMore.click()
-    await expect(salesPanel).toBeVisible()
-    const ownerInPanel = salesPanel.getByRole("combobox", { name: "负责销售" })
-    if (await ownerInPanel.count()) {
-        await ownerInPanel.click()
-        await page.keyboard.press("Escape")
-    }
+    await expect(workPage.getByRole("status").filter({ hasText: "共 3 张销售单" }).first()).toBeVisible()
+    await expect(workPage.getByText("负责销售：已选 1 人")).toBeVisible()
+    await workPage.locator("#sales-orders-list-owner").click()
+    await expect(workPage.locator(`#sales-orders-list-owner-option-${OWNER_B}`)).toBeVisible()
     await page.keyboard.press("Escape")
-    const salesOverflow = await page.evaluate(() => ({
-        scrollWidth: document.documentElement.scrollWidth,
-        clientWidth: document.documentElement.clientWidth,
+    const salesOverflow = await workPage.locator("html").evaluate((element) => ({
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
     }))
     expect(salesOverflow.scrollWidth).toBeLessThanOrEqual(salesOverflow.clientWidth + 1)
 
     await page.goto(`/procurement/orders?ownerUserIds=${OWNER_B}`)
-    await expect(page.getByRole("status").filter({ hasText: "共 3 张采购单" }).first()).toBeVisible()
-    await expect(page.getByText("采购负责人：已选").first()).toBeVisible()
-    await page.locator("#procurement-orders-list-owner").scrollIntoViewIfNeeded()
-    await page.locator("#procurement-orders-list-owner").click()
-    const purchaseOverflow = await page.evaluate(() => ({
-        scrollWidth: document.documentElement.scrollWidth,
-        clientWidth: document.documentElement.clientWidth,
+    await expect(workPage.getByRole("status").filter({ hasText: "共 3 张采购单" }).first()).toBeVisible()
+    await expect(workPage.getByText("采购负责人：已选").first()).toBeVisible()
+    await workPage.locator("#procurement-orders-list-owner").scrollIntoViewIfNeeded()
+    await workPage.locator("#procurement-orders-list-owner").click()
+    const purchaseOverflow = await workPage.locator("html").evaluate((element) => ({
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
     }))
     expect(purchaseOverflow.scrollWidth).toBeLessThanOrEqual(purchaseOverflow.clientWidth + 1)
 })

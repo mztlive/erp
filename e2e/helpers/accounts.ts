@@ -35,9 +35,9 @@ const byRole = {
     procurementApprover: record("caigoushenpi", "刘志强", "role-procurement"),
     operations: record("yunying", "林晓燕", "role-operations"),
     warehouse: record("cangchu", "赵卫东", "role-warehouse"),
-    finance: record("caiwu", "王慧敏", "role-finance"),
-    payment: record("fukuan", "孙立新", "role-finance"),
-    invoice: record("kaipiao", "吴倩", "role-finance"),
+    finance: record("caiwu", "王慧敏", "role-finance-director"),
+    payment: record("fukuan", "孙立新", "role-cashier"),
+    invoice: record("kaipiao", "吴倩", "role-invoice-clerk"),
     management: record("guanli", "郑远山", "role-management"),
     sysadmin: record("xitong", "何建明", "role-sysadmin"),
 } as const satisfies Record<string, AccountRecord>

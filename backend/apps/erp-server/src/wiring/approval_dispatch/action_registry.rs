@@ -455,9 +455,9 @@ fn rejected_action(action: ApprovalDomainAction) -> ServiceResult<()> {
     )))
 }
 
-// 分派审批领域动作前拒绝无会话执行器，确保业务动作随原审批事务提交或回滚。
-fn require_transaction(executor: &mut dyn Executor) -> ServiceResult<()> {
-    if executor.session().is_none() {
+// 借用原始会话会清除边界；领域动作继续复用调用方的受管事务。
+fn require_transaction(executor: &dyn Executor) -> ServiceResult<()> {
+    if !executor.boundary().is_some_and(|boundary| boundary.is_snapshot()) {
         return Err(ServiceError::Internal("审批领域动作缺少事务执行器".to_string()));
     }
     Ok(())
@@ -484,7 +484,8 @@ mod tests {
     use erp_core::AccountKind;
     use erp_workflow::DocumentType;
     use erp_workflow::service::approval::action::DecisionActionParams;
-    use persistence_core::NoTransaction;
+    use persistence_core::testing::SnapshotExecutor;
+    use persistence_core::{NoTransaction, ReadExecutor};
 
     use super::*;
 
@@ -533,8 +534,20 @@ mod tests {
     #[test]
     fn approval_write_requires_the_callers_transaction_executor() {
         assert!(
-            matches!(require_transaction(&mut NoTransaction), Err(ServiceError::Internal(message)) if message == "审批领域动作缺少事务执行器")
+            matches!(require_transaction(&NoTransaction), Err(ServiceError::Internal(message)) if message == "审批领域动作缺少事务执行器")
         );
+        assert!(require_transaction(&ReadExecutor::default()).is_err());
+    }
+
+    #[test]
+    fn checking_approval_transaction_preserves_the_snapshot_boundary() {
+        let executor = SnapshotExecutor::default();
+        let boundary = executor.boundary().unwrap();
+
+        require_transaction(&executor).unwrap();
+
+        assert!(boundary.is_snapshot());
+        assert!(boundary.is_current(&executor));
     }
 
     #[test]

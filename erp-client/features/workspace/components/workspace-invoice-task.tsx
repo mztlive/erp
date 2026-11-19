@@ -24,10 +24,7 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 import type { WorkspaceWorkItem } from "../types"
-import {
-    workspaceInvoiceDescriptor,
-    workspaceInvoiceMatchesReceivable,
-} from "../lib/workspace-invoice"
+import { workspaceInvoiceDescriptor } from "../lib/workspace-invoice"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 type WorkspaceInvoiceTaskProps = Readonly<{
@@ -35,28 +32,20 @@ type WorkspaceInvoiceTaskProps = Readonly<{
     onTaskCompleted?: (workItemId: string) => void
 }>
 
-/**
- * 范围行只有销售单和行级金额，不一定带回应收子账。
- * 已有子账必须一致；缺子账时用销售单核对，避免整页因缺字段关掉作业面。
- */
-function approvedRequestMatches(
+/** 任务和应收筛选已限定关联；范围行返回的来源仍须逐一核对。 */
+function invoiceRequestMatchesReceivable(
     request: InvoiceRequest,
+    workItemId: string,
     receivable: { accountId: string; salesOrderId: string },
 ): boolean {
-    if (request.status !== "approved") return false
-    if (
-        request.receivable_account_id &&
-        request.receivable_account_id !== receivable.accountId
-    ) {
-        return false
-    }
-    if (
-        request.sales_order_id &&
-        request.sales_order_id !== receivable.salesOrderId
-    ) {
-        return false
-    }
-    return Boolean(request.receivable_account_id || request.sales_order_id)
+    return (
+        request.work_item_id === workItemId &&
+        (!request.receivable_account_id ||
+            request.receivable_account_id === receivable.accountId) &&
+        (!request.sales_order_id ||
+            request.sales_order_id === receivable.salesOrderId) &&
+        Boolean(request.receivable_account_id || request.sales_order_id)
+    )
 }
 
 function remainingApproved(amount: string, invoiced: string): string {
@@ -79,27 +68,37 @@ export function WorkspaceInvoiceTask({
         profile?.permissions,
         "sales_order:detail",
     )
-    const requestQuery = useInvoiceRequests({
-        work_item_id: item.workItemId,
-        page_size: 2,
-    })
+    const descriptor = workspaceInvoiceDescriptor(item)
+    const requestQuery = useInvoiceRequests(
+        {
+            work_item_id: item.workItemId,
+            receivable_account_id: descriptor?.receivableAccountId,
+            page_size: 2,
+        },
+        Boolean(descriptor && item.workItemId),
+    )
     const approvedRequest =
-        requestQuery.data?.items.length === 1
+        requestQuery.isSuccess && requestQuery.data.items.length === 1
             ? requestQuery.data.items[0]
             : undefined
-    const descriptor = workspaceInvoiceDescriptor(item)
     const receivableQuery = useCustomerAccountsDetailQuery(
-        descriptor && requestQuery.isSuccess && approvedRequest
-            ? "receivable"
-            : null,
+        approvedRequest ? "receivable" : null,
         descriptor?.receivableAccountId ?? null,
     )
     const grantPending = isResourceAuthorizationPending(requestQuery.error)
-    const receivable = receivableQuery.data?.receivable
+    const receivable = receivableQuery.isSuccess
+        ? receivableQuery.data?.receivable
+        : undefined
     const identityOk = Boolean(
         descriptor &&
-        receivable &&
-        workspaceInvoiceMatchesReceivable(descriptor, receivable),
+        approvedRequest &&
+        receivable?.salesOrderId &&
+        receivable.accountId === descriptor.receivableAccountId &&
+        invoiceRequestMatchesReceivable(
+            approvedRequest,
+            item.workItemId,
+            receivable,
+        ),
     )
     const executionAuthorized = item.allowedActions.includes("PROCESS")
 
@@ -115,7 +114,9 @@ export function WorkspaceInvoiceTask({
                                 {receivable?.counterpartyPartyName ||
                                     item.counterpartyName}
                             </span>
-                            {receivable?.salesOrderId && canReadSalesOrder ? (
+                            {identityOk &&
+                            receivable?.salesOrderId &&
+                            canReadSalesOrder ? (
                                 <Link
                                     id="workspace-invoice-source-sales"
                                     href={sourceSalesOrderHref(
@@ -180,7 +181,7 @@ export function WorkspaceInvoiceTask({
                         请刷新任务状态，核对申请与任务的关联。
                     </AlertDescription>
                 </Alert>
-            ) : !identityOk || !receivable || !descriptor ? (
+            ) : !identityOk || !receivable || !approvedRequest ? (
                 <Alert variant="destructive">
                     <AlertTitle>待办关联的销售应收不匹配</AlertTitle>
                     <AlertDescription>
@@ -195,15 +196,14 @@ export function WorkspaceInvoiceTask({
                             "当前账号没有处理此开票任务的资格。"}
                     </AlertDescription>
                 </Alert>
-            ) : approvedRequest?.status === "completed" ? (
+            ) : approvedRequest.status === "completed" ? (
                 <Alert>
                     <AlertTitle>本次申请已全部开票</AlertTitle>
                     <AlertDescription>
                         批准额度已执行完毕，可返回工作台查看其他任务。
                     </AlertDescription>
                 </Alert>
-            ) : !approvedRequest ||
-              !approvedRequestMatches(approvedRequest, receivable) ? (
+            ) : approvedRequest.status !== "approved" ? (
                 <Alert variant="warning">
                     <AlertTitle>此任务没有可执行的已批准申请</AlertTitle>
                     <AlertDescription>

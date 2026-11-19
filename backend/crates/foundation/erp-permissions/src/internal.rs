@@ -92,6 +92,14 @@ pub const SUPPLIER_PROFILE_COMMAND_READ: Permission = Permission::new("supplier"
 
 /// 开票金额候选读取沿用申请列表功能资格，不签发应收对象凭证。
 pub const INVOICE_REQUEST_AMOUNTS_READ: Permission = Permission::new("sales_invoice_request", "amounts_read");
+
+/// 沿用提交资格核验开票申请的真实销售来源。
+pub const INVOICE_REQUEST_SUBMIT_SOURCE: Permission =
+    Permission::new("sales_invoice_request", "submit_source");
+/// 沿用撤回资格核验开票申请的真实销售来源。
+pub const INVOICE_REQUEST_CANCEL_SOURCE: Permission =
+    Permission::new("sales_invoice_request", "cancel_source");
+
 /// 读取本人销售询价导入预览。
 pub const SALES_INQUIRY_IMPORT_PREVIEW: Permission =
     Permission::new("sales_inquiry_import_preview", "detail");

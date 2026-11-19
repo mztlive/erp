@@ -43,6 +43,7 @@ impl AuthorizationService {
         if permission == &internal::WORK_ITEM_EXECUTION_QUALIFICATION {
             return self.require_work_item_qualification(actor, &target, executor).await;
         }
+
         if form == rules::TargetForm::Candidate && definitions::entry(permission).is_some() {
             return self.require_definition(actor, permission, &target, executor).await;
         }

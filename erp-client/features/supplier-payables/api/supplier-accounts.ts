@@ -26,8 +26,11 @@ import type {
     BackendInvoice,
     BackendPayableAccount,
     BackendPurchaseInvoiceAllocation,
-    BackendSupplierPayment,
 } from "@/features/supplier-payables/api/mappers"
+import type {
+    FundsScopedPaymentResultWire,
+    ScopedSupplierPaymentWire,
+} from "@/features/supplier-payables/api/scoped"
 import {
     LIST_PAGE_SIZE,
     nextSessionId,
@@ -81,14 +84,17 @@ export async function fetchSupplierAccounts(
             sort_by: "created_at",
             sort_dir: "desc",
         }),
-        fetchCompleteList<BackendSupplierPayment>("/admin/supplier-payments", {
-            supplier_id: query.supplierId,
-            q: query.q?.trim() || undefined,
-            page: 1,
-            page_size: LIST_PAGE_SIZE,
-            sort_by: "paid_at",
-            sort_dir: "desc",
-        }),
+        fetchCompleteList<ScopedSupplierPaymentWire>(
+            "/admin/supplier-payments",
+            {
+                supplier_id: query.supplierId,
+                q: query.q?.trim() || undefined,
+                page: 1,
+                page_size: LIST_PAGE_SIZE,
+                sort_by: "paid_at",
+                sort_dir: "desc",
+            },
+        ),
         fetchCompleteList<BackendInvoice>("/admin/invoices", {
             invoice_direction: "purchase",
             party_id: invoicePartyId,
@@ -116,9 +122,15 @@ export async function fetchSupplierAccounts(
     const unallocated: UnallocatedRow[] = [
         ...payments
             .filter(
-                (p) =>
+                (
+                    p,
+                ): p is PaymentRow & {
+                    amount: string
+                    unallocatedAmount: string
+                } =>
                     p.status === "POSTED" &&
-                    p.unallocatedAmount &&
+                    p.amount !== null &&
+                    p.unallocatedAmount !== null &&
                     p.unallocatedAmount !== "0" &&
                     p.unallocatedAmount !== "0.00",
             )
@@ -351,7 +363,7 @@ export async function fetchSupplierPayment(
     paymentId: string,
 ): Promise<PaymentRow | null> {
     return nullIfNotFound(async () => {
-        const payment = await apiGet<BackendSupplierPayment>(
+        const payment = await apiGet<FundsScopedPaymentResultWire>(
             `/admin/supplier-payments/${encodeURIComponent(paymentId)}`,
         )
         return projectPayment(payment)

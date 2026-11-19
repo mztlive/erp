@@ -18,11 +18,18 @@ import { expect, test, type Browser, type Page } from "../helpers/test"
 
 import { ACCOUNTS } from "../helpers/accounts"
 import { API_BASE, apiGet, apiToken } from "../helpers/api"
+import { analyticsDate, uploadAnalyticsEvidence } from "../helpers/financial-analytics"
 import { ensureZeroBalanceDimension } from "../helpers/inventory"
 import { loginViaUi } from "../helpers/login"
 import { ensurePersonWarehouseScope, type PersonScopeView } from "../helpers/person-data-scope"
+import { workPage } from "../helpers/workspace-page"
 
-test.describe.configure({ mode: "serial" })
+test.beforeEach(() => {
+    expect(process.env.ERP_E2E_ISOLATED, "S2 必须通过隔离 runner 运行").toBe("1")
+    expect(API_BASE, "必须显式指定隔离后端 API_BASE").toMatch(/^http:\/\/(127\.0\.0\.1|localhost):/)
+    const sourceOrigin = new URL(process.env.ERP_E2E_SOURCE_API_BASE ?? "http://127.0.0.1:10001").origin
+    expect(new URL(API_BASE).origin, "S2 不得使用前端原有 API 服务").not.toBe(sourceOrigin)
+})
 
 const VISIBLE = { timeout: 30_000 } as const
 const RUN = `${Date.now().toString(36)}${Math.floor(Math.random() * 0xffff).toString(16)}`
@@ -133,6 +140,8 @@ function cleanTemporaryRoleAfterTest(
 }
 
 test.afterEach(async () => {
+    pageErrors.length = 0
+    consoleErrors.length = 0
     const failures: unknown[] = []
     for (const cleanup of temporaryRoleCleanups.splice(0).reverse()) {
         try {
@@ -188,10 +197,8 @@ async function adminAccountOf(token: string, account: string): Promise<AdminAcco
 }
 
 test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受阻", async ({ browser }) => {
-    expect(API_BASE, "必须显式指定隔离后端 API_BASE").toMatch(/^http:\/\/(127\.0\.0\.1|localhost):/)
     // 1. 真实密码登录：管理员走登录页，token 全部经真实登录接口取得。
     const adminPage = await loginAs(browser, "admin")
-    await expect(adminPage.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
     const adminToken = await apiToken("admin")
     const financeAccount = await adminAccountOf(adminToken, loginName("caiwu"))
     const financeId = financeAccount.id
@@ -344,7 +351,7 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
         "监督账号不得具备审批决定权限").toBe(false)
     const managementRuntimeRoleId = await apiOk("POST", "/admin/roles", adminToken, {
         name: `S2库存审批监督-${RUN}`,
-        permissions: ["stock_adjustment:approval_runtime_admin"],
+        permissions: ["approval_instance:read", "stock_adjustment:approval_runtime_admin"],
     }) as string
     expect(typeof managementRuntimeRoleId, "临时库存审批监督角色应创建成功").toBe("string")
     cleanTemporaryRoleAfterTest(adminToken, manageId, managementRuntimeRoleId, manageAccount.role_ids)
@@ -371,8 +378,8 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
 
     // 5. 组织页跨页可见：刷新后新部门可见。
     await adminPage.goto("/system/organization")
-    await expect(adminPage.getByRole("heading", { name: "组织与人员" })).toBeVisible(VISIBLE)
-    const financeOrgButton = adminPage.getByRole("button", { name: FINANCE_ORG })
+    await expect(workPage(adminPage).getByRole("heading", { name: "组织与人员" })).toBeVisible(VISIBLE)
+    const financeOrgButton = workPage(adminPage).getByRole("button", { name: FINANCE_ORG })
     await financeOrgButton.scrollIntoViewIfNeeded()
     await expect(financeOrgButton).toBeVisible(VISIBLE)
     await adminPage.screenshot({
@@ -381,18 +388,18 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
 
     // 6. 人员范围入口可见：按人员配置数据范围，不提供角色主体范围编辑。
     await adminPage.goto("/system/organization/scopes")
-    await expect(adminPage.getByRole("heading", { name: "人员数据范围" })).toBeVisible(VISIBLE)
-    await expect(adminPage.locator("#person-scope-accounts-entry")).toBeVisible(VISIBLE)
+    await expect(workPage(adminPage).getByRole("heading", { name: "人员数据范围" })).toBeVisible(VISIBLE)
+    await expect(workPage(adminPage).locator("#person-scope-accounts-entry")).toBeVisible(VISIBLE)
 
     // 7. 客户跨页一致：组织筛选页正常加载。
     const salesPage = await loginAs(browser, "xiaoshou")
     await salesPage.goto("/sales/customers")
-    await expect(salesPage.getByRole("heading", { name: "客户中心" })).toBeVisible(VISIBLE)
+    await expect(workPage(salesPage).getByRole("heading", { name: "客户中心" })).toBeVisible(VISIBLE)
 
     // 8. 仓库维度隔离：内部部门不能保存为库存余额授权，也不能改变已配置的仓库范围。
     const financePage = await loginAs(browser, "caiwu")
     await financePage.goto("/inventory")
-    await expect(financePage.getByRole("heading", { name: "库存台账" })).toBeVisible(VISIBLE)
+    await expect(workPage(financePage).getByRole("heading", { name: "库存台账" })).toBeVisible(VISIBLE)
     const warehouseScope = await apiGet<PersonScopeView>(
         adminToken,
         `/admin/person-data-scopes/${warehouseId}`,
@@ -425,7 +432,7 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
     expect(invalidWarehouseGrant.status, "库存余额必须以请求校验错误拒绝缺失仓库维度的内部部门授权").toBe(400)
     expect(invalidWarehouseGrant.parsed.success).toBe(false)
     expect(invalidWarehouseGrant.parsed.code).toBe("INVALID_REQUEST")
-    expect(invalidWarehouseGrant.parsed.errorMessage).toContain("每项附加授权均须配置此业务全部必需维度")
+    expect(invalidWarehouseGrant.parsed.errorMessage).toContain("所选操作不支持按内部组织设置数据范围")
     const unchangedBalances = await apiGet<{ items: Array<{ id: string }> }>(
         warehouseToken,
         "/admin/stock-balances",
@@ -448,10 +455,10 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
     ).toBe(true)
     // 审批不接受独立人员范围；撤去读取资格、保留决定入口以验收写时重验与受阻提交。
     const financeScopes = await apiGet<{
-        businesses: Array<{ resource: string; authorization_policy: string; configurable_actions: string[] }>
+        businesses: Array<{ resource: string; policy_description: string; configurable_actions: string[] }>
     }>(adminToken, `/admin/person-data-scopes/${financeId}`)
     const approvalPolicy = financeScopes.businesses.find((row) => row.resource === "approval_instance")
-    expect(approvalPolicy?.authorization_policy, "审批必须采用任务参与授权").toBe("task")
+    expect(approvalPolicy?.policy_description, "审批必须采用任务参与授权").toContain("流程任务")
     expect(approvalPolicy?.configurable_actions, "审批不得配置独立数据范围").toEqual([])
     const roles = await apiGet<AdminRole[]>(adminToken, "/admin/roles")
     const originalPermissions = [...new Set(roles
@@ -468,6 +475,9 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
     await apiOk("PUT", `/admin/admins/${financeId}/role`, adminToken, {
         role_ids: [ineligibleRoleId],
     })
+    const revokedProfile = await apiGet<{ permissions: string[] }>(financeToken, "/account/profile")
+    expect(revokedProfile.permissions).not.toContain("approval_instance:read")
+    expect(revokedProfile.permissions).toContain("approval_instance:decide")
 
     // 管理视图看到受阻任务：保留原负责人与业务组织，仅保留查看。
     const blockedQueue = await apiGet<{ items: Array<Record<string, any>> }>(
@@ -483,15 +493,13 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
     // 浏览器管理视图必须在决定提交之前：写时重验失败会关闭原受阻任务
     //（原任务不可变，恢复必须建新任务），关单后管理队列不再列出该任务。
     const managePage = await loginAs(browser, "guanli")
-    await managePage.goto("/workspace")
-    await expect(managePage.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
-    const managedNav = managePage.locator("#workspace-queue-scope-managed")
-    await expect(managedNav, "已委派管理范围必须提供范围内待办视图").toBeVisible(VISIBLE)
-    await managedNav.click()
-    await expect(managePage.getByRole("group", { name: "工作视图" })).toBeVisible(VISIBLE)
-    // 指标行在队列容器之外；限定在任务队列内断言，避免命中指标文字。
-    const managedList = managePage.locator('[data-slot="workspace-queue"]')
-    await expect(managedList.getByText("受阻").first()).toBeVisible(VISIBLE)
+    await managePage.goto("/workspace/tasks")
+    await workPage(managePage).locator("#workspace-task-scope").click()
+    await workPage(managePage).locator("#workspace-task-scope-option-managed").click()
+    await expect(workPage(managePage).getByRole("heading", { name: "范围内待办", exact: true })).toBeVisible(VISIBLE)
+    const managedTask = workPage(managePage).getByRole("region", { name: "任务队列" })
+        .locator(`[data-row-id="${task!.id}"]`)
+    await expect(managedTask.getByText("受阻", { exact: true })).toBeVisible(VISIBLE)
     await managePage.screenshot({
         path: test.info().outputPath("s2-workspace-managed.png"),
     })
@@ -542,10 +550,10 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
     const result = await apiOk("GET", `/admin/stock-adjustments/${stockId}`, warehouseToken)
     expect(result.adjustment.status).toBe("POSTED")
     // 跨页刷新：恢复后管理视图与库存页重新加载无错。
-    await managePage.goto("/workspace")
-    await expect(managePage.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
+    await managePage.goto("/workspace/tasks?view=managed")
+    await expect(workPage(managePage).getByRole("heading", { name: "范围内待办", exact: true })).toBeVisible(VISIBLE)
     await financePage.goto("/inventory")
-    await expect(financePage.getByRole("heading", { name: "库存台账" })).toBeVisible(VISIBLE)
+    await expect(workPage(financePage).getByRole("heading", { name: "库存台账" })).toBeVisible(VISIBLE)
 
     // 10. 零页面错误：整个流程不得有未捕获异常与应用 error 日志。
     expect(pageErrors, `页面异常必须为零：${pageErrors.slice(0, 3).join(" | ")}`).toEqual([])
@@ -557,28 +565,82 @@ test("S2 浏览器验收：组织变更跨页可见、维度隔离、任务受�
 })
 
 test("S2 浏览器验收（窄屏）：组织与工作台可读可用", async ({ browser }) => {
-    expect(API_BASE, "必须显式指定隔离后端 API_BASE").toMatch(/^http:\/\/(127\.0\.0\.1|localhost):/)
     const page = await loginAs(browser, "admin", { width: 390, height: 844 })
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
     await page.goto("/system/organization")
-    await expect(page.getByRole("heading", { name: "组织与人员" })).toBeVisible(VISIBLE)
-    await expect(page.getByRole("navigation", { name: "组织树" })).toBeVisible(VISIBLE)
+    await expect(workPage(page).getByRole("heading", { name: "组织与人员" })).toBeVisible(VISIBLE)
+    await expect(workPage(page).getByRole("navigation", { name: "组织树" })).toBeVisible(VISIBLE)
     await page.screenshot({
         path: test.info().outputPath("s2-org-units-mobile.png"),
     })
-    await page.goto("/workspace")
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
+    await page.goto("/workspace/tasks")
+    await expect(workPage(page).getByRole("heading", { name: "待我处理", exact: true })).toBeVisible(VISIBLE)
     expect(pageErrors, `页面异常必须为零：${pageErrors.slice(0, 3).join(" | ")}`).toEqual([])
     expect(consoleErrors, `控制台 error 必须为零：${consoleErrors.slice(0, 3).join(" | ")}`).toEqual([])
     await page.context().close().catch(() => undefined)
 })
 
+async function createExportOrder(adminToken: string, salesToken: string, seller: AdminAccount): Promise<string> {
+    const [companies, skus, customer, evidenceId] = await Promise.all([
+        apiGet<{ items: Array<{ id: string; party_no: string }> }>(adminToken, "/admin/companies", {
+            status: "active", page_size: 100,
+        }),
+        apiGet<{ items: Array<{ sku_id: string; sku_revision_id: string; sku_no: string }> }>(
+            salesToken, "/admin/sellable-skus", { q: SKU_NO, page_size: 20 },
+        ),
+        apiOk("POST", "/admin/customer-profiles", salesToken, {
+            legal_name: `S2销售导出客户-${RUN}`,
+            default_payment_term_id: "POSTPAY_NET15",
+            effective_from: analyticsDate(),
+            change_reason: "S2 销售导出验收",
+            idempotency_key: randomUUID(),
+        }) as Promise<{ customer_id: string }>,
+        uploadAnalyticsEvidence(salesToken),
+    ])
+    const company = companies.items.find((row) => row.party_no === "FSY")
+    const sku = skus.items.find((row) => row.sku_no === SKU_NO)
+    expect(company, "固定种子缺少我方公司主体").toBeTruthy()
+    expect(sku, `固定种子缺少销售商品 ${SKU_NO}`).toBeTruthy()
+    const orderNo = `S2-EXPORT-${RUN}`
+    const created = await apiOk("POST", "/admin/sales-orders", salesToken, {
+        order_no: orderNo,
+        business_type: "GOODS_SERVICE",
+        customer_id: customer.customer_id,
+        intent: "SAVE_DRAFT",
+        evidence_file_asset_ids: [evidenceId],
+        idempotency_key: randomUUID(),
+        draft: {
+            editor_user_id: seller.id,
+            no_contract_terms: {
+                settlement_party_id: company!.id,
+                payment_term_code: "POSTPAY_NET15",
+                payment_term_name: "货到 15 天",
+                invoice_type: "增值税专用发票",
+                tax_point: "0",
+            },
+            lines: [{
+                line_no: 1,
+                line_type: "GOODS_SERVICE",
+                sales_tax_rate: "0",
+                item_name_snapshot: "狮峰明前龙井礼盒 250g",
+                spec_snapshot: "250g/盒",
+                unit_snapshot: "盒",
+                goods: {
+                    sku_id: sku!.sku_id,
+                    sku_revision_id: sku!.sku_revision_id,
+                    fulfillment_due_at: Math.floor(Date.now() / 1000) + 30 * 86400,
+                    quantity: "1",
+                    base_unit_code: "HE",
+                    unit_price_gross: "100.00",
+                    pricing_mode: "MANUAL",
+                },
+            }],
+        },
+    }) as { order_no: string; commercial_status: string }
+    expect(created).toMatchObject({ order_no: orderNo, commercial_status: "DRAFT" })
+    return orderNo
+}
+
 test("S2 浏览器验收（导出下载）：真实账号列表导出并撤权重验", async ({ browser }) => {
-    expect(API_BASE, "必须显式指定隔离后端 API_BASE").toMatch(/^http:\/\/(127\.0\.0\.1|localhost):/)
-    // 导出走前端分页收集＋最后一页之后下载前重验；下载即创建对象 URL 并点击，
-    // 验收拦截下载事件校验内容，不落盘，避免在共享目录产生文件。
-    // 隔离库无销售单据时走空态分支；有单据时走真实下载断言。
-    // 最后用接口直接验证导出收集口径：跨页 scope_version 传递与撤权重验。
     const context = await browser.newContext({
         locale: "zh-CN",
         timezoneId: "Asia/Shanghai",
@@ -587,51 +649,66 @@ test("S2 浏览器验收（导出下载）：真实账号列表导出并撤权�
     const page = await context.newPage()
     watch(page)
     await loginViaUi(page, loginName("xiaoshou"))
-    await page.goto("/sales/orders")
-    await expect(page.getByRole("heading", { name: "销售单" })).toBeVisible(VISIBLE)
-    const exportButton = page.locator("#sales-orders-list-header-export")
-    await expect(exportButton).toBeVisible(VISIBLE)
-    if (await exportButton.isDisabled()) {
-        // 隔离库无销售单时导出按钮禁用：断言按钮存在且禁用原因明确（总数为零），
-        // 不伪造单据；有单据时走下面的真实下载断言。
-        expect(await exportButton.isDisabled(), "无单据时导出按钮应禁用").toBe(true)
-        await page.screenshot({
-            path: test.info().outputPath("s2-sales-export-empty.png"),
-        })
-    } else {
-        const downloadPromise = page.waitForEvent("download", { timeout: 60_000 })
-        await exportButton.click()
-        const download = await downloadPromise
-        const path = await download.path()
-        expect(path, "应产生真实下载文件").toBeTruthy()
-        const suggested = download.suggestedFilename()
-        expect(suggested, "下载文件名应为 CSV").toMatch(/\.csv$/i)
-        await expect(page.getByText("导出完成")).toBeVisible(VISIBLE)
-        await page.screenshot({
-            path: test.info().outputPath("s2-sales-export.png"),
-        })
-    }
-    // 导出收集口径的接口验证：第一页版本必须传递给后续页；伪造版本必须 409 失败关闭。
+    const adminToken = await apiToken("admin")
     const salesToken = await apiToken("xiaoshou")
-    const first = await apiGet<{
-        items: Array<Record<string, unknown>>
-        total: number
-        scope_version: string
-    }>(salesToken, "/admin/sales-orders", { page: 1, page_size: 5 })
+    const seller = await adminAccountOf(adminToken, loginName("xiaoshou"))
+    const orderNo = await createExportOrder(adminToken, salesToken, seller)
+    await page.goto(`/sales/orders?q=${encodeURIComponent(orderNo)}`)
+    const orders = workPage(page)
+    await expect(orders.getByRole("heading", { name: "销售单" })).toBeVisible(VISIBLE)
+    await expect(orders.getByText(orderNo, { exact: true })).toBeVisible(VISIBLE)
+    const exportButton = orders.locator("#sales-orders-list-header-export")
+    await expect(exportButton).toBeEnabled(VISIBLE)
+    const [reply, download] = await Promise.all([
+        page.waitForResponse((response) =>
+            response.request().method() === "GET" &&
+            /^\/account\/data-transfers\/[^/]+\/result$/.test(new URL(response.url()).pathname),
+            { timeout: 90_000 },
+        ),
+        page.waitForEvent("download", { timeout: 90_000 }),
+        exportButton.click(),
+    ])
+    expect(reply.status()).toBe(200)
+    const resultPath = new URL(reply.url()).pathname
+    expect(download.suggestedFilename()).toMatch(/\.csv$/i)
+    const stream = await download.createReadStream()
+    const chunks: Buffer[] = []
+    for await (const chunk of stream) chunks.push(chunk)
+    const csv = Buffer.concat(chunks).toString("utf8")
+    const [header, ...rows] = csv.trim().split(/\r?\n/)
+    expect(header).toContain('"销售单号"')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toContain(`"${orderNo}"`)
+    await expect(orders.getByText("导出完成", { exact: true })).toBeVisible(VISIBLE)
+    await page.screenshot({ path: test.info().outputPath("s2-sales-export.png") })
+
+    const first = await apiGet<{ scope_version: string }>(salesToken, "/admin/sales-orders", { page: 1, page_size: 1 })
     expect(typeof first.scope_version, "列表应返回 scope_version").toBe("string")
     const second = await apiGet<{ scope_version: string }>(salesToken, "/admin/sales-orders", {
-        page: 1,
+        page: 2,
         page_size: 1,
         scope_version: first.scope_version,
     })
     expect(second.scope_version, "同版本续查应一致").toBe(first.scope_version)
     const forgedVersion = await apiGetCall(salesToken, "/admin/sales-orders", {
-        page: 1,
+        page: 2,
         page_size: 1,
         scope_version: "forged-version",
     })
     expect(forgedVersion.status, "伪造范围版本必须409失败关闭").toBe(409)
     expect(forgedVersion.parsed.code).toBe("DATA_SCOPE_CHANGED")
+    const restrictedRoleId = await apiOk("POST", "/admin/roles", adminToken, {
+        name: `S2销售导出撤权-${RUN}`,
+        permissions: ["customer:list"],
+    }) as string
+    cleanTemporaryRoleAfterTest(adminToken, seller.id, restrictedRoleId, seller.role_ids)
+    await apiOk("PUT", `/admin/admins/${seller.id}/role`, adminToken, { role_ids: [restrictedRoleId] })
+    const listDenied = await apiGetCall(salesToken, "/admin/sales-orders")
+    expect(listDenied.status).toBe(403)
+    expect(listDenied.parsed.code).toBe("PERMISSION_DENIED")
+    const downloadDenied = await apiGetCall(salesToken, resultPath)
+    expect(downloadDenied.status).toBe(403)
+    expect(downloadDenied.parsed.code).toBe("PERMISSION_DENIED")
     expect(pageErrors, `页面异常必须为零：${pageErrors.slice(0, 3).join(" | ")}`).toEqual([])
     expect(consoleErrors, `控制台 error 必须为零：${consoleErrors.slice(0, 3).join(" | ")}`).toEqual([])
     await context.close().catch(() => undefined)

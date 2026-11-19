@@ -1,8 +1,10 @@
+import { workPage } from "./workspace-page"
 import { randomUUID } from "node:crypto";
 
+import { toAutomationIdSegment } from "../../erp-client/lib/automation-id";
 import { expect, test, type Page } from "./test";
 import { API_BASE, apiGet, apiToken } from "./api";
-import { chooseOption, openWorkspaceTask } from "./ui";
+import { chooseOption } from "./ui";
 
 type Task = {
   id: string;
@@ -12,6 +14,7 @@ type Task = {
   status: string;
   allowed_actions: string[];
 };
+type TaskActionReceipt = Pick<Task, "id" | "task_version">;
 type ServiceQueueItem = {
   work_item_id: string;
   operation_id: string;
@@ -33,11 +36,11 @@ async function command(token: string, taskId: string, body: unknown) {
   });
   return {
     status: response.status,
-    parsed: (await response.json()) as { success: boolean; errorMessage?: string; data: Task },
+    parsed: (await response.json()) as { success: boolean; errorMessage?: string; data: TaskActionReceipt },
   };
 }
 
-/** 验收真实服务任务转交；原采购失去对象范围后，新责任人继续履约。 */
+/** 验收真实服务任务转交、原责任人的办理拒绝及不合格接收人拦截。 */
 export async function verifyServiceTaskReassignment(
   managerPage: Page,
   salesOrderId: string,
@@ -68,9 +71,9 @@ export async function verifyServiceTaskReassignment(
     const target = candidates.find((row) => row.account === "admin");
     expect(target, "实际完整责任候选应包含具有全部业务资格的管理员").toBeTruthy();
 
-    await openWorkspaceTask(managerPage, /履约处理/, "北京安达", "fulfillment");
-    await managerPage.getByRole("button", { name: "转交责任", exact: true }).click();
-    const dialog = managerPage.getByRole("dialog", { name: "转交履约责任" });
+    await managerPage.goto(`/workspace/tasks/${encodeURIComponent(before.id)}`);
+    await workPage(managerPage).locator(`#workspace-fulfillment-reassign-trigger-${toAutomationIdSegment(before.id)}`).click();
+    const dialog = workPage(managerPage).getByRole("dialog", { name: "转交履约待办" });
     await chooseOption(
       managerPage,
       dialog.locator('input[id^="workspace-fulfillment-reassign-target-"]'),
@@ -89,13 +92,16 @@ export async function verifyServiceTaskReassignment(
     ]);
     const parsed = (await response.json()) as {
       success: boolean;
-      data: Task;
+      data: TaskActionReceipt;
       errorMessage?: string;
     };
     expect(response.status(), parsed.errorMessage).toBeLessThan(400);
     expect(parsed.success).toBe(true);
     const after = parsed.data;
-    expect(after.owner_user_id).toBe(target!.user_id);
+    expect(after.id).toBe(before.id);
+    expect(await apiGet<Task>(managerToken, `/admin/work-items/${after.id}`)).toMatchObject({
+      owner_user_id: target!.user_id, task_version: after.task_version,
+    });
     expect(after.task_version).not.toBe(before.task_version);
     const purchaseAfter = await apiGet<PurchaseIdentity>(
       managerToken,
@@ -180,7 +186,7 @@ export async function verifyServiceTaskReassignment(
     ).toMatchObject({ version: serviceBefore.version, status: serviceBefore.status });
     const replay = await command(managerToken, before.id, response.request().postDataJSON());
     expect(replay.status, replay.parsed.errorMessage).toBeLessThan(400);
-    expect(replay.parsed.data.task_version).toBe(after.task_version);
+    expect(replay.parsed.data).toEqual(after);
     const stale = await command(managerToken, before.id, {
       expected_task_version: before.task_version,
       target_user_id: before.owner_user_id,
@@ -191,16 +197,22 @@ export async function verifyServiceTaskReassignment(
     expect((await apiGet<Task>(managerToken, `/admin/work-items/${before.id}`)).owner_user_id).toBe(
       target!.user_id,
     );
-    // §6.3.2 接收人须当前可读来源采购单；失去本人范围后不能靠管理命令取回责任。
+    const salesToken = await apiToken("xiaoshou");
+    const sales = await apiGet<{ userid: string }>(salesToken, "/account/profile");
+    const unreadablePurchase = await fetch(`${API_BASE}/admin/purchase-orders/${service.purchase_order_id}`, {
+      headers: { Authorization: `Bearer ${salesToken}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    expect(unreadablePurchase.status).toBe(403);
     const nextCandidates = await apiGet<Array<{ user_id: string }>>(
       managerToken,
       `/admin/work-items/${before.id}/reassign-candidates`,
     );
-    expect(nextCandidates.some((row) => row.user_id === before.owner_user_id)).toBe(false);
+    expect(nextCandidates.some((row) => row.user_id === sales.userid)).toBe(false);
     const deniedReturn = await command(managerToken, before.id, {
       expected_task_version: after.task_version,
-      target_user_id: before.owner_user_id,
-      reason: "E2E 接收人缺少当前对象读取资格时拒绝转回",
+      target_user_id: sales.userid,
+      reason: "E2E 不具备服务履约资格的销售岗位不得接收待办",
       idempotency_key: randomUUID(),
     });
     expect(deniedReturn.status).toBe(403);
