@@ -198,7 +198,7 @@ impl AuthorizationService {
         } else {
             AccessRule::Deny
         };
-        Ok(Some(ResolvedFilter::Separate { context: Box::new(context), rule }))
+        Ok(Some(ResolvedFilter::Separate { permission: context.permission, rule }))
     }
 
     /// 为根规则及独立整账规则实际引用的资源读取记录授权修订号，用于凭证版本和交付复验。

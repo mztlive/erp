@@ -119,7 +119,12 @@ impl RolePermissionSnapshot {
             .collect()
     }
 
-    fn role_covers<'a>(&self, role_id: &str, mut required: impl Iterator<Item = &'a Permission>) -> bool {
+    /// 判断快照中的指定角色是否命中全部非空要求；角色状态由调用方核对。
+    pub(crate) fn role_covers<'a>(
+        &self,
+        role_id: &str,
+        mut required: impl Iterator<Item = &'a Permission>,
+    ) -> bool {
         self.grants.get(role_id).is_some_and(|grants| {
             required.next().is_some_and(|first| grants.contains(first))
                 && required.all(|permission| grants.contains(permission))

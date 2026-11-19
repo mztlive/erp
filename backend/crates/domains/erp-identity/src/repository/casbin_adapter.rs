@@ -223,16 +223,16 @@ impl MongoCasbinAdapter {
     fn group_subject_policies(rows: Vec<CasbinRule>) -> Result<HashMap<String, SubjectPolicy>> {
         let mut grouped: HashMap<String, SubjectPolicy> = HashMap::new();
         for row in rows {
-            match (row.sec.as_str(), row.ptype.as_str(), row.values.as_slice()) {
-                ("p", "p", [subject, resource, action]) => {
-                    grouped
-                        .entry(subject.clone())
-                        .or_default()
-                        .permissions
-                        .push((resource.clone(), action.clone()));
+            let mut values = row.values.into_iter();
+            let subject = values.next();
+            let value = values.next();
+            let action = values.next();
+            match (row.sec.as_str(), row.ptype.as_str(), subject, value, action, values.next()) {
+                ("p", "p", Some(subject), Some(resource), Some(action), None) => {
+                    grouped.entry(subject).or_default().permissions.push((resource, action));
                 },
-                ("g", "g", [subject, parent]) => {
-                    grouped.entry(subject.clone()).or_default().roles.push(parent.clone());
+                ("g", "g", Some(subject), Some(parent), None, None) => {
+                    grouped.entry(subject).or_default().roles.push(parent);
                 },
                 _ => return Err(PersistenceError::EntityMetadataOutOfRange("Casbin subject policy")),
             }
@@ -594,6 +594,12 @@ mod tests {
         for rule in [
             CasbinRule::new("p", "p", vec!["role:sales".into(), "customer".into()]),
             CasbinRule::new("g", "g", vec!["role:sales".into()]),
+            CasbinRule::new(
+                "p",
+                "p",
+                vec!["role:sales".into(), "customer".into(), "list".into(), "extra".into()],
+            ),
+            CasbinRule::new("g", "g", vec!["role:sales".into(), "role:base".into(), "extra".into()]),
             CasbinRule::new("p", "g", vec!["role:sales".into(), "role:base".into()]),
         ] {
             assert!(matches!(

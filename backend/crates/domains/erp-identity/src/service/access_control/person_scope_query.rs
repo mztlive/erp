@@ -73,23 +73,21 @@ impl AccessControlService {
             return Ok(vec![]);
         }
 
-        let actions = match resource {
+        let mut permissions = match resource {
             Some(resource) if scope_spec::resource_is_known(resource) => {
-                scope_spec::display_actions(resource)
+                scope_spec::display_actions(resource).cloned().collect::<Vec<_>>()
             },
             Some(_) => return Ok(vec![]),
-            None => scope_spec::resources().into_iter().flat_map(scope_spec::display_actions).collect(),
+            None => {
+                scope_spec::resources().into_iter().flat_map(scope_spec::display_actions).cloned().collect()
+            },
         };
-        let mut permissions = actions.into_iter().cloned().collect::<Vec<_>>();
         let snapshot = self.rbac.role_permission_snapshot(account.kind, user, &permissions).await?;
         self.rbac.ensure_policy_snapshot_with_executor(snapshot.policy_revision(), executor).await?;
         let roles = self.db.roles().enabled_roles(snapshot.role_ids(), executor).await?;
 
         permissions.retain(|permission| {
-            snapshot
-                .granting_role_ids(permission)
-                .iter()
-                .any(|id| roles.iter().any(|role| id.as_str() == role.base.id))
+            roles.iter().any(|role| snapshot.role_covers(&role.base.id, std::iter::once(permission)))
         });
         Ok(permissions)
     }

@@ -229,34 +229,23 @@ pub(crate) fn is_configurable(resource: &str, action: &str) -> bool {
 
 /// 判断资源是否已登记至少一个范围或固定动作。
 pub(crate) fn resource_is_known(resource: &str) -> bool {
-    raw_specs().iter().any(|spec| spec.permission.resource() == resource)
-        || catalog::FIXED_ACTIONS.iter().any(|entry| entry.permission.resource() == resource)
+    actions(resource).next().is_some()
 }
 
-/// 枚举指定资源的范围动作和固定动作，包括内部入口。
-pub(crate) fn actions(resource: &str) -> Vec<&'static Permission> {
-    let mut actions = raw_specs()
+/// 按登记顺序枚举指定资源的范围动作和固定动作，包括内部入口。
+pub(crate) fn actions(resource: &str) -> impl Iterator<Item = &'static Permission> {
+    raw_specs()
         .iter()
-        .filter(|spec| spec.permission.resource() == resource)
-        .map(|spec| spec.permission())
-        .collect::<Vec<_>>();
-    actions.extend(
-        catalog::FIXED_ACTIONS
-            .iter()
-            .filter(|entry| entry.permission.resource() == resource)
-            .map(|entry| &entry.permission),
-    );
-    actions
+        .map(ScopeSpec::permission)
+        .chain(catalog::FIXED_ACTIONS.iter().map(|entry| &entry.permission))
+        .filter(move |permission| permission.resource() == resource)
 }
 
 /// 为人员范围页面仅枚举公共权限目录中的动作，不展示固定内部入口。
-pub(crate) fn display_actions(resource: &str) -> Vec<&'static Permission> {
-    actions(resource)
-        .into_iter()
-        .filter(|permission| {
-            MODULES.iter().flat_map(|module| module.entries).any(|(_, entry)| entry.permission == *permission)
-        })
-        .collect()
+pub(crate) fn display_actions(resource: &str) -> impl Iterator<Item = &'static Permission> {
+    actions(resource).filter(|permission| {
+        MODULES.iter().flat_map(|module| module.entries).any(|(_, entry)| entry.permission == *permission)
+    })
 }
 
 /// 验证目录后按首次登记顺序枚举资源，去除重复项。

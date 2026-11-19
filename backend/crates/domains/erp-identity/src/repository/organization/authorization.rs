@@ -20,10 +20,13 @@ pub fn primary_membership_query(user: Bson, orgs: Option<&BTreeSet<String>>, at:
         doc! { "$limit": 2 },
     ];
     match orgs {
-        Some(orgs) => pipeline.extend([
-            doc! { "$group": { "_id": null, "count": { "$sum": 1 }, "org": { "$first": "$org_unit_id" } } },
-            doc! { "$match": { "count": 1, "org": { "$in": orgs.iter().cloned().collect::<Vec<_>>() } } },
-        ]),
+        Some(orgs) => {
+            let orgs = orgs.iter().map(|id| Bson::from(id.as_str())).collect::<Vec<_>>();
+            pipeline.extend([
+                doc! { "$group": { "_id": null, "count": { "$sum": 1 }, "org": { "$first": "$org_unit_id" } } },
+                doc! { "$match": { "count": 1, "org": { "$in": Bson::Array(orgs) } } },
+            ]);
+        },
         None => pipeline.extend([
             doc! { "$facet": { "members": [{ "$limit": 2 }] } },
             doc! { "$match": { "$expr": { "$lte": [{ "$size": "$members" }, 1] } } },

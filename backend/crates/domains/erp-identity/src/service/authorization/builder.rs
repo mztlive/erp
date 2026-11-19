@@ -35,7 +35,6 @@ impl AuthorizationBuilder {
     /// 为固定资源登记唯一事实端口，供单条和批量授权读取真实对象；未知、仅功能资格或重复的资源登记均拒绝。
     pub fn facts(mut self, resource: &str, facts: Arc<dyn AccessFactsPort>) -> Result<Self> {
         if !scope_spec::actions(resource)
-            .iter()
             .any(|permission| scope_spec::kind(permission).is_ok_and(|kind| kind != ActionKind::Function))
         {
             return Err(Error::ValidationError(format!("未知或无需 Facts 的资源：{resource}")));

@@ -9,16 +9,19 @@ use crate::{Error, Result};
 #[derive(Debug, Clone)]
 pub struct ResourceTargets(
     // 经输入校验、去重并按 ID 排序的目标集合。
-    BTreeSet<String>
+    BTreeSet<String>,
 );
 impl ResourceTargets {
     /// 取证后核对非空目标集；缺失、重复、额外或资源错配的根对象均使整次检查失败。
     pub(crate) fn ensure_objects(&self, resource: &str, objects: &[ObjectFacts]) -> Result<()> {
-        let found = objects.iter().map(|object| object.id.clone()).collect::<BTreeSet<_>>();
+        let mut seen = BTreeSet::new();
         if self.0.is_empty()
-            || found != self.0
-            || objects.len() != found.len()
-            || objects.iter().any(|object| object.resource != resource)
+            || objects.len() != self.0.len()
+            || objects.iter().any(|object| {
+                object.resource != resource
+                    || !self.0.contains(object.id.as_str())
+                    || !seen.insert(object.id.as_str())
+            })
         {
             return Err(Error::NotFound("对象不存在或必要目标不完整".into()));
         }
@@ -68,9 +71,18 @@ mod tests {
         let targets = ResourceTargets::new(&["a", "b"]).unwrap();
         let a = ObjectFacts { resource: "order".into(), id: "a".into(), ..Default::default() };
         let b = ObjectFacts { id: "b".into(), ..a.clone() };
-        assert!(targets.ensure_objects("order", &[a.clone(), b.clone()]).is_ok());
-        for objects in [vec![a.clone()], vec![a.clone(), a.clone()], vec![a.clone(), b.clone(), b.clone()]] {
-            assert!(targets.ensure_objects("order", &objects).is_err());
+        assert!(targets.ensure_objects("order", &[b.clone(), a.clone()]).is_ok());
+        let extra = ObjectFacts { id: "extra".into(), ..a.clone() };
+        for objects in [
+            vec![a.clone()],
+            vec![a.clone(), a.clone()],
+            vec![a.clone(), b.clone(), extra.clone()],
+            vec![a.clone(), extra],
+        ] {
+            assert!(matches!(
+                targets.ensure_objects("order", &objects),
+                Err(Error::NotFound(message)) if message == "对象不存在或必要目标不完整"
+            ));
         }
         assert!(targets.ensure_objects("customer", &[a, b]).is_err());
         assert!(ResourceTargets::new(&[]).unwrap().ensure_objects("order", &[]).is_err());

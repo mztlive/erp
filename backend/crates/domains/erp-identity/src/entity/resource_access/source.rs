@@ -52,13 +52,19 @@ impl SourceKey {
     /// 校验可信业务提供的四个身份字段，并以完整 JSON 编码生成来源主键，避免分隔符拼接碰撞。
     /// 字段为空、超过 128 字符或带首尾空白时拒绝。
     pub fn id(&self) -> Result<String> {
+        self.validate()?;
+        Ok(serde_json::to_string(self)?)
+    }
+
+    /// 校验组成来源身份的字段，供按字段查询时复用。
+    pub(crate) fn validate(&self) -> Result<()> {
         for value in [&self.rule, &self.business_type, &self.business_id, &self.recipient] {
             if normalize_required_text_ref(value, "来源身份不能为空", 128, "来源身份过长")? != *value
             {
                 return Err(Error::ValidationError("来源身份不能带首尾空白".into()));
             }
         }
-        Ok(serde_json::to_string(self)?)
+        Ok(())
     }
 }
 /// 由资源类型和记录 ID 唯一标识的读取目标，权限仅限指定记录的读取。

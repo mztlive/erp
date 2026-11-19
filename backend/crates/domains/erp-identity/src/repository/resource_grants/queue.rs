@@ -168,15 +168,15 @@ pub enum GrantRecompute {
     All,
     Source(
         /// 仅重排具有此稳定来源身份的正式事件。
-        SourceKey
+        SourceKey,
     ),
     Resource(
         /// 重排能为此资源类型生成读取授权的规则事件。
-        ResourceKind
+        ResourceKind,
     ),
     Rule(
         /// 仅重排由此固定规则产生的正式事件。
-        GrantRule
+        GrantRule,
     ),
 }
 /// 已实现的规则版本固定为 1；新增规则必须增加类型化变体。
@@ -204,10 +204,7 @@ impl GrantRecompute {
     fn query(&self) -> Result<Document> {
         Ok(match self {
             Self::All => doc! {},
-            Self::Source(key) => {
-                key.id()?;
-                doc! { "source.rule": &key.rule, "source.business_type": &key.business_type, "source.business_id": &key.business_id, "source.recipient": &key.recipient }
-            },
+            Self::Source(key) => return source_filter(key),
             Self::Rule(rule) => doc! { "source.rule": rule.code() },
             Self::Resource(ResourceKind::SalesOrder) => {
                 doc! { "source.rule": { "$in": ["invoice_approved", "invoice_task_reassigned", "sales_order_approval_assigned"] } }
@@ -241,15 +238,53 @@ impl GrantEventRepository {
         source: &SourceKey,
         executor: &mut dyn Executor,
     ) -> Result<Option<GrantEvent>> {
-        source.id()?;
-        Ok(resource_grants::events(&self.db)
-            .find_one(
-                doc! {
-                    "source.rule": &source.rule, "source.business_type": &source.business_type,
-                    "source.business_id": &source.business_id, "source.recipient": &source.recipient,
-                },
-                executor,
-            )
-            .await?)
+        Ok(resource_grants::events(&self.db).find_one(source_filter(source)?, executor).await?)
+    }
+}
+
+// 重排和查找共用来源索引的四个字段；只按文档主键查询时才需要编码 ID。
+fn source_filter(source: &SourceKey) -> Result<Document> {
+    source.validate()?;
+    Ok(doc! {
+        "source.rule": &source.rule, "source.business_type": &source.business_type,
+        "source.business_id": &source.business_id, "source.recipient": &source.recipient,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exact_source_filter_and_id_keep_fields_and_first_validation_error() {
+        let mut source = SourceKey {
+            rule: "invoice_approved".into(),
+            business_type: "approval".into(),
+            business_id: "票:1".into(),
+            recipient: "alice".into(),
+        };
+        assert_eq!(
+            source.id().unwrap(),
+            r#"{"rule":"invoice_approved","business_type":"approval","business_id":"票:1","recipient":"alice"}"#,
+        );
+        assert_eq!(
+            GrantRecompute::Source(source.clone()).query().unwrap(),
+            doc! { "source.rule": "invoice_approved", "source.business_type": "approval",
+            "source.business_id": "票:1", "source.recipient": "alice" },
+        );
+
+        source.business_type.clear();
+        source.business_id = format!(" {} ", "票".repeat(129));
+        assert!(
+            matches!(source_filter(&source), Err(Error::Logic(erp_core::Error::LogicError(message))) if message == "来源身份不能为空")
+        );
+        source.business_type = "approval".into();
+        assert!(
+            matches!(source_filter(&source), Err(Error::Logic(erp_core::Error::LogicError(message))) if message == "来源身份过长")
+        );
+        source.business_id = " ticket ".into();
+        assert!(
+            matches!(source_filter(&source), Err(Error::ValidationError(message)) if message == "来源身份不能带首尾空白")
+        );
     }
 }

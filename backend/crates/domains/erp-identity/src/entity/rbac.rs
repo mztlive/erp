@@ -13,7 +13,7 @@ const MAX_ID_LEN: usize = 128;
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct RoleId(
     // 保留原大小写的非空 ASCII 标识，构造时统一校验。
-    String
+    String,
 );
 
 impl RoleId {
@@ -87,7 +87,7 @@ impl<'de> Deserialize<'de> for RoleId {
 #[serde(from = "Vec<RoleId>", into = "Vec<RoleId>")]
 pub struct RoleIdSet(
     // 按构造时确定的顺序保存首次出现的角色 ID。
-    Vec<RoleId>
+    Vec<RoleId>,
 );
 
 impl RoleIdSet {
@@ -172,14 +172,15 @@ impl Deref for RoleIdSet {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PermissionSet(
     // 按资源、动作依次排序的权限项，相同权限只保留一项。
-    Vec<Permission>
+    Vec<Permission>,
 );
 
 impl PermissionSet {
     /// 将已解析的权限去重，再按资源和动作排序，得到顺序确定的集合。
     pub fn new(permissions: impl IntoIterator<Item = Permission>) -> Self {
-        let mut permissions = permissions.into_iter().collect::<HashSet<_>>().into_iter().collect::<Vec<_>>();
-        permissions.sort();
+        let mut permissions = permissions.into_iter().collect::<Vec<_>>();
+        permissions.sort_unstable();
+        permissions.dedup();
         Self(permissions)
     }
 
@@ -271,9 +272,9 @@ mod tests {
     #[test]
     fn permission_set_should_normalize_and_enforce_subset() {
         let actor = PermissionSet::new([
+            Permission::new("role", "read"),
             Permission::parse("customer:*").unwrap(),
-            Permission::parse("role:read").unwrap(),
-            Permission::parse("customer:*").unwrap(),
+            Permission::new("customer", "*"),
         ]);
         let allowed = PermissionSet::new([
             Permission::parse("customer:update").unwrap(),
@@ -281,7 +282,7 @@ mod tests {
         ]);
         let elevated = PermissionSet::new([Permission::parse("role:delete").unwrap()]);
 
-        assert_eq!(actor.as_slice().len(), 2);
+        assert_eq!(actor.as_slice(), [Permission::new("customer", "*"), Permission::new("role", "read")]);
         assert!(actor.covers(&allowed));
         assert!(!actor.covers(&elevated));
         assert!(actor.covers_one(&Permission::parse("customer:update").unwrap()));

@@ -44,12 +44,11 @@ pub async fn list_page(
     let (access, mut display) = authorize(db, authorization, actor, category, executor).await?;
     let org_filter =
         expand_org_filter(&display.organizations, &request.org_unit_ids, request.include_descendants)?;
-    let orgs = org_filter.as_ref().map(|ids| ids.iter().cloned().collect::<Vec<_>>());
     let result = directory_page(
         db,
         &DirectoryRead {
             category,
-            org_unit_ids: orgs.as_deref(),
+            org_unit_ids: org_filter.as_ref(),
             selected_ids: None,
             search: request.search.as_deref(),
             page: request.page,

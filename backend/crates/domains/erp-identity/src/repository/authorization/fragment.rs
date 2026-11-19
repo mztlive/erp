@@ -3,15 +3,13 @@ use mongodb::bson::{Document, doc};
 use crate::ports::QueryFragment;
 use crate::{Error, Result};
 
-/// 一个集合管道的关联准备和最终权限条件；嵌套来源另用独立别名作用域。
+/// 一个集合管道的固定阶段和授权关联；嵌套来源另用独立别名作用域。
 #[derive(Default)]
 pub(super) struct Fragment {
     /// 映射声明的固定准备阶段，先于授权关联执行。
-    pub(super) stages: Vec<Document>,
+    stages: Vec<Document>,
     // 以保序 BSON 字节去重的关联定义，登记次序决定临时别名。
     lookups: Vec<(Vec<u8>, Document)>,
-    /// 所有业务事实和必要记录条件组合后的最终授权谓词。
-    pub(super) filter: Document,
 }
 
 impl Fragment {
@@ -52,7 +50,7 @@ impl Fragment {
     }
 
     /// 依次输出固定准备、授权关联、完整过滤及临时字段清理阶段，不让别名泄漏到外部。
-    pub(super) fn finish(self) -> Vec<Document> {
+    pub(super) fn finish(self, filter: Document) -> Vec<Document> {
         let mut stages = self.stages;
         let mut aliases = Vec::new();
         for (index, (_, mut lookup)) in self.lookups.into_iter().enumerate() {
@@ -62,7 +60,7 @@ impl Fragment {
             aliases.push(alias);
         }
 
-        stages.push(doc! { "$match": self.filter });
+        stages.push(doc! { "$match": filter });
         if !aliases.is_empty() {
             stages.push(doc! { "$unset": aliases });
         }
@@ -127,9 +125,8 @@ mod tests {
         let other_binding = fragment.fact(fact("participants", "$other", "u")).unwrap();
         let other_user = fragment.fact(fact("participants", "$id", "other")).unwrap();
         let other_collection = fragment.fact(fact("approvers", "$id", "u")).unwrap();
-        fragment.filter =
-            combine("$and", vec![first, duplicate, other_binding, other_user, other_collection]);
-        let stages = fragment.finish();
+        let stages = fragment
+            .finish(combine("$and", vec![first, duplicate, other_binding, other_user, other_collection]));
         assert_eq!(stages.iter().filter(|stage| stage.contains_key("$lookup")).count(), 4);
 
         let rows = (1..=4).map(|i| doc! { "id": format!("r{i}"), "other": format!("a{i}") }).collect();

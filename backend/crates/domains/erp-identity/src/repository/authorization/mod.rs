@@ -49,13 +49,12 @@ pub(crate) fn compile(
     let model = mapping.model();
 
     let mut compiler = Compiler { valid_until: validity.valid_until };
-    let (fragment, _) = compiler.model(&resolved.rules.root, mapping, &context, 0)?;
-    let mut stages = fragment.finish();
+    let (mut stages, _) = compiler.model(&resolved.rules.root, mapping, &context, 0)?;
     let whole = match &resolved.rules.whole {
         Some(WholeRule::Root) if model.output == QueryOutput::Object => Some(FilterPlan::Root),
         Some(WholeRule::Root) => return Err(Error::ValidationError("受限查询需要独立整账过滤".into())),
         Some(WholeRule::Separate(rule)) => {
-            Some(FilterPlan::Separate(compiler.model(rule, mapping, &context, 0)?.0.finish()))
+            Some(FilterPlan::Separate(compiler.model(rule, mapping, &context, 0)?.0))
         },
         None => None,
     };
@@ -66,8 +65,9 @@ pub(crate) fn compile(
     };
     let management = match &resolved.rules.management {
         Some(ResolvedFilter::Root) => Some(FilterPlan::Root),
-        Some(ResolvedFilter::Separate { context, rule }) => {
-            Some(FilterPlan::Separate(compiler.model(rule, mapping, context, 0)?.0.finish()))
+        Some(ResolvedFilter::Separate { permission, rule }) => {
+            let management_context = AccessContext { permission: permission.clone(), ..context.clone() };
+            Some(FilterPlan::Separate(compiler.model(rule, mapping, &management_context, 0)?.0))
         },
         None => None,
     };
@@ -161,8 +161,7 @@ impl Compiler {
                 conditions.push(self.condition(rule, child, &context, &mut fragment, 0)?.0);
             }
 
-            fragment.filter = combine("$or", conditions);
-            let stages = fragment.finish();
+            let stages = fragment.finish(combine("$or", conditions));
             sources.insert(key.clone(), SourcePlan { model: child.model().clone(), stages });
         }
         Ok(sources)
@@ -175,11 +174,10 @@ impl Compiler {
         mapping: &FrozenMapping,
         context: &AccessContext,
         depth: usize,
-    ) -> Result<(Fragment, Bson)> {
+    ) -> Result<(Vec<Document>, Bson)> {
         let mut fragment = Fragment::with_stages(mapping.stages());
         let (filter, key) = self.condition(rule, mapping, context, &mut fragment, depth)?;
-        fragment.filter = filter;
-        Ok((fragment, key))
+        Ok((fragment.finish(filter), key))
     }
 
     // 在调用方给定的关联作用域内用当前上下文求交有效记录与授权条件，返回谓词和主键表达式。
@@ -310,7 +308,7 @@ impl Compiler {
         let expected = doc! { "$setUnion": [{ "$ifNull": [expected_ids, []] }, []] };
         let mut pipeline =
             vec![doc! { "$match": { "$expr": { "$in": [&key_expression, "$$identity_expected"] } } }];
-        pipeline.extend(child.finish());
+        pipeline.extend(child);
         pipeline.push(doc! { "$project": { "_id": 0, "__identity_id": key_expression } });
         let alias = fragment.lookup(doc! { "from": &child_mapping.model().collection,
         "let": { "identity_expected": expected.clone() }, "pipeline": pipeline })?;
@@ -821,17 +819,14 @@ mod tests {
             action_sensitive: true,
         });
         let mut query = query(AccessRule::Allow, mapping.clone(), &executor);
-        let context = AccessContext { permission: sales_order::DETAIL, ..query.proof.context.clone() };
+        let as_of = query.proof.context.as_of;
         query.proof.resolved.rules.management = Some(ResolvedFilter::Separate {
-            context: Box::new(context.clone()),
+            permission: sales_order::DETAIL,
             rule: AccessRule::Fact(AccessFact::Owned),
         });
 
         let plan = query.compile(&mut executor).unwrap();
-        assert_eq!(
-            plan.validity.valid_until,
-            Some(Instant::from_unix_secs(context.as_of.unix_secs() + 3600))
-        );
+        assert_eq!(plan.validity.valid_until, Some(Instant::from_unix_secs(as_of.unix_secs() + 3600)));
         assert_eq!(
             plan.management_stages().unwrap(),
             &[doc! { "$match": { "$and": [
@@ -840,7 +835,7 @@ mod tests {
             ] } }]
         );
         query.proof.resolved.rules.management =
-            Some(ResolvedFilter::Separate { context: Box::new(context), rule: AccessRule::Deny });
+            Some(ResolvedFilter::Separate { permission: sales_order::DETAIL, rule: AccessRule::Deny });
         let denied = query.compile(&mut executor).unwrap();
         assert_eq!(plan.stages(), denied.stages());
         assert_ne!(plan.version(), denied.version());

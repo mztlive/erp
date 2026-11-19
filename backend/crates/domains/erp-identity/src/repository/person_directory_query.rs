@@ -1,5 +1,7 @@
 //! 人员目录数据库查询：授权 ID 索引、资格关联、搜索及分页均先于响应。
 
+use std::collections::BTreeSet;
+
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::AccountKind;
 use erp_core::common::time::Instant;
@@ -23,7 +25,7 @@ pub struct DirectoryRead<'a> {
     /// 决定目录资源和所需附加资格的人员类别。
     pub category: PersonDirectoryCategory,
     /// 可选的主属组织 ID 集合，只收窄已授权候选。
-    pub org_unit_ids: Option<&'a [String]>,
+    pub org_unit_ids: Option<&'a BTreeSet<String>>,
     /// 可选的账号 ID 集合，供已选人员回显并限制查询候选。
     pub selected_ids: Option<&'a [String]>,
     /// 在姓名或登录名中匹配的字面量关键词。
@@ -116,10 +118,9 @@ fn directory_pipeline(read: &DirectoryRead<'_>, as_of: Instant) -> Result<Vec<Do
 }
 
 // 按授权时点的唯一有效主属关系收窄部门候选，计数前移除临时关联字段。
-fn organization_filter(ids: &[String], as_of: Instant) -> Result<Vec<Document>> {
-    let ids = ids.iter().cloned().collect();
+fn organization_filter(ids: &BTreeSet<String>, as_of: Instant) -> Result<Vec<Document>> {
     let QueryFragment::Exists { collection, bindings, pipeline } =
-        primary_membership_query("$id".into(), Some(&ids), as_of)
+        primary_membership_query("$id".into(), Some(ids), as_of)
     else {
         return Err(Error::ValidationError("目录组织筛选缺少主属关系查询".into()));
     };
@@ -181,6 +182,41 @@ mod tests {
     fn candidate_limit_rejects_the_first_truncated_result() {
         assert!(ensure_candidate_limit(DIRECTORY_LIMIT).is_ok());
         assert!(ensure_candidate_limit(DIRECTORY_LIMIT + 1).is_err());
+    }
+
+    // 组织筛选先排除重叠主属关系，再用稳定顺序限制组织 ID；完整过滤在分页和资格段之前。
+    #[test]
+    fn organization_filter_keeps_single_membership_and_sorted_ids_before_facets() {
+        let orgs = BTreeSet::from(["west".into(), "east".into()]);
+        let read = DirectoryRead {
+            category: PersonDirectoryCategory::Sales,
+            org_unit_ids: Some(&orgs),
+            selected_ids: None,
+            search: None,
+            page: 1,
+            page_size: 20,
+        };
+        let actual = directory_pipeline(&read, Instant::from_unix_secs(10)).unwrap();
+        assert_eq!(
+            actual[1],
+            doc! { "$lookup": {
+                "from": "org_memberships", "let": { "member": "$id" }, "pipeline": [
+                    { "$match": {
+                        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                        "$expr": { "$eq": ["$user_id", "$$member"] },
+                        "valid_from": { "$lte": 10_i64 },
+                        "$or": [{ "valid_to": null }, { "valid_to": { "$gt": 10_i64 } }],
+                    } },
+                    { "$limit": 2 },
+                    { "$group": { "_id": null, "count": { "$sum": 1 }, "org": { "$first": "$org_unit_id" } } },
+                    { "$match": { "count": 1, "org": { "$in": ["east", "west"] } } },
+                ], "as": "__directory_filter",
+            } },
+        );
+        assert_eq!(actual[2], doc! { "$match": { "__directory_filter.0": { "$exists": true } } });
+        assert_eq!(actual[3], doc! { "$unset": "__directory_filter" });
+        assert!(actual[4].contains_key("$lookup"));
+        assert!(actual.last().unwrap().contains_key("$facet"));
     }
 
     // 验证已选 ID 在资格关联前筛选，通用业务类别不追加角色或资格关联。

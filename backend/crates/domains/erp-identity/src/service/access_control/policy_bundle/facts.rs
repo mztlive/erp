@@ -23,10 +23,10 @@ impl PolicyBundleService {
         for user_id in user_ids {
             let user = self.user_fact(&user_id, executor).await?;
             roles.extend(user.role_ids.iter().map(ToString::to_string));
-            facts.users.insert(user_id.clone(), user);
             facts.scopes.extend(
                 self.access.db.person_data_scopes().for_person(&user_id, None, None, executor).await?,
             );
+            facts.users.insert(user_id, user);
         }
 
         for id in roles {

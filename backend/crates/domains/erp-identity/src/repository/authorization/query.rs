@@ -76,8 +76,8 @@ pub(crate) enum WholeRule {
 pub(crate) enum ResolvedFilter {
     Root,
     Separate {
-        /// 辅助入口独立解析的授权上下文，不沿用根查询动作。
-        context: Box<AccessContext>,
+        /// 辅助入口使用的管理动作；其余上下文沿用根查询。
+        permission: Permission,
         /// 在辅助入口上下文中已解析的过滤规则。
         rule: AccessRule,
     },
