@@ -26,6 +26,10 @@ pub enum PersonDirectoryCategory {
 }
 
 impl PersonDirectoryCategory {
+    /// 自动补记资格的固定类别和角色，初始化按销售、采购的顺序处理。
+    pub(crate) const GRANT_ROLES: [(Self, &'static str); 2] =
+        [(Self::Sales, "role-sales"), (Self::Procurement, "role-procurement")];
+
     /// 返回接口与持久化共用的类别代码：`sales`、`procurement` 或 `business`。
     pub fn as_str(self) -> &'static str {
         match self {
@@ -47,21 +51,13 @@ impl PersonDirectoryCategory {
     /// 返回自动授予时观察的稳定角色 ID：销售为 `role-sales`，采购为 `role-procurement`，后台人员为 `None`。
     /// 销售领导角色、建单权限和业务单据归属均不触发自动授予。
     pub fn grant_role_id(self) -> Option<&'static str> {
-        match self {
-            Self::Sales => Some("role-sales"),
-            Self::Procurement => Some("role-procurement"),
-            Self::Business => None,
-        }
+        Self::GRANT_ROLES.into_iter().find_map(|(category, id)| (category == self).then_some(id))
     }
 
     /// 由本次分配的角色识别可自动补记资格的目录。
     /// 仅 `role-sales` 和 `role-procurement` 匹配，通用后台人员目录无对应角色。
     pub fn from_grant_role(role_id: &str) -> Option<Self> {
-        match role_id {
-            "role-sales" => Some(Self::Sales),
-            "role-procurement" => Some(Self::Procurement),
-            _ => None,
-        }
+        Self::GRANT_ROLES.into_iter().find_map(|(category, id)| (id == role_id).then_some(category))
     }
 }
 
@@ -276,10 +272,18 @@ mod tests {
         }
     }
 
-    // 验证销售自动授予只认固定销售角色，采购目录使用独立的数据范围资源代码。
+    // 锁定自动补记的类别、角色及初始化顺序，其他角色或权限不能触发补记。
     #[test]
-    fn sales_grant_role_is_not_the_leader_or_create_permission() {
-        assert_eq!(PersonDirectoryCategory::Sales.grant_role_id(), Some("role-sales"));
+    fn directory_grant_roles_round_trip_in_sync_order() {
+        use PersonDirectoryCategory::{Business, Procurement, Sales};
+
+        let grants = [(Sales, "role-sales"), (Procurement, "role-procurement")];
+        assert_eq!(PersonDirectoryCategory::GRANT_ROLES, grants);
+        for (category, role) in grants {
+            assert_eq!(category.grant_role_id(), Some(role));
+            assert_eq!(PersonDirectoryCategory::from_grant_role(role), Some(category));
+        }
+        assert_eq!(Business.grant_role_id(), None);
         assert_eq!(PersonDirectoryCategory::from_grant_role("role-sales-leader"), None);
         assert_eq!(PersonDirectoryCategory::from_grant_role("sales_order:create"), None);
         assert_eq!(PersonDirectoryCategory::Procurement.resource(), "procurement_person");

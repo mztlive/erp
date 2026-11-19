@@ -1,38 +1,40 @@
 //! 来源授权行的分页差异计算，内存只保留本次目标和当前页。
-use std::collections::BTreeSet;
-
 use super::{GrantSource, GrantTarget, ResourceGrant};
 
-/// 记录来源授权的分页同步状态，只保留本次目标集合和待建目标。
-pub(crate) struct GrantRows {
-    // 来源本次发布的完整读取目标，用于判定旧行是否仍应生效。
-    targets: BTreeSet<GrantTarget>,
-    // 尚未在任何已处理页中找到对应授权行的目标。
-    missing: BTreeSet<GrantTarget>,
+/// 跨页记录本次发布的每个目标是否已有授权行。
+pub(crate) struct GrantRows<'a> {
+    // 按资源和 ID 排序去重；标记表示已扫描到该目标的历史行。
+    targets: Vec<(&'a GrantTarget, bool)>,
     // 已保存的来源记录版本，刷新时写入每条旧行。
     version: u64,
 }
-impl GrantRows {
+impl<'a> GrantRows<'a> {
     /// 用已验证的来源冻结目标与版本；扫描历史行前，所有目标均视为待新增。
-    pub(crate) fn new(source: &GrantSource) -> Self {
-        let targets = source.targets.iter().cloned().collect::<BTreeSet<_>>();
-        Self { missing: targets.clone(), targets, version: source.base.version }
+    pub(crate) fn new(source: &'a GrantSource) -> Self {
+        let mut targets = source.targets.iter().map(|target| (target, false)).collect::<Vec<_>>();
+        targets.sort_unstable_by_key(|(target, _)| *target);
+        targets.dedup_by_key(|(target, _)| *target);
+        Self { targets, version: source.base.version }
     }
 
     /// 原地刷新当前页的未删除授权行，使仍在目标集合中的行生效，并将所有行推进到本次来源版本。
-    /// 从待新增集合剔除本页已存在的目标；仓储负责持久化。
+    /// 标记本页已有的目标，仓储负责持久化。
     pub(crate) fn refresh(&mut self, rows: &mut [ResourceGrant]) {
         for row in rows {
-            let target = GrantTarget { resource: row.resource, id: row.resource_id.clone() };
-            row.active = self.targets.contains(&target);
+            let target = self.targets.binary_search_by(|(target, _)| {
+                (target.resource, target.id.as_str()).cmp(&(row.resource, row.resource_id.as_str()))
+            });
+            row.active = target.is_ok();
+            if let Ok(index) = target {
+                self.targets[index].1 = true;
+            }
             row.source_version = self.version;
-            self.missing.remove(&target);
         }
     }
 
-    /// 处理完全部历史页后，取出仍需创建授权行的有序唯一目标。
-    pub(crate) fn missing(self) -> BTreeSet<GrantTarget> {
-        self.missing
+    /// 处理完全部历史页后，按资源和 ID 顺序交出仍需创建授权行的唯一目标。
+    pub(crate) fn missing(self) -> impl Iterator<Item = &'a GrantTarget> {
+        self.targets.into_iter().filter_map(|(target, seen)| (!seen).then_some(target))
     }
 }
 
@@ -56,7 +58,8 @@ mod tests {
         source.base.version = 7;
         let target = GrantTarget { resource: ResourceKind::SalesOrder, id: "same".into() };
         let added = GrantTarget { resource: ResourceKind::SalesOrder, id: "new".into() };
-        source.targets = vec![target.clone(), added.clone()];
+        let purchase = GrantTarget { resource: ResourceKind::PurchaseOrder, id: "aaa".into() };
+        source.targets = vec![purchase, target.clone(), added, target];
         let row = |resource| ResourceGrant {
             base: BaseModel::new("row".into()),
             recipient: "user".into(),
@@ -74,16 +77,22 @@ mod tests {
         assert!(first[0].active);
         assert_eq!(first[0].source_version, 7);
 
-        let mut second = vec![row(ResourceKind::PurchaseOrder)];
+        let mut second = vec![row(ResourceKind::PurchaseOrder), row(ResourceKind::SalesOrder)];
         delta.refresh(&mut second);
         assert!(!second[0].active);
-        assert_eq!(second[0].source_version, 7);
-        assert_eq!(delta.missing(), BTreeSet::from([added]));
+        assert!(second[1].active);
+        assert!(second.iter().all(|row| row.source_version == 7));
+        assert!(
+            delta
+                .missing()
+                .map(|target| (target.resource, target.id.as_str()))
+                .eq([(ResourceKind::SalesOrder, "new"), (ResourceKind::PurchaseOrder, "aaa")])
+        );
 
         source.targets.clear();
         let mut empty = GrantRows::new(&source);
         empty.refresh(&mut first);
         assert!(!first[0].active);
-        assert!(empty.missing().is_empty());
+        assert!(empty.missing().next().is_none());
     }
 }

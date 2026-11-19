@@ -6,6 +6,7 @@ use erp_permissions::{internal, supplier, work_item};
 use persistence_core::Executor;
 
 use super::{AuthorizationService, rules};
+use crate::entity::access_control::ResolvedScope;
 use crate::entity::access_control::scope_spec::{self, ActionKind};
 use crate::entity::authorization::{AccessContext, AccessRule, QueryModel, QueryOutput};
 use crate::entity::fingerprint::Fingerprint;
@@ -192,8 +193,8 @@ impl AuthorizationService {
         let context = AccessContext { permission, ..context.clone() };
         let rule = if qualified.same_role(&rules::same_role_permissions(&context.permission)) {
             let scope = self.resolve_scope(&context, &context.permission, qualified, executor).await?;
-            resolution.include(&scope);
-            rules::data_condition(&context.permission, Some(&scope.scope))?
+            let scope = resolution.include(scope);
+            rules::data_condition(&context.permission, Some(&scope))?
         } else {
             AccessRule::Deny
         };
@@ -276,8 +277,8 @@ impl AuthorizationService {
         match kind {
             ActionKind::Scope => {
                 let scope = self.resolve_scope(context, &context.permission, qualified, executor).await?;
-                resolution.include(&scope);
-                let base = rules::data_condition(&context.permission, Some(&scope.scope))?;
+                let scope = resolution.include(scope);
+                let base = rules::data_condition(&context.permission, Some(&scope))?;
 
                 let mut scopes = Vec::new();
                 for (entry, source) in rules::selection::scope_requests(&context.permission)
@@ -289,8 +290,8 @@ impl AuthorizationService {
                     }
                     let source_context = AccessContext { permission: entry.clone(), ..context.clone() };
                     let scope = self.resolve_scope(&source_context, &source, qualified, executor).await?;
-                    resolution.include(&scope);
-                    scopes.push((entry, source, scope.scope));
+                    let scope = resolution.include(scope);
+                    scopes.push((entry, source, scope));
                 }
                 let scopes = rules::ScopeLookup::Resolved(&scopes);
 
@@ -317,8 +318,8 @@ impl AuthorizationService {
         let source =
             AccessContext { permission: supplier::DETAIL, resource: "supplier".into(), ..context.clone() };
         let scope = self.resolve_scope(&source, &supplier::DETAIL, qualified, executor).await?;
-        resolution.include(&scope);
-        rules::supplier_catalog_condition(rules::data_condition(&supplier::DETAIL, Some(&scope.scope))?)
+        let scope = resolution.include(scope);
+        rules::supplier_catalog_condition(rules::data_condition(&supplier::DETAIL, Some(&scope))?)
     }
 
     // 按入口与来源分别解析合格角色范围，生成根及整账条件。完整对象可复用根规则，份额、存在性和精确任务另保留完整对象条件。
@@ -342,8 +343,8 @@ impl AuthorizationService {
             }
             let source_context = AccessContext { permission: entry.clone(), ..context.clone() };
             let scope = self.resolve_scope(&source_context, &source, qualified, executor).await?;
-            resolution.include(&scope);
-            scopes.push((entry, source, scope.scope));
+            let scope = resolution.include(scope);
+            scopes.push((entry, source, scope));
         }
 
         let condition =
@@ -377,13 +378,13 @@ impl AuthorizationService {
 }
 
 impl Resolution {
-    /// 每解析一个范围即纳入其版本、组织修订、角色范围标记及最早失效时间。
-    pub(super) fn include(&mut self, scope: &AuthorizedDataScope) {
+    /// 纳入本次取证的版本、角色范围和期限，交出用于构造规则的范围条款。
+    pub(super) fn include(&mut self, scope: AuthorizedDataScope) -> ResolvedScope {
         self.has_role_scope |= scope.scope.has_role_scope();
-        self.versions.push(scope.scope_version.clone());
         self.organization_version = self.organization_version.max(scope.organizations.version);
-
-        self.valid_until = self.valid_until.into_iter().chain(scope_deadline(scope)).min();
+        self.valid_until = self.valid_until.into_iter().chain(scope_deadline(&scope)).min();
+        self.versions.push(scope.scope_version);
+        scope.scope
     }
 }
 

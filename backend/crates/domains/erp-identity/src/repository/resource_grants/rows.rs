@@ -29,7 +29,6 @@ pub(crate) async fn sync_rows(
 
     let rows = delta
         .missing()
-        .into_iter()
         .map(|target| {
             Ok(ResourceGrant {
                 base: BaseModel::new(row_id(&source.base.id, target.resource, &target.id)?),
@@ -37,7 +36,7 @@ pub(crate) async fn sync_rows(
                 source_id: source.base.id.clone(),
                 source_version: source.base.version,
                 resource: target.resource,
-                resource_id: target.id,
+                resource_id: target.id.clone(),
                 action: "read".into(),
                 active: true,
             })

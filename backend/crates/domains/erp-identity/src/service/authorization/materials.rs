@@ -65,8 +65,7 @@ impl AuthorizationService {
                 ..context.clone()
             };
             let scope = self.resolve_scope(&source, &permission, qualified, executor).await?;
-            resolution.include(&scope);
-            rules.push(source_condition(relation, &permission, &scope.scope)?);
+            rules.push(source_condition(relation, &permission, &resolution.include(scope))?);
         }
         Ok(AccessRule::all(rules))
     }

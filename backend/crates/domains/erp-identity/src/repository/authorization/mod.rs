@@ -201,9 +201,8 @@ impl Compiler {
         Ok((combine("$and", vec![records, access]), key))
     }
 
-    // 校验模型与上下文，并将静态条件的截止时点纳入凭证期限。
+    // 模型在冻结时已验证；编译只核对本次上下文和静态期限。
     fn check_mapping(&mut self, mapping: &FrozenMapping, context: &AccessContext) -> Result<()> {
-        mapping.model().validate()?;
         if let Some(until) = mapping.valid_until(context) {
             if Instant::now() >= until {
                 return Err(Error::ConflictError("DATA_SCOPE_CHANGED：静态时间边界已到期".into()));
@@ -749,6 +748,30 @@ mod tests {
         query.proof.validity.valid_until = None;
         executor.next_read();
         assert!(matches!(query.compile(&mut executor), Err(Error::ValidationError(_))));
+    }
+
+    #[test]
+    fn expired_mapping_is_rejected_before_a_context_mismatch() {
+        let mut executor = ReadExecutor::default();
+        let mapping = Arc::new(Mapping {
+            model: mapping("sales_order", None).model().clone(),
+            child: None,
+            sources: BTreeMap::new(),
+            live_only: false,
+            key_expression: None,
+            action_sensitive: true,
+        });
+        let mut query = query(AccessRule::Allow, mapping, &executor);
+        query.proof.context.resource = "purchase_order".into();
+        assert!(matches!(
+            query.compile(&mut executor),
+            Err(Error::ValidationError(message)) if message == "业务事实映射与授权资源不匹配"
+        ));
+        query.proof.context.as_of = Instant::from_unix_secs(1);
+        assert!(matches!(
+            query.compile(&mut executor),
+            Err(Error::ConflictError(message)) if message == "DATA_SCOPE_CHANGED：静态时间边界已到期"
+        ));
     }
 
     // 验证独立范围按自身动作转换，且更早的截止时点限制整份凭证。

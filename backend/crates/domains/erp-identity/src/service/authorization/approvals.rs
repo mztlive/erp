@@ -217,6 +217,7 @@ fn ensure_admin(required: &[Permission], qualified: &QualifiedPermissions) -> Re
 
 impl AuthorizationService {
     /// 根审批对象取证后沿原执行器检查真实来源。普通本人读取命中时不另查当前来源；库存撤回走专用条件。
+    /// 调用方已确认是受支持的审批入口，或固定使用审批管理读取入口。
     pub(super) async fn approval_sources(
         &self,
         proof: &AccessProof,
@@ -224,9 +225,6 @@ impl AuthorizationService {
         facts: &TargetFacts,
         executor: &mut dyn Executor,
     ) -> Result<Vec<AccessProof>> {
-        if !supports(&proof.context.permission) {
-            return Ok(vec![]);
-        }
         if proof.context.permission == inventory::STOCK_ADJUSTMENT_CANCEL_APPROVAL {
             return self.stock_adjustment_cancel_sources(proof, qualified, facts, executor).await;
         }
@@ -384,8 +382,7 @@ impl AuthorizationService {
         for scope_source in management_scope_requests(source)? {
             let origin = scope_spec::runtime_source(scope_spec::require_scope(&scope_source)?)?.permission();
             let scope = self.facilities.scope(context, origin, required, qualified, executor).await?;
-            resolution.include(&scope);
-            scopes.push((scope_source, scope.scope));
+            scopes.push((scope_source, resolution.include(scope)));
         }
 
         if context.permission == work_item::DETAIL && source == &purchase_order::DETAIL {

@@ -61,23 +61,25 @@ impl AccessRule {
         grants: &Grants,
     ) -> Result<bool> {
         let mut seen = BTreeSet::new();
-        let mut allowed = BTreeSet::new();
+        let mut allowed = 0;
         for child in &related.objects {
             if child.resource != resource
                 || !related.expected_ids.contains(&child.id)
-                || !seen.insert(child.id.clone())
+                || !seen.insert(&child.id)
             {
                 return Err(Error::ValidationError("来源身份错配或重复".into()));
             }
             if self.allows_object(actor, child, grants)? {
-                allowed.insert(child.id.clone());
+                allowed += 1;
             }
         }
 
+        // 每个通过的来源都是唯一的预期引用，计数即可判断覆盖。
+        let expected = related.expected_ids.len();
         Ok(match mode {
-            RelationMatch::Any => !allowed.is_empty(),
-            RelationMatch::AllNonEmpty => !related.expected_ids.is_empty() && allowed == related.expected_ids,
-            RelationMatch::ExactlyOne => related.expected_ids.len() == 1 && allowed == related.expected_ids,
+            RelationMatch::Any => allowed > 0,
+            RelationMatch::AllNonEmpty => allowed > 0 && allowed == expected,
+            RelationMatch::ExactlyOne => expected == 1 && allowed == 1,
         })
     }
 
@@ -256,6 +258,34 @@ mod tests {
         ] {
             assert!(rule(RelationMatch::Any).allows_object("u", &root(children), &BTreeSet::new()).is_err());
         }
+    }
+
+    #[test]
+    fn related_evaluation_keeps_checking_after_a_match_and_reports_the_first_error() {
+        let rule = rule(RelationMatch::Any);
+        let grants = BTreeSet::new();
+        let missing = ObjectFacts { owner_id: FactValue::Missing, ..source("s1", "u") };
+        for (first, expected_error) in
+            [(source("s1", "u"), "来源身份错配或重复"), (missing, "缺少必要授权事实")]
+        {
+            let object = root(vec![first, source("extra", "u")]);
+            assert!(matches!(
+                rule.allows_object("u", &object, &grants),
+                Err(Error::ValidationError(message)) if message == expected_error
+            ));
+        }
+    }
+
+    #[test]
+    fn exactly_one_requires_one_reference_and_one_allowed_source() {
+        let rule = rule(RelationMatch::ExactlyOne);
+        let grants = BTreeSet::new();
+        let mut object = root(vec![source("s1", "u")]);
+        assert!(!rule.allows_object("u", &object, &grants).unwrap());
+        object.relations.values_mut().next().unwrap().expected_ids.remove("s2");
+        assert!(rule.allows_object("u", &object, &grants).unwrap());
+        object.relations.values_mut().next().unwrap().objects.clear();
+        assert!(!rule.allows_object("u", &object, &grants).unwrap());
     }
 
     // 验证空引用无法满足全部来源规则，未装载关系和已到期事实均报错。

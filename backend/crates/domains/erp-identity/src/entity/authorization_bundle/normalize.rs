@@ -7,7 +7,7 @@ use crate::dto::person_scope::{
     PersonScopeCommand, PersonScopeGrant, SavePersonScopeRequest, normalize_grants,
 };
 use crate::entity::access_control::person_scope::PersonScopeExpression;
-use crate::entity::role::{ROOT_ROLE_ID, Role, RoleData};
+use crate::entity::role::{ROOT_ROLE_ID, Role};
 use crate::{Error, Permission, Result};
 
 impl PolicyDocument {
@@ -23,7 +23,7 @@ impl PolicyDocument {
             if role.id.as_str() == ROOT_ROLE_ID || !roles.insert(role.id.clone()) {
                 return Err(Error::ValidationError("系统角色或重复角色不能写入策略文件".into()));
             }
-            role.name = Role::new(role.id.clone(), RoleData::new(&role.name))?.name;
+            role.name = Role::normalize_name(&role.name)?;
             if role.permissions.len() > 1000 {
                 return Err(Error::ValidationError("单个角色最多1000项权限".into()));
             }
@@ -214,6 +214,22 @@ mod tests {
         assert_eq!(value.bindings[0].role_ids.len(), 1);
         assert_eq!(value.bindings[0].mode, PolicyMode::Merge);
         assert_eq!(value.clone().normalized().unwrap(), value);
+    }
+
+    #[test]
+    fn file_role_names_keep_the_same_validation_errors_as_role_creation() {
+        use crate::RoleData;
+
+        for name in [" ".into(), "长".repeat(33)] {
+            let mut value = document();
+            value.roles[0].name.clone_from(&name);
+            let expected =
+                Error::from(Role::new(value.roles[0].id.clone(), RoleData::new(name)).unwrap_err());
+            assert!(matches!(
+                (value.normalized().unwrap_err(), expected),
+                (Error::Logic(actual), Error::Logic(expected)) if actual.to_string() == expected.to_string()
+            ));
+        }
     }
 
     #[test]

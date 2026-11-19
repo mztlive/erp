@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::validation::{normalize_optional_text, normalize_required_text_ref};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -88,7 +88,7 @@ impl Role {
     pub fn new(id: RoleId, data: RoleData) -> Result<Self> {
         Ok(Self {
             base: BaseModel::new(id.to_string()),
-            name: normalize_required_text(data.name, "角色名称不能为空", NAME_MAX_LEN, "角色名称过长")?,
+            name: Self::normalize_name(&data.name)?,
             description: normalize_optional_text(data.description, "角色描述", DESCRIPTION_MAX_LEN)?,
             system: data.system,
             workbenches: data.workbenches,
@@ -96,11 +96,16 @@ impl Role {
         })
     }
 
+    /// 创建、更新及文件规范化共用的角色名称校验，裁剪空白并拒绝空名或超长名称。
+    pub(crate) fn normalize_name(name: &str) -> Result<String> {
+        normalize_required_text_ref(name, "角色名称不能为空", NAME_MAX_LEN, "角色名称过长")
+    }
+
     /// 按已提供字段更新展示信息、工作台及停用状态；文本不合规时返回错误。
     /// 描述校验失败时名称可能已在内存中更新，调用方不得保存此次结果。
     pub fn update(&mut self, update: RoleUpdate) -> Result<()> {
         if let Some(name) = update.name {
-            self.name = normalize_required_text(name, "角色名称不能为空", NAME_MAX_LEN, "角色名称过长")?;
+            self.name = Self::normalize_name(&name)?;
         }
         if let Some(description) = update.description {
             self.description = normalize_optional_text(Some(description), "角色描述", DESCRIPTION_MAX_LEN)?;

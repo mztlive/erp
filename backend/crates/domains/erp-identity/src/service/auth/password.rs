@@ -13,7 +13,7 @@ pub(crate) enum PasswordCheck {
     Current,
     Upgraded(
         /// 旧密码通过验证后生成的 Argon2 凭证，由调用方按用例决定是否写入。
-        Secret
+        Secret,
     ),
 }
 
@@ -78,16 +78,11 @@ where
 
 // 在阻塞线程上完成验密；无凭证时做占位计算，只有旧格式密码匹配才生成 Argon2 哈希。
 fn verify_password_sync(secret: Option<Secret>, password: String) -> erp_core::Result<PasswordCheck> {
-    let Some(mut secret) = secret else {
-        Secret::verify_password_or_dummy(None, password.as_str());
-        return Ok(PasswordCheck::Mismatch);
-    };
-
-    let verification = Secret::verify_password_or_dummy(Some(&secret), password.as_str());
-    match verification {
-        PasswordVerification::Mismatch => Ok(PasswordCheck::Mismatch),
-        PasswordVerification::Current => Ok(PasswordCheck::Current),
-        PasswordVerification::Legacy => {
+    let verification = Secret::verify_password_or_dummy(secret.as_ref(), password.as_str());
+    match (verification, secret) {
+        (PasswordVerification::Mismatch, _) | (_, None) => Ok(PasswordCheck::Mismatch),
+        (PasswordVerification::Current, _) => Ok(PasswordCheck::Current),
+        (PasswordVerification::Legacy, Some(mut secret)) => {
             secret.change_password(password)?;
             Ok(PasswordCheck::Upgraded(secret))
         },
