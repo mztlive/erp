@@ -1,9 +1,9 @@
 //! 按权限固定的授权规则。对象判断和查询转换共用这里产生的数据条件。
+use std::borrow::Cow;
 use std::slice;
 
 use erp_permissions::{
-    MODULES, catalog, fulfillment, internal, receivable, sales_inquiry, supplier, supplier_fulfillment,
-    supplier_offering,
+    MODULES, catalog, internal, receivable, sales_inquiry, supplier, supplier_fulfillment, supplier_offering,
 };
 
 use crate::QualifiedPermissions;
@@ -30,6 +30,30 @@ use crate::entity::authorization::{
 };
 use crate::entity::resource_access::ResourceKind;
 use crate::{Error, Permission, Result};
+
+// 同一来源可按不同入口的合格角色解析，不能只按来源归并。
+pub(super) enum ScopeLookup<'a> {
+    Capability,
+    Resolved(&'a [(Permission, Permission, ResolvedScope)]),
+}
+
+impl<'a> ScopeLookup<'a> {
+    pub(super) fn get(
+        &self,
+        entry: &Permission,
+        source: &Permission,
+        missing: impl FnOnce() -> Error,
+    ) -> Result<Cow<'a, ResolvedScope>> {
+        match self {
+            Self::Capability => capability_scope(source).map(Cow::Owned),
+            Self::Resolved(scopes) => scopes
+                .iter()
+                .find(|(key, origin, _)| key == entry && origin == source)
+                .map(|(_, _, scope)| Cow::Borrowed(scope))
+                .ok_or_else(missing),
+        }
+    }
+}
 
 // 取固定入口要求的完整同角色功能权限组合，不接受业务调用方改动所需集合。
 pub(crate) fn same_role_permissions(permission: &Permission) -> Vec<Permission> {
@@ -418,11 +442,12 @@ pub(crate) fn binding_condition(permission: &Permission, output: &QueryOutput) -
                     data_condition(permission, Some(&capability_scope(permission)?))?,
                 )?,
             )?;
-            if management_permission(permission).is_some() {
-                return Ok(AccessRule::all(vec![
-                    rule,
-                    data_condition(&work_item::MANAGE, Some(&capability_scope(&work_item::MANAGE)?))?,
-                ]));
+            if task_query(permission) {
+                // 创建候选仍使用范围条件，查询另须支持精确任务的指派条件。
+                return Ok(AccessRule::all(vec![rule, task_condition(permission, None)?]));
+            }
+            if let Some(management) = management_binding_condition(permission)? {
+                return Ok(AccessRule::all(vec![rule, management]));
             }
             Ok(rule)
         },
@@ -444,6 +469,12 @@ pub(super) fn supplier_catalog_condition(rule: AccessRule) -> Result<AccessRule>
 // 为工作项查询指定固定的管理动作过滤，业务调用不能另选查询入口作为管理范围。
 pub(crate) fn management_permission(permission: &Permission) -> Option<Permission> {
     (permission == &work_item::LIST || permission == &work_item::DETAIL).then_some(work_item::MANAGE)
+}
+
+pub(super) fn management_binding_condition(permission: &Permission) -> Result<Option<AccessRule>> {
+    management_permission(permission)
+        .map(|management| data_condition(&management, Some(&capability_scope(&management)?)))
+        .transpose()
 }
 
 // 从固定入口提取附加功能资格，为规则内部各分支准备独立取证；客户端不能添加或省略资格。
@@ -509,48 +540,10 @@ pub(super) fn task_permissions(permission: &Permission) -> Vec<Permission> {
     if permission == &supplier_settlement::STATEMENT_REVIEW_DECIDE {
         permissions.extend([supplier_settlement::STATEMENT_DETAIL, work_item::DETAIL]);
     }
-    permissions.extend(task_execution_permissions(permission));
+    permissions.extend_from_slice(work_items::fulfillment_task_permissions(permission));
     permissions.sort();
     permissions.dedup();
     permissions
-}
-
-fn task_execution_permissions(permission: &Permission) -> Vec<Permission> {
-    match permission.resource() {
-        "delivery" => vec![
-            fulfillment::DELIVERY_DELIVERY_LIST,
-            fulfillment::DELIVERY_DELIVERY_DETAIL,
-            fulfillment::DELIVERY_DELIVERY_UPDATE,
-            fulfillment::DELIVERY_DELIVERY_POST,
-        ],
-        "purchase_receipt" => vec![
-            fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_LIST,
-            fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_DETAIL,
-            fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_UPDATE,
-            fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_POST,
-        ],
-        "electronic_delivery" => vec![
-            fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_LIST,
-            fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
-        ],
-        "service_fulfillment" => vec![
-            fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_LIST,
-            fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
-        ],
-        "customer_acceptance" => vec![
-            fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_LIST,
-            fulfillment::ACCEPTANCE_EVIDENCE_CUSTOMER_ACCEPTANCE_EVIDENCE,
-            fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_CREATE,
-            fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_COMMIT,
-            sales_order::EVIDENCE_SALES_ORDER_EVIDENCE_DOWNLOAD,
-        ],
-        "supplier_fulfillment_order" if permission == &supplier_fulfillment::ORDER_INVESTIGATION => vec![
-            supplier_fulfillment::EXECUTION_SETUP_SUPPLIER_ORDER_EXECUTION_SETUP,
-            supplier_fulfillment::ORDER_INVESTIGATION,
-            supplier_fulfillment::ORDER_TASK_COMPLETION,
-        ],
-        _ => vec![],
-    }
 }
 
 pub(super) fn task_supported(permission: &Permission) -> bool {

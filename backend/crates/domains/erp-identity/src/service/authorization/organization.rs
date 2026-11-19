@@ -7,7 +7,7 @@ use erp_permissions::{Permission, internal, organization};
 use persistence_core::{ExecutionBoundary, Executor};
 
 use super::AuthorizationService;
-use super::resolve::Resolution;
+use super::resolve::scope_deadline;
 use crate::entity::authorization::AccessContext;
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Result};
@@ -80,9 +80,7 @@ impl AuthorizationService {
         };
         let access = self.resolve_scope(&context, permission, &qualified, executor).await?;
 
-        let mut resolution = Resolution::default();
-        resolution.include(&access);
-        let scope = OrganizationScope { access, boundary, valid_until: resolution.valid_until };
+        let scope = OrganizationScope { valid_until: scope_deadline(&access), access, boundary };
         scope.ensure_current(executor)?;
         Ok(scope)
     }

@@ -4,7 +4,7 @@ use erp_core::common::time::Instant;
 use erp_permissions::{access_control, admin, organization};
 use persistence_core::{ExecutionBoundary, Executor};
 
-use super::resolve::Resolution;
+use super::resolve::scope_deadline;
 use super::{AuthorizationService, operations};
 use crate::entity::authorization::AccessContext;
 use crate::entity::authorization_bundle::PolicyDocument;
@@ -111,9 +111,7 @@ impl AuthorizationService {
         if !boundary.is_current(executor) {
             return Err(Error::ValidationError("授权文件检查跨越执行阶段".into()));
         }
-        let mut resolution = Resolution::default();
-        resolution.include(&access);
-        let result = PolicyBundleAccess { scope: access, boundary, valid_until: resolution.valid_until };
+        let result = PolicyBundleAccess { valid_until: scope_deadline(&access), scope: access, boundary };
         result.ensure_current(executor)?;
         Ok(result)
     }

@@ -184,9 +184,9 @@ async fn task_delivery_checks_the_original_deadline_after_management_projection(
     let mut executor = SnapshotExecutor::default();
     let mut access: CompiledAccess = service.query(&actor(), &work_item::LIST, &mut executor).await.unwrap();
     assert_eq!(members(access.management_stages().unwrap()), ["mine", "other"]);
-    assert_eq!(access.proof.valid_until, Some(deadline));
+    assert_eq!(access.validity.valid_until, Some(deadline));
     // 推进冻结到期边界，模拟展示读取完成时已经到期，不依赖真实等待。
-    access.proof.valid_until = Some(Instant::from_unix_secs(1));
+    access.validity.valid_until = Some(Instant::from_unix_secs(1));
     assert!(matches!(service.validate(&access, &mut executor).await, Err(Error::ConflictError(_))));
     assert!(executor.boundary().unwrap().is_snapshot());
 }

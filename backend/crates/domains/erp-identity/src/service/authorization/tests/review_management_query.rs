@@ -115,7 +115,7 @@ async fn refund_management_query_requires_same_role_ledger_only_for_funds_source
         approval_admin::SUPPLIER_REFUND_RUNTIME,
     ];
     let ledger = policy_permission::FINANCE_LEDGER_READ;
-    let mut executor = SnapshotExecutor::default();
+    let mut executor = ReadExecutor::default();
     for combined in [false, true] {
         identity.state.lock().unwrap().grants = if combined {
             let mut grants = refund_admin.clone();
@@ -126,7 +126,7 @@ async fn refund_management_query_requires_same_role_ledger_only_for_funds_source
         };
         let access =
             service.query(&actor(), &internal::APPROVAL_MANAGEMENT_READ, &mut executor).await.unwrap();
-        let AccessRule::Any(partitions) = &access.proof.rule else {
+        let AccessRule::Any(partitions) = &access.revalidation.as_ref().unwrap().rules.root else {
             panic!("管理列表必须保留两个退款类型的账户来源");
         };
         let keys = partitions
@@ -158,9 +158,9 @@ async fn management_query_retains_scope_expiry_and_rejects_revocation_before_del
     let mut executor = SnapshotExecutor::default();
     let mut access =
         service.query(&actor(), &internal::APPROVAL_MANAGEMENT_READ, &mut executor).await.unwrap();
-    assert_eq!(access.proof.valid_until, Some(deadline));
+    assert_eq!(access.validity.valid_until, Some(deadline));
     assert_eq!(management_members(&access), ["sales"]);
-    access.proof.valid_until = Some(Instant::from_unix_secs(1));
+    access.validity.valid_until = Some(Instant::from_unix_secs(1));
     assert!(matches!(service.validate(&access, &mut executor).await, Err(Error::ConflictError(_))));
 
     let mut executor = ReadExecutor::default();

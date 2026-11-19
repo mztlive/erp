@@ -13,7 +13,10 @@ use persistence_core::{Executor, ReadExecutor};
 use super::binding::FrozenMapping;
 use super::fixtures::execute;
 use super::testing::{Mapping, mapping};
-use super::{AccessProof, CompiledAccess, compile};
+use super::{
+    AccessProof, AccessValidity, CompiledAccess, Replay, ResolvedAccess, ResolvedRules, ScopeMetadata,
+    compile,
+};
 use crate::entity::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::authorization::{
     AccessContext, AccessFact, AccessRule, MappingFacts, QueryModel, QueryOutput, RelationKey, RelationMatch,
@@ -103,18 +106,17 @@ fn proof(
             as_of: Instant::now(),
         },
         qualified: QualifiedPermissions::test_grants(&[]),
-        approval_source: None,
-        task: false,
-        rule,
-        whole_rule,
-        management_filter: None,
-        has_role_scope: false,
-        version: "phase5".into(),
-        valid_until: None,
-        policy_version: 1,
-        organization_version: 1,
-        boundary: executor.boundary().unwrap(),
-        service: Arc::new(()),
+        resolved: ResolvedAccess {
+            rules: ResolvedRules { root: rule, whole: whole_rule, management: None },
+            replay: Replay::Target,
+            version: "phase5".into(),
+        },
+        scope: ScopeMetadata { has_role_scope: false, policy_version: 1, organization_version: 1 },
+        validity: AccessValidity {
+            valid_until: None,
+            boundary: executor.boundary().unwrap(),
+            service: Arc::new(()),
+        },
     }
 }
 async fn plan(
@@ -127,7 +129,7 @@ async fn plan(
     let model = mapping.model().clone();
     let proof = proof(permission, rule, whole, &model, executor);
     let frozen = FrozenMapping::freeze(mapping, &mut vec![], 0).unwrap();
-    compile(&proof, &frozen, &model, executor).await.unwrap()
+    compile(proof, &frozen, &model, executor).await.unwrap()
 }
 fn ids(rows: Vec<Document>) -> Vec<String> {
     rows.into_iter().map(|row| row.get_str("id").unwrap().to_string()).collect()
@@ -296,7 +298,7 @@ async fn independent_source_plan_uses_its_entry_context_and_reuses_exact_prepara
 async fn static_deadline_needs_no_preparation_and_expires_the_compiled_plan() {
     let deadline = Instant::from_unix_secs(4_102_444_800);
     let before = Instant::from_unix_secs(deadline.unix_secs() - 1);
-    AccessProof::with_test_time(before, async {
+    AccessValidity::with_test_time(before, async {
         let mut executor = ReadExecutor::default();
         let root = Arc::new(DecoratedMapping {
             deadline: Some(deadline),
@@ -316,12 +318,12 @@ async fn static_deadline_needs_no_preparation_and_expires_the_compiled_plan() {
         .unwrap();
 
         let plan = service.query(&actor, &sales_order::DETAIL, &mut executor).await.unwrap();
-        assert_eq!(plan.proof.valid_until, Some(deadline));
+        assert_eq!(plan.validity.valid_until, Some(deadline));
         assert!(plan.dependencies.is_empty());
         service.validate(&plan, &mut executor).await.unwrap();
 
         let plan = service.query(&actor, &sales_order::DETAIL, &mut executor).await.unwrap();
-        AccessProof::set_test_time(deadline);
+        AccessValidity::set_test_time(deadline);
         assert!(matches!(
             service.validate(&plan, &mut executor).await,
             Err(Error::ConflictError(message)) if message == "DATA_SCOPE_CHANGED：授权关系已到期"
@@ -340,7 +342,7 @@ async fn dynamic_deadline_and_phase_changes_reject_delivery() {
     let plan =
         plan(sales_order::DETAIL, AccessRule::Fact(AccessFact::Owned), None, root.clone(), &mut executor)
             .await;
-    assert_eq!(plan.proof.valid_until, Some(deadline));
+    assert_eq!(plan.validity.valid_until, Some(deadline));
     assert_eq!(root.prepares.load(Ordering::SeqCst), 1);
 
     *root.expires.lock().unwrap() = Some(Instant::from_unix_secs(1));
@@ -376,7 +378,7 @@ async fn fixed_lookup_preserves_missing_relations_and_is_immutable_after_binding
     let frozen = FrozenMapping::freeze(root.clone(), &mut vec![], 0).unwrap();
     let proof =
         proof(sales_order::DETAIL, AccessRule::Fact(AccessFact::Owned), None, root.model(), &executor);
-    let plan = compile(&proof, &frozen, root.model(), &mut executor).await.unwrap();
+    let plan = compile(proof.clone(), &frozen, root.model(), &mut executor).await.unwrap();
     assert_eq!(
         ids(execute(
             vec![row("own", "user"), row("other", "other")],
@@ -389,7 +391,7 @@ async fn fixed_lookup_preserves_missing_relations_and_is_immutable_after_binding
 
     root.fixed.lock().unwrap().clear();
     assert!(matches!(
-        compile(&proof, &frozen, root.model(), &mut executor).await,
+        compile(proof, &frozen, root.model(), &mut executor).await,
         Err(Error::ValidationError(_))
     ));
 }

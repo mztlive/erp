@@ -18,6 +18,39 @@ const DECISION: &[Permission] = &[approval_instance::COPIES_HISTORY, approval_in
 
 const REWORK_EXECUTION: &[Permission] = &[work_item::DETAIL];
 
+const PURCHASE_RECEIPT_EXECUTION: &[Permission] = &[
+    fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_LIST,
+    fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_DETAIL,
+    fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_UPDATE,
+    fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_POST,
+];
+const DELIVERY_EXECUTION: &[Permission] = &[
+    fulfillment::DELIVERY_DELIVERY_LIST,
+    fulfillment::DELIVERY_DELIVERY_DETAIL,
+    fulfillment::DELIVERY_DELIVERY_UPDATE,
+    fulfillment::DELIVERY_DELIVERY_POST,
+];
+const ELECTRONIC_DELIVERY_EXECUTION: &[Permission] = &[
+    fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_LIST,
+    fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
+];
+const SERVICE_FULFILLMENT_EXECUTION: &[Permission] = &[
+    fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_LIST,
+    fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
+];
+const CUSTOMER_ACCEPTANCE_EXECUTION: &[Permission] = &[
+    fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_LIST,
+    fulfillment::ACCEPTANCE_EVIDENCE_CUSTOMER_ACCEPTANCE_EVIDENCE,
+    fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_CREATE,
+    fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_COMMIT,
+    sales_order::EVIDENCE_SALES_ORDER_EVIDENCE_DOWNLOAD,
+];
+const SUPPLIER_ORDER_INVESTIGATION_EXECUTION: &[Permission] = &[
+    supplier_fulfillment::EXECUTION_SETUP_SUPPLIER_ORDER_EXECUTION_SETUP,
+    supplier_fulfillment::ORDER_INVESTIGATION,
+    supplier_fulfillment::ORDER_TASK_COMPLETION,
+];
+
 type TaskRequirements = (&'static str, &'static str, Permission, &'static [Permission]);
 
 // 每个配对分别登记读取权限和执行子集；部分读取权限也是形成前预检的必需资格。
@@ -74,54 +107,22 @@ static TASK_REQUIREMENTS: &[TaskRequirements] = &[
         "FULFILLMENT_OPERATION",
         "purchase_receipt",
         fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_POST,
-        &[
-            fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_LIST,
-            fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_DETAIL,
-            fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_UPDATE,
-            fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_POST,
-        ],
+        PURCHASE_RECEIPT_EXECUTION,
     ),
-    (
-        "FULFILLMENT_OPERATION",
-        "delivery",
-        fulfillment::DELIVERY_DELIVERY_POST,
-        &[
-            fulfillment::DELIVERY_DELIVERY_LIST,
-            fulfillment::DELIVERY_DELIVERY_DETAIL,
-            fulfillment::DELIVERY_DELIVERY_UPDATE,
-            fulfillment::DELIVERY_DELIVERY_POST,
-        ],
-    ),
+    ("FULFILLMENT_OPERATION", "delivery", fulfillment::DELIVERY_DELIVERY_POST, DELIVERY_EXECUTION),
     (
         "FULFILLMENT_OPERATION",
         "electronic_delivery",
         fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
-        &[
-            fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_LIST,
-            fulfillment::ELECTRONIC_DELIVERY_ELECTRONIC_DELIVERY_CONFIRM,
-        ],
+        ELECTRONIC_DELIVERY_EXECUTION,
     ),
     (
         "FULFILLMENT_OPERATION",
         "service_fulfillment",
         fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
-        &[
-            fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_LIST,
-            fulfillment::SERVICE_FULFILLMENT_SERVICE_FULFILLMENT_CONFIRM,
-        ],
+        SERVICE_FULFILLMENT_EXECUTION,
     ),
-    (
-        "CUSTOMER_ACCEPTANCE_REGISTRATION",
-        "sales_order",
-        sales_order::DETAIL,
-        &[
-            fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_LIST,
-            fulfillment::ACCEPTANCE_EVIDENCE_CUSTOMER_ACCEPTANCE_EVIDENCE,
-            fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_CREATE,
-            fulfillment::CUSTOMER_ACCEPTANCE_CUSTOMER_ACCEPTANCE_COMMIT,
-            sales_order::EVIDENCE_SALES_ORDER_EVIDENCE_DOWNLOAD,
-        ],
-    ),
+    ("CUSTOMER_ACCEPTANCE_REGISTRATION", "sales_order", sales_order::DETAIL, CUSTOMER_ACCEPTANCE_EXECUTION),
     ("DOCUMENT_APPROVAL", "sales_order", sales_order::DETAIL, &[]),
     (
         "SUPPLIER_PAYMENT_EXECUTION",
@@ -159,21 +160,13 @@ static TASK_REQUIREMENTS: &[TaskRequirements] = &[
         "INTEGRATION_RESULT_UNKNOWN",
         "SUPPLIER_FULFILLMENT_ORDER",
         supplier_fulfillment::ORDER_DETAIL,
-        &[
-            supplier_fulfillment::EXECUTION_SETUP_SUPPLIER_ORDER_EXECUTION_SETUP,
-            supplier_fulfillment::ORDER_INVESTIGATION,
-            supplier_fulfillment::ORDER_TASK_COMPLETION,
-        ],
+        SUPPLIER_ORDER_INVESTIGATION_EXECUTION,
     ),
     (
         "BUSINESS_EXCEPTION",
         "SUPPLIER_FULFILLMENT_ORDER",
         supplier_fulfillment::ORDER_DETAIL,
-        &[
-            supplier_fulfillment::EXECUTION_SETUP_SUPPLIER_ORDER_EXECUTION_SETUP,
-            supplier_fulfillment::ORDER_INVESTIGATION,
-            supplier_fulfillment::ORDER_TASK_COMPLETION,
-        ],
+        SUPPLIER_ORDER_INVESTIGATION_EXECUTION,
     ),
     (
         "BUSINESS_EXCEPTION",
@@ -213,6 +206,58 @@ static TASK_REQUIREMENTS: &[TaskRequirements] = &[
     ("APPROVAL_REWORK", "payment_reversal", purchase_order::DETAIL, REWORK_EXECUTION),
 ];
 
+pub(super) fn fulfillment_task_permissions(permission: &Permission) -> &'static [Permission] {
+    match permission.resource() {
+        "purchase_receipt" => PURCHASE_RECEIPT_EXECUTION,
+        "delivery" => DELIVERY_EXECUTION,
+        "electronic_delivery" => ELECTRONIC_DELIVERY_EXECUTION,
+        "service_fulfillment" => SERVICE_FULFILLMENT_EXECUTION,
+        "customer_acceptance" => CUSTOMER_ACCEPTANCE_EXECUTION,
+        "supplier_fulfillment_order" if permission == &supplier_fulfillment::ORDER_INVESTIGATION => {
+            SUPPLIER_ORDER_INVESTIGATION_EXECUTION
+        },
+        _ => &[],
+    }
+}
+
+pub(super) struct PortalRequest {
+    kind: &'static str,
+    pub(super) detail_key: &'static str,
+    pub(super) read: Permission,
+    pub(super) review: Permission,
+}
+
+pub(super) static PORTAL_REQUESTS: &[PortalRequest] = &[
+    PortalRequest {
+        kind: "offering_create",
+        detail_key: "detail_portal_application",
+        read: internal::PORTAL_MATERIAL_READ,
+        review: internal::PORTAL_MATERIAL_REVIEW_OFFERING_CREATE,
+    },
+    PortalRequest {
+        kind: "offering_update",
+        detail_key: "detail_portal_offering",
+        read: internal::PORTAL_MATERIAL_READ_OFFERING,
+        review: internal::PORTAL_MATERIAL_REVIEW_OFFERING_UPDATE,
+    },
+    PortalRequest {
+        kind: "new_product",
+        detail_key: "detail_portal_new_product",
+        read: internal::PORTAL_MATERIAL_READ,
+        review: internal::PORTAL_MATERIAL_REVIEW_NEW_PRODUCT,
+    },
+    PortalRequest {
+        kind: "cooperation",
+        detail_key: "detail_portal_cooperation",
+        read: internal::PORTAL_MATERIAL_READ,
+        review: internal::PORTAL_MATERIAL_REVIEW_COOPERATION,
+    },
+];
+
+pub(super) fn portal_request(kind: &str) -> Option<&'static PortalRequest> {
+    PORTAL_REQUESTS.iter().find(|request| request.kind == kind)
+}
+
 // 集中预取各登记任务种类可能用到的功能权限；与本次操作匹配的组合须由持久化任务事实确定。
 pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     if permission == &internal::WORK_ITEM_EXECUTION_QUALIFICATION {
@@ -234,15 +279,8 @@ pub(super) fn qualifications(permission: &Permission) -> Vec<Permission> {
     if [work_item::DETAIL, internal::WORK_ITEM_EXECUTE, internal::WORK_ITEM_RECIPIENT].contains(permission) {
         required.extend(super::approvals::qualifications(&internal::APPROVAL_MANAGEMENT_READ));
     }
-    for permission in [
-        internal::PORTAL_MATERIAL_READ,
-        internal::PORTAL_MATERIAL_READ_OFFERING,
-        internal::PORTAL_MATERIAL_REVIEW_COOPERATION,
-        internal::PORTAL_MATERIAL_REVIEW_OFFERING_CREATE,
-        internal::PORTAL_MATERIAL_REVIEW_OFFERING_UPDATE,
-        internal::PORTAL_MATERIAL_REVIEW_NEW_PRODUCT,
-    ] {
-        required.extend(rules::qualifications(&permission));
+    for permission in PORTAL_REQUESTS.iter().flat_map(|request| [&request.read, &request.review]) {
+        required.extend(rules::qualifications(permission));
     }
     required
 }
@@ -393,20 +431,11 @@ impl AuthorizationService {
         executor: &mut dyn Executor,
     ) -> Result<Vec<AccessProof>> {
         let source = exact_source(object, "portal_source", "supplier_portal_material")?;
-        let permissions = match source.subject_type.get()?.as_str() {
-            "offering_create" => {
-                [internal::PORTAL_MATERIAL_READ, internal::PORTAL_MATERIAL_REVIEW_OFFERING_CREATE]
-            },
-            "offering_update" => {
-                [internal::PORTAL_MATERIAL_READ_OFFERING, internal::PORTAL_MATERIAL_REVIEW_OFFERING_UPDATE]
-            },
-            "new_product" => [internal::PORTAL_MATERIAL_READ, internal::PORTAL_MATERIAL_REVIEW_NEW_PRODUCT],
-            "cooperation" => [internal::PORTAL_MATERIAL_READ, internal::PORTAL_MATERIAL_REVIEW_COOPERATION],
-            _ => return Err(Error::ValidationError("任务的真实供应商申请种类未登记".into())),
-        };
+        let request = portal_request(source.subject_type.get()?)
+            .ok_or_else(|| Error::ValidationError("任务的真实供应商申请种类未登记".into()))?;
 
         let mut sources = Vec::new();
-        for permission in permissions {
+        for permission in [request.read.clone(), request.review.clone()] {
             if !rules::qualified(&permission, &proof.qualified) {
                 return Err(Error::Forbidden("当前账号不具备任务真实申请的业务资格".into()));
             }
@@ -427,11 +456,11 @@ impl AuthorizationService {
         source: &ObjectFacts,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let grants = self.target_grants(&proof.context, &proof.rule, facts, executor).await?;
-        if !proof.rule.allows_object(proof.context.actor.id(), source, &grants)? {
+        let grants = self.target_grants(&proof.context, &proof.resolved.rules.root, facts, executor).await?;
+        if !proof.resolved.rules.root.allows_object(proof.context.actor.id(), source, &grants)? {
             return Err(Error::Forbidden("任务真实来源不在当前可读取范围内".into()));
         }
-        proof.ensure_current(executor)
+        proof.validity.ensure_current(executor)
     }
 }
 

@@ -134,7 +134,7 @@ async fn fulfillment_list_delivery_rejects_expiry_after_the_query_and_ends_succe
 
     let access = service.query(&actor(), &permission, &mut executor).await.unwrap();
     assert_eq!(inquiry_members(&access), ["one", "other"]);
-    assert_eq!(access.proof.valid_until, Some(deadline));
+    assert_eq!(access.validity.valid_until, Some(deadline));
     service.validate(&access, &mut executor).await.unwrap();
     assert!(matches!(access.ensure_current(&mut executor), Err(Error::ValidationError(_))));
 
@@ -142,7 +142,7 @@ async fn fulfillment_list_delivery_rejects_expiry_after_the_query_and_ends_succe
     assert_eq!(inquiry_members(&access), ["one", "other"]);
     access.ensure_current(&mut executor).unwrap();
     // 推进已冻结的截止时间，模拟补齐展示期间到期，避免依赖真实等待。
-    access.proof.valid_until = Some(Instant::from_unix_secs(1));
+    access.validity.valid_until = Some(Instant::from_unix_secs(1));
     assert!(matches!(
         service.validate(&access, &mut executor).await,
         Err(Error::ConflictError(message)) if message.starts_with("DATA_SCOPE_CHANGED")

@@ -36,7 +36,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
 use erp_permissions::{
-    approval_instance, integration_ops, purchase_payment_request, receivable, returns,
+    approval_instance, integration_ops, purchase_order, purchase_payment_request, receivable, returns,
     sales_inquiry as inquiry, sales_order,
 };
 use fixtures::*;
@@ -115,6 +115,86 @@ fn builder_checks_fact_capabilities_sources_and_output_before_any_request() {
     let mut builder = complete();
     builder.mappings.insert(permission.clone(), map);
     assert!(matches!(builder.build(), Err(Error::ValidationError(_))));
+}
+
+#[test]
+fn builder_requires_assignment_for_purchase_creation_queries() {
+    let permission = purchase_order::CREATE;
+    let mut map = mapping(&permission);
+    assert!(Arc::get_mut(&mut map).unwrap().model.facts.remove(&FactKind::Assignee));
+    let mut builder = complete();
+    builder.mappings.insert(permission.clone(), map);
+
+    assert!(matches!(
+        builder.build(),
+        Err(Error::ValidationError(message))
+            if message.contains(&format!("授权绑定 {permission}")) && message.contains("Assignee")
+    ));
+}
+
+#[test]
+fn purchase_creation_query_binding_still_rejects_restricted_outputs() {
+    let permission = purchase_order::CREATE;
+    for output in [
+        QueryOutput::Share { fields: ["id".into()].into() },
+        QueryOutput::Existence { fields: ["id".into()].into() },
+    ] {
+        let mut map = mapping(&permission);
+        let model = &mut Arc::get_mut(&mut map).unwrap().model;
+        model.output = output;
+        model.facts.remove(&FactKind::Assignee);
+        let mut builder = complete();
+        builder.mappings.insert(permission.clone(), map);
+        assert!(matches!(
+            builder.build(),
+            Err(Error::ValidationError(message)) if message == "此权限不支持受限输出"
+        ));
+    }
+}
+
+#[tokio::test]
+async fn purchase_creation_keeps_its_candidate_and_exact_task_contracts() {
+    let permission = purchase_order::CREATE;
+    let facts = Arc::new(Facts::new(vec![ObjectFacts {
+        assignee_id: FactValue::Known(Some("user".into())),
+        ..object(permission.resource(), "task", "user")
+    }]));
+    let mut builder = complete();
+    builder.facts.insert("work_item".into(), facts.clone());
+    let service = builder.build().unwrap();
+    let mut read = ReadExecutor::default();
+    let access = service.query(&actor(), &permission, &mut read).await.unwrap();
+    assert_eq!(
+        task_members(&access, &[("mine", "user", false, ""), ("theirs", "other", false, "")]),
+        ["mine"]
+    );
+    service.validate(&access, &mut read).await.unwrap();
+
+    let mut executor = SnapshotExecutor::default();
+    service
+        .require(
+            &actor(),
+            &permission,
+            AccessTarget::Candidate(candidate(permission.resource(), "user")),
+            &mut executor,
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        service.require(&actor(), &permission, AccessTarget::record("task").unwrap(), &mut executor).await,
+        Err(Error::ValidationError(message)) if message == "此权限不支持该授权目标"
+    ));
+    assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
+    service
+        .require(
+            &actor(),
+            &permission,
+            AccessTarget::Task { id: "task".into(), version: "v1".into() },
+            &mut executor,
+        )
+        .await
+        .unwrap();
+    assert_eq!(facts.calls.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]

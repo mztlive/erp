@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 
 use erp_permissions::{customer, internal};
 
-use super::capability_scope;
+use super::ScopeLookup;
 use crate::entity::access_control::ResolvedScope;
 use crate::entity::authorization::{AccessRule, FactKind, RelationKey, RelationMatch};
 use crate::{Error, Permission, QualifiedPermissions, Result};
@@ -19,32 +19,36 @@ pub(crate) fn scope_requests(permission: &Permission) -> Vec<(Permission, Permis
 }
 
 // 在销售基础数据条件上追加真实客户来源的完整覆盖要求；客户必须落入本次独立客户范围。
-pub(crate) fn condition(
+pub(in crate::service::authorization) fn condition(
     permission: &Permission,
     qualified: &QualifiedPermissions,
-    scopes: &[(Permission, Permission, ResolvedScope)],
+    scopes: &ScopeLookup<'_>,
+    base: AccessRule,
+) -> Result<AccessRule> {
+    condition_with(permission, Some(qualified), scopes, base)
+}
+
+// 启动时核对质量查询对销售根模型和真实客户关联所需的全部事实能力。
+pub(super) fn binding_condition(permission: &Permission, base: AccessRule) -> Result<AccessRule> {
+    condition_with(permission, None, &ScopeLookup::Capability, base)
+}
+
+fn condition_with(
+    permission: &Permission,
+    qualified: Option<&QualifiedPermissions>,
+    scopes: &ScopeLookup<'_>,
     base: AccessRule,
 ) -> Result<AccessRule> {
     if !current(permission) {
         return Ok(base);
     }
-    if !qualified.same_role(&[customer::LIST]) {
+    if qualified.is_some_and(|qualified| !qualified.same_role(&[customer::LIST])) {
         return Err(Error::Forbidden("客户质量查询缺少客户列表资格".into()));
     }
-    let scope = scopes
-        .iter()
-        .find(|(entry, source, _)| entry == &customer::LIST && source == &customer::LIST)
-        .map(|(_, _, scope)| scope)
-        .ok_or_else(|| Error::ValidationError("客户质量查询缺少独立客户范围".into()))?;
-    Ok(AccessRule::all(vec![base, customer_condition(scope)?]))
-}
-
-// 启动时核对质量查询对销售根模型和真实客户关联所需的全部事实能力。
-pub(crate) fn binding_condition(permission: &Permission, base: AccessRule) -> Result<AccessRule> {
-    if !current(permission) {
-        return Ok(base);
-    }
-    Ok(AccessRule::all(vec![base, customer_condition(&capability_scope(&customer::LIST)?)?]))
+    let scope = scopes.get(&customer::LIST, &customer::LIST, || {
+        Error::ValidationError("客户质量查询缺少独立客户范围".into())
+    })?;
+    Ok(AccessRule::all(vec![base, customer_condition(&scope)?]))
 }
 
 fn current(permission: &Permission) -> bool {
@@ -125,10 +129,23 @@ mod tests {
         condition(
             &internal::CUSTOMER_QUALITY_CURRENT,
             &qualified,
-            &scopes,
+            &ScopeLookup::Resolved(&scopes),
             AccessRule::scope(&scope(sales_company), false),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn binding_matches_runtime_with_capability_scope() {
+        let permission = internal::CUSTOMER_QUALITY_CURRENT;
+        let qualified = QualifiedPermissions::test_grants(&[("customer", &[customer::LIST])]);
+        let base = AccessRule::scope(&scope(false), false);
+        let scope = super::super::capability_scope(&customer::LIST).unwrap();
+        let scopes = [(customer::LIST, customer::LIST, scope)];
+        assert_eq!(
+            binding_condition(&permission, base.clone()).unwrap(),
+            condition(&permission, &qualified, &ScopeLookup::Resolved(&scopes), base).unwrap()
+        );
     }
 
     #[test]
@@ -175,13 +192,23 @@ mod tests {
     fn missing_customer_qualification_scope_or_real_source_fails_closed() {
         let qualified = QualifiedPermissions::test_grants(&[("sales", &[sales_order::LIST])]);
         assert!(matches!(
-            condition(&internal::CUSTOMER_QUALITY_CURRENT, &qualified, &[], AccessRule::Allow),
+            condition(
+                &internal::CUSTOMER_QUALITY_CURRENT,
+                &qualified,
+                &ScopeLookup::Resolved(&[]),
+                AccessRule::Allow
+            ),
             Err(Error::Forbidden(_))
         ));
 
         let qualified = QualifiedPermissions::test_grants(&[("customers", &[customer::LIST])]);
         assert!(matches!(
-            condition(&internal::CUSTOMER_QUALITY_CURRENT, &qualified, &[], AccessRule::Allow),
+            condition(
+                &internal::CUSTOMER_QUALITY_CURRENT,
+                &qualified,
+                &ScopeLookup::Resolved(&[]),
+                AccessRule::Allow
+            ),
             Err(Error::ValidationError(_))
         ));
 

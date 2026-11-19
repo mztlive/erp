@@ -33,6 +33,10 @@ pub(super) struct SourceEvidence {
 }
 
 impl SourceEvidence {
+    pub(super) fn from_proofs(proofs: Vec<AccessProof>) -> Self {
+        Self { proofs, facts: Vec::new() }
+    }
+
     // 合并同一授权阶段的附加来源证明及事实；对象复验专用的事实也要保留。
     pub(super) fn extend(&mut self, other: Self) {
         self.proofs.extend(other.proofs);
@@ -95,7 +99,7 @@ impl TargetFacts {
         if !result.boundary.is_current(executor) {
             return Err(Error::ValidationError("目标读取跨越执行阶段".into()));
         }
-        result.ensure_current()?;
+        result.flattened()?;
         Ok(result)
     }
 
@@ -107,12 +111,10 @@ impl TargetFacts {
         grants: &BTreeSet<(ResourceKind, String)>,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if !self.boundary.is_current(executor) {
-            return Err(Error::ValidationError("目标检查跨越执行阶段".into()));
-        }
+        self.ensure_stage(executor)?;
         ensure_whole_object(rule)?;
         self.ensure_current()?;
-        for object in self.objects.iter().chain(&self.candidate) {
+        for object in self.roots() {
             if !rule.allows_object(context.actor.id(), object, grants)? {
                 return Err(Error::Forbidden("操作包含不可访问的对象或目标归属".into()));
             }
@@ -145,7 +147,31 @@ impl TargetFacts {
     }
 
     pub(super) fn ensure_current(&self) -> Result<()> {
-        self.flattened().map(|_| ())
+        for object in &self.objects {
+            ensure_unexpired(object)?;
+        }
+        if let Some(candidate) = &self.candidate {
+            if candidate.valid_until.is_some_and(|until| Instant::now() >= until) {
+                return Err(Error::ConflictError("DATA_SCOPE_CHANGED：候选归属已到期".into()));
+            }
+            for child in source_objects(candidate) {
+                ensure_unexpired(child)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn ensure_current_stage(&self, executor: &mut dyn Executor) -> Result<()> {
+        self.ensure_stage(executor)?;
+        self.ensure_current()
+    }
+
+    fn ensure_stage(&self, executor: &mut dyn Executor) -> Result<()> {
+        if self.boundary.is_current(executor) {
+            Ok(())
+        } else {
+            Err(Error::ValidationError("目标检查跨越执行阶段".into()))
+        }
     }
 
     // 交付对象检查时，非事务路径重读并比较完整根与来源事实；原快照不重复读同一批对象。
@@ -155,9 +181,7 @@ impl TargetFacts {
         context: &AccessContext,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if !self.boundary.is_current(executor) {
-            return Err(Error::ValidationError("目标检查跨越执行阶段".into()));
-        }
+        self.ensure_stage(executor)?;
         if !self.boundary.is_snapshot() && !self.objects.is_empty() {
             let ids = self.objects.iter().map(|object| object.id.as_str()).collect::<Vec<_>>();
             let current =
@@ -169,6 +193,20 @@ impl TargetFacts {
 
         self.ensure_current()
     }
+}
+
+fn source_objects(object: &ObjectFacts) -> impl Iterator<Item = &ObjectFacts> {
+    object.relations.values().flat_map(|relation| &relation.objects)
+}
+
+fn ensure_unexpired(object: &ObjectFacts) -> Result<()> {
+    if object.valid_until.is_some_and(|until| Instant::now() >= until) {
+        return Err(Error::ConflictError("DATA_SCOPE_CHANGED：对象责任关系已到期".into()));
+    }
+    for child in source_objects(object) {
+        ensure_unexpired(child)?;
+    }
+    Ok(())
 }
 
 // 精确任务从固定任务端口读取，返回对象仍按原入口资源核对。
@@ -676,7 +714,7 @@ mod tests {
                 ..Default::default()
             }),
         };
-        build(related.clone()).ensure_current().unwrap();
+        build(related.clone()).flattened().unwrap();
 
         related.expected_ids.insert("extra".into());
         related.objects.push(ObjectFacts {
@@ -685,6 +723,6 @@ mod tests {
             version: "v1".into(),
             ..Default::default()
         });
-        assert!(matches!(build(related).ensure_current(), Err(Error::ValidationError(_))));
+        assert!(matches!(build(related).flattened(), Err(Error::ValidationError(_))));
     }
 }

@@ -17,7 +17,9 @@ use crate::entity::authorization::{
 };
 use crate::entity::fingerprint::Fingerprint;
 use crate::entity::resource_access::ResourceKind;
-use crate::repository::authorization::{AccessProof, ApprovalSource};
+use crate::repository::authorization::{
+    AccessProof, AccessValidity, Replay, ResolvedAccess, ResolvedRules, ScopeMetadata,
+};
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
 pub(super) fn supports(permission: &Permission) -> bool {
@@ -255,13 +257,16 @@ impl AuthorizationService {
             )
             .await?;
 
-        let grants = self.target_grants(&source_proof.context, &source_proof.rule, facts, executor).await?;
+        let grants = self
+            .target_grants(&source_proof.context, &source_proof.resolved.rules.root, facts, executor)
+            .await?;
         let earliest = facts.flattened()?.iter().filter_map(|fact| fact.valid_until).min();
-        source_proof.valid_until = source_proof.valid_until.into_iter().chain(earliest).min();
-        if !source_proof.rule.allows_object(proof.context.actor.id(), source, &grants)? {
+        source_proof.validity.valid_until =
+            source_proof.validity.valid_until.into_iter().chain(earliest).min();
+        if !source_proof.resolved.rules.root.allows_object(proof.context.actor.id(), source, &grants)? {
             return Err(Error::Forbidden("审批真实来源不在当前可读取范围内".into()));
         }
-        source_proof.ensure_current(executor)?;
+        source_proof.validity.ensure_current(executor)?;
         Ok(source_proof)
     }
 
@@ -272,7 +277,7 @@ impl AuthorizationService {
         object: &ObjectFacts,
         executor: &mut dyn Executor,
     ) -> Result<TargetFacts> {
-        if !proof.boundary.is_snapshot() {
+        if !proof.validity.boundary.is_snapshot() {
             return Err(Error::ValidationError("审批管理读取必须使用快照事务".into()));
         }
 
@@ -324,53 +329,34 @@ impl AuthorizationService {
             .approval_source_condition(&context, source, required, qualified, &mut resolution, executor)
             .await?;
 
-        let mut resources = BTreeSet::new();
-        rule.grant_resources(&mut resources);
-        for resource in resources {
-            resolution.versions.push(format!(
-                "{}:{}",
-                resource.code(),
-                self.facilities.grant_revision(&context.actor, resource, executor).await?
-            ));
-        }
-
-        let source = ApprovalSource { source: source.clone(), required: required.to_vec() };
-        self.approval_source_proof(context, source, qualified, rule, resolution, executor)
-    }
-
-    // 为当前审批管理分支生成专用来源证明，绑定固定管理上下文及当前执行边界，不跨事务复用。
-    fn approval_source_proof(
-        &self,
-        context: AccessContext,
-        source: ApprovalSource,
-        qualified: &QualifiedPermissions,
-        rule: AccessRule,
-        resolution: Resolution,
-        executor: &mut dyn Executor,
-    ) -> Result<AccessProof> {
+        let rules = ResolvedRules { root: rule, whole: None, management: None };
+        resolution.versions.extend(self.grant_versions(&context.actor, &rules, executor).await?);
         let mut version = Fingerprint::new("approval-source-v1");
         version.unordered(&resolution.versions, |hash, value| hash.text(value));
-        version.rule(&rule);
+        version.rule(&rules.root);
 
         let proof = AccessProof {
             context,
             qualified: qualified.clone(),
-            approval_source: Some(source),
-            task: false,
-            rule,
-            whole_rule: None,
-            management_filter: None,
-            has_role_scope: resolution.has_role_scope,
-            version: version.finish(),
-            valid_until: resolution.valid_until,
-            policy_version: qualified.policy_revision(),
-            organization_version: resolution.organization_version,
-            boundary: executor
-                .boundary()
-                .ok_or_else(|| Error::ValidationError("审批来源缺少活动读取边界".into()))?,
-            service: self.token.clone(),
+            resolved: ResolvedAccess {
+                rules,
+                replay: Replay::ApprovalSource { source: source.clone(), required: required.to_vec() },
+                version: version.finish(),
+            },
+            validity: AccessValidity {
+                valid_until: resolution.valid_until,
+                boundary: executor
+                    .boundary()
+                    .ok_or_else(|| Error::ValidationError("审批来源缺少活动读取边界".into()))?,
+                service: self.token.clone(),
+            },
+            scope: ScopeMetadata {
+                has_role_scope: resolution.has_role_scope,
+                policy_version: qualified.policy_revision(),
+                organization_version: resolution.organization_version,
+            },
         };
-        proof.ensure_current(executor)?;
+        proof.validity.ensure_current(executor)?;
         Ok(proof)
     }
 
@@ -383,16 +369,8 @@ impl AuthorizationService {
         resolution: &mut Resolution,
         executor: &mut dyn Executor,
     ) -> Result<AccessRule> {
-        let requests = if scope_spec::kind(source)? == ActionKind::Source {
-            rules::sources::scope_requests(source)?
-        } else {
-            vec![(source.clone(), source.clone())]
-        };
         let mut scopes = Vec::new();
-        for (_, scope_source) in requests {
-            if scopes.iter().any(|(key, _)| key == &scope_source) {
-                continue;
-            }
+        for scope_source in management_scope_requests(source)? {
             let origin = scope_spec::runtime_source(scope_spec::require_scope(&scope_source)?)?.permission();
             let scope = self.facilities.scope(context, origin, required, qualified, executor).await?;
             resolution.include(&scope);
@@ -406,6 +384,20 @@ impl AuthorizationService {
         }
         scoped_source_condition(source, &scopes)
     }
+}
+
+// 管理资格统一解释来源范围；同一范围权限只解析一次，保留其首次出现顺序。
+pub(super) fn management_scope_requests(source: &Permission) -> Result<Vec<Permission>> {
+    if scope_spec::kind(source)? != ActionKind::Source {
+        return Ok(vec![source.clone()]);
+    }
+
+    let mut seen = BTreeSet::new();
+    Ok(rules::sources::scope_requests(source)?
+        .into_iter()
+        .map(|(_, source)| source)
+        .filter(|source| seen.insert(source.clone()))
+        .collect())
 }
 
 // 为审批管理构建对象与列表共用的来源范围条件，同时保留读取补充和完整性要求。

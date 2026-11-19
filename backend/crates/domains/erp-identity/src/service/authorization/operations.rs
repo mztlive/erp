@@ -5,7 +5,7 @@ use erp_permissions::{access_control, admin, organization};
 use persistence_core::Executor;
 
 use super::AuthorizationService;
-use super::resolve::Resolution;
+use super::resolve::scope_deadline;
 use crate::entity::authorization::AccessContext;
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Permission, QualifiedPermissions, Result};
@@ -74,9 +74,7 @@ impl AuthorizationService {
             return Err(Error::Forbidden("授权管理需要同角色完整资格和公司组织范围".into()));
         }
 
-        let mut resolution = Resolution::default();
-        resolution.include(&access);
-        if resolution.valid_until.is_some_and(|until| until <= Instant::now()) {
+        if scope_deadline(&access).is_some_and(|until| until <= Instant::now()) {
             return Err(Error::ConflictError("DATA_SCOPE_CHANGED：管理范围已到期，请重新读取".into()));
         }
         Ok(access)

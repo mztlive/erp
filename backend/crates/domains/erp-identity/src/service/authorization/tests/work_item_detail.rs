@@ -285,11 +285,11 @@ async fn detail_source_preparation_expiry_is_part_of_the_original_delivery_proof
     let service = builder.build().unwrap();
     let mut executor = SnapshotExecutor::default();
     let mut access = service.query(&actor(), &work_item::DETAIL, &mut executor).await.unwrap();
-    assert_eq!(access.proof.valid_until, Some(deadline));
+    assert_eq!(access.validity.valid_until, Some(deadline));
     service.validate(&access, &mut executor).await.unwrap();
 
-    access.proof.boundary = executor.boundary().unwrap();
-    access.proof.valid_until = Some(Instant::from_unix_secs(1));
+    access.validity.boundary = executor.boundary().unwrap();
+    access.validity.valid_until = Some(Instant::from_unix_secs(1));
     assert!(matches!(service.validate(&access, &mut executor).await, Err(Error::ConflictError(_))));
 }
 

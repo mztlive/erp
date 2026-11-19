@@ -4,6 +4,7 @@ use persistence_core::Executor;
 
 use super::resolve::Resolution;
 use super::{AuthorizationService, rules};
+use crate::entity::access_control::ResolvedScope;
 use crate::entity::authorization::{AccessContext, AccessRule, RelationKey, RelationMatch};
 use crate::{QualifiedPermissions, Result};
 
@@ -27,19 +28,23 @@ fn sources(permission: &Permission) -> Vec<(&'static str, Permission)> {
 
 // 为门户材料登记校验构造完整来源条件；所需事实维度未接入时拒绝，不视作无数据限制。
 pub(super) fn binding_condition(permission: &Permission) -> Result<AccessRule> {
-    let rules = sources(permission)
+    sources(permission)
         .into_iter()
         .map(|(relation, source)| {
             let scope = rules::capability_scope(&source)?;
-            Ok(AccessRule::Related {
-                relation: RelationKey::parse(relation)?,
-                resource: source.resource().into(),
-                mode: RelationMatch::AllNonEmpty,
-                rule: Box::new(rules::data_condition(&source, Some(&scope))?),
-            })
+            source_condition(relation, &source, &scope)
         })
-        .collect::<Result<Vec<_>>>()?;
-    Ok(AccessRule::all(rules))
+        .collect::<Result<Vec<_>>>()
+        .map(AccessRule::all)
+}
+
+fn source_condition(relation: &str, source: &Permission, scope: &ResolvedScope) -> Result<AccessRule> {
+    Ok(AccessRule::Related {
+        relation: RelationKey::parse(relation)?,
+        resource: source.resource().into(),
+        mode: RelationMatch::AllNonEmpty,
+        rule: Box::new(rules::data_condition(source, Some(scope))?),
+    })
 }
 
 impl AuthorizationService {
@@ -60,12 +65,7 @@ impl AuthorizationService {
             };
             let scope = self.resolve_scope(&source, &permission, qualified, executor).await?;
             resolution.include(&scope);
-            rules.push(AccessRule::Related {
-                relation: RelationKey::parse(relation)?,
-                resource: permission.resource().into(),
-                mode: RelationMatch::AllNonEmpty,
-                rule: Box::new(rules::data_condition(&permission, Some(&scope.scope))?),
-            });
+            rules.push(source_condition(relation, &permission, &scope.scope)?);
         }
         Ok(AccessRule::all(rules))
     }

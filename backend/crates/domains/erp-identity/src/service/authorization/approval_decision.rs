@@ -25,10 +25,6 @@ impl AuthorizationService {
         facts: &TargetFacts,
         executor: &mut dyn Executor,
     ) -> Result<Vec<AccessProof>> {
-        if proof.context.permission != approval_instance::SUBMIT_DECISION {
-            return Ok(vec![]);
-        }
-
         let mut proofs = Vec::new();
         for task in facts.roots() {
             let Some((permission, resource, rule)) = order_source(task)? else { continue };
@@ -63,7 +59,7 @@ impl AuthorizationService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let mut grants = BTreeSet::new();
-        if proof.rule.allows_object(proof.context.actor.id(), source, &grants)? {
+        if proof.resolved.rules.root.allows_object(proof.context.actor.id(), source, &grants)? {
             return Ok(());
         }
 
@@ -78,7 +74,7 @@ impl AuthorizationService {
             grants.insert((resource, source.id.clone()));
         }
 
-        if !proof.rule.allows_object(proof.context.actor.id(), source, &grants)? {
+        if !proof.resolved.rules.root.allows_object(proof.context.actor.id(), source, &grants)? {
             return Err(Error::Forbidden("没有审批单据的读取资格".into()));
         }
         Ok(())

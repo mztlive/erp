@@ -594,7 +594,7 @@ async fn query_qualification_rejects_other_queries_expiry_and_cross_stage_reuse(
     assert!(
         access.execution_qualified("PURCHASE_PAYMENT_ARRANGEMENT", "purchase_order", &mut executor).unwrap()
     );
-    access.proof.valid_until = Some(Instant::from_unix_secs(1));
+    access.validity.valid_until = Some(Instant::from_unix_secs(1));
     assert!(matches!(access.decision_qualified(&mut executor), Err(Error::ConflictError(_))));
 
     let access = service.query(&actor(), &work_item::LIST, &mut executor).await.unwrap();

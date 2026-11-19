@@ -22,7 +22,7 @@ async fn require_current_delivery(executor: &mut dyn Executor) {
 
         let mut expired = service.query(&actor(), &permission, executor).await.unwrap();
         expired.ensure_current(executor).unwrap();
-        expired.proof.valid_until = Some(Instant::from_unix_secs(1));
+        expired.validity.valid_until = Some(Instant::from_unix_secs(1));
         assert!(matches!(
             service.validate(&expired, executor).await,
             Err(Error::ConflictError(message)) if message.starts_with("DATA_SCOPE_CHANGED")

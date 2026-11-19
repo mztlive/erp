@@ -2,10 +2,11 @@
 use erp_permissions::internal;
 use persistence_core::Executor;
 
-use super::approvals::{management_partitions, management_permissions, scoped_source_condition};
+use super::approvals::{
+    management_partitions, management_permissions, management_scope_requests, scoped_source_condition,
+};
 use super::resolve::Resolution;
 use super::{AuthorizationService, rules};
-use crate::entity::access_control::scope_spec::{self, ActionKind};
 use crate::entity::authorization::{AccessContext, AccessRule, RelationKey, RelationMatch};
 use crate::{Permission, QualifiedPermissions, Result};
 
@@ -24,14 +25,12 @@ pub(super) fn query_binding_condition() -> Result<AccessRule> {
     let mut partitions = Vec::new();
     for (subject, _, policy) in management_partitions() {
         let source = &policy.permission;
-        let requests = if scope_spec::kind(source)? == ActionKind::Source {
-            rules::sources::scope_requests(source)?
-        } else {
-            vec![(source.clone(), source.clone())]
-        };
-        let scopes = requests
+        let scopes = management_scope_requests(source)?
             .into_iter()
-            .map(|(_, source)| Ok((source.clone(), rules::capability_scope(&source)?)))
+            .map(|source| {
+                let scope = rules::capability_scope(&source)?;
+                Ok((source, scope))
+            })
             .collect::<Result<Vec<_>>>()?;
         partitions.push(relation(subject, source, scoped_source_condition(source, &scopes)?)?);
     }
@@ -76,6 +75,16 @@ impl AuthorizationService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scope_requests_keep_the_first_occurrence_of_each_scope_permission() {
+        use erp_permissions::{purchase_order, returns, sales_order, supplier_settlement};
+
+        assert_eq!(
+            management_scope_requests(&returns::SUPPLIER_REFUND_SUPPLIER_REFUND_SUBMIT).unwrap(),
+            [sales_order::DETAIL, purchase_order::DETAIL, supplier_settlement::STATEMENT_LIST]
+        );
+    }
 
     #[test]
     fn binding_preserves_every_approval_partition_in_order() {

@@ -19,8 +19,10 @@ use futures_util::future::BoxFuture;
 use mongodb::bson::{Bson, Document, doc};
 use persistence_core::{ExecutionBoundary, Executor};
 pub use query::CompiledAccess;
-pub(crate) use query::{AccessProof, ApprovalSource, MappingDependency, ResolvedFilter};
-use query::{ManagementPlan, SourcePlan};
+pub(crate) use query::{
+    AccessProof, AccessValidity, Replay, ResolvedAccess, ResolvedFilter, ResolvedRules, ScopeMetadata,
+};
+use query::{ManagementPlan, MappingDependency, SourcePlan};
 
 use crate::entity::authorization::{
     AccessContext, AccessRule, MappingFacts, QueryModel, QueryOutput, RelationKey, RelationMatch,
@@ -43,27 +45,28 @@ struct Compiler<'a> {
 
 // 接收服务端生成的完整授权证明，编译固定模型的过滤与投影，同时保留交付时需要检查的依赖。
 pub(crate) async fn compile(
-    proof: &AccessProof,
+    proof: AccessProof,
     mapping: &Arc<dyn AccessMapping>,
     model: &QueryModel,
     executor: &mut dyn Executor,
 ) -> Result<CompiledAccess> {
-    proof.ensure_current(executor)?;
+    let AccessProof { context, qualified, resolved, mut validity, scope } = proof;
+    validity.ensure_current(executor)?;
     if mapping.model() != model {
         return Err(Error::ValidationError("Mapping 描述与启动绑定不一致".into()));
     }
 
     let mut compiler = Compiler {
         executor,
-        boundary: proof.boundary.clone(),
-        valid_until: proof.valid_until,
+        boundary: validity.boundary.clone(),
+        valid_until: validity.valid_until,
         prepared: vec![],
         versions: vec![],
     };
-    let (fragment, _) = compiler.model(&proof.rule, mapping, &proof.context, 0).await?;
+    let (fragment, _) = compiler.model(&resolved.rules.root, mapping, &context, 0).await?;
     let mut stages = fragment.finish();
-    let (sources, whole) = compiler.plans(proof, mapping).await?;
-    let management = match &proof.management_filter {
+    let (sources, whole) = compiler.plans(&resolved.rules, &context, mapping).await?;
+    let management = match &resolved.rules.management {
         Some(ResolvedFilter::Root) => Some(ManagementPlan::Root),
         Some(ResolvedFilter::Separate { context, rule }) => {
             Some(ManagementPlan::Separate(compiler.model(rule, mapping, context, 0).await?.0.finish()))
@@ -78,10 +81,9 @@ pub(crate) async fn compile(
         stages.push(doc! { "$project": projection });
     }
 
-    let mut proof = proof.clone();
-    proof.valid_until = compiler.valid_until;
+    validity.valid_until = compiler.valid_until;
     let mut version = Fingerprint::new("authorization-query-v4");
-    version.text(&proof.version);
+    version.text(&resolved.version);
     version.model(model);
     version.unordered(&compiler.versions, |hash, value| hash.text(value));
     version.sequence(&stages, |hash, stage| hash.bson(&Bson::Document(stage.clone())));
@@ -93,11 +95,16 @@ pub(crate) async fn compile(
         hash.sequence(stages, |hash, stage| hash.bson(&Bson::Document(stage.clone())));
     });
 
+    let is_snapshot = compiler.boundary.is_snapshot();
     let compiled = CompiledAccess {
-        proof,
+        context,
+        qualified,
+        validity,
+        revalidation: (!is_snapshot).then(|| Box::new(resolved)),
+        scope,
         model: model.clone(),
         stages,
-        dependencies: if compiler.boundary.is_snapshot() { vec![] } else { compiler.prepared },
+        dependencies: if is_snapshot { vec![] } else { compiler.prepared },
         version: version.finish(),
         sources,
         whole,
@@ -136,16 +143,17 @@ impl Compiler<'_> {
     // 复合资金查询需要来源份额和整账时，使用同一次身份、范围及映射准备编译两类固定计划，沿用根执行边界。
     async fn plans(
         &mut self,
-        proof: &AccessProof,
+        resolved: &ResolvedRules,
+        root: &AccessContext,
         mapping: &Arc<dyn AccessMapping>,
     ) -> Result<(BTreeMap<RelationKey, SourcePlan>, Option<Vec<Document>>)> {
-        let Some(whole_rule) = &proof.whole_rule else {
+        let Some(whole_rule) = &resolved.whole else {
             return Ok((BTreeMap::new(), None));
         };
-        let whole = self.model(whole_rule, mapping, &proof.context, 0).await?.0.finish();
+        let whole = self.model(whole_rule, mapping, root, 0).await?.0.finish();
 
         let mut rules = BTreeMap::new();
-        source_rules(&proof.rule, None, &mut rules);
+        source_rules(&resolved.root, None, &mut rules);
         let mut sources = BTreeMap::new();
         for (key, rules) in rules {
             let child = mapping
@@ -158,8 +166,8 @@ impl Compiler<'_> {
                 let context = AccessContext {
                     resource: child.model().resource.clone(),
                     model: Some(child.model().key.clone()),
-                    permission: entry.unwrap_or_else(|| proof.context.permission.clone()),
-                    ..proof.context.clone()
+                    permission: entry.unwrap_or_else(|| root.permission.clone()),
+                    ..root.clone()
                 };
                 conditions.push(self.condition(&rule, &child, &context, &mut fragment, 0).await?.0);
             }
@@ -570,7 +578,7 @@ mod tests {
 
     impl Query {
         async fn compile(&self, executor: &mut dyn Executor) -> Result<CompiledAccess> {
-            compile(&self.proof, &self.mapping, &self.model, executor).await
+            compile(self.proof.clone(), &self.mapping, &self.model, executor).await
         }
     }
 
@@ -578,7 +586,6 @@ mod tests {
         let model = mapping.model().clone();
         Query {
             proof: AccessProof {
-                approval_source: None,
                 context: AccessContext {
                     actor: AuditActor::new("u".into(), "user".into(), AccountKind::Admin),
                     permission: Permission::parse(format!("{}:list", model.resource)).unwrap(),
@@ -587,17 +594,17 @@ mod tests {
                     as_of: Instant::now(),
                 },
                 qualified: crate::QualifiedPermissions::test_grants(&[]),
-                task: false,
-                whole_rule: None,
-                management_filter: None,
-                has_role_scope: false,
-                rule,
-                version: "identity-v1".into(),
-                valid_until: None,
-                policy_version: 7,
-                organization_version: 11,
-                boundary: executor.boundary().unwrap(),
-                service: Arc::new(()),
+                resolved: ResolvedAccess {
+                    rules: ResolvedRules { root: rule, whole: None, management: None },
+                    replay: Replay::Target,
+                    version: "identity-v1".into(),
+                },
+                scope: ScopeMetadata { has_role_scope: false, policy_version: 7, organization_version: 11 },
+                validity: AccessValidity {
+                    valid_until: None,
+                    boundary: executor.boundary().unwrap(),
+                    service: Arc::new(()),
+                },
             },
             mapping,
             model,
@@ -819,10 +826,10 @@ mod tests {
         let mut executor = ReadExecutor::default();
         let mapping = mapping("sales_order", None);
         let mut query = query(AccessRule::Allow, mapping.clone(), &executor);
-        query.proof.valid_until = Some(Instant::from_unix_secs(1));
+        query.proof.validity.valid_until = Some(Instant::from_unix_secs(1));
         assert!(matches!(query.compile(&mut executor).await, Err(Error::ConflictError(_))));
 
-        query.proof.valid_until = None;
+        query.proof.validity.valid_until = None;
         executor.next_read();
         assert!(matches!(query.compile(&mut executor).await, Err(Error::ValidationError(_))));
     }
@@ -884,7 +891,7 @@ mod tests {
         });
         let mut query = query(AccessRule::Allow, mapping.clone(), &executor);
         let context = AccessContext { permission: sales_order::DETAIL, ..query.proof.context.clone() };
-        query.proof.management_filter = Some(ResolvedFilter::Separate {
+        query.proof.resolved.rules.management = Some(ResolvedFilter::Separate {
             context: Box::new(context.clone()),
             rule: AccessRule::Fact(AccessFact::Owned),
         });
@@ -895,7 +902,7 @@ mod tests {
         let dependency = &plan.dependencies[1];
         assert_eq!(dependency.context, context);
         assert_eq!(dependency.facts.version.as_deref(), Some("facts-detail-v1"));
-        assert_eq!(plan.proof.valid_until, dependency.facts.valid_until);
+        assert_eq!(plan.validity.valid_until, dependency.facts.valid_until);
         assert_eq!(
             plan.management_stages().unwrap(),
             &[doc! { "$match": { "$and": [
@@ -904,13 +911,13 @@ mod tests {
             ] } }]
         );
         dependency.validate(&mut executor).await.unwrap();
-        query.proof.management_filter =
+        query.proof.resolved.rules.management =
             Some(ResolvedFilter::Separate { context: Box::new(context), rule: AccessRule::Deny });
         let denied = query.compile(&mut executor).await.unwrap();
         assert_eq!(plan.stages(), denied.stages());
         assert_ne!(plan.version(), denied.version());
 
-        query.proof.management_filter = Some(ResolvedFilter::Root);
+        query.proof.resolved.rules.management = Some(ResolvedFilter::Root);
         let root = query.compile(&mut executor).await.unwrap();
         assert_eq!(root.management_stages().unwrap(), root.stages());
         assert_eq!(root.dependencies.len(), 1);
@@ -1293,7 +1300,7 @@ mod tests {
         let proof = query(AccessRule::Allow, first.clone(), &executor).proof;
         let mut compiler = Compiler {
             executor: &mut executor,
-            boundary: proof.boundary,
+            boundary: proof.validity.boundary,
             valid_until: None,
             prepared: vec![],
             versions: vec![],
@@ -1390,7 +1397,8 @@ mod tests {
         let query = query(AccessRule::Allow, mapping.clone(), &executor);
         let mut plan = query.compile(&mut executor).await.unwrap();
         assert!(plan.dependencies.is_empty());
-        assert!(plan.proof.valid_until.is_some());
+        assert!(plan.revalidation.is_none());
+        assert!(plan.validity.valid_until.is_some());
         mapping.revision.store(2, Ordering::Relaxed);
         plan.ensure_current(&mut executor).unwrap();
 
@@ -1399,8 +1407,8 @@ mod tests {
         executor.restart();
         assert!(matches!(plan.ensure_current(&mut executor), Err(Error::ValidationError(_))));
 
-        plan.proof.boundary = executor.boundary().unwrap();
-        plan.proof.valid_until = Some(Instant::from_unix_secs(1));
+        plan.validity.boundary = executor.boundary().unwrap();
+        plan.validity.valid_until = Some(Instant::from_unix_secs(1));
         assert!(matches!(plan.ensure_current(&mut executor), Err(Error::ConflictError(_))));
     }
 
@@ -1412,25 +1420,32 @@ mod tests {
         let mapping = mapping("sales_order", None);
         let snapshot_query = query(AccessRule::Allow, mapping.clone(), &snapshot);
         assert!(
-            !snapshot_query.proof.needs_revalidation(&snapshot_query.proof.service, &mut snapshot).unwrap()
+            !snapshot_query
+                .proof
+                .validity
+                .needs_revalidation(&snapshot_query.proof.validity.service, &mut snapshot)
+                .unwrap()
         );
         assert!(matches!(
-            snapshot_query.proof.needs_revalidation(&Arc::new(()), &mut snapshot),
+            snapshot_query.proof.validity.needs_revalidation(&Arc::new(()), &mut snapshot),
             Err(Error::ValidationError(_))
         ));
         assert!(matches!(snapshot_query.compile(&mut NoTransaction).await, Err(Error::ValidationError(_))));
         snapshot.session();
         assert!(matches!(
-            snapshot_query.proof.needs_revalidation(&snapshot_query.proof.service, &mut snapshot),
+            snapshot_query
+                .proof
+                .validity
+                .needs_revalidation(&snapshot_query.proof.validity.service, &mut snapshot),
             Err(Error::ValidationError(_))
         ));
 
         let mut executor = ReadExecutor::default();
         let proof = query(AccessRule::Allow, mapping, &executor).proof;
-        assert!(proof.needs_revalidation(&proof.service, &mut executor).unwrap());
+        assert!(proof.validity.needs_revalidation(&proof.validity.service, &mut executor).unwrap());
         executor.next_read();
         assert!(matches!(
-            proof.needs_revalidation(&proof.service, &mut executor),
+            proof.validity.needs_revalidation(&proof.validity.service, &mut executor),
             Err(Error::ValidationError(_))
         ));
     }

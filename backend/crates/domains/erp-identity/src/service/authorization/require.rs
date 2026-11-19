@@ -1,11 +1,11 @@
 use std::collections::BTreeSet;
 
 use application_core::AuditActor;
-use erp_permissions::internal;
+use erp_permissions::{approval_instance, internal};
 use persistence_core::Executor;
 
-use super::targets::TargetFacts;
-use super::{AuthorizationService, definitions, operations, rules};
+use super::targets::{SourceEvidence, TargetFacts};
+use super::{AuthorizationService, approvals, definitions, operations, rules};
 use crate::entity::authorization::{AccessContext, AccessRule, AccessTarget, ResourceTargets};
 use crate::entity::resource_access::ResourceKind;
 use crate::{Error, Permission, Result};
@@ -79,33 +79,38 @@ impl AuthorizationService {
             )
             .await?;
 
-        let facts = TargetFacts::load(&self.facts, &proof.context, &proof.rule, target, executor).await?;
+        let facts =
+            TargetFacts::load(&self.facts, &proof.context, &proof.resolved.rules.root, target, executor)
+                .await?;
 
-        let mut source_proofs = self.approval_sources(&proof, &facts, executor).await?;
-        source_proofs.extend(self.approval_decision_sources(&proof, &facts, executor).await?);
-        let sources = self.work_item_sources(&proof, &facts, executor).await?;
-        source_proofs.extend(sources.proofs);
+        let sources = if approvals::supports(permission) {
+            SourceEvidence::from_proofs(self.approval_sources(&proof, &facts, executor).await?)
+        } else if permission == &approval_instance::SUBMIT_DECISION {
+            SourceEvidence::from_proofs(self.approval_decision_sources(&proof, &facts, executor).await?)
+        } else {
+            self.work_item_sources(&proof, &facts, executor).await?
+        };
 
-        let grants = self.target_grants(&proof.context, &proof.rule, &facts, executor).await?;
-        facts.require(&proof.context, &proof.rule, &grants, executor)?;
+        let grants = self.target_grants(&proof.context, &proof.resolved.rules.root, &facts, executor).await?;
+        facts.require(&proof.context, &proof.resolved.rules.root, &grants, executor)?;
 
         self.validate_proof(&proof, executor).await?;
         facts.revalidate(&self.facts, &proof.context, executor).await?;
         for (context, source_facts) in &sources.facts {
             source_facts.revalidate(&self.facts, context, executor).await?;
         }
-        for source in &source_proofs {
+        for source in &sources.proofs {
             self.validate_proof(source, executor).await?;
         }
 
-        facts.require(&proof.context, &proof.rule, &grants, executor)?;
+        facts.ensure_current_stage(executor)?;
         for (_, source_facts) in &sources.facts {
             source_facts.ensure_current()?;
         }
-        for source in &source_proofs {
-            source.ensure_current(executor)?;
+        for source in &sources.proofs {
+            source.validity.ensure_current(executor)?;
         }
-        proof.ensure_current(executor)
+        proof.validity.ensure_current(executor)
     }
 
     // 只在规则含记录读取补充时，按本次根目标及真实来源的资源和 ID 查询有效授权，不拉取账号的历史授权全集。
@@ -116,9 +121,13 @@ impl AuthorizationService {
         facts: &TargetFacts,
         executor: &mut dyn Executor,
     ) -> Result<BTreeSet<(ResourceKind, String)>> {
-        let flattened = facts.flattened()?;
         let mut resources = BTreeSet::new();
         rule.grant_resources(&mut resources);
+        if resources.is_empty() {
+            facts.ensure_current()?;
+            return Ok(BTreeSet::new());
+        }
+        let flattened = facts.flattened()?;
 
         let mut grants = BTreeSet::new();
         for resource in resources {

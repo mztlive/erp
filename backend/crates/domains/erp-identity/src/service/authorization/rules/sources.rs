@@ -1,16 +1,19 @@
 //! 固定来源规则及输出边界；对象执行和后续查询转换消费同一分区规则。
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use erp_permissions::{
     payable, policy_permission, purchase_order, receivable, sales_order, supplier_settlement,
 };
 
-use super::same_role_permissions;
+use super::{ScopeLookup, same_role_permissions};
 use crate::entity::access_control::ResolvedScope;
 use crate::entity::access_control::scope_spec::{self, ActionKind};
 use crate::entity::authorization::{AccessFact, AccessRule, FactKind, RelationKey, RelationMatch};
 use crate::entity::resource_access::ResourceKind;
 use crate::{Error, Permission, QualifiedPermissions, Result};
+
+type SourceScopes<'a, 'f> = dyn Fn(&Permission, &Permission) -> Result<Cow<'a, ResolvedScope>> + 'f;
 
 /// 完整对象和匹配份额的判断不可互换；存在性也只能消费匹配份额结果。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,7 +63,12 @@ pub(crate) fn qualifications(permission: &Permission) -> Result<Vec<Permission>>
 
 // 启动验证来源 Mapping 时检查所有固定执行分支，不因当前账号或人员范围暂未启用某分支而跳过。
 pub(super) fn binding_condition(permission: &Permission, output: Output) -> Result<AccessRule> {
-    condition_with(permission, &|_| true, &|_, source| super::capability_scope(source), output)
+    condition_with(
+        permission,
+        &|_| true,
+        &|entry, source| required_scope(&ScopeLookup::Capability, entry, source),
+        output,
+    )
 }
 
 impl Source {
@@ -156,7 +164,7 @@ pub(crate) fn whole_qualified(permission: &Permission, qualified: &QualifiedPerm
 fn condition_with(
     permission: &Permission,
     qualifies: &dyn Fn(&[Permission]) -> bool,
-    scopes: &dyn Fn(&Permission, &Permission) -> Result<ResolvedScope>,
+    scopes: &SourceScopes<'_, '_>,
     output: Output,
 ) -> Result<AccessRule> {
     let rule = source_condition(permission, qualifies, scopes, output)?;
@@ -171,7 +179,7 @@ fn condition_with(
 fn source_condition(
     permission: &Permission,
     qualifies: &dyn Fn(&[Permission]) -> bool,
-    scopes: &dyn Fn(&Permission, &Permission) -> Result<ResolvedScope>,
+    scopes: &SourceScopes<'_, '_>,
     output: Output,
 ) -> Result<AccessRule> {
     if scope_spec::kind(permission)? != ActionKind::Source {
@@ -251,7 +259,7 @@ fn with_presence(rule: AccessRule, sources: &[Source], mask: usize) -> Result<Ve
 fn source_rule(
     entry: &Permission,
     source: Source,
-    scopes: &dyn Fn(&Permission, &Permission) -> Result<ResolvedScope>,
+    scopes: &SourceScopes<'_, '_>,
     output: Output,
 ) -> Result<AccessRule> {
     let permission = source.permission();
@@ -285,14 +293,21 @@ pub(crate) fn scoped_condition(
     scopes: &[(Permission, Permission, ResolvedScope)],
     output: Output,
 ) -> Result<AccessRule> {
-    let lookup = |entry: &Permission, source: &Permission| {
-        scopes
-            .iter()
-            .find(|(key, origin, _)| key == entry && origin == source)
-            .map(|(_, _, scope)| scope.clone())
-            .ok_or_else(|| Error::ValidationError(format!("缺少来源范围：{entry} -> {source}")))
-    };
-    condition_with(permission, &|required| qualified.same_role(required), &lookup, output)
+    let scopes = ScopeLookup::Resolved(scopes);
+    condition_with(
+        permission,
+        &|required| qualified.same_role(required),
+        &|entry, source| required_scope(&scopes, entry, source),
+        output,
+    )
+}
+
+fn required_scope<'a>(
+    scopes: &ScopeLookup<'a>,
+    entry: &Permission,
+    source: &Permission,
+) -> Result<Cow<'a, ResolvedScope>> {
+    scopes.get(entry, source, || Error::ValidationError(format!("缺少来源范围：{entry} -> {source}")))
 }
 
 // 审批管理取证已证明完整同角色功能组合后，只用这组合格角色解析来源范围，不额外要求来源菜单。
@@ -304,7 +319,7 @@ pub(crate) fn management_condition(
         scopes
             .iter()
             .find(|(key, _)| key == source)
-            .map(|(_, scope)| scope.clone())
+            .map(|(_, scope)| Cow::Borrowed(scope))
             .ok_or_else(|| Error::ValidationError("缺少审批管理来源范围".into()))
     };
     source_condition(permission, &|_| true, &lookup, Output::Object)
@@ -325,7 +340,7 @@ pub(crate) fn data_condition(
             scopes
                 .iter()
                 .find(|(key, _)| key == permission)
-                .map(|(_, scope)| scope.clone())
+                .map(|(_, scope)| Cow::Borrowed(scope))
                 .ok_or_else(|| Error::ValidationError(format!("缺少来源范围：{permission}")))
         },
         output,
@@ -336,7 +351,7 @@ pub(crate) fn data_condition(
 fn refund_conditions(
     sources: &[Source],
     qualifies: &dyn Fn(&[Permission]) -> bool,
-    scopes: &dyn Fn(&Permission, &Permission) -> Result<ResolvedScope>,
+    scopes: &SourceScopes<'_, '_>,
 ) -> Result<AccessRule> {
     let mut partitions = Vec::new();
     for (index, source) in sources.iter().enumerate() {
@@ -550,6 +565,22 @@ mod tests {
             Err(Error::ValidationError(_))
         ));
     }
+    #[test]
+    fn financial_scope_lookup_requires_the_source_and_its_entry() {
+        let permission = receivable::CUSTOMER_RECEIPT_SUBMIT;
+        let qualified = qualifications(&permission, false);
+        let source = sales_order::DETAIL;
+        let scope = super::super::capability_scope(&source).unwrap();
+        let wrong_entry = [(receivable::ACCOUNT_DETAIL, source.clone(), scope.clone())];
+        let wrong_source = [(permission.clone(), purchase_order::DETAIL, scope)];
+        for scopes in [&wrong_entry, &wrong_source] {
+            assert!(matches!(
+                scoped_condition(&permission, &qualified, scopes, Output::Object),
+                Err(Error::ValidationError(message)) if message == format!("缺少来源范围：{permission} -> {source}")
+            ));
+        }
+    }
+
     #[test]
     fn receipt_submit_uses_the_same_final_condition_and_requires_both_handler_and_sources() {
         let permission = receivable::CUSTOMER_RECEIPT_SUBMIT;

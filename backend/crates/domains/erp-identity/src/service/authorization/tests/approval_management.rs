@@ -332,7 +332,7 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
     use crate::entity::authorization::{AccessContext, ResourceTargets};
     use crate::entity::organization::{OrgMembership, OrgValidity};
     use crate::entity::resource_access::ResourceKind;
-    use crate::repository::authorization::AccessProof;
+    use crate::repository::authorization::AccessValidity;
     use crate::service::access_control::resolve::AuthorizedDataScope;
     use crate::{QualifiedPermissions, Result};
 
@@ -378,7 +378,7 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
                 && self.purchase_reads.fetch_add(1, Ordering::SeqCst) > 0
                 && self.expire_during_revalidation
             {
-                AccessProof::set_test_time(self.deadline);
+                AccessValidity::set_test_time(self.deadline);
             }
             Ok(access)
         }
@@ -403,7 +403,7 @@ async fn all_approval_source_deadlines_are_checked_after_the_last_async_revalida
     let deadline = Instant::from_unix_secs(4_102_444_800);
     let before = Instant::from_unix_secs(deadline.unix_secs() - 1);
     for expire_during_revalidation in [false, true] {
-        AccessProof::with_test_time(before, async {
+        AccessValidity::with_test_time(before, async {
             let identity = Identity::default();
             identity.state.lock().unwrap().grants = vec![(
                 "manager".into(),

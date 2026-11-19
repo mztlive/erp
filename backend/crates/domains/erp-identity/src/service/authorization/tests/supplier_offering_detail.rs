@@ -70,7 +70,7 @@ async fn offering_detail_query_requires_mapping_and_rejects_expired_delivery() {
     let service = complete().build().unwrap();
     let mut executor = SnapshotExecutor::default();
     let mut access = service.query(&actor(), &supplier_offering::DETAIL, &mut executor).await.unwrap();
-    access.proof.valid_until = Some(Instant::from_unix_secs(1));
+    access.validity.valid_until = Some(Instant::from_unix_secs(1));
     assert!(matches!(
         service.validate(&access, &mut executor).await,
         Err(Error::ConflictError(reason)) if reason.starts_with("DATA_SCOPE_CHANGED")

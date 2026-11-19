@@ -18,22 +18,27 @@ tokio::task_local! {
     static PROOF_TIME: Cell<Instant>;
 }
 
-#[derive(Clone)]
+#[cfg_attr(test, derive(Clone))]
 pub(crate) struct AccessProof {
     pub context: AccessContext,
     pub qualified: QualifiedPermissions,
-    pub approval_source: Option<ApprovalSource>,
-    pub task: bool,
-    pub rule: AccessRule,
-    pub whole_rule: Option<AccessRule>,
-    pub management_filter: Option<ResolvedFilter>,
-    pub has_role_scope: bool,
+    pub resolved: ResolvedAccess,
+    pub validity: AccessValidity,
+    pub scope: ScopeMetadata,
+}
+
+#[derive(Clone)]
+pub(crate) struct ResolvedAccess {
+    pub rules: ResolvedRules,
+    pub replay: Replay,
     pub version: String,
-    pub valid_until: Option<Instant>,
-    pub policy_version: u64,
-    pub organization_version: u64,
-    pub boundary: ExecutionBoundary,
-    pub service: Arc<()>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct ResolvedRules {
+    pub root: AccessRule,
+    pub whole: Option<AccessRule>,
+    pub management: Option<ResolvedFilter>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -43,12 +48,27 @@ pub(crate) enum ResolvedFilter {
 }
 
 #[derive(Clone)]
-pub(crate) struct ApprovalSource {
-    pub source: Permission,
-    pub required: Vec<Permission>,
+pub(crate) enum Replay {
+    Target,
+    ExactTask,
+    ApprovalSource { source: Permission, required: Vec<Permission> },
 }
 
-impl AccessProof {
+#[derive(Clone)]
+pub(crate) struct ScopeMetadata {
+    pub has_role_scope: bool,
+    pub policy_version: u64,
+    pub organization_version: u64,
+}
+
+#[derive(Clone)]
+pub(crate) struct AccessValidity {
+    pub valid_until: Option<Instant>,
+    pub boundary: ExecutionBoundary,
+    pub service: Arc<()>,
+}
+
+impl AccessValidity {
     // 交付复验先核对凭证所属服务、执行边界及有效期。原快照不重读；非事务读取须重新取证实际依赖。
     pub(crate) fn needs_revalidation(&self, token: &Arc<()>, executor: &mut dyn Executor) -> Result<bool> {
         self.ensure_current(executor)?;
@@ -100,7 +120,11 @@ impl AccessProof {
 /// 编译器生成的查询计划；业务不能自行构造。
 #[derive(Clone)]
 pub struct CompiledAccess {
-    pub(crate) proof: AccessProof,
+    pub(crate) context: AccessContext,
+    pub(crate) qualified: QualifiedPermissions,
+    pub(crate) validity: AccessValidity,
+    pub(crate) revalidation: Option<Box<ResolvedAccess>>,
+    pub(super) scope: ScopeMetadata,
     pub(crate) model: QueryModel,
     pub(crate) stages: Vec<Document>,
     pub(crate) dependencies: Vec<MappingDependency>,
@@ -188,17 +212,17 @@ impl CompiledAccess {
     //
     // 个人限制和查询结果为空不能替代本标记。
     pub(crate) fn has_role_scope(&self) -> bool {
-        self.proof.has_role_scope
+        self.scope.has_role_scope
     }
 
     /// 借用凭证绑定的真实账号，供同一授权批次补充展示资格。账号有效性仍须在交付时复验。
     pub fn actor(&self) -> &AuditActor {
-        &self.proof.context.actor
+        &self.context.actor
     }
 
     /// 读取凭证绑定的固定入口权限，供仓储核对用途；不能据此把凭证转给另一操作。
     pub fn permission(&self) -> &Permission {
-        &self.proof.context.permission
+        &self.context.permission
     }
 
     /// 返回本次身份资格取证使用的权限策略修订。
@@ -206,7 +230,7 @@ impl CompiledAccess {
     ///
     /// 不执行 I/O。
     pub fn policy_version(&self) -> u64 {
-        self.proof.policy_version
+        self.scope.policy_version
     }
 
     /// 返回本次范围解析使用的组织修订。
@@ -214,18 +238,18 @@ impl CompiledAccess {
     ///
     /// 不执行 I/O。
     pub fn organization_version(&self) -> u64 {
-        self.proof.organization_version
+        self.scope.organization_version
     }
 
     /// 读取编译时冻结的授权时点；范围和业务映射使用这一时点解释有效关系，不能改用当前墙钟重算条件。
     pub fn as_of(&self) -> Instant {
-        self.proof.context.as_of
+        self.context.as_of
     }
 
     /// 仓储执行授权查询前核对凭证仍属于原执行器的同一事务和读取阶段，且未到任何有效期截止点。
     /// 此步不访问数据库，不能代替结果交付前的 `AuthorizationService::validate`。
     pub fn ensure_current(&self, executor: &mut dyn Executor) -> Result<()> {
-        self.proof.ensure_current(executor)?;
+        self.validity.ensure_current(executor)?;
         for dependency in &self.dependencies {
             dependency.facts.validate(false, Instant::now())?;
         }

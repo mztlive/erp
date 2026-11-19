@@ -47,6 +47,6 @@ async fn draft_read_requires_both_independent_entries_and_never_adds_historical_
     ));
 
     let mut expiring = service.query(&actor(), &permission, &mut executor).await.unwrap();
-    expiring.proof.valid_until = Some(Instant::from_unix_secs(1));
+    expiring.validity.valid_until = Some(Instant::from_unix_secs(1));
     assert!(matches!(service.validate(&expiring, &mut executor).await, Err(Error::ConflictError(_))));
 }

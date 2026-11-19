@@ -107,7 +107,7 @@ impl AuthorizationService {
             )
             .await?;
 
-        compile(&proof, mapping, mapping.model(), executor).await
+        compile(proof, mapping, mapping.model(), executor).await
     }
 }
 
@@ -120,7 +120,7 @@ impl CompiledAccess {
     /// kind、source 为已授权任务的真实种类和来源类型；executor 为原读取执行器。
     pub fn execution_qualified(&self, kind: &str, source: &str, executor: &mut dyn Executor) -> Result<bool> {
         self.ensure_work_item_view(executor)?;
-        work_items::execution_qualified(kind, source, &self.proof.qualified)
+        work_items::execution_qualified(kind, source, &self.qualified)
     }
 
     /// 返回本次工作项展示批次的固定审批决定资格。
@@ -131,7 +131,7 @@ impl CompiledAccess {
     /// executor 为生成当前查询的原读取执行器。
     pub fn decision_qualified(&self, executor: &mut dyn Executor) -> Result<bool> {
         self.ensure_work_item_view(executor)?;
-        Ok(work_items::decision_qualified(&self.proof.qualified))
+        Ok(work_items::decision_qualified(&self.qualified))
     }
 
     fn ensure_work_item_view(&self, executor: &mut dyn Executor) -> Result<()> {
@@ -143,6 +143,6 @@ impl CompiledAccess {
 
     /// 供复合资金投影判断当前启用角色是否具有整账功能资格，不证明来源可读。返回整账前仍须执行完整来源过滤并复验原查询凭证。
     pub fn has_whole_qualification(&self) -> bool {
-        self.whole.is_some() && rules::sources::whole_qualified(self.permission(), &self.proof.qualified)
+        self.whole.is_some() && rules::sources::whole_qualified(self.permission(), &self.qualified)
     }
 }

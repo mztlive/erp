@@ -1,10 +1,11 @@
 //! 选品入口的客户可见性与独立读取前提；所有业务入口共用固定组合。
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::slice;
 
 use erp_permissions::{customer, sales_selection as selection};
 
-use super::capability_scope;
+use super::ScopeLookup;
 use crate::entity::access_control::ResolvedScope;
 use crate::entity::authorization::{AccessFact, AccessRule, FactKind, RelationKey, RelationMatch};
 use crate::{Error, Permission, QualifiedPermissions, Result};
@@ -39,21 +40,36 @@ pub(crate) fn scope_requests(permission: &Permission) -> Vec<(Permission, Permis
 }
 
 // 选品根范围须与固定客户或详情前提同时成立；缺少任一入口资格或范围时不放行。
-pub(crate) fn condition(
+pub(in crate::service::authorization) fn condition(
     permission: &Permission,
     qualified: &QualifiedPermissions,
-    scopes: &[(Permission, Permission, ResolvedScope)],
+    scopes: &ScopeLookup<'_>,
+    base: AccessRule,
+) -> Result<AccessRule> {
+    condition_with(permission, Some(qualified), scopes, base)
+}
+
+// 校验选品接入时保留客户本人条件，覆盖可选资格未授予时所需的事实能力。
+pub(super) fn binding_condition(permission: &Permission, base: AccessRule) -> Result<AccessRule> {
+    condition_with(permission, None, &ScopeLookup::Capability, base)
+}
+
+fn condition_with(
+    permission: &Permission,
+    qualified: Option<&QualifiedPermissions>,
+    scopes: &ScopeLookup<'_>,
     base: AccessRule,
 ) -> Result<AccessRule> {
     if is_list(permission) {
         require_qualification(qualified, &customer::LIST)?;
         let scope = find_scope(scopes, &customer::LIST)?;
-        let ownership = if qualified.same_role(&[customer::ALL_AUTHORIZED_LIST]) {
-            AccessRule::Allow
-        } else {
-            AccessRule::Fact(AccessFact::Owned)
-        };
-        return Ok(AccessRule::all(vec![base, customer_condition(scope, ownership)?]));
+        let ownership =
+            if qualified.is_some_and(|qualified| qualified.same_role(&[customer::ALL_AUTHORIZED_LIST])) {
+                AccessRule::Allow
+            } else {
+                AccessRule::Fact(AccessFact::Owned)
+            };
+        return Ok(AccessRule::all(vec![base, customer_condition(&scope, ownership)?]));
     }
 
     if !is_selection(permission) {
@@ -61,30 +77,11 @@ pub(crate) fn condition(
     }
     require_qualification(qualified, &customer::DETAIL)?;
     let customer_scope = find_scope(scopes, &customer::DETAIL)?;
-    let mut conditions = vec![base, customer_detail_condition(customer_scope)?];
+    let mut conditions = vec![base, customer_detail_condition(&customer_scope)?];
     if requires_read(permission) {
         require_qualification(qualified, &selection::ADMIN_IMAGE)?;
-        conditions.push(read_condition(find_scope(scopes, &selection::ADMIN_IMAGE)?));
-    }
-    Ok(AccessRule::all(conditions))
-}
-
-// 校验选品接入时列全可能的客户来源和详情范围维度，不靠当前请求覆盖某个分支。
-pub(crate) fn binding_condition(permission: &Permission, base: AccessRule) -> Result<AccessRule> {
-    if is_list(permission) {
-        let scope = capability_scope(&customer::LIST)?;
-        return Ok(AccessRule::all(vec![
-            base,
-            customer_condition(&scope, AccessRule::Fact(AccessFact::Owned))?,
-        ]));
-    }
-
-    if !is_selection(permission) {
-        return Ok(base);
-    }
-    let mut conditions = vec![base, customer_detail_condition(&capability_scope(&customer::DETAIL)?)?];
-    if requires_read(permission) {
-        conditions.push(read_condition(&capability_scope(&selection::ADMIN_IMAGE)?));
+        let scope = find_scope(scopes, &selection::ADMIN_IMAGE)?;
+        conditions.push(read_condition(&scope));
     }
     Ok(AccessRule::all(conditions))
 }
@@ -101,8 +98,8 @@ fn requires_read(permission: &Permission) -> bool {
         && !matches!(permission.action(), "list" | "get" | "create")
 }
 
-fn require_qualification(qualified: &QualifiedPermissions, permission: &Permission) -> Result<()> {
-    if qualified.same_role(slice::from_ref(permission)) {
+fn require_qualification(qualified: Option<&QualifiedPermissions>, permission: &Permission) -> Result<()> {
+    if qualified.is_none_or(|qualified| qualified.same_role(slice::from_ref(permission))) {
         Ok(())
     } else {
         tracing::debug!(%permission, "缺少选品入口所需的独立读取资格");
@@ -110,18 +107,11 @@ fn require_qualification(qualified: &QualifiedPermissions, permission: &Permissi
     }
 }
 
-fn find_scope<'a>(
-    scopes: &'a [(Permission, Permission, ResolvedScope)],
-    permission: &Permission,
-) -> Result<&'a ResolvedScope> {
-    scopes
-        .iter()
-        .find(|(entry, source, _)| entry == permission && source == permission)
-        .map(|(_, _, scope)| scope)
-        .ok_or_else(|| {
-            tracing::debug!(%permission, "选品缺少独立范围");
-            Error::ValidationError("当前账号尚未配置选品所需的数据范围，请联系权限管理员".into())
-        })
+fn find_scope<'a>(scopes: &ScopeLookup<'a>, permission: &Permission) -> Result<Cow<'a, ResolvedScope>> {
+    scopes.get(permission, permission, || {
+        tracing::debug!(%permission, "选品缺少独立范围");
+        Error::ValidationError("当前账号尚未配置选品所需的数据范围，请联系权限管理员".into())
+    })
 }
 
 fn customer_condition(scope: &ResolvedScope, ownership: AccessRule) -> Result<AccessRule> {
@@ -204,7 +194,7 @@ mod tests {
         let permission = selection::BOOKLET_PUBLISH;
         let qualified = QualifiedPermissions::test_grants(&[("write", slice::from_ref(&permission))]);
         assert!(matches!(
-            condition(&permission, &qualified, &[], AccessRule::Allow),
+            condition(&permission, &qualified, &ScopeLookup::Resolved(&[]), AccessRule::Allow),
             Err(Error::Forbidden(_))
         ));
         let qualified = QualifiedPermissions::test_grants(&[
@@ -216,12 +206,37 @@ mod tests {
             (selection::ADMIN_IMAGE, selection::ADMIN_IMAGE, scope(false)),
             (customer::DETAIL, customer::DETAIL, scope(true)),
         ];
-        let rule = condition(&permission, &qualified, &scopes, AccessRule::Allow).unwrap();
+        let rule =
+            condition(&permission, &qualified, &ScopeLookup::Resolved(&scopes), AccessRule::Allow).unwrap();
         let mut root = list_object("actor");
         assert!(rule.allows_object("actor", &root, &BTreeSet::new()).unwrap());
         root.owner_id = FactValue::Known(Some("other".into()));
         assert!(!rule.allows_object("actor", &root, &BTreeSet::new()).unwrap());
-        assert!(condition(&permission, &qualified, &[], AccessRule::Allow).is_err());
+        assert!(condition(&permission, &qualified, &ScopeLookup::Resolved(&[]), AccessRule::Allow).is_err());
+    }
+
+    #[test]
+    fn binding_matches_runtime_with_capability_scopes_and_no_optional_qualification() {
+        let qualified = QualifiedPermissions::test_grants(&[
+            ("customer-list", &[customer::LIST]),
+            ("customer-detail", &[customer::DETAIL]),
+            ("booklet-read", &[selection::ADMIN_IMAGE]),
+        ]);
+        for permission in [selection::BOOKLET_LIST, selection::BOOKLET_CREATE, selection::BOOKLET_PUBLISH] {
+            let scopes: Vec<_> = scope_requests(&permission)
+                .into_iter()
+                .map(|(entry, source)| {
+                    let scope = super::super::capability_scope(&source).unwrap();
+                    (entry, source, scope)
+                })
+                .collect();
+            let base = AccessRule::Fact(AccessFact::Owned);
+            assert_eq!(
+                binding_condition(&permission, base.clone()).unwrap(),
+                condition(&permission, &qualified, &ScopeLookup::Resolved(&scopes), base).unwrap(),
+                "{permission}"
+            );
+        }
     }
 
     #[test]
@@ -229,7 +244,8 @@ mod tests {
         let permission = selection::BOOKLET_LIST;
         let scopes = [(customer::LIST, customer::LIST, scope(true))];
         let ordinary = QualifiedPermissions::test_grants(&[("read", &[customer::LIST])]);
-        let rule = condition(&permission, &ordinary, &scopes, AccessRule::Allow).unwrap();
+        let rule =
+            condition(&permission, &ordinary, &ScopeLookup::Resolved(&scopes), AccessRule::Allow).unwrap();
         assert!(rule.allows_object("actor", &list_object("actor"), &BTreeSet::new()).unwrap());
         assert!(!rule.allows_object("actor", &list_object("other"), &BTreeSet::new()).unwrap());
 
@@ -237,12 +253,12 @@ mod tests {
             ("read", &[customer::LIST]),
             ("all", &[customer::ALL_AUTHORIZED_LIST]),
         ]);
-        let rule = condition(&permission, &all, &scopes, AccessRule::Allow).unwrap();
+        let rule = condition(&permission, &all, &ScopeLookup::Resolved(&scopes), AccessRule::Allow).unwrap();
         assert!(rule.allows_object("actor", &list_object("other"), &BTreeSet::new()).unwrap());
         assert!(rule.allows_object("actor", &object("actor"), &BTreeSet::new()).is_err());
 
         let limited = [(customer::LIST, customer::LIST, scope(false))];
-        let rule = condition(&permission, &all, &limited, AccessRule::Allow).unwrap();
+        let rule = condition(&permission, &all, &ScopeLookup::Resolved(&limited), AccessRule::Allow).unwrap();
         assert!(!rule.allows_object("actor", &list_object("other"), &BTreeSet::new()).unwrap());
     }
 
@@ -251,12 +267,13 @@ mod tests {
         let qualified = QualifiedPermissions::test_grants(&[("customer", &[customer::DETAIL])]);
         let scopes = [(customer::DETAIL, customer::DETAIL, scope(true))];
         for permission in [selection::BOOKLET_CREATE, selection::ADMIN_IMAGE, selection::PROPOSAL_DETAIL] {
-            let rule = condition(&permission, &qualified, &scopes, AccessRule::Allow).unwrap();
+            let rule = condition(&permission, &qualified, &ScopeLookup::Resolved(&scopes), AccessRule::Allow)
+                .unwrap();
             assert!(rule.allows_object("actor", &list_object("other"), &BTreeSet::new()).unwrap());
             assert_eq!(qualifications(&permission), vec![customer::DETAIL]);
             let missing = QualifiedPermissions::test_grants(&[]);
             assert!(matches!(
-                condition(&permission, &missing, &scopes, AccessRule::Allow),
+                condition(&permission, &missing, &ScopeLookup::Resolved(&scopes), AccessRule::Allow),
                 Err(Error::Forbidden(_))
             ));
         }
@@ -270,12 +287,24 @@ mod tests {
             .history_participants = FactValue::Known(["actor".into()].into());
         let mut customer_scope = scope(false);
         let scopes = [(customer::DETAIL, customer::DETAIL, customer_scope.clone())];
-        let rule = condition(&selection::ADMIN_IMAGE, &qualified, &scopes, AccessRule::Allow).unwrap();
+        let rule = condition(
+            &selection::ADMIN_IMAGE,
+            &qualified,
+            &ScopeLookup::Resolved(&scopes),
+            AccessRule::Allow,
+        )
+        .unwrap();
         assert!(rule.allows_object("actor", &root, &BTreeSet::new()).unwrap());
 
         customer_scope.user_limit = Some(ScopeClause::default());
         let scopes = [(customer::DETAIL, customer::DETAIL, customer_scope)];
-        let rule = condition(&selection::ADMIN_IMAGE, &qualified, &scopes, AccessRule::Allow).unwrap();
+        let rule = condition(
+            &selection::ADMIN_IMAGE,
+            &qualified,
+            &ScopeLookup::Resolved(&scopes),
+            AccessRule::Allow,
+        )
+        .unwrap();
         assert!(!rule.allows_object("actor", &root, &BTreeSet::new()).unwrap());
     }
 }

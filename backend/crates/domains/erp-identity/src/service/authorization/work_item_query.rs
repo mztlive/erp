@@ -4,7 +4,9 @@ use persistence_core::Executor;
 
 use super::resolve::Resolution;
 use super::targets::{SourceEvidence, TargetFacts};
-use super::work_items::{decision_qualified, exact_source, order_resource};
+use super::work_items::{
+    PORTAL_REQUESTS, PortalRequest, decision_qualified, exact_source, order_resource, portal_request,
+};
 use super::{AuthorizationService, approval_query, materials, rules};
 use crate::entity::authorization::{
     AccessContext, AccessFact, AccessRule, AccessTarget, ObjectFacts, RelationKey, RelationMatch,
@@ -12,54 +14,72 @@ use crate::entity::authorization::{
 use crate::repository::authorization::AccessProof;
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
-const PORTAL: &[(&str, Permission)] = &[
-    ("detail_portal_application", internal::PORTAL_MATERIAL_READ),
-    ("detail_portal_offering", internal::PORTAL_MATERIAL_READ_OFFERING),
-    ("detail_portal_new_product", internal::PORTAL_MATERIAL_READ),
-    ("detail_portal_cooperation", internal::PORTAL_MATERIAL_READ),
-];
-
-// 每类详情分支应以唯一完整来源为准；自引用只用于不需要额外单据来源的真实任务种类。
-fn related(key: &str, resource: &str, rule: AccessRule) -> Result<AccessRule> {
-    Ok(AccessRule::Related {
-        relation: RelationKey::parse(key)?,
-        resource: resource.into(),
-        mode: RelationMatch::ExactlyOne,
-        rule: Box::new(rule),
-    })
+enum DetailPartition {
+    Other,
+    Order(&'static str, Permission),
+    Portal(&'static PortalRequest),
+    ApprovalOwner,
+    ApprovalManagement,
 }
 
-// 任务详情启动校验必须覆盖全部来源分区，不能因当前账号不合格而跳过缺失的 Mapping。
+fn detail_partitions() -> impl Iterator<Item = DetailPartition> {
+    [
+        DetailPartition::Other,
+        DetailPartition::Order("detail_sales", sales_order::DETAIL),
+        DetailPartition::Order("detail_purchase", purchase_order::DETAIL),
+    ]
+    .into_iter()
+    .chain(PORTAL_REQUESTS.iter().map(DetailPartition::Portal))
+    .chain([DetailPartition::ApprovalOwner, DetailPartition::ApprovalManagement])
+}
+
+impl DetailPartition {
+    // 每类详情分支应以唯一完整来源为准；自引用只用于无需额外来源的任务分区。
+    fn related(&self, rule: AccessRule) -> Result<AccessRule> {
+        let (key, resource) = match self {
+            Self::Other => ("detail_other", "work_item"),
+            Self::Order(key, source) => (*key, source.resource()),
+            Self::Portal(request) => (request.detail_key, "supplier_portal_material"),
+            Self::ApprovalOwner => ("detail_approval_owner", "work_item"),
+            Self::ApprovalManagement => ("detail_approval_management", "approval_instance"),
+        };
+        Ok(AccessRule::Related {
+            relation: RelationKey::parse(key)?,
+            resource: resource.into(),
+            mode: RelationMatch::ExactlyOne,
+            rule: Box::new(rule),
+        })
+    }
+}
+
+fn approval_owner(can_decide: bool) -> AccessRule {
+    let owned = AccessRule::Fact(AccessFact::Owned);
+    if can_decide {
+        owned
+    } else {
+        AccessRule::all(vec![owned, AccessRule::Fact(AccessFact::Completed(true))])
+    }
+}
+
+// 启动时检查全部详情来源及独立管理过滤，不按账号资格省略分支。
 pub(super) fn binding_condition(base: AccessRule) -> Result<AccessRule> {
-    let mut partitions = vec![related("detail_other", "work_item", AccessRule::Allow)?];
-    for (key, source) in [("detail_sales", sales_order::DETAIL), ("detail_purchase", purchase_order::DETAIL)]
-    {
-        partitions.push(related(
-            key,
-            source.resource(),
-            rules::data_condition(&source, Some(&rules::capability_scope(&source)?))?,
-        )?);
-    }
-
-    for (key, permission) in PORTAL {
-        partitions.push(related(key, "supplier_portal_material", materials::binding_condition(permission)?)?);
-    }
-
-    partitions.push(related(
-        "detail_approval_owner",
-        "work_item",
-        AccessRule::all(vec![
-            AccessRule::Fact(AccessFact::Owned),
-            AccessRule::Fact(AccessFact::Completed(true)),
-        ]),
-    )?);
-    partitions.push(related(
-        "detail_approval_management",
-        "approval_instance",
-        approval_query::query_binding_condition()?,
-    )?);
-
-    Ok(AccessRule::all(vec![base, AccessRule::any(partitions)]))
+    let partitions = detail_partitions()
+        .map(|partition| {
+            let rule = match &partition {
+                DetailPartition::Other => AccessRule::Allow,
+                DetailPartition::Order(_, source) => {
+                    rules::data_condition(source, Some(&rules::capability_scope(source)?))?
+                },
+                DetailPartition::Portal(request) => materials::binding_condition(&request.read)?,
+                DetailPartition::ApprovalOwner => approval_owner(false),
+                DetailPartition::ApprovalManagement => approval_query::query_binding_condition()?,
+            };
+            partition.related(rule)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let mut checks = vec![base, AccessRule::any(partitions)];
+    checks.extend(rules::management_binding_condition(&work_item::DETAIL)?);
+    Ok(AccessRule::all(checks))
 }
 
 impl AuthorizationService {
@@ -72,74 +92,52 @@ impl AuthorizationService {
         base: AccessRule,
         executor: &mut dyn Executor,
     ) -> Result<AccessRule> {
-        let mut partitions = vec![related("detail_other", "work_item", AccessRule::Allow)?];
-        for (key, source) in
-            [("detail_sales", sales_order::DETAIL), ("detail_purchase", purchase_order::DETAIL)]
-        {
-            let rule = self
-                .approval_source_condition(
-                    context,
-                    &source,
-                    &[work_item::DETAIL],
-                    qualified,
-                    resolution,
-                    executor,
-                )
-                .await?;
-            partitions.push(related(key, source.resource(), rule)?);
-        }
-
-        self.portal_partitions(context, qualified, resolution, &mut partitions, executor).await?;
-
-        if qualified.permissions().covers_one(&approval_instance::COPIES_HISTORY) {
-            let owner = if decision_qualified(qualified) {
-                AccessRule::Fact(AccessFact::Owned)
-            } else {
-                AccessRule::all(vec![
-                    AccessRule::Fact(AccessFact::Owned),
-                    AccessRule::Fact(AccessFact::Completed(true)),
-                ])
+        let can_read_approvals = qualified.permissions().covers_one(&approval_instance::COPIES_HISTORY);
+        let mut partitions = Vec::new();
+        for partition in detail_partitions() {
+            let rule = match &partition {
+                DetailPartition::Other => AccessRule::Allow,
+                DetailPartition::Order(_, source) => {
+                    self.approval_source_condition(
+                        context,
+                        source,
+                        &[work_item::DETAIL],
+                        qualified,
+                        resolution,
+                        executor,
+                    )
+                    .await?
+                },
+                DetailPartition::Portal(request) => {
+                    if !rules::qualified(&request.read, qualified) {
+                        continue;
+                    }
+                    let source = AccessContext {
+                        permission: request.read.clone(),
+                        resource: "supplier_portal_material".into(),
+                        ..context.clone()
+                    };
+                    let rule = self.material_condition(&source, qualified, resolution, executor).await?;
+                    AccessRule::Independent { permission: request.read.clone(), rule: Box::new(rule) }
+                },
+                DetailPartition::ApprovalOwner | DetailPartition::ApprovalManagement
+                    if !can_read_approvals =>
+                {
+                    continue;
+                },
+                DetailPartition::ApprovalOwner => approval_owner(decision_qualified(qualified)),
+                DetailPartition::ApprovalManagement => {
+                    let management = AccessContext {
+                        permission: internal::APPROVAL_MANAGEMENT_READ,
+                        resource: "approval_instance".into(),
+                        ..context.clone()
+                    };
+                    self.approval_query_condition(&management, qualified, resolution, executor).await?
+                },
             };
-            partitions.push(related("detail_approval_owner", "work_item", owner)?);
-
-            let management = AccessContext {
-                permission: internal::APPROVAL_MANAGEMENT_READ,
-                resource: "approval_instance".into(),
-                ..context.clone()
-            };
-            let rule = self.approval_query_condition(&management, qualified, resolution, executor).await?;
-            partitions.push(related("detail_approval_management", "approval_instance", rule)?);
+            partitions.push(partition.related(rule)?);
         }
-
         Ok(AccessRule::all(vec![base, AccessRule::any(partitions)]))
-    }
-
-    // 供应商申请材料按持久化申请类型分别编译已有读取资格，不额外要求能审核该申请。
-    async fn portal_partitions(
-        &self,
-        context: &AccessContext,
-        qualified: &QualifiedPermissions,
-        resolution: &mut Resolution,
-        partitions: &mut Vec<AccessRule>,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        for (key, permission) in PORTAL {
-            if !rules::qualified(permission, qualified) {
-                continue;
-            }
-            let source = AccessContext {
-                permission: permission.clone(),
-                resource: "supplier_portal_material".into(),
-                ..context.clone()
-            };
-            let rule = self.material_condition(&source, qualified, resolution, executor).await?;
-            partitions.push(related(
-                key,
-                "supplier_portal_material",
-                AccessRule::Independent { permission: permission.clone(), rule: Box::new(rule) },
-            )?);
-        }
-        Ok(())
     }
 
     // 精确任务详情必须执行其固定来源权限；普通列表只执行自己的条件，不被详情来源收窄。
@@ -171,11 +169,9 @@ impl AuthorizationService {
         executor: &mut dyn Executor,
     ) -> Result<AccessProof> {
         let source = exact_source(object, "portal_source", "supplier_portal_material")?;
-        let permission = match source.subject_type.get()?.as_str() {
-            "offering_update" => internal::PORTAL_MATERIAL_READ_OFFERING,
-            "offering_create" | "new_product" | "cooperation" => internal::PORTAL_MATERIAL_READ,
-            _ => return Err(Error::ValidationError("任务材料真实申请类型未登记".into())),
-        };
+        let request = portal_request(source.subject_type.get()?)
+            .ok_or_else(|| Error::ValidationError("任务材料真实申请类型未登记".into()))?;
+        let permission = request.read.clone();
         if !rules::qualified(&permission, &proof.qualified) {
             return Err(Error::Forbidden("当前账号不具备任务材料读取资格".into()));
         }
@@ -217,11 +213,59 @@ impl AuthorizationService {
         let access = self.resolve_context(context, None, false, &proof.qualified, executor).await?;
 
         let target = AccessTarget::record(&instance.id)?;
-        let facts = TargetFacts::load(&self.facts, &access.context, &access.rule, &target, executor).await?;
+        let facts =
+            TargetFacts::load(&self.facts, &access.context, &access.resolved.rules.root, &target, executor)
+                .await?;
 
         let mut proofs = self.approval_sources(&access, &facts, executor).await?;
         let context = access.context.clone();
         proofs.push(access);
         Ok(SourceEvidence { proofs, facts: vec![(context, facts)] })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::entity::authorization::QueryOutput;
+
+    #[test]
+    fn binding_checks_management_after_all_detail_partitions() {
+        let binding = rules::binding_condition(&work_item::DETAIL, &QueryOutput::Object).unwrap();
+        let AccessRule::All(checks) = binding else {
+            panic!("任务详情绑定必须检查根对象、来源分区和独立管理范围");
+        };
+        let [_, AccessRule::Any(partitions), management] = checks.as_slice() else {
+            panic!("独立管理范围必须在完整详情规则之后校验");
+        };
+        assert_eq!(
+            management,
+            &rules::data_condition(
+                &work_item::MANAGE,
+                Some(&rules::capability_scope(&work_item::MANAGE).unwrap())
+            )
+            .unwrap()
+        );
+        let keys = partitions
+            .iter()
+            .map(|partition| match partition {
+                AccessRule::Related { relation, mode: RelationMatch::ExactlyOne, .. } => relation.as_str(),
+                _ => panic!("详情分区必须要求唯一完整来源"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            keys,
+            [
+                "detail_other",
+                "detail_sales",
+                "detail_purchase",
+                "detail_portal_application",
+                "detail_portal_offering",
+                "detail_portal_new_product",
+                "detail_portal_cooperation",
+                "detail_approval_owner",
+                "detail_approval_management",
+            ]
+        );
     }
 }
