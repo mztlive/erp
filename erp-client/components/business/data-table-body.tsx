@@ -129,7 +129,10 @@ export function DataTableBody<TData>({
                 Array.from({ length: 5 }, (_, rowIndex) => (
                     <TableRow key={`loading-${rowIndex}`}>
                         {table.getVisibleLeafColumns().map((column) => (
-                            <TableCell key={column.id}>
+                            <TableCell
+                                key={column.id}
+                                data-column-id={column.id}
+                            >
                                 <Skeleton className="h-4 w-full" />
                             </TableCell>
                         ))}

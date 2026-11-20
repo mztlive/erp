@@ -683,34 +683,103 @@
     padding-inline: var(--scaffold-px);
 }
 
-/* 通栏纯白工作面内的表格表面与分页：表格按 --scaffold-px 内收成独立圆角表框，
-   避免表头与批量操作条的浅色底直接贴死左侧导航造成视觉粘连。 */
+/* 通栏纯白工作面内的无框表格（方案 A）：去掉四周边框与圆角，表头改纯白以消除与左侧浅灰导航的粘连，
+   全表以水平细线建立秩序，首尾列外沿与页头/筛选栏严格对齐 --scaffold-px。 */
 [data-slot="page-scaffold"].erp-list-workspace-page
-    > [data-slot="list-work-surface"]:has([data-slot="data-table-surface"])
-    > :is(
-        [data-slot="list-workspace-toolbar"],
-        [data-slot="list-work-surface-applied-chips"]
-    ) {
-    border-bottom-color: transparent;
+    > [data-slot="list-work-surface"] {
+    --table-header: var(--card);
 }
 [data-slot="page-scaffold"].erp-list-workspace-page
     > [data-slot="list-work-surface"]
-    > [data-slot="list-work-surface-filter-tray"]:has(
-        [data-slot="list-filter-tray"][data-open]
-    ) {
-    margin-bottom: 0.625rem;
+    [data-slot="table-toolbar-wrapper"] {
+    padding-top: 0.625rem;
+    border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
 }
 [data-slot="page-scaffold"].erp-list-workspace-page
     > [data-slot="list-work-surface"]
     [data-slot="data-table-surface"] {
-    margin-inline: var(--scaffold-px);
-    border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
-    border-radius: var(--radius-lg);
+    margin-inline: 0;
+    border: 0;
+    border-radius: 0;
 }
 [data-slot="page-scaffold"].erp-list-workspace-page
     > [data-slot="list-work-surface"]
-    [data-slot="data-table-pagination"] {
-    border-top-width: 0;
+    [data-slot="data-table-surface"]
+    > [role="status"] {
+    padding-inline: var(--scaffold-px);
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    [data-slot="table-header"]
+    tr {
+    border-bottom-color: color-mix(in oklab, var(--border) 85%, transparent);
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    [data-slot="table-head"]:hover {
+    background-color: color-mix(in oklab, var(--muted) 55%, transparent);
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    [data-slot="table-head"][data-sorted="true"],
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    [data-slot="table-head"][data-sorted="true"]:hover {
+    background-color: var(--row-hover);
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    [data-slot="table-body"]
+    [data-slot="table-row"] {
+    border-bottom-color: color-mix(in oklab, var(--grid) 65%, transparent);
+}
+/* 通栏首列与末列外沿精准吃齐 --scaffold-px（选择列与预览列同步补足定宽，避免挤压 16px 图标并保证固定列测宽准确） */
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    :is([data-slot="table-head"], [data-slot="table-cell"]):first-child:not(
+        [data-column-id="__selection"]
+    ) {
+    padding-inline-start: var(--scaffold-px);
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    :is(
+        [data-slot="table-head"],
+        [data-slot="table-cell"]
+    ):first-child[data-column-id="__selection"] {
+    width: calc(var(--scaffold-px) + 1.25rem);
+    min-width: calc(var(--scaffold-px) + 1.25rem);
+    max-width: calc(var(--scaffold-px) + 1.25rem);
+    padding-inline-start: var(--scaffold-px);
+    padding-inline-end: 0.25rem;
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    :is([data-slot="table-head"], [data-slot="table-cell"]):last-child:not(
+        [data-column-id="__preview"]
+    ) {
+    padding-inline-end: var(--scaffold-px);
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"]
+    :is(
+        [data-slot="table-head"],
+        [data-slot="table-cell"]
+    ):last-child[data-column-id="__preview"] {
+    width: calc(var(--scaffold-px) + 1.25rem);
+    min-width: calc(var(--scaffold-px) + 1.25rem);
+    max-width: calc(var(--scaffold-px) + 1.25rem);
+    padding-inline-start: 0.25rem;
+    padding-inline-end: var(--scaffold-px);
 }
 
 /* 底部居中悬浮批量操作胶囊：锚定在表格区域底部正中、分页条上方 14px，零表体跳动 */
