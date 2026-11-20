@@ -18,7 +18,9 @@ pub use iam::*;
 pub use organization::*;
 pub use person_directory::*;
 pub use portal::*;
-pub use resource_access::GrantSourcePage;
+pub use resource_access::{
+    GrantSourcePage, ManualGrantRequest, RecomputeRequest, RevokeRequest, SourcesQuery, validate_grant_cursor,
+};
 pub use role_template::*;
 
 pub use crate::entity::person_directory::PersonDirectoryCategory;

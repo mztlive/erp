@@ -7,6 +7,6 @@ mod readiness;
 mod rules;
 
 pub use backfill::{BackfillProblem, BackfillReport, BackfillRequest, GrantHistoryKind};
-pub use management::{ManualGrantRequest, RecomputeRequest, RevokeRequest, SourcesQuery};
+pub use erp_identity::dto::{ManualGrantRequest, RecomputeRequest, RevokeRequest, SourcesQuery};
 pub use process::ResourceGrantProcess;
 pub use readiness::GrantReadiness;

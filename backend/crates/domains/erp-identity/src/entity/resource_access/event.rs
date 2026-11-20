@@ -5,7 +5,7 @@ use erp_core::validation::normalize_required_text_ref;
 use id_generator::next_id;
 use serde::{Deserialize, Serialize};
 
-use super::SourceKey;
+use super::{GrantRule, SourceKey};
 use crate::{Error, Result};
 
 /// 业务触发与必需证据。开票仅在最终审批通过并创建执行任务后产生事件。
@@ -48,76 +48,65 @@ pub enum GrantEventPayload {
     },
 }
 impl GrantEventPayload {
+    /// 返回该业务事件对应的自动读取授权规则。
+    pub fn rule(&self) -> GrantRule {
+        match self {
+            Self::InvoiceTaskReassigned { .. } => GrantRule::InvoiceTaskReassigned,
+            Self::InvoiceApproved { .. } => GrantRule::InvoiceApproved,
+            Self::SalesOrderApprovalAssigned { .. } => GrantRule::SalesOrderApprovalAssigned,
+            Self::PurchaseOrderApprovalAssigned { .. } => GrantRule::PurchaseOrderApprovalAssigned,
+        }
+    }
+
     /// 根据事件变体固定授权规则、业务类型和业务 ID，节点及分配等细节保留在事件证据中。
     /// 接收账号须来自正式任务或审批节点的实际分配；证据 ID 或账号为空、超长或带首尾空白时拒绝。
     pub fn source(&self, recipient: &str) -> Result<SourceKey> {
-        let (rule, business_type, business_id, ids) = match self {
+        let (business_id, ids): (&String, &[&String]) = match self {
             Self::InvoiceTaskReassigned { work_item_id, command_receipt_id } => {
-                ("invoice_task_reassigned", "work_item", work_item_id, vec![work_item_id, command_receipt_id])
+                (work_item_id, &[work_item_id, command_receipt_id])
             },
-            Self::InvoiceApproved { invoice_request_id, approval_instance_id, work_item_id } => (
-                "invoice_approved",
-                "sales_invoice_request",
-                invoice_request_id,
-                vec![invoice_request_id, approval_instance_id, work_item_id],
-            ),
+            Self::InvoiceApproved { invoice_request_id, approval_instance_id, work_item_id } => {
+                (invoice_request_id, &[invoice_request_id, approval_instance_id, work_item_id])
+            },
             Self::SalesOrderApprovalAssigned {
                 sales_order_id,
                 approval_instance_id,
                 node_id,
                 assignment_id,
-            } => (
-                "sales_order_approval_assigned",
-                "approval_instance",
-                approval_instance_id,
-                vec![sales_order_id, approval_instance_id, node_id, assignment_id],
-            ),
+            } => (approval_instance_id, &[sales_order_id, approval_instance_id, node_id, assignment_id]),
             Self::PurchaseOrderApprovalAssigned {
                 purchase_order_id,
                 approval_instance_id,
                 node_id,
                 assignment_id,
-            } => (
-                "purchase_order_approval_assigned",
-                "approval_instance",
-                approval_instance_id,
-                vec![purchase_order_id, approval_instance_id, node_id, assignment_id],
-            ),
+            } => (approval_instance_id, &[purchase_order_id, approval_instance_id, node_id, assignment_id]),
         };
 
-        for id in ids {
+        for &id in ids {
             if normalize_required_text_ref(id, "业务事件证据不能为空", 128, "业务事件证据过长")? != *id
             {
                 return Err(Error::ValidationError("业务事件证据不能带首尾空白".into()));
             }
         }
 
-        let source = SourceKey {
-            rule: rule.into(),
-            business_type: business_type.into(),
-            business_id: business_id.clone(),
-            recipient: recipient.into(),
-        };
+        let source = self.rule().source_key(business_id, recipient);
         source.id()?;
         Ok(source)
     }
 
     // 提取事件类型和该业务动作的稳定证据键；未参与键的关联记录仍在重放时比对。
     fn identity(&self) -> (&'static str, &str, &str, &str) {
-        match self {
-            Self::InvoiceTaskReassigned { command_receipt_id, .. } => {
-                ("invoice_task_reassigned", command_receipt_id, "", "")
-            },
+        let (first, second, third) = match self {
+            Self::InvoiceTaskReassigned { command_receipt_id, .. } => (command_receipt_id.as_str(), "", ""),
             Self::InvoiceApproved { invoice_request_id, approval_instance_id, .. } => {
-                ("invoice_approved", invoice_request_id, approval_instance_id, "")
+                (invoice_request_id.as_str(), approval_instance_id.as_str(), "")
             },
-            Self::SalesOrderApprovalAssigned { approval_instance_id, node_id, assignment_id, .. } => {
-                ("sales_order_approval_assigned", approval_instance_id, node_id, assignment_id)
+            Self::SalesOrderApprovalAssigned { approval_instance_id, node_id, assignment_id, .. }
+            | Self::PurchaseOrderApprovalAssigned { approval_instance_id, node_id, assignment_id, .. } => {
+                (approval_instance_id.as_str(), node_id.as_str(), assignment_id.as_str())
             },
-            Self::PurchaseOrderApprovalAssigned { approval_instance_id, node_id, assignment_id, .. } => {
-                ("purchase_order_approval_assigned", approval_instance_id, node_id, assignment_id)
-            },
-        }
+        };
+        (self.rule().code(), first, second, third)
     }
 }
 
@@ -293,6 +282,20 @@ mod tests {
             assert_eq!(event.status, GrantEventStatus::Pending);
             assert_eq!(event.available_at, 100);
         }
+    }
+    // 核对事件、重算请求与队列筛选使用同一套稳定规则代码。
+    #[test]
+    fn all_rules_match_payload_types_and_wire_codes() {
+        let mut remaining = GrantRule::ALL.to_vec();
+        for payload in payloads() {
+            let rule = payload.rule();
+            let index = remaining.iter().position(|&entry| entry == rule).unwrap();
+            remaining.remove(index);
+            assert_eq!(serde_json::to_value(rule).unwrap(), json!(rule.code()));
+            assert_eq!(serde_json::to_value(&payload).unwrap()["type"], rule.code());
+            assert_eq!(payload.identity().0, rule.code());
+        }
+        assert!(remaining.is_empty());
     }
     // 验证事件类型、接收账号或事实版本的变化会区分幂等键。
     #[test]

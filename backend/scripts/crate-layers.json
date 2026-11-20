@@ -735,8 +735,6 @@
       ],
       "dependencies": [
         "async-trait",
-        "bpm",
-        "erp-core",
         "erp-finance",
         "erp-identity",
         "erp-procurement",

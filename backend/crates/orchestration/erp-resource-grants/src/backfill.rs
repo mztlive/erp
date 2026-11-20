@@ -2,23 +2,21 @@
 use std::collections::BTreeSet;
 
 use application_core::AuditActor;
-use bpm::model::types::ApprovalNodeExecutionStatus;
-use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
 use erp_finance::repository::extensions::ReceivableExt;
+use erp_identity::dto::validate_grant_cursor;
 use erp_identity::entity::resource_access::event::{GrantEvent, GrantEventEvidence, GrantEventPayload};
 use erp_identity::ports::ResourceGrantFacts;
 use erp_identity::service::resource_access::append_event;
 use erp_identity::{Error, Result};
 use erp_workflow::entity::work_item_command::WorkItemCommandResult;
+use erp_workflow::repository::WorkItemExt;
 pub use erp_workflow::repository::grant_history::GrantHistoryKind;
 use erp_workflow::repository::grant_history::{self, GrantHistoryEntry};
-use erp_workflow::repository::{BpmExt, WorkItemExt};
 use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 
 use crate::ResourceGrantProcess;
 use crate::facts::Facts;
-use crate::management::validate_cursor;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -53,7 +51,7 @@ impl ResourceGrantProcess {
     /// 校验管理员权限后，按指定证据类型和排他游标处理一页历史记录。预览只统计，执行只追加授权事件，不重放已有审批、转派或财务命令。
     /// 报告区分新增、已有、永久终止和无效证据，空页代表本类扫描结束。权限或基础设施错误中止整页，提交结果未知时不自动重试。
     pub async fn backfill(&self, actor: &AuditActor, request: BackfillRequest) -> Result<BackfillReport> {
-        validate_cursor(request.after.as_deref())?;
+        validate_grant_cursor(request.after.as_deref())?;
 
         let this = self.clone();
         let actor = actor.clone();
@@ -80,15 +78,16 @@ impl ResourceGrantProcess {
         let mut planned = BTreeSet::new();
 
         for entry in entries {
-            let prepared = match self.prepare_history(&entry, &planned, ex).await {
+            let id = entry.id().to_owned();
+            let prepared = match self.prepare_history(entry, &planned, ex).await {
                 Ok(value) => value,
                 Err(Error::ConflictError(reason)) => {
-                    report.invalid.push(BackfillProblem { record_id: entry.id().into(), reason });
+                    report.invalid.push(BackfillProblem { record_id: id, reason });
                     continue;
                 },
                 Err(Error::ValidationError(_)) => {
                     report.invalid.push(BackfillProblem {
-                        record_id: entry.id().into(),
+                        record_id: id,
                         reason: "原审批或人员分派资料不符合补齐查看权限的要求，请核对该笔记录".into(),
                     });
                     continue;
@@ -111,7 +110,7 @@ impl ResourceGrantProcess {
 
     async fn prepare_history(
         &self,
-        entry: &GrantHistoryEntry,
+        entry: GrantHistoryEntry,
         planned: &BTreeSet<String>,
         ex: &mut dyn Executor,
     ) -> Result<PreparedHistory> {
@@ -141,15 +140,15 @@ impl ResourceGrantProcess {
 
     async fn historical_events(
         &self,
-        entry: &GrantHistoryEntry,
+        entry: GrantHistoryEntry,
         ex: &mut dyn Executor,
     ) -> Result<Vec<GrantEventEvidence>> {
         match entry {
-            GrantHistoryEntry::Invoice(approval) => {
+            GrantHistoryEntry::Invoice { id, invoice_request_id } => {
                 let request = self
                     .db
                     .sales_invoice_requests()
-                    .find_by_id(approval.subject.subject_id(), ex)
+                    .find_by_id(&invoice_request_id, ex)
                     .await?
                     .ok_or_else(invalid)?;
                 let task_id = request.work_item_id.as_deref().ok_or_else(invalid)?;
@@ -159,7 +158,7 @@ impl ResourceGrantProcess {
                 Ok(vec![GrantEventEvidence {
                     payload: GrantEventPayload::InvoiceApproved {
                         invoice_request_id: request.base.id.clone(),
-                        approval_instance_id: approval.base.id.clone(),
+                        approval_instance_id: id,
                         work_item_id: task.base.id,
                     },
                     recipient,
@@ -167,26 +166,9 @@ impl ResourceGrantProcess {
                     occurred_at: request.base.updated_at,
                 }])
             },
-            GrantHistoryEntry::Assignment(execution) => {
-                if execution.status == ApprovalNodeExecutionStatus::Blocked {
-                    return Ok(Vec::new());
-                }
-                let instance = self
-                    .db
-                    .approval_process_instances()
-                    .find_by_id(execution.process_instance_id.as_ref(), ex)
-                    .await?
-                    .ok_or_else(invalid)?;
-
-                let mut events = Vec::new();
-                for event in assignment_events(&instance, execution) {
-                    if grant_history::assigned_to(&self.db, &execution.base.id, &event.recipient, ex).await? {
-                        events.push(event);
-                    }
-                }
-                Ok(events)
-            },
-            GrantHistoryEntry::Reassignment(receipt) => {
+            GrantHistoryEntry::Assignment { events, .. } => Ok(events),
+            GrantHistoryEntry::InvalidAssignment { .. } => Err(invalid()),
+            GrantHistoryEntry::Reassignment { receipt, .. } => {
                 let WorkItemCommandResult::Reassigned { work_item_id, .. } = &receipt.result else {
                     return Err(invalid());
                 };
@@ -208,48 +190,8 @@ fn invalid() -> Error {
     Error::ConflictError("原审批、待办或人员分派记录缺失或不一致，无法补齐查看权限，请核对该笔记录".into())
 }
 
-fn assignment_events(
-    instance: &ApprovalProcessInstance,
-    execution: &ApprovalNodeExecution,
-) -> Vec<GrantEventEvidence> {
-    let payload = match instance.subject.subject_kind() {
-        "sales_order" => GrantEventPayload::SalesOrderApprovalAssigned {
-            sales_order_id: instance.subject.subject_id().into(),
-            approval_instance_id: instance.base.id.clone(),
-            node_id: execution.node_key.clone(),
-            assignment_id: execution.base.id.clone(),
-        },
-        "purchase_order" => GrantEventPayload::PurchaseOrderApprovalAssigned {
-            purchase_order_id: instance.subject.subject_id().into(),
-            approval_instance_id: instance.base.id.clone(),
-            node_id: execution.node_key.clone(),
-            assignment_id: execution.base.id.clone(),
-        },
-        _ => return Vec::new(),
-    };
-
-    let recipients = std::iter::once(execution.assignee_participant_id.as_str())
-        .chain(execution.additional_assignees.iter().map(|assignee| assignee.participant_id.as_str()))
-        .collect::<BTreeSet<_>>();
-    recipients
-        .into_iter()
-        .map(|recipient| GrantEventEvidence {
-            payload: payload.clone(),
-            recipient: recipient.into(),
-            fact_version: instance.base.version,
-            occurred_at: execution.base.created_at,
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
-    use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
-    use bpm::model::types::ApprovalExecutionAssignmentSource;
-    use bpm::model::{
-        ApprovalParticipant, NewNodeExecution, NewProcessInstance, ParticipantId, ProcessKind, SubjectRef,
-        Timestamp,
-    };
     use serde_json::json;
 
     use super::*;
@@ -268,58 +210,5 @@ mod tests {
             }))
             .is_err()
         );
-    }
-
-    #[test]
-    fn historical_orders_use_frozen_recipients_and_distinct_sources() {
-        for (kind, process) in
-            [("sales_order", ProcessKind::SalesOrder), ("purchase_order", ProcessKind::PurchaseOrder)]
-        {
-            let mut instance = ApprovalProcessInstance::start_running(NewProcessInstance {
-                id: ApprovalProcessInstanceId::new("instance"),
-                process_definition_id: ApprovalProcessDefinitionId::new("definition"),
-                definition_version: 1,
-                process_kind: process,
-                subject: SubjectRef::new(kind, "S001").unwrap(),
-                subject_version: 1,
-                started_by: ParticipantId::new("applicant").unwrap(),
-                at: Timestamp::from_unix_secs(10).unwrap(),
-            })
-            .unwrap();
-            instance.base.version = 7;
-            let mut execution = ApprovalNodeExecution::new_active(NewNodeExecution {
-                id: ApprovalNodeExecutionId::new("node"),
-                process_instance_id: ApprovalProcessInstanceId::new("instance"),
-                node_key: "review".into(),
-                node_name: "审批".into(),
-                round_no: 1,
-                execution_no: 1,
-                assignment_source: ApprovalExecutionAssignmentSource::Definition,
-                replaces_execution_id: None,
-                assignee_participant_id: ParticipantId::new("first").unwrap(),
-                assignee_name_snapshot: "审批人".into(),
-                at: Timestamp::from_unix_secs(11).unwrap(),
-            })
-            .unwrap();
-            execution.additional_assignees.push(ApprovalParticipant {
-                participant_id: ParticipantId::new("second").unwrap(),
-                name: "另一审批人".into(),
-            });
-
-            let events = assignment_events(&instance, &execution);
-            assert_eq!(
-                events.iter().map(|event| event.recipient.as_str()).collect::<Vec<_>>(),
-                vec!["first", "second"]
-            );
-            let first = GrantEvent::new(events[0].clone()).unwrap();
-            let second = GrantEvent::new(events[1].clone()).unwrap();
-            assert_ne!(first.source, second.source);
-            assert_eq!(first.evidence.fact_version, 7);
-            assert_eq!(first.evidence.occurred_at, 11);
-            first.ensure_replay(&GrantEvent::new(events[0].clone()).unwrap()).unwrap();
-
-            instance.subject = SubjectRef::new("unrelated", "S001").unwrap();
-            assert!(assignment_events(&instance, &execution).is_empty());
-        }
     }
 }

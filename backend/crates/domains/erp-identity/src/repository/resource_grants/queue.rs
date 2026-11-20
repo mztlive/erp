@@ -5,6 +5,7 @@ use mongodb::options::{FindOptions, ReturnDocument};
 use persistence_core::{Executor, mongo_ops};
 use serde::{Deserialize, Serialize};
 
+pub use crate::entity::resource_access::GrantRule;
 use crate::entity::resource_access::event::{GrantEvent, GrantEventStatus};
 use crate::entity::resource_access::{GrantSource, ResourceKind, SourceKey};
 use crate::repository::resource_grants;
@@ -118,10 +119,9 @@ impl GrantEventRepository {
         let latest = self
             .db
             .collection::<GrantSource>("resource_grant_sources")
-            .find_one(doc! { "key.rule": { "$in": ["invoice_approved", "sales_order_approval_assigned", "purchase_order_approval_assigned"] } })
+            .find_one(health_source_filter())
             .sort(doc! { "updated_at": -1, "id": 1 })
-            .await
-            ?;
+            .await?;
 
         Ok(GrantQueueHealth {
             latest_fact_version: latest.map(|s| s.fact_version),
@@ -161,6 +161,12 @@ impl GrantEventRepository {
         Ok(events.last().map(|e| e.base.id.clone()))
     }
 }
+// 最近事实版本仅从自动授权来源中读取。
+fn health_source_filter() -> Document {
+    let codes: Vec<_> = GrantRule::ALL.iter().copied().map(GrantRule::code).collect();
+    doc! { "key.rule": { "$in": codes } }
+}
+
 /// 维护入口仅允许固定规则、资源类型或稳定来源。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case", deny_unknown_fields)]
@@ -179,26 +185,6 @@ pub enum GrantRecompute {
         GrantRule,
     ),
 }
-/// 已实现的规则版本固定为 1；新增规则必须增加类型化变体。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum GrantRule {
-    InvoiceTaskReassigned,
-    InvoiceApproved,
-    SalesOrderApprovalAssigned,
-    PurchaseOrderApprovalAssigned,
-}
-impl GrantRule {
-    // 返回正式事件使用的稳定规则代码，供按规则重算筛选。
-    fn code(&self) -> &'static str {
-        match self {
-            Self::InvoiceApproved => "invoice_approved",
-            Self::InvoiceTaskReassigned => "invoice_task_reassigned",
-            Self::SalesOrderApprovalAssigned => "sales_order_approval_assigned",
-            Self::PurchaseOrderApprovalAssigned => "purchase_order_approval_assigned",
-        }
-    }
-}
 impl GrantRecompute {
     // 将维护范围转为正式事件筛选；支持全部、已验证的精确来源、资源或规则。
     fn query(&self) -> Result<Document> {
@@ -206,11 +192,12 @@ impl GrantRecompute {
             Self::All => doc! {},
             Self::Source(key) => return source_filter(key),
             Self::Rule(rule) => doc! { "source.rule": rule.code() },
-            Self::Resource(ResourceKind::SalesOrder) => {
-                doc! { "source.rule": { "$in": ["invoice_approved", "invoice_task_reassigned", "sales_order_approval_assigned"] } }
-            },
-            Self::Resource(ResourceKind::PurchaseOrder) => {
-                doc! { "source.rule": "purchase_order_approval_assigned" }
+            Self::Resource(kind) => {
+                let codes = GrantRule::codes_for_resource(*kind);
+                match codes.as_slice() {
+                    [code] => doc! { "source.rule": *code },
+                    _ => doc! { "source.rule": { "$in": codes } },
+                }
             },
         })
     }
@@ -254,6 +241,29 @@ fn source_filter(source: &SourceKey) -> Result<Document> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // 健康检查纳入全部自动来源，尤其是开票执行任务转派。
+    #[test]
+    fn health_selects_all_automatic_rules() {
+        assert_eq!(
+            health_source_filter(),
+            doc! { "key.rule": { "$in": ["invoice_approved", "invoice_task_reassigned",
+            "sales_order_approval_assigned", "purchase_order_approval_assigned"] } },
+        );
+    }
+
+    // 按资源重算沿用原有规则集合和 MongoDB 查询结构。
+    #[test]
+    fn resource_recompute_preserves_sales_and_purchase_filters() {
+        assert_eq!(
+            GrantRecompute::Resource(ResourceKind::SalesOrder).query().unwrap(),
+            doc! { "source.rule": { "$in": ["invoice_approved", "invoice_task_reassigned", "sales_order_approval_assigned"] } },
+        );
+        assert_eq!(
+            GrantRecompute::Resource(ResourceKind::PurchaseOrder).query().unwrap(),
+            doc! { "source.rule": "purchase_order_approval_assigned" },
+        );
+    }
 
     #[test]
     fn exact_source_filter_and_id_keep_fields_and_first_validation_error() {

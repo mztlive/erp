@@ -2538,8 +2538,6 @@ version = "0.1.0"
 dependencies = [
  "application-core",
  "async-trait",
- "bpm",
- "erp-core",
  "erp-finance",
  "erp-identity",
  "erp-procurement",

@@ -1,6 +1,4 @@
 use async_trait::async_trait;
-use bpm::SubjectRef;
-use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use erp_finance::entity::receivable::InvoiceRequestStatus;
 use erp_finance::repository::extensions::ReceivableExt;
 use erp_finance::repository::receivable::SalesInvoiceRequestRepositoryExt;
@@ -10,8 +8,11 @@ use erp_identity::ports::ResourceGrantFacts;
 use erp_identity::{Error, Result};
 use erp_procurement::repository::extensions::PurchaseOrderExt;
 use erp_sales::repository::extensions::SalesOrderExt;
+use erp_workflow::authorization::grant_facts::{
+    find_approval_snapshot, find_assignment_snapshots, find_latest_invoice_approval_snapshot,
+};
 use erp_workflow::entity::work_item::WorkItemType;
-use erp_workflow::repository::{BpmExt, BpmWorkflowRepository, WorkItemCommandExt, WorkItemExt};
+use erp_workflow::repository::{WorkItemCommandExt, WorkItemExt};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -120,13 +121,10 @@ impl Facts {
         }
 
         let request = db.sales_invoice_requests().find_for_task(task_id, ex).await?.ok_or_else(conflict)?;
-        let subject = SubjectRef::new("sales_invoice_request", &request.base.id).map_err(|_| conflict())?;
-        let approval = BpmWorkflowRepository::new(db)
-            .find_latest_by_subject(&subject, ex)
-            .await?
-            .ok_or_else(conflict)?;
+        let approval =
+            find_latest_invoice_approval_snapshot(db, &request.base.id, ex).await?.ok_or_else(conflict)?;
 
-        let (target, _) = Self::invoice(db, event, &request.base.id, &approval.base.id, task_id, ex).await?;
+        let (target, _) = Self::invoice(db, event, &request.base.id, &approval.id, task_id, ex).await?;
         Ok((target, task.base.version))
     }
 
@@ -139,8 +137,7 @@ impl Facts {
         ex: &mut dyn Executor,
     ) -> Result<(GrantTarget, u64)> {
         let request = db.sales_invoice_requests().find_by_id(request_id, ex).await?.ok_or_else(conflict)?;
-        let approval =
-            db.approval_process_instances().find_by_id(approval_id, ex).await?.ok_or_else(conflict)?;
+        let approval = find_approval_snapshot(db, approval_id, ex).await?.ok_or_else(conflict)?;
         let task = db.work_items().find_by_id(task_id, ex).await?.ok_or_else(conflict)?;
         let account = db
             .receivable_accounts()
@@ -149,13 +146,13 @@ impl Facts {
             .ok_or_else(conflict)?;
 
         InvoiceEvidence {
-            approved: approval.status == ApprovalProcessInstanceStatus::Approved,
+            approved: approval.approved,
             request_approved: matches!(
                 request.status,
                 InvoiceRequestStatus::Approved | InvoiceRequestStatus::Completed
             ),
-            approval_kind: approval.subject.subject_kind(),
-            approval_request: approval.subject.subject_id(),
+            approval_kind: &approval.subject_kind,
+            approval_request: &approval.subject_id,
             request_id,
             approval_version: approval.subject_version,
             request_version: request.approval_subject_version,
@@ -186,25 +183,25 @@ impl Facts {
         assignment: &str,
         ex: &mut dyn Executor,
     ) -> Result<(GrantTarget, u64)> {
-        let instance =
-            db.approval_process_instances().find_by_id(instance_id, ex).await?.ok_or_else(conflict)?;
-        let execution =
-            db.approval_node_executions().find_by_id(assignment, ex).await?.ok_or_else(conflict)?;
+        let (instance, execution) =
+            find_assignment_snapshots(db, instance_id, assignment, &event.evidence.recipient, ex)
+                .await?
+                .ok_or_else(conflict)?;
 
         AssignmentEvidence {
-            subject_kind: instance.subject.subject_kind(),
-            subject_id: instance.subject.subject_id(),
+            subject_kind: &instance.subject_kind,
+            subject_id: &instance.subject_id,
             resource: target.resource,
             target_id: &target.id,
             instance_id,
-            execution_instance: execution.process_instance_id.as_ref(),
+            execution_instance: &execution.process_instance_id,
             node,
             execution_node: &execution.node_key,
-            blocked: execution.status == ApprovalNodeExecutionStatus::Blocked,
-            participant: execution.has_participant(&event.evidence.recipient),
+            blocked: execution.blocked,
+            participant: execution.has_recipient,
         }
         .validate()?;
-        Ok((target, instance.base.version))
+        Ok((target, instance.version))
     }
 }
 fn conflict() -> Error {
