@@ -9,11 +9,12 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::supplier::{
-    SupplierProfileAddressInput, SupplierProfileBankAccountInput, SupplierProfileContactInput,
-    SupplierProfileQualificationInput, SupplierProfileRatingInput,
+    SupplierProfileAddressInput, SupplierProfileBankAccountInput, SupplierProfileCapabilityOwnerInput,
+    SupplierProfileContactInput, SupplierProfileQualificationInput, SupplierProfileRatingInput,
 };
 use crate::entity::supplier::{
-    InvoiceType, QualificationType, ReconciliationCycle, SettlementMode, SupplierPaymentTerm, SupplierRating,
+    CapabilityCode, InvoiceType, QualificationType, ReconciliationCycle, SettlementMode, SupplierPaymentTerm,
+    SupplierRating,
 };
 use crate::{Error, Result, SaveSupplierProfileRequest};
 
@@ -136,7 +137,7 @@ impl SupplierImportRow {
         Ok(())
     }
 
-    /// 将完整模板行转成根命令，由服务端指定当前提交人为维护人。
+    /// 将完整模板行转成根命令，默认启用实物商品能力，由提交人担任维护人和能力负责人。
     /// 返回完整创建命令；空税率保持未提供。
     /// 必填、维护人、税率、结算或评级不符合约束时拒绝整行。
     /// `maintainer_user_id`：当前已认证提交人的账号 ID，不读取模板内容。
@@ -178,9 +179,12 @@ impl SupplierImportRow {
             invoice_tax_rates: Some(import_tax_rates(self.cell(19))?),
             signing_entity_party_id: signing,
             payment_entity_party_id: payment,
-            maintainer_user_id: Some(maintainer_user_id),
-            capability_owners: vec![],
-            capability_codes: vec![],
+            maintainer_user_id: Some(maintainer_user_id.clone()),
+            capability_owners: vec![SupplierProfileCapabilityOwnerInput {
+                capability_code: CapabilityCode::Physical,
+                owner_user_id: maintainer_user_id,
+            }],
+            capability_codes: vec![CapabilityCode::Physical],
             qualifications: self.qualifications(),
             rating: self.rating()?,
             effective_from: self.effective_from,
@@ -377,10 +381,18 @@ mod tests {
         assert_eq!(reverse.command_key(), row.command_key());
     }
     #[test]
-    fn import_command_requires_the_authenticated_submitter_as_maintainer() {
+    fn import_command_defaults_to_physical_with_submitter_as_owner() {
         let row = complete_row();
         let command = row.command(PartyId::new("signing"), PartyId::new("payment"), " buyer-2 ").unwrap();
         assert_eq!(command.maintainer_user_id.as_deref(), Some("buyer-2"));
+        assert_eq!(command.capability_codes, [CapabilityCode::Physical]);
+        assert_eq!(
+            command.capability_owners,
+            [SupplierProfileCapabilityOwnerInput {
+                capability_code: CapabilityCode::Physical,
+                owner_user_id: "buyer-2".into(),
+            }]
+        );
         assert!(command.validate_contract().is_ok());
 
         for missing in ["", " \n\t "] {

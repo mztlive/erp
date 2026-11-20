@@ -518,6 +518,12 @@ test("[flow-22] 供应商模板：逐行创建与跳过、失败下载和原提�
     ])
     const supplier = await apiGet<{
         maintainer_user_id: string
+        capabilities: {
+            capability_code: string
+            owner_user_id: string
+            status: string
+            current_revision_id: string | null
+        }[]
         current_profile: {
             signing_entity_party_id: string
             payment_entity_party_id: string
@@ -529,6 +535,14 @@ test("[flow-22] 供应商模板：逐行创建与跳过、失败下载和原提�
         supplier.maintainer_user_id,
         "导入创建必须由原提交人承担维护责任",
     ).toBe(job.requested_by)
+    expect(supplier.capabilities).toMatchObject([
+        {
+            capability_code: "physical",
+            owner_user_id: job.requested_by,
+            status: "active",
+            current_revision_id: expect.stringMatching(/\S/),
+        },
+    ])
     expect(supplier.current_profile).toMatchObject({
         signing_entity_party_id: company!.id,
         payment_entity_party_id: company!.id,
@@ -590,4 +604,14 @@ test("[flow-22] 供应商模板：逐行创建与跳过、失败下载和原提�
         "具备导入权限的其他员工也不得下载原提交人的敏感源行",
     ).toBe(403)
     expect((await forbidden.json()).success).toBe(false)
+
+    await page.goto(`/master-data/suppliers/${suppliers.items[0].id}`)
+    const detail = workPage(page)
+    await detail.getByRole("tab", { name: "商务合作" }).click()
+    await expect(
+        detail
+            .locator("label")
+            .filter({ hasText: /^实物商品$/ })
+            .locator('[role="checkbox"]'),
+    ).toBeChecked()
 })
