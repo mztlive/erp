@@ -246,8 +246,10 @@ export type ListWorkSurfaceProps = {
     tableClassName?: string
     toolbarClassName?: string
     selectionBar?: React.ReactNode
-    /** 按需显隐 selectionBar 时传入，配合表格工具栏播放平滑展开/收起过渡。 */
+    /** 按需显隐 selectionBar 时传入，默认以表格底部居中悬浮胶囊呈现（零表体跳动）。 */
     selectionBarOpen?: boolean
+    /** 批量选择条呈现位置：传入 selectionBarOpen 时默认 dock（底部悬浮胶囊），否则保留 toolbar（表上方内嵌条）。 */
+    selectionBarPlacement?: "dock" | "toolbar"
     tableActions?: React.ReactNode
 }
 
@@ -261,10 +263,20 @@ export function ListWorkSurface({
     toolbarClassName,
     selectionBar,
     selectionBarOpen,
+    selectionBarPlacement,
     tableActions,
 }: ListWorkSurfaceProps) {
+    const isFloatingSelectionBar =
+        selectionBar != null &&
+        (selectionBarPlacement === "dock" ||
+            (selectionBarPlacement === undefined &&
+                selectionBarOpen !== undefined))
+    const isSelectionDockOpen = Boolean(
+        isFloatingSelectionBar && (selectionBarOpen ?? true),
+    )
+
     return (
-        <TableToolbarScope>
+        <TableToolbarScope hasSelectionDock={isFloatingSelectionBar}>
             <section
                 data-slot="list-work-surface"
                 className={cn(styles.workSurface, className)}
@@ -285,24 +297,60 @@ export function ListWorkSurface({
                 <TableToolbarFilterTrayHost />
                 <TableToolbar
                     isFrameToolbar
-                    animateCollapse={selectionBarOpen !== undefined}
-                    childrenOpen={selectionBarOpen}
+                    suppressSummaryPortal={isFloatingSelectionBar}
+                    animateCollapse={
+                        !isFloatingSelectionBar &&
+                        selectionBarOpen !== undefined
+                    }
+                    childrenOpen={
+                        !isFloatingSelectionBar ? selectionBarOpen : false
+                    }
                     hideControls={Boolean(toolbar)}
                     actions={toolbar ? undefined : tableActions}
                     wrapperClassName="bg-card px-4 pb-2.5"
                     className={
-                        selectionBar
+                        !isFloatingSelectionBar && selectionBar
                             ? "rounded-lg border border-primary/20 bg-sidebar-accent/55 px-3"
                             : "rounded-lg border border-border/70 bg-surface-sunken/75 px-3"
                     }
                 >
-                    {selectionBar}
+                    {!isFloatingSelectionBar ? selectionBar : undefined}
                 </TableToolbar>
                 <div
-                    className={cn(styles.table, tableClassName)}
+                    className={cn("relative", styles.table, tableClassName)}
                     data-slot="business-table-frame-table"
+                    data-selection-dock-open={
+                        isSelectionDockOpen ? "true" : undefined
+                    }
                 >
                     {table}
+                    {isFloatingSelectionBar ? (
+                        <div
+                            data-slot="list-selection-dock"
+                            data-open={isSelectionDockOpen ? "true" : "false"}
+                            aria-hidden={!isSelectionDockOpen || undefined}
+                            className={cn(
+                                "pointer-events-none absolute inset-x-0 z-40 flex justify-center px-4",
+                                "transition-[opacity,transform,visibility] motion-reduce:transition-none",
+                                isSelectionDockOpen
+                                    ? "visible translate-y-0 scale-100 opacity-100 duration-200 ease-out"
+                                    : "invisible translate-y-2.5 scale-[0.98] opacity-0 duration-150 ease-in",
+                            )}
+                        >
+                            <div
+                                data-slot="list-selection-dock-surface"
+                                className={cn(
+                                    "max-w-full rounded-2xl border border-border/90 bg-popover/95 px-2.5 py-1.5 text-popover-foreground shadow-xl ring-1 ring-foreground/5 backdrop-blur-md dark:ring-foreground/10",
+                                    "[&_[data-slot=button]]:shadow-none",
+                                    isSelectionDockOpen
+                                        ? "pointer-events-auto"
+                                        : "pointer-events-none",
+                                )}
+                            >
+                                {selectionBar}
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
             </section>
         </TableToolbarScope>

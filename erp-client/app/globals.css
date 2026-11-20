@@ -713,6 +713,25 @@
     border-top-width: 0;
 }
 
+/* 底部居中悬浮批量操作胶囊：锚定在表格区域底部正中、分页条上方 14px，零表体跳动 */
+[data-slot="list-selection-dock"] {
+    bottom: 1rem;
+}
+[data-slot="business-table-frame-table"]:has(
+        [data-slot="data-table-pagination"]
+    )
+    > [data-slot="list-selection-dock"] {
+    bottom: calc(
+        var(--spacing-control-sm) + var(--spacing-table-pagination-block) * 2 +
+            0.875rem
+    );
+}
+/* 浮条展开时为表格滚动容器底部预留缓冲空间，确保滚动至末行不被浮条遮挡，且不引起可视行跳动 */
+[data-slot="business-table-frame-table"][data-selection-dock-open="true"]
+    [data-slot="table-container"] {
+    padding-bottom: 4.5rem;
+}
+
 /* 有已选条件条时，主筛选栏去掉底线并收紧下边距，让已选条件成为同一纯白筛选区的薄底带 */
 [data-slot="list-work-surface"]
     > [data-slot="list-workspace-toolbar"]:has(

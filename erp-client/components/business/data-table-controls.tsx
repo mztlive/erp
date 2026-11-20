@@ -18,6 +18,7 @@ import type {
 } from "@tanstack/react-table"
 
 import { OptionCombobox } from "@/components/business/option-combobox"
+import { useHasSelectionDock } from "@/components/business/table-toolbar"
 import type { DataTableLayout } from "@/components/business/data-table-layout"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -325,6 +326,7 @@ function DataTablePagination<TData>({
     const pageCount = table.getPageCount()
     const rowCount = table.getRowCount()
     const selectedCount = Object.keys(table.getState().rowSelection).length
+    const hasSelectionDock = useHasSelectionDock()
     const needsPager = pageCount > 1
 
     return (
@@ -358,7 +360,7 @@ function DataTablePagination<TData>({
                     条 / 页
                 </label>
                 <span aria-hidden="true">·</span>
-                {selectedCount > 0 ? (
+                {selectedCount > 0 && !hasSelectionDock ? (
                     <span className="num">
                         已选择 {selectedCount.toLocaleString("zh-CN")} 条
                     </span>

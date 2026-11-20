@@ -1,9 +1,30 @@
 "use client"
 
 import * as React from "react"
+import { XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+
+const ACTIVE_OVERLAY_SELECTOR = [
+    '[role="dialog"]',
+    '[role="alertdialog"]',
+    '[role="menu"]',
+    '[role="listbox"]',
+    '[data-slot="sheet"]',
+    '[data-slot="popover-content"][data-open]',
+    '[data-slot="list-filter-tray"][data-open]',
+].join(", ")
+
+function isEditableTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false
+    return (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+    )
+}
 
 function isShallowEqual<T>(a: T, b: T): boolean {
     if (Object.is(a, b)) return true
@@ -71,6 +92,10 @@ export type ListSelectionBarProps = {
         | ((display: ListSelectionBarDisplay) => React.ReactNode)
     selectPageLabel?: string
     clearLabel?: string
+    /** 读屏区域名称，默认「批量操作」。 */
+    ariaLabel?: string
+    /** 无浮层打开且焦点不在输入框时，允许按 Esc 快速清空已选。默认开启。 */
+    enableEscapeClear?: boolean
     onSelectPage: () => void
     onClear: () => void
     className?: string
@@ -78,9 +103,10 @@ export type ListSelectionBarProps = {
 }
 
 /**
- * 列表工作面统一批量勾选操作条：
+ * 列表工作面统一批量勾选操作条（配合 ListWorkSurface 底部悬浮胶囊使用）：
  * - 内置退场动画期间的计数快照冻结，避免闪出 0；
- * - 统一提供「已选 N / M 单位」、全选本页、清空已选与批量主动作插槽。
+ * - 统一提供实蓝计数徽标、附加分流摘要、全选本页、批量主动作插槽与清空关闭钮；
+ * - 无浮层打开时支持按 Esc 快速清空已选。
  */
 export function ListSelectionBar({
     idPrefix,
@@ -94,6 +120,8 @@ export function ListSelectionBar({
     actions,
     selectPageLabel = "全选本页",
     clearLabel = "清空已选",
+    ariaLabel = "批量操作",
+    enableEscapeClear = true,
     onSelectPage,
     onClear,
     className,
@@ -104,6 +132,27 @@ export function ListSelectionBar({
         selectedCount,
     })
 
+    React.useEffect(() => {
+        if (!enableEscapeClear || selectedCount === 0 || busy) return
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (
+                event.key !== "Escape" ||
+                event.defaultPrevented ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.altKey
+            ) {
+                return
+            }
+            if (isEditableTarget(event.target)) return
+            if (document.querySelector(ACTIVE_OVERLAY_SELECTOR)) return
+            event.preventDefault()
+            onClear()
+        }
+        window.addEventListener("keydown", onKeyDown)
+        return () => window.removeEventListener("keydown", onKeyDown)
+    }, [busy, enableEscapeClear, onClear, selectedCount])
+
     const resolvedExtra =
         typeof summaryExtra === "function"
             ? summaryExtra(display)
@@ -113,43 +162,69 @@ export function ListSelectionBar({
 
     return (
         <div
+            role="region"
+            aria-label={ariaLabel}
             data-slot={dataSlot}
             className={cn(
-                "flex flex-wrap items-center gap-x-2.5 gap-y-2 text-body-compact",
+                "flex max-w-full flex-wrap items-center gap-x-2 gap-y-1.5 text-body-compact",
                 className,
             )}
         >
-            <span className="text-muted-foreground">
-                已选{" "}
-                <span className="num font-medium text-foreground">
-                    {display.selectedCount}
-                </span>{" "}
-                / <span className="num">{display.resultCount}</span> {unit}
-                {resolvedExtra}
-            </span>
-            <Button
-                id={`${idPrefix}-select-page`}
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={busy || pageRowCount === 0 || allPageSelected}
-                onClick={onSelectPage}
-            >
-                {selectPageLabel}
-            </Button>
-            <Button
-                id={`${idPrefix}-clear`}
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={busy || display.selectedCount === 0}
-                onClick={() => {
-                    if (selectedCount > 0) onClear()
-                }}
-            >
-                {clearLabel}
-            </Button>
-            {resolvedActions}
+            <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 pl-1">
+                <span className="inline-flex items-center gap-1.5 text-foreground/85">
+                    <span className="font-medium">已选</span>
+                    <span className="num inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs leading-none font-semibold text-primary-foreground">
+                        {display.selectedCount}
+                    </span>
+                    <span className="num text-muted-foreground">
+                        / {display.resultCount} {unit}
+                    </span>
+                </span>
+                {resolvedExtra ? (
+                    <span className="text-xs text-muted-foreground">
+                        {resolvedExtra}
+                    </span>
+                ) : null}
+            </div>
+            <span
+                aria-hidden="true"
+                className="hidden h-4 w-px shrink-0 bg-border/85 sm:inline-block"
+            />
+            <div className="flex flex-wrap items-center gap-1.5">
+                <Button
+                    id={`${idPrefix}-select-page`}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-control-sm px-2 text-xs font-normal text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                    disabled={busy || pageRowCount === 0 || allPageSelected}
+                    onClick={onSelectPage}
+                >
+                    {selectPageLabel}
+                </Button>
+                {resolvedActions}
+                <span
+                    aria-hidden="true"
+                    className="mx-0.5 h-4 w-px shrink-0 bg-border/85"
+                />
+                <Button
+                    id={`${idPrefix}-clear`}
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="size-control-sm text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                    aria-label={clearLabel}
+                    title={
+                        enableEscapeClear ? `${clearLabel}（Esc）` : clearLabel
+                    }
+                    disabled={busy || display.selectedCount === 0}
+                    onClick={() => {
+                        if (selectedCount > 0) onClear()
+                    }}
+                >
+                    <XIcon aria-hidden="true" />
+                </Button>
+            </div>
         </div>
     )
 }

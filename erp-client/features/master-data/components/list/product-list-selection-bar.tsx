@@ -53,13 +53,19 @@ export function ProductListSelectionBar({
             summaryExtra={(display) =>
                 display.selectedCount > 0 ? (
                     <>
-                        {" · 可上架 "}
-                        <span className="num font-medium text-foreground">
+                        {"· 可上架 "}
+                        <span
+                            className={
+                                counts.actionableCount > 0
+                                    ? "num font-medium text-foreground"
+                                    : "num"
+                            }
+                        >
                             {counts.actionableCount}
                         </span>
                         {" 件"}
                         {counts.skippedCount > 0 ? (
-                            <span className="num">
+                            <span className="num text-muted-foreground/75">
                                 （{counts.skippedCount} 件将跳过）
                             </span>
                         ) : null}
@@ -67,19 +73,18 @@ export function ProductListSelectionBar({
                 ) : null
             }
             actions={(display) => {
+                const hasActionable = counts.actionableCount > 0
                 const batchListDisabled =
-                    busy ||
-                    display.selectedCount === 0 ||
-                    counts.actionableCount === 0
+                    busy || display.selectedCount === 0 || !hasActionable
                 const batchListTitle =
-                    display.selectedCount > 0 && counts.actionableCount === 0
+                    display.selectedCount > 0 && !hasActionable
                         ? "已选商品均已上架或不满足上架条件"
                         : undefined
                 return (
                     <Button
                         id={`${idPrefix}-batch-list`}
                         type="button"
-                        variant="default"
+                        variant={hasActionable ? "default" : "secondary"}
                         size="sm"
                         disabled={batchListDisabled}
                         title={batchListTitle}
@@ -93,7 +98,7 @@ export function ProductListSelectionBar({
                             data-icon="inline-start"
                             aria-hidden="true"
                         />
-                        {counts.actionableCount > 0
+                        {hasActionable
                             ? `批量上架 ${counts.actionableCount}`
                             : "批量上架"}
                     </Button>

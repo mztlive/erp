@@ -28,8 +28,8 @@
 
 1. **纯白通栏工作面 + 内收圆角表框，严防与左侧菜单粘连**
    - 页面级骨架（`erp-list-workspace-page`）铺满纯白底色（`bg-card`），左侧导航自带 `1px` 右细线（`border-sidebar-border/80`）确立主次边界；
-   - 页头、筛选栏、已选条件带、高级筛选托盘、批量操作条、表格边框、分页条全部沿同一水平基准线（`--scaffold-px`）严格对齐；
-   - 表格主体（`data-table-surface`）与批量操作条按 `--scaffold-px` **左右内收并保留纯白外留白**，以 `rounded-lg` 圆角框承载，彻底杜绝浅灰表头或批量条贴死左侧导航造成视觉融为一体。
+   - 页头、筛选栏、已选条件带、高级筛选托盘、表格边框、分页条全部沿同一水平基准线（`--scaffold-px`）严格对齐；
+   - 表格主体（`data-table-surface`）按 `--scaffold-px` **左右内收并保留纯白外留白**，以 `rounded-lg` 圆角框承载，彻底杜绝浅灰表头贴死左侧导航造成视觉融为一体；批量勾选操作条采用**表格底部居中悬浮胶囊（Floating Dock）**，零表体跳动且与左右操作列自然错开。
 2. **压扁表头前纵向层数，首屏让位给数据**
    - 当视图切换仅有 **2~4 个短项**（如「全部 / 当前启用 / 当前停用」）时，必须内联并入页头同行（`ListWorkspaceHeader views={...}` + `variant="inline"`），同时省略冗余 `eyebrow` 与 `description`，把页头压缩为紧凑单行（`48px`）。
 3. **色彩克制与视觉降噪**
@@ -174,18 +174,19 @@
 │  ────────────────────────────────────────────────────────────────────────────────────────  │
 │  可组合多个条件，点击「查询」后统一生效。                       [↺ 重置更多条件]  [ 查询 ]  │
 ├────────────────────────────────────────────────────────────────────────────────────────────┤
-│ [Layer 6] 批量勾选操作条 (bg-surface-sunken/70, border-b border-grid/75, 有勾选时平滑滑出)  │
-│  已选 5 / 128 件 · 可上架 3 件（2 件将跳过）  [全选本页]  [清空已选]  [✓ 批量上架 3]       │
-├────────────────────────────────────────────────────────────────────────────────────────────┤
-│ [Layer 7A] 数据表头 (sticky top-0, h=36px, bg-table-header, border-b border-border/75)     │
+│ [Layer 6A] 数据表头 (sticky top-0, h=36px, bg-table-header, border-b border-border/75)     │
 │  [☐] │ 名称 (左冻结)   │ 维护人 │ SKU 数量 │ SKU 售价 │  供给  │ 启用状态 │ 上架状态 │ 操作 │ › │
 ├──────┼─────────────────┼────────┼──────────┼──────────┼────────┼──────────┼──────────┼──────┼───┤
-│ [Layer 7B] 表格主体 (flex-1 独立纵横滚动, 行高 48px, border-b border-grid/75)               │
+│ [Layer 6B] 表格主体 (flex-1 独立纵横滚动, 行高 48px, border-b border-grid/75)               │
 │  [☐] │ 名称 13px 中粗   │ 张三   │     3 个 │ ¥12~¥28  │ ●已覆盖│ ●当前启用 │ [●━━]   │添加供给 ⋯│ › │
 │      │ PRD-001 12px 灰 │        │          │          │        │          │          │      │   │
 │  [☑] │ 选中行冰蓝底     │ —      │     0 个 │ 未填写   │ —      │ ●当前停用 │ [━━○]   │添加供给 ⋯│ › │
+│                                                                                            │
+│          ╭────────────────────────────────────────────────────────────────────────╮        │
+│ [Dock]   │ 已选 [ 5 ] / 128 件 · 可上架 3 件（2 件将跳过） │ 全选本页 [✓ 批量上架 3] │ × │ │
+│          ╰────────────────────────────────────────────────────────────────────────╯        │
 ├────────────────────────────────────────────────────────────────────────────────────────────┤
-│ [Layer 7C] 吸底分页条 (mt-auto, bg-card, border-t border-border/60, py=10px, px=--scaffold) │
+│ [Layer 6C] 吸底分页条 (mt-auto, bg-card, border-t border-border/60, py=10px, px=--scaffold) │
 │  [ 50 ▾ ] 条 / 页 · 共 128 条                                  第 1 / 3 页 [«][‹][›][»]    │
 └────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -291,16 +292,16 @@ flowchart TD
   - 胶囊交互态与外层主筛选逐像素同源：hover `bg-muted` → focus-within `border-primary/60 bg-card + 3px ring` → 有值（`:has([data-has-value="true"])` 或输入框非空）切换冰蓝底 `bg-sidebar-accent/70` + `border-primary/25` + 深蓝字！
 - **托盘页脚**：`border-t border-border/40 pt-3 pb-3.5`，左放说明文案（`可组合多个条件，点击「查询」后统一生效。`），右放「重置更多条件」（`RotateCcwIcon`，只清空托盘草稿）+ 实心主蓝「查询」按钮。
 
-### 4.5 批量勾选操作条（`TableToolbar` + `ListSelectionBar`）
+### 4.5 批量勾选悬浮胶囊（`ListWorkSurface` Dock + `ListSelectionBar`）
 
-- 位于筛选区与表格之间，由外层 `table-toolbar-wrapper` 提供 `--scaffold-px` 左右纯白留白与 `10px` 底部间距，内层渲染为 **`rounded-lg` 冰蓝语义圆角条**（`border border-primary/20 bg-sidebar-accent/55 px-3`），既与左侧冷灰菜单完全隔离，又在色相上呼应冰蓝选中行、与下方冷灰表头明确区分。
-- 通过 `selectionBarOpen={canBatch && selectedCount > 0}` 驱动 `Collapsible` 平滑展开/收起动画（200ms 展 / 150ms 收，配合 `-translate-y-1` 位移；外层留白纳入折叠面板内，收起后零残余高度）。
-- **退场防闪烁模式（已内置于 `ListSelectionBar` / `useFrozenSelectionSnapshot`）**：当用户取消最后一条勾选触发收起动画时，自动冻结上一次非零计数快照，防止收起瞬间闪现「已选 0 件」或主按钮瞬间置灰。
-- 控件排布（`gap-x-2.5 gap-y-2 text-body-compact`）：
-  1. 分流计数摘要：`已选 **N** / M 件 · 可{动作} **K** 件（S 件将跳过）`（关键数字用 `num font-medium text-foreground`）
-  2. `Button variant="ghost" size="sm"`：「全选本页」（本页已全选时禁用）
-  3. `Button variant="ghost" size="sm"`：「清空已选」
-  4. `Button variant="default" size="sm"`：实心主蓝批量动作钮，带图标及实时可执行数（如 `批量上架 3`），可执行数为 `0` 时禁用并通过 `title` 解释原因。
+- **形态与定位**：当 `ListWorkSurface` 传入 `selectionBarOpen={canBatch && selectedCount > 0}` 时，默认在表格区域底部正中、分页条上方 `14px` 处以**自适应内容宽度的悬浮胶囊（`data-slot="list-selection-dock"`，`z-40`）**平滑上浮呈现，**零表体下推跳动**；容器样式为 `rounded-2xl border border-border/90 bg-popover/95 px-2.5 py-1.5 shadow-xl ring-1 ring-foreground/5 backdrop-blur-md`（与内部 `rounded-md` 28px 按钮形成同心圆角）。
+- **底部滚动留白与计数去重**：浮条展开时自动给表格滚动容器追加 `padding-bottom: 4.5rem`，保证滚动至最末行仍完全可见可点且不影响可视行位置；同时由 `TableToolbarScope` 告知分页条与顶栏不重复展示「已选择 N 条」，分页条稳定保持「共 M 条」。
+- **入场/退场防闪烁**：通过 `opacity + translateY + scale + visibility` 平滑上浮（200ms ease-out）与收起（150ms ease-in，支持 `motion-reduce`）；`ListSelectionBar` 内置 `useFrozenSelectionSnapshot`，在取消最后一条勾选触发退场动画期间冻结最后一次非零计数，杜绝闪现 `0`。
+- **控件排布（左右以 `1px` 竖线分隔）**：
+  1. 计数锚点与分流摘要：`已选` + 实心主蓝圆胶囊数字（`bg-primary text-primary-foreground rounded-full`）+ `/ M 单位` + 轻量 `text-xs text-muted-foreground` 附加摘要（如 `· 可上架 3 件（2 件将跳过）`）
+  2. `Button variant="ghost" size="sm"`：「全选本页」（弱化灰字，本页已全选时禁用）
+  3. 批量主动作按钮：有可执行项时用实心主蓝 `variant="default"` 带图标及实时可执行数（如 `批量上架 3`）；可执行数为 `0` 时降级为中性 `variant="secondary"` 禁用态并通过 `title` 解释原因，避免淡蓝半透明显脏
+  4. `Button variant="ghost" size="icon-sm"`：右侧 `×` 清空按钮（保留 `${idPrefix}-clear` 原生 ID 与 `aria-label="清空已选"`，支持无浮层打开时按 `Esc` 快速清空）
 
 ---
 
@@ -423,7 +424,7 @@ flowchart TD
 | `↑` / `↓` | 聚焦数据行时在相邻行间移动焦点 |
 | `Enter` | 在数据行上触发 `onRowOpen`（或回落 `onRowPreview`）；在筛选表单内触发提交查询 |
 | `Space` | 在可选数据行上切换行勾选状态（行内按钮/链接/开关/输入框自动拦截，不冒泡触发行动作） |
-| `Esc` | 关闭已展开的高级筛选托盘并回滚未提交的低频草稿 |
+| `Esc` | 关闭已展开的高级筛选托盘并回滚未提交的低频草稿；无浮层/弹窗打开且存在批量勾选时清空已选 |
 | 焦点归还 | 点击行或行操作前把 `row.stableId` 记入 `lastFocusedRowId`；抽屉/弹窗关闭后将焦点还回对应 `[data-row-id="…"]` |
 
 ---
@@ -687,6 +688,6 @@ export function StandardEntityListPage() {
 - [ ] **工具栏与列设置**：列设置唯一且位于筛选栏最右侧（`TableToolbarInlineControls` 末位），支持显隐、排序、左右固定与恢复默认。
 - [ ] **表格密度与字号**：`layout="flush"`，默认 `density="comfortable"`（48px 行高）；表头 12px 吸顶，正文严格继承 13px（无 `text-sm` 杂音），数字等宽右对齐（`.num`），空值统一淡灰 `—`。
 - [ ] **冻结列与滚动微影**：左冻结选择列 + 主身份列、右冻结操作列 + 预览箭头列；静止态无阴影，纵/横滚动超过 1px 后自动浮现边界微影，冻结单元格底色不透字。
-- [ ] **批量勾选体验**：勾选后平滑展开 `bg-surface-sunken/70` 批量条，取消最后一条收起时不闪出 `0`；筛选/视图切换后自动清空已选。
+- [ ] **批量勾选体验**：勾选后在表格底部正中平滑上浮悬浮胶囊（`list-selection-dock`），零表体跳动、取消最后一条收起时不闪出 `0`、支持 `Esc` 清空；分页条不重复显示「已选择」；筛选/视图切换后自动清空已选。
 - [ ] **全状态完备**：首屏骨架、刷新保留旧数据条、查询失败 `BusinessFailureState`（带重试，不误报无结果）、三类空态（无范围 / 筛选无结果 / 首次无数据）全部就位，且横向滚动时不漂移。
 - [ ] **权限、键盘与 DOM ID**：无权入口整段不渲染；`/` 聚焦搜索、`↑/↓` 换行、`Enter` 打开、`Space` 勾选、`Esc` 收起托盘；所有交互目标均有唯一稳定原生 `id`。

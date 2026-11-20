@@ -24,12 +24,20 @@ type ToolbarScope = {
     setSettings: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>
     tables: ReadonlySet<object>
     register: (table: object) => () => void
+    hasSelectionDock: boolean
 }
 
 const ToolbarContext = React.createContext<ToolbarScope | null>(null)
 
 /** 每个列表框架独立管理挂载点；嵌套框架和多表不得共用列设置。 */
-export function TableToolbarScope({ children }: { children: React.ReactNode }) {
+export function TableToolbarScope({
+    hasSelectionDock = false,
+    children,
+}: {
+    /** 当前列表工作面是否启用底部悬浮批量操作胶囊（启用时分页与顶栏不再重复汇报已选数）。 */
+    hasSelectionDock?: boolean
+    children: React.ReactNode
+}) {
     const [filterStatus, setFilterStatus] =
         React.useState<HTMLDivElement | null>(null)
     const [inlineFilterStatus, setInlineFilterStatus] =
@@ -83,6 +91,7 @@ export function TableToolbarScope({ children }: { children: React.ReactNode }) {
             setSettings,
             tables,
             register,
+            hasSelectionDock,
         }),
         [
             filterStatus,
@@ -95,9 +104,15 @@ export function TableToolbarScope({ children }: { children: React.ReactNode }) {
             settings,
             tables,
             register,
+            hasSelectionDock,
         ],
     )
     return <ToolbarContext value={value}>{children}</ToolbarContext>
+}
+
+/** 当前列表框架是否已由底部悬浮胶囊承载勾选计数与批量动作。 */
+export function useHasSelectionDock() {
+    return Boolean(React.useContext(ToolbarContext)?.hasSelectionDock)
 }
 
 /** 将查询结果和已生效条件放入所属列表的表格工具栏；独立筛选栏保留原位。 */
@@ -226,6 +241,7 @@ export function TableToolbar({
     isFrameToolbar = false,
     hideControls = false,
     animateCollapse = false,
+    suppressSummaryPortal = false,
 }: {
     children?: React.ReactNode
     /** 控制左侧 children（如批量操作栏）是否展开；省略时按 children 是否非空判定。 */
@@ -240,6 +256,8 @@ export function TableToolbar({
     hideControls?: boolean
     /** 开启后在空/非空切换时播放高度与透明度过渡动画。 */
     animateCollapse?: boolean
+    /** 勾选状态已由悬浮操作胶囊承载时，不向顶栏注入表格默认「已选 N / M 条」摘要。 */
+    suppressSummaryPortal?: boolean
 }) {
     const scope = React.useContext(ToolbarContext)
     const toolbarRef = React.useRef<HTMLDivElement | null>(null)
@@ -315,13 +333,19 @@ export function TableToolbar({
             <div
                 data-slot="table-toolbar-summary"
                 ref={
-                    isFrameToolbar && !hasDirectChildren
+                    isFrameToolbar &&
+                    !hasDirectChildren &&
+                    !suppressSummaryPortal
                         ? scope?.setSummary
                         : undefined
                 }
                 data-table-toolbar-content=""
                 data-table-toolbar-portal={
-                    isFrameToolbar && !hasDirectChildren ? "true" : undefined
+                    isFrameToolbar &&
+                    !hasDirectChildren &&
+                    !suppressSummaryPortal
+                        ? "true"
+                        : undefined
                 }
                 data-summary-provided={hasDirectChildren ? "true" : undefined}
                 className="min-w-0 empty:hidden"
