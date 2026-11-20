@@ -6,8 +6,7 @@
  * 不写入销售单/采购单/库存/票款。供应商、商品与公司商品池由 seed-dev-catalog.mjs 补齐。
  * 仓库在主数据重置后由本脚本重建。
  * 销售提交实物单前必须能解析默认采购调度人。付款与销项开票任务必须先有启用的财务责任规则，否则生产任务会失败关闭。
- * 默认负责人读自 dev-foundation.json。已有启用默认规则但负责人不同时，本脚本改回规格负责人。
- * 演示主数据接口只在缺少启用规则时创建，不改已有负责人。
+ * 默认负责人读自 dev-foundation.json。隔离 E2E 固定负责人，共享开发环境保留已有启用规则。
  * 财务三人分责：caiwu 为财务总监，只审批付款申请、资金单和库存调整，不得提交回款、退款或冲正；
  * fukuan 为出纳，执行付款任务并提交客户回款/退款/冲正；kaipiao 为默认开票负责人。
  * 供应商付款不得发布或启动独立审批。
@@ -21,6 +20,7 @@
  * 用法: node scripts/seed-dev-foundation.mjs
  * 环境变量: API_BASE（默认 http://127.0.0.1:10001）
  */
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { prepareRecognition } from "../e2e/fixtures/contract-recognition.mjs";
@@ -29,6 +29,7 @@ import { ensureDevOrganization } from "./dev-organization-seed.mjs";
 import {
   ACCOUNTS,
   ADMIN,
+  API_BASE,
   FOUNDATION,
   call,
   ensureDevAccounts,
@@ -311,13 +312,36 @@ function findDefaultFinanceRule(rows, operation) {
   return matches.find((row) => row.status === "active") ?? matches[0] ?? null;
 }
 
-async function ensureDefaultFinanceRules(adminToken, seeded) {
+function isolatedResponsibilitySeed() {
+  if (process.env.ERP_E2E_ISOLATED !== "1") return false;
+  const config = process.env.ERP_E2E_CONFIG_PATH;
+  if (!config) throw new Error("固定测试负责人需要 E2E 分片配置");
+  const [database, port] = JSON.parse(execFileSync("python3", ["-c", `
+import json, sys, tomllib
+with open(sys.argv[1], 'rb') as source:
+    config = tomllib.load(source)
+print(json.dumps([config['database']['db_name'], config['app']['port']]))
+`, config], { encoding: "utf8", timeout: 10_000 }));
+  if (!/^erp_e2e_[0-9]{8}t[0-9]{6}_[0-9a-f]{12}_[0-9]+$/.test(database) ||
+      API_BASE !== `http://127.0.0.1:${port}`) {
+    throw new Error("固定测试负责人必须由本次 E2E 分片的 API 执行");
+  }
+  return true;
+}
+
+function preserveActiveResponsibility(rule, ownerId, isolated) {
+  return rule?.status === "active" && (!isolated || (
+    rule.owner_user_ids?.length === 1 && rule.owner_user_ids[0] === ownerId
+  ));
+}
+
+async function ensureDefaultFinanceRules(adminToken, seeded, isolated) {
   const listed = await call("GET", "/admin/finance-responsibility-rules", { token: adminToken });
   const rows = Array.isArray(listed) ? listed : [];
   for (const rule of financeRules()) {
     const owner = seededAccount(seeded, rule.accountKey, "财务责任人");
     const existing = findDefaultFinanceRule(rows, rule.operation);
-    if (existing?.status === "active") {
+    if (preserveActiveResponsibility(existing, owner.id, isolated)) {
       console.log(`${rule.label}已配置启用负责人池，保留现有成员`);
       continue;
     }
@@ -350,7 +374,7 @@ async function ensureDefaultFinanceRules(adminToken, seeded) {
   }
 }
 
-async function ensureDefaultProcurementRule(adminToken, seeded) {
+async function ensureDefaultProcurementRule(adminToken, seeded, isolated) {
   const owner = seededAccount(seeded, FOUNDATION.procurement_responsibility_owner, "采购责任人");
   const path = "/admin/procurement-responsibility-rules";
   const rows = [];
@@ -361,7 +385,7 @@ async function ensureDefaultProcurementRule(adminToken, seeded) {
   }
   const defaults = rows.filter((row) => row.rule_type === "DEFAULT_DISPATCHER");
   const existing = defaults.find((row) => row.status === "active") ?? defaults[0];
-  if (existing?.status === "active") {
+  if (preserveActiveResponsibility(existing, owner.id, isolated)) {
     console.log("默认采购负责人池已启用，保留现有成员");
     return;
   }
@@ -468,6 +492,7 @@ async function ensureWarehouses(adminToken, handlerUserId) {
 }
 
 async function main() {
+  const isolated = isolatedResponsibilitySeed();
   const adminToken = await login(ADMIN.account, ADMIN.password);
   console.log("admin 登录成功，开始补齐岗位账号");
   const seeded = await ensureDevAccounts(adminToken);
@@ -482,8 +507,8 @@ async function main() {
   await verifyWarehouseEligibility(adminToken, seeded.warehouse);
   const warehouses = await ensureWarehouses(adminToken, seeded.warehouse.id);
   await verifyFinanceEligibility(adminToken, seeded);
-  await ensureDefaultFinanceRules(adminToken, seeded);
-  await ensureDefaultProcurementRule(adminToken, seeded);
+  await ensureDefaultFinanceRules(adminToken, seeded, isolated);
+  await ensureDefaultProcurementRule(adminToken, seeded, isolated);
 
   let customer = await findCustomer(adminToken);
   if (customer) {

@@ -209,228 +209,238 @@ function LineNumberInput({
     )
 }
 
-function buildPurchaseOrderEditLineColumns(
-    lineEdits: LineEdits,
-    setLineEdits: LineEditSetter,
-    allowZeroQuantity: boolean,
-    options: DeliveryOptions,
-): ColumnDef<PurchaseOrderLineRow>[] {
-    return [
-        {
-            id: "item",
-            accessorFn: (row) => row.itemName,
-            header: "项目",
-            meta: { label: "项目", width: "flex" },
-            cell: ({ row }) => {
-                const line = row.original
-                return (
-                    <div className="whitespace-normal">
-                        <div className="font-medium">{line.itemName}</div>
-                        <div className="text-tiny text-muted-foreground">
-                            {lineSubtitle(line)}
-                        </div>
-                    </div>
-                )
-            },
-        },
-        {
-            id: "quantity",
-            accessorKey: "quantity",
-            header: () => (
-                <>
-                    数量
-                    <RequiredMark />
-                </>
-            ),
-            meta: {
-                label: "数量",
-                width: "quantity",
-                align: "end",
-                numeric: true,
-            },
-            cell: ({ row }) => {
-                const line = row.original
-                if (line.lineType === "LOGISTICS_FEE") return "—"
-                const draft = lineEdits[line.lineId]
-                return (
-                    <LineNumberInput
-                        id={`procurement-orders-detail-edit-row-${toAutomationIdSegment(line.lineId)}-quantity`}
-                        value={draft?.quantity ?? ""}
-                        ariaLabel={`${line.itemName} 数量`}
-                        widthClass="w-20"
-                        invalid={
-                            !purchaseQuantityValid(
-                                draft?.quantity ?? line.quantity,
-                                allowZeroQuantity,
-                            )
-                        }
-                        invalidMessage={
-                            allowZeroQuantity ? "须为 0 或正数" : "须为正数"
-                        }
-                        onValueChange={(value) =>
-                            patchLineEdit(
-                                setLineEdits,
-                                line.lineId,
-                                line.inputTaxRate,
-                                {
-                                    quantity: value,
-                                    ...followSingleAddress(
-                                        line,
-                                        lineOption(line, options),
-                                        draft,
-                                        value,
-                                    ),
-                                },
-                            )
-                        }
-                    />
-                )
-            },
-        },
-        {
-            id: "unitCost",
-            accessorKey: "unitCostGross",
-            header: () => (
-                <>
-                    含税单价
-                    <RequiredMark />
-                </>
-            ),
-            meta: {
-                label: "含税单价",
-                width: "amount",
-                align: "end",
-                numeric: true,
-            },
-            cell: ({ row }) => {
-                const line = row.original
-                const draft = lineEdits[line.lineId]
-                return (
-                    <LineNumberInput
-                        id={`procurement-orders-detail-edit-row-${toAutomationIdSegment(line.lineId)}-cost`}
-                        value={draft?.unitCostGross ?? ""}
-                        ariaLabel={`${line.itemName} 含税单价`}
-                        widthClass="w-28"
-                        invalid={
-                            !positiveDecimal(
-                                draft?.unitCostGross ?? line.unitCostGross,
-                            )
-                        }
-                        invalidMessage="须为正数"
-                        onValueChange={(value) =>
-                            patchLineEdit(
-                                setLineEdits,
-                                line.lineId,
-                                line.inputTaxRate,
-                                { unitCostGross: value },
-                            )
-                        }
-                    />
-                )
-            },
-        },
-        {
-            id: "taxRate",
-            accessorKey: "inputTaxRate",
-            header: () => (
-                <>
-                    税率
-                    <RequiredMark />
-                </>
-            ),
-            meta: {
-                label: "税率",
-                width: "rate",
-                align: "end",
-                numeric: true,
-            },
-            cell: ({ row }) => {
-                const line = row.original
-                const draft = lineEdits[line.lineId]
-                const storedRate = draft?.inputTaxRate ?? line.inputTaxRate
-                return (
-                    <LineNumberInput
-                        id={`procurement-orders-detail-edit-row-${toAutomationIdSegment(line.lineId)}-tax-rate`}
-                        value={taxRateInputValue(storedRate)}
-                        ariaLabel={`${line.itemName} 税率（%）`}
-                        widthClass="w-20"
-                        suffix="%"
-                        invalid={!taxRateValid(storedRate)}
-                        invalidMessage="税率须为 0–100 的百分数"
-                        onValueChange={(value) =>
-                            patchLineEdit(
-                                setLineEdits,
-                                line.lineId,
-                                line.inputTaxRate,
-                                { inputTaxRate: parseTaxRateInput(value) },
-                            )
-                        }
-                    />
-                )
-            },
-        },
-        {
-            id: "delivery",
-            accessorKey: "expectedDeliveryDate",
-            header: () => (
-                <>
-                    预计交付日
-                    <RequiredMark />
-                </>
-            ),
-            meta: { label: "预计交付日", width: "default" },
-            cell: ({ row }) => {
-                const line = row.original
-                const option = lineOption(line, options)
-                if (!option) {
-                    return (
-                        <span className="text-xs text-muted-foreground">
-                            {line.expectedDeliveryDate ?? "—"}
-                        </span>
-                    )
-                }
-                const value =
-                    lineEdits[line.lineId]?.expectedDeliveryDate ??
-                    line.expectedDeliveryDate ??
-                    ""
-                const late =
-                    value !== line.expectedDeliveryDate &&
-                    expectedDateAfterDue(value, option.salesDueDate)
-                return (
-                    <>
-                        <DatePicker
-                            id={`procurement-orders-detail-edit-row-${toAutomationIdSegment(line.lineId)}-expected-date`}
-                            size="sm"
-                            className="w-40"
-                            value={value}
-                            clearable={false}
-                            disabledDates={afterDueDates(option.salesDueDate)}
-                            aria-invalid={late || undefined}
-                            onValueChange={(next) =>
-                                patchLineEdit(
-                                    setLineEdits,
-                                    line.lineId,
-                                    line.inputTaxRate,
-                                    { expectedDeliveryDate: next ?? "" },
-                                )
-                            }
-                        />
-                        <span
-                            className={cn(
-                                "block text-tiny",
-                                late
-                                    ? "text-destructive"
-                                    : "text-muted-foreground",
-                            )}
-                        >
-                            销售履约期限 {option.salesDueDate}
-                        </span>
-                    </>
-                )
-            },
-        },
-    ]
+const EditLineContext = React.createContext<{
+    lineEdits: LineEdits
+    setLineEdits: LineEditSetter
+    allowZeroQuantity: boolean
+    options: DeliveryOptions
+} | null>(null)
+
+function useEditLine() {
+    const context = React.useContext(EditLineContext)
+    if (!context) throw new Error("采购明细单元格需要草稿编辑上下文")
+    return context
 }
+
+// 固定单元格组件身份，输入更新或交付选项返回时保留当前输入控件。
+const editLineColumns: ColumnDef<PurchaseOrderLineRow>[] = [
+    {
+        id: "item",
+        accessorFn: (row) => row.itemName,
+        header: "项目",
+        meta: { label: "项目", width: "flex" },
+        cell: ({ row }) => {
+            const line = row.original
+            return (
+                <div className="whitespace-normal">
+                    <div className="font-medium">{line.itemName}</div>
+                    <div className="text-tiny text-muted-foreground">
+                        {lineSubtitle(line)}
+                    </div>
+                </div>
+            )
+        },
+    },
+    {
+        id: "quantity",
+        accessorKey: "quantity",
+        header: () => (
+            <>
+                数量
+                <RequiredMark />
+            </>
+        ),
+        meta: {
+            label: "数量",
+            width: "quantity",
+            align: "end",
+            numeric: true,
+        },
+        cell: function QuantityCell({ row }) {
+            const { lineEdits, setLineEdits, allowZeroQuantity, options } =
+                useEditLine()
+            const line = row.original
+            if (line.lineType === "LOGISTICS_FEE") return "—"
+            const draft = lineEdits[line.lineId]
+            return (
+                <LineNumberInput
+                    id={`procurement-orders-detail-edit-row-${toAutomationIdSegment(line.lineId)}-quantity`}
+                    value={draft?.quantity ?? line.quantity ?? ""}
+                    ariaLabel={`${line.itemName} 数量`}
+                    widthClass="w-20"
+                    invalid={
+                        !purchaseQuantityValid(
+                            draft?.quantity ?? line.quantity,
+                            allowZeroQuantity,
+                        )
+                    }
+                    invalidMessage={
+                        allowZeroQuantity ? "须为 0 或正数" : "须为正数"
+                    }
+                    onValueChange={(value) =>
+                        patchLineEdit(
+                            setLineEdits,
+                            line.lineId,
+                            line.inputTaxRate,
+                            {
+                                quantity: value,
+                                ...followSingleAddress(
+                                    line,
+                                    lineOption(line, options),
+                                    draft,
+                                    value,
+                                ),
+                            },
+                        )
+                    }
+                />
+            )
+        },
+    },
+    {
+        id: "unitCost",
+        accessorKey: "unitCostGross",
+        header: () => (
+            <>
+                含税单价
+                <RequiredMark />
+            </>
+        ),
+        meta: {
+            label: "含税单价",
+            width: "amount",
+            align: "end",
+            numeric: true,
+        },
+        cell: function UnitCostCell({ row }) {
+            const { lineEdits, setLineEdits } = useEditLine()
+            const line = row.original
+            const draft = lineEdits[line.lineId]
+            return (
+                <LineNumberInput
+                    id={`procurement-orders-detail-edit-row-${toAutomationIdSegment(line.lineId)}-cost`}
+                    value={draft?.unitCostGross ?? ""}
+                    ariaLabel={`${line.itemName} 含税单价`}
+                    widthClass="w-28"
+                    invalid={
+                        !positiveDecimal(
+                            draft?.unitCostGross ?? line.unitCostGross,
+                        )
+                    }
+                    invalidMessage="须为正数"
+                    onValueChange={(value) =>
+                        patchLineEdit(
+                            setLineEdits,
+                            line.lineId,
+                            line.inputTaxRate,
+                            { unitCostGross: value },
+                        )
+                    }
+                />
+            )
+        },
+    },
+    {
+        id: "taxRate",
+        accessorKey: "inputTaxRate",
+        header: () => (
+            <>
+                税率
+                <RequiredMark />
+            </>
+        ),
+        meta: {
+            label: "税率",
+            width: "rate",
+            align: "end",
+            numeric: true,
+        },
+        cell: function TaxRateCell({ row }) {
+            const { lineEdits, setLineEdits } = useEditLine()
+            const line = row.original
+            const draft = lineEdits[line.lineId]
+            const storedRate = draft?.inputTaxRate ?? line.inputTaxRate
+            return (
+                <LineNumberInput
+                    id={`procurement-orders-detail-edit-row-${toAutomationIdSegment(line.lineId)}-tax-rate`}
+                    value={taxRateInputValue(storedRate)}
+                    ariaLabel={`${line.itemName} 税率（%）`}
+                    widthClass="w-20"
+                    suffix="%"
+                    invalid={!taxRateValid(storedRate)}
+                    invalidMessage="税率须为 0–100 的百分数"
+                    onValueChange={(value) =>
+                        patchLineEdit(
+                            setLineEdits,
+                            line.lineId,
+                            line.inputTaxRate,
+                            { inputTaxRate: parseTaxRateInput(value) },
+                        )
+                    }
+                />
+            )
+        },
+    },
+    {
+        id: "delivery",
+        accessorKey: "expectedDeliveryDate",
+        header: () => (
+            <>
+                预计交付日
+                <RequiredMark />
+            </>
+        ),
+        meta: { label: "预计交付日", width: "default" },
+        cell: function DeliveryCell({ row }) {
+            const { lineEdits, setLineEdits, options } = useEditLine()
+            const line = row.original
+            const option = lineOption(line, options)
+            if (!option) {
+                return (
+                    <span className="text-xs text-muted-foreground">
+                        {line.expectedDeliveryDate ?? "—"}
+                    </span>
+                )
+            }
+            const value =
+                lineEdits[line.lineId]?.expectedDeliveryDate ??
+                line.expectedDeliveryDate ??
+                ""
+            const late =
+                value !== line.expectedDeliveryDate &&
+                expectedDateAfterDue(value, option.salesDueDate)
+            return (
+                <>
+                    <DatePicker
+                        id={`procurement-orders-detail-edit-row-${toAutomationIdSegment(line.lineId)}-expected-date`}
+                        size="sm"
+                        className="w-40"
+                        value={value}
+                        clearable={false}
+                        disabledDates={afterDueDates(option.salesDueDate)}
+                        aria-invalid={late || undefined}
+                        onValueChange={(next) =>
+                            patchLineEdit(
+                                setLineEdits,
+                                line.lineId,
+                                line.inputTaxRate,
+                                { expectedDeliveryDate: next ?? "" },
+                            )
+                        }
+                    />
+                    <span
+                        className={cn(
+                            "block text-tiny",
+                            late ? "text-destructive" : "text-muted-foreground",
+                        )}
+                    >
+                        销售履约期限 {option.salesDueDate}
+                    </span>
+                </>
+            )
+        },
+    },
+]
 
 /** 须按收件地址分配的行逐行给出分配编辑。 */
 function DeliveryAllocationEditors({
@@ -515,16 +525,6 @@ export function EditSurface({
             ),
         [optionsQuery.data],
     )
-    const columns = React.useMemo(
-        () =>
-            buildPurchaseOrderEditLineColumns(
-                lineEdits,
-                setLineEdits,
-                allowZeroQuantity,
-                options,
-            ),
-        [lineEdits, setLineEdits, allowZeroQuantity, options],
-    )
 
     return (
         <div className="space-y-4">
@@ -608,32 +608,46 @@ export function EditSurface({
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 pt-4">
-                    <DataTable
-                        id={`procurement-orders-detail-edit-table-${order.identity.purchaseOrderId}`}
-                        data={[...lines]}
-                        columns={columns}
-                        getRowId={(row) => row.lineId}
-                        rowCount={lines.length}
-                        rowLabel={(row) => row.itemName}
-                        caption="本单可调明细"
-                        layout="flush"
-                        density="compact"
-                        showPagination={false}
-                        showColumnVisibility={false}
-                        defaultColumnPinning={{ left: ["item"] }}
-                        emptyTitle="暂无采购明细"
-                    />
-                    {optionsQuery.isError ? (
-                        <p className="text-xs text-muted-foreground">
-                            暂时读取不到销售当前的履约期限和收件资料，预计交付日与收件分配本次不可调整。
-                        </p>
-                    ) : null}
-                    <DeliveryAllocationEditors
-                        lines={lines}
-                        lineEdits={lineEdits}
-                        setLineEdits={setLineEdits}
-                        options={options}
-                    />
+                    <fieldset
+                        disabled={!draftEditToken || savePending}
+                        className="min-w-0 space-y-4"
+                    >
+                        <EditLineContext.Provider
+                            value={{
+                                lineEdits,
+                                setLineEdits,
+                                allowZeroQuantity,
+                                options,
+                            }}
+                        >
+                            <DataTable
+                                id={`procurement-orders-detail-edit-table-${order.identity.purchaseOrderId}`}
+                                data={[...lines]}
+                                columns={editLineColumns}
+                                getRowId={(row) => row.lineId}
+                                rowCount={lines.length}
+                                rowLabel={(row) => row.itemName}
+                                caption="本单可调明细"
+                                layout="flush"
+                                density="compact"
+                                showPagination={false}
+                                showColumnVisibility={false}
+                                defaultColumnPinning={{ left: ["item"] }}
+                                emptyTitle="暂无采购明细"
+                            />
+                        </EditLineContext.Provider>
+                        {optionsQuery.isError ? (
+                            <p className="text-xs text-muted-foreground">
+                                暂时读取不到销售当前的履约期限和收件资料，预计交付日与收件分配本次不可调整。
+                            </p>
+                        ) : null}
+                        <DeliveryAllocationEditors
+                            lines={lines}
+                            lineEdits={lineEdits}
+                            setLineEdits={setLineEdits}
+                            options={options}
+                        />
+                    </fieldset>
 
                     <div className="flex flex-wrap gap-2">
                         <LoadingButton

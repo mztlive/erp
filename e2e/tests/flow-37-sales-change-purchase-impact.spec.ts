@@ -272,6 +272,11 @@ test("销售减量后审批中采购退回草稿并派待办，修改原单后�
     await procurement.page.goto("/workspace/tasks")
     await selectWorkspaceFamily(procurement.page, "procurement")
     await openWorkspaceTaskRow(procurement.page, impactTask[0]!.id)
+    await workPage(procurement.page).locator("#purchase-source-update-edit").click()
+    const draftDialog = workPage(procurement.page).getByRole("dialog", { name: "修改采购原单", exact: true })
+    await expect(draftDialog.getByRole("textbox", { name: /数量$/ })).toBeEditable(VISIBLE)
+    await draftDialog.locator("#purchase-source-update-draft-close").click()
+    await expect(draftDialog).toBeHidden(VISIBLE)
     await procurement.page.goto(`/procurement/orders/${purchase.purchase_order_id}`)
     const notice = workPage(procurement.page).locator("#procurement-orders-detail-source-update")
     await expect(notice).toContainText("关联销售单已变更，待核对采购单", VISIBLE)
@@ -284,8 +289,14 @@ test("销售减量后审批中采购退回草稿并派待办，修改原单后�
     const quantityInput = workPage(procurement.page).locator(
         `#procurement-orders-detail-edit-row-${itemLine.line_id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}-quantity`,
     )
-    await expect(quantityInput).toBeVisible(VISIBLE)
-    await quantityInput.fill("2")
+    await expect(quantityInput).toBeEditable(VISIBLE)
+    await quantityInput.selectText()
+    await quantityInput.pressSequentially("12")
+    await expect(quantityInput).toHaveValue("12")
+    await quantityInput.press("Backspace")
+    await quantityInput.press("Backspace")
+    await quantityInput.press("2")
+    await expect(quantityInput).toHaveValue("2")
     const saved = procurement.page.waitForResponse(
         (response) =>
             response.request().method() === "POST" &&
@@ -293,6 +304,9 @@ test("销售减量后审批中采购退回草稿并派待办，修改原单后�
     )
     await workPage(procurement.page).locator(`#procurement-orders-detail-edit-save-${purchase.purchase_order_id}`).click()
     const savedResponse = await saved
+    expect(savedResponse.request().postDataJSON().line_patches).toContainEqual(
+        expect.objectContaining({ line_id: itemLine.line_id, quantity: "2" }),
+    )
     expect(savedResponse.ok(), await savedResponse.text()).toBe(true)
     const awaiting = await apiGet<SalesChangeDetail>(procurementToken, `/admin/sales-change-orders/${changeId}`)
     expect(awaiting.procurement).toMatchObject({ total: 1, open: 1, completed: false })

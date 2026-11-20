@@ -548,7 +548,7 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
     try {
         await registerAcceptance(acceptance.page, salesOrderId)
         await acceptance.page.goto(`${FRONTEND_BASE}/sales/orders/${salesOrderId}`)
-        await expect(workPage(acceptance.page).getByText(salesOrderNo)).toBeVisible({ timeout: TIMEOUT })
+        await expect(workPage(acceptance.page).getByText(`单号：${salesOrderNo}`, { exact: true })).toBeVisible({ timeout: TIMEOUT })
         await workPage(acceptance.page).getByRole("tab", { name: /^交付与验收/ }).click()
         await workPage(acceptance.page).locator("#sales-order-section-acceptance").click()
         await expect(workPage(acceptance.page).getByText("验收进度")).toBeVisible({ timeout: TIMEOUT })

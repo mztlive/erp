@@ -340,18 +340,14 @@ async function maintainPrices(
 async function expectPoolPrices(
     token: string,
     skuNo: string,
-    prices: Prices,
+    prices: Partial<Prices>,
 ): Promise<SellableSku> {
-    let items: SellableSku[] = []
-    await expect.poll(async () => {
-        const result = await apiGet<ApiPage<SellableSku>>(
-            token,
-            "/admin/sellable-skus",
-            { q: skuNo, page_size: 100 },
-        )
-        items = result.items
-        return items
-    }, { message: `公司商品池应发布 ${skuNo} 的最新参考价`, timeout: VISIBLE.timeout })
+    const { items } = await apiGet<ApiPage<SellableSku>>(
+        token,
+        "/admin/sellable-skus",
+        { q: skuNo, page_size: 100 },
+    )
+    expect(items, `公司商品池首次查询应返回 ${skuNo} 的最新参考价`)
         .toMatchObject([{ sku_no: skuNo, ...prices }])
     return items[0]!
 }
@@ -459,7 +455,9 @@ test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及�
     test.setTimeout(10 * 60 * 1000)
     const suffix = Date.now().toString(36).toUpperCase()
     const adminToken = await apiToken("admin")
+    const salesToken = await apiToken("xiaoshou")
     const product = await prepareProduct(adminToken, suffix)
+    await expectPoolPrices(salesToken, product.skuNo, { sales_visible_price_gross: "100.00" })
     const { page: procurementPage } = await openLoggedInWorkspace(
         browser,
         "caigou",
@@ -468,7 +466,6 @@ test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及�
     await ensureDefaultProcurementOwner(procurementPage)
 
     const { page } = await openLoggedInWorkspace(browser, "xiaoshou")
-    const salesToken = await apiToken("xiaoshou")
     const selected = await expectPoolPrices(salesToken, product.skuNo, PRICES)
     expect(selected.supplier_codes.sort()).toEqual(["SUP-DEV-WEEK", "SUP-HZSF"])
     expect(selected.supplier_count).toBe(2)

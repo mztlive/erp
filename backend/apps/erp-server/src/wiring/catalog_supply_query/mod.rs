@@ -7,7 +7,7 @@ use erp_read_models::catalog_supply::CatalogSupplyRepository;
 use erp_supplier_catalog::sellable_projection_refresh::SellableProjectionRefresher;
 use persistence_core::{Executor, PageResult, Result};
 
-/// 把目录消费方 Port 接到跨域读取，并在列表读取前协调投影追平。
+/// 把目录消费方 Port 接到跨域读取，仅在快照之外协调投影追平。
 pub struct MongoCatalogSupplyQuery {
     db: mongodb::Database,
 }
@@ -44,7 +44,10 @@ impl CatalogSupplyQueryPort for MongoCatalogSupplyQuery {
         if restrict.as_ref().is_some_and(Vec::is_empty) {
             return Ok(PageResult { items: Vec::new(), total: 0 });
         }
-        let projection_ready = if filter.eligibility_as_of == BusinessDate::today() {
+        // 快照看不到事务外刚更新的投影，直接用同一快照聚合商品和供给事实。
+        let projection_ready = if filter.eligibility_as_of == BusinessDate::today()
+            && !executor.boundary().is_some_and(|boundary| boundary.is_snapshot())
+        {
             SellableProjectionRefresher::new(self.db.clone()).catch_up().await?
         } else {
             false
