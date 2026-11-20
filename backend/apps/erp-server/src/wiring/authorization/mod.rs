@@ -5,6 +5,7 @@ mod directories;
 mod finance;
 mod inquiries;
 mod master;
+pub mod resource_grants;
 mod sales;
 mod suppliers;
 mod tasks;

@@ -18,8 +18,8 @@ use persistence_core::Executor;
 
 use super::rules::{AssignmentEvidence, InvoiceEvidence};
 
-pub(crate) struct Facts {
-    pub db: Database,
+pub(super) struct Facts {
+    pub(super) db: Database,
 }
 
 #[async_trait]

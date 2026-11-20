@@ -5,7 +5,7 @@ Build ERP HTTP and CLI entrypoints from domain crates, named processes, and read
 ## What’s Included
 
 - **Server application (`apps/erp-server`)**: JWT authentication for ERP operators, Casbin RBAC backed by MongoDB, account management, and authenticated image upload to S3-compatible object storage.
-- **Ops CLI (`apps/cli`)**: Initialize the super admin or reset an existing admin password without depending on `erp-server`.
+- **Ops CLI (`apps/cli`)**: Initialize the super admin or reset an existing admin password. Commands may reuse `erp_server::wiring` through a one-way dependency while keeping an independent CLI runtime.
 - **Persistence (`crates/foundation/persistence-core`)**: Generic repositories, executors, transaction support, and Mongo helpers. Domain crates own concrete repositories, collection accessors, and index definitions.
 - **Business domains (`crates/domains/erp-*`)**: 19 domains own entities, DTOs, rules, repositories and services. Cross-domain writes belong to their owning orchestration crate; mixed queries belong to `erp-read-models`. Ordinary domains must not depend on other business domains.
 - **Shared crates (`crates/`)**: coordination-free UUID generation (`id-generator`), S3-compatible object storage (`storage`), and proc macros for entities and permissions.

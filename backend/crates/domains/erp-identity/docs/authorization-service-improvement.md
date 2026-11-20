@@ -106,7 +106,7 @@ DataScope 负责范围配置、范围来源和当前账号的范围解析。静�
 - server 的授权装配模块依赖公共定义、identity 及业务实现，只连接实现，不定义授权政策，不启动 HTTP、worker 或外部连接器。
 - identity 按公共权限调用已有规则，通过接口取得业务事实和映射，不反向依赖 server 或业务实现。范围定义和授权处理函数均归 identity。
 
-本次共享装配覆盖 HTTP 和当前 worker。CLI 运维命令使用自身运行时，不接入 server 的全量业务授权装配，继续遵守 CLI 不依赖 server 的边界。
+HTTP 和 worker 使用共享装配。CLI 运维命令使用自身运行时，并可按需单向复用 `erp_server::wiring`，不挂载 HTTP 或启动 worker 常驻循环。
 
 ## 3. 实现细节
 

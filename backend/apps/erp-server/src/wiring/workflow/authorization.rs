@@ -44,16 +44,9 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         instance: &str,
         executor: &mut dyn Executor,
     ) -> WorkflowResult<()> {
-        super::resource_access::approval_readiness(
-            &self.db,
-            &self.authorization,
-            actor,
-            source,
-            instance,
-            executor,
-        )
-        .await
-        .map_err(map_service)
+        super::resource_access::approval_readiness(&self.db, actor, source, instance, executor)
+            .await
+            .map_err(map_service)
     }
 
     async fn append_assignment_grants(

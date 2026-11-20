@@ -34,7 +34,6 @@ members = [
   "crates/orchestration/erp-master-data",
   "crates/orchestration/erp-order-to-cash",
   "crates/orchestration/erp-procure-to-pay",
-  "crates/orchestration/erp-resource-grants",
   "crates/orchestration/erp-reverse-flow",
   "crates/orchestration/erp-supplier-catalog",
   "crates/orchestration/erp-supplier-orders",
@@ -76,6 +75,8 @@ lopdf = { version = "=0.45.0", default-features = false }
 zune-core = { version = "=0.5.3", default-features = false, features = ["std"] }
 zune-jpeg = { version = "=0.5.15", default-features = false, features = ["std"] }
 # Workspace crates
+# 应用
+erp-server = { path = "apps/erp-server" }
 # 领域
 erp-audit = { path = "crates/domains/erp-audit" }
 erp-catalog = { path = "crates/domains/erp-catalog" }
@@ -107,7 +108,6 @@ erp-fulfillment-execution = { path = "crates/orchestration/erp-fulfillment-execu
 erp-master-data = { path = "crates/orchestration/erp-master-data" }
 erp-order-to-cash = { path = "crates/orchestration/erp-order-to-cash" }
 erp-procure-to-pay = { path = "crates/orchestration/erp-procure-to-pay" }
-erp-resource-grants = { path = "crates/orchestration/erp-resource-grants" }
 erp-reverse-flow = { path = "crates/orchestration/erp-reverse-flow" }
 erp-supplier-catalog = { path = "crates/orchestration/erp-supplier-catalog" }
 erp-supplier-orders = { path = "crates/orchestration/erp-supplier-orders" }

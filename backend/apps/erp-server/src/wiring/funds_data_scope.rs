@@ -9,10 +9,10 @@ use erp_identity::AuthorizationService;
 use erp_read_models::Result as ReadResult;
 use erp_read_models::finance::funds_scope::FundsAccess;
 use erp_read_models::ports::invoice_grants::InvoiceGrantReadiness;
-use erp_resource_grants::ResourceGrantProcess;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::authorization::resource_grants::invoice_pending;
 use super::identity_error::map_identity_error;
 use super::scope_support;
 
@@ -61,13 +61,11 @@ impl FundsDataScopePort for MongoFundsDataScope {
 /// 返回已注入本 adapter 的资金访问器。
 pub fn funds_access(db: Database, authorization: Arc<AuthorizationService>) -> FundsAccess {
     let scope = MongoFundsDataScope::shared(db.clone());
-    FundsAccess::new(db.clone(), authorization.clone(), scope)
-        .with_grant_readiness(Arc::new(InvoiceReadiness { db, authorization }))
+    FundsAccess::new(db.clone(), authorization, scope).with_grant_readiness(Arc::new(InvoiceReadiness { db }))
 }
 
 struct InvoiceReadiness {
     db: Database,
-    authorization: Arc<AuthorizationService>,
 }
 #[async_trait]
 impl InvoiceGrantReadiness for InvoiceReadiness {
@@ -77,8 +75,6 @@ impl InvoiceGrantReadiness for InvoiceReadiness {
         recipient: &str,
         executor: &mut dyn Executor,
     ) -> ReadResult<bool> {
-        Ok(ResourceGrantProcess::new(self.db.clone(), self.authorization.clone())
-            .invoice_pending(request_id, recipient, executor)
-            .await?)
+        Ok(invoice_pending(&self.db, request_id, recipient, executor).await?)
     }
 }

@@ -134,7 +134,7 @@
 
 1. 业务领域的 normal、build、dev 依赖允许指向 erp-identity 的公开身份与授权服务；其余领域之间及领域到组合层仍禁止直接依赖。erp-identity 禁止反向依赖业务领域、组合层或应用。基础库和通用技术组件不得依赖 identity。其余外域事实通过窄 Port 或输入事实接入。
 2. 编排库只依赖实际消费的领域、读模型和明确下层能力；编排之间仅允许 [crate-layers.json](../scripts/crate-layers.json) 登记的单向依赖。erp-read-models 允许读取多个领域，不得依赖编排库。共享基础 crate 不得持有业务实体或依赖业务领域。
-3. HTTP、CLI 等应用负责装配具体服务和适配器；CLI 不得依赖 erp-server。test-support 仅作为 dev-dependency 使用。
+3. HTTP、CLI 等应用负责装配具体服务和适配器；CLI 可按需单向复用 `erp_server::wiring`，不挂载 HTTP 或启动 worker 常驻循环；`erp-server` 不得依赖 `cli`，两者均不得直接依赖 `bpm`。test-support 仅作为 dev-dependency 使用。
 4. bpm 只接收调用方提供的模型、人员资格、ID 和时间；ERP 政策与持久化由 erp-workflow 接入。
 5. 不得恢复 entities、database、services 旧三层 crate 或兼容转发层，历史归档不得接入活动 Cargo target。
 6. 新增 crate 时同步更新 workspace 成员、依赖、层次及编排直接依赖登记、边界检查配置、本索引及该 crate 的 README。
@@ -169,5 +169,3 @@ git diff --check
 ## 外部 OCR 技术客户端
 
 [aliyun-ocr](platform/aliyun-ocr/README.md) 负责阿里云图片识别签名和传输，不依赖业务 crate。合同 PDF 逐页转图、`ContractOcr` 与 `ContractExtractor` 适配位于 [erp-contract-recognition](adapters/erp-contract-recognition/README.md)，由 web-api 使用 `SafeConfig` 装配；Process 只持有合同领域 Port。
-
-- `orchestration/erp-resource-grants`：独立 worker 自动读取授权规则、事务发布、恢复、分页重算及就绪状态；存储归 `erp-identity`。

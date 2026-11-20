@@ -16,7 +16,6 @@ path = "src/main.rs"
 
 [dependencies]
 erp-permissions = { workspace = true }
-erp-resource-grants = { workspace = true }
 futures-util = { workspace = true }
 erp-notification = { workspace = true }
 entity-core = { workspace = true }

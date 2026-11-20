@@ -10,7 +10,7 @@
 
 ## 共享服务
 
-需要业务授权的进程启动时通过 server 的 `wiring/authorization/` 构造一个 `Arc<AuthorizationService>`。HTTP 和 worker 将实例保存在 `Application`；CLI 保持独立运行时，不依赖 server 或接入其全量业务授权装配。`HttpState` 通过 `Application` 使用它；业务 Service、Process 和 ReadModel 通过构造函数接收共享实例。
+需要业务授权的进程启动时通过 server 的 `wiring/authorization/` 构造一个 `Arc<AuthorizationService>`。HTTP 和 worker 将实例保存在 `Application`；CLI 保持独立运行时，可按需单向复用 `erp_server::wiring`。`HttpState` 通过 `Application` 使用它；业务 Service、Process 和 ReadModel 通过构造函数接收共享实例。
 
 identity 固定授权规则，事实读取器和 Mapping 在 server 的 `wiring/authorization/` 统一装配。`Application::authorization()` 只克隆共享 `Arc`，请求处理期间不再创建授权服务或登记政策。
 
@@ -199,7 +199,7 @@ Facts 返回的根对象和各层来源对象按资源与身份视为无序集�
 
 各事件必填字段见 [GrantEventPayload](src/entity/resource_access/event.rs)。`append_event` 必须加入业务事务：新事件返回 `true`，相同内容重放返回 `false`；内容非法、幂等冲突或写库失败时，业务事务也必须失败。
 
-`erp-worker` 通过 `erp-resource-grants` 领取事件，并将领取凭据传给 `ResourceGrantService::apply_source`。身份域在同一事务内复核领取，经 `ResourceGrantFacts` 一次计算正式业务事实，应用有效结果并完成事件。事件已追加不代表授权已生效。
+`erp-worker` 通过 `Application::resource_grants()` 取得[记录授权运行时](../../../apps/erp-server/src/wiring/authorization/resource_grants/mod.rs)并领取事件，并将领取凭据传给 `ResourceGrantService::apply_source`。身份域在同一事务内复核领取，经 `ResourceGrantFacts` 一次计算正式业务事实，应用有效结果并完成事件。事件已追加不代表授权已生效。
 
 ## 代码位置
 

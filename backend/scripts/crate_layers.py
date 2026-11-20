@@ -104,6 +104,6 @@ def dependency_errors(edges: Any) -> list[str]:
             errors.append(f"测试辅助仅允许 dev-dependency: {label}")
         if dst == "erp-demo-data" and layer != "apps":
             errors.append(f"演示数据仅允许由应用入口按需调用: {label}")
-        if src == "cli" and dst == "erp-server":
-            errors.append(f"CLI 不得依赖 web-api: {label}")
+        if src == "erp-server" and dst == "cli":
+            errors.append(f"erp-server 不得依赖 cli: {label}")
     return errors

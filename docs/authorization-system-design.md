@@ -10,9 +10,9 @@
 | [erp-identity](../backend/crates/domains/erp-identity/README.md) | 身份资格、范围配置与解析、固定授权规则、对象判断、查询编译及授权持久化 | 依赖公共权限和基础设施，不依赖其他业务领域、编排库、ReadModel 或应用。 |
 | [server wiring/authorization](../backend/apps/erp-server/src/wiring/authorization/mod.rs) | 创建并连接身份设施、真实 Facts 和 Mapping，构造共享授权服务 | 位于现有 server 组合根，只装配实现，不声明授权政策或启动后台循环。 |
 | 业务领域、Process、ReadModel | 提供归属、来源、指派和版本，执行业务校验、读写及结果交付 | 调用 identity 的公开接口；跨域事实经窄 Port 接入。 |
-| [erp-resource-grants](../backend/crates/orchestration/erp-resource-grants/README.md) | 根据业务事件与可信事实计算记录读取授权，编排发布、重算、对账与回填 | 依赖 identity 的公开事件和来源服务，通过拥有领域仓储读取事实。 |
+| [server wiring/authorization/resource_grants](../backend/apps/erp-server/src/wiring/authorization/resource_grants/mod.rs) | 根据业务事件与可信事实计算记录读取授权，编排发布、重算、对账与回填 | 依赖 identity 的公开事件和来源服务，通过拥有领域仓储读取事实。 |
 | HTTP 与 worker | 启动时构造共享服务并注入业务用例 | HTTP 认证身份；worker 驱动消费和调度，不挂载业务 HTTP。 |
-| CLI | 使用自身运行时执行运维命令 | 不依赖 server，不接入其全量业务授权装配。 |
+| CLI | 使用独立运行时执行运维命令，可按需复用 `erp_server::wiring` | 依赖方向为 `cli → erp-server`；CLI 不挂载业务 HTTP、不启动 worker 常驻循环。 |
 
 ```mermaid
 flowchart TD
@@ -26,13 +26,16 @@ flowchart TD
     Business --> Identity
     Business --> Permissions
     Identity --> Permissions
-    Worker["worker 消费循环"] --> Grants["erp-resource-grants"]
+    Runtime --> App["Application::resource_grants()"]
+    App --> Grants["server wiring/authorization/resource_grants"]
+    Wiring --> Grants
     Grants --> Identity
     Grants --> Repositories
     Cli["CLI 独立运行时"] --> Identity
+    Cli -. 按需复用 wiring .-> App
 ```
 
-identity 决定当前账号能否执行操作或访问对象；resource-grants 计算业务事件应产生的记录读取来源。记录授权发布后，最终访问仍由 identity 判断。请求查询不触发自动授权消费。
+identity 决定当前账号能否执行操作或访问对象；`wiring/authorization/resource_grants/` 计算业务事件应产生的记录读取来源。记录授权发布后，最终访问仍由 identity 判断。请求查询不触发自动授权消费。
 
 ## 共享服务装配
 
@@ -163,18 +166,21 @@ identity 内部以公共权限为键维护私有 `ScopeSpec`。配置候选、�
 
 ## 记录读取授权的生成与使用
 
-记录读取授权分为生成、发布和访问使用三个阶段。identity 保存授权来源、授权行、修订号和事件状态；resource-grants 读取业务事实并计算授权；worker 驱动消费循环。
+记录读取授权分为生成、发布和访问使用三个阶段。identity 保存授权来源、授权行、修订号和事件状态；服务端记录授权模块读取业务事实并计算授权；worker 驱动消费循环。HTTP 管理端与 worker 均通过 `Application::resource_grants()` 获取 `ResourceGrantRuntime`。
 
 ```mermaid
 sequenceDiagram
     participant B as 业务用例
     participant I as erp-identity
     participant W as worker
-    participant G as erp-resource-grants
+    participant A as Application
+    participant G as ResourceGrantRuntime / ResourceGrantFacts
     participant R as 业务 Repository
     B->>I: 在业务事务中 append_event
     Note over B,I: 业务变更与事件同事务提交
-    W->>G: tick
+    W->>A: resource_grants()
+    A-->>W: 已装配的 ResourceGrantRuntime
+    W->>G: tick(token, now)
     G->>I: 领取事件
     G->>I: apply_source(领取凭据)
     I->>I: 在发布事务内复核领取与来源状态
@@ -190,13 +196,13 @@ sequenceDiagram
 
 1. 事件证据来自服务端确认的实际业务事实，事件与业务变更使用同一执行器。事件追加失败使业务事务失败。
 2. 追加成功只表示待处理，不表示授权生效。就绪状态查询不替代实际访问授权。
-3. resource-grants 使用 `ResourceGrantService::apply_source` 发布。identity 核验领取与来源，经可信端口计算结果、核验写入目标，并执行幂等、业务版本、终止来源和修订控制。
+3. `ResourceGrantRuntime` 使用 `ResourceGrantService::apply_source` 发布。identity 核验领取与来源，经可信端口计算结果、核验写入目标，并执行幂等、业务版本、终止来源和修订控制。
 4. 发布失败只重试授权步骤，不重放审批或派工等原业务命令。事实读取失败不得转换为空授权；旧事件不得覆盖新事实。
 5. 终止来源不得被重试、重算或回填恢复。撤销一个来源不删除其他有效来源；来源状态、授权行和修订同事务更新。
 6. 人工授予、撤销、来源查询和受控重算须通过管理员资格检查；后台对账入口不得直接作为管理端接口。
 7. 记录授权只补充固定规则允许的读取范围，不替代功能资格，不授予原单据的修改或提交资格。
 
-worker 负责消费、恢复、有界对账、队列观测和停止排空。resource-grants 不启动循环，授权装配不管理 worker 生命周期。扩展方式见 [erp-resource-grants README](../backend/crates/orchestration/erp-resource-grants/README.md)。
+worker 负责消费、恢复、有界对账、队列观测和停止排空。记录授权装配只提供单轮处理及维护能力。实现与扩展方式见 [记录读取授权装配](../backend/apps/erp-server/README.md#记录读取授权装配)。
 
 ## 验证与文档维护
 

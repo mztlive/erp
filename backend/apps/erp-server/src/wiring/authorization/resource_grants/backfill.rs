@@ -15,8 +15,8 @@ use erp_workflow::repository::grant_history::{self, GrantHistoryEntry};
 use persistence_core::{Executor, Transactional};
 use serde::{Deserialize, Serialize};
 
-use crate::ResourceGrantProcess;
-use crate::facts::Facts;
+use super::ResourceGrantRuntime;
+use super::facts::Facts;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -47,7 +47,7 @@ pub struct BackfillProblem {
     pub reason: String,
 }
 
-impl ResourceGrantProcess {
+impl ResourceGrantRuntime {
     /// 校验管理员权限后，按指定证据类型和排他游标处理一页历史记录。预览只统计，执行只追加授权事件，不重放已有审批、转派或财务命令。
     /// 报告区分新增、已有、永久终止和无效证据，空页代表本类扫描结束。权限或基础设施错误中止整页，提交结果未知时不自动重试。
     pub async fn backfill(&self, actor: &AuditActor, request: BackfillRequest) -> Result<BackfillReport> {
@@ -60,7 +60,7 @@ impl ResourceGrantProcess {
             .clone()
             .with_transaction(move |ex| {
                 Box::pin(async move {
-                    this.management().authorize_manager(&actor, ex).await?;
+                    this.grants.authorize_manager(&actor, ex).await?;
                     this.backfill_page(request, ex).await
                 })
             })

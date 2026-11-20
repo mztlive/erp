@@ -6,16 +6,12 @@ use erp_core::common::time::Instant;
 use erp_identity::Error as IdentityError;
 use erp_identity::dto::{GrantSourcePage, ManualGrantRequest, RecomputeRequest, RevokeRequest, SourcesQuery};
 use erp_identity::entity::resource_access::GrantSource;
-use erp_resource_grants::{BackfillReport, BackfillRequest, ResourceGrantProcess};
 
 use crate::http::errors::Result;
 use crate::http::extractor::{Json, Query};
 use crate::http::response::ApiResponse;
 use crate::http::state::HttpState;
-
-fn process(state: &HttpState) -> ResourceGrantProcess {
-    ResourceGrantProcess::new(state.application().db(), state.application().authorization())
-}
+use crate::wiring::authorization::resource_grants::{BackfillReport, BackfillRequest};
 
 /// 按稳定操作号授予指定记录读取权。
 /// state 为共享应用，actor 为管理员，request 为人工来源及完整目标。
@@ -26,7 +22,9 @@ pub async fn grant(
     Extension(actor): Extension<AuditActor>,
     Json(request): Json<ManualGrantRequest>,
 ) -> Result<GrantSource> {
-    Ok(ApiResponse::ok_with_data(process(&state).management().grant(&actor, request.into_update()).await?))
+    Ok(ApiResponse::ok_with_data(
+        state.application().resource_grants().management().grant(&actor, request.into_update()).await?,
+    ))
 }
 
 /// 永久终止一个授权来源。
@@ -39,7 +37,9 @@ pub async fn revoke(
     Json(request): Json<RevokeRequest>,
 ) -> Result<GrantSource> {
     Ok(ApiResponse::ok_with_data(
-        process(&state)
+        state
+            .application()
+            .resource_grants()
             .management()
             .revoke(&actor, request.source, request.expected_version, request.reason)
             .await?,
@@ -56,7 +56,12 @@ pub async fn sources(
 ) -> Result<GrantSourcePage> {
     query.validate()?;
     Ok(ApiResponse::ok_with_data(
-        process(&state).management().sources(&actor, &query.recipient, query.after.as_deref()).await?,
+        state
+            .application()
+            .resource_grants()
+            .management()
+            .sources(&actor, &query.recipient, query.after.as_deref())
+            .await?,
     ))
 }
 
@@ -72,7 +77,12 @@ pub async fn recompute(
     let now =
         u64::try_from(Instant::now().unix_secs()).map_err(|_| IdentityError::Internal("时间越界".into()))?;
     Ok(ApiResponse::ok_with_data(
-        process(&state).management().recompute_managed(&actor, request.selection, request.after, now).await?,
+        state
+            .application()
+            .resource_grants()
+            .management()
+            .recompute_managed(&actor, request.selection, request.after, now)
+            .await?,
     ))
 }
 
@@ -84,7 +94,7 @@ pub async fn backfill(
     Extension(actor): Extension<AuditActor>,
     Json(request): Json<BackfillRequest>,
 ) -> Result<BackfillReport> {
-    Ok(ApiResponse::ok_with_data(process(&state).backfill(&actor, request).await?))
+    Ok(ApiResponse::ok_with_data(state.application().resource_grants().backfill(&actor, request).await?))
 }
 
 #[cfg(test)]

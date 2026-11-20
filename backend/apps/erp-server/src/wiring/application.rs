@@ -41,6 +41,7 @@ use serde::Serialize;
 use storage::S3Storage;
 use tokio::sync::watch;
 
+use super::authorization::resource_grants::ResourceGrantRuntime;
 use super::notification::ApprovalNotifications;
 use crate::wiring::approval_dispatch::ApprovalActionRegistry;
 use crate::wiring::catalog_supply_query::MongoCatalogSupplyQuery;
@@ -139,6 +140,7 @@ pub struct Application {
     config: SafeConfig,
     rbac: SharedRbacService,
     authorization: Arc<AuthorizationService>,
+    resource_grants: ResourceGrantRuntime,
     storage: Arc<S3Storage>,
     sensitive_data: Arc<SensitiveDataCodec>,
     approval_runtime_service: Arc<ApprovalRuntimeService<WorkflowAuth>>,
@@ -154,6 +156,11 @@ impl Application {
     /// 进程启动时通过完整绑定校验构造的 `Arc<AuthorizationService>`。
     pub fn authorization(&self) -> Arc<AuthorizationService> {
         Arc::clone(&self.authorization)
+    }
+
+    /// 返回启动时装配的记录授权运行时，供管理、单轮消费、对账及回填使用。
+    pub fn resource_grants(&self) -> ResourceGrantRuntime {
+        self.resource_grants.clone()
     }
 
     /// 返回启动时装配的蛋糕叔叔连接，缺省配置保持关闭。
@@ -178,6 +185,7 @@ impl Application {
         let rbac = crate::wiring::identity::shared_rbac_service(db.clone());
         let authorization = crate::wiring::authorization::build(db.clone(), Arc::clone(&rbac))
             .expect("完整统一授权实现绑定必须有效");
+        let resource_grants = ResourceGrantRuntime::new(db.clone(), Arc::clone(&authorization));
         let approval_action_port =
             Arc::new(ApprovalActionRegistry::new(db.clone(), Arc::clone(&rbac), Arc::clone(&authorization)));
         let approval_runtime_service = Arc::new(ApprovalRuntimeService::with_ports(
@@ -203,6 +211,7 @@ impl Application {
             config,
             rbac,
             authorization,
+            resource_grants,
             storage: Arc::new(storage),
             sensitive_data,
             approval_runtime_service,
@@ -673,6 +682,10 @@ mod tests {
         let first = app.authorization();
         let second = app.clone().authorization();
         assert!(Arc::ptr_eq(&first, &second));
+        assert!(matches!(
+            app.resource_grants().tick("", 1).await,
+            Err(erp_identity::Error::ValidationError(message)) if message == "领取令牌不能为空"
+        ));
         let _ = app.integration_resolution();
         let _ = app.supplier_fulfillment_process();
     }

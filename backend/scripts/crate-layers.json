@@ -728,26 +728,6 @@
         "crates/domains/erp-notification"
       ]
     },
-    "erp-resource-grants": {
-      "layer": "orchestration",
-      "paths": [
-        "crates/orchestration/erp-resource-grants"
-      ],
-      "dependencies": [
-        "async-trait",
-        "erp-finance",
-        "erp-identity",
-        "erp-procurement",
-        "erp-sales",
-        "erp-workflow",
-        "mongodb",
-        "persistence-core",
-        "tokio",
-        "application-core",
-        "serde",
-        "serde_json"
-      ]
-    },
     "erp-permissions": {
       "layer": "foundation",
       "paths": [

@@ -1,7 +1,6 @@
 //! 随独立 worker 启停，发布中的事务必须完成后再退出。
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use erp_resource_grants::ResourceGrantProcess;
 use id_generator::next_id;
 use tokio::sync::watch;
 
@@ -11,7 +10,7 @@ use crate::wiring::Application;
 // 收到停止信号后结束循环。
 // 轮次错误记录后重试，panic 由进程监督器检测。
 pub(super) async fn run(state: Application, mut stop: watch::Receiver<bool>) {
-    let process = ResourceGrantProcess::new(state.db(), state.authorization());
+    let grants = state.resource_grants();
     let mut cursor = None;
     let mut rounds = 0_u64;
     loop {
@@ -20,11 +19,11 @@ pub(super) async fn run(state: Application, mut stop: watch::Receiver<bool>) {
         }
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
         if rounds.is_multiple_of(30) {
-            match process.reconcile(cursor.as_deref(), now).await {
+            match grants.reconcile(cursor.as_deref(), now).await {
                 Ok(next) => cursor = next,
                 Err(error) => tracing::error!(%error, "自动授权对账失败"),
             }
-            match process.health(now).await {
+            match grants.health(now).await {
                 Ok(health) => tracing::info!(?health, "自动授权队列状态"),
                 Err(error) => tracing::error!(%error, "自动授权观测失败"),
             }
@@ -32,7 +31,7 @@ pub(super) async fn run(state: Application, mut stop: watch::Receiver<bool>) {
         if *stop.borrow() {
             break;
         }
-        match process.tick(&next_id(), now).await {
+        match grants.tick(&next_id(), now).await {
             Ok(_) => {},
             Err(error) => tracing::error!(%error, "自动授权处理失败，等待恢复"),
         }

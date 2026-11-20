@@ -46,6 +46,7 @@ src/
 │   ├── application.rs        # Application：共享资源及业务能力工厂
 │   ├── application/          # 外部连接器、识别、导入等能力装配
 │   ├── authorization/        # 完整 Facts/Mapping 与共享授权服务装配
+│   │   └── resource_grants/  # 正式事实取证、记录授权发布、就绪状态及回填
 │   ├── approval_dispatch/    # 审批动作与对象读取接线
 │   ├── data_transfer/        # 导入导出 Process 和业务读取接线
 │   └── ...                   # 消费方 Port 到提供方领域的 adapter
@@ -60,6 +61,22 @@ src/
 3. `HttpState` 持有 HTTP 专属缓存与请求任务边界，通过 `application()` 访问业务装配。Worker 直接使用 `Application`。
 4. Handler 只提取协议输入、传递已认证身份、调用用例并包装响应。单域用例归拥有领域，跨域写入归所属编排库，跨域读取归 `erp-read-models`。
 5. HTTP 和 worker 各自在启动时调用 `wiring::authorization::build(db, rbac)`，将完整校验后的 `Arc<AuthorizationService>` 保存在 `Application`。`authorization()` 只克隆该 `Arc`；业务工厂注入同一实例。共享服务不得保存请求身份、事务、候选对象或授权结果。
+
+## 记录读取授权装配
+
+`Application` 在启动时以数据库及共享授权服务装配 [`ResourceGrantRuntime`](src/wiring/authorization/resource_grants/mod.rs)，通过 [`resource_grants()`](src/wiring/application.rs) 提供轻量句柄。HTTP 使用其维护入口；[`erp-worker`](src/worker/resource_grants.rs) 使用 `tick` 单轮领取及发布，按游标调用 `reconcile` 做有界对账，并通过 `health` 观测队列。CLI 可按需单向复用 `erp_server::wiring`，保持独立命令运行时。
+
+业务用例在原事务追加正式批准、任务转派或订单审批分配事件。[`facts.rs`](src/wiring/authorization/resource_grants/facts.rs) 通过工作流快照和拥有领域仓储取证，[`rules.rs`](src/wiring/authorization/resource_grants/rules.rs) 验证关联及正式分配。`erp-identity` 持有队列与授权记录，由 `ResourceGrantService::apply_source` 在同一事务复核领取、应用授权并完成事件。发布提交结果未知时保留原租约，恢复时检查事件是否已完成。完整职责见 [ERP 权限系统设计](../../../docs/authorization-system-design.md#记录读取授权的生成与使用)。
+
+[`readiness.rs`](src/wiring/authorization/resource_grants/readiness.rs) 在调用方的执行器中检查正式来源及其版本，区分无事件、待生成、已就绪和已终止。审批与资金接线以此识别授权待生成；实际访问仍由完整授权检查决定。
+
+新增自动规则时，在 identity 的 [`GrantRule`](../../crates/domains/erp-identity/src/entity/resource_access/rule.rs) 与[事件模型](../../crates/domains/erp-identity/src/entity/resource_access/event.rs) 定义稳定来源和事件证据，接入业务事务生产方，再扩展事实读取与纯规则。已有来源身份应保持稳定；变更规则时检查是否需要重算历史授权。
+
+### 记录授权管理接口
+
+[管理端 handler](src/http/handler/access_control/resource_grants.rs) 复用 [identity 的管理请求 DTO](../../crates/domains/erp-identity/src/dto/resource_access.rs)，通过 `management()` 调用 `grant`、`revoke`、`sources` 或 `recompute_managed`，由身份域校验管理员权限。worker 的例行对账入口 `reconcile` 仅供后台使用。
+
+[`backfill(actor, request)`](src/wiring/authorization/resource_grants/backfill.rs) 校验管理员资格，分页核验历史审批、正式分派及转派回执。默认 `dry_run: true`，预览返回可回填、已有、永久终止、无效证据及续页游标。显式关闭预览才追加核验通过的授权事件，随后由 worker 发布。回填不重放审批、转派或财务命令。
 
 ## 执行与退出合同
 

@@ -31,20 +31,19 @@ def dependency_errors(metadata) -> list[str]:
     for entry in ("erp-server", "cli"):
         if "bpm" in graph.get(entry, set()):
             errors.append(f"{entry} 不得直接依赖 bpm（含 normal/build/dev）")
-    for start, targets in (("bpm", forbidden), ("cli", {"erp-server"})):
-        stack = [(start, [start])]
-        seen = set()
-        while stack:
-            node, chain = stack.pop()
-            if node in seen:
-                continue
-            seen.add(node)
-            for dep in sorted(graph.get(node, set())):
-                path = [*chain, dep]
-                if dep in targets:
-                    errors.append("禁止依赖路径（含 normal/build/dev）: " + " -> ".join(path))
-                if dep not in seen:
-                    stack.append((dep, path))
+    stack = [("bpm", ["bpm"])]
+    seen = set()
+    while stack:
+        node, chain = stack.pop()
+        if node in seen:
+            continue
+        seen.add(node)
+        for dep in sorted(graph.get(node, set())):
+            path = [*chain, dep]
+            if dep in forbidden:
+                errors.append("禁止依赖路径（含 normal/build/dev）: " + " -> ".join(path))
+            if dep not in seen:
+                stack.append((dep, path))
     return errors
 
 

@@ -206,7 +206,7 @@ class CutoverTests(unittest.TestCase):
 
     def test_bpm_direct_and_transitive_all_kind_rules_without_old_manifests(self):
         for kind in (None, "build", "dev"):
-            for parent, target in (("bpm", "mongodb"), ("bpm", "erp-sales"), ("cli", "erp-server"), ("cli", "bpm"), ("erp-server", "bpm")):
+            for parent, target in (("bpm", "mongodb"), ("bpm", "erp-sales"), ("cli", "bpm"), ("erp-server", "bpm")):
                 with self.subTest(kind=kind, parent=parent, target=target):
                     metadata = copy.deepcopy(self.fixture.metadata)
                     package = next(p for p in metadata["packages"] if p["name"] == parent)
@@ -218,6 +218,17 @@ class CutoverTests(unittest.TestCase):
         self.assertTrue(bpm.dependency_errors(metadata))
         self.fixture.package("erp-workflow")["dependencies"] = []
         self.assertTrue(bpm.dependency_errors(self.fixture.metadata))
+
+    def test_cli_can_reuse_server_wiring_for_every_dependency_kind(self):
+        for kind in ("normal", "build", "dev"):
+            with self.subTest(kind=kind):
+                metadata = copy.deepcopy(self.fixture.metadata)
+                packages = {package["name"]: package for package in metadata["packages"]}
+                packages["cli"]["dependencies"].append({"name": "erp-server", "kind": kind})
+                packages["erp-server"]["dependencies"].append({"name": "erp-workflow", "kind": "normal"})
+                self.assertEqual(bpm.dependency_errors(metadata), [])
+                graph = domain.Graph(packages={"cli", "erp-server"}, edges=[domain.DepEdge("cli", "erp-server", kind)])
+                self.assertEqual(domain.forbidden_graph_errors(graph), [])
 
     def test_composition_cycle_fails_final_checker(self):
         self.fixture.package("erp-order-to-cash")["dependencies"].append({"name": "erp-read-models"})
@@ -276,7 +287,7 @@ class CutoverTests(unittest.TestCase):
                      ("erp-order-to-cash", "erp-server"), ("erp-order-to-cash", "erp-connector-jd-vop"),
                      ("erp-order-to-cash", "erp-processes"), ("erp-order-to-cash", "erp-master-data"),
                      ("erp-master-data", "erp-demo-data"),
-                     ("cli", "erp-server")]
+                     ("erp-server", "cli")]
         for kind in ("normal", "build", "dev"):
             for src, dst in forbidden:
                 with self.subTest(kind=kind, source=src, target=dst):
