@@ -21,9 +21,7 @@ export function stableNoColumn(): ColumnDef<MasterDataListItem> {
             label: masterDataCopy.colStableNo,
             width: "default",
         },
-        cell: ({ row }) => (
-            <span className="num text-sm">{row.original.stableNo}</span>
-        ),
+        cell: ({ row }) => <span className="num">{row.original.stableNo}</span>,
     }
 }
 
@@ -37,18 +35,18 @@ export function nameColumn({
         meta: { label: masterDataCopy.colName, width: "flex" },
         cell: ({ row }) => (
             <div className="min-w-0">
-                <div className="truncate text-sm font-medium">
+                <div className="truncate leading-5 font-medium text-foreground">
                     {row.original.name}
                 </div>
                 {showNumber ? (
                     <div
-                        className="num truncate text-xs text-muted-foreground"
+                        className="num truncate text-xs leading-4 text-muted-foreground"
                         title={row.original.stableNo}
                     >
                         {row.original.stableNo}
                     </div>
                 ) : row.original.keyFacts[0] ? (
-                    <div className="truncate text-xs text-muted-foreground">
+                    <div className="truncate text-xs leading-4 text-muted-foreground">
                         {row.original.keyFacts[0].label}：
                         {row.original.keyFacts[0].value}
                     </div>
@@ -67,7 +65,7 @@ export function revisionNoColumn(): ColumnDef<MasterDataListItem> {
             width: "quantity",
         },
         cell: ({ row }) => (
-            <span className="num text-sm">v{row.original.revisionNo}</span>
+            <span className="num">v{row.original.revisionNo}</span>
         ),
     }
 }
@@ -85,12 +83,12 @@ export function lifecycleColumn(): ColumnDef<MasterDataListItem> {
                     tone={row.original.lifecycleTone}
                 />
                 {row.original.primaryBlocker ? (
-                    <span className="max-w-48 whitespace-normal text-xs text-destructive">
+                    <span className="max-w-48 whitespace-normal text-xs leading-4 text-destructive">
                         {row.original.primaryBlocker}
                     </span>
                 ) : null}
                 {row.original.scheduledLifecycleLabel ? (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs leading-4 text-muted-foreground">
                         {row.original.scheduledLifecycleLabel}
                     </span>
                 ) : null}
@@ -111,6 +109,7 @@ export function revisionTimingColumn(): ColumnDef<MasterDataListItem> {
                         ? "warning"
                         : "secondary"
                 }
+                className="text-xs"
             >
                 {row.original.revisionTimingLabel}
             </Badge>
@@ -124,7 +123,7 @@ export function effectivePeriodColumn(): ColumnDef<MasterDataListItem> {
         header: masterDataCopy.colEffective,
         meta: { label: masterDataCopy.colEffective },
         cell: ({ row }) => (
-            <span className="num text-body-compact">
+            <span className="num">
                 {formatEffectiveRange(
                     row.original.effectiveFrom,
                     row.original.effectiveTo,
@@ -145,11 +144,11 @@ export function blockerColumn(
             meta: { label: masterDataCopy.colBlocker },
             cell: ({ row }) =>
                 row.original.primaryBlocker ? (
-                    <span className="text-xs text-destructive">
+                    <span className="text-xs leading-4 text-destructive">
                         {row.original.primaryBlocker}
                     </span>
                 ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
+                    <span className="text-muted-foreground/60">—</span>
                 ),
         },
     ]

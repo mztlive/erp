@@ -82,7 +82,7 @@ function StatusBadge({
         <Badge
             variant={toneVariant[tone]}
             className={cn(
-                "gap-1 rounded-sm border-transparent px-2 py-0 text-tiny font-medium tracking-tight",
+                "gap-1 rounded-sm border-transparent px-2 py-0 text-xs font-medium tracking-normal",
                 tone === "void" && "line-through opacity-80",
                 appearance === "text" &&
                     "border-transparent bg-transparent px-0 shadow-none",

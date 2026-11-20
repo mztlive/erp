@@ -34,15 +34,20 @@ function ProductSupplyStatus({
     skuCount: number
     suppliedSkuCount: number
 }) {
-    if (pending || failed || skuCount === 0 || suppliedSkuCount === 0) {
-        const label = pending
-            ? "读取中…"
-            : failed
-              ? "暂不可查"
-              : skuCount === 0
-                ? "—"
-                : "未覆盖"
-        return <span className="text-sm text-muted-foreground">{label}</span>
+    if (pending || failed) {
+        return (
+            <span className="text-xs text-muted-foreground">
+                {pending ? "读取中…" : "暂不可查"}
+            </span>
+        )
+    }
+    if (skuCount === 0) {
+        return <span className="text-muted-foreground/60">—</span>
+    }
+    if (suppliedSkuCount === 0) {
+        return (
+            <BusinessStatusBadge context="list" label="未覆盖" tone="neutral" />
+        )
     }
     if (suppliedSkuCount === skuCount) {
         return (
@@ -137,11 +142,12 @@ export function useProductListColumns({
                 id: "maintainer",
                 header: "维护人",
                 meta: { label: "维护人" },
-                cell: ({ row }) => (
-                    <span className="text-sm">
-                        {row.original.ownerName ?? "—"}
-                    </span>
-                ),
+                cell: ({ row }) =>
+                    row.original.ownerName ? (
+                        <span>{row.original.ownerName}</span>
+                    ) : (
+                        <span className="text-muted-foreground/60">—</span>
+                    ),
             },
             revisionNoColumn(),
             lifecycleColumn(),
@@ -153,9 +159,7 @@ export function useProductListColumns({
                     const item = row.original
                     if (!item.sourceDiffCount)
                         return (
-                            <span className="text-sm text-muted-foreground">
-                                —
-                            </span>
+                            <span className="text-muted-foreground/60">—</span>
                         )
                     const summary = (
                         <>
@@ -164,7 +168,7 @@ export function useProductListColumns({
                                 tone="warning"
                                 label={`资料更新待确认 · ${item.sourceDiffCount} 项`}
                             />
-                            <span className="line-clamp-2 text-xs text-muted-foreground">
+                            <span className="line-clamp-2 text-xs leading-4 text-muted-foreground">
                                 {[...new Set(item.sourceDiffFields ?? [])]
                                     .map(
                                         (field) =>
@@ -210,21 +214,21 @@ export function useProductListColumns({
                                   ) ?? []
                               if (productSkusPending) {
                                   return (
-                                      <span className="text-sm text-muted-foreground">
+                                      <span className="text-xs text-muted-foreground">
                                           读取中…
                                       </span>
                                   )
                               }
                               if (productSkusError) {
                                   return (
-                                      <span className="text-sm text-muted-foreground">
+                                      <span className="text-xs text-muted-foreground">
                                           暂不可查
                                       </span>
                                   )
                               }
                               if (skus.length === 0) {
                                   return (
-                                      <span className="text-sm text-muted-foreground">
+                                      <span className="text-muted-foreground/60">
                                           —
                                       </span>
                                   )
@@ -232,11 +236,17 @@ export function useProductListColumns({
                               const names = skus
                                   .map((sku) => sku.skuName.trim())
                                   .filter(Boolean)
-                              const label =
-                                  names.length > 0 ? names.join("、") : "—"
+                              if (names.length === 0) {
+                                  return (
+                                      <span className="text-muted-foreground/60">
+                                          —
+                                      </span>
+                                  )
+                              }
+                              const label = names.join("、")
                               return (
                                   <span
-                                      className="line-clamp-2 max-w-56 text-sm"
+                                      className="line-clamp-2 max-w-56"
                                       title={label}
                                   >
                                       {label}
@@ -257,19 +267,35 @@ export function useProductListColumns({
                               align: "end",
                               numeric: true,
                           },
-                          cell: ({ row }) => (
-                              <span className="num text-sm">
-                                  {productSkusPending
-                                      ? "读取中…"
-                                      : productSkusError
-                                        ? "暂不可查"
-                                        : productSkuPriceRange(
-                                              productSkusByProduct.get(
-                                                  row.original.stableId,
-                                              ) ?? [],
-                                          )}
-                              </span>
-                          ),
+                          cell: ({ row }) => {
+                              if (productSkusPending) {
+                                  return (
+                                      <span className="text-xs text-muted-foreground">
+                                          读取中…
+                                      </span>
+                                  )
+                              }
+                              if (productSkusError) {
+                                  return (
+                                      <span className="text-xs text-muted-foreground">
+                                          暂不可查
+                                      </span>
+                                  )
+                              }
+                              const priceRange = productSkuPriceRange(
+                                  productSkusByProduct.get(
+                                      row.original.stableId,
+                                  ) ?? [],
+                              )
+                              if (priceRange === "未填写") {
+                                  return (
+                                      <span className="text-xs text-muted-foreground">
+                                          未填写
+                                      </span>
+                                  )
+                              }
+                              return <span className="num">{priceRange}</span>
+                          },
                       },
                   ] satisfies ColumnDef<MasterDataListItem>[])
                 : []),
@@ -283,8 +309,13 @@ export function useProductListColumns({
                     numeric: true,
                 },
                 cell: ({ row }) => (
-                    <span className="num text-sm">
-                        {row.original.skuCount ?? 0} 个
+                    <span className="inline-flex items-baseline gap-1">
+                        <span className="num">
+                            {row.original.skuCount ?? 0}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                            个
+                        </span>
                     </span>
                 ),
             },
