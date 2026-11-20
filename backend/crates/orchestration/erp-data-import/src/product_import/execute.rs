@@ -18,7 +18,7 @@ use persistence_core::{ReadExecutor, Transactional};
 
 use super::ProductImportProcess;
 use super::images::RowMediaSource;
-use super::parse::{ParsedProductSheet, parse_product_quote_xlsx};
+use super::parse::{ParsedProductRow, ParsedProductSheet, parse_product_quote_xlsx};
 use super::resolve::ImportDictionaryCache;
 use super::row_manifest::{
     ROW_MANIFEST_INPUT_FORMAT, RowManifest, RowManifestRow, decode_row_manifest, read_row_manifest,
@@ -158,17 +158,16 @@ impl ProductImportProcess {
                 (None, Some(&legacy_workbook))
             },
         };
-        let legacy_cells = workbook.map(|(_, p)| {
-            p.rows.iter().map(|r| (r.row_number, r.cells.as_slice())).collect::<HashMap<u32, &[String]>>()
-        });
+        let workbook_rows =
+            workbook.map(|(_, p)| p.rows.iter().map(|row| (row.row_number, row)).collect::<HashMap<_, _>>());
         let mut execution =
-            ProductImportRows { process: self, actor, cache, entries, workbook, legacy_cells };
+            ProductImportRows { process: self, actor, cache, entries, workbook, workbook_rows };
         execute_rows(&mut execution, job, items, import_budget()).await
     }
 
     // 执行单行的业务写入并转为可持久化结果。
     //
-    // `entries`：清单行映射；`workbook`：源文件字节与解析结果；`legacy_cells`：源文件行号到单元格的预建映射。
+    // `entries`：清单行映射；`workbook`：源文件字节与解析结果；`workbook_rows`：源文件行号到解析行的预建映射。
     //
     // 返回明细状态、原因码与结果对象。
     async fn import_single_row(
@@ -176,16 +175,18 @@ impl ProductImportProcess {
         row_number: u32,
         entries: Option<&HashMap<u32, &RowManifestRow>>,
         workbook: Option<&(&Arc<Vec<u8>>, &ParsedProductSheet)>,
-        legacy_cells: &Option<HashMap<u32, &[String]>>,
+        workbook_rows: &Option<HashMap<u32, &ParsedProductRow>>,
         actor: &AuditActor,
         cache: &mut ImportDictionaryCache,
     ) -> RecordedOutcome {
         match (entries, workbook) {
             (Some(map), _) => self.import_manifest_row(row_number, map, actor, cache).await,
             (_, Some((bytes, parsed))) => {
-                let cells = legacy_cells.as_ref().and_then(|m| m.get(&row_number).copied()).unwrap_or(&[]);
-                let media = RowMediaSource::Workbook { xlsx: bytes, sheet: parsed };
-                record_row_outcome(self.import_row(row_number, cells, &media, actor, cache).await)
+                let Some(row) = workbook_rows.as_ref().and_then(|rows| rows.get(&row_number).copied()) else {
+                    return record_row_outcome(Err(Error::ValidationError("产品名称不能为空".into())));
+                };
+                let media = RowMediaSource::Workbook { xlsx: bytes, sheet: parsed, row };
+                record_row_outcome(self.import_row(row_number, &row.cells, &media, actor, cache).await)
             },
             (None, None) => unreachable!("行来源必为清单或源文件之一"),
         }
@@ -423,7 +424,7 @@ struct ProductImportRows<'a> {
     cache: &'a mut ImportDictionaryCache,
     entries: Option<&'a HashMap<u32, &'a RowManifestRow>>,
     workbook: Option<&'a (&'a Arc<Vec<u8>>, &'a ParsedProductSheet)>,
-    legacy_cells: Option<HashMap<u32, &'a [String]>>,
+    workbook_rows: Option<HashMap<u32, &'a ParsedProductRow>>,
 }
 
 #[async_trait]
@@ -446,7 +447,7 @@ impl ImportRowExecution for ProductImportRows<'_> {
                 row_number,
                 self.entries,
                 self.workbook,
-                &self.legacy_cells,
+                &self.workbook_rows,
                 self.actor,
                 self.cache,
             )

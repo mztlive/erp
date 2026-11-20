@@ -12,7 +12,7 @@ use erp_master_data::product_update_with_assets;
 use persistence_core::ReadExecutor;
 
 use super::ProductImportProcess;
-use super::backfill::sku_inputs_with_main_image;
+use super::backfill::{existing_sku_inputs, media_inputs};
 use super::identity::NormalizedImportRow;
 use super::images::{RowMedia, RowMediaSource, resolve_row_media};
 use super::row::RowImportOutcome;
@@ -21,7 +21,7 @@ use crate::{Error, Result};
 impl ProductImportProcess {
     // 把当前行作为新 SKU 并入已有商品；规格已存在则只补图。
     //
-    // `product`：已有 SPU；`row`：规范化后的导入行；`cells`：原单元格；`media_source`：行媒体来源（清单复用或源文件提取）。
+    // `product`：已有 SPU；`row`：规范化后的导入行；`media_source`：行媒体来源（清单复用或源文件提取）。
     //
     // 新增 SKU、补图或跳过时的行结果。
     //
@@ -30,7 +30,6 @@ impl ProductImportProcess {
         &self,
         product: Product,
         row: NormalizedImportRow,
-        cells: &[String],
         media_source: &RowMediaSource<'_>,
         actor: &AuditActor,
     ) -> Result<RowImportOutcome> {
@@ -46,7 +45,7 @@ impl ProductImportProcess {
                 revisions.values().any(|revision| revision.barcode.as_ref() == Some(barcode))
             });
         if same_sku {
-            return self.import_existing_with_images(product, cells, media_source, actor).await;
+            return self.import_existing_with_images(product, &row, media_source, actor).await;
         }
 
         if let Some(barcode) = &row.barcode {
@@ -59,7 +58,7 @@ impl ProductImportProcess {
             }
         }
 
-        let media = resolve_row_media(&self.storage, &self.secret, cells, media_source).await?;
+        let media = resolve_row_media(&self.storage, &self.secret, media_source).await?;
         let pending = media.pending.clone();
         let request = self.append_sku_request(&product, &row, &skus, media).await?;
         match product_update_with_assets(
@@ -101,7 +100,7 @@ impl ProductImportProcess {
             .current_revision
             .ok_or_else(|| Error::BusinessLogicError("商品缺少当前资料，无法新增 SKU".into()))?;
         let revisions = self.db.catalog().current_sku_revisions(skus, &mut ReadExecutor::default()).await?;
-        let sku_inputs = sku_inputs_with_main_image(skus, &revisions, None)?;
+        let sku_inputs = existing_sku_inputs(skus, &revisions)?;
         append_request(product, row, revision, &snapshot.media, sku_inputs, media)
     }
 }
@@ -145,19 +144,6 @@ fn append_request(
         detail_media,
         skus: sku_inputs,
     })
-}
-
-// 按媒体用途复制当前修订的文件身份、展示顺序和替代文本。
-fn media_inputs(media: &[ProductRevisionMedia], role: MediaRole) -> Vec<ProductMediaInput> {
-    media
-        .iter()
-        .filter(|item| item.media_role == role)
-        .map(|item| ProductMediaInput {
-            file_asset_id: item.file_asset_id.clone(),
-            sort_order: item.sort_order,
-            alt_text: item.alt_text.clone(),
-        })
-        .collect()
 }
 
 // 计算本行 SKU 规格签名，用于判断是否已在同一 SPU 下存在。

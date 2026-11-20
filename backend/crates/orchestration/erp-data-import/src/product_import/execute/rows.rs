@@ -307,6 +307,7 @@ mod tests {
                         parsed: ParsedProductSheet {
                             rows: (1..=1000)
                                 .map(|row_number| ParsedProductRow {
+                                    shared_main_image: None,
                                     row_number,
                                     cells: vec![format!("product-{row_number}")],
                                 })

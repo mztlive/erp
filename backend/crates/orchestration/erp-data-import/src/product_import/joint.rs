@@ -54,7 +54,7 @@ impl ProductImportProcess {
         self.import_supplier(&input, actor, &mut ReadExecutor::default()).await?;
 
         let row = normalize_import_row(row_number, cells)?;
-        let media = resolve_row_media(&self.storage, &self.secret, cells, media_source).await?;
+        let media = resolve_row_media(&self.storage, &self.secret, media_source).await?;
         let prepared = self.prepare_supply_product(&row, media, actor, cache).await?;
 
         let process = self.clone();
@@ -169,18 +169,18 @@ impl ProductImportProcess {
             .find_by_product_ids(&[ProductId::new(product.base.id.clone())], &mut ReadExecutor::default())
             .await?;
         let revisions = self.db.catalog().current_sku_revisions(&skus, &mut ReadExecutor::default()).await?;
-        let same = row.matching_sku(&skus, &revisions)?.is_some();
-        if same && (media.pending.is_empty() || self.product_has_images(&product).await?) {
-            let pending = PendingFileAssets::prepare(Vec::new(), actor)?.into_catalog_batch();
-            return Ok(PreparedProduct { write: ProductWrite::Existing(product.base.id), pending });
-        }
-
-        let pending = PendingFileAssets::prepare(media.pending.clone(), actor)?.into_catalog_batch();
-        let request = if same {
-            self.update_request_with_images(&product, media).await?
+        let (request, pending) = if let Some(sku) = row.matching_sku(&skus, &revisions)? {
+            let Some(backfill) = self.prepare_image_backfill(&product, sku, &skus, &revisions, media).await?
+            else {
+                let pending = PendingFileAssets::prepare(Vec::new(), actor)?.into_catalog_batch();
+                return Ok(PreparedProduct { write: ProductWrite::Existing(product.base.id), pending });
+            };
+            backfill
         } else {
-            self.append_sku_request(&product, row, &skus, media).await?
+            let pending = media.pending.clone();
+            (self.append_sku_request(&product, row, &skus, media).await?, pending)
         };
+        let pending = PendingFileAssets::prepare(pending, actor)?.into_catalog_batch();
         let plan = self
             .services
             .scoped_catalog

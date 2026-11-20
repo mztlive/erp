@@ -16,7 +16,7 @@ use storage::S3Storage;
 
 use super::images::RowMedia;
 use super::legacy;
-use super::media::{PreparedImage, WorkbookMedia, row_media_targets};
+use super::media::{PreparedImage, RowImageRole, WorkbookMedia, row_media_targets};
 use super::parse::ParsedProductSheet;
 use crate::{Error, Result};
 
@@ -125,7 +125,7 @@ pub(super) async fn build_row_manifest(
             &writer,
             &mut entry,
             reader,
-            row_media_targets(&row.cells, parsed),
+            row_media_targets(row, parsed),
             &mut uploaded_object_keys,
         )
         .await
@@ -344,25 +344,27 @@ async fn upload_manifest_row(
     writer: &impl ManifestImageWriter,
     entry: &mut RowManifestRow,
     mut reader: WorkbookMedia,
-    targets: Vec<(usize, String)>,
+    targets: Vec<(RowImageRole, String)>,
     uploaded_keys: &mut Vec<String>,
 ) -> Result<WorkbookMedia> {
     let mut sort_order = 0;
-    for (column, path) in targets {
+    for (role, path) in targets {
         let (next_reader, image) = reader.read(path).await?;
         reader = next_reader;
         let Some(image) = image else {
             continue;
         };
 
-        let slot = format!("carousel-{sort_order}");
-        let result = writer.put(entry.row_number, &slot, &image).await;
-        if !record_manifest_upload(entry, result, Some(sort_order), uploaded_keys) {
-            break;
+        if role != RowImageRole::SharedMain {
+            let slot = format!("carousel-{sort_order}");
+            let result = writer.put(entry.row_number, &slot, &image).await;
+            if !record_manifest_upload(entry, result, Some(sort_order), uploaded_keys) {
+                break;
+            }
+            sort_order += 1;
         }
-        sort_order += 1;
 
-        if column == 2 {
+        if role != RowImageRole::Carousel {
             let result = writer.put(entry.row_number, "main", &image).await;
             if !record_manifest_upload(entry, result, None, uploaded_keys) {
                 break;
@@ -413,8 +415,8 @@ mod tests {
 
     use super::{
         BACKGROUND_JOB_INPUT_LIMIT, ManifestCarouselImage, ManifestImage, ManifestImageWriter,
-        ManifestPayload, PreparedImage, ROW_MANIFEST_VERSION, RowManifest, RowManifestRow, WorkbookMedia,
-        decode_row_manifest, manifest_object_key, manifest_payload, row_media_from_entry,
+        ManifestPayload, PreparedImage, ROW_MANIFEST_VERSION, RowImageRole, RowManifest, RowManifestRow,
+        WorkbookMedia, decode_row_manifest, manifest_object_key, manifest_payload, row_media_from_entry,
         upload_manifest_row,
     };
     use crate::product_import::identity::normalize_import_row;
@@ -707,8 +709,12 @@ mod tests {
     }
 
     /// 按模板三列构造独立媒体路径，以检测是否提前提取后续图片。
-    fn prepared_targets() -> Vec<(usize, String)> {
-        (2..5).map(|column| (column, format!("image-{column}"))).collect()
+    fn prepared_targets() -> Vec<(RowImageRole, String)> {
+        vec![
+            (RowImageRole::MainAndCarousel, "image-2".into()),
+            (RowImageRole::Carousel, "image-3".into()),
+            (RowImageRole::Carousel, "image-4".into()),
+        ]
     }
 
     // 验证：主图与轮播首图独立登记，全部上传顺序和轮播排序保持原合同。
@@ -728,6 +734,28 @@ mod tests {
         assert_ne!(main.reference, entry.carousel[0].reference);
         assert_ne!(main.registration.storage_object_key, entry.carousel[0].registration.storage_object_key);
         assert!(entry.media_error.is_none());
+    }
+
+    #[tokio::test]
+    async fn shared_main_image_registers_only_a_sku_attachment() {
+        let writer = RecordingImages { calls: Mutex::new(Vec::new()), failure: None };
+        let mut entry = RowManifestRow { row_number: 2, ..Default::default() };
+        let mut keys = Vec::new();
+        upload_manifest_row(
+            &writer,
+            &mut entry,
+            prepared_reader().await,
+            vec![(RowImageRole::SharedMain, "image-2".into())],
+            &mut keys,
+        )
+        .await
+        .unwrap();
+
+        let media = row_media_from_entry(&entry);
+        assert_eq!(keys, ["2-main"]);
+        assert!(media.main_image.is_some());
+        assert!(media.carousel.is_empty());
+        assert_eq!(media.pending.len(), 1);
     }
 
     // 验证：首错停止当前行并保留成功对象用于补偿，随后行仍继续执行。

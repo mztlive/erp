@@ -84,9 +84,9 @@ impl ProductImportProcess {
             self.db.products().find_by_product_no(&row.product_no, &mut ReadExecutor::default()).await?
         {
             if row.coded_spu {
-                return self.import_sku_into_spu(existing, row, cells, media_source, actor).await;
+                return self.import_sku_into_spu(existing, row, media_source, actor).await;
             }
-            return self.import_existing_with_images(existing, cells, media_source, actor).await;
+            return self.import_existing_with_images(existing, &row, media_source, actor).await;
         }
 
         if let Some(barcode) = &row.barcode {
@@ -102,7 +102,7 @@ impl ProductImportProcess {
         let brand_id = self.resolve_brand(&row.brand_name, actor, cache).await?;
         let category_id = self.resolve_category(&row.category_name, actor, cache).await?;
 
-        let media = resolve_row_media(&self.storage, &self.secret, cells, media_source).await?;
+        let media = resolve_row_media(&self.storage, &self.secret, media_source).await?;
         let carousel_media = media
             .carousel
             .into_iter()

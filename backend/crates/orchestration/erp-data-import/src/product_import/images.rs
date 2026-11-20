@@ -10,8 +10,8 @@ use erp_support::{
 use id_generator::next_id;
 use storage::S3Storage;
 
-use super::media::{PreparedImage, WorkbookMedia, row_media_targets};
-use super::parse::ParsedProductSheet;
+use super::media::{PreparedImage, RowImageRole, WorkbookMedia, row_media_targets};
+use super::parse::{ParsedProductRow, ParsedProductSheet};
 use crate::{Error, Result};
 
 /// 一行已上传的媒体引用。
@@ -36,6 +36,8 @@ pub(super) enum RowMediaSource<'a> {
         xlsx: &'a Arc<Vec<u8>>,
         /// 解析结果。
         sheet: &'a ParsedProductSheet,
+        /// 当前行。
+        row: &'a ParsedProductRow,
     },
 }
 
@@ -43,7 +45,6 @@ pub(super) enum RowMediaSource<'a> {
 //
 // - `storage`：对象存储（仅源文件来源使用）
 // - `secret`：内容指纹密钥（仅源文件来源使用）
-// - `cells`：当前行单元格（仅源文件来源使用）
 // - `source`：行媒体来源
 //
 // 返回临时文件引用与待登记资产。
@@ -52,13 +53,12 @@ pub(super) enum RowMediaSource<'a> {
 pub(super) async fn resolve_row_media(
     storage: &S3Storage,
     secret: &[u8],
-    cells: &[String],
     source: &RowMediaSource<'_>,
 ) -> Result<RowMedia> {
     match source {
         RowMediaSource::Manifest(media) => Ok((*media).clone()),
-        RowMediaSource::Workbook { xlsx, sheet } => {
-            upload_row_images(storage, secret, xlsx, sheet, cells).await
+        RowMediaSource::Workbook { xlsx, sheet, row } => {
+            upload_row_images(storage, secret, xlsx, sheet, row).await
         },
     }
 }
@@ -75,25 +75,27 @@ pub async fn upload_row_images(
     secret: &[u8],
     xlsx: &Arc<Vec<u8>>,
     sheet: &ParsedProductSheet,
-    cells: &[String],
+    row: &ParsedProductRow,
 ) -> Result<RowMedia> {
     let mut reader = WorkbookMedia::open(xlsx.clone()).await?;
     let mut media = RowMedia::default();
     let mut sort_order = 0;
-    for (column, path) in row_media_targets(cells, sheet) {
+    for (role, path) in row_media_targets(row, sheet) {
         let (next_reader, image) = reader.read(path).await?;
         reader = next_reader;
         let Some(image) = image else {
             continue;
         };
 
-        let carousel_pending = store_image(storage, secret, &image).await?;
-        let reference = FileAssetId::new(carousel_pending.reference.clone());
-        media.carousel.push((reference, sort_order));
-        sort_order += 1;
-        media.pending.push(carousel_pending);
+        if role != RowImageRole::SharedMain {
+            let carousel_pending = store_image(storage, secret, &image).await?;
+            let reference = FileAssetId::new(carousel_pending.reference.clone());
+            media.carousel.push((reference, sort_order));
+            sort_order += 1;
+            media.pending.push(carousel_pending);
+        }
 
-        if column == 2 {
+        if role != RowImageRole::Carousel {
             let sku_pending = store_image(storage, secret, &image).await?;
             media.main_image = Some(FileAssetId::new(sku_pending.reference.clone()));
             media.pending.push(sku_pending);

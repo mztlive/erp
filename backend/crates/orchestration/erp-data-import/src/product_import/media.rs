@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 use tokio::task::spawn_blocking;
 use zip::ZipArchive;
 
-use super::parse::ParsedProductSheet;
+use super::parse::{ParsedProductRow, ParsedProductSheet};
 use crate::{Error, Result};
 
 /// 近期图片缓存同时受条数与解压后字节数限制；超大图片仅保留当前行引用。
@@ -113,22 +113,34 @@ impl WorkbookMedia {
     }
 }
 
-// 按原第 3 至第 5 列顺序解析图片目标，缺公式或缺映射时跳过。
-//
-// `cells`：当前模板行的单元格；`sheet`：工作簿解析结果中的图片路径映射。
-//
-// 返回最多 3 个按模板列序排列的图片目标。
-pub(super) fn row_media_targets(cells: &[String], sheet: &ParsedProductSheet) -> Vec<(usize, String)> {
-    cells
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum RowImageRole {
+    MainAndCarousel,
+    Carousel,
+    SharedMain,
+}
+
+// 同规格行的主图兼作轮播图；共用主图只补 SKU，避免在商品轮播中重复追加。
+pub(super) fn row_media_targets(
+    row: &ParsedProductRow,
+    sheet: &ParsedProductSheet,
+) -> Vec<(RowImageRole, String)> {
+    let mut targets: Vec<_> = row
+        .cells
         .iter()
         .enumerate()
         .take(5)
         .skip(2)
         .filter_map(|(column, cell)| {
             let id = dispimg_id(cell)?;
-            Some((column, sheet.image_targets.get(id)?.clone()))
+            let role = if column == 2 { RowImageRole::MainAndCarousel } else { RowImageRole::Carousel };
+            Some((role, sheet.image_targets.get(id)?.clone()))
         })
-        .collect()
+        .collect();
+    if let Some(path) = &row.shared_main_image {
+        targets.push((RowImageRole::SharedMain, path.clone()));
+    }
+    targets
 }
 
 // 从同一 ZIP 提取并识别图片，损坏条目、缺条目或未知格式均沿用跳过语义。
@@ -168,9 +180,10 @@ mod tests {
     use zip::write::SimpleFileOptions;
 
     use super::{
-        Arc, Cursor, Digest, MEDIA_CACHE_BYTES, MEDIA_CACHE_ENTRIES, Sha256, WorkbookMedia, row_media_targets,
+        Arc, Cursor, Digest, MEDIA_CACHE_BYTES, MEDIA_CACHE_ENTRIES, RowImageRole, Sha256, WorkbookMedia,
+        row_media_targets,
     };
-    use crate::product_import::parse::ParsedProductSheet;
+    use crate::product_import::parse::{ParsedProductRow, ParsedProductSheet};
 
     /// 生成纯内存 ZIP，覆盖实际生产解压与格式识别路径。
     fn workbook(entries: &[(&str, Vec<u8>)]) -> Arc<Vec<u8>> {
@@ -268,6 +281,14 @@ mod tests {
         };
         let cells =
             ["ID_A", "ID_A", "ID_C", "ID_A", "ID_B", "ID_A"].map(|id| format!("=DISPIMG(\"{id}\",1)"));
-        assert_eq!(row_media_targets(&cells, &sheet), [(2, "c".into()), (3, "a".into()), (4, "b".into())]);
+        let row = ParsedProductRow { row_number: 2, cells: cells.to_vec(), shared_main_image: None };
+        assert_eq!(
+            row_media_targets(&row, &sheet),
+            [
+                (RowImageRole::MainAndCarousel, "c".into()),
+                (RowImageRole::Carousel, "a".into()),
+                (RowImageRole::Carousel, "b".into()),
+            ]
+        );
     }
 }

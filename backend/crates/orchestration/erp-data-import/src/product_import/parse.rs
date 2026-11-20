@@ -2,11 +2,13 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use erp_catalog::entity::catalog::product_import::{dispimg_id, is_import_blank};
 use erp_catalog::{
     MAX_PRODUCT_IMPORT_FILE_BYTES, PRODUCT_IMPORT_HEADERS, PRODUCT_IMPORT_SHEET_NAME,
     ensure_product_import_headers,
 };
 
+use super::identity::explicit_product_code;
 use super::legacy;
 use crate::xlsx::{self, Archive, ArchiveLimits, Cell, MergeRange, SheetLimits};
 use crate::{Error, Result};
@@ -39,6 +41,8 @@ pub struct ParsedProductRow {
     pub row_number: u32,
     /// 按模板列序的单元格文本。
     pub cells: Vec<String>,
+    /// 本行未填写主图时，同产品编码唯一主图的媒体路径。
+    pub(super) shared_main_image: Option<String>,
 }
 
 /// 解析产品报价表字节。
@@ -69,7 +73,7 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
     let width = template_width(&headers.cells)?;
     let legacy_layout = width == legacy::HEADERS.len();
 
-    let data_rows = rows
+    let mut data_rows = rows
         .into_iter()
         .skip(1)
         .filter(|row| row.cells.iter().take(width).any(|cell| !cell.trim().is_empty()))
@@ -90,7 +94,39 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
     }
 
     let image_targets = parse_image_targets(&mut archive)?;
+    fill_shared_main_images(&mut data_rows, &image_targets);
     Ok(ParsedProductSheet { rows: data_rows, image_targets })
+}
+
+// 同一产品编码只有一个主图来源时，允许缺图规格共用该图片。
+fn fill_shared_main_images(rows: &mut [ParsedProductRow], targets: &HashMap<String, String>) {
+    const MAIN_IMAGE_COLUMN: usize = 2;
+    let mut main_images = HashMap::new();
+    for row in rows.iter() {
+        let cell = &row.cells[MAIN_IMAGE_COLUMN];
+        let Some(code) = explicit_product_code(&row.cells[0]) else { continue };
+        if is_import_blank(cell) {
+            continue;
+        }
+        let image = dispimg_id(cell).and_then(|id| targets.get(id));
+        main_images
+            .entry(code)
+            .and_modify(|current| {
+                if *current != image {
+                    *current = None;
+                }
+            })
+            .or_insert(image);
+    }
+
+    for row in rows {
+        if is_import_blank(&row.cells[MAIN_IMAGE_COLUMN])
+            && let Some(code) = explicit_product_code(&row.cells[0])
+            && let Some(Some(path)) = main_images.get(&code)
+        {
+            row.shared_main_image = Some((*path).clone());
+        }
+    }
 }
 
 // 先匹配完整旧表头，再严格校验新模板，避免将历史售价解释为供给成本。
@@ -128,7 +164,10 @@ fn parse_sheet_rows(xml: &str, shared: &[String]) -> Result<Vec<ParsedProductRow
     }
 
     fill_merged_cells(&mut rows, &sheet.merges);
-    Ok(rows.into_iter().map(|(row_number, cells)| ParsedProductRow { row_number, cells }).collect())
+    Ok(rows
+        .into_iter()
+        .map(|(row_number, cells)| ParsedProductRow { row_number, cells, shared_main_image: None })
+        .collect())
 }
 
 fn product_cell(cell: Cell) -> String {
@@ -250,6 +289,33 @@ mod tests {
         let text = cell_text(r#" t="str""#, inner, &shared);
         assert!(text.contains("ID_DC3C0313483242B2B7BF94A18EC5BDA4"));
         assert_eq!(dispimg_id(&text), Some("ID_DC3C0313483242B2B7BF94A18EC5BDA4"));
+    }
+
+    #[test]
+    fn blank_sku_uses_only_the_unique_main_image_of_its_product() {
+        let xml = r#"<sheetData>
+            <c r="A2" t="inlineStr"><is><t>SPU-1</t></is></c>
+            <c r="A3" t="inlineStr"><is><t>SPU-1</t></is></c>
+            <c r="C3"><f>DISPIMG("IMG_A",1)</f></c>
+            <c r="A4" t="inlineStr"><is><t>SPU-2</t></is></c>
+            <c r="C4"><f>DISPIMG("IMG_A",1)</f></c>
+            <c r="A5" t="inlineStr"><is><t>SPU-2</t></is></c>
+            <c r="C5"><f>DISPIMG("IMG_B",1)</f></c>
+            <c r="A6" t="inlineStr"><is><t>SPU-2</t></is></c>
+            <c r="A7" t="inlineStr"><is><t>SPU-3</t></is></c>
+            <c r="D7"><f>DISPIMG("IMG_B",1)</f></c>
+            <c r="A8" t="inlineStr"><is><t>SPU-3</t></is></c>
+            <c r="I9" t="inlineStr"><is><t>独立规格</t></is></c>
+        </sheetData>"#;
+        let mut rows = parse_sheet_rows(xml, &[]).unwrap();
+        let targets =
+            [("IMG_A".into(), "xl/media/a.png".into()), ("IMG_B".into(), "xl/media/b.png".into())].into();
+        super::fill_shared_main_images(&mut rows, &targets);
+
+        assert_eq!(rows[0].shared_main_image.as_deref(), Some("xl/media/a.png"));
+        assert!(rows[0].cells[2].is_empty());
+        assert!(rows[1..].iter().all(|row| row.shared_main_image.is_none()));
+        assert_eq!(dispimg_id(&rows[3].cells[2]), Some("IMG_B"));
     }
 
     #[test]
