@@ -1,4 +1,5 @@
 //! 审批提交时冻结的工作台展示合同；仅保存已筛选的业务字段，不保存任意 JSON 或权限。
+use erp_core::money::{Amount, Quantity, UnitPrice};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -11,9 +12,47 @@ pub struct ApprovalDisplaySnapshot {
     pub counterparty_label: Option<String>,
     pub impact_summary: Option<String>,
     pub source: ApprovalBriefSource,
+    /// 本次开票申请提交的完整资料；历史审批缺失时不回读现行资料。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invoice_request: Option<ApprovalInvoiceRequestSnapshot>,
     /// 本次采购提交实际引用的不可变销售版本；历史缺失不读取当前销售单补齐。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_sales: Vec<ApprovalRelatedSalesSnapshot>,
+}
+
+/// 提交开票审批时冻结的申请资料，由开票领域校验后写入。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApprovalInvoiceRequestSnapshot {
+    pub amount: Amount,
+    pub invoice_title: String,
+    pub tax_number: String,
+    pub seller_name: Option<String>,
+    pub seller_tax_number: Option<String>,
+    pub invoice_content: String,
+    pub reason: String,
+    pub lines: Vec<ApprovalInvoiceRequestLine>,
+}
+
+/// 冻结的开票内容、数量和含税单价。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApprovalInvoiceRequestLine {
+    pub content: String,
+    pub quantity: Quantity,
+    pub unit_price: UnitPrice,
+}
+
+impl ApprovalInvoiceRequestSnapshot {
+    fn validate(&self) -> Result<()> {
+        let texts = [&self.invoice_title, &self.tax_number, &self.invoice_content, &self.reason]
+            .into_iter()
+            .chain(self.seller_name.as_ref())
+            .chain(self.seller_tax_number.as_ref())
+            .chain(self.lines.iter().map(|line| &line.content));
+        if self.lines.len() > 100 || texts.into_iter().any(|text| text.chars().count() > 1000) {
+            return Err(Error::from("审批开票资料超出允许范围"));
+        }
+        Ok(())
+    }
 }
 
 /// 采购审批中冻结的来源销售摘要；只允许单层关联，不形成通用对象读取入口。
@@ -54,6 +93,7 @@ impl ApprovalDisplaySnapshot {
             counterparty_label: None,
             impact_summary: None,
             source: ApprovalBriefSource::default(),
+            invoice_request: None,
             source_sales: Vec::new(),
         }
     }
@@ -125,6 +165,9 @@ impl ApprovalDisplaySnapshot {
     pub fn validate(&self) -> Result<()> {
         if self.source_sales.len() > 100 {
             return Err(Error::from("审批关联销售资料超过100个版本"));
+        }
+        if let Some(invoice_request) = &self.invoice_request {
+            invoice_request.validate()?;
         }
         for sales in &self.source_sales {
             sales.validate()?;
@@ -229,6 +272,7 @@ mod tests {
                 }],
                 ..Default::default()
             },
+            invoice_request: None,
             source_sales: Vec::new(),
         };
         display.validate().unwrap();

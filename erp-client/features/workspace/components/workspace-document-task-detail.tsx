@@ -80,6 +80,17 @@ import {
     type WorkspacePaperTarget,
 } from "./workspace-document-paper-dialog"
 
+const exactInvoiceFields = new Set([
+    "开票抬头",
+    "税号",
+    "开票内容",
+    "申请事由",
+    "购方名称",
+    "购方纳税人识别号",
+    "销方名称",
+    "销方纳税人识别号",
+])
+
 export function WorkspaceDocumentTaskDetail({
     item,
     reworkTask,
@@ -135,6 +146,11 @@ export function WorkspaceDocumentTaskDetail({
     const receiptApproval =
         approvalDocument &&
         item.businessObjectType === "customer_receipt" &&
+        Boolean(instanceId) &&
+        canReadSubmission
+    const invoiceApproval =
+        approvalDocument &&
+        item.businessObjectType === "sales_invoice_request" &&
         Boolean(instanceId) &&
         canReadSubmission
     const readActionLabel = approvalDocument
@@ -245,6 +261,13 @@ export function WorkspaceDocumentTaskDetail({
         ...detailFacts.keyFields,
         ...detailFacts.moreFields,
     ]
+    const visibleDocumentFields = documentFields.filter(
+        ({ label }) =>
+            !(
+                item.businessObjectType === "sales_invoice_request" &&
+                label === "申请金额"
+            ) && !(invoiceApproval && exactInvoiceFields.has(label)),
+    )
     const purchasePaymentTerm = documentFields.find(
         (field) => field.label === "付款条件",
     )?.value
@@ -664,19 +687,10 @@ export function WorkspaceDocumentTaskDetail({
                     <>
                         {!receiptApproval &&
                         !deliveryBrief &&
-                        documentFields.length > 0 ? (
+                        visibleDocumentFields.length > 0 ? (
                             <DetailBlock>
                                 <FieldGrid
-                                    sections={
-                                        item.businessObjectType ===
-                                        "sales_invoice_request"
-                                            ? documentFields.filter(
-                                                  (field) =>
-                                                      field.label !==
-                                                      "申请金额",
-                                              )
-                                            : documentFields
-                                    }
+                                    sections={visibleDocumentFields}
                                     returnTo={returnTo}
                                     onPreview={(section) => {
                                         const kind = linkedDocumentPaperKind(
@@ -695,10 +709,7 @@ export function WorkspaceDocumentTaskDetail({
                     </>
                 )}
 
-                {approvalDocument &&
-                instanceId &&
-                canReadSubmission &&
-                item.businessObjectType === "sales_invoice_request" ? (
+                {invoiceApproval && instanceId ? (
                     <WorkspaceInvoiceApproval
                         item={item}
                         key={instanceId}
@@ -716,7 +727,8 @@ export function WorkspaceDocumentTaskDetail({
                     />
                 ) : null}
 
-                {!(salesApproval && instanceId && canReadSubmission) &&
+                {!invoiceApproval &&
+                !(salesApproval && instanceId && canReadSubmission) &&
                 !deliveryBrief &&
                 !receiptApproval &&
                 !purchaseApproval &&

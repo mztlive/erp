@@ -92,9 +92,10 @@ pub async fn freeze_approval_materials(
     }
 
     if snapshot.document_type == DocumentType::SalesInvoiceRequest {
-        let (source, files) = super::invoice_review::capture(db, &snapshot, executor).await?;
+        let (source, files, request) = super::invoice_review::capture(db, &snapshot, executor).await?;
         if let Some(display) = &mut snapshot.display {
             display.source_sales = vec![source];
+            display.invoice_request = Some(request);
             display.source.extra_sections.push(ApprovalBriefSection::new(
                 "申请时间".into(),
                 super::brief::format_instant_datetime(snapshot.payload.submitted_at),

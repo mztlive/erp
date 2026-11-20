@@ -10,7 +10,9 @@ use erp_finance::repository::prelude::*;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use erp_workflow::WorkflowAuthorizationPort;
-use erp_workflow::entity::approval_integration::display_snapshot::ApprovalRelatedSalesSnapshot;
+use erp_workflow::entity::approval_integration::display_snapshot::{
+    ApprovalInvoiceRequestLine, ApprovalInvoiceRequestSnapshot, ApprovalRelatedSalesSnapshot,
+};
 use erp_workflow::entity::approval_integration::{ApprovalMaterialFile, ApprovalSubjectSnapshot};
 use erp_workflow::service::approval::execution::ApprovalRuntimeService;
 use erp_workflow::service::approval::execution::runtime_service::ApprovalMaterialsView;
@@ -211,6 +213,11 @@ fn warnings(
     {
         warnings.push("提交的开票抬头或税号与当前结算主体档案不一致，请核对资料变更。".into());
     }
+    if request.data.seller_name.as_ref().is_some_and(|value| value != &identity.seller_name)
+        || request.data.seller_tax_number.as_ref().is_some_and(|value| value != &identity.seller_tax_number)
+    {
+        warnings.push("提交的销方名称或税号与当前开票主体档案不一致，请核对资料变更。".into());
+    }
     if frozen.iter().any(|row| row.revision_id != source.revision_id) {
         warnings.push("申请提交后销售版本已变更，请对照提交资料与当前销售依据。".into());
     }
@@ -233,7 +240,7 @@ pub(super) async fn capture(
     db: &Database,
     snapshot: &ApprovalSubjectSnapshot,
     executor: &mut dyn Executor,
-) -> Result<(ApprovalRelatedSalesSnapshot, Vec<ApprovalMaterialFile>)> {
+) -> Result<(ApprovalRelatedSalesSnapshot, Vec<ApprovalMaterialFile>, ApprovalInvoiceRequestSnapshot)> {
     let request = request(db, &snapshot.business_object_id, snapshot.subject_version, executor).await?;
     let account = db
         .receivable_accounts()
@@ -265,7 +272,29 @@ pub(super) async fn capture(
     };
 
     source.validate()?;
-    Ok((source, files))
+    Ok((source, files, request_snapshot(request)))
+}
+
+fn request_snapshot(request: SalesInvoiceRequest) -> ApprovalInvoiceRequestSnapshot {
+    let data = request.data;
+    ApprovalInvoiceRequestSnapshot {
+        amount: data.amount,
+        invoice_title: data.invoice_title,
+        tax_number: data.tax_number,
+        seller_name: data.seller_name,
+        seller_tax_number: data.seller_tax_number,
+        invoice_content: data.invoice_content,
+        reason: data.reason,
+        lines: data
+            .lines
+            .into_iter()
+            .map(|line| ApprovalInvoiceRequestLine {
+                content: line.content,
+                quantity: line.quantity,
+                unit_price: line.unit_price,
+            })
+            .collect(),
+    }
 }
 
 #[cfg(test)]
@@ -313,6 +342,9 @@ mod tests {
                 invoice_title: "购方公司".into(),
                 tax_number: "TAX".into(),
                 invoice_content: "商品".into(),
+                seller_name: None,
+                seller_tax_number: None,
+                lines: Vec::new(),
                 reason: "按合同开票".into(),
             },
             "actor",
@@ -361,6 +393,8 @@ mod tests {
             effective: true,
             invoice_title: request.data.invoice_title.clone(),
             tax_number: request.data.tax_number.clone(),
+            seller_name: "我方公司".into(),
+            seller_tax_number: "91110108123456789X".into(),
         };
         let amounts = InvoiceReviewAmounts::from_requests(
             account.open_invoiceable_total,
@@ -398,6 +432,8 @@ mod tests {
             effective: true,
             invoice_title: request.data.invoice_title.clone(),
             tax_number: request.data.tax_number.clone(),
+            seller_name: "我方公司".into(),
+            seller_tax_number: "91110108123456789X".into(),
         };
         assert!(warnings(&request, &[], &source(), &amounts, &identity).is_empty());
     }

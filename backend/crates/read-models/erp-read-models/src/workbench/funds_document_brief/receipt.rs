@@ -208,7 +208,7 @@ impl WorkbenchFactsReader<'_> {
 }
 
 impl WorkbenchFactsReader<'_> {
-    // 为回款单据任务简报取数时，读取申请用于当前展示及不可变审批快照；税号与内容取提交实体。
+    // 开票资料取已保存申请，用于当前展示及不可变审批快照。
     async fn load_invoice_request_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -217,7 +217,7 @@ impl WorkbenchFactsReader<'_> {
     ) -> Result<()> {
         use erp_finance::repository::ReceivableExt;
         use erp_workflow::entity::approval_integration::display_snapshot::{
-            ApprovalBriefSection, ApprovalBriefSource,
+            ApprovalBriefLine, ApprovalBriefSection, ApprovalBriefSource,
         };
         let ids = object_ids(keys, ObjectKind::SalesInvoiceRequest);
         if ids.is_empty() {
@@ -228,26 +228,46 @@ impl WorkbenchFactsReader<'_> {
                 WorkbenchObjectFact::from_authority(authority_mapping::invoice_request_fact(&request));
             fact.display.approval_subject_version = Some(request.approval_subject_version);
 
-            let sections = [
-                ("申请金额", request.data.amount.to_string()),
-                ("开票抬头", request.data.invoice_title.clone()),
-                ("税号", request.data.tax_number.clone()),
-                ("开票内容", request.data.invoice_content.clone()),
-                ("申请事由", request.data.reason.clone()),
-            ]
-            .into_iter()
-            .map(|(label, value)| ApprovalBriefSection {
-                label: label.into(),
-                value,
-                numeric: label == "申请金额",
-                object_id: None,
-            })
-            .collect();
+            let data = &request.data;
+            let mut sections = vec![
+                ApprovalBriefSection {
+                    label: "申请金额".into(),
+                    value: data.amount.to_string(),
+                    numeric: true,
+                    object_id: None,
+                },
+                ApprovalBriefSection::new("购方名称".into(), data.invoice_title.clone()),
+                ApprovalBriefSection::new("购方纳税人识别号".into(), data.tax_number.clone()),
+                ApprovalBriefSection::new("申请事由".into(), data.reason.clone()),
+            ];
+            for (label, value) in [
+                ("销方名称", data.seller_name.as_deref()),
+                ("销方纳税人识别号", data.seller_tax_number.as_deref()),
+                ("开票内容", data.lines.is_empty().then_some(data.invoice_content.as_str())),
+            ] {
+                super::super::brief::push_section(&mut sections, label, value, false);
+            }
+
+            let brief_limit = super::super::brief::BRIEF_LINE_LIMIT;
+            let lines = data
+                .lines
+                .iter()
+                .take(brief_limit)
+                .map(|line| {
+                    Ok(ApprovalBriefLine {
+                        title: line.content.clone(),
+                        quantity: Some(format!("{} · 含税单价 {} 元", line.quantity, line.unit_price)),
+                        due_label: Some(format!("含税金额 {} 元", line.gross_amount()?)),
+                    })
+                })
+                .collect::<Result<_>>()?;
             fact.display.brief_source = Some(ApprovalBriefSource {
-                customer: Some(request.data.invoice_title.clone()),
-                amount_label: Some(format!("申请开票 {} 元", request.data.amount)),
-                list_summary: format!("{} · {} 元", request.data.invoice_title, request.data.amount),
+                customer: Some(data.invoice_title.clone()),
+                amount_label: Some(format!("申请开票 {} 元", data.amount)),
+                list_summary: format!("{} · {} 元", data.invoice_title, data.amount),
                 extra_sections: sections,
+                lines,
+                more_count: data.lines.len().saturating_sub(brief_limit) as u32,
                 ..Default::default()
             });
             facts.insert((ObjectKind::SalesInvoiceRequest, request.base.id), fact);

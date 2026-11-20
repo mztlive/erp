@@ -3,6 +3,7 @@
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 
 import * as React from "react"
+import { DownloadIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
@@ -39,13 +40,15 @@ import { usePersonDirectorySelected } from "@/features/entity-selectors/hooks/pe
 import type { ColumnDef } from "@tanstack/react-table"
 import { getErrorMessage } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
-import { useScopeListExport } from "@/lib/use-scope-list-export"
+import { excelExportText } from "@/lib/ui-text"
+import { useScopeExcelExport } from "@/lib/use-scope-list-export"
 import {
     requestStatusLabels,
     type RequestStatus,
 } from "@/features/invoice-requests/api"
 import type { ScopedInvoiceRequestWire } from "@/features/invoice-requests/scoped"
-import { exportInvoiceRequestScopeCsv } from "@/features/invoice-requests/scoped-export"
+import { exportInvoiceRequestScopeExcel } from "@/features/invoice-requests/scoped-export"
+import { InvoiceRequestDetails } from "./request-details"
 import {
     useInvoiceRequestScopeDetailQuery,
     useInvoiceRequestScopeListQuery,
@@ -234,9 +237,7 @@ export function InvoiceRequestScopePage() {
         () => ScopeColumns(resolvedNames),
         [resolvedNames],
     )
-    const { exporting, handleExport } = useScopeListExport(() =>
-        exportInvoiceRequestScopeCsv(urlState.query),
-    )
+    const exportExcel = useScopeExcelExport(exportInvoiceRequestScopeExcel)
 
     const table =
         listQuery.isError && !data ? (
@@ -303,7 +304,32 @@ export function InvoiceRequestScopePage() {
                 eyebrow="财务"
                 title="开票申请汇总"
                 description="按负责销售、申请人或财务处理人查询开票申请进度。"
-            />
+            >
+                <PermissionGuard permission="sales_invoice_request:list">
+                    <LoadingButton
+                        id="invoice-request-scope-export"
+                        type="button"
+                        variant="outline"
+                        loading={exportExcel.isPending}
+                        disabled={
+                            listQuery.isFetching ||
+                            listQuery.isError ||
+                            !data?.hasScope ||
+                            !data.total
+                        }
+                        onClick={() => exportExcel.mutate(urlState.query)}
+                        title="导出当前筛选下的全部开票申请"
+                    >
+                        <DownloadIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        {exportExcel.isPending
+                            ? excelExportText.pending
+                            : excelExportText.action}
+                    </LoadingButton>
+                </PermissionGuard>
+            </ListWorkspaceHeader>
 
             <FundsScopeBanner
                 scopeSummary={data?.scopeSummary}
@@ -444,22 +470,6 @@ export function InvoiceRequestScopePage() {
                 table={table}
             />
 
-            <PermissionGuard permission={"sales_invoice_request:list"}>
-                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                    <LoadingButton
-                        id="invoice-request-scope-export"
-                        type="button"
-                        loading={exporting}
-                        variant="outline"
-                        size="sm"
-                        disabled={exporting || !data || data.total === 0}
-                        onClick={() => void handleExport()}
-                    >
-                        {exporting ? "导出中…" : "导出当前范围"}
-                    </LoadingButton>
-                </div>
-            </PermissionGuard>
-
             {detailId ? (
                 <section
                     aria-label="开票申请范围详情"
@@ -557,6 +567,11 @@ export function InvoiceRequestScopePage() {
                                     </TableRow>
                                 </TableBody>
                             </Table>
+                            <div className="mt-4">
+                                <InvoiceRequestDetails
+                                    data={detailQuery.data.data}
+                                />
+                            </div>
                             {detailQuery.data.permission_limited ? (
                                 <p className="mt-2 text-xs text-muted-foreground">
                                     部分金额受限时仅显示本人权限内金额

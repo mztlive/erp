@@ -9,6 +9,7 @@ import { sourceSalesOrderHref } from "../lib/source-sales-order"
 import { useInvoiceRequests } from "@/features/invoice-requests/hooks/queries"
 import { subtractFixed } from "@/lib/fixed-decimal"
 import type { InvoiceRequest } from "@/features/invoice-requests/api"
+import { InvoiceRequestDetails } from "@/features/invoice-requests/components/request-details"
 
 import {
     BusinessFailureState,
@@ -32,22 +33,6 @@ type WorkspaceInvoiceTaskProps = Readonly<{
     onTaskCompleted?: (workItemId: string) => void
 }>
 
-/** 任务和应收筛选已限定关联；范围行返回的来源仍须逐一核对。 */
-function invoiceRequestMatchesReceivable(
-    request: InvoiceRequest,
-    workItemId: string,
-    receivable: { accountId: string; salesOrderId: string },
-): boolean {
-    return (
-        request.work_item_id === workItemId &&
-        (!request.receivable_account_id ||
-            request.receivable_account_id === receivable.accountId) &&
-        (!request.sales_order_id ||
-            request.sales_order_id === receivable.salesOrderId) &&
-        Boolean(request.receivable_account_id || request.sales_order_id)
-    )
-}
-
 function remainingApproved(amount: string, invoiced: string): string {
     if (
         !/^-?\d+(?:\.\d{1,2})?$/.test(amount) ||
@@ -69,20 +54,38 @@ export function WorkspaceInvoiceTask({
         "sales_order:detail",
     )
     const descriptor = workspaceInvoiceDescriptor(item)
+    const canReadRequest = hasPermission(
+        profile?.permissions,
+        "sales_invoice_request:list",
+    )
     const requestQuery = useInvoiceRequests(
         {
             work_item_id: item.workItemId,
             receivable_account_id: descriptor?.receivableAccountId,
             page_size: 2,
         },
-        Boolean(descriptor && item.workItemId),
+        Boolean(descriptor && item.workItemId && canReadRequest),
     )
-    const approvedRequest =
-        requestQuery.isSuccess && requestQuery.data.items.length === 1
+    const request =
+        canReadRequest &&
+        requestQuery.isSuccess &&
+        requestQuery.data.items.length === 1
             ? requestQuery.data.items[0]
             : undefined
+    const taskRequest =
+        descriptor &&
+        request?.work_item_id === item.workItemId &&
+        request.receivable_account_id === descriptor.receivableAccountId
+            ? request
+            : undefined
+    const canProcess =
+        item.status === "OPEN" && item.allowedActions.includes("PROCESS")
+    const readOnly = !canProcess || taskRequest?.status === "completed"
+    const canOpenRequest =
+        canReadRequest &&
+        hasPermission(profile?.permissions, "sales_invoice_request:detail")
     const receivableQuery = useCustomerAccountsDetailQuery(
-        approvedRequest ? "receivable" : null,
+        taskRequest && !readOnly ? "receivable" : null,
         descriptor?.receivableAccountId ?? null,
     )
     const grantPending = isResourceAuthorizationPending(requestQuery.error)
@@ -91,23 +94,21 @@ export function WorkspaceInvoiceTask({
         : undefined
     const identityOk = Boolean(
         descriptor &&
-        approvedRequest &&
+        taskRequest &&
         receivable?.salesOrderId &&
         receivable.accountId === descriptor.receivableAccountId &&
-        invoiceRequestMatchesReceivable(
-            approvedRequest,
-            item.workItemId,
-            receivable,
-        ),
+        (!taskRequest.sales_order_id ||
+            taskRequest.sales_order_id === receivable.salesOrderId),
     )
-    const executionAuthorized = item.allowedActions.includes("PROCESS")
+    const salesOrderNo =
+        (identityOk && receivable?.salesOrderNo) || taskRequest?.sales_order_no
 
     return (
         <WorkspaceTaskPane
             header={
                 <WorkspaceTaskIdentityHeader
                     item={item}
-                    title="登记销项发票"
+                    title={readOnly ? "销项开票任务" : "登记销项发票"}
                     subtitle={
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span>
@@ -126,8 +127,8 @@ export function WorkspaceInvoiceTask({
                                 >
                                     销售单 {receivable.salesOrderNo}
                                 </Link>
-                            ) : receivable?.salesOrderNo ? (
-                                <span>销售单 {receivable.salesOrderNo}</span>
+                            ) : salesOrderNo ? (
+                                <span>销售单 {salesOrderNo}</span>
                             ) : null}
                         </div>
                     }
@@ -141,6 +142,10 @@ export function WorkspaceInvoiceTask({
                     <AlertDescription>
                         请联系管理员核对开票负责人和关联销售单，再刷新重试。
                     </AlertDescription>
+                </Alert>
+            ) : profile && !canReadRequest ? (
+                <Alert>
+                    <AlertTitle>当前账号不能查看关联开票申请</AlertTitle>
                 </Alert>
             ) : grantPending ? (
                 <Alert>
@@ -164,8 +169,60 @@ export function WorkspaceInvoiceTask({
                     error={requestQuery.error}
                     onRetry={() => void requestQuery.refetch()}
                 />
-            ) : receivableQuery.isPending &&
-              (!requestQuery.isSuccess || approvedRequest) ? (
+            ) : requestQuery.isPending ? (
+                <InvoiceSessionSkeleton />
+            ) : !taskRequest ? (
+                <Alert variant="warning">
+                    <AlertTitle>未能核对本任务关联的开票申请</AlertTitle>
+                    <AlertDescription>
+                        请刷新任务。若仍无法查看，请联系管理员核对任务和申请的关联或访问权限。
+                    </AlertDescription>
+                </Alert>
+            ) : readOnly ? (
+                <div
+                    className={cn(
+                        workspaceTaskSurfacePadClassName,
+                        "flex flex-col gap-4 py-5",
+                    )}
+                >
+                    <Alert>
+                        <AlertTitle>
+                            {taskRequest.status === "completed"
+                                ? "本次申请已全部开票"
+                                : item.status === "COMPLETED"
+                                  ? "该开票任务已完成"
+                                  : "当前仅可查看开票资料"}
+                        </AlertTitle>
+                        {item.actionBlockers[0] && item.status === "OPEN" && (
+                            <AlertDescription>
+                                {item.actionBlockers[0].message}
+                            </AlertDescription>
+                        )}
+                    </Alert>
+                    <dl className="grid gap-3 rounded-lg border border-grid p-4 text-sm sm:grid-cols-2">
+                        <div>
+                            <dt className="text-muted-foreground">申请金额</dt>
+                            <dd className="mt-1">
+                                <MoneyValue value={taskRequest.data.amount} />
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-muted-foreground">
+                                已登记开票
+                            </dt>
+                            <dd className="mt-1">
+                                <MoneyValue
+                                    value={taskRequest.invoiced_amount}
+                                />
+                            </dd>
+                        </div>
+                    </dl>
+                    <AppliedInvoiceDetails
+                        request={taskRequest}
+                        canOpenRequest={canOpenRequest}
+                    />
+                </div>
+            ) : receivableQuery.isPending ? (
                 <InvoiceSessionSkeleton />
             ) : receivableQuery.isError ? (
                 <BusinessFailureState
@@ -174,36 +231,14 @@ export function WorkspaceInvoiceTask({
                     error={receivableQuery.error}
                     onRetry={() => void receivableQuery.refetch()}
                 />
-            ) : requestQuery.isSuccess && !approvedRequest ? (
-                <Alert variant="warning">
-                    <AlertTitle>此任务没有可执行的已批准申请</AlertTitle>
-                    <AlertDescription>
-                        请刷新任务状态，核对申请与任务的关联。
-                    </AlertDescription>
-                </Alert>
-            ) : !identityOk || !receivable || !approvedRequest ? (
+            ) : !identityOk || !receivable ? (
                 <Alert variant="destructive">
                     <AlertTitle>待办关联的销售应收不匹配</AlertTitle>
                     <AlertDescription>
                         请联系管理员核对本条待办关联的销售单和应收记录，修正后刷新再办理开票。
                     </AlertDescription>
                 </Alert>
-            ) : !executionAuthorized ? (
-                <Alert variant="warning">
-                    <AlertTitle>当前无法登记销项发票</AlertTitle>
-                    <AlertDescription>
-                        {item.actionBlockers[0]?.message ??
-                            "当前账号没有处理此开票任务的资格。"}
-                    </AlertDescription>
-                </Alert>
-            ) : approvedRequest.status === "completed" ? (
-                <Alert>
-                    <AlertTitle>本次申请已全部开票</AlertTitle>
-                    <AlertDescription>
-                        批准额度已执行完毕，可返回工作台查看其他任务。
-                    </AlertDescription>
-                </Alert>
-            ) : approvedRequest.status !== "approved" ? (
+            ) : taskRequest.status !== "approved" ? (
                 <Alert variant="warning">
                     <AlertTitle>此任务没有可执行的已批准申请</AlertTitle>
                     <AlertDescription>
@@ -212,13 +247,14 @@ export function WorkspaceInvoiceTask({
                 </Alert>
             ) : (
                 <WorkspaceInvoiceSession
-                    request={approvedRequest}
+                    request={taskRequest}
+                    canOpenRequest={canOpenRequest}
                     item={item}
                     receivable={{
                         ...receivable,
                         openInvoiceableTotal: remainingApproved(
-                            approvedRequest.data?.amount || "0.00",
-                            approvedRequest.invoiced_amount || "0.00",
+                            taskRequest.data?.amount || "0.00",
+                            taskRequest.invoiced_amount || "0.00",
                         ),
                     }}
                     onTaskCompleted={onTaskCompleted}
@@ -243,11 +279,13 @@ function InvoiceSessionSkeleton() {
 /** 应收身份确认后展开核销工作面；提交结果留在当前任务。 */
 function WorkspaceInvoiceSession({
     request,
+    canOpenRequest,
     item,
     receivable,
     onTaskCompleted,
 }: {
     request: InvoiceRequest
+    canOpenRequest: boolean
     item: WorkspaceWorkItem
     receivable: ReceivableAccountRow
     onTaskCompleted?: (workItemId: string) => void
@@ -287,28 +325,10 @@ function WorkspaceInvoiceSession({
                     </div>
                 ))}
             </dl>
-            <section aria-label="已批准开票资料" className="space-y-3">
-                <h3 className="text-base font-semibold">已批准开票资料</h3>
-                <dl className="grid gap-x-6 gap-y-4 rounded-lg border border-grid bg-muted/30 p-4 text-sm @min-[540px]/invoice:grid-cols-2">
-                    {[
-                        ["开票抬头", request.data.invoice_title],
-                        ["税号", request.data.tax_number],
-                        ["开票内容", request.data.invoice_content],
-                        ["申请事由", request.data.reason],
-                    ].map(([label, value]) => (
-                        <div
-                            key={label}
-                            className="grid grid-cols-[5rem_minmax(0,1fr)] gap-3"
-                        >
-                            <dt className="text-muted-foreground">{label}</dt>
-                            <dd className="break-words">{value || "—"}</dd>
-                        </div>
-                    ))}
-                </dl>
-                <p className="text-xs text-muted-foreground">
-                    关联应收：{item.objectTitle} · {receivable.salesOrderNo}
-                </p>
-            </section>
+            <AppliedInvoiceDetails
+                request={request}
+                canOpenRequest={canOpenRequest}
+            />
             <WorkspaceInvoiceUpload
                 key={`${item.workItemId}:${item.taskVersion}`}
                 item={item}
@@ -317,5 +337,40 @@ function WorkspaceInvoiceSession({
                 onTaskCompleted={onTaskCompleted}
             />
         </div>
+    )
+}
+
+function AppliedInvoiceDetails({
+    request,
+    canOpenRequest,
+}: {
+    request: InvoiceRequest
+    canOpenRequest: boolean
+}) {
+    return (
+        <section
+            aria-label="已批准开票资料"
+            className="flex min-w-0 flex-col gap-3"
+        >
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="text-base font-semibold">已批准开票资料</h3>
+                {request.request_no ? (
+                    canOpenRequest ? (
+                        <Link
+                            id={`workspace-invoice-linked-request-${toAutomationIdSegment(request.id)}`}
+                            href={`/finance/customer-accounts/invoice-requests?requestId=${encodeURIComponent(request.id)}`}
+                            className="text-sm underline-offset-4 hover:underline"
+                        >
+                            开票申请 {request.request_no}
+                        </Link>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">
+                            开票申请 {request.request_no}
+                        </p>
+                    )
+                ) : null}
+            </div>
+            <InvoiceRequestDetails data={request.data} />
+        </section>
     )
 }

@@ -1,5 +1,6 @@
 "use client"
 import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
+import { WORKSPACE_QUEUE_ROUTES } from "@/lib/workspace-queue-routes"
 import Link from "next/link"
 import { useEffect, useState, useRef } from "react"
 import { z } from "zod"
@@ -27,6 +28,8 @@ import {
 } from "@/features/approval-workflow/types"
 import { classifyFormalCommandError } from "@/lib/formal-command"
 import { getErrorMessage } from "@/lib/api/errors"
+import { hasPermission } from "@/lib/permissions"
+import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
 import { subtractFixed } from "@/lib/fixed-decimal"
 import {
     useInvoiceRequest,
@@ -34,6 +37,7 @@ import {
     useInvoiceRequestPermissions,
 } from "../hooks/queries"
 import { cancelRequest, requestStatusLabels, type InvoiceRequest } from "../api"
+import { InvoiceRequestDetails } from "./request-details"
 
 const requestStatusTones: Record<InvoiceRequest["status"], StatusTone> = {
     draft: "neutral",
@@ -88,9 +92,6 @@ function requestFacts(
         invoiced,
         remaining: safeRemaining(amount, invoiced),
         title: textOrDash(data?.invoice_title),
-        taxNumber: textOrDash(data?.tax_number),
-        content: textOrDash(data?.invoice_content),
-        reason: textOrDash(data?.reason),
         applicantId: request.created_by || request.applicant_user_id || "",
         approval,
     }
@@ -162,6 +163,7 @@ function InvoiceRequestDetailBody({
 }) {
     const query = useInvoiceRequest(id)
     const permissions = useInvoiceRequestPermissions()
+    const profile = useAccountProfileQuery().data
     const [cancelling, setCancelling] = useState(false)
     const [reviseRejected, setReviseRejected] = useState(false)
     const request = query.data
@@ -239,19 +241,7 @@ function InvoiceRequestDetailBody({
                     />
                 ))}
             </MetricStrip>
-            <dl className="grid gap-4 text-sm sm:grid-cols-2">
-                {[
-                    ["开票抬头", facts.title],
-                    ["税号", facts.taxNumber],
-                    ["开票内容", facts.content],
-                    ["申请事由", facts.reason],
-                ].map(([label, value]) => (
-                    <div key={label}>
-                        <dt className="text-muted-foreground">{label}</dt>
-                        <dd className="mt-1 break-words">{value}</dd>
-                    </div>
-                ))}
-            </dl>
+            <InvoiceRequestDetails data={request.data} />
             {facts.approval ? (
                 <ApprovalReadonly
                     id={`invoice-request-${id}-approval`}
@@ -273,7 +263,10 @@ function InvoiceRequestDetailBody({
                         查看销售单
                     </Button>
                 ) : null}
-                {request.work_item_id && request.status === "approved" ? (
+                {request.work_item_id &&
+                (request.status === "approved" ||
+                    request.status === "completed") &&
+                hasPermission(profile?.permissions, "work_item:detail") ? (
                     <Button
                         id="invoice-request-open-task"
                         variant="outline"
@@ -282,6 +275,13 @@ function InvoiceRequestDetailBody({
                                 href={buildWorkspaceDetailHref(
                                     "tasks",
                                     request.work_item_id,
+                                    request.status === "completed"
+                                        ? {
+                                              returnTo:
+                                                  WORKSPACE_QUEUE_ROUTES.history
+                                                      .href,
+                                          }
+                                        : undefined,
                                 )}
                             />
                         }

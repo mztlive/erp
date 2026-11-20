@@ -102,6 +102,18 @@ const destinations: Partial<Record<TransferKind, ExportDestination>> = {
         label: "打开开票申请",
         format: "CSV",
     },
+    invoice_requests_excel: {
+        permission: "sales_invoice_request:list",
+        href: "/finance/customer-accounts/invoice-requests/scope",
+        label: "打开开票申请汇总",
+        format: "Excel 工作簿",
+    },
+    workbench_invoice_execution_excel: {
+        permission: "work_item:list",
+        href: "/workspace/tasks",
+        label: "打开工作台任务",
+        format: "Excel 工作簿",
+    },
     profit_loss: {
         permission: "cost_entry:list",
         href: "/analytics/profit-loss",

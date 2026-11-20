@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
+import { InvoiceRequestDetails } from "@/features/invoice-requests/components/request-details"
 import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
 import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
 import type { ApprovalMaterials } from "@/features/approval-workflow/api/materials"
@@ -68,6 +69,23 @@ export function WorkspaceInvoiceApproval({
         })
     return (
         <>
+            <section className={sectionClass} aria-label="本次提交的开票资料">
+                <h3 className="text-base font-semibold">本次提交的开票资料</h3>
+                {materials.isPending ? (
+                    <Loading>正在读取开票资料…</Loading>
+                ) : materials.isError ? (
+                    <BusinessFailureState
+                        id={`${prefix}-invoice-request-retry`}
+                        title="开票资料读取失败"
+                        error={materials.error}
+                        onRetry={() => void materials.refetch()}
+                    />
+                ) : materials.data ? (
+                    <InvoiceRequestDetails
+                        data={submittedInvoiceDetails(materials.data)}
+                    />
+                ) : null}
+            </section>
             <section className={sectionClass} aria-label="当前票款核对">
                 <header className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-base font-semibold">当前票款核对</h3>
@@ -248,6 +266,29 @@ export function WorkspaceInvoiceApproval({
             </details>
         </>
     )
+}
+
+function submittedInvoiceDetails(materials: ApprovalMaterials) {
+    if (materials.display.invoice_request)
+        return materials.display.invoice_request
+    const fields = new Map(
+        materials.display.source.extra_sections.map(({ label, value }) => [
+            label,
+            value,
+        ]),
+    )
+    return {
+        invoice_title:
+            fields.get("购方名称") ??
+            fields.get("开票抬头") ??
+            materials.display.source.customer ??
+            "",
+        tax_number: fields.get("购方纳税人识别号") ?? fields.get("税号") ?? "",
+        seller_name: fields.get("销方名称"),
+        seller_tax_number: fields.get("销方纳税人识别号"),
+        invoice_content: fields.get("开票内容") ?? "",
+        reason: fields.get("申请事由") ?? "",
+    }
 }
 
 function CurrentReview({

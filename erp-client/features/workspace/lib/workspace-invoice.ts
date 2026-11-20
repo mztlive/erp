@@ -1,4 +1,49 @@
-import type { WorkspaceWorkItem } from "../types"
+import { runDataTransfer } from "@/lib/data-transfer"
+import type { TodayWorkspaceQuery, WorkspaceWorkItem } from "../types"
+
+const INVOICE_EXECUTION_TYPE = "SALES_INVOICE_EXECUTION"
+const INVOICE_EXECUTION_CATEGORY = `task:${INVOICE_EXECUTION_TYPE}`
+
+export function invoiceExecutionExportQuery(query: TodayWorkspaceQuery) {
+    const scope =
+        query.view === "inbox"
+            ? "mine"
+            : query.view === "history"
+              ? "history"
+              : undefined
+    if (
+        !scope ||
+        query.filters?.item_types?.length !== 1 ||
+        query.filters.item_types[0] !== INVOICE_EXECUTION_CATEGORY
+    ) {
+        return undefined
+    }
+
+    return {
+        scope,
+        work_item_type: INVOICE_EXECUTION_TYPE,
+        family: query.family,
+        due: query.due,
+        filters: JSON.stringify({
+            ...query.filters,
+            blocked: query.blocked || query.filters.blocked,
+            include_options: undefined,
+            option_query: undefined,
+        }),
+        q: query.query,
+        handler_user_ids: query.handlerUserIds,
+        sales_order_ids: query.salesOrderIds,
+        purchase_order_ids: query.purchaseOrderIds,
+        sort: query.sort,
+        timezone: query.timezone,
+    }
+}
+
+export function exportWorkspaceInvoiceTasksExcel(
+    query: NonNullable<ReturnType<typeof invoiceExecutionExportQuery>>,
+) {
+    return runDataTransfer("workbench_invoice_execution_excel", query)
+}
 
 const INVOICE_REASON_CODES = new Set([
     "SALES_INVOICE_REQUEST_APPROVED",

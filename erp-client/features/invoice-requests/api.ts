@@ -1,10 +1,19 @@
 /** 开票申请 API；所有调用由 TanStack Query 管理。 */
 import { apiGet, apiPost, apiPut, type Page } from "@/lib/api"
+import type {
+    InvoiceRequestData,
+    InvoiceRequestLine,
+} from "@/lib/invoice-request-data"
 import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import {
     enrichSubmittedInvoiceRequest,
     submittedInvoiceRequest,
 } from "./pending-detail"
+export type {
+    InvoiceRequestData,
+    InvoiceRequestLine,
+} from "@/lib/invoice-request-data"
+
 export type RequestStatus =
     | "draft"
     | "rejected"
@@ -17,13 +26,6 @@ export const requestStatusLabels: Record<RequestStatus, string> = {
     in_approval: "审批中",
     approved: "待开票",
     completed: "已开票",
-}
-export type RequestData = {
-    amount: string
-    invoice_title: string
-    tax_number: string
-    invoice_content: string
-    reason: string
 }
 export type InvoiceRequest = {
     id: string
@@ -38,7 +40,7 @@ export type InvoiceRequest = {
     created_by_name?: string | null
     created_at: number
     status: RequestStatus
-    data: RequestData
+    data: InvoiceRequestData
     invoiced_amount: string
     work_item_id?: string | null
     approval?: DocumentApprovalViewDto | null
@@ -48,6 +50,8 @@ export type RequestAmounts = {
     unavailable_reason: string | null
     invoice_title: string
     tax_number: string
+    seller_name?: string | null
+    seller_tax_number?: string | null
     receivable_account_id: string
     available_amount: string
     pending_amount: string
@@ -69,7 +73,7 @@ export type SubmitRequest = {
     receivable_account_id: string
     request_id?: string
     expected_version?: number
-    data: RequestData
+    data: InvoiceRequestData
     idempotency_key: string
 }
 
@@ -80,6 +84,22 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function textOf(value: unknown): string {
     return typeof value === "string" ? value.trim() : ""
+}
+
+function optionalText(value: unknown): string | null | undefined {
+    return value === null ? null : textOf(value) || undefined
+}
+
+function requestLines(value: unknown): InvoiceRequestLine[] | undefined {
+    if (!Array.isArray(value)) return undefined
+    return value.map((entry) => {
+        const line = asRecord(entry)
+        return {
+            content: textOf(line.content),
+            quantity: textOf(line.quantity),
+            unit_price: textOf(line.unit_price),
+        }
+    })
 }
 
 function decimalText(value: unknown, fallback: string): string {
@@ -166,6 +186,17 @@ export function normalizeInvoiceRequest(row: unknown): InvoiceRequest {
             invoice_content:
                 textOf(nested.invoice_content) || textOf(wire.invoice_content),
             reason: textOf(nested.reason) || textOf(wire.reason),
+            seller_name: optionalText(
+                nested.seller_name === undefined
+                    ? wire.seller_name
+                    : nested.seller_name,
+            ),
+            seller_tax_number: optionalText(
+                nested.seller_tax_number === undefined
+                    ? wire.seller_tax_number
+                    : nested.seller_tax_number,
+            ),
+            lines: requestLines(nested.lines) ?? requestLines(wire.lines),
         },
         invoiced_amount: decimalText(wire.invoiced_amount, "0.00"),
         work_item_id: textOf(wire.work_item_id) || null,
@@ -223,7 +254,7 @@ export const cancelRequest = (input: {
 export type UpdateRequest = {
     id: string
     expected_version: number
-    data: RequestData
+    data: InvoiceRequestData
 }
 export async function updateRequest(
     input: UpdateRequest,

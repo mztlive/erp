@@ -150,6 +150,8 @@ impl ReceivableReadService {
             unavailable_reason,
             invoice_title: source.invoice_title,
             tax_number: source.tax_number,
+            seller_name: source.seller_name,
+            seller_tax_number: source.seller_tax_number,
             receivable_account_id: account_id.into(),
             available_amount: available,
             pending_amount: pending,

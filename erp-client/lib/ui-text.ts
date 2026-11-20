@@ -40,6 +40,13 @@ export const fileUploadText = {
     empty: "暂无文件",
 } as const
 
+export const excelExportText = {
+    action: "导出 Excel",
+    pending: "正在导出…",
+    success: "导出已完成",
+    failure: "导出失败",
+} as const
+
 export const listFilterText = {
     selected: "已选条件：",
     clear: "清空",

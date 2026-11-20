@@ -89,6 +89,15 @@ export function enrichSubmittedInvoiceRequest(
                 saved.data.invoice_content,
             ),
             reason: textOr(request.data.reason, saved.data.reason),
+            seller_name:
+                request.data.seller_name === undefined
+                    ? saved.data.seller_name
+                    : request.data.seller_name,
+            seller_tax_number:
+                request.data.seller_tax_number === undefined
+                    ? saved.data.seller_tax_number
+                    : request.data.seller_tax_number,
+            lines: request.data.lines ?? saved.data.lines,
         },
         invoiced_amount: amountOr(
             request.invoiced_amount,

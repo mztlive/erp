@@ -38,6 +38,9 @@ fn request(value: &str) -> SalesInvoiceRequest {
             invoice_title: "  测试客户  ".into(),
             tax_number: "  TAX-1  ".into(),
             invoice_content: "服务费".into(),
+            seller_name: None,
+            seller_tax_number: None,
+            lines: Vec::new(),
             reason: "按约定开票".into(),
         },
         "sales",
@@ -220,4 +223,44 @@ fn rejected_edit_preserves_state_and_rejects_invalid_data_atomically() {
 
     req.submit(amount("600")).unwrap();
     assert!(req.update(req.data.clone()).is_err());
+}
+
+#[test]
+fn legacy_request_payload_keeps_its_original_wire_shape() {
+    let old = serde_json::json!({
+        "amount": "100.00",
+        "invoice_title": "购方",
+        "tax_number": "0012345",
+        "invoice_content": "服务费",
+        "reason": "按约定开票"
+    });
+    let decoded: InvoiceRequestData = serde_json::from_value(old.clone()).unwrap();
+    assert!(decoded.lines.is_empty());
+    assert!(decoded.seller_name.is_none());
+    assert!(decoded.seller_tax_number.is_none());
+    assert_eq!(serde_json::to_value(decoded).unwrap(), old);
+}
+
+#[test]
+fn invoice_line_totals_use_shared_rounding_and_match_the_request_amount() {
+    let line = |content: &str, quantity: &str, price: &str| InvoiceRequestLine {
+        content: content.into(),
+        quantity: quantity.parse().unwrap(),
+        unit_price: price.parse().unwrap(),
+    };
+    let mut data = request("3.02").data;
+    data.lines = vec![line(" 服务费  ", "1", "1.005"), line("运费", "2", "1.0075")];
+    let saved = data.clone().normalize().unwrap();
+    assert_eq!(saved.invoice_content, "服务费");
+    assert_eq!(saved.lines[0].gross_amount().unwrap(), amount("1.00"));
+    assert_eq!(saved.lines[1].gross_amount().unwrap(), amount("2.02"));
+
+    let different_amount = InvoiceRequestData { amount: amount("3.03"), ..data.clone() };
+    assert!(different_amount.normalize().is_err());
+    for invalid in [line("", "1", "3.02"), line("服务", "0", "3.02"), line("服务", "1", "0.001")] {
+        let invalid = InvoiceRequestData { lines: vec![invalid], ..data.clone() };
+        assert!(invalid.normalize().is_err());
+    }
+    data.lines = vec![line("服务", "79228162514264337593543950335", "2")];
+    assert!(data.normalize().is_err());
 }

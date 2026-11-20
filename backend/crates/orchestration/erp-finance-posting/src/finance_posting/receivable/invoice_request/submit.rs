@@ -5,7 +5,7 @@ use erp_audit::execution::persist_log;
 use erp_core::common::time::Instant;
 use erp_core::ids::SalesInvoiceRequestId;
 use erp_finance::dto::receivable::SubmitInvoiceRequest;
-use erp_finance::entity::receivable::InvoiceRequestStatus;
+use erp_finance::entity::receivable::{InvoiceRequestData, InvoiceRequestStatus};
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_read_models::finance::receivable::invoice_request::InvoiceRequestView;
@@ -96,9 +96,11 @@ impl SubmitWrite<'_> {
         let account = lock_account(db, &req.receivable_account_id, executor).await?;
         let available =
             account.open_invoiceable_total.checked_sub(reserved(db, &account.base.id, executor).await?);
-        invoice_request_source::load(db, &account, executor).await?.validate(&req.data, available)?;
+        let data = invoice_request_source::load(db, &account, executor)
+            .await?
+            .prepare_data(req.data.clone(), Some(available))?;
 
-        let mut request = candidate(db, &account, req, actor, executor).await?;
+        let mut request = candidate(db, &account, req, data, actor, executor).await?;
         if req.request_id.is_none() {
             authorize(&access, actor, &request.base.id, RequestAction::Submit, executor).await?;
         }
@@ -120,6 +122,7 @@ async fn candidate(
     db: &Database,
     account: &ReceivableAccount,
     req: &SubmitInvoiceRequest,
+    data: InvoiceRequestData,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<SalesInvoiceRequest> {
@@ -135,19 +138,14 @@ async fn candidate(
         if !matches!(request.status, InvoiceRequestStatus::Draft | InvoiceRequestStatus::Rejected) {
             return Err(Error::ConflictError("申请已提交，请刷新后重试".into()));
         }
-        request.data = req.data.clone().normalize()?;
+        request.update(data)?;
         return Ok(request);
     }
 
     if req.expected_version.is_some() {
         return Err(Error::ValidationError("新建申请不能指定已有版本".into()));
     }
-    let request = SalesInvoiceRequest::new(
-        SalesInvoiceRequestId::new(next_id()),
-        account,
-        req.data.clone(),
-        actor.id(),
-    )?;
+    let request = SalesInvoiceRequest::new(SalesInvoiceRequestId::new(next_id()), account, data, actor.id())?;
     db.sales_invoice_requests().create(&request, executor).await?;
     Ok(request)
 }
@@ -287,6 +285,6 @@ fn request_start_snapshot(
         }),
         total_amount: Some(request.data.amount),
         total_quantity: None,
-        line_count: 1,
+        line_count: request.data.lines.len().max(1) as u32,
     }
 }

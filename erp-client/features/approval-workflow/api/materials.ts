@@ -1,3 +1,4 @@
+import type { InvoiceRequestData } from "@/lib/invoice-request-data"
 import type { SalesLinePrices } from "@/lib/sales-line-prices"
 import { apiGet, apiGetBlob, apiPost } from "@/lib/api"
 import { downloadBlob } from "@/lib/download-blob"
@@ -39,6 +40,7 @@ export type ApprovalMaterials = {
     document_type: string
     document_id: string
     display: {
+        invoice_request?: InvoiceRequestData | null
         root_document_id: string
         counterparty_label: string | null
         impact_summary: string | null

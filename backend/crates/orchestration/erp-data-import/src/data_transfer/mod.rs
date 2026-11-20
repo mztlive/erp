@@ -7,6 +7,7 @@ mod context_view;
 mod csv;
 mod execute;
 mod imports;
+mod invoice_export;
 mod master;
 mod outcome;
 mod portal;

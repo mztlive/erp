@@ -18,7 +18,7 @@ use crate::sales_inquiry_import::SalesInquiryImportProcess;
 use crate::{Error, Result};
 
 impl DataTransferProcess {
-    /// 读取可访问任务类型；导出可由当前获授权账号读取分类信息。
+    /// 读取可访问任务类型；支持共享的导出允许当前获授权账号读取分类信息。
     ///
     /// `id` 为任务号，`actor` 为当前认证身份。
     ///

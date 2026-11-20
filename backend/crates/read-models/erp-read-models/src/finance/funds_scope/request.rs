@@ -70,6 +70,38 @@ impl FundsAccess {
             .await
     }
 
+    /// 按已授权任务的精确身份读取关联申请，再独立核验申请详情权限。
+    /// 无关联、不可见或关联来源不匹配时返回空；授权准备中及读取故障继续传播。
+    pub async fn request_detail_for_work_item_scoped(
+        &self,
+        work_item_id: &str,
+        receivable_account_id: &str,
+        actor: &AuditActor,
+    ) -> Result<Option<FundsScopedResult<ScopedInvoiceRequestRow>>> {
+        let (this, actor, task, account) =
+            (self.clone(), actor.clone(), work_item_id.to_owned(), receivable_account_id.to_owned());
+        this.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let Some(row) = this.db.sales_invoice_requests().find_for_task(&task, executor).await?
+                    else {
+                        return Ok(None);
+                    };
+                    if row.receivable_account_id.as_ref() != account {
+                        return Ok(None);
+                    }
+                    match this.load_request_detail(&row.base.id, &actor, executor).await {
+                        Ok(detail) => Ok(Some(detail)),
+                        Err(Error::NotFound(_) | Error::Forbidden(_)) => Ok(None),
+                        Err(error) => Err(error),
+                    }
+                })
+            })
+            .await
+    }
+
     // 交付开票申请前重新读取授权及完整候选事实版本；比对发现变化时拒绝原结果。
     //
     // 调用参数：
@@ -506,6 +538,9 @@ mod tests {
                 invoice_title: "title".into(),
                 tax_number: "tax".into(),
                 invoice_content: "content".into(),
+                seller_name: None,
+                seller_tax_number: None,
+                lines: Vec::new(),
                 reason: "reason".into(),
             },
             invoiced_amount: Amount::zero(),

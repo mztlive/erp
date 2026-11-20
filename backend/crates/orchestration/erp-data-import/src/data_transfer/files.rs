@@ -153,7 +153,7 @@ impl DataTransferProcess {
         let id = job.input_file_asset_id.as_ref().ok_or_else(|| Error::NotFound("任务输入缺失".into()))?;
         self.read_private(id.as_ref(), &job.requested_by).await
     }
-    /// 返回当前身份仍获授权且未过期的结果；导出允许非原提交人下载。
+    /// 返回未过期且仍获授权的结果；工作台开票任务仅供本人下载。
     ///
     /// 后台任务 ID 和当前认证人。
     ///

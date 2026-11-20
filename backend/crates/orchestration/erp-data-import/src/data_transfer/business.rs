@@ -6,7 +6,7 @@ use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::AccountKind;
 use erp_identity::{AccessTarget, AuthorizationService};
-use erp_permissions::{Permission, internal};
+use erp_permissions::{Permission, internal, work_item};
 use erp_supplier_catalog::supplier_portal::SupplierPortalProcess;
 use erp_supplier_catalog::supply_governance::SupplierOfferingProcess;
 use mongodb::Database;
@@ -46,6 +46,14 @@ pub trait TransferReader: Send + Sync {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<Value>;
+    /// 沿独立的申请详情权限查询与 `work_item_id` 精确绑定的开票申请。
+    /// 未找到可读取的详情时返回空，不公开绑定是否存在。
+    async fn linked_invoice_request(
+        &self,
+        work_item_id: &str,
+        receivable_account_id: &str,
+        actor: &AuditActor,
+    ) -> Result<Option<Value>>;
     /// 读取原报表的完整 CSV。
     ///
     /// 固定报表类型、条件与认证人。
@@ -134,6 +142,16 @@ impl BusinessTransfers {
         input: &Value,
         actor: &AuditActor,
     ) -> Result<Vec<Value>> {
+        Ok(self.collect_export(kind, input, actor, 100_000).await?.0)
+    }
+
+    pub(super) async fn collect_export(
+        &self,
+        kind: TransferKind,
+        input: &Value,
+        actor: &AuditActor,
+        limit: u64,
+    ) -> Result<(Vec<Value>, Value)> {
         let mut query = input.clone();
         let mut rows = Vec::new();
         let mut identities = HashSet::new();
@@ -152,15 +170,13 @@ impl BusinessTransfers {
             if total > 100_000 || expected.is_some_and(|value| value != total) {
                 return Err(Error::ConflictError("结果已变化或超过十万行，请缩小范围".into()));
             }
+            if total > limit {
+                return Err(Error::ValidationError(format!("导出超过 {limit} 条记录，请缩小范围")));
+            }
             expected = Some(total);
             let items =
                 response["items"].as_array().ok_or_else(|| Error::Internal("导出列表格式错误".into()))?;
-            if let Some(version) = response.get("scope_version").filter(|v| !v.is_null()) {
-                if query.get("scope_version").is_some_and(|old| !old.is_null() && old != version) {
-                    return Err(Error::ConflictError("导出范围已变化".into()));
-                }
-                query["scope_version"] = version.clone();
-            }
+            bind_scope(&mut query, &response)?;
 
             for row in items {
                 let id = row
@@ -177,7 +193,11 @@ impl BusinessTransfers {
             if u64::try_from(rows.len()).ok() == expected {
                 query["page"] = json!(1);
                 self.check_final_scope(kind, &query, actor, expected).await?;
-                return Ok(rows);
+                return Ok((
+                    rows,
+                    json!({"scope_version": query["scope_version"],
+                    "queue_context_id": query["queue_context_id"]}),
+                ));
             }
             if items.is_empty() {
                 return Err(Error::ConflictError("导出结果不完整".into()));
@@ -216,7 +236,7 @@ impl BusinessTransfers {
         self.reader.page(kind, query, actor).await
     }
 
-    async fn check_final_scope(
+    pub(super) async fn check_final_scope(
         &self,
         kind: TransferKind,
         query: &Value,
@@ -226,9 +246,15 @@ impl BusinessTransfers {
         let last = self.export_page(kind, query, actor).await?;
         if last["total"].as_u64() != expected
             || last["empty_reason"] == "no_scope"
-            || last
-                .get("scope_version")
-                .is_some_and(|v| !v.is_null() && Some(v) != query.get("scope_version"))
+            || ["scope_version", "queue_context_id"].into_iter().any(|key| {
+                let expected = query.get(key).filter(|value| !value.is_null());
+                let actual = last.get(key).filter(|value| !value.is_null());
+                let version_required = matches!(
+                    kind,
+                    TransferKind::InvoiceRequestsExcel | TransferKind::WorkbenchInvoiceExecutionExcel
+                );
+                (version_required || actual.is_some()) && expected != actual
+            })
         {
             return Err(Error::ConflictError("导出范围已变化，请重新查询".into()));
         }
@@ -276,6 +302,27 @@ impl BusinessTransfers {
         Ok(result)
     }
 }
+fn bind_scope(query: &mut Value, response: &Value) -> Result<()> {
+    for key in ["scope_version", "queue_context_id"] {
+        if let Some(version) = response.get(key).filter(|value| !value.is_null()) {
+            if query.get(key).is_some_and(|old| !old.is_null() && old != version) {
+                return Err(Error::ConflictError("导出范围已变化，请重新查询".into()));
+            }
+            query[key] = version.clone();
+        }
+    }
+    Ok(())
+}
+
+fn reset_workbench_page(input: &mut Value) -> Result<()> {
+    // 原页面版本可能包含其他任务类型；导出从独立的队列快照开始。
+    let query = input.as_object_mut().ok_or_else(|| Error::ValidationError("任务查询条件格式无效".into()))?;
+    for key in ["queue_context_id", "scope_version", "current_work_item_id", "cursor"] {
+        query.remove(key);
+    }
+    Ok(())
+}
+
 #[async_trait]
 impl TransferHandler for BusinessTransfers {
     async fn authorize_read(
@@ -317,6 +364,9 @@ impl TransferHandler for BusinessTransfers {
 
     async fn prepare(&self, kind: TransferKind, mut input: Value, actor: &AuditActor) -> Result<Value> {
         self.access(kind, &input, actor).await?;
+        if kind == TransferKind::WorkbenchInvoiceExecutionExcel {
+            reset_workbench_page(&mut input)?;
+        }
         if !kind.is_export() {
             return self.prepare_import(kind, input, actor).await;
         }
@@ -330,9 +380,7 @@ impl TransferHandler for BusinessTransfers {
             if first["empty_reason"] == "no_scope" {
                 return Err(Error::Forbidden("当前无可导出范围".into()));
             }
-            if let Some(version) = first.get("scope_version") {
-                input["scope_version"] = version.clone();
-            }
+            bind_scope(&mut input, &first)?;
         }
         Ok(input)
     }
@@ -341,6 +389,9 @@ impl TransferHandler for BusinessTransfers {
         match kind {
             TransferKind::ProductPoolExcel | TransferKind::SupplierQuoteArchive => {
                 self.workbook(kind, input, actor).await
+            },
+            TransferKind::InvoiceRequestsExcel | TransferKind::WorkbenchInvoiceExecutionExcel => {
+                self.invoice_workbook(kind, input, actor).await
             },
             kind if !kind.is_export() => self.import(kind, input, actor).await,
             _ => self.csv(kind, input, actor).await,
@@ -358,10 +409,14 @@ impl TransferHandler for BusinessTransfers {
             return self.authorize_import(kind, input, authorization, actor).await;
         }
 
-        let fresh = if matches!(kind, TransferKind::ProductPoolExcel | TransferKind::SupplierQuoteArchive) {
-            self.workbook_authorization(kind, input, actor).await?
-        } else {
-            self.csv(kind, input, actor).await?.authorization
+        let fresh = match kind {
+            TransferKind::ProductPoolExcel | TransferKind::SupplierQuoteArchive => {
+                self.workbook_authorization(kind, input, actor).await?
+            },
+            TransferKind::InvoiceRequestsExcel | TransferKind::WorkbenchInvoiceExecutionExcel => {
+                self.invoice_export_source(kind, input, actor).await?.authorization()?
+            },
+            _ => self.csv(kind, input, actor).await?.authorization,
         };
         if fresh != *authorization {
             return Err(Error::ConflictError("数据或授权范围已变化，请重新导出".into()));
@@ -379,6 +434,11 @@ async fn function_access(
 ) -> Result<()> {
     if actor.kind() != AccountKind::Admin {
         return Err(Error::Forbidden("此任务仅供管理端使用".into()));
+    }
+    if kind == TransferKind::WorkbenchInvoiceExecutionExcel {
+        let access = authorization.query(actor, &work_item::LIST, executor).await?;
+        authorization.validate(&access, executor).await?;
+        return Ok(());
     }
     let permission = transfer_permission(kind, input)?;
     authorization.require(actor, &permission, AccessTarget::Operation, executor).await?;
@@ -437,7 +497,10 @@ fn transfer_permission(kind: TransferKind, input: &Value) -> Result<Permission> 
         SupplierOrders => internal::DATA_TRANSFER_SUPPLIER_ORDERS,
         Receivables => receivable_entry(input),
         SupplierPayables => payable_entry(input),
-        InvoiceRequests => internal::DATA_TRANSFER_INVOICE_REQUESTS,
+        InvoiceRequests | InvoiceRequestsExcel => internal::DATA_TRANSFER_INVOICE_REQUESTS,
+        WorkbenchInvoiceExecutionExcel => {
+            return Err(Error::ValidationError("工作台导出使用待办列表权限".into()));
+        },
         ProfitLoss => internal::DATA_TRANSFER_PROFIT_LOSS,
         CustomerQualityCurrent | CustomerQualityHistory => internal::DATA_TRANSFER_CUSTOMER_QUALITY,
         MasterData => master_entry(input)?,
@@ -512,6 +575,10 @@ mod tests {
             Ok(json!({"items":[],"total":0}))
         }
 
+        async fn linked_invoice_request(&self, _: &str, _: &str, _: &AuditActor) -> Result<Option<Value>> {
+            panic!("此查询不读取开票申请")
+        }
+
         async fn report(&self, _: TransferKind, _: &Value, _: &AuditActor) -> Result<Value> {
             panic!("商品和报价页不得切换到报表入口")
         }
@@ -583,6 +650,33 @@ mod tests {
         .unwrap_err();
         assert!(matches!(error, Error::Forbidden(message) if message == "此任务仅供管理端使用"));
         assert_eq!(reader.0.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn export_scope_pins_queue_and_range_versions_without_reusing_visible_page_focus() {
+        let mut input = json!({"scope":"history", "filters":{"statuses":["COMPLETED"]}, "q":"task",
+            "scope_version":"visible-range", "queue_context_id":"visible-queue", "current_work_item_id":"task"});
+        reset_workbench_page(&mut input).unwrap();
+        assert_eq!(input, json!({"scope":"history", "filters":{"statuses":["COMPLETED"]}, "q":"task"}));
+        let first = json!({"scope_version":"export-range", "queue_context_id":"export-queue"});
+        bind_scope(&mut input, &first).unwrap();
+        bind_scope(&mut input, &first).unwrap();
+        for changed in [
+            json!({"scope_version":"export-range", "queue_context_id":"changed"}),
+            json!({"scope_version":"changed", "queue_context_id":"export-queue"}),
+        ] {
+            assert!(matches!(bind_scope(&mut input, &changed), Err(Error::ConflictError(_))));
+        }
+    }
+
+    #[test]
+    fn finance_excel_reuses_finance_list_qualification_and_keeps_legacy_csv_kind() {
+        assert_eq!(
+            transfer_permission(TransferKind::InvoiceRequestsExcel, &json!({})).unwrap(),
+            transfer_permission(TransferKind::InvoiceRequests, &json!({})).unwrap()
+        );
+        assert_eq!(serde_json::to_value(TransferKind::InvoiceRequests).unwrap(), "invoice_requests");
+        assert!(!TransferKind::WorkbenchInvoiceExecutionExcel.allows_shared_result());
     }
 
     #[test]

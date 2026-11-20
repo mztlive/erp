@@ -207,6 +207,8 @@ mod tests {
             effective: true,
             invoice_title: "客户公司".into(),
             tax_number: "91310000123456789A".into(),
+            seller_name: "我方公司".into(),
+            seller_tax_number: "91110108123456789X".into(),
         };
         assert_eq!(account.settled_total, Amount::zero());
         assert!(source.unavailable_reason(account.open_invoiceable_total).is_none());

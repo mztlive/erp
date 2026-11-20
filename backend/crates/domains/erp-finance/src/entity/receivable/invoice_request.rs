@@ -2,8 +2,8 @@
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::ids::{CustomerAccountId, PartyId, ReceivableAccountId, SalesInvoiceRequestId, SalesOrderId};
-use erp_core::money::Amount;
-use erp_core::validation::normalize_required_text;
+use erp_core::money::{Amount, Quantity, UnitPrice, round_to_cent};
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -47,9 +47,37 @@ pub struct InvoiceRequestData {
     pub amount: Amount,
     pub invoice_title: String,
     pub tax_number: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seller_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seller_tax_number: Option<String>,
     pub invoice_content: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lines: Vec<InvoiceRequestLine>,
     pub reason: String,
 }
+
+/// 一条拟开票内容，金额按含税单价乘数量后舍入到分。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct InvoiceRequestLine {
+    pub content: String,
+    pub quantity: Quantity,
+    pub unit_price: UnitPrice,
+}
+
+impl InvoiceRequestLine {
+    /// 返回本行含税金额；超出定点数值范围时拒绝。
+    pub fn gross_amount(&self) -> Result<Amount> {
+        let amount = self
+            .quantity
+            .to_decimal()
+            .checked_mul(self.unit_price.to_decimal())
+            .ok_or_else(|| Error::from("开票明细金额超出可用范围"))?;
+        Amount::try_from(round_to_cent(amount))
+    }
+}
+
 impl InvoiceRequestData {
     /// 规范化必填开票资料；金额必须为正且精确到分。
     /// 返回裁剪空白后的开票资料。
@@ -62,10 +90,42 @@ impl InvoiceRequestData {
         }
         self.invoice_title = required(self.invoice_title, "开票抬头", 256)?;
         self.tax_number = required(self.tax_number, "税号", 64)?;
-        self.invoice_content = required(self.invoice_content, "开票内容", 1000)?;
+        self.seller_name = normalize_optional_text(self.seller_name, "销方名称", 256)?;
+        self.seller_tax_number = normalize_optional_text(self.seller_tax_number, "销方纳税人识别号", 64)?;
+        if self.lines.is_empty() {
+            self.invoice_content = required(self.invoice_content, "开票内容", 1000)?;
+        } else {
+            validate_lines(&mut self.lines, self.amount)?;
+            self.invoice_content = self.lines[0].content.clone();
+        }
         self.reason = required(self.reason, "申请事由", 1000)?;
         Ok(self)
     }
+}
+
+fn validate_lines(lines: &mut [InvoiceRequestLine], amount: Amount) -> Result<()> {
+    if lines.len() > 100 {
+        return Err(Error::from("一张申请最多填写 100 条开票明细"));
+    }
+    let mut total = Amount::zero().to_decimal();
+    for line in lines {
+        line.content = required(std::mem::take(&mut line.content), "开票内容", 1000)?;
+        if line.quantity.to_decimal() <= Amount::zero().to_decimal()
+            || line.unit_price.to_decimal() <= Amount::zero().to_decimal()
+        {
+            return Err(Error::from("开票明细的数量和含税单价必须大于零"));
+        }
+        let gross = line.gross_amount()?;
+        if gross <= Amount::zero() {
+            return Err(Error::from("开票明细金额舍入到分后必须大于零"));
+        }
+        total =
+            total.checked_add(gross.to_decimal()).ok_or_else(|| Error::from("开票明细合计超出可用范围"))?;
+    }
+    if total != amount.to_decimal() {
+        return Err(Error::from("开票明细含税合计必须等于本次申请金额"));
+    }
+    Ok(())
 }
 
 /// 一张申请固定关联一笔销售应收；已开票额度不因红冲恢复原授权。

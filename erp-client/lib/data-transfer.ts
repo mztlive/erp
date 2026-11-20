@@ -24,6 +24,8 @@ export type TransferKind =
     | "receivables"
     | "supplier_payables"
     | "invoice_requests"
+    | "invoice_requests_excel"
+    | "workbench_invoice_execution_excel"
     | "profit_loss"
     | "customer_quality_current"
     | "customer_quality_history"

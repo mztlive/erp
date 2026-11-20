@@ -1,4 +1,5 @@
-//! 开票来源和购方资料统一读取，支持查询及提交事务复用。
+//! 开票来源及购销双方资料统一读取，支持查询及提交事务复用。
+use erp_core::ids::PartyId;
 use erp_finance::entity::receivable::ReceivableAccount;
 use erp_finance::entity::receivable::invoice_request_source::InvoiceRequestSource;
 use erp_party::repository::PartyDomainRepository;
@@ -9,7 +10,7 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 为开票来源及购方资料取数时，读取本应收对应销售来源及结算主体当前法定名称、统一社会信用代码。
+/// 购方取应收往来主体，销方取来源销售单当前生效版本的我方结算主体。
 ///
 /// # 参数
 /// * `account` - 本次申请绑定的应收。
@@ -31,22 +32,40 @@ pub async fn load(
         .await?
         .ok_or_else(|| Error::NotFound("来源销售单不存在".into()))?;
 
-    let party = PartyDomainRepository::new(db)
-        .find_with_current_revision(&account.counterparty_party_id, executor)
-        .await?;
-    let (invoice_title, tax_number) = match party {
-        Some((party, revision)) => (
-            revision.map(|revision| revision.legal_name).unwrap_or_default(),
-            party.unified_credit_code.unwrap_or_default(),
-        ),
-        None => (String::new(), String::new()),
+    let (invoice_title, tax_number) = party_identity(db, &account.counterparty_party_id, executor).await?;
+    let (seller_name, seller_tax_number) = match order.current_revision_id() {
+        Some(id) if order.customer_id == account.customer_id => {
+            let revision = db
+                .sales_order_revisions()
+                .find_by_id(id.as_ref(), executor)
+                .await?
+                .filter(|revision| revision.sales_order_id == account.sales_order_id)
+                .ok_or_else(|| Error::ConflictError("来源销售单生效版本不匹配".into()))?;
+            party_identity(db, &revision.settlement_party_id, executor).await?
+        },
+        _ => (String::new(), String::new()),
     };
-
     Ok(InvoiceRequestSource {
         effective: order.commercial_status == CommercialStatus::Effective
             && order.current_revision_id().is_some()
             && order.customer_id == account.customer_id,
         invoice_title,
         tax_number,
+        seller_name,
+        seller_tax_number,
+    })
+}
+
+async fn party_identity(
+    db: &Database,
+    id: &PartyId,
+    executor: &mut dyn Executor,
+) -> Result<(String, String)> {
+    Ok(match PartyDomainRepository::new(db).find_with_current_revision(id, executor).await? {
+        Some((party, revision)) => (
+            revision.map(|row| row.legal_name).unwrap_or_default().trim().to_owned(),
+            party.unified_credit_code.unwrap_or_default().trim().to_owned(),
+        ),
+        None => (String::new(), String::new()),
     })
 }

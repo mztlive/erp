@@ -161,6 +161,22 @@ export function WorkspaceTaskSurface({
         )
     }
 
+    if (
+        canReadSensitive &&
+        item.workItemType === "SALES_INVOICE_EXECUTION" &&
+        item.businessObjectType === "receivable_account" &&
+        (item.status === "COMPLETED" ||
+            item.allowedActions.includes("PROCESS") ||
+            item.allowedActions.includes("VIEW"))
+    ) {
+        return (
+            <WorkspaceInvoiceTask
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
     // 非执行者独立读取关联材料，避免挂载建单、确认或异常处理表单。
     if (
         item.workItemType !== "DOCUMENT_APPROVAL" &&
@@ -335,19 +351,6 @@ export function WorkspaceTaskSurface({
     ) {
         return (
             <WorkspaceSupplyExceptionTask
-                item={item}
-                onTaskCompleted={onTaskCompleted}
-            />
-        )
-    }
-
-    // 销项开票处理 → WorkspaceInvoiceTask
-    if (
-        item.workItemType === "SALES_INVOICE_EXECUTION" &&
-        item.businessObjectType === "receivable_account"
-    ) {
-        return (
-            <WorkspaceInvoiceTask
                 item={item}
                 onTaskCompleted={onTaskCompleted}
             />

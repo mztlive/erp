@@ -25,6 +25,8 @@ pub enum TransferKind {
     Receivables,
     SupplierPayables,
     InvoiceRequests,
+    InvoiceRequestsExcel,
+    WorkbenchInvoiceExecutionExcel,
     ProfitLoss,
     CustomerQualityCurrent,
     CustomerQualityHistory,
@@ -53,6 +55,8 @@ impl TransferKind {
             Self::Receivables => "客户往来导出",
             Self::SupplierPayables => "供应商往来导出",
             Self::InvoiceRequests => "开票申请导出",
+            Self::InvoiceRequestsExcel => "开票申请 Excel 导出",
+            Self::WorkbenchInvoiceExecutionExcel => "工作台开票任务 Excel 导出",
             Self::ProfitLoss => "经营盈亏导出",
             Self::CustomerQualityCurrent => "客户质量当前口径导出",
             Self::CustomerQualityHistory => "客户质量历史口径导出",
@@ -75,6 +79,9 @@ impl TransferKind {
                 | Self::SupplyBatch
                 | Self::PortalBatch
         )
+    }
+    pub(super) fn allows_shared_result(self) -> bool {
+        self.is_export() && self != Self::WorkbenchInvoiceExecutionExcel
     }
 }
 

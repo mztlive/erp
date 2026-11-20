@@ -82,6 +82,8 @@ pub struct InvoiceRequestAmounts {
     pub unavailable_reason: Option<String>,
     pub invoice_title: String,
     pub tax_number: String,
+    pub seller_name: String,
+    pub seller_tax_number: String,
     pub receivable_account_id: String,
     pub available_amount: Amount,
     pub pending_amount: Amount,

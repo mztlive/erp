@@ -6,6 +6,8 @@ import type {
     FundsSummaryWire,
 } from "@/lib/funds-scope"
 
+import type { InvoiceRequestData } from "./api"
+
 export type ScopedInvoiceRequestWire = Readonly<{
     id: string
     request_no: string
@@ -16,6 +18,8 @@ export type ScopedInvoiceRequestWire = Readonly<{
     applicant_user_id: string
     handler_user_id: string | null
     amount: string
+    data?: InvoiceRequestData
+    work_item_id?: string | null
     permission_limited: boolean
     sales_owner_user_id: string | null
     business_org_unit_id: string | null

@@ -43,7 +43,7 @@ impl DataTransferProcess {
 
     // 在短快照完成任务和业务资格，不在事务内下载或解密。
     //
-    // id、actor 为真实任务和当前身份，shared 允许当前获授权账号读取共享导出。
+    // id、actor 为真实任务和当前身份，shared 允许读取支持共享的导出。
     //
     // 同快照授权的任务及可选轻量上下文。
     //
@@ -93,7 +93,7 @@ impl DataTransferProcess {
         };
 
         let context = self.stored_context(id, executor).await?;
-        if !owned && context.as_ref().is_none_or(|context| !context.kind.is_export()) {
+        if !owned && context.as_ref().is_none_or(|context| !context.kind.allows_shared_result()) {
             return Err(Error::Forbidden("该任务仅供原提交人读取，请返回原业务页重新提交".into()));
         }
 

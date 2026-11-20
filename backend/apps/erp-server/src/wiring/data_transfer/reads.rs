@@ -8,6 +8,7 @@ use persistence_core::{Executor, NoTransaction};
 
 use crate::wiring::{customer_access, funds_access};
 mod error;
+mod invoice;
 use erp_read_models::customer_quality::CustomerQualityReadModel;
 use erp_read_models::finance::actual_profit_loss::{ActualProfitLossReadModel, ProfitLossAccess};
 use erp_read_models::purchase_center::PurchaseOrderReadService;
@@ -54,6 +55,14 @@ impl TransferReader for Reads {
         executor: &mut dyn Executor,
     ) -> erp_data_import::Result<Value> {
         self.read_page_with(kind, query, actor, executor).await.map_err(Into::into)
+    }
+    async fn linked_invoice_request(
+        &self,
+        work_item_id: &str,
+        receivable_account_id: &str,
+        actor: &AuditActor,
+    ) -> erp_data_import::Result<Option<Value>> {
+        invoice::linked_request(&self.0, work_item_id, receivable_account_id, actor).await.map_err(Into::into)
     }
     async fn report(
         &self,
@@ -104,6 +113,8 @@ impl Reads {
                     .request_list_scoped(&input(query)?, actor)
                     .await?,
             ),
+            InvoiceRequestsExcel => invoice::request_page(state, query, actor).await,
+            WorkbenchInvoiceExecutionExcel => invoice::task_page(state, query, actor).await,
             Receivables | SupplierPayables => funds(state, kind, query, actor).await,
             SupplierQuoteArchive | SupplierQuotePreview | ProductPoolExcel => {
                 Err(Error::ValidationError("此任务必须沿原功能授权快照读取".into()))

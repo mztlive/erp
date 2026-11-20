@@ -268,6 +268,7 @@ export function useWorkspaceHome() {
 
     return {
         urlState,
+        queryInput,
         view,
         accountProfileQuery,
         dashboardQuery,

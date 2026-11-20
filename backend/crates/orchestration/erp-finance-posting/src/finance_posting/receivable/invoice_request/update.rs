@@ -6,6 +6,7 @@ use erp_audit::execution::persist_log;
 use erp_finance::dto::receivable::UpdateInvoiceRequest;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_read_models::finance::receivable::invoice_request::InvoiceRequestView;
+use erp_read_models::finance::receivable::invoice_request_source;
 use persistence_core::Transactional;
 
 use super::super::ReceivableProcess;
@@ -44,7 +45,15 @@ impl ReceivableProcess {
 
                     let mut request = load(&db, &request_id, executor).await?;
                     ensure_expected_version(request.base.version, req.expected_version)?;
-                    request.update(req.data)?;
+                    let account = db
+                        .receivable_accounts()
+                        .find_by_id(request.receivable_account_id.as_ref(), executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("销售应收不存在".into()))?;
+                    let data = invoice_request_source::load(&db, &account, executor)
+                        .await?
+                        .prepare_data(req.data, None)?;
+                    request.update(data)?;
                     db.sales_invoice_requests().update(&mut request, executor).await?;
 
                     let audit = actor.clone().resource_log(

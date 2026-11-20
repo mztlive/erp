@@ -11,10 +11,17 @@ import {
     listWorkspaceStyles,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
+import { excelExportText } from "@/lib/ui-text"
+import { useScopeExcelExport } from "@/lib/use-scope-list-export"
 import { WorkspaceQueuePanel } from "../components/workspace-queue-panel"
 import { useWorkspaceHome } from "../hooks/use-workspace-home"
 import { deriveWorkItemsFreshness } from "../lib/freshness"
 import { usePaymentExport } from "../hooks/use-payment-export"
+import {
+    exportWorkspaceInvoiceTasksExcel,
+    invoiceExecutionExportQuery,
+} from "../lib/workspace-invoice"
 import { RoleWorkbenchEntry } from "./role-workbench-entry"
 
 const QUEUE_DESCRIPTIONS = {
@@ -45,6 +52,8 @@ export function WorkspaceHomeView({
     home: ReturnType<typeof useWorkspaceHome>
 }) {
     const paymentExport = usePaymentExport()
+    const invoiceExport = useScopeExcelExport(exportWorkspaceInvoiceTasksExcel)
+    const invoiceExportQuery = invoiceExecutionExportQuery(home.queryInput)
     const permissions = home.accountProfileQuery.data?.permissions
     const canExportPayments = [
         "work_item:list",
@@ -121,6 +130,32 @@ export function WorkspaceHomeView({
                         {paymentExport.isPending ? "正在导出…" : "导出 Excel"}
                     </Button>
                 )}
+                {invoiceExportQuery &&
+                    hasPermission(permissions, "work_item:list") && (
+                        <LoadingButton
+                            id="workspace-invoice-execution-export"
+                            type="button"
+                            variant="outline"
+                            loading={invoiceExport.isPending}
+                            disabled={
+                                home.refreshing ||
+                                home.dashboardQuery.isError ||
+                                !home.view?.total
+                            }
+                            onClick={() =>
+                                invoiceExport.mutate(invoiceExportQuery)
+                            }
+                            title="导出当前筛选下的全部开票执行记录"
+                        >
+                            <DownloadIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            {invoiceExport.isPending
+                                ? excelExportText.pending
+                                : excelExportText.action}
+                        </LoadingButton>
+                    )}
                 <Button
                     id="workspace-home-refresh"
                     variant="outline"

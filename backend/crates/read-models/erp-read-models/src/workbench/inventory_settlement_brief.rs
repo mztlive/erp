@@ -68,6 +68,7 @@ pub async fn capture_stock_adjustment_display(
     );
 
     let snapshot = ApprovalDisplaySnapshot {
+        invoice_request: None,
         source_sales: Vec::new(),
         root_document_id: fact.display.root_document_id,
         counterparty_label: fact.display.counterparty_label,
