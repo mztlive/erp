@@ -5,6 +5,7 @@ import NextLink from "next/link"
 
 import {
     TableToolbar,
+    TableToolbarAppliedChipsHost,
     TableToolbarFilterTrayHost,
     TableToolbarInlineControls,
     TableToolbarScope,
@@ -14,14 +15,15 @@ import { cn } from "@/lib/utils"
 /** Shared Tailwind classes for business list workspaces (Feishu Bitable pure-white edge-to-edge surface + soft borderless toolbar). */
 export const listWorkspaceStyles = {
     page: "erp-list-workspace-page max-w-none gap-0 bg-card px-workspace-inline py-0 md:px-page-inline md:py-0 min-[75rem]:px-page-inline-lg",
-    header: "flex shrink-0 flex-col items-start justify-between gap-2.5 border-b border-border/60 bg-card py-3.5 md:flex-row md:items-center md:gap-6",
+    header: "flex shrink-0 flex-col items-start justify-between gap-2.5 border-b border-border/60 bg-card py-3 md:flex-row md:items-center md:gap-6",
     eyebrow:
         "inline-flex shrink-0 items-center rounded-sm bg-muted/80 px-1.5 py-0.5 text-tiny leading-4 font-medium text-muted-foreground",
     title: "text-page-title font-semibold tracking-tight text-foreground",
     description: "mt-0.5 text-xs leading-4.5 text-muted-foreground/85",
     headerActions:
-        "flex shrink-0 items-center gap-2 max-md:w-full max-md:justify-end [&_[data-slot=button]]:h-control [&_[data-slot=button]]:px-3",
-    quietButton: "text-body-compact text-muted-foreground shadow-none",
+        "flex shrink-0 items-center gap-1.5 max-md:w-full max-md:justify-end [&_[data-slot=button]]:h-control [&_[data-slot=button]]:px-3",
+    quietButton:
+        "text-body-compact font-normal text-muted-foreground shadow-none hover:bg-muted/80 hover:text-foreground",
     exportButton: "text-body-compact shadow-none",
     workSurface:
         "flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border/75 bg-card",
@@ -35,7 +37,7 @@ export const listWorkspaceStyles = {
     viewHint:
         "text-xs whitespace-nowrap text-muted-foreground/70 max-[1280px]:hidden",
     toolbar: [
-        "flex shrink-0 flex-wrap items-start gap-x-2.5 gap-y-2 border-b border-border/60 bg-card px-4 py-workspace-toolbar-block transition-[border-color,padding] duration-200 ease-out motion-reduce:transition-none",
+        "flex shrink-0 flex-wrap items-center gap-x-2.5 gap-y-2 border-b border-border/60 bg-card px-4 py-workspace-toolbar-block transition-[border-color,padding] duration-200 ease-out motion-reduce:transition-none",
         "[&_[data-slot=button]]:shadow-none [&_[data-slot=input-group]]:text-body-compact [&_[data-slot=input-group]]:shadow-none",
         // 飞书轻工具栏：搜索框与常用下拉筛选统一采用 bg-muted/65 无框浅灰柔底，与高级筛选区完全同色
         "[&_[data-slot=list-toolbar-search]_[data-slot=input-group]]:border-transparent [&_[data-slot=list-toolbar-search]_[data-slot=input-group]]:bg-muted/65 [&_[data-slot=list-toolbar-search]_[data-slot=input-group]]:hover:bg-muted [&_[data-slot=list-toolbar-search]_[data-slot=input-group]:focus-within]:border-primary/60 [&_[data-slot=list-toolbar-search]_[data-slot=input-group]:focus-within]:bg-card",
@@ -62,14 +64,61 @@ export function ListWorkspaceHeader({
     eyebrow,
     title,
     description,
+    views,
     children,
 }: {
     className?: string
-    eyebrow: string
+    eyebrow?: string
     title: string
     description?: React.ReactNode
+    /** 短视图切换（如启停状态 2~4 项）可并入页头同行，压缩表头前纵向层数。 */
+    views?: React.ReactNode
     children?: React.ReactNode
 }) {
+    if (views) {
+        return (
+            <header
+                data-slot="list-workspace-header"
+                data-inline-views=""
+                className={cn(
+                    "flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-0 border-b border-border/60 bg-card md:min-h-12 md:flex-nowrap",
+                    className,
+                )}
+            >
+                <div className="flex min-w-0 flex-1 items-center gap-x-4 max-md:contents">
+                    <div className="min-w-0 shrink-0 py-2.5 md:py-0">
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                            <h1 className={styles.title}>{title}</h1>
+                            {eyebrow ? (
+                                <span className={styles.eyebrow}>
+                                    {eyebrow}
+                                </span>
+                            ) : null}
+                        </div>
+                        {description ? (
+                            <div className={styles.description}>
+                                {description}
+                            </div>
+                        ) : null}
+                    </div>
+                    <div className="relative min-w-0 empty:hidden max-md:order-3 max-md:w-full md:pl-4 md:before:absolute md:before:left-0 md:before:top-1/2 md:before:h-4 md:before:w-px md:before:-translate-y-1/2 md:before:bg-border/80">
+                        {views}
+                    </div>
+                </div>
+                {children ? (
+                    <div
+                        className={cn(
+                            styles.headerActions,
+                            "py-2 max-md:order-2 max-md:w-auto md:py-0",
+                        )}
+                    >
+                        {children}
+                    </div>
+                ) : null}
+            </header>
+        )
+    }
+
     return (
         <header
             data-slot="list-workspace-header"
@@ -108,21 +157,38 @@ export function ListWorkspaceViews({
     ariaLabel,
     items,
     hint,
+    variant = "bar",
 }: {
     ariaLabel: string
     items: readonly ListWorkspaceViewItem[]
     hint?: string
+    /** inline：并入页头同行展示，贴齐页头底线；bar：独立通栏视图行。 */
+    variant?: "bar" | "inline"
 }) {
     // 单个视图不是切换，不画 tab 行（例如「全部合同」）。
     if (items.length < 2) return null
     const visibleHint =
         hint && !GENERIC_VIEW_HINT_RE.test(hint.trim()) ? hint : undefined
+    const isInline = variant === "inline"
     return (
-        <div className={styles.viewBar} data-slot="list-workspace-views">
-            <div className={styles.views} role="group" aria-label={ariaLabel}>
+        <div
+            className={
+                isInline
+                    ? "flex min-w-0 items-center justify-between gap-3"
+                    : styles.viewBar
+            }
+            data-slot="list-workspace-views"
+            data-variant={variant}
+        >
+            <div
+                className={cn(styles.views, isInline && "gap-5")}
+                role="group"
+                aria-label={ariaLabel}
+            >
                 {items.map((item) => {
                     const className = cn(
                         styles.view,
+                        isInline && "md:min-h-12",
                         item.active && styles.activeView,
                     )
                     const content = (
@@ -224,6 +290,7 @@ export function ListWorkSurface({
                         <TableToolbarInlineControls actions={tableActions} />
                     </div>
                 ) : null}
+                <TableToolbarAppliedChipsHost />
                 <TableToolbarFilterTrayHost />
                 <TableToolbar
                     isFrameToolbar

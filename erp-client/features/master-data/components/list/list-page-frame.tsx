@@ -24,6 +24,7 @@ export function ListPageFrame({
     title,
     resource,
     description,
+    views,
     alerts,
     exportMeta,
     actions,
@@ -36,6 +37,7 @@ export function ListPageFrame({
     title: string
     resource: MasterDataResource
     description?: React.ReactNode
+    views?: React.ReactNode
     alerts?: React.ReactNode
     exportMeta?: ListExportMeta | null
     actions: readonly PageAction[]
@@ -78,6 +80,7 @@ export function ListPageFrame({
                 eyebrow={eyebrow}
                 title={title}
                 description={description}
+                views={views}
             >
                 <PageActions actions={visibleActions} size="sm" />
             </ListWorkspaceHeader>

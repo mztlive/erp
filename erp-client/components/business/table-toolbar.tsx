@@ -12,6 +12,8 @@ type ToolbarScope = {
     setInlineFilterStatus: React.Dispatch<
         React.SetStateAction<HTMLDivElement | null>
     >
+    appliedChips: HTMLDivElement | null
+    setAppliedChips: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>
     filterTray: HTMLDivElement | null
     setFilterTray: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>
     filters: ReadonlySet<object>
@@ -31,6 +33,8 @@ export function TableToolbarScope({ children }: { children: React.ReactNode }) {
     const [filterStatus, setFilterStatus] =
         React.useState<HTMLDivElement | null>(null)
     const [inlineFilterStatus, setInlineFilterStatus] =
+        React.useState<HTMLDivElement | null>(null)
+    const [appliedChips, setAppliedChips] =
         React.useState<HTMLDivElement | null>(null)
     const [filterTray, setFilterTray] = React.useState<HTMLDivElement | null>(
         null,
@@ -67,6 +71,8 @@ export function TableToolbarScope({ children }: { children: React.ReactNode }) {
             setFilterStatus,
             inlineFilterStatus,
             setInlineFilterStatus,
+            appliedChips,
+            setAppliedChips,
             filterTray,
             setFilterTray,
             filters,
@@ -81,6 +87,7 @@ export function TableToolbarScope({ children }: { children: React.ReactNode }) {
         [
             filterStatus,
             inlineFilterStatus,
+            appliedChips,
             filterTray,
             filters,
             registerFilter,
@@ -108,10 +115,28 @@ export function useTableInlineFilterStatusHost() {
     return scope?.filters.size === 1 ? scope.inlineFilterStatus : null
 }
 
+/** 通栏已选条件条挂载点（紧贴主筛选栏正下方，跨全宽展示，避免挤压右侧工具区）。 */
+export function useTableAppliedChipsHost() {
+    const scope = React.useContext(ToolbarContext)
+    return scope?.filters.size === 1 ? scope.appliedChips : null
+}
+
 /** 通栏高级筛选展开区挂载点（位于主筛选栏正下方、与表头同宽）。 */
 export function useTableFilterTrayHost() {
     const scope = React.useContext(ToolbarContext)
     return scope?.filters.size === 1 ? scope.filterTray : null
+}
+
+/** 列表工作面内的已选条件薄底带，无已选条件时自动隐藏不占空间。 */
+export function TableToolbarAppliedChipsHost() {
+    const scope = React.useContext(ToolbarContext)
+    return (
+        <div
+            data-slot="list-work-surface-applied-chips"
+            ref={scope?.setAppliedChips}
+            className="shrink-0 border-b border-border/60 bg-card px-4 pb-2.5 empty:hidden"
+        />
+    )
 }
 
 /** 列表工作面内的高级筛选通栏展开槽，空时自动隐藏不占空间。 */

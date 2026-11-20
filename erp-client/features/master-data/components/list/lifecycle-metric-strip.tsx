@@ -19,6 +19,7 @@ export function LifecycleMetricStrip({
     ariaLabel,
     hint,
     allLabel,
+    variant,
     interactive = true,
     onChangeLifecycle,
 }: {
@@ -28,6 +29,7 @@ export function LifecycleMetricStrip({
     ariaLabel: string
     hint?: string
     allLabel?: string
+    variant?: "bar" | "inline"
     interactive?: boolean
     onChangeLifecycle?: (next: "enabled" | "disabled" | "all") => void
 }) {
@@ -47,6 +49,11 @@ export function LifecycleMetricStrip({
             },
         }))
     return (
-        <ListWorkspaceViews ariaLabel={ariaLabel} items={items} hint={hint} />
+        <ListWorkspaceViews
+            ariaLabel={ariaLabel}
+            items={items}
+            hint={hint}
+            variant={variant}
+        />
     )
 }

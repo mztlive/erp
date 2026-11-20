@@ -13,6 +13,7 @@ import {
 import {
     ListWorkSurface,
     listWorkspaceEmptyStateClassName,
+    listWorkspaceStyles,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
@@ -161,8 +162,19 @@ export function ProductsListPage() {
     return (
         <ListPageFrame
             resource="products"
+            eyebrow=""
             title="商品列表"
-            description="查看商品资料、上架状态与供应覆盖。"
+            views={
+                <LifecycleMetricStrip
+                    idPrefix="master-data-products-list-metrics"
+                    metrics={state.syncedMetrics}
+                    metricKey={filters.metricKey}
+                    ariaLabel="商品列表指标筛选"
+                    allLabel="全部商品"
+                    variant="inline"
+                    onChangeLifecycle={filters.changeLifecycle}
+                />
+            }
             alerts={
                 state.listingError ? (
                     <p className="text-sm text-destructive" role="alert">
@@ -177,7 +189,8 @@ export function ProductsListPage() {
                     actionKey: "import",
                     label: "导入",
                     icon: UploadIcon,
-                    variant: "outline",
+                    variant: "ghost",
+                    className: listWorkspaceStyles.quietButton,
                     hidden: !state.canCreate,
                     disabled: !state.canCreate,
                     title: !state.canCreate
@@ -189,6 +202,8 @@ export function ProductsListPage() {
                     id: "master-data-products-list-export",
                     pending: exportPending,
                     rowCount: state.rows.length,
+                    variant: "ghost",
+                    className: listWorkspaceStyles.quietButton,
                     onClick: state.onExport,
                 }),
                 masterDataCreateAction({
@@ -204,33 +219,14 @@ export function ProductsListPage() {
         >
             <ListWorkSurface
                 ariaLabel="商品列表"
-                views={
-                    <LifecycleMetricStrip
-                        idPrefix="master-data-products-list-metrics"
-                        metrics={state.syncedMetrics}
-                        metricKey={filters.metricKey}
-                        ariaLabel="商品列表指标筛选"
-                        allLabel="全部商品"
-                        hint={
-                            state.canReadProductDetail
-                                ? "选择商品查看详情"
-                                : undefined
-                        }
-                        onChangeLifecycle={filters.changeLifecycle}
-                    />
-                }
                 toolbar={
                     <ProductListToolbar
                         idPrefix="master-data-products-list-toolbar"
                         searchInputRef={searchInputRef}
                         filters={filters}
                         appliedChips={state.appliedChips}
-
                         productFilterOptionsQuery={
                             state.productFilterOptionsQuery
-                        }
-                        resultCount={
-                            state.listQuery.data ? state.rows.length : undefined
                         }
                         loading={state.listQuery.isFetching}
                         failed={state.listQuery.isError}

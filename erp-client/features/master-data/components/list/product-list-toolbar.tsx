@@ -20,7 +20,6 @@ import {
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import type { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
@@ -57,8 +56,6 @@ export function ProductListToolbar({
     filters: f,
     appliedChips,
     productFilterOptionsQuery,
-
-    resultCount,
     loading,
     failed,
 }: {
@@ -67,8 +64,6 @@ export function ProductListToolbar({
     filters: ReturnType<typeof useProductListFilters>
     appliedChips: readonly ProductAppliedChip[]
     productFilterOptionsQuery: ReturnType<typeof useProductFilterOptionsQuery>
-
-    resultCount?: number
     loading: boolean
     failed: boolean
 }) {
@@ -77,9 +72,15 @@ export function ProductListToolbar({
     const panelId = `${prefix}-more-panel`
     const priceErrorId = `${prefix}-price-error`
     const priceInputRef = React.useRef<HTMLInputElement>(null)
-    const moreCount = appliedChips.filter(({ key }) =>
-        MORE_CHIP_KEYS.includes(key as (typeof MORE_CHIP_KEYS)[number]),
-    ).length
+    // 主筛选行已直接呈现搜索/类型/分类选中态，已选条件条仅展示折叠在「更多筛选」里的条件避免重复。
+    const foldedChips = React.useMemo(
+        () =>
+            appliedChips.filter(({ key }) =>
+                MORE_CHIP_KEYS.includes(key as (typeof MORE_CHIP_KEYS)[number]),
+            ),
+        [appliedChips],
+    )
+    const moreCount = foldedChips.length
 
     React.useEffect(() => {
         if (f.productSalesPriceError && f.productFilterPanelOpen) {
@@ -90,7 +91,6 @@ export function ProductListToolbar({
     return (
         <ListWorkspaceFilterBar
             morePresentation="popover"
-            moreSize="wide"
             className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel="商品列表查询"
@@ -123,7 +123,7 @@ export function ProductListToolbar({
                 <>
                     <OptionCombobox
                         id={`${prefix}-kind`}
-                        className="w-36 max-w-full min-w-0"
+                        className="w-32 max-w-full min-w-0"
                         filterLabel="类型"
                         aria-label="类型"
                         value={
@@ -146,7 +146,7 @@ export function ProductListToolbar({
                     <PermissionGuard permission="product_category:list">
                         <DirectoryFilterControl
                             id={`${prefix}-category`}
-                            className="w-48 max-w-full"
+                            className="w-44 max-w-full"
                             failed={directory.failed}
                             unavailable={directory.categoryUnavailable}
                             noScope={directory.categoryNoScope}
@@ -378,20 +378,14 @@ export function ProductListToolbar({
                     </fieldset>
                 </div>
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "条",
-            })}
-            chips={appliedChips}
+            resultStatus={loading ? "查询中…" : failed ? "查询未完成" : null}
+            chips={foldedChips}
             onClearChip={(key) =>
                 f.removeFilter(key as ProductAppliedChip["key"])
             }
             onClearAll={f.clearAllFilters}
             hasPendingChanges={f.hasPendingChanges}
             pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-            idleHint="导出与当前查询结果一致"
         />
     )
 }

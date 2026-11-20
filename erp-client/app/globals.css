@@ -666,6 +666,7 @@
     :is(
         [data-slot="list-workspace-views"],
         [data-slot="list-workspace-toolbar"],
+        [data-slot="list-work-surface-applied-chips"],
         [data-slot="list-filter-tray"],
         [data-slot="table-toolbar"],
         [data-slot="data-table-pagination"]
@@ -673,12 +674,24 @@
     padding-inline: var(--scaffold-px);
 }
 
-/* 展开高级筛选区时，主筛选栏去掉底线并收紧下边距，与纯白展开区自然融为一体 */
+/* 有已选条件条时，主筛选栏去掉底线并收紧下边距，让已选条件成为同一纯白筛选区的薄底带 */
+[data-slot="list-work-surface"]
+    > [data-slot="list-workspace-toolbar"]:has(
+        + [data-slot="list-work-surface-applied-chips"]:not(:empty)
+    ) {
+    border-bottom-color: transparent;
+    padding-bottom: 0.375rem;
+}
+
+/* 展开高级筛选区时，主筛选栏及已选条件条去掉底线并收紧下边距，与纯白展开区自然融为一体 */
 [data-slot="list-work-surface"]:has(
         > [data-slot="list-work-surface-filter-tray"]
             [data-slot="list-filter-tray"][data-open]
     )
-    > [data-slot="list-workspace-toolbar"] {
+    > :is(
+        [data-slot="list-workspace-toolbar"],
+        [data-slot="list-work-surface-applied-chips"]
+    ) {
     border-bottom-color: transparent;
     padding-bottom: 0.375rem;
 }

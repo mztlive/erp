@@ -11,6 +11,7 @@ import {
 } from "@/components/business/list-filter-popover"
 import { ListToolbar } from "@/components/business/list"
 import {
+    useTableAppliedChipsHost,
     useTableFilterStatusHost,
     useTableFilterTrayHost,
     useTableInlineFilterStatusHost,
@@ -21,7 +22,7 @@ import { cn } from "@/lib/utils"
 import { listFilterText } from "@/lib/ui-text"
 
 const listWorkspaceFilterBarClassName =
-    "gap-3 [&_[data-slot=list-toolbar-filters]]:self-start [&_[data-slot=list-toolbar-secondary]]:w-full [&_[data-slot=list-toolbar-secondary]]:flex-col [&_[data-slot=list-toolbar-secondary]]:items-stretch [&_[data-slot=list-toolbar-secondary]]:gap-0 max-sm:[&_[data-slot=list-toolbar-primary]]:sticky max-sm:[&_[data-slot=list-toolbar-primary]]:top-0 max-sm:[&_[data-slot=list-toolbar-primary]]:z-10 max-sm:[&_[data-slot=list-toolbar-primary]]:bg-card max-sm:[&_[data-slot=list-toolbar-primary]]:pb-2 [&_[data-slot=list-toolbar-query-tools]]:sm:flex-wrap [&_[data-slot=list-toolbar-search]]:sm:w-64 [&_[data-slot=list-toolbar-search]]:lg:w-72 [&_[data-slot=list-toolbar-search]]:xl:w-80"
+    "gap-3 [&_[data-slot=list-toolbar-filters]]:self-start [&_[data-slot=list-toolbar-secondary]]:w-full [&_[data-slot=list-toolbar-secondary]]:flex-col [&_[data-slot=list-toolbar-secondary]]:items-stretch [&_[data-slot=list-toolbar-secondary]]:gap-0 max-sm:[&_[data-slot=list-toolbar-primary]]:sticky max-sm:[&_[data-slot=list-toolbar-primary]]:top-0 max-sm:[&_[data-slot=list-toolbar-primary]]:z-10 max-sm:[&_[data-slot=list-toolbar-primary]]:bg-card max-sm:[&_[data-slot=list-toolbar-primary]]:pb-2 [&_[data-slot=list-toolbar-query-tools]]:sm:flex-wrap [&_[data-slot=list-toolbar-search]]:sm:w-60 [&_[data-slot=list-toolbar-search]]:lg:w-64 [&_[data-slot=list-toolbar-search]]:xl:w-72"
 
 export type ListWorkspaceFilterChip = {
     key: string
@@ -193,13 +194,18 @@ export function ListWorkspaceFilterBar({
     const hideTopQuery = showMore && moreOpen
     const statusHost = useTableFilterStatusHost()
     const inlineStatusHost = useTableInlineFilterStatusHost()
+    const appliedChipsHost = useTableAppliedChipsHost()
     const filterTrayHost = useTableFilterTrayHost()
     const hasInlineChips = morePresentation !== "popover" && chips.length > 0
     const compactInlineStatus = Boolean(
         inlineStatusHost &&
-        resultStatus != null &&
+        (resultStatus != null ||
+            (morePresentation === "popover" && !idleHint)) &&
         !hasInlineChips &&
         !statusActions,
+    )
+    const portalAppliedChips = Boolean(
+        morePresentation === "popover" && appliedChipsHost && chips.length > 0,
     )
     const appliedChips = chips.length ? (
         <>
@@ -338,7 +344,9 @@ export function ListWorkspaceFilterBar({
                 actions={actions}
                 secondary={
                     commonFilters ||
-                    (morePresentation === "popover" && chips.length > 0) ||
+                    (morePresentation === "popover" &&
+                        chips.length > 0 &&
+                        !appliedChipsHost) ||
                     (showMore && !filterTrayHost) ||
                     !statusHost ? (
                         <div
@@ -354,7 +362,9 @@ export function ListWorkspaceFilterBar({
                                     {commonFilters}
                                 </div>
                             ) : null}
-                            {morePresentation === "popover" && appliedChips ? (
+                            {morePresentation === "popover" &&
+                            appliedChips &&
+                            !appliedChipsHost ? (
                                 <div
                                     data-slot="list-filter-applied"
                                     className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 pt-0.5 text-xs"
@@ -387,6 +397,17 @@ export function ListWorkspaceFilterBar({
                     ) : undefined
                 }
             />
+            {portalAppliedChips && appliedChipsHost
+                ? createPortal(
+                      <div
+                          data-slot="list-filter-applied"
+                          className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-xs"
+                      >
+                          {appliedChips}
+                      </div>,
+                      appliedChipsHost,
+                  )
+                : null}
             {showMore && filterTrayHost
                 ? createPortal(
                       <ListFilterTray
@@ -410,30 +431,34 @@ export function ListWorkspaceFilterBar({
                   )
                 : null}
             {compactInlineStatus && inlineStatusHost
-                ? createPortal(
-                      <div className="flex items-center gap-2">
-                          {hasPendingChanges ? (
-                              <span
-                                  role="status"
-                                  title={pendingHint}
-                                  className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-tiny leading-4 font-medium whitespace-nowrap text-warning-soft-foreground"
-                              >
+                ? hasPendingChanges || resultStatus != null
+                    ? createPortal(
+                          <div className="flex items-center gap-2">
+                              {hasPendingChanges ? (
                                   <span
-                                      aria-hidden="true"
-                                      className="size-1.5 rounded-full bg-warning"
-                                  />
-                                  待查询
-                              </span>
-                          ) : null}
-                          <span
-                              role="status"
-                              className="num shrink-0 whitespace-nowrap text-xs text-muted-foreground"
-                          >
-                              {resultStatus}
-                          </span>
-                      </div>,
-                      inlineStatusHost,
-                  )
+                                      role="status"
+                                      title={pendingHint}
+                                      className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-tiny leading-4 font-medium whitespace-nowrap text-warning-soft-foreground"
+                                  >
+                                      <span
+                                          aria-hidden="true"
+                                          className="size-1.5 rounded-full bg-warning"
+                                      />
+                                      待查询
+                                  </span>
+                              ) : null}
+                              {resultStatus != null ? (
+                                  <span
+                                      role="status"
+                                      className="num shrink-0 whitespace-nowrap text-xs text-muted-foreground"
+                                  >
+                                      {resultStatus}
+                                  </span>
+                              ) : null}
+                          </div>,
+                          inlineStatusHost,
+                      )
+                    : null
                 : statusHost
                   ? createPortal(statusRow, statusHost)
                   : null}

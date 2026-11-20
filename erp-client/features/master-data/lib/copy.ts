@@ -39,7 +39,7 @@ export function masterDataSearchPlaceholder(
         case "warehouses":
             return "仓库代码、名称"
         case "products":
-            return "商品编号/名称，SKU 编号/名称/规格/条码"
+            return "搜索商品 / SKU 名称、编号或条码"
         case "voucher-categories":
             return "编号、名称、SKU"
         case "sellable-items":

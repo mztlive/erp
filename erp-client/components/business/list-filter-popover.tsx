@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, FilterIcon, RotateCcwIcon } from "lucide-react"
+import { FilterIcon, RotateCcwIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
@@ -9,24 +9,27 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import { listFilterText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
-/** 查询主按钮：收起态（顶栏）与展开态（托盘页脚）共用同一组件，保证外观与待查询高亮完全一致。 */
+/** 查询主按钮：有待提交改动或位于展开托盘页脚时用主蓝强调，顶栏空闲态退为中性轻按钮避免与筛选高亮打架。 */
 export function ListFilterQueryButton({
     id,
     hasPendingChanges = false,
+    emphasize = false,
 }: {
     id: string
     hasPendingChanges?: boolean
+    emphasize?: boolean
 }) {
+    const isPrimary = hasPendingChanges || emphasize
     return (
         <LoadingButton
             id={id}
             type="submit"
-            variant={hasPendingChanges ? "default" : "ghost"}
+            variant={isPrimary ? "default" : "ghost"}
             className={cn(
                 "shadow-none",
-                hasPendingChanges
+                isPrimary
                     ? "px-3.5"
-                    : "bg-sidebar-accent/55 px-3 text-primary hover:bg-sidebar-accent hover:text-primary",
+                    : "px-2.5 font-normal text-muted-foreground hover:bg-muted/80 hover:text-foreground",
             )}
         >
             {listFilterText.query}
@@ -34,7 +37,7 @@ export function ListFilterQueryButton({
     )
 }
 
-/** 高级筛选触发按钮：平时无框轻按钮，展开或有已选条件时高亮飞书冰蓝。 */
+/** 高级筛选触发按钮：平时无框轻按钮，展开或有已选条件时用轻冰蓝底 + 轻数字标记，保持工具栏视觉克制。 */
 export function ListFilterTrigger({
     triggerId,
     panelId,
@@ -57,8 +60,8 @@ export function ListFilterTrigger({
             aria-controls={panelId}
             className={cn(
                 count > 0 || open
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent"
-                    : "text-foreground/80 hover:bg-muted/80 hover:text-foreground",
+                    ? "bg-sidebar-accent/75 text-sidebar-accent-foreground hover:bg-sidebar-accent"
+                    : "font-normal text-foreground/75 hover:bg-muted/80 hover:text-foreground",
             )}
             onClick={onToggle}
         >
@@ -66,19 +69,12 @@ export function ListFilterTrigger({
             {open ? listFilterText.collapse : listFilterText.more}
             {count > 0 ? (
                 <span
-                    className="rounded-full bg-primary px-1.5 text-tiny leading-4 font-medium tabular-nums text-primary-foreground"
+                    className="rounded-sm bg-primary/12 px-1.5 text-tiny leading-4 font-semibold tabular-nums text-primary"
                     aria-label={`${count} 项已生效`}
                 >
                     {count}
                 </span>
             ) : null}
-            <ChevronDownIcon
-                aria-hidden="true"
-                className={cn(
-                    "size-3.5 transition-transform duration-150",
-                    open && "rotate-180",
-                )}
-            />
         </Button>
     )
 }
@@ -168,6 +164,7 @@ export function ListFilterTray({
                     <ListFilterQueryButton
                         id={`${idPrefix}-more-apply`}
                         hasPendingChanges={hasPendingChanges}
+                        emphasize
                     />
                 </div>
             </div>

@@ -8,6 +8,8 @@ export function masterDataExportAction(input: {
     id: string
     pending: boolean
     rowCount: number
+    variant?: PageAction["variant"]
+    className?: string
     onClick: () => void
 }): PageAction {
     return {
@@ -15,7 +17,8 @@ export function masterDataExportAction(input: {
         actionKey: "export",
         label: input.pending ? "导出中…" : masterDataCopy.actionExport,
         icon: DownloadIcon,
-        variant: "outline",
+        variant: input.variant ?? "outline",
+        className: input.className,
         loading: input.pending,
         disabled: input.pending || input.rowCount === 0,
         onClick: input.onClick,

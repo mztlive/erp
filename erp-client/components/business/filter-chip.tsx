@@ -33,10 +33,10 @@ function FilterChip({
     const baseId = idPrefix ?? id
     return (
         <Badge
-            variant="info"
+            variant="neutral"
             data-slot="filter-chip"
             className={cn(
-                "h-6 gap-1 rounded-md border border-primary/15 px-2 text-xs font-normal",
+                "h-6 gap-1 rounded-md border border-border/65 bg-muted/65 px-2 text-xs font-normal text-foreground/85",
                 className,
             )}
             id={baseId}
@@ -48,7 +48,7 @@ function FilterChip({
                 id={baseId ? `${baseId}-clear` : undefined}
                 onClick={onClear}
                 aria-label={clearLabel ?? `清除${String(label)}筛选`}
-                className="-mr-0.5 inline-flex size-4 items-center justify-center rounded-sm text-info-soft-foreground/70 transition-colors hover:bg-primary/15 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="-mr-0.5 inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground/75 transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
                 <svg
                     className="size-3"
