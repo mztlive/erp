@@ -17,6 +17,8 @@ import {
     productFilterDirectoryState,
 } from "@/features/master-data/lib/product-filter-directory"
 import {
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
@@ -72,15 +74,6 @@ export function ProductListToolbar({
     const panelId = `${prefix}-more-panel`
     const priceErrorId = `${prefix}-price-error`
     const priceInputRef = React.useRef<HTMLInputElement>(null)
-    // 主筛选行已直接呈现搜索/类型/分类选中态，已选条件条仅展示折叠在「更多筛选」里的条件避免重复。
-    const foldedChips = React.useMemo(
-        () =>
-            appliedChips.filter(({ key }) =>
-                MORE_CHIP_KEYS.includes(key as (typeof MORE_CHIP_KEYS)[number]),
-            ),
-        [appliedChips],
-    )
-    const moreCount = foldedChips.length
 
     React.useEffect(() => {
         if (f.productSalesPriceError && f.productFilterPanelOpen) {
@@ -91,7 +84,6 @@ export function ProductListToolbar({
     return (
         <ListWorkspaceFilterBar
             morePresentation="popover"
-            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel="商品列表查询"
             onSubmit={f.applyProductFilters}
@@ -106,7 +98,6 @@ export function ProductListToolbar({
                     aria-label="搜索基础资料"
                 />
             }
-            moreCount={moreCount}
             moreOpen={f.productFilterPanelOpen}
             onToggleMore={() =>
                 f.productFilterPanelOpen
@@ -183,203 +174,181 @@ export function ProductListToolbar({
                 </>
             }
             morePanel={
-                <div className="grid min-w-0 gap-5">
+                <ListFilterSections>
                     {f.canFilterOwner || f.canFilterProcurementOwner ? (
-                        <fieldset className="min-w-0">
-                            <legend className="mb-3 text-xs font-medium">
-                                人员
-                            </legend>
-                            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                                {f.canFilterOwner ? (
-                                    <PersonDirectoryFilter
-                                        id={`${prefix}-owner`}
-                                        label="维护人"
-                                        value={f.ownerUserIdsDraft}
-                                        onChange={f.setOwnerUserIdsDraft}
-                                        category="business"
-                                    />
-                                ) : null}
-                                {f.canFilterProcurementOwner ? (
-                                    <PersonDirectoryFilter
-                                        id={`${prefix}-procurement-owner`}
-                                        label="采购负责人"
-                                        value={f.procurementOwnerUserIdsDraft}
-                                        onChange={
-                                            f.setProcurementOwnerUserIdsDraft
-                                        }
-                                        category="procurement"
-                                    />
-                                ) : null}
-                            </div>
-                        </fieldset>
+                        <ListFilterSection legend="人员">
+                            {f.canFilterOwner ? (
+                                <PersonDirectoryFilter
+                                    id={`${prefix}-owner`}
+                                    label="维护人"
+                                    value={f.ownerUserIdsDraft}
+                                    onChange={f.setOwnerUserIdsDraft}
+                                    category="business"
+                                />
+                            ) : null}
+                            {f.canFilterProcurementOwner ? (
+                                <PersonDirectoryFilter
+                                    id={`${prefix}-procurement-owner`}
+                                    label="采购负责人"
+                                    value={f.procurementOwnerUserIdsDraft}
+                                    onChange={f.setProcurementOwnerUserIdsDraft}
+                                    category="procurement"
+                                />
+                            ) : null}
+                        </ListFilterSection>
                     ) : null}
-                    <fieldset className="min-w-0">
-                        <legend className="mb-3 text-xs font-medium">
-                            状态
-                        </legend>
-                        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-                            <ListWorkspaceFilterField
-                                htmlFor={`${prefix}-revision`}
-                                label="版本"
-                            >
-                                <OptionCombobox
-                                    id={`${prefix}-revision`}
-                                    className="w-full min-w-0"
-                                    aria-label="版本状态"
-                                    value={
-                                        f.revisionTimingDraft === "all"
-                                            ? null
-                                            : f.revisionTimingDraft
-                                    }
-                                    options={REVISION_TIMING_FILTER_OPTIONS}
-                                    placeholder="全部"
-                                    onValueChange={(value) =>
-                                        f.setRevisionTimingDraft(
-                                            value === "current" ||
-                                                value === "future"
-                                                ? value
-                                                : "all",
-                                        )
-                                    }
-                                />
-                            </ListWorkspaceFilterField>
-                            <ListWorkspaceFilterField
-                                htmlFor={`${prefix}-listing`}
-                                label="上架"
-                            >
-                                <OptionCombobox
-                                    id={`${prefix}-listing`}
-                                    className="w-full min-w-0"
-                                    aria-label="上架"
-                                    value={
-                                        f.productListingStatusDraft === "all"
-                                            ? null
-                                            : f.productListingStatusDraft
-                                    }
-                                    options={PRODUCT_LISTING_FILTER_OPTIONS}
-                                    placeholder="全部"
-                                    onValueChange={(value) =>
-                                        f.setProductListingStatusDraft(
-                                            PRODUCT_LISTING_FILTER_OPTIONS.some(
-                                                (option) =>
-                                                    option.value === value,
-                                            )
-                                                ? (value as ProductListingFilter)
-                                                : "all",
-                                        )
-                                    }
-                                />
-                            </ListWorkspaceFilterField>
-                            <ListWorkspaceFilterField
-                                htmlFor={`${prefix}-coverage`}
-                                label="供给覆盖"
-                            >
-                                <OptionCombobox
-                                    id={`${prefix}-coverage`}
-                                    className="w-full min-w-0"
-                                    aria-label="供给覆盖"
-                                    value={
-                                        f.productSupplyCoverageDraft === "all"
-                                            ? null
-                                            : f.productSupplyCoverageDraft
-                                    }
-                                    options={PRODUCT_COVERAGE_FILTER_OPTIONS}
-                                    placeholder="全部"
-                                    onValueChange={(value) =>
-                                        f.setProductSupplyCoverageDraft(
-                                            PRODUCT_COVERAGE_FILTER_OPTIONS.some(
-                                                (option) =>
-                                                    option.value === value,
-                                            )
-                                                ? (value as ProductSkuCoverageFilter)
-                                                : "all",
-                                        )
-                                    }
-                                />
-                            </ListWorkspaceFilterField>
-                        </div>
-                    </fieldset>
-                    <fieldset className="min-w-0">
-                        <legend className="mb-3 text-xs font-medium">
-                            商品
-                        </legend>
-                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                            <ListWorkspaceFilterField
-                                htmlFor={`${prefix}-source-diff`}
-                                label="资料更新"
-                            >
-                                <OptionCombobox
-                                    id={`${prefix}-source-diff`}
-                                    className="w-full min-w-0"
-                                    aria-label="供应商资料更新"
-                                    value={
-                                        f.productSourceDiffPendingDraft
-                                            ? "pending"
-                                            : null
-                                    }
-                                    options={[
-                                        { value: "pending", label: "待确认" },
-                                    ]}
-                                    placeholder="全部"
-                                    onValueChange={(value) =>
-                                        f.setProductSourceDiffPendingDraft(
-                                            value === "pending",
-                                        )
-                                    }
-                                />
-                            </ListWorkspaceFilterField>
-                            <DirectoryOptionFilter
-                                {...brandDirectoryFilterBindings(
-                                    directory,
-                                    () =>
-                                        productFilterOptionsQuery.refetch({
-                                            throwOnError: true,
-                                        }),
-                                )}
-                                id={`${prefix}-brand`}
-                                comboboxClassName="w-full min-w-0"
-                                ariaLabel="商品品牌"
-                                value={f.productBrandIdDraft}
-                                onValueChange={f.setProductBrandIdDraft}
+                    <ListFilterSection legend="状态">
+                        <ListWorkspaceFilterField
+                            htmlFor={`${prefix}-revision`}
+                            label="版本"
+                        >
+                            <OptionCombobox
+                                id={`${prefix}-revision`}
+                                className="w-full min-w-0"
+                                aria-label="版本状态"
+                                value={
+                                    f.revisionTimingDraft === "all"
+                                        ? null
+                                        : f.revisionTimingDraft
+                                }
+                                options={REVISION_TIMING_FILTER_OPTIONS}
+                                placeholder="全部"
+                                onValueChange={(value) =>
+                                    f.setRevisionTimingDraft(
+                                        value === "current" ||
+                                            value === "future"
+                                            ? value
+                                            : "all",
+                                    )
+                                }
                             />
-                            <DirectoryOptionFilter
-                                {...supplierDirectoryFilterBindings(
-                                    directory,
-                                    () =>
-                                        productFilterOptionsQuery.refetch({
-                                            throwOnError: true,
-                                        }),
-                                )}
-                                id={`${prefix}-supplier`}
-                                comboboxClassName="w-full min-w-0"
-                                ariaLabel="供应商"
-                                value={f.productSupplierIdDraft}
-                                onValueChange={f.setProductSupplierIdDraft}
+                        </ListWorkspaceFilterField>
+                        <ListWorkspaceFilterField
+                            htmlFor={`${prefix}-listing`}
+                            label="上架"
+                        >
+                            <OptionCombobox
+                                id={`${prefix}-listing`}
+                                className="w-full min-w-0"
+                                aria-label="上架"
+                                value={
+                                    f.productListingStatusDraft === "all"
+                                        ? null
+                                        : f.productListingStatusDraft
+                                }
+                                options={PRODUCT_LISTING_FILTER_OPTIONS}
+                                placeholder="全部"
+                                onValueChange={(value) =>
+                                    f.setProductListingStatusDraft(
+                                        PRODUCT_LISTING_FILTER_OPTIONS.some(
+                                            (option) => option.value === value,
+                                        )
+                                            ? (value as ProductListingFilter)
+                                            : "all",
+                                    )
+                                }
                             />
-                            <GrossPriceRangeInputs
-                                minId={`${prefix}-price-min`}
-                                maxId={`${prefix}-price-max`}
-                                errorId={priceErrorId}
-                                inputClassName="h-control w-0 min-w-0 flex-1"
-                                inputRef={priceInputRef}
-                                min={f.productSalesPriceMinDraft}
-                                max={f.productSalesPriceMaxDraft}
-                                error={f.productSalesPriceError}
-                                onMinChange={(value) => {
-                                    f.setProductSalesPriceMinDraft(value)
-                                    f.setProductSalesPriceError(null)
-                                }}
-                                onMaxChange={(value) => {
-                                    f.setProductSalesPriceMaxDraft(value)
-                                    f.setProductSalesPriceError(null)
-                                }}
+                        </ListWorkspaceFilterField>
+                        <ListWorkspaceFilterField
+                            htmlFor={`${prefix}-coverage`}
+                            label="供给覆盖"
+                        >
+                            <OptionCombobox
+                                id={`${prefix}-coverage`}
+                                className="w-full min-w-0"
+                                aria-label="供给覆盖"
+                                value={
+                                    f.productSupplyCoverageDraft === "all"
+                                        ? null
+                                        : f.productSupplyCoverageDraft
+                                }
+                                options={PRODUCT_COVERAGE_FILTER_OPTIONS}
+                                placeholder="全部"
+                                onValueChange={(value) =>
+                                    f.setProductSupplyCoverageDraft(
+                                        PRODUCT_COVERAGE_FILTER_OPTIONS.some(
+                                            (option) => option.value === value,
+                                        )
+                                            ? (value as ProductSkuCoverageFilter)
+                                            : "all",
+                                    )
+                                }
                             />
-                        </div>
-                    </fieldset>
-                </div>
+                        </ListWorkspaceFilterField>
+                    </ListFilterSection>
+                    <ListFilterSection legend="商品">
+                        <ListWorkspaceFilterField
+                            htmlFor={`${prefix}-source-diff`}
+                            label="资料更新"
+                        >
+                            <OptionCombobox
+                                id={`${prefix}-source-diff`}
+                                className="w-full min-w-0"
+                                aria-label="供应商资料更新"
+                                value={
+                                    f.productSourceDiffPendingDraft
+                                        ? "pending"
+                                        : null
+                                }
+                                options={[
+                                    { value: "pending", label: "待确认" },
+                                ]}
+                                placeholder="全部"
+                                onValueChange={(value) =>
+                                    f.setProductSourceDiffPendingDraft(
+                                        value === "pending",
+                                    )
+                                }
+                            />
+                        </ListWorkspaceFilterField>
+                        <DirectoryOptionFilter
+                            {...brandDirectoryFilterBindings(directory, () =>
+                                productFilterOptionsQuery.refetch({
+                                    throwOnError: true,
+                                }),
+                            )}
+                            id={`${prefix}-brand`}
+                            comboboxClassName="w-full min-w-0"
+                            ariaLabel="商品品牌"
+                            value={f.productBrandIdDraft}
+                            onValueChange={f.setProductBrandIdDraft}
+                        />
+                        <DirectoryOptionFilter
+                            {...supplierDirectoryFilterBindings(directory, () =>
+                                productFilterOptionsQuery.refetch({
+                                    throwOnError: true,
+                                }),
+                            )}
+                            id={`${prefix}-supplier`}
+                            comboboxClassName="w-full min-w-0"
+                            ariaLabel="供应商"
+                            value={f.productSupplierIdDraft}
+                            onValueChange={f.setProductSupplierIdDraft}
+                        />
+                        <GrossPriceRangeInputs
+                            minId={`${prefix}-price-min`}
+                            maxId={`${prefix}-price-max`}
+                            errorId={priceErrorId}
+                            inputClassName="h-control w-0 min-w-0 flex-1"
+                            inputRef={priceInputRef}
+                            min={f.productSalesPriceMinDraft}
+                            max={f.productSalesPriceMaxDraft}
+                            error={f.productSalesPriceError}
+                            onMinChange={(value) => {
+                                f.setProductSalesPriceMinDraft(value)
+                                f.setProductSalesPriceError(null)
+                            }}
+                            onMaxChange={(value) => {
+                                f.setProductSalesPriceMaxDraft(value)
+                                f.setProductSalesPriceError(null)
+                            }}
+                        />
+                    </ListFilterSection>
+                </ListFilterSections>
             }
             resultStatus={loading ? "查询中…" : failed ? "查询未完成" : null}
-            chips={foldedChips}
+            chips={appliedChips}
+            foldedChipKeys={MORE_CHIP_KEYS}
             onClearChip={(key) =>
                 f.removeFilter(key as ProductAppliedChip["key"])
             }

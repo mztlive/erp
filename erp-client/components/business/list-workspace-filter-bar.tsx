@@ -17,6 +17,7 @@ import {
     useTableInlineFilterStatusHost,
 } from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { listFilterText } from "@/lib/ui-text"
@@ -24,11 +25,144 @@ import { listFilterText } from "@/lib/ui-text"
 const listWorkspaceFilterBarClassName =
     "gap-3 [&_[data-slot=list-toolbar-filters]]:self-start [&_[data-slot=list-toolbar-secondary]]:w-full [&_[data-slot=list-toolbar-secondary]]:flex-col [&_[data-slot=list-toolbar-secondary]]:items-stretch [&_[data-slot=list-toolbar-secondary]]:gap-0 max-sm:[&_[data-slot=list-toolbar-primary]]:sticky max-sm:[&_[data-slot=list-toolbar-primary]]:top-0 max-sm:[&_[data-slot=list-toolbar-primary]]:z-10 max-sm:[&_[data-slot=list-toolbar-primary]]:bg-card max-sm:[&_[data-slot=list-toolbar-primary]]:pb-2 [&_[data-slot=list-toolbar-query-tools]]:sm:flex-wrap [&_[data-slot=list-toolbar-search]]:sm:w-60 [&_[data-slot=list-toolbar-search]]:lg:w-64 [&_[data-slot=list-toolbar-search]]:xl:w-72"
 
+const listWorkspacePopoverFiltersClassName =
+    "[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
+
 export type ListWorkspaceFilterChip = {
     key: string
     label: string
     clearLabel?: string
     onClear?: () => void
+}
+
+/** 高级筛选托盘内的分组容器，配合 globals.css 自动生成组间细分割线与左标题布局。 */
+export function ListFilterSections({
+    children,
+    className,
+}: {
+    children: React.ReactNode
+    className?: string
+}) {
+    return <div className={cn("grid min-w-0 gap-5", className)}>{children}</div>
+}
+
+/** 高级筛选托盘内的语义分组（左标题 + 响应式 1/2/3/4 列控件网格）。 */
+export function ListFilterSection({
+    legend,
+    children,
+    className,
+    gridClassName,
+}: {
+    legend: string
+    children: React.ReactNode
+    className?: string
+    gridClassName?: string
+}) {
+    return (
+        <fieldset className={cn("min-w-0", className)}>
+            <legend className="mb-3 text-xs font-medium">{legend}</legend>
+            <div
+                className={cn(
+                    "grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2",
+                    gridClassName,
+                )}
+            >
+                {children}
+            </div>
+        </fieldset>
+    )
+}
+
+/** 高级筛选托盘内的双输入区间胶囊（如金额、价格、数量或天数范围）。 */
+export function ListFilterRangeField({
+    label,
+    minId,
+    maxId,
+    errorId,
+    min,
+    max,
+    minPlaceholder = "最低",
+    maxPlaceholder = "最高",
+    minAriaLabel,
+    maxAriaLabel,
+    unit,
+    inputMode = "decimal",
+    inputRef,
+    error,
+    onMinChange,
+    onMaxChange,
+    fieldClassName,
+    inputClassName = "h-control w-0 min-w-0 flex-1",
+}: {
+    label: string
+    minId: string
+    maxId: string
+    errorId: string
+    min: string
+    max: string
+    minPlaceholder?: string
+    maxPlaceholder?: string
+    minAriaLabel?: string
+    maxAriaLabel?: string
+    unit?: string
+    inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"]
+    inputRef?: React.Ref<HTMLInputElement>
+    error?: string | null
+    onMinChange: (value: string) => void
+    onMaxChange: (value: string) => void
+    fieldClassName?: string
+    inputClassName?: string
+}) {
+    return (
+        <div className={cn("min-w-0", fieldClassName)}>
+            <ListWorkspaceFilterField label={label}>
+                <div className="flex min-w-0 items-center gap-1">
+                    <Input
+                        id={minId}
+                        ref={inputRef}
+                        className={inputClassName}
+                        value={min}
+                        onChange={(event) => onMinChange(event.target.value)}
+                        inputMode={inputMode}
+                        autoComplete="off"
+                        placeholder={minPlaceholder}
+                        aria-label={minAriaLabel ?? `最低${label}`}
+                        aria-invalid={Boolean(error)}
+                        aria-describedby={error ? errorId : undefined}
+                    />
+                    <span className="shrink-0 text-xs text-muted-foreground/65">
+                        —
+                    </span>
+                    <Input
+                        id={maxId}
+                        className={inputClassName}
+                        value={max}
+                        onChange={(event) => onMaxChange(event.target.value)}
+                        inputMode={inputMode}
+                        autoComplete="off"
+                        placeholder={maxPlaceholder}
+                        aria-label={maxAriaLabel ?? `最高${label}`}
+                        aria-invalid={Boolean(error)}
+                        aria-describedby={error ? errorId : undefined}
+                    />
+                    {unit ? (
+                        <span className="shrink-0 pr-1.5 text-xs text-muted-foreground/75">
+                            {unit}
+                        </span>
+                    ) : null}
+                </div>
+            </ListWorkspaceFilterField>
+            {error ? (
+                <p
+                    id={errorId}
+                    className="mt-1 text-xs text-destructive"
+                    role="alert"
+                >
+                    {error}
+                </p>
+            ) : null}
+        </div>
+    )
 }
 
 export function ListWorkspaceFilterField({
@@ -124,7 +258,7 @@ export function ListWorkspaceFilterBar({
     formAriaLabel,
     onSubmit,
     search,
-    moreCount = 0,
+    moreCount,
     moreOpen = false,
     onToggleMore,
     morePanelId,
@@ -134,8 +268,9 @@ export function ListWorkspaceFilterBar({
     moreSize: _moreSize = "wide",
     commonFilters,
     primaryFilters,
-    resultStatus,
+    resultStatus = null,
     chips = [],
+    foldedChipKeys,
     onClearChip,
     onClearAll,
     hasPendingChanges = false,
@@ -169,8 +304,14 @@ export function ListWorkspaceFilterBar({
     commonFilters?: React.ReactNode
     /** 常用条件置于搜索之后、查询按钮之前；不影响默认的次行布局。 */
     primaryFilters?: React.ReactNode
-    resultStatus: React.ReactNode
+    resultStatus?: React.ReactNode
     chips?: readonly ListWorkspaceFilterChip[]
+    /**
+     * 指定折叠在「更多筛选」里的条件 key。
+     * 传入后仅在已选条件带展示这些 key，且未显式传 moreCount 时自动以其数量作为计数角标，
+     * 避免与主筛选行重复展示。
+     */
+    foldedChipKeys?: readonly string[]
     onClearChip?: (key: string) => void
     onClearAll?: () => void
     hasPendingChanges?: boolean
@@ -190,13 +331,23 @@ export function ListWorkspaceFilterBar({
 }) {
     const panelId = morePanelId ?? `${idPrefix}-more-panel`
     const showMore = morePanel != null && onToggleMore != null
+    const visibleChips = React.useMemo(
+        () =>
+            foldedChipKeys
+                ? chips.filter((chip) => foldedChipKeys.includes(chip.key))
+                : chips,
+        [chips, foldedChipKeys],
+    )
+    const resolvedMoreCount =
+        moreCount ?? (foldedChipKeys ? visibleChips.length : 0)
     // 展开「更多筛选」时顶栏主按钮退场，由展开区页脚「查询」作为唯一提交入口。
     const hideTopQuery = showMore && moreOpen
     const statusHost = useTableFilterStatusHost()
     const inlineStatusHost = useTableInlineFilterStatusHost()
     const appliedChipsHost = useTableAppliedChipsHost()
     const filterTrayHost = useTableFilterTrayHost()
-    const hasInlineChips = morePresentation !== "popover" && chips.length > 0
+    const hasInlineChips =
+        morePresentation !== "popover" && visibleChips.length > 0
     const compactInlineStatus = Boolean(
         inlineStatusHost &&
         (resultStatus != null ||
@@ -205,16 +356,18 @@ export function ListWorkspaceFilterBar({
         !statusActions,
     )
     const portalAppliedChips = Boolean(
-        morePresentation === "popover" && appliedChipsHost && chips.length > 0,
+        morePresentation === "popover" &&
+        appliedChipsHost &&
+        visibleChips.length > 0,
     )
-    const appliedChips = chips.length ? (
+    const appliedChips = visibleChips.length ? (
         <>
             <span className="shrink-0 text-muted-foreground/80">
                 {morePresentation === "popover"
                     ? listFilterText.selected
                     : "已生效"}
             </span>
-            {chips.map((chip) => (
+            {visibleChips.map((chip) => (
                 <FilterChip
                     key={chip.key}
                     id={`${idPrefix}-chip-${toAutomationIdSegment(chip.key)}`}
@@ -315,6 +468,8 @@ export function ListWorkspaceFilterBar({
             <ListToolbar
                 className={cn(
                     listWorkspaceFilterBarClassName,
+                    morePresentation === "popover" &&
+                        listWorkspacePopoverFiltersClassName,
                     density === "compact" && "gap-2",
                     className,
                 )}
@@ -328,7 +483,7 @@ export function ListWorkspaceFilterBar({
                                 triggerId={moreButtonId ?? `${idPrefix}-more`}
                                 panelId={panelId}
                                 open={moreOpen}
-                                count={moreCount}
+                                count={resolvedMoreCount}
                                 onToggle={onToggleMore}
                             />
                             {!hideTopQuery ? queryButton : null}
@@ -345,7 +500,7 @@ export function ListWorkspaceFilterBar({
                 secondary={
                     commonFilters ||
                     (morePresentation === "popover" &&
-                        chips.length > 0 &&
+                        visibleChips.length > 0 &&
                         !appliedChipsHost) ||
                     (showMore && !filterTrayHost) ||
                     !statusHost ? (

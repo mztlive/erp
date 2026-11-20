@@ -2,15 +2,11 @@
 
 import * as React from "react"
 
+import { BackgroundJobProgress } from "@/components/business"
 import {
-    BackgroundJobProgress,
-    PageActions,
-    PageScaffold,
-    type PageAction,
-} from "@/components/business"
-import {
-    ListWorkspaceHeader,
-    listWorkspaceStyles as styles,
+    ListWorkspacePage,
+    type ListWorkspacePageAction,
+    type ListWorkSurfaceProps,
 } from "@/components/business/list-workspace"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { masterDataListPermission } from "@/features/master-data/lib/data"
@@ -31,6 +27,7 @@ export function ListPageFrame({
     resultsLabel,
     resultsHeadingRef,
     loading,
+    surface,
     children,
 }: {
     eyebrow?: string
@@ -40,11 +37,12 @@ export function ListPageFrame({
     views?: React.ReactNode
     alerts?: React.ReactNode
     exportMeta?: ListExportMeta | null
-    actions: readonly PageAction[]
+    actions: readonly ListWorkspacePageAction[]
     resultsLabel: string
     resultsHeadingRef: React.RefObject<HTMLHeadingElement | null>
     loading: boolean
-    children: React.ReactNode
+    surface?: ListWorkSurfaceProps
+    children?: React.ReactNode
 }) {
     const account = useAccountProfileQuery()
     const canExport =
@@ -57,59 +55,39 @@ export function ListPageFrame({
         ? actions
         : actions.filter((action) => action.actionKey !== "export")
 
-    if (loading) {
-        return (
-            <PageScaffold density="compact" className={styles.page}>
-                <ListWorkspaceHeader
-                    eyebrow={eyebrow}
-                    title={title}
-                    description={description}
-                />
-                <div
-                    className="h-10 animate-pulse rounded-lg bg-muted"
-                    aria-busy
-                />
-                <div className="h-96 animate-pulse bg-muted" aria-busy />
-            </PageScaffold>
-        )
-    }
-
     return (
-        <PageScaffold density="compact" className={styles.page}>
-            <ListWorkspaceHeader
-                eyebrow={eyebrow}
-                title={title}
-                description={description}
-                views={views}
-            >
-                <PageActions actions={visibleActions} size="sm" />
-            </ListWorkspaceHeader>
-            {alerts}
-            {canExport && exportMeta ? (
-                <BackgroundJobProgress
-                    mode="all-or-nothing"
-                    status="succeeded"
-                    total={exportMeta.rowCount}
-                    completed={exportMeta.rowCount}
-                    succeeded={exportMeta.rowCount}
-                    label={masterDataCopy.exportDone}
-                    description={
-                        <>
-                            按当前筛选导出 {exportMeta.rowCount} 条。任务号{" "}
-                            <span className="num">{exportMeta.jobId}</span>
-                            。不含无权限查看的敏感信息。
-                        </>
-                    }
-                />
-            ) : null}
-            <h2
-                ref={resultsHeadingRef}
-                tabIndex={-1}
-                className="sr-only outline-none"
-            >
-                {resultsLabel}
-            </h2>
+        <ListWorkspacePage
+            eyebrow={eyebrow}
+            title={title}
+            description={description}
+            views={views}
+            actions={visibleActions}
+            alerts={alerts}
+            notices={
+                canExport && exportMeta ? (
+                    <BackgroundJobProgress
+                        mode="all-or-nothing"
+                        status="succeeded"
+                        total={exportMeta.rowCount}
+                        completed={exportMeta.rowCount}
+                        succeeded={exportMeta.rowCount}
+                        label={masterDataCopy.exportDone}
+                        description={
+                            <>
+                                按当前筛选导出 {exportMeta.rowCount} 条。任务号{" "}
+                                <span className="num">{exportMeta.jobId}</span>
+                                。不含无权限查看的敏感信息。
+                            </>
+                        }
+                    />
+                ) : null
+            }
+            resultsLabel={resultsLabel}
+            resultsHeadingRef={resultsHeadingRef}
+            loading={loading}
+            surface={surface}
+        >
             {children}
-        </PageScaffold>
+        </ListWorkspacePage>
     )
 }

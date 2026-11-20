@@ -3,10 +3,16 @@
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    QuantityValue,
+    TableAsyncCell,
+    TableEmptyCell,
+    TableSwitchCell,
+    TableTextCell,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { PRODUCT_SOURCE_FIELD_LABELS } from "../api/types-product-source"
-import { Switch } from "@/components/ui/switch"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { productSkuPriceRange } from "@/features/master-data/lib/list-filters"
 import {
@@ -34,32 +40,30 @@ function ProductSupplyStatus({
     skuCount: number
     suppliedSkuCount: number
 }) {
-    if (pending || failed) {
-        return (
-            <span className="text-xs text-muted-foreground">
-                {pending ? "读取中…" : "暂不可查"}
-            </span>
-        )
-    }
-    if (skuCount === 0) {
-        return <span className="text-muted-foreground/60">—</span>
-    }
-    if (suppliedSkuCount === 0) {
-        return (
-            <BusinessStatusBadge context="list" label="未覆盖" tone="neutral" />
-        )
-    }
-    if (suppliedSkuCount === skuCount) {
-        return (
-            <BusinessStatusBadge context="list" label="已覆盖" tone="success" />
-        )
-    }
     return (
-        <BusinessStatusBadge
-            context="list"
-            label={`${suppliedSkuCount}/${skuCount}`}
-            tone="warning"
-        />
+        <TableAsyncCell pending={pending} failed={failed}>
+            {skuCount === 0 ? (
+                <TableEmptyCell />
+            ) : suppliedSkuCount === 0 ? (
+                <BusinessStatusBadge
+                    context="list"
+                    label="未覆盖"
+                    tone="neutral"
+                />
+            ) : suppliedSkuCount === skuCount ? (
+                <BusinessStatusBadge
+                    context="list"
+                    label="已覆盖"
+                    tone="success"
+                />
+            ) : (
+                <BusinessStatusBadge
+                    context="list"
+                    label={`${suppliedSkuCount}/${skuCount}`}
+                    tone="warning"
+                />
+            )}
+        </TableAsyncCell>
     )
 }
 
@@ -142,12 +146,9 @@ export function useProductListColumns({
                 id: "maintainer",
                 header: "维护人",
                 meta: { label: "维护人" },
-                cell: ({ row }) =>
-                    row.original.ownerName ? (
-                        <span>{row.original.ownerName}</span>
-                    ) : (
-                        <span className="text-muted-foreground/60">—</span>
-                    ),
+                cell: ({ row }) => (
+                    <TableTextCell value={row.original.ownerName} />
+                ),
             },
             revisionNoColumn(),
             lifecycleColumn(),
@@ -157,10 +158,7 @@ export function useProductListColumns({
                 meta: { label: "资料更新" },
                 cell: ({ row }) => {
                     const item = row.original
-                    if (!item.sourceDiffCount)
-                        return (
-                            <span className="text-muted-foreground/60">—</span>
-                        )
+                    if (!item.sourceDiffCount) return <TableEmptyCell />
                     const summary = (
                         <>
                             <BusinessStatusBadge
@@ -212,45 +210,19 @@ export function useProductListColumns({
                                   productSkusByProduct.get(
                                       row.original.stableId,
                                   ) ?? []
-                              if (productSkusPending) {
-                                  return (
-                                      <span className="text-xs text-muted-foreground">
-                                          读取中…
-                                      </span>
-                                  )
-                              }
-                              if (productSkusError) {
-                                  return (
-                                      <span className="text-xs text-muted-foreground">
-                                          暂不可查
-                                      </span>
-                                  )
-                              }
-                              if (skus.length === 0) {
-                                  return (
-                                      <span className="text-muted-foreground/60">
-                                          —
-                                      </span>
-                                  )
-                              }
                               const names = skus
                                   .map((sku) => sku.skuName.trim())
                                   .filter(Boolean)
-                              if (names.length === 0) {
-                                  return (
-                                      <span className="text-muted-foreground/60">
-                                          —
-                                      </span>
-                                  )
-                              }
-                              const label = names.join("、")
                               return (
-                                  <span
-                                      className="line-clamp-2 max-w-56"
-                                      title={label}
+                                  <TableAsyncCell
+                                      pending={productSkusPending}
+                                      failed={productSkusError}
                                   >
-                                      {label}
-                                  </span>
+                                      <TableTextCell
+                                          value={names.join("、")}
+                                          clamp={2}
+                                      />
+                                  </TableAsyncCell>
                               )
                           },
                       },
@@ -268,33 +240,28 @@ export function useProductListColumns({
                               numeric: true,
                           },
                           cell: ({ row }) => {
-                              if (productSkusPending) {
-                                  return (
-                                      <span className="text-xs text-muted-foreground">
-                                          读取中…
-                                      </span>
-                                  )
-                              }
-                              if (productSkusError) {
-                                  return (
-                                      <span className="text-xs text-muted-foreground">
-                                          暂不可查
-                                      </span>
-                                  )
-                              }
                               const priceRange = productSkuPriceRange(
                                   productSkusByProduct.get(
                                       row.original.stableId,
                                   ) ?? [],
                               )
-                              if (priceRange === "未填写") {
-                                  return (
-                                      <span className="text-xs text-muted-foreground">
-                                          未填写
-                                      </span>
-                                  )
-                              }
-                              return <span className="num">{priceRange}</span>
+                              return (
+                                  <TableAsyncCell
+                                      pending={productSkusPending}
+                                      failed={productSkusError}
+                                  >
+                                      {priceRange === "未填写" ? (
+                                          <TableEmptyCell
+                                              variant="label"
+                                              label="未填写"
+                                          />
+                                      ) : (
+                                          <span className="num">
+                                              {priceRange}
+                                          </span>
+                                      )}
+                                  </TableAsyncCell>
+                              )
                           },
                       },
                   ] satisfies ColumnDef<MasterDataListItem>[])
@@ -309,14 +276,10 @@ export function useProductListColumns({
                     numeric: true,
                 },
                 cell: ({ row }) => (
-                    <span className="inline-flex items-baseline gap-1">
-                        <span className="num">
-                            {row.original.skuCount ?? 0}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                            个
-                        </span>
-                    </span>
+                    <QuantityValue
+                        value={String(row.original.skuCount ?? 0)}
+                        unit="个"
+                    />
                 ),
             },
             ...(canReadOfferings
@@ -397,34 +360,16 @@ export function useProductListColumns({
                           : inherited === "PARTIALLY_LISTED"
                             ? "部分上架"
                             : "已下架"
-                    if (!canUpdateProductListing) {
-                        return (
-                            <BusinessStatusBadge
-                                context="list"
-                                tone={
-                                    inherited === "LISTED"
-                                        ? "success"
-                                        : inherited === "PARTIALLY_LISTED"
-                                          ? "warning"
-                                          : "neutral"
-                                }
-                                label={statusLabel}
-                            />
-                        )
-                    }
-                    const accessibleName = `${item.name}整组上架状态：${statusLabel}`
+                    const statusTone =
+                        inherited === "LISTED"
+                            ? "success"
+                            : inherited === "PARTIALLY_LISTED"
+                              ? "warning"
+                              : "neutral"
                     return (
-                        <Switch
-                            nativeButton
-                            render={
-                                <button
-                                    type="button"
-                                    aria-label={accessibleName}
-                                    title={statusLabel}
-                                />
-                            }
+                        <TableSwitchCell
                             id={`master-data-product-${toAutomationIdSegment(item.stableId)}-listing`}
-                            size="sm"
+                            canEdit={canUpdateProductListing}
                             checked={inherited === "LISTED"}
                             disabled={
                                 pending ||
@@ -433,11 +378,12 @@ export function useProductListColumns({
                                     inherited === "UNLISTED") ||
                                 (item.skuCount ?? 0) === 0
                             }
+                            statusLabel={statusLabel}
+                            statusTone={statusTone}
+                            accessibleName={`${item.name}整组上架状态：${statusLabel}`}
                             onCheckedChange={(checked) =>
                                 void onUpdateProductListing(item, checked)
                             }
-                            aria-label={accessibleName}
-                            title={statusLabel}
                         />
                     )
                 },

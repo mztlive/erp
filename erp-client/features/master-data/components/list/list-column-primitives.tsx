@@ -5,7 +5,12 @@ import { BanIcon, EyeIcon, PlusIcon, UserRoundCogIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 import * as React from "react"
 
-import { BusinessStatusBadge, TableRowActions } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableRowActions,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
@@ -34,24 +39,18 @@ export function nameColumn({
         header: masterDataCopy.colName,
         meta: { label: masterDataCopy.colName, width: "flex" },
         cell: ({ row }) => (
-            <div className="min-w-0">
-                <div className="truncate leading-5 font-medium text-foreground">
-                    {row.original.name}
-                </div>
-                {showNumber ? (
-                    <div
-                        className="num truncate text-xs leading-4 text-muted-foreground"
-                        title={row.original.stableNo}
-                    >
-                        {row.original.stableNo}
-                    </div>
-                ) : row.original.keyFacts[0] ? (
-                    <div className="truncate text-xs leading-4 text-muted-foreground">
-                        {row.original.keyFacts[0].label}：
-                        {row.original.keyFacts[0].value}
-                    </div>
-                ) : null}
-            </div>
+            <TableIdentityCell
+                primary={row.original.name}
+                secondary={
+                    showNumber
+                        ? row.original.stableNo
+                        : row.original.keyFacts[0]
+                          ? `${row.original.keyFacts[0].label}：${row.original.keyFacts[0].value}`
+                          : undefined
+                }
+                secondaryTitle={showNumber ? row.original.stableNo : undefined}
+                numericSecondary={showNumber}
+            />
         ),
     }
 }
@@ -148,7 +147,7 @@ export function blockerColumn(
                         {row.original.primaryBlocker}
                     </span>
                 ) : (
-                    <span className="text-muted-foreground/60">—</span>
+                    <TableEmptyCell />
                 ),
         },
     ]

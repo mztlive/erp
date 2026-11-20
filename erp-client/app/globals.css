@@ -677,10 +677,40 @@
         [data-slot="list-workspace-toolbar"],
         [data-slot="list-work-surface-applied-chips"],
         [data-slot="list-filter-tray"],
-        [data-slot="table-toolbar"],
+        [data-slot="table-toolbar-wrapper"],
         [data-slot="data-table-pagination"]
     ) {
     padding-inline: var(--scaffold-px);
+}
+
+/* 通栏纯白工作面内的表格表面与分页：表格按 --scaffold-px 内收成独立圆角表框，
+   避免表头与批量操作条的浅色底直接贴死左侧导航造成视觉粘连。 */
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]:has([data-slot="data-table-surface"])
+    > :is(
+        [data-slot="list-workspace-toolbar"],
+        [data-slot="list-work-surface-applied-chips"]
+    ) {
+    border-bottom-color: transparent;
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    > [data-slot="list-work-surface-filter-tray"]:has(
+        [data-slot="list-filter-tray"][data-open]
+    ) {
+    margin-bottom: 0.625rem;
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    [data-slot="data-table-surface"] {
+    margin-inline: var(--scaffold-px);
+    border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
+    border-radius: var(--radius-lg);
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    [data-slot="data-table-pagination"] {
+    border-top-width: 0;
 }
 
 /* 有已选条件条时，主筛选栏去掉底线并收紧下边距，让已选条件成为同一纯白筛选区的薄底带 */
@@ -932,19 +962,6 @@
     border-color: color-mix(in oklab, var(--primary) 60%, transparent);
     background-color: var(--card);
 }
-[data-slot="page-scaffold"].erp-list-workspace-page
-    > [data-slot="list-work-surface"]
-    [data-slot="table"]
-    :is(th, td):first-child {
-    padding-inline-start: var(--scaffold-px);
-}
-[data-slot="page-scaffold"].erp-list-workspace-page
-    > [data-slot="list-work-surface"]
-    [data-slot="table"]
-    :is(th, td):last-child {
-    padding-inline-end: var(--scaffold-px);
-}
-
 /* 表格吸顶与冻结列边界微影：仅在真正滚动产生遮挡时显现，静止态保持极净扁平 */
 [data-slot="data-table-surface"][data-scrolled-top="true"]
     [data-slot="table-container"]

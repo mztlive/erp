@@ -5,23 +5,9 @@ import type { FixedSku } from "@/features/supplier-offerings/types"
 import { useRouter } from "@/lib/navigation"
 import { UploadIcon } from "lucide-react"
 
-import {
-    BusinessEmptyState,
-    BusinessFailureState,
-    DataTable,
-} from "@/components/business"
-import {
-    ListWorkSurface,
-    listWorkspaceEmptyStateClassName,
-    listWorkspaceStyles,
-} from "@/components/business/list-workspace"
-import { Button } from "@/components/ui/button"
+import { ListDataTable } from "@/components/business/list-workspace"
 import { toast } from "@/components/ui/toast"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
-import {
-    MasterDataClearFiltersButton,
-    MasterDataEmptyCreateButton,
-} from "@/features/master-data/components/list/list-empty-actions"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { ProductListSelectionBar } from "@/features/master-data/components/list/product-list-selection-bar"
 import { ProductListToolbar } from "@/features/master-data/components/list/product-list-toolbar"
@@ -189,8 +175,7 @@ export function ProductsListPage() {
                     actionKey: "import",
                     label: "导入",
                     icon: UploadIcon,
-                    variant: "ghost",
-                    className: listWorkspaceStyles.quietButton,
+                    tier: "quiet",
                     hidden: !state.canCreate,
                     disabled: !state.canCreate,
                     title: !state.canCreate
@@ -198,14 +183,15 @@ export function ProductsListPage() {
                         : undefined,
                     onClick: () => setImportOpen(true),
                 },
-                masterDataExportAction({
-                    id: "master-data-products-list-export",
-                    pending: exportPending,
-                    rowCount: state.rows.length,
-                    variant: "ghost",
-                    className: listWorkspaceStyles.quietButton,
-                    onClick: state.onExport,
-                }),
+                {
+                    ...masterDataExportAction({
+                        id: "master-data-products-list-export",
+                        pending: exportPending,
+                        rowCount: state.rows.length,
+                        onClick: state.onExport,
+                    }),
+                    tier: "quiet",
+                },
                 masterDataCreateAction({
                     id: "master-data-products-list-create",
                     canCreate: state.canCreate,
@@ -216,10 +202,9 @@ export function ProductsListPage() {
             resultsLabel={`商品列表 · ${state.rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
             loading={state.listQuery.isPending}
-        >
-            <ListWorkSurface
-                ariaLabel="商品列表"
-                toolbar={
+            surface={{
+                ariaLabel: "商品列表",
+                toolbar: (
                     <ProductListToolbar
                         idPrefix="master-data-products-list-toolbar"
                         searchInputRef={searchInputRef}
@@ -231,35 +216,33 @@ export function ProductsListPage() {
                         loading={state.listQuery.isFetching}
                         failed={state.listQuery.isError}
                     />
-                }
-                selectionBarOpen={
+                ),
+                selectionBarOpen:
                     state.canUpdateProductListing &&
-                    state.selection.selectedCount > 0
-                }
-                selectionBar={
-                    state.canUpdateProductListing ? (
-                        <ProductListSelectionBar
-                            resultCount={state.rows.length}
-                            pageRowCount={state.pageRows.length}
-                            selectedCount={state.selection.selectedCount}
-                            actionableCount={
-                                state.batchListingPartition.actionable.length
-                            }
-                            skippedCount={
-                                state.batchListingPartition.skipped.length
-                            }
-                            allPageSelected={state.selection.allPageSelected}
-                            busy={state.batchProductListingMutation.isPending}
-                            onSelectPage={state.selection.selectAllPage}
-                            onClear={state.selection.clear}
-                            onBatchList={state.openBatchListingDialog}
-                        />
-                    ) : undefined
-                }
-                tableClassName={productsListStyles.table}
-                table={
-                    <DataTable
+                    state.selection.selectedCount > 0,
+                selectionBar: state.canUpdateProductListing ? (
+                    <ProductListSelectionBar
+                        resultCount={state.rows.length}
+                        pageRowCount={state.pageRows.length}
+                        selectedCount={state.selection.selectedCount}
+                        actionableCount={
+                            state.batchListingPartition.actionable.length
+                        }
+                        skippedCount={
+                            state.batchListingPartition.skipped.length
+                        }
+                        allPageSelected={state.selection.allPageSelected}
+                        busy={state.batchProductListingMutation.isPending}
+                        onSelectPage={state.selection.selectAllPage}
+                        onClear={state.selection.clear}
+                        onBatchList={state.openBatchListingDialog}
+                    />
+                ) : undefined,
+                tableClassName: productsListStyles.table,
+                table: (
+                    <ListDataTable
                         id="master-data-products-list-table"
+                        entityName="商品"
                         data={state.pageRows}
                         columns={columns}
                         defaultColumnVisibility={{
@@ -296,76 +279,27 @@ export function ProductsListPage() {
                         pagination={filters.pagination}
                         onPaginationChange={filters.changePagination}
                         loading={state.listQuery.isFetching}
-                        layout="flush"
                         defaultColumnPinning={{
                             left: ["name"],
                             right: ["actions"],
                         }}
-                        errorState={
-                            listLoadFailed ? (
-                                <BusinessFailureState
-                                    error={state.listQuery.error}
-                                    action={
-                                        <Button
-                                            id="master-data-products-list-retry"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                                void state.listQuery.refetch()
-                                            }
-                                        >
-                                            重试
-                                        </Button>
-                                    }
-                                />
-                            ) : undefined
-                        }
-                        emptyState={
-                            !listLoadFailed && state.rows.length === 0 ? (
-                                <BusinessEmptyState
-                                    kind={
-                                        noScope
-                                            ? "no-data"
-                                            : hasActiveFilters
-                                              ? "filter"
-                                              : "no-data"
-                                    }
-                                    className={listWorkspaceEmptyStateClassName}
-                                    title={
-                                        noScope
-                                            ? "暂无可查看的商品"
-                                            : hasActiveFilters
-                                              ? "当前筛选无结果"
-                                              : "还没有商品列表资料"
-                                    }
-                                    description={
-                                        noScope
-                                            ? "您当前尚未分配商品的数据查看权限，请联系管理员开通后再试。"
-                                            : hasActiveFilters
-                                              ? masterDataCopy.filterEmptyDescription
-                                              : state.canCreate
-                                                ? "点击「新建」创建第一份资料；历史记录会随资料保留。"
-                                                : undefined
-                                    }
-                                    action={
-                                        hasActiveFilters ? (
-                                            <MasterDataClearFiltersButton
-                                                id="master-data-products-list-empty-clear-filters"
-                                                onClick={
-                                                    filters.clearAllFilters
-                                                }
-                                            />
-                                        ) : state.canCreate ? (
-                                            <MasterDataEmptyCreateButton
-                                                id="master-data-products-list-empty-create"
-                                                onClick={openCreate}
-                                            />
-                                        ) : undefined
-                                    }
-                                />
-                            ) : undefined
-                        }
+                        isError={listLoadFailed}
+                        error={state.listQuery.error}
+                        onRetry={() => void state.listQuery.refetch()}
+                        retryButtonId="master-data-products-list-retry"
+                        noScope={noScope}
+                        hasActiveFilters={hasActiveFilters}
+                        onClearFilters={filters.clearAllFilters}
+                        clearFiltersButtonId="master-data-products-list-empty-clear-filters"
+                        canCreate={state.canCreate}
+                        onCreate={openCreate}
+                        createButtonId="master-data-products-list-empty-create"
+                        createLabel={masterDataCopy.actionCreate}
+                        emptyCopy={{
+                            filterDescription:
+                                masterDataCopy.filterEmptyDescription,
+                            emptyTitle: "还没有商品列表资料",
+                        }}
                         onRowPreview={
                             state.canReadProductDetail
                                 ? (row) => openDetail(row.stableId)
@@ -377,9 +311,9 @@ export function ProductsListPage() {
                                 : undefined
                         }
                     />
-                }
-            />
-
+                ),
+            }}
+        >
             {state.canReadOfferings && !state.supplyDialogSkus && (
                 <ProductSupplyDialog
                     product={state.supplyProduct}

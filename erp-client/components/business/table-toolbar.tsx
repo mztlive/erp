@@ -222,6 +222,7 @@ export function TableToolbar({
     actions,
     columnSettings,
     className,
+    wrapperClassName,
     isFrameToolbar = false,
     hideControls = false,
     animateCollapse = false,
@@ -232,6 +233,8 @@ export function TableToolbar({
     actions?: React.ReactNode
     columnSettings?: React.ReactNode
     className?: string
+    /** 包裹工具栏的外层留白容器类名（用于内收圆角条在折叠动画内平滑计算高度）。 */
+    wrapperClassName?: string
     isFrameToolbar?: boolean
     /** 右侧视图操作与列设置已合并至筛选栏时隐藏，仅在有批量选择或条件提示时展开本条。 */
     hideControls?: boolean
@@ -350,7 +353,22 @@ export function TableToolbar({
         </div>
     )
 
-    if (!animateCollapse) return toolbarContent
+    const wrappedContent = wrapperClassName ? (
+        <div
+            data-slot="table-toolbar-wrapper"
+            className={cn(
+                !animateCollapse &&
+                    "[&:not(:has([data-table-toolbar-content]:not(:empty)))]:hidden",
+                wrapperClassName,
+            )}
+        >
+            {toolbarContent}
+        </div>
+    ) : (
+        toolbarContent
+    )
+
+    if (!animateCollapse) return wrappedContent
 
     return (
         <Collapsible
@@ -368,7 +386,7 @@ export function TableToolbar({
                     "motion-reduce:transition-none",
                 )}
             >
-                {toolbarContent}
+                {wrappedContent}
             </CollapsibleContent>
         </Collapsible>
     )
