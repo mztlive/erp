@@ -123,7 +123,7 @@ export function ProductListToolbar({
                 <>
                     <OptionCombobox
                         id={`${prefix}-kind`}
-                        className="w-44 max-w-full min-w-0"
+                        className="w-36 max-w-full min-w-0"
                         filterLabel="类型"
                         aria-label="类型"
                         value={
@@ -146,7 +146,7 @@ export function ProductListToolbar({
                     <PermissionGuard permission="product_category:list">
                         <DirectoryFilterControl
                             id={`${prefix}-category`}
-                            className="w-56 max-w-full"
+                            className="w-48 max-w-full"
                             failed={directory.failed}
                             unavailable={directory.categoryUnavailable}
                             noScope={directory.categoryNoScope}
@@ -217,92 +217,86 @@ export function ProductListToolbar({
                         <legend className="mb-3 text-xs font-medium">
                             状态
                         </legend>
-                        <div className="grid min-w-0 gap-3">
-                            <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,0.72fr)_minmax(0,0.9fr)_minmax(0,1.25fr)]">
-                                <ListWorkspaceFilterField
-                                    htmlFor={`${prefix}-revision`}
-                                    label="版本"
-                                >
-                                    <OptionCombobox
-                                        id={`${prefix}-revision`}
-                                        className="w-full min-w-0"
-                                        aria-label="版本状态"
-                                        value={
-                                            f.revisionTimingDraft === "all"
-                                                ? null
-                                                : f.revisionTimingDraft
-                                        }
-                                        options={REVISION_TIMING_FILTER_OPTIONS}
-                                        placeholder="全部"
-                                        onValueChange={(value) =>
-                                            f.setRevisionTimingDraft(
-                                                value === "current" ||
-                                                    value === "future"
-                                                    ? value
-                                                    : "all",
+                        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+                            <ListWorkspaceFilterField
+                                htmlFor={`${prefix}-revision`}
+                                label="版本"
+                            >
+                                <OptionCombobox
+                                    id={`${prefix}-revision`}
+                                    className="w-full min-w-0"
+                                    aria-label="版本状态"
+                                    value={
+                                        f.revisionTimingDraft === "all"
+                                            ? null
+                                            : f.revisionTimingDraft
+                                    }
+                                    options={REVISION_TIMING_FILTER_OPTIONS}
+                                    placeholder="全部"
+                                    onValueChange={(value) =>
+                                        f.setRevisionTimingDraft(
+                                            value === "current" ||
+                                                value === "future"
+                                                ? value
+                                                : "all",
+                                        )
+                                    }
+                                />
+                            </ListWorkspaceFilterField>
+                            <ListWorkspaceFilterField
+                                htmlFor={`${prefix}-listing`}
+                                label="上架"
+                            >
+                                <OptionCombobox
+                                    id={`${prefix}-listing`}
+                                    className="w-full min-w-0"
+                                    aria-label="上架"
+                                    value={
+                                        f.productListingStatusDraft === "all"
+                                            ? null
+                                            : f.productListingStatusDraft
+                                    }
+                                    options={PRODUCT_LISTING_FILTER_OPTIONS}
+                                    placeholder="全部"
+                                    onValueChange={(value) =>
+                                        f.setProductListingStatusDraft(
+                                            PRODUCT_LISTING_FILTER_OPTIONS.some(
+                                                (option) =>
+                                                    option.value === value,
                                             )
-                                        }
-                                    />
-                                </ListWorkspaceFilterField>
-                                <ListWorkspaceFilterField
-                                    htmlFor={`${prefix}-listing`}
-                                    label="上架"
-                                >
-                                    <OptionCombobox
-                                        id={`${prefix}-listing`}
-                                        className="w-full min-w-0"
-                                        aria-label="上架"
-                                        value={
-                                            f.productListingStatusDraft ===
-                                            "all"
-                                                ? null
-                                                : f.productListingStatusDraft
-                                        }
-                                        options={PRODUCT_LISTING_FILTER_OPTIONS}
-                                        placeholder="全部"
-                                        onValueChange={(value) =>
-                                            f.setProductListingStatusDraft(
-                                                PRODUCT_LISTING_FILTER_OPTIONS.some(
-                                                    (option) =>
-                                                        option.value === value,
-                                                )
-                                                    ? (value as ProductListingFilter)
-                                                    : "all",
+                                                ? (value as ProductListingFilter)
+                                                : "all",
+                                        )
+                                    }
+                                />
+                            </ListWorkspaceFilterField>
+                            <ListWorkspaceFilterField
+                                htmlFor={`${prefix}-coverage`}
+                                label="供给覆盖"
+                            >
+                                <OptionCombobox
+                                    id={`${prefix}-coverage`}
+                                    className="w-full min-w-0"
+                                    aria-label="供给覆盖"
+                                    value={
+                                        f.productSupplyCoverageDraft === "all"
+                                            ? null
+                                            : f.productSupplyCoverageDraft
+                                    }
+                                    options={PRODUCT_COVERAGE_FILTER_OPTIONS}
+                                    placeholder="全部"
+                                    onValueChange={(value) =>
+                                        f.setProductSupplyCoverageDraft(
+                                            PRODUCT_COVERAGE_FILTER_OPTIONS.some(
+                                                (option) =>
+                                                    option.value === value,
                                             )
-                                        }
-                                    />
-                                </ListWorkspaceFilterField>
-                                <ListWorkspaceFilterField
-                                    htmlFor={`${prefix}-coverage`}
-                                    label="供给覆盖"
-                                >
-                                    <OptionCombobox
-                                        id={`${prefix}-coverage`}
-                                        className="w-full min-w-0"
-                                        aria-label="供给覆盖"
-                                        value={
-                                            f.productSupplyCoverageDraft ===
-                                            "all"
-                                                ? null
-                                                : f.productSupplyCoverageDraft
-                                        }
-                                        options={
-                                            PRODUCT_COVERAGE_FILTER_OPTIONS
-                                        }
-                                        placeholder="全部"
-                                        onValueChange={(value) =>
-                                            f.setProductSupplyCoverageDraft(
-                                                PRODUCT_COVERAGE_FILTER_OPTIONS.some(
-                                                    (option) =>
-                                                        option.value === value,
-                                                )
-                                                    ? (value as ProductSkuCoverageFilter)
-                                                    : "all",
-                                            )
-                                        }
-                                    />
-                                </ListWorkspaceFilterField>
-                            </div>
+                                                ? (value as ProductSkuCoverageFilter)
+                                                : "all",
+                                        )
+                                    }
+                                />
+                            </ListWorkspaceFilterField>
                         </div>
                     </fieldset>
                     <fieldset className="min-w-0">
@@ -363,7 +357,6 @@ export function ProductListToolbar({
                                 onValueChange={f.setProductSupplierIdDraft}
                             />
                             <GrossPriceRangeInputs
-                                fieldClassName="sm:col-span-2"
                                 minId={`${prefix}-price-min`}
                                 maxId={`${prefix}-price-max`}
                                 errorId={priceErrorId}

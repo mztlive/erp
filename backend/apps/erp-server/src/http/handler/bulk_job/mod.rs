@@ -205,7 +205,7 @@ pub struct BulkSelectionItemListQuery {
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct BackgroundJobItemListQuery {
     /// 逐项执行结果筛选。
-    pub status: Option<erp_support::ItemStatus>,
+    pub status: Option<erp_support::ItemStatusFilter>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -217,7 +217,26 @@ mod tests {
     use axum::extract::Query;
     use axum::http::Uri;
 
-    use super::BackgroundJobListParams;
+    use super::{BackgroundJobItemListQuery, BackgroundJobListParams};
+
+    #[test]
+    fn background_job_item_status_filters_include_unprocessed() {
+        use erp_support::{ItemStatus, ItemStatusFilter};
+
+        for (status, expected) in [
+            ("success", Some(ItemStatus::Success)),
+            ("skipped", Some(ItemStatus::Skipped)),
+            ("failed", Some(ItemStatus::Failed)),
+            ("unprocessed", None),
+        ] {
+            let uri = format!("/items?status={status}&page=1&page_size=10").parse::<Uri>().unwrap();
+            let Query(params) = Query::<BackgroundJobItemListQuery>::try_from_uri(&uri).unwrap();
+            assert_eq!(params.status.map(ItemStatusFilter::status), Some(expected));
+        }
+        let uri = Uri::from_static("/items?page=1&page_size=10");
+        let Query(params) = Query::<BackgroundJobItemListQuery>::try_from_uri(&uri).unwrap();
+        assert!(params.status.is_none());
+    }
 
     #[test]
     fn background_job_active_filter_query_contract() {

@@ -109,8 +109,7 @@ function DocumentHeader({
             <div className="flex flex-wrap items-center gap-2">
                 <h1
                     className={cn(
-                        "font-heading font-semibold tracking-tight",
-                        "text-[26px] leading-9",
+                        "font-heading font-semibold tracking-tight text-page-title",
                     )}
                 >
                     {title}
@@ -197,9 +196,8 @@ function DocumentHeader({
             data-slot="document-header"
             data-density={density}
             className={cn(
-                // 对象身份区以底部分隔线连接业务分区
-                "border-b border-border bg-card",
-                compact ? "pb-6" : "pb-7",
+                // 飞书卡片式对象身份头
+                "rounded-lg border border-border/90 bg-card px-5 py-4 shadow-2xs",
                 className,
             )}
             {...props}

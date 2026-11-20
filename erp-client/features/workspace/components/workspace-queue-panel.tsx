@@ -204,12 +204,13 @@ function WorkspaceQueueContent({
                                         key={due ?? "all"}
                                         id={`workspace-queue-due-${due ?? "all"}`}
                                         size="sm"
-                                        variant={
-                                            filters.due === due
-                                                ? "secondary"
-                                                : "ghost"
-                                        }
+                                        variant="ghost"
                                         aria-pressed={filters.due === due}
+                                        className={
+                                            filters.due === due
+                                                ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                                                : "text-muted-foreground hover:text-foreground"
+                                        }
                                         onClick={() =>
                                             applyFilters(urlState.query ?? "", {
                                                 ...filters,

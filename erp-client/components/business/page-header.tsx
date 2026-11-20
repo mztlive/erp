@@ -78,7 +78,7 @@ function PageHeader({
             data-density={objectChrome ? "compact" : density}
             data-variant={variant}
             className={cn(
-                "sticky top-0 z-20 flex shrink-0 flex-col bg-card",
+                "sticky top-0 z-20 flex shrink-0 flex-col bg-background/95 backdrop-blur-xs",
                 objectChrome ? "gap-1.5" : compact ? "gap-1.5" : "gap-2.5",
                 className,
             )}

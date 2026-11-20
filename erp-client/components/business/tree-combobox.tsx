@@ -376,7 +376,11 @@ export function TreeCombobox({
             disabled={disabled}
             required={required}
         >
-            <div data-slot="tree-combobox" className={cn("min-w-0", className)}>
+            <div
+                data-slot="tree-combobox"
+                data-has-value={selected ? "true" : undefined}
+                className={cn("min-w-0", className)}
+            >
                 <ComboboxInput
                     id={id}
                     triggerId={id ? `${id}-trigger` : undefined}
@@ -391,7 +395,10 @@ export function TreeCombobox({
                     className="w-full"
                 >
                     {filterLabel ? (
-                        <InputGroupAddon className="shrink-0 whitespace-nowrap font-normal">
+                        <InputGroupAddon
+                            data-filter-label=""
+                            className="shrink-0 whitespace-nowrap pr-0 font-normal text-muted-foreground/80"
+                        >
                             {filterLabel}：
                         </InputGroupAddon>
                     ) : null}

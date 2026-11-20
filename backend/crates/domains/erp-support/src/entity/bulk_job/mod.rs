@@ -27,7 +27,7 @@ pub use aggregate::{
     BulkSelectionSnapshotAggregate, BulkSelectionSnapshotAggregateData,
 };
 pub use background_job::{BackgroundJob, BackgroundJobData, JobStatus, JobType, JobUpdate};
-pub use background_job_item::{BackgroundJobItem, BackgroundJobItemData, ItemStatus};
+pub use background_job_item::{BackgroundJobItem, BackgroundJobItemData, ItemStatus, ItemStatusFilter};
 pub use bulk_selection_item::{BulkSelectionItem, BulkSelectionItemData, SelectionItemStatus};
 pub use bulk_selection_snapshot::{
     BulkSelectionSnapshot, BulkSelectionSnapshotData, SelectionStatus, SelectionType,

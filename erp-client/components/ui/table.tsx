@@ -12,7 +12,10 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
         >
             <table
                 data-slot="table"
-                className={cn("w-full caption-bottom text-sm", className)}
+                className={cn(
+                    "w-full caption-bottom text-body-compact",
+                    className,
+                )}
                 {...props}
             />
         </div>
@@ -24,7 +27,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
         <thead
             data-slot="table-header"
             className={cn(
-                "bg-table-header [&_tr]:border-b [&_tr]:border-border/80 [&_tr]:hover:bg-transparent",
+                "group/thead bg-table-header [&_tr]:border-b [&_tr]:border-border/75 [&_tr]:hover:bg-transparent",
                 className,
             )}
             {...props}
@@ -60,7 +63,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
         <tr
             data-slot="table-row"
             className={cn(
-                "group/row border-b border-grid/80 transition-colors duration-100 hover:bg-row-hover has-aria-expanded:bg-row-hover data-[state=selected]:bg-row-selected [[data-placeholder]_&]:hover:bg-transparent [[data-placeholder]_&]:has-aria-expanded:bg-transparent",
+                "group/row border-b border-grid/75 transition-colors duration-100 hover:bg-row-hover has-aria-expanded:bg-row-hover data-[state=selected]:bg-row-selected [[data-placeholder]_&]:hover:bg-transparent [[data-placeholder]_&]:has-aria-expanded:bg-transparent",
                 className,
             )}
             {...props}
@@ -73,7 +76,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
         <th
             data-slot="table-head"
             className={cn(
-                "h-table-header bg-table-header px-(--table-cell-inline) py-table-header-block text-left align-middle text-body-compact font-medium tracking-normal text-muted-foreground whitespace-nowrap data-[align=end]:text-right data-[align=center]:text-center select-none",
+                "h-table-header bg-table-header px-(--table-cell-inline) py-table-header-block text-left align-middle text-xs font-medium tracking-normal text-foreground/65 whitespace-nowrap transition-colors duration-100 hover:bg-muted hover:text-foreground/85 data-[sorted=true]:bg-row-hover data-[sorted=true]:text-primary data-[align=end]:text-right data-[align=center]:text-center select-none",
                 className,
             )}
             {...props}

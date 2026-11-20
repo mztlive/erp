@@ -1,11 +1,11 @@
 //! `background_job_items` 列表投影行与仓储查询。
 
-use mongodb::bson::{Document, doc};
+use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Result, mongo_ops};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::bulk_job::{BackgroundJobId, BackgroundJobItem, ItemStatus};
+use crate::entity::bulk_job::{BackgroundJobId, BackgroundJobItem, ItemStatus, ItemStatusFilter};
 
 /// 后台任务逐项结果投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -48,7 +48,7 @@ pub trait BackgroundJobItemRepositoryExt {
     async fn search_job_items(
         &self,
         job_id: &BackgroundJobId,
-        status: Option<ItemStatus>,
+        status: Option<ItemStatusFilter>,
         page: u64,
         page_size: u32,
         executor: &mut dyn Executor,
@@ -59,14 +59,15 @@ impl BackgroundJobItemRepositoryExt for persistence_core::Repository<'_, Backgro
     async fn search_job_items(
         &self,
         job_id: &BackgroundJobId,
-        status: Option<ItemStatus>,
+        status: Option<ItemStatusFilter>,
         page: u64,
         page_size: u32,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<BackgroundJobItemRow>> {
         let mut filter = doc! { "background_job_id": job_id.to_string() };
         if let Some(status) = status {
-            filter.insert("status", status.as_str());
+            let value = status.status().map_or(Bson::Null, |status| Bson::from(status.as_str()));
+            filter.insert("status", value);
         }
 
         let options = FindOptions::builder()

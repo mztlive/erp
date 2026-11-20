@@ -200,7 +200,7 @@ impl ProductImportProcess {
     // 返回清单或源文件行来源。
     //
     // 私有输入读取失败时保留持久化错误；其余清单与源文件均不可用时返回错误。
-    async fn load_row_source(&self, job: &BackgroundJob) -> Result<JobRowSource> {
+    pub(super) async fn load_row_source(&self, job: &BackgroundJob) -> Result<JobRowSource> {
         let job_id = BackgroundJobId::new(job.base.id.clone());
         let input = self
             .db

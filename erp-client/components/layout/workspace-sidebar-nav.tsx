@@ -188,130 +188,146 @@ export function WorkspaceSidebarNav() {
 
     return (
         <>
-            {navGroups.map((group, index) => (
-                <WorkspaceSidebarSection
-                    key={group.label}
-                    label={group.label}
-                    index={index}
-                    active={
-                        group.label === "待办任务" &&
-                        group.items.some((item) =>
-                            isNavItemActive(
-                                navPathname,
-                                item.href,
-                                allHrefs,
-                                search,
-                            ),
-                        )
-                    }
-                    count={
-                        (hasPermission(permissions, "work_item:list") &&
-                            counts.todo === undefined) ||
-                        (profileQuery.data?.account_kind === "admin" &&
-                            counts.copied === undefined)
+            {navGroups.map((group, index) => {
+                const groupActive = group.items.some((item) =>
+                    isNavItemActive(navPathname, item.href, allHrefs, search),
+                )
+                const groupBadgeTotal =
+                    group.label === "待办任务"
+                        ? (hasPermission(permissions, "work_item:list") &&
+                              counts.todo === undefined) ||
+                          (profileQuery.data?.account_kind === "admin" &&
+                              counts.copied === undefined)
                             ? undefined
                             : (counts.todo ?? 0) + (counts.copied ?? 0)
-                    }
-                >
-                    <SidebarGroupContent>
-                        <SidebarMenu className="gap-0.5">
-                            {group.items.map((item) => {
-                                const Icon = item.icon
-                                const isActive = isNavItemActive(
-                                    navPathname,
-                                    item.href,
-                                    allHrefs,
-                                    search,
-                                )
-                                const badgeCount = item.badge
-                                    ? badgeCountFor(item.badge, counts)
-                                    : undefined
-                                const badgeQuery =
-                                    item.badge === "todo-count"
-                                        ? navigationCounts.inbox
-                                        : item.badge ===
-                                            "approval-started-unread-count"
-                                          ? navigationCounts.started
-                                          : item.badge === "copy-unread-count"
-                                            ? copyCountQuery
+                        : group.items.reduce((sum, item) => {
+                              const value = item.badge
+                                  ? badgeCountFor(item.badge, counts)
+                                  : undefined
+                              return sum + (value ?? 0)
+                          }, 0)
+                return (
+                    <WorkspaceSidebarSection
+                        key={group.label}
+                        label={group.label}
+                        index={index}
+                        active={groupActive}
+                        collapsible={group.items.length > 1}
+                        count={groupBadgeTotal}
+                    >
+                        <SidebarGroupContent>
+                            <SidebarMenu className="gap-0.5">
+                                {group.items.map((item) => {
+                                    const Icon = item.icon
+                                    const isActive = isNavItemActive(
+                                        navPathname,
+                                        item.href,
+                                        allHrefs,
+                                        search,
+                                    )
+                                    const badgeCount = item.badge
+                                        ? badgeCountFor(item.badge, counts)
+                                        : undefined
+                                    const badgeQuery =
+                                        item.badge === "todo-count"
+                                            ? navigationCounts.inbox
                                             : item.badge ===
-                                                "inquiry-feedback-count"
-                                              ? inquiryFeedbackCountQuery
+                                                "approval-started-unread-count"
+                                              ? navigationCounts.started
                                               : item.badge ===
-                                                  "procurement-inquiry-count"
-                                                ? procurementInquiryCountQuery
+                                                  "copy-unread-count"
+                                                ? copyCountQuery
                                                 : item.badge ===
-                                                    "background-job-active-count"
-                                                  ? backgroundJobCountQuery
-                                                  : undefined
-                                const badgeError = badgeQuery?.isError
-                                    ? `${item.label}数量加载失败：${getErrorMessage(badgeQuery.error, "请稍后重试")}`
-                                    : undefined
-                                const badgeLabel =
-                                    item.badge === "copy-unread-count"
-                                        ? `${badgeCount} 条未读抄送`
-                                        : item.badge ===
-                                            "approval-started-unread-count"
-                                          ? `${badgeCount} 条审批有新进展待查看`
-                                          : item.badge ===
-                                              "inquiry-feedback-count"
-                                            ? `${badgeCount} 张询价单有新反馈待处理`
+                                                    "inquiry-feedback-count"
+                                                  ? inquiryFeedbackCountQuery
+                                                  : item.badge ===
+                                                      "procurement-inquiry-count"
+                                                    ? procurementInquiryCountQuery
+                                                    : item.badge ===
+                                                        "background-job-active-count"
+                                                      ? backgroundJobCountQuery
+                                                      : undefined
+                                    const badgeError = badgeQuery?.isError
+                                        ? `${item.label}数量加载失败：${getErrorMessage(badgeQuery.error, "请稍后重试")}`
+                                        : undefined
+                                    const badgeLabel =
+                                        item.badge === "copy-unread-count"
+                                            ? `${badgeCount} 条未读抄送`
                                             : item.badge ===
-                                                "procurement-inquiry-count"
-                                              ? `${badgeCount} 张采购询价待处理`
+                                                "approval-started-unread-count"
+                                              ? `${badgeCount} 条审批有新进展待查看`
                                               : item.badge ===
-                                                  "background-job-active-count"
-                                                ? `${badgeCount} 项后台任务尚未完成`
-                                                : `${badgeCount} 项待处理`
+                                                  "inquiry-feedback-count"
+                                                ? `${badgeCount} 张询价单有新反馈待处理`
+                                                : item.badge ===
+                                                    "procurement-inquiry-count"
+                                                  ? `${badgeCount} 张采购询价待处理`
+                                                  : item.badge ===
+                                                      "background-job-active-count"
+                                                    ? `${badgeCount} 项后台任务尚未完成`
+                                                    : `${badgeCount} 项待处理`
 
-                                return (
-                                    <SidebarMenuItem
-                                        key={`${group.label}-${item.href}`}
-                                    >
-                                        <SidebarMenuButton
-                                            id={`workspace-sidebar-nav-${toAutomationIdSegment(item.href)}`}
-                                            data-workspace-nav={toAutomationIdSegment(
-                                                item.href,
-                                            )}
-                                            isActive={isActive}
-                                            tooltip={item.label}
-                                            render={<Link href={item.href} />}
+                                    return (
+                                        <SidebarMenuItem
+                                            key={`${group.label}-${item.href}`}
                                         >
-                                            <Icon aria-hidden="true" />
-                                            <span>{item.label}</span>
-                                            {badgeError ||
-                                            (badgeCount !== undefined &&
-                                                badgeCount > 0) ? (
-                                                <span
-                                                    data-workspace-nav-badge=""
-                                                    aria-label={
-                                                        badgeError ?? badgeLabel
-                                                    }
-                                                    title={
-                                                        badgeError ?? badgeLabel
-                                                    }
-                                                    className={cn(
-                                                        "ml-auto flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums group-data-[collapsible=icon]:hidden",
-                                                        item.badge ===
-                                                            "background-job-active-count" &&
-                                                            !badgeError
-                                                            ? "bg-success text-success-foreground"
-                                                            : "bg-destructive text-destructive-foreground",
-                                                    )}
-                                                >
-                                                    {badgeError
-                                                        ? "!"
-                                                        : badgeCount}
-                                                </span>
-                                            ) : null}
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
-                                )
-                            })}
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </WorkspaceSidebarSection>
-            ))}
+                                            <SidebarMenuButton
+                                                id={`workspace-sidebar-nav-${toAutomationIdSegment(item.href)}`}
+                                                data-workspace-nav={toAutomationIdSegment(
+                                                    item.href,
+                                                )}
+                                                isActive={isActive}
+                                                tooltip={item.label}
+                                                render={
+                                                    <Link href={item.href} />
+                                                }
+                                            >
+                                                <Icon aria-hidden="true" />
+                                                <span>{item.label}</span>
+                                                {badgeError ||
+                                                (badgeCount !== undefined &&
+                                                    badgeCount > 0) ? (
+                                                    <span
+                                                        data-workspace-nav-badge=""
+                                                        aria-label={
+                                                            badgeError ??
+                                                            badgeLabel
+                                                        }
+                                                        title={
+                                                            badgeError ??
+                                                            badgeLabel
+                                                        }
+                                                        className={cn(
+                                                            "ml-auto flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1.5 text-2xs font-medium tabular-nums group-data-[collapsible=icon]:hidden",
+                                                            badgeError
+                                                                ? "bg-destructive text-destructive-foreground"
+                                                                : item.badge ===
+                                                                    "background-job-active-count"
+                                                                  ? "bg-info-soft text-info-soft-foreground"
+                                                                  : item.badge ===
+                                                                          "todo-count" ||
+                                                                      item.badge ===
+                                                                          "copy-unread-count"
+                                                                    ? "bg-destructive-soft text-destructive-soft-foreground"
+                                                                    : isActive
+                                                                      ? "bg-card/80 text-sidebar-accent-foreground"
+                                                                      : "bg-muted text-muted-foreground",
+                                                        )}
+                                                    >
+                                                        {badgeError
+                                                            ? "!"
+                                                            : badgeCount}
+                                                    </span>
+                                                ) : null}
+                                            </SidebarMenuButton>
+                                        </SidebarMenuItem>
+                                    )
+                                })}
+                            </SidebarMenu>
+                        </SidebarGroupContent>
+                    </WorkspaceSidebarSection>
+                )
+            })}
         </>
     )
 }

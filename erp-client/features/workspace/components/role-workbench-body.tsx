@@ -1,7 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowUpRightIcon } from "lucide-react"
+import {
+    ArrowUpRightIcon,
+    BarChart3Icon,
+    ClockIcon,
+    CompassIcon,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -31,8 +36,8 @@ import {
 } from "./workbench-data-info"
 
 type Role = ReturnType<typeof useRoleWorkbench>
-const panel = "min-w-0 rounded-xl border border-border/70 bg-card"
-const focus = "rounded-md focus-visible:outline-2 focus-visible:outline-ring"
+const panel = "min-w-0 rounded-lg border border-border/90 bg-card shadow-2xs"
+const focus = "rounded-md focus-visible:outline-2 focus-visible:outline-primary"
 
 export function RoleWorkbenchBody({
     role,
@@ -63,31 +68,37 @@ export function RoleWorkbenchBody({
                     <RoleWorkbenchTiming role={role} />
                 </div>
                 {operations.length > 0 && (
-                    <nav
+                    <section
                         aria-label="岗位常用操作"
-                        className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1"
+                        className={cn(panel, "px-4 py-3")}
                     >
-                        <span className="text-xs text-muted-foreground">
-                            常用入口
-                        </span>
-                        {operations.map((operation) => (
-                            <Link
-                                key={operation.href}
-                                id={`role-operation-${toAutomationIdSegment(operation.href)}`}
-                                href={operation.href}
-                                className={cn(
-                                    focus,
-                                    "inline-flex items-center gap-1 text-xs hover:underline",
-                                )}
-                            >
-                                {operation.label}
-                                <ArrowUpRightIcon
-                                    className="size-3.5 text-muted-foreground"
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="mr-1 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                <CompassIcon
+                                    className="size-3.5 text-primary"
                                     aria-hidden="true"
                                 />
-                            </Link>
-                        ))}
-                    </nav>
+                                常用入口
+                            </span>
+                            {operations.map((operation) => (
+                                <Link
+                                    key={operation.href}
+                                    id={`role-operation-${toAutomationIdSegment(operation.href)}`}
+                                    href={operation.href}
+                                    className={cn(
+                                        focus,
+                                        "group inline-flex h-control-sm items-center gap-1.5 rounded-md border border-border/80 bg-background/70 px-2.5 text-xs font-medium text-foreground transition-colors hover:border-primary/45 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
+                                    )}
+                                >
+                                    {operation.label}
+                                    <ArrowUpRightIcon
+                                        className="size-3.5 text-muted-foreground transition-colors group-hover:text-sidebar-accent-foreground"
+                                        aria-hidden="true"
+                                    />
+                                </Link>
+                            ))}
+                        </div>
+                    </section>
                 )}
             </div>
             <RoleWorkbenchUrgent urgent={role.urgent} returnTo={returnTo} />
@@ -102,17 +113,25 @@ function RoleWorkbenchTiming({ role }: { role: Role }) {
             className={panel}
             aria-labelledby={`${presentation.prefix}-workbench-timing-title`}
         >
-            <div className="flex items-center justify-between px-4 pt-3">
-                <div>
-                    <h2
-                        id={`${presentation.prefix}-workbench-timing-title`}
-                        className="text-sm font-semibold"
+            <div className="flex items-center justify-between border-b border-grid/70 px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                    <span
+                        className="flex size-7 shrink-0 items-center justify-center rounded-md bg-warning-soft text-warning-soft-foreground"
+                        aria-hidden="true"
                     >
-                        {presentation.timingTitle}
-                    </h2>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        本人可处理 · 截至当前
-                    </p>
+                        <ClockIcon className="size-3.5" />
+                    </span>
+                    <div>
+                        <h2
+                            id={`${presentation.prefix}-workbench-timing-title`}
+                            className="text-sm font-semibold text-foreground"
+                        >
+                            {presentation.timingTitle}
+                        </h2>
+                        <p className="text-xs text-muted-foreground">
+                            本人可处理 · 截至当前
+                        </p>
+                    </div>
                 </div>
                 <WorkbenchDataInfo
                     id={`${presentation.prefix}-workbench-timing-info`}
@@ -215,14 +234,14 @@ function RoleWorkbenchTiming({ role }: { role: Role }) {
                                                         href={`/workspace/tasks?type=${type}${column === 1 ? "&due=today" : column === 2 ? "&due=overdue" : ""}`}
                                                         className={cn(
                                                             focus,
-                                                            "inline-flex min-w-7 justify-center px-1 py-1 hover:bg-muted",
+                                                            "inline-flex min-w-7 items-center justify-center rounded-sm px-2 py-0.5 text-xs transition-colors",
                                                             count === 0
-                                                                ? "text-muted-foreground"
+                                                                ? "text-muted-foreground/70 hover:bg-muted"
                                                                 : column === 2
-                                                                  ? "font-semibold text-destructive"
+                                                                  ? "bg-destructive-soft font-semibold text-destructive-soft-foreground hover:bg-destructive/15"
                                                                   : column === 1
-                                                                    ? "font-semibold text-warning-soft-foreground"
-                                                                    : "font-semibold",
+                                                                    ? "bg-warning-soft font-semibold text-warning-soft-foreground hover:bg-warning/15"
+                                                                    : "bg-info-soft font-semibold text-info-soft-foreground hover:bg-primary/15",
                                                         )}
                                                     >
                                                         {count}
@@ -267,17 +286,25 @@ function RoleWorkbenchStages({
             className={panel}
             aria-labelledby={`${presentation.prefix}-workbench-stages-title`}
         >
-            <div className="flex items-center justify-between px-4 pt-3">
-                <div>
-                    <h2
-                        id={`${presentation.prefix}-workbench-stages-title`}
-                        className="text-sm font-semibold"
+            <div className="flex items-center justify-between border-b border-grid/70 px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                    <span
+                        className="flex size-7 shrink-0 items-center justify-center rounded-md bg-info-soft text-info-soft-foreground"
+                        aria-hidden="true"
                     >
-                        {presentation.stagesTitle}
-                    </h2>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        本人负责 · 截至当前 · 单
-                    </p>
+                        <BarChart3Icon className="size-3.5" />
+                    </span>
+                    <div>
+                        <h2
+                            id={`${presentation.prefix}-workbench-stages-title`}
+                            className="text-sm font-semibold text-foreground"
+                        >
+                            {presentation.stagesTitle}
+                        </h2>
+                        <p className="text-xs text-muted-foreground">
+                            本人负责 · 截至当前 · 单
+                        </p>
+                    </div>
                 </div>
                 <WorkbenchDataInfo
                     id={`${presentation.prefix}-workbench-stages-info`}
@@ -320,7 +347,7 @@ function RoleWorkbenchStages({
                                 type="button"
                                 className={cn(
                                     focus,
-                                    "flex w-full items-center gap-3 px-1 py-2 text-left text-xs hover:bg-muted/40",
+                                    "group flex w-full items-center gap-3 rounded-md px-2 py-2 text-left text-xs transition-colors hover:bg-row-hover",
                                 )}
                                 onClick={() =>
                                     query.isError
@@ -328,7 +355,7 @@ function RoleWorkbenchStages({
                                         : onSelect(item)
                                 }
                             >
-                                <span className="w-12 shrink-0">
+                                <span className="w-14 shrink-0 font-medium text-foreground/85 group-hover:text-primary">
                                     {item.label}
                                 </span>
                                 {query.isPending ? (
@@ -356,25 +383,30 @@ function RoleWorkbenchStages({
                                         >
                                             <span
                                                 className={cn(
-                                                    "block h-full rounded-full",
+                                                    "block h-full rounded-full transition-[width] duration-300",
                                                     item.key ===
                                                         "stage-effective" ||
                                                         item.key ===
                                                             "stage-EFFECTIVE"
-                                                        ? "bg-info"
+                                                        ? "bg-primary"
                                                         : item.key ===
                                                                 "stage-pending_review" ||
                                                             item.key ===
                                                                 "stage-PENDING_REVIEW"
                                                           ? "bg-warning"
-                                                          : "bg-foreground/30",
+                                                          : item.key ===
+                                                                  "stage-COMPLETED" ||
+                                                              item.key ===
+                                                                  "stage-completed"
+                                                            ? "bg-success"
+                                                            : "bg-primary/40",
                                                 )}
                                                 style={{
                                                     width: `${((query.data?.count ?? 0) / max) * 100}%`,
                                                 }}
                                             />
                                         </span>
-                                        <span className="w-9 shrink-0 text-right tabular-nums">
+                                        <span className="w-11 shrink-0 text-right font-medium tabular-nums text-foreground">
                                             {value} 单
                                         </span>
                                     </>

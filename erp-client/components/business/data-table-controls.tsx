@@ -60,6 +60,7 @@ function DataTableViewOptions<TData>({
                         type="button"
                         variant="ghost"
                         size="sm"
+                        className="text-muted-foreground hover:bg-accent/70 hover:text-foreground"
                     />
                 }
             >
@@ -113,9 +114,9 @@ function DataTableViewOptions<TData>({
                             return (
                                 <div
                                     key={column.id}
-                                    className="flex items-center gap-1 rounded-lg px-1 py-1 hover:bg-accent"
+                                    className="group/col-row flex items-center gap-1 rounded-md px-1.5 py-1 transition-colors hover:bg-accent/70"
                                 >
-                                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm">
+                                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-body-compact">
                                         <Checkbox
                                             nativeButton
                                             render={
@@ -147,7 +148,12 @@ function DataTableViewOptions<TData>({
                                     <div
                                         role="group"
                                         aria-label={`${label}列设置`}
-                                        className="flex"
+                                        className={cn(
+                                            "flex items-center gap-0.5 transition-opacity",
+                                            pinned
+                                                ? "opacity-100"
+                                                : "opacity-45 group-hover/col-row:opacity-100 group-focus-within/col-row:opacity-100",
+                                        )}
                                     >
                                         <Button
                                             id={
@@ -204,12 +210,13 @@ function DataTableViewOptions<TData>({
                                                             : undefined
                                                     }
                                                     type="button"
-                                                    variant={
-                                                        pinned === "left"
-                                                            ? "secondary"
-                                                            : "ghost"
-                                                    }
+                                                    variant="ghost"
                                                     size="icon-xs"
+                                                    className={
+                                                        pinned === "left"
+                                                            ? "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent"
+                                                            : undefined
+                                                    }
                                                     onClick={() =>
                                                         column.pin("left")
                                                     }
@@ -227,12 +234,13 @@ function DataTableViewOptions<TData>({
                                                             : undefined
                                                     }
                                                     type="button"
-                                                    variant={
-                                                        pinned === "right"
-                                                            ? "secondary"
-                                                            : "ghost"
-                                                    }
+                                                    variant="ghost"
                                                     size="icon-xs"
+                                                    className={
+                                                        pinned === "right"
+                                                            ? "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent"
+                                                            : undefined
+                                                    }
                                                     onClick={() =>
                                                         column.pin("right")
                                                     }
@@ -323,7 +331,7 @@ function DataTablePagination<TData>({
         <div
             data-slot="data-table-pagination"
             className={cn(
-                "flex flex-wrap items-center gap-x-4 gap-y-2 text-sm",
+                "flex flex-wrap items-center gap-x-4 gap-y-2 text-xs",
                 needsPager && "justify-between",
                 layout === "flush" && "px-table-cell-inline py-2.5",
                 layout === "inset" && "px-(--card-spacing) py-2",

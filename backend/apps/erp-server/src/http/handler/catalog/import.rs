@@ -8,7 +8,8 @@ use erp_catalog::{
     ProductImportDirectUploadInitView, ProductImportDirectUploadPartView, ProductImportItemListParams,
     ProductImportItemView, ProductImportJobListParams, ProductImportJobView,
 };
-use erp_support::{RetentionClass, SensitivityClass};
+use erp_data_import::product_import::ProductImportResults;
+use erp_support::{ItemStatusFilter, RetentionClass, SensitivityClass};
 use serde::Deserialize;
 
 use crate::http::errors::{Error, Result};
@@ -87,6 +88,24 @@ pub async fn product_import_job_items(
 ) -> Result<PageView<ProductImportItemView>> {
     let view = state.application().product_import_process().job_items(&id, &params, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 商品导入结果下载的分类参数。
+#[derive(Debug, Deserialize)]
+pub struct ProductImportResultsQuery {
+    status: ItemStatusFilter,
+}
+
+/// 读取已结束商品导入任务的指定分类结果及源行。
+/// 仅任务发起人且具备当前商品导入资格时返回数据。
+pub async fn product_import_result_rows(
+    State(state): State<HttpState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Query(query): Query<ProductImportResultsQuery>,
+) -> Result<ProductImportResults> {
+    let rows = state.application().product_import_process().result_rows(&id, query.status, &actor).await?;
+    Ok(ApiResponse::ok_with_data(rows))
 }
 
 /// 分片地址查询（`object_key` 与 `request_id` 须绑定）。

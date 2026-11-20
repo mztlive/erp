@@ -13,6 +13,7 @@ mod media;
 mod parse;
 mod query;
 mod resolve;
+mod results;
 mod row;
 mod row_manifest;
 mod submit;
@@ -33,6 +34,8 @@ use storage::S3Storage;
 use self::execute::JobRowSource;
 use crate::background::import_source::ImportSourceCache;
 use crate::repository::import_job_access::ImportJobAccess;
+
+pub use results::{ProductImportResultRow, ProductImportResults};
 
 /// 导入消费的领域服务与附件转换合同，由应用注入实际 Port 提供者。
 #[derive(Clone)]

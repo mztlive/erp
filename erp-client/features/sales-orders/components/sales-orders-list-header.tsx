@@ -32,9 +32,12 @@ export function SalesOrdersListHeader(props: {
 
     return (
         <>
-            <header className={styles.header}>
-                <div>
-                    <h1 className={styles.title}>销售单</h1>
+            <header data-slot="list-workspace-header" className={styles.header}>
+                <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                        <h1 className={styles.title}>销售单</h1>
+                        <span className={styles.eyebrow}>销售</span>
+                    </div>
                     <p className={styles.description}>
                         查看销售单、履约进度与成交金额。
                         <span className="ml-3 text-xs" role="status">

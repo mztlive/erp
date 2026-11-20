@@ -226,7 +226,14 @@ export function workspaceTaskColumns({
                 const hasSearchMatches = Boolean(row.item.searchMatches?.length)
                 return (
                     <div className="flex items-center gap-2.5 py-1">
-                        <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted/60 text-muted-foreground">
+                        <div
+                            className={cn(
+                                "flex size-7 shrink-0 items-center justify-center rounded-md",
+                                rework
+                                    ? "bg-destructive-soft text-destructive-soft-foreground"
+                                    : "bg-sidebar-accent/75 text-sidebar-accent-foreground",
+                            )}
+                        >
                             <Icon
                                 className="size-4 shrink-0"
                                 aria-hidden="true"
@@ -403,9 +410,9 @@ export function workspaceTaskColumns({
                                 }
                             />
                         ) : (
-                            <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/70 px-2 py-0.5 text-xs font-medium text-foreground">
+                            <span className="inline-flex items-center gap-1.5 rounded-sm border border-info-border/75 bg-info-soft/75 px-1.5 py-0.5 text-tiny font-medium text-info-soft-foreground">
                                 <span
-                                    className="size-1.5 shrink-0 rounded-full bg-primary/70"
+                                    className="size-1.5 shrink-0 rounded-full bg-primary"
                                     aria-hidden="true"
                                 />
                                 <span className="max-w-40 truncate">
@@ -454,8 +461,8 @@ export function workspaceTaskColumns({
                         size="sm"
                         className={
                             canProcess
-                                ? "h-7 px-2.5 text-xs font-medium border-border/80 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
-                                : undefined
+                                ? "h-7 border-primary/35 px-2.5 text-xs font-medium text-primary transition-colors hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                                : "h-7 px-2.5 text-xs text-muted-foreground hover:text-primary"
                         }
                         onClick={() => onSelect(item)}
                         aria-label={`${canProcess ? "处理" : "查看"}${presentation.number}`}

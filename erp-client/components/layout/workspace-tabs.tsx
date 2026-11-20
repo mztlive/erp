@@ -25,6 +25,7 @@ import {
     type WorkspaceFrameState,
 } from "@/lib/workspace-tabs"
 import { WorkspaceOpeningMark } from "./workspace-opening-mark"
+import { dispatchWorkspaceQuickSearch } from "./workspace-quick-search"
 import { WorkspaceTabBar } from "./workspace-tab-bar"
 
 export type WorkspaceTab = WorkspaceFrameState & {
@@ -250,6 +251,9 @@ export function WorkspaceTabs({
                 const tab = sourceTab(source)
                 if (tab && pendingRefresh.current.get(tab.id) === revision)
                     pendingRefresh.current.delete(tab.id)
+            },
+            openQuickSearch: () => {
+                dispatchWorkspaceQuickSearch()
             },
         }
         const pop = () => navigate(null, window.location.href, false, true)

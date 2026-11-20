@@ -5,40 +5,50 @@ import NextLink from "next/link"
 
 import {
     TableToolbar,
+    TableToolbarFilterTrayHost,
+    TableToolbarInlineControls,
     TableToolbarScope,
 } from "@/components/business/table-toolbar"
 import { cn } from "@/lib/utils"
 
-/** Shared Tailwind classes for business list workspaces. */
+/** Shared Tailwind classes for business list workspaces (Feishu Bitable pure-white edge-to-edge surface + soft borderless toolbar). */
 export const listWorkspaceStyles = {
-    page: "max-w-none gap-0 bg-card px-workspace-inline py-page-block md:px-page-inline md:pt-workspace-block-start-lg md:pb-page-block-lg min-[75rem]:px-page-inline-lg",
-    header: "flex flex-col items-start justify-between gap-4 pb-page-block md:flex-row md:items-center md:gap-6 md:pb-workspace-header-block-end",
-    eyebrow: "mb-2.5 text-xs leading-4.5 text-muted-foreground",
-    title: "text-page-title font-semibold tracking-tight",
-    description: "mt-1.5 text-body-compact text-muted-foreground",
+    page: "erp-list-workspace-page max-w-none gap-0 bg-card px-workspace-inline py-0 md:px-page-inline md:py-0 min-[75rem]:px-page-inline-lg",
+    header: "flex shrink-0 flex-col items-start justify-between gap-2.5 border-b border-border/60 bg-card py-3.5 md:flex-row md:items-center md:gap-6",
+    eyebrow:
+        "inline-flex shrink-0 items-center rounded-sm bg-muted/80 px-1.5 py-0.5 text-tiny leading-4 font-medium text-muted-foreground",
+    title: "text-page-title font-semibold tracking-tight text-foreground",
+    description: "mt-0.5 text-xs leading-4.5 text-muted-foreground/85",
     headerActions:
-        "flex shrink-0 items-center gap-2 max-md:w-full max-md:justify-end [&_[data-slot=button]]:h-control [&_[data-slot=button]]:shadow-none",
+        "flex shrink-0 items-center gap-2 max-md:w-full max-md:justify-end [&_[data-slot=button]]:h-control [&_[data-slot=button]]:px-3",
     quietButton: "text-body-compact text-muted-foreground shadow-none",
     exportButton: "text-body-compact shadow-none",
-    workSurface: "flex min-w-0 flex-1 flex-col",
+    workSurface:
+        "flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border/75 bg-card",
     viewBar:
-        "flex shrink-0 items-center justify-between gap-3 border-b border-border",
-    views: "flex min-w-0 gap-5 overflow-x-auto md:gap-workspace-view-gap",
-    view: "relative inline-flex min-h-workspace-view shrink-0 cursor-pointer items-center gap-2.25 border-b-2 border-transparent text-body-compact font-medium text-muted-foreground transition-colors duration-150 ease-linear hover:text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:-outline-offset-3 focus-visible:outline-foreground",
-    activeView: "border-foreground font-semibold text-foreground",
-    viewCount:
-        "min-w-5.5 rounded-md bg-muted px-1.25 py-0 text-center text-xs leading-5 font-medium tabular-nums",
+        "flex shrink-0 items-center justify-between gap-3 border-b border-border/65 bg-card px-4",
+    views: "flex min-w-0 gap-6 overflow-x-auto",
+    view: "relative -mb-px inline-flex min-h-workspace-view shrink-0 cursor-pointer items-center gap-1.5 text-body-compact font-normal text-muted-foreground transition-colors duration-150 ease-linear hover:text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:-outline-offset-3 focus-visible:outline-primary",
+    activeView:
+        "font-medium text-primary after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary",
+    viewCount: "text-xs font-normal tabular-nums text-muted-foreground/75",
     viewHint:
-        "text-xs whitespace-nowrap text-muted-foreground max-[1200px]:hidden",
-    toolbar:
-        "flex shrink-0 items-start gap-0 py-workspace-toolbar-block md:gap-3 [&_[data-slot=button]]:shadow-none [&_[data-slot=input-group]]:text-body-compact [&_[data-slot=input-group]]:shadow-none [&_[data-slot=input-group]:focus-within]:outline-2 [&_[data-slot=input-group]:focus-within]:outline-offset-2 [&_[data-slot=input-group]:focus-within]:outline-foreground",
+        "text-xs whitespace-nowrap text-muted-foreground/70 max-[1280px]:hidden",
+    toolbar: [
+        "flex shrink-0 flex-wrap items-start gap-x-2.5 gap-y-2 border-b border-border/60 bg-card px-4 py-workspace-toolbar-block",
+        "[&_[data-slot=button]]:shadow-none [&_[data-slot=input-group]]:text-body-compact [&_[data-slot=input-group]]:shadow-none",
+        // 飞书轻工具栏：搜索框与常用下拉筛选统一采用 bg-muted/65 无框浅灰柔底，与高级筛选区完全同色
+        "[&_[data-slot=list-toolbar-search]_[data-slot=input-group]]:border-transparent [&_[data-slot=list-toolbar-search]_[data-slot=input-group]]:bg-muted/65 [&_[data-slot=list-toolbar-search]_[data-slot=input-group]]:hover:bg-muted [&_[data-slot=list-toolbar-search]_[data-slot=input-group]:focus-within]:border-primary/60 [&_[data-slot=list-toolbar-search]_[data-slot=input-group]:focus-within]:bg-card",
+        "[&_[data-slot=list-toolbar-filters]_[data-slot=input-group]]:border-transparent [&_[data-slot=list-toolbar-filters]_[data-slot=input-group]]:bg-muted/65 [&_[data-slot=list-toolbar-filters]_[data-slot=input-group]]:hover:bg-muted [&_[data-slot=list-toolbar-filters]_[data-slot=input-group]:focus-within]:border-primary/60 [&_[data-slot=list-toolbar-filters]_[data-slot=input-group]:focus-within]:bg-card",
+        "[&_[data-slot=list-toolbar-filters]_[data-has-value=true]_[data-slot=input-group]]:border-primary/25 [&_[data-slot=list-toolbar-filters]_[data-has-value=true]_[data-slot=input-group]]:bg-sidebar-accent/70 [&_[data-slot=list-toolbar-filters]_[data-has-value=true]_[data-slot=input-group]:hover]:bg-sidebar-accent [&_[data-slot=list-toolbar-filters]_[data-has-value=true]_input]:font-medium [&_[data-slot=list-toolbar-filters]_[data-has-value=true]_input]:text-sidebar-accent-foreground [&_[data-slot=list-toolbar-filters]_[data-has-value=true]_[data-filter-label]]:text-sidebar-accent-foreground/75",
+    ].join(" "),
     filters: "min-w-0 flex-1",
     table: [
         "min-h-0 flex-1",
         "[&_[data-slot=data-table]]:h-full [&_[data-slot=data-table]]:gap-0",
         "[&_[data-slot=data-table-surface]]:flex-1 [&_[data-slot=data-table-surface]]:rounded-none [&_[data-slot=data-table-surface]]:border-0",
-        "[&_[data-slot=table-row]:focus-visible]:outline-2 [&_[data-slot=table-row]:focus-visible]:-outline-offset-2 [&_[data-slot=table-row]:focus-visible]:outline-foreground",
-        "[&_[data-slot=data-table-pagination]]:mt-auto [&_[data-slot=data-table-pagination]]:shrink-0 [&_[data-slot=data-table-pagination]]:border-t [&_[data-slot=data-table-pagination]]:border-border [&_[data-slot=data-table-pagination]]:px-0 [&_[data-slot=data-table-pagination]]:pt-table-pagination-block [&_[data-slot=data-table-pagination]]:pb-0 [&_[data-slot=data-table-pagination]]:text-xs",
+        "[&_[data-slot=table-row]:focus-visible]:outline-2 [&_[data-slot=table-row]:focus-visible]:-outline-offset-2 [&_[data-slot=table-row]:focus-visible]:outline-primary",
+        "[&_[data-slot=data-table-pagination]]:mt-auto [&_[data-slot=data-table-pagination]]:shrink-0 [&_[data-slot=data-table-pagination]]:border-t [&_[data-slot=data-table-pagination]]:border-border/60 [&_[data-slot=data-table-pagination]]:bg-card [&_[data-slot=data-table-pagination]]:px-4 [&_[data-slot=data-table-pagination]]:py-table-pagination-block [&_[data-slot=data-table-pagination]]:text-xs",
     ].join(" "),
 } as const
 
@@ -61,10 +71,17 @@ export function ListWorkspaceHeader({
     children?: React.ReactNode
 }) {
     return (
-        <header className={cn(styles.header, className)}>
+        <header
+            data-slot="list-workspace-header"
+            className={cn(styles.header, className)}
+        >
             <div className="min-w-0">
-                <p className={styles.eyebrow}>{eyebrow}</p>
-                <h1 className={styles.title}>{title}</h1>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                    <h1 className={styles.title}>{title}</h1>
+                    {eyebrow ? (
+                        <span className={styles.eyebrow}>{eyebrow}</span>
+                    ) : null}
+                </div>
                 {description ? (
                     <div className={styles.description}>{description}</div>
                 ) : null}
@@ -85,6 +102,8 @@ export type ListWorkspaceViewItem = {
     onClick?: () => void
 }
 
+const GENERIC_VIEW_HINT_RE = /^(选择|点击).+查看详情$/
+
 export function ListWorkspaceViews({
     ariaLabel,
     items,
@@ -96,6 +115,8 @@ export function ListWorkspaceViews({
 }) {
     // 单个视图不是切换，不画 tab 行（例如「全部合同」）。
     if (items.length < 2) return null
+    const visibleHint =
+        hint && !GENERIC_VIEW_HINT_RE.test(hint.trim()) ? hint : undefined
     return (
         <div className={styles.viewBar} data-slot="list-workspace-views">
             <div className={styles.views} role="group" aria-label={ariaLabel}>
@@ -108,7 +129,13 @@ export function ListWorkspaceViews({
                         <>
                             {item.label}
                             {item.count != null ? (
-                                <span className={styles.viewCount}>
+                                <span
+                                    className={cn(
+                                        styles.viewCount,
+                                        item.active &&
+                                            "font-medium text-primary",
+                                    )}
+                                >
                                     {item.count}
                                 </span>
                             ) : null}
@@ -139,7 +166,9 @@ export function ListWorkspaceViews({
                     )
                 })}
             </div>
-            {hint ? <span className={styles.viewHint}>{hint}</span> : null}
+            {visibleHint ? (
+                <span className={styles.viewHint}>{visibleHint}</span>
+            ) : null}
         </div>
     )
 }
@@ -177,6 +206,7 @@ export function ListWorkSurface({
     return (
         <TableToolbarScope>
             <section
+                data-slot="list-work-surface"
                 className={cn(styles.workSurface, className)}
                 data-business-component="table-frame"
                 aria-label={ariaLabel}
@@ -188,9 +218,16 @@ export function ListWorkSurface({
                         data-slot="list-workspace-toolbar"
                     >
                         <div className={styles.filters}>{toolbar}</div>
+                        <TableToolbarInlineControls actions={tableActions} />
                     </div>
                 ) : null}
-                <TableToolbar isFrameToolbar actions={tableActions}>
+                <TableToolbarFilterTrayHost />
+                <TableToolbar
+                    isFrameToolbar
+                    hideControls={Boolean(toolbar)}
+                    actions={toolbar ? undefined : tableActions}
+                    className="border-b border-grid/75 bg-surface-sunken/70 px-4"
+                >
                     {selectionBar}
                 </TableToolbar>
                 <div

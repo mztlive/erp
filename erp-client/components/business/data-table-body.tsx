@@ -162,7 +162,8 @@ export function DataTableBody<TData>({
                                 tabIndex={interactive ? 0 : undefined}
                                 className={cn(
                                     interactive && "cursor-pointer",
-                                    highlightedRowId === row.id && "bg-muted",
+                                    highlightedRowId === row.id &&
+                                        "bg-row-selected",
                                 )}
                                 onClick={(event) => {
                                     if (isInteractiveRowTarget(event.target))
@@ -215,14 +216,25 @@ export function DataTableBody<TData>({
                                     const meta = cell.column.columnDef.meta
                                     const runtimeWidth =
                                         columnSizing[cell.column.id]
+                                    const pinned = cell.column.getIsPinned()
+                                    const pinnedEdge =
+                                        pinned === "left" &&
+                                        cell.column.getIsLastColumn("left")
+                                            ? "left"
+                                            : pinned === "right" &&
+                                                cell.column.getIsFirstColumn(
+                                                    "right",
+                                                )
+                                              ? "right"
+                                              : undefined
                                     return (
                                         <TableCell
                                             key={cell.id}
                                             data-column-id={cell.column.id}
                                             data-column-pinned={
-                                                cell.column.getIsPinned() ||
-                                                undefined
+                                                pinned || undefined
                                             }
+                                            data-pinned-edge={pinnedEdge}
                                             data-align={
                                                 meta?.align === "end"
                                                     ? "end"
@@ -237,10 +249,7 @@ export function DataTableBody<TData>({
                                                     meta?.width,
                                                     meta?.role,
                                                 ),
-                                                pinningClass(
-                                                    cell.column.getIsPinned(),
-                                                    "cell",
-                                                ),
+                                                pinningClass(pinned, "cell"),
                                             )}
                                             style={{
                                                 width: columnRuntimeWidth(

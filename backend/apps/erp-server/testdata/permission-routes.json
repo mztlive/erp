@@ -2688,6 +2688,18 @@
     ]
   },
   {
+    "method": "GET",
+    "path": "/products/import-jobs/{id}/result-rows",
+    "handler": "catalog::import::product_import_result_rows",
+    "code": "product:create",
+    "group": "商品与仓库",
+    "group_desc": "公司商品池、商品、类目、供应商与仓库基础资料",
+    "description": "下载商品导入分类结果",
+    "guards": [
+      "product:create"
+    ]
+  },
+  {
     "method": "PUT",
     "path": "/products/{id}",
     "handler": "catalog::product::product_update",

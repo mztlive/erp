@@ -147,7 +147,7 @@ export function SellableItemsFilterBar({
                 <>
                     <OptionCombobox
                         id={`${prefix}-kind`}
-                        className="w-48 max-w-full min-w-0"
+                        className="w-40 max-w-full min-w-0"
                         filterLabel="商品类型"
                         aria-label="商品类型"
                         value={
@@ -170,7 +170,7 @@ export function SellableItemsFilterBar({
                     <PermissionGuard permission="product_category:list">
                         <DirectoryFilterControl
                             id={`${prefix}-category`}
-                            className="w-56 max-w-full"
+                            className="w-48 max-w-full"
                             failed={directory.failed}
                             unavailable={directory.categoryUnavailable}
                             noScope={directory.categoryNoScope}

@@ -216,18 +216,15 @@ export function PortalShell({
             sidebarCollapsible="none"
             showSidebarRail={false}
             sidebarHeader={
-                <div className="flex items-center gap-3 px-3 py-3">
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-xs">
-                        <Building2Icon
-                            className="size-4.5"
-                            aria-hidden="true"
-                        />
+                <div className="flex items-center gap-2.5 px-1 py-0.5">
+                    <div className="flex size-7.5 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-2xs">
+                        <Building2Icon className="size-4" aria-hidden="true" />
                     </div>
                     <div className="min-w-0">
-                        <div className="truncate text-sm font-bold tracking-tight text-foreground">
+                        <div className="truncate text-sm font-semibold tracking-tight text-foreground">
                             福尚云 ERP
                         </div>
-                        <div className="truncate text-xs font-medium text-muted-foreground">
+                        <div className="truncate text-2xs font-medium text-muted-foreground">
                             供应商门户
                         </div>
                     </div>
@@ -240,14 +237,14 @@ export function PortalShell({
                 <PortalSidebarAccount profile={profile} onLogout={onLogout} />
             }
             topbar={
-                <header className="flex h-topbar shrink-0 items-center gap-3 border-b border-border bg-card px-workspace-inline md:px-page-inline min-[75rem]:px-page-inline-lg">
+                <header className="flex h-topbar shrink-0 items-center gap-3 border-b border-border/90 bg-card px-workspace-inline md:px-page-inline min-[75rem]:px-page-inline-lg">
                     <SidebarTrigger
                         id="supplier-portal-sidebar-trigger"
                         className="md:hidden"
                     />
-                    <div className="flex h-8 min-w-0 items-center gap-2 rounded-md bg-muted px-2.5 text-body-compact font-medium">
+                    <div className="flex h-control-sm min-w-0 items-center gap-1.5 rounded-md bg-sidebar-accent px-2.5 text-body-compact font-medium text-sidebar-accent-foreground">
                         <Icon
-                            className="size-3.5 shrink-0 text-foreground/75"
+                            className="size-3.5 shrink-0 text-sidebar-accent-foreground"
                             aria-hidden="true"
                         />
                         <span className="truncate">

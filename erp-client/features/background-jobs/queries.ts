@@ -8,9 +8,12 @@ import {
     fetchBackgroundJobDetail,
     fetchBackgroundJobItems,
     fetchBackgroundJobs,
+    fetchProductImportResults,
+    type BackgroundJobItemStatus,
     type BackgroundJobListParams,
 } from "@/features/background-jobs/api"
 import { isJobActive } from "@/features/background-jobs/labels"
+import { downloadProductImportResults } from "@/features/background-jobs/lib/product-import-results"
 import { readTransferContext } from "@/lib/data-transfer"
 
 export function useDataTransferContextQuery(
@@ -84,14 +87,44 @@ export function useBackgroundJobItemsQuery(
     id: string | null,
     page = 1,
     active = false,
+    {
+        status,
+        pageSize = 100,
+    }: {
+        status?: BackgroundJobItemStatus
+        pageSize?: number
+    } = {},
 ) {
     return useQuery({
-        queryKey: [...backgroundJobKeys.items(id ?? "", page), active],
-        queryFn: () => fetchBackgroundJobItems(id ?? "", page),
+        queryKey: [
+            ...backgroundJobKeys.items(id ?? "", page),
+            active,
+            status,
+            pageSize,
+        ],
+        queryFn: () =>
+            fetchBackgroundJobItems(id ?? "", page, status, pageSize),
         placeholderData: (previous, query) =>
-            query?.queryKey[2] === id ? previous : undefined,
+            query?.queryKey[2] === id &&
+            query.queryKey[5] === status &&
+            query.queryKey[6] === pageSize
+                ? previous
+                : undefined,
         refetchInterval: active ? 2000 : false,
         enabled: Boolean(id),
+    })
+}
+
+/** 仅在用户下载时读取源行，并在生成工作簿后释放。 */
+export function useProductImportResultsDownload(id: string, jobNo: string) {
+    return useMutation({
+        mutationFn: async (status: BackgroundJobItemStatus) => {
+            const results = await fetchProductImportResults(id, status)
+            await downloadProductImportResults(results, status, jobNo)
+        },
+        retry: false,
+        gcTime: 0,
+        meta: { suppressErrorToast: true },
     })
 }
 

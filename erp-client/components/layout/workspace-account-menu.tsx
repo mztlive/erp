@@ -77,7 +77,7 @@ export function WorkspaceAccountMenu() {
                         }
                     >
                         <Avatar size="sm">
-                            <AvatarFallback className="bg-muted font-medium text-foreground text-xs">
+                            <AvatarFallback className="bg-sidebar-accent text-xs font-medium text-sidebar-accent-foreground">
                                 {displayInitial(
                                     profileQuery.data?.name,
                                     profileQuery.data?.account,

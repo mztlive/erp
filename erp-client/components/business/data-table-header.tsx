@@ -53,6 +53,16 @@ export function DataTableHeader<TData>({
                                   ? ArrowDownIcon
                                   : ArrowUpDownIcon
 
+                        const pinned = header.column.getIsPinned()
+                        const pinnedEdge =
+                            pinned === "left" &&
+                            header.column.getIsLastColumn("left")
+                                ? "left"
+                                : pinned === "right" &&
+                                    header.column.getIsFirstColumn("right")
+                                  ? "right"
+                                  : undefined
+
                         return (
                             <TableHead
                                 key={header.id}
@@ -63,20 +73,19 @@ export function DataTableHeader<TData>({
                                         ? "true"
                                         : undefined
                                 }
-                                data-column-pinned={
-                                    header.column.getIsPinned() || undefined
-                                }
+                                data-column-pinned={pinned || undefined}
+                                data-pinned-edge={pinnedEdge}
+                                data-sorted={sort ? "true" : undefined}
                                 data-align={
                                     meta?.align === "end" ? "end" : undefined
                                 }
                                 className={cn(
-                                    "sticky top-0 z-20",
+                                    "group/head sticky top-0 z-20",
                                     alignmentClass(meta?.align),
                                     columnWidthClass(meta?.width, meta?.role),
-                                    pinningClass(
-                                        header.column.getIsPinned(),
-                                        "header",
-                                    ),
+                                    pinningClass(pinned, "header"),
+                                    sort &&
+                                        "bg-row-hover text-primary hover:bg-row-hover hover:text-primary",
                                 )}
                                 style={{
                                     width: columnRuntimeWidth(
@@ -108,7 +117,9 @@ export function DataTableHeader<TData>({
                                         variant="ghost"
                                         size="xs"
                                         className={cn(
-                                            "w-full px-0 text-body-compact font-medium text-muted-foreground hover:text-foreground",
+                                            "w-full gap-1 px-0 text-xs font-medium text-foreground/65 hover:bg-transparent hover:text-foreground",
+                                            sort &&
+                                                "text-primary hover:text-primary",
                                             sortableHeaderClass(meta?.align),
                                         )}
                                         onClick={header.column.getToggleSortingHandler()}
@@ -118,7 +129,15 @@ export function DataTableHeader<TData>({
                                             header.column.columnDef.header,
                                             header.getContext(),
                                         )}
-                                        <SortIcon aria-hidden="true" />
+                                        <SortIcon
+                                            aria-hidden="true"
+                                            className={cn(
+                                                "size-3.5 transition-opacity",
+                                                sort
+                                                    ? "opacity-100 text-primary"
+                                                    : "opacity-35 group-hover/head:opacity-85",
+                                            )}
+                                        />
                                     </Button>
                                 ) : (
                                     flexRender(
@@ -200,10 +219,10 @@ export function DataTableHeader<TData>({
                                         onPointerCancel={resize.end}
                                         onLostPointerCapture={resize.end}
                                         className={cn(
-                                            "absolute inset-y-0 right-0 z-20 w-table-resize-target cursor-col-resize touch-none border-0 bg-transparent p-0 select-none after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-transparent hover:after:bg-ring",
+                                            "absolute inset-y-0 right-0 z-20 w-table-resize-target cursor-col-resize touch-none border-0 bg-transparent p-0 select-none after:absolute after:inset-y-2.5 after:right-0 after:w-px after:bg-transparent after:transition-colors group-hover/thead:after:bg-border/60 group-hover/head:after:bg-primary/65 hover:after:inset-y-1 hover:after:w-0.5 hover:after:bg-primary",
                                             columnSizingInfo.isResizingColumn ===
                                                 header.column.id &&
-                                                "after:bg-ring",
+                                                "after:inset-y-0 after:w-0.5 after:bg-primary",
                                         )}
                                     />
                                 ) : null}

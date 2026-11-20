@@ -67,7 +67,7 @@ export function BackgroundJobsToolbar({
                 <>
                     <OptionCombobox
                         id={`${ID_PREFIX}-toolbar-status`}
-                        className="w-48 max-w-full min-w-0"
+                        className="w-36 max-w-full min-w-0"
                         filterLabel="状态"
                         value={filters.draft.status}
                         onValueChange={(value) =>
@@ -83,7 +83,7 @@ export function BackgroundJobsToolbar({
                     />
                     <OptionCombobox
                         id={`${ID_PREFIX}-toolbar-job-type`}
-                        className="w-48 max-w-full min-w-0"
+                        className="w-44 max-w-full min-w-0"
                         filterLabel="任务类型"
                         value={filters.draft.jobType || null}
                         onValueChange={(value) =>

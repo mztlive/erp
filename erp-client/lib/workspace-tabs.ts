@@ -15,6 +15,7 @@ export type WorkspaceHost = {
     changed: (source: Window) => void
     refreshed: (source: Window, revision: number) => void
     deliver: (source: Window, request: NavDeliveryRequest) => void
+    openQuickSearch?: () => void
 }
 
 export const WORKSPACE_CLOSE_SHORTCUT = "Alt+Shift+W"

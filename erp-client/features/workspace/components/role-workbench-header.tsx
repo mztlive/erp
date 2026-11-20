@@ -34,7 +34,7 @@ import { useRouter } from "@/lib/navigation"
 import { savePreference } from "../pages/role-workbench-entry"
 import type { WorkspaceOverview } from "./workspace-overview"
 import { WORKBENCH_PRESENTATION } from "../lib/workbench-presentation"
-import { WorkbenchDataInfo } from "./workbench-data-info"
+import { WorkbenchDataInfo, workbenchUpdatedAt } from "./workbench-data-info"
 
 const dateSchema = z.iso.date("请选择有效日期")
 const rangeSchema = z
@@ -73,7 +73,6 @@ export function RoleWorkbenchHeader({
                         <NativeSelect
                             id="role-workbench-switch"
                             aria-label="切换岗位"
-                            className="[&_select]:rounded-lg"
                             value={template.id}
                             onChange={(event) =>
                                 router.push(
@@ -193,6 +192,18 @@ export function SalesWorkbenchPeriod({
                     </p>
                     <p>待办只包含本人具备处理资格的待办任务，不随期间变化。</p>
                 </WorkbenchDataInfo>
+                <span className="hidden text-xs text-muted-foreground sm:inline">
+                    ·{" "}
+                    {overview.queries.some(
+                        (query) => query.isFetching && !query.isPending,
+                    )
+                        ? "更新中…"
+                        : workbenchUpdatedAt(
+                              overview.queries.map((query) =>
+                                  query.isError ? undefined : query.data?.asOf,
+                              ),
+                          )}
+                </span>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <label htmlFor="role-workbench-period">新增单据期间</label>
@@ -200,7 +211,6 @@ export function SalesWorkbenchPeriod({
                     id="role-workbench-period"
                     aria-describedby="sales-workbench-period-description"
                     value={custom ? "custom" : overview.preset}
-                    className="[&_select]:rounded-lg"
                     onChange={(event) => {
                         if (event.target.value === "custom") {
                             form.reset(custom ?? overview.period)

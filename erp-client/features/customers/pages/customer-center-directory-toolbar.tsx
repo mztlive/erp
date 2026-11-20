@@ -134,7 +134,7 @@ export function CustomerCenterDirectoryToolbar({
                     )}
                     <OptionCombobox
                         id="customers-directory-status"
-                        className="w-44 min-w-0 max-w-full"
+                        className="w-36 min-w-0 max-w-full"
                         filterLabel="状态"
                         aria-label="状态"
                         allowClear={false}

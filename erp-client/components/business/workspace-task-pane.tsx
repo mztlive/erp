@@ -173,7 +173,7 @@ export function WorkspaceTaskPane({
                         className={cn(
                             "flex min-h-0 flex-1 flex-col",
                             layout &&
-                                "gap-4 overflow-auto bg-muted/20 p-3 sm:p-5",
+                                "gap-4 overflow-auto bg-background p-3 sm:p-5",
                             layout?.compact && "gap-5 sm:p-6",
                             layout.fullWidth &&
                                 "gap-3 overflow-hidden p-3 sm:p-4",
@@ -183,7 +183,7 @@ export function WorkspaceTaskPane({
                         <div
                             className={cn(
                                 layout &&
-                                    "shrink-0 rounded-xl border border-border/60 bg-card shadow-xs",
+                                    "shrink-0 rounded-lg border border-border/90 bg-card shadow-2xs",
                                 layout?.compact &&
                                     "mx-auto w-full max-w-7xl border-0 bg-transparent shadow-none",
                                 layout.unframedBody &&
@@ -194,11 +194,11 @@ export function WorkspaceTaskPane({
                                 data-slot="workspace-task-header"
                                 className={cn(
                                     workspaceTaskSurfacePadClassName,
-                                    "flex shrink-0 items-start justify-between gap-3 bg-card py-5",
+                                    "flex shrink-0 items-start justify-between gap-3 bg-card py-4",
                                     !layout && "border-b border-grid",
                                     layout.fullWidth && "py-3",
                                     layout.denseHeader && "py-3",
-                                    layout && "rounded-t-xl sm:px-6",
+                                    layout && "rounded-t-lg sm:px-6",
                                     layout?.compact &&
                                         "bg-transparent px-0 py-1 sm:px-0",
                                     layout.unframedBody &&
@@ -246,7 +246,7 @@ export function WorkspaceTaskPane({
                                 className={cn(
                                     "min-w-0",
                                     layout
-                                        ? "rounded-xl border border-border/60 bg-card shadow-xs"
+                                        ? "rounded-lg border border-border/90 bg-card shadow-2xs"
                                         : "min-h-0 flex-1 overflow-auto",
                                     layout?.compact && "shadow-none",
                                     layout.unframedBody &&
@@ -270,7 +270,7 @@ export function WorkspaceTaskPane({
                                     <aside
                                         aria-label="办理进度与状态"
                                         className={cn(
-                                            "space-y-6 rounded-xl border border-border/60 bg-card p-5 shadow-xs xl:sticky xl:top-0",
+                                            "space-y-6 rounded-lg border border-border/90 bg-card p-5 shadow-2xs xl:sticky xl:top-0",
                                             layout.compact &&
                                                 "shadow-none lg:sticky lg:top-0",
                                         )}

@@ -56,7 +56,7 @@ export function DetailSummary({
         <div
             aria-label={label}
             className={cn(
-                "grid divide-y divide-border/70 overflow-hidden rounded-xl border border-border/70 bg-muted/35 sm:grid-cols-2 sm:divide-x sm:divide-y-0",
+                "grid divide-y divide-border/70 overflow-hidden rounded-lg border border-border/90 bg-card shadow-2xs sm:grid-cols-2 sm:divide-x sm:divide-y-0",
                 className,
             )}
         >

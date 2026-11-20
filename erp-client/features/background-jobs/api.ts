@@ -15,6 +15,12 @@ export type {
     BackgroundJobListParams,
 } from "@/lib/background-jobs"
 
+export type BackgroundJobItemStatus =
+    | "success"
+    | "skipped"
+    | "failed"
+    | "unprocessed"
+
 export async function fetchBackgroundJobs(
     params: BackgroundJobListParams,
 ): Promise<Page<BackgroundJobView>> {
@@ -35,13 +41,37 @@ export async function fetchBackgroundJobDetail(
 export async function fetchBackgroundJobItems(
     id: string,
     page = 1,
+    status?: BackgroundJobItemStatus,
+    pageSize = 100,
 ): Promise<Page<BackgroundJobItemView>> {
     return apiGet<Page<BackgroundJobItemView>>(
         `/admin/background-jobs/${id}/items`,
         {
             page,
-            page_size: 100,
+            page_size: pageSize,
+            status,
         },
+    )
+}
+
+export type ProductImportResults = {
+    headers: string[]
+    rows: {
+        source_row_no: number
+        cells: string[]
+        outcome_unknown: boolean
+        result_summary: string | null
+    }[]
+}
+
+export async function fetchProductImportResults(
+    id: string,
+    status: BackgroundJobItemStatus,
+): Promise<ProductImportResults> {
+    return apiGet<ProductImportResults>(
+        `/admin/products/import-jobs/${encodeURIComponent(id)}/result-rows`,
+        { status },
+        { cache: "no-store", timeoutMs: 60_000 },
     )
 }
 

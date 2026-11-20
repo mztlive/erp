@@ -209,7 +209,7 @@ function Sidebar({
             <div
                 data-slot="sidebar"
                 className={cn(
-                    "sticky top-0 hidden h-svh w-(--sidebar-width) shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-2 pt-3 pb-2 text-sidebar-foreground md:flex",
+                    "sticky top-0 hidden h-svh w-(--sidebar-width) shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex",
                     className,
                 )}
                 {...props}
@@ -245,10 +245,9 @@ function Sidebar({
                 data-side={side}
                 className={cn(
                     "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
-                    // IDURAR 式：默认侧栏透明无分割线；floating/inset 保留内边距。
                     variant === "floating" || variant === "inset"
                         ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
-                        : "group-data-[collapsible=icon]:w-(--sidebar-width-icon) px-2 pt-3 pb-2",
+                        : "group-data-[collapsible=icon]:w-(--sidebar-width-icon)",
                     className,
                 )}
                 {...props}
@@ -357,7 +356,7 @@ function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
             data-slot="sidebar-header"
             data-sidebar="header"
             className={cn(
-                "flex flex-col gap-2 p-2 [--radius:var(--radius-xl)]",
+                "flex flex-col gap-2 px-2.5 pt-2.5 pb-1.5 [--radius:var(--radius-md)]",
                 className,
             )}
             {...props}
@@ -396,7 +395,7 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
             data-slot="sidebar-content"
             data-sidebar="content"
             className={cn(
-                "no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-auto [--radius:var(--radius-xl)] group-data-[collapsible=icon]:overflow-hidden",
+                "no-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-auto px-1 pb-3 [--radius:var(--radius-md)] group-data-[collapsible=icon]:overflow-hidden",
                 className,
             )}
             {...props}
@@ -428,8 +427,8 @@ function SidebarGroupLabel({
         props: mergeProps<"div">(
             {
                 className: cn(
-                    // 分组标题比菜单项小一档、用 muted，避免和可点击项同色同级
-                    "flex h-7 shrink-0 items-center rounded-md px-3 text-xs font-medium text-sidebar-foreground/55 ring-sidebar-ring outline-hidden transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-3 [&>svg]:size-4 [&>svg]:shrink-0",
+                    // 飞书侧栏分组标题：低噪音小号字，避免与可点击项抢戏
+                    "flex h-6 shrink-0 items-center rounded-md px-2.5 text-tiny font-medium text-muted-foreground/80 ring-sidebar-ring outline-hidden transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:-mt-6 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-3 [&>svg]:size-4 [&>svg]:shrink-0",
                     className,
                 ),
             },
@@ -504,20 +503,19 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
 }
 
 const sidebarMenuButtonVariants = cva(
-    // 选中态 = 浅底 + 左侧竖标；圆角对齐 --radius，重量让给内容区数据
-    "peer/menu-button group/menu-button relative flex w-full items-center gap-2 overflow-hidden rounded-lg px-3 py-2 text-left text-sm whitespace-nowrap text-sidebar-foreground ring-sidebar-ring outline-hidden transition-[width,height,padding,background-color,color] duration-200 group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground focus-visible:ring-3 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 has-[>svg:first-child]:pl-2.5 has-[>svg:last-child]:pr-2.5 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-sidebar-accent/70 data-open:hover:text-sidebar-accent-foreground data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground data-active:before:absolute data-active:before:top-1.5 data-active:before:bottom-1.5 data-active:before:left-0 data-active:before:w-0.5 data-active:before:rounded-full data-active:before:bg-sidebar-primary data-active:before:content-[''] [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-sidebar-foreground/65 hover:[&_svg]:text-sidebar-accent-foreground data-active:[&_svg]:text-sidebar-accent-foreground [&>span:last-child]:truncate",
+    // 飞书侧栏导航项：圆角 6px，未选悬停浅灰，选中冰蓝底 + 飞书蓝字与图标
+    "peer/menu-button group/menu-button relative flex w-full items-center gap-2.5 overflow-hidden rounded-md px-2.5 py-1.5 text-left text-body-compact whitespace-nowrap text-sidebar-foreground ring-sidebar-ring outline-hidden transition-[width,height,padding,background-color,color] duration-150 group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! hover:bg-accent/80 hover:text-foreground focus-visible:ring-3 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-accent/80 data-open:hover:text-foreground data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground data-active:hover:bg-sidebar-accent data-active:hover:text-sidebar-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground data-active:[&_svg]:text-sidebar-accent-foreground [&>span:last-child]:truncate",
     {
         variants: {
             variant: {
-                default:
-                    "hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
+                default: "hover:bg-accent/80 hover:text-foreground",
                 outline:
-                    "bg-transparent shadow-none ring-1 ring-border hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground hover:ring-sidebar-accent",
+                    "bg-transparent shadow-none ring-1 ring-border hover:bg-accent/80 hover:text-foreground hover:ring-border",
             },
             size: {
-                default: "h-control text-sm",
-                sm: "h-control-sm text-xs",
-                lg: "h-12 px-3 text-sm group-data-[collapsible=icon]:p-0!",
+                default: "h-8 text-body-compact",
+                sm: "h-7 text-xs",
+                lg: "h-11 px-2.5 text-sm group-data-[collapsible=icon]:p-0!",
             },
         },
         defaultVariants: {

@@ -18,16 +18,17 @@ export function WorkspaceTopNav({
     return (
         <header
             data-slot="workspace-top-nav"
-            className="flex h-workspace-topbar min-w-0 shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-3 md:pr-5 md:pl-4"
+            className="relative flex h-workspace-topbar min-w-0 shrink-0 items-center justify-between gap-2 bg-muted/85 px-2.5 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:z-0 after:h-px after:bg-border/80 md:pr-4 md:pl-3"
         >
             <SidebarTrigger
                 id="workspace-topbar-navigation-trigger"
-                className="shrink-0 lg:hidden"
+                title="折叠或展开导航栏 (⌘B)"
+                className="relative z-10 shrink-0 text-muted-foreground hover:bg-card/75 hover:text-foreground"
             />
             {tabs}
             <nav
                 aria-label="全局功能"
-                className="flex min-w-0 shrink-0 items-center gap-1"
+                className="relative z-10 flex min-w-0 shrink-0 items-center gap-1"
             >
                 {actions ? <div className="mr-1 min-w-0">{actions}</div> : null}
                 <SystemFeedbackPanel />

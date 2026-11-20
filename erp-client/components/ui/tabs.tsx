@@ -26,13 +26,13 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-    "group/tabs-list inline-flex w-fit items-center justify-center rounded-2xl p-[3px] text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col group-data-vertical/tabs:p-1 data-[variant=line]:rounded-none data-[variant=line]:group-data-horizontal/tabs:h-auto",
+    "group/tabs-list inline-flex w-fit items-center justify-center rounded-md p-[3px] text-muted-foreground group-data-horizontal/tabs:h-control group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col group-data-vertical/tabs:p-1 data-[variant=line]:rounded-none data-[variant=line]:group-data-horizontal/tabs:h-auto",
     {
         variants: {
             variant: {
                 default: "bg-muted",
-                // 列表工作视图：平面分区，使用浅底和字重标识当前项。
-                solid: "gap-1 rounded-lg border border-border bg-card",
+                // 列表工作视图：平面分区，使用冰蓝浅底标识当前项。
+                solid: "gap-1 rounded-md border border-border bg-card",
                 // 对象分区 / 底边导航：统一使用对象导航高度令牌。
                 line: "justify-start gap-6 bg-transparent p-0",
             },
@@ -81,11 +81,11 @@ function TabsTrigger({
             id={triggerId}
             data-slot="tabs-trigger"
             className={cn(
-                "relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-2xl border border-transparent! px-1.5 py-0.5 text-sm font-medium whitespace-nowrap text-foreground/60 transition-all group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start group-data-vertical/tabs:px-3 group-data-vertical/tabs:py-0.5 hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 dark:text-muted-foreground dark:hover:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-                "group-data-[variant=line]/tabs-list:flex-none group-data-[variant=line]/tabs-list:h-object-tab group-data-[variant=line]/tabs-list:rounded-none group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:px-0 group-data-[variant=line]/tabs-list:py-0 group-data-[variant=line]/tabs-list:data-active:bg-transparent dark:group-data-[variant=line]/tabs-list:data-active:border-transparent dark:group-data-[variant=line]/tabs-list:data-active:bg-transparent",
-                "data-active:bg-background data-active:text-foreground dark:data-active:border-input dark:data-active:bg-input/30 dark:data-active:text-foreground",
-                "group-data-[variant=solid]/tabs-list:rounded-md group-data-[variant=solid]/tabs-list:data-active:bg-muted group-data-[variant=solid]/tabs-list:data-active:font-semibold group-data-[variant=solid]/tabs-list:data-active:text-foreground",
-                "after:absolute after:bg-foreground after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:bottom-[-5px] group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:after:bottom-0 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
+                "relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-sm border border-transparent! px-2.5 py-0.5 text-body-compact font-medium whitespace-nowrap text-muted-foreground transition-colors group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start group-data-vertical/tabs:px-3 group-data-vertical/tabs:py-1 hover:text-foreground focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 dark:text-muted-foreground dark:hover:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+                "group-data-[variant=line]/tabs-list:flex-none group-data-[variant=line]/tabs-list:h-object-tab group-data-[variant=line]/tabs-list:rounded-none group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:px-0 group-data-[variant=line]/tabs-list:py-0 group-data-[variant=line]/tabs-list:data-active:bg-transparent group-data-[variant=line]/tabs-list:data-active:text-primary group-data-[variant=line]/tabs-list:data-active:shadow-none dark:group-data-[variant=line]/tabs-list:data-active:border-transparent dark:group-data-[variant=line]/tabs-list:data-active:bg-transparent",
+                "data-active:bg-card data-active:text-foreground data-active:shadow-2xs dark:data-active:border-input dark:data-active:bg-input/30 dark:data-active:text-foreground",
+                "group-data-[variant=solid]/tabs-list:rounded-sm group-data-[variant=solid]/tabs-list:data-active:bg-sidebar-accent group-data-[variant=solid]/tabs-list:data-active:font-medium group-data-[variant=solid]/tabs-list:data-active:text-sidebar-accent-foreground group-data-[variant=solid]/tabs-list:data-active:shadow-none",
+                "after:absolute after:bg-primary after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:bottom-[-5px] group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:after:bottom-0 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
                 className,
             )}
             {...props}

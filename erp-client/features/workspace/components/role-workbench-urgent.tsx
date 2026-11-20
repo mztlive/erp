@@ -1,7 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowUpRightIcon, CircleAlertIcon } from "lucide-react"
+import {
+    ArrowUpRightIcon,
+    CircleAlertIcon,
+    CircleCheckIcon,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -20,24 +24,42 @@ export function RoleWorkbenchUrgent({
 }) {
     return (
         <aside
-            className="min-w-0 rounded-xl border border-border/70 bg-card"
+            className="min-w-0 rounded-lg border border-border/90 bg-card shadow-2xs"
             aria-labelledby="role-workbench-urgent-title"
         >
-            <div className="flex items-center justify-between gap-2 px-4 pt-3">
-                <div>
-                    <h2
-                        id="role-workbench-urgent-title"
-                        className="flex items-center gap-2 text-sm font-semibold"
+            <div className="flex items-center justify-between gap-2 border-b border-grid/70 px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                    <span
+                        className={cn(
+                            "flex size-7 shrink-0 items-center justify-center rounded-md",
+                            urgent.items.length > 0
+                                ? "bg-destructive-soft text-destructive-soft-foreground"
+                                : "bg-success-soft text-success-soft-foreground",
+                        )}
+                        aria-hidden="true"
                     >
-                        <CircleAlertIcon
-                            className="size-4 text-muted-foreground"
-                            aria-hidden="true"
-                        />
-                        需优先处理
-                    </h2>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        本人待办 · 含审批 · 最多 5 项
-                    </p>
+                        {urgent.items.length > 0 ? (
+                            <CircleAlertIcon className="size-3.5" />
+                        ) : (
+                            <CircleCheckIcon className="size-3.5" />
+                        )}
+                    </span>
+                    <div>
+                        <h2
+                            id="role-workbench-urgent-title"
+                            className="flex items-center gap-2 text-sm font-semibold text-foreground"
+                        >
+                            需优先处理
+                            {urgent.items.length > 0 ? (
+                                <span className="num rounded-full bg-destructive-soft px-1.5 text-2xs font-semibold leading-4.5 text-destructive-soft-foreground">
+                                    {urgent.items.length}
+                                </span>
+                            ) : null}
+                        </h2>
+                        <p className="text-xs text-muted-foreground">
+                            本人待办 · 含审批 · 最多 5 项
+                        </p>
+                    </div>
                 </div>
                 <WorkbenchDataInfo
                     id="role-workbench-urgent-info"
@@ -103,20 +125,34 @@ export function RoleWorkbenchUrgent({
             {!urgent.isPending &&
                 !urgent.isError &&
                 urgent.items.length === 0 && (
-                    <p className="px-4 py-4 text-sm text-muted-foreground">
-                        当前无紧急待办
-                    </p>
+                    <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+                        <span
+                            className="flex size-9 items-center justify-center rounded-full bg-success-soft text-success-soft-foreground"
+                            aria-hidden="true"
+                        >
+                            <CircleCheckIcon className="size-4.5" />
+                        </span>
+                        <p className="text-sm font-medium text-foreground">
+                            当前无紧急待办
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                            超期或高优先级事项将自动置顶显示
+                        </p>
+                    </div>
                 )}
             {urgent.items.length > 0 && (
-                <ul className="divide-y divide-grid px-4">
+                <ul className="divide-y divide-grid">
                     {urgent.items.map(({ item, reason, rank }) => {
                         const task = mapWorkspaceWorkItem(item, "Asia/Shanghai")
                         return (
-                            <li key={item.id} className="py-3">
+                            <li
+                                key={item.id}
+                                className="px-4 py-3 transition-colors hover:bg-row-hover"
+                            >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <span
                                         className={cn(
-                                            "rounded-md px-2 py-0.5 text-xs font-medium",
+                                            "rounded-sm px-1.5 py-0.5 text-tiny font-medium",
                                             rank === 0 || rank === 2
                                                 ? "bg-destructive-soft text-destructive-soft-foreground"
                                                 : rank === 1
@@ -130,11 +166,11 @@ export function RoleWorkbenchUrgent({
                                         {task.workItemTypeLabel}
                                     </span>
                                 </div>
-                                <p className="mt-2 break-words text-sm font-medium">
+                                <p className="mt-1.5 break-words text-body-compact font-medium text-foreground">
                                     {task.counterpartyName || task.objectTitle}
                                 </p>
                                 {task.counterpartyName && (
-                                    <p className="mt-1 break-words text-xs text-muted-foreground">
+                                    <p className="mt-0.5 break-words text-xs text-muted-foreground">
                                         {task.objectTitle}
                                     </p>
                                 )}
@@ -148,6 +184,7 @@ export function RoleWorkbenchUrgent({
                                         id={`role-process-${toAutomationIdSegment(item.id)}`}
                                         variant="ghost"
                                         size="xs"
+                                        className="text-primary hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                                         render={
                                             <Link
                                                 href={buildWorkspaceDetailHref(
@@ -167,11 +204,11 @@ export function RoleWorkbenchUrgent({
                     })}
                 </ul>
             )}
-            <div className="border-t border-grid px-4 py-3">
+            <div className="border-t border-grid px-4 py-2.5">
                 <Link
                     id="role-workbench-urgent-all"
                     href="/workspace/tasks"
-                    className="inline-flex items-center gap-1 rounded-md text-xs text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                    className="inline-flex items-center gap-1 rounded-md text-xs font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
                 >
                     查看全部待办
                     <ArrowUpRightIcon className="size-3.5" aria-hidden="true" />

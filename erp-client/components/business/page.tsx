@@ -247,7 +247,7 @@ function MetricStrip({
                 "grid gap-x-6 gap-y-4",
                 metricColumnClasses[columns],
                 variant === "summary" && [
-                    "gap-x-4 gap-y-4 rounded-xl bg-muted/35 px-4 py-3 lg:gap-x-6",
+                    "gap-x-4 gap-y-4 rounded-lg border border-border/80 bg-card px-4 py-3 shadow-2xs lg:gap-x-6",
                     columns === 1 ? "grid-cols-1" : "grid-cols-2",
                 ],
                 className,
@@ -347,10 +347,10 @@ function PageScaffold({
             data-slot="page-scaffold"
             data-density={density}
             className={cn(
-                "mx-auto flex w-full max-w-none flex-1 flex-col bg-card",
+                "mx-auto flex w-full max-w-none flex-1 flex-col bg-background",
                 "px-page-inline py-page-block md:px-page-inline-lg md:py-page-block-lg",
                 density === "compact" ? "gap-page-gap-compact" : "gap-page-gap",
-                "[&>[data-slot=page-header]]:pb-2",
+                "[&>[data-slot=page-header]]:pb-1",
                 "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:text-sm",
                 "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:font-normal",
                 "[&:has(>[data-slot=document-header])>[data-slot=page-header]_h1]:text-muted-foreground",
@@ -361,8 +361,9 @@ function PageScaffold({
     )
 }
 
-/** 主工作面：白底平面，分区组件负责绘制边界。 */
-const surfacePanelClassName = "erp-raised-surface min-w-0 bg-card"
+/** 主工作面：飞书经典白底浮起卡片（浅灰画布 + 1px 精致边线 + 极轻投影）。 */
+const surfacePanelClassName =
+    "erp-raised-surface min-w-0 rounded-lg border border-border/90 bg-card shadow-2xs"
 
 /** 嵌入已有表面时去掉卡片壳，只保留分区线。 */
 const surfaceFlatClassName =
@@ -377,7 +378,7 @@ const workspaceTaskSurfacePadClassName = "px-5"
 
 /** 工作台内嵌页面脚手架：贴齐作业面，不再套一层页边距和卡片间隙。 */
 const workspaceEmbeddedScaffoldClassName = cn(
-    "h-full min-h-0 max-w-none gap-0 p-0 md:p-0",
+    "erp-embedded-scaffold h-full min-h-0 max-w-none gap-0 p-0 md:p-0",
     "[&>[data-slot=page-header]]:static",
     "[&>[data-slot=page-header]]:mx-0",
     "[&>[data-slot=page-header]]:mt-0",

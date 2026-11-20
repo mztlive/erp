@@ -79,7 +79,7 @@ function ObjectSectionTabs({
                 if (next) onValueChange(next)
             }}
             className={cn(
-                "gap-0",
+                "gap-0 rounded-lg border border-border/90 bg-card shadow-2xs",
                 panelScroll && "min-h-0 flex-1 overflow-hidden",
                 className,
             )}
@@ -89,7 +89,7 @@ function ObjectSectionTabs({
                 variant="line"
                 aria-label={listLabel}
                 className={cn(
-                    "sticky top-0 z-10 h-auto w-full justify-start gap-5 overflow-x-auto rounded-none border-b border-border bg-card px-0 py-0",
+                    "sticky top-0 z-10 h-auto w-full justify-start gap-5 overflow-x-auto rounded-t-lg border-b border-border/80 bg-card px-5 py-0",
 
                     "group-data-horizontal/tabs:h-auto",
                     panelScroll && "shrink-0",
@@ -106,7 +106,7 @@ function ObjectSectionTabs({
                         }
                         value={item.id}
                         title={item.title}
-                        className="h-12 flex-none gap-2 rounded-none px-0 text-[13px] after:inset-x-0 after:bottom-0 after:h-0.5 data-active:font-semibold"
+                        className="h-object-tab flex-none gap-2 rounded-none px-0 text-body-compact after:inset-x-0 after:bottom-0 after:h-0.5 data-active:font-semibold"
                     >
                         {item.label}
                         {item.badge != null ? item.badge : null}
@@ -125,7 +125,7 @@ function ObjectSectionTabs({
                     role={panelScroll ? "region" : undefined}
                     aria-label={panelScroll ? `${listLabel}内容区` : undefined}
                     className={cn(
-                        "grid min-w-0 items-start gap-6 py-6 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px]",
+                        "grid min-w-0 items-start gap-6 p-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px]",
                         panelScroll &&
                             "min-h-0 flex-1 overflow-y-auto overscroll-contain xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden",
                     )}
@@ -143,7 +143,7 @@ function ObjectSectionTabs({
                             panelScroll ? `${listLabel}明细` : undefined
                         }
                         className={cn(
-                            "min-w-0 [&>[data-slot=object-section-tabs-panel]]:py-0",
+                            "min-w-0 [&>[data-slot=object-section-tabs-panel]]:p-0",
                             panelScroll &&
                                 "xl:h-full xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain",
                         )}
@@ -172,14 +172,16 @@ function ObjectSectionTabs({
                     tabIndex={0}
                     role="region"
                     aria-label={`${listLabel}明细`}
-                    className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
+                    className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-5 [&>[data-slot=object-section-tabs-panel]]:p-0"
                 >
                     {beforeContent}
                     {children}
                 </div>
             ) : (
                 <>
-                    {beforeContent}
+                    {beforeContent ? (
+                        <div className="px-5 pt-5">{beforeContent}</div>
+                    ) : null}
                     {children}
                 </>
             )}
@@ -188,7 +190,7 @@ function ObjectSectionTabs({
 }
 
 const objectSectionPanelClassName = cn(
-    "min-w-0 space-y-6 px-0 py-6",
+    "min-w-0 space-y-5 px-5 py-5",
     "[&_[data-slot=card]]:rounded-none [&_[data-slot=card]]:border-0 [&_[data-slot=card]]:bg-card [&_[data-slot=card]]:shadow-none",
     "[&_[data-slot=card-header]]:px-0 [&_[data-slot=card-content]]:px-0 [&_[data-slot=card-footer]]:px-0",
 )

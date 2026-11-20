@@ -26,6 +26,7 @@ import { BackgroundJobItemResults } from "./background-job-item-results"
 import { DataTransferTaskResult } from "./data-transfer-task-result"
 import { DirectImportResult } from "./direct-import-result"
 import { DomainJobResult } from "./domain-job-result"
+import { ProductImportResult } from "./product-import-result"
 import { canCancelJob } from "../labels"
 
 type BackgroundJobPreviewSheetProps = {
@@ -94,12 +95,14 @@ export function BackgroundJobPreviewSheet({
                             }
                             label={JOB_STATUS_LABELS[previewJob.status]}
                         />
-                        <span className="text-xs text-muted-foreground">
-                            {backgroundJobDomainLabel(
-                                previewJob.domain_job_type,
-                                previewJob.job_type,
-                            )}
-                        </span>
+                        {previewJob.domain_job_type !== "PRODUCT_IMPORT" && (
+                            <span className="text-xs text-muted-foreground">
+                                {backgroundJobDomainLabel(
+                                    previewJob.domain_job_type,
+                                    previewJob.job_type,
+                                )}
+                            </span>
+                        )}
                     </div>
                 ) : null
             }
@@ -166,8 +169,14 @@ export function BackgroundJobPreviewSheet({
                                 此任务由其他用户发起。导入预览、批量处理结果与继续办理仅供发起人使用。
                             </p>
                         )
-                    ) : previewJob.domain_job_type === "PRODUCT_IMPORT" ||
-                      previewJob.domain_job_type === "SUPPLIER_IMPORT" ||
+                    ) : previewJob.domain_job_type === "PRODUCT_IMPORT" ? (
+                        <ProductImportResult
+                            key={previewJob.id}
+                            job={previewJob}
+                            canReadItems={canReadItems}
+                            currentUserId={currentUserId}
+                        />
+                    ) : previewJob.domain_job_type === "SUPPLIER_IMPORT" ||
                       previewJob.domain_job_type === "BRAND_IMPORT" ? (
                         <DirectImportResult
                             job={previewJob}
@@ -176,11 +185,12 @@ export function BackgroundJobPreviewSheet({
                     ) : (
                         <DomainJobResult job={previewJob} />
                     )}
-                    {previewJob.error_summary && (
-                        <p role="alert" className="text-destructive">
-                            {previewJob.error_summary}
-                        </p>
-                    )}
+                    {previewJob.error_summary &&
+                        previewJob.domain_job_type !== "PRODUCT_IMPORT" && (
+                            <p role="alert" className="text-destructive">
+                                {previewJob.error_summary}
+                            </p>
+                        )}
                     {canCancel &&
                         previewJob.domain_job_type === "DATA_TRANSFER" &&
                         previewJob.job_type === "import" &&
@@ -230,10 +240,10 @@ export function BackgroundJobPreviewSheet({
                         </DescriptionList>
                     </section>
                     {canReadItems &&
-                        previewJob.domain_job_type !== "DATA_TRANSFER" && (
+                        previewJob.domain_job_type !== "DATA_TRANSFER" &&
+                        previewJob.domain_job_type !== "PRODUCT_IMPORT" && (
                             <BackgroundJobItemResults
                                 previewJob={previewJob}
-                                currentUserId={currentUserId}
                                 itemsPage={itemsPage}
                                 onPageChange={onItemsPageChange}
                                 itemsQuery={itemsQuery}

@@ -29,7 +29,7 @@ function RadioGroupItem({
                 data-slot="radio-group-item"
                 className={cn(
                     buttonVariants({ variant: "outline" }),
-                    "relative rounded-none px-8 first-of-type:rounded-l-lg last-of-type:rounded-r-lg not-first-of-type:border-l-0 data-checked:bg-muted focus-visible:z-10",
+                    "relative rounded-none px-8 first-of-type:rounded-l-md last-of-type:rounded-r-md not-first-of-type:border-l-0 data-checked:z-10 data-checked:border-primary/45 data-checked:bg-sidebar-accent data-checked:text-sidebar-accent-foreground focus-visible:z-10",
                     className,
                 )}
                 {...props}
@@ -45,7 +45,7 @@ function RadioGroupItem({
         <RadioPrimitive.Root
             data-slot="radio-group-item"
             className={cn(
-                "group/radio-group-item peer relative flex aspect-square size-4 shrink-0 rounded-2xl border border-transparent bg-input/90 outline-none after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:bg-primary data-checked:text-primary-foreground dark:data-checked:bg-primary",
+                "group/radio-group-item peer relative flex aspect-square size-4 shrink-0 rounded-full border border-input bg-surface-control transition-colors duration-150 outline-none hover:border-primary after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground dark:data-checked:bg-primary",
                 className,
             )}
             {...props}

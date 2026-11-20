@@ -23,10 +23,9 @@ export function DirectImportResult({
     currentUserId,
 }: DirectImportResultProps) {
     const account = useAccountProfileQuery()
-    const supplier = job.domain_job_type === "SUPPLIER_IMPORT"
     const brand = job.domain_job_type === "BRAND_IMPORT"
     const client = useQueryClient()
-    const resource = brand ? "product_brand" : supplier ? "supplier" : "product"
+    const resource = brand ? "product_brand" : "supplier"
     const permissions = account.data?.permissions
     const canList = hasPermission(permissions, `${resource}:list`)
     const canImport = hasPermission(permissions, `${resource}:create`)
@@ -71,9 +70,7 @@ export function DirectImportResult({
                 <p>
                     {brand
                         ? "成功行已建立品牌。已有品牌核对后跳过，原状态和 Logo 保持不变。"
-                        : supplier
-                          ? "成功行已登记供应商资料。重复供应商按逐行说明跳过，已有资料不会重复创建。"
-                          : "商品新建、规格追加、图片补齐及供给处理的具体结果见逐行说明，成功行已经保存。"}
+                        : "成功行已登记供应商资料。重复供应商按逐行说明跳过，已有资料不会重复创建。"}
                 </p>
                 {job.failed_count > 0 && (
                     <p>
@@ -91,13 +88,11 @@ export function DirectImportResult({
                     <p>
                         {brand
                             ? "下载待处理行，修正后到品牌列表重新导入。仅原提交人且仍有品牌创建权限时可下载。"
-                            : supplier
-                              ? "下载待处理行，核对结果后修正文件，再到供应商列表导入。下载文件仅限原提交人，并重新检查当前权限。"
-                              : "请按逐行结果中的 Excel 行号核对原文件，只保留需要处理的行，修正后到商品列表重新导入。"}
+                            : "下载待处理行，核对结果后修正文件，再到供应商列表导入。下载文件仅限原提交人，并重新检查当前权限。"}
                     </p>
                 )}
             </div>
-            {supplier &&
+            {!brand &&
                 finished &&
                 needsAttention &&
                 job.requested_by === currentUserId &&
@@ -122,18 +117,12 @@ export function DirectImportResult({
                             href={
                                 brand
                                     ? "/master-data/brands"
-                                    : supplier
-                                      ? "/master-data/suppliers"
-                                      : "/master-data/products"
+                                    : "/master-data/suppliers"
                             }
                         />
                     }
                 >
-                    {brand
-                        ? "前往品牌列表"
-                        : supplier
-                          ? "前往供应商列表"
-                          : "前往商品列表"}
+                    {brand ? "前往品牌列表" : "前往供应商列表"}
                     <ArrowUpRightIcon data-icon="inline-end" aria-hidden />
                 </Button>
             )}

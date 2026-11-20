@@ -338,6 +338,13 @@ fn product_import_job_routes() -> Router<HttpState> {
                 &permissions::catalog::PRODUCT_PRODUCT_LIST,
             ),
         )
+        .route(
+            "/products/import-jobs/{id}/result-rows",
+            permission_route(
+                get(catalog::import::product_import_result_rows),
+                &permissions::catalog::PRODUCT_PRODUCT_CREATE,
+            ),
+        )
 }
 
 // 为父路由挂载商品详情与更新管理路由。

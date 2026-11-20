@@ -181,8 +181,8 @@ export function productActionsColumn({
 }): ColumnDef<MasterDataListItem> {
     return {
         id: "actions",
-        size: 168,
-        minSize: 168,
+        size: 124,
+        minSize: 116,
         header: masterDataCopy.colActions,
         meta: { label: masterDataCopy.colActions, align: "end" },
         cell: ({ row }) => {

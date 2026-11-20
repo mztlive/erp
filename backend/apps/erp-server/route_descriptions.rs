@@ -84,6 +84,7 @@ pub(crate) const DESCRIPTIONS: &[(&str, &str, &str)] = &[
     ("GET", "/products/import-jobs", "查询商品导入任务"),
     ("GET", "/products/import-jobs/{id}", "查询商品导入任务详情"),
     ("GET", "/products/import-jobs/{id}/items", "查询商品导入逐项结果"),
+    ("GET", "/products/import-jobs/{id}/result-rows", "下载商品导入分类结果"),
     ("POST", "/products/{id}/handover", "交接商品维护人"),
     ("GET", "/products/{id}/handover-candidates", "查询商品交接候选"),
     ("GET", "/products/{id}/revisions", "查询商品修订详情"),

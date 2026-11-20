@@ -162,6 +162,7 @@ export function OptionCombobox({
             <div
                 data-slot="option-combobox"
                 data-size={size}
+                data-has-value={selected ? "true" : undefined}
                 className={cn("min-w-0", className)}
             >
                 <ComboboxInput
@@ -186,7 +187,10 @@ export function OptionCombobox({
                     )}
                 >
                     {filterLabel && (
-                        <InputGroupAddon className="shrink-0 whitespace-nowrap font-normal">
+                        <InputGroupAddon
+                            data-filter-label=""
+                            className="shrink-0 whitespace-nowrap pr-0 font-normal text-muted-foreground/80"
+                        >
                             {filterLabel}：
                         </InputGroupAddon>
                     )}

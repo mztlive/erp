@@ -2,12 +2,18 @@
 
 import * as React from "react"
 import { createPortal } from "react-dom"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import { FilterChip } from "@/components/business/filter-chip"
-import { ListFilterPopover } from "@/components/business/list-filter-popover"
+import {
+    ListFilterTray,
+    ListFilterTrigger,
+} from "@/components/business/list-filter-popover"
 import { ListToolbar } from "@/components/business/list"
-import { useTableFilterStatusHost } from "@/components/business/table-toolbar"
+import {
+    useTableFilterStatusHost,
+    useTableFilterTrayHost,
+    useTableInlineFilterStatusHost,
+} from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -15,7 +21,7 @@ import { cn } from "@/lib/utils"
 import { listFilterText } from "@/lib/ui-text"
 
 const listWorkspaceFilterBarClassName =
-    "gap-4 [&_[data-slot=list-toolbar-filters]]:self-start [&_[data-slot=list-toolbar-secondary]]:w-full [&_[data-slot=list-toolbar-secondary]]:flex-col [&_[data-slot=list-toolbar-secondary]]:items-stretch [&_[data-slot=list-toolbar-secondary]]:gap-0 max-sm:[&_[data-slot=list-toolbar-primary]]:sticky max-sm:[&_[data-slot=list-toolbar-primary]]:top-0 max-sm:[&_[data-slot=list-toolbar-primary]]:z-10 max-sm:[&_[data-slot=list-toolbar-primary]]:bg-card max-sm:[&_[data-slot=list-toolbar-primary]]:pb-2 [&_[data-slot=list-toolbar-query-tools]]:sm:flex-wrap [&_[data-slot=list-toolbar-search]]:lg:w-96"
+    "gap-3 [&_[data-slot=list-toolbar-filters]]:self-start [&_[data-slot=list-toolbar-secondary]]:w-full [&_[data-slot=list-toolbar-secondary]]:flex-col [&_[data-slot=list-toolbar-secondary]]:items-stretch [&_[data-slot=list-toolbar-secondary]]:gap-0 max-sm:[&_[data-slot=list-toolbar-primary]]:sticky max-sm:[&_[data-slot=list-toolbar-primary]]:top-0 max-sm:[&_[data-slot=list-toolbar-primary]]:z-10 max-sm:[&_[data-slot=list-toolbar-primary]]:bg-card max-sm:[&_[data-slot=list-toolbar-primary]]:pb-2 [&_[data-slot=list-toolbar-query-tools]]:sm:flex-wrap [&_[data-slot=list-toolbar-search]]:sm:w-64 [&_[data-slot=list-toolbar-search]]:lg:w-72 [&_[data-slot=list-toolbar-search]]:xl:w-80"
 
 export type ListWorkspaceFilterChip = {
     key: string
@@ -36,18 +42,29 @@ export function ListWorkspaceFilterField({
     className?: string
 }) {
     return (
-        <div className={cn("min-w-0 space-y-1.5", className)}>
+        <div
+            data-slot="list-filter-field"
+            className={cn("min-w-0 space-y-1.5", className)}
+        >
             {htmlFor ? (
                 <label
+                    data-slot="list-filter-field-label"
                     htmlFor={htmlFor}
-                    className="text-xs text-muted-foreground"
+                    className="block text-xs text-muted-foreground"
                 >
                     {label}
                 </label>
             ) : (
-                <div className="text-xs text-muted-foreground">{label}</div>
+                <div
+                    data-slot="list-filter-field-label"
+                    className="text-xs text-muted-foreground"
+                >
+                    {label}
+                </div>
             )}
-            {children}
+            <div data-slot="list-filter-field-control" className="min-w-0">
+                {children}
+            </div>
         </div>
     )
 }
@@ -113,7 +130,7 @@ export function ListWorkspaceFilterBar({
     morePanel,
     morePanelAriaLabel = "更多筛选条件",
     morePresentation = "inline",
-    moreSize = "wide",
+    moreSize: _moreSize = "wide",
     commonFilters,
     primaryFilters,
     resultStatus,
@@ -126,7 +143,7 @@ export function ListWorkspaceFilterBar({
     statusActions,
     extraPrimary,
     onResetMore,
-    moreHint = "可组合多个条件，点击「查询」后统一生效。",
+    moreHint = "可组合多个条件，点击「应用筛选」后统一生效。",
     actions,
     className,
     queryButtonId,
@@ -173,9 +190,18 @@ export function ListWorkspaceFilterBar({
     const panelId = morePanelId ?? `${idPrefix}-more-panel`
     const showMore = morePanel != null && onToggleMore != null
     const statusHost = useTableFilterStatusHost()
+    const inlineStatusHost = useTableInlineFilterStatusHost()
+    const filterTrayHost = useTableFilterTrayHost()
+    const hasInlineChips = morePresentation !== "popover" && chips.length > 0
+    const compactInlineStatus = Boolean(
+        inlineStatusHost &&
+        resultStatus != null &&
+        !hasInlineChips &&
+        !statusActions,
+    )
     const appliedChips = chips.length ? (
         <>
-            <span className="shrink-0 text-muted-foreground">
+            <span className="shrink-0 text-muted-foreground/80">
                 {morePresentation === "popover"
                     ? listFilterText.selected
                     : "已生效"}
@@ -198,11 +224,7 @@ export function ListWorkspaceFilterBar({
                     type="button"
                     variant="ghost"
                     size="xs"
-                    className={
-                        morePresentation === "popover"
-                            ? "font-normal text-muted-foreground hover:text-foreground"
-                            : undefined
-                    }
+                    className="h-6 px-1.5 text-xs font-normal text-muted-foreground hover:bg-transparent hover:text-primary"
                     onClick={onClearAll}
                 >
                     {morePresentation === "popover"
@@ -244,8 +266,8 @@ export function ListWorkspaceFilterBar({
                                 role="status"
                                 className={
                                     hasPendingChanges
-                                        ? "font-medium text-warning-soft-foreground"
-                                        : "text-muted-foreground"
+                                        ? "rounded-sm bg-warning-soft px-1.5 py-0.5 font-medium text-warning-soft-foreground"
+                                        : "hidden text-muted-foreground/75 xl:inline"
                                 }
                             >
                                 {hasPendingChanges ? pendingHint : idleHint}
@@ -279,57 +301,24 @@ export function ListWorkspaceFilterBar({
                         <LoadingButton
                             id={queryButtonId ?? `${idPrefix}-query`}
                             type="submit"
+                            variant={hasPendingChanges ? "default" : "ghost"}
+                            className={
+                                hasPendingChanges
+                                    ? "px-3.5"
+                                    : "bg-sidebar-accent/55 px-3 text-primary hover:bg-sidebar-accent hover:text-primary"
+                            }
                         >
-                            <SearchIcon aria-hidden="true" />
                             查询
                         </LoadingButton>
                         {extraPrimary}
-                        {showMore && morePresentation === "popover" ? (
-                            <ListFilterPopover
-                                idPrefix={idPrefix}
+                        {showMore ? (
+                            <ListFilterTrigger
                                 triggerId={moreButtonId ?? `${idPrefix}-more`}
-                                queryId={queryButtonId ?? `${idPrefix}-query`}
                                 panelId={panelId}
-                                label={morePanelAriaLabel}
                                 open={moreOpen}
-                                onOpenChange={(open) => {
-                                    if (open !== moreOpen) onToggleMore?.()
-                                }}
                                 count={moreCount}
-                                size={moreSize}
-                                onApply={onSubmit}
-                                onReset={onResetMore}
-                                resetId={resetMoreButtonId}
-                            >
-                                {morePanel}
-                            </ListFilterPopover>
-                        ) : showMore ? (
-                            <Button
-                                id={moreButtonId ?? `${idPrefix}-more`}
-                                type="button"
-                                variant="ghost"
-                                aria-expanded={moreOpen}
-                                aria-controls={panelId}
-                                onClick={onToggleMore}
-                            >
-                                <FilterIcon aria-hidden="true" />
-                                更多筛选
-                                {moreCount > 0 ? (
-                                    <span
-                                        className="rounded bg-muted px-1.5 text-xs tabular-nums"
-                                        aria-label={`${moreCount} 项已生效`}
-                                    >
-                                        {moreCount}
-                                    </span>
-                                ) : null}
-                                <ChevronDownIcon
-                                    aria-hidden="true"
-                                    className={cn(
-                                        "transition-transform",
-                                        moreOpen && "rotate-180",
-                                    )}
-                                />
-                            </Button>
+                                onToggle={onToggleMore}
+                            />
                         ) : null}
                     </>
                 }
@@ -337,14 +326,14 @@ export function ListWorkspaceFilterBar({
                 secondary={
                     commonFilters ||
                     (morePresentation === "popover" && chips.length > 0) ||
-                    (showMore && moreOpen && morePresentation === "inline") ||
+                    (showMore && !filterTrayHost) ||
                     !statusHost ? (
                         <div
                             className={cn(
                                 "w-full min-w-0",
                                 density === "compact"
                                     ? "space-y-2"
-                                    : "space-y-4",
+                                    : "space-y-3",
                             )}
                         >
                             {commonFilters ? (
@@ -355,47 +344,86 @@ export function ListWorkspaceFilterBar({
                             {morePresentation === "popover" && appliedChips ? (
                                 <div
                                     data-slot="list-filter-applied"
-                                    className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 border-b border-border/60 pb-4 text-xs"
+                                    className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 pt-0.5 text-xs"
                                 >
                                     {appliedChips}
                                 </div>
                             ) : null}
-                            {showMore &&
-                            moreOpen &&
-                            morePresentation === "inline" ? (
-                                <section
-                                    id={panelId}
-                                    aria-label={morePanelAriaLabel}
-                                    className="rounded-xl border border-border/70 bg-muted/25 p-4"
+                            {showMore && !filterTrayHost ? (
+                                <ListFilterTray
+                                    idPrefix={idPrefix}
+                                    panelId={panelId}
+                                    label={morePanelAriaLabel}
+                                    open={moreOpen}
+                                    onOpenChange={(nextOpen) => {
+                                        if (nextOpen !== moreOpen)
+                                            onToggleMore?.()
+                                    }}
+                                    count={moreCount}
+                                    onApply={onSubmit}
+                                    onReset={onResetMore}
+                                    resetId={resetMoreButtonId}
+                                    hint={moreHint}
+                                    inPortal={false}
                                 >
                                     {morePanel}
-                                    {onResetMore ? (
-                                        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
-                                            <span className="text-xs text-muted-foreground">
-                                                {moreHint}
-                                            </span>
-                                            <Button
-                                                id={
-                                                    resetMoreButtonId ??
-                                                    `${idPrefix}-reset-more`
-                                                }
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={onResetMore}
-                                            >
-                                                重置更多条件
-                                            </Button>
-                                        </div>
-                                    ) : null}
-                                </section>
+                                </ListFilterTray>
                             ) : null}
                             {!statusHost ? statusRow : null}
                         </div>
                     ) : undefined
                 }
             />
-            {statusHost ? createPortal(statusRow, statusHost) : null}
+            {showMore && filterTrayHost
+                ? createPortal(
+                      <ListFilterTray
+                          idPrefix={idPrefix}
+                          panelId={panelId}
+                          label={morePanelAriaLabel}
+                          open={moreOpen}
+                          onOpenChange={(nextOpen) => {
+                              if (nextOpen !== moreOpen) onToggleMore?.()
+                          }}
+                          count={moreCount}
+                          onApply={onSubmit}
+                          onReset={onResetMore}
+                          resetId={resetMoreButtonId}
+                          hint={moreHint}
+                          inPortal
+                      >
+                          {morePanel}
+                      </ListFilterTray>,
+                      filterTrayHost,
+                  )
+                : null}
+            {compactInlineStatus && inlineStatusHost
+                ? createPortal(
+                      <div className="flex items-center gap-2">
+                          {hasPendingChanges ? (
+                              <span
+                                  role="status"
+                                  title={pendingHint}
+                                  className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-tiny leading-4 font-medium whitespace-nowrap text-warning-soft-foreground"
+                              >
+                                  <span
+                                      aria-hidden="true"
+                                      className="size-1.5 rounded-full bg-warning"
+                                  />
+                                  待查询
+                              </span>
+                          ) : null}
+                          <span
+                              role="status"
+                              className="num shrink-0 whitespace-nowrap text-xs text-muted-foreground"
+                          >
+                              {resultStatus}
+                          </span>
+                      </div>,
+                      inlineStatusHost,
+                  )
+                : statusHost
+                  ? createPortal(statusRow, statusHost)
+                  : null}
         </form>
     )
 }

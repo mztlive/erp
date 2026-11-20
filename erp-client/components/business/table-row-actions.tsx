@@ -17,8 +17,11 @@ import {
 import { cn } from "@/lib/utils"
 import { tableActionText } from "@/lib/ui-text"
 
-const actionButtonClassName =
-    "gap-1.5 rounded-md px-2 text-[13px] leading-5 text-foreground/85 hover:text-foreground [&_svg]:size-3.5 [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground focus-visible:[&_svg]:text-foreground"
+const inlineActionButtonClassName =
+    "h-7 gap-1 rounded-md px-2 text-body-compact font-normal text-primary hover:bg-sidebar-accent/70 hover:text-primary active:bg-sidebar-accent"
+
+const moreActionButtonClassName =
+    "text-muted-foreground/80 hover:bg-muted/80 hover:text-foreground aria-expanded:bg-sidebar-accent/70 aria-expanded:text-sidebar-accent-foreground [&_svg]:size-3.5"
 
 /** 列表操作列的一个动作。页面声明权限、文案和回调，不自己拼按钮尺寸和菜单。 */
 export type TableRowAction = {
@@ -47,7 +50,13 @@ export type TableRowAction = {
     leading?: React.ReactNode
 }
 
-function ActionLabel({ action }: { action: TableRowAction }) {
+function ActionLabel({
+    action,
+    showIcon = true,
+}: {
+    action: TableRowAction
+    showIcon?: boolean
+}) {
     const Icon = action.icon
     return (
         <>
@@ -55,7 +64,7 @@ function ActionLabel({ action }: { action: TableRowAction }) {
                 <span aria-hidden="true" className="inline-flex shrink-0">
                     {action.leading}
                 </span>
-            ) : Icon ? (
+            ) : showIcon && Icon ? (
                 <Icon aria-hidden="true" className="size-3.5" />
             ) : null}
             {action.label}
@@ -79,10 +88,11 @@ function ActionControl({
     variant: "ghost" | "outline"
 }) {
     const className = cn(
-        actionButtonClassName,
+        inlineActionButtonClassName,
+        variant === "outline" && "border-primary/35 hover:border-primary/60",
         action.destructive &&
             action.placement === "inline" &&
-            "text-destructive hover:bg-destructive/10 hover:text-destructive [&_svg]:text-destructive hover:[&_svg]:text-destructive focus-visible:[&_svg]:text-destructive",
+            "text-destructive hover:bg-destructive-soft hover:text-destructive",
     )
     const button =
         action.href && !action.disabled && !action.loading ? (
@@ -99,7 +109,7 @@ function ActionControl({
                     action.onClick?.(event)
                 }}
             >
-                <ActionLabel action={action} />
+                <ActionLabel action={action} showIcon={false} />
             </Button>
         ) : (
             <LoadingButton
@@ -117,7 +127,7 @@ function ActionControl({
                     action.onClick?.(event)
                 }}
             >
-                <ActionLabel action={action} />
+                <ActionLabel action={action} showIcon={false} />
             </LoadingButton>
         )
     if (!action.disabled || !action.disabledReason) return button
@@ -166,14 +176,14 @@ function MenuAction({ action }: { action: TableRowAction }) {
 }
 
 /**
- * 列表行操作：图标文字按钮，最多露出 2 个，其余进带文字的更多菜单。
+ * 列表行操作：飞书后台清爽蓝字操作链（最多露出 2 个）+ 纯图标「···」更多菜单。
  * 破坏性动作默认放到菜单底部；显式 placement="inline" 时直接露出。
  */
 export function TableRowActions({
     actions,
     moreId,
     moreLabel,
-    moreIconOnly = false,
+    moreIconOnly = true,
     maxInline = 2,
     className,
 }: {
@@ -181,7 +191,7 @@ export function TableRowActions({
     moreId: string
     /** 例如「销售员 更多操作」。 */
     moreLabel: string
-    /** 紧凑目录使用纯图标入口，菜单仍显示完整动作名称。 */
+    /** 默认纯图标「···」，保留完整 aria-label 与菜单动作名称；需要带字时可传 false。 */
     moreIconOnly?: boolean
     maxInline?: number
     className?: string
@@ -205,7 +215,7 @@ export function TableRowActions({
         <div
             data-slot="table-row-actions"
             className={cn(
-                "flex flex-nowrap items-center justify-end gap-2",
+                "flex flex-nowrap items-center justify-end gap-0.5",
                 className,
             )}
         >
@@ -223,10 +233,18 @@ export function TableRowActions({
                         render={
                             <Button
                                 type="button"
-                                size="sm"
+                                size={moreIconOnly ? "icon-sm" : "sm"}
                                 variant="ghost"
-                                className={actionButtonClassName}
+                                className={cn(
+                                    moreActionButtonClassName,
+                                    !moreIconOnly && "gap-1 px-2 font-normal",
+                                )}
                                 aria-label={moreLabel}
+                                title={
+                                    moreIconOnly
+                                        ? tableActionText.more
+                                        : undefined
+                                }
                                 onClick={(event) => event.stopPropagation()}
                             />
                         }

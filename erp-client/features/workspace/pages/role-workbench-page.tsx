@@ -27,7 +27,10 @@ import {
 } from "../components/role-workbench-header"
 import { RoleWorkbenchMetrics } from "../components/role-workbench-metrics"
 import { RoleWorkbenchBody } from "../components/role-workbench-body"
-import { WorkbenchDataInfo } from "../components/workbench-data-info"
+import {
+    WorkbenchDataInfo,
+    workbenchUpdatedAt,
+} from "../components/workbench-data-info"
 import { savePreference } from "./role-workbench-entry"
 
 export function RoleWorkbenchPage({ id }: { id: string }) {
@@ -200,7 +203,18 @@ function RoleWorkbenchContent({
                             </WorkbenchDataInfo>
                         </div>
                         <span className="text-xs text-muted-foreground">
-                            截至当前 · 全部期间
+                            截至当前 · 全部期间 ·{" "}
+                            {overview.queries.some(
+                                (query) => query.isFetching && !query.isPending,
+                            )
+                                ? "更新中…"
+                                : workbenchUpdatedAt(
+                                      overview.queries.map((query) =>
+                                          query.isError
+                                              ? undefined
+                                              : query.data?.asOf,
+                                      ),
+                                  )}
                         </span>
                     </div>
                 )}

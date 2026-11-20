@@ -65,7 +65,11 @@ export function BackgroundJobsWorkspace() {
     const authorizedPreviewId = canReadDetail ? previewId : null
     const detailQuery = useBackgroundJobDetailQuery(authorizedPreviewId)
     const itemsQuery = useBackgroundJobItemsQuery(
-        canReadItems ? authorizedPreviewId : null,
+        canReadItems &&
+            detailQuery.data &&
+            detailQuery.data.domain_job_type !== "PRODUCT_IMPORT"
+            ? authorizedPreviewId
+            : null,
         itemsPage,
         Boolean(
             detailQuery.data &&

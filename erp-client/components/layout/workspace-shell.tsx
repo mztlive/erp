@@ -8,23 +8,27 @@ import { WorkspaceSidebarNav } from "@/components/layout/workspace-sidebar-nav"
 import { WorkspaceTopNav } from "@/components/layout/workspace-top-nav"
 import { NavDeliveryOverlay } from "@/components/layout/nav-delivery-overlay"
 import { isWorkspaceFrame } from "@/lib/workspace-tabs"
+import { WorkspaceQuickSearch } from "./workspace-quick-search"
 import { WorkspaceFrame } from "./workspace-frame"
 import { WorkspaceTabs } from "./workspace-tabs"
 
 function WorkspaceSidebarHeader() {
     return (
-        <div className="flex items-center gap-2.5 px-2.5 py-1">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-xs">
-                <Building2Icon className="size-4.5" aria-hidden="true" />
-            </div>
-            <div className="min-w-0">
-                <div className="truncate text-sm font-bold tracking-tight text-foreground">
-                    福尚云 ERP
+        <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2.5 px-1 py-0.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+                <div className="flex size-7.5 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-2xs">
+                    <Building2Icon className="size-4" aria-hidden="true" />
                 </div>
-                <div className="truncate text-tiny font-medium text-muted-foreground">
-                    经营协同工作台
+                <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+                    <div className="truncate text-sm font-semibold tracking-tight text-foreground">
+                        福尚云 ERP
+                    </div>
+                    <div className="truncate text-2xs font-medium text-muted-foreground">
+                        经营协同工作台
+                    </div>
                 </div>
             </div>
+            <WorkspaceQuickSearch />
         </div>
     )
 }
@@ -42,8 +46,8 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
                 <ErpAppShell
                     className="h-svh overflow-hidden"
                     contentLabel="主工作区"
-                    sidebarCollapsible="none"
-                    showSidebarRail={false}
+                    sidebarCollapsible="icon"
+                    showSidebarRail={true}
                     sidebarHeader={<WorkspaceSidebarHeader />}
                     sidebarContent={<WorkspaceSidebarNav />}
                     topbar={<WorkspaceTopNav tabs={tabbar} />}

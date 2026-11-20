@@ -3,47 +3,20 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* 采购审批采用高辨识蓝操作态与暖橙核对提示，仅覆盖该工作面的语义色。 */
-.purchase-approval-surface {
-    --info: oklch(0.546 0.195 262);
-    --info-foreground: oklch(1 0 0);
-    --info-soft: oklch(0.97 0.013 255);
-    --info-soft-foreground: oklch(0.488 0.195 264);
-    --info-border: oklch(0.882 0.055 254);
-    --warning: oklch(0.553 0.155 38);
-    --warning-foreground: oklch(1 0 0);
-    --warning-soft: oklch(0.98 0.014 73);
-    --warning-soft-foreground: oklch(0.47 0.135 37);
-    --warning-border: oklch(0.901 0.068 70);
-}
-
-.dark .purchase-approval-surface {
-    --info: oklch(0.714 0.14 255);
-    --info-foreground: oklch(0.282 0.085 268);
-    --info-soft: oklch(0.282 0.085 268);
-    --info-soft-foreground: oklch(0.809 0.092 252);
-    --info-border: oklch(0.424 0.165 265);
-    --warning: oklch(0.745 0.13 52);
-    --warning-foreground: oklch(0.266 0.072 36);
-    --warning-soft: oklch(0.266 0.072 36);
-    --warning-soft-foreground: oklch(0.901 0.068 70);
-    --warning-border: oklch(0.47 0.135 37);
-}
-
 @custom-variant dark (&:is(.dark *));
 
 /* ==========================================================================
-   ERP 商务主题 — shadcn Neutral 表面 + 语义状态色
+   ERP 飞书风格主题 — Universe Design 清澈高效商务蓝 + 灰底白卡分层
    --------------------------------------------------------------------------
-   布局：侧栏消费 sidebar 系列令牌；浅色模式用近白侧栏、浅灰画布和白卡片/页头。
-   内容侧对齐 shadcn/ui Neutral，深色模式由对应主题令牌切换：
-     background 浅灰画布 · card / 页头 纯白 · primary 近黑 · accent 浅灰
-   侧栏选中与悬停统一消费 sidebar-accent / sidebar-accent-foreground。
-   单据状态色仍用独立色相（成功绿 / 警告金 / 信息蓝 / 危险红），不灰度化。
-
-   内容区层级靠发丝 border / grid、画布与卡片的明度差和字重，不靠大块灰底。
-
-   尺寸令牌来自 docs/erp-ui-design.md 第 2.1 / 2.2 节。
+   表面层次：
+     画布 background (#f4f6f7) · 卡片 / 浮层纯白 (#ffffff) · 极净近白侧栏 (#fcfcfd)
+   交互主色：
+     飞书蓝 primary (#1f6aee，满足 WCAG AA 4.8:1) · 侧栏/表格选中采用冰蓝底 (#e8f1fe)
+     搭配深蓝文字 (#1a57ce)，链接、焦点环、主按钮、选定状态语义清晰统一。
+   语义状态色：
+     成功绿 / 警告橙 / 信息蓝 / 危险红 全部位于 sRGB 安全域，清爽通透不发灰。
+   几何与密度：
+     控件圆角 6px / 标签与复选框 4px / 卡片与浮层 8~10px；紧凑高效桌面行高。
    ========================================================================== */
 
 @theme inline {
@@ -162,43 +135,43 @@
 
 /* 尺寸保留为运行时变量，供高度断点覆盖；不能放入 @theme inline 固化成字面值。 */
 @theme {
-    /* 应用壳尺寸 —— 对应 erp-ui-design 2.2 */
-    --spacing-topbar: 3rem; /* 顶部全局栏 48px */
-    --spacing-workspace-topbar: 3rem; /* 工作区顶部栏 48px */
+    /* 应用壳尺寸 —— 飞书高效率紧凑节奏 */
+    --spacing-topbar: 2.75rem; /* 顶部全局栏 44px */
+    --spacing-workspace-topbar: 2.75rem; /* 工作区顶部栏 44px */
     --spacing-control-xs: 1.5rem; /* 24px 极小控件 */
-    --spacing-control-sm: 2rem; /* 32px 紧凑控件 / 输入框内图标按钮 */
-    --spacing-control: 2.25rem; /* 36px 默认控件 / 输入框 */
-    --spacing-control-lg: 2.5rem; /* 40px 强调控件 */
-    --spacing-page-inline: 1.5rem; /* 24px 内容区内边距 */
-    --spacing-page-inline-lg: 2rem; /* 32px 桌面内容区内边距 */
-    --spacing-page-block: 1.25rem; /* 20px 内容区纵向边距 */
-    --spacing-page-block-lg: 1.5rem; /* 24px 桌面内容区纵向边距 */
-    --spacing-page-gap: 1.5rem;
-    --spacing-page-gap-compact: 1rem;
+    --spacing-control-sm: 1.75rem; /* 28px 紧凑控件 / 表格工具栏按钮 */
+    --spacing-control: 2rem; /* 32px 飞书标准桌面控件 / 输入框 */
+    --spacing-control-lg: 2.25rem; /* 36px 强调控件 */
+    --spacing-page-inline: 1.25rem; /* 20px 内容区内边距 */
+    --spacing-page-inline-lg: 1.5rem; /* 24px 桌面内容区内边距 */
+    --spacing-page-block: 0.875rem; /* 14px 内容区纵向边距 */
+    --spacing-page-block-lg: 1rem; /* 16px 桌面内容区纵向边距 */
+    --spacing-page-gap: 1rem; /* 16px 区块间距 */
+    --spacing-page-gap-compact: 0.75rem; /* 12px 紧凑区块间距 */
     --spacing-workspace-inline: 1rem; /* 列表工作面窄窗口边距 */
-    --spacing-workspace-block-start-lg: 1.25rem; /* 列表页签栏下方页头间距 20px */
-    --spacing-workspace-header-block-end: 1.875rem;
-    --spacing-workspace-toolbar-block: 1.125rem;
-    --spacing-workspace-view: 2.875rem;
-    --spacing-workspace-view-gap: 1.625rem;
+    --spacing-workspace-block-start-lg: 0.875rem; /* 列表工作面顶部边距 14px */
+    --spacing-workspace-header-block-end: 0.875rem; /* 14px 页头与主卡片间距 */
+    --spacing-workspace-toolbar-block: 0.625rem; /* 10px 筛选栏纵边距 */
+    --spacing-workspace-view: 2.25rem; /* 36px 融合式视图页签行高 */
+    --spacing-workspace-view-gap: 1.25rem; /* 20px 视图页签间距 */
     --spacing-toolbar-inset: 0.75rem; /* 12px 筛选条内边距 */
     --spacing-search-min: 16rem; /* 搜索框在工具栏中的最小宽度 */
     --spacing-row: 2.25rem; /* 标准列表行高 36px */
-    --spacing-row-comfortable: 4rem; /* 舒适密度 / 双行单元格 64px */
-    --spacing-table-header: 2.75rem; /* 列表表头 44px */
-    --spacing-table-header-block: 0.5rem; /* 表头纵向留白 8px */
-    --spacing-table-toolbar-block: 0.625rem;
-    --spacing-table-pagination-block: 1rem;
-    --spacing-object-tab: 2.75rem; /* 对象中心分区导航 44px */
-    --spacing-table-cell-inline: 1rem; /* 表格单元格横向留白 */
+    --spacing-row-comfortable: 3rem; /* 舒适密度 / 双行单元格 48px */
+    --spacing-table-header: 2.25rem; /* 列表表头 36px 飞书利落节奏 */
+    --spacing-table-header-block: 0.375rem; /* 表头纵向留白 6px */
+    --spacing-table-toolbar-block: 0.5rem; /* 8px 表格二级工具条纵边距 */
+    --spacing-table-pagination-block: 0.625rem; /* 10px 分页条纵边距 */
+    --spacing-object-tab: 2.5rem; /* 对象中心分区导航 40px */
+    --spacing-table-cell-inline: 0.875rem; /* 14px 表格单元格横向留白 */
     --spacing-table-cell-block: 0.25rem; /* 高密度单元格纵向留白 */
-    --spacing-table-cell-block-comfortable: 0.625rem; /* 多行单元格纵向留白 10px */
-    --spacing-table-frame-inset: 1.25rem; /* 内嵌表格与业务卡片边缘距离 */
+    --spacing-table-cell-block-comfortable: 0.5rem; /* 多行单元格纵向留白 8px */
+    --spacing-table-frame-inset: 1rem; /* 内嵌表格与业务卡片边缘距离 */
     --spacing-table-resize-target: 0.75rem; /* 列宽拖拽命中区 */
     --spacing-table-column-default: 10rem;
     --spacing-table-column-default-min: 8rem;
     --spacing-table-column-selection: 2.5rem;
-    --spacing-table-column-preview: 3rem; /* 行预览指示列 */
+    --spacing-table-column-preview: 2.25rem; /* 行预览指示列 */
     --spacing-table-column-reference: 20rem;
     --spacing-table-column-reference-min: 16rem;
     --spacing-table-column-status: 8rem;
@@ -211,20 +184,20 @@
     --spacing-table-column-rate-min: 6rem;
     --spacing-table-column-tracks: 18rem;
     --spacing-table-column-tracks-min: 16rem;
-    --spacing-nav: 15rem; /* 左侧导航展开 240px，贴近 IDURAR 宽侧栏 */
-    --spacing-nav-icon: 4rem; /* 左侧导航折叠 64px */
-    --spacing-nav-mobile: 18rem; /* 移动端抽屉导航 */
+    --spacing-nav: 14rem; /* 左侧导航展开 224px，给宽表格更多呼吸感 */
+    --spacing-nav-icon: 3.5rem; /* 左侧导航折叠 56px */
+    --spacing-nav-mobile: 17rem; /* 移动端抽屉导航 */
     --spacing-preview: 25rem; /* 右侧轻量预览 400px */
     --spacing-detail: 48rem; /* 右侧半屏详情抽屉 768px；读完主事实 */
     --spacing-shell: 90rem; /* 基准工作宽度 1440px */
 
-    --spacing-overlay-padding: 1.5rem;
-    --spacing-overlay-gap: 1.5rem;
-    --spacing-sheet-inline: 1.75rem;
-    --spacing-sheet-start: 2.5rem;
-    --spacing-sheet-end: 1.5rem;
-    --spacing-sheet-footer: 1rem;
-    --spacing-filter-block: 0.75rem;
+    --spacing-overlay-padding: 1.25rem;
+    --spacing-overlay-gap: 1.25rem;
+    --spacing-sheet-inline: 1.5rem;
+    --spacing-sheet-start: 1.75rem;
+    --spacing-sheet-end: 1.25rem;
+    --spacing-sheet-footer: 0.875rem;
+    --spacing-filter-block: 0.625rem;
     --spacing-filter-body: 1rem;
     --spacing-filter-max: 44rem;
     --spacing-filter-medium-max: 38rem;
@@ -233,221 +206,227 @@
     --text-2xs: 0.625rem; /* 10px */
     --text-tiny: 0.6875rem; /* 11px */
     --text-body-compact: 0.8125rem; /* 13px */
-    --text-body-compact--line-height: 1.375rem; /* 22px */
-    --text-page-title: 1.625rem; /* 26px */
-    --text-page-title--line-height: 2.25rem; /* 36px */
-    --text-value-summary: 2rem; /* 32px */
-    --text-value-summary--line-height: 2.5rem;
-    --text-value-hero: 2.75rem; /* 44px */
-    --text-value-hero--line-height: 3rem;
+    --text-body-compact--line-height: 1.25rem; /* 20px */
+    --text-page-title: 1.125rem; /* 18px 飞书精致页面主标题 */
+    --text-page-title--line-height: 1.625rem; /* 26px */
+    --text-value-summary: 1.75rem; /* 28px */
+    --text-value-summary--line-height: 2.25rem;
+    --text-value-hero: 2.5rem; /* 40px */
+    --text-value-hero--line-height: 2.75rem;
     --text-login-title: 1.75rem; /* 28px */
     --text-login-title--line-height: 2.25rem;
 }
 
 @theme inline {
-    /* 比例协调的圆角阶梯体系 */
+    /* 飞书精准圆角阶梯：克制、利落、绝不臃肿 */
     --radius-xs: 0.125rem; /* 2px */
-    --radius-sm: 0.25rem; /* 4px - 状态点/极小标记 */
-    --radius-md: 0.375rem; /* 6px - 徽章/紧凑小控件 */
-    --radius-lg: var(--radius); /* 8px - 默认按钮/输入框 */
-    --radius-xl: 0.625rem; /* 10px - 内部面板 */
-    --radius-2xl: 0.75rem; /* 12px - 核心卡片表面 */
-    --radius-3xl: 1rem; /* 16px - 大浮层/弹窗 */
+    --radius-sm: 0.25rem; /* 4px - 标签 / 复选框 / 极小标记 */
+    --radius-md: var(--radius); /* 6px - 默认按钮 / 输入框 / 菜单项 / 侧栏项 */
+    --radius-lg: 0.5rem; /* 8px - 核心卡片 / 下拉浮层 / 提示条 */
+    --radius-xl: 0.625rem; /* 10px - 弹窗 / 抽屉 / 复合面板 */
+    --radius-2xl: 0.75rem; /* 12px - 大浮层 */
+    --radius-3xl: 1rem; /* 16px */
     --radius-4xl: 1.25rem; /* 20px */
 
-    /* Vercel / Notion 极简精密微投影：克制、精密、发丝级浮层 */
-    --shadow-2xs: 0 1px 2px 0 rgb(0 0 0 / 0.04);
-    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    /* 飞书 Universe Design 轻盈通透投影（基于墨灰 #1F2329） */
+    --shadow-2xs: 0 1px 2px 0 rgb(31 35 41 / 0.04);
+    --shadow-xs: 0 1px 3px 0 rgb(31 35 41 / 0.05);
     --shadow-sm:
-        0 1px 3px 0 rgb(0 0 0 / 0.07), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+        0 2px 6px -1px rgb(31 35 41 / 0.06), 0 1px 2px -1px rgb(31 35 41 / 0.04);
     --shadow-md:
-        0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+        0 6px 16px -4px rgb(31 35 41 / 0.08),
+        0 2px 6px -2px rgb(31 35 41 / 0.04);
     --shadow-lg:
-        0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.04);
+        0 12px 28px -6px rgb(31 35 41 / 0.1),
+        0 4px 10px -4px rgb(31 35 41 / 0.05);
     --shadow-xl:
-        0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.04);
-    --shadow-footer: 0 -6px 24px -18px rgb(0 0 0 / 0.15);
+        0 20px 36px -8px rgb(31 35 41 / 0.12),
+        0 8px 16px -6px rgb(31 35 41 / 0.05);
+    --shadow-footer: 0 -4px 16px -8px rgb(31 35 41 / 0.08);
 }
 
 /* --------------------------------------------------------------------------
-   浅色模式：Notion / Vercel 纯净高级灰阶（冷灰画布 + 纯白卡片 + 黑曜石主键）
+   浅色模式：飞书 Universe Design（#f4f6f7 浅灰画布 + 纯白卡片 + 飞书蓝主色）
    -------------------------------------------------------------------------- */
 :root {
-    --money-wan: oklch(0.43 0.072 205);
-    --money-million: oklch(0.45 0.15 280);
-    --money-yi: oklch(0.36 0.135 325);
-    --radius: 0.5rem;
+    /* 金额保持沉稳统一墨色，靠字号、字重与等宽对齐区分主次，不按量级变彩虹色 */
+    --money-wan: var(--foreground);
+    --money-million: var(--foreground);
+    --money-yi: var(--foreground);
+    --radius: 0.375rem; /* 6px 飞书标准交互圆角 */
 
-    /* 固定深色品牌舞台（登录左侧画布不随主题反转为白底） */
-    --stage: oklch(0.155 0.006 260);
-    --stage-foreground: oklch(0.985 0.002 260);
+    /* 固定深色品牌舞台（登录左侧画布：深海商务靛蓝夜幕） */
+    --stage: oklch(0.205 0.038 258);
+    --stage-foreground: oklch(0.985 0.003 255);
 
-    /* Vercel / Notion 风格：浅冷灰画布 + 纯白浮起卡片 */
-    --background: oklch(0.972 0.002 260); /* #f5f6f7 素净冷灰画布 */
-    --foreground: oklch(0.205 0.006 260); /* #16171a 沉着石墨黑 */
+    /* 飞书极净画布与表面分层（轻盈近白画布 + 纯白工作面 + 极淡表头） */
+    --background: oklch(0.98 0.002 252); /* #f7f8fa 飞书极浅冷灰画布 */
+    --foreground: oklch(0.252 0.011 255); /* #1f2227 飞书 N900 沉稳墨黑 */
     --card: oklch(1 0 0); /* #ffffff 纯白卡片表面 */
-    --card-foreground: oklch(0.205 0.006 260);
+    --card-foreground: oklch(0.252 0.011 255);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.205 0.006 260);
+    --popover-foreground: oklch(0.252 0.011 255);
 
-    /* Vercel 经典黑白主色体系：黑曜石核心按键与焦点，极度克制高级 */
-    --primary: oklch(0.205 0.006 260); /* #16171a 实心黑曜石主按钮 */
-    --primary-foreground: oklch(0.99 0 0); /* 纯白文字 */
-    --secondary: oklch(0.955 0.003 260); /* 沉静浅灰衬底 */
-    --secondary-foreground: oklch(0.24 0.006 260);
-    --muted: oklch(0.958 0.002 260); /* 柔和微冷灰 */
-    --muted-foreground: oklch(0.51 0.008 260); /* #63666b 次级灰度文字 */
+    /* 飞书标志蓝主色体系（sRGB 安全域，白字对比度 4.8:1 满足 WCAG AA） */
+    --primary: oklch(0.562 0.212 261); /* #1f6aee 飞书蓝 */
+    --primary-foreground: oklch(1 0 0); /* 纯白文字 */
+    --secondary: oklch(0.958 0.003 255); /* #f0f1f3 次级浅灰底 */
+    --secondary-foreground: oklch(0.252 0.011 255);
+    --muted: oklch(0.964 0.003 255); /* #f2f3f5 柔和浅灰底 */
+    --muted-foreground: oklch(0.525 0.013 255); /* #656b72 飞书 N600 次级文字 */
 
-    --accent: oklch(0.948 0.003 260);
-    --accent-foreground: oklch(0.205 0.006 260);
+    --accent: oklch(0.956 0.003 255); /* #eff0f2 轻量悬停灰 */
+    --accent-foreground: oklch(0.252 0.011 255);
 
-    --highlight: oklch(0.952 0.062 95);
-    --highlight-foreground: oklch(0.32 0.055 75);
+    --highlight: oklch(0.96 0.055 92);
+    --highlight-foreground: oklch(0.35 0.065 65);
 
-    /* 语义状态色 —— 全部收敛于 sRGB 安全域，实底/柔底均满足 WCAG AA/AAA */
-    --destructive: oklch(0.55 0.18 25);
+    /* 飞书语义状态色 —— 清爽通透、sRGB 域内、AA/AAA 可读 */
+    --destructive: oklch(0.555 0.195 25); /* #cc2d32 飞书红 */
     --destructive-foreground: oklch(1 0 0);
-    --destructive-soft: oklch(0.974 0.011 25);
-    --destructive-soft-foreground: oklch(0.44 0.145 25);
-    --destructive-border: oklch(0.895 0.032 25);
+    --destructive-soft: oklch(0.968 0.014 22);
+    --destructive-soft-foreground: oklch(0.46 0.16 25);
+    --destructive-border: oklch(0.895 0.045 24);
 
-    --success: oklch(0.51 0.115 155); /* 克制深鼠尾草绿 */
+    --success: oklch(0.535 0.14 148); /* #1f823a 飞书绿 */
     --success-foreground: oklch(1 0 0);
-    --success-soft: oklch(0.968 0.012 155); /* 极其清淡温润的草木灰底 */
-    --success-soft-foreground: oklch(
-        0.32 0.065 155
-    ); /* 沉静且极高可读性的灰绿文字 */
-    --success-border: oklch(0.88 0.025 155);
+    --success-soft: oklch(0.96 0.025 152);
+    --success-soft-foreground: oklch(0.42 0.125 152);
+    --success-border: oklch(0.885 0.045 150);
 
-    --warning: oklch(0.56 0.115 65); /* 沉稳琥珀金（白字与白底均 >= 4.7:1） */
+    --warning: oklch(0.57 0.132 58); /* 飞书琥珀橙 */
     --warning-foreground: oklch(1 0 0);
-    --warning-soft: oklch(0.975 0.016 75);
-    --warning-soft-foreground: oklch(0.42 0.082 65);
-    --warning-border: oklch(0.89 0.036 75);
+    --warning-soft: oklch(0.972 0.02 72);
+    --warning-soft-foreground: oklch(0.455 0.105 56);
+    --warning-border: oklch(0.895 0.052 70);
 
-    --info: oklch(0.51 0.125 250); /* 矿物石板蓝 */
+    --info: oklch(0.562 0.212 261); /* #1f6aee 与飞书蓝同源 */
     --info-foreground: oklch(1 0 0);
-    --info-soft: oklch(0.972 0.012 250);
-    --info-soft-foreground: oklch(0.35 0.095 250);
-    --info-border: oklch(0.89 0.033 250);
+    --info-soft: oklch(0.955 0.02 258); /* #e8f1fe 冰蓝柔底 */
+    --info-soft-foreground: oklch(0.475 0.185 262);
+    --info-border: oklch(0.882 0.055 258);
 
-    --neutral-soft: oklch(0.962 0.002 260);
-    --neutral-soft-foreground: oklch(0.38 0.006 260);
-    --neutral-border: oklch(0.89 0.004 260);
+    --neutral-soft: oklch(0.958 0.003 255);
+    --neutral-soft-foreground: oklch(0.42 0.012 255);
+    --neutral-border: oklch(0.895 0.005 255);
 
-    /* 业务种类色标 —— 莫兰迪低饱和度高级色标（sRGB 域内） */
-    --orange-soft: oklch(0.972 0.015 55);
-    --orange-soft-foreground: oklch(0.46 0.105 55);
-    --orange-border: oklch(0.89 0.034 55);
-    --teal-soft: oklch(0.968 0.017 190);
-    --teal-soft-foreground: oklch(0.36 0.058 190);
-    --teal-border: oklch(0.88 0.032 190);
-    --violet-soft: oklch(0.97 0.013 290);
-    --violet-soft-foreground: oklch(0.4 0.1 290);
-    --violet-border: oklch(0.885 0.032 290);
-    --lime-soft: oklch(0.97 0.018 135);
-    --lime-soft-foreground: oklch(0.38 0.08 135);
-    --lime-border: oklch(0.885 0.034 135);
-    --rose-soft: oklch(0.972 0.012 15);
-    --rose-soft-foreground: oklch(0.45 0.1 15);
-    --rose-border: oklch(0.89 0.028 15);
-    --indigo-soft: oklch(0.972 0.012 265);
-    --indigo-soft-foreground: oklch(0.38 0.095 265);
-    --indigo-border: oklch(0.89 0.032 265);
-    --cyan-soft: oklch(0.968 0.016 220);
-    --cyan-soft-foreground: oklch(0.36 0.062 220);
-    --cyan-border: oklch(0.885 0.032 220);
+    /* 业务种类色标 —— 飞书轻盈清爽 Tag 柔色，收敛饱和度避免盖过主状态 */
+    --orange-soft: oklch(0.97 0.016 58);
+    --orange-soft-foreground: oklch(0.47 0.105 55);
+    --orange-border: oklch(0.905 0.036 58);
+    --teal-soft: oklch(0.966 0.016 188);
+    --teal-soft-foreground: oklch(0.39 0.075 188);
+    --teal-border: oklch(0.895 0.034 188);
+    --violet-soft: oklch(0.968 0.014 288);
+    --violet-soft-foreground: oklch(0.44 0.11 288);
+    --violet-border: oklch(0.9 0.034 288);
+    --lime-soft: oklch(0.968 0.018 138);
+    --lime-soft-foreground: oklch(0.41 0.09 138);
+    --lime-border: oklch(0.9 0.036 138);
+    --rose-soft: oklch(0.97 0.014 14);
+    --rose-soft-foreground: oklch(0.47 0.115 16);
+    --rose-border: oklch(0.905 0.032 14);
+    --indigo-soft: oklch(0.964 0.016 262);
+    --indigo-soft-foreground: oklch(0.45 0.125 262);
+    --indigo-border: oklch(0.895 0.04 262);
+    --cyan-soft: oklch(0.966 0.016 225);
+    --cyan-soft-foreground: oklch(0.41 0.082 225);
+    --cyan-border: oklch(0.895 0.036 225);
 
-    /* 极细微高精边框与发丝线 */
-    --border: oklch(0.905 0.003 260); /* #dee0e2 精密浅灰细线 */
-    --overlay: oklch(0.14 0.005 260 / 32%);
-    --overlay-sheet: oklch(0 0 0 / 20%);
-    --input: oklch(0.865 0.004 260); /* #d1d3d5 控件清晰描边 */
-    --ring: oklch(0.205 0.006 260 / 18%); /* 黑灰细微焦点环 */
+    /* 飞书精细边线与蓝色焦点环 */
+    --border: oklch(0.922 0.003 255); /* #e6e8eb 飞书轻盈细线 */
+    --overlay: oklch(0.18 0.012 255 / 36%);
+    --overlay-sheet: oklch(0.18 0.012 255 / 22%);
+    --input: oklch(0.892 0.004 255); /* #dcdfe3 精致控件描边 */
+    --ring: oklch(0.562 0.212 261 / 28%); /* 飞书蓝柔和焦点光环 */
 
-    --surface-sunken: oklch(0.968 0.002 260);
+    --surface-sunken: oklch(0.982 0.002 252);
     --surface-control: oklch(1 0 0);
-    --table-header: oklch(0.978 0.002 260);
-    --row-hover: oklch(0.972 0.002 260);
-    --row-selected: oklch(0.948 0.004 260);
-    --row-striped: oklch(0.988 0.001 260);
-    --grid: oklch(0.925 0.003 260);
+    --table-header: oklch(
+        0.984 0.002 252
+    ); /* #f8f9fb 飞书多维表格极浅冷灰表头 */
+    --row-hover: oklch(0.98 0.008 258); /* #f4f8ff 极淡冰蓝行悬停 */
+    --row-selected: oklch(0.955 0.02 258); /* #e8f1fe 飞书蓝行选中 */
+    --row-striped: oklch(0.99 0.002 255);
+    --grid: oklch(0.948 0.003 255); /* #eff0f2 表格轻柔分隔线 */
 
-    /* 克制商务数据可视化色板（5 色明确区隔且 >= 4.5:1） */
-    --chart-1: oklch(0.48 0.115 250);
-    --chart-2: oklch(0.57 0.112 65);
-    --chart-3: oklch(0.52 0.102 158);
-    --chart-4: oklch(0.53 0.075 205);
-    --chart-5: oklch(0.52 0.125 290);
+    /* 飞书商务数据可视化色板（蓝 / 橙 / 绿 / 青 / 紫） */
+    --chart-1: oklch(0.562 0.195 261);
+    --chart-2: oklch(0.62 0.14 58);
+    --chart-3: oklch(0.56 0.135 150);
+    --chart-4: oklch(0.56 0.105 205);
+    --chart-5: oklch(0.55 0.145 288);
 
-    /* Notion / Vercel 纯净浅色侧栏 */
-    --sidebar: oklch(0.985 0.002 260); /* #f9fafb 近白冷调侧栏 */
-    --sidebar-foreground: oklch(0.43 0.008 260); /* 次级导航灰 */
-    --sidebar-primary: oklch(0.205 0.006 260); /* 沉着黑曜石 */
-    --sidebar-primary-foreground: oklch(0.99 0 0);
-    --sidebar-accent: oklch(0.942 0.003 260); /* 浅灰选中底 */
-    --sidebar-accent-foreground: oklch(0.205 0.006 260);
-    --sidebar-border: oklch(0.91 0.003 260); /* 精致单像素侧边分隔线 */
-    --sidebar-ring: oklch(0.205 0.006 260 / 18%);
+    /* 飞书极净浅色侧栏 + 标志性冰蓝选中态 */
+    --sidebar: oklch(0.994 0.001 252); /* #fcfcfd 洁净近白侧栏 */
+    --sidebar-foreground: oklch(0.36 0.01 255); /* 沉静墨灰导航文字 */
+    --sidebar-primary: oklch(0.562 0.212 261); /* 飞书蓝品牌标识 */
+    --sidebar-primary-foreground: oklch(1 0 0);
+    --sidebar-accent: oklch(0.955 0.02 258); /* #e8f1fe 飞书经典冰蓝选中底 */
+    --sidebar-accent-foreground: oklch(
+        0.495 0.195 262
+    ); /* #1a57ce 飞书蓝选中文字 */
+    --sidebar-border: oklch(0.918 0.004 255);
+    --sidebar-ring: oklch(0.562 0.212 261 / 28%);
 }
 
 /* --------------------------------------------------------------------------
-   深色模式：Notion / Vercel 曜石暗夜黑灰（拉开背景 / 侧栏 / 卡片明度梯级）
+   深色模式：飞书暗夜模式（深灰画布 + 浮动深卡 + 亮蓝主色）
    -------------------------------------------------------------------------- */
 .dark {
-    --money-wan: oklch(0.76 0.08 205);
-    --money-million: oklch(0.78 0.105 280);
-    --money-yi: oklch(0.82 0.095 325);
+    --money-wan: var(--foreground);
+    --money-million: var(--foreground);
+    --money-yi: var(--foreground);
 
-    --stage: oklch(0.155 0.006 260);
-    --stage-foreground: oklch(0.985 0.002 260);
+    --stage: oklch(0.18 0.03 258);
+    --stage-foreground: oklch(0.985 0.003 255);
 
-    --background: oklch(0.145 0.005 260); /* #090a0c 曜石底层画布 */
-    --foreground: oklch(0.98 0 0);
-    --card: oklch(0.205 0.006 260); /* #16171a 浮动卡片（近似 Zinc 900） */
-    --card-foreground: oklch(0.98 0 0);
-    --popover: oklch(0.205 0.006 260);
-    --popover-foreground: oklch(0.98 0 0);
+    --background: oklch(0.155 0.006 255);
+    --foreground: oklch(0.96 0.003 255);
+    --card: oklch(0.205 0.007 255);
+    --card-foreground: oklch(0.96 0.003 255);
+    --popover: oklch(0.215 0.007 255);
+    --popover-foreground: oklch(0.96 0.003 255);
 
-    --primary: oklch(0.98 0 0); /* 纯白主按钮 */
-    --primary-foreground: oklch(0.145 0.005 260);
-    --secondary: oklch(0.26 0.006 260);
-    --secondary-foreground: oklch(0.98 0 0);
-    --muted: oklch(0.26 0.006 260);
-    --muted-foreground: oklch(0.69 0.006 260);
+    --primary: oklch(0.66 0.18 260);
+    --primary-foreground: oklch(1 0 0);
+    --secondary: oklch(0.26 0.007 255);
+    --secondary-foreground: oklch(0.96 0.003 255);
+    --muted: oklch(0.25 0.007 255);
+    --muted-foreground: oklch(0.68 0.008 255);
 
-    --accent: oklch(0.26 0.006 260);
-    --accent-foreground: oklch(0.98 0 0);
+    --accent: oklch(0.26 0.008 255);
+    --accent-foreground: oklch(0.96 0.003 255);
 
     --highlight: oklch(0.34 0.065 95);
     --highlight-foreground: oklch(0.9 0.08 95);
 
-    --destructive: oklch(0.56 0.185 25);
+    --destructive: oklch(0.6 0.185 25);
     --destructive-foreground: oklch(1 0 0);
-    --destructive-soft: oklch(0.27 0.04 25);
+    --destructive-soft: oklch(0.27 0.045 25);
     --destructive-soft-foreground: oklch(0.86 0.075 25);
     --destructive-border: oklch(0.38 0.06 25);
 
-    --success: oklch(0.66 0.115 155);
-    --success-foreground: oklch(0.145 0.005 155);
-    --success-soft: oklch(0.25 0.032 155);
-    --success-soft-foreground: oklch(0.86 0.06 155);
-    --success-border: oklch(0.36 0.045 155);
+    --success: oklch(0.66 0.13 148);
+    --success-foreground: oklch(0.15 0.008 148);
+    --success-soft: oklch(0.25 0.036 148);
+    --success-soft-foreground: oklch(0.86 0.065 148);
+    --success-border: oklch(0.36 0.05 148);
 
-    --warning: oklch(0.74 0.125 72);
-    --warning-foreground: oklch(0.145 0.005 72);
-    --warning-soft: oklch(0.27 0.042 72);
-    --warning-soft-foreground: oklch(0.88 0.065 72);
-    --warning-border: oklch(0.38 0.055 72);
+    --warning: oklch(0.74 0.135 68);
+    --warning-foreground: oklch(0.15 0.008 68);
+    --warning-soft: oklch(0.27 0.045 68);
+    --warning-soft-foreground: oklch(0.88 0.07 68);
+    --warning-border: oklch(0.38 0.06 68);
 
-    --info: oklch(0.67 0.125 250);
-    --info-foreground: oklch(0.145 0.005 250);
-    --info-soft: oklch(0.26 0.035 250);
-    --info-soft-foreground: oklch(0.86 0.065 250);
-    --info-border: oklch(0.37 0.055 250);
+    --info: oklch(0.66 0.18 260);
+    --info-foreground: oklch(1 0 0);
+    --info-soft: oklch(0.26 0.055 260);
+    --info-soft-foreground: oklch(0.84 0.095 258);
+    --info-border: oklch(0.39 0.08 260);
 
-    --neutral-soft: oklch(0.26 0.006 260);
-    --neutral-soft-foreground: oklch(0.82 0.005 260);
+    --neutral-soft: oklch(0.26 0.007 255);
+    --neutral-soft-foreground: oklch(0.82 0.006 255);
     --neutral-border: oklch(1 0 0 / 12%);
 
     --orange-soft: oklch(0.28 0.05 55);
@@ -473,33 +452,33 @@
     --cyan-border: oklch(0.38 0.05 220);
 
     --border: oklch(1 0 0 / 12%);
-    --overlay: oklch(0 0 0 / 70%);
+    --overlay: oklch(0 0 0 / 68%);
     --overlay-sheet: oklch(0 0 0 / 35%);
     --input: oklch(1 0 0 / 18%);
-    --ring: oklch(1 0 0 / 20%);
+    --ring: oklch(0.66 0.18 260 / 32%);
 
-    --surface-sunken: oklch(0.165 0.005 260);
-    --surface-control: oklch(0.205 0.006 260);
-    --table-header: oklch(0.185 0.005 260);
-    --row-hover: oklch(0.245 0.006 260);
-    --row-selected: oklch(0.285 0.007 260);
-    --row-striped: oklch(0.185 0.005 260);
+    --surface-sunken: oklch(0.175 0.006 255);
+    --surface-control: oklch(0.205 0.007 255);
+    --table-header: oklch(0.185 0.006 255);
+    --row-hover: oklch(0.245 0.014 258);
+    --row-selected: oklch(0.275 0.045 260);
+    --row-striped: oklch(0.19 0.006 255);
     --grid: oklch(1 0 0 / 9%);
 
-    --chart-1: oklch(0.72 0.115 250);
-    --chart-2: oklch(0.76 0.115 68);
-    --chart-3: oklch(0.72 0.11 158);
-    --chart-4: oklch(0.72 0.085 205);
-    --chart-5: oklch(0.74 0.115 290);
+    --chart-1: oklch(0.7 0.155 260);
+    --chart-2: oklch(0.76 0.125 65);
+    --chart-3: oklch(0.72 0.12 152);
+    --chart-4: oklch(0.72 0.095 205);
+    --chart-5: oklch(0.74 0.125 288);
 
-    --sidebar: oklch(0.175 0.005 260);
-    --sidebar-foreground: oklch(0.76 0.005 260);
-    --sidebar-primary: oklch(0.98 0 0);
-    --sidebar-primary-foreground: oklch(0.145 0.005 260);
-    --sidebar-accent: oklch(0.26 0.006 260);
-    --sidebar-accent-foreground: oklch(0.98 0 0);
+    --sidebar: oklch(0.18 0.006 255);
+    --sidebar-foreground: oklch(0.78 0.006 255);
+    --sidebar-primary: oklch(0.66 0.18 260);
+    --sidebar-primary-foreground: oklch(1 0 0);
+    --sidebar-accent: oklch(0.27 0.055 260);
+    --sidebar-accent-foreground: oklch(0.84 0.095 258);
     --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(1 0 0 / 20%);
+    --sidebar-ring: oklch(0.66 0.18 260 / 32%);
 }
 
 /* 金额、数量、税率、日期用等宽数字，便于纵向核对（交互规范 §19）。 */
@@ -607,53 +586,428 @@
     }
 }
 
+/* --------------------------------------------------------------------------
+   跨组件布局覆盖（必须放在 @layer base 之外，才能稳定覆盖 Tailwind utilities）
+   -------------------------------------------------------------------------- */
+
+/* 右对齐数字列紧邻左对齐列时，增加视觉留白，避免「SKU 售价」与「供给」贴脸 */
+[data-slot="table"] th[data-align="end"] + th:not([data-align="end"]),
+[data-slot="table"] td[data-align="end"] + td:not([data-align="end"]) {
+    padding-inline-start: 1.75rem;
+}
+
+/* 飞书多维表格风格纯白通栏列表工作面：剥离外层圆角与描边，页头与主表无缝衔接、统一对齐外沿 */
+[data-slot="page-scaffold"] {
+    --scaffold-px: var(--spacing-page-inline);
+    --scaffold-pt: var(--spacing-page-block);
+}
+@media (min-width: 48rem) {
+    [data-slot="page-scaffold"] {
+        --scaffold-px: var(--spacing-page-inline-lg);
+        --scaffold-pt: var(--spacing-page-block-lg);
+    }
+}
+[data-slot="page-scaffold"].erp-list-workspace-page {
+    --scaffold-px: var(--spacing-workspace-inline);
+    --scaffold-pt: 0px;
+}
+@media (min-width: 48rem) {
+    [data-slot="page-scaffold"].erp-list-workspace-page {
+        --scaffold-px: var(--spacing-page-inline);
+        --scaffold-pt: 0px;
+    }
+}
+@media (min-width: 75rem) {
+    [data-slot="page-scaffold"].erp-list-workspace-page {
+        --scaffold-px: var(--spacing-page-inline-lg);
+    }
+}
+[data-slot="page-scaffold"].erp-embedded-scaffold {
+    --scaffold-px: 0px;
+    --scaffold-pt: 0px;
+}
+[data-slot="page-scaffold"] > [data-slot="list-workspace-header"] {
+    margin-inline: calc(var(--scaffold-px) * -1);
+    margin-top: calc(var(--scaffold-pt) * -1);
+    padding-inline: var(--scaffold-px);
+}
+/* 页头直接衔接视图页签时，去掉页头底线让标题与视图 Tab 融合成同一块清爽头部 */
+[data-slot="page-scaffold"].erp-list-workspace-page:has(
+        > [data-slot="list-workspace-header"]
+            + [data-slot="list-work-surface"]
+            > [data-slot="list-workspace-views"]
+    )
+    > [data-slot="list-workspace-header"],
+[data-slot="page-scaffold"].erp-list-workspace-page:has(
+        > [data-slot="list-workspace-header"]
+            + .sr-only
+            + [data-slot="list-work-surface"]
+            > [data-slot="list-workspace-views"]
+    )
+    > [data-slot="list-workspace-header"] {
+    border-bottom-width: 0;
+    padding-bottom: 0.375rem;
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > :not([data-slot="list-workspace-header"]):not(
+        [data-slot="list-work-surface"]
+    ):not(.sr-only) {
+    margin-block: 0.75rem;
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"] {
+    margin-inline: calc(var(--scaffold-px) * -1);
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    :is(
+        [data-slot="list-workspace-views"],
+        [data-slot="list-workspace-toolbar"],
+        [data-slot="list-filter-tray"],
+        [data-slot="table-toolbar"],
+        [data-slot="data-table-pagination"]
+    ) {
+    padding-inline: var(--scaffold-px);
+}
+
+/* 展开高级筛选区时，主筛选栏去掉底线并收紧下边距，与纯白展开区自然融为一体 */
+[data-slot="list-work-surface"]:has(
+        > [data-slot="list-work-surface-filter-tray"]
+            > [data-slot="list-filter-tray"]:not([hidden])
+    )
+    > [data-slot="list-workspace-toolbar"] {
+    border-bottom-color: transparent;
+    padding-bottom: 0.375rem;
+}
+
+/* 飞书多维表格通栏高级筛选区：纯白底无缝承接主筛选栏 + 内嵌前置标签（与外部「类型：全部」逐像素同源同色） */
+[data-slot="list-filter-tray-body"] > :has(> fieldset) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+[data-slot="list-filter-tray-body"] fieldset {
+    position: relative;
+    margin-block: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
+}
+[data-slot="list-filter-tray-body"] fieldset + fieldset {
+    border-top: 1px solid color-mix(in oklab, var(--border) 42%, transparent);
+    padding-top: 0.5rem;
+}
+[data-slot="list-filter-tray-body"] fieldset > legend {
+    margin-bottom: 0.375rem;
+    padding: 0;
+    font-size: var(--text-xs);
+    line-height: 1.125rem;
+    font-weight: 500;
+    color: var(--muted-foreground);
+}
+@media (min-width: 48rem) {
+    [data-slot="list-filter-tray-body"] fieldset {
+        padding-inline-start: 3.75rem;
+    }
+    [data-slot="list-filter-tray-body"] fieldset > legend {
+        position: absolute;
+        inset-inline-start: 0;
+        top: 0;
+        width: 3.25rem;
+        margin: 0;
+        line-height: var(--spacing-control);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    [data-slot="list-filter-tray-body"] fieldset + fieldset > legend {
+        top: 0.5rem;
+    }
+    [data-slot="list-filter-tray-body"]
+        fieldset
+        > .grid:not([class*="grid-cols-["]) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.5rem 0.75rem;
+    }
+    [data-slot="list-filter-tray-body"] > .grid:not(:has(> fieldset)) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.5rem 0.75rem;
+    }
+}
+@media (min-width: 64rem) {
+    [data-slot="list-filter-tray-body"]
+        fieldset
+        > .grid:not([class*="grid-cols-["]),
+    [data-slot="list-filter-tray-body"] > .grid:not(:has(> fieldset)) {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+@media (min-width: 80rem) {
+    [data-slot="list-filter-tray-body"]
+        fieldset
+        > .grid:not([class*="grid-cols-["]),
+    [data-slot="list-filter-tray-body"] > .grid:not(:has(> fieldset)) {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+/* 展开区内所有字段统一为 32px 单行内嵌标签胶囊，底色与外层搜索框/筛选框逐像素一致（muted 65%） */
+[data-slot="list-filter-tray-body"] [data-slot="list-filter-field"] {
+    display: flex;
+    align-items: center;
+    min-height: var(--spacing-control);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background-color: color-mix(in oklab, var(--muted) 65%, transparent);
+    padding-inline-start: 0.625rem;
+    padding-inline-end: 0.125rem;
+    transition:
+        background-color 150ms,
+        border-color 150ms,
+        box-shadow 150ms;
+}
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field"]
+    > :not(:last-child) {
+    margin-block-end: 0;
+}
+[data-slot="list-filter-tray-body"] [data-slot="list-filter-field"]:hover {
+    background-color: var(--muted);
+}
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field"]:focus-within {
+    border-color: color-mix(in oklab, var(--primary) 60%, transparent);
+    background-color: var(--card);
+    box-shadow: 0 0 0 3px var(--ring);
+}
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field"]:has([data-has-value="true"]),
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field"]:has(
+        [data-slot="input"]:not(:placeholder-shown)
+    ) {
+    border-color: color-mix(in oklab, var(--primary) 25%, transparent);
+    background-color: color-mix(
+        in oklab,
+        var(--sidebar-accent) 70%,
+        transparent
+    );
+}
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field"]:has([data-has-value="true"]):hover,
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field"]:has(
+        [data-slot="input"]:not(:placeholder-shown)
+    ):hover {
+    background-color: var(--sidebar-accent);
+}
+[data-slot="list-filter-tray-body"] [data-slot="list-filter-field-label"] {
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-size: var(--text-body-compact);
+    line-height: 1.25rem;
+    font-weight: 400;
+    color: color-mix(in oklab, var(--muted-foreground) 82%, transparent);
+    user-select: none;
+}
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field-label"]::after {
+    content: "：";
+}
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field"]:has([data-has-value="true"])
+    [data-slot="list-filter-field-label"],
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field"]:has(
+        [data-slot="input"]:not(:placeholder-shown)
+    )
+    [data-slot="list-filter-field-label"] {
+    color: color-mix(
+        in oklab,
+        var(--sidebar-accent-foreground) 75%,
+        transparent
+    );
+}
+[data-slot="list-filter-tray-body"] [data-slot="list-filter-field-control"] {
+    flex: 1 1 0%;
+    min-width: 0;
+}
+/* 剥离内层输入/下拉/日期触发器自带边框与背景，完全融入外层统一胶囊 */
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field-control"]
+    :is(
+        [data-slot="input-group"],
+        [data-slot="combobox-chips"],
+        [data-slot="input"]
+    ),
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field-control"]
+    [data-slot="button"]:not([data-slot="input-group"] *) {
+    height: calc(var(--spacing-control) - 2px);
+    min-height: calc(var(--spacing-control) - 2px);
+    border-color: transparent;
+    border-width: 0;
+    background-color: transparent;
+    box-shadow: none;
+    --tw-ring-shadow: 0 0 #0000;
+}
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field-control"]
+    [data-slot="combobox-chips"] {
+    height: auto;
+    padding-inline: 0 0.25rem;
+    padding-block: 0.125rem;
+}
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field-control"]
+    :is([data-slot="input-group-control"], [data-slot="input"]) {
+    padding-inline: 0 0.25rem;
+}
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field-control"]
+    [data-slot="button"]:not([data-slot="input-group"] *) {
+    padding-inline: 0 0.375rem;
+}
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field"]:has([data-has-value="true"])
+    :is([data-slot="input-group-control"], [data-slot="input"]),
+[data-slot="list-filter-tray-body"]
+    [data-slot="list-filter-field"]:has(
+        [data-slot="input"]:not(:placeholder-shown)
+    )
+    [data-slot="input"] {
+    color: var(--sidebar-accent-foreground);
+    font-weight: 500;
+}
+/* 兜底：未包裹 ListWorkspaceFilterField 的独立输入/下拉同样使用完全一致的 muted 65% 底色 */
+[data-slot="list-filter-tray-body"]
+    :is(
+        [data-slot="input-group"],
+        [data-slot="combobox-chips"],
+        [data-slot="input"]
+    ):not([data-slot="list-filter-field-control"] *) {
+    border-color: transparent;
+    background-color: color-mix(in oklab, var(--muted) 65%, transparent);
+}
+[data-slot="list-filter-tray-body"]
+    :is(
+        [data-slot="input-group"],
+        [data-slot="combobox-chips"],
+        [data-slot="input"]
+    ):not([data-slot="list-filter-field-control"] *):hover {
+    background-color: var(--muted);
+}
+[data-slot="list-filter-tray-body"]
+    :is(
+        [data-slot="input-group"]:focus-within,
+        [data-slot="combobox-chips"]:focus-within,
+        [data-slot="input"]:focus-visible
+    ):not([data-slot="list-filter-field-control"] *) {
+    border-color: color-mix(in oklab, var(--primary) 60%, transparent);
+    background-color: var(--card);
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    [data-slot="table"]
+    :is(th, td):first-child {
+    padding-inline-start: var(--scaffold-px);
+}
+[data-slot="page-scaffold"].erp-list-workspace-page
+    > [data-slot="list-work-surface"]
+    [data-slot="table"]
+    :is(th, td):last-child {
+    padding-inline-end: var(--scaffold-px);
+}
+
+/* 表格吸顶与冻结列边界微影：仅在真正滚动产生遮挡时显现，静止态保持极净扁平 */
+[data-slot="data-table-surface"][data-scrolled-top="true"]
+    [data-slot="table-container"]
+    thead
+    th {
+    box-shadow: 0 2px 6px -2px rgb(31 35 41 / 0.07);
+}
+[data-slot="data-table-surface"][data-scrolled-left="true"]
+    [data-pinned-edge="left"] {
+    box-shadow:
+        inset -1px 0 0 var(--border),
+        6px 0 12px -6px rgb(31 35 41 / 0.09);
+}
+[data-slot="data-table-surface"][data-scrolled-right="true"]
+    [data-pinned-edge="right"] {
+    box-shadow:
+        inset 1px 0 0 var(--border),
+        -6px 0 12px -6px rgb(31 35 41 / 0.09);
+}
+[data-slot="data-table-surface"][data-scrolled-top="true"][data-scrolled-left="true"]
+    [data-slot="table-container"]
+    thead
+    th[data-pinned-edge="left"] {
+    box-shadow:
+        inset -1px 0 0 var(--border),
+        6px 0 12px -6px rgb(31 35 41 / 0.09),
+        0 2px 6px -2px rgb(31 35 41 / 0.07);
+}
+[data-slot="data-table-surface"][data-scrolled-top="true"][data-scrolled-right="true"]
+    [data-slot="table-container"]
+    thead
+    th[data-pinned-edge="right"] {
+    box-shadow:
+        inset 1px 0 0 var(--border),
+        -6px 0 12px -6px rgb(31 35 41 / 0.09),
+        0 2px 6px -2px rgb(31 35 41 / 0.07);
+}
+
 /* 桌面密度按当前文档的可用高度切换，iframe 内自动扣除外层页签。
  * 收紧留白与控件高度；不修改根字号，不缩放整页，不压缩手机触控区域。 */
 @media (min-width: 48rem) and (max-height: 960px) {
     :root {
-        --spacing-topbar: 2.75rem;
-        --spacing-workspace-topbar: 2.75rem;
+        --spacing-topbar: 2.5rem;
+        --spacing-workspace-topbar: 2.5rem;
         --spacing-control: 2rem;
         --spacing-control-lg: 2.25rem;
-        --spacing-page-inline: 1.25rem;
-        --spacing-page-inline-lg: 1.5rem;
-        --spacing-page-block: 1rem;
+        --spacing-page-inline: 1rem;
+        --spacing-page-inline-lg: 1.25rem;
+        --spacing-page-block: 0.75rem;
         --spacing-page-block-lg: 1rem;
-        --spacing-page-gap: 1rem;
-        --spacing-page-gap-compact: 0.75rem;
-        --spacing-workspace-block-start-lg: 1rem;
-        --spacing-workspace-header-block-end: 0.75rem;
-        --spacing-workspace-toolbar-block: 0.625rem;
-        --spacing-workspace-view: 2.5rem;
-        --spacing-workspace-view-gap: 1.25rem;
-        --spacing-row-comfortable: 3.5rem;
-        --spacing-table-header: 2.5rem;
-        --spacing-table-cell-block-comfortable: 0.5rem;
-        --spacing-table-toolbar-block: 0.5rem;
-        --spacing-table-pagination-block: 0.75rem;
-        --spacing-overlay-padding: 1.25rem;
+        --spacing-page-gap: 0.875rem;
+        --spacing-page-gap-compact: 0.625rem;
+        --spacing-workspace-block-start-lg: 0.75rem;
+        --spacing-workspace-header-block-end: 0.625rem;
+        --spacing-workspace-toolbar-block: 0.5rem;
+        --spacing-workspace-view: 2.25rem;
+        --spacing-workspace-view-gap: 1.125rem;
+        --spacing-row-comfortable: 2.875rem;
+        --spacing-table-header: 2.125rem;
+        --spacing-table-cell-block-comfortable: 0.375rem;
+        --spacing-table-toolbar-block: 0.375rem;
+        --spacing-table-pagination-block: 0.5rem;
+        --spacing-overlay-padding: 1.125rem;
         --spacing-overlay-gap: 1rem;
         --spacing-sheet-inline: 1.25rem;
-        --spacing-sheet-start: 2rem;
+        --spacing-sheet-start: 1.5rem;
         --spacing-sheet-end: 1rem;
         --spacing-sheet-footer: 0.75rem;
         --spacing-filter-block: 0.5rem;
         --spacing-filter-body: 0.75rem;
         --spacing-filter-max: 32rem;
         --spacing-filter-medium-max: 32rem;
-        --text-page-title: 1.5rem;
-        --text-page-title--line-height: 2rem;
+        --text-page-title: 1.125rem;
+        --text-page-title--line-height: 1.625rem;
     }
 }
 
 @media (min-width: 48rem) and (max-height: 720px) {
     :root {
-        --spacing-page-block: 0.75rem;
+        --spacing-page-block: 0.625rem;
         --spacing-page-block-lg: 0.75rem;
-        --spacing-workspace-block-start-lg: 0.75rem;
+        --spacing-workspace-block-start-lg: 0.625rem;
         --spacing-workspace-header-block-end: 0.5rem;
-        --spacing-workspace-toolbar-block: 0.5rem;
-        --spacing-row-comfortable: 3.25rem;
+        --spacing-workspace-toolbar-block: 0.375rem;
+        --spacing-row-comfortable: 2.625rem;
         --spacing-overlay-padding: 1rem;
         --spacing-filter-max: 28rem;
         --spacing-filter-medium-max: 28rem;

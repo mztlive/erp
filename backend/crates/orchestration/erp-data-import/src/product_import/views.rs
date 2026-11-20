@@ -42,12 +42,7 @@ pub fn file_name_of(asset: Option<&FileAsset>) -> Option<String> {
 ///
 /// 返回导入结果视图。
 pub fn item_view(row: BackgroundJobItemRow) -> ProductImportItemView {
-    let result_summary = if row.result_code.as_deref() == Some("media_unavailable") {
-        let row_number = row.source_row_no.unwrap_or(row.item_no);
-        Some(super::row_manifest::media_failure_message(row_number))
-    } else {
-        row.result_summary
-    };
+    let result_summary = item_result_summary(&row);
     ProductImportItemView {
         item_no: row.item_no,
         source_row_no: row.source_row_no,
@@ -55,5 +50,15 @@ pub fn item_view(row: BackgroundJobItemRow) -> ProductImportItemView {
         status: row.status.map(|status| status.as_str().to_string()),
         result_summary,
         product_id: row.result_object_id,
+    }
+}
+
+// 图片失败沿用带 Excel 行号的说明，兼容早期任务保存的摘要。
+pub(super) fn item_result_summary(row: &BackgroundJobItemRow) -> Option<String> {
+    if row.result_code.as_deref() == Some("media_unavailable") {
+        let row_number = row.source_row_no.unwrap_or(row.item_no);
+        Some(super::row_manifest::media_failure_message(row_number))
+    } else {
+        row.result_summary.clone()
     }
 }

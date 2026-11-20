@@ -1,6 +1,19 @@
 "use client"
 
-import { ArrowUpRightIcon } from "lucide-react"
+import {
+    AlertCircleIcon,
+    ArrowUpRightIcon,
+    ClipboardCheckIcon,
+    ClipboardListIcon,
+    ClockIcon,
+    FileTextIcon,
+    ReceiptIcon,
+    ShoppingCartIcon,
+    TrendingUpIcon,
+    TruckIcon,
+    WalletCardsIcon,
+    type LucideIcon,
+} from "lucide-react"
 import { MoneyValue } from "@/components/business"
 import { Skeleton } from "@/components/ui/skeleton"
 import { compareDecimal } from "@/lib/fixed-decimal"
@@ -8,6 +21,73 @@ import { cn } from "@/lib/utils"
 import type { OverviewMetric } from "../lib/overview"
 import { overviewValue, type WorkspaceOverview } from "./workspace-overview"
 import { WorkbenchDataInfo, workbenchTime } from "./workbench-data-info"
+
+function metricVisual(
+    metric: OverviewMetric,
+    warning: boolean,
+): { icon: LucideIcon; badgeClass: string } {
+    if (warning) {
+        return {
+            icon: AlertCircleIcon,
+            badgeClass: "bg-destructive-soft text-destructive-soft-foreground",
+        }
+    }
+    if (metric.key.includes("review")) {
+        return {
+            icon: ClockIcon,
+            badgeClass: "bg-warning-soft text-warning-soft-foreground",
+        }
+    }
+    if (metric.source.kind === "sales") {
+        return {
+            icon: ShoppingCartIcon,
+            badgeClass: "bg-info-soft text-info-soft-foreground",
+        }
+    }
+    if (metric.source.kind === "inquiry") {
+        return {
+            icon: ClipboardListIcon,
+            badgeClass: "bg-indigo-soft text-indigo-soft-foreground",
+        }
+    }
+    if (metric.source.kind === "purchase") {
+        return {
+            icon: ClipboardCheckIcon,
+            badgeClass: "bg-info-soft text-info-soft-foreground",
+        }
+    }
+    if (
+        metric.source.kind === "receivable" ||
+        metric.source.kind === "receipt"
+    ) {
+        return {
+            icon: ReceiptIcon,
+            badgeClass: "bg-success-soft text-success-soft-foreground",
+        }
+    }
+    if (metric.source.kind === "payable" || metric.source.kind === "payment") {
+        return {
+            icon: WalletCardsIcon,
+            badgeClass: "bg-warning-soft text-warning-soft-foreground",
+        }
+    }
+    if (metric.source.kind === "fulfillment") {
+        return {
+            icon: TruckIcon,
+            badgeClass: "bg-teal-soft text-teal-soft-foreground",
+        }
+    }
+    if (metric.source.kind === "profit") {
+        return {
+            icon: TrendingUpIcon,
+            badgeClass: "bg-success-soft text-success-soft-foreground",
+        }
+    }
+    return {
+        icon: FileTextIcon,
+        badgeClass: "bg-info-soft text-info-soft-foreground",
+    }
+}
 
 export function RoleWorkbenchMetrics({
     overview,
@@ -32,16 +112,20 @@ export function RoleWorkbenchMetrics({
                 const data = query.isError ? undefined : query.data
                 const value = overviewValue(metric, data)
                 const period = metric.key === "sales-created"
-                const warning =
+                const warning = Boolean(
                     metric.warning &&
                     value != null &&
-                    compareDecimal(String(value), "0", 2) > 0
+                    compareDecimal(String(value), "0", 2) > 0,
+                )
+                const visual = metricVisual(metric, warning)
+                const Icon = visual.icon
                 return (
                     <article
                         key={metric.key}
                         className={cn(
-                            "relative min-w-0 rounded-xl border border-border/70 bg-card",
-                            warning && "border-destructive/30",
+                            "group/kpi relative min-w-0 rounded-lg border border-border/90 bg-card shadow-2xs transition-[border-color,box-shadow] duration-150 hover:border-primary/45 hover:shadow-xs",
+                            warning &&
+                                "border-destructive-border hover:border-destructive/60",
                         )}
                     >
                         <button
@@ -52,29 +136,47 @@ export function RoleWorkbenchMetrics({
                                     ? void query.refetch()
                                     : onSelect(metric)
                             }
-                            className="group flex h-full w-full flex-col rounded-xl p-4 text-left transition-colors hover:bg-muted/30 focus-visible:outline-2 focus-visible:outline-ring"
+                            className="flex h-full w-full flex-col rounded-lg p-4 text-left focus-visible:outline-2 focus-visible:outline-primary"
                         >
-                            <span
+                            <div className="flex w-full items-center gap-2 pr-7">
+                                <span
+                                    className={cn(
+                                        "flex size-6.5 shrink-0 items-center justify-center rounded-md",
+                                        visual.badgeClass,
+                                    )}
+                                    aria-hidden="true"
+                                >
+                                    <Icon className="size-3.5" />
+                                </span>
+                                <span
+                                    className={cn(
+                                        "truncate text-body-compact font-medium text-muted-foreground",
+                                        warning &&
+                                            "text-destructive-soft-foreground",
+                                    )}
+                                >
+                                    {metric.label}
+                                </span>
+                            </div>
+                            <div
                                 className={cn(
-                                    "pr-7 text-sm text-muted-foreground",
-                                    warning && "text-destructive",
+                                    "mt-3 flex min-h-9 items-baseline gap-1.5 text-value-summary font-semibold tabular-nums tracking-tight text-foreground",
+                                    warning &&
+                                        "text-destructive-soft-foreground",
                                 )}
                             >
-                                {metric.label}
-                            </span>
-                            <div className="mt-3 flex min-h-10 items-baseline gap-1.5 text-value-summary font-semibold tabular-nums tracking-tight">
                                 {query.isPending ? (
-                                    <Skeleton className="h-9 w-24" />
+                                    <Skeleton className="h-8 w-24" />
                                 ) : query.isError ? (
-                                    <span className="text-sm text-destructive">
+                                    <span className="text-body-compact font-normal text-destructive">
                                         读取失败，点击重试
                                     </span>
                                 ) : data?.noScope ? (
-                                    <span className="text-sm text-muted-foreground">
+                                    <span className="text-body-compact font-normal text-muted-foreground">
                                         暂无数据查看权限
                                     </span>
                                 ) : value == null ? (
-                                    <span className="text-sm text-muted-foreground">
+                                    <span className="text-body-compact font-normal text-muted-foreground">
                                         {data?.limited
                                             ? "仅统计权限内部分数据"
                                             : "暂不可用"}
@@ -97,8 +199,8 @@ export function RoleWorkbenchMetrics({
                                     />
                                 )}
                             </div>
-                            <span className="mt-2 flex w-full items-center justify-between gap-2 text-xs text-muted-foreground">
-                                <span>
+                            <div className="mt-auto flex w-full items-center justify-between gap-2 pt-3 text-xs text-muted-foreground">
+                                <span className="truncate">
                                     {period
                                         ? "所选期间 · 含草稿"
                                         : metric.field === "overdue"
@@ -106,22 +208,15 @@ export function RoleWorkbenchMetrics({
                                           : metric.field === "balance"
                                             ? "当前余额 · 含税"
                                             : "截至当前"}
+                                    {data?.limited ? " · 部分范围" : ""}
                                 </span>
-                                <ArrowUpRightIcon
-                                    className="size-3.5 opacity-40 transition-opacity group-hover:opacity-100"
-                                    aria-hidden="true"
-                                />
-                            </span>
-                            <span className="mt-2 text-xs text-muted-foreground">
-                                {query.isFetching && !query.isPending
-                                    ? "更新中…"
-                                    : data?.asOf
-                                      ? `更新于 ${workbenchTime(data.asOf)}`
-                                      : query.isPending
-                                        ? "读取中…"
-                                        : "更新时间待返回"}
-                                {data?.limited ? " · 仅统计权限内部分数据" : ""}
-                            </span>
+                                <span className="inline-flex shrink-0 items-center gap-0.5 text-muted-foreground/70 transition-colors group-hover/kpi:text-primary">
+                                    <ArrowUpRightIcon
+                                        className="size-3.5 transition-transform duration-150 group-hover/kpi:translate-x-0.5 group-hover/kpi:-translate-y-0.5"
+                                        aria-hidden="true"
+                                    />
+                                </span>
+                            </div>
                         </button>
                         <div className="absolute top-2.5 right-2.5">
                             <WorkbenchDataInfo

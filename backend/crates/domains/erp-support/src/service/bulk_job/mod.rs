@@ -580,7 +580,7 @@ impl BulkJobService {
     pub async fn background_job_item_list(
         &self,
         job_id: &str,
-        status: Option<crate::entity::bulk_job::ItemStatus>,
+        status: Option<crate::entity::bulk_job::ItemStatusFilter>,
         page: u64,
         page_size: u32,
         actor: &AuditActor,

@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowUpRightIcon } from "lucide-react"
+import { ArrowUpRightIcon, WalletCardsIcon } from "lucide-react"
 import { MoneyValue } from "@/components/business"
 import { Skeleton } from "@/components/ui/skeleton"
 import { compareDecimal, divideFixed } from "@/lib/fixed-decimal"
@@ -27,20 +27,28 @@ export function RoleWorkbenchBalances({
     }, "0")
     return (
         <section
-            className="min-w-0 rounded-xl border border-border/70 bg-card"
+            className="min-w-0 rounded-lg border border-border/90 bg-card shadow-2xs"
             aria-labelledby="cashier-workbench-balances-title"
         >
-            <div className="flex items-center justify-between px-4 pt-3">
-                <div>
-                    <h2
-                        id="cashier-workbench-balances-title"
-                        className="text-sm font-semibold"
+            <div className="flex items-center justify-between border-b border-grid/70 px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                    <span
+                        className="flex size-7 shrink-0 items-center justify-center rounded-md bg-info-soft text-info-soft-foreground"
+                        aria-hidden="true"
                     >
-                        待分配资金
-                    </h2>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        当前未分配余额 · 含税
-                    </p>
+                        <WalletCardsIcon className="size-3.5" />
+                    </span>
+                    <div>
+                        <h2
+                            id="cashier-workbench-balances-title"
+                            className="text-sm font-semibold text-foreground"
+                        >
+                            待分配资金
+                        </h2>
+                        <p className="text-xs text-muted-foreground">
+                            当前未分配余额 · 含税
+                        </p>
+                    </div>
                 </div>
                 <WorkbenchDataInfo
                     id="cashier-workbench-balances-info"
@@ -109,12 +117,12 @@ export function RoleWorkbenchBalances({
                                         ? void query.refetch()
                                         : onSelect(item)
                                 }
-                                className="group w-full rounded-lg px-2 py-3 text-left hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring"
+                                className="group w-full rounded-md px-2.5 py-3 text-left transition-colors hover:bg-row-hover focus-visible:outline-2 focus-visible:outline-primary"
                             >
-                                <span className="flex items-center justify-between text-xs text-muted-foreground">
+                                <span className="flex items-center justify-between text-xs font-medium text-muted-foreground group-hover:text-primary">
                                     {item.label}
                                     <ArrowUpRightIcon
-                                        className="size-3.5 opacity-40 group-hover:opacity-100"
+                                        className="size-3.5 opacity-50 transition-all group-hover:text-primary group-hover:opacity-100"
                                         aria-hidden="true"
                                     />
                                 </span>
@@ -150,7 +158,7 @@ export function RoleWorkbenchBalances({
                                         aria-hidden="true"
                                     >
                                         <span
-                                            className={`block h-full origin-left rounded-full ${item.source.kind === "receipt" ? "bg-info" : "bg-foreground/30"}`}
+                                            className={`block h-full origin-left rounded-full ${item.source.kind === "receipt" ? "bg-primary" : "bg-success"}`}
                                             style={{
                                                 transform: `scaleX(${ratio})`,
                                             }}

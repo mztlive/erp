@@ -280,7 +280,7 @@ function DataTable<TData>({
             cell: () => (
                 <ChevronRightIcon
                     aria-hidden="true"
-                    className="text-muted-foreground"
+                    className="inline-block text-muted-foreground/70 opacity-0 transition-all duration-150 group-hover/row:translate-x-0.5 group-hover/row:text-primary group-hover/row:opacity-100 group-focus-within/row:opacity-100 group-data-[highlighted=true]/row:text-primary group-data-[highlighted=true]/row:opacity-100 [@media(hover:none)]:opacity-45"
                 />
             ),
             enableHiding: false,
@@ -434,7 +434,7 @@ function DataTable<TData>({
                 ref={tableSurfaceRef}
                 data-slot="data-table-surface"
                 className={cn(
-                    "overflow-hidden border-y border-border bg-card [container-type:inline-size]",
+                    "overflow-hidden rounded-lg border border-border/90 bg-card [container-type:inline-size]",
                     scrollable &&
                         "min-h-0 flex-1 [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-auto [&>[data-slot=table-container]>table>thead]:sticky [&>[data-slot=table-container]>table>thead]:top-0 [&>[data-slot=table-container]>table>thead]:z-40",
                 )}

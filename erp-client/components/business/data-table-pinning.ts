@@ -30,7 +30,10 @@ export function usePinnedColumnOffsets<TData>(
         if (!surface) return
 
         const observedHeaders = new Set<Element>()
-        const resizeObserver = new ResizeObserver(syncPinnedColumnOffsets)
+        const resizeObserver = new ResizeObserver(() => {
+            syncPinnedColumnOffsets()
+            syncScrollEdgeFlags()
+        })
 
         function observeLeafHeaders() {
             surface
@@ -103,19 +106,56 @@ export function usePinnedColumnOffsets<TData>(
                 })
         }
 
+        const scrollContainer = surface.querySelector<HTMLElement>(
+            '[data-slot="table-container"]',
+        )
+
+        function syncScrollEdgeFlags() {
+            if (!surface || !scrollContainer) return
+            const { scrollTop, scrollLeft, scrollWidth, clientWidth } =
+                scrollContainer
+            const hasHorizontalOverflow = scrollWidth - clientWidth > 1
+            if (scrollTop > 1) surface.dataset.scrolledTop = "true"
+            else delete surface.dataset.scrolledTop
+
+            if (hasHorizontalOverflow && scrollLeft > 1) {
+                surface.dataset.scrolledLeft = "true"
+            } else {
+                delete surface.dataset.scrolledLeft
+            }
+
+            if (
+                hasHorizontalOverflow &&
+                scrollLeft + clientWidth < scrollWidth - 1
+            ) {
+                surface.dataset.scrolledRight = "true"
+            } else {
+                delete surface.dataset.scrolledRight
+            }
+        }
+
         const mutationObserver = new MutationObserver(() => {
             observeLeafHeaders()
             syncPinnedColumnOffsets()
+            syncScrollEdgeFlags()
         })
 
         observeLeafHeaders()
         resizeObserver.observe(surface)
+        if (scrollContainer) {
+            resizeObserver.observe(scrollContainer)
+            scrollContainer.addEventListener("scroll", syncScrollEdgeFlags, {
+                passive: true,
+            })
+        }
         mutationObserver.observe(surface, { childList: true, subtree: true })
         syncPinnedColumnOffsets()
+        syncScrollEdgeFlags()
 
         return () => {
             resizeObserver.disconnect()
             mutationObserver.disconnect()
+            scrollContainer?.removeEventListener("scroll", syncScrollEdgeFlags)
         }
     }, [pinnedColumnSignature, surfaceRef, table, visibleColumnSignature])
 }

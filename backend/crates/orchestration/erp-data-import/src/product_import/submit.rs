@@ -203,7 +203,7 @@ impl ProductImportProcess {
 }
 
 // 导入入口只检查功能资格；商品候选范围由后台逐行创建重新验证。
-async fn authorize(
+pub(super) async fn authorize(
     authorization: &AuthorizationService,
     actor: &AuditActor,
     executor: &mut dyn Executor,

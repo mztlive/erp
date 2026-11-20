@@ -44,6 +44,32 @@ crate::entity::enum_str!(ItemStatus {
     Failed => ("failed", "失败"),
 });
 
+/// 按执行结果筛选任务明细，含尚未产生结果的行。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ItemStatusFilter {
+    /// 已成功。
+    Success,
+    /// 已跳过。
+    Skipped,
+    /// 执行失败或结果待核对。
+    Failed,
+    /// 尚未处理。
+    Unprocessed,
+}
+
+impl ItemStatusFilter {
+    /// 返回所选分类对应的持久化状态，未处理对应空值。
+    pub fn status(self) -> Option<ItemStatus> {
+        match self {
+            Self::Success => Some(ItemStatus::Success),
+            Self::Skipped => Some(ItemStatus::Skipped),
+            Self::Failed => Some(ItemStatus::Failed),
+            Self::Unprocessed => None,
+        }
+    }
+}
+
 /// 后台任务逐项创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BackgroundJobItemData {

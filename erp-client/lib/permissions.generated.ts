@@ -2837,6 +2837,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/products/import-jobs/{id}/result-rows",
+                description: "下载商品导入分类结果",
+                permission: {
+                    resource: "product",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
                 method: "PUT",
                 path: "/admin/products/{id}",
                 description: "规格编辑商品",

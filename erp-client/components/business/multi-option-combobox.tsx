@@ -6,6 +6,7 @@ import {
 } from "@/components/business/combobox-refresh"
 
 import * as React from "react"
+import { ChevronDownIcon } from "lucide-react"
 
 import {
     Combobox,
@@ -146,6 +147,7 @@ export function MultiOptionCombobox({
                 ref={anchorRef}
                 data-slot="multi-option-combobox"
                 data-size={size}
+                data-has-value={selected.length > 0 ? "true" : undefined}
                 className={cn("min-w-0", className)}
             >
                 {filterLabel ? (
@@ -212,6 +214,10 @@ export function MultiOptionCombobox({
                             aria-required={required || undefined}
                             onBlur={onBlur}
                             className={cn(size === "sm" && "text-xs")}
+                        />
+                        <ChevronDownIcon
+                            aria-hidden="true"
+                            className="pointer-events-none ml-auto mr-0.5 size-3.5 shrink-0 text-muted-foreground/75"
                         />
                     </ComboboxChips>
                 )}

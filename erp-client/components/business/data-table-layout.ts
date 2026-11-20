@@ -53,7 +53,7 @@ export function pinningClass(
     if (!pinned) return undefined
     return area === "header"
         ? "sticky z-30 bg-table-header"
-        : "sticky z-10 bg-card group-hover/row:bg-row-hover group-data-[state=selected]/row:bg-row-selected [[data-placeholder]_&]:group-hover/row:bg-card"
+        : "sticky z-10 bg-card group-hover/row:bg-row-hover group-data-[state=selected]/row:bg-row-selected group-data-[highlighted=true]/row:bg-row-selected [[data-placeholder]_&]:group-hover/row:bg-card"
 }
 
 export function columnWidthClass(
@@ -64,7 +64,7 @@ export function columnWidthClass(
         return "w-table-column-selection min-w-table-column-selection max-w-table-column-selection"
     }
     if (role === "preview") {
-        return "w-table-column-preview min-w-table-column-preview max-w-table-column-preview [&_svg]:size-4"
+        return "w-table-column-preview min-w-table-column-preview max-w-table-column-preview px-1.5 [&_svg]:size-4"
     }
     return dataTableColumnWidthClasses[width]
 }

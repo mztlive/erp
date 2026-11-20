@@ -1,170 +1,208 @@
 "use client"
 
-import type { ReactNode } from "react"
-import { ChevronDownIcon, FilterIcon, XIcon } from "lucide-react"
+import * as React from "react"
+import { ChevronDownIcon, FilterIcon, RotateCcwIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
-import {
-    Popover,
-    PopoverContent,
-    PopoverTitle,
-    PopoverTrigger,
-} from "@/components/ui/popover"
 import { listFilterText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
-/** 锚定查询栏的高级筛选；仅正文滚动，应用操作始终可见。 */
-export function ListFilterPopover({
-    idPrefix,
+/** 高级筛选触发按钮：平时无框轻按钮，展开或有已选条件时高亮飞书冰蓝。 */
+export function ListFilterTrigger({
     triggerId,
-    queryId,
+    panelId,
+    open,
+    count,
+    onToggle,
+}: {
+    triggerId: string
+    panelId: string
+    open: boolean
+    count: number
+    onToggle: () => void
+}) {
+    return (
+        <Button
+            id={triggerId}
+            type="button"
+            variant="ghost"
+            aria-expanded={open}
+            aria-controls={panelId}
+            className={cn(
+                count > 0 || open
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent"
+                    : "text-foreground/80 hover:bg-muted/80 hover:text-foreground",
+            )}
+            onClick={onToggle}
+        >
+            <FilterIcon aria-hidden="true" className="size-3.5" />
+            {listFilterText.more}
+            {count > 0 ? (
+                <span
+                    className="rounded-full bg-primary px-1.5 text-tiny leading-4 font-medium tabular-nums text-primary-foreground"
+                    aria-label={`${count} 项已生效`}
+                >
+                    {count}
+                </span>
+            ) : null}
+            <ChevronDownIcon
+                aria-hidden="true"
+                className={cn(
+                    "size-3.5 transition-transform duration-150",
+                    open && "rotate-180",
+                )}
+            />
+        </Button>
+    )
+}
+
+/**
+ * 飞书多维表格风格通栏展开式高级筛选区。
+ * - 不遮挡表格、不产生浮层嵌套；保持挂载（hidden 切换）以保留未应用草稿；
+ * - 通过 portal 挂载到列表工作面时自带独立 <form>，退回工具栏内部渲染时复用外层表单避免嵌套。
+ */
+export function ListFilterTray({
+    idPrefix,
     panelId,
     label,
     open,
     onOpenChange,
     count,
-    size = "wide",
     onApply,
     onReset,
     resetId,
+    hint = "可组合多个条件，点击「应用」后生效",
+    inPortal = true,
     children,
 }: {
     idPrefix: string
-    triggerId: string
-    queryId: string
     panelId: string
     label: string
     open: boolean
     onOpenChange: (open: boolean) => void
     count: number
-    size?: "compact" | "wide" | "medium"
     onApply: () => void
     onReset?: () => void
     resetId?: string
-    children: ReactNode
+    hint?: string
+    /** true：已挂载到外层通栏槽（独立 form）；false：内联在父 form 内部（使用 div）。 */
+    inPortal?: boolean
+    children: React.ReactNode
 }) {
-    return (
-        <Popover
-            open={open}
-            onOpenChange={(nextOpen, details) => {
-                // 外部「查询」仍应提交本次全部草稿，不能先被外点取消清掉。
-                const target = details.event.target
-                if (
-                    !nextOpen &&
-                    target instanceof Element &&
-                    target.closest("button")?.id === queryId
-                ) {
-                    details.cancel()
-                    return
-                }
-                onOpenChange(nextOpen)
-            }}
-        >
-            <PopoverTrigger
-                render={
-                    <Button id={triggerId} type="button" variant="outline" />
-                }
-                aria-controls={panelId}
-            >
-                <FilterIcon aria-hidden="true" />
-                {listFilterText.more}
-                {count > 0 && (
-                    <span
-                        className="rounded bg-muted px-1.5 text-xs tabular-nums"
-                        aria-label={`${count} 项已生效`}
-                    >
-                        {count}
-                    </span>
-                )}
-                <ChevronDownIcon
-                    aria-hidden="true"
-                    className={cn("transition-transform", open && "rotate-180")}
-                />
-            </PopoverTrigger>
-            <PopoverContent
-                keepMounted
-                id={panelId}
-                aria-label={label}
-                align="end"
-                sideOffset={8}
-                collisionPadding={8}
-                collisionAvoidance={{
-                    side: "flip",
-                    align: "shift",
-                    fallbackAxisSide: "none",
-                }}
+    const sectionRef = React.useRef<HTMLElement | null>(null)
+
+    React.useEffect(() => {
+        if (!open) return
+        const node = sectionRef.current
+        if (!node) return
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape" && !event.defaultPrevented) {
+                onOpenChange(false)
+            }
+        }
+        node.addEventListener("keydown", onKeyDown)
+        return () => node.removeEventListener("keydown", onKeyDown)
+    }, [open, onOpenChange])
+
+    const content = (
+        <>
+            <div
+                data-slot="list-filter-tray-body"
                 className={cn(
-                    // 打开使用淡入缩放；关闭立即隐藏，避免 iframe 隐藏中断退场动画。
-                    // 保持字段挂载，取消或切换 Tab 后仍保留未应用的筛选草稿。
-                    "max-h-[min(var(--spacing-filter-max),calc(100dvh-2rem),var(--available-height))] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden rounded-xl p-0 data-open:duration-200 data-closed:hidden data-closed:animate-none motion-reduce:animate-none",
-                    size === "compact"
-                        ? "w-80"
-                        : size === "medium"
-                          ? "w-[34rem] max-h-[min(var(--spacing-filter-medium-max),calc(100dvh-2rem),var(--available-height))]"
-                          : "w-[36rem]",
+                    "max-h-[min(26rem,44dvh)] overflow-y-auto overscroll-contain pt-2.5 pb-2.5",
+                    inPortal && "border-t border-border/45",
                 )}
             >
-                <div className="flex shrink-0 items-center justify-between border-b px-4 py-filter-block">
-                    <PopoverTitle className="text-sm font-semibold">
-                        {listFilterText.more}
-                    </PopoverTitle>
+                {children}
+            </div>
+            <div
+                data-slot="list-filter-tray-footer"
+                className="flex flex-wrap items-center justify-between gap-2 border-t border-border/45 py-2"
+            >
+                <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                    {count > 0 ? (
+                        <span className="inline-flex items-center rounded-full bg-sidebar-accent px-2 py-0.5 text-tiny leading-4 font-medium tabular-nums text-sidebar-accent-foreground">
+                            已生效 {count} 项
+                        </span>
+                    ) : null}
+                    <span className="truncate text-muted-foreground/75">
+                        {hint}
+                    </span>
+                </div>
+                <div className="ml-auto flex shrink-0 items-center gap-1">
+                    {onReset ? (
+                        <Button
+                            id={resetId ?? `${idPrefix}-reset-more`}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:bg-muted/80 hover:text-primary"
+                            onClick={onReset}
+                        >
+                            <RotateCcwIcon
+                                aria-hidden="true"
+                                className="size-3.5"
+                            />
+                            {listFilterText.reset}
+                        </Button>
+                    ) : null}
                     <Button
-                        id={`${idPrefix}-more-close`}
+                        id={`${idPrefix}-more-cancel`}
                         type="button"
                         variant="ghost"
-                        size="icon-sm"
-                        aria-label={listFilterText.close}
+                        size="sm"
+                        className="text-foreground/80 hover:bg-muted/80 hover:text-foreground"
                         onClick={() => onOpenChange(false)}
                     >
-                        <XIcon aria-hidden="true" />
+                        收起
                     </Button>
+                    <LoadingButton
+                        id={`${idPrefix}-more-apply`}
+                        type="submit"
+                        size="sm"
+                        className="ml-0.5 px-3.5"
+                    >
+                        {listFilterText.apply}
+                    </LoadingButton>
                 </div>
+            </div>
+        </>
+    )
+
+    return (
+        <section
+            ref={sectionRef}
+            id={panelId}
+            data-slot="list-filter-tray"
+            data-placement={inPortal ? "edge" : "embedded"}
+            aria-label={label}
+            hidden={!open}
+            className={cn(
+                "min-w-0",
+                !open && "hidden",
+                open &&
+                    "animate-in fade-in-0 slide-in-from-top-1 duration-150 motion-reduce:animate-none",
+                inPortal
+                    ? "border-b border-border/75 bg-card px-4"
+                    : "rounded-lg border border-border/75 bg-card px-4",
+            )}
+        >
+            {inPortal ? (
                 <form
-                    className="flex min-h-0 flex-col"
                     aria-label={label}
+                    className="flex min-w-0 flex-col"
                     onSubmit={(event) => {
                         event.preventDefault()
                         event.stopPropagation()
                         onApply()
                     }}
                 >
-                    <div className="min-h-0 overflow-y-auto overscroll-contain p-filter-body">
-                        {children}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2 border-t bg-popover px-4 py-filter-block">
-                        {onReset && (
-                            <Button
-                                id={resetId ?? `${idPrefix}-reset-more`}
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={onReset}
-                            >
-                                {listFilterText.reset}
-                            </Button>
-                        )}
-                        <div className="ml-auto flex gap-2">
-                            <Button
-                                id={`${idPrefix}-more-cancel`}
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => onOpenChange(false)}
-                            >
-                                {listFilterText.cancel}
-                            </Button>
-                            <LoadingButton
-                                id={`${idPrefix}-more-apply`}
-                                type="submit"
-                                size="sm"
-                            >
-                                {listFilterText.apply}
-                            </LoadingButton>
-                        </div>
-                    </div>
+                    {content}
                 </form>
-            </PopoverContent>
-        </Popover>
+            ) : (
+                <div className="flex min-w-0 flex-col">{content}</div>
+            )}
+        </section>
     )
 }

@@ -211,16 +211,16 @@ function BusinessTableFrame({
                         {toolbar ? (
                             <div
                                 data-slot="table-frame-toolbar"
-                                className="bg-card py-1"
+                                className="rounded-lg border border-border/90 bg-card px-4 py-3 shadow-2xs"
                             >
                                 {toolbar}
                             </div>
                         ) : null}
                         <div
                             data-slot="business-table-frame-result"
-                            className="overflow-hidden border-y border-border bg-card"
+                            className="overflow-hidden rounded-lg border border-border/90 bg-card shadow-2xs"
                         >
-                            <div className="flex min-h-row-comfortable flex-col gap-2 border-b px-0 py-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex min-h-row-comfortable flex-col gap-2 border-b border-border/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div className="min-w-0">
                                     <Heading className="text-base font-semibold text-foreground">
                                         {title}
@@ -235,12 +235,16 @@ function BusinessTableFrame({
                                     {headerActions}
                                 </div>
                             </div>
-                            <TableToolbar isFrameToolbar actions={tableActions}>
+                            <TableToolbar
+                                isFrameToolbar
+                                actions={tableActions}
+                                className="border-b border-grid/70 px-4"
+                            >
                                 {selectionBar}
                             </TableToolbar>
                             <div
                                 data-slot="business-table-frame-table"
-                                className="[&_[data-slot=data-table]]:gap-0 [&_[data-slot=data-table-pagination]]:border-t [&_[data-slot=data-table-surface]]:rounded-none [&_[data-slot=data-table-surface]]:border-0"
+                                className="[&_[data-slot=data-table]]:gap-0 [&_[data-slot=data-table-pagination]]:border-t [&_[data-slot=data-table-pagination]]:border-border/80 [&_[data-slot=data-table-pagination]]:px-4 [&_[data-slot=data-table-surface]]:rounded-none [&_[data-slot=data-table-surface]]:border-0"
                             >
                                 {table}
                             </div>

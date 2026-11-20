@@ -144,63 +144,14 @@ export function PersonDirectoryFilter({
 
     if (!canRead || isPermissionDeniedError(list.error)) return null
 
-    return (
-        <div className={hideLabel ? "min-w-0" : "min-w-0 space-y-1.5"}>
-            {!externalLabel && (
-                <label
-                    className={
-                        hideLabel ? "sr-only" : "text-xs text-muted-foreground"
-                    }
-                    htmlFor={id}
-                >
-                    {label}
-                </label>
-            )}
-            {selectionMode === "single" ? (
-                <>
-                    <OptionCombobox
-                        id={id}
-                        aria-label={label}
-                        value={ids[0] ?? null}
-                        options={uniqueOptions}
-                        filterMode="remote"
-                        onRefresh={() =>
-                            Promise.all([
-                                list.refetch({ throwOnError: true }),
-                                ...(ids.length
-                                    ? [selected.refetch({ throwOnError: true })]
-                                    : []),
-                            ])
-                        }
-                        onSearchChange={search.onSearchChange}
-                        loading={list.isFetching || selected.isFetching}
-                        emptyLabel={emptyLabel}
-                        onValueChange={(next) => onChange(next ?? "")}
-                        placeholder={`全部${label}`}
-                    />
-                    {hasMore && (
-                        <Button
-                            id={`${id}-more`}
-                            type="button"
-                            variant="link"
-                            size="xs"
-                            className="h-auto px-0"
-                            onClick={() => {
-                                setPageKey(filterKey)
-                                setPageCount(effectivePageCount + 1)
-                            }}
-                        >
-                            加载更多
-                        </Button>
-                    )}
-                </>
-            ) : (
-                <MultiOptionCombobox
+    const inlineField = !hideLabel && !externalLabel
+    const controlNode =
+        selectionMode === "single" ? (
+            <>
+                <OptionCombobox
                     id={id}
                     aria-label={label}
-                    filterLabel={hideLabel || externalLabel ? label : undefined}
-                    hideFilterLabel={externalLabel}
-                    value={ids}
+                    value={ids[0] ?? null}
                     options={uniqueOptions}
                     filterMode="remote"
                     onRefresh={() =>
@@ -212,22 +163,92 @@ export function PersonDirectoryFilter({
                         ])
                     }
                     onSearchChange={search.onSearchChange}
-                    loading={list.isFetching}
-                    hasMore={hasMore}
-                    onLoadMore={() => {
-                        setPageKey(filterKey)
-                        setPageCount(effectivePageCount + 1)
-                    }}
-                    loadMoreId={`${id}-more`}
+                    loading={list.isFetching || selected.isFetching}
                     emptyLabel={emptyLabel}
-                    onValueChange={(next) =>
-                        onChange([...new Set(next)].sort().join(","))
-                    }
-                    placeholder={`全部${label}`}
+                    onValueChange={(next) => onChange(next ?? "")}
+                    placeholder={inlineField ? "全部" : `全部${label}`}
                 />
-            )}
+                {hasMore && (
+                    <Button
+                        id={`${id}-more`}
+                        type="button"
+                        variant="link"
+                        size="xs"
+                        className="h-auto px-0"
+                        onClick={() => {
+                            setPageKey(filterKey)
+                            setPageCount(effectivePageCount + 1)
+                        }}
+                    >
+                        加载更多
+                    </Button>
+                )}
+            </>
+        ) : (
+            <MultiOptionCombobox
+                id={id}
+                aria-label={label}
+                filterLabel={hideLabel || externalLabel ? label : undefined}
+                hideFilterLabel={externalLabel}
+                value={ids}
+                options={uniqueOptions}
+                filterMode="remote"
+                onRefresh={() =>
+                    Promise.all([
+                        list.refetch({ throwOnError: true }),
+                        ...(ids.length
+                            ? [selected.refetch({ throwOnError: true })]
+                            : []),
+                    ])
+                }
+                onSearchChange={search.onSearchChange}
+                loading={list.isFetching}
+                hasMore={hasMore}
+                onLoadMore={() => {
+                    setPageKey(filterKey)
+                    setPageCount(effectivePageCount + 1)
+                }}
+                loadMoreId={`${id}-more`}
+                emptyLabel={emptyLabel}
+                onValueChange={(next) =>
+                    onChange([...new Set(next)].sort().join(","))
+                }
+                placeholder={inlineField ? "全部" : `全部${label}`}
+            />
+        )
+
+    return (
+        <div className="min-w-0">
+            <div
+                data-slot={inlineField ? "list-filter-field" : undefined}
+                className={hideLabel ? "min-w-0" : "min-w-0 space-y-1.5"}
+            >
+                {!externalLabel && (
+                    <label
+                        data-slot={
+                            inlineField ? "list-filter-field-label" : undefined
+                        }
+                        className={
+                            hideLabel
+                                ? "sr-only"
+                                : "block text-xs text-muted-foreground"
+                        }
+                        htmlFor={id}
+                    >
+                        {label}
+                    </label>
+                )}
+                <div
+                    data-slot={
+                        inlineField ? "list-filter-field-control" : undefined
+                    }
+                    className="min-w-0"
+                >
+                    {controlNode}
+                </div>
+            </div>
             {list.isError ? (
-                <p className="text-xs text-destructive" role="alert">
+                <p className="mt-1 text-xs text-destructive" role="alert">
                     {listFailureCopy(list.error)}
                     <Button
                         id={`${id}-retry`}
@@ -244,7 +265,7 @@ export function PersonDirectoryFilter({
             {ids.length > 0 &&
             selected.isError &&
             !isPermissionDeniedError(selected.error) ? (
-                <p className="text-xs text-destructive" role="alert">
+                <p className="mt-1 text-xs text-destructive" role="alert">
                     {selectedFailureCopy(selected.error)}
                     <Button
                         id={`${id}-selected-retry`}

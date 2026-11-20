@@ -22,7 +22,7 @@ function Command({
         <CommandPrimitive
             data-slot="command"
             className={cn(
-                "flex size-full flex-col overflow-hidden rounded-3xl bg-popover p-1 text-popover-foreground",
+                "flex size-full flex-col overflow-hidden rounded-xl bg-popover p-1 text-popover-foreground",
                 className,
             )}
             {...props}
@@ -52,7 +52,7 @@ function CommandDialog({
             </DialogHeader>
             <DialogContent
                 className={cn(
-                    "top-1/3 translate-y-0 overflow-hidden rounded-3xl! p-0",
+                    "top-1/4 translate-y-0 overflow-hidden rounded-xl! p-0 sm:max-w-lg",
                     className,
                 )}
                 showCloseButton={showCloseButton}
@@ -68,8 +68,11 @@ function CommandInput({
     ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
     return (
-        <div data-slot="command-input-wrapper" className="p-1 pb-0">
-            <InputGroup className="h-8!">
+        <div
+            data-slot="command-input-wrapper"
+            className="border-b border-grid p-2"
+        >
+            <InputGroup className="h-control border-0 bg-transparent shadow-none hover:border-0 has-[[data-slot=input-group-control]:focus-visible]:border-0 has-[[data-slot=input-group-control]:focus-visible]:ring-0">
                 <CommandPrimitive.Input
                     data-slot="command-input"
                     className={cn(
@@ -79,7 +82,7 @@ function CommandInput({
                     {...props}
                 />
                 <InputGroupAddon>
-                    <SearchIcon className="size-4 shrink-0 opacity-50" />
+                    <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
                 </InputGroupAddon>
             </InputGroup>
         </div>
@@ -155,7 +158,7 @@ function CommandItem({
             id={id}
             data-slot="command-item"
             className={cn(
-                "group/command-item relative flex min-h-7 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none in-data-[slot=dialog-content]:rounded-2xl data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-muted data-selected:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-selected:*:[svg]:text-foreground",
+                "group/command-item relative flex min-h-8 cursor-default items-center gap-2 rounded-md px-2.5 py-1.5 text-body-compact outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-sidebar-accent data-selected:text-sidebar-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg]:text-muted-foreground data-selected:*:[svg]:text-sidebar-accent-foreground",
                 className,
             )}
             {...props}

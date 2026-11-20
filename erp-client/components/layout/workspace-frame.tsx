@@ -60,8 +60,25 @@ export function WorkspaceFrame({ children }: { children: React.ReactNode }) {
             childList: true,
             characterData: true,
         })
+        const handleQuickSearchShortcut = (event: KeyboardEvent) => {
+            if (
+                event.defaultPrevented ||
+                event.isComposing ||
+                event.altKey ||
+                event.shiftKey
+            )
+                return
+            if (
+                event.key.toLowerCase() === "k" &&
+                (event.metaKey || event.ctrlKey)
+            ) {
+                event.preventDefault()
+                workspaceHost()?.openQuickSearch?.()
+            }
+        }
         document.addEventListener("click", interceptWorkspaceLink, true)
         window.addEventListener("keydown", handleWorkspaceCloseShortcut, true)
+        window.addEventListener("keydown", handleQuickSearchShortcut, true)
         window.addEventListener("erp-workspace-form-state", report)
         window.addEventListener("hashchange", report)
 
@@ -81,6 +98,11 @@ export function WorkspaceFrame({ children }: { children: React.ReactNode }) {
             window.removeEventListener(
                 "keydown",
                 handleWorkspaceCloseShortcut,
+                true,
+            )
+            window.removeEventListener(
+                "keydown",
+                handleQuickSearchShortcut,
                 true,
             )
             window.removeEventListener("erp-workspace-form-state", report)
