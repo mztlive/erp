@@ -9,6 +9,7 @@ use erp_permissions::{
     supplier_offering, supplier_settlement, work_item,
 };
 
+use crate::entity::access_control::scope_spec::ORGANIZATION_PERSON_PROFILE_CHANGE;
 use crate::entity::authorization::{AccessFact, AccessRule, FactKind, RelationKey, RelationMatch};
 use crate::{Permission, QualifiedPermissions};
 
@@ -96,10 +97,7 @@ static REQUIREMENTS: LazyLock<Vec<(Permission, Vec<Permission>)>> = LazyLock::ne
         (internal::CONTRACT_IMPORT, vec![contract::CREATE]),
         (internal::CONTRACT_SALES_ACCESS, vec![contract::TERMINATE]),
         (internal::CATALOG_ADOPTION, vec![supplier_api::ADOPTIONS_PREVIEW]),
-        (
-            internal::ORGANIZATION_PERSON_PROFILE_CHANGE,
-            vec![organization::CHANGE, admin::ACCOUNT_UPDATE_ADMIN],
-        ),
+        (ORGANIZATION_PERSON_PROFILE_CHANGE, vec![organization::CHANGE, admin::ACCOUNT_UPDATE_ADMIN]),
         (internal::SETTLEMENT_REFRESH_PREPARED, vec![supplier_settlement::STATEMENT_REFRESH]),
         (internal::SETTLEMENT_VOID_PREPARED, vec![supplier_settlement::STATEMENT_REFRESH]),
         (internal::SETTLEMENT_RESOLVE_DIFFERENCE, vec![supplier_settlement::STATEMENT_REFRESH]),

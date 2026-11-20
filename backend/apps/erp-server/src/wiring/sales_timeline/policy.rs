@@ -1,6 +1,6 @@
 use erp_permissions::{
-    Permission, fulfillment, internal, inventory, payable, purchase_order, purchase_payment_request,
-    receivable, returns, sales_order,
+    Permission, fulfillment, inventory, payable, purchase_order, purchase_payment_request, receivable,
+    returns, sales_order, sales_review,
 };
 use erp_workflow::DocumentType;
 
@@ -34,7 +34,7 @@ impl ReadPolicy {
         use DocumentType::*;
         match kind {
             SalesOrder | VoucherSalesOrder => sales_order::DETAIL,
-            SalesChangeOrder => internal::SALES_CHANGE_DETAIL,
+            SalesChangeOrder => sales_review::SALES_CHANGE_ORDER_DETAIL,
             PurchaseOrder => purchase_order::DETAIL,
             PurchaseChangeOrder => purchase_order::PURCHASE_CHANGE_DETAIL,
             PurchaseReceipt => fulfillment::PURCHASE_RECEIPT_PURCHASE_RECEIPT_DETAIL,
@@ -61,6 +61,14 @@ impl ReadPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sales_change_timeline_uses_the_registered_detail_permission() {
+        let kind = DocumentType::SalesChangeOrder;
+        let policy = ReadPolicy::for_document(kind);
+        assert_eq!(policy, ReadPolicy::ApprovalSource);
+        assert_eq!(policy.permission(kind), sales_review::SALES_CHANGE_ORDER_DETAIL);
+    }
 
     #[test]
     fn return_documents_use_their_own_detail_policy() {

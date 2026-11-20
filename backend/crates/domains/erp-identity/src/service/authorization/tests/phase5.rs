@@ -9,6 +9,7 @@ use erp_permissions::{
 use persistence_core::testing::SnapshotExecutor;
 
 use super::fixtures::{Facts, Identity, actor, complete, object};
+use crate::entity::access_control::scope_spec::ORGANIZATION_PERSON_PROFILE_CHANGE;
 use crate::entity::authorization::{AccessTarget, FactValue, RelatedObjects, RelationKey};
 use crate::{AuthorizationService, Error};
 
@@ -623,15 +624,13 @@ async fn organization_scope_preserves_fixed_profile_qualification_and_snapshot_b
     let mut executor = SnapshotExecutor::default();
     grant(&identity, &[("org", &[organization::CHANGE]), ("account", &[admin::ACCOUNT_UPDATE_ADMIN])]);
     assert!(matches!(
-        service
-            .organization_scope(&actor(), &internal::ORGANIZATION_PERSON_PROFILE_CHANGE, &mut executor)
-            .await,
+        service.organization_scope(&actor(), &ORGANIZATION_PERSON_PROFILE_CHANGE, &mut executor).await,
         Err(Error::Forbidden(_))
     ));
 
     grant(&identity, &[("combined", &[organization::CHANGE, admin::ACCOUNT_UPDATE_ADMIN])]);
     let scope = service
-        .organization_scope(&actor(), &internal::ORGANIZATION_PERSON_PROFILE_CHANGE, &mut executor)
+        .organization_scope(&actor(), &ORGANIZATION_PERSON_PROFILE_CHANGE, &mut executor)
         .await
         .unwrap();
     scope.ensure_current(&mut executor).unwrap();

@@ -3,11 +3,12 @@ use std::ops::Deref;
 
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
-use erp_permissions::{Permission, internal, organization};
+use erp_permissions::{Permission, organization};
 use persistence_core::{ExecutionBoundary, Executor};
 
 use super::AuthorizationService;
 use super::resolve::scope_deadline;
+use crate::entity::access_control::scope_spec::ORGANIZATION_PERSON_PROFILE_CHANGE;
 use crate::entity::authorization::AccessContext;
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Result};
@@ -61,7 +62,7 @@ impl AuthorizationService {
         permission: &Permission,
         executor: &mut dyn Executor,
     ) -> Result<SnapshotScope> {
-        if ![organization::LIST, organization::CHANGE, internal::ORGANIZATION_PERSON_PROFILE_CHANGE]
+        if ![organization::LIST, organization::CHANGE, ORGANIZATION_PERSON_PROFILE_CHANGE]
             .contains(permission)
         {
             return Err(Error::ValidationError("此入口不提供组织配置范围".into()));

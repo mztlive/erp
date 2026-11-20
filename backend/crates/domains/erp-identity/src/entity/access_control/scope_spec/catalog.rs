@@ -1,4 +1,4 @@
-//! 范围与非范围动作的静态目录。键引用 `erp-permissions` 常量。
+//! 范围与非范围动作的静态目录，引用共享权限及本域专用权限。
 use std::sync::LazyLock;
 
 use erp_permissions::{
@@ -11,7 +11,7 @@ use erp_permissions::{
 };
 
 use super::super::{DataScopeType, ScopeDimension};
-use super::{ActionKind, FixedAction, ScopeSource, scope};
+use super::{ActionKind, FixedAction, ORGANIZATION_PERSON_PROFILE_CHANGE, ScopeSource, scope};
 use crate::Permission;
 
 const ALL: &[DataScopeType] = &[
@@ -165,7 +165,7 @@ pub(super) static SPECS: LazyLock<Vec<super::ScopeSpec>> = LazyLock::new(|| {
         scope(&organization::LIST, CURRENT, false, ALL, ORG, false),
         scope(&organization::CHANGE, CURRENT, false, ALL, ORG, false),
         scope(
-            &internal::ORGANIZATION_PERSON_PROFILE_CHANGE,
+            &ORGANIZATION_PERSON_PROFILE_CHANGE,
             ScopeSource::Permission(organization::CHANGE),
             false,
             ALL,

@@ -13,7 +13,7 @@ use crate::entity::authorization::{
     AccessContext, AccessFact, AccessRule, FactKind, QueryModel, QueryModelKey, QueryOutput, RelationKey,
 };
 use crate::ports::{AccessMapping, QueryFragment, RelationMapping};
-use crate::service::authorization::rules;
+use crate::service::authorization::test_rules::binding_condition;
 use crate::{CompiledAccess, Error, Permission, Result};
 
 /// 公共授权 API 的内存映射替身，可模拟到期和违反绑定约束。
@@ -83,7 +83,7 @@ impl AccessMapping for Mapping {
 
 /// 从生产权限登记的完整对象规则构造测试映射和所需来源。
 pub(crate) fn mapping(permission: &Permission) -> Arc<Mapping> {
-    let rule = rules::binding_condition(permission, &QueryOutput::Object).unwrap();
+    let rule = binding_condition(permission, &QueryOutput::Object).unwrap();
     model(permission.resource(), &rule)
 }
 // 为资源生成内存测试模型，并递归登记规则所需的来源映射。

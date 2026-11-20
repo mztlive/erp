@@ -57,6 +57,12 @@ assert_eq!(*permission, configured);
 3. 在管理端通过 `permission_route(route, &permissions::<module>::<CONST>)` 直接引用已登记的主常量；多个接口复用同一主常量，不在公共目录保存 HTTP 信息。仅当接口说明不同才在 [route_descriptions.rs](../../../apps/erp-server/route_descriptions.rs) 登记差异。新增管理端路由模块时，同时接入[管理端路由](../../../apps/erp-server/src/http/routes/admin.rs)和生成器的 `DOMAIN_MODULES` [扫描清单](../../../apps/erp-server/build_permissions.rs)。
 4. 在受保护业务用例接入 identity 授权，不以路由标记或展示项代替授权检查。修改权限定义或路由目录后，按下节重新生成并审阅差异，不手工修改生成物。
 
+### 内部派生权限治理
+
+- 菜单可配置权限、跨 crate 共享的业务入口权限和授权文件白名单使用本 crate 的常量。可配置项沿用公共目录；无独立路由的可配置政策登记在 [`policy_permission.rs`](src/policy_permission.rs)。
+- 单一流程的派生动作先检查现有主权限能否复用，或能否用 [`AccessTarget`](../../domains/erp-identity/README.md#对象与命令) 表达对象、候选或精确任务。确需独立规则时，单 crate 专用权限留在所属 crate；跨 crate 共享的内部入口定义在 [`internal.rs`](src/internal.rs)，评审时说明调用方及资格或范围的差异。
+- 维护时定期核对 `internal.rs` 的业务调用、规则登记和权限编码引用。确认无调用方、目录或白名单合同后清理废弃常量；同编码别名优先迁至主常量。
+
 ## 生成与检查
 
 修改权限定义、路由或展示登记时，在 `backend/` 执行：

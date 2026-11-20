@@ -368,8 +368,7 @@ mod tests {
     };
     use crate::entity::resource_access::ResourceKind;
     use crate::ports::{AccessMapping, QueryFragment, RelationMapping};
-    use crate::service::authorization::rules;
-    use crate::service::authorization::rules::sources::{Output, data_condition as source_condition};
+    use crate::service::authorization::test_rules::{Output, data_condition, source_condition};
     use crate::{Permission, QualifiedPermissions};
 
     #[test]
@@ -946,7 +945,7 @@ mod tests {
             }],
             user_limit: None,
         };
-        let rule = rules::data_condition(&sales_inquiry::QUERY_SALES_LIST, Some(&scope)).unwrap();
+        let rule = data_condition(&sales_inquiry::QUERY_SALES_LIST, Some(&scope)).unwrap();
         let query = query(rule.clone(), mapping.clone(), &executor);
         let plan = query.compile(&mut executor).unwrap();
 

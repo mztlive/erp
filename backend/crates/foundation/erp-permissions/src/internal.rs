@@ -1,5 +1,6 @@
-//! 内部对象资格；不作为可分配的菜单功能展示。
-use crate::{Permission, sales_review};
+//! 跨 crate 共享的内部授权入口；不作为可分配的菜单功能展示。
+//! 单流程的派生动作优先复用主权限或通过 `AccessTarget` 表达目标形态。
+use crate::Permission;
 
 /// 按持久化任务种类核验完整办理资格；沿用工作项详情与业务动作资格。
 pub const WORK_ITEM_EXECUTE: Permission = Permission::new("work_item", "execute");
@@ -150,9 +151,6 @@ pub const APPROVAL_COPY_READ: Permission = Permission::new("approval_copy", "rea
 /// 在采购维护范围内以同角色退货资格取得退货来源。
 pub const PURCHASE_RETURN_SOURCE: Permission = Permission::new("purchase_order", "return_source");
 
-/// 兼容既有销售时间线展示资格的隐藏权限，不加入角色配置目录。
-pub const SALES_CHANGE_DETAIL: Permission = sales_review::SALES_CHANGE_ORDER_DETAIL;
-
 /// 查询实际经营盈亏的期间口径，仅要求成本列表功能资格。
 pub const PROFIT_LOSS_PERIOD_BASIS: Permission =
     Permission::new("cost_entry", "profit_loss_period_basis_read");
@@ -241,10 +239,6 @@ pub const SETTLEMENT_VOID_PREPARED: Permission =
 /// 以结算维护资格处理本人负责的结算差异。
 pub const SETTLEMENT_RESOLVE_DIFFERENCE: Permission =
     Permission::new("supplier_settlement_statement", "resolve_assigned_difference");
-
-/// 同角色维护组织关系与人员账号资料，沿组织管理范围检查。
-pub const ORGANIZATION_PERSON_PROFILE_CHANGE: Permission =
-    Permission::new("org_unit", "manage_person_profile");
 
 /// 审批生效后的销售变更结果沿用销售详情资格。
 pub const SALES_CHANGE_APPLIED_RESULT_READ: Permission =

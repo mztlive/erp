@@ -1,11 +1,12 @@
 //! 人员姓名与组织关系共用同一个提交事务。
 use application_core::AuditActor;
 use erp_core::AccountKind;
-use erp_permissions::{internal, organization};
+use erp_permissions::organization;
 use persistence_core::{Executor, Transactional};
 
 use super::OrganizationService;
 use super::access::replay;
+use crate::entity::access_control::scope_spec::ORGANIZATION_PERSON_PROFILE_CHANGE;
 use crate::entity::account_core::AccountCoreUpdate;
 use crate::entity::organization_change::{
     OrganizationChangeReceipt, OrganizationChangeRequest, OrganizationOperation,
@@ -30,11 +31,8 @@ impl OrganizationService {
             },
             _ => None,
         };
-        let permission = if profile.is_some() {
-            &internal::ORGANIZATION_PERSON_PROFILE_CHANGE
-        } else {
-            &organization::CHANGE
-        };
+        let permission =
+            if profile.is_some() { &ORGANIZATION_PERSON_PROFILE_CHANGE } else { &organization::CHANGE };
         let access = self.authorization.organization_scope(actor, permission, executor).await?;
 
         let mut account_revision = None;

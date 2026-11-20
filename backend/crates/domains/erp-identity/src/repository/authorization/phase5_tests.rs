@@ -22,7 +22,7 @@ use crate::entity::authorization::{
 };
 use crate::ports::{AccessMapping, QueryFragment, RelationMapping};
 use crate::service::authorization::fixed;
-use crate::service::authorization::rules::sources::{Output, scoped_condition};
+use crate::service::authorization::test_rules::{Output, scoped_condition};
 use crate::{Error, Permission, QualifiedPermissions, Result};
 
 // 扩展通用测试映射，用于覆盖固定阶段、时间边界和根记录约束。

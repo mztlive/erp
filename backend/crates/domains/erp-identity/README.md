@@ -8,6 +8,22 @@
 
 公共权限值与目录由 `erp-permissions` 提供，identity 的 `Permission` 导出引用同一类型。业务用例使用统一公共 API，HTTP 和 worker 通过完整 Facts/Mapping 装配取得共享服务。接口与验收合同见 [授权服务改进](docs/authorization-service-improvement.md)。
 
+## 内部子域边界
+
+| 子域 | 模块及职责 |
+| --- | --- |
+| 身份与组织 | `auth`（后台认证）、`portal`（门户身份）、`organization`（组织和成员）、`person_directory`（人员目录）、`account_core`（账号核心）。 |
+| 授权引擎与治理 | `iam`（角色权限与 Casbin）、`access_control`（数据范围）、`authorization`（统一判定与查询编译）、`resource_access`（记录授权）、`authorization_bundle`（授权文件）。 |
+
+[`lib.rs`](src/lib.rs) 按这两个子域组织根导出，既有公开导入路径保持不变。授权引擎通过账号、组织与人员目录取得身份事实；身份与组织模块可以调用稳定的授权服务接口，具体业务规则仅供 `service::authorization` 在生产代码中使用。仓储查询编译的单测通过测试专用入口复用生产规则。
+
+目前两个子域继续在同一个 crate 内演进。满足以下任一条件时，启动拆分评估：
+
+- 修改单条具体业务规则后，通过 `cargo check --workspace` 的增量计时确认编译已成为日常开发的显著瓶颈。
+- 身份与组织和授权引擎需要各自独立发布，或需要由不同团队并行演进。
+
+届时保留面向业务域的精简授权接口与凭证类型，独立演进高频变化的业务授权规则。
+
 ## 共享服务
 
 需要业务授权的进程启动时通过 server 的 `wiring/authorization/` 构造一个 `Arc<AuthorizationService>`。HTTP 和 worker 将实例保存在 `Application`；CLI 保持独立运行时，可按需单向复用 `erp_server::wiring`。`HttpState` 通过 `Application` 使用它；业务 Service、Process 和 ReadModel 通过构造函数接收共享实例。

@@ -15,10 +15,15 @@ mod policy_bundles;
 pub(crate) use organization::SnapshotScope;
 mod require;
 mod resolve;
-pub(crate) mod rules;
+mod rules;
 mod targets;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+pub(crate) mod test_rules {
+    pub(crate) use super::rules::sources::{Output, data_condition as source_condition, scoped_condition};
+    pub(crate) use super::rules::{binding_condition, data_condition};
+}
 mod transfers;
 #[cfg(feature = "test-support")]
 mod unavailable;
