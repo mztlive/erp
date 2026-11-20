@@ -11,8 +11,9 @@ use erp_permissions::{
 };
 
 use super::super::{DataScopeType, ScopeDimension};
-use super::{ActionKind, FixedAction, ORGANIZATION_PERSON_PROFILE_CHANGE, ScopeSource, scope};
+use super::{ActionKind, FixedAction, ScopeSource, scope};
 use crate::Permission;
+use crate::entity::person_profile_change::ORGANIZATION_PERSON_PROFILE_CHANGE;
 
 const ALL: &[DataScopeType] = &[
     DataScopeType::Company,

@@ -220,14 +220,14 @@ class CutoverTests(unittest.TestCase):
         self.assertTrue(bpm.dependency_errors(self.fixture.metadata))
 
     def test_cli_can_reuse_server_wiring_for_every_dependency_kind(self):
-        for kind in ("normal", "build", "dev"):
-            with self.subTest(kind=kind):
+        for metadata_kind, graph_kind in ((None, "normal"), ("build", "build"), ("dev", "dev")):
+            with self.subTest(kind=graph_kind):
                 metadata = copy.deepcopy(self.fixture.metadata)
                 packages = {package["name"]: package for package in metadata["packages"]}
-                packages["cli"]["dependencies"].append({"name": "erp-server", "kind": kind})
-                packages["erp-server"]["dependencies"].append({"name": "erp-workflow", "kind": "normal"})
+                packages["cli"]["dependencies"].append({"name": "erp-server", "kind": metadata_kind})
+                packages["erp-server"]["dependencies"].append({"name": "erp-workflow", "kind": None})
                 self.assertEqual(bpm.dependency_errors(metadata), [])
-                graph = domain.Graph(packages={"cli", "erp-server"}, edges=[domain.DepEdge("cli", "erp-server", kind)])
+                graph = domain.Graph(packages={"cli", "erp-server"}, edges=[domain.DepEdge("cli", "erp-server", graph_kind)])
                 self.assertEqual(domain.forbidden_graph_errors(graph), [])
 
     def test_composition_cycle_fails_final_checker(self):

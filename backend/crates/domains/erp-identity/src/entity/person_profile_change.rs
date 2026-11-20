@@ -4,7 +4,11 @@ use std::collections::BTreeSet;
 use erp_core::common::time::Instant;
 use serde::{Deserialize, Serialize};
 
-use crate::{Error, Result, RoleId, RoleIdSet};
+use crate::{Error, Permission, Result, RoleId, RoleIdSet};
+
+/// 同角色维护组织关系与人员账号资料，沿组织管理范围检查。
+pub(crate) const ORGANIZATION_PERSON_PROFILE_CHANGE: Permission =
+    Permission::new("org_unit", "manage_person_profile");
 
 /// 旧人员资料请求中的管理关系明细，仅供历史审计载荷往返。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

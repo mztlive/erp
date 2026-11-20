@@ -41,6 +41,7 @@ src/
 │   ├── supplier_orders.rs
 │   ├── approval_outbox.rs
 │   ├── data_transfer.rs
+│   ├── resource_grants.rs
 │   └── xxl/                  # 执行器协议、注册、执行与回报
 ├── wiring/
 │   ├── application.rs        # Application：共享资源及业务能力工厂

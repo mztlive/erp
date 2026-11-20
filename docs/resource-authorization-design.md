@@ -78,7 +78,7 @@
 | 改动位置 | 执行内容 |
 | --- | --- |
 | [SalesAccess](../backend/crates/read-models/erp-read-models/src/sales_center/access.rs)、[销售查询范围](../backend/crates/domains/erp-sales/src/repository/sales_order/scope.rs) | 将销售单访问判定和查询范围生成接到统一权限接口，合并指定记录读取授权 |
-| [采购授权接线](../backend/apps/erp-server/src/wiring/purchase_data_scope.rs) | 接入统一查询约束及指定采购单读取来源 |
+| [采购授权接线](../backend/apps/erp-server/src/wiring/purchase.rs) | 接入统一查询约束及指定采购单读取来源 |
 | [财务来源授权](../backend/crates/read-models/erp-read-models/src/finance/funds_scope/source_authorization.rs)、[命令守卫](../backend/crates/read-models/erp-read-models/src/finance/funds_scope/guard.rs)、[开票申请查询](../backend/crates/read-models/erp-read-models/src/finance/funds_scope/request.rs) | 统一来源范围、列表、详情、分配候选及命令检查，替换 `authorized_sales_ids`、`FundsAccess::allows` 等分散判断 |
 | [应收创建](../backend/crates/orchestration/erp-finance-posting/src/finance_posting/receivable/account.rs)、[财务编排](../backend/crates/orchestration/erp-finance-posting/src/finance_posting/receivable/) | 在应收创建、回款提交、发票登记事务中检查实际来源集合与办理资格 |
 | [开票派工](../backend/crates/orchestration/erp-finance-posting/src/finance_posting/receivable/invoice_request/execution.rs)、[工作项服务](../backend/crates/domains/erp-workflow/src/service/work_item/)、[审批执行](../backend/crates/domains/erp-workflow/src/service/approval/execution/) | 在开票最终审批通过并创建执行任务、销售或采购审批节点正式分配的事务追加对应事件；将任务访问判定接到统一接口 |
@@ -100,7 +100,7 @@
 本节接线生产第 3 节定义的四类事件。管理员授予、来源查询、永久撤销、事件重算和存量证据回填使用 [记录授权管理接口](../backend/apps/erp-server/README.md#记录授权管理接口)。回填只追加经过核验的授权事件，不得重放旧业务命令。
 
 
-实施按“统一接口与存储 → 自动授权进程 → 业务读写接入 → 存量回填与切换”推进。新增 crate 同步登记 workspace、层次依赖、索引及 README。按对应审批通过及正式分配证据回填存量授权，按完整业务链路切换并移除对应旧判定。
+实施按“统一接口与存储 → 自动授权运行时 → 业务读写接入 → 存量回填与切换”推进。按对应审批通过及正式分配证据回填存量授权，按完整业务链路切换并移除对应旧判定。
 
 ## 5. 验收
 

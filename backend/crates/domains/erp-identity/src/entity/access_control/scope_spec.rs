@@ -7,10 +7,6 @@ use erp_permissions::MODULES;
 use crate::entity::access_control::{DataScopeType, ScopeDimension};
 use crate::{Error, Permission, Result};
 
-/// 同角色维护组织关系与人员账号资料，沿组织管理范围检查。
-pub(crate) const ORGANIZATION_PERSON_PROFILE_CHANGE: Permission =
-    Permission::new("org_unit", "manage_person_profile");
-
 /// 范围配置的取得方式。不表达任务、功能资格或真实来源关系。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ScopeSource {

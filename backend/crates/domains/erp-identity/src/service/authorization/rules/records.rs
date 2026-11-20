@@ -9,8 +9,8 @@ use erp_permissions::{
     supplier_offering, supplier_settlement, work_item,
 };
 
-use crate::entity::access_control::scope_spec::ORGANIZATION_PERSON_PROFILE_CHANGE;
 use crate::entity::authorization::{AccessFact, AccessRule, FactKind, RelationKey, RelationMatch};
+use crate::entity::person_profile_change::ORGANIZATION_PERSON_PROFILE_CHANGE;
 use crate::{Permission, QualifiedPermissions};
 
 /// 返回固定内部入口借用的同角色功能资格；空集合表示无公共功能门槛，未登记则交给通用规则。

@@ -9,8 +9,8 @@ use erp_permissions::{
 use persistence_core::testing::SnapshotExecutor;
 
 use super::fixtures::{Facts, Identity, actor, complete, object};
-use crate::entity::access_control::scope_spec::ORGANIZATION_PERSON_PROFILE_CHANGE;
 use crate::entity::authorization::{AccessTarget, FactValue, RelatedObjects, RelationKey};
+use crate::entity::person_profile_change::ORGANIZATION_PERSON_PROFILE_CHANGE;
 use crate::{AuthorizationService, Error};
 
 // 在完整绑定上替换指定资源的事实和身份设施，执行内部入口授权。

@@ -8,8 +8,8 @@ use persistence_core::{ExecutionBoundary, Executor};
 
 use super::AuthorizationService;
 use super::resolve::scope_deadline;
-use crate::entity::access_control::scope_spec::ORGANIZATION_PERSON_PROFILE_CHANGE;
 use crate::entity::authorization::AccessContext;
+use crate::entity::person_profile_change::ORGANIZATION_PERSON_PROFILE_CHANGE;
 use crate::service::access_control::resolve::AuthorizedDataScope;
 use crate::{Error, Result};
 

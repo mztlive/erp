@@ -6,11 +6,11 @@ use persistence_core::{Executor, Transactional};
 
 use super::OrganizationService;
 use super::access::replay;
-use crate::entity::access_control::scope_spec::ORGANIZATION_PERSON_PROFILE_CHANGE;
 use crate::entity::account_core::AccountCoreUpdate;
 use crate::entity::organization_change::{
     OrganizationChangeReceipt, OrganizationChangeRequest, OrganizationOperation,
 };
+use crate::entity::person_profile_change::ORGANIZATION_PERSON_PROFILE_CHANGE;
 use crate::repository::OrganizationRepository;
 use crate::service::authorization::SnapshotScope;
 use crate::{AccessControlExt, Error, Result};
