@@ -22,8 +22,10 @@ import {
     MasterDataEmptyCreateButton,
 } from "@/features/master-data/components/list/list-empty-actions"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
+import { ProductListSelectionBar } from "@/features/master-data/components/list/product-list-selection-bar"
 import { ProductListToolbar } from "@/features/master-data/components/list/product-list-toolbar"
 import { productsListStyles } from "./products-list-styles"
+import { ProductBatchListingDialog } from "@/features/master-data/components/product/product-batch-listing-dialog"
 import { ProductSupplyDialog } from "@/features/master-data/components/product/product-supply-dialog"
 import { ProductDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
@@ -102,6 +104,7 @@ export function ProductsListPage() {
         productListingPending: state.productListingMutation.isPending,
         productListingProductId:
             state.productListingMutation.variables?.productId,
+        batchListingPending: state.batchProductListingMutation.isPending,
         rows: state.rows,
         supplierOfferingsPending: state.supplierOfferingsQuery.isPending,
         supplierOfferingsError: state.supplierOfferingsQuery.isError,
@@ -233,6 +236,30 @@ export function ProductsListPage() {
                         failed={state.listQuery.isError}
                     />
                 }
+                selectionBarOpen={
+                    state.canUpdateProductListing &&
+                    state.selection.selectedCount > 0
+                }
+                selectionBar={
+                    state.canUpdateProductListing ? (
+                        <ProductListSelectionBar
+                            resultCount={state.rows.length}
+                            pageRowCount={state.pageRows.length}
+                            selectedCount={state.selection.selectedCount}
+                            actionableCount={
+                                state.batchListingPartition.actionable.length
+                            }
+                            skippedCount={
+                                state.batchListingPartition.skipped.length
+                            }
+                            allPageSelected={state.selection.allPageSelected}
+                            busy={state.batchProductListingMutation.isPending}
+                            onSelectPage={state.selection.selectAllPage}
+                            onClear={state.selection.clear}
+                            onBatchList={state.openBatchListingDialog}
+                        />
+                    ) : undefined
+                }
                 tableClassName={productsListStyles.table}
                 table={
                     <DataTable
@@ -247,6 +274,7 @@ export function ProductsListPage() {
                             blocker: false,
                         }}
                         defaultColumnOrder={[
+                            "__selection",
                             "name",
                             "maintainer",
                             "skuCount",
@@ -262,6 +290,12 @@ export function ProductsListPage() {
                             "blocker",
                         ]}
                         getRowId={(row) => row.stableId}
+                        rowLabel={(row) => `${row.name}（${row.stableNo}）`}
+                        enableRowSelection={state.canUpdateProductListing}
+                        rowSelection={state.selection.rowSelection}
+                        onRowSelectionChange={
+                            state.selection.onRowSelectionChange
+                        }
                         rowCount={state.rows.length}
                         pagination={filters.pagination}
                         onPaginationChange={filters.changePagination}
@@ -415,6 +449,27 @@ export function ProductsListPage() {
             {state.canUpdateProductListing
                 ? state.listingConfirmationDialog
                 : null}
+            {state.canUpdateProductListing ? (
+                <ProductBatchListingDialog
+                    open={state.batchListingOpen}
+                    rows={state.selection.selectedRows}
+                    filterSummary={state.filterSnapshotLabel}
+                    totalResultCount={state.rows.length}
+                    pending={state.batchProductListingMutation.isPending}
+                    progress={state.batchListingProgress}
+                    result={state.batchListingResult}
+                    onOpenChange={(open) => {
+                        if (!open) state.closeBatchListingDialog()
+                    }}
+                    onRemove={state.selection.remove}
+                    onConfirm={(actionable, skipped) =>
+                        void state.submitBatchListing(actionable, skipped)
+                    }
+                    onRetryFailed={(failedRows) =>
+                        void state.retryFailedBatchListing(failedRows)
+                    }
+                />
+            ) : null}
             {state.canCreate && importOpen ? (
                 <ProductImportDialog
                     onClose={() => setImportOpen(false)}

@@ -96,6 +96,7 @@ export function useProductListColumns({
     productSkusError,
     productListingPending,
     productListingProductId,
+    batchListingPending = false,
     rows,
     supplierOfferingsPending,
     supplierOfferingsError,
@@ -115,6 +116,7 @@ export function useProductListColumns({
     productSkusError: boolean
     productListingPending: boolean
     productListingProductId: string | undefined
+    batchListingPending?: boolean
     rows: readonly MasterDataListItem[]
     supplierOfferingsPending: boolean
     supplierOfferingsError: boolean
@@ -395,6 +397,7 @@ export function useProductListColumns({
                             checked={inherited === "LISTED"}
                             disabled={
                                 pending ||
+                                batchListingPending ||
                                 (item.lifecycleStatus !== "ENABLED" &&
                                     inherited === "UNLISTED") ||
                                 (item.skuCount ?? 0) === 0
@@ -432,6 +435,7 @@ export function useProductListColumns({
                 : []),
         ],
         [
+            batchListingPending,
             canUpdateProductListing,
             canReadOfferings,
             canReadSkus,

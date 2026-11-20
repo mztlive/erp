@@ -17,6 +17,7 @@ import { backgroundJobKeys } from "@/lib/background-jobs"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
+    batchUpdateProductListingStatus,
     createMasterDataObject,
     createMasterDataRevision,
     disableMasterDataObject,
@@ -26,6 +27,7 @@ import {
     fetchProductListSkus,
     listSellableItemsPage,
     updateProductListingStatus,
+    type BatchUpdateProductListingInput,
 } from "@/features/master-data/api"
 import { fetchFileAsset } from "@/features/master-data/api/media-assets"
 import { updateVoucherCategoryRevision } from "@/features/master-data/api/mutations/voucher"
@@ -356,6 +358,19 @@ export function useProductListingMutation() {
             listingStatus: Exclude<ProductListingStatus, "PARTIALLY_LISTED">
         }) => updateProductListingStatus(input.productId, input.listingStatus),
         onSuccess: async () => {
+            await invalidateMasterDataCaches(queryClient)
+        },
+    })
+}
+
+/** 商品列表批量上/下架；整批结束后统一刷新一次主数据缓存，避免逐条重拉。 */
+export function useBatchProductListingMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        meta: { affectsDataScope: true },
+        mutationFn: (input: BatchUpdateProductListingInput) =>
+            batchUpdateProductListingStatus(input),
+        onSettled: async () => {
             await invalidateMasterDataCaches(queryClient)
         },
     })

@@ -4,18 +4,27 @@ import { useChangeConfirmation } from "./use-change-confirmation"
 
 import * as React from "react"
 
+import { toast } from "@/components/ui/toast"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useCreatePermission } from "@/features/master-data/hooks/use-create-permission"
 import { useClientPagedRows } from "@/features/master-data/hooks/use-client-paged-rows"
 import { useProductListFilters } from "@/features/master-data/hooks/use-product-list-filters"
 import type { ProductFilterKey } from "@/features/master-data/hooks/use-product-list-filters"
+import { useProductListSelection } from "@/features/master-data/hooks/use-product-list-selection"
 import {
+    useBatchProductListingMutation,
     useMasterDataListQuery,
     useProductFilterOptionsQuery,
     useProductListSkusQuery,
     useProductListingMutation,
 } from "@/features/master-data/hooks/queries"
 import { useMasterDataListExport } from "@/features/master-data/hooks/use-master-data-list-export"
+import {
+    partitionProductsForBatchListing,
+    type BatchProductListingProgress,
+    type BatchProductListingResult,
+    type BatchProductListingSkippedItem,
+} from "@/features/master-data/lib/product-batch-listing"
 import {
     buildProductFilterSnapshotLabel,
     buildProductTableDescription,
@@ -70,27 +79,52 @@ export function useProductListState(
     const canAddSupply =
         canReadSkus && hasPermission(permissions, "supplier_offering:create")
     const filters = useProductListFilters(searchInputRef)
-    const listQuery = useMasterDataListQuery({
-        resource: "products",
-        q: filters.q.trim() || undefined,
-        lifecycleStatus: filters.lifecycleStatus,
-        revisionTiming: filters.revisionTiming,
-        productKind: filters.productKind,
-        productCategoryId: filters.productCategoryId,
-        productBrandId: filters.productBrandId,
-        productSupplierId: filters.productSupplierId,
-        productListingStatus: filters.productListingStatus,
-        productSupplyCoverage: filters.productSupplyCoverage,
-        productSourceDiffPending: filters.productSourceDiffPending || undefined,
-        productSalesPriceMin: filters.productSalesPriceMin,
-        productSalesPriceMax: filters.productSalesPriceMax,
-        ownerUserIds: filters.ownerUserIds,
-        procurementOwnerUserIds: filters.procurementOwnerUserIds,
-    })
+    const listQueryInput = React.useMemo(
+        () => ({
+            resource: "products" as const,
+            q: filters.q.trim() || undefined,
+            lifecycleStatus: filters.lifecycleStatus,
+            revisionTiming: filters.revisionTiming,
+            productKind: filters.productKind,
+            productCategoryId: filters.productCategoryId,
+            productBrandId: filters.productBrandId,
+            productSupplierId: filters.productSupplierId,
+            productListingStatus: filters.productListingStatus,
+            productSupplyCoverage: filters.productSupplyCoverage,
+            productSourceDiffPending:
+                filters.productSourceDiffPending || undefined,
+            productSalesPriceMin: filters.productSalesPriceMin,
+            productSalesPriceMax: filters.productSalesPriceMax,
+            ownerUserIds: filters.ownerUserIds,
+            procurementOwnerUserIds: filters.procurementOwnerUserIds,
+        }),
+        [
+            filters.lifecycleStatus,
+            filters.ownerUserIds,
+            filters.procurementOwnerUserIds,
+            filters.productBrandId,
+            filters.productCategoryId,
+            filters.productKind,
+            filters.productListingStatus,
+            filters.productSalesPriceMax,
+            filters.productSalesPriceMin,
+            filters.productSourceDiffPending,
+            filters.productSupplierId,
+            filters.productSupplyCoverage,
+            filters.q,
+            filters.revisionTiming,
+        ],
+    )
+    const selectionResetKey = React.useMemo(
+        () => JSON.stringify(listQueryInput),
+        [listQueryInput],
+    )
+    const listQuery = useMasterDataListQuery(listQueryInput)
     const productFilterOptionsQuery = useProductFilterOptionsQuery(true)
     const { exportMeta, exportPending, handleExport } =
         useMasterDataListExport()
     const productListingMutation = useProductListingMutation()
+    const batchProductListingMutation = useBatchProductListingMutation()
     const canUpdateProductListing = hasPermission(permissions, "product:update")
     const [disableTarget, setDisableTarget] =
         React.useState<MasterDataListItem | null>(null)
@@ -100,12 +134,27 @@ export function useProductListState(
         readonly FixedSku[] | null
     >(null)
     const [listingError, setListingError] = React.useState<string | null>(null)
+    const [batchListingOpen, setBatchListingOpen] = React.useState(false)
+    const [batchListingProgress, setBatchListingProgress] =
+        React.useState<BatchProductListingProgress | null>(null)
+    const [batchListingResult, setBatchListingResult] =
+        React.useState<BatchProductListingResult | null>(null)
+    const batchListingRunningRef = React.useRef(false)
 
     const rows = React.useMemo(
         () => listQuery.data?.rows ?? [],
         [listQuery.data?.rows],
     )
     const pageRows = useClientPagedRows(rows, filters.pagination)
+    const selection = useProductListSelection({
+        pageRows,
+        latestRows: rows,
+        resetKey: selectionResetKey,
+    })
+    const batchListingPartition = React.useMemo(
+        () => partitionProductsForBatchListing(selection.selectedRows),
+        [selection.selectedRows],
+    )
     const productPageIds = React.useMemo(
         () => pageRows.map((row) => row.stableId),
         [pageRows],
@@ -394,6 +443,79 @@ export function useProductListState(
         })
     }
 
+    const openBatchListingDialog = React.useCallback(() => {
+        setBatchListingResult(null)
+        setBatchListingProgress(null)
+        setBatchListingOpen(true)
+    }, [])
+
+    const closeBatchListingDialog = React.useCallback(() => {
+        if (batchListingRunningRef.current) return
+        setBatchListingOpen(false)
+        setBatchListingResult(null)
+        setBatchListingProgress(null)
+    }, [])
+
+    const runBatchListing = React.useCallback(
+        async (
+            actionable: readonly MasterDataListItem[],
+            skipped: readonly BatchProductListingSkippedItem[],
+            isRetry: boolean,
+        ) => {
+            if (batchListingRunningRef.current || actionable.length === 0)
+                return
+            batchListingRunningRef.current = true
+            setListingError(null)
+            setBatchListingProgress({ completed: 0, total: actionable.length })
+            try {
+                const result = await batchProductListingMutation.mutateAsync({
+                    items: actionable,
+                    skipped,
+                    listingStatus: "LISTED",
+                    onProgress: setBatchListingProgress,
+                })
+                if (result.failed.length === 0) {
+                    selection.clear()
+                    setBatchListingOpen(false)
+                    setBatchListingResult(null)
+                    toast.add({
+                        title: "批量上架完成",
+                        description: isRetry
+                            ? `已重新上架 ${result.succeeded.length} 个商品。`
+                            : result.skipped.length > 0
+                              ? `已上架 ${result.succeeded.length} 个商品，跳过 ${result.skipped.length} 个无需或不可上架商品。`
+                              : `已上架 ${result.succeeded.length} 个商品，所选商品下启用中的 SKU 已设为已上架。`,
+                        type: "success",
+                        timeout: 5000,
+                    })
+                    return
+                }
+                selection.retainOnly(
+                    result.failed.map((item) => item.productId),
+                )
+                setBatchListingResult(result)
+            } finally {
+                batchListingRunningRef.current = false
+                setBatchListingProgress(null)
+            }
+        },
+        [batchProductListingMutation, selection],
+    )
+
+    const submitBatchListing = React.useCallback(
+        (
+            actionable: readonly MasterDataListItem[],
+            skipped: readonly BatchProductListingSkippedItem[],
+        ) => runBatchListing(actionable, skipped, false),
+        [runBatchListing],
+    )
+
+    const retryFailedBatchListing = React.useCallback(
+        (failedRows: readonly MasterDataListItem[]) =>
+            runBatchListing(failedRows, [], true),
+        [runBatchListing],
+    )
+
     return {
         listingConfirmationDialog: listingConfirmation.dialog,
         filters,
@@ -402,6 +524,7 @@ export function useProductListState(
         exportMeta,
         exportPending,
         productListingMutation,
+        batchProductListingMutation,
         canCreate,
         createBlockedReason,
         canUpdateProductListing,
@@ -419,12 +542,22 @@ export function useProductListState(
         listingError,
         rows,
         pageRows,
+        selection,
+        batchListingPartition,
+        batchListingOpen,
+        batchListingProgress,
+        batchListingResult,
+        openBatchListingDialog,
+        closeBatchListingDialog,
+        submitBatchListing,
+        retryFailedBatchListing,
         productPageSkuIds,
         productSkusByProduct,
         productSkusQuery,
         supplierOfferingsQuery,
         currentSupplySkuIds,
         appliedChips,
+        filterSnapshotLabel,
         listTableDescription,
         syncedMetrics,
         onExport,

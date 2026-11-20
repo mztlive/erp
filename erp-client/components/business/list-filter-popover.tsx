@@ -4,6 +4,7 @@ import * as React from "react"
 import { ChevronDownIcon, FilterIcon, RotateCcwIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { listFilterText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
@@ -174,38 +175,55 @@ export function ListFilterTray({
     )
 
     return (
-        <section
-            ref={sectionRef}
-            id={panelId}
-            data-slot="list-filter-tray"
-            data-placement={inPortal ? "edge" : "embedded"}
-            aria-label={label}
-            hidden={!open}
-            className={cn(
-                "min-w-0",
-                !open && "hidden",
-                open &&
-                    "animate-in fade-in-0 slide-in-from-top-1 duration-150 motion-reduce:animate-none",
-                inPortal
-                    ? "border-b border-border/75 bg-card px-4"
-                    : "rounded-lg border border-border/75 bg-card px-4",
-            )}
+        <Collapsible
+            open={open}
+            className="min-w-0 has-[>[data-slot=list-filter-tray-panel][hidden]]:hidden"
         >
-            {inPortal ? (
-                <form
+            <CollapsibleContent
+                keepMounted
+                data-slot="list-filter-tray-panel"
+                className={cn(
+                    "group/tray h-(--collapsible-panel-height) overflow-hidden transition-[height,opacity] ease-out",
+                    "data-open:duration-200 data-closed:duration-150 data-closed:ease-in",
+                    "data-starting-style:h-0 data-starting-style:opacity-0",
+                    "data-ending-style:h-0 data-ending-style:opacity-0",
+                    "motion-reduce:transition-none",
+                )}
+            >
+                <section
+                    ref={sectionRef}
+                    id={panelId}
+                    data-slot="list-filter-tray"
+                    data-open={open ? "" : undefined}
+                    data-placement={inPortal ? "edge" : "embedded"}
                     aria-label={label}
-                    className="flex min-w-0 flex-col"
-                    onSubmit={(event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        onApply()
-                    }}
+                    className={cn(
+                        "min-w-0 transition-transform ease-out",
+                        "group-data-open/tray:duration-200 group-data-closed/tray:pointer-events-none group-data-closed/tray:duration-150 group-data-closed/tray:ease-in",
+                        "group-data-[starting-style]/tray:-translate-y-1.5 group-data-[ending-style]/tray:-translate-y-1",
+                        "motion-reduce:transition-none",
+                        inPortal
+                            ? "border-b border-border/75 bg-card px-4"
+                            : "rounded-lg border border-border/75 bg-card px-4",
+                    )}
                 >
-                    {content}
-                </form>
-            ) : (
-                <div className="flex min-w-0 flex-col">{content}</div>
-            )}
-        </section>
+                    {inPortal ? (
+                        <form
+                            aria-label={label}
+                            className="flex min-w-0 flex-col"
+                            onSubmit={(event) => {
+                                event.preventDefault()
+                                event.stopPropagation()
+                                onApply()
+                            }}
+                        >
+                            {content}
+                        </form>
+                    ) : (
+                        <div className="flex min-w-0 flex-col">{content}</div>
+                    )}
+                </section>
+            </CollapsibleContent>
+        </Collapsible>
     )
 }

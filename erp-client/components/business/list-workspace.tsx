@@ -35,7 +35,7 @@ export const listWorkspaceStyles = {
     viewHint:
         "text-xs whitespace-nowrap text-muted-foreground/70 max-[1280px]:hidden",
     toolbar: [
-        "flex shrink-0 flex-wrap items-start gap-x-2.5 gap-y-2 border-b border-border/60 bg-card px-4 py-workspace-toolbar-block",
+        "flex shrink-0 flex-wrap items-start gap-x-2.5 gap-y-2 border-b border-border/60 bg-card px-4 py-workspace-toolbar-block transition-[border-color,padding] duration-200 ease-out motion-reduce:transition-none",
         "[&_[data-slot=button]]:shadow-none [&_[data-slot=input-group]]:text-body-compact [&_[data-slot=input-group]]:shadow-none",
         // 飞书轻工具栏：搜索框与常用下拉筛选统一采用 bg-muted/65 无框浅灰柔底，与高级筛选区完全同色
         "[&_[data-slot=list-toolbar-search]_[data-slot=input-group]]:border-transparent [&_[data-slot=list-toolbar-search]_[data-slot=input-group]]:bg-muted/65 [&_[data-slot=list-toolbar-search]_[data-slot=input-group]]:hover:bg-muted [&_[data-slot=list-toolbar-search]_[data-slot=input-group]:focus-within]:border-primary/60 [&_[data-slot=list-toolbar-search]_[data-slot=input-group]:focus-within]:bg-card",
@@ -191,6 +191,7 @@ export function ListWorkSurface({
     tableClassName,
     toolbarClassName,
     selectionBar,
+    selectionBarOpen,
     tableActions,
 }: {
     ariaLabel: string
@@ -201,6 +202,8 @@ export function ListWorkSurface({
     tableClassName?: string
     toolbarClassName?: string
     selectionBar?: React.ReactNode
+    /** 按需显隐 selectionBar 时传入，配合表格工具栏播放平滑展开/收起过渡。 */
+    selectionBarOpen?: boolean
     tableActions?: React.ReactNode
 }) {
     return (
@@ -224,6 +227,8 @@ export function ListWorkSurface({
                 <TableToolbarFilterTrayHost />
                 <TableToolbar
                     isFrameToolbar
+                    animateCollapse={selectionBarOpen !== undefined}
+                    childrenOpen={selectionBarOpen}
                     hideControls={Boolean(toolbar)}
                     actions={toolbar ? undefined : tableActions}
                     className="border-b border-grid/75 bg-surface-sunken/70 px-4"

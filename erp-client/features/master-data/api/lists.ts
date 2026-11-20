@@ -12,10 +12,12 @@ export {
     listUnitOfMeasures,
 } from "./lists/dictionaries"
 export {
+    batchUpdateProductListingStatus,
     fetchProductFilterOptions,
     fetchProductListSkus,
     listProducts,
     updateProductListingStatus,
+    type BatchUpdateProductListingInput,
 } from "./lists/products"
 export { listSellableItems, listSellableItemsPage } from "./lists/sellable"
 export { listVoucherCategories } from "./lists/voucher"

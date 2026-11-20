@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 
 type ToolbarScope = {
@@ -192,26 +193,81 @@ export function TableToolbarInlineControls({
 /** 表格上方的统一工具栏：左侧数量或选择操作，右侧视图操作和列设置。 */
 export function TableToolbar({
     children,
+    childrenOpen,
     actions,
     columnSettings,
     className,
     isFrameToolbar = false,
     hideControls = false,
+    animateCollapse = false,
 }: {
     children?: React.ReactNode
+    /** 控制左侧 children（如批量操作栏）是否展开；省略时按 children 是否非空判定。 */
+    childrenOpen?: boolean
     actions?: React.ReactNode
     columnSettings?: React.ReactNode
     className?: string
     isFrameToolbar?: boolean
     /** 右侧视图操作与列设置已合并至筛选栏时隐藏，仅在有批量选择或条件提示时展开本条。 */
     hideControls?: boolean
+    /** 开启后在空/非空切换时播放高度与透明度过渡动画。 */
+    animateCollapse?: boolean
 }) {
     const scope = React.useContext(ToolbarContext)
-    return (
+    const toolbarRef = React.useRef<HTMLDivElement | null>(null)
+    const [hasPortalContent, setHasPortalContent] = React.useState(false)
+
+    const hasDirectChildren = children != null && children !== false
+    const isChildrenVisible = hasDirectChildren && (childrenOpen ?? true)
+    const hasDirectControls =
+        !hideControls &&
+        ((actions != null && actions !== false) ||
+            (columnSettings != null && columnSettings !== false))
+
+    const open = isChildrenVisible || hasDirectControls || hasPortalContent
+    // 当整条工具栏处于收起退场动画时保留 children 以避免退场瞬间塌成空白条；
+    // 若工具栏因其他槽位（如筛选状态）仍保持展开，则不渲染已关闭的 children。
+    const renderedChildren = animateCollapse
+        ? isChildrenVisible || (!open && hasDirectChildren)
+            ? children
+            : null
+        : isChildrenVisible
+          ? children
+          : null
+
+    React.useLayoutEffect(() => {
+        if (!animateCollapse) return
+        const root = toolbarRef.current
+        if (!root) return
+        const checkPortalContent = () => {
+            const slots = root.querySelectorAll<HTMLElement>(
+                '[data-table-toolbar-portal="true"]',
+            )
+            let next = false
+            for (const slot of slots) {
+                if (slot.childNodes.length > 0) {
+                    next = true
+                    break
+                }
+            }
+            setHasPortalContent(next)
+        }
+        checkPortalContent()
+        const observer = new MutationObserver(checkPortalContent)
+        observer.observe(root, { childList: true, subtree: true })
+        return () => observer.disconnect()
+    }, [animateCollapse])
+
+    const toolbarContent = (
         <div
+            ref={toolbarRef}
             data-slot="table-toolbar"
             className={cn(
-                "flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 py-table-toolbar-block text-body-compact [&:not(:has([data-table-toolbar-content]:not(:empty)))]:hidden",
+                "flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 py-table-toolbar-block text-body-compact",
+                !animateCollapse &&
+                    "[&:not(:has([data-table-toolbar-content]:not(:empty)))]:hidden",
+                animateCollapse &&
+                    "transition-transform ease-out group-data-open/toolbar:duration-200 group-data-closed/toolbar:pointer-events-none group-data-closed/toolbar:duration-150 group-data-closed/toolbar:ease-in group-data-[starting-style]/toolbar:-translate-y-1 group-data-[ending-style]/toolbar:-translate-y-1 motion-reduce:transition-none",
                 "[&_[data-slot=button]]:h-control-sm [&_[data-slot=button]]:text-body-compact [&_[data-slot=button]]:shadow-none",
                 className,
             )}
@@ -221,24 +277,28 @@ export function TableToolbar({
                     data-slot="table-toolbar-filter-status"
                     ref={scope?.setFilterStatus}
                     data-table-toolbar-content=""
+                    data-table-toolbar-portal="true"
                     className={cn(
                         "min-w-0 basis-full empty:hidden sm:basis-auto",
-                        children == null && "flex-1",
+                        !hasDirectChildren && "flex-1",
                     )}
                 />
             ) : null}
             <div
                 data-slot="table-toolbar-summary"
                 ref={
-                    isFrameToolbar && children == null
+                    isFrameToolbar && !hasDirectChildren
                         ? scope?.setSummary
                         : undefined
                 }
                 data-table-toolbar-content=""
-                data-summary-provided={children != null ? "true" : undefined}
+                data-table-toolbar-portal={
+                    isFrameToolbar && !hasDirectChildren ? "true" : undefined
+                }
+                data-summary-provided={hasDirectChildren ? "true" : undefined}
                 className="min-w-0 empty:hidden"
             >
-                {children}
+                {renderedChildren}
             </div>
             {!hideControls ? (
                 <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
@@ -253,6 +313,9 @@ export function TableToolbar({
                         data-slot="table-toolbar-column-settings"
                         ref={isFrameToolbar ? scope?.setSettings : undefined}
                         data-table-toolbar-content=""
+                        data-table-toolbar-portal={
+                            isFrameToolbar ? "true" : undefined
+                        }
                         className="shrink-0 empty:hidden"
                     >
                         {columnSettings}
@@ -260,5 +323,28 @@ export function TableToolbar({
                 </div>
             ) : null}
         </div>
+    )
+
+    if (!animateCollapse) return toolbarContent
+
+    return (
+        <Collapsible
+            open={open}
+            className="shrink-0 has-[>[data-slot=table-toolbar-panel][hidden]]:hidden"
+        >
+            <CollapsibleContent
+                keepMounted
+                data-slot="table-toolbar-panel"
+                className={cn(
+                    "group/toolbar h-(--collapsible-panel-height) overflow-hidden transition-[height,opacity] ease-out",
+                    "data-open:duration-200 data-closed:duration-150 data-closed:ease-in",
+                    "data-starting-style:h-0 data-starting-style:opacity-0",
+                    "data-ending-style:h-0 data-ending-style:opacity-0",
+                    "motion-reduce:transition-none",
+                )}
+            >
+                {toolbarContent}
+            </CollapsibleContent>
+        </Collapsible>
     )
 }

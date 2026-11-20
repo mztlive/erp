@@ -676,7 +676,7 @@
 /* 展开高级筛选区时，主筛选栏去掉底线并收紧下边距，与纯白展开区自然融为一体 */
 [data-slot="list-work-surface"]:has(
         > [data-slot="list-work-surface-filter-tray"]
-            > [data-slot="list-filter-tray"]:not([hidden])
+            [data-slot="list-filter-tray"][data-open]
     )
     > [data-slot="list-workspace-toolbar"] {
     border-bottom-color: transparent;

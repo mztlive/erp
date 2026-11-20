@@ -4,10 +4,12 @@
  */
 
 export {
+    batchUpdateProductListingStatus,
     fetchProductFilterOptions,
     fetchProductListSkus,
     listSellableItemsPage,
     updateProductListingStatus,
+    type BatchUpdateProductListingInput,
 } from "@/features/master-data/api/lists"
 export {
     createMasterDataObject,

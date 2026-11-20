@@ -1,6 +1,6 @@
 /** 商品列表查询、筛选选项、SKU 摘要与整组上/下架适配。 */
 
-import { apiPut } from "@/lib/api"
+import { apiPut, getErrorMessage } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
 import type {
     ProductBrandDto,
@@ -14,6 +14,12 @@ import type {
 } from "@/features/master-data/api/contracts"
 import { mapProductRow } from "@/features/master-data/api/list-mappers"
 import { asLifecycle } from "@/features/master-data/api/presentation"
+import type {
+    BatchProductListingItemResult,
+    BatchProductListingProgress,
+    BatchProductListingResult,
+    BatchProductListingSkippedItem,
+} from "@/features/master-data/lib/product-batch-listing"
 import type {
     MasterDataListItem,
     MasterDataListQuery,
@@ -197,4 +203,93 @@ export async function updateProductListingStatus(
             listing_status: listingStatus === "LISTED" ? "listed" : "unlisted",
         },
     )
+}
+
+const BATCH_PRODUCT_LISTING_CONCURRENCY = 4
+
+export type BatchUpdateProductListingInput = Readonly<{
+    items: readonly MasterDataListItem[]
+    skipped?: readonly BatchProductListingSkippedItem[]
+    listingStatus: Exclude<ProductListingStatus, "PARTIALLY_LISTED">
+    onProgress?: (progress: BatchProductListingProgress) => void
+}>
+
+/**
+ * 批量整组上/下架商品。
+ *
+ * 当前通过受控并发逐项调用既有单条上架接口，汇总为统一分项结果；
+ * 后续后端提供原生批量接口后，仅需替换本函数内部请求实现。
+ */
+export async function batchUpdateProductListingStatus({
+    items,
+    skipped = [],
+    listingStatus,
+    onProgress,
+}: BatchUpdateProductListingInput): Promise<BatchProductListingResult> {
+    const total = items.length
+    const outcomes = Array.from<BatchProductListingItemResult | undefined>({
+        length: total,
+    })
+    let cursor = 0
+    let completed = 0
+
+    const runWorker = async () => {
+        while (cursor < total) {
+            const index = cursor
+            cursor += 1
+            const item = items[index]
+            if (!item) continue
+            try {
+                const updated = await updateProductListingStatus(
+                    item.stableId,
+                    listingStatus,
+                )
+                outcomes[index] = {
+                    productId: item.stableId,
+                    productNo: item.stableNo,
+                    productName: item.name,
+                    status: "succeeded",
+                    listedSkuCount: updated.listed_sku_count,
+                    skuCount: updated.sku_count,
+                }
+            } catch (error) {
+                outcomes[index] = {
+                    productId: item.stableId,
+                    productNo: item.stableNo,
+                    productName: item.name,
+                    status: "failed",
+                    reason: getErrorMessage(
+                        error,
+                        "上架状态更新失败，请刷新后重试。",
+                    ),
+                }
+            } finally {
+                completed += 1
+                onProgress?.({ completed, total })
+            }
+        }
+    }
+
+    const workerCount = Math.min(BATCH_PRODUCT_LISTING_CONCURRENCY, total)
+    await Promise.all(Array.from({ length: workerCount }, () => runWorker()))
+
+    const succeeded: BatchProductListingItemResult[] = []
+    const failed: BatchProductListingItemResult[] = []
+    for (const outcome of outcomes) {
+        if (!outcome) continue
+        if (outcome.status === "succeeded") succeeded.push(outcome)
+        else if (outcome.status === "failed") failed.push(outcome)
+    }
+
+    return {
+        succeeded,
+        skipped: skipped.map(({ product, reason }) => ({
+            productId: product.stableId,
+            productNo: product.stableNo,
+            productName: product.name,
+            status: "skipped" as const,
+            reason,
+        })),
+        failed,
+    }
 }
