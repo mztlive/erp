@@ -115,8 +115,19 @@ type WorkspaceNavItem = Readonly<{
     requiredPermissions: readonly string[]
 }>
 
+/** 侧栏主轨一级业务域：5 个核心业务域置顶 + 2 个基础资料/治理域沉底。 */
+export type WorkspaceNavDomain =
+    | "work"
+    | "sales"
+    | "procurement"
+    | "finance"
+    | "analytics"
+    | "master-data"
+    | "governance"
+
 export type WorkspaceNavGroup = Readonly<{
     label: string
+    domain: WorkspaceNavDomain
     items: readonly WorkspaceNavItem[]
 }>
 
@@ -148,6 +159,7 @@ type WorkspaceNavItemSpec = Readonly<{
 
 type WorkspaceNavGroupSpec = Readonly<{
     label: string
+    domain: WorkspaceNavDomain
     items: readonly WorkspaceNavItemSpec[]
 }>
 
@@ -255,6 +267,7 @@ function buildWorkspaceNavGroups(
 ): readonly WorkspaceNavGroup[] {
     return groups.map((group) => ({
         label: group.label,
+        domain: group.domain,
         items: group.items.map((spec) => {
             const route = getWorkspaceById(spec.routeId)
             const href = spec.href ?? route.navHref
@@ -286,6 +299,7 @@ export function filterNavGroupsByPermissions(
     return groups
         .map((group) => ({
             label: group.label,
+            domain: group.domain,
             items: group.items
                 .filter((item) =>
                     item.href === "/system/access-audit"
@@ -490,6 +504,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
     buildWorkspaceNavGroups([
         {
             label: "工作",
+            domain: "work",
             items: [
                 {
                     routeId: "W01",
@@ -500,7 +515,8 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
             ],
         },
         {
-            label: "待办任务",
+            label: "待办与审批",
+            domain: "work",
             items: [
                 {
                     routeId: "W01",
@@ -537,6 +553,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
         },
         {
             label: "销售",
+            domain: "sales",
             items: [
                 {
                     routeId: "W03",
@@ -581,12 +598,9 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
             ],
         },
         {
-            label: "采购与履约",
+            label: "采购与库存",
+            domain: "procurement",
             items: [
-                {
-                    routeId: "W30",
-                    icon: CreditCardIcon,
-                },
                 {
                     routeId: "W08",
                     icon: ClipboardListIcon,
@@ -600,15 +614,14 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     requiredPermissions: ["procurement_inquiry:list"],
                 },
                 {
+                    routeId: "W30",
+                    icon: CreditCardIcon,
+                },
+                {
                     routeId: "W21",
                     label: "供应商供货目录",
                     icon: ShoppingBagIcon,
                 },
-            ],
-        },
-        {
-            label: "仓储",
-            items: [
                 {
                     routeId: "W10",
                     icon: WarehouseIcon,
@@ -617,6 +630,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
         },
         {
             label: "财务",
+            domain: "finance",
             items: [
                 {
                     routeId: "W11",
@@ -646,7 +660,22 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
             ],
         },
         {
-            label: "基础资料",
+            label: "经营分析",
+            domain: "analytics",
+            items: [
+                {
+                    routeId: "W15",
+                    icon: GaugeIcon,
+                },
+                {
+                    routeId: "W16",
+                    icon: ScaleIcon,
+                },
+            ],
+        },
+        {
+            label: "商品目录",
+            domain: "master-data",
             items: [
                 {
                     routeId: "W14",
@@ -684,6 +713,12 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     label: "卡券类目",
                     icon: TicketIcon,
                 },
+            ],
+        },
+        {
+            label: "主体与规则",
+            domain: "master-data",
+            items: [
                 {
                     routeId: "W14",
                     label: "我方公司",
@@ -698,6 +733,12 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 },
                 {
                     routeId: "W14",
+                    href: "/master-data/warehouses",
+                    label: "仓库",
+                    icon: WarehouseIcon,
+                },
+                {
+                    routeId: "W14",
                     href: "/master-data/procurement-responsibilities",
                     label: "采购责任规则",
                     icon: UserCogIcon,
@@ -706,29 +747,11 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                         "procurement_responsibility:manage",
                     ],
                 },
-                {
-                    routeId: "W14",
-                    href: "/master-data/warehouses",
-                    label: "仓库",
-                    icon: WarehouseIcon,
-                },
             ],
         },
         {
-            label: "分析",
-            items: [
-                {
-                    routeId: "W15",
-                    icon: GaugeIcon,
-                },
-                {
-                    routeId: "W16",
-                    icon: ScaleIcon,
-                },
-            ],
-        },
-        {
-            label: "供应商平台对接",
+            label: "供应商平台",
+            domain: "governance",
             items: [
                 {
                     routeId: "W20",
@@ -747,7 +770,8 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
             ],
         },
         {
-            label: "数据导入与同步",
+            label: "数据与任务",
+            domain: "governance",
             items: [
                 {
                     routeId: "W18",
@@ -769,8 +793,16 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
             ],
         },
         {
-            label: "系统",
+            label: "系统管理",
+            domain: "governance",
             items: [
+                {
+                    routeId: "W19",
+                    href: "/system/accounts",
+                    label: "组织与人员",
+                    icon: FileStackIcon,
+                    requiredPermissions: ["admin:list", "org_unit:list"],
+                },
                 {
                     // 权限配置与审计查询的查询口径、时间语义与导出策略都不同，
                     // 拆成两个入口；两者同属 W19 工作面。
@@ -778,6 +810,10 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     label: "角色与权限",
                     icon: ShieldCheckIcon,
                     requiredPermissions: ["role:list", "data_scope:list"],
+                },
+                {
+                    routeId: "W24",
+                    icon: WorkflowIcon,
                 },
                 {
                     routeId: "W19",
@@ -788,21 +824,10 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 },
                 {
                     routeId: "W19",
-                    href: "/system/accounts",
-                    label: "组织与人员",
-                    icon: FileStackIcon,
-                    requiredPermissions: ["admin:list", "org_unit:list"],
-                },
-                {
-                    routeId: "W19",
                     href: "/system/demo-master-data",
                     label: "示例业务数据",
                     icon: DatabaseIcon,
                     requiredPermissions: ["demo_master_data:read"],
-                },
-                {
-                    routeId: "W24",
-                    icon: WorkflowIcon,
                 },
             ],
         },

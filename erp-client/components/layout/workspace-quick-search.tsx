@@ -12,7 +12,6 @@ import {
     CommandItem,
     CommandList,
 } from "@/components/ui/command"
-import { Kbd } from "@/components/ui/kbd"
 import { SidebarMenuButton } from "@/components/ui/sidebar"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -95,16 +94,20 @@ export function WorkspaceQuickSearch() {
                 type="button"
                 tooltip="快速跳转菜单 (⌘K)"
                 aria-label="快速跳转菜单"
-                className="h-8 border border-border/80 bg-muted/55 text-muted-foreground shadow-none hover:border-primary/45 hover:bg-card hover:text-foreground group-data-[collapsible=icon]:border-transparent group-data-[collapsible=icon]:bg-transparent"
+                className="h-7.5 border-0 bg-foreground/[0.045] text-muted-foreground/85 shadow-none hover:bg-foreground/[0.075] hover:text-foreground"
                 onClick={() => setOpen(true)}
             >
-                <SearchIcon className="size-3.5 shrink-0" aria-hidden="true" />
-                <span className="flex-1 truncate text-xs group-data-[collapsible=icon]:hidden">
-                    快速跳转…
-                </span>
-                <Kbd className="ml-auto h-4.5 min-w-0 px-1 text-2xs group-data-[collapsible=icon]:hidden">
+                <SearchIcon
+                    className="size-3.5 shrink-0 text-muted-foreground/70"
+                    aria-hidden="true"
+                />
+                <span className="flex-1 truncate text-xs">快速跳转</span>
+                <span
+                    aria-hidden="true"
+                    className="ml-auto font-mono text-2xs text-muted-foreground/65"
+                >
                     ⌘K
-                </Kbd>
+                </span>
             </SidebarMenuButton>
             <CommandDialog
                 open={open}

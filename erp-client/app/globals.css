@@ -39,6 +39,7 @@
     --color-sidebar-primary: var(--sidebar-primary);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar: var(--sidebar);
+    --color-sidebar-rail: var(--sidebar-rail);
 
     --color-chart-1: var(--chart-1);
     --color-chart-2: var(--chart-2);
@@ -184,8 +185,8 @@
     --spacing-table-column-rate-min: 6rem;
     --spacing-table-column-tracks: 18rem;
     --spacing-table-column-tracks-min: 16rem;
-    --spacing-nav: 14rem; /* 左侧导航展开 224px，给宽表格更多呼吸感 */
-    --spacing-nav-icon: 3.5rem; /* 左侧导航折叠 56px */
+    --spacing-nav: 15rem; /* 双栏左侧导航展开 240px（60px 主轨 + 180px 子面板） */
+    --spacing-nav-icon: 3.75rem; /* 左侧导航折叠仅保留 60px 主轨 */
     --spacing-nav-mobile: 17rem; /* 移动端抽屉导航 */
     --spacing-preview: 25rem; /* 右侧轻量预览 400px */
     --spacing-detail: 48rem; /* 右侧半屏详情抽屉 768px；读完主事实 */
@@ -357,16 +358,23 @@
     --chart-4: oklch(0.56 0.105 205);
     --chart-5: oklch(0.55 0.145 288);
 
-    /* 飞书极净浅色侧栏 + 标志性冰蓝选中态 */
-    --sidebar: oklch(0.994 0.001 252); /* #fcfcfd 洁净近白侧栏 */
-    --sidebar-foreground: oklch(0.36 0.01 255); /* 沉静墨灰导航文字 */
+    /* 双栏轻盈冷白侧栏（主轨微稳 + 子面板极净通透）+ 纯白顶栏与工作区 */
+    --sidebar-rail: oklch(
+        0.974 0.0025 255
+    ); /* #f5f6f9 60px 窄轨轻承托，清晰不发灰 */
+    --sidebar: oklch(0.986 0.0018 255); /* #f8f9fb 180px 子面板通透冷白 */
+    --sidebar-foreground: oklch(
+        0.42 0.011 255
+    ); /* #4e545e 利落克制的导航文字 */
     --sidebar-primary: oklch(0.562 0.212 261); /* 飞书蓝品牌标识 */
     --sidebar-primary-foreground: oklch(1 0 0);
-    --sidebar-accent: oklch(0.955 0.02 258); /* #e8f1fe 飞书经典冰蓝选中底 */
+    --sidebar-accent: oklch(
+        0.955 0.02 258
+    ); /* #e8f1fe 冰蓝选中语义底（筛选胶囊/标签复用） */
     --sidebar-accent-foreground: oklch(
         0.495 0.195 262
     ); /* #1a57ce 飞书蓝选中文字 */
-    --sidebar-border: oklch(0.918 0.004 255);
+    --sidebar-border: oklch(0.926 0.003 255); /* #eaecef 轻盈 1px 细线 */
     --sidebar-ring: oklch(0.562 0.212 261 / 28%);
 }
 
@@ -471,8 +479,9 @@
     --chart-4: oklch(0.72 0.095 205);
     --chart-5: oklch(0.74 0.125 288);
 
-    --sidebar: oklch(0.18 0.006 255);
-    --sidebar-foreground: oklch(0.78 0.006 255);
+    --sidebar-rail: oklch(0.145 0.006 255);
+    --sidebar: oklch(0.172 0.006 255);
+    --sidebar-foreground: oklch(0.74 0.007 255);
     --sidebar-primary: oklch(0.66 0.18 260);
     --sidebar-primary-foreground: oklch(1 0 0);
     --sidebar-accent: oklch(0.27 0.055 260);

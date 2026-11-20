@@ -209,7 +209,7 @@ function Sidebar({
             <div
                 data-slot="sidebar"
                 className={cn(
-                    "sticky top-0 hidden h-svh w-(--sidebar-width) shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex",
+                    "sticky top-0 hidden h-svh w-(--sidebar-width) shrink-0 flex-col bg-sidebar text-sidebar-foreground md:flex",
                     className,
                 )}
                 {...props}
@@ -255,7 +255,7 @@ function Sidebar({
                 <div
                     data-sidebar="sidebar"
                     data-slot="sidebar-inner"
-                    className="flex size-full flex-col bg-sidebar group-data-[variant=sidebar]:border-r group-data-[variant=sidebar]:border-sidebar-border group-data-[variant=floating]:rounded-2xl group-data-[variant=floating]:bg-card group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-border"
+                    className="flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-2xl group-data-[variant=floating]:bg-card group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-border"
                 >
                     {children}
                 </div>
@@ -369,7 +369,7 @@ function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
         <div
             data-slot="sidebar-footer"
             data-sidebar="footer"
-            className={cn("flex flex-col gap-2 p-2", className)}
+            className={cn("flex shrink-0 flex-col gap-2 p-2", className)}
             {...props}
         />
     )
@@ -503,18 +503,18 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
 }
 
 const sidebarMenuButtonVariants = cva(
-    // 飞书侧栏导航项：圆角 6px，未选悬停浅灰，选中冰蓝底 + 飞书蓝字与图标
-    "peer/menu-button group/menu-button relative flex w-full items-center gap-2.5 overflow-hidden rounded-md px-2.5 py-1.5 text-left text-body-compact whitespace-nowrap text-sidebar-foreground ring-sidebar-ring outline-hidden transition-[width,height,padding,background-color,color] duration-150 group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! hover:bg-accent/80 hover:text-foreground focus-visible:ring-3 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-accent/80 data-open:hover:text-foreground data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground data-active:hover:bg-sidebar-accent data-active:hover:text-sidebar-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground data-active:[&_svg]:text-sidebar-accent-foreground [&>span:last-child]:truncate",
+    // 轻盈冷白侧栏导航项：无边框柔灰选中胶囊 + 深墨黑字重 + 左侧 2px 品牌蓝指示条
+    "peer/menu-button group/menu-button relative flex w-full items-center gap-2 overflow-hidden rounded-md px-2.5 py-1.5 text-left text-body-compact whitespace-nowrap text-sidebar-foreground ring-sidebar-ring outline-hidden transition-[width,height,padding,background-color,color] duration-150 group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! hover:bg-foreground/[0.038] hover:text-foreground focus-visible:ring-2 active:bg-foreground/[0.065] active:text-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-foreground/[0.038] data-open:hover:text-foreground data-active:bg-foreground/[0.06] data-active:font-medium data-active:text-foreground data-active:hover:bg-foreground/[0.075] data-active:hover:text-foreground dark:data-active:bg-foreground/[0.09] before:pointer-events-none before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-primary before:opacity-0 before:transition-opacity data-active:before:opacity-100 group-data-[collapsible=icon]:before:hidden [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:stroke-[1.75] [&_svg]:text-muted-foreground/75 hover:[&_svg]:text-foreground/85 data-active:[&_svg]:text-primary [&>span:last-child]:truncate",
     {
         variants: {
             variant: {
-                default: "hover:bg-accent/80 hover:text-foreground",
+                default: "hover:bg-foreground/[0.038] hover:text-foreground",
                 outline:
-                    "bg-transparent shadow-none ring-1 ring-border hover:bg-accent/80 hover:text-foreground hover:ring-border",
+                    "bg-transparent shadow-none ring-1 ring-border hover:bg-foreground/[0.038] hover:text-foreground hover:ring-border",
             },
             size: {
                 default: "h-8 text-body-compact",
-                sm: "h-7 text-xs",
+                sm: "h-7.5 text-body-compact",
                 lg: "h-11 px-2.5 text-sm group-data-[collapsible=icon]:p-0!",
             },
         },

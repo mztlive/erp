@@ -17,6 +17,9 @@ export interface ErpAppShellProps {
     sidebarContent: React.ReactNode
     sidebarHeader?: React.ReactNode
     sidebarFooter?: React.ReactNode
+    sidebarHeaderClassName?: string
+    sidebarContentClassName?: string
+    sidebarFooterClassName?: string
     topbar?: React.ReactNode
     maintenanceBanner?: React.ReactNode
     defaultSidebarOpen?: boolean
@@ -36,6 +39,9 @@ function ErpAppShell({
     sidebarContent,
     sidebarHeader,
     sidebarFooter,
+    sidebarHeaderClassName,
+    sidebarContentClassName,
+    sidebarFooterClassName,
     topbar,
     maintenanceBanner,
     defaultSidebarOpen = true,
@@ -62,11 +68,17 @@ function ErpAppShell({
                 variant={sidebarVariant}
             >
                 {sidebarHeader ? (
-                    <SidebarHeader>{sidebarHeader}</SidebarHeader>
+                    <SidebarHeader className={sidebarHeaderClassName}>
+                        {sidebarHeader}
+                    </SidebarHeader>
                 ) : null}
-                <SidebarContent>{sidebarContent}</SidebarContent>
+                <SidebarContent className={sidebarContentClassName}>
+                    {sidebarContent}
+                </SidebarContent>
                 {sidebarFooter ? (
-                    <SidebarFooter>{sidebarFooter}</SidebarFooter>
+                    <SidebarFooter className={sidebarFooterClassName}>
+                        {sidebarFooter}
+                    </SidebarFooter>
                 ) : null}
                 {showSidebarRail && sidebarCollapsible !== "none" ? (
                     <SidebarRail />
