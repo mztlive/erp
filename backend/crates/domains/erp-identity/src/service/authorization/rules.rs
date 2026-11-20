@@ -117,12 +117,7 @@ pub(crate) fn data_condition(permission: &Permission, scope: Option<&ResolvedSco
             let spec = scope_spec::require_scope(permission)?;
             let resolved = scope.ok_or_else(|| Error::ValidationError("缺少范围解析".into()))?;
             let mut rule = AccessRule::scope(resolved, spec.allows_history());
-            if record_grant(permission) {
-                let resource = if permission.resource() == "sales_order" {
-                    ResourceKind::SalesOrder
-                } else {
-                    ResourceKind::PurchaseOrder
-                };
+            if let Some(resource) = record_grant(permission) {
                 rule = AccessRule::any(vec![rule, AccessRule::RecordReadGrant(resource)]);
             }
             if permission == &inventory::STOCK_ADJUSTMENT_SUBMIT {
@@ -349,19 +344,31 @@ fn required_facts(permission: &Permission) -> Result<BTreeSet<FactKind>> {
     Ok(facts)
 }
 
-// 判断销售单或采购单的读取动作能否使用记录读取补充，不将其用于写入。
-fn record_grant(permission: &Permission) -> bool {
-    matches!(
-        permission.action(),
-        "list"
-            | "detail"
-            | "financial_expense_source"
-            | "profit_loss_read"
-            | "purchase_expense_source"
-            | "extra_cost_read"
-            | "customer_quality_history"
-            | "delivery_options_read"
-    ) && matches!(permission.resource(), "sales_order" | "purchase_order")
+// 允许以销售单记录读取授权补充数据范围的固定入口：仅用于读取销售单或作为下游来源读取，
+// 不授予销售单自身的写入范围；其中 `PURCHASE_EXPENSE_SOURCE` 刻意关闭历史参与，但保留显式记录读取授权。
+const SALES_RECORD_GRANTS: &[Permission] = &[
+    sales_order::LIST,
+    sales_order::DETAIL,
+    internal::SALES_ORDER_FINANCIAL_EXPENSE_SOURCE,
+    internal::SALES_ORDER_PROFIT_LOSS_READ,
+    internal::PURCHASE_EXPENSE_SOURCE,
+    internal::SALES_ORDER_EXTRA_COST_READ,
+    internal::CUSTOMER_QUALITY_HISTORY,
+];
+
+// 允许以采购单记录读取授权补充数据范围的固定入口：仅用于读取采购单，不授予采购单自身的写入范围。
+const PURCHASE_RECORD_GRANTS: &[Permission] =
+    &[purchase_order::LIST, purchase_order::DETAIL, internal::PURCHASE_DELIVERY_OPTIONS_READ];
+
+// 按精确权限常量判断入口能否使用销售单或采购单的记录读取补充，不按资源与动作名做笛卡尔积匹配。
+fn record_grant(permission: &Permission) -> Option<ResourceKind> {
+    if SALES_RECORD_GRANTS.contains(permission) {
+        Some(ResourceKind::SalesOrder)
+    } else if PURCHASE_RECORD_GRANTS.contains(permission) {
+        Some(ResourceKind::PurchaseOrder)
+    } else {
+        None
+    }
 }
 
 /// 按固定登记校验权限是否能编译查询，不从动作名推断，也不放宽写入所需快照。
@@ -680,6 +687,74 @@ mod tests {
         assert!(!allows(&sales_order::DETAIL, &scope, &BTreeSet::new()));
         assert!(allows(&sales_order::DETAIL, &scope, &grants));
         assert!(!allows(&sales_order::HANDOVER, &scope, &grants));
+    }
+
+    // 验证记录读取补充按精确权限常量匹配，拒绝跨资源组合及原单写入或当前口径入口。
+    #[test]
+    fn record_grant_matches_exact_permissions_and_rejects_cross_resource_or_write_entries() {
+        for permission in SALES_RECORD_GRANTS {
+            assert_eq!(permission.resource(), "sales_order", "{permission}");
+            assert_eq!(scope_spec::kind(permission).unwrap(), ActionKind::Scope, "{permission}");
+            assert_eq!(record_grant(permission), Some(ResourceKind::SalesOrder), "{permission}");
+        }
+        for permission in PURCHASE_RECORD_GRANTS {
+            assert_eq!(permission.resource(), "purchase_order", "{permission}");
+            assert_eq!(scope_spec::kind(permission).unwrap(), ActionKind::Scope, "{permission}");
+            assert_eq!(record_grant(permission), Some(ResourceKind::PurchaseOrder), "{permission}");
+        }
+
+        for cross_resource in [
+            "sales_order:delivery_options_read",
+            "purchase_order:financial_expense_source",
+            "purchase_order:profit_loss_read",
+            "purchase_order:purchase_expense_source",
+            "purchase_order:extra_cost_read",
+            "purchase_order:customer_quality_history",
+        ] {
+            let permission = Permission::parse(cross_resource).unwrap();
+            assert_eq!(record_grant(&permission), None, "{cross_resource}");
+        }
+
+        for denied in [
+            sales_order::CREATE,
+            sales_order::HANDOVER,
+            sales_order::SUBMIT,
+            sales_order::VOID,
+            sales_order::CANCEL_APPROVAL,
+            internal::SALES_CHANGE_DRAFT_READ,
+            internal::CUSTOMER_QUALITY_CURRENT,
+            internal::SALES_ORDER_HANDOVER_RECIPIENT,
+            internal::SALES_CREATED_RESULT_READ,
+            purchase_order::CREATE,
+            purchase_order::SAVE_DRAFT,
+            purchase_order::SUBMIT,
+            purchase_order::VOID,
+            internal::PAYMENT_REQUEST_CANDIDATES,
+            internal::PURCHASE_PORTAL_IMPACT_READ,
+            erp_permissions::customer::LIST,
+            erp_permissions::customer::DETAIL,
+        ] {
+            assert_eq!(record_grant(&denied), None, "{denied}");
+        }
+    }
+
+    // 验证费用采购来源拒绝历史参与补充，但接受精确销售单记录读取授权，且不掩盖缺失事实。
+    #[test]
+    fn purchase_expense_source_rejects_history_but_accepts_sales_record_read_grant() {
+        let scope = scope();
+        let mut object = object();
+        let rule = data_condition(&internal::PURCHASE_EXPENSE_SOURCE, Some(&scope)).unwrap();
+
+        assert!(!rule.allows_object("user", &object, &BTreeSet::new()).unwrap());
+
+        let wrong_resource = [(ResourceKind::PurchaseOrder, "one".into())].into();
+        assert!(!rule.allows_object("user", &object, &wrong_resource).unwrap());
+
+        let sales_grant = [(ResourceKind::SalesOrder, "one".into())].into();
+        assert!(rule.allows_object("user", &object, &sales_grant).unwrap());
+
+        object.owner_id = FactValue::Missing;
+        assert!(matches!(rule.allows_object("user", &object, &sales_grant), Err(Error::ValidationError(_))));
     }
     // 验证空范围拒绝，且公司范围也不能掩盖必需负责人事实缺失。
     #[test]

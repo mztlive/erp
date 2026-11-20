@@ -2,14 +2,17 @@
 #![cfg(test)]
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use erp_permissions::{cost, customer, internal, purchase_order, sales_order};
 use mongodb::bson::doc;
 use persistence_core::ReadExecutor;
 use persistence_core::testing::SnapshotExecutor;
 
-use super::fixtures::{Facts, Identity, actor, service};
+use super::fixtures::{Facts, Identity, actor, complete, object, service};
 use crate::entity::access_control::{ResolvedScope, ScopeClause};
+use crate::entity::authorization::FactValue;
+use crate::entity::resource_access::ResourceKind;
 use crate::repository::authorization::fixtures::execute;
 use crate::{AccessTarget, Error};
 
@@ -162,4 +165,73 @@ async fn delivery_options_requires_update_and_detail_independently_without_chang
     );
     assert_eq!(rows.iter().map(|row| row.get_str("id").unwrap()).collect::<Vec<_>>(), ["active"]);
     service.validate(&access, &mut executor).await.unwrap();
+}
+
+// 费用采购来源只要求采购创建资格，不接受销售历史参与，但允许销售单记录读取授权并复验授权修订。
+#[tokio::test]
+async fn purchase_expense_source_requires_purchase_create_rejects_history_and_accepts_sales_record_grant() {
+    let identity = Arc::new(Identity::default());
+    let mut historical = object("sales_order", "order", "other");
+    historical.history_participants = FactValue::Known(["user".into()].into());
+    let facts = Arc::new(Facts::new(vec![historical]));
+    let mut builder = complete();
+    builder.facilities = identity.clone();
+    builder.facts.insert("sales_order".into(), facts.clone());
+    let service = builder.build().unwrap();
+
+    identity.state.lock().unwrap().grants = vec![("sales".into(), vec![sales_order::DETAIL])];
+    let mut executor = SnapshotExecutor::default();
+    assert!(matches!(
+        service
+            .require(
+                &actor(),
+                &internal::PURCHASE_EXPENSE_SOURCE,
+                AccessTarget::record("order").unwrap(),
+                &mut executor,
+            )
+            .await,
+        Err(Error::Forbidden(_))
+    ));
+    assert_eq!(facts.calls.load(Ordering::SeqCst), 0);
+
+    identity.state.lock().unwrap().grants = vec![("buyer".into(), vec![purchase_order::CREATE])];
+    assert!(matches!(
+        service
+            .require(
+                &actor(),
+                &internal::PURCHASE_EXPENSE_SOURCE,
+                AccessTarget::record("order").unwrap(),
+                &mut executor,
+            )
+            .await,
+        Err(Error::Forbidden(_))
+    ));
+
+    identity.record_grants.lock().unwrap().insert((ResourceKind::SalesOrder, "order".into()));
+    service
+        .require(
+            &actor(),
+            &internal::PURCHASE_EXPENSE_SOURCE,
+            AccessTarget::record("order").unwrap(),
+            &mut executor,
+        )
+        .await
+        .unwrap();
+
+    let mut read_executor = ReadExecutor::default();
+    let access =
+        service.query(&actor(), &internal::PURCHASE_EXPENSE_SOURCE, &mut read_executor).await.unwrap();
+    let rows = execute(
+        vec![
+            doc! {"id":"mine", "owner":"user", "deleted_at":0},
+            doc! {"id":"participated", "owner":"other", "history":["user"], "deleted_at":0},
+        ],
+        access.stages(),
+        &BTreeMap::new(),
+        &doc! {},
+    );
+    assert_eq!(rows.iter().map(|row| row.get_str("id").unwrap()).collect::<Vec<_>>(), ["mine"]);
+
+    identity.grant_revision.fetch_add(1, Ordering::SeqCst);
+    assert!(matches!(service.validate(&access, &mut read_executor).await, Err(Error::ConflictError(_))));
 }
