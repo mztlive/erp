@@ -51,9 +51,12 @@ export const listFilterText = {
     selected: "已选条件：",
     clear: "清空",
     more: "更多筛选",
+    collapse: "收起筛选",
     close: "关闭更多筛选",
     reset: "重置",
+    resetMore: "重置更多条件",
     cancel: "取消",
+    query: "查询",
     apply: "应用筛选",
 } as const
 

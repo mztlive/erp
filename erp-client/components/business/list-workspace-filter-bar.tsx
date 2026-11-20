@@ -5,6 +5,7 @@ import { createPortal } from "react-dom"
 
 import { FilterChip } from "@/components/business/filter-chip"
 import {
+    ListFilterQueryButton,
     ListFilterTray,
     ListFilterTrigger,
 } from "@/components/business/list-filter-popover"
@@ -15,7 +16,6 @@ import {
     useTableInlineFilterStatusHost,
 } from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { listFilterText } from "@/lib/ui-text"
@@ -143,7 +143,7 @@ export function ListWorkspaceFilterBar({
     statusActions,
     extraPrimary,
     onResetMore,
-    moreHint = "可组合多个条件，点击「应用筛选」后统一生效。",
+    moreHint = "可组合多个条件，点击「查询」后统一生效。",
     actions,
     className,
     queryButtonId,
@@ -189,6 +189,8 @@ export function ListWorkspaceFilterBar({
 }) {
     const panelId = morePanelId ?? `${idPrefix}-more-panel`
     const showMore = morePanel != null && onToggleMore != null
+    // 展开「更多筛选」时顶栏主按钮退场，由展开区页脚「查询」作为唯一提交入口。
+    const hideTopQuery = showMore && moreOpen
     const statusHost = useTableFilterStatusHost()
     const inlineStatusHost = useTableInlineFilterStatusHost()
     const filterTrayHost = useTableFilterTrayHost()
@@ -279,6 +281,13 @@ export function ListWorkspaceFilterBar({
             </div>
         ) : null
 
+    const queryButton = (
+        <ListFilterQueryButton
+            id={queryButtonId ?? `${idPrefix}-query`}
+            hasPendingChanges={hasPendingChanges}
+        />
+    )
+
     return (
         <form
             aria-label={formAriaLabel}
@@ -288,6 +297,15 @@ export function ListWorkspaceFilterBar({
                 onSubmit()
             }}
         >
+            {hideTopQuery && filterTrayHost ? (
+                <input
+                    type="submit"
+                    value=""
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    className="sr-only"
+                />
+            ) : null}
             <ListToolbar
                 className={cn(
                     listWorkspaceFilterBarClassName,
@@ -296,22 +314,10 @@ export function ListWorkspaceFilterBar({
                 )}
                 search={search}
                 filters={
-                    <>
-                        {primaryFilters}
-                        <LoadingButton
-                            id={queryButtonId ?? `${idPrefix}-query`}
-                            type="submit"
-                            variant={hasPendingChanges ? "default" : "ghost"}
-                            className={
-                                hasPendingChanges
-                                    ? "px-3.5"
-                                    : "bg-sidebar-accent/55 px-3 text-primary hover:bg-sidebar-accent hover:text-primary"
-                            }
-                        >
-                            查询
-                        </LoadingButton>
-                        {extraPrimary}
-                        {showMore ? (
+                    showMore ? (
+                        <>
+                            {primaryFilters}
+                            {extraPrimary}
                             <ListFilterTrigger
                                 triggerId={moreButtonId ?? `${idPrefix}-more`}
                                 panelId={panelId}
@@ -319,8 +325,15 @@ export function ListWorkspaceFilterBar({
                                 count={moreCount}
                                 onToggle={onToggleMore}
                             />
-                        ) : null}
-                    </>
+                            {!hideTopQuery ? queryButton : null}
+                        </>
+                    ) : (
+                        <>
+                            {primaryFilters}
+                            {queryButton}
+                            {extraPrimary}
+                        </>
+                    )
                 }
                 actions={actions}
                 secondary={
@@ -359,10 +372,10 @@ export function ListWorkspaceFilterBar({
                                         if (nextOpen !== moreOpen)
                                             onToggleMore?.()
                                     }}
-                                    count={moreCount}
                                     onApply={onSubmit}
                                     onReset={onResetMore}
                                     resetId={resetMoreButtonId}
+                                    hasPendingChanges={hasPendingChanges}
                                     hint={moreHint}
                                     inPortal={false}
                                 >
@@ -384,10 +397,10 @@ export function ListWorkspaceFilterBar({
                           onOpenChange={(nextOpen) => {
                               if (nextOpen !== moreOpen) onToggleMore?.()
                           }}
-                          count={moreCount}
                           onApply={onSubmit}
                           onReset={onResetMore}
                           resetId={resetMoreButtonId}
+                          hasPendingChanges={hasPendingChanges}
                           hint={moreHint}
                           inPortal
                       >

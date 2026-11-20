@@ -8,6 +8,31 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import { listFilterText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
+/** 查询主按钮：收起态（顶栏）与展开态（托盘页脚）共用同一组件，保证外观与待查询高亮完全一致。 */
+export function ListFilterQueryButton({
+    id,
+    hasPendingChanges = false,
+}: {
+    id: string
+    hasPendingChanges?: boolean
+}) {
+    return (
+        <LoadingButton
+            id={id}
+            type="submit"
+            variant={hasPendingChanges ? "default" : "ghost"}
+            className={cn(
+                "shadow-none",
+                hasPendingChanges
+                    ? "px-3.5"
+                    : "bg-sidebar-accent/55 px-3 text-primary hover:bg-sidebar-accent hover:text-primary",
+            )}
+        >
+            {listFilterText.query}
+        </LoadingButton>
+    )
+}
+
 /** 高级筛选触发按钮：平时无框轻按钮，展开或有已选条件时高亮飞书冰蓝。 */
 export function ListFilterTrigger({
     triggerId,
@@ -37,7 +62,7 @@ export function ListFilterTrigger({
             onClick={onToggle}
         >
             <FilterIcon aria-hidden="true" className="size-3.5" />
-            {listFilterText.more}
+            {open ? listFilterText.collapse : listFilterText.more}
             {count > 0 ? (
                 <span
                     className="rounded-full bg-primary px-1.5 text-tiny leading-4 font-medium tabular-nums text-primary-foreground"
@@ -68,11 +93,11 @@ export function ListFilterTray({
     label,
     open,
     onOpenChange,
-    count,
     onApply,
     onReset,
     resetId,
-    hint = "可组合多个条件，点击「应用」后生效",
+    hasPendingChanges = false,
+    hint = "可组合多个条件，点击「查询」后统一生效",
     inPortal = true,
     children,
 }: {
@@ -81,10 +106,10 @@ export function ListFilterTray({
     label: string
     open: boolean
     onOpenChange: (open: boolean) => void
-    count: number
     onApply: () => void
     onReset?: () => void
     resetId?: string
+    hasPendingChanges?: boolean
     hint?: string
     /** true：已挂载到外层通栏槽（独立 form）；false：内联在父 form 内部（使用 div）。 */
     inPortal?: boolean
@@ -110,61 +135,39 @@ export function ListFilterTray({
             <div
                 data-slot="list-filter-tray-body"
                 className={cn(
-                    "max-h-[min(26rem,44dvh)] overflow-y-auto overscroll-contain pt-2.5 pb-2.5",
-                    inPortal && "border-t border-border/45",
+                    "max-h-[min(26rem,44dvh)] overflow-y-auto overscroll-contain pb-2.5",
+                    inPortal ? "pt-1" : "pt-2.5",
                 )}
             >
                 {children}
             </div>
             <div
                 data-slot="list-filter-tray-footer"
-                className="flex flex-wrap items-center justify-between gap-2 border-t border-border/45 py-2"
+                className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-3 pb-3.5"
             >
-                <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                    {count > 0 ? (
-                        <span className="inline-flex items-center rounded-full bg-sidebar-accent px-2 py-0.5 text-tiny leading-4 font-medium tabular-nums text-sidebar-accent-foreground">
-                            已生效 {count} 项
-                        </span>
-                    ) : null}
-                    <span className="truncate text-muted-foreground/75">
-                        {hint}
-                    </span>
-                </div>
-                <div className="ml-auto flex shrink-0 items-center gap-1">
+                <span className="min-w-0 truncate text-xs text-muted-foreground/75">
+                    {hint}
+                </span>
+                <div className="ml-auto flex shrink-0 items-center gap-1.5">
                     {onReset ? (
                         <Button
                             id={resetId ?? `${idPrefix}-reset-more`}
                             type="button"
                             variant="ghost"
-                            size="sm"
-                            className="text-muted-foreground hover:bg-muted/80 hover:text-primary"
+                            className="text-muted-foreground shadow-none hover:bg-muted/80 hover:text-primary"
                             onClick={onReset}
                         >
                             <RotateCcwIcon
                                 aria-hidden="true"
                                 className="size-3.5"
                             />
-                            {listFilterText.reset}
+                            {listFilterText.resetMore}
                         </Button>
                     ) : null}
-                    <Button
-                        id={`${idPrefix}-more-cancel`}
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-foreground/80 hover:bg-muted/80 hover:text-foreground"
-                        onClick={() => onOpenChange(false)}
-                    >
-                        收起
-                    </Button>
-                    <LoadingButton
+                    <ListFilterQueryButton
                         id={`${idPrefix}-more-apply`}
-                        type="submit"
-                        size="sm"
-                        className="ml-0.5 px-3.5"
-                    >
-                        {listFilterText.apply}
-                    </LoadingButton>
+                        hasPendingChanges={hasPendingChanges}
+                    />
                 </div>
             </div>
         </>
