@@ -94,29 +94,41 @@ function RemoteSearchChoice({
                     label: `已选${WORKSPACE_FILTER_LABELS[name]}（当前范围无匹配）`,
                 },
         )
+    const control = (
+        <MultiOptionCombobox
+            id={id}
+            aria-label={WORKSPACE_FILTER_LABELS[name]}
+            aria-describedby={
+                failureText && !remote.canRetry ? `${id}-status` : undefined
+            }
+            options={[...selected, ...choices]}
+            value={value}
+            onValueChange={onChange}
+            filterLabel={label ?? WORKSPACE_FILTER_LABELS[name]}
+            hideFilterLabel={externalLabel}
+            className={
+                externalLabel
+                    ? undefined
+                    : "[&_[data-slot=button]]:border-transparent [&_[data-slot=button]]:bg-muted/65 [&_[data-slot=button]]:hover:bg-muted data-[has-value=true]:[&_[data-slot=button]]:border-primary/25 data-[has-value=true]:[&_[data-slot=button]]:bg-sidebar-accent/70 data-[has-value=true]:[&_[data-slot=button]]:text-sidebar-accent-foreground"
+            }
+            filterMode="remote"
+            onSearchChange={remote.setSearch}
+            loading={remote.isFetching}
+            emptyLabel={remote.failure?.title ?? "没有符合条件的选项"}
+        />
+    )
     return (
         <div className={externalLabel ? "min-w-0" : "w-52 max-w-full min-w-0"}>
-            <MultiOptionCombobox
-                id={id}
-                aria-label={WORKSPACE_FILTER_LABELS[name]}
-                aria-describedby={
-                    failureText && !remote.canRetry ? `${id}-status` : undefined
-                }
-                options={[...selected, ...choices]}
-                value={value}
-                onValueChange={onChange}
-                filterLabel={label ?? WORKSPACE_FILTER_LABELS[name]}
-                hideFilterLabel={externalLabel}
-                className={
-                    externalLabel
-                        ? undefined
-                        : "[&_[data-slot=button]]:border-transparent [&_[data-slot=button]]:bg-muted/65 [&_[data-slot=button]]:hover:bg-muted data-[has-value=true]:[&_[data-slot=button]]:border-primary/25 data-[has-value=true]:[&_[data-slot=button]]:bg-sidebar-accent/70 data-[has-value=true]:[&_[data-slot=button]]:text-sidebar-accent-foreground"
-                }
-                filterMode="remote"
-                onSearchChange={remote.setSearch}
-                loading={remote.isFetching}
-                emptyLabel={remote.failure?.title ?? "没有符合条件的选项"}
-            />
+            {externalLabel ? (
+                <ListWorkspaceFilterField
+                    htmlFor={id}
+                    label={WORKSPACE_FILTER_LABELS[name]}
+                >
+                    {control}
+                </ListWorkspaceFilterField>
+            ) : (
+                control
+            )}
             {remote.canRetry ? (
                 <button
                     type="button"
@@ -153,7 +165,6 @@ function WorkspaceSearchChoice(
                     props.onChange(value ? value.split(",") : [])
                 }
                 label="处理人"
-                externalLabel={props.externalLabel}
             />
         )
     }
@@ -450,20 +461,9 @@ export function WorkspaceSearchPanel({
                                             key !== "business_types") ||
                                             options[key]?.length ||
                                             applied.filters[key]?.length),
-                                ).map((key) => (
-                                    <ListWorkspaceFilterField
-                                        key={key}
-                                        label={WORKSPACE_FILTER_LABELS[key]}
-                                        htmlFor={`workspace-filter-${key}`}
-                                    >
-                                        {choice(key, true)}
-                                    </ListWorkspaceFilterField>
-                                ))}
+                                ).map((key) => choice(key, true))}
                             </ListFilterSection>
-                            <ListFilterSection
-                                legend="时间与状态"
-                                gridClassName="grid-cols-[minmax(0,1fr)]"
-                            >
+                            <ListFilterSection legend="时间与状态">
                                 <form.Field name="filters">
                                     {(field) => {
                                         const filters = field.state.value
@@ -476,139 +476,139 @@ export function WorkspaceSearchPanel({
                                                 ...patch,
                                             })
                                         return (
-                                            <div className="flex min-w-0 flex-col gap-3">
+                                            <>
                                                 <ListWorkspaceFilterField
                                                     htmlFor="workspace-filter-date-field"
                                                     label="时间条件"
                                                 >
-                                                    <div className="grid gap-2 lg:grid-cols-[8rem_minmax(0,1fr)]">
-                                                        <OptionCombobox
-                                                            id="workspace-filter-date-field"
-                                                            aria-label="时间条件"
-                                                            allowClear={false}
-                                                            className="w-full"
-                                                            value={
-                                                                filters.date_field ??
-                                                                (state.view ===
-                                                                "started"
-                                                                    ? "created"
-                                                                    : "due")
-                                                            }
-                                                            options={[
-                                                                {
-                                                                    value: "created",
-                                                                    label:
-                                                                        state.view ===
-                                                                        "started"
-                                                                            ? "提交时间"
-                                                                            : "进入时间",
-                                                                },
-                                                                ...(state.view !==
-                                                                "started"
-                                                                    ? [
-                                                                          {
-                                                                              value: "due",
-                                                                              label: "截止时间",
-                                                                          },
-                                                                      ]
-                                                                    : []),
-                                                                ...(state.view ===
-                                                                "history"
-                                                                    ? [
-                                                                          {
-                                                                              value: "completed",
-                                                                              label: "处理时间",
-                                                                          },
-                                                                      ]
-                                                                    : []),
-                                                            ]}
-                                                            onValueChange={(
-                                                                value,
-                                                            ) =>
-                                                                update({
-                                                                    date_field:
-                                                                        value as WorkspaceFilters["date_field"],
-                                                                })
-                                                            }
-                                                        />
-                                                        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
-                                                            <DatePicker
-                                                                id="workspace-filter-date-from"
-                                                                placeholder="开始日期"
-                                                                size="default"
-                                                                className="w-full"
-                                                                disabled={
-                                                                    filters.undated
-                                                                }
-                                                                value={
-                                                                    filters.date_from
-                                                                }
-                                                                disabledDates={
-                                                                    filters.date_to
-                                                                        ? {
-                                                                              after: parseISO(
-                                                                                  filters.date_to,
-                                                                              ),
-                                                                          }
-                                                                        : undefined
-                                                                }
-                                                                onValueChange={(
-                                                                    value,
-                                                                ) =>
-                                                                    update({
-                                                                        date_field:
-                                                                            filters.date_field ??
-                                                                            (state.view ===
-                                                                            "started"
-                                                                                ? "created"
-                                                                                : "due"),
-                                                                        date_from:
-                                                                            value,
-                                                                    })
-                                                                }
-                                                            />
-                                                            <span className="text-xs">
-                                                                至
-                                                            </span>
-                                                            <DatePicker
-                                                                id="workspace-filter-date-to"
-                                                                placeholder="结束日期"
-                                                                size="default"
-                                                                className="w-full"
-                                                                disabled={
-                                                                    filters.undated
-                                                                }
-                                                                disabledDates={
-                                                                    filters.date_from
-                                                                        ? {
-                                                                              before: parseISO(
-                                                                                  filters.date_from,
-                                                                              ),
-                                                                          }
-                                                                        : undefined
-                                                                }
-                                                                value={
-                                                                    filters.date_to
-                                                                }
-                                                                onValueChange={(
-                                                                    value,
-                                                                ) =>
-                                                                    update({
-                                                                        date_field:
-                                                                            filters.date_field ??
-                                                                            (state.view ===
-                                                                            "started"
-                                                                                ? "created"
-                                                                                : "due"),
-                                                                        date_to:
-                                                                            value,
-                                                                    })
-                                                                }
-                                                            />
-                                                        </div>
-                                                    </div>
+                                                    <OptionCombobox
+                                                        id="workspace-filter-date-field"
+                                                        aria-label="时间条件"
+                                                        allowClear={false}
+                                                        className="w-full"
+                                                        value={
+                                                            filters.date_field ??
+                                                            (state.view ===
+                                                            "started"
+                                                                ? "created"
+                                                                : "due")
+                                                        }
+                                                        options={[
+                                                            {
+                                                                value: "created",
+                                                                label:
+                                                                    state.view ===
+                                                                    "started"
+                                                                        ? "提交时间"
+                                                                        : "进入时间",
+                                                            },
+                                                            ...(state.view !==
+                                                            "started"
+                                                                ? [
+                                                                      {
+                                                                          value: "due",
+                                                                          label: "截止时间",
+                                                                      },
+                                                                  ]
+                                                                : []),
+                                                            ...(state.view ===
+                                                            "history"
+                                                                ? [
+                                                                      {
+                                                                          value: "completed",
+                                                                          label: "处理时间",
+                                                                      },
+                                                                  ]
+                                                                : []),
+                                                        ]}
+                                                        onValueChange={(
+                                                            value,
+                                                        ) =>
+                                                            update({
+                                                                date_field:
+                                                                    value as WorkspaceFilters["date_field"],
+                                                            })
+                                                        }
+                                                    />
                                                 </ListWorkspaceFilterField>
-                                                <div className="flex flex-wrap gap-4 text-xs">
+                                                <ListWorkspaceFilterField
+                                                    htmlFor="workspace-filter-date-from"
+                                                    label="开始日期"
+                                                >
+                                                    <DatePicker
+                                                        id="workspace-filter-date-from"
+                                                        fieldLabel="开始日期"
+                                                        placeholder="全部"
+                                                        className="w-full"
+                                                        disabled={
+                                                            filters.undated
+                                                        }
+                                                        value={
+                                                            filters.date_from
+                                                        }
+                                                        disabledDates={
+                                                            filters.date_to
+                                                                ? {
+                                                                      after: parseISO(
+                                                                          filters.date_to,
+                                                                      ),
+                                                                  }
+                                                                : undefined
+                                                        }
+                                                        onValueChange={(
+                                                            value,
+                                                        ) =>
+                                                            update({
+                                                                date_field:
+                                                                    filters.date_field ??
+                                                                    (state.view ===
+                                                                    "started"
+                                                                        ? "created"
+                                                                        : "due"),
+                                                                date_from:
+                                                                    value,
+                                                            })
+                                                        }
+                                                    />
+                                                </ListWorkspaceFilterField>
+                                                <ListWorkspaceFilterField
+                                                    htmlFor="workspace-filter-date-to"
+                                                    label="结束日期"
+                                                >
+                                                    <DatePicker
+                                                        id="workspace-filter-date-to"
+                                                        fieldLabel="结束日期"
+                                                        placeholder="全部"
+                                                        className="w-full"
+                                                        disabled={
+                                                            filters.undated
+                                                        }
+                                                        disabledDates={
+                                                            filters.date_from
+                                                                ? {
+                                                                      before: parseISO(
+                                                                          filters.date_from,
+                                                                      ),
+                                                                  }
+                                                                : undefined
+                                                        }
+                                                        value={filters.date_to}
+                                                        onValueChange={(
+                                                            value,
+                                                        ) =>
+                                                            update({
+                                                                date_field:
+                                                                    filters.date_field ??
+                                                                    (state.view ===
+                                                                    "started"
+                                                                        ? "created"
+                                                                        : "due"),
+                                                                date_to: value,
+                                                            })
+                                                        }
+                                                    />
+                                                </ListWorkspaceFilterField>
+                                                <div className="col-span-full flex min-h-control flex-wrap items-center gap-x-4 gap-y-2 text-xs">
                                                     <label
                                                         htmlFor="workspace-filter-undated"
                                                         className="flex items-center gap-2"
@@ -665,7 +665,7 @@ export function WorkspaceSearchPanel({
                                                         </label>
                                                     )}
                                                 </div>
-                                            </div>
+                                            </>
                                         )
                                     }}
                                 </form.Field>

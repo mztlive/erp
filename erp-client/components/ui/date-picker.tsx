@@ -122,6 +122,7 @@ function DatePicker({
     allowLongTerm = false,
     size = "lg",
     className,
+    fieldLabel,
     "aria-invalid": ariaInvalid,
     "aria-describedby": ariaDescribedby,
 }: {
@@ -136,16 +137,22 @@ function DatePicker({
     allowLongTerm?: boolean
     size?: DatePickerSize
     className?: string
+    /** 使用外部筛选标签，并将日历图标对齐到右侧。 */
+    fieldLabel?: string
     "aria-invalid"?: boolean
     "aria-describedby"?: string
 }) {
     const [open, setOpen] = React.useState(false)
     const selected = parseDateValue(value)
     const isLongTerm = allowLongTerm && value === "长期"
+    const Icon = isLongTerm ? InfinityIcon : CalendarDaysIcon
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
-            <div className={cn("flex min-w-0 items-center gap-1", className)}>
+            <div
+                data-has-value={Boolean(value)}
+                className={cn("flex min-w-0 items-center gap-1", className)}
+            >
                 <PopoverTrigger
                     render={
                         <Button
@@ -158,30 +165,30 @@ function DatePicker({
                             aria-invalid={ariaInvalid}
                             aria-describedby={ariaDescribedby}
                             aria-label={
-                                value ? `已选日期 ${value}` : placeholder
+                                fieldLabel
+                                    ? `${fieldLabel}：${value ?? placeholder}`
+                                    : value
+                                      ? `已选日期 ${value}`
+                                      : placeholder
                             }
                         />
                     }
                 >
-                    {isLongTerm ? (
-                        <InfinityIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                    ) : (
-                        <CalendarDaysIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
+                    {!fieldLabel && (
+                        <Icon data-icon="inline-start" aria-hidden="true" />
                     )}
                     <span
+                        data-slot="date-picker-value"
                         className={cn(
-                            "truncate",
+                            "min-w-0 truncate",
                             !value && "text-muted-foreground",
                         )}
                     >
                         {value ?? placeholder}
                     </span>
+                    {fieldLabel && (
+                        <Icon data-icon="inline-end" aria-hidden="true" />
+                    )}
                 </PopoverTrigger>
                 {clearable && value ? (
                     <Button
@@ -253,6 +260,7 @@ function DateRangePicker({
     disabled,
     disabledDates,
     className,
+    fieldLabel,
     "aria-invalid": ariaInvalid,
     "aria-describedby": ariaDescribedby,
 }: {
@@ -264,6 +272,8 @@ function DateRangePicker({
     disabled?: boolean
     disabledDates?: Matcher | Matcher[]
     className?: string
+    /** 使用外部筛选标签，并将日历图标对齐到右侧。 */
+    fieldLabel?: string
     "aria-invalid"?: boolean
     "aria-describedby"?: string
 }) {
@@ -278,52 +288,69 @@ function DateRangePicker({
         ? value.to
             ? `${value.from} — ${value.to}`
             : `${value.from} —`
-        : placeholder
+        : value?.to
+          ? `— ${value.to}`
+          : placeholder
+    const hasValue = Boolean(value?.from || value?.to)
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
-            <div className={cn("flex min-w-0 items-center gap-1", className)}>
+            <div
+                data-has-value={hasValue}
+                className={cn("flex min-w-0 items-center gap-1", className)}
+            >
                 <PopoverTrigger
                     render={
                         <Button
                             id={id}
                             type="button"
                             variant="control"
-                            size="lg"
+                            size={fieldLabel ? "default" : "lg"}
                             className="min-w-0 flex-1 justify-start"
                             disabled={disabled}
                             aria-invalid={ariaInvalid}
                             aria-describedby={ariaDescribedby}
                             aria-label={
-                                filterLabel ? `${filterLabel}：${label}` : label
+                                fieldLabel || filterLabel
+                                    ? `${fieldLabel ?? filterLabel}：${label}`
+                                    : label
                             }
                         />
                     }
                 >
-                    <CalendarDaysIcon
-                        data-icon="inline-start"
-                        aria-hidden="true"
-                    />
+                    {!fieldLabel && (
+                        <CalendarDaysIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                    )}
                     {filterLabel && (
                         <span className="shrink-0 font-normal text-muted-foreground">
                             {filterLabel}：
                         </span>
                     )}
                     <span
+                        data-slot="date-picker-value"
                         className={cn(
-                            "truncate",
-                            !value?.from && "text-muted-foreground",
+                            "min-w-0 truncate",
+                            !hasValue && "text-muted-foreground",
                         )}
                     >
                         {label}
                     </span>
+                    {fieldLabel && (
+                        <CalendarDaysIcon
+                            data-icon="inline-end"
+                            aria-hidden="true"
+                        />
+                    )}
                 </PopoverTrigger>
-                {value?.from ? (
+                {hasValue ? (
                     <Button
                         id={id ? `${id}-clear` : undefined}
                         type="button"
                         variant="ghost"
-                        size="icon-lg"
+                        size={fieldLabel ? "icon" : "icon-lg"}
                         onClick={() => onValueChange?.(undefined)}
                         disabled={disabled}
                         aria-label="清除日期范围"

@@ -175,7 +175,8 @@ export function ConnectionListToolbar({
                                 value={healthDraft}
                                 onValueChange={onHealthDraftChange}
                                 options={HEALTH_FILTER_OPTIONS}
-                                placeholder="全部健康结果"
+                                filterLabel="健康结果"
+                                hideFilterLabel
                                 aria-label="健康结果"
                             />
                         </ListWorkspaceFilterField>
@@ -189,7 +190,8 @@ export function ConnectionListToolbar({
                                 value={catalogFreshnessDraft}
                                 onValueChange={onCatalogFreshnessDraftChange}
                                 options={CATALOG_FRESHNESS_FILTER_OPTIONS}
-                                placeholder="全部目录状态"
+                                filterLabel="目录更新时间"
+                                hideFilterLabel
                                 aria-label="目录更新时间"
                             />
                         </ListWorkspaceFilterField>

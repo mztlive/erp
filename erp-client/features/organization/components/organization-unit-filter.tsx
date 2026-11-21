@@ -6,13 +6,15 @@ import {
     MultiTreeCombobox,
     type TreeComboboxNode,
 } from "@/components/business/tree-combobox"
+import { ListWorkspaceFilterField } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
+import { NativeCheckbox } from "@/components/ui/checkbox"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
 import type { OrgUnit } from "@/features/organization/types"
 import { isPermissionDeniedError } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
+import { cn } from "@/lib/utils"
 
 function buildUnitNodes(units: readonly OrgUnit[]): TreeComboboxNode[] {
     const known = new Set(units.map((unit) => unit.id))
@@ -52,6 +54,7 @@ function buildUnitNodes(units: readonly OrgUnit[]): TreeComboboxNode[] {
 export function OrganizationUnitFilter({
     id,
     label = "组织",
+    compact = false,
     value,
     onChange,
     includeDescendants,
@@ -59,6 +62,7 @@ export function OrganizationUnitFilter({
 }: {
     id: string
     label?: string
+    compact?: boolean
     value: string
     onChange: (value: string) => void
     includeDescendants: boolean
@@ -95,49 +99,66 @@ export function OrganizationUnitFilter({
 
     if (!canRead || isPermissionDeniedError(query.error)) return null
 
+    const controls = (
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+            <MultiTreeCombobox
+                id={id}
+                label={label}
+                compact={compact}
+                aria-describedby={message ? `${id}-hint` : undefined}
+                className="min-w-0 [&_[data-slot=combobox-chip]]:max-w-full [&_[data-slot=combobox-chip-remove]]:shrink-0"
+                nodes={nodes}
+                loading={query.isFetching}
+                onRefresh={
+                    canRead
+                        ? () => query.refetch({ throwOnError: true })
+                        : undefined
+                }
+                value={selected}
+                placeholder="搜索组织名称"
+                emptyLabel={message ?? "没有符合条件的组织"}
+                onValueChange={(ids) => {
+                    const next = [...new Set(ids)].sort()
+                    onChange(next.join(","))
+                    if (!next.length) onDescendantsChange(false)
+                }}
+            />
+            <label
+                htmlFor={`${id}-descendants`}
+                className={cn(
+                    "flex shrink-0 items-center gap-1.5 whitespace-nowrap pr-1 text-xs text-muted-foreground has-[:disabled]:cursor-not-allowed",
+                    !compact && "h-control",
+                )}
+            >
+                <NativeCheckbox
+                    id={`${id}-descendants`}
+                    checked={includeDescendants}
+                    disabled={!selected.length}
+                    className="rounded-sm"
+                    onCheckedChange={onDescendantsChange}
+                />
+                包含下级
+            </label>
+        </div>
+    )
+
     return (
         <div className="min-w-0 space-y-1.5">
-            <label htmlFor={id} className="text-xs text-muted-foreground">
-                {label}
-            </label>
-            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-                <MultiTreeCombobox
-                    id={id}
-                    label={label}
-                    aria-describedby={message ? `${id}-hint` : undefined}
-                    className="min-w-0 [&_[data-slot=combobox-chip]]:max-w-full [&_[data-slot=combobox-chip-remove]]:shrink-0"
-                    nodes={nodes}
-                    loading={query.isFetching}
-                    onRefresh={
-                        canRead
-                            ? () => query.refetch({ throwOnError: true })
-                            : undefined
-                    }
-                    value={selected}
-                    placeholder="搜索组织名称"
-                    emptyLabel={message ?? "没有符合条件的组织"}
-                    onValueChange={(ids) => {
-                        const next = [...new Set(ids)].sort()
-                        onChange(next.join(","))
-                        if (!next.length) onDescendantsChange(false)
-                    }}
-                />
-                <label
-                    htmlFor={`${id}-descendants`}
-                    className="flex h-control items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground has-[:disabled]:cursor-not-allowed"
-                >
-                    <Checkbox
-                        id={`${id}-descendants`}
-                        checked={includeDescendants}
-                        disabled={!selected.length}
-                        className="rounded-sm"
-                        onCheckedChange={(checked) =>
-                            onDescendantsChange(checked === true)
-                        }
-                    />
-                    包含下级
-                </label>
-            </div>
+            {compact ? (
+                <ListWorkspaceFilterField htmlFor={id} label={label}>
+                    {controls}
+                </ListWorkspaceFilterField>
+            ) : (
+                <>
+                    <label
+                        htmlFor={id}
+                        className="text-xs text-muted-foreground"
+                    >
+                        {label}
+                    </label>
+                    {controls}
+                </>
+            )}
             {message && (
                 <div
                     id={`${id}-hint`}

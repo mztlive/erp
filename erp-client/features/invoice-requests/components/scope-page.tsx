@@ -442,11 +442,9 @@ export function InvoiceRequestScopePage() {
                                         </ListFilterSection>
                                     )}
                                     {urlState.canUseOrg && (
-                                        <ListFilterSection
-                                            legend="组织"
-                                            gridClassName="grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,24rem)]"
-                                        >
+                                        <ListFilterSection legend="组织">
                                             <OrganizationUnitFilter
+                                                compact
                                                 id={`${toolbarPrefix}-org`}
                                                 label="业务组织"
                                                 value={urlState.orgDraft}

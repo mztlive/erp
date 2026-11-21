@@ -213,19 +213,16 @@ export function ContractsTablePanel({
                         canFilterOrgs ? (
                             <ListFilterSections>
                                 <ListFilterSection legend="数据范围">
-                                    <div className="min-w-0 md:col-span-2">
-                                        <OrganizationUnitFilter
-                                            id="card-contracts-list-filter-org"
-                                            value={orgDraft}
-                                            onChange={setOrgDraft}
-                                            includeDescendants={
-                                                descendantsDraft
-                                            }
-                                            onDescendantsChange={
-                                                setDescendantsDraft
-                                            }
-                                        />
-                                    </div>
+                                    <OrganizationUnitFilter
+                                        compact
+                                        id="card-contracts-list-filter-org"
+                                        value={orgDraft}
+                                        onChange={setOrgDraft}
+                                        includeDescendants={descendantsDraft}
+                                        onDescendantsChange={
+                                            setDescendantsDraft
+                                        }
+                                    />
                                 </ListFilterSection>
                             </ListFilterSections>
                         ) : null

@@ -208,6 +208,7 @@ export function SupplierOrdersListToolbar({
                     {f.canFilterOrg && (
                         <ListFilterSection legend="组织">
                             <OrganizationUnitFilter
+                                compact
                                 id={`${prefix}-org`}
                                 label="业务组织"
                                 value={f.orgUnitIdsDraft}

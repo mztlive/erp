@@ -169,7 +169,10 @@ export function MultiOptionCombobox({
                                 {filterLabel}：
                             </span>
                         )}
-                        <span className="min-w-0 flex-1 truncate text-left">
+                        <span
+                            className="min-w-0 flex-1 truncate text-left"
+                            data-slot="filter-selection-summary"
+                        >
                             {selected.length === 0
                                 ? "全部"
                                 : selected.length === 1

@@ -355,30 +355,25 @@ export function BooksListFilterBar({
                             />
                         </ListWorkspaceFilterField>
                         {canFilterOrgs && (
-                            <div className="min-w-0 empty:hidden md:col-span-2">
-                                <OrganizationUnitFilter
-                                    id={`${prefix}-org`}
-                                    label="业务组织"
-                                    value={draft.org_unit_ids}
-                                    onChange={(org_unit_ids) =>
-                                        setDraft((prev) => ({
-                                            ...prev,
-                                            org_unit_ids,
-                                        }))
-                                    }
-                                    includeDescendants={
-                                        draft.include_descendants
-                                    }
-                                    onDescendantsChange={(
+                            <OrganizationUnitFilter
+                                compact
+                                id={`${prefix}-org`}
+                                label="业务组织"
+                                value={draft.org_unit_ids}
+                                onChange={(org_unit_ids) =>
+                                    setDraft((prev) => ({
+                                        ...prev,
+                                        org_unit_ids,
+                                    }))
+                                }
+                                includeDescendants={draft.include_descendants}
+                                onDescendantsChange={(include_descendants) =>
+                                    setDraft((prev) => ({
+                                        ...prev,
                                         include_descendants,
-                                    ) =>
-                                        setDraft((prev) => ({
-                                            ...prev,
-                                            include_descendants,
-                                        }))
-                                    }
-                                />
-                            </div>
+                                    }))
+                                }
+                            />
                         )}
                     </ListFilterSection>
                 </ListFilterSections>

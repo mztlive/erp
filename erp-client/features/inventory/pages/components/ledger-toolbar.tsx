@@ -1,6 +1,7 @@
 "use client"
 
 import type * as React from "react"
+import { parseISO } from "date-fns"
 
 import { OptionCombobox, MultiOptionCombobox } from "@/components/business"
 import {
@@ -12,7 +13,7 @@ import {
     listWorkspaceStyles,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { DatePicker } from "@/components/ui/date-picker"
 import { WarehouseSearchCombobox } from "@/features/entity-selectors"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { listFilterText } from "@/lib/ui-text"
@@ -215,88 +216,80 @@ export function LedgerToolbar({
                                         value={movementTypeDraft}
                                         onValueChange={setMovementTypeDraft}
                                         options={MOVEMENT_TYPE_OPTIONS}
-                                        placeholder="全部流水类型"
+                                        filterLabel="流水类型"
+                                        hideFilterLabel
                                         aria-label="流水类型"
                                     />
                                 </ListWorkspaceFilterField>
-                                <div className="min-w-0 md:col-span-2">
-                                    <ListWorkspaceFilterField
-                                        htmlFor="inventory-ledger-occurred-from"
-                                        label="发生日期"
+                                <ListWorkspaceFilterField
+                                    htmlFor="inventory-ledger-occurred-from"
+                                    label="发生日期起"
+                                >
+                                    <DatePicker
+                                        id="inventory-ledger-occurred-from"
+                                        fieldLabel="发生日期起"
+                                        placeholder="全部"
+                                        value={occurredFromDraft || undefined}
+                                        disabledDates={
+                                            occurredToDraft
+                                                ? {
+                                                      after: parseISO(
+                                                          occurredToDraft,
+                                                      ),
+                                                  }
+                                                : undefined
+                                        }
+                                        onValueChange={(value) => {
+                                            setOccurredFromDraft(value ?? "")
+                                            setFilterError(null)
+                                        }}
+                                        aria-invalid={Boolean(filterError)}
+                                        aria-describedby={
+                                            filterError
+                                                ? dateErrorId
+                                                : undefined
+                                        }
+                                    />
+                                </ListWorkspaceFilterField>
+                                <ListWorkspaceFilterField
+                                    htmlFor="inventory-ledger-occurred-to"
+                                    label="发生日期止"
+                                >
+                                    <DatePicker
+                                        id="inventory-ledger-occurred-to"
+                                        fieldLabel="发生日期止"
+                                        placeholder="全部"
+                                        value={occurredToDraft || undefined}
+                                        disabledDates={
+                                            occurredFromDraft
+                                                ? {
+                                                      before: parseISO(
+                                                          occurredFromDraft,
+                                                      ),
+                                                  }
+                                                : undefined
+                                        }
+                                        onValueChange={(value) => {
+                                            setOccurredToDraft(value ?? "")
+                                            setFilterError(null)
+                                        }}
+                                        aria-invalid={Boolean(filterError)}
+                                        aria-describedby={
+                                            filterError
+                                                ? dateErrorId
+                                                : undefined
+                                        }
+                                    />
+                                </ListWorkspaceFilterField>
+                                {filterError ? (
+                                    <p
+                                        id={dateErrorId}
+                                        className="col-span-full text-xs text-destructive"
+                                        role="alert"
                                     >
-                                        <div
-                                            className="flex min-w-0 items-center gap-2"
-                                            data-has-value={Boolean(
-                                                occurredFromDraft ||
-                                                occurredToDraft,
-                                            )}
-                                        >
-                                            <Input
-                                                id="inventory-ledger-occurred-from"
-                                                type="date"
-                                                className="w-0 min-w-0 flex-1"
-                                                value={occurredFromDraft}
-                                                max={
-                                                    occurredToDraft || undefined
-                                                }
-                                                onChange={(event) => {
-                                                    setOccurredFromDraft(
-                                                        event.target.value,
-                                                    )
-                                                    setFilterError(null)
-                                                }}
-                                                autoComplete="off"
-                                                aria-label="发生日期起"
-                                                aria-invalid={Boolean(
-                                                    filterError,
-                                                )}
-                                                aria-describedby={
-                                                    filterError
-                                                        ? dateErrorId
-                                                        : undefined
-                                                }
-                                            />
-                                            <span className="text-xs text-muted-foreground">
-                                                至
-                                            </span>
-                                            <Input
-                                                id="inventory-ledger-occurred-to"
-                                                type="date"
-                                                className="w-0 min-w-0 flex-1"
-                                                value={occurredToDraft}
-                                                min={
-                                                    occurredFromDraft ||
-                                                    undefined
-                                                }
-                                                onChange={(event) => {
-                                                    setOccurredToDraft(
-                                                        event.target.value,
-                                                    )
-                                                    setFilterError(null)
-                                                }}
-                                                autoComplete="off"
-                                                aria-label="发生日期止"
-                                                aria-invalid={Boolean(
-                                                    filterError,
-                                                )}
-                                                aria-describedby={
-                                                    filterError
-                                                        ? dateErrorId
-                                                        : undefined
-                                                }
-                                            />
-                                        </div>
-                                    </ListWorkspaceFilterField>
-                                    {filterError ? (
-                                        <p
-                                            id={dateErrorId}
-                                            className="mt-1 text-xs text-destructive"
-                                            role="alert"
-                                        >
-                                            {filterError}
-                                        </p>
-                                    ) : null}
-                                </div>
+                                        {filterError}
+                                    </p>
+                                ) : null}
                             </ListFilterSection>
                         ) : null}
                         {showMovementMore && canFilterPeople ? (

@@ -4,6 +4,7 @@ import * as React from "react"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 
+import { ListWorkspaceFilterField } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { MultiOptionCombobox } from "@/components/business/multi-option-combobox"
 import { OptionCombobox } from "@/components/business/option-combobox"
@@ -24,8 +25,6 @@ type PersonDirectoryFilterProps = {
     onChange: (value: string) => void
     label?: string
     hideLabel?: boolean
-    /** 外层表单提供关联标签，人员选择仍使用固定高度的摘要。 */
-    externalLabel?: boolean
     selectionMode?: "single" | "multiple"
     /** 仅当用户在控件上选择了组织筛选时传入。 */
     orgUnitIds?: readonly string[]
@@ -67,7 +66,6 @@ export function PersonDirectoryFilter({
     onChange,
     label = "负责人",
     hideLabel = false,
-    externalLabel = false,
     selectionMode = "multiple",
     orgUnitIds = [],
     includeDescendants = false,
@@ -144,109 +142,62 @@ export function PersonDirectoryFilter({
 
     if (!canRead || isPermissionDeniedError(list.error)) return null
 
-    const inlineField = !hideLabel && !externalLabel
+    const onLoadMore = () => {
+        setPageKey(filterKey)
+        setPageCount(effectivePageCount + 1)
+    }
+    const onRefresh = () =>
+        Promise.all([
+            list.refetch({ throwOnError: true }),
+            ...(ids.length ? [selected.refetch({ throwOnError: true })] : []),
+        ])
     const controlNode =
         selectionMode === "single" ? (
-            <>
-                <OptionCombobox
-                    id={id}
-                    aria-label={label}
-                    value={ids[0] ?? null}
-                    options={uniqueOptions}
-                    filterMode="remote"
-                    onRefresh={() =>
-                        Promise.all([
-                            list.refetch({ throwOnError: true }),
-                            ...(ids.length
-                                ? [selected.refetch({ throwOnError: true })]
-                                : []),
-                        ])
-                    }
-                    onSearchChange={search.onSearchChange}
-                    loading={list.isFetching || selected.isFetching}
-                    emptyLabel={emptyLabel}
-                    onValueChange={(next) => onChange(next ?? "")}
-                    placeholder={inlineField ? "全部" : `全部${label}`}
-                />
-                {hasMore && (
-                    <Button
-                        id={`${id}-more`}
-                        type="button"
-                        variant="link"
-                        size="xs"
-                        className="h-auto px-0"
-                        onClick={() => {
-                            setPageKey(filterKey)
-                            setPageCount(effectivePageCount + 1)
-                        }}
-                    >
-                        加载更多
-                    </Button>
-                )}
-            </>
+            <OptionCombobox
+                id={id}
+                aria-label={label}
+                value={ids[0] ?? null}
+                options={uniqueOptions}
+                filterMode="remote"
+                onRefresh={onRefresh}
+                onSearchChange={search.onSearchChange}
+                loading={list.isFetching || selected.isFetching}
+                onLoadMore={hasMore ? onLoadMore : undefined}
+                emptyLabel={emptyLabel}
+                onValueChange={(next) => onChange(next ?? "")}
+                placeholder="全部"
+            />
         ) : (
             <MultiOptionCombobox
                 id={id}
                 aria-label={label}
-                filterLabel={hideLabel || externalLabel ? label : undefined}
-                hideFilterLabel={externalLabel}
+                filterLabel={label}
+                hideFilterLabel={!hideLabel}
                 value={ids}
                 options={uniqueOptions}
                 filterMode="remote"
-                onRefresh={() =>
-                    Promise.all([
-                        list.refetch({ throwOnError: true }),
-                        ...(ids.length
-                            ? [selected.refetch({ throwOnError: true })]
-                            : []),
-                    ])
-                }
+                onRefresh={onRefresh}
                 onSearchChange={search.onSearchChange}
                 loading={list.isFetching}
                 hasMore={hasMore}
-                onLoadMore={() => {
-                    setPageKey(filterKey)
-                    setPageCount(effectivePageCount + 1)
-                }}
+                onLoadMore={onLoadMore}
                 loadMoreId={`${id}-more`}
                 emptyLabel={emptyLabel}
                 onValueChange={(next) =>
                     onChange([...new Set(next)].sort().join(","))
                 }
-                placeholder={inlineField ? "全部" : `全部${label}`}
             />
         )
 
     return (
         <div className="min-w-0">
-            <div
-                data-slot={inlineField ? "list-filter-field" : undefined}
-                className={hideLabel ? "min-w-0" : "min-w-0 space-y-1.5"}
-            >
-                {!externalLabel && (
-                    <label
-                        data-slot={
-                            inlineField ? "list-filter-field-label" : undefined
-                        }
-                        className={
-                            hideLabel
-                                ? "sr-only"
-                                : "block text-xs text-muted-foreground"
-                        }
-                        htmlFor={id}
-                    >
-                        {label}
-                    </label>
-                )}
-                <div
-                    data-slot={
-                        inlineField ? "list-filter-field-control" : undefined
-                    }
-                    className="min-w-0"
-                >
+            {hideLabel ? (
+                controlNode
+            ) : (
+                <ListWorkspaceFilterField htmlFor={id} label={label}>
                     {controlNode}
-                </div>
-            </div>
+                </ListWorkspaceFilterField>
+            )}
             {list.isError ? (
                 <p className="mt-1 text-xs text-destructive" role="alert">
                     {listFailureCopy(list.error)}

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/combobox"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import { InputGroupAddon } from "@/components/ui/input-group"
 
 /** 通用可搜索选项；用于枚举、筛选与轻量业务列表。 */
@@ -54,6 +55,7 @@ export type OptionComboboxProps = ComboboxRefreshProps & {
     onSearchChange?: (query: string) => void
     disabled?: boolean
     loading?: boolean
+    onLoadMore?: () => void
     /** 是否显示清除按钮；默认 true */
     allowClear?: boolean
     required?: boolean
@@ -97,6 +99,7 @@ export function OptionCombobox({
     emptyLabel = "没有符合条件的选项",
     disabled = false,
     loading = false,
+    onLoadMore,
     onRefresh,
     filterMode = "local",
     retainMissingSelection,
@@ -219,6 +222,19 @@ export function OptionCombobox({
                             </ComboboxItem>
                         )}
                     </ComboboxList>
+                    {onLoadMore ? (
+                        <Button
+                            id={id ? `${id}-more` : undefined}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="w-full"
+                            disabled={loading}
+                            onClick={onLoadMore}
+                        >
+                            加载更多
+                        </Button>
+                    ) : null}
                     <ComboboxRefresh
                         id={id}
                         onRefresh={onRefresh}

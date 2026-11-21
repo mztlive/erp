@@ -23,9 +23,11 @@ import {
     ComboboxInput,
     ComboboxItem,
     ComboboxList,
+    ComboboxTrigger,
     ComboboxValue,
     useComboboxAnchor,
 } from "@/components/ui/combobox"
+import { Button } from "@/components/ui/button"
 import { InputGroupAddon } from "@/components/ui/input-group"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
@@ -436,6 +438,7 @@ export type MultiTreeComboboxProps = ComboboxRefreshProps & {
     value: readonly string[]
     onValueChange: (ids: string[]) => void
     label: string
+    compact?: boolean
     placeholder?: string
     emptyLabel?: string
     loading?: boolean
@@ -469,6 +472,7 @@ export function MultiTreeCombobox({
     value,
     onValueChange,
     label,
+    compact = false,
     placeholder = "搜索名称",
     emptyLabel = "没有符合条件的选项",
     loading = false,
@@ -592,43 +596,80 @@ export function MultiTreeCombobox({
             <div
                 ref={anchorRef}
                 data-slot="multi-tree-combobox"
+                data-has-value={selected.length > 0 ? "true" : undefined}
                 className={cn("min-w-0", className)}
             >
-                <ComboboxChips>
-                    <ComboboxValue>
-                        {(items: TreeComboboxNode[]) =>
-                            items.map((item) => {
-                                const itemLabel =
-                                    pathLabel.get(item.id) ?? item.label
-                                return (
-                                    <ComboboxChip
-                                        key={item.id}
-                                        removeId={
-                                            id
-                                                ? `${id}-chip-${toAutomationIdSegment(item.id)}-remove`
-                                                : undefined
-                                        }
-                                        removeLabel={`移除${itemLabel}`}
-                                        aria-label={itemLabel}
-                                    >
-                                        <span className="min-w-0 truncate">
-                                            {itemLabel}
-                                        </span>
-                                    </ComboboxChip>
-                                )
-                            })
-                        }
-                    </ComboboxValue>
-                    <ComboboxChipsInput
+                {compact ? (
+                    <ComboboxTrigger
                         id={id}
                         aria-label={label}
                         aria-describedby={ariaDescribedBy}
-                        placeholder={selected.length > 0 ? "" : placeholder}
                         disabled={disabled}
-                    />
-                </ComboboxChips>
+                        render={
+                            <Button
+                                type="button"
+                                variant="control"
+                                className="w-full min-w-0 justify-start gap-1"
+                            />
+                        }
+                    >
+                        <span
+                            className="min-w-0 flex-1 truncate text-left"
+                            data-slot="filter-selection-summary"
+                        >
+                            {selected.length === 0
+                                ? "全部"
+                                : selected.length === 1
+                                  ? (pathLabel.get(selected[0].id) ??
+                                    selected[0].label)
+                                  : `已选 ${selected.length} 项`}
+                        </span>
+                    </ComboboxTrigger>
+                ) : (
+                    <ComboboxChips>
+                        <ComboboxValue>
+                            {(items: TreeComboboxNode[]) =>
+                                items.map((item) => {
+                                    const itemLabel =
+                                        pathLabel.get(item.id) ?? item.label
+                                    return (
+                                        <ComboboxChip
+                                            key={item.id}
+                                            removeId={
+                                                id
+                                                    ? `${id}-chip-${toAutomationIdSegment(item.id)}-remove`
+                                                    : undefined
+                                            }
+                                            removeLabel={`移除${itemLabel}`}
+                                            aria-label={itemLabel}
+                                        >
+                                            <span className="min-w-0 truncate">
+                                                {itemLabel}
+                                            </span>
+                                        </ComboboxChip>
+                                    )
+                                })
+                            }
+                        </ComboboxValue>
+                        <ComboboxChipsInput
+                            id={id}
+                            aria-label={label}
+                            aria-describedby={ariaDescribedBy}
+                            placeholder={selected.length > 0 ? "" : placeholder}
+                            disabled={disabled}
+                        />
+                    </ComboboxChips>
+                )}
             </div>
             <ComboboxContent anchor={anchorRef}>
+                {compact && (
+                    <ComboboxInput
+                        id={id ? `${id}-search` : undefined}
+                        aria-label={`搜索${label}`}
+                        placeholder={placeholder}
+                        showTrigger={false}
+                    />
+                )}
                 <ComboboxEmpty>{emptyLabel}</ComboboxEmpty>
                 <ComboboxList>
                     {displayEntries.map(({ node, depth }) => (

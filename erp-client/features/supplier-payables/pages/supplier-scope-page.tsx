@@ -550,10 +550,7 @@ export function SupplierScopePage() {
                                     urlState.canUseBusiness ||
                                     urlState.canUseOrg ? (
                                         <ListFilterSections>
-                                            <ListFilterSection
-                                                legend="归属"
-                                                gridClassName="grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
-                                            >
+                                            <ListFilterSection legend="归属">
                                                 {urlState.canUseBusiness ? (
                                                     <PersonDirectoryFilter
                                                         id={`${toolbarPrefix}-operator`}
@@ -577,6 +574,7 @@ export function SupplierScopePage() {
                                                 ) : null}
                                                 {urlState.canUseOrg ? (
                                                     <OrganizationUnitFilter
+                                                        compact
                                                         id={`${toolbarPrefix}-org`}
                                                         label="业务组织"
                                                         value={

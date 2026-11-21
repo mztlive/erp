@@ -250,6 +250,7 @@ export function SettlementListToolbar({
                     <PermissionGuard permission="org_unit:list">
                         <ListFilterSection legend="组织">
                             <OrganizationUnitFilter
+                                compact
                                 id={`${prefix}-filter-org`}
                                 label="业务组织"
                                 value={orgUnitIdsDraft}
@@ -264,43 +265,39 @@ export function SettlementListToolbar({
                             htmlFor={`${prefix}-filter-period-from`}
                             label="开始日期"
                         >
-                            <div data-has-value={Boolean(periodFromDraft)}>
-                                <DatePicker
-                                    id={`${prefix}-filter-period-from`}
-                                    size="sm"
-                                    value={periodFromDraft || undefined}
-                                    onValueChange={(next) => {
-                                        setPeriodFromDraft(next ?? "")
-                                        setPeriodError(null)
-                                    }}
-                                    aria-invalid={Boolean(periodError)}
-                                    aria-describedby={
-                                        periodError ? periodErrorId : undefined
-                                    }
-                                    placeholder="期间自"
-                                />
-                            </div>
+                            <DatePicker
+                                id={`${prefix}-filter-period-from`}
+                                fieldLabel="开始日期"
+                                value={periodFromDraft || undefined}
+                                onValueChange={(next) => {
+                                    setPeriodFromDraft(next ?? "")
+                                    setPeriodError(null)
+                                }}
+                                aria-invalid={Boolean(periodError)}
+                                aria-describedby={
+                                    periodError ? periodErrorId : undefined
+                                }
+                                placeholder="全部"
+                            />
                         </ListWorkspaceFilterField>
                         <ListWorkspaceFilterField
                             htmlFor={`${prefix}-filter-period-to`}
                             label="结束日期"
                         >
-                            <div data-has-value={Boolean(periodToDraft)}>
-                                <DatePicker
-                                    id={`${prefix}-filter-period-to`}
-                                    size="sm"
-                                    value={periodToDraft || undefined}
-                                    onValueChange={(next) => {
-                                        setPeriodToDraft(next ?? "")
-                                        setPeriodError(null)
-                                    }}
-                                    aria-invalid={Boolean(periodError)}
-                                    aria-describedby={
-                                        periodError ? periodErrorId : undefined
-                                    }
-                                    placeholder="期间至"
-                                />
-                            </div>
+                            <DatePicker
+                                id={`${prefix}-filter-period-to`}
+                                fieldLabel="结束日期"
+                                value={periodToDraft || undefined}
+                                onValueChange={(next) => {
+                                    setPeriodToDraft(next ?? "")
+                                    setPeriodError(null)
+                                }}
+                                aria-invalid={Boolean(periodError)}
+                                aria-describedby={
+                                    periodError ? periodErrorId : undefined
+                                }
+                                placeholder="全部"
+                            />
                         </ListWorkspaceFilterField>
                         {periodError ? (
                             <span

@@ -158,11 +158,9 @@ export function CustomerCenterDirectoryToolbar({
             morePanel={
                 canFilterOrg ? (
                     <ListFilterSections>
-                        <ListFilterSection
-                            legend="归属"
-                            gridClassName="max-w-lg grid-cols-[minmax(0,1fr)]"
-                        >
+                        <ListFilterSection legend="归属">
                             <OrganizationUnitFilter
+                                compact
                                 id="customers-directory-org"
                                 label="组织"
                                 value={orgDraft}

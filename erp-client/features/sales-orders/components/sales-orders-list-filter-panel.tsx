@@ -129,7 +129,6 @@ export function SalesOrdersListFilterPanel({
                 }}
                 options={options}
                 placeholder="全部"
-                searchPlaceholder={`搜索${label}`}
             />
         </ListWorkspaceFilterField>
     )
@@ -149,34 +148,23 @@ export function SalesOrdersListFilterPanel({
                 <ListWorkspaceFilterField
                     htmlFor="sales-orders-list-filter-created-date"
                     label="创建日期"
-                    className="[&>[data-slot=list-filter-field-label]]:sr-only"
                 >
-                    <div
-                        data-has-value={Boolean(
-                            draft.createdFrom || draft.createdTo,
-                        )}
-                    >
-                        <DateRangePicker
-                            id="sales-orders-list-filter-created-date"
-                            filterLabel="创建日期"
-                            value={
-                                draft.createdFrom || draft.createdTo
-                                    ? {
-                                          from: draft.createdFrom || undefined,
-                                          to: draft.createdTo || undefined,
-                                      }
-                                    : undefined
-                            }
-                            onValueChange={(range) =>
-                                onDraftChange((current) => ({
-                                    ...current,
-                                    createdFrom: range?.from ?? "",
-                                    createdTo: range?.to ?? "",
-                                }))
-                            }
-                            placeholder="全部"
-                        />
-                    </div>
+                    <DateRangePicker
+                        id="sales-orders-list-filter-created-date"
+                        fieldLabel="创建日期"
+                        value={{
+                            from: draft.createdFrom || undefined,
+                            to: draft.createdTo || undefined,
+                        }}
+                        onValueChange={(range) =>
+                            onDraftChange((current) => ({
+                                ...current,
+                                createdFrom: range?.from ?? "",
+                                createdTo: range?.to ?? "",
+                            }))
+                        }
+                        placeholder="全部"
+                    />
                 </ListWorkspaceFilterField>
             </ListFilterSection>
             {(hasPermission(account.data?.permissions, "org_unit:list") ||
@@ -187,26 +175,25 @@ export function SalesOrdersListFilterPanel({
                         account.data?.permissions,
                         "org_unit:list",
                     ) && (
-                        <div className="col-span-full min-w-0">
-                            <OrganizationUnitFilter
-                                id="sales-orders-list-filter-org"
-                                label="业务组织"
-                                value={draft.orgUnitIds}
-                                onChange={(orgUnitIds) =>
-                                    onDraftChange((current) => ({
-                                        ...current,
-                                        orgUnitIds,
-                                    }))
-                                }
-                                includeDescendants={draft.includeDescendants}
-                                onDescendantsChange={(includeDescendants) =>
-                                    onDraftChange((current) => ({
-                                        ...current,
-                                        includeDescendants,
-                                    }))
-                                }
-                            />
-                        </div>
+                        <OrganizationUnitFilter
+                            compact
+                            id="sales-orders-list-filter-org"
+                            label="业务组织"
+                            value={draft.orgUnitIds}
+                            onChange={(orgUnitIds) =>
+                                onDraftChange((current) => ({
+                                    ...current,
+                                    orgUnitIds,
+                                }))
+                            }
+                            includeDescendants={draft.includeDescendants}
+                            onDescendantsChange={(includeDescendants) =>
+                                onDraftChange((current) => ({
+                                    ...current,
+                                    includeDescendants,
+                                }))
+                            }
+                        />
                     )}
                     {hasPermission(
                         account.data?.permissions,
@@ -268,25 +255,19 @@ export function SalesOrdersListFilterPanel({
                     account.data?.permissions,
                     "business_person:list",
                 ) && (
-                    <ListWorkspaceFilterField
-                        htmlFor="sales-orders-list-filter-created-by"
+                    <PersonDirectoryFilter
+                        id="sales-orders-list-filter-created-by"
+                        category="business"
+                        selectionMode="single"
                         label="创建人"
-                    >
-                        <PersonDirectoryFilter
-                            id="sales-orders-list-filter-created-by"
-                            category="business"
-                            selectionMode="single"
-                            label="创建人"
-                            externalLabel
-                            value={draft.createdBy}
-                            onChange={(createdBy) =>
-                                onDraftChange((current) => ({
-                                    ...current,
-                                    createdBy: createdBy ?? "",
-                                }))
-                            }
-                        />
-                    </ListWorkspaceFilterField>
+                        value={draft.createdBy}
+                        onChange={(createdBy) =>
+                            onDraftChange((current) => ({
+                                ...current,
+                                createdBy: createdBy ?? "",
+                            }))
+                        }
+                    />
                 )}
             </ListFilterSection>
         </ListFilterSections>

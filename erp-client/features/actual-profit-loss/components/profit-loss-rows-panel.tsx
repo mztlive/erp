@@ -57,9 +57,6 @@ const DEFAULT_COLUMN_ORDER = [
     "benefitScenarios",
     "latestCostOccurredAt",
 ]
-const FILTER_GROUP_GRID =
-    "sm:grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))]"
-
 const COVERAGE_OPTIONS: ReadonlyArray<{
     value: ProfitLossCoverage
     label: string
@@ -258,10 +255,7 @@ export function ProfitLossRowsPanel({
                                     onRetry={onRetryDirectory}
                                 />
                             )}
-                            <ListFilterSection
-                                legend="签单归属"
-                                gridClassName={FILTER_GROUP_GRID}
-                            >
+                            <ListFilterSection legend="签单归属">
                                 <ListWorkspaceFilterField
                                     htmlFor="actual-profit-loss-filter-attribution-user"
                                     label="签单归属销售"
@@ -276,7 +270,8 @@ export function ProfitLossRowsPanel({
                                             historyDirectory?.attributionUserOptions ??
                                             []
                                         }
-                                        placeholder="全部签单归属销售"
+                                        filterLabel="签单归属销售"
+                                        hideFilterLabel
                                         aria-label="签单归属销售"
                                     />
                                 </ListWorkspaceFilterField>
@@ -294,15 +289,13 @@ export function ProfitLossRowsPanel({
                                             historyDirectory?.attributionOrgOptions ??
                                             []
                                         }
-                                        placeholder="全部签单所属部门"
+                                        filterLabel="签单所属部门"
+                                        hideFilterLabel
                                         aria-label="签单所属部门"
                                     />
                                 </ListWorkspaceFilterField>
                             </ListFilterSection>
-                            <ListFilterSection
-                                legend="场景与成本"
-                                gridClassName={FILTER_GROUP_GRID}
-                            >
+                            <ListFilterSection legend="场景与成本">
                                 <ListWorkspaceFilterField
                                     htmlFor="actual-profit-loss-filter-benefit-scenario"
                                     label="福利场景"
@@ -335,7 +328,8 @@ export function ProfitLossRowsPanel({
                                         aria-label="成本类型"
                                         onValueChange={onCostTypesDraftChange}
                                         options={costTypeOptions}
-                                        placeholder="全部成本类型"
+                                        filterLabel="成本类型"
+                                        hideFilterLabel
                                     />
                                 </ListWorkspaceFilterField>
                             </ListFilterSection>

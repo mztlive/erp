@@ -2,6 +2,8 @@ import * as React from "react"
 
 import { OptionCombobox } from "@/components/business"
 import {
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
     listWorkspaceFilterStatusText,
@@ -236,13 +238,18 @@ export function IntegrationQueueToolbar({
                     />
                 }
                 morePanel={
-                    <ResponsibleUserFilter
-                        id="integration-queue-toolbar-operator"
-                        label="历史处理人"
-                        value={operatorDraft}
-                        options={[]}
-                        onChange={setOperatorDraft}
-                    />
+                    <ListFilterSections>
+                        <ListFilterSection legend="人员">
+                            <ResponsibleUserFilter
+                                compact
+                                id="integration-queue-toolbar-operator"
+                                label="历史处理人"
+                                value={operatorDraft}
+                                options={[]}
+                                onChange={setOperatorDraft}
+                            />
+                        </ListFilterSection>
+                    </ListFilterSections>
                 }
                 resultStatus={listWorkspaceFilterStatusText({
                     loading,

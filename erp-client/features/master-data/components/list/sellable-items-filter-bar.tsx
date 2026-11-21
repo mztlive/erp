@@ -19,11 +19,14 @@ import {
     type ProductFilterDirectoryQuery,
 } from "@/features/master-data/lib/product-filter-directory"
 import {
+    ListFilterRangeField,
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
-import { Input } from "@/components/ui/input"
 import type { SellableAppliedChip } from "./sellable-list-toolbar"
 import {
     SellableDeliveryFilterFields,
@@ -207,29 +210,24 @@ export function SellableItemsFilterBar({
                 </>
             }
             morePanel={
-                <div className="grid min-w-0 gap-5">
+                <ListFilterSections>
                     {canFilterBrand ? (
-                        <fieldset className="min-w-0">
-                            <legend className="mb-3 text-xs font-medium">
-                                品牌与供货
-                            </legend>
-                            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                                <DirectoryOptionFilter
-                                    {...brandDirectoryFilterBindings(
-                                        directory,
-                                        () =>
-                                            filterOptions.refetch({
-                                                throwOnError: true,
-                                            }),
-                                    )}
-                                    id={`${prefix}-brand`}
-                                    comboboxClassName="w-full"
-                                    ariaLabel="品牌"
-                                    value={f.productBrandIdDraft}
-                                    onValueChange={f.setProductBrandIdDraft}
-                                />
-                            </div>
-                        </fieldset>
+                        <ListFilterSection legend="品牌与供货">
+                            <DirectoryOptionFilter
+                                {...brandDirectoryFilterBindings(
+                                    directory,
+                                    () =>
+                                        filterOptions.refetch({
+                                            throwOnError: true,
+                                        }),
+                                )}
+                                id={`${prefix}-brand`}
+                                comboboxClassName="w-full"
+                                ariaLabel="品牌"
+                                value={f.productBrandIdDraft}
+                                onValueChange={f.setProductBrandIdDraft}
+                            />
+                        </ListFilterSection>
                     ) : null}
                     {deliveryFilter ? (
                         <SellableDeliveryFilterFields
@@ -237,14 +235,11 @@ export function SellableItemsFilterBar({
                             filters={deliveryFilter}
                         />
                     ) : null}
-                    <fieldset className="min-w-0">
-                        <legend className="mb-3 text-xs font-medium">
-                            价格筛选
-                            <span className="ml-2 font-normal text-muted-foreground">
-                                含税 · 元
-                            </span>
-                        </legend>
-                        <div className="grid min-w-0 gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-[10rem_minmax(0,1fr)]">
+                    <ListFilterSection legend="价格筛选">
+                        <ListWorkspaceFilterField
+                            htmlFor={`${prefix}-price-kind`}
+                            label="价格类型"
+                        >
                             <OptionCombobox
                                 id={`${prefix}-price-kind`}
                                 className="w-full"
@@ -259,70 +254,32 @@ export function SellableItemsFilterBar({
                                 options={PRICE_FILTER_OPTIONS}
                                 placeholder="一件代发价"
                             />
-                            <div className="flex min-w-0 items-center gap-2">
-                                <Input
-                                    id={`${prefix}-price-min`}
-                                    ref={priceInputRef}
-                                    className="h-control w-0 min-w-0 flex-1"
-                                    aria-label="最低价"
-                                    placeholder="最低价"
-                                    inputMode="decimal"
-                                    autoComplete="off"
-                                    value={f.productSalesPriceMinDraft}
-                                    onChange={(event) => {
-                                        f.setProductSalesPriceMinDraft(
-                                            event.target.value,
-                                        )
-                                        f.setProductSalesPriceError(null)
-                                    }}
-                                    aria-invalid={Boolean(
-                                        f.productSalesPriceError,
-                                    )}
-                                    aria-describedby={
-                                        f.productSalesPriceError
-                                            ? priceErrorId
-                                            : undefined
-                                    }
-                                />
-                                <span className="text-xs text-muted-foreground">
-                                    至
-                                </span>
-                                <Input
-                                    id={`${prefix}-price-max`}
-                                    className="h-control w-0 min-w-0 flex-1"
-                                    aria-label="最高价"
-                                    placeholder="最高价"
-                                    inputMode="decimal"
-                                    autoComplete="off"
-                                    value={f.productSalesPriceMaxDraft}
-                                    onChange={(event) => {
-                                        f.setProductSalesPriceMaxDraft(
-                                            event.target.value,
-                                        )
-                                        f.setProductSalesPriceError(null)
-                                    }}
-                                    aria-invalid={Boolean(
-                                        f.productSalesPriceError,
-                                    )}
-                                    aria-describedby={
-                                        f.productSalesPriceError
-                                            ? priceErrorId
-                                            : undefined
-                                    }
-                                />
-                            </div>
-                        </div>
-                        {f.productSalesPriceError ? (
-                            <p
-                                id={priceErrorId}
-                                role="alert"
-                                className="mt-1.5 text-xs text-destructive"
-                            >
-                                {f.productSalesPriceError}
-                            </p>
-                        ) : null}
-                    </fieldset>
-                </div>
+                        </ListWorkspaceFilterField>
+                        <ListFilterRangeField
+                            label="含税价格"
+                            minId={`${prefix}-price-min`}
+                            maxId={`${prefix}-price-max`}
+                            errorId={priceErrorId}
+                            inputRef={priceInputRef}
+                            min={f.productSalesPriceMinDraft}
+                            max={f.productSalesPriceMaxDraft}
+                            minPlaceholder="最低价"
+                            maxPlaceholder="最高价"
+                            minAriaLabel="最低价"
+                            maxAriaLabel="最高价"
+                            unit="元"
+                            error={f.productSalesPriceError}
+                            onMinChange={(value) => {
+                                f.setProductSalesPriceMinDraft(value)
+                                f.setProductSalesPriceError(null)
+                            }}
+                            onMaxChange={(value) => {
+                                f.setProductSalesPriceMaxDraft(value)
+                                f.setProductSalesPriceError(null)
+                            }}
+                        />
+                    </ListFilterSection>
+                </ListFilterSections>
             }
             resultStatus={
                 loading || failed
