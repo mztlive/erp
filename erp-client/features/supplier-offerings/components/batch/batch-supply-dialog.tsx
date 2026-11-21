@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/dialog"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import type { SupplierOfferingView } from "../../types"
-import { MODE_LABELS, type BatchMode } from "../../lib/batch-supply"
+import {
+    MODE_LABELS,
+    type BatchMode,
+    type BatchRow,
+} from "../../lib/batch-supply"
 import { downloadFailedRows } from "../../lib/batch-supply-transfer"
 import { useBatchSupplyEditor } from "../../hooks/use-batch-supply-editor"
 import { BatchCommonSettings } from "./batch-common-settings"
@@ -24,7 +28,7 @@ import { BatchSupplyTable } from "./batch-supply-table"
 type Props = {
     mode: BatchMode
     offerings?: readonly SupplierOfferingView[]
-    onClose: () => void
+    onClose: (remainingIds?: readonly string[]) => void
 }
 export function BatchSupplyDialog(props: Props) {
     const profile = useAccountProfileQuery()
@@ -37,11 +41,27 @@ function BatchSupplyEditor({
     onClose,
     userId,
 }: Props & { userId: string }) {
+    const closeWithResults = (rows: readonly BatchRow[]) => {
+        const selectedIds = new Set(offerings.map((offering) => offering.id))
+        const hasSavedSelection = rows.some(
+            (row) =>
+                row.status === "SUCCEEDED" && selectedIds.has(row.offeringId),
+        )
+        onClose(
+            hasSavedSelection
+                ? rows
+                      .filter(
+                          (row) => row.selected && row.status !== "SUCCEEDED",
+                      )
+                      .map((row) => row.offeringId)
+                : undefined,
+        )
+    }
     const editor = useBatchSupplyEditor({
         mode,
         offerings,
         userId,
-        onClose,
+        onCompleted: closeWithResults,
     })
     const [reloadConfirm, setReloadConfirm] = React.useState(false)
     const [discard, setDiscard] = React.useState(false)
@@ -50,7 +70,7 @@ function BatchSupplyEditor({
         const values = editor.form.state.values
         if (values.rows.some((row) => row.status === "UNKNOWN")) {
             sessionStorage.setItem(editor.storageKey, JSON.stringify(values))
-            onClose()
+            closeWithResults(values.rows)
             return
         }
         if (
@@ -58,7 +78,7 @@ function BatchSupplyEditor({
             values.rows.some((row) => row.status !== "SUCCEEDED")
         )
             setDiscard(true)
-        else onClose()
+        else closeWithResults(values.rows)
     }
     return (
         <>
@@ -357,7 +377,7 @@ function BatchSupplyEditor({
                 onConfirm={() => {
                     sessionStorage.removeItem(editor.storageKey)
                     setDiscard(false)
-                    onClose()
+                    closeWithResults(editor.form.state.values.rows)
                 }}
             />
         </>

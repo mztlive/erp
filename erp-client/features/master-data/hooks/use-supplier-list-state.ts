@@ -15,9 +15,8 @@ import {
 } from "@/features/master-data/lib/master-data-list-summaries"
 import { syncListMetrics } from "@/features/master-data/lib/master-data-list-summaries"
 import {
-    qualificationHealthLabel,
+    selectedCsvValues,
     selectedSupplierOptionLabels,
-    SUPPLIER_CAPABILITY_OPTIONS,
     SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
 } from "@/features/master-data/lib/list-filters"
 import { resourceLabel } from "@/features/master-data/lib/data"
@@ -56,33 +55,13 @@ export function useSupplierListState(
     const pageRows = useClientPagedRows(rows, filters.pagination)
     const syncedMetrics = React.useMemo(() => {
         const base = listQuery.data?.metrics ?? []
-        if (rows.length === 0 || listQuery.data == null) return base
         return syncListMetrics(base, rows).filter(
             (metric) => metric.key !== "pending",
         )
     }, [listQuery.data, rows])
-    /** 所有已生效条件均可从 chip 单独撤销。 */
+    /** 主栏已显示的条件不重复生成 chip。 */
     const appliedChips = React.useMemo<readonly SupplierAppliedChip[]>(() => {
         const chips: SupplierAppliedChip[] = []
-        if (filters.q.trim()) {
-            chips.push({ key: "q", label: `搜索：${filters.q.trim()}` })
-        }
-
-        if (filters.supplierQualificationHealth) {
-            chips.push({
-                key: "supplierQualificationHealth",
-                label: `资质状态：${qualificationHealthLabel(filters.supplierQualificationHealth)}`,
-            })
-        }
-        if (filters.supplierCapabilityCodes.length > 0) {
-            chips.push({
-                key: "supplierCapabilityCodes",
-                label: `供应能力：${selectedSupplierOptionLabels(
-                    filters.supplierCapabilityCodes,
-                    SUPPLIER_CAPABILITY_OPTIONS,
-                ).join("、")}`,
-            })
-        }
         if (filters.supplierQualificationTypes.length > 0) {
             chips.push({
                 key: "supplierQualificationTypes",
@@ -95,20 +74,17 @@ export function useSupplierListState(
         if (filters.ownerUserIds) {
             chips.push({
                 key: "owner_user_ids",
-                label: `维护人 ${filters.ownerUserIds}`,
+                label: `维护人：已选 ${selectedCsvValues(filters.ownerUserIds).length} 人`,
             })
         }
         if (filters.capabilityOwnerUserIds) {
             chips.push({
                 key: "capability_owner_user_ids",
-                label: `能力负责人 ${filters.capabilityOwnerUserIds}`,
+                label: `能力负责人：已选 ${selectedCsvValues(filters.capabilityOwnerUserIds).length} 人`,
             })
         }
         return chips
     }, [
-        filters.q,
-        filters.supplierCapabilityCodes,
-        filters.supplierQualificationHealth,
         filters.supplierQualificationTypes,
         filters.ownerUserIds,
         filters.capabilityOwnerUserIds,

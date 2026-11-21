@@ -9,7 +9,13 @@ import {
 import type { SalesOrdersUrlState } from "@/features/sales-orders/lib/url-state"
 
 /** 列表页查询派生：URL 状态 + 登录人身份 → 列表查询（含身份就绪门控）。 */
-export function useSalesOrdersListQuery(url: SalesOrdersUrlState) {
+export function useSalesOrdersListQuery(
+    url: SalesOrdersUrlState,
+    {
+        canList,
+        canReadContract,
+    }: { canList: boolean; canReadContract: boolean },
+) {
     const profileQuery = useAccountProfileQuery()
     const currentUserId = profileQuery.data?.userid?.trim() ?? ""
 
@@ -18,7 +24,11 @@ export function useSalesOrdersListQuery(url: SalesOrdersUrlState) {
         [url, currentUserId],
     )
     const identityReady = salesOrdersListIdentityReady(url, currentUserId)
-    const ordersQuery = useSalesOrdersQuery(query, identityReady)
+    const ordersQuery = useSalesOrdersQuery(
+        query,
+        canList && identityReady,
+        canReadContract,
+    )
 
     return { ordersQuery, query, currentUserId, identityReady }
 }

@@ -10,9 +10,14 @@ import {
 import { useRouter, usePathname, useSearchParams } from "@/lib/navigation"
 
 import { FormalActionResult, PageScaffold } from "@/components/business"
-import { listWorkspaceStyles } from "@/components/business/list-workspace"
+import {
+    ListWorkspaceViews,
+    listWorkspaceStyles,
+} from "@/components/business/list-workspace"
+import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
 import { type ResultState } from "@/components/business/feedback"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     createInvoiceColumns,
     createReceivableColumns,
@@ -40,18 +45,20 @@ import {
 import {
     VIEW_LABEL,
     type AllocationMode,
+    type CustomerAccountsView,
 } from "@/features/customer-receivables/types"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { isCustomerReceiptWorkItem } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import { isCustomerRefundWorkItem } from "@/features/customer-receivables/lib/customer-refund-approval"
 import { isReceiptReversalWorkItem } from "@/features/customer-receivables/lib/receipt-reversal-approval"
 import { getErrorMessage } from "@/lib/api/errors"
+import { hasPermission } from "@/lib/permissions"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import { AllocationSessionScreen } from "@/features/customer-receivables/pages/components/allocation-session-screen"
 import { CustomerReceivablesHeader } from "@/features/customer-receivables/pages/components/customer-receivables-header"
 import { CustomerReceivablesListPane } from "@/features/customer-receivables/pages/components/customer-receivables-list-pane"
-import { CustomerReceivablesStandaloneListProvider } from "@/features/customer-receivables/pages/components/customer-receivables-table"
+import { CustomerReceivablesMetrics } from "@/features/customer-receivables/pages/components/customer-receivables-metrics"
 import { SalesOrderReturnAlert } from "@/features/customer-receivables/pages/components/sales-order-return-alert"
 import { useAutoAllocationSession } from "@/features/customer-receivables/pages/hooks/use-auto-allocation-session"
 import { useCustomerReceivablesAppliedChips } from "@/features/customer-receivables/pages/hooks/use-customer-receivables-applied-chips"
@@ -59,6 +66,19 @@ import { useCustomerReceivablesPreview } from "@/features/customer-receivables/p
 import { useCustomerReceivablesUrlState } from "@/features/customer-receivables/pages/hooks/use-customer-receivables-url-state"
 import { useReverseFlow } from "@/features/customer-receivables/pages/hooks/use-reverse-flow"
 import { useCustomerReceivablesPermissions } from "@/features/customer-receivables/hooks/use-customer-receivables-permissions"
+
+const VIEWS = ["receivable", "receipt", "sales_invoice", "unallocated"] as const
+const LEDGER_PERMISSIONS = {
+    receivable: "receivable_account:list",
+    receipt: "customer_receipt:list",
+    sales_invoice: "invoice:list",
+} as const
+const PREVIEW_PERMISSIONS = {
+    receivable: "receivable_account:detail",
+    receipt: "customer_receipt:detail",
+    invoice: "invoice:detail",
+} as const
+const INVOICE_REQUESTS_HREF = "/finance/customer-accounts/invoice-requests"
 
 /**
  * 客户往来工作面。客户回款、客户退款与回款冲正嵌入通用审批区；
@@ -92,9 +112,28 @@ export function CustomerReceivablesWorkspace({
         `${pathname}?${searchParams}`,
     )
     const permissions = useCustomerReceivablesPermissions()
+    const profile = useAccountProfileQuery()
+    const granted = profile.isError ? undefined : profile.data?.permissions
+    const listAccess = {
+        receivable: hasPermission(granted, LEDGER_PERMISSIONS.receivable),
+        receipt: hasPermission(granted, LEDGER_PERMISSIONS.receipt),
+        sales_invoice: hasPermission(granted, LEDGER_PERMISSIONS.sales_invoice),
+    }
+    const canReadView = (view: CustomerAccountsView) =>
+        view === "unallocated"
+            ? listAccess.receipt && listAccess.sales_invoice
+            : listAccess[view]
+    const readableViews = VIEWS.filter(canReadView)
+    const canPreview = (kind: keyof typeof PREVIEW_PERMISSIONS) =>
+        hasPermission(granted, PREVIEW_PERMISSIONS[kind])
+    const canReadInvoiceRequests = hasPermission(
+        granted,
+        "sales_invoice_request:list",
+    )
 
     const urlState = useCustomerReceivablesUrlState({
         fixedSalesOrderId: salesOrderId,
+        defaultView: readableViews[0],
         stateMode: embedded ? "local" : "url",
     })
 
@@ -169,7 +208,23 @@ export function CustomerReceivablesWorkspace({
         workItemReversalId ??
         null
 
-    const listQuery = useCustomerAccountsListQuery(urlState.query)
+    const canReadCurrentView = canReadView(urlState.view)
+    const isRegistrationLink =
+        !urlState.sessionId &&
+        Boolean(
+            urlState.registerMode &&
+            canStartAssignedSession(urlState.registerMode) &&
+            ((urlState.from === "W05" && urlState.returnTo) ||
+                (urlState.from === "W01" &&
+                    urlState.registerMode === "invoice" &&
+                    urlState.receivableAccountId)),
+        )
+    const listEnabled = canReadCurrentView || isRegistrationLink
+    const listQuery = useCustomerAccountsListQuery(
+        urlState.query,
+        listAccess,
+        listEnabled,
+    )
     const detailQuery = useCustomerAccountsDetailQuery(previewKind, previewId)
     const sessionQuery = useAllocationSessionQuery(urlState.sessionId ?? null)
     // 旧会话链接只负责转入独立登记页，不再替换客户往来列表。
@@ -204,10 +259,20 @@ export function CustomerReceivablesWorkspace({
             ? invoiceTaskBlockedReason
             : permissions.reason
 
-    const data = listQuery.data
+    const result =
+        listEnabled && !listQuery.isError ? listQuery.data : undefined
+    const data = listQuery.isPlaceholderData ? undefined : result
+    const listData = canReadCurrentView ? result : undefined
+    const exportData = canReadCurrentView ? data : undefined
+    const listFailed =
+        canReadCurrentView &&
+        (listQuery.isError || (!listQuery.isPending && !listData))
+    const refreshList = () => {
+        if (listEnabled) void listQuery.refetch()
+    }
 
     const appliedChips = useCustomerReceivablesAppliedChips({
-        data,
+        data: exportData,
         urlState,
         embedded,
         embeddedCounterpartyId: counterpartyPartyId,
@@ -401,7 +466,7 @@ export function CustomerReceivablesWorkspace({
                     urlState.patchUrl({ sessionId: null })
                 }}
                 onPosted={() => {
-                    void listQuery.refetch()
+                    refreshList()
                     onSalesOrderChanged?.()
                 }}
                 canOperate={sessionCanOperate}
@@ -414,16 +479,82 @@ export function CustomerReceivablesWorkspace({
         )
     }
 
+    const views = readableViews.map((view) => ({
+        id: `customer-receivables-view-${view}`,
+        view,
+        label: VIEW_LABEL[view],
+        count:
+            view === urlState.view
+                ? exportData?.total.toLocaleString("zh-CN")
+                : undefined,
+        active: view === urlState.view,
+        onClick: () => urlState.changeView(view),
+    }))
+    const viewSwitcher =
+        views.length === 1 && !canReadCurrentView ? (
+            <Button
+                id={views[0].id}
+                type="button"
+                variant="ghost"
+                className={listWorkspaceStyles.quietButton}
+                aria-pressed={views[0].active}
+                onClick={views[0].onClick}
+            >
+                {views[0].label}
+            </Button>
+        ) : views.length >= 2 ? (
+            embedded ? (
+                <Tabs
+                    value={urlState.view}
+                    onValueChange={(value) =>
+                        views.find((item) => item.view === value)?.onClick()
+                    }
+                >
+                    <TabsList
+                        variant="line"
+                        aria-label="本单客户往来工作视图"
+                        className="w-full min-w-0 justify-start overflow-x-auto border-b border-border/60"
+                    >
+                        {views.map((item) => (
+                            <TabsTrigger
+                                key={item.id}
+                                id={item.id}
+                                value={item.view}
+                            >
+                                {item.label}
+                            </TabsTrigger>
+                        ))}
+                    </TabsList>
+                </Tabs>
+            ) : (
+                <ListWorkspaceViews
+                    ariaLabel="客户往来工作视图"
+                    items={views}
+                    variant="inline"
+                />
+            )
+        ) : null
+
     const content = (
         <>
             <CustomerReceivablesHeader
-                data={data}
+                data={exportData}
+                exportPending={
+                    listQuery.isPlaceholderData ||
+                    (listQuery.isPending && listEnabled)
+                }
+                views={embedded ? undefined : viewSwitcher}
+                onOpenInvoiceRequests={
+                    !embedded && canReadInvoiceRequests
+                        ? () => router.push(INVOICE_REQUESTS_HREF)
+                        : undefined
+                }
                 embedded={embedded}
                 salesOrderNo={salesOrderNo}
                 onExport={() => {
-                    if (!data) return
-                    const fileName = `客户往来-${VIEW_LABEL[data.view]}-${new Date().toISOString().slice(0, 10)}.csv`
-                    downloadCsv(fileName, buildAccountsCsv(data))
+                    if (!exportData) return
+                    const fileName = `客户往来-${VIEW_LABEL[exportData.view]}-${new Date().toISOString().slice(0, 10)}.csv`
+                    downloadCsv(fileName, buildAccountsCsv(exportData))
                     setLastResult({
                         status: "succeeded",
                         title: "导出已完成",
@@ -431,17 +562,17 @@ export function CustomerReceivablesWorkspace({
                     })
                 }}
                 onRegisterInvoice={() =>
-                    router.push(
-                        "/finance/customer-accounts/invoice-requests?create=1",
-                    )
+                    router.push(`${INVOICE_REQUESTS_HREF}?create=1`)
                 }
                 onRegisterReceipt={() => openRegister("receipt")}
                 startSessionPending={startSessionPending}
                 canRegisterInvoice={permissions.canSubmitInvoiceRequest}
                 canRegisterReceipt={permissions.canRegisterReceipt}
-                canExport={permissions.canExport}
-                permissionReason={permissions.reason}
-                invoiceBlockedReason="当前账号没有提交开票申请的权限"
+                canExport={
+                    canReadCurrentView &&
+                    permissions.canExport &&
+                    listData?.moduleAllowed !== false
+                }
             />
 
             {urlState.from === "W05" && urlState.returnTo ? (
@@ -496,21 +627,6 @@ export function CustomerReceivablesWorkspace({
                 </Alert>
             ) : null}
 
-            <CustomerReceivablesListPane
-                data={data}
-                urlState={urlState}
-                appliedChips={appliedChips}
-                isPending={listQuery.isPending}
-                isError={listQuery.isError}
-                error={listQuery.error}
-                onRetry={() => void listQuery.refetch()}
-                receivableColumns={receivableColumns}
-                receiptColumns={receiptColumns}
-                invoiceColumns={invoiceColumns}
-                preview={preview}
-                onPreview={openPreview}
-            />
-
             <CustomerAccountDetailPreview
                 open={
                     preview != null ||
@@ -538,7 +654,7 @@ export function CustomerReceivablesWorkspace({
                 workItemAllowedActions={focusedWorkItem?.allowedActions}
                 onDecisionApplied={(view: ApprovalCommandView) => {
                     void detailQuery.refetch()
-                    void listQuery.refetch()
+                    refreshList()
                     onSalesOrderChanged?.()
                     setLastResult({
                         status: "succeeded",
@@ -722,17 +838,56 @@ export function CustomerReceivablesWorkspace({
         </>
     )
 
+    const ledger = (
+        <>
+            {embedded ? viewSwitcher : null}
+            {listData?.moduleAllowed && listData.hasDataScope ? (
+                <CustomerReceivablesMetrics
+                    metrics={listData.metrics}
+                    access={listAccess}
+                    queriedAt={listData.queriedAt}
+                    embedded={embedded}
+                />
+            ) : null}
+            <CustomerReceivablesListPane
+                embedded={embedded}
+                data={listData}
+                urlState={urlState}
+                appliedChips={appliedChips}
+                profilePending={profile.isPending}
+                isPending={canReadCurrentView && listQuery.isPending}
+                isFetching={listQuery.isFetching}
+                isPlaceholder={listQuery.isPlaceholderData}
+                isError={listFailed}
+                error={listQuery.error}
+                canReadView={canReadCurrentView}
+                profileError={profile.error}
+                onRetryProfile={() => void profile.refetch()}
+                canPreview={canPreview}
+                onRetry={refreshList}
+                receivableColumns={receivableColumns}
+                receiptColumns={receiptColumns}
+                invoiceColumns={invoiceColumns}
+                preview={preview}
+                onPreview={openPreview}
+            />
+        </>
+    )
     if (embedded) {
-        return <div className="flex flex-col gap-4">{content}</div>
+        return (
+            <div className="flex flex-col gap-4">
+                {content}
+                {ledger}
+            </div>
+        )
     }
     return (
-        <CustomerReceivablesStandaloneListProvider>
-            <PageScaffold
-                density="compact"
-                className={listWorkspaceStyles.page}
-            >
-                {content}
-            </PageScaffold>
-        </CustomerReceivablesStandaloneListProvider>
+        <PageScaffold
+            density="compact"
+            className={`${listWorkspaceStyles.page} min-h-0`}
+        >
+            {content}
+            {ledger}
+        </PageScaffold>
     )
 }

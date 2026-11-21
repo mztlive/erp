@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogClose,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -19,7 +20,6 @@ import { SellableItemPreviewPanel } from "@/features/master-data/components/list
 import { SellableItemThumbnail } from "@/features/master-data/components/list/sellable-item-thumbnail"
 import { DialogScrollBody } from "@/features/master-data/components/shared/action-dialog-shared"
 import type { MasterDataListItem } from "@/features/master-data/types"
-import { restoreListRowFocus } from "@/lib/list-row-focus"
 
 export function SellablePreviewDialog({
     idPrefix,
@@ -42,14 +42,19 @@ export function SellablePreviewDialog({
         <Dialog
             open={previewRow != null}
             onOpenChange={(open) => {
-                if (!open) {
-                    onClose()
-                    restoreListRowFocus(lastFocusedRowId.current)
-                }
+                if (!open) onClose()
             }}
         >
             <DialogContent
                 className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
+                finalFocus={() => {
+                    const id = lastFocusedRowId.current
+                    return id
+                        ? document.querySelector<HTMLElement>(
+                              `[data-row-id="${CSS.escape(id)}"]`,
+                          )
+                        : null
+                }}
                 closeButtonId={`${prefix}-dialog-dismiss`}
             >
                 <DialogHeader>
@@ -91,14 +96,12 @@ export function SellablePreviewDialog({
                 </DialogScrollBody>
                 {previewRow?.sellableItem ? (
                     <DialogFooter>
-                        <Button
+                        <DialogClose
                             id={`${prefix}-dialog-close`}
-                            type="button"
-                            variant="outline"
-                            onClick={onClose}
+                            render={<Button type="button" variant="outline" />}
                         >
                             关闭
-                        </Button>
+                        </DialogClose>
                         <PermissionGuard permission="product:detail">
                             <Button
                                 id={`${prefix}-dialog-open-product`}

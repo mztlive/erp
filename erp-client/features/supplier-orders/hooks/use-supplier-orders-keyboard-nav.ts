@@ -8,25 +8,47 @@ import type {
 } from "@/features/supplier-orders/lib/url-state"
 import type { SupplierOrderListRow } from "@/features/supplier-orders/types"
 
-/**
- * 列表键盘导航：
- * - focusedIndex 跟踪当前行（列表数据/筛选变化时归零）；
- * - rowRefs 供 Esc 关闭预览后焦点复位；
- * - 全局 keydown：/ 聚焦搜索、j/k 移动、Enter 开预览、Esc 关预览。
- */
 export function useSupplierOrdersKeyboardNav({
     canOpenDetail,
     url,
     rows,
+    searchInputRef,
     updateUrl,
 }: {
     canOpenDetail: boolean
     url: SupplierOrdersUrlState
     rows: SupplierOrderListRow[]
+    searchInputRef: React.RefObject<HTMLInputElement | null>
     updateUrl: SupplierOrdersUrlUpdater
 }) {
     const [focusedIndex, setFocusedIndex] = React.useState(0)
     const rowRefs = React.useRef<Map<string, HTMLElement>>(new Map())
+
+    const lastPreviewId = React.useRef<string | undefined>(url.preview)
+
+    React.useLayoutEffect(() => {
+        if (url.preview) lastPreviewId.current = url.preview
+    }, [url.preview])
+
+    const getRowFocusTarget = React.useCallback(
+        (id: string) =>
+            rowRefs.current.get(id) ??
+            document
+                .getElementById("supplier-orders-list-table")
+                ?.querySelector<HTMLElement>(
+                    `[data-row-id="${CSS.escape(id)}"]`,
+                ),
+        [],
+    )
+
+    const restorePreviewFocus = React.useCallback(() => {
+        const id = lastPreviewId.current
+        return (id ? getRowFocusTarget(id) : null) ?? searchInputRef.current
+    }, [getRowFocusTarget, searchInputRef])
+
+    const closePreview = React.useCallback(() => {
+        updateUrl({ preview: undefined }, "push")
+    }, [updateUrl])
 
     React.useEffect(() => {
         setFocusedIndex(0)
@@ -34,59 +56,80 @@ export function useSupplierOrdersKeyboardNav({
 
     React.useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
-            const target = event.target as HTMLElement | null
-            if (
-                target &&
-                (target.tagName === "INPUT" ||
-                    target.tagName === "TEXTAREA" ||
-                    target.tagName === "SELECT" ||
-                    target.isContentEditable)
-            ) {
-                if (event.key !== "Escape") return
-            }
+            if (event.defaultPrevented || event.isComposing) return
 
-            if (event.key === "/" && !event.metaKey && !event.ctrlKey) {
-                // 弹层（Dialog / Sheet / Popover / Combobox）打开时不抢焦点
-                if (
-                    document.querySelector(
-                        '[role="dialog"], [data-slot="sheet"], [data-slot="popover-content"], [data-slot="combobox-content"]',
-                    )
-                ) {
-                    return
-                }
+            const target =
+                event.target instanceof HTMLElement ? event.target : null
+            const editing = target?.closest(
+                'input, textarea, select, [contenteditable="true"]',
+            )
+            const overlayOpen = document.querySelector(
+                '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-slot="popover-content"][data-open]',
+            )
+            if (overlayOpen || event.metaKey || event.ctrlKey || event.altKey)
+                return
+
+            if (event.key === "Escape" && url.preview && canOpenDetail) {
                 event.preventDefault()
-                document
-                    .querySelector<HTMLInputElement>(
-                        '[data-slot="sfo-list-search"]',
-                    )
-                    ?.focus()
+                closePreview()
                 return
             }
+            if (editing) return
 
+            if (event.key === "/") {
+                event.preventDefault()
+                searchInputRef.current?.focus()
+                return
+            }
             if (!canOpenDetail || rows.length === 0) return
 
-            if (event.key === "j" || event.key === "ArrowDown") {
+            const rowId =
+                target?.closest<HTMLElement>("[data-row-id]")?.dataset.rowId
+            const isIdentity =
+                rowId != null && rowRefs.current.get(rowId) === target
+            const interactive = target?.closest(
+                'button, a, [role="button"], [role="combobox"], [role="checkbox"]',
+            )
+            const offset =
+                event.key === "j" || event.key === "ArrowDown"
+                    ? 1
+                    : event.key === "k" || event.key === "ArrowUp"
+                      ? -1
+                      : 0
+
+            if (offset && (!interactive || isIdentity)) {
                 event.preventDefault()
-                setFocusedIndex((i) => Math.min(rows.length - 1, i + 1))
-            } else if (event.key === "k" || event.key === "ArrowUp") {
-                event.preventDefault()
-                setFocusedIndex((i) => Math.max(0, i - 1))
-            } else if (event.key === "Enter") {
-                event.preventDefault()
+                const rowIndex = rowId
+                    ? rows.findIndex((row) => row.orderId === rowId)
+                    : -1
+                const nextIndex = Math.max(
+                    0,
+                    Math.min(
+                        rows.length - 1,
+                        (rowIndex >= 0 ? rowIndex : focusedIndex) + offset,
+                    ),
+                )
+                setFocusedIndex(nextIndex)
+                getRowFocusTarget(rows[nextIndex].orderId)?.focus()
+            } else if (event.key === "Enter" && !interactive) {
                 const row = rows[focusedIndex]
-                if (row) updateUrl({ preview: row.orderId }, "push")
-            } else if (event.key === "Escape" && url.preview) {
+                if (!row) return
                 event.preventDefault()
-                const id = url.preview
-                updateUrl({ preview: undefined }, "push")
-                requestAnimationFrame(() => {
-                    rowRefs.current.get(id)?.focus()
-                })
+                updateUrl({ preview: row.orderId }, "push")
             }
         }
         window.addEventListener("keydown", onKeyDown)
         return () => window.removeEventListener("keydown", onKeyDown)
-    }, [canOpenDetail, focusedIndex, updateUrl, rows, url.preview])
+    }, [
+        canOpenDetail,
+        closePreview,
+        getRowFocusTarget,
+        focusedIndex,
+        updateUrl,
+        rows,
+        searchInputRef,
+        url.preview,
+    ])
 
-    return { focusedIndex, rowRefs }
+    return { focusedIndex, rowRefs, closePreview, restorePreviewFocus }
 }

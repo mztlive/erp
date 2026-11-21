@@ -2,6 +2,7 @@
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { selectedOrgUnitIds } from "@/features/organization/lib/organization-ids"
@@ -14,7 +15,6 @@ import {
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
-    listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { SalesOrdersListFilterPanel } from "@/features/sales-orders/components/sales-orders-list-filter-panel"
 import type { SalesOrdersAppliedChip } from "@/features/sales-orders/hooks/use-sales-orders-list-chips"
@@ -44,25 +44,23 @@ const MORE_CHIP_KEYS: readonly SalesOrdersListFilterKey[] = [
 export function SalesOrdersListFilterBar({
     filters: f,
     chips,
-    resultCount,
     loading,
     failed,
 }: {
     filters: ReturnType<typeof useSalesOrdersListFilters>
     chips: readonly SalesOrdersAppliedChip[]
-    resultCount?: number
     loading: boolean
     failed: boolean
 }) {
-    const moreCount = chips.filter(({ key }) =>
-        MORE_CHIP_KEYS.includes(key),
-    ).length
-
+    useSearchHotkey(f.searchInputRef, {
+        overlaySelector:
+            '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-slot="sheet"], [data-slot="popover-content"][data-open]',
+    })
     const account = useAccountProfileQuery()
     return (
         <ListWorkspaceFilterBar
             morePresentation="popover"
-            className="[&_[data-slot=list-toolbar-search]]:lg:w-72 [&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
+            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel="销售单查询"
             onSubmit={f.applyFilters}
@@ -70,13 +68,14 @@ export function SalesOrdersListFilterBar({
                 <ListSearchField
                     id={`${prefix}-search`}
                     data-slot="so-list-search"
+                    searchInputRef={f.searchInputRef}
                     value={f.searchDraft}
                     onChange={f.setSearchDraft}
                     placeholder="销售单号、客户、合同号"
                     aria-label="搜索销售单"
                 />
             }
-            moreCount={moreCount}
+            foldedChipKeys={MORE_CHIP_KEYS}
             moreOpen={f.filterPanelOpen}
             onToggleMore={() =>
                 f.filterPanelOpen
@@ -96,7 +95,7 @@ export function SalesOrdersListFilterBar({
                         account.data?.permissions,
                         "sales_person:list",
                     ) && (
-                        <div className="w-44 max-w-full">
+                        <div className="w-44 max-w-full min-w-0">
                             <PersonDirectoryFilter
                                 id="sales-orders-list-owner"
                                 category="sales"
@@ -120,7 +119,7 @@ export function SalesOrdersListFilterBar({
                     )}
                     <OptionCombobox
                         id="sales-orders-list-filter-commercial-status"
-                        className="w-48 max-w-full"
+                        className="w-36 max-w-full min-w-0"
                         filterLabel="商业状态"
                         aria-label="商业状态"
                         value={
@@ -140,28 +139,17 @@ export function SalesOrdersListFilterBar({
                     />
                 </>
             }
-            moreSize="medium"
             morePanel={
                 <SalesOrdersListFilterPanel
                     draft={f.filterDraft}
                     onDraftChange={f.setFilterDraft}
                 />
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "张销售单",
-                loadingLabel: "正在加载销售单…",
-            })}
+            resultStatus={failed ? "查询未完成" : loading ? "查询中…" : null}
             chips={chips}
-            onClearChip={(key) =>
-                f.removeFilter(key as SalesOrdersListFilterKey)
-            }
             onClearAll={f.clearFilters}
             hasPendingChanges={f.hasPendingChanges}
             pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-            idleHint="导出与当前查询结果一致"
         />
     )
 }

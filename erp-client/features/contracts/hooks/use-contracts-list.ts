@@ -10,7 +10,6 @@ import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
 
 import {
-    EMPTY_CONTRACT_METRICS,
     contractMetricLabel,
     type ContractMetricFilter,
 } from "@/features/contracts/lib/filter-contracts"
@@ -23,24 +22,14 @@ import { useSearchHotkey } from "@/lib/use-search-hotkey"
 import { useSearchDraft } from "@/lib/use-search-draft"
 
 /** 可被单独移除的已生效条件。 */
-export type ContractFilterKey =
-    | "q"
-    | "metric"
-    | "customerId"
-    | "settlementPartyId"
-    | "ownerUserIds"
-    | "orgUnitIds"
+type ContractFilterKey = "customerId" | "orgUnitIds"
 
-export type ContractAppliedChip = Readonly<{
+type ContractAppliedChip = Readonly<{
     key: ContractFilterKey
     label: string
 }>
 
-/**
- * 合同列表 URL-first 状态（docs/ui-filter-design.md §5）：
- * Applied 在 URL（唯一事实源），Draft 本地受控不触发请求，UI 态（面板展开）本地保存。
- * 关键词与「更多筛选」草稿经显式提交（查询）一次性写 URL 并回第 1 页。
- */
+/** 合同查询使用 URL 中已生效的条件，草稿由「查询」统一提交。 */
 export function useContractsList() {
     const router = useRouter()
     const pathname = usePathname()
@@ -48,20 +37,21 @@ export function useContractsList() {
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
 
     const account = useAccountProfileQuery()
-    const canFilterOwners = hasPermission(
-        account.data?.permissions,
-        "sales_person:list",
-    )
-    const canFilterOrgs = hasPermission(
-        account.data?.permissions,
-        "org_unit:list",
-    )
+    const permissions = account.data?.permissions
+    const canReadList = hasPermission(permissions, "contract:list")
+    const canFilterOwners =
+        canReadList && hasPermission(permissions, "sales_person:list")
+    const canFilterOrgs =
+        canReadList && hasPermission(permissions, "org_unit:list")
     const allowedFilters = React.useCallback(
         (state: ContractsUrlState): ContractsUrlState => ({
             ...state,
             ownerUserIds: canFilterOwners ? state.ownerUserIds : undefined,
             orgUnitIds: canFilterOrgs ? state.orgUnitIds : undefined,
-            includeDescendants: canFilterOrgs && state.includeDescendants,
+            includeDescendants:
+                canFilterOrgs &&
+                Boolean(state.orgUnitIds) &&
+                state.includeDescendants,
         }),
         [canFilterOrgs, canFilterOwners],
     )
@@ -119,17 +109,19 @@ export function useContractsList() {
         upload,
     } = url
 
-    const contractsQuery = useContractsQuery(url)
-    const allRows = React.useMemo(
-        () => contractsQuery.data?.items ?? [],
-        [contractsQuery.data],
+    const contractsQuery = useContractsQuery(url, canReadList)
+    const pageRows = React.useMemo(
+        () => (canReadList ? (contractsQuery.data?.items ?? []) : []),
+        [canReadList, contractsQuery.data],
     )
-    const total = contractsQuery.data?.total ?? 0
+    const total = canReadList ? (contractsQuery.data?.total ?? 0) : 0
 
     // Draft：本地受控，变化不请求
     const { searchDraft, setSearchDraft } = useSearchDraft(q ?? "", {
         inputRef: searchInputRef,
     })
+    const [metricDraft, setMetricDraft] =
+        React.useState<ContractMetricFilter>(metric)
     const [settlementPartyIdDraft, setSettlementPartyIdDraft] = React.useState<
         string | null
     >(settlementPartyId ?? null)
@@ -143,10 +135,6 @@ export function useContractsList() {
     const ownerDraft = canFilterOwners ? ownerDraftValue : null
     const orgDraft = canFilterOrgs ? orgDraftValue : ""
     const descendantsDraft = canFilterOrgs && descendantsDraftValue
-
-    const hasStructuredFilters = Boolean(
-        settlementPartyId || ownerUserIds || orgUnitIds,
-    )
 
     // UI 态：条件由标签展示，深链不自动打开浮层。
     const [panelOpen, setPanelOpen] = React.useState(false)
@@ -165,6 +153,7 @@ export function useContractsList() {
     const applyFilters = React.useCallback(() => {
         pushUrl({
             q: searchDraft.trim() || undefined,
+            metric: metricDraft,
             settlementPartyId: settlementPartyIdDraft ?? undefined,
             ownerUserIds: ownerDraft ?? undefined,
             orgUnitIds: orgDraft.trim() || undefined,
@@ -174,6 +163,7 @@ export function useContractsList() {
         setPanelOpen(false)
     }, [
         descendantsDraft,
+        metricDraft,
         orgDraft,
         ownerDraft,
         pushUrl,
@@ -196,50 +186,33 @@ export function useContractsList() {
 
     const hasPendingChanges =
         searchDraft.trim() !== (q ?? "").trim() ||
+        metricDraft !== metric ||
         settlementPartyIdDraft !== (settlementPartyId ?? null) ||
         ownerDraft !== (ownerUserIds ?? null) ||
         orgDraft.trim() !== (orgUnitIds ?? "").trim() ||
         descendantsDraft !== includeDescendants
 
-    /** 移除单个已生效条件；每个条件都有可移除 chip。 */
     const removeFilter = React.useCallback(
         (key: ContractFilterKey) => {
-            switch (key) {
-                case "q":
-                    setSearchDraft("")
-                    pushUrl({ q: undefined, page: 1 })
-                    break
-                case "metric":
-                    pushUrl({ metric: "all", page: 1 })
-                    break
-                case "customerId":
-                    pushUrl({ customerId: undefined, page: 1 })
-                    break
-                case "settlementPartyId":
-                    setSettlementPartyIdDraft(null)
-                    pushUrl({ settlementPartyId: undefined, page: 1 })
-                    break
-                case "ownerUserIds":
-                    setOwnerDraft(null)
-                    pushUrl({ ownerUserIds: undefined, page: 1 })
-                    break
-                case "orgUnitIds":
-                    setOrgDraft("")
-                    setDescendantsDraft(false)
-                    pushUrl({
-                        orgUnitIds: undefined,
-                        includeDescendants: false,
-                        page: 1,
-                    })
-                    break
+            if (key === "customerId") {
+                pushUrl({ customerId: undefined, page: 1 })
+            } else if (key === "orgUnitIds") {
+                setOrgDraft("")
+                setDescendantsDraft(false)
+                pushUrl({
+                    orgUnitIds: undefined,
+                    includeDescendants: false,
+                    page: 1,
+                })
             }
         },
-        [pushUrl, setSearchDraft],
+        [pushUrl],
     )
 
     /** 清除全部筛选（含来源锁定与分页）；保留排序等视图/导航参数。 */
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
+        setMetricDraft("all")
         setSettlementPartyIdDraft(null)
         setOwnerDraft(null)
         setPanelOpen(false)
@@ -257,20 +230,17 @@ export function useContractsList() {
         })
     }, [pushUrl, setSearchDraft])
 
-    // URL 回填：仅同步 Draft；面板展开态不在此重置
+    React.useEffect(() => setMetricDraft(metric), [metric])
+    React.useEffect(
+        () => setSettlementPartyIdDraft(settlementPartyId ?? null),
+        [settlementPartyId],
+    )
+    React.useEffect(() => setOwnerDraft(ownerUserIds ?? null), [ownerUserIds])
     React.useEffect(() => {
-        setSettlementPartyIdDraft(settlementPartyId ?? null)
-        setOwnerDraft(ownerUserIds ?? null)
         setOrgDraft(orgUnitIds ?? "")
         setDescendantsDraft(includeDescendants)
-    }, [
-        canFilterOrgs,
-        canFilterOwners,
-        includeDescendants,
-        orgUnitIds,
-        ownerUserIds,
-        settlementPartyId,
-    ])
+        if (!canFilterOrgs) setPanelOpen(false)
+    }, [canFilterOrgs, includeDescendants, orgUnitIds])
 
     useSearchHotkey(searchInputRef)
 
@@ -284,16 +254,13 @@ export function useContractsList() {
         [page, pageSize],
     )
 
-    const pageRows = allRows
-    const metrics = contractsQuery.data?.metrics ?? EMPTY_CONTRACT_METRICS
-
-    // 来源锁定与结构化条件的展示名；数据外深链回退为「未知」，仍提供可移除 chip
-    const lockedCustomerLabel = React.useMemo(
-        () =>
-            allRows.find((r) => r.customer.customerId === customerId)?.customer
-                .displayName ?? "未知",
-        [allRows, customerId],
-    )
+    const customerName = pageRows.find(
+        (row) => row.customer.customerId === customerId,
+    )?.customer.displayName
+    const lockedCustomerLabel =
+        customerName && customerName !== customerId
+            ? customerName
+            : "已指定客户"
     const selectedSettlement = useQuery({
         queryKey: [
             "party-selector",
@@ -305,7 +272,7 @@ export function useContractsList() {
                 "settlement-parties",
                 settlementPartyId ?? "",
             ),
-        enabled: Boolean(settlementPartyId),
+        enabled: canReadList && Boolean(settlementPartyId),
         staleTime: 0,
     })
     const selectedSettlementPartyLabel =
@@ -315,82 +282,18 @@ export function useContractsList() {
                   (item) => item.id === settlementPartyId,
               )?.name ?? "未知")
 
-    /** 全部已生效条件 → chip；查询、摘要、计数、导出只读 Applied。 */
-    const appliedChips = React.useMemo<readonly ContractAppliedChip[]>(() => {
-        const chips: ContractAppliedChip[] = []
-        const trimmedQ = (q ?? "").trim()
-        if (trimmedQ) chips.push({ key: "q", label: `搜索：${trimmedQ}` })
-        if (metric !== "all") {
-            chips.push({
-                key: "metric",
-                label: `指标：${contractMetricLabel(metric)}`,
-            })
-        }
-        if (customerId) {
-            chips.push({
-                key: "customerId",
-                label: `客户：${lockedCustomerLabel}`,
-            })
-        }
-        if (settlementPartyId) {
-            chips.push({
-                key: "settlementPartyId",
-                label: `结算主体：${selectedSettlementPartyLabel}`,
-            })
-        }
-        if (ownerUserIds)
-            chips.push({
-                key: "ownerUserIds",
-                label: `当前跟进负责人：已选 ${ownerUserIds.split(",").length} 人`,
-            })
-        if (orgUnitIds)
-            chips.push({
-                key: "orgUnitIds",
-                label: `组织：已选 ${orgUnitIds.split(",").length} 个${includeDescendants ? "（含下级）" : ""}`,
-            })
-        return chips
-    }, [
-        customerId,
-        includeDescendants,
-        lockedCustomerLabel,
-        metric,
-        orgUnitIds,
-        ownerUserIds,
-        q,
-        selectedSettlementPartyLabel,
-        settlementPartyId,
-    ])
-
-    const filterDescription = React.useMemo(() => {
-        const parts: string[] = []
-        if (metric !== "all") parts.push(contractMetricLabel(metric))
-        if ((q ?? "").trim()) parts.push(`“${(q ?? "").trim()}”`)
-        if (customerId) parts.push(`客户：${lockedCustomerLabel}`)
-        if (settlementPartyId) {
-            parts.push(`结算主体：${selectedSettlementPartyLabel}`)
-        }
-        if (ownerUserIds)
-            parts.push(
-                `当前跟进负责人：已选 ${ownerUserIds.split(",").length} 人`,
-            )
-        if (orgUnitIds)
-            parts.push(
-                `组织：已选 ${orgUnitIds.split(",").length} 个${includeDescendants ? "（含下级）" : ""}`,
-            )
-        return parts.length
-            ? `当前筛选：${parts.join(" · ")}`
-            : "按将到期优先排序展示当前业务范围内的合同。"
-    }, [
-        customerId,
-        includeDescendants,
-        lockedCustomerLabel,
-        metric,
-        orgUnitIds,
-        ownerUserIds,
-        q,
-        selectedSettlementPartyLabel,
-        settlementPartyId,
-    ])
+    const appliedChips: ContractAppliedChip[] = []
+    if (customerId)
+        appliedChips.push({
+            key: "customerId",
+            label: `客户：${lockedCustomerLabel}`,
+        })
+    if (orgUnitIds) {
+        appliedChips.push({
+            key: "orgUnitIds",
+            label: `组织：已选 ${orgUnitIds.split(",").length} 个${includeDescendants ? "（含下级）" : ""}`,
+        })
+    }
 
     const filterSnapshotLabel = React.useMemo(() => {
         const parts = [
@@ -427,13 +330,6 @@ export function useContractsList() {
         [pushUrl],
     )
 
-    const handleMetricChange = React.useCallback(
-        (next: ContractMetricFilter) => {
-            pushUrl({ metric: next, page: 1 })
-        },
-        [pushUrl],
-    )
-
     const handleSortingChange = React.useCallback(
         (next: SortingState) => {
             const head = next[0]
@@ -455,31 +351,23 @@ export function useContractsList() {
         Boolean(orgUnitIds)
 
     return {
+        canReadList,
         canFilterOwners,
         canFilterOrgs,
         url,
         contractsQuery,
         total,
-        q,
-        metric,
-        page,
-        pageSize,
-        sort,
-        dir,
         customerId,
-        settlementPartyId,
-        ownerUserIds,
-        orgUnitIds,
-        includeDescendants,
         orgDraft,
         setOrgDraft,
         descendantsDraft,
         setDescendantsDraft,
         upload,
-        hasStructuredFilters,
         searchDraft,
         setSearchDraft,
         searchInputRef,
+        metricDraft,
+        setMetricDraft,
         settlementPartyIdDraft,
         setSettlementPartyIdDraft,
         ownerDraft,
@@ -489,9 +377,7 @@ export function useContractsList() {
         sorting,
         pagination,
         pageRows,
-        metrics,
         appliedChips,
-        filterDescription,
         filterSnapshotLabel,
         isFiltered,
         applyFilters,
@@ -499,7 +385,6 @@ export function useContractsList() {
         cancelMoreFilters,
         hasPendingChanges,
         removeFilter,
-        handleMetricChange,
         handleSortingChange,
         handlePaginationChange,
         clearAllFilters,

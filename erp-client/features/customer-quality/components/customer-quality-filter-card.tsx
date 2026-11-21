@@ -6,7 +6,6 @@ import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
-    listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import type { BusinessTypeFilter } from "../types"
 import type {
@@ -35,14 +34,13 @@ export type CustomerQualityFilterCardProps = {
     businessTypeDraft: BusinessTypeFilter | "all"
     setBusinessTypeDraft: SetState<BusinessTypeFilter | "all">
     hasPendingChanges: boolean
-    resultCount?: number
     loading?: boolean
     failed?: boolean
 }
 
 /**
  * 客户经营质量明细筛选：业务性质跟在搜索后面。没有低频条件，不提供更多面板。
- * 期间条不属于本表单。
+ * 主控件显示草稿，已生效条件保留独立移除入口。
  */
 export function CustomerQualityFilterCard({
     searchDraft,
@@ -55,7 +53,6 @@ export function CustomerQualityFilterCard({
     businessTypeDraft,
     setBusinessTypeDraft,
     hasPendingChanges,
-    resultCount,
     loading,
     failed,
 }: CustomerQualityFilterCardProps) {
@@ -96,13 +93,7 @@ export function CustomerQualityFilterCard({
                     }
                 />
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "户客户",
-                loadingLabel: "正在加载客户…",
-            })}
+            resultStatus={loading ? "查询中…" : failed ? "查询未完成" : null}
             chips={appliedChips}
             onClearChip={(key) =>
                 onRemoveFilter(key as CustomerQualityFilterKey)
@@ -110,7 +101,6 @@ export function CustomerQualityFilterCard({
             onClearAll={onClearAllFilters}
             hasPendingChanges={hasPendingChanges}
             pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-            idleHint="导出与当前查询结果一致"
         />
     )
 }

@@ -1,21 +1,19 @@
 "use client"
 
-import {
-    DownloadIcon,
-    FileTextIcon,
-    LoaderCircleIcon,
-    WalletIcon,
-} from "lucide-react"
+import { DownloadIcon, FileTextIcon, WalletIcon } from "lucide-react"
 
 import {
     DataFreshness,
     PageActions,
     surfaceInsetClassName,
 } from "@/components/business"
-import { ListWorkspaceHeader } from "@/components/business/list-workspace"
+import {
+    ListWorkspaceHeader,
+    listWorkspaceQuietAction,
+    listWorkspaceStyles,
+} from "@/components/business/list-workspace"
 import { cn } from "@/lib/utils"
 import type { CustomerAccountsListView } from "@/features/customer-receivables/types"
-import { formatDateTime } from "@/lib/datetime"
 import { freshnessText } from "@/lib/ui-text"
 
 type CustomerReceivablesHeaderProps = {
@@ -23,37 +21,53 @@ type CustomerReceivablesHeaderProps = {
     onExport: () => void
     onRegisterInvoice: () => void
     onRegisterReceipt: () => void
-    canRegisterInvoice?: boolean
-    canRegisterReceipt?: boolean
+    canRegisterInvoice: boolean
+    canRegisterReceipt: boolean
     startSessionPending?: boolean
-    canExport?: boolean
-    permissionReason?: string
-    invoiceBlockedReason?: string
+    canExport: boolean
+    exportPending: boolean
+    onOpenInvoiceRequests?: () => void
+    views?: React.ReactNode
     embedded?: boolean
     salesOrderNo?: string
 }
 
-/**
- * 客户往来页头。登记销项发票直接进入核销会话，不提供审批流程选择。
- */
 export function CustomerReceivablesHeader({
     data,
     onExport,
     onRegisterInvoice,
     onRegisterReceipt,
-    canRegisterInvoice = Boolean(data?.canRegister),
-    canRegisterReceipt = Boolean(data?.canRegister),
+    canRegisterInvoice,
+    canRegisterReceipt,
     startSessionPending = false,
-    canExport = Boolean(data?.canExport),
-    permissionReason,
-    invoiceBlockedReason,
+    canExport,
+    exportPending,
+    onOpenInvoiceRequests,
+    views,
     embedded = false,
     salesOrderNo,
 }: CustomerReceivablesHeaderProps) {
     const actions = (
         <PageActions
+            idPrefix={
+                embedded
+                    ? "customer-receivables-header-embedded"
+                    : "customer-receivables-header"
+            }
+            size="sm"
+            className="gap-1.5"
             actions={[
-                {
+                ...(onOpenInvoiceRequests
+                    ? [
+                          listWorkspaceQuietAction({
+                              actionKey: "invoice-requests",
+                              id: "customer-receivables-view-invoice-requests",
+                              label: "开票申请",
+                              onClick: onOpenInvoiceRequests,
+                          }),
+                      ]
+                    : []),
+                listWorkspaceQuietAction({
                     hidden: !canExport,
                     actionKey: "export",
                     id: embedded
@@ -61,28 +75,27 @@ export function CustomerReceivablesHeader({
                         : "customer-receivables-header-export",
                     label: "导出",
                     icon: DownloadIcon,
-                    variant: "outline",
-                    disabled: !canExport || !data || data.total === 0,
-                    title: canExport
-                        ? "导出与当前查询结果一致"
-                        : permissionReason,
+                    disabled: !data || data.total === 0,
+                    title: exportPending
+                        ? "查询完成后可导出"
+                        : data?.total
+                          ? "导出与当前查询结果一致"
+                          : "当前查询没有可导出的记录",
                     onClick: onExport,
-                },
+                }),
                 {
                     hidden: !canRegisterInvoice,
                     actionKey: "register-invoice",
                     id: embedded
                         ? "customer-receivables-header-embedded-register-invoice"
                         : "customer-receivables-header-register-invoice",
-                    label: startSessionPending ? "创建中…" : "新建开票申请",
-                    icon: startSessionPending ? LoaderCircleIcon : FileTextIcon,
-                    variant: "outline",
-                    disabled: !canRegisterInvoice || startSessionPending,
-                    title: canRegisterInvoice
-                        ? undefined
-                        : (invoiceBlockedReason ??
-                          permissionReason ??
-                          "当前无开票申请权限"),
+                    label: "新建开票申请",
+                    icon: FileTextIcon,
+                    disabled: startSessionPending,
+                    variant: canRegisterReceipt ? "ghost" : "default",
+                    className: canRegisterReceipt
+                        ? listWorkspaceStyles.quietButton
+                        : undefined,
                     onClick: onRegisterInvoice,
                 },
                 {
@@ -94,10 +107,7 @@ export function CustomerReceivablesHeader({
                     label: startSessionPending ? "创建中…" : "登记回款",
                     icon: WalletIcon,
                     loading: startSessionPending,
-                    disabled: !canRegisterReceipt || startSessionPending,
-                    title: canRegisterReceipt
-                        ? undefined
-                        : (permissionReason ?? "当前无回款登记权限"),
+                    disabled: startSessionPending,
                     onClick: onRegisterReceipt,
                 },
             ]}
@@ -134,26 +144,7 @@ export function CustomerReceivablesHeader({
     }
 
     return (
-        <ListWorkspaceHeader
-            className="pb-6 md:pb-6"
-            eyebrow="财务"
-            title="客户往来"
-            description={
-                <>
-                    查看应收、回款与销项发票。
-                    <span className="ml-3 text-xs" role="status">
-                        {data ? (
-                            <time dateTime={data.queriedAt}>
-                                更新于{" "}
-                                {formatDateTime(data.queriedAt, "monthDayIntl")}
-                            </time>
-                        ) : (
-                            "正在查询"
-                        )}
-                    </span>
-                </>
-            }
-        >
+        <ListWorkspaceHeader eyebrow="" title="客户往来" views={views}>
             {actions}
         </ListWorkspaceHeader>
     )

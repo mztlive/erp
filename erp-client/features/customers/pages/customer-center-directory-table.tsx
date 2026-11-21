@@ -1,119 +1,114 @@
 "use client"
 
-import type {
-    ColumnDef,
-    PaginationState,
-    SortingState,
-} from "@tanstack/react-table"
+import * as React from "react"
+import type { PaginationState, SortingState } from "@tanstack/react-table"
 
-import { BusinessEmptyState, DataTable } from "@/components/business"
+import { BusinessFailureState, ListDataTable } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import type { DirectoryStatus } from "@/features/customers/lib/directory-url"
+import { useCustomerDirectoryColumns } from "@/features/customers/hooks/use-directory-columns"
 import { SCOPE_LABELS } from "@/features/customers/lib/filter-customers"
 import type {
     CustomerDirectoryItem,
+    CustomerDirectoryResult,
     CustomerScope,
 } from "@/features/customers/types"
 
-/**
- * 客户中心目录结果区 table 槽位：空态/数据表三态渲染。
- * 纯展示组件，由页面嵌入 BusinessTableFrame；行打开与筛选清除通过回调交由页面处理。
- */
 export function CustomerCenterDirectoryTable({
-    items,
-    totalInScope,
-    columns,
+    data,
     scope,
-    status,
-    q,
     canCreate,
+    canOpenDetail,
     hasActiveFilters,
     sorting,
     onSortingChange,
-    pagination,
+    page,
     onPaginationChange,
+    loading,
+    failed,
+    error,
+    onRetry,
     onClearFilters,
     onCreate,
     onOpenRow,
 }: {
-    items: readonly CustomerDirectoryItem[]
-    totalInScope: number
-    columns: ColumnDef<CustomerDirectoryItem>[]
+    data?: CustomerDirectoryResult
     scope: CustomerScope
-    status: DirectoryStatus
-    q: string
     canCreate: boolean
+    canOpenDetail: boolean
     hasActiveFilters: boolean
     sorting: SortingState
     onSortingChange: (next: SortingState) => void
-    pagination: PaginationState
+    page: number
     onPaginationChange: (next: PaginationState) => void
+    loading: boolean
+    failed: boolean
+    error: unknown
+    onRetry: () => void
     onClearFilters: () => void
     onCreate: () => void
-    onOpenRow?: (row: CustomerDirectoryItem) => void
+    onOpenRow: (row: CustomerDirectoryItem) => void
 }) {
-    return items.length === 0 ? (
-        totalInScope === 0 && !q.trim() && status === "active" ? (
-            <BusinessEmptyState
-                kind="no-data"
-                title="当前范围尚无客户"
-                description={`${SCOPE_LABELS[scope]}下还没有客户。有权时可新建客户。`}
-                className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                action={
-                    canCreate ? (
-                        <Button
-                            id="customers-directory-empty-create"
-                            type="button"
-                            variant="secondary"
-                            className="rounded-lg shadow-none"
-                            onClick={onCreate}
-                        >
-                            新建客户
-                        </Button>
-                    ) : null
-                }
-            />
-        ) : (
-            <BusinessEmptyState
-                kind="filter"
-                title="当前筛选无结果"
-                description={`范围“${SCOPE_LABELS[scope]}”${status !== "active" ? ` · 状态：${status === "disabled" ? "已停用" : "全部状态"}` : ""}${q ? ` · 关键词“${q}”` : ""} 下没有匹配客户。`}
-                className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                action={
-                    hasActiveFilters ? (
-                        <Button
-                            id="customers-directory-empty-clear-filters"
-                            type="button"
-                            variant="secondary"
-                            className="rounded-lg shadow-none"
-                            onClick={onClearFilters}
-                        >
-                            清除筛选
-                        </Button>
-                    ) : null
-                }
-            />
-        )
-    ) : (
-        <DataTable
+    const columns = useCustomerDirectoryColumns(canOpenDetail)
+    const items = React.useMemo(() => [...(data?.items ?? [])], [data?.items])
+    const openRow = canOpenDetail ? onOpenRow : undefined
+
+    return (
+        <ListDataTable
             id="customers-directory-table"
-            data={[...items]}
+            caption="客户目录"
+            entityName="客户"
+            data={items}
             columns={columns}
             getRowId={(row) => row.id}
-            rowCount={totalInScope}
+            rowLabel={(row) =>
+                `${row.shortName || row.legalName}（${row.customerNo}）`
+            }
+            rowCount={failed ? 0 : (data?.totalInScope ?? 0)}
             sorting={sorting}
             onSortingChange={onSortingChange}
-            pagination={pagination}
+            pagination={{ pageIndex: page - 1, pageSize: 20 }}
             onPaginationChange={onPaginationChange}
             pageSizeOptions={[20]}
-            layout="flush"
-            rowLabel={(row) => row.shortName || row.legalName}
+            showPagination={!failed && Boolean(data?.totalInScope)}
+            defaultColumnOrder={["customer", "owner", "status", "business"]}
             defaultColumnVisibility={{ business: false }}
-            defaultColumnPinning={{
-                left: ["customer"],
+            defaultColumnPinning={{ left: ["customer"] }}
+            loading={loading}
+            errorState={
+                failed ? (
+                    <BusinessFailureState
+                        title="客户目录加载失败"
+                        error={error}
+                        action={
+                            <Button
+                                id="customers-directory-retry"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={onRetry}
+                            >
+                                重试
+                            </Button>
+                        }
+                    />
+                ) : undefined
+            }
+            noScope={data?.emptyReason === "no_scope"}
+            hasActiveFilters={hasActiveFilters}
+            onClearFilters={onClearFilters}
+            clearFiltersButtonId="customers-directory-empty-clear-filters"
+            canCreate={canCreate}
+            onCreate={onCreate}
+            createButtonId="customers-directory-empty-create"
+            createLabel="新建客户"
+            emptyCopy={{
+                noScopeDescription: "当前没有客户查看范围，请联系管理员配置。",
+                filterDescription: `“${SCOPE_LABELS[scope]}”下没有符合条件的客户，可清除筛选后重试。`,
+                emptyTitle: "当前范围尚无客户",
+                emptyDescription: `“${SCOPE_LABELS[scope]}”下还没有客户。`,
             }}
-            onRowPreview={onOpenRow}
-            onRowOpen={onOpenRow}
+            onRowPreview={openRow}
+            onRowOpen={openRow}
         />
     )
 }

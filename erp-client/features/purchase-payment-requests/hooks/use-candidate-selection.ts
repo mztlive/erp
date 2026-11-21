@@ -11,7 +11,14 @@ export function useCandidateSelection(
     filters: CandidateFilters,
     onApply: (ids: string[]) => void,
 ) {
-    const [selection, setSelection] = useState<RowSelectionState>({})
+    const filterKey = JSON.stringify(filters)
+    const [state, setState] = useState<{
+        filterKey: string
+        selection: RowSelectionState
+    }>({ filterKey, selection: {} })
+    const selection = state.filterKey === filterKey ? state.selection : {}
+    const setSelection = (next: RowSelectionState) =>
+        setState({ filterKey, selection: next })
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const matching = usePaymentCandidateIdsQuery(filters)
@@ -26,12 +33,16 @@ export function useCandidateSelection(
         },
         [],
     )
-    const filterKey = JSON.stringify(filters)
     useEffect(() => {
         operation.current += 1
         inFlight.current = false
         setBusy(false)
         setError(null)
+        setState((current) =>
+            current.filterKey === filterKey
+                ? current
+                : { filterKey, selection: {} },
+        )
     }, [filterKey])
     const ids = Object.keys(selection).filter((id) => selection[id])
     const select = async (action: "all" | "apply") => {
@@ -48,10 +59,10 @@ export function useCandidateSelection(
             if (result.isError) throw result.error
             const available = result.data ?? []
             if (action === "all") {
-                setSelection((current) => ({
-                    ...current,
+                setSelection({
+                    ...selection,
                     ...Object.fromEntries(available.map((id) => [id, true])),
-                }))
+                })
                 return
             }
             const valid = new Set(available)

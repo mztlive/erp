@@ -1,19 +1,37 @@
 "use client"
+
 import { useMemo, useState } from "react"
-import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
-import { DataTable } from "@/components/business"
-import { ListWorkSurface } from "@/components/business/list-workspace"
-import { PortalListSearchForm } from "../components/portal-list-search-form"
+
+import {
+    TableIdentityCell,
+    TableRowActions,
+    TableTextCell,
+} from "@/components/business"
+import {
+    ListDataTable,
+    ListWorkSurface,
+    listWorkspaceFilterStatusText,
+    listWorkspaceStyles,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+
+import { PortalBatchDialog } from "../components/batch-dialog"
+import { PortalImage } from "../components/portal-image"
+import { PortalListSearchForm } from "../components/portal-list-search-form"
+import { usePortalProfile } from "../components/portal-session"
+import { PortalSurface } from "../components/surface"
+import { PortalTermsForm } from "../components/terms-form"
 import { usePortalCatalog } from "../hooks/queries"
 import type { PortalCatalogSku } from "../types"
-import { PortalError, PortalSurface } from "../components/surface"
-import { PortalTermsForm } from "../components/terms-form"
-import { PortalImage } from "../components/portal-image"
-import { usePortalProfile } from "../components/portal-session"
-import { PortalBatchDialog } from "../components/batch-dialog"
+
+const SEARCH_ID = "supplier-portal-catalog-search"
+
+function quoteActionId(skuId: string) {
+    return `supplier-portal-catalog-quote-${toAutomationIdSegment(skuId)}`
+}
+
 export function PortalQuotesPage() {
     const canMaintain = usePortalProfile()?.role === "maintainer"
     const [search, setSearch] = useState("")
@@ -26,46 +44,100 @@ export function PortalQuotesPage() {
         page: pagination.pageIndex + 1,
         page_size: pagination.pageSize,
     })
+    const applySearch = (value: string) => {
+        setQ(value.trim())
+        setPagination((p) => ({ ...p, pageIndex: 0 }))
+    }
     const columns = useMemo<ColumnDef<PortalCatalogSku>[]>(
         () => [
             {
+                accessorKey: "name",
+                header: "商品名称",
+                meta: { width: "flex" },
+                cell: ({ row: { original: sku } }) => (
+                    <TableIdentityCell
+                        primary={sku.name}
+                        primaryTitle={sku.name}
+                        secondary={sku.sku_no}
+                        secondaryTitle={sku.sku_no}
+                        numericSecondary
+                    />
+                ),
+            },
+            {
                 id: "image",
                 header: "图片",
+                meta: { width: "rate" },
                 cell: ({ row }) => (
                     <PortalImage
                         assetId={row.original.image_asset_id}
                         source={{ sku_id: row.original.id }}
                         alt={row.original.name}
+                        className="size-control rounded-md object-contain"
                     />
                 ),
             },
-            { accessorKey: "name", header: "商品名称" },
-            { accessorKey: "sku_no", header: "公司 SKU 编号" },
-            { accessorKey: "specification", header: "精确规格" },
-            { accessorKey: "unit_name", header: "报价单位" },
+            {
+                accessorKey: "sku_no",
+                header: "公司 SKU 编号",
+                meta: { width: "default", numeric: true },
+                cell: ({ row }) => (
+                    <TableTextCell
+                        value={row.original.sku_no}
+                        clamp={1}
+                        numeric
+                    />
+                ),
+            },
+            {
+                accessorKey: "specification",
+                header: "精确规格",
+                meta: { width: "default" },
+                cell: ({ row }) => (
+                    <TableTextCell
+                        value={row.original.specification}
+                        clamp={2}
+                        className="whitespace-normal"
+                    />
+                ),
+            },
+            {
+                accessorKey: "unit_name",
+                header: "报价单位",
+                meta: { width: "rate" },
+                cell: ({ row }) => (
+                    <TableTextCell value={row.original.unit_name} clamp={1} />
+                ),
+            },
             {
                 id: "actions",
                 header: "操作",
                 enableHiding: false,
-                cell: ({ row }) =>
-                    row.original.own_offering_id ? (
-                        <Link
-                            id={`supplier-portal-catalog-own-${toAutomationIdSegment(row.original.id)}`}
-                            href={`/supplier-portal/offerings/${encodeURIComponent(row.original.own_offering_id)}`}
-                            className="text-primary"
-                        >
-                            查看自己的供给
-                        </Link>
-                    ) : canMaintain ? (
-                        <Button
-                            id={`supplier-portal-catalog-quote-${toAutomationIdSegment(row.original.id)}`}
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setSelected(row.original)}
-                        >
-                            为此规格报价
-                        </Button>
-                    ) : null,
+                meta: { align: "end", width: "default" },
+                cell: ({ row: { original: sku } }) => {
+                    const ownOfferingId = sku.own_offering_id
+                    if (!ownOfferingId && !canMaintain) return null
+                    const idSegment = toAutomationIdSegment(sku.id)
+                    return (
+                        <TableRowActions
+                            moreId={`supplier-portal-catalog-more-${idSegment}`}
+                            moreLabel={`${sku.name} 更多操作`}
+                            actions={[
+                                ownOfferingId
+                                    ? {
+                                          id: `supplier-portal-catalog-own-${idSegment}`,
+                                          label: "查看自己的供给",
+                                          href: `/supplier-portal/offerings/${encodeURIComponent(ownOfferingId)}`,
+                                      }
+                                    : {
+                                          id: quoteActionId(sku.id),
+                                          label: "为此规格报价",
+                                          onClick: () => setSelected(sku),
+                                      },
+                            ]}
+                        />
+                    )
+                },
             },
         ],
         [canMaintain],
@@ -74,12 +146,13 @@ export function PortalQuotesPage() {
         <PortalSurface
             variant="list"
             title="已有商品报价"
-            description="查看采购方向您开放询价的商品规格，选择规格后可提交供货报价。"
             actions={
                 canMaintain ? (
                     <Button
                         id="supplier-portal-quotes-batch"
-                        variant="outline"
+                        type="button"
+                        variant="ghost"
+                        className={listWorkspaceStyles.quietButton}
                         onClick={() => setBatch(true)}
                     >
                         批量报价
@@ -89,47 +162,64 @@ export function PortalQuotesPage() {
         >
             <ListWorkSurface
                 ariaLabel="可报价目录"
-                selectionBar={
-                    <span className="text-sm">
-                        共 {query.data?.total ?? 0} 个规格
-                    </span>
-                }
                 toolbar={
                     <PortalListSearchForm
-                        searchId="supplier-portal-catalog-search"
+                        searchId={SEARCH_ID}
                         searchLabel="商品名称或编号"
                         placeholder="商品名称或编号"
                         value={search}
                         onChange={setSearch}
                         submitId="supplier-portal-catalog-search-submit"
-                        onSubmit={() => {
-                            setQ(search.trim())
-                            setPagination((p) => ({ ...p, pageIndex: 0 }))
-                        }}
+                        onSubmit={() => applySearch(search)}
+                        hasPendingChanges={search.trim() !== q}
+                        resultStatus={
+                            query.isFetching || query.isError
+                                ? listWorkspaceFilterStatusText({
+                                      loading: query.isFetching,
+                                      failed: query.isError,
+                                      noun: "商品规格",
+                                  })
+                                : null
+                        }
                     />
                 }
+                tableClassName="max-md:[&_[data-column-pinned]]:inset-x-auto! max-md:[&_[data-pinned-edge]]:shadow-none!"
                 table={
-                    <DataTable
+                    <ListDataTable
                         id="supplier-portal-catalog-table"
+                        entityName="商品规格"
+                        caption="可报价目录"
                         data={query.data?.items ?? []}
                         columns={columns}
                         getRowId={(row) => row.id}
+                        rowLabel={(row) => `${row.name}（${row.sku_no}）`}
+                        defaultColumnVisibility={{ sku_no: false }}
+                        defaultColumnPinning={{
+                            left: ["name"],
+                            right: ["actions"],
+                        }}
                         rowCount={query.data?.total ?? 0}
                         pagination={pagination}
                         onPaginationChange={setPagination}
+                        showToolbarSummary={false}
                         loading={query.isFetching}
-                        errorState={
-                            <PortalError
-                                error={query.error}
-                                retry={() => void query.refetch()}
-                                id="supplier-portal-catalog-retry"
-                            />
-                        }
-                        emptyState={
-                            <p className="p-6 text-sm text-muted-foreground">
-                                暂无开放询价的商品规格。未建档商品可从「新品提报」提交。
-                            </p>
-                        }
+                        isError={query.isError}
+                        error={query.error}
+                        onRetry={() => void query.refetch()}
+                        retryButtonId="supplier-portal-catalog-retry"
+                        hasActiveFilters={q !== ""}
+                        onClearFilters={() => {
+                            setSearch("")
+                            applySearch("")
+                            document.getElementById(SEARCH_ID)?.focus()
+                        }}
+                        clearFiltersButtonId="supplier-portal-catalog-empty-clear-filters"
+                        emptyCopy={{
+                            emptyTitle: "暂无开放询价的商品规格",
+                            emptyDescription: canMaintain
+                                ? "未建档商品可从「新品提报」提交。"
+                                : undefined,
+                        }}
                     />
                 }
             />
@@ -143,7 +233,16 @@ export function PortalQuotesPage() {
                         <Button
                             id="supplier-portal-quote-cancel"
                             variant="ghost"
-                            onClick={() => setSelected(null)}
+                            onClick={() => {
+                                setSelected(null)
+                                requestAnimationFrame(() => {
+                                    document
+                                        .getElementById(
+                                            quoteActionId(selected.id),
+                                        )
+                                        ?.focus()
+                                })
+                            }}
                         >
                             取消选择
                         </Button>

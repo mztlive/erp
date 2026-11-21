@@ -1,12 +1,15 @@
 "use client"
 
-import { EyeIcon } from "lucide-react"
-
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { BusinessStatusBadge, TableRowActions } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    TableIdentityCell,
+    TableRowActions,
+    TableTextCell,
+} from "@/components/business"
 import type { AuditEventRow } from "@/features/access-audit/types"
 import { formatDateTime } from "@/lib/datetime"
 
@@ -20,84 +23,79 @@ function useAuditColumns({ rowFocusRef, openEvent }: UseAuditColumnsInput) {
         () => [
             {
                 id: "time",
-                size: 175,
                 header: "时间",
+                meta: { width: "default", numeric: true },
                 cell: ({ row }) => (
-                    <span
-                        className="num whitespace-nowrap text-xs"
-                        title={formatDateTime(row.original.recordedAt, "full")}
-                    >
-                        {formatDateTime(row.original.recordedAt, "full")}
-                    </span>
+                    <TableTextCell
+                        value={formatDateTime(row.original.recordedAt, "full")}
+                        numeric
+                        clamp={1}
+                    />
                 ),
             },
             {
                 id: "actor",
                 header: "操作者",
                 cell: ({ row }) => (
-                    <div className="min-w-[7rem]">
-                        <div className="text-sm font-medium">
-                            {row.original.actorLabel}
-                        </div>
-                    </div>
+                    <TableTextCell value={row.original.actorLabel} clamp={1} />
                 ),
             },
             {
                 id: "action",
                 header: "操作",
                 cell: ({ row }) => (
-                    <span className="text-sm">{row.original.actionLabel}</span>
+                    <TableTextCell value={row.original.actionLabel} clamp={1} />
                 ),
             },
             {
                 id: "object",
-                size: 240,
                 header: "操作对象",
+                meta: { width: "flex" },
                 cell: ({ row }) => (
-                    <div className="min-w-[8rem]">
-                        <div className="truncate text-sm">
-                            {row.original.objectLabel}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                            {row.original.objectTypeLabel}
-                        </div>
-                    </div>
+                    <TableIdentityCell
+                        primary={row.original.objectLabel}
+                        primaryTitle={row.original.objectLabel}
+                        secondary={row.original.objectTypeLabel}
+                        secondaryTitle={row.original.objectTypeLabel}
+                    />
                 ),
             },
             {
                 id: "result",
                 header: "结果",
+                meta: { width: "status" },
                 cell: ({ row }) => (
                     <BusinessStatusBadge
+                        context="list"
                         label={row.original.resultLabel}
                         tone={row.original.resultTone}
+                        appearance={
+                            row.original.resultTone === "success"
+                                ? "quiet"
+                                : "badge"
+                        }
                     />
                 ),
             },
             {
                 id: "fields",
                 header: "变更",
+                meta: { width: "reference" },
                 cell: ({ row }) => (
-                    <span
-                        className="block max-w-[12rem] truncate text-sm"
-                        title={
-                            row.original.changedFieldDisplay !== "—"
-                                ? row.original.changedFieldDisplay
-                                : undefined
+                    <TableTextCell
+                        value={
+                            row.original.changedFieldDisplay === "—"
+                                ? null
+                                : row.original.changedFieldDisplay
                         }
-                    >
-                        {row.original.changedFieldDisplay !== "—"
-                            ? row.original.changedFieldDisplay
-                            : "—"}
-                    </span>
+                        clamp={1}
+                    />
                 ),
             },
             {
                 id: "actions",
-                meta: { align: "end" },
-                size: 104,
-                minSize: 104,
-                header: () => <span className="block text-right">查看</span>,
+                header: "查看",
+                meta: { align: "end", width: "status" },
                 cell: ({ row }) => {
                     const segment = toAutomationIdSegment(
                         row.original.auditEventId,
@@ -110,7 +108,6 @@ function useAuditColumns({ rowFocusRef, openEvent }: UseAuditColumnsInput) {
                                 {
                                     id: `operations-audit-events-row-${segment}-detail`,
                                     label: "详情",
-                                    icon: EyeIcon,
                                     buttonRef: (element) => {
                                         rowFocusRef.current.set(
                                             row.original.auditEventId,

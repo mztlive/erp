@@ -1,414 +1,348 @@
 "use client"
 
-import * as React from "react"
-import { useRouter } from "@/lib/navigation"
-import type { CustomerAccountPreviewTarget } from "@/features/customer-receivables/components/column-types"
-
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 
+import { BusinessFailureState, MoneyValue } from "@/components/business"
 import {
-    BusinessEmptyState,
-    BusinessFailureState,
-    BusinessTableFrame,
-    DataTable,
-    MoneyValue,
-} from "@/components/business"
-import {
+    ListDataTable,
     ListWorkSurface,
-    ListWorkspaceViews,
-    listWorkspaceEmptyStateClassName,
+    type ListDataTableEmptyCopy,
+    type ListDataTableProps,
 } from "@/components/business/list-workspace"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import type { CustomerAccountsLedgerListView } from "@/features/customer-receivables/api/list-view"
+import type { CustomerAccountPreviewTarget } from "@/features/customer-receivables/components/column-types"
 import {
     VIEW_LABEL,
-    type CustomerAccountsListView,
     type CustomerAccountsView,
     type ReceiptRow,
     type ReceivableAccountRow,
     type SalesInvoiceRow,
 } from "@/features/customer-receivables/types"
-import type { CustomerReceivablesPatchUrl } from "../hooks/use-customer-receivables-url-state"
 
-const CUSTOMER_RECEIVABLE_VIEWS = [
-    "receivable",
-    "receipt",
-    "sales_invoice",
-    "unallocated",
-] as const
+type TableKind = "receivable" | "receipt" | "invoice"
+type TableState = Pick<
+    ListDataTableProps<never>,
+    | "loading"
+    | "isError"
+    | "error"
+    | "onRetry"
+    | "noScope"
+    | "hasActiveFilters"
+    | "onClearFilters"
+>
 
-const embeddedEmptyStateClassName =
-    "rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-
-const CustomerReceivablesStandaloneListContext = React.createContext(false)
-
-export function CustomerReceivablesStandaloneListProvider({
-    children,
-}: {
-    children: React.ReactNode
-}) {
-    return (
-        <CustomerReceivablesStandaloneListContext.Provider value>
-            {children}
-        </CustomerReceivablesStandaloneListContext.Provider>
-    )
-}
-
-type CustomerReceivablesTableProps = {
+type CustomerReceivablesTableProps = TableState & {
     view: CustomerAccountsView
-    data: CustomerAccountsListView | undefined
-    isPending: boolean
-    isError: boolean
-    error: unknown
-    onRetry: () => void
-    metrics: CustomerAccountsListView["metrics"] | undefined
+    data: CustomerAccountsLedgerListView | undefined
     pagination: PaginationState
+    onPaginationChange: (next: PaginationState) => void
     receivableColumns: ColumnDef<ReceivableAccountRow>[]
     receiptColumns: ColumnDef<ReceiptRow>[]
     invoiceColumns: ColumnDef<SalesInvoiceRow>[]
     preview: CustomerAccountPreviewTarget | null
     onPreview: (target: CustomerAccountPreviewTarget) => void
+    canPreview: (kind: TableKind) => boolean
     toolbar: React.ReactNode
-    patchUrl: CustomerReceivablesPatchUrl
-    onPaginationChange: (next: PaginationState) => void
-    clearFilters: () => void
+    embedded: boolean
+}
+
+const EMPTY_COPY: ListDataTableEmptyCopy = {
+    filterTitle: "无匹配往来记录",
+    emptyTitle: "当前范围尚无客户往来记录",
+    emptyDescription: "可从销售单进入登记；登记后刷新查看。",
+    noScopeTitle: "暂无可查看的客户往来数据",
+    noScopeDescription:
+        "您当前尚未配置客户往来的数据查看范围，请联系管理员开通相应权限后再查询。",
+}
+const PAGE_SIZE_OPTIONS = [20]
+const PAIRED_PAGINATION = { pageIndex: 0, pageSize: PAGE_SIZE_OPTIONS[0] }
+const RECEIVABLE_ORDER = [
+    "party",
+    "order",
+    "open",
+    "settled",
+    "invoice",
+    "due",
+    "status",
+]
+const RECEIPT_ORDER = ["doc", "receivedAt", "amount", "alloc", "status"]
+const INVOICE_ORDER = ["doc", "date", "gross", "alloc", "status"]
+
+function LedgerTable<T>({
+    kind,
+    rows,
+    preview,
+    onPreview,
+    canPreview,
+    ...props
+}: Omit<
+    ListDataTableProps<T>,
+    "data" | "highlightedRowId" | "onRowPreview" | "onRowOpen"
+> & {
+    kind: TableKind
+    rows?: readonly T[]
+    preview: CustomerAccountPreviewTarget | null
+    onPreview: (target: CustomerAccountPreviewTarget) => void
+    canPreview: boolean
+    getRowId: (row: T) => string
+}) {
+    const open = canPreview
+        ? (row: T) => onPreview({ kind, id: props.getRowId(row) })
+        : undefined
+    return (
+        <ListDataTable
+            {...props}
+            data={[...(rows ?? [])]}
+            layout="flush"
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            onRowPreview={open}
+            onRowOpen={open}
+            highlightedRowId={preview?.kind === kind ? preview.id : undefined}
+        />
+    )
 }
 
 export function CustomerReceivablesTable({
     view,
     data,
-    isPending,
+    loading,
     isError,
     error,
     onRetry,
-    metrics,
+    noScope,
+    hasActiveFilters,
+    onClearFilters,
     pagination,
+    onPaginationChange,
     receivableColumns,
     receiptColumns,
     invoiceColumns,
     preview,
     onPreview,
+    canPreview,
     toolbar,
-    patchUrl,
-    onPaginationChange,
-    clearFilters,
+    embedded,
 }: CustomerReceivablesTableProps) {
-    const router = useRouter()
-    const standalone = React.useContext(
-        CustomerReceivablesStandaloneListContext,
+    const state = {
+        loading,
+        isError,
+        error,
+        onRetry,
+        noScope,
+        hasActiveFilters,
+        onClearFilters,
+    }
+    const paged = {
+        ...state,
+        entityName: VIEW_LABEL[view],
+        retryButtonId: "customer-receivables-list-retry",
+        clearFiltersButtonId: "customer-receivables-empty-clear-filters",
+        emptyCopy: EMPTY_COPY,
+        scrollable: !embedded,
+        className: !embedded
+            ? "[&_[data-slot=data-table-surface]]:flex [&_[data-slot=data-table-surface]]:flex-col [&_[data-slot=table-container]]:min-h-0 [&_[data-slot=table-container]]:flex-1"
+            : undefined,
+        showPagination: Boolean(data && !isError && !noScope && data.total > 0),
+        showColumnVisibility: !isError && !noScope,
+        enableColumnResizing: !isError && !noScope,
+        rowCount: data?.total ?? 0,
+        pagination,
+        onPaginationChange,
+        preview,
+        onPreview,
+    }
+    const renderReceivables = () => (
+        <LedgerTable
+            key="receivable"
+            {...paged}
+            kind="receivable"
+            id="customer-receivables-list-receivable"
+            caption="应收台账"
+            rows={data?.receivables}
+            columns={receivableColumns}
+            defaultColumnVisibility={{ settled: false }}
+            defaultColumnOrder={RECEIVABLE_ORDER}
+            defaultColumnPinning={{ left: ["party"] }}
+            getRowId={(row) => row.accountId}
+            rowLabel={(row) =>
+                `${row.counterpartyPartyName} · ${row.salesOrderNo} · 应收款项 ${row.accountSeq}`
+            }
+            canPreview={canPreview("receivable")}
+        />
+    )
+    const renderReceipts = () => (
+        <LedgerTable
+            key="receipt"
+            {...paged}
+            kind="receipt"
+            id="customer-receivables-list-receipt"
+            caption="客户回款"
+            rows={data?.receipts}
+            columns={receiptColumns}
+            defaultColumnOrder={RECEIPT_ORDER}
+            defaultColumnPinning={{ left: ["doc"] }}
+            getRowId={(row) => row.receiptId}
+            rowLabel={(row) =>
+                `${row.receiptNo} · ${row.counterpartyPartyName}`
+            }
+            canPreview={canPreview("receipt")}
+        />
+    )
+    const renderInvoices = () => (
+        <LedgerTable
+            key="invoice"
+            {...paged}
+            kind="invoice"
+            id="customer-receivables-list-invoice"
+            caption="销项发票"
+            rows={data?.invoices}
+            columns={invoiceColumns}
+            defaultColumnOrder={INVOICE_ORDER}
+            defaultColumnPinning={{ left: ["doc"] }}
+            getRowId={(row) => row.invoiceId}
+            rowLabel={(row) =>
+                `${row.invoiceNo} · ${row.counterpartyPartyName}`
+            }
+            canPreview={canPreview("invoice")}
+        />
     )
 
-    const changeView = (nextView: CustomerAccountsView) => {
-        // 非 receivable 视图隐藏 due/status/reviewStatus，切视图时清除残留
-        const patch: Record<string, string | null | undefined> = {
-            view: nextView,
-            page: null,
-        }
-        if (nextView !== "receivable") {
-            patch.due = null
-            patch.status = null
-        }
-        patchUrl(patch, { replace: true })
+    const unallocated = view === "unallocated"
+    const sectionProps = {
+        loading,
+        hasActiveFilters,
+        onClearFilters,
+        preview,
+        onPreview,
     }
-
-    const table =
-        isError && !data ? (
-            <BusinessFailureState
-                title="客户往来加载失败"
-                error={error}
-                action={
-                    <Button
-                        id="customer-receivables-list-retry"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={onRetry}
-                    >
-                        重试
-                    </Button>
-                }
-            />
-        ) : isPending && !data ? (
-            <div className="h-64 animate-pulse rounded-xl bg-muted" />
-        ) : view === "unallocated" && data ? (
-            <div className="space-y-6 p-1">
-                <Alert variant="info">
-                    <AlertTitle>待核销分区</AlertTitle>
-                    <AlertDescription>{data.unallocated.note}</AlertDescription>
-                </Alert>
-                <section className="space-y-2">
-                    <h3 className="text-sm font-semibold">
-                        待分配回款
-                        <span className="ml-2 text-xs font-normal text-muted-foreground">
-                            未分配{" "}
-                            <MoneyValue
-                                value={metrics?.unallocatedReceiptTotal ?? null}
-                                className="inline"
-                            />
-                        </span>
-                    </h3>
-                    {data.unallocated.receipts.length === 0 ? (
-                        <BusinessEmptyState
-                            kind="no-data"
-                            title="无待分配回款"
-                            description="已确认且仍有未分配余额的回款将出现在此。"
-                            className={embeddedEmptyStateClassName}
-                        />
-                    ) : (
-                        <DataTable
-                            id="customer-receivables-unallocated-receipts"
-                            data={[...data.unallocated.receipts]}
-                            columns={receiptColumns}
-                            getRowId={(r) => r.receiptId}
-                            onRowPreview={(row) =>
-                                onPreview({
-                                    kind: "receipt",
-                                    id: row.receiptId,
-                                })
-                            }
-                            highlightedRowId={
-                                preview?.kind === "receipt"
-                                    ? preview.id
-                                    : undefined
-                            }
-                            rowCount={data.unallocated.receipts.length}
-                            layout="flush"
-                            defaultColumnPinning={{
-                                left: ["doc"],
-                            }}
-                        />
-                    )}
-                </section>
-                <Separator />
-                <section className="space-y-2">
-                    <h3 className="text-sm font-semibold">
-                        待分配销项发票
-                        <span className="ml-2 text-xs font-normal text-muted-foreground">
-                            未分配{" "}
-                            <MoneyValue
-                                value={metrics?.unallocatedInvoiceTotal ?? null}
-                                className="inline"
-                            />
-                            （独立统计）
-                        </span>
-                    </h3>
-                    {data.unallocated.invoices.length === 0 ? (
-                        <BusinessEmptyState
-                            kind="no-data"
-                            title="无待分配销项发票"
-                            description="已登记蓝票且仍有未分配余额的发票将出现在此。"
-                            className={embeddedEmptyStateClassName}
-                        />
-                    ) : (
-                        <DataTable
-                            id="customer-receivables-unallocated-invoices"
-                            data={[...data.unallocated.invoices]}
-                            columns={invoiceColumns}
-                            getRowId={(r) => r.invoiceId}
-                            onRowPreview={(row) =>
-                                onPreview({
-                                    kind: "invoice",
-                                    id: row.invoiceId,
-                                })
-                            }
-                            highlightedRowId={
-                                preview?.kind === "invoice"
-                                    ? preview.id
-                                    : undefined
-                            }
-                            rowCount={data.unallocated.invoices.length}
-                            layout="flush"
-                            defaultColumnPinning={{
-                                left: ["doc"],
-                            }}
-                        />
-                    )}
-                </section>
-            </div>
-        ) : data?.total === 0 ? (
-            data.emptyReason === "FILTER_NO_RESULT" ? (
-                <BusinessEmptyState
-                    kind="filter"
-                    title="无匹配往来记录"
-                    description="无匹配记录，可清除筛选后重试。"
-                    className={
-                        standalone
-                            ? listWorkspaceEmptyStateClassName
-                            : embeddedEmptyStateClassName
-                    }
-                    action={
-                        <Button
-                            id="customer-receivables-empty-clear-filters"
-                            type="button"
-                            variant="secondary"
-                            className="rounded-lg shadow-none"
-                            onClick={clearFilters}
-                        >
-                            清除筛选
-                        </Button>
-                    }
-                />
-            ) : (
-                <BusinessEmptyState
-                    kind="no-data"
-                    title="当前范围尚无客户往来记录"
-                    description="可从销售单进入登记；登记后刷新查看。"
-                    className={
-                        standalone
-                            ? listWorkspaceEmptyStateClassName
-                            : embeddedEmptyStateClassName
-                    }
-                />
-            )
-        ) : view === "receivable" && data ? (
-            <DataTable
-                id="customer-receivables-list-receivable"
-                data={[...data.receivables]}
-                columns={receivableColumns}
-                defaultColumnVisibility={{ settled: false }}
-                getRowId={(r) => r.accountId}
-                onRowPreview={(row) =>
-                    onPreview({ kind: "receivable", id: row.accountId })
-                }
-                highlightedRowId={
-                    preview?.kind === "receivable" ? preview.id : undefined
-                }
-                rowCount={data.total}
-                pagination={pagination}
-                onPaginationChange={onPaginationChange}
-                layout="flush"
-                defaultColumnPinning={{
-                    left: ["party"],
-                }}
-            />
-        ) : view === "receipt" && data ? (
-            <DataTable
-                id="customer-receivables-list-receipt"
-                data={[...data.receipts]}
-                columns={receiptColumns}
-                getRowId={(r) => r.receiptId}
-                onRowPreview={(row) =>
-                    onPreview({ kind: "receipt", id: row.receiptId })
-                }
-                highlightedRowId={
-                    preview?.kind === "receipt" ? preview.id : undefined
-                }
-                rowCount={data.total}
-                pagination={pagination}
-                onPaginationChange={onPaginationChange}
-                layout="flush"
-                defaultColumnPinning={{
-                    left: ["doc"],
-                }}
-            />
-        ) : view === "sales_invoice" && data ? (
-            <DataTable
-                id="customer-receivables-list-invoice"
-                data={[...data.invoices]}
-                columns={invoiceColumns}
-                getRowId={(r) => r.invoiceId}
-                onRowPreview={(row) =>
-                    onPreview({ kind: "invoice", id: row.invoiceId })
-                }
-                highlightedRowId={
-                    preview?.kind === "invoice" ? preview.id : undefined
-                }
-                rowCount={data.total}
-                pagination={pagination}
-                onPaginationChange={onPaginationChange}
-                layout="flush"
-                defaultColumnPinning={{
-                    left: ["doc"],
-                }}
-            />
-        ) : (
-            <div className="h-40 animate-pulse rounded-xl bg-muted" />
-        )
-
-    if (!standalone) {
-        return (
-            <>
-                <Tabs
-                    value={view}
-                    onValueChange={(nextView) => {
-                        changeView(nextView as CustomerAccountsView)
-                    }}
-                >
-                    <TabsList
-                        variant="line"
-                        className="w-full overflow-x-auto border-b border-border"
-                    >
-                        {CUSTOMER_RECEIVABLE_VIEWS.map((item) => (
-                            <TabsTrigger
-                                key={item}
-                                value={item}
-                                id={`customer-receivables-view-${item}`}
-                            >
-                                {VIEW_LABEL[item]}
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
-                </Tabs>
-
-                <BusinessTableFrame
-                    showHeader
-                    title={
-                        <span className="inline-flex items-baseline gap-2">
-                            {VIEW_LABEL[view]}
-                            <span
-                                aria-live="polite"
-                                className="font-normal text-muted-foreground"
-                            >
-                                {(data?.total ?? 0).toLocaleString("zh-CN")} 条
-                            </span>
-                        </span>
-                    }
-                    description={
-                        <span aria-live="polite">
-                            {data?.filterSummary ?? "加载中…"}
-                        </span>
-                    }
-                    toolbar={toolbar}
-                    table={table}
-                />
-            </>
-        )
-    }
-
     return (
         <ListWorkSurface
-            ariaLabel="客户往来列表"
-            toolbarClassName="pt-3 pb-2"
-            views={
-                <ListWorkspaceViews
-                    ariaLabel="客户往来工作视图"
-                    items={[
-                        ...CUSTOMER_RECEIVABLE_VIEWS.map((item) => ({
-                            id: `customer-receivables-view-${item}`,
-                            label: VIEW_LABEL[item],
-                            count:
-                                item === view
-                                    ? (data?.total ?? 0).toLocaleString("zh-CN")
-                                    : undefined,
-                            active: item === view,
-                            onClick: () => changeView(item),
-                        })),
-                        {
-                            id: "customer-receivables-view-invoice-requests",
-                            label: "开票申请",
-                            active: false,
-                            onClick: () =>
-                                router.push(
-                                    "/finance/customer-accounts/invoice-requests",
-                                ),
-                        },
-                    ]}
+            ariaLabel={VIEW_LABEL[view]}
+            className={embedded ? undefined : "min-h-64"}
+            tableClassName={!embedded ? "flex flex-col" : undefined}
+            toolbar={toolbar}
+            table={
+                unallocated ? (
+                    isError ? (
+                        <BusinessFailureState
+                            idPrefix="customer-receivables-unallocated-failure"
+                            title="客户往来加载失败"
+                            error={error}
+                            action={
+                                <Button
+                                    id="customer-receivables-list-retry"
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={onRetry}
+                                >
+                                    重试
+                                </Button>
+                            }
+                        />
+                    ) : (
+                        <div className="min-h-0 flex-1 overflow-y-auto">
+                            {data?.unallocated.note ? (
+                                <p className="px-(--scaffold-px) py-2 text-xs text-muted-foreground">
+                                    {data.unallocated.note}
+                                </p>
+                            ) : null}
+                            <UnallocatedTable
+                                {...sectionProps}
+                                kind="receipt"
+                                title="待分配回款"
+                                amount={data?.metrics.unallocatedReceiptTotal}
+                                id="customer-receivables-unallocated-receipts"
+                                rows={data?.unallocated.receipts}
+                                columns={receiptColumns}
+                                defaultColumnOrder={RECEIPT_ORDER}
+                                getRowId={(row) => row.receiptId}
+                                rowLabel={(row) =>
+                                    `${row.receiptNo} · ${row.counterpartyPartyName}`
+                                }
+                                noScope={data?.unallocated.receiptsNoScope}
+                                clearFiltersButtonId="customer-receivables-empty-clear-filters"
+                                emptyDescription="已确认且仍有未分配余额的回款将出现在此。"
+                                canPreview={canPreview("receipt")}
+                            />
+                            <UnallocatedTable
+                                {...sectionProps}
+                                kind="invoice"
+                                title="待分配销项发票"
+                                amount={data?.metrics.unallocatedInvoiceTotal}
+                                id="customer-receivables-unallocated-invoices"
+                                rows={data?.unallocated.invoices}
+                                columns={invoiceColumns}
+                                defaultColumnOrder={INVOICE_ORDER}
+                                getRowId={(row) => row.invoiceId}
+                                rowLabel={(row) =>
+                                    `${row.invoiceNo} · ${row.counterpartyPartyName}`
+                                }
+                                noScope={data?.unallocated.invoicesNoScope}
+                                clearFiltersButtonId="customer-receivables-unallocated-invoices-empty-clear-filters"
+                                emptyDescription="已登记蓝票且仍有未分配余额的发票将出现在此。"
+                                canPreview={canPreview("invoice")}
+                            />
+                        </div>
+                    )
+                ) : view === "receivable" ? (
+                    renderReceivables()
+                ) : view === "receipt" ? (
+                    renderReceipts()
+                ) : (
+                    renderInvoices()
+                )
+            }
+        />
+    )
+}
+
+function UnallocatedTable<T>({
+    title,
+    amount,
+    emptyDescription,
+    ...props
+}: Omit<React.ComponentProps<typeof LedgerTable<T>>, "rowCount"> & {
+    title: string
+    amount?: string | null
+    emptyDescription: string
+}) {
+    const rowCount = props.rows?.length ?? 0
+    return (
+        <ListWorkSurface
+            ariaLabel={title}
+            className="rounded-none border-0 border-t border-border/60"
+            toolbar={
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <h3 className="text-body-compact font-medium">{title}</h3>
+                    {amount !== undefined ? (
+                        <span className="text-xs text-muted-foreground">
+                            未分配{" "}
+                            <MoneyValue value={amount} display="compact" />
+                            {props.kind === "invoice" ? "（独立统计）" : null}
+                        </span>
+                    ) : null}
+                </div>
+            }
+            table={
+                <LedgerTable
+                    {...props}
+                    caption={title}
+                    rowCount={rowCount}
+                    pagination={PAIRED_PAGINATION}
+                    showPagination={rowCount > 0}
+                    showColumnVisibility={!props.noScope}
+                    enableColumnResizing={!props.noScope}
+                    defaultColumnPinning={{ left: ["doc"] }}
+                    emptyCopy={{
+                        noScopeTitle: `暂无${title}查看范围`,
+                        filterTitle: `本页无匹配的${title}`,
+                        emptyTitle: `本页无${title}`,
+                        emptyDescription,
+                    }}
                 />
             }
-            toolbar={toolbar}
-            table={table}
         />
     )
 }

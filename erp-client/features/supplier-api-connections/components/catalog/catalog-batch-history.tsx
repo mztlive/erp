@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { ClipboardListIcon } from "lucide-react"
+import { listWorkspaceStyles } from "@/components/business/list-workspace"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -67,7 +68,12 @@ export function CatalogBatchHistory({
         >
             <DialogTrigger
                 id="supplier-catalog-batch-history-toggle"
-                render={<Button variant="outline" />}
+                render={
+                    <Button
+                        variant="ghost"
+                        className={listWorkspaceStyles.quietButton}
+                    />
+                }
             >
                 <ClipboardListIcon
                     data-icon="inline-start"

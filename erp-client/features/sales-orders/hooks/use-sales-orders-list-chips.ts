@@ -30,15 +30,18 @@ export function useSalesOrdersListChips(
     url: SalesOrdersUrlState,
     items: readonly SalesOrderListItem[],
     removeFilter: (key: SalesOrdersListFilterKey) => void,
+    enabled: boolean,
 ): readonly SalesOrdersAppliedChip[] {
     const creatorQuery = usePersonDirectorySelected(
         "business",
         url.createdBy ? [url.createdBy] : [],
+        enabled,
     )
     // 来源锁定条件命中时，当前页所有行都属于同一客户/合同，可用行数据解析业务名
     const sample = items[0]
 
     return React.useMemo(() => {
+        if (!enabled) return []
         const chips: SalesOrdersAppliedChip[] = []
         if (url.search) {
             chips.push({
@@ -193,6 +196,7 @@ export function useSalesOrdersListChips(
         creatorQuery.data,
         creatorQuery.isSuccess,
         creatorQuery.isFetching,
+        enabled,
         removeFilter,
         sample,
         url.closeStatus,

@@ -21,7 +21,6 @@ import {
     SOURCE_TYPE_LABEL,
     TRACK_LABEL,
     type AllocationTrack,
-    type PayableRow,
     type SupplierAccountsQuery,
     type SupplierAccountsView,
 } from "@/features/supplier-payables/types"
@@ -78,16 +77,15 @@ export function useSupplierAccountsFilters() {
         paymentGateParam === "satisfied" || paymentGateParam === "unsatisfied"
             ? paymentGateParam
             : undefined
-    const track =
+    const track: AllocationTrack | undefined =
         trackParam === "payment" || trackParam === "purchase_invoice"
             ? trackParam
             : undefined
 
+    const trackFilter: AllocationTrack | "all" = track ?? "all"
+
     const [searchInput, setSearchInput] = React.useState(qParam)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-    const hasStructuredFilters = Boolean(
-        supplierId || sourceType || paymentGate || track,
-    )
     const [panelOpen, setPanelOpen] = React.useState(false)
     const [supplierDraft, setSupplierDraft] = React.useState<string | null>(
         supplierId ?? null,
@@ -114,9 +112,10 @@ export function useSupplierAccountsFilters() {
         const page = pageParam ? Number.parseInt(pageParam, 10) : 1
         return Number.isFinite(page) && page >= 1 ? page - 1 : 0
     }, [pageParam])
+    const [pageSize, setPageSize] = React.useState(20)
     const pagination = React.useMemo<PaginationState>(
-        () => ({ pageIndex, pageSize: 20 }),
-        [pageIndex],
+        () => ({ pageIndex, pageSize }),
+        [pageIndex, pageSize],
     )
 
     const query = React.useMemo<SupplierAccountsQuery>(
@@ -143,32 +142,61 @@ export function useSupplierAccountsFilters() {
     )
     const listQuery = useSupplierAccountsQuery(query)
     const data = listQuery.data
+    const hasDueDates =
+        data?.payables.some(
+            (payable) => payable.dueDate && payable.dueState !== "unknown",
+        ) ?? false
+    const dueFilterUnavailable = Boolean(
+        view === "payable" && due && data?.payables.length && !hasDueDates,
+    )
 
     const sortedPayables = React.useMemo(() => {
-        const list = data?.payables ? [...data.payables] : []
+        const list = (data?.payables ?? []).filter((payable) => {
+            if (due && hasDueDates && payable.dueState !== due) return false
+            if (!paymentGate) return true
+            const summary = payable.paymentGateSummary?.state
+            if (summary) {
+                return (
+                    summary ===
+                    (paymentGate === "satisfied" ? "SATISFIED" : "BLOCKED")
+                )
+            }
+            const guidance = payable.paymentGuidance
+            if (!guidance?.prepayGate || guidance.prepaymentGap == null)
+                return false
+            const satisfied =
+                compareDecimal(guidance.prepaymentGap, "0", 2) === 0
+            return satisfied === (paymentGate === "satisfied")
+        })
         if (sorting.length === 0) return list
-        const { id, desc } = sorting[0]!
-        const direction = desc ? -1 : 1
-        if (id === "amounts" || id === "tracks") {
-            return list.sort(
-                (left, right) =>
-                    compareDecimal(
-                        id === "amounts" ? left.openTotal : left.settledTotal,
-                        id === "amounts" ? right.openTotal : right.settledTotal,
-                        2,
-                    ) * direction,
-            )
-        }
-        const key = (payable: PayableRow): string => {
-            if (id === "due") return payable.dueDate
-            if (id === "supplier") return payable.supplierName
-            return payable.payableAccountId
-        }
-        return list.sort(
-            (left, right) =>
-                key(left).localeCompare(key(right), "zh-CN") * direction,
-        )
-    }, [data?.payables, sorting])
+        return list.sort((left, right) => {
+            for (const { id, desc } of sorting) {
+                const direction = desc ? -1 : 1
+                if (id === "supplier") {
+                    const order = left.supplierName.localeCompare(
+                        right.supplierName,
+                        "zh-CN",
+                    )
+                    if (order) return order * direction
+                } else if (
+                    id === "openTotal" ||
+                    id === "grossTotal" ||
+                    id === "settledTotal" ||
+                    id === "invoicedTotal"
+                ) {
+                    const a = left[id]
+                    const b = right[id]
+                    if (a == null && b != null) return 1
+                    if (a != null && b == null) return -1
+                    if (a != null && b != null) {
+                        const order = compareDecimal(a, b, 2)
+                        if (order) return order * direction
+                    }
+                }
+            }
+            return 0
+        })
+    }, [data?.payables, due, hasDueDates, paymentGate, sorting])
 
     const patchUrl = React.useCallback<SupplierAccountsPatchUrl>(
         (patch, options) => {
@@ -180,13 +208,6 @@ export function useSupplierAccountsFilters() {
         },
         [pathname, router, searchParams, view],
     )
-    const switchView = React.useCallback(
-        (nextView: SupplierAccountsView) => {
-            patchUrl(patchForViewChange(nextView), { replace: true })
-        },
-        [patchUrl],
-    )
-
     const hasActiveFilters = Boolean(
         qParam.trim() ||
         supplierId ||
@@ -234,7 +255,7 @@ export function useSupplierAccountsFilters() {
         if (view === "unallocated") setTrackDraft("all")
     }, [view])
 
-    /** 取消、关闭、Esc 和外点只恢复低频草稿，保留搜索与常驻状态、到期。 */
+    /** 关闭托盘只恢复低频草稿，保留搜索与常驻筛选。 */
     const cancelMoreFilters = React.useCallback(() => {
         if (view === "payable") {
             setSupplierDraft(supplierId ?? null)
@@ -244,6 +265,17 @@ export function useSupplierAccountsFilters() {
         if (view === "unallocated") setTrackDraft(track ?? "all")
         setPanelOpen(false)
     }, [paymentGate, sourceType, supplierId, track, view])
+
+    const switchView = React.useCallback(
+        (nextView: SupplierAccountsView) => {
+            if (nextView !== view) cancelMoreFilters()
+            patchUrl(patchForViewChange(nextView), {
+                replace: true,
+                scroll: false,
+            })
+        },
+        [cancelMoreFilters, patchUrl, view],
+    )
 
     const hasPendingChanges =
         searchInput.trim() !== qParam.trim() ||
@@ -365,6 +397,12 @@ export function useSupplierAccountsFilters() {
 
     const handlePaginationChange = React.useCallback(
         (next: PaginationState) => {
+            if (next.pageSize !== pageSize) {
+                setPageSize(next.pageSize)
+                if (pageIndex !== 0)
+                    patchUrl({ page: null }, { replace: true, scroll: false })
+                return
+            }
             patchUrl(
                 {
                     page:
@@ -372,10 +410,10 @@ export function useSupplierAccountsFilters() {
                             ? null
                             : String(next.pageIndex + 1),
                 },
-                { replace: true },
+                { replace: true, scroll: false },
             )
         },
-        [patchUrl],
+        [pageIndex, pageSize, patchUrl],
     )
 
     React.useEffect(() => {
@@ -398,13 +436,13 @@ export function useSupplierAccountsFilters() {
         due,
         paymentGate,
         purchaseOrderId,
-        trackFilter: track ?? "all",
+        trackFilter,
+        dueFilterUnavailable,
         searchInput,
         setSearchInput,
         searchInputRef,
         panelOpen: (view === "payable" || view === "unallocated") && panelOpen,
         setPanelOpen,
-        hasStructuredFilters,
         appliedChips,
         applyFilters,
         resetMoreFilters,

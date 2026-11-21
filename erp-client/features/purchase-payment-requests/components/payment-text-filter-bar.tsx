@@ -1,49 +1,120 @@
 "use client"
 
+import { useRef, useState } from "react"
+import {
+    ListFilterSection,
+    ListFilterSections,
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    ListWorkspaceFilterField,
+    listWorkspaceStyles,
+    type ListWorkspaceFilterChip,
+} from "@/components/business/list-workspace"
 import { useAppForm } from "@/components/form"
-import { ListWorkspaceFilterBar } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
+import { listFilterText } from "@/lib/ui-text"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 import { PaymentListFilterInput } from "./payment-list-filter-input"
 
 type TextFilters = Record<string, string>
+type FilterField<T> = readonly [keyof T & string, string, string]
 
-/**
- * 可申请采购单与付款申请共用的文本筛选条。
- * 查询时去掉首尾空白；未传入重置回调时，重置直接提交空条件。
- */
+const isEntity = (key: string) =>
+    key === "supplier_id" || key === "payer_party_id"
+
 export function PaymentTextFilterBar<T extends TextFilters>({
     idPrefix,
     formAriaLabel,
     fields,
+    searchKey,
     applied,
     empty,
+    moreLegend,
     onApply,
     onReset,
-    chips,
-    idleHint,
+    scopeChip,
+    resultStatus,
 }: {
     idPrefix: string
     formAriaLabel: string
-    fields: readonly (readonly [keyof T & string, string, string])[]
+    fields: readonly FilterField<T>[]
+    searchKey: keyof T & string
     applied: T
     empty: T
-    onApply: (filters: T) => void
-    onReset?: () => void
-    chips?: { key: string; label: string; onClear: () => void }[]
-    idleHint: string
+    moreLegend: string
+    onApply: (filters: T, clearScope?: boolean) => void
+    onReset: () => void
+    scopeChip?: ListWorkspaceFilterChip
+    resultStatus?: string | null
 }) {
+    const searchInputRef = useRef<HTMLInputElement>(null)
+    useSearchHotkey(searchInputRef)
+    const [moreOpen, setMoreOpen] = useState(false)
     const form = useAppForm({
-        defaultValues: applied,
-        onSubmit: ({ value }) =>
-            onApply(
-                Object.fromEntries(
-                    Object.entries(value).map(([key, text]) => [
-                        key,
-                        text.trim(),
-                    ]),
-                ) as T,
-            ),
+        defaultValues: { ...applied } as TextFilters,
+        onSubmit: ({ value }) => {
+            setMoreOpen(false)
+            const filters = { ...applied }
+            for (const [key] of fields)
+                filters[key] = value[key].trim() as T[typeof key]
+            onApply(filters)
+        },
     })
+    const searchName: string = searchKey
+    const searchField = fields.find(([key]) => key === searchKey)
+    const primaryFields = fields.filter(([key]) => isEntity(key))
+    const moreFields = fields.filter(
+        ([key]) => key !== searchKey && !isEntity(key),
+    )
+    const idFor = (key: string) =>
+        `${idPrefix.replace(/-filters$/, "")}-filter-${key.replaceAll("_", "-")}`
+    const moreChips = moreFields.flatMap(([key, label]) =>
+        applied[key]
+            ? [
+                  {
+                      key,
+                      label: `${label}：${applied[key]}`,
+                      onClear: () => onApply({ ...applied, [key]: "" }),
+                  },
+              ]
+            : [],
+    )
+    const chips = scopeChip ? [scopeChip, ...moreChips] : moreChips
+
+    function renderField([key, label, placeholder]: FilterField<T>) {
+        const id = idFor(key)
+        const name: string = key
+        return (
+            <form.Field key={key} name={name}>
+                {(field) => {
+                    const input = (
+                        <PaymentListFilterInput
+                            id={id}
+                            name={key}
+                            label={label}
+                            value={field.state.value}
+                            onValueChange={field.handleChange}
+                            onBlur={field.handleBlur}
+                            placeholder={placeholder}
+                        />
+                    )
+                    return isEntity(key) ? (
+                        <div
+                            className="w-44 max-w-full min-w-0"
+                            data-has-value={Boolean(field.state.value)}
+                        >
+                            {input}
+                        </div>
+                    ) : (
+                        <ListWorkspaceFilterField htmlFor={id} label={label}>
+                            {input}
+                        </ListWorkspaceFilterField>
+                    )
+                }}
+            </form.Field>
+        )
+    }
+
     return (
         <form.Subscribe selector={(state) => state.values}>
             {(values) => (
@@ -51,54 +122,74 @@ export function PaymentTextFilterBar<T extends TextFilters>({
                     idPrefix={idPrefix}
                     formAriaLabel={formAriaLabel}
                     onSubmit={() => void form.handleSubmit()}
-                    search={null}
-                    className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:items-end"
-                    primaryFilters={fields.map(([key, label, placeholder]) => (
-                        <form.Field key={key} name={key}>
-                            {(field) => (
-                                <div className="flex w-52 max-w-full min-w-0 flex-col gap-1.5">
-                                    <label
-                                        className="text-xs text-muted-foreground"
-                                        htmlFor={`${idPrefix.replace(/-filters$/, "")}-filter-${key.replaceAll("_", "-")}`}
-                                    >
-                                        {label}
-                                    </label>
-                                    <PaymentListFilterInput
-                                        id={`${idPrefix.replace(/-filters$/, "")}-filter-${key.replaceAll("_", "-")}`}
-                                        name={key}
-                                        value={field.state.value as string}
-                                        onValueChange={(next) =>
+                    search={
+                        searchField ? (
+                            <form.Field name={searchName}>
+                                {(field) => (
+                                    <ListSearchField
+                                        id={idFor(searchKey)}
+                                        searchInputRef={searchInputRef}
+                                        value={field.state.value}
+                                        onChange={(value) =>
                                             field.handleChange(
-                                                next as typeof field.state.value,
+                                                value.slice(0, 200),
                                             )
                                         }
-                                        onBlur={field.handleBlur}
-                                        placeholder={placeholder}
+                                        placeholder={`搜索${searchField[2]}`}
+                                        aria-label={searchField[1]}
                                     />
-                                </div>
-                            )}
-                        </form.Field>
-                    ))}
+                                )}
+                            </form.Field>
+                        ) : null
+                    }
+                    primaryFilters={primaryFields.map(renderField)}
                     extraPrimary={
                         <Button
                             id={`${idPrefix}-reset`}
                             type="button"
-                            variant="outline"
+                            variant="ghost"
+                            className={listWorkspaceStyles.quietButton}
                             onClick={() => {
                                 form.reset(empty)
-                                if (onReset) onReset()
-                                else onApply(empty)
+                                setMoreOpen(false)
+                                onReset()
                             }}
                         >
-                            重置
+                            {listFilterText.reset}
                         </Button>
                     }
-                    {...(chips !== undefined ? { chips } : {})}
+                    morePresentation="popover"
+                    moreOpen={moreOpen}
+                    moreCount={moreChips.length}
+                    onToggleMore={() => {
+                        if (moreOpen) {
+                            for (const [key] of moreFields)
+                                form.setFieldValue<string>(key, applied[key])
+                        }
+                        setMoreOpen(!moreOpen)
+                    }}
+                    onResetMore={() => {
+                        for (const [key] of moreFields)
+                            form.setFieldValue<string>(key, empty[key])
+                    }}
+                    morePanel={
+                        <ListFilterSections>
+                            <ListFilterSection legend={moreLegend}>
+                                {moreFields.map(renderField)}
+                            </ListFilterSection>
+                        </ListFilterSections>
+                    }
+                    chips={chips}
+                    onClearAll={() => {
+                        const filters = { ...applied }
+                        for (const [key] of moreFields)
+                            filters[key] = empty[key]
+                        onApply(filters, Boolean(scopeChip))
+                    }}
                     hasPendingChanges={fields.some(
                         ([key]) => values[key].trim() !== applied[key],
                     )}
-                    resultStatus={null}
-                    idleHint={idleHint}
+                    resultStatus={resultStatus}
                 />
             )}
         </form.Subscribe>

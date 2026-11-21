@@ -1,53 +1,133 @@
 "use client"
 
-import { BanIcon, CircleCheckIcon, PencilIcon, PlusIcon } from "lucide-react"
-import { useState } from "react"
-import type { ColumnDef } from "@tanstack/react-table"
+import { PlusIcon } from "lucide-react"
+import { useRef, useState } from "react"
+import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 import {
-    DataTable,
-    PageActions,
-    PageHeader,
-    PageScaffold,
-    TableRowActions,
-} from "@/components/business"
-import {
+    BusinessFailureState,
+    BusinessStatusBadge,
+    ListDataTable,
     ListSearchField,
-    ListWorkSurface,
     ListWorkspaceFilterBar,
-    listWorkspaceFilterStatusText,
-} from "@/components/business/list-workspace"
+    ListWorkspacePage,
+    TableIdentityCell,
+    TableRowActions,
+    TableTextCell,
+} from "@/components/business"
+import { Alert } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { hasPermission } from "@/lib/permissions"
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorMessage, isPermissionDeniedError } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { hasPermission } from "@/lib/permissions"
+import { listFilterText } from "@/lib/ui-text"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
+import type { Company } from "./api"
 import { CompanyForm } from "./company-form"
 import { useCompaniesQuery, useSaveCompanyMutation } from "./queries"
-import type { Company } from "./api"
+
+const title = "公司主体"
+const createId = "companies-create"
+const emptyCompanies: Company[] = []
+const columnOrder = [
+    "legal_name",
+    "short_name",
+    "aliases",
+    "unified_credit_code",
+    "status",
+    "actions",
+]
+const columnVisibility = { short_name: false }
+const columnPinning = { left: ["legal_name"], right: ["actions"] }
 
 export const CompaniesPage = () => {
+    const account = useAccountProfileQuery()
+    if (account.isPending) {
+        return <ListWorkspacePage title={title} loading />
+    }
+    if (account.isError && !account.data) {
+        return (
+            <ListWorkspacePage
+                title={title}
+                alerts={
+                    <BusinessFailureState
+                        idPrefix="companies-account"
+                        error={account.error}
+                        onRetry={() => void account.refetch()}
+                    />
+                }
+            />
+        )
+    }
+    const permissions = account.data?.permissions
+    if (!hasPermission(permissions, "company:list")) {
+        return (
+            <ListWorkspacePage
+                title={title}
+                alerts={
+                    <BusinessFailureState
+                        kind="permission"
+                        title="无权查看公司主体"
+                    />
+                }
+            />
+        )
+    }
+    return (
+        <CompanyList
+            canCreate={hasPermission(permissions, "company:create")}
+            canUpdate={hasPermission(permissions, "company:update")}
+        />
+    )
+}
+
+function CompanyList({
+    canCreate,
+    canUpdate,
+}: {
+    canCreate: boolean
+    canUpdate: boolean
+}) {
+    const searchInputRef = useRef<HTMLInputElement>(null)
+    useSearchHotkey(searchInputRef)
     const [search, setSearch] = useState("")
     const [keyword, setKeyword] = useState("")
-    const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 })
-    const [editing, setEditing] = useState<Company | "new" | null>(null)
+    const [pagination, setPagination] = useState<PaginationState>({
+        pageIndex: 0,
+        pageSize: 20,
+    })
+    const [lastPageTotal, setLastPageTotal] = useState<number>()
+    const [editing, setEditing] = useState<{
+        company?: Company
+        triggerId: string
+    } | null>(null)
     const [error, setError] = useState("")
-    const account = useAccountProfileQuery()
-    const canCreate = hasPermission(account.data?.permissions, "company:create")
-    const canUpdate = hasPermission(account.data?.permissions, "company:update")
     const query = useCompaniesQuery({
         keyword,
         page: pagination.pageIndex + 1,
         page_size: pagination.pageSize,
     })
     const mutation = useSaveCompanyMutation()
-    const appliedKeyword = keyword.trim()
+    const hasPendingChanges = search.trim() !== keyword
+    const showAppliedKeyword = Boolean(keyword) && hasPendingChanges
+    const rowCount = query.data?.total ?? lastPageTotal
+    const changePagination = (next: PaginationState) => {
+        setLastPageTotal(rowCount)
+        setPagination(next)
+    }
     const applySearch = () => {
-        setKeyword(search.trim())
+        const nextKeyword = search.trim()
+        setSearch(nextKeyword)
+        setKeyword(nextKeyword)
+        setLastPageTotal(nextKeyword === keyword ? rowCount : undefined)
         setPagination((current) => ({ ...current, pageIndex: 0 }))
     }
     const clearSearch = () => {
         setSearch("")
         setKeyword("")
+        setLastPageTotal(undefined)
         setPagination((current) => ({ ...current, pageIndex: 0 }))
+        searchInputRef.current?.focus()
     }
     const changeStatus = async (company: Company) => {
         setError("")
@@ -69,104 +149,143 @@ export const CompaniesPage = () => {
         }
     }
     const columns: ColumnDef<Company>[] = [
-        { accessorKey: "legal_name", header: "公司全称" },
+        {
+            accessorKey: "legal_name",
+            header: "公司全称",
+            meta: { width: "flex" },
+            cell: ({ row }) => (
+                <TableIdentityCell
+                    primary={row.original.legal_name}
+                    primaryTitle={row.original.legal_name}
+                    secondary={row.original.short_name}
+                    secondaryTitle={row.original.short_name ?? undefined}
+                    className="w-0 min-w-full"
+                />
+            ),
+        },
         {
             accessorKey: "short_name",
             header: "简称",
-            cell: ({ row }) => row.original.short_name || "—",
+            cell: ({ row }) => (
+                <TableTextCell
+                    value={row.original.short_name}
+                    clamp={1}
+                    className="w-0 min-w-full"
+                />
+            ),
         },
         {
             accessorKey: "aliases",
             header: "导入别名",
-            cell: ({ row }) => row.original.aliases.join("、") || "—",
+            meta: { width: "reference" },
+            cell: ({ row }) => (
+                <TableTextCell
+                    value={row.original.aliases.join("、")}
+                    clamp={1}
+                    className="w-0 min-w-full"
+                />
+            ),
         },
         {
             accessorKey: "unified_credit_code",
             header: "统一社会信用代码",
-            cell: ({ row }) => row.original.unified_credit_code || "—",
+            cell: ({ row }) => (
+                <TableTextCell
+                    value={row.original.unified_credit_code}
+                    clamp={1}
+                    numeric
+                    className="w-0 min-w-full"
+                />
+            ),
         },
         {
             accessorKey: "status",
             header: "状态",
-            cell: ({ row }) =>
-                row.original.status === "active" ? "启用" : "停用",
+            meta: { width: "status" },
+            cell: ({ row }) => {
+                const active = row.original.status === "active"
+                const disabledHint =
+                    "停用后不再用于新资料选择，历史引用继续保留。"
+                return (
+                    <BusinessStatusBadge
+                        context="list"
+                        label={active ? "当前启用" : "当前停用"}
+                        tone={active ? "success" : "neutral"}
+                        appearance={active ? "quiet" : "badge"}
+                        title={active ? undefined : disabledHint}
+                        aria-description={active ? undefined : disabledHint}
+                    />
+                )
+            },
         },
-        ...((canUpdate
-            ? [
-                  {
-                      id: "actions",
-                      meta: { align: "end" },
-                      size: 168,
-                      minSize: 168,
-                      header: "操作",
-                      cell: ({ row }) => {
-                          const segment = toAutomationIdSegment(row.original.id)
-                          return (
-                              <TableRowActions
-                                  moreId={`company-more-${segment}`}
-                                  moreLabel={`${row.original.legal_name} 更多操作`}
-                                  actions={[
-                                      {
-                                          id: `company-edit-${segment}`,
-                                          label: "编辑",
-                                          icon: PencilIcon,
-                                          onClick: () =>
-                                              setEditing(row.original),
-                                      },
-                                      {
-                                          id: `company-status-${segment}`,
-                                          icon:
-                                              row.original.status === "active"
-                                                  ? BanIcon
-                                                  : CircleCheckIcon,
-                                          label:
-                                              row.original.status === "active"
-                                                  ? "停用"
-                                                  : "启用",
-                                          disabled: mutation.isPending,
-                                          loading:
-                                              mutation.isPending &&
-                                              mutation.variables?.id ===
-                                                  row.original.id,
-                                          onClick: () =>
-                                              void changeStatus(row.original),
-                                      },
-                                  ]}
-                              />
-                          )
-                      },
-                  },
-              ]
-            : []) satisfies ColumnDef<Company>[]),
     ]
-    return (
-        <PageScaffold density="compact">
-            <PageHeader
-                title="公司主体"
-                description="维护我方签约、付款公司及导入别名。停用后不再用于新资料选择，历史引用继续保留。"
-                actions={
-                    <PageActions
+    if (canUpdate) {
+        columns.push({
+            id: "actions",
+            header: "操作",
+            meta: { align: "end", width: "status" },
+            enableHiding: false,
+            cell: ({ row }) => {
+                const company = row.original
+                const segment = toAutomationIdSegment(company.id)
+                const editId = `company-edit-${segment}`
+                return (
+                    <TableRowActions
+                        moreId={`company-more-${segment}`}
+                        moreLabel={`${company.legal_name} 更多操作`}
                         actions={[
                             {
-                                hidden: !canCreate,
-                                id: "companies-create",
-                                actionKey: "create",
-                                label: "新建公司主体",
-                                icon: PlusIcon,
-                                onClick: () => setEditing("new"),
+                                id: editId,
+                                label: "编辑",
+                                onClick: () =>
+                                    setEditing({ company, triggerId: editId }),
+                            },
+                            {
+                                id: `company-status-${segment}`,
+                                label:
+                                    company.status === "active"
+                                        ? "停用"
+                                        : "启用",
+                                disabled: mutation.isPending,
+                                disabledReason: mutation.isPending
+                                    ? "正在更新公司状态，请稍候。"
+                                    : undefined,
+                                loading:
+                                    mutation.isPending &&
+                                    mutation.variables?.id === company.id,
+                                onClick: () => void changeStatus(company),
                             },
                         ]}
                     />
-                }
-            />
-            {(error || query.isError) && (
-                <p role="alert" className="text-sm text-destructive">
-                    {error || getErrorMessage(query.error, "公司主体加载失败")}
-                </p>
-            )}
-            <ListWorkSurface
-                ariaLabel="公司主体列表"
-                toolbar={
+                )
+            },
+        })
+    }
+
+    return (
+        <ListWorkspacePage
+            title={title}
+            actions={
+                canCreate
+                    ? [
+                          {
+                              id: createId,
+                              actionKey: "create",
+                              tier: "primary",
+                              label: "新建公司主体",
+                              icon: PlusIcon,
+                              onClick: () =>
+                                  setEditing({ triggerId: createId }),
+                          },
+                      ]
+                    : undefined
+            }
+            alerts={
+                error ? <Alert variant="destructive">{error}</Alert> : undefined
+            }
+            surface={{
+                ariaLabel: "公司主体列表",
+                toolbar: (
                     <ListWorkspaceFilterBar
                         morePresentation="popover"
                         idPrefix="companies"
@@ -177,55 +296,102 @@ export const CompaniesPage = () => {
                         search={
                             <ListSearchField
                                 id="companies-search"
+                                searchInputRef={searchInputRef}
                                 value={search}
                                 onChange={setSearch}
                                 placeholder="搜索公司名称或别名"
                                 aria-label="搜索公司名称或别名"
                             />
                         }
-                        resultStatus={listWorkspaceFilterStatusText({
-                            loading: query.isFetching,
-                            failed: query.isError,
-                            resultCount: query.data
-                                ? query.data.total
-                                : undefined,
-                            noun: "条",
-                            loadingLabel: "正在加载公司主体…",
-                        })}
+                        resultStatus={
+                            query.isError
+                                ? "查询未完成"
+                                : query.isFetching
+                                  ? "查询中…"
+                                  : null
+                        }
                         chips={
-                            appliedKeyword
-                                ? [
-                                      {
-                                          key: "q",
-                                          label: `搜索：${appliedKeyword}`,
-                                      },
-                                  ]
+                            showAppliedKeyword
+                                ? [{ key: "q", label: `搜索：${keyword}` }]
                                 : []
                         }
                         onClearChip={clearSearch}
                         onClearAll={clearSearch}
-                        hasPendingChanges={search.trim() !== appliedKeyword}
+                        extraPrimary={
+                            keyword && !showAppliedKeyword ? (
+                                <Button
+                                    id="companies-clear"
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-control font-normal text-muted-foreground"
+                                    onClick={clearSearch}
+                                >
+                                    {listFilterText.clear}
+                                </Button>
+                            ) : undefined
+                        }
+                        hasPendingChanges={hasPendingChanges}
                     />
-                }
-                table={
-                    <DataTable
+                ),
+                tableClassName:
+                    "[&_[data-column-id='unified_credit_code']]:w-48 [&_[data-column-id='unified_credit_code']]:min-w-44 max-sm:[&_[data-column-id='legal_name']]:min-w-36",
+                table: (
+                    <ListDataTable
                         id="companies-table"
-                        data={query.data?.items ?? []}
+                        entityName={title}
+                        caption="公司主体列表"
+                        data={query.data?.items ?? emptyCompanies}
                         columns={columns}
+                        defaultColumnOrder={columnOrder}
+                        defaultColumnVisibility={columnVisibility}
+                        defaultColumnPinning={columnPinning}
                         getRowId={(row) => row.id}
-                        rowCount={query.data?.total ?? 0}
+                        rowLabel={(row) => row.legal_name}
+                        rowCount={rowCount ?? 0}
                         pagination={pagination}
-                        onPaginationChange={setPagination}
-                        loading={query.isFetching}
+                        onPaginationChange={changePagination}
+                        showPagination={
+                            !query.isError && rowCount !== undefined
+                        }
+                        showToolbarSummary={false}
+                        loading={query.isPending || query.isFetching}
+                        isError={query.isError}
+                        error={query.error ?? undefined}
+                        onRetry={
+                            isPermissionDeniedError(query.error)
+                                ? undefined
+                                : () => void query.refetch()
+                        }
+                        hasActiveFilters={Boolean(keyword)}
+                        onClearFilters={clearSearch}
+                        canCreate={canCreate}
+                        onCreate={() =>
+                            setEditing({
+                                triggerId: "companies-table-empty-create",
+                            })
+                        }
+                        emptyCopy={{
+                            emptyDescription:
+                                "公司主体用于我方签约、付款及导入匹配。",
+                        }}
                     />
-                }
-            />
-            {editing && (editing === "new" ? canCreate : canUpdate) && (
+                ),
+            }}
+        >
+            {editing && (editing.company ? canUpdate : canCreate) ? (
                 <CompanyForm
-                    company={editing === "new" ? undefined : editing}
+                    company={editing.company}
                     onClose={() => setEditing(null)}
+                    finalFocus={() =>
+                        document.getElementById(editing.triggerId) ??
+                        (!editing.company
+                            ? document.getElementById(createId)
+                            : null) ??
+                        searchInputRef.current
+                    }
                 />
-            )}
-        </PageScaffold>
+            ) : null}
+        </ListWorkspacePage>
     )
 }

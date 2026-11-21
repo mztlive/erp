@@ -1,31 +1,31 @@
 "use client"
-import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 
-import * as React from "react"
+import type * as React from "react"
 
 import { OptionCombobox } from "@/components/business"
 import {
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
-    listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
-import type {
-    CustomerAppliedChip,
-    CustomerFilterKey,
-} from "@/features/customers/hooks/use-customer-center-directory-state"
+import { Button } from "@/components/ui/button"
+import type { CustomerAppliedChip } from "@/features/customers/hooks/use-customer-center-directory-state"
 import type { DirectoryStatus } from "@/features/customers/lib/directory-url"
+import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import { selectedOrgUnitIds } from "@/features/organization/lib/organization-ids"
+import { listFilterText } from "@/lib/ui-text"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
+
+const FOLDED_CHIP_KEYS = ["orgUnitIds"] as const
 
 const STATUS_OPTIONS = [
     { value: "all", label: "全部" },
     { value: "active", label: "启用" },
     { value: "disabled", label: "停用" },
 ] as const
-
-const MORE_CHIP_KEYS: readonly CustomerFilterKey[] = ["orgUnitIds"]
 
 /**
  * 客户中心目录工具条：负责销售和状态常驻，组织在更多筛选。
@@ -47,15 +47,14 @@ export function CustomerCenterDirectoryToolbar({
     panelOpen,
     setPanelOpen,
     appliedChips,
-    removeFilter,
+    removeOrgFilter,
     applyFilters,
     resetMoreFilters,
     cancelMoreFilters,
     clearAllFilters,
     hasPendingChanges,
-    resultCount,
-    loading,
-    failed,
+    hasActiveFilters,
+    resultStatus,
 }: {
     canFilterOwner: boolean
     canFilterOrg: boolean
@@ -73,25 +72,18 @@ export function CustomerCenterDirectoryToolbar({
     panelOpen: boolean
     setPanelOpen: (open: boolean) => void
     appliedChips: readonly CustomerAppliedChip[]
-    removeFilter: (key: CustomerFilterKey) => void
+    removeOrgFilter: () => void
     applyFilters: () => void
     resetMoreFilters: () => void
     cancelMoreFilters: () => void
     clearAllFilters: () => void
     hasPendingChanges: boolean
-    resultCount?: number
-    loading?: boolean
-    failed?: boolean
+    hasActiveFilters: boolean
+    resultStatus: string | null
 }) {
-    const moreCount = appliedChips.filter((chip) =>
-        MORE_CHIP_KEYS.includes(chip.key),
-    ).length
-
     return (
         <ListWorkspaceFilterBar
             morePresentation="popover"
-            moreSize="compact"
-            className="[&_[data-slot=list-toolbar-search]]:lg:w-80 [&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix="customers-directory"
             formAriaLabel="客户目录查询"
             onSubmit={applyFilters}
@@ -108,7 +100,6 @@ export function CustomerCenterDirectoryToolbar({
                     aria-label="搜索客户"
                 />
             }
-            moreCount={moreCount}
             moreOpen={panelOpen}
             onToggleMore={() =>
                 panelOpen ? cancelMoreFilters() : setPanelOpen(true)
@@ -119,7 +110,7 @@ export function CustomerCenterDirectoryToolbar({
             primaryFilters={
                 <>
                     {canFilterOwner && (
-                        <div className="empty:hidden w-56 min-w-0 max-w-full">
+                        <div className="w-44 min-w-0 max-w-full empty:hidden">
                             <PersonDirectoryFilter
                                 id="customers-directory-owner"
                                 category="sales"
@@ -134,10 +125,10 @@ export function CustomerCenterDirectoryToolbar({
                     )}
                     <OptionCombobox
                         id="customers-directory-status"
-                        className="w-36 min-w-0 max-w-full"
+                        className="w-32 min-w-0 max-w-full"
                         filterLabel="状态"
                         aria-label="状态"
-                        allowClear={false}
+                        allowClear={statusDraft !== "active"}
                         value={statusDraft}
                         options={STATUS_OPTIONS}
                         onValueChange={(value) => {
@@ -151,31 +142,45 @@ export function CustomerCenterDirectoryToolbar({
                     />
                 </>
             }
-            morePanel={
-                canFilterOrg ? (
-                    <OrganizationUnitFilter
-                        id="customers-directory-org"
-                        label="组织"
-                        value={orgDraft}
-                        onChange={setOrgDraft}
-                        includeDescendants={descendantsDraft}
-                        onDescendantsChange={setDescendantsDraft}
-                    />
+            extraPrimary={
+                hasActiveFilters && appliedChips.length === 0 ? (
+                    <Button
+                        id="customers-directory-clear-all"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearAllFilters}
+                    >
+                        {listFilterText.clear}
+                    </Button>
                 ) : undefined
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "个客户",
-                loadingLabel: "正在加载客户…",
-            })}
+            morePanel={
+                canFilterOrg ? (
+                    <ListFilterSections>
+                        <ListFilterSection
+                            legend="归属"
+                            gridClassName="max-w-lg grid-cols-[minmax(0,1fr)]"
+                        >
+                            <OrganizationUnitFilter
+                                id="customers-directory-org"
+                                label="组织"
+                                value={orgDraft}
+                                onChange={setOrgDraft}
+                                includeDescendants={descendantsDraft}
+                                onDescendantsChange={setDescendantsDraft}
+                            />
+                        </ListFilterSection>
+                    </ListFilterSections>
+                ) : undefined
+            }
+            resultStatus={resultStatus}
             chips={appliedChips}
-            onClearChip={(key) => removeFilter(key as CustomerFilterKey)}
+            foldedChipKeys={FOLDED_CHIP_KEYS}
+            onClearChip={removeOrgFilter}
             onClearAll={clearAllFilters}
             hasPendingChanges={hasPendingChanges}
             pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-            idleHint="导出与当前查询结果一致"
         />
     )
 }

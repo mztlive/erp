@@ -30,10 +30,8 @@ export type CustomerCenterDirectoryPatch = {
 }
 
 /** 可被单独移除的已生效筛选条件。 */
-export type CustomerFilterKey = "q" | "status" | "ownerUserIds" | "orgUnitIds"
-
 export type CustomerAppliedChip = Readonly<{
-    key: CustomerFilterKey
+    key: "orgUnitIds"
     label: string
 }>
 
@@ -51,7 +49,7 @@ export function useCustomerCenterDirectoryState() {
     const accountProfile = useAccountProfileQuery()
     const permissions = accountProfile.data?.permissions
     const canCreate = hasPermission(permissions, "customer:create")
-    const canExport = hasPermission(permissions, "customer:list")
+    const canReadDirectory = hasPermission(permissions, "customer:list")
     const canOpenDetail = hasPermission(permissions, "customer:detail")
     const canReadAll = hasPermission(permissions, "customer_scope:detail")
     const canFilterOwner = hasPermission(permissions, "sales_person:list")
@@ -111,7 +109,7 @@ export function useCustomerCenterDirectoryState() {
     // URL 回填只同步 Draft
     React.useEffect(() => {
         setStatusDraft(status)
-    }, [status, ownerUserIds])
+    }, [status])
 
     const pushState = React.useCallback(
         (next: CustomerCenterDirectoryPatch) => {
@@ -195,33 +193,11 @@ export function useCustomerCenterDirectoryState() {
         [pushState],
     )
 
-    /** 移除单个已生效条件；状态移除后回到业务默认「启用」。 */
-    const removeFilter = React.useCallback(
-        (key: CustomerFilterKey) => {
-            if (key === "ownerUserIds") {
-                setOwnerDraft("")
-                pushState({ ownerUserIds: "", page: 1 })
-            }
-            if (key === "orgUnitIds") {
-                setOrgDraft("")
-                setDescendantsDraft(false)
-                pushState({
-                    orgUnitIds: "",
-                    includeDescendants: false,
-                    page: 1,
-                })
-            }
-            if (key === "q") {
-                setSearchDraft("")
-                pushState({ q: "", page: 1 })
-            }
-            if (key === "status") {
-                setStatusDraft("active")
-                pushState({ status: "active", page: 1 })
-            }
-        },
-        [pushState, setSearchDraft],
-    )
+    const removeOrgFilter = React.useCallback(() => {
+        setOrgDraft("")
+        setDescendantsDraft(false)
+        pushState({ orgUnitIds: "", includeDescendants: false, page: 1 })
+    }, [pushState])
 
     /** 只清组织草稿；保留搜索、负责销售、状态和当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
@@ -254,31 +230,18 @@ export function useCustomerCenterDirectoryState() {
         })
     }, [pushState, setSearchDraft])
 
-    /** 所有已生效筛选均可从 chip 单独撤销。 */
-    const appliedChips = React.useMemo<readonly CustomerAppliedChip[]>(() => {
-        const chips: CustomerAppliedChip[] = []
-        if (ownerUserIds)
-            chips.push({
-                key: "ownerUserIds",
-                label: `负责销售：已选 ${ownerUserIds.split(",").length} 人`,
-            })
-        if (orgUnitIds)
-            chips.push({
-                key: "orgUnitIds",
-                label: `组织：已选 ${orgUnitIds.split(",").length} 个${includeDescendants ? "（含下级）" : ""}`,
-            })
-        const trimmedQ = q.trim()
-        if (trimmedQ) {
-            chips.push({ key: "q", label: `搜索：${trimmedQ}` })
-        }
-        if (status !== "active") {
-            chips.push({
-                key: "status",
-                label: status === "all" ? "状态：全部" : "状态：停用",
-            })
-        }
-        return chips
-    }, [q, status, ownerUserIds, orgUnitIds, includeDescendants])
+    const appliedChips = React.useMemo<readonly CustomerAppliedChip[]>(
+        () =>
+            orgUnitIds
+                ? [
+                      {
+                          key: "orgUnitIds",
+                          label: `组织：已选 ${orgUnitIds.split(",").length} 个${includeDescendants ? "（含下级）" : ""}`,
+                      },
+                  ]
+                : [],
+        [orgUnitIds, includeDescendants],
+    )
 
     const hasStructuredFilters =
         status !== "active" || Boolean(ownerUserIds) || Boolean(orgUnitIds)
@@ -289,7 +252,7 @@ export function useCustomerCenterDirectoryState() {
         (canFilterOwner && ownerDraft !== ownerUserIds) ||
         (canFilterOrg &&
             (orgDraft !== orgUnitIds ||
-                descendantsDraft !== includeDescendants))
+                (Boolean(orgDraft) && descendantsDraft) !== includeDescendants))
 
     const handlePaginationChange = React.useCallback(
         (next: PaginationState) => {
@@ -306,10 +269,9 @@ export function useCustomerCenterDirectoryState() {
     const handleSortingChange = React.useCallback(
         (next: SortingState) => {
             const head = next[0]
-            if (!head || !SORT_COLUMN_TO_FIELD[head.id]) return
+            if (head && !SORT_COLUMN_TO_FIELD[head.id]) return
             pushState({
-                sort: head.id,
-                dir: head.desc ? "desc" : "asc",
+                dir: head?.desc === false ? "asc" : "desc",
                 page: 1,
             })
         },
@@ -317,8 +279,9 @@ export function useCustomerCenterDirectoryState() {
     )
 
     return {
+        accountProfile,
         canCreate,
-        canExport,
+        canReadDirectory,
         canOpenDetail,
         canReadAll,
         canFilterOwner,
@@ -335,7 +298,6 @@ export function useCustomerCenterDirectoryState() {
         scope,
         status,
         q,
-        sort,
         dir,
         page,
         searchDraft,
@@ -345,14 +307,13 @@ export function useCustomerCenterDirectoryState() {
         panelOpen,
         setPanelOpen,
         searchInputRef,
-        hasStructuredFilters,
         hasActiveFilters,
         hasPendingChanges,
         appliedChips,
         pushState,
         applyFilters,
         applyScope,
-        removeFilter,
+        removeOrgFilter,
         resetMoreFilters,
         cancelMoreFilters,
         clearAllFilters,
@@ -360,37 +321,4 @@ export function useCustomerCenterDirectoryState() {
         sorting,
         handleSortingChange,
     }
-}
-
-/** 在非输入控件焦点、且无 Dialog/Sheet 打开时按 “/” 聚焦客户搜索框。 */
-export function useCustomerCenterSearchShortcut() {
-    React.useEffect(() => {
-        const onKeyDown = (event: KeyboardEvent) => {
-            const target = event.target as HTMLElement | null
-            if (
-                target &&
-                (target.tagName === "INPUT" ||
-                    target.tagName === "TEXTAREA" ||
-                    target.tagName === "SELECT" ||
-                    target.isContentEditable)
-            ) {
-                return
-            }
-            if (
-                document.querySelector('[role="dialog"], [data-slot="sheet"]')
-            ) {
-                return
-            }
-            if (event.key === "/" && !event.metaKey && !event.ctrlKey) {
-                event.preventDefault()
-                document
-                    .querySelector<HTMLInputElement>(
-                        '[data-slot="customer-search"]',
-                    )
-                    ?.focus()
-            }
-        }
-        window.addEventListener("keydown", onKeyDown)
-        return () => window.removeEventListener("keydown", onKeyDown)
-    }, [])
 }

@@ -5,7 +5,13 @@ import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 import { ArrowUpRightIcon, EyeIcon, SearchIcon } from "lucide-react"
 
-import { StatusTrackSummary, TableRowActions } from "@/components/business"
+import {
+    QuantityValue,
+    StatusTrackSummary,
+    TableIdentityCell,
+    TableRowActions,
+    TableTextCell,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { SupplierOrderListRow } from "@/features/supplier-orders/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -32,62 +38,61 @@ export function useSupplierOrdersListColumns({
     canInvestigate: boolean
     canOpenIntegrationErrors: boolean
 }) {
-    return React.useMemo<ColumnDef<SupplierOrderListRow>[]>(
-        () => [
+    return React.useMemo<ColumnDef<SupplierOrderListRow>[]>(() => {
+        const columns: ColumnDef<SupplierOrderListRow>[] = [
             {
                 id: "identity",
                 accessorKey: "orderNo",
                 header: "供应商订单",
-                meta: { label: "供应商订单", width: "reference" },
-                cell: ({ row }) => (
-                    <div
-                        className="flex min-w-0 flex-col gap-0.5"
-                        data-focused={
-                            rows[focusedIndex]?.orderId === row.original.orderId
-                                ? "true"
-                                : undefined
-                        }
-                    >
-                        {canOpenDetail ? (
-                            <Button
-                                id={`supplier-orders-list-row-${toAutomationIdSegment(row.original.orderId)}-preview`}
-                                type="button"
-                                variant="link"
-                                size="xs"
-                                className="num h-auto justify-start px-0 text-sm"
-                                aria-label={`预览 ${row.original.orderNo}`}
-                                ref={(element) => {
-                                    if (element) {
-                                        rowRefs.current.set(
-                                            row.original.orderId,
-                                            element,
-                                        )
-                                    } else {
-                                        rowRefs.current.delete(
-                                            row.original.orderId,
-                                        )
-                                    }
-                                }}
-                                tabIndex={
-                                    rows[focusedIndex]?.orderId ===
-                                    row.original.orderId
-                                        ? 0
-                                        : -1
+                meta: { label: "供应商订单", width: "flex" },
+                cell: ({ row }) => {
+                    const { orderId, orderNo, supplierName } = row.original
+                    const focused = rows[focusedIndex]?.orderId === orderId
+
+                    return (
+                        <div data-focused={focused ? "true" : undefined}>
+                            <TableIdentityCell
+                                primary={
+                                    canOpenDetail ? (
+                                        <Button
+                                            id={`supplier-orders-list-row-${toAutomationIdSegment(orderId)}-preview`}
+                                            type="button"
+                                            variant="link"
+                                            size="xs"
+                                            className="num h-auto max-w-full justify-start px-0 text-body-compact font-medium"
+                                            aria-label={`预览 ${orderNo}`}
+                                            ref={(element) => {
+                                                if (element)
+                                                    rowRefs.current.set(
+                                                        orderId,
+                                                        element,
+                                                    )
+                                                else
+                                                    rowRefs.current.delete(
+                                                        orderId,
+                                                    )
+                                            }}
+                                            tabIndex={focused ? 0 : -1}
+                                            onClick={(event) => {
+                                                event.stopPropagation()
+                                                onPreview(orderId)
+                                            }}
+                                        >
+                                            <span className="truncate">
+                                                {orderNo}
+                                            </span>
+                                        </Button>
+                                    ) : (
+                                        <span className="num">{orderNo}</span>
+                                    )
                                 }
-                                onClick={() => onPreview(row.original.orderId)}
-                            >
-                                {row.original.orderNo}
-                            </Button>
-                        ) : (
-                            <span className="num font-medium">
-                                {row.original.orderNo}
-                            </span>
-                        )}
-                        <span className="truncate text-xs text-muted-foreground">
-                            {row.original.supplierName}
-                        </span>
-                    </div>
-                ),
+                                primaryTitle={orderNo}
+                                secondary={supplierName}
+                                secondaryTitle={supplierName}
+                            />
+                        </div>
+                    )
+                },
             },
             {
                 id: "tracks",
@@ -134,9 +139,10 @@ export function useSupplierOrdersListColumns({
                 meta: { label: "跟进人", width: "default" },
                 enableSorting: false,
                 cell: ({ row }) => (
-                    <span className="truncate text-body-compact">
-                        {row.original.followUpUserName || "—"}
-                    </span>
+                    <TableTextCell
+                        value={row.original.followUpUserName}
+                        clamp={1}
+                    />
                 ),
             },
             {
@@ -145,9 +151,10 @@ export function useSupplierOrdersListColumns({
                 meta: { label: "异常处理人", width: "default" },
                 enableSorting: false,
                 cell: ({ row }) => (
-                    <span className="truncate text-body-compact">
-                        {row.original.handlerUserName || "—"}
-                    </span>
+                    <TableTextCell
+                        value={row.original.handlerUserName}
+                        clamp={1}
+                    />
                 ),
             },
             {
@@ -155,16 +162,15 @@ export function useSupplierOrdersListColumns({
                 accessorKey: "externalOrderNo",
                 header: "外部单号",
                 meta: { label: "供应商外部单号", width: "reference" },
-                cell: ({ row }) =>
-                    row.original.externalOrderNo ? (
-                        <span className="num text-body-compact">
-                            {row.original.externalOrderNo}
-                        </span>
-                    ) : (
-                        <span className="text-xs text-muted-foreground">
-                            尚未返回
-                        </span>
-                    ),
+                cell: ({ row }) => (
+                    <TableTextCell
+                        value={row.original.externalOrderNo}
+                        emptyVariant="label"
+                        emptyLabel="尚未返回"
+                        clamp={1}
+                        numeric
+                    />
+                ),
             },
             {
                 id: "updated",
@@ -172,13 +178,15 @@ export function useSupplierOrdersListColumns({
                 header: "更新时间",
                 meta: { label: "更新时间", width: "default" },
                 cell: ({ row }) => (
-                    <span className="num text-body-compact text-muted-foreground">
-                        {formatDateTime(
+                    <TableTextCell
+                        value={formatDateTime(
                             row.original.lastBusinessAt,
                             "monthDayIntl",
                             "passthrough",
                         )}
-                    </span>
+                        numeric
+                        className="text-muted-foreground"
+                    />
                 ),
             },
             {
@@ -192,20 +200,22 @@ export function useSupplierOrdersListColumns({
                     numeric: true,
                 },
                 cell: ({ row }) => (
-                    <span className="num text-body-compact">
-                        {row.original.itemCount}
-                    </span>
+                    <QuantityValue
+                        value={String(row.original.itemCount)}
+                        unit="件"
+                    />
                 ),
             },
             {
                 id: "actions",
-                size: 284,
-                minSize: 284,
                 header: "操作",
-                meta: { label: "操作", width: "default", align: "end" },
+                meta: {
+                    label: "操作",
+                    width: "default",
+                    align: "end",
+                },
                 enableSorting: false,
                 cell: ({ row }) => {
-                    if (!canOpenDetail) return null
                     const r = row.original
                     const segment = toAutomationIdSegment(r.orderId)
                     const canQuery = r.allowedActions.includes("QUERY_RESULT")
@@ -227,7 +237,9 @@ export function useSupplierOrdersListColumns({
                                         icon: EyeIcon,
                                         onClick: () => onPreview(r.orderId),
                                         ...(resultUnknown && canInvestigate
-                                            ? { placement: "menu" as const }
+                                            ? {
+                                                  placement: "menu" as const,
+                                              }
                                             : {}),
                                     },
                                     {
@@ -247,7 +259,9 @@ export function useSupplierOrdersListColumns({
                                                   disabled:
                                                       !canQuery || queryPending,
                                                   loading: queryPending,
-                                                  emphasis: "outline" as const,
+                                                  disabledReason: !canQuery
+                                                      ? queryBlocker?.message
+                                                      : undefined,
                                                   onClick: () => {
                                                       void onQueryResult(r)
                                                   },
@@ -260,7 +274,7 @@ export function useSupplierOrdersListColumns({
                             resultUnknown &&
                             !canQuery &&
                             queryBlocker ? (
-                                <span className="max-w-[14rem] text-xs leading-tight text-muted-foreground">
+                                <span className="max-w-36 text-xs leading-4 whitespace-normal text-muted-foreground">
                                     {queryBlocker.message}
                                     {canOpenIntegrationErrors &&
                                     queryBlocker.destinationWorkspaceId ? (
@@ -270,6 +284,9 @@ export function useSupplierOrdersListColumns({
                                                 id={`supplier-orders-list-row-${segment}-integration-errors`}
                                                 href="/governance/integration-errors"
                                                 className="text-primary underline-offset-2 hover:underline"
+                                                onClick={(event) =>
+                                                    event.stopPropagation()
+                                                }
                                             >
                                                 前往接口错误中心
                                             </Link>
@@ -286,16 +303,19 @@ export function useSupplierOrdersListColumns({
                     )
                 },
             },
-        ],
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers stable enough for list
-        [
-            canOpenDetail,
-            canInvestigate,
-            canOpenIntegrationErrors,
-            focusedIndex,
-            onPreview,
-            queryPending,
-            rows,
-        ],
-    )
+        ]
+        return canOpenDetail
+            ? columns
+            : columns.filter((column) => column.id !== "actions")
+    }, [
+        canOpenDetail,
+        canInvestigate,
+        canOpenIntegrationErrors,
+        focusedIndex,
+        onPreview,
+        onQueryResult,
+        queryPending,
+        rowRefs,
+        rows,
+    ])
 }

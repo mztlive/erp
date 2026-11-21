@@ -10,6 +10,7 @@ import type {
 import { BusinessEmptyState, PageScaffold } from "@/components/business"
 import {
     ListWorkspaceHeader,
+    listWorkspaceEmptyStateClassName,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import type {
@@ -135,7 +136,10 @@ export function CustomerQualityMainView({
                     onExport={onExport}
                 />
             ) : (
-                <ListWorkspaceHeader eyebrow="分析" title="客户经营质量" />
+                <ListWorkspaceHeader
+                    className="py-2 md:min-h-12"
+                    title="客户经营质量"
+                />
             )}
 
             {data ? (
@@ -144,6 +148,15 @@ export function CustomerQualityMainView({
                     freshness={data.freshness}
                 />
             ) : null}
+
+            {exportJob ? (
+                <CustomerQualityExportProgress job={exportJob} />
+            ) : null}
+
+            <BusinessTagDialog
+                tag={tagDialog}
+                onOpenChange={onTagDialogOpenChange}
+            />
 
             <DualQualitySection from={resolvedFrom} to={resolvedTo} />
 
@@ -162,6 +175,7 @@ export function CustomerQualityMainView({
             {data?.emptyKind === "no-scope" ? (
                 <BusinessEmptyState
                     kind="no-scope"
+                    className={listWorkspaceEmptyStateClassName}
                     title="当前角色无客户数据范围"
                     description="当前角色无客户数据范围，请申请权限。"
                 />
@@ -213,7 +227,6 @@ export function CustomerQualityMainView({
                         </>
                     ) : null}
 
-                    {/* Customer detail table */}
                     <CustomerQualityDetailTable
                         sectionRef={tableSectionRef}
                         items={items}
@@ -233,15 +246,6 @@ export function CustomerQualityMainView({
                     />
                 </>
             )}
-
-            {exportJob ? (
-                <CustomerQualityExportProgress job={exportJob} />
-            ) : null}
-
-            <BusinessTagDialog
-                tag={tagDialog}
-                onOpenChange={onTagDialogOpenChange}
-            />
         </PageScaffold>
     )
 }

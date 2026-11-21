@@ -2,24 +2,20 @@
 
 import * as React from "react"
 import {
-    BusinessEmptyState,
-    BusinessFailureState,
-    DataTable,
-    PageScaffold,
-} from "@/components/business"
-import {
-    ListWorkSurface,
-    ListWorkspaceHeader,
-    listWorkspaceEmptyStateClassName,
-    listWorkspaceStyles as styles,
+    ListDataTable,
+    ListWorkspacePage,
 } from "@/components/business/list-workspace"
-import { Button } from "@/components/ui/button"
 import { getErrorMessage } from "@/lib/api/errors"
 import { restoreListRowFocus } from "@/lib/list-row-focus"
 import { hasPermission } from "@/lib/permissions"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import type { BackgroundJobView, CancelAllBackgroundJobsResult } from "../api"
-import { isBackgroundJobAdmin, isJobActive } from "../labels"
+import {
+    backgroundJobIdentity,
+    isBackgroundJobAdmin,
+    isJobActive,
+} from "../labels"
 import {
     useBackgroundJobDetailQuery,
     useBackgroundJobItemsQuery,
@@ -60,6 +56,7 @@ export function BackgroundJobsWorkspace() {
         React.useState<CancelAllBackgroundJobsResult | null>(null)
     const lastFocusedRowId = React.useRef<string | null>(null)
     const searchInputRef = React.useRef<HTMLInputElement>(null)
+    useSearchHotkey(searchInputRef)
 
     const jobsQuery = useBackgroundJobsQuery(filters.listParams)
     const authorizedPreviewId = canReadDetail ? previewId : null
@@ -135,109 +132,98 @@ export function BackgroundJobsWorkspace() {
     )
 
     return (
-        <PageScaffold density="compact" className={styles.page}>
-            <ListWorkspaceHeader
-                eyebrow="治理"
-                title="后台任务"
-                description="集中查看商品导入、业务导出等后台任务的进度与结果，取消尚未完成的任务。"
-            >
-                {canStopAll ? (
-                    <Button
-                        id={`${ID_PREFIX}-stop-all`}
-                        type="button"
-                        variant="destructive"
-                        onClick={openStopAll}
-                    >
-                        停止并取消所有任务
-                    </Button>
-                ) : null}
-            </ListWorkspaceHeader>
-            <ListWorkSurface
-                ariaLabel="后台任务"
-                toolbar={
+        <ListWorkspacePage
+            title="后台任务"
+            actions={
+                canStopAll
+                    ? [
+                          {
+                              id: `${ID_PREFIX}-stop-all`,
+                              actionKey: "stop-all",
+                              type: "button",
+                              label: "停止并取消所有任务",
+                              tier: "quiet",
+                              className:
+                                  "text-destructive hover:bg-destructive-soft hover:text-destructive",
+                              onClick: openStopAll,
+                          },
+                      ]
+                    : undefined
+            }
+            loading={jobsQuery.isPending && !jobsQuery.isFetched}
+            surface={{
+                ariaLabel: "后台任务",
+                tableActions: isAdmin ? undefined : (
+                    <span className="hidden text-xs text-muted-foreground xl:inline">
+                        仅显示我创建的后台任务
+                    </span>
+                ),
+                toolbar: (
                     <BackgroundJobsToolbar
                         filters={filters}
                         isAdmin={isAdmin}
                         jobsQuery={jobsQuery}
                         searchInputRef={searchInputRef}
                     />
-                }
-                table={
-                    <DataTable
+                ),
+                tableClassName:
+                    "max-sm:[&_[data-column-id=job]]:min-w-table-column-default-min",
+                table: (
+                    <ListDataTable
                         id={`${ID_PREFIX}-table`}
+                        entityName="后台任务"
                         data={rows}
                         columns={columns}
+                        defaultColumnOrder={[
+                            "job",
+                            "status",
+                            "progress",
+                            "created",
+                            "actions",
+                        ]}
+                        defaultColumnPinning={{
+                            left: ["job"],
+                            right: ["actions"],
+                        }}
                         getRowId={(row) => row.id}
+                        rowLabel={(row) => {
+                            const { title, number } = backgroundJobIdentity(row)
+                            return `${title}（${number}）`
+                        }}
                         rowCount={jobsQuery.data?.total ?? 0}
                         pagination={{
                             pageIndex: page - 1,
-                            pageSize: 20,
+                            pageSize: filters.listParams.page_size,
                         }}
+                        pageSizeOptions={[filters.listParams.page_size]}
                         onPaginationChange={(next) => {
                             setPage(next.pageIndex + 1)
                         }}
-                        loading={jobsQuery.isPending}
-                        showRefreshingBanner={false}
-                        layout="flush"
+                        loading={jobsQuery.isFetching}
+                        showRefreshingBanner={jobsQuery.isPlaceholderData}
+                        isError={
+                            jobsQuery.isError ||
+                            (!jobsQuery.isPending && !jobsQuery.data)
+                        }
+                        error={jobsQuery.error}
+                        onRetry={() => void jobsQuery.refetch()}
+                        retryButtonId={`${ID_PREFIX}-retry`}
+                        hasActiveFilters={hasActiveFilters}
+                        onClearFilters={clearFilters}
+                        clearFiltersButtonId={`${ID_PREFIX}-empty-clear-filters`}
+                        emptyCopy={{
+                            filterDescription:
+                                "没有任务符合当前筛选条件，可清除筛选后重试。",
+                            emptyDescription:
+                                "在商品列表导入报价表，或在销售单、库存台账等页面发起导出后，进度会集中显示在这里。",
+                        }}
                         onRowPreview={canReadDetail ? openPreview : undefined}
+                        onRowOpen={canReadDetail ? openPreview : undefined}
                         highlightedRowId={authorizedPreviewId ?? undefined}
-                        errorState={
-                            jobsQuery.isError ? (
-                                <BusinessFailureState
-                                    error={jobsQuery.error}
-                                    action={
-                                        <Button
-                                            id={`${ID_PREFIX}-retry`}
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                                void jobsQuery.refetch()
-                                            }
-                                        >
-                                            重试
-                                        </Button>
-                                    }
-                                />
-                            ) : undefined
-                        }
-                        emptyState={
-                            !jobsQuery.isError && rows.length === 0 ? (
-                                <BusinessEmptyState
-                                    kind={
-                                        hasActiveFilters ? "filter" : "no-data"
-                                    }
-                                    className={listWorkspaceEmptyStateClassName}
-                                    title={
-                                        hasActiveFilters
-                                            ? "当前筛选无结果"
-                                            : "还没有后台任务"
-                                    }
-                                    description={
-                                        hasActiveFilters
-                                            ? "没有任务符合当前筛选条件，可清除筛选后重试。"
-                                            : "在商品列表导入报价表，或在销售单、库存台账等页面发起导出后，进度会集中显示在这里。"
-                                    }
-                                    action={
-                                        hasActiveFilters ? (
-                                            <Button
-                                                id={`${ID_PREFIX}-empty-clear-filters`}
-                                                type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                className="rounded-lg shadow-none"
-                                                onClick={clearFilters}
-                                            >
-                                                清除筛选
-                                            </Button>
-                                        ) : undefined
-                                    }
-                                />
-                            ) : undefined
-                        }
                     />
-                }
-            />
+                ),
+            }}
+        >
             <BackgroundJobPreviewSheet
                 previewId={authorizedPreviewId}
                 canCancel={canCancel}
@@ -278,6 +264,6 @@ export function BackgroundJobsWorkspace() {
                 pending={cancelAllMutation.isPending}
                 onConfirm={confirmStopAll}
             />
-        </PageScaffold>
+        </ListWorkspacePage>
     )
 }

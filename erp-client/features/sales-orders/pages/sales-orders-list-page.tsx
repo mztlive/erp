@@ -1,24 +1,22 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+import { DownloadIcon, PlusIcon } from "lucide-react"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { useRouter } from "@/lib/navigation"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
 
-import { PageScaffold } from "@/components/business"
-import {
-    ListWorkSurface,
-    ListWorkspaceViews,
-    listWorkspaceStyles as styles,
-} from "@/components/business/list-workspace"
+import { BusinessFailureState } from "@/components/business"
+import { ListWorkspacePage } from "@/components/business/list-workspace"
 import { salesOrdersListStyles as salesStyles } from "./sales-orders-list-styles"
 import { toast } from "@/components/ui/toast"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { downloadSalesOrderContractPdf } from "@/features/sales-orders/api/sales-orders"
 import { SalesOrdersListFilterBar } from "@/features/sales-orders/components/sales-orders-list-filter-bar"
-import { SalesOrdersListHeader } from "@/features/sales-orders/components/sales-orders-list-header"
+import { SalesOrdersListExportResult } from "@/features/sales-orders/components/sales-orders-list-header"
 import { SalesOrdersListTable } from "@/features/sales-orders/components/sales-orders-list-table"
 import type { SalesOrderSummaryFilter } from "@/features/sales-orders/lib/filter-orders"
 import { useSalesOrdersListChips } from "@/features/sales-orders/hooks/use-sales-orders-list-chips"
@@ -29,6 +27,8 @@ import { useSalesOrdersListUrlState } from "@/features/sales-orders/hooks/use-sa
 import { salesOrdersListFiltersActive } from "@/features/sales-orders/lib/sales-orders-list-filters"
 import { SORT_COLUMN_TO_FIELD } from "@/features/sales-orders/lib/sales-orders-list-query"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
+
+const CREATE_HREF = "/sales/orders?mode=create"
 
 const SUMMARY_FILTER_OPTIONS: ReadonlyArray<{
     value: SalesOrderSummaryFilter
@@ -51,12 +51,29 @@ export function SalesOrdersListPage() {
         account.data?.permissions,
         "sales_order:create",
     )
-    const canExport = hasPermission(
+    const canList = hasPermission(account.data?.permissions, "sales_order:list")
+    const canReadContract = hasPermission(
         account.data?.permissions,
-        "sales_order:list",
+        "contract:detail",
     )
     const { url, pushUrl } = useSalesOrdersListUrlState()
-    const { ordersQuery, query } = useSalesOrdersListQuery(url)
+    const { ordersQuery, query, identityReady } = useSalesOrdersListQuery(url, {
+        canList,
+        canReadContract,
+    })
+    const queryFailed = ordersQuery.isError || !identityReady
+    const [listSettled, setListSettled] = React.useState(false)
+    React.useEffect(() => {
+        if (
+            !listSettled &&
+            canList &&
+            (!ordersQuery.isPending || queryFailed)
+        ) {
+            setListSettled(true)
+        }
+    }, [canList, listSettled, ordersQuery.isPending, queryFailed])
+    const listLoading =
+        !queryFailed && (ordersQuery.isPending || ordersQuery.isFetching)
     const filters = useSalesOrdersListFilters(url, pushUrl)
     const { removeFilter, clearFilters } = filters
 
@@ -70,7 +87,7 @@ export function SalesOrdersListPage() {
         query,
         total,
     )
-    const chips = useSalesOrdersListChips(url, items, removeFilter)
+    const chips = useSalesOrdersListChips(url, items, removeFilter, canList)
 
     const [downloadingContractId, setDownloadingContractId] = React.useState<
         string | null
@@ -143,91 +160,139 @@ export function SalesOrdersListPage() {
     )
 
     return (
-        <PageScaffold density="compact" className={styles.page}>
-            <SalesOrdersListHeader
-                isError={ordersQuery.isError}
-                isFetching={ordersQuery.isFetching}
-                queriedAt={ordersQuery.data?.queriedAt}
-                canCreate={canCreate}
-                canExport={canExport}
-                exportDisabled={total === 0 || isExporting}
-                isExporting={isExporting}
-                onExport={() => {
-                    void exportCsv()
-                }}
-                exportJob={canExport ? exportJob : null}
-            />
-
-            <ListWorkSurface
-                ariaLabel="销售单列表"
-                views={
-                    <ListWorkspaceViews
-                        ariaLabel="销售单工作视图"
-                        hint="选择销售单查看详情"
-                        items={SUMMARY_FILTER_OPTIONS.map((option) => {
-                            const active = url.summary === option.value
-                            return {
-                                id: `sales-orders-list-filter-summary-${toAutomationIdSegment(option.value)}`,
-                                label: option.label,
-                                count: active ? total : undefined,
-                                active,
-                                onClick: () => {
-                                    // 工作视图会约束创建人或审核轨；切换时清掉重叠条件，避免同字段冲突。
-                                    pushUrl({
-                                        summary: option.value,
-                                        createdBy: undefined,
-                                        commercialStatus: "all",
-                                        reviewStatus: "all",
-                                        page: 1,
-                                    })
-                                },
-                            }
-                        })}
+        <ListWorkspacePage
+            title="销售单"
+            loading={
+                account.isPending ||
+                (canList &&
+                    !listSettled &&
+                    ordersQuery.isPending &&
+                    !queryFailed)
+            }
+            views={
+                canList
+                    ? {
+                          ariaLabel: "销售单工作视图",
+                          items: SUMMARY_FILTER_OPTIONS.map((option) => ({
+                              id: `sales-orders-list-filter-summary-${toAutomationIdSegment(option.value)}`,
+                              label: option.label,
+                              count:
+                                  url.summary === option.value &&
+                                  ordersQuery.data &&
+                                  !queryFailed
+                                      ? total
+                                      : undefined,
+                              active: url.summary === option.value,
+                              onClick: () => {
+                                  // 工作视图与创建人、商业状态、审核状态筛选互斥。
+                                  filters.changeSummary(option.value)
+                              },
+                          })),
+                      }
+                    : undefined
+            }
+            actions={[
+                {
+                    hidden: !canList,
+                    actionKey: "export",
+                    id: "sales-orders-list-header-export",
+                    label: isExporting ? "导出中…" : "导出",
+                    icon: DownloadIcon,
+                    tier: "quiet",
+                    loading: isExporting,
+                    disabled: total === 0 || queryFailed || isExporting,
+                    title: queryFailed
+                        ? "请重新查询后导出"
+                        : !isExporting && total === 0
+                          ? "当前没有可导出的销售单"
+                          : undefined,
+                    onClick: exportCsv,
+                },
+                {
+                    hidden: !canCreate,
+                    actionKey: "create",
+                    id: "sales-orders-list-header-create",
+                    label: "新建销售单",
+                    icon: PlusIcon,
+                    tier: "primary",
+                    render: <Link href={CREATE_HREF} />,
+                },
+            ]}
+            alerts={
+                account.isError && !account.data ? (
+                    <BusinessFailureState
+                        id="sales-orders-list-retry"
+                        title="账号资料加载失败"
+                        error={account.error}
+                        onRetry={() => void account.refetch()}
                     />
-                }
-                toolbar={
-                    <SalesOrdersListFilterBar
-                        filters={filters}
-                        chips={chips}
-                        resultCount={ordersQuery.data ? total : undefined}
-                        loading={ordersQuery.isFetching}
-                        failed={ordersQuery.isError}
+                ) : !canList ? (
+                    <BusinessFailureState
+                        kind="permission"
+                        title="暂无查看销售单的权限"
                     />
-                }
-                tableClassName={salesStyles.table}
-                table={
-                    <SalesOrdersListTable
-                        noScope={ordersQuery.data?.emptyReason === "no_scope"}
-                        items={items}
-                        total={total}
-                        loading={ordersQuery.isPending}
-                        isError={ordersQuery.isError}
-                        error={ordersQuery.error}
-                        onRetry={() => {
-                            void ordersQuery.refetch()
-                        }}
-                        filtersActive={filtersActive}
-                        onClearFilters={clearFilters}
-                        url={url}
-                        sorting={sorting}
-                        onSortingChange={handleSortingChange}
-                        pagination={pagination}
-                        onPaginationChange={handlePaginationChange}
-                        canCreate={canCreate}
-                        canOpen={hasPermission(
-                            account.data?.permissions,
-                            "sales_order:detail",
-                        )}
-                        canDownloadContract={hasPermission(
-                            account.data?.permissions,
-                            "contract:detail",
-                        )}
-                        onRowNavigate={handleRowNavigate}
-                        downloadingContractId={downloadingContractId}
-                        downloadContract={downloadContract}
-                    />
-                }
-            />
-        </PageScaffold>
+                ) : undefined
+            }
+            notices={
+                canList && exportJob ? (
+                    <SalesOrdersListExportResult exportJob={exportJob} />
+                ) : undefined
+            }
+            resultsLabel={
+                canList && ordersQuery.data && !queryFailed
+                    ? `销售单列表，共 ${total} 条结果`
+                    : undefined
+            }
+            surface={
+                canList
+                    ? {
+                          ariaLabel: "销售单列表",
+                          toolbar: (
+                              <SalesOrdersListFilterBar
+                                  filters={filters}
+                                  chips={chips}
+                                  loading={ordersQuery.isFetching}
+                                  failed={queryFailed}
+                              />
+                          ),
+                          tableClassName: salesStyles.table,
+                          table: (
+                              <SalesOrdersListTable
+                                  noScope={
+                                      ordersQuery.data?.emptyReason ===
+                                      "no_scope"
+                                  }
+                                  items={items}
+                                  total={total}
+                                  loading={listLoading}
+                                  isError={queryFailed}
+                                  error={ordersQuery.error}
+                                  onRetry={() => {
+                                      if (identityReady)
+                                          void ordersQuery.refetch()
+                                      else void account.refetch()
+                                  }}
+                                  filtersActive={filtersActive}
+                                  onClearFilters={clearFilters}
+                                  sorting={sorting}
+                                  onSortingChange={handleSortingChange}
+                                  pagination={pagination}
+                                  onPaginationChange={handlePaginationChange}
+                                  canCreate={canCreate}
+                                  createHref={CREATE_HREF}
+                                  canOpen={hasPermission(
+                                      account.data?.permissions,
+                                      "sales_order:detail",
+                                  )}
+                                  canDownloadContract={canReadContract}
+                                  onRowNavigate={handleRowNavigate}
+                                  downloadingContractId={downloadingContractId}
+                                  downloadContract={downloadContract}
+                              />
+                          ),
+                      }
+                    : undefined
+            }
+        />
     )
 }

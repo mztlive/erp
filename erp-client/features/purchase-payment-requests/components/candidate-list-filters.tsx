@@ -11,10 +11,14 @@ export function CandidateListFilters({
     applied,
     canFilterSupplier,
     onApply,
+    onReset,
+    resultStatus,
 }: {
     canFilterSupplier: boolean
     applied: CandidateFilters
     onApply: (filters: CandidateFilters) => void
+    onReset: () => void
+    resultStatus?: string | null
 }) {
     return (
         <PaymentTextFilterBar
@@ -23,10 +27,13 @@ export function CandidateListFilters({
             fields={candidateFilterFields.filter(
                 ([key]) => key !== "supplier_id" || canFilterSupplier,
             )}
+            moreLegend="采购内容"
+            searchKey="purchase_order_no"
             applied={applied}
             empty={emptyCandidateFilters}
             onApply={onApply}
-            idleHint="仅显示已生效、有可申请余额且你有申请资格的采购单。支持跨页勾选，按供应商和我方主体分别生成申请。"
+            onReset={onReset}
+            resultStatus={resultStatus}
         />
     )
 }

@@ -172,8 +172,7 @@ export function CustomerQualityPage() {
             businessTypeDraft={filters.businessTypeDraft}
             setBusinessTypeDraft={filters.setBusinessTypeDraft}
             hasPendingChanges={filters.hasPendingChanges}
-            resultCount={data?.customers.filteredTotal}
-            loading={viewQuery.isPending && !data}
+            loading={viewQuery.isFetching && !viewQuery.isPending}
             failed={viewQuery.isError && !data}
         />
     )

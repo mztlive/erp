@@ -13,14 +13,14 @@ export function RequestListFilters({
     onApply,
     onReset,
     scopeChip,
-    view,
+    resultStatus,
 }: {
     canFilterSupplier: boolean
     applied: RequestFilters
-    onApply: (filters: RequestFilters) => void
-    onReset?: () => void
+    onApply: (filters: RequestFilters, clearScope?: boolean) => void
+    onReset: () => void
     scopeChip?: { label: string; onClear: () => void }
-    view: "effective" | "draft"
+    resultStatus?: string | null
 }) {
     return (
         <PaymentTextFilterBar
@@ -29,26 +29,18 @@ export function RequestListFilters({
             fields={requestFilterFields.filter(
                 ([key]) => key !== "supplier_id" || canFilterSupplier,
             )}
+            moreLegend="申请来源"
+            searchKey="request_no"
             applied={applied}
             empty={emptyRequestFilters}
             onApply={onApply}
             onReset={onReset}
-            chips={
+            scopeChip={
                 scopeChip
-                    ? [
-                          {
-                              key: "purchase_order_id",
-                              label: scopeChip.label,
-                              onClear: scopeChip.onClear,
-                          },
-                      ]
-                    : []
+                    ? { key: "purchase_order_id", ...scopeChip }
+                    : undefined
             }
-            idleHint={
-                view === "draft"
-                    ? "未提交、已驳回和已撤回的申请，可修改后提交。"
-                    : "已提交的申请及付款记录，包含已关闭申请。"
-            }
+            resultStatus={resultStatus}
         />
     )
 }

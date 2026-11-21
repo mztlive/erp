@@ -8,9 +8,9 @@ import { ArrowUpRightIcon } from "lucide-react"
 import { QuickPreviewSheet } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { SheetClose } from "@/components/ui/sheet"
 import { SellableItemPreviewPanel } from "@/features/master-data/components/list/master-data-preview"
 import type { MasterDataListItem } from "@/features/master-data/types"
-import { restoreListRowFocus } from "@/lib/list-row-focus"
 
 export function SellablePreviewSheet({
     idPrefix,
@@ -29,10 +29,15 @@ export function SellablePreviewSheet({
             idPrefix={`${prefix}-sheet`}
             open={previewRow != null}
             onOpenChange={(open) => {
-                if (!open) {
-                    onClose()
-                    restoreListRowFocus(lastFocusedRowId.current)
-                }
+                if (!open) onClose()
+            }}
+            finalFocus={() => {
+                const id = lastFocusedRowId.current
+                return id
+                    ? document.querySelector<HTMLElement>(
+                          `[data-row-id="${CSS.escape(id)}"]`,
+                      )
+                    : null
             }}
             size="preview"
             title={previewRow?.name ?? "商品预览"}
@@ -59,14 +64,12 @@ export function SellablePreviewSheet({
             footer={
                 previewRow?.sellableItem ? (
                     <>
-                        <Button
+                        <SheetClose
                             id={`${prefix}-close`}
-                            type="button"
-                            variant="outline"
-                            onClick={onClose}
+                            render={<Button type="button" variant="outline" />}
                         >
                             关闭
-                        </Button>
+                        </SheetClose>
                         <PermissionGuard permission="product:detail">
                             <Button
                                 id={`${prefix}-open-product`}

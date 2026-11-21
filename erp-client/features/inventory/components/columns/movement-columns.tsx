@@ -4,9 +4,13 @@ import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 import { ExternalLinkIcon } from "lucide-react"
 
+import {
+    QuantityValue,
+    TableIdentityCell,
+    TableTextCell,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { WarehouseSkuIdentity } from "@/features/inventory/components/columns/warehouse-sku-cell"
-import { formatQty } from "@/features/inventory/components/presentation"
 import type { StockMovementRow } from "@/features/inventory/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
@@ -16,7 +20,7 @@ export function buildMovementColumns(): ColumnDef<StockMovementRow>[] {
         {
             id: "identity",
             header: "仓库 / SKU",
-            meta: { label: "仓库 / SKU", width: "reference" },
+            meta: { label: "仓库 / SKU", width: "flex" },
             cell: ({ row }) => (
                 <WarehouseSkuIdentity
                     warehouseName={row.original.warehouseName}
@@ -30,14 +34,12 @@ export function buildMovementColumns(): ColumnDef<StockMovementRow>[] {
             header: "流水类型",
             meta: { label: "流水类型", width: "default" },
             cell: ({ row }) => (
-                <div className="text-sm">
-                    <div>{row.original.movementTypeLabel}</div>
-                    <div className="text-xs text-muted-foreground">
-                        {row.original.direction === "increase"
-                            ? "增加"
-                            : "减少"}
-                    </div>
-                </div>
+                <TableIdentityCell
+                    primary={row.original.movementTypeLabel}
+                    secondary={
+                        row.original.direction === "increase" ? "增加" : "减少"
+                    }
+                />
             ),
         },
         {
@@ -45,34 +47,28 @@ export function buildMovementColumns(): ColumnDef<StockMovementRow>[] {
             header: "数量",
             meta: {
                 label: "数量",
-                width: "amount",
+                width: "quantity",
                 align: "end",
                 numeric: true,
             },
-            cell: ({ row }) =>
-                formatQty(row.original.quantity, row.original.baseUnit),
+            cell: ({ row }) => (
+                <QuantityValue
+                    value={row.original.quantity}
+                    unit={row.original.baseUnit}
+                />
+            ),
         },
         {
             id: "occurred",
             header: "发生 / 记录",
-            meta: { label: "时间", width: "default", numeric: true },
+            meta: { label: "发生 / 记录", width: "amount", numeric: true },
             cell: ({ row }) => (
-                <div className="num text-body-compact text-muted-foreground">
+                <div className="num text-muted-foreground">
                     <div>
-                        发生{" "}
-                        {formatDateTime(
-                            row.original.occurredAt,
-                            "full",
-                            "passthrough",
-                        )}
+                        发生 {formatDateTime(row.original.occurredAt, "full")}
                     </div>
                     <div>
-                        记录{" "}
-                        {formatDateTime(
-                            row.original.recordedAt,
-                            "full",
-                            "passthrough",
-                        )}
+                        记录 {formatDateTime(row.original.recordedAt, "full")}
                     </div>
                 </div>
             ),
@@ -80,15 +76,16 @@ export function buildMovementColumns(): ColumnDef<StockMovementRow>[] {
         {
             id: "source",
             header: "来源单据",
-            meta: { label: "来源单据", width: "default" },
+            meta: { label: "来源单据", width: "default", align: "end" },
             cell: ({ row }) =>
                 row.original.sourceHref ? (
                     <Button
                         id={`inventory-ledger-movement-row-${toAutomationIdSegment(row.original.movementId)}-source`}
                         type="button"
-                        variant="link"
-                        size="xs"
-                        className="h-auto px-0 text-sm"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 max-w-full px-2 text-body-compact font-normal text-muted-foreground group-hover/row:text-primary group-focus-within/row:text-primary"
+                        onClick={(event) => event.stopPropagation()}
                         render={
                             <Link
                                 href={row.original.sourceHref}
@@ -96,15 +93,23 @@ export function buildMovementColumns(): ColumnDef<StockMovementRow>[] {
                             />
                         }
                     >
-                        <span className="num">
+                        <span
+                            className="num truncate"
+                            title={row.original.sourceDocumentNo}
+                        >
                             {row.original.sourceDocumentNo}
                         </span>
-                        <ExternalLinkIcon className="ml-1 size-3" aria-hidden />
+                        <ExternalLinkIcon
+                            data-icon="inline-end"
+                            aria-hidden="true"
+                        />
                     </Button>
                 ) : (
-                    <span className="num text-sm">
-                        {row.original.sourceDocumentNo}
-                    </span>
+                    <TableTextCell
+                        value={row.original.sourceDocumentNo}
+                        clamp={1}
+                        numeric
+                    />
                 ),
         },
         {
@@ -112,7 +117,7 @@ export function buildMovementColumns(): ColumnDef<StockMovementRow>[] {
             header: "记录人",
             meta: { label: "记录人", width: "default" },
             cell: ({ row }) => (
-                <span className="text-sm">{row.original.recordedByLabel}</span>
+                <TableTextCell value={row.original.recordedByLabel} clamp={1} />
             ),
         },
     ]

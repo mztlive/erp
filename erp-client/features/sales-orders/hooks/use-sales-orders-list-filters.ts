@@ -8,10 +8,10 @@ import {
     EMPTY_SALES_ORDERS_LIST_FILTER_DRAFT,
     type SalesOrdersListFilterDraft,
     filterDraftFromUrl,
-    hasStructuredSalesOrdersFilters,
     resolveSalesOrdersListFilterPatch,
     salesOrdersListFilterDraftsEqual,
 } from "@/features/sales-orders/lib/sales-orders-list-filters"
+import type { SalesOrderSummaryFilter } from "@/features/sales-orders/lib/filter-orders"
 import type { SalesOrdersUrlState } from "@/features/sales-orders/lib/url-state"
 
 /** 可被单独移除的已生效条件。 */
@@ -39,7 +39,9 @@ export function useSalesOrdersListFilters(
     url: SalesOrdersUrlState,
     pushUrl: (patch: Partial<SalesOrdersUrlState>) => void,
 ) {
-    const { searchDraft, setSearchDraft } = useSearchDraft(url.search ?? "")
+    const { searchDraft, setSearchDraft, searchInputRef } = useSearchDraft(
+        url.search,
+    )
     const [filterPanelOpen, setFilterPanelOpen] = React.useState(false)
     const [draft, setFilterDraft] = React.useState(() =>
         filterDraftFromUrl(url),
@@ -75,12 +77,6 @@ export function useSalesOrdersListFilters(
         () => stripUnavailable(draft),
         [draft, stripUnavailable],
     )
-    React.useEffect(() => {
-        setFilterDraft(stripUnavailable)
-    }, [stripUnavailable])
-
-    const hasStructuredFilters = hasStructuredSalesOrdersFilters(url)
-
     const {
         search,
         customerId,
@@ -102,9 +98,9 @@ export function useSalesOrdersListFilters(
         createdTo,
     } = url
 
-    // URL 回填只同步草稿；深链条件显示为已生效标签，不自动打开浮层。
-    React.useEffect(() => {
-        setFilterDraft(
+    // 分页与排序不应覆盖筛选草稿。
+    const appliedDraft = React.useMemo(
+        () =>
             filterDraftFromUrl({
                 customerId,
                 contractId,
@@ -124,26 +120,42 @@ export function useSalesOrdersListFilters(
                 createdFrom,
                 createdTo,
             }),
-        )
-    }, [
-        closeStatus,
-        collection,
-        commercialStatus,
-        contractId,
-        hasContract,
-        createdBy,
-        ownerUserIds,
-        orgUnitIds,
-        includeDescendants,
-        createdFrom,
-        createdTo,
-        customerId,
-        fulfillment,
-        invoice,
-        nature,
-        origin,
-        reviewStatus,
-    ])
+        [
+            closeStatus,
+            collection,
+            commercialStatus,
+            contractId,
+            hasContract,
+            createdBy,
+            ownerUserIds,
+            orgUnitIds,
+            includeDescendants,
+            createdFrom,
+            createdTo,
+            customerId,
+            fulfillment,
+            invoice,
+            nature,
+            origin,
+            reviewStatus,
+        ],
+    )
+    const previousAppliedDraft = React.useRef(appliedDraft)
+    React.useEffect(() => {
+        const previous = previousAppliedDraft.current
+        previousAppliedDraft.current = appliedDraft
+        setFilterDraft((draft) => ({
+            ...appliedDraft,
+            ownerUserIds:
+                previous.ownerUserIds === appliedDraft.ownerUserIds
+                    ? draft.ownerUserIds
+                    : appliedDraft.ownerUserIds,
+            commercialStatus:
+                previous.commercialStatus === appliedDraft.commercialStatus
+                    ? draft.commercialStatus
+                    : appliedDraft.commercialStatus,
+        }))
+    }, [appliedDraft])
 
     const applyFilters = React.useCallback(() => {
         pushUrl(
@@ -237,19 +249,40 @@ export function useSalesOrdersListFilters(
         }))
     }, [])
 
-    /** 取消、外点和 Esc 均撤销未应用的面板条件，保留外部查询栏草稿。 */
+    /** 收起面板时仅撤销更多条件的草稿。 */
     const cancelMoreFilters = React.useCallback(() => {
         setFilterDraft((draft) => ({
-            ...filterDraftFromUrl(url),
+            ...appliedDraft,
             ownerUserIds: draft.ownerUserIds,
             commercialStatus: draft.commercialStatus,
         }))
         setFilterPanelOpen(false)
-    }, [url])
+    }, [appliedDraft])
 
     const hasPendingChanges =
         searchDraft.trim() !== (search ?? "").trim() ||
-        !salesOrdersListFilterDraftsEqual(filterDraft, filterDraftFromUrl(url))
+        !salesOrdersListFilterDraftsEqual(filterDraft, appliedDraft)
+
+    const changeSummary = React.useCallback(
+        (summary: SalesOrderSummaryFilter) => {
+            setFilterPanelOpen(false)
+            setFilterDraft((draft) => ({
+                ...appliedDraft,
+                ownerUserIds: draft.ownerUserIds,
+                createdBy: "",
+                commercialStatus: "all",
+                reviewStatus: "all",
+            }))
+            pushUrl({
+                summary,
+                createdBy: undefined,
+                commercialStatus: "all",
+                reviewStatus: "all",
+                page: 1,
+            })
+        },
+        [appliedDraft, pushUrl],
+    )
 
     const clearFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -282,16 +315,17 @@ export function useSalesOrdersListFilters(
     return {
         searchDraft,
         setSearchDraft,
+        searchInputRef,
         filterDraft,
         setFilterDraft,
         filterPanelOpen,
         setFilterPanelOpen,
-        hasStructuredFilters,
         hasPendingChanges,
         applyFilters,
         removeFilter,
         resetMoreFilters,
         cancelMoreFilters,
         clearFilters,
+        changeSummary,
     }
 }

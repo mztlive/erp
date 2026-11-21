@@ -1,29 +1,29 @@
 "use client"
 
+import { useRef } from "react"
 import { DownloadIcon, PlusIcon } from "lucide-react"
 
+import { BusinessFailureState, FormalActionResult } from "@/components/business"
 import {
-    BusinessFailureState,
-    FormalActionResult,
-    PageScaffold,
-} from "@/components/business"
-import {
-    ListWorkSurface,
-    ListWorkspaceHeader,
-    listWorkspaceStyles as styles,
+    ListDataTable,
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    ListWorkspacePage,
 } from "@/components/business/list-workspace"
-import { useAccountProfileQuery } from "@/features/auth/queries"
-import { hasPermission } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
-import { AccessListToolbar } from "@/features/access-audit/components/access-list-toolbar"
 import { AccessPreviewSheets } from "@/features/access-audit/components/access-preview-sheets"
 import { PolicyBanner } from "@/features/access-audit/components/policy-banner"
+import type { AccessFilterKey } from "@/features/access-audit/pages/hooks/use-access-list-filters"
 import { useAccessAuditPage } from "@/features/access-audit/pages/hooks/use-access-audit-page"
 import { AccessChangeDialog } from "@/features/access-audit/pages/components/access-change-dialog"
-import { AccessViewTable } from "@/features/access-audit/pages/components/access-view-table"
 import { DeleteRoleDialog } from "@/features/admin/delete-role-dialog"
 import { BuiltinRoleDialog } from "@/features/admin/components/roles/builtin-role-dialog"
-import type { RoleRow } from "@/features/access-audit/types"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { hasPermission } from "@/lib/permissions"
+
+const TITLE = "角色与权限"
+const ROLE_TABLE_ID = "operations-access-roles-table"
 
 /**
  * 权限配置：角色权限。
@@ -34,6 +34,7 @@ import type { RoleRow } from "@/features/access-audit/types"
 export function AccessAuditPage() {
     const profile = useAccountProfileQuery()
     const page = useAccessAuditPage("access")
+    const previewedRoleId = useRef<string | null>(null)
     const permissions = profile.data?.permissions
     const canCreate =
         hasPermission(permissions, "role:create") &&
@@ -43,25 +44,23 @@ export function AccessAuditPage() {
 
     if (profile.isError) {
         return (
-            <PageScaffold density="compact" className={styles.page}>
-                <ListWorkspaceHeader eyebrow="系统" title="角色与权限" />
+            <ListWorkspacePage title={TITLE}>
                 <BusinessFailureState
                     error={profile.error}
                     id="operations-access-profile-retry"
                     onRetry={() => void profile.refetch()}
                 />
-            </PageScaffold>
+            </ListWorkspacePage>
         )
     }
 
     if (page.rejectedWorkItemId) {
         return (
-            <PageScaffold density="compact" className={styles.page}>
-                <ListWorkspaceHeader
-                    eyebrow="系统"
-                    title="角色与权限"
-                    description="管理角色的操作权限，查看关联人员。"
-                />
+            <ListWorkspacePage
+                title={TITLE}
+                eyebrow="系统"
+                description="管理角色的操作权限，查看关联人员。"
+            >
                 <FormalActionResult
                     status="blocked"
                     title="权限复核入口未开放"
@@ -91,159 +90,182 @@ export function AccessAuditPage() {
                         </Button>
                     }
                 />
-            </PageScaffold>
+            </ListWorkspacePage>
         )
     }
 
-    if (page.pageQuery.isPending) {
-        return (
-            <PageScaffold density="compact" className={styles.page}>
-                <div className="h-9 w-40 animate-pulse rounded-lg bg-muted" />
-                <div className="h-10 animate-pulse rounded-lg bg-muted" />
-                <div className="h-[32rem] animate-pulse rounded-lg bg-muted" />
-            </PageScaffold>
-        )
+    if (page.pageQuery.isPending || page.view === "audit") {
+        return <ListWorkspacePage title={TITLE} loading />
     }
 
-    const data = page.data
-    const view = page.view
+    const { data, pageQuery, pagination } = page
     const rows = data?.roles ?? []
+    const pageStart = pagination.pageIndex * pagination.pageSize
+    const emptyReason = data?.emptyReason
+    const noModulePermission = emptyReason === "NO_MODULE_PERMISSION"
+    const listFailed = pageQuery.isError || !data
+    const createRole = () => page.routerPush("/system/roles/new")
 
     return (
-        <PageScaffold density="compact" className={styles.page}>
-            <ListWorkspaceHeader
-                eyebrow="系统"
-                title="角色与权限"
-                description="管理角色的操作权限，查看关联人员。"
-            >
-                <div className="flex flex-wrap items-center gap-2">
-                    {canCreate ? <BuiltinRoleDialog /> : null}
-                    <Button
-                        id="operations-access-export"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={page.exportBlocked}
-                        title={
-                            page.exportBlocked
-                                ? (page.exportBlocker?.message ?? "导出已禁用")
-                                : "导出当前筛选的配置"
+        <ListWorkspacePage
+            title={TITLE}
+            headerActions={canCreate ? <BuiltinRoleDialog /> : null}
+            actions={[
+                {
+                    id: "operations-access-export",
+                    actionKey: "export",
+                    label: "导出配置",
+                    icon: DownloadIcon,
+                    tier: "quiet",
+                    type: "button",
+                    disabled: page.exportBlocked,
+                    title: page.exportBlocked
+                        ? (page.exportBlocker?.message ?? "导出已禁用")
+                        : "导出当前筛选的配置",
+                    onClick: page.handleExport,
+                },
+                {
+                    id: "operations-access-config-create-role",
+                    actionKey: "create",
+                    label: "新建角色",
+                    icon: PlusIcon,
+                    tier: "primary",
+                    type: "button",
+                    hidden: !canCreate,
+                    onClick: createRole,
+                },
+            ]}
+            alerts={
+                data ? (
+                    <PolicyBanner
+                        policies={data.governancePolicies}
+                        view={page.view}
+                    />
+                ) : null
+            }
+            surface={{
+                ariaLabel: "角色权限列表",
+                tableClassName:
+                    "max-sm:[&_[data-column-id=identity]]:w-table-column-default max-sm:[&_[data-column-id=identity]]:min-w-table-column-default-min",
+                toolbar: (
+                    <ListWorkspaceFilterBar
+                        idPrefix="operations-access-toolbar-filter"
+                        formAriaLabel="角色查询"
+                        morePresentation="popover"
+                        onSubmit={page.applyFilters}
+                        search={
+                            <ListSearchField
+                                id="operations-access-toolbar-search"
+                                searchInputRef={page.searchInputRef}
+                                value={page.searchDraft}
+                                onChange={page.setSearchDraft}
+                                placeholder="角色名称"
+                                aria-label="搜索角色"
+                            />
                         }
-                        onClick={() => page.handleExport()}
-                    >
-                        <DownloadIcon className="size-3.5" aria-hidden="true" />
-                        导出配置
-                    </Button>
-                    {canCreate && (
-                        <Button
-                            id="operations-access-config-create-role"
-                            type="button"
-                            size="sm"
-                            onClick={() => page.routerPush("/system/roles/new")}
-                        >
-                            <PlusIcon className="size-3.5" aria-hidden="true" />
-                            新建角色
-                        </Button>
-                    )}
-                </div>
-            </ListWorkspaceHeader>
-
-            {data ? (
-                <PolicyBanner policies={data.governancePolicies} view={view} />
-            ) : null}
-
-            {page.lastResult ? (
-                <FormalActionResult
-                    status={
-                        page.lastResult.status === "failed"
-                            ? "blocked"
-                            : page.lastResult.status
-                    }
-                    title={page.lastResult.title}
-                    description={page.lastResult.description}
-                    reference={page.lastResult.reference}
-                    facts={page.lastResult.facts}
-                    actions={
-                        <Button
-                            id="operations-access-config-result-close"
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => page.setLastResult(null)}
-                        >
-                            关闭
-                        </Button>
-                    }
-                />
-            ) : null}
-
-            <ListWorkSurface
-                ariaLabel="角色权限列表"
-                toolbar={
-                    <AccessListToolbar
-                        isAudit={false}
-                        searchInputRef={page.searchInputRef}
-                        searchDraft={page.searchDraft}
-                        setSearchDraft={page.setSearchDraft}
-                        panelOpen={page.panelOpen}
-                        setPanelOpen={page.setPanelOpen}
-                        appliedChips={page.appliedChips}
-                        removeFilter={page.removeFilter}
-                        clearAllFilters={page.clearFilters}
-                        applyFilters={page.applyFilters}
+                        queryButtonId="operations-access-toolbar-query"
+                        chips={page.appliedChips}
+                        onClearChip={(key) =>
+                            page.removeFilter(key as AccessFilterKey)
+                        }
+                        onClearAll={page.clearFilters}
+                        clearButtonId="operations-access-toolbar-clear-all"
                         hasPendingChanges={page.hasPendingChanges}
-                        resultCount={rows.length}
-                        loading={
-                            page.pageQuery.isFetching &&
-                            !page.pageQuery.isPending
+                        pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+                        resultStatus={
+                            pageQuery.isFetching
+                                ? "查询中…"
+                                : listFailed
+                                  ? "查询未完成"
+                                  : null
                         }
-                        failed={page.pageQuery.isError && !data}
                     />
-                }
-                table={
-                    <AccessViewTable
-                        view={view}
-                        isAudit={false}
-                        rows={rows}
-                        pagination={page.pagination}
+                ),
+                table: (
+                    <ListDataTable
+                        id={ROLE_TABLE_ID}
+                        caption="角色权限列表"
+                        entityName="角色"
+                        data={rows.slice(
+                            pageStart,
+                            pageStart + pagination.pageSize,
+                        )}
+                        rowCount={rows.length}
+                        columns={page.roleColumns}
+                        getRowId={(row) => row.id}
+                        rowLabel={(row) => row.name}
+                        defaultColumnPinning={{
+                            left: ["identity"],
+                            right: canEdit || canDelete ? ["actions"] : [],
+                        }}
+                        pagination={pagination}
                         onPaginationChange={page.handlePaginationChange}
-                        isFetching={
-                            page.pageQuery.isFetching &&
-                            !page.pageQuery.isPending
+                        loading={pageQuery.isFetching}
+                        isError={listFailed}
+                        error={pageQuery.error}
+                        retryButtonId="operations-access-config-retry"
+                        onRetry={() => void pageQuery.refetch()}
+                        noScope={
+                            noModulePermission ||
+                            emptyReason === "NO_DATA_SCOPE"
                         }
-                        emptyReason={data?.emptyReason}
-                        roleColumns={page.roleColumns}
-                        userColumns={page.userColumns}
-                        auditColumns={page.auditColumns}
+                        hasActiveFilters={
+                            page.hasActiveFilters ||
+                            emptyReason === "FILTER_NO_RESULT"
+                        }
+                        clearFiltersButtonId="operations-access-filter-empty-clear"
                         onClearFilters={page.clearFilters}
+                        canCreate={canCreate}
+                        createButtonId="operations-access-empty-create-role"
+                        createLabel="新建角色"
+                        onCreate={createRole}
+                        emptyCopy={{
+                            noScopeTitle: noModulePermission
+                                ? "暂无访问权限"
+                                : "暂无可管理的角色或人员",
+                            noScopeDescription: noModulePermission
+                                ? "当前账号无权查看「角色与权限」，请联系系统管理员开通。"
+                                : "当前账号尚未分配可管理的部门或角色范围，请联系系统管理员配置。",
+                            emptyTitle: "暂无角色",
+                            emptyDescription: canCreate
+                                ? "可新建角色并为其配置操作权限。"
+                                : undefined,
+                        }}
                         highlightedRowId={page.explainSubject?.id}
-                        onRowPreview={(row) =>
-                            page.openExplain("ROLE", (row as RoleRow).id)
+                        onRowPreview={(row) => {
+                            previewedRoleId.current = row.id
+                            page.openExplain("ROLE", row.id)
+                        }}
+                    />
+                ),
+            }}
+            notices={
+                page.lastResult ? (
+                    <FormalActionResult
+                        status={
+                            page.lastResult.status === "failed"
+                                ? "blocked"
+                                : page.lastResult.status
                         }
-                        errorState={
-                            page.pageQuery.isError && !data ? (
-                                <BusinessFailureState
-                                    error={page.pageQuery.error}
-                                    action={
-                                        <Button
-                                            id="operations-access-config-retry"
-                                            type="button"
-                                            variant="secondary"
-                                            className="rounded-lg shadow-none"
-                                            onClick={() =>
-                                                void page.pageQuery.refetch()
-                                            }
-                                        >
-                                            重试
-                                        </Button>
-                                    }
-                                />
-                            ) : undefined
+                        title={page.lastResult.title}
+                        description={page.lastResult.description}
+                        reference={page.lastResult.reference}
+                        facts={page.lastResult.facts}
+                        actions={
+                            <Button
+                                id="operations-access-config-result-close"
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => page.setLastResult(null)}
+                            >
+                                关闭
+                            </Button>
                         }
                     />
-                }
-            />
-
+                ) : null
+            }
+        >
             <AccessPreviewSheets
                 explainSubject={page.explainSubject}
                 canEditRole={canEdit}
@@ -259,7 +281,21 @@ export function AccessAuditPage() {
                 eventQuery={page.eventQuery}
                 closeExplain={page.closeExplain}
                 closeEvent={page.closeEvent}
-                restoreRowFocus={page.restoreRowFocus}
+                restoreRowFocus={() => {
+                    const id = previewedRoleId.current
+                    previewedRoleId.current = null
+                    if (!id) {
+                        page.restoreRowFocus()
+                        return
+                    }
+                    window.requestAnimationFrame(() => {
+                        document
+                            .getElementById(
+                                `${ROLE_TABLE_ID}-row-${toAutomationIdSegment(id)}`,
+                            )
+                            ?.focus()
+                    })
+                }}
             />
 
             {/* 影响预览 + 提交 */}
@@ -288,6 +324,6 @@ export function AccessAuditPage() {
                     }}
                 />
             ) : null}
-        </PageScaffold>
+        </ListWorkspacePage>
     )
 }

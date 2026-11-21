@@ -158,8 +158,8 @@ export function useSupplierAccountsNavigation({
         [patchUrl, rememberRow],
     )
     const openReversalPreview = React.useCallback(
-        (reversalId: string) => {
-            rememberRow(reversalId)
+        (reversalId: string, paymentId?: string) => {
+            if (paymentId) rememberRow(paymentId)
             patchUrl(
                 { detailId: reversalId, previewKind: "reversal" },
                 { replace: true },

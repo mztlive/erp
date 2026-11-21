@@ -95,7 +95,7 @@ export function ProductListToolbar({
                     value={f.searchDraft}
                     onChange={f.setSearchDraft}
                     placeholder={masterDataSearchPlaceholder("products")}
-                    aria-label="搜索基础资料"
+                    aria-label="搜索商品或 SKU"
                 />
             }
             moreOpen={f.productFilterPanelOpen}

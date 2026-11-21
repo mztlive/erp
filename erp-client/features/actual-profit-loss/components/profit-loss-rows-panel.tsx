@@ -9,24 +9,23 @@ import type {
 } from "@tanstack/react-table"
 
 import {
-    BusinessEmptyState,
     BusinessFailureState,
-    DataTable,
     MultiOptionCombobox,
     OptionCombobox,
 } from "@/components/business"
 import {
+    ListDataTable,
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkSurface,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
     ListWorkspaceViews,
-    listWorkspaceEmptyStateClassName,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import type { ComboboxOption } from "@/components/business/option-combobox"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import { COST_TYPE_CHIP_PREFIX } from "@/features/actual-profit-loss/hooks/profit-loss-filter-contract"
 import type { ProfitLossAppliedChip } from "@/features/actual-profit-loss/hooks/use-actual-profit-loss-page"
 import { PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL } from "@/features/actual-profit-loss/lib/presentation"
@@ -41,6 +40,25 @@ import {
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
+
+const DEFAULT_COLUMN_VISIBILITY = {
+    benefitScenarios: false,
+    latestCostOccurredAt: false,
+}
+const DEFAULT_COLUMN_ORDER = [
+    "identityLabel",
+    "netSalesRevenue",
+    "actualProcurementCostNet",
+    "actualFulfillmentCostNet",
+    "reductionsNet",
+    "actualProfitLossNet",
+    "marginRate",
+    "coverageState",
+    "benefitScenarios",
+    "latestCostOccurredAt",
+]
+const FILTER_GROUP_GRID =
+    "sm:grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))]"
 
 const COVERAGE_OPTIONS: ReadonlyArray<{
     value: ProfitLossCoverage
@@ -147,15 +165,18 @@ export function ProfitLossRowsPanel({
     const moreCount = appliedChips.filter(
         ({ key }) =>
             key === "benefitScenario" ||
-            key.startsWith("attribution") ||
+            key === "attributionUserIds" ||
+            key === "attributionOrgUnitIds" ||
             key.startsWith(COST_TYPE_CHIP_PREFIX),
     ).length
     const listLoadFailed = isError && !data
+    const rowCount = data?.rows.total ?? 0
+    const noScope = data?.emptyReason === "no_scope"
 
     return (
         <ListWorkSurface
             className="flex-none"
-            tableClassName="flex-none [&_[data-slot=data-table]]:h-auto [&_[data-slot=data-table-surface]]:flex-none"
+            tableClassName="[&_[data-slot=table-container]]:max-h-[max(16rem,60dvh)]"
             ariaLabel={`实际经营盈亏明细 · ${SCOPE_LABEL}`}
             views={
                 <ListWorkspaceViews
@@ -172,9 +193,7 @@ export function ProfitLossRowsPanel({
                         label: DIMENSION_LABEL[key],
                         count:
                             key === dimension
-                                ? data
-                                    ? data.rows.total.toLocaleString("zh-CN")
-                                    : 0
+                                ? rowCount.toLocaleString("zh-CN")
                                 : undefined,
                         active: dimension === key,
                         onClick: () => onDimensionChange(key),
@@ -184,7 +203,6 @@ export function ProfitLossRowsPanel({
             toolbar={
                 <ListWorkspaceFilterBar
                     morePresentation="popover"
-                    moreSize="wide"
                     idPrefix="actual-profit-loss-filter"
                     formAriaLabel="盈亏明细查询"
                     onSubmit={onApplyFilters}
@@ -213,7 +231,7 @@ export function ProfitLossRowsPanel({
                     primaryFilters={
                         <OptionCombobox
                             id="actual-profit-loss-coverage"
-                            className="w-64 max-w-full min-w-0"
+                            className="w-60 max-w-full min-w-0"
                             filterLabel="成本归集完整度"
                             aria-label="成本归集完整度"
                             allowClear={false}
@@ -231,202 +249,166 @@ export function ProfitLossRowsPanel({
                         />
                     }
                     morePanel={
-                        <div className="space-y-5">
+                        <ListFilterSections>
                             {directoryError != null && (
                                 <BusinessFailureState
+                                    idPrefix="actual-profit-loss-filter-directory"
                                     title="销售与部门列表加载失败"
                                     error={directoryError}
                                     onRetry={onRetryDirectory}
                                 />
                             )}
-                            <fieldset className="min-w-0 space-y-3">
-                                <legend className="mb-1 text-sm font-medium">
-                                    签单归属
-                                </legend>
-                                <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                                    <ListWorkspaceFilterField
-                                        htmlFor="actual-profit-loss-filter-attribution-user"
-                                        label="签单归属销售"
-                                    >
-                                        <MultiOptionCombobox
-                                            onRefresh={onRefreshDirectory}
-                                            id="actual-profit-loss-filter-attribution-user"
-                                            className="w-full min-w-0"
-                                            value={attributionUsersDraft}
-                                            onValueChange={
-                                                onAttributionUsersChange
-                                            }
-                                            options={
-                                                historyDirectory?.attributionUserOptions ??
-                                                []
-                                            }
-                                            placeholder="全部签单归属销售"
-                                            aria-label="签单归属销售"
-                                        />
-                                    </ListWorkspaceFilterField>
-                                    <ListWorkspaceFilterField
-                                        htmlFor="actual-profit-loss-filter-attribution-org"
-                                        label="签单所属部门（含当时下级）"
-                                    >
-                                        <MultiOptionCombobox
-                                            onRefresh={onRefreshDirectory}
-                                            id="actual-profit-loss-filter-attribution-org"
-                                            className="w-full min-w-0"
-                                            value={attributionOrgsDraft}
-                                            onValueChange={
-                                                onAttributionOrgsChange
-                                            }
-                                            options={
-                                                historyDirectory?.attributionOrgOptions ??
-                                                []
-                                            }
-                                            placeholder="全部签单所属部门"
-                                            aria-label="签单所属部门"
-                                        />
-                                    </ListWorkspaceFilterField>
-                                </div>
-                            </fieldset>
-                            <fieldset className="min-w-0 border-t pt-4">
-                                <legend className="pr-2 text-sm font-medium">
-                                    场景与成本
-                                </legend>
-                                <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                                    <ListWorkspaceFilterField
-                                        htmlFor="actual-profit-loss-filter-benefit-scenario"
-                                        label="福利场景"
-                                    >
-                                        <OptionCombobox
-                                            id="actual-profit-loss-filter-benefit-scenario"
-                                            className="w-full min-w-0"
-                                            value={
-                                                benefitScenarioDraft ||
-                                                undefined
-                                            }
-                                            aria-label="福利场景"
-                                            onValueChange={(value) =>
-                                                onBenefitScenarioDraftChange(
-                                                    value ?? "",
-                                                )
-                                            }
-                                            options={benefitScenarioOptions}
-                                            placeholder="全部福利场景"
-                                            searchPlaceholder="搜索福利场景"
-                                        />
-                                    </ListWorkspaceFilterField>
-                                    <ListWorkspaceFilterField
-                                        htmlFor="actual-profit-loss-filter-cost-types"
-                                        label="成本类型"
-                                    >
-                                        <MultiOptionCombobox
-                                            id="actual-profit-loss-filter-cost-types"
-                                            className="w-full min-w-0"
-                                            value={costTypesDraft}
-                                            aria-label="成本类型"
-                                            onValueChange={
-                                                onCostTypesDraftChange
-                                            }
-                                            options={costTypeOptions}
-                                            placeholder="全部成本类型"
-                                        />
-                                    </ListWorkspaceFilterField>
-                                </div>
-                            </fieldset>
-                        </div>
+                            <ListFilterSection
+                                legend="签单归属"
+                                gridClassName={FILTER_GROUP_GRID}
+                            >
+                                <ListWorkspaceFilterField
+                                    htmlFor="actual-profit-loss-filter-attribution-user"
+                                    label="签单归属销售"
+                                >
+                                    <MultiOptionCombobox
+                                        onRefresh={onRefreshDirectory}
+                                        id="actual-profit-loss-filter-attribution-user"
+                                        className="w-full min-w-0"
+                                        value={attributionUsersDraft}
+                                        onValueChange={onAttributionUsersChange}
+                                        options={
+                                            historyDirectory?.attributionUserOptions ??
+                                            []
+                                        }
+                                        placeholder="全部签单归属销售"
+                                        aria-label="签单归属销售"
+                                    />
+                                </ListWorkspaceFilterField>
+                                <ListWorkspaceFilterField
+                                    htmlFor="actual-profit-loss-filter-attribution-org"
+                                    label="签单所属部门（含当时下级）"
+                                >
+                                    <MultiOptionCombobox
+                                        onRefresh={onRefreshDirectory}
+                                        id="actual-profit-loss-filter-attribution-org"
+                                        className="w-full min-w-0"
+                                        value={attributionOrgsDraft}
+                                        onValueChange={onAttributionOrgsChange}
+                                        options={
+                                            historyDirectory?.attributionOrgOptions ??
+                                            []
+                                        }
+                                        placeholder="全部签单所属部门"
+                                        aria-label="签单所属部门"
+                                    />
+                                </ListWorkspaceFilterField>
+                            </ListFilterSection>
+                            <ListFilterSection
+                                legend="场景与成本"
+                                gridClassName={FILTER_GROUP_GRID}
+                            >
+                                <ListWorkspaceFilterField
+                                    htmlFor="actual-profit-loss-filter-benefit-scenario"
+                                    label="福利场景"
+                                >
+                                    <OptionCombobox
+                                        id="actual-profit-loss-filter-benefit-scenario"
+                                        className="w-full min-w-0"
+                                        value={
+                                            benefitScenarioDraft || undefined
+                                        }
+                                        aria-label="福利场景"
+                                        onValueChange={(value) =>
+                                            onBenefitScenarioDraftChange(
+                                                value ?? "",
+                                            )
+                                        }
+                                        options={benefitScenarioOptions}
+                                        placeholder="全部福利场景"
+                                        searchPlaceholder="搜索福利场景"
+                                    />
+                                </ListWorkspaceFilterField>
+                                <ListWorkspaceFilterField
+                                    htmlFor="actual-profit-loss-filter-cost-types"
+                                    label="成本类型"
+                                >
+                                    <MultiOptionCombobox
+                                        id="actual-profit-loss-filter-cost-types"
+                                        className="w-full min-w-0"
+                                        value={costTypesDraft}
+                                        aria-label="成本类型"
+                                        onValueChange={onCostTypesDraftChange}
+                                        options={costTypeOptions}
+                                        placeholder="全部成本类型"
+                                    />
+                                </ListWorkspaceFilterField>
+                            </ListFilterSection>
+                        </ListFilterSections>
                     }
-                    resultStatus={listWorkspaceFilterStatusText({
-                        loading: loading || (!data && !isError),
-                        failed: isError,
-                        resultCount: data?.rows.total,
-                        noun: "条明细",
-                        loadingLabel: "正在加载盈亏明细…",
-                    })}
+                    resultStatus={
+                        loading || isError
+                            ? listWorkspaceFilterStatusText({
+                                  loading: loading && !isError,
+                                  failed: isError,
+                                  noun: "盈亏明细",
+                              })
+                            : null
+                    }
                     chips={appliedChips}
                     onClearChip={onRemoveFilter}
                     onClearAll={onClearAllFilters}
                     hasPendingChanges={hasPendingChanges}
                     pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-                    idleHint="导出全部匹配行，采用生成时的最新数据"
                 />
             }
             table={
-                listLoadFailed ? (
-                    <div className="p-4">
-                        <BusinessFailureState
-                            title="盈亏数据加载失败"
-                            error={error}
-                            action={
-                                <Button
-                                    id="actual-profit-loss-table-retry"
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={onRetry}
-                                >
-                                    重试
-                                </Button>
-                            }
-                        />
-                    </div>
-                ) : !data ? (
-                    <div className="flex flex-col gap-2 p-4">
-                        <Skeleton className="h-10 w-full rounded-md" />
-                        <Skeleton className="h-10 w-full rounded-md" />
-                        <Skeleton className="h-10 w-2/3 rounded-md" />
-                    </div>
-                ) : data.rows.total === 0 ? (
-                    <BusinessEmptyState
-                        kind={hasFilters ? "filter" : "no-data"}
-                        title={
-                            data.emptyReason === "no_scope"
-                                ? "当前没有可查询的数据范围"
-                                : hasFilters
-                                  ? "当前筛选无结果"
-                                  : "期间内没有经营结果"
-                        }
-                        description={
-                            data.emptyReason === "no_scope"
-                                ? "账号具备查询权限，但当前授权范围未包含可读取业务，请联系权限管理员核对范围。"
-                                : hasFilters
-                                  ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                  : "可调整统计期间或成本归集筛选条件后重试。"
-                        }
-                        className={listWorkspaceEmptyStateClassName}
-                        action={
-                            hasFilters && data.emptyReason !== "no_scope" ? (
-                                <Button
-                                    id="actual-profit-loss-empty-clear-filters"
-                                    type="button"
-                                    variant="secondary"
-                                    size="sm"
-                                    className="rounded-lg shadow-none"
-                                    onClick={onClearAllFilters}
-                                >
-                                    清除筛选
-                                </Button>
-                            ) : undefined
-                        }
-                    />
-                ) : (
-                    <DataTable
-                        id="actual-profit-loss-table"
-                        data={pageRows}
-                        columns={columns}
-                        defaultColumnVisibility={{
-                            benefitScenarios: false,
-                            fulfillmentModes: false,
-                            latestCostOccurredAt: false,
-                        }}
-                        defaultColumnPinning={{ left: ["identityLabel"] }}
-                        getRowId={(row) => row.rowId}
-                        rowCount={data.rows.total}
-                        pagination={pagination}
-                        onPaginationChange={onPaginationChange}
-                        sorting={sorting}
-                        onSortingChange={onSortingChange}
-                        loading={loading}
-                        layout="flush"
-                    />
-                )
+                <ListDataTable
+                    id="actual-profit-loss-table"
+                    caption="实际经营盈亏明细"
+                    data={pageRows}
+                    columns={columns}
+                    defaultColumnVisibility={DEFAULT_COLUMN_VISIBILITY}
+                    defaultColumnOrder={DEFAULT_COLUMN_ORDER}
+                    defaultColumnPinning={{ left: ["identityLabel"] }}
+                    getRowId={(row) => row.rowId}
+                    rowLabel={(row) => row.identityLabel}
+                    rowCount={rowCount}
+                    pagination={pagination}
+                    onPaginationChange={onPaginationChange}
+                    sorting={sorting}
+                    onSortingChange={rowCount > 0 ? onSortingChange : undefined}
+                    showColumnVisibility={rowCount > 0}
+                    showPagination={rowCount > 0}
+                    showToolbarSummary={false}
+                    loading={loading}
+                    errorState={
+                        listLoadFailed ? (
+                            <BusinessFailureState
+                                title="盈亏数据加载失败"
+                                error={error}
+                                action={
+                                    <Button
+                                        id="actual-profit-loss-table-retry"
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={onRetry}
+                                    >
+                                        重试
+                                    </Button>
+                                }
+                            />
+                        ) : undefined
+                    }
+                    noScope={noScope}
+                    hasActiveFilters={hasFilters}
+                    onClearFilters={noScope ? undefined : onClearAllFilters}
+                    clearFiltersButtonId="actual-profit-loss-empty-clear-filters"
+                    emptyCopy={{
+                        noScopeTitle: "当前没有可查询的数据范围",
+                        noScopeDescription:
+                            "账号具备查询权限，但当前授权范围未包含可读取业务，请联系权限管理员核对范围。",
+                        emptyTitle: "期间内没有经营结果",
+                        emptyDescription:
+                            "可调整统计期间或成本归集筛选条件后重试。",
+                    }}
+                />
             }
         />
     )

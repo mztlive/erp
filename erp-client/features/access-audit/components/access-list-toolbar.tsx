@@ -4,6 +4,8 @@ import * as React from "react"
 
 import { OptionCombobox } from "@/components/business"
 import {
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
@@ -165,7 +167,7 @@ function AccessListToolbar({
                             className="w-48 max-w-full min-w-0"
                             filterLabel="结果"
                             aria-label="结果"
-                            value={draft.result}
+                            value={draft.result === "all" ? null : draft.result}
                             allowClear={false}
                             onValueChange={(value) => {
                                 const next = (value ??
@@ -198,11 +200,8 @@ function AccessListToolbar({
             }
             morePanel={
                 showMore ? (
-                    <fieldset className="min-w-0 space-y-3">
-                        <legend className="mb-1 text-sm font-medium">
-                            事件定位
-                        </legend>
-                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                    <ListFilterSections>
+                        <ListFilterSection legend="事件定位">
                             <ListWorkspaceFilterField
                                 htmlFor="operations-audit-toolbar-action"
                                 label="动作"
@@ -280,17 +279,23 @@ function AccessListToolbar({
                                     aria-label="对象编号"
                                 />
                             </ListWorkspaceFilterField>
-                        </div>
-                    </fieldset>
+                        </ListFilterSection>
+                    </ListFilterSections>
                 ) : undefined
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: isAudit ? "条事件" : "个角色",
-                loadingLabel: isAudit ? "正在加载审计事件…" : "正在加载角色…",
-            })}
+            resultStatus={
+                isAudit && !loading && !failed
+                    ? null
+                    : listWorkspaceFilterStatusText({
+                          loading: loading && !failed,
+                          failed,
+                          resultCount,
+                          noun: isAudit ? "条事件" : "个角色",
+                          loadingLabel: isAudit
+                              ? "正在加载审计事件…"
+                              : "正在加载角色…",
+                      })
+            }
             chips={appliedChips}
             onClearChip={(key) => removeFilter(key as AccessFilterKey)}
             onClearAll={clearAllFilters}
@@ -301,7 +306,7 @@ function AccessListToolbar({
             }
             hasPendingChanges={hasPendingChanges}
             pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-            idleHint="导出与当前查询结果一致"
+            idleHint={isAudit ? undefined : "导出与当前查询结果一致"}
         />
     )
 }

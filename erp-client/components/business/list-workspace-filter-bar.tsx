@@ -330,6 +330,7 @@ export function ListWorkspaceFilterBar({
     clearButtonId?: string
 }) {
     const panelId = morePanelId ?? `${idPrefix}-more-panel`
+    const triggerId = moreButtonId ?? `${idPrefix}-more`
     const showMore = morePanel != null && onToggleMore != null
     const visibleChips = React.useMemo(
         () =>
@@ -342,6 +343,26 @@ export function ListWorkspaceFilterBar({
         moreCount ?? (foldedChipKeys ? visibleChips.length : 0)
     // 展开「更多筛选」时顶栏主按钮退场，由展开区页脚「查询」作为唯一提交入口。
     const hideTopQuery = showMore && moreOpen
+
+    React.useEffect(() => {
+        if (!hideTopQuery) return
+        const onEscape = (event: KeyboardEvent) => {
+            if (
+                event.key !== "Escape" ||
+                event.defaultPrevented ||
+                event.isComposing ||
+                document.querySelector(
+                    '[role="dialog"]:not([data-slot="toast"]), [role="alertdialog"], [role="menu"], [role="listbox"], [data-slot="popover-content"][data-open]',
+                )
+            )
+                return
+            event.preventDefault()
+            onToggleMore?.()
+            document.getElementById(triggerId)?.focus()
+        }
+        window.addEventListener("keydown", onEscape)
+        return () => window.removeEventListener("keydown", onEscape)
+    }, [hideTopQuery, onToggleMore, triggerId])
     const statusHost = useTableFilterStatusHost()
     const inlineStatusHost = useTableInlineFilterStatusHost()
     const appliedChipsHost = useTableAppliedChipsHost()
@@ -450,6 +471,9 @@ export function ListWorkspaceFilterBar({
     return (
         <form
             aria-label={formAriaLabel}
+            data-pending-query={
+                hasPendingChanges || hideTopQuery ? "" : undefined
+            }
             onSubmit={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
@@ -458,6 +482,7 @@ export function ListWorkspaceFilterBar({
         >
             {hideTopQuery && filterTrayHost ? (
                 <input
+                    id={`${idPrefix}-implicit-submit`}
                     type="submit"
                     value=""
                     tabIndex={-1}
@@ -480,7 +505,7 @@ export function ListWorkspaceFilterBar({
                             {primaryFilters}
                             {extraPrimary}
                             <ListFilterTrigger
-                                triggerId={moreButtonId ?? `${idPrefix}-more`}
+                                triggerId={triggerId}
                                 panelId={panelId}
                                 open={moreOpen}
                                 count={resolvedMoreCount}
@@ -533,10 +558,6 @@ export function ListWorkspaceFilterBar({
                                     panelId={panelId}
                                     label={morePanelAriaLabel}
                                     open={moreOpen}
-                                    onOpenChange={(nextOpen) => {
-                                        if (nextOpen !== moreOpen)
-                                            onToggleMore?.()
-                                    }}
                                     onApply={onSubmit}
                                     onReset={onResetMore}
                                     resetId={resetMoreButtonId}
@@ -570,9 +591,6 @@ export function ListWorkspaceFilterBar({
                           panelId={panelId}
                           label={morePanelAriaLabel}
                           open={moreOpen}
-                          onOpenChange={(nextOpen) => {
-                              if (nextOpen !== moreOpen) onToggleMore?.()
-                          }}
                           onApply={onSubmit}
                           onReset={onResetMore}
                           resetId={resetMoreButtonId}

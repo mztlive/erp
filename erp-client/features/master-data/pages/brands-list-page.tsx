@@ -14,7 +14,8 @@ import { DictionaryCompactWorkspace } from "@/features/master-data/components/li
 import { MasterDataEmptyCreateButton } from "@/features/master-data/components/list/list-empty-actions"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { BrandPreviewDialog } from "@/features/master-data/components/brand/brand-preview-dialog"
-import { BrandCardContent } from "@/features/master-data/components/brand/brand-card-content"
+import { BrandListIdentity } from "@/features/master-data/components/brand/brand-card-content"
+import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import {
     BrandCreateDialog,
     BrandReviseDialog,
@@ -28,12 +29,15 @@ import {
     masterDataExportAction,
 } from "@/features/master-data/lib/list-page-actions"
 
+const LIST_ID = "master-data-brands-list"
+const IMPORT_ACTION_ID = `${LIST_ID}-import`
+
 export function BrandsListPage() {
     const router = useRouter()
     const onImportSubmitted = (job: BackgroundJobView, fileName: string) => {
         launchNavDelivery(
             "background-task",
-            document.getElementById("master-data-brands-list-import"),
+            document.getElementById(IMPORT_ACTION_ID),
         )
         toast.add({
             title: "品牌导入任务已提交",
@@ -54,32 +58,45 @@ export function BrandsListPage() {
         createPermission: "product_brand:create",
         searchInputRef,
     })
-    const exportPending = state.exportPending
 
     return (
         <ListPageFrame
             resource="brands"
+            eyebrow=""
             title="品牌"
-            description="查看品牌字典，供商品与 SKU 选用。"
+            views={
+                <LifecycleMetricStrip
+                    idPrefix={`${LIST_ID}-metrics`}
+                    metrics={state.syncedMetrics}
+                    metricKey={state.filters.metricKey}
+                    ariaLabel="品牌指标筛选"
+                    allLabel="全部品牌"
+                    variant="inline"
+                    onChangeLifecycle={state.filters.changeLifecycle}
+                />
+            }
             exportMeta={state.exportMeta}
             actions={[
-                masterDataExportAction({
-                    id: "master-data-brands-list-export",
-                    pending: exportPending,
-                    rowCount: state.rows.length,
-                    onClick: state.onExport,
-                }),
                 {
-                    id: "master-data-brands-list-import",
+                    id: IMPORT_ACTION_ID,
                     actionKey: "import",
                     label: "批量导入",
                     icon: UploadIcon,
-                    variant: "outline",
+                    tier: "quiet",
                     hidden: !state.canCreate,
                     onClick: () => setImportOpen(true),
                 },
+                {
+                    ...masterDataExportAction({
+                        id: `${LIST_ID}-export`,
+                        pending: state.exportPending,
+                        rowCount: state.rows.length,
+                        onClick: state.onExport,
+                    }),
+                    tier: "quiet",
+                },
                 masterDataCreateAction({
-                    id: "master-data-brands-list-create",
+                    id: `${LIST_ID}-create`,
                     canCreate: state.canCreate,
                     blockedReason: state.createBlockedReason,
                     onClick: () => state.setCreateOpen(true),
@@ -90,15 +107,12 @@ export function BrandsListPage() {
             loading={state.listQuery.isPending}
         >
             <DictionaryCompactWorkspace
-                listId="master-data-brands-list"
+                listId={LIST_ID}
                 ariaLabel="品牌列表"
-                metricsAriaLabel="品牌指标筛选"
-                allLabel="全部品牌"
-                hint="选择品牌查看详情"
                 countLabel="品牌"
                 searchPlaceholder={masterDataSearchPlaceholder("brands")}
                 codeLabel="品牌代码"
-                renderCard={(row) => <BrandCardContent row={row} />}
+                renderIdentity={(row) => <BrandListIdentity row={row} />}
                 emptyTitle="还没有品牌资料"
                 emptyDescription={
                     state.canCreate
@@ -108,14 +122,13 @@ export function BrandsListPage() {
                 emptyAction={
                     state.canCreate ? (
                         <MasterDataEmptyCreateButton
-                            id="master-data-brands-list-empty-create"
+                            id={`${LIST_ID}-empty-create`}
                             onClick={() => state.setCreateOpen(true)}
                         />
                     ) : undefined
                 }
                 searchInputRef={searchInputRef}
                 filters={state.filters}
-                syncedMetrics={state.syncedMetrics}
                 rows={state.rows}
                 previewId={state.previewId}
                 fetching={state.listQuery.isFetching}

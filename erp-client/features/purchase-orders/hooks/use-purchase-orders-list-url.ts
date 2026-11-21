@@ -22,12 +22,12 @@ export function usePurchaseOrdersListUrl() {
     const searchParams = useSearchParams()
 
     const profile = useAccountProfileQuery()
-    const canFilterOwner = hasPermission(
-        profile.data?.permissions,
-        "procurement_person:list",
-    )
-    const hasUnauthorizedFilter =
-        !canFilterOwner && searchParams.has("ownerUserIds")
+    const canFilterOwner =
+        !profile.isError &&
+        hasPermission(profile.data?.permissions, "procurement_person:list")
+    const hasOwnerFilter = searchParams.has("ownerUserIds")
+    const hasUnauthorizedFilter = !canFilterOwner && hasOwnerFilter
+    const waitingForOwnerPermission = hasOwnerFilter && profile.isPending
     const url = React.useMemo(() => {
         const values = parsePurchaseOrdersSearchParams(searchParams)
         return hasUnauthorizedFilter
@@ -47,8 +47,8 @@ export function usePurchaseOrdersListUrl() {
         [canFilterOwner, pathname, router, url],
     )
     React.useEffect(() => {
-        if (profile.data && hasUnauthorizedFilter) pushUrl({ page: 1 })
-    }, [profile.data, hasUnauthorizedFilter, pushUrl])
+        if (profile.isSuccess && hasUnauthorizedFilter) pushUrl({ page: 1 })
+    }, [profile.isSuccess, hasUnauthorizedFilter, pushUrl])
 
     // 跨单据跳转的返回目标：保留销售单关系筛选；建单参数带回去会再次进入建单页。
     const listReturnHref = React.useMemo(() => {
@@ -72,11 +72,6 @@ export function usePurchaseOrdersListUrl() {
         return [id, dir] as const
     }, [url.sort])
 
-    // 「可建单依据」是动作卡不是筛选卡：URL 带该值时按全部列表处理。
-    // metric=pending_create 只由建单入口携带，指标条上无对应高亮控件（其它分支的
-    // metricKey 均为有控件的高亮枚举值，按原值消费即可，无需额外分支处理）。
-    const effectiveMetric = url.metric === "pending_create" ? "all" : url.metric
-
     const listQueryInput = React.useMemo<PurchaseOrderListQuery>(
         () => ({
             q: url.q,
@@ -84,31 +79,27 @@ export function usePurchaseOrdersListUrl() {
             ownerUserIds: url.ownerUserIds,
             salesOrderId: url.salesOrderId,
             status: url.status,
-            metric: effectiveMetric,
+            metric: url.metric,
             page: url.page,
             pageSize: url.pageSize,
             sortBy,
             sortDir,
         }),
-        [effectiveMetric, sortBy, sortDir, url],
+        [sortBy, sortDir, url],
     )
 
     return {
         canFilterOwner,
-        router,
+        waitingForOwnerPermission,
         url,
         pushUrl,
         listReturnHref,
         sortBy,
         sortDir,
-        effectiveMetric,
         listQueryInput,
         search: url.q ?? "",
         statusFilter: url.status,
-        metricKey: url.metric,
-        basisFromUrl: url.basisId ?? null,
         salesOrderFromUrl: url.salesOrderId ?? null,
         workItemFromUrl: url.workItemId ?? null,
-        createFromSales: url.action === "create",
     }
 }

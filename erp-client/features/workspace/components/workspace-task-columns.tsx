@@ -2,20 +2,12 @@
 
 import type { ColumnDef } from "@tanstack/react-table"
 import {
-    Building2Icon,
-    CalendarClockIcon,
-    ChevronRightIcon,
-    CircleCheckIcon,
-    FileTextIcon,
-    LinkIcon,
-    ListTodoIcon,
-    PackageIcon,
-    WalletCardsIcon,
-    type LucideIcon,
-} from "lucide-react"
-import { queueTypeIcon } from "../lib/queue-presentation"
+    BusinessStatusBadge,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableTextCell,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { StatusBadge } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { displayName } from "@/lib/display-name"
@@ -90,14 +82,14 @@ function TaskDeadline({ item }: { item: WorkspaceWorkItem }) {
         if (item.enteredAtLabel && item.enteredAtLabel !== "—") {
             return (
                 <span
-                    className="text-xs text-muted-foreground whitespace-nowrap"
+                    className="num whitespace-nowrap text-muted-foreground"
                     title={`进入待办时间：${item.enteredAtLabel}`}
                 >
                     {item.enteredAtLabel}
                 </span>
             )
         }
-        return <span className="text-muted-foreground">—</span>
+        return <TableEmptyCell />
     }
     const date = new Date(item.dueAt)
     const label = new Intl.DateTimeFormat("zh-CN", {
@@ -113,10 +105,10 @@ function TaskDeadline({ item }: { item: WorkspaceWorkItem }) {
         <time
             dateTime={item.dueAt}
             title={`待办截止：${label}`}
-            className="num text-xs whitespace-nowrap"
+            className="num whitespace-nowrap"
         >
             {urgent ? (
-                <StatusBadge
+                <BusinessStatusBadge
                     label={item.dueBucket === "overdue" ? "已超期" : "今日到期"}
                     tone={
                         item.dueBucket === "overdue" ? "destructive" : "warning"
@@ -129,34 +121,22 @@ function TaskDeadline({ item }: { item: WorkspaceWorkItem }) {
     )
 }
 
-function columnTitle(label: string, Icon: LucideIcon) {
-    return (
-        <span className="inline-flex items-center gap-2">
-            <Icon className="size-3.5" aria-hidden="true" />
-            {label}
-        </span>
-    )
-}
-
 /** 待办展示对象与摘要，金额独立为指标列，保持主次层次分明。 */
-function TaskOverview({ row }: { row: QueueTaskRow }) {
+function TaskOverview({
+    row,
+    showSummary,
+}: {
+    row: QueueTaskRow
+    showSummary: boolean
+}) {
     return (
-        <div className="min-w-0 space-y-1 py-1 whitespace-normal">
-            <div
-                className="line-clamp-1 text-sm font-medium text-foreground"
-                title={row.presentation.title}
-            >
-                {row.presentation.title}
-            </div>
-            <div
-                className={cn(
-                    "line-clamp-1 text-xs text-muted-foreground",
-                    row.presentation.attention &&
-                        "text-warning-soft-foreground font-medium",
-                )}
-                title={row.presentation.summary}
-            >
-                {row.retryMaterials ? (
+        <TableIdentityCell
+            className="max-w-table-column-reference"
+            primary={row.presentation.title}
+            primaryTitle={row.presentation.title}
+            secondaryTitle={row.presentation.summary}
+            secondary={
+                row.retryMaterials ? (
                     <Button
                         id={`workspace-materials-retry-${toAutomationIdSegment(row.item.workItemId)}`}
                         variant="link"
@@ -169,11 +149,20 @@ function TaskOverview({ row }: { row: QueueTaskRow }) {
                     >
                         重新加载资料
                     </Button>
-                ) : (
-                    row.summaryPreview || "—"
-                )}
-            </div>
-        </div>
+                ) : !showSummary ? undefined : row.summaryPreview ? (
+                    <span
+                        className={cn(
+                            row.presentation.attention &&
+                                "font-medium text-warning-soft-foreground",
+                        )}
+                    >
+                        {row.summaryPreview}
+                    </span>
+                ) : row.materialNotice ? undefined : (
+                    <TableEmptyCell />
+                )
+            }
+        />
     )
 }
 
@@ -207,127 +196,98 @@ export function workspaceTaskColumns({
     const columns: ColumnDef<QueueTaskRow, unknown>[] = [
         {
             id: "number",
-            header: () => columnTitle(numberLabel, FileTextIcon),
+            header: numberLabel,
             enableHiding: false,
             enableSorting: false,
             meta: {
-                width: "reference",
+                width: "default",
                 label: numberLabel,
             },
             cell: ({ row: { original: row } }) => {
                 const rework =
                     row.item.workItemType === "APPROVAL_REWORK" &&
                     row.item.status === "OPEN"
-                const Icon = queueTypeIcon(
-                    row.item.workItemType === "DOCUMENT_APPROVAL" || tracking
-                        ? `approval:${row.item.businessObjectType}`
-                        : `task:${row.item.workItemType}`,
-                )
-                const hasSearchMatches = Boolean(row.item.searchMatches?.length)
+                const searchMatches = row.item.searchMatches
+                const { number, typeLabel } = row.presentation
                 return (
-                    <div className="flex items-center gap-2.5 py-1">
-                        <div
-                            className={cn(
-                                "flex size-7 shrink-0 items-center justify-center rounded-md",
-                                rework
-                                    ? "bg-destructive-soft text-destructive-soft-foreground"
-                                    : "bg-sidebar-accent/75 text-sidebar-accent-foreground",
-                            )}
-                        >
-                            <Icon
-                                className="size-4 shrink-0"
-                                aria-hidden="true"
-                            />
-                        </div>
-                        <div className="min-w-0 space-y-0.5">
-                            <div
-                                className="num max-w-56 truncate text-sm font-medium text-foreground whitespace-nowrap"
-                                title={row.presentation.number}
-                            >
-                                {row.presentation.number}
-                            </div>
-                            {rework ? (
-                                <StatusBadge
-                                    label={row.presentation.typeLabel}
+                    <TableIdentityCell
+                        className="max-w-table-column-default"
+                        primary={
+                            number === "—" ? (
+                                <TableEmptyCell />
+                            ) : (
+                                <span className="num">{number}</span>
+                            )
+                        }
+                        primaryTitle={number}
+                        secondary={
+                            rework ? (
+                                <BusinessStatusBadge
+                                    label={typeLabel}
                                     tone="destructive"
                                 />
-                            ) : hasSearchMatches ? (
-                                <div
-                                    className="max-w-56 truncate text-xs text-muted-foreground"
-                                    title={row.item.searchMatches?.join("；")}
-                                >
-                                    {row.item.searchMatches?.[0]}
-                                </div>
                             ) : (
-                                <div className="max-w-56 truncate text-xs text-muted-foreground">
-                                    {row.presentation.typeLabel}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                                searchMatches?.[0] || typeLabel
+                            )
+                        }
+                        secondaryTitle={
+                            rework
+                                ? typeLabel
+                                : searchMatches?.join("；") || typeLabel
+                        }
+                    />
                 )
             },
         },
         {
             id: "counterparty",
-            header: () => columnTitle(partyLabel, Building2Icon),
+            header: partyLabel,
             enableSorting: false,
             meta: {
-                width: compact ? "flex" : "reference",
+                width: compact ? "flex" : "default",
                 label: partyLabel,
             },
-            cell: ({ row: { original: row } }) =>
-                compact ? (
-                    <TaskOverview row={row} />
-                ) : (
-                    <div
-                        className="max-w-72 truncate text-sm font-medium text-foreground"
-                        title={row.presentation.title}
-                    >
-                        {row.presentation.title}
-                    </div>
-                ),
+            cell: ({ row }) => (
+                <TaskOverview row={row.original} showSummary={compact} />
+            ),
         },
         {
             id: "source",
-            header: () => columnTitle("来源销售单", LinkIcon),
+            header: "来源销售单",
             enableSorting: false,
-            meta: { width: "reference", label: "来源销售单" },
+            meta: { width: "default", label: "来源销售单" },
             cell: ({ row }) => (
-                <span className="num" title={row.original.source?.orderNo}>
-                    {row.original.source?.orderNo || "—"}
-                </span>
+                <TableTextCell
+                    value={row.original.source?.orderNo}
+                    clamp={1}
+                    numeric
+                />
             ),
         },
         {
             id: "summary",
-            header: () =>
-                columnTitle(purchase ? "商品摘要" : "事项摘要", PackageIcon),
+            header: purchase ? "商品摘要" : "事项摘要",
             enableSorting: false,
             meta: {
                 width: "flex",
                 label: purchase ? "商品摘要" : "事项摘要",
             },
             cell: ({ row: { original: row } }) => (
-                <div
+                <TableTextCell
+                    value={row.summaryPreview}
+                    clamp={1}
+                    title={row.presentation.summary}
                     className={cn(
-                        "max-w-80 truncate text-body-compact",
+                        "max-w-table-column-reference",
                         row.presentation.attention &&
                             "text-warning-soft-foreground",
                     )}
-                    title={row.presentation.summary}
-                >
-                    {row.summaryPreview || "—"}
-                </div>
+                />
             ),
         },
         {
             id: "metric",
-            header: () =>
-                columnTitle(
-                    purchase ? "含税金额" : tracking ? "申请摘要" : "本次处理",
-                    WalletCardsIcon,
-                ),
+            header: purchase ? "含税金额" : tracking ? "申请摘要" : "本次处理",
             enableSorting: false,
             meta: {
                 width: "amount",
@@ -341,18 +301,24 @@ export function workspaceTaskColumns({
             },
             cell: ({ row: { original: row } }) => (
                 <div
-                    className="space-y-0.5 whitespace-nowrap text-right"
-                    title={row.content.metric.detail}
+                    className="ml-auto max-w-table-column-amount truncate whitespace-nowrap"
+                    title={
+                        row.materialNotice
+                            ? undefined
+                            : (row.content.metric.detail ??
+                              row.content.metric.value)
+                    }
                 >
-                    <div className="num text-sm font-semibold tabular-nums text-foreground">
-                        <WorkspaceMoney
-                            value={
-                                row.materialNotice
-                                    ? "—"
-                                    : row.content.metric.value
-                            }
-                            display="exact"
-                        />
+                    <div className="num truncate font-medium text-foreground">
+                        {row.materialNotice ||
+                        row.content.metric.value === "—" ? (
+                            <TableEmptyCell />
+                        ) : (
+                            <WorkspaceMoney
+                                value={row.content.metric.value}
+                                display="exact"
+                            />
+                        )}
                     </div>
                     {(!purchase ||
                         !["含税金额", "含税总额"].includes(
@@ -369,11 +335,7 @@ export function workspaceTaskColumns({
         },
         {
             id: "status",
-            header: () =>
-                columnTitle(
-                    history ? "处理结果" : tracking ? "审批进度" : "当前节点",
-                    CircleCheckIcon,
-                ),
+            header: history ? "处理结果" : tracking ? "审批进度" : "当前节点",
             enableSorting: false,
             meta: {
                 width: "status",
@@ -389,41 +351,42 @@ export function workspaceTaskColumns({
                 },
             }) => {
                 const closed = item.status !== "OPEN"
+                const blocked = isBlockedWorkItem(item)
                 const node = displayName(item.approval?.currentNodeLabel)
+                const tone = closed
+                    ? item.statusTone
+                    : blocked
+                      ? "warning"
+                      : tracking
+                        ? content.status.tone
+                        : "info"
+                const label = closed
+                    ? item.statusLabel
+                    : tracking
+                      ? content.status.label
+                      : blocked
+                        ? "受阻"
+                        : node || item.statusLabel
                 return (
-                    <div className="space-y-1 whitespace-normal">
-                        {closed || tracking || isBlockedWorkItem(item) ? (
-                            <StatusBadge
-                                label={
-                                    closed
-                                        ? item.statusLabel
-                                        : tracking
-                                          ? content.status.label
-                                          : "受阻"
-                                }
-                                tone={
-                                    closed
-                                        ? item.statusTone
-                                        : isBlockedWorkItem(item)
-                                          ? "warning"
-                                          : content.status.tone
-                                }
-                            />
-                        ) : (
-                            <span className="inline-flex items-center gap-1.5 rounded-sm border border-info-border/75 bg-info-soft/75 px-1.5 py-0.5 text-tiny font-medium text-info-soft-foreground">
-                                <span
-                                    className="size-1.5 shrink-0 rounded-full bg-primary"
-                                    aria-hidden="true"
-                                />
-                                <span className="max-w-40 truncate">
-                                    {node || item.statusLabel}
-                                </span>
-                            </span>
-                        )}
+                    <div className="flex flex-col items-start gap-1 whitespace-normal">
+                        <BusinessStatusBadge
+                            label={label}
+                            tone={tone}
+                            appearance={
+                                tone === "success" ||
+                                (!closed && !tracking && !blocked)
+                                    ? "quiet"
+                                    : "badge"
+                            }
+                            title={label}
+                            className="max-w-table-column-default [&>svg]:shrink-0"
+                        />
                         {tracking && !closed && node && (
-                            <div className="line-clamp-2 text-xs text-muted-foreground">
-                                {node}
-                            </div>
+                            <TableTextCell
+                                value={node}
+                                clamp={2}
+                                className="text-xs text-muted-foreground"
+                            />
                         )}
                         <WorkspaceFulfillmentBadges item={item} />
                     </div>
@@ -432,17 +395,17 @@ export function workspaceTaskColumns({
         },
         {
             id: "due",
-            header: () => columnTitle("待办期限", CalendarClockIcon),
+            header: "待办期限",
             enableSorting: false,
             meta: { width: "status", label: "待办期限" },
             cell: ({ row }) => <TaskDeadline item={row.original.item} />,
         },
         {
             id: "action",
-            header: () => columnTitle("操作", ListTodoIcon),
+            header: "操作",
             enableHiding: false,
             enableSorting: false,
-            meta: { width: "quantity", align: "end", label: "操作" },
+            meta: { width: "status", align: "end", label: "操作" },
             cell: ({
                 row: {
                     original: { item, presentation, processable },
@@ -457,18 +420,17 @@ export function workspaceTaskColumns({
                                 ? `work-item-procurement-order-creation-${item.workItemId}`
                                 : undefined
                         }
-                        variant={canProcess ? "outline" : "ghost"}
+                        type="button"
+                        variant="ghost"
                         size="sm"
-                        className={
-                            canProcess
-                                ? "h-7 border-primary/35 px-2.5 text-xs font-medium text-primary transition-colors hover:border-primary hover:bg-primary hover:text-primary-foreground"
-                                : "h-7 px-2.5 text-xs text-muted-foreground hover:text-primary"
-                        }
-                        onClick={() => onSelect(item)}
+                        className="h-control-sm px-2 text-body-compact font-normal text-muted-foreground group-hover/row:text-primary group-focus-within/row:text-primary hover:bg-sidebar-accent/70 hover:text-primary"
+                        onClick={(event) => {
+                            event.stopPropagation()
+                            onSelect(item)
+                        }}
                         aria-label={`${canProcess ? "处理" : "查看"}${presentation.number}`}
                     >
                         {canProcess ? "处理" : "查看"}
-                        <ChevronRightIcon aria-hidden="true" />
                     </Button>
                 )
             },
@@ -480,19 +442,25 @@ export function workspaceTaskColumns({
             0,
             {
                 id: "payerCompany",
-                header: () => columnTitle("付款主体公司名称", Building2Icon),
+                header: "付款主体公司名称",
                 enableSorting: false,
-                meta: { width: "reference", label: "付款主体公司名称" },
+                meta: { width: "default", label: "付款主体公司名称" },
                 cell: ({ row }) => (
-                    <div className="min-w-40 max-w-72 whitespace-normal">
-                        {workspaceTaskSection(row.original.item, "我方付款主体")
-                            ?.value || "—"}
-                    </div>
+                    <TableTextCell
+                        value={
+                            workspaceTaskSection(
+                                row.original.item,
+                                "我方付款主体",
+                            )?.value
+                        }
+                        clamp={2}
+                        className="whitespace-normal"
+                    />
                 ),
             },
             {
                 id: "paymentAmount",
-                header: () => columnTitle("付款金额", WalletCardsIcon),
+                header: "付款金额",
                 enableSorting: false,
                 meta: {
                     width: "amount",
@@ -500,19 +468,19 @@ export function workspaceTaskColumns({
                     numeric: true,
                     align: "end",
                 },
-                cell: ({ row }) => (
-                    <div title="当前剩余待付金额">
-                        <WorkspaceMoney
-                            value={
-                                workspaceTaskSection(
-                                    row.original.item,
-                                    "待付金额",
-                                )?.value || "—"
-                            }
-                            display="exact"
-                        />
-                    </div>
-                ),
+                cell: ({ row }) => {
+                    const value = workspaceTaskSection(
+                        row.original.item,
+                        "待付金额",
+                    )?.value
+                    return value && value !== "—" ? (
+                        <span title="当前剩余待付金额" className="num">
+                            <WorkspaceMoney value={value} display="exact" />
+                        </span>
+                    ) : (
+                        <TableEmptyCell />
+                    )
+                },
             },
         )
     return compact

@@ -1,27 +1,18 @@
 "use client"
 
 import * as React from "react"
-import { ChevronRightIcon } from "lucide-react"
-import {
-    getCoreRowModel,
-    useReactTable,
-    type PaginationState,
-} from "@tanstack/react-table"
+import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 
 import {
-    BusinessEmptyState,
     BusinessFailureState,
     BusinessStatusBadge,
-    DataTablePagination,
+    TableIdentityCell,
 } from "@/components/business"
-import { listWorkspaceEmptyStateClassName } from "@/components/business/list-workspace"
-import { Button } from "@/components/ui/button"
+import { ListDataTable } from "@/components/business/list-workspace"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { MasterDataListItem } from "@/features/master-data/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
 
-/** 简单字典使用整行入口，分页与筛选结果保持一致。 */
 export function DictionaryCompactList({
     id,
     rows,
@@ -39,7 +30,8 @@ export function DictionaryCompactList({
     codeLabel,
     selectedId,
     onPreview,
-    renderCard,
+    renderIdentity,
+    showRevision = true,
 }: {
     id: string
     rows: readonly MasterDataListItem[]
@@ -57,7 +49,8 @@ export function DictionaryCompactList({
     codeLabel: string
     selectedId: string | null
     onPreview: (row: MasterDataListItem) => void
-    renderCard?: (row: MasterDataListItem) => React.ReactNode
+    renderIdentity?: (row: MasterDataListItem) => React.ReactNode
+    showRevision?: boolean
 }) {
     const pageIndex = Math.min(
         pagination.pageIndex,
@@ -76,131 +69,113 @@ export function DictionaryCompactList({
             ),
         [rows, pageIndex, pagination.pageSize],
     )
-    const table = useReactTable({
-        data: pageRows,
-        columns: [],
-        rowCount: rows.length,
-        state: { pagination: { ...pagination, pageIndex } },
-        onPaginationChange: (next) =>
-            onPaginationChange(
-                typeof next === "function"
-                    ? next({ ...pagination, pageIndex })
-                    : next,
-            ),
-        getCoreRowModel: getCoreRowModel(),
-        manualPagination: true,
-    })
-
-    if (listLoadFailed)
-        return (
-            <BusinessFailureState
-                idPrefix={id}
-                error={error}
-                onRetry={onRetry}
-            />
-        )
-    if (!loading && rows.length === 0)
-        return (
-            <BusinessEmptyState
-                kind={hasActiveFilters ? "filter" : "no-data"}
-                className={listWorkspaceEmptyStateClassName}
-                title={hasActiveFilters ? "当前筛选无结果" : emptyTitle}
-                description={
-                    hasActiveFilters
-                        ? masterDataCopy.filterEmptyDescription
-                        : emptyDescription
-                }
-                action={
-                    hasActiveFilters ? (
-                        <Button
-                            id={`${id}-clear-filters`}
-                            variant="secondary"
-                            size="sm"
-                            onClick={onClearFilters}
-                        >
-                            清除筛选
-                        </Button>
-                    ) : (
-                        emptyAction
+    const columns = React.useMemo<ColumnDef<MasterDataListItem>[]>(
+        () => [
+            {
+                id: "name",
+                header: "名称",
+                accessorKey: "name",
+                enableHiding: false,
+                meta: { width: "flex" },
+                cell: ({ row: { original: row } }) => {
+                    const code = row.dictionaryCode ?? row.stableNo
+                    return (
+                        <div className="relative min-w-0">
+                            {renderIdentity ? (
+                                renderIdentity(row)
+                            ) : (
+                                <TableIdentityCell
+                                    primary={row.name}
+                                    primaryTitle={row.name}
+                                    secondary={`${codeLabel}：${code}`}
+                                    secondaryTitle={code}
+                                    numericSecondary
+                                />
+                            )}
+                            <button
+                                id={`${id}-row-${toAutomationIdSegment(row.stableId)}-preview`}
+                                data-row-id={row.stableId}
+                                type="button"
+                                aria-label={`查看${row.name}，${codeLabel}：${code}，${row.lifecycleStatusLabel}`}
+                                aria-haspopup="dialog"
+                                aria-expanded={selectedId === row.stableId}
+                                onClick={() => onPreview(row)}
+                                className="absolute inset-0 w-full cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+                            >
+                                <span aria-hidden="true" className="sr-only">
+                                    {row.lifecycleStatusLabel}
+                                </span>
+                            </button>
+                        </div>
                     )
-                }
-            />
-        )
+                },
+            },
+            {
+                id: "lifecycle",
+                header: "当前状态",
+                meta: { width: "status" },
+                cell: ({ row }) => (
+                    <BusinessStatusBadge
+                        context="list"
+                        label={row.original.lifecycleStatusLabel}
+                        tone={row.original.lifecycleTone}
+                        appearance={
+                            row.original.lifecycleTone === "success"
+                                ? "quiet"
+                                : "badge"
+                        }
+                    />
+                ),
+            },
+            ...(showRevision
+                ? [
+                      {
+                          id: "revision",
+                          header: "版本状态",
+                          accessorKey: "revisionTimingLabel",
+                          meta: { width: "status" as const },
+                      },
+                  ]
+                : []),
+        ],
+        [codeLabel, id, onPreview, renderIdentity, selectedId, showRevision],
+    )
 
     return (
-        <div id={id} aria-busy={loading}>
-            {loading ? (
-                <p role="status" className="py-2 text-sm text-muted-foreground">
-                    正在更新列表…
-                </p>
-            ) : null}
-            <ul
-                className={
-                    renderCard
-                        ? "grid grid-cols-[repeat(auto-fill,minmax(min(100%,15rem),1fr))] gap-4 pb-2"
-                        : "divide-y divide-border"
-                }
-            >
-                {pageRows.map((row) => (
-                    <li key={row.stableId} className="min-w-0">
-                        <button
-                            id={`${id}-row-${toAutomationIdSegment(row.stableId)}`}
-                            data-row-id={row.stableId}
-                            type="button"
-                            aria-label={`查看${row.name}，${codeLabel}：${row.dictionaryCode ?? row.stableNo}，${row.lifecycleStatusLabel}`}
-                            aria-haspopup="dialog"
-                            aria-expanded={selectedId === row.stableId}
-                            onClick={() => onPreview(row)}
-                            className={cn(
-                                "w-full text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                                renderCard
-                                    ? "group flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card hover:border-foreground/25 hover:bg-muted/20"
-                                    : "flex items-center gap-3 rounded-md px-3 py-3.5 hover:bg-muted/50 sm:gap-6",
-                                selectedId === row.stableId &&
-                                    (renderCard
-                                        ? "border-ring bg-muted/30 ring-1 ring-ring"
-                                        : "bg-muted/60"),
-                            )}
-                        >
-                            {renderCard ? (
-                                renderCard(row)
-                            ) : (
-                                <>
-                                    <span className="min-w-0 flex-1 space-y-1">
-                                        <span className="block break-words text-sm font-medium text-foreground">
-                                            {row.name}
-                                        </span>
-                                        <span className="block break-all text-xs text-muted-foreground">
-                                            {codeLabel}：
-                                            <span className="num">
-                                                {row.dictionaryCode ??
-                                                    row.stableNo}
-                                            </span>
-                                        </span>
-                                    </span>
-                                    <span className="shrink-0">
-                                        <BusinessStatusBadge
-                                            label={row.lifecycleStatusLabel}
-                                            tone={row.lifecycleTone}
-                                        />
-                                    </span>
-                                    <ChevronRightIcon
-                                        className="size-4 shrink-0 text-muted-foreground"
-                                        aria-hidden
-                                    />
-                                </>
-                            )}
-                        </button>
-                    </li>
-                ))}
-            </ul>
-            {rows.length > pagination.pageSize || pagination.pageIndex > 0 ? (
-                <DataTablePagination
-                    table={table}
-                    idPrefix={id}
-                    pageSizeOptions={[20, 50, 100]}
-                />
-            ) : null}
-        </div>
+        <ListDataTable
+            id={id}
+            data={pageRows}
+            columns={columns}
+            getRowId={(row) => row.stableId}
+            rowLabel={(row) =>
+                `${row.name}（${row.dictionaryCode ?? row.stableNo}）`
+            }
+            defaultColumnVisibility={{ revision: false }}
+            defaultColumnPinning={{ left: ["name"] }}
+            rowCount={rows.length}
+            pagination={{ ...pagination, pageIndex }}
+            onPaginationChange={onPaginationChange}
+            highlightedRowId={selectedId ?? undefined}
+            onRowPreview={onPreview}
+            loading={loading}
+            errorState={
+                listLoadFailed ? (
+                    <BusinessFailureState
+                        idPrefix={id}
+                        error={error}
+                        onRetry={onRetry}
+                    />
+                ) : undefined
+            }
+            hasActiveFilters={hasActiveFilters}
+            onClearFilters={onClearFilters}
+            clearFiltersButtonId={`${id}-clear-filters`}
+            emptyCopy={{
+                filterDescription: masterDataCopy.filterEmptyDescription,
+                emptyTitle,
+                emptyDescription,
+            }}
+            emptyAction={emptyAction}
+        />
     )
 }

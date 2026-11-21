@@ -22,14 +22,27 @@ export function CustomerQualityPageSkeleton({
     const { summary, table } = variantClasses[variant]
     return (
         <PageScaffold density="compact" className={styles.page}>
-            <ListWorkspaceHeader eyebrow="分析" title="客户经营质量" />
+            <ListWorkspaceHeader
+                eyebrow={variant === "policy-loading" ? "分析" : undefined}
+                className={
+                    variant === "view-loading" ? "py-2 md:min-h-12" : undefined
+                }
+                title="客户经营质量"
+            />
             <Skeleton className={`${summary} w-full rounded-lg`} />
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                 {Array.from({ length: 8 }).map((_, i) => (
                     <Skeleton key={i} className="h-20 rounded-lg" />
                 ))}
             </div>
-            <Skeleton className={`${table} w-full rounded-lg`} />
+            {variant === "view-loading" ? (
+                <div className="flex min-w-0 flex-col gap-2" aria-busy="true">
+                    <Skeleton className="h-control w-72 max-w-full rounded-md" />
+                    <Skeleton className={`${table} w-full rounded-none`} />
+                </div>
+            ) : (
+                <Skeleton className={`${table} w-full rounded-lg`} />
+            )}
         </PageScaffold>
     )
 }

@@ -8,15 +8,19 @@ import { Button } from "@/components/ui/button"
 import { MasterDataClearFiltersButton } from "@/features/master-data/components/list/list-empty-actions"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { SellableGalleryCard } from "@/features/master-data/components/list/sellable-gallery-card"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
 const galleryGridClassName =
-    "grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 min-[90rem]:grid-cols-5"
+    "grid grid-cols-1 gap-3 min-[28rem]:grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 min-[90rem]:grid-cols-5"
 
 function GallerySkeletons() {
     return (
-        <div className={galleryGridClassName}>
+        <div
+            className={`${galleryGridClassName} px-(--scaffold-px) pt-2`}
+            aria-busy="true"
+        >
             {Array.from({ length: 8 }, (_, index) => (
                 <Skeleton
                     key={index}
@@ -37,6 +41,8 @@ export function SellableItemsGallery({
     failed,
     error,
     hasActiveFilters,
+    canSelect,
+    selectionDisabled,
     selectedIds,
     highlightedId,
     lastFocusedRowId,
@@ -56,6 +62,8 @@ export function SellableItemsGallery({
     failed: boolean
     error: unknown
     hasActiveFilters: boolean
+    canSelect: boolean
+    selectionDisabled: boolean
     selectedIds: ReadonlySet<string>
     highlightedId?: string
     lastFocusedRowId: { current: string | null }
@@ -64,6 +72,7 @@ export function SellableItemsGallery({
     onToggle: (id: string, selected: boolean) => void
     onPreview: (row: MasterDataListItem) => void
 }) {
+    const scrollRef = React.useRef<HTMLDivElement>(null)
     const sentinelRef = React.useRef<HTMLDivElement | null>(null)
     const revealMore = React.useCallback(() => {
         if (!loadingMore) onLoadMore()
@@ -77,7 +86,7 @@ export function SellableItemsGallery({
             (entries) => {
                 if (entries.some((entry) => entry.isIntersecting)) revealMore()
             },
-            { rootMargin: "320px 0px" },
+            { root: scrollRef.current, rootMargin: "320px 0px" },
         )
         observer.observe(element)
         return () => observer.disconnect()
@@ -132,7 +141,20 @@ export function SellableItemsGallery({
     }
 
     return (
-        <div className="flex flex-col gap-4">
+        <div
+            ref={scrollRef}
+            className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-(--scaffold-px) pt-2"
+            data-slot="table-container"
+        >
+            {loading ? (
+                <p
+                    role="status"
+                    className="flex items-center gap-2 bg-surface-sunken px-2 py-1 text-xs text-muted-foreground"
+                >
+                    <Spinner />
+                    正在刷新，当前内容会保留
+                </p>
+            ) : null}
             <div
                 id="master-data-sellable-items-gallery"
                 className={galleryGridClassName}
@@ -141,7 +163,9 @@ export function SellableItemsGallery({
                     <SellableGalleryCard
                         key={row.stableId}
                         row={row}
-                        selected={selectedIds.has(row.stableId)}
+                        canSelect={canSelect}
+                        selectionDisabled={selectionDisabled}
+                        selected={canSelect && selectedIds.has(row.stableId)}
                         highlighted={highlightedId === row.stableId}
                         onToggle={(selected) =>
                             onToggle(row.stableId, selected)
@@ -168,7 +192,7 @@ export function SellableItemsGallery({
                 </div>
             ) : rows.length > 0 ? (
                 <p className="pb-4 text-center text-xs text-muted-foreground">
-                    已显示全部 {total} 件
+                    已显示全部 <span className="num">{total}</span> 件
                 </p>
             ) : null}
         </div>

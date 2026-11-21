@@ -4,7 +4,10 @@ import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 
 import { DataFreshness, GuardedBusinessAction } from "@/components/business"
-import { ListWorkspaceHeader } from "@/components/business/list-workspace"
+import {
+    ListWorkspaceHeader,
+    listWorkspaceStyles as styles,
+} from "@/components/business/list-workspace"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { formatClock, freshnessPresentation } from "../lib/presentation"
 import type { CustomerQualityView } from "../types"
@@ -38,11 +41,17 @@ export function CustomerQualityPageHeader({
 
     return (
         <ListWorkspaceHeader
-            eyebrow="分析"
+            className="gap-2 py-2 md:min-h-12 md:py-1 [&>div:last-child]:min-w-0 [&>div:last-child]:shrink"
             title="客户经营质量"
-            description={`期间 ${period.from} ~ ${period.to} · ${scopeLabel}`}
         >
-            <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
+                <span className="text-xs text-muted-foreground">
+                    期间{" "}
+                    <span className="num">
+                        {period.from} ~ {period.to}
+                    </span>{" "}
+                    · {scopeLabel}
+                </span>
                 <DataFreshness
                     updatedAt={formatClock(freshness.projectedAt)}
                     dateTime={freshness.projectedAt}
@@ -57,14 +66,17 @@ export function CustomerQualityPageHeader({
                         loading={refreshing}
                         variant="ghost"
                         size="sm"
-                        className="text-muted-foreground hover:text-foreground"
+                        className={styles.quietButton}
                         disabled={refreshing}
                         onClick={() => {
                             void onRefresh()
                         }}
                     >
                         {!refreshing ? (
-                            <RefreshCwIcon className="size-4" aria-hidden />
+                            <RefreshCwIcon
+                                data-icon="inline-start"
+                                aria-hidden
+                            />
                         ) : null}
                         {refreshing ? "刷新中" : "刷新"}
                     </LoadingButton>
@@ -76,7 +88,8 @@ export function CustomerQualityPageHeader({
                                 id="customers-quality-export"
                                 loading={exportPending}
                                 type="button"
-                                variant="outline"
+                                variant="ghost"
+                                className={styles.quietButton}
                                 size="sm"
                                 disabled={filteredTotal === 0 || exportPending}
                                 reason={
@@ -90,7 +103,7 @@ export function CustomerQualityPageHeader({
                             >
                                 {!exportPending ? (
                                     <DownloadIcon
-                                        className="size-4"
+                                        data-icon="inline-start"
                                         aria-hidden
                                     />
                                 ) : null}

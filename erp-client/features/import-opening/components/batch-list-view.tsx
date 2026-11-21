@@ -1,16 +1,16 @@
 "use client"
 
+import * as React from "react"
 import { ShieldAlertIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
-    BusinessFailureState,
-    DataTable,
     MetricItem,
     MetricStrip,
     PageScaffold,
 } from "@/components/business"
 import {
+    ListDataTable,
     ListWorkSurface,
     ListWorkspaceHeader,
     ListWorkspaceViews,
@@ -27,6 +27,14 @@ import { useBatchPagination } from "@/features/import-opening/hooks/use-batch-pa
 import type { ImportOpeningUrlState } from "@/features/import-opening/lib/url-state"
 import type { ImportEnvironment } from "@/features/import-opening/types"
 import { formatDateTime } from "@/lib/datetime"
+
+const TABLE_ID = "operations-import-batches-table"
+const CLEAR_FILTERS_ID = `${TABLE_ID}-clear-filters`
+const PAGE_SIZE = 20
+const EMPTY_COPY = {
+    emptyDescription: "当前环境还没有导入批次。",
+    filterDescription: "没有批次符合当前筛选条件，可清除筛选后重试。",
+}
 
 const ENVIRONMENT_VIEWS: ReadonlyArray<{
     value: ImportEnvironment
@@ -58,48 +66,61 @@ export function BatchListView({
         objectType: filters.appliedObjectType ?? "all",
         q: urlState.q,
         page: urlState.page,
-        pageSize: 20,
+        pageSize: PAGE_SIZE,
     })
 
-    const columns = useBatchListColumns({
-        onOpenBatch: (batchId) =>
+    const openBatch = React.useCallback(
+        (batchId: string) =>
             patchUrl({ batchId, section: "overview", page: 1 }),
-    })
-
+        [patchUrl],
+    )
+    const columns = useBatchListColumns({ onOpenBatch: openBatch })
     const data = listQuery.data
+    const rows = React.useMemo(() => [...(data?.rows ?? [])], [data?.rows])
     const { pagination, setPagination } = useBatchPagination(urlState.page)
-    const listLoadFailed = listQuery.isError || !listQuery.data
+    const listLoadFailed =
+        listQuery.isError || (!listQuery.isPending && data === undefined)
+    const hasAppliedFilters = filters.hasAppliedBatchFilters
+    // 数据类型在分页后筛选，当前页可能为空，但仍需保留服务端分页总数。
+    const isEmptyPage = data != null && data.totalCount > 0 && rows.length === 0
+    const isProduction = urlState.environment === "PRODUCTION"
 
     return (
         <PageScaffold density="compact" className={listWorkspaceStyles.page}>
             <ListWorkspaceHeader
-                className="pb-6 md:pb-6"
-                eyebrow="治理"
                 title="导入与期初"
-                description={
-                    <>
-                        查看导入批次与期初处理进度。
-                        <span className="ml-3 text-xs" role="status">
-                            {listQuery.isError ? (
-                                "查询失败"
-                            ) : listQuery.isFetching ? (
-                                "正在更新…"
-                            ) : data?.queriedAt ? (
-                                <time dateTime={data.queriedAt}>
-                                    更新于{" "}
-                                    {formatDateTime(
-                                        data.queriedAt,
-                                        "dateStyle",
-                                        "passthrough",
-                                    )}
-                                </time>
-                            ) : (
-                                "正在查询"
-                            )}
-                        </span>
-                    </>
+                views={
+                    <ListWorkspaceViews
+                        ariaLabel="导入环境"
+                        variant="inline"
+                        items={ENVIRONMENT_VIEWS.map((item) => ({
+                            id: item.id,
+                            label: item.label,
+                            active: item.value === urlState.environment,
+                            onClick: () =>
+                                patchUrl({
+                                    environment: item.value,
+                                    page: 1,
+                                    batchId: undefined,
+                                }),
+                        }))}
+                    />
                 }
-            />
+            >
+                {!listLoadFailed && data?.queriedAt ? (
+                    <time
+                        className="num text-xs text-muted-foreground"
+                        dateTime={data.queriedAt}
+                    >
+                        更新于{" "}
+                        {formatDateTime(
+                            data.queriedAt,
+                            "dateStyle",
+                            "passthrough",
+                        )}
+                    </time>
+                ) : null}
+            </ListWorkspaceHeader>
 
             <MetricStrip className="mb-4" columns={4} aria-label="导入批次指标">
                 <MetricItem
@@ -121,58 +142,29 @@ export function BatchListView({
             </MetricStrip>
 
             <Alert>
-                <ShieldAlertIcon />
+                <ShieldAlertIcon aria-hidden="true" />
                 <AlertTitle>导入文件规范</AlertTitle>
                 <AlertDescription>
                     请上传按标准模板整理的期初数据文件，系统将在预检通过并经各部门核对后正式导入。
+                    {isProduction ? "生产环境 · 操作需显著确认。" : null}
                 </AlertDescription>
             </Alert>
 
             <ListWorkSurface
-                toolbarClassName="pt-3 pb-2"
                 ariaLabel="导入批次列表"
-                views={
-                    <ListWorkspaceViews
-                        ariaLabel="导入环境"
-                        hint={
-                            urlState.environment === "PRODUCTION"
-                                ? "生产环境 · 操作需显著确认"
-                                : "验证环境"
-                        }
-                        items={ENVIRONMENT_VIEWS.map((item) => ({
-                            id: item.id,
-                            label: item.label,
-                            active: item.value === urlState.environment,
-                            onClick: () =>
-                                patchUrl({
-                                    environment: item.value,
-                                    page: 1,
-                                    batchId: undefined,
-                                }),
-                        }))}
-                    />
-                }
                 toolbar={
                     <BatchListToolbar
-                        searchInputRef={filters.searchInputRef}
-                        searchDraft={filters.qDraft}
-                        setSearchDraft={filters.setQDraft}
-                        clearAllFilters={filters.clearAllBatchFilters}
-                        appliedChips={filters.appliedChips}
-                        removeFilter={filters.removeBatchFilter}
-                        applyBatchFilters={filters.applyBatchFilters}
-                        objectTypeDraft={filters.objectTypeDraft}
-                        setObjectTypeDraft={filters.setObjectTypeDraft}
-                        hasPendingChanges={filters.hasPendingChanges}
-                        resultCount={data?.totalCount}
-                        loading={listQuery.isPending || listQuery.isFetching}
-                        failed={listQuery.isError}
+                        filters={filters}
+                        loading={listQuery.isFetching}
+                        failed={listLoadFailed}
                     />
                 }
                 table={
-                    <DataTable
-                        id="operations-import-batches-table"
-                        data={[...(data?.rows ?? [])]}
+                    <ListDataTable
+                        id={TABLE_ID}
+                        entityName="导入批次"
+                        caption="导入批次列表"
+                        data={rows}
                         columns={columns}
                         defaultColumnVisibility={{
                             environment: false,
@@ -181,60 +173,45 @@ export function BatchListView({
                         }}
                         defaultColumnPinning={{ left: ["batchNo"] }}
                         getRowId={(row) => row.batchId}
+                        rowLabel={(row) => row.batchNo}
+                        onRowOpen={(row) => openBatch(row.batchId)}
                         rowCount={data?.totalCount ?? 0}
                         pagination={pagination}
+                        pageSizeOptions={[PAGE_SIZE]}
                         onPaginationChange={(next) => {
                             setPagination(next)
                             patchUrl({ page: next.pageIndex + 1 })
                         }}
-                        layout="flush"
-                        loading={listQuery.isPending}
-                        errorState={
-                            listQuery.isError ? (
-                                <BusinessFailureState
-                                    title="批次列表加载失败"
-                                    error={listQuery.error}
-                                    className="rounded-lg border-0 bg-transparent shadow-none ring-0"
-                                    action={
-                                        <Button
-                                            id="operations-import-batches-table-retry"
-                                            type="button"
-                                            variant="secondary"
-                                            className="rounded-lg shadow-none"
-                                            onClick={() =>
-                                                void listQuery.refetch()
-                                            }
-                                        >
-                                            重试
-                                        </Button>
-                                    }
-                                />
-                            ) : undefined
-                        }
+                        showToolbarSummary={false}
+                        loading={listQuery.isPending || listQuery.isFetching}
+                        isError={listLoadFailed}
+                        error={listQuery.error}
+                        onRetry={() => void listQuery.refetch()}
+                        hasActiveFilters={hasAppliedFilters}
+                        onClearFilters={filters.clearAllBatchFilters}
+                        clearFiltersButtonId={CLEAR_FILTERS_ID}
+                        emptyCopy={EMPTY_COPY}
                         emptyState={
-                            !listLoadFailed &&
-                            (data?.rows.length ?? 0) === 0 ? (
+                            isEmptyPage ? (
                                 <BusinessEmptyState
                                     kind={
-                                        filters.hasAppliedBatchFilters
-                                            ? "filter"
-                                            : "no-data"
+                                        hasAppliedFilters ? "filter" : "no-data"
                                     }
                                     className={listWorkspaceEmptyStateClassName}
                                     title={
-                                        filters.hasAppliedBatchFilters
+                                        hasAppliedFilters
                                             ? "当前筛选无结果"
-                                            : "还没有导入批次"
+                                            : "当前页没有导入批次"
                                     }
                                     description={
-                                        filters.hasAppliedBatchFilters
-                                            ? "没有批次符合当前筛选条件，可清除筛选后重试。"
-                                            : "当前环境还没有导入批次。"
+                                        hasAppliedFilters
+                                            ? EMPTY_COPY.filterDescription
+                                            : "当前页没有可显示的批次。"
                                     }
                                     action={
-                                        filters.hasAppliedBatchFilters ? (
+                                        hasAppliedFilters ? (
                                             <Button
-                                                id="operations-import-batches-table-clear-filters"
+                                                id={CLEAR_FILTERS_ID}
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"

@@ -63,11 +63,16 @@ export const salesOrderKeys = {
 export function useSalesOrdersQuery(
     query: SalesOrdersListQuery,
     enabled = true,
+    includeContractDetails = true,
 ) {
     return useScopedListQuery({
         query,
-        queryKey: salesOrderKeys.list,
-        fetchPage: fetchSalesOrders,
+        queryKey: (input) => [
+            ...salesOrderKeys.list(input),
+            includeContractDetails,
+        ],
+        fetchPage: (input) =>
+            fetchSalesOrders(input, { includeContractDetails }),
         enabled,
     })
 }

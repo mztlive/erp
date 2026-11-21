@@ -7,7 +7,11 @@ import type { Dispatch, SetStateAction } from "react"
 import { OptionCombobox } from "@/components/business"
 import { DateRangePicker } from "@/components/ui/date-picker"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
-import { ListWorkspaceFilterField } from "@/components/business/list-workspace"
+import {
+    ListFilterSection,
+    ListFilterSections,
+    ListWorkspaceFilterField,
+} from "@/components/business/list-workspace"
 import {
     ContractSearchCombobox,
     CustomerSearchCombobox,
@@ -109,7 +113,7 @@ export function SalesOrdersListFilterPanel({
         >
             <OptionCombobox
                 id={`sales-orders-list-filter-${id}`}
-                className="w-full"
+                className="w-full min-w-0"
                 value={draft[key] === "all" ? null : draft[key]}
                 aria-label={label}
                 onValueChange={(value) => {
@@ -131,26 +135,30 @@ export function SalesOrdersListFilterPanel({
     )
     const account = useAccountProfileQuery()
     return (
-        <div className="space-y-4">
-            <fieldset className="min-w-0 space-y-2">
-                <legend className="mb-1 text-sm font-medium">基本条件</legend>
-                <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                    {renderEnum({
-                        key: "nature",
-                        id: "nature",
-                        label: "业务性质",
-                        options: [
-                            { value: "physical_service", label: "实物与服务" },
-                            { value: "card_voucher", label: "卡券" },
-                        ],
-                    })}
-                    <ListWorkspaceFilterField
-                        htmlFor="sales-orders-list-filter-created-date"
-                        label="创建日期"
+        <ListFilterSections>
+            <ListFilterSection legend="基本条件">
+                {renderEnum({
+                    key: "nature",
+                    id: "nature",
+                    label: "业务性质",
+                    options: [
+                        { value: "physical_service", label: "实物与服务" },
+                        { value: "card_voucher", label: "卡券" },
+                    ],
+                })}
+                <ListWorkspaceFilterField
+                    htmlFor="sales-orders-list-filter-created-date"
+                    label="创建日期"
+                    className="[&>[data-slot=list-filter-field-label]]:sr-only"
+                >
+                    <div
+                        data-has-value={Boolean(
+                            draft.createdFrom || draft.createdTo,
+                        )}
                     >
                         <DateRangePicker
                             id="sales-orders-list-filter-created-date"
-                            className="w-full [&_button]:h-control"
+                            filterLabel="创建日期"
                             value={
                                 draft.createdFrom || draft.createdTo
                                     ? {
@@ -168,129 +176,119 @@ export function SalesOrdersListFilterPanel({
                             }
                             placeholder="全部"
                         />
-                    </ListWorkspaceFilterField>
-                </div>
-            </fieldset>
+                    </div>
+                </ListWorkspaceFilterField>
+            </ListFilterSection>
             {(hasPermission(account.data?.permissions, "org_unit:list") ||
                 hasPermission(account.data?.permissions, "customer:list") ||
                 hasPermission(account.data?.permissions, "contract:list")) && (
-                <fieldset className="min-w-0 space-y-2">
-                    <legend className="mb-1 text-sm font-medium">
-                        组织与关联
-                    </legend>
+                <ListFilterSection legend="组织关联">
                     {hasPermission(
                         account.data?.permissions,
                         "org_unit:list",
                     ) && (
-                        <OrganizationUnitFilter
-                            id="sales-orders-list-filter-org"
-                            label="业务组织"
-                            value={draft.orgUnitIds}
-                            onChange={(orgUnitIds) =>
-                                onDraftChange((current) => ({
-                                    ...current,
-                                    orgUnitIds,
-                                }))
-                            }
-                            includeDescendants={draft.includeDescendants}
-                            onDescendantsChange={(includeDescendants) =>
-                                onDraftChange((current) => ({
-                                    ...current,
-                                    includeDescendants,
-                                }))
-                            }
-                        />
-                    )}
-                    <div className="grid min-w-0 gap-3 empty:hidden sm:grid-cols-2">
-                        {hasPermission(
-                            account.data?.permissions,
-                            "customer:list",
-                        ) && (
-                            <ListWorkspaceFilterField
-                                htmlFor="sales-orders-list-filter-customer"
-                                label="客户"
-                            >
-                                <CustomerSearchCombobox
-                                    id="sales-orders-list-filter-customer"
-                                    purpose="filter"
-                                    value={draft.customerId || undefined}
-                                    onValueChange={(customerId) =>
-                                        onDraftChange((current) => ({
-                                            ...current,
-                                            customerId: customerId ?? "",
-                                            contractId:
-                                                customerId ===
-                                                current.customerId
-                                                    ? current.contractId
-                                                    : "",
-                                        }))
-                                    }
-                                    placeholder="全部客户"
-                                />
-                            </ListWorkspaceFilterField>
-                        )}
-                        {hasPermission(
-                            account.data?.permissions,
-                            "contract:list",
-                        ) && (
-                            <ListWorkspaceFilterField
-                                htmlFor="sales-orders-list-filter-contract"
-                                label="合同"
-                            >
-                                <ContractSearchCombobox
-                                    id="sales-orders-list-filter-contract"
-                                    purpose="filter"
-                                    customerId={draft.customerId || undefined}
-                                    value={draft.contractId || undefined}
-                                    onValueChange={(contractId) =>
-                                        onDraftChange((current) => ({
-                                            ...current,
-                                            contractId: contractId ?? "",
-                                        }))
-                                    }
-                                    placeholder="全部合同"
-                                />
-                            </ListWorkspaceFilterField>
-                        )}
-                    </div>
-                </fieldset>
-            )}
-            <fieldset className="min-w-0 border-t pt-4">
-                <legend className="pr-2 text-sm font-medium">业务进度</legend>
-                <div className="grid gap-3 sm:grid-cols-2">
-                    {progressFields.map(renderEnum)}
-                </div>
-            </fieldset>
-            <fieldset className="min-w-0 border-t pt-4">
-                <legend className="pr-2 text-sm font-medium">来源与审批</legend>
-                <div className="grid gap-3 sm:grid-cols-2">
-                    {sourceFields.map(renderEnum)}
-                    {hasPermission(
-                        account.data?.permissions,
-                        "business_person:list",
-                    ) && (
-                        <ListWorkspaceFilterField
-                            htmlFor="sales-orders-list-filter-created-by"
-                            label="创建人"
-                        >
-                            <PersonDirectoryFilter
-                                id="sales-orders-list-filter-created-by"
-                                category="business"
-                                selectionMode="single"
-                                label="创建人"
-                                hideLabel
-                                value={draft.createdBy}
-                                onChange={(createdBy) =>
+                        <div className="col-span-full min-w-0">
+                            <OrganizationUnitFilter
+                                id="sales-orders-list-filter-org"
+                                label="业务组织"
+                                value={draft.orgUnitIds}
+                                onChange={(orgUnitIds) =>
                                     onDraftChange((current) => ({
                                         ...current,
-                                        createdBy: createdBy ?? "",
+                                        orgUnitIds,
+                                    }))
+                                }
+                                includeDescendants={draft.includeDescendants}
+                                onDescendantsChange={(includeDescendants) =>
+                                    onDraftChange((current) => ({
+                                        ...current,
+                                        includeDescendants,
                                     }))
                                 }
                             />
+                        </div>
+                    )}
+                    {hasPermission(
+                        account.data?.permissions,
+                        "customer:list",
+                    ) && (
+                        <ListWorkspaceFilterField
+                            htmlFor="sales-orders-list-filter-customer"
+                            label="客户"
+                        >
+                            <CustomerSearchCombobox
+                                id="sales-orders-list-filter-customer"
+                                purpose="filter"
+                                value={draft.customerId || undefined}
+                                onValueChange={(customerId) =>
+                                    onDraftChange((current) => ({
+                                        ...current,
+                                        customerId: customerId ?? "",
+                                        contractId:
+                                            customerId === current.customerId
+                                                ? current.contractId
+                                                : "",
+                                    }))
+                                }
+                                placeholder="全部客户"
+                            />
                         </ListWorkspaceFilterField>
                     )}
-                </div>
-            </fieldset>
-        </div>
+                    {hasPermission(
+                        account.data?.permissions,
+                        "contract:list",
+                    ) && (
+                        <ListWorkspaceFilterField
+                            htmlFor="sales-orders-list-filter-contract"
+                            label="合同"
+                        >
+                            <ContractSearchCombobox
+                                id="sales-orders-list-filter-contract"
+                                purpose="filter"
+                                customerId={draft.customerId || undefined}
+                                value={draft.contractId || undefined}
+                                onValueChange={(contractId) =>
+                                    onDraftChange((current) => ({
+                                        ...current,
+                                        contractId: contractId ?? "",
+                                    }))
+                                }
+                                placeholder="全部合同"
+                            />
+                        </ListWorkspaceFilterField>
+                    )}
+                </ListFilterSection>
+            )}
+            <ListFilterSection legend="业务进度">
+                {progressFields.map(renderEnum)}
+            </ListFilterSection>
+            <ListFilterSection legend="来源审批">
+                {sourceFields.map(renderEnum)}
+                {hasPermission(
+                    account.data?.permissions,
+                    "business_person:list",
+                ) && (
+                    <ListWorkspaceFilterField
+                        htmlFor="sales-orders-list-filter-created-by"
+                        label="创建人"
+                    >
+                        <PersonDirectoryFilter
+                            id="sales-orders-list-filter-created-by"
+                            category="business"
+                            selectionMode="single"
+                            label="创建人"
+                            externalLabel
+                            value={draft.createdBy}
+                            onChange={(createdBy) =>
+                                onDraftChange((current) => ({
+                                    ...current,
+                                    createdBy: createdBy ?? "",
+                                }))
+                            }
+                        />
+                    </ListWorkspaceFilterField>
+                )}
+            </ListFilterSection>
+        </ListFilterSections>
     )
 }

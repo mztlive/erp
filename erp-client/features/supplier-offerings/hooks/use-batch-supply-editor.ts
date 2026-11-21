@@ -59,12 +59,12 @@ export function useBatchSupplyEditor({
     mode,
     offerings,
     userId,
-    onClose,
+    onCompleted,
 }: {
     mode: BatchMode
     offerings: readonly SupplierOfferingView[]
     userId: string
-    onClose: () => void
+    onCompleted: (rows: readonly BatchRow[]) => void
 }) {
     const mutation = useSupplyBatchMutation(mode)
     const reloadMutation = useReloadSupplyRowsMutation()
@@ -340,7 +340,7 @@ export function useBatchSupplyEditor({
                     description: `成功 ${completed} 行；未勾选的行未提交。`,
                     type: "success",
                 })
-                onClose()
+                onCompleted(snapshot.rows)
             } else
                 message(
                     validateOnly

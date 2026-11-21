@@ -5,11 +5,8 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { DownloadIcon, FileUpIcon, HistoryIcon } from "lucide-react"
 
-import { PageActions, PageScaffold } from "@/components/business"
-import {
-    ListWorkspaceHeader,
-    listWorkspaceStyles as styles,
-} from "@/components/business/list-workspace"
+import { BusinessFailureState } from "@/components/business"
+import { ListWorkspacePage } from "@/components/business/list-workspace"
 import { ContractListResults } from "@/features/contracts/components/contract-list-results"
 import { ContractPaperDialog } from "@/features/contracts/components/contract-paper-dialog"
 import { ContractPreviewSheet } from "@/features/contracts/components/contract-preview-sheet"
@@ -24,7 +21,6 @@ import { useContractFilePicker } from "@/features/contracts/hooks/use-contract-f
 export function ContractsListPage() {
     const list = useContractsList()
     const account = useAccountProfileQuery()
-    const canExport = hasPermission(account.data?.permissions, "contract:list")
     const canReadDetail = hasPermission(
         account.data?.permissions,
         "contract:detail",
@@ -33,9 +29,9 @@ export function ContractsListPage() {
         account.data?.permissions,
         "contract:create",
     )
-    const { contractsQuery } = list
-    const { customerId } = list
+    const { contractsQuery, customerId } = list
 
+    const lastFocusedRowId = React.useRef<string | null>(null)
     const [previewId, setPreviewId] = React.useState<string | null>(null)
     const [paperId, setPaperId] = React.useState<string | null>(null)
     const [uploadOpen, setUploadOpen] = React.useState(list.upload === "1")
@@ -45,19 +41,13 @@ export function ContractsListPage() {
         setUploadOpen(true)
     })
 
-    const previewRow = React.useMemo(
-        () =>
-            (contractsQuery.data?.items ?? []).find(
-                (item) => item.contractId === previewId,
-            ) ?? null,
-        [contractsQuery.data, previewId],
-    )
-
+    const previewRow =
+        list.pageRows.find((item) => item.contractId === previewId) ?? null
     const previewDetailQuery = useContractCenterQuery(
-        canReadDetail ? (previewId ?? "") : "",
+        list.canReadList && canReadDetail ? (previewId ?? "") : "",
     )
     const paperDetailQuery = useContractCenterQuery(
-        canReadDetail ? (paperId ?? "") : "",
+        list.canReadList && canReadDetail ? (paperId ?? "") : "",
     )
 
     const actions = useContractListActions({
@@ -65,14 +55,10 @@ export function ContractsListPage() {
         filteredCount: list.total,
         filterSnapshotLabel: list.filterSnapshotLabel,
     })
-
-    const columns = useContractListColumns()
-    const updatedAt = contractsQuery.data
-        ? new Date(contractsQuery.dataUpdatedAt).toISOString()
-        : undefined
+    const columns = useContractListColumns(canReadDetail)
 
     return (
-        <PageScaffold density="compact" className={styles.page}>
+        <>
             {canImport && (
                 <input
                     id="contracts-list-upload-input"
@@ -80,106 +66,116 @@ export function ContractsListPage() {
                     {...picker.inputProps}
                 />
             )}
-            <ListWorkspaceHeader
-                eyebrow="销售"
+            <ListWorkspacePage
                 title="合同"
-                description={
-                    <>
-                        查看合同文本、客户与结算主体。
-                        <span className="ml-3 text-xs" role="status">
-                            {contractsQuery.isError ? (
-                                "查询失败"
-                            ) : contractsQuery.isFetching ? (
-                                "正在更新…"
-                            ) : updatedAt ? (
-                                <time dateTime={updatedAt}>
-                                    更新于{" "}
-                                    {new Date(updatedAt).toLocaleTimeString(
-                                        "zh-CN",
-                                        {
-                                            hour: "2-digit",
-                                            minute: "2-digit",
-                                        },
-                                    )}
-                                </time>
-                            ) : (
-                                "正在查询"
-                            )}
-                        </span>
-                    </>
+                loading={
+                    account.isPending ||
+                    (list.canReadList &&
+                        contractsQuery.isPending &&
+                        contractsQuery.isFetching)
+                }
+                actions={[
+                    {
+                        hidden: !list.canReadList,
+                        actionKey: "export",
+                        label: actions.exportPending ? "导出中…" : "导出",
+                        icon: DownloadIcon,
+                        tier: "quiet",
+                        loading: actions.exportPending,
+                        disabled:
+                            list.total === 0 ||
+                            contractsQuery.isError ||
+                            actions.exportPending,
+                        title: contractsQuery.isError
+                            ? "请重新查询后导出"
+                            : list.total === 0
+                              ? "当前没有可导出的合同"
+                              : undefined,
+                        onClick: () => {
+                            void actions.handleExport()
+                        },
+                    },
+                    {
+                        hidden: !canImport,
+                        actionKey: "import-history",
+                        label: "导入记录",
+                        icon: HistoryIcon,
+                        tier: "quiet",
+                        onClick: () => setUploadOpen(true),
+                    },
+                    {
+                        hidden: !canImport,
+                        actionKey: "upload",
+                        label: "上传合同 PDF",
+                        icon: FileUpIcon,
+                        tier: "primary",
+                        onClick: picker.selectFile,
+                    },
+                ]}
+                alerts={
+                    list.canReadList &&
+                    (actions.actionResult || actions.exportJob) ? (
+                        <ContractListResults
+                            actionResult={actions.actionResult}
+                            exportJob={actions.exportJob}
+                        />
+                    ) : null
                 }
             >
-                <PageActions
-                    actions={[
-                        {
-                            hidden: !canExport,
-                            actionKey: "export",
-                            label: actions.exportPending ? "导出中…" : "导出",
-                            icon: DownloadIcon,
-                            loading: actions.exportPending,
-                            variant: "outline",
-                            disabled: list.total === 0 || actions.exportPending,
-                            onClick: () => {
-                                void actions.handleExport()
-                            },
-                        },
-                        {
-                            hidden: !canImport,
-                            actionKey: "import-history",
-                            label: "导入记录",
-                            icon: HistoryIcon,
-                            variant: "outline",
-                            onClick: () => setUploadOpen(true),
-                        },
-                        {
-                            hidden: !canImport,
-                            actionKey: "upload",
-                            label: "上传合同 PDF",
-                            icon: FileUpIcon,
-                            onClick: picker.selectFile,
-                        },
-                    ]}
-                />
-            </ListWorkspaceHeader>
-
-            <ContractListResults
-                actionResult={actions.actionResult}
-                exportJob={actions.exportJob}
-            />
-
-            <ContractsTablePanel
-                list={list}
-                columns={columns}
-                isError={contractsQuery.isError}
-                error={contractsQuery.error}
-                isPending={contractsQuery.isPending}
-                onRetry={() => {
-                    void contractsQuery.refetch()
-                }}
-                onOpenUpload={canImport ? picker.selectFile : undefined}
-                onPreview={setPreviewId}
-                highlightedContractId={
-                    actions.highlightedContractId ?? undefined
-                }
-            />
+                {account.isError && !account.data ? (
+                    <BusinessFailureState
+                        id="card-contracts-list-failure"
+                        title="无法读取账号权限"
+                        error={account.error}
+                        onRetry={() => void account.refetch()}
+                    />
+                ) : (
+                    <ContractsTablePanel
+                        list={list}
+                        columns={columns}
+                        canReadDetail={canReadDetail}
+                        onOpenUpload={canImport ? picker.selectFile : undefined}
+                        onPreview={(contractId) => {
+                            lastFocusedRowId.current = contractId
+                            setPreviewId(contractId)
+                        }}
+                        highlightedContractId={
+                            previewId ??
+                            actions.highlightedContractId ??
+                            undefined
+                        }
+                    />
+                )}
+            </ListWorkspacePage>
 
             <ContractPreviewSheet
-                row={previewRow}
-                detail={previewDetailQuery.data}
+                row={list.canReadList ? previewRow : null}
+                detail={canReadDetail ? previewDetailQuery.data : undefined}
                 detailLoading={canReadDetail && previewDetailQuery.isPending}
                 onOpenChange={(open) => {
                     if (!open) setPreviewId(null)
                 }}
                 onShowPaper={setPaperId}
-            />
-
-            <ContractPaperDialog
-                contract={paperDetailQuery.data ?? null}
-                open={paperId != null && paperDetailQuery.data != null}
-                onOpenChange={(open) => {
-                    if (!open) setPaperId(null)
+                finalFocus={() => {
+                    const id = lastFocusedRowId.current
+                    const row = id
+                        ? document.querySelector<HTMLElement>(
+                              `#card-contracts-list-table [data-row-id="${CSS.escape(id)}"]`,
+                          )
+                        : null
+                    return row ?? list.searchInputRef.current
                 }}
             />
+
+            {list.canReadList && canReadDetail && (
+                <ContractPaperDialog
+                    contract={paperDetailQuery.data ?? null}
+                    open={paperId != null && paperDetailQuery.data != null}
+                    onOpenChange={(open) => {
+                        if (!open) setPaperId(null)
+                    }}
+                />
+            )}
 
             {canImport && (
                 <ContractUploadDialog
@@ -190,6 +186,6 @@ export function ContractsListPage() {
                     onSuccess={actions.handleUploadSuccess}
                 />
             )}
-        </PageScaffold>
+        </>
     )
 }

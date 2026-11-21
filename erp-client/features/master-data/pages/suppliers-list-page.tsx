@@ -1,29 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { SupplierImportDialog } from "@/features/master-data/components/supplier/supplier-import-dialog"
-import { useRouter } from "@/lib/navigation"
 import { DownloadIcon, UploadIcon } from "lucide-react"
 
-import {
-    BusinessEmptyState,
-    BusinessFailureState,
-    DataTable,
-} from "@/components/business"
-import {
-    ListWorkSurface,
-    listWorkspaceEmptyStateClassName,
-} from "@/components/business/list-workspace"
-import { Button } from "@/components/ui/button"
+import { ListDataTable } from "@/components/business/list-workspace"
 import { toast } from "@/components/ui/toast"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
-import {
-    MasterDataClearFiltersButton,
-    MasterDataEmptyCreateButton,
-} from "@/features/master-data/components/list/list-empty-actions"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { SupplierListToolbar } from "@/features/master-data/components/list/supplier-list-toolbar"
-import { suppliersListStyles } from "./suppliers-list-styles"
+import { SupplierImportDialog } from "@/features/master-data/components/supplier/supplier-import-dialog"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import { useSupplierListColumns } from "@/features/master-data/hooks/use-supplier-list-columns"
 import { useSupplierListState } from "@/features/master-data/hooks/use-supplier-list-state"
@@ -32,9 +17,12 @@ import {
     masterDataCreateAction,
     masterDataExportAction,
 } from "@/features/master-data/lib/list-page-actions"
+import { downloadSupplierTemplate } from "@/features/master-data/lib/supplier-import"
 import type { BackgroundJobView } from "@/lib/background-jobs"
 import { launchNavDelivery } from "@/lib/nav-delivery"
-import { downloadSupplierTemplate } from "@/features/master-data/lib/supplier-import"
+import { useRouter } from "@/lib/navigation"
+
+import { suppliersListStyles } from "./suppliers-list-styles"
 
 /** 导入动作按钮与投递落点：动作 id 同时是动画起点。 */
 const IMPORT_ACTION_ID = "master-data-suppliers-list-import"
@@ -63,6 +51,7 @@ export function SuppliersListPage() {
         lastFocusedRowId.current = stableId
         router.push(`/master-data/suppliers/${stableId}?section=overview`)
     }
+    const openCreate = () => router.push("/master-data/suppliers/new")
     const columns = useSupplierListColumns()
     const hasActiveFilters =
         filters.q.trim() !== "" || filters.hasStructuredSupplierFilters
@@ -89,8 +78,21 @@ export function SuppliersListPage() {
     return (
         <ListPageFrame
             resource="suppliers"
+            eyebrow=""
             title="供应商与资质"
-            description="查看供应商资料、资质与供货能力。"
+            views={
+                state.syncedMetrics.length > 1 ? (
+                    <LifecycleMetricStrip
+                        idPrefix="master-data-suppliers-list-metrics"
+                        metrics={state.syncedMetrics}
+                        metricKey={filters.metricKey}
+                        ariaLabel="供应商与资质指标"
+                        allLabel="全部供应商"
+                        variant="inline"
+                        onChangeLifecycle={filters.changeLifecycle}
+                    />
+                ) : undefined
+            }
             exportMeta={state.exportMeta}
             actions={[
                 {
@@ -98,7 +100,7 @@ export function SuppliersListPage() {
                     actionKey: "import-template",
                     label: "下载导入模板",
                     icon: DownloadIcon,
-                    variant: "outline",
+                    tier: "quiet",
                     hidden: !state.canCreate,
                     disabled: templatePending,
                     loading: templatePending,
@@ -109,65 +111,47 @@ export function SuppliersListPage() {
                     actionKey: "import",
                     label: "导入",
                     icon: UploadIcon,
-                    variant: "outline",
+                    tier: "quiet",
                     hidden: !state.canCreate,
-                    disabled: !state.canCreate,
-                    title: !state.canCreate
-                        ? state.createBlockedReason
-                        : undefined,
                     onClick: () => setImportOpen(true),
                 },
-                masterDataExportAction({
-                    id: "master-data-suppliers-list-export",
-                    pending: exportPending,
-                    rowCount: state.rows.length,
-                    onClick: state.onExport,
-                }),
+                {
+                    ...masterDataExportAction({
+                        id: "master-data-suppliers-list-export",
+                        pending: exportPending,
+                        rowCount: state.rows.length,
+                        onClick: state.onExport,
+                    }),
+                    tier: "quiet",
+                },
                 masterDataCreateAction({
                     id: "master-data-suppliers-list-create",
                     canCreate: state.canCreate,
                     blockedReason: state.createBlockedReason,
-                    onClick: () => router.push("/master-data/suppliers/new"),
+                    onClick: openCreate,
                 }),
             ]}
             resultsLabel={`供应商与资质 · ${state.rows.length} 条结果`}
             resultsHeadingRef={resultsHeadingRef}
             loading={state.listQuery.isPending}
-        >
-            <ListWorkSurface
-                ariaLabel="供应商与资质列表"
-                views={
-                    <LifecycleMetricStrip
-                        idPrefix="master-data-suppliers-list-metrics"
-                        metrics={state.syncedMetrics}
-                        metricKey={filters.metricKey}
-                        ariaLabel="供应商与资质指标"
-                        allLabel="全部供应商"
-                        hint={
-                            state.canReadDetail
-                                ? "选择供应商查看详情"
-                                : undefined
-                        }
-                        onChangeLifecycle={filters.changeLifecycle}
-                    />
-                }
-                toolbar={
+            surface={{
+                ariaLabel: "供应商与资质列表",
+                toolbar: (
                     <SupplierListToolbar
                         idPrefix="master-data-suppliers-list-toolbar"
                         searchInputRef={searchInputRef}
                         filters={filters}
                         appliedChips={state.appliedChips}
-                        resultCount={
-                            state.listQuery.data ? state.rows.length : undefined
-                        }
                         loading={state.listQuery.isFetching}
                         failed={state.listQuery.isError}
                     />
-                }
-                tableClassName={suppliersListStyles.table}
-                table={
-                    <DataTable
+                ),
+                tableClassName: suppliersListStyles.table,
+                table: (
+                    <ListDataTable
                         id="master-data-suppliers-list-table"
+                        entityName="供应商"
+                        caption="供应商与资质"
                         data={state.pageRows}
                         columns={columns}
                         defaultColumnVisibility={{
@@ -175,84 +159,47 @@ export function SuppliersListPage() {
                             invoice: false,
                             businessCategory: false,
                         }}
+                        defaultColumnOrder={[
+                            "name",
+                            "lifecycle",
+                            "maintainer",
+                            "capability",
+                            "qualification",
+                            "settlement",
+                            "entities",
+                            "invoice",
+                            "businessCategory",
+                            "revisionNo",
+                        ]}
+                        defaultColumnPinning={{ left: ["name"] }}
                         getRowId={(row) => row.stableId}
+                        rowLabel={(row) => `${row.name}（${row.stableNo}）`}
                         rowCount={state.rows.length}
                         pagination={filters.pagination}
                         onPaginationChange={filters.changePagination}
                         loading={state.listQuery.isFetching}
-                        layout="flush"
-                        defaultColumnPinning={{
-                            left: ["name"],
+                        showToolbarSummary={false}
+                        isError={listLoadFailed}
+                        error={state.listQuery.error}
+                        onRetry={() => void state.listQuery.refetch()}
+                        retryButtonId="master-data-suppliers-list-retry"
+                        noScope={noScope}
+                        hasActiveFilters={hasActiveFilters}
+                        onClearFilters={
+                            noScope ? undefined : filters.clearAllFilters
+                        }
+                        clearFiltersButtonId="master-data-suppliers-list-empty-clear-filters"
+                        canCreate={state.canCreate}
+                        onCreate={openCreate}
+                        createButtonId="master-data-suppliers-list-empty-create"
+                        createLabel={masterDataCopy.actionCreate}
+                        emptyCopy={{
+                            noScopeDescription:
+                                "您当前尚未分配供应商的数据查看权限，请联系管理员开通。",
+                            filterDescription:
+                                masterDataCopy.filterEmptyDescription,
+                            emptyTitle: "还没有供应商与资质资料",
                         }}
-                        errorState={
-                            listLoadFailed ? (
-                                <BusinessFailureState
-                                    error={state.listQuery.error}
-                                    action={
-                                        <Button
-                                            id="master-data-suppliers-list-retry"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                                void state.listQuery.refetch()
-                                            }
-                                        >
-                                            重试
-                                        </Button>
-                                    }
-                                />
-                            ) : undefined
-                        }
-                        emptyState={
-                            !listLoadFailed && state.rows.length === 0 ? (
-                                <BusinessEmptyState
-                                    kind={
-                                        noScope
-                                            ? "no-scope"
-                                            : hasActiveFilters
-                                              ? "filter"
-                                              : "no-data"
-                                    }
-                                    className={listWorkspaceEmptyStateClassName}
-                                    title={
-                                        noScope
-                                            ? "暂无可查看的供应商"
-                                            : hasActiveFilters
-                                              ? "当前筛选无结果"
-                                              : "还没有供应商与资质资料"
-                                    }
-                                    description={
-                                        noScope
-                                            ? "您当前尚未分配供应商的数据查看权限，请联系管理员开通。"
-                                            : hasActiveFilters
-                                              ? masterDataCopy.filterEmptyDescription
-                                              : state.canCreate
-                                                ? "点击「新建」创建第一份资料；历史记录会随资料保留。"
-                                                : undefined
-                                    }
-                                    action={
-                                        hasActiveFilters ? (
-                                            <MasterDataClearFiltersButton
-                                                id="master-data-suppliers-list-empty-clear-filters"
-                                                onClick={
-                                                    filters.clearAllFilters
-                                                }
-                                            />
-                                        ) : state.canCreate ? (
-                                            <MasterDataEmptyCreateButton
-                                                id="master-data-suppliers-list-empty-create"
-                                                onClick={() =>
-                                                    router.push(
-                                                        "/master-data/suppliers/new",
-                                                    )
-                                                }
-                                            />
-                                        ) : undefined
-                                    }
-                                />
-                            ) : undefined
-                        }
                         onRowPreview={
                             state.canReadDetail
                                 ? (row) => openDetail(row.stableId)
@@ -264,8 +211,9 @@ export function SuppliersListPage() {
                                 : undefined
                         }
                     />
-                }
-            />
+                ),
+            }}
+        >
             {state.canCreate && importOpen && (
                 <SupplierImportDialog
                     onClose={() => setImportOpen(false)}

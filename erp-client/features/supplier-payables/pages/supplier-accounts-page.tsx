@@ -1,11 +1,22 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
+import { useEffect, useState } from "react"
 
-import { getErrorMessage } from "@/lib/api/errors"
+import { Alert, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+
+import { getErrorMessage, getErrorPresentation } from "@/lib/api/errors"
 import { FinancialDraftEditDialog } from "@/features/financial-draft-edit/components/financial-draft-edit-dialog"
-import { BusinessEmptyState, PageScaffold } from "@/components/business"
-import { listWorkspaceStyles } from "@/components/business/list-workspace"
+import {
+    BusinessEmptyState,
+    BusinessFailureState,
+    PageScaffold,
+} from "@/components/business"
+import {
+    listWorkspaceEmptyStateClassName,
+    listWorkspaceStyles,
+} from "@/components/business/list-workspace"
 import { PaymentReversalRequestDialog } from "@/features/supplier-payables/components/payment-reversal-request-dialog"
 import { PaymentReversalSubmitConfirmDialog } from "@/features/supplier-payables/components/payment-reversal-submit-confirm-dialog"
 import { SupplierRefundRequestDialog } from "@/features/supplier-payables/components/supplier-refund-request-dialog"
@@ -44,6 +55,7 @@ export function SupplierAccountsPage() {
         fromWorkspace,
         returnTo,
         trackFilter,
+        dueFilterUnavailable,
         searchInput,
         setSearchInput,
         searchInputRef,
@@ -103,59 +115,17 @@ export function SupplierAccountsPage() {
         setRedInvoiceNo,
         lastResult,
         setLastResult,
+        hasActiveFilters,
         clearFilters,
         switchView,
         listQuery,
         data,
         sortedPayables,
     } = useSupplierAccountsPage()
-
-    const filterToolbar = (
-        <SupplierAccountsToolbar
-            view={view}
-            searchInput={searchInput}
-            onSearchInputChange={setSearchInput}
-            searchInputRef={searchInputRef}
-            panelOpen={panelOpen}
-            setPanelOpen={setPanelOpen}
-            appliedChips={appliedChips}
-            applyFilters={applyFilters}
-            resetMoreFilters={resetMoreFilters}
-            cancelMoreFilters={cancelMoreFilters}
-            clearAllFilters={clearFilters}
-            removeFilter={removeFilter}
-            supplierDraft={supplierDraft}
-            setSupplierDraft={setSupplierDraft}
-            sourceTypeDraft={sourceTypeDraft}
-            setSourceTypeDraft={setSourceTypeDraft}
-            statusDraft={statusDraft}
-            setStatusDraft={setStatusDraft}
-            dueDraft={dueDraft}
-            setDueDraft={setDueDraft}
-            paymentGateDraft={paymentGateDraft}
-            setPaymentGateDraft={setPaymentGateDraft}
-            trackDraft={trackDraft}
-            setTrackDraft={setTrackDraft}
-            hasPendingChanges={hasPendingChanges}
-            resultCount={
-                data
-                    ? view === "payable"
-                        ? sortedPayables.length
-                        : view === "payment"
-                          ? data.payments.length
-                          : view === "purchase_invoice"
-                            ? data.invoices.length
-                            : trackFilter !== "all"
-                              ? data.unallocated.filter(
-                                    (item) => item.track === trackFilter,
-                                ).length
-                              : data.unallocated.length
-                    : undefined
-            }
-            loading={listQuery.isFetching}
-            failed={listQuery.isError}
-        />
-    )
+    const [hasSettledList, setHasSettledList] = useState(false)
+    useEffect(() => {
+        if (!listQuery.isPending) setHasSettledList(true)
+    }, [listQuery.isPending])
 
     const workItemQuery = useWorkItemDetailQuery(workItemId ?? "")
     const focusedWorkItem = workItemQuery.data
@@ -250,31 +220,67 @@ export function SupplierAccountsPage() {
         )
     }
 
-    const rows = data
-        ? view === "payable"
-            ? sortedPayables
-            : view === "payment"
-              ? data.payments
-              : view === "purchase_invoice"
-                ? data.invoices
-                : trackFilter !== "all"
-                  ? data.unallocated.filter((u) => u.track === trackFilter)
-                  : data.unallocated
-        : []
+    const noModule =
+        data &&
+        (!data.moduleAllowed || data.emptyReason === "PERMISSION_REVOKED")
+    const noScope =
+        data &&
+        (noModule || !data.hasDataScope || data.emptyReason === "NO_DATA_SCOPE")
+    const initialLoading = !hasSettledList && listQuery.isPending
+    const failed = listQuery.isError || (!listQuery.isPending && !data)
+    const accessDenied =
+        listQuery.isError &&
+        getErrorPresentation(listQuery.error).kind === "permission"
+    const showControls = !noScope && !accessDenied
+    const canRegisterInvoice = showControls && Boolean(data?.canRegisterInvoice)
+    const canRegisterPayment = showControls && Boolean(data?.canRegisterPayment)
+    const onRefresh = () => void listQuery.refetch()
 
-    const pageRows = rows.slice(
-        pagination.pageIndex * pagination.pageSize,
-        pagination.pageIndex * pagination.pageSize + pagination.pageSize,
-    )
+    const filterToolbar = showControls ? (
+        <SupplierAccountsToolbar
+            view={view}
+            searchInput={searchInput}
+            onSearchInputChange={setSearchInput}
+            searchInputRef={searchInputRef}
+            panelOpen={panelOpen}
+            setPanelOpen={setPanelOpen}
+            appliedChips={appliedChips}
+            applyFilters={applyFilters}
+            resetMoreFilters={resetMoreFilters}
+            cancelMoreFilters={cancelMoreFilters}
+            clearAllFilters={clearFilters}
+            removeFilter={removeFilter}
+            supplierDraft={supplierDraft}
+            setSupplierDraft={setSupplierDraft}
+            sourceTypeDraft={sourceTypeDraft}
+            setSourceTypeDraft={setSourceTypeDraft}
+            statusDraft={statusDraft}
+            setStatusDraft={setStatusDraft}
+            dueDraft={dueDraft}
+            setDueDraft={setDueDraft}
+            paymentGateDraft={paymentGateDraft}
+            setPaymentGateDraft={setPaymentGateDraft}
+            trackDraft={trackDraft}
+            setTrackDraft={setTrackDraft}
+            hasPendingChanges={hasPendingChanges}
+            loading={listQuery.isFetching}
+            failed={failed}
+        />
+    ) : null
 
     return (
         <PageScaffold density="compact" className={listWorkspaceStyles.page}>
             <FinancialDraftEditDialog side="supplier" />
             <SupplierAccountsHeader
-                data={data}
-                isError={listQuery.isError}
-                isFetching={listQuery.isFetching}
-                onRefresh={() => void listQuery.refetch()}
+                view={view}
+                showViews={!initialLoading && showControls}
+                prioritizeQuery={showControls && panelOpen}
+                canRegisterInvoice={canRegisterInvoice}
+                queriedAt={
+                    !failed && showControls ? data?.queriedAt : undefined
+                }
+                onViewChange={switchView}
+                onRefresh={onRefresh}
                 onRegisterInvoice={() => {
                     setPickSupplierId(
                         supplierId ?? data?.suppliers[0]?.supplierId ?? "",
@@ -282,6 +288,14 @@ export function SupplierAccountsPage() {
                     setPickSupplierOpen("purchase_invoice")
                 }}
             />
+
+            {!failed && !noScope && dueFilterUnavailable ? (
+                <Alert variant="warning">
+                    <AlertTitle>
+                        当前列表未提供到期日，查询结果未按到期情况筛选。
+                    </AlertTitle>
+                </Alert>
+            ) : null}
 
             <SupplierAccountsResultBanner
                 lastResult={lastResult}
@@ -307,50 +321,10 @@ export function SupplierAccountsPage() {
                 </Button>
             ) : null}
 
-            {data && !data.moduleAllowed ? (
-                <BusinessEmptyState
-                    kind="no-scope"
-                    title="无供应商往来权限"
-                    description="权限已收回或未授权。敏感字段与导出结果已清除，不能提交。"
-                />
-            ) : data && !data.hasDataScope ? (
-                <BusinessEmptyState
-                    kind="no-scope"
-                    title="当前角色未配置供应商往来范围"
-                    description="不能显示为 0 元应付。请联系管理员配置组织/供应商范围后再查询。"
-                />
-            ) : (
-                <>
-                    <SupplierAccountsTable
-                        view={view}
-                        onViewChange={switchView}
-                        data={data}
-                        pageRows={pageRows}
-                        rowCount={rows.length}
-                        loading={listQuery.isFetching}
-                        isError={listQuery.isError}
-                        error={listQuery.error}
-                        onRetry={() => void listQuery.refetch()}
-                        pagination={pagination}
-                        onPaginationChange={handlePaginationChange}
-                        sorting={sorting}
-                        onSortingChange={setSorting}
-                        onClearFilters={clearFilters}
-                        previewRowId={previewRowId}
-                        openPreview={openPreview}
-                        openPaymentPreview={openPaymentPreview}
-                        openInvoicePreview={openInvoicePreview}
-                        openUnallocatedPreview={openUnallocatedPreview}
-                        openReversalPreview={openReversalPreview}
-                        toolbar={filterToolbar}
-                    />
-                </>
-            )}
-
             <SupplierAccountsPreview
                 previewInvoiceId={previewInvoiceId}
                 previewUnallocatedId={previewUnallocatedId}
-                listData={data}
+                listData={showControls ? data : undefined}
                 listLoading={listQuery.isPending}
                 listError={
                     listQuery.isError
@@ -366,7 +340,7 @@ export function SupplierAccountsPage() {
                 onRedInvoiceNo={setRedInvoiceNo}
                 onRefund={refundFlow.setRefundRequest}
                 onClosed={restoreRowFocus}
-                canRegisterPayment={data?.canRegisterPayment}
+                canRegisterPayment={canRegisterPayment}
                 previewPayableId={previewPayableId}
                 previewPaymentId={focusedPaymentId}
                 previewRefundId={focusedRefundId}
@@ -389,7 +363,7 @@ export function SupplierAccountsPage() {
                 paymentTaskPayableAccountId={
                     paymentExecutionTask?.businessObjectId
                 }
-                canRegisterInvoice={data?.canRegisterInvoice}
+                canRegisterInvoice={canRegisterInvoice}
                 onClose={closePreview}
                 onOpenPayable={openPreview}
                 onOpenSession={openSession}
@@ -425,7 +399,7 @@ export function SupplierAccountsPage() {
             />
 
             <PickSupplierDialog
-                track={pickSupplierOpen}
+                track={canRegisterInvoice ? pickSupplierOpen : null}
                 supplierId={pickSupplierId}
                 onSupplierIdChange={(id) => setPickSupplierId(id)}
                 onClose={() => setPickSupplierOpen(null)}
@@ -570,6 +544,66 @@ export function SupplierAccountsPage() {
                     }}
                 />
             ) : null}
+
+            {initialLoading ? (
+                <div
+                    className="flex flex-col gap-2"
+                    role="status"
+                    aria-busy="true"
+                >
+                    <span className="sr-only">正在加载供应商往来…</span>
+                    <Skeleton className="h-10" />
+                    <Skeleton className="h-96" />
+                </div>
+            ) : accessDenied ? (
+                <BusinessFailureState
+                    error={listQuery.error}
+                    className={listWorkspaceEmptyStateClassName}
+                />
+            ) : !failed && noScope ? (
+                <BusinessEmptyState
+                    kind="no-scope"
+                    className={listWorkspaceEmptyStateClassName}
+                    title={
+                        noModule
+                            ? "无供应商往来权限"
+                            : "当前角色未配置供应商往来范围"
+                    }
+                    description={
+                        noModule
+                            ? "权限已收回或未授权。敏感字段与导出结果已清除，不能提交。"
+                            : "不能显示为 0 元应付。请联系管理员配置组织/供应商范围后再查询。"
+                    }
+                />
+            ) : (
+                <SupplierAccountsTable
+                    view={view}
+                    data={data}
+                    sortedPayables={sortedPayables}
+                    track={trackFilter}
+                    loading={listQuery.isFetching}
+                    isError={failed}
+                    error={listQuery.error}
+                    onRetry={onRefresh}
+                    pagination={pagination}
+                    onPaginationChange={handlePaginationChange}
+                    sorting={sorting}
+                    onSortingChange={setSorting}
+                    hasActiveFilters={hasActiveFilters}
+                    onClearFilters={clearFilters}
+                    previewRowId={
+                        view === "payment" && previewReversalId
+                            ? (reversalQuery.data?.originalPaymentId ?? null)
+                            : previewRowId
+                    }
+                    openPreview={openPreview}
+                    openPaymentPreview={openPaymentPreview}
+                    openInvoicePreview={openInvoicePreview}
+                    openUnallocatedPreview={openUnallocatedPreview}
+                    openReversalPreview={openReversalPreview}
+                    toolbar={filterToolbar}
+                />
+            )}
         </PageScaffold>
     )
 }

@@ -10,14 +10,19 @@ import Link from "next/link"
 import { TriangleAlertIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
-    BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
-    DataTable,
+    BusinessStatusBadge,
+    ListDataTable,
+    ListWorkSurface,
+    listWorkspaceStyles,
     MoneyValue,
     QuantityValue,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableRowActions,
+    TableTextCell,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import { Alert } from "@/components/ui/alert"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
@@ -86,7 +91,7 @@ function CatalogMediaWarning({ item }: { item: CatalogItem }) {
 
 export function CatalogBrowser({
     connectionId,
-    supplierName,
+    title,
     canAdopt,
     adoptionBlocker,
     settingsHref,
@@ -94,8 +99,7 @@ export function CatalogBrowser({
     canReview,
 }: {
     connectionId: string
-    supplierName: string
-    supplierId: string
+    title: string
     canAdopt: boolean
     adoptionBlocker?: string
     settingsHref: string
@@ -138,6 +142,19 @@ export function CatalogBrowser({
     const canSelect = canAdopt && showCosts
     const selectionBlocker = canSelect ? adoptionBlocker : undefined
     const canConfigure = canSelect && !selectionBlocker && query.isSuccess
+    const canConfigureBatch =
+        canConfigure &&
+        !choice.preparing &&
+        choice.selectedIds.length > 0 &&
+        !choice.needsReload &&
+        !choice.busy
+    const hasActiveFilters = catalogFilterKey(filters) !== catalogFilterKey({})
+    const applyFilters = (next: CatalogFilters) => {
+        if (catalogFilterKey(filters) === catalogFilterKey(next)) return
+        choice.clear()
+        setFilters(next)
+        setPage(1)
+    }
     React.useEffect(() => {
         if (
             showCosts ||
@@ -156,58 +173,74 @@ export function CatalogBrowser({
             {
                 accessorKey: "name",
                 header: "供应商商品",
-                meta: { label: "商品" },
-                cell: ({ row }) => (
-                    <div className="flex min-w-48 items-center gap-3">
-                        <div className="size-11 shrink-0 overflow-hidden rounded-md bg-muted">
-                            {row.original.images?.[0] ? (
-                                <CatalogSourceImage
-                                    image={row.original.images[0]}
-                                    alt=""
-                                    width={44}
-                                    height={44}
-                                    compact
-                                    className="size-full rounded-md border object-cover"
-                                />
-                            ) : null}
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-1">
-                                <p className="font-medium">
-                                    {row.original.name}
-                                </p>
-                                <CatalogMediaWarning item={row.original} />
+                meta: { label: "商品", width: "flex" },
+                cell: ({ row: { original: item } }) => {
+                    const reference = `订货编码：${item.spec_id}`
+                    const specification = item.specification || "未标注规格"
+                    const secondary = `${reference} · ${specification}`
+                    return (
+                        <div className="flex min-w-0 items-center gap-2">
+                            <div className="size-9 shrink-0 overflow-hidden rounded-md bg-muted">
+                                {item.images?.[0] ? (
+                                    <CatalogSourceImage
+                                        image={item.images[0]}
+                                        alt=""
+                                        width={36}
+                                        height={36}
+                                        compact
+                                        className="size-full object-cover"
+                                    />
+                                ) : null}
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                                {row.original.specification || "未标注规格"}
-                            </p>
-                            <p className="num mt-1 text-xs text-muted-foreground">
-                                供应商订货编码：{row.original.spec_id}
-                            </p>
+                            <TableIdentityCell
+                                className="flex-1"
+                                primary={item.name}
+                                primaryTitle={item.name}
+                                secondary={
+                                    <>
+                                        <span className="num">{reference}</span>{" "}
+                                        · {specification}
+                                    </>
+                                }
+                                secondaryTitle={secondary}
+                            />
+                            <CatalogMediaWarning item={item} />
                         </div>
-                    </div>
-                ),
+                    )
+                },
             },
             {
                 accessorKey: "category_name",
                 header: "供应商分类",
-                meta: { label: "供应商分类" },
-                cell: ({ row }) =>
-                    row.original.category_name ||
-                    row.original.category_id ||
-                    "未提供",
+                meta: { label: "供应商分类", width: "default" },
+                cell: ({ row }) => (
+                    <TableTextCell
+                        value={
+                            row.original.category_name ||
+                            row.original.category_id
+                        }
+                        clamp={1}
+                    />
+                ),
             },
             {
                 accessorKey: "brand_name",
                 header: "品牌",
-                meta: { label: "品牌" },
-                cell: ({ row }) => row.original.brand_name || "未提供",
+                meta: { label: "品牌", width: "default" },
+                cell: ({ row }) => (
+                    <TableTextCell value={row.original.brand_name} clamp={1} />
+                ),
             },
             {
                 accessorKey: "unit",
                 header: "商品单位",
-                meta: { label: "商品单位" },
-                cell: ({ row }) => catalogUnitLabel(row.original),
+                meta: { label: "商品单位", width: "status" },
+                cell: ({ row }) => (
+                    <TableTextCell
+                        value={catalogUnitLabel(row.original)}
+                        clamp={1}
+                    />
+                ),
             },
             ...(showCosts
                 ? ([
@@ -218,10 +251,14 @@ export function CatalogBrowser({
                               label: "接口采购报价",
                               align: "end",
                               numeric: true,
+                              width: "amount",
                           },
                           cell: ({ row }) =>
                               row.original.purchase_price == null ? (
-                                  "暂无接口报价"
+                                  <TableEmptyCell
+                                      variant="label"
+                                      label="暂无接口报价"
+                                  />
                               ) : (
                                   <MoneyValue
                                       value={row.original.purchase_price}
@@ -234,12 +271,13 @@ export function CatalogBrowser({
             {
                 id: "purchase-terms",
                 header: "采购要求",
-                meta: { label: "采购要求" },
+                meta: { label: "采购要求", width: "default" },
                 cell: ({ row }) => {
                     const terms = row.original.source_purchase_terms
-                    if (!terms) return "未取得"
+                    if (!terms)
+                        return <TableEmptyCell variant="label" label="未取得" />
                     return (
-                        <div className="space-y-1 text-xs">
+                        <div className="flex flex-col items-start gap-1">
                             <p>
                                 起购：
                                 {terms.minimum_quantity ? (
@@ -263,7 +301,11 @@ export function CatalogBrowser({
                                 )}
                             </p>
                             {terms.restrictions.length > 0 ? (
-                                <Badge variant="warning">含附加采购条件</Badge>
+                                <BusinessStatusBadge
+                                    context="list"
+                                    tone="warning"
+                                    label="含附加采购条件"
+                                />
                             ) : null}
                         </div>
                     )
@@ -272,31 +314,40 @@ export function CatalogBrowser({
             {
                 accessorKey: "availability",
                 header: "可供状态",
-                meta: { label: "可供状态" },
-                cell: ({ row }) => (
-                    <Badge
-                        variant={
-                            row.original.availability === "AVAILABLE"
-                                ? "success"
-                                : row.original.availability === "UNKNOWN"
-                                  ? "warning"
-                                  : "secondary"
-                        }
-                    >
-                        {availabilityLabels[row.original.availability] ??
-                            "待核验"}
-                    </Badge>
-                ),
+                meta: { label: "可供状态", width: "status" },
+                cell: ({ row }) => {
+                    const availability = row.original.availability
+                    return (
+                        <BusinessStatusBadge
+                            context="list"
+                            appearance={
+                                availability === "AVAILABLE" ? "quiet" : "badge"
+                            }
+                            tone={
+                                availability === "AVAILABLE"
+                                    ? "success"
+                                    : availability === "UNKNOWN"
+                                      ? "warning"
+                                      : "neutral"
+                            }
+                            label={availabilityLabels[availability] ?? "待核验"}
+                        />
+                    )
+                },
             },
             {
                 id: "selected",
                 header: "公司商品",
-                meta: { label: "公司商品" },
+                meta: { label: "公司商品", width: "default" },
                 cell: ({ row }) =>
                     choice.isExcluded(row.original.id) ? (
-                        <Badge variant="secondary">已排除</Badge>
+                        <BusinessStatusBadge
+                            context="list"
+                            tone="neutral"
+                            label="已排除"
+                        />
                     ) : row.original.company_product_id ? (
-                        <div className="space-y-1">
+                        <div className="flex min-w-0 flex-col items-start gap-1">
                             <p className="text-xs text-muted-foreground">
                                 {row.original.requires_identity_review
                                     ? "规格或单位有变，请核对供给"
@@ -310,10 +361,13 @@ export function CatalogBrowser({
                             canReview ? (
                                 <Button
                                     id={`supplier-catalog-identity-${toAutomationIdSegment(row.original.id)}`}
-                                    variant="outline"
-                                    size="sm"
+                                    variant="ghost"
+                                    className={listWorkspaceStyles.quietButton}
+                                    size="xs"
                                     onClick={(event) => {
                                         event.stopPropagation()
+                                        lastFocusedRowId.current =
+                                            row.original.id
                                         setIdentityItemId(row.original.id)
                                     }}
                                 >
@@ -324,7 +378,8 @@ export function CatalogBrowser({
                                 <Link
                                     id={`supplier-catalog-product-${toAutomationIdSegment(row.original.id)}`}
                                     href={`/master-data/products/${encodeURIComponent(row.original.company_product_id)}`}
-                                    className="text-primary underline"
+                                    className="num max-w-full truncate text-primary underline"
+                                    onClick={(event) => event.stopPropagation()}
                                 >
                                     {row.original.sku_no || "打开公司商品"}
                                 </Link>
@@ -335,36 +390,55 @@ export function CatalogBrowser({
                             ) : null}
                         </div>
                     ) : (
-                        "未入库"
+                        <BusinessStatusBadge
+                            context="list"
+                            tone="neutral"
+                            appearance="quiet"
+                            label="未入库"
+                        />
                     ),
             },
-            {
-                id: "actions",
-                header: "操作",
-                enableHiding: false,
-                cell: ({ row }) =>
-                    canSelect ? (
-                        <LoadingButton
-                            id={`supplier-catalog-adopt-${toAutomationIdSegment(row.original.id)}`}
-                            size="sm"
-                            variant="outline"
-                            aria-describedby={
-                                selectionBlocker
-                                    ? "supplier-catalog-adoption-blocker"
-                                    : undefined
-                            }
-                            loading={choice.configuring}
-                            disabled={
-                                !canConfigure || choice.busy || choice.preparing
-                            }
-                            onClick={() =>
-                                void choice.configure([row.original.id])
-                            }
-                        >
-                            配置入库
-                        </LoadingButton>
-                    ) : null,
-            },
+            ...(canSelect
+                ? ([
+                      {
+                          id: "actions",
+                          header: "操作",
+                          enableHiding: false,
+                          meta: {
+                              label: "操作",
+                              align: "end",
+                              width: "status",
+                          },
+                          cell: ({ row }) => {
+                              const segment = toAutomationIdSegment(
+                                  row.original.id,
+                              )
+                              return (
+                                  <TableRowActions
+                                      moreId={`supplier-catalog-${segment}-more`}
+                                      moreLabel={`${row.original.name}更多操作`}
+                                      actions={[
+                                          {
+                                              id: `supplier-catalog-adopt-${segment}`,
+                                              label: "配置入库",
+                                              loading: choice.configuring,
+                                              disabled:
+                                                  !canConfigure ||
+                                                  choice.busy ||
+                                                  choice.preparing,
+                                              disabledReason: selectionBlocker,
+                                              onClick: () =>
+                                                  void choice.configure([
+                                                      row.original.id,
+                                                  ]),
+                                          },
+                                      ]}
+                                  />
+                              )
+                          },
+                      },
+                  ] satisfies ColumnDef<CatalogItem>[])
+                : []),
         ],
         [
             canConfigure,
@@ -383,15 +457,14 @@ export function CatalogBrowser({
     return (
         <>
             {selectionBlocker ? (
-                <div
+                <Alert
+                    variant="warning"
                     role="alert"
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning-border bg-warning-soft p-4 text-sm text-warning-soft-foreground"
+                    className="flex flex-wrap items-center justify-between gap-3"
                 >
-                    {canSelect && (
-                        <p id="supplier-catalog-adoption-blocker">
-                            {selectionBlocker}
-                        </p>
-                    )}
+                    <p id="supplier-catalog-adoption-blocker">
+                        {selectionBlocker}
+                    </p>
                     <Button
                         id="supplier-catalog-adoption-settings"
                         variant="outline"
@@ -400,232 +473,31 @@ export function CatalogBrowser({
                     >
                         前往平台设置
                     </Button>
-                </div>
+                </Alert>
             ) : null}
-            <BusinessTableFrame
-                title={`${supplierName} · 商品库`}
-                toolbar={
-                    <CatalogFilterForm
-                        key={`${showCosts}:${catalogFilterKey(filters)}`}
-                        value={filters}
-                        options={query.data?.filters}
-                        loading={query.isFetching || choice.busy}
-                        canReadCost={showCosts}
-                        onApply={(next) => {
-                            if (
-                                catalogFilterKey(filters) !==
-                                catalogFilterKey(next)
-                            ) {
-                                choice.clear()
-                                setFilters(next)
-                                setPage(1)
-                            }
-                        }}
-                    />
-                }
-                selectionBar={
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
-                        <span className="font-medium">
-                            共{" "}
-                            {query.data?.product_total != null
-                                ? `${query.data.product_total} 个商品 · `
-                                : ""}
-                            {query.data?.total ?? "—"} 个 SKU
-                        </span>
-                        <span className="text-muted-foreground">
-                            本页 {query.data?.items.length ?? 0} 个 SKU
-                        </span>
-                        {choice.preparing && choice.frozen ? (
-                            choice.frozen.batch.work &&
-                            choice.frozen.batch.work.status !== "COMPLETED" ? (
-                                <BatchWorkStatus
-                                    batch={choice.frozen.batch}
-                                    inCatalog
-                                />
-                            ) : (
-                                <BatchPreparationStatus
-                                    batch={choice.frozen.batch}
-                                />
-                            )
-                        ) : choice.frozen ? (
-                            <span className="rounded-md bg-success-soft px-3 py-2 text-success-soft-foreground">
-                                已选择全部筛选结果 {choice.frozen.rows.length}{" "}
-                                个 SKU · 已排除 {choice.excludedRows.length} 个
-                                · 最终选中 {choice.selectedIds.length} 个
-                            </span>
-                        ) : choice.selectedIds.length ? (
-                            <span>
-                                已选 {choice.productCount} 个商品 ·{" "}
-                                {choice.selectedIds.length} 个 SKU
-                            </span>
-                        ) : null}
-                        {!choice.frozen && query.data?.total && canSelect ? (
-                            <LoadingButton
-                                id="supplier-catalog-batch-select-filtered"
-                                variant="outline"
-                                disabled={
-                                    !canConfigure ||
-                                    query.isFetching ||
-                                    choice.busy
-                                }
-                                loading={choice.selecting}
-                                onClick={() => void choice.freezeAll(filters)}
-                            >
-                                选择全部 {query.data.total} 个 SKU
-                            </LoadingButton>
-                        ) : null}
-                        {choice.excludedRows.length ? (
-                            <Button
-                                id="supplier-catalog-batch-view-excluded"
-                                variant="ghost"
-                                onClick={() =>
-                                    choice.setShowExcluded(!choice.showExcluded)
-                                }
-                            >
-                                {choice.showExcluded
-                                    ? "收起排除项"
-                                    : `查看排除项（${choice.excludedRows.length}）`}
-                            </Button>
-                        ) : null}
-                        {choice.selectedIds.length || choice.frozen ? (
-                            <Button
-                                id="supplier-catalog-clear-selection"
-                                variant="ghost"
-                                disabled={choice.busy}
-                                onClick={() => choice.clear()}
-                            >
-                                清空选择
-                            </Button>
-                        ) : null}
-                        {choice.saving ? (
-                            <span
-                                role="status"
-                                className="text-muted-foreground"
-                            >
-                                正在保存选择…
-                            </span>
-                        ) : null}
-                    </div>
-                }
-                tableActions={
-                    canSelect ? (
-                        <LoadingButton
-                            aria-describedby={
-                                selectionBlocker
-                                    ? "supplier-catalog-adoption-blocker"
-                                    : undefined
-                            }
-                            id="supplier-catalog-batch-configure"
-                            disabled={
-                                !canConfigure ||
-                                choice.preparing ||
-                                !choice.selectedIds.length ||
-                                choice.needsReload ||
-                                choice.busy
-                            }
-                            loading={choice.configuring}
-                            onClick={() => void choice.configure()}
-                        >
-                            配置入库（{choice.selectedIds.length}）
-                        </LoadingButton>
-                    ) : null
-                }
-                table={
-                    <DataTable
-                        id="supplier-api-connections-catalog-table"
-                        data={query.data?.items ?? []}
-                        columns={columns}
-                        getRowId={(row) => row.id}
-                        rowLabel={(row) => row.name}
-                        loading={query.isPending}
-                        rowCount={query.data?.total ?? 0}
-                        pagination={{ pageIndex: page - 1, pageSize: 20 }}
-                        onPaginationChange={(next) =>
-                            setPage(next.pageIndex + 1)
-                        }
-                        enableRowSelection={(row) =>
-                            canConfigure &&
-                            !choice.busy &&
-                            !choice.preparing &&
-                            !choice.needsReload &&
-                            choice.isFrozenMember(row.original.id)
-                        }
-                        rowSelection={choice.rowSelection}
-                        showToolbarSummary={false}
-                        onRowSelectionChange={(next) =>
-                            choice.change(next, query.data?.items ?? [])
-                        }
-                        onRowPreview={(row) => {
-                            lastFocusedRowId.current = row.id
-                            setPreviewRow(row)
-                        }}
-                        highlightedRowId={previewRow?.id}
-                        caption="供应商品库"
-                        layout="flush"
-                        errorState={
-                            query.isError ? (
-                                <BusinessFailureState
-                                    title="供应商品库加载失败"
-                                    description={query.error.message}
-                                    onRetry={() => void query.refetch()}
-                                />
-                            ) : undefined
-                        }
-                        emptyState={
-                            <BusinessEmptyState
-                                kind="no-data"
-                                title={
-                                    Object.values(filters).some((value) =>
-                                        Array.isArray(value)
-                                            ? value.length > 0
-                                            : Boolean(value),
-                                    )
-                                        ? "当前筛选没有商品"
-                                        : "尚未同步商品"
-                                }
-                                description={
-                                    Object.values(filters).some((value) =>
-                                        Array.isArray(value)
-                                            ? value.length > 0
-                                            : Boolean(value),
-                                    )
-                                        ? "调整分类、品牌或其它筛选条件后重试。"
-                                        : "完成接口配置后同步供应商商品，再选择需要经营的商品入库。"
-                                }
-                            />
-                        }
-                    />
-                }
-            />
             {choice.error ? (
-                <div
-                    role="alert"
-                    className="flex flex-wrap items-center justify-between gap-3 text-sm"
-                >
-                    <p className="text-destructive">
-                        选择保存或读取失败：{choice.error.message}
-                        。页面保留上次确认的选择，
-                        {choice.frozen
-                            ? "请重新读取后核对。"
-                            : "请重试刚才的选择。"}
-                    </p>
-                    {choice.frozen ? (
-                        <Button
-                            id="supplier-catalog-batch-selection-reload"
-                            variant="outline"
-                            size="sm"
-                            disabled={choice.busy}
-                            onClick={() => void choice.refreshFrozen()}
-                        >
-                            重新读取选择
-                        </Button>
-                    ) : null}
-                </div>
+                <BusinessFailureState
+                    title="选择保存或读取失败"
+                    description={`${choice.error.message}。页面保留上次确认的选择，${choice.frozen ? "请重新读取后核对。" : "请重试刚才的选择。"}`}
+                    action={
+                        choice.frozen ? (
+                            <Button
+                                id="supplier-catalog-batch-selection-reload"
+                                variant="outline"
+                                size="sm"
+                                disabled={choice.busy}
+                                onClick={() => void choice.refreshFrozen()}
+                            >
+                                重新读取选择
+                            </Button>
+                        ) : null
+                    }
+                />
             ) : null}
             {choice.showExcluded ? (
                 <section
                     aria-labelledby="supplier-catalog-batch-excluded-title"
-                    className="space-y-3 rounded-lg border p-4"
+                    className="flex flex-col gap-3 rounded-lg border p-4"
                 >
                     <h3
                         id="supplier-catalog-batch-excluded-title"
@@ -633,7 +505,7 @@ export function CatalogBrowser({
                     >
                         已排除 {choice.excludedRows.length} 个 SKU
                     </h3>
-                    <div className="max-h-80 space-y-2 overflow-y-auto">
+                    <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
                         {choice.excludedRows.map((row) => (
                             <div
                                 key={row.source.id}
@@ -667,7 +539,10 @@ export function CatalogBrowser({
                 <CatalogIdentityReviewDialog
                     connectionId={connectionId}
                     itemId={identityItemId}
-                    onClose={() => setIdentityItemId(null)}
+                    onClose={() => {
+                        setIdentityItemId(null)
+                        restoreListRowFocus(lastFocusedRowId.current)
+                    }}
                 />
             ) : null}
             {previewRow ? (
@@ -683,6 +558,205 @@ export function CatalogBrowser({
                     choice={choice}
                 />
             ) : null}
+            <ListWorkSurface
+                ariaLabel={title}
+                tableClassName="max-sm:[&_[data-column-id=name]]:w-table-column-default max-sm:[&_[data-column-id=name]]:min-w-table-column-default-min"
+                toolbar={
+                    <CatalogFilterForm
+                        key={`${showCosts}:${catalogFilterKey(filters)}`}
+                        value={filters}
+                        options={query.data?.filters}
+                        loading={query.isFetching || choice.busy}
+                        resultStatus={
+                            query.isFetching
+                                ? "查询中…"
+                                : query.isError
+                                  ? "查询未完成"
+                                  : null
+                        }
+                        canReadCost={showCosts}
+                        onApply={applyFilters}
+                    />
+                }
+                selectionBar={
+                    <div className="flex flex-wrap items-center gap-2 text-body-compact">
+                        <span className="num font-medium">
+                            共{" "}
+                            {query.data?.product_total != null
+                                ? `${query.data.product_total} 个商品 · `
+                                : ""}
+                            {query.data?.total ?? "—"} 个 SKU
+                        </span>
+                        <span className="num text-muted-foreground">
+                            本页 {query.data?.items.length ?? 0} 个 SKU
+                        </span>
+                        {choice.preparing && choice.frozen ? (
+                            choice.frozen.batch.work &&
+                            choice.frozen.batch.work.status !== "COMPLETED" ? (
+                                <BatchWorkStatus
+                                    batch={choice.frozen.batch}
+                                    inCatalog
+                                />
+                            ) : (
+                                <BatchPreparationStatus
+                                    batch={choice.frozen.batch}
+                                />
+                            )
+                        ) : choice.frozen ? (
+                            <span className="num text-success-soft-foreground">
+                                已选择全部筛选结果 {choice.frozen.rows.length}{" "}
+                                个 SKU · 已排除 {choice.excludedRows.length} 个
+                                · 最终选中 {choice.selectedIds.length} 个
+                            </span>
+                        ) : choice.selectedIds.length ? (
+                            <span className="num">
+                                已选 {choice.productCount} 个商品 ·{" "}
+                                {choice.selectedIds.length} 个 SKU
+                            </span>
+                        ) : null}
+                        {!choice.frozen &&
+                        Boolean(query.data?.total) &&
+                        canSelect ? (
+                            <LoadingButton
+                                id="supplier-catalog-batch-select-filtered"
+                                variant="outline"
+                                size="sm"
+                                disabled={
+                                    !canConfigure ||
+                                    query.isFetching ||
+                                    choice.busy
+                                }
+                                loading={choice.selecting}
+                                onClick={() => void choice.freezeAll(filters)}
+                            >
+                                选择全部 {query.data?.total} 个 SKU
+                            </LoadingButton>
+                        ) : null}
+                        {choice.excludedRows.length ? (
+                            <Button
+                                id="supplier-catalog-batch-view-excluded"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                    choice.setShowExcluded(!choice.showExcluded)
+                                }
+                            >
+                                {choice.showExcluded
+                                    ? "收起排除项"
+                                    : `查看排除项（${choice.excludedRows.length}）`}
+                            </Button>
+                        ) : null}
+                        {choice.selectedIds.length || choice.frozen ? (
+                            <Button
+                                id="supplier-catalog-clear-selection"
+                                variant="ghost"
+                                size="sm"
+                                disabled={choice.busy}
+                                onClick={() => choice.clear()}
+                            >
+                                清空选择
+                            </Button>
+                        ) : null}
+                        {choice.saving ? (
+                            <span
+                                role="status"
+                                className="text-muted-foreground"
+                            >
+                                正在保存选择…
+                            </span>
+                        ) : null}
+                        {canSelect ? (
+                            <LoadingButton
+                                aria-describedby={
+                                    selectionBlocker
+                                        ? "supplier-catalog-adoption-blocker"
+                                        : undefined
+                                }
+                                id="supplier-catalog-batch-configure"
+                                size="sm"
+                                className="ml-auto"
+                                variant={
+                                    canConfigureBatch ? "default" : "secondary"
+                                }
+                                disabled={!canConfigureBatch}
+                                loading={choice.configuring}
+                                onClick={() => void choice.configure()}
+                            >
+                                配置入库（{choice.selectedIds.length}）
+                            </LoadingButton>
+                        ) : null}
+                    </div>
+                }
+                table={
+                    <ListDataTable
+                        id="supplier-api-connections-catalog-table"
+                        data={query.data?.items ?? []}
+                        columns={columns}
+                        getRowId={(row) => row.id}
+                        rowLabel={(row) => row.name}
+                        loading={query.isFetching}
+                        defaultColumnPinning={{
+                            left: ["name"],
+                            right: ["actions"],
+                        }}
+                        pageSizeOptions={[20]}
+                        rowCount={query.data?.total ?? 0}
+                        pagination={{ pageIndex: page - 1, pageSize: 20 }}
+                        onPaginationChange={(next) =>
+                            setPage(next.pageIndex + 1)
+                        }
+                        enableRowSelection={
+                            canSelect
+                                ? (row) =>
+                                      canConfigure &&
+                                      !choice.busy &&
+                                      !choice.preparing &&
+                                      !choice.needsReload &&
+                                      choice.isFrozenMember(row.original.id)
+                                : false
+                        }
+                        rowSelection={choice.rowSelection}
+                        onRowSelectionChange={(next) =>
+                            choice.change(next, query.data?.items ?? [])
+                        }
+                        onRowPreview={(row) => {
+                            lastFocusedRowId.current = row.id
+                            setPreviewRow(row)
+                        }}
+                        highlightedRowId={previewRow?.id}
+                        caption="供应商品库"
+                        entityName="供应商商品"
+                        errorState={
+                            query.isError ? (
+                                <BusinessFailureState
+                                    idPrefix="supplier-api-connections-catalog-table"
+                                    title="供应商品库加载失败"
+                                    error={query.error}
+                                    action={
+                                        <Button
+                                            id="supplier-api-connections-catalog-table-retry"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => void query.refetch()}
+                                        >
+                                            重试
+                                        </Button>
+                                    }
+                                />
+                            ) : undefined
+                        }
+                        hasActiveFilters={hasActiveFilters}
+                        onClearFilters={() => applyFilters({})}
+                        emptyCopy={{
+                            filterTitle: "当前筛选没有商品",
+                            emptyTitle: "尚未同步商品",
+                            emptyDescription:
+                                "完成接口配置后同步供应商商品，再选择需要经营的商品入库。",
+                        }}
+                    />
+                }
+            />
         </>
     )
 }

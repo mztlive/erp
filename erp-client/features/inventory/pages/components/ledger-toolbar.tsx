@@ -1,21 +1,25 @@
 "use client"
 
-import * as React from "react"
+import type * as React from "react"
 
 import { OptionCombobox, MultiOptionCombobox } from "@/components/business"
 import {
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    listWorkspaceFilterStatusText,
+    listWorkspaceStyles,
 } from "@/components/business/list-workspace"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { WarehouseSearchCombobox } from "@/features/entity-selectors"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
+import { listFilterText } from "@/lib/ui-text"
 import { MOVEMENT_TYPE_OPTIONS } from "@/features/inventory/lib/presentation"
 import type {
     LedgerAppliedChip,
-    LedgerFilterKey,
+    useLedgerFilters,
 } from "@/features/inventory/pages/hooks/use-ledger-filters"
 import { AVAILABILITY_LABEL } from "@/features/inventory/types"
 import type {
@@ -23,7 +27,7 @@ import type {
     InventoryView,
 } from "@/features/inventory/types"
 
-type SetState<T> = React.Dispatch<React.SetStateAction<T>>
+const MORE_FILTER_TRIGGER = "inventory-ledger-filters-trigger"
 
 const AVAILABILITY_OPTIONS: ReadonlyArray<{
     value: InventoryAvailability
@@ -33,46 +37,13 @@ const AVAILABILITY_OPTIONS: ReadonlyArray<{
     label: AVAILABILITY_LABEL[value],
 }))
 
-interface LedgerToolbarProps {
-    canFilterPeople: boolean
-    canFilterWarehouse: boolean
+type LedgerToolbarProps = ReturnType<typeof useLedgerFilters> & {
     view: InventoryView
-    actions?: React.ReactNode
     searchInputRef: React.RefObject<HTMLInputElement | null>
-    searchDraft: string
-    setSearchDraft: SetState<string>
-    warehouseIdDraft: string | null
-    setWarehouseIdDraft: SetState<string | null>
-    availabilityDraft: InventoryAvailability
-    setAvailabilityDraft: SetState<InventoryAvailability>
-    movementTypeDraft: string[]
-    setMovementTypeDraft: SetState<string[]>
-    occurredFromDraft: string
-    setOccurredFromDraft: SetState<string>
-    occurredToDraft: string
-    setOccurredToDraft: SetState<string>
-    operatorUserIdsDraft: string
-    setOperatorUserIdsDraft: SetState<string>
-    applicantUserIdsDraft: string
-    setApplicantUserIdsDraft: SetState<string>
-    handlerUserIdsDraft: string
-    setHandlerUserIdsDraft: SetState<string>
-    panelOpen: boolean
-    setPanelOpen: SetState<boolean>
-    hasStructuredFilters?: boolean
-    hasActiveFilters?: boolean
+    hasActiveFilters: boolean
     appliedChips: readonly LedgerAppliedChip[]
-    removeFilter: (key: LedgerFilterKey) => void
-    applyFilters: () => void
-    resetMoreFilters: () => void
-    cancelMoreFilters: () => void
-    clearAllFilters: () => void
-    filterError: string | null
-    setFilterError: SetState<string | null>
-    hasPendingChanges?: boolean
-    resultCount?: number
-    loading?: boolean
-    failed?: boolean
+    loading: boolean
+    failed: boolean
 }
 
 /**
@@ -83,7 +54,7 @@ export function LedgerToolbar({
     canFilterPeople,
     canFilterWarehouse,
     view,
-    actions,
+    hasActiveFilters,
     searchInputRef,
     searchDraft,
     setSearchDraft,
@@ -114,7 +85,6 @@ export function LedgerToolbar({
     filterError,
     setFilterError,
     hasPendingChanges = false,
-    resultCount,
     loading,
     failed,
 }: LedgerToolbarProps) {
@@ -151,8 +121,7 @@ export function LedgerToolbar({
         <ListWorkspaceFilterBar
             density="compact"
             morePresentation="popover"
-            moreSize={showAdjustmentMore ? "compact" : "wide"}
-            className="[&_[data-slot=list-toolbar-search]]:lg:w-72 [&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center [&_[data-slot=list-toolbar-primary]>div>[data-slot=separator]]:hidden"
+            className="[&_[data-slot=list-toolbar-primary]>div>[data-slot=separator]]:hidden"
             idPrefix="inventory-ledger-filter"
             formAriaLabel="库存台账查询"
             onSubmit={applyFilters}
@@ -168,26 +137,47 @@ export function LedgerToolbar({
             }
             queryButtonId="inventory-ledger-apply-filters"
             moreCount={moreCount}
-            moreOpen={panelOpen}
+            moreOpen={showMore && panelOpen}
             onToggleMore={
                 showMore
-                    ? () =>
-                          panelOpen ? cancelMoreFilters() : setPanelOpen(true)
+                    ? () => {
+                          if (panelOpen) {
+                              cancelMoreFilters()
+                              document
+                                  .getElementById(MORE_FILTER_TRIGGER)
+                                  ?.focus()
+                          } else {
+                              setPanelOpen(true)
+                          }
+                      }
                     : undefined
             }
-            moreButtonId="inventory-ledger-filters-trigger"
+            moreButtonId={MORE_FILTER_TRIGGER}
             morePanelId="inventory-ledger-more-panel"
             morePanelAriaLabel="库存台账更多筛选条件"
             onResetMore={showMore ? resetMoreFilters : undefined}
             resetMoreButtonId="inventory-ledger-reset-more"
-            actions={actions}
+            actions={
+                hasActiveFilters && appliedChips.length === 0 ? (
+                    <Button
+                        id="inventory-ledger-clear-all"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={listWorkspaceStyles.quietButton}
+                        onClick={clearAllFilters}
+                    >
+                        {listFilterText.clear}
+                    </Button>
+                ) : undefined
+            }
             primaryFilters={
                 <>
                     {warehouseFilter}
                     {showAvailabilityCommon ? (
                         <OptionCombobox
                             id="inventory-ledger-availability-filter"
-                            className="w-44 max-w-full min-w-0"
+                            className="w-36 max-w-full min-w-0"
                             filterLabel="库存条件"
                             aria-label="库存条件"
                             value={
@@ -212,9 +202,9 @@ export function LedgerToolbar({
             }
             morePanel={
                 showMore ? (
-                    <div className="grid min-w-0 gap-5">
+                    <ListFilterSections>
                         {showMovementMore ? (
-                            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            <ListFilterSection legend="流水">
                                 <ListWorkspaceFilterField
                                     htmlFor="inventory-ledger-movement-type-filter"
                                     label="流水类型"
@@ -229,80 +219,99 @@ export function LedgerToolbar({
                                         aria-label="流水类型"
                                     />
                                 </ListWorkspaceFilterField>
-                                <ListWorkspaceFilterField
-                                    label="发生日期"
-                                    className="sm:col-span-2"
-                                >
-                                    <div className="flex min-w-0 items-center gap-2">
-                                        <Input
-                                            id="inventory-ledger-occurred-from"
-                                            type="date"
-                                            className="w-0 min-w-0 flex-1"
-                                            value={occurredFromDraft}
-                                            max={occurredToDraft || undefined}
-                                            onChange={(event) => {
-                                                setOccurredFromDraft(
-                                                    event.target.value,
-                                                )
-                                                setFilterError(null)
-                                            }}
-                                            autoComplete="off"
-                                            aria-label="发生日期起"
-                                            aria-invalid={Boolean(filterError)}
-                                            aria-describedby={
-                                                filterError
-                                                    ? dateErrorId
-                                                    : undefined
-                                            }
-                                        />
-                                        <span className="text-xs text-muted-foreground">
-                                            至
-                                        </span>
-                                        <Input
-                                            id="inventory-ledger-occurred-to"
-                                            type="date"
-                                            className="w-0 min-w-0 flex-1"
-                                            value={occurredToDraft}
-                                            min={occurredFromDraft || undefined}
-                                            onChange={(event) => {
-                                                setOccurredToDraft(
-                                                    event.target.value,
-                                                )
-                                                setFilterError(null)
-                                            }}
-                                            autoComplete="off"
-                                            aria-label="发生日期止"
-                                            aria-invalid={Boolean(filterError)}
-                                            aria-describedby={
-                                                filterError
-                                                    ? dateErrorId
-                                                    : undefined
-                                            }
-                                        />
-                                    </div>
+                                <div className="min-w-0 md:col-span-2">
+                                    <ListWorkspaceFilterField
+                                        htmlFor="inventory-ledger-occurred-from"
+                                        label="发生日期"
+                                    >
+                                        <div
+                                            className="flex min-w-0 items-center gap-2"
+                                            data-has-value={Boolean(
+                                                occurredFromDraft ||
+                                                occurredToDraft,
+                                            )}
+                                        >
+                                            <Input
+                                                id="inventory-ledger-occurred-from"
+                                                type="date"
+                                                className="w-0 min-w-0 flex-1"
+                                                value={occurredFromDraft}
+                                                max={
+                                                    occurredToDraft || undefined
+                                                }
+                                                onChange={(event) => {
+                                                    setOccurredFromDraft(
+                                                        event.target.value,
+                                                    )
+                                                    setFilterError(null)
+                                                }}
+                                                autoComplete="off"
+                                                aria-label="发生日期起"
+                                                aria-invalid={Boolean(
+                                                    filterError,
+                                                )}
+                                                aria-describedby={
+                                                    filterError
+                                                        ? dateErrorId
+                                                        : undefined
+                                                }
+                                            />
+                                            <span className="text-xs text-muted-foreground">
+                                                至
+                                            </span>
+                                            <Input
+                                                id="inventory-ledger-occurred-to"
+                                                type="date"
+                                                className="w-0 min-w-0 flex-1"
+                                                value={occurredToDraft}
+                                                min={
+                                                    occurredFromDraft ||
+                                                    undefined
+                                                }
+                                                onChange={(event) => {
+                                                    setOccurredToDraft(
+                                                        event.target.value,
+                                                    )
+                                                    setFilterError(null)
+                                                }}
+                                                autoComplete="off"
+                                                aria-label="发生日期止"
+                                                aria-invalid={Boolean(
+                                                    filterError,
+                                                )}
+                                                aria-describedby={
+                                                    filterError
+                                                        ? dateErrorId
+                                                        : undefined
+                                                }
+                                            />
+                                        </div>
+                                    </ListWorkspaceFilterField>
                                     {filterError ? (
                                         <p
                                             id={dateErrorId}
-                                            className="text-xs text-destructive"
+                                            className="mt-1 text-xs text-destructive"
                                             role="alert"
                                         >
                                             {filterError}
                                         </p>
                                     ) : null}
-                                </ListWorkspaceFilterField>
-                                {canFilterPeople && (
-                                    <PersonDirectoryFilter
-                                        id="inventory-ledger-operator-filter"
-                                        label="经办人"
-                                        value={operatorUserIdsDraft}
-                                        onChange={setOperatorUserIdsDraft}
-                                        category="business"
-                                    />
-                                )}
-                            </div>
+                                </div>
+                            </ListFilterSection>
+                        ) : null}
+                        {showMovementMore && canFilterPeople ? (
+                            <ListFilterSection legend="人员">
+                                <PersonDirectoryFilter
+                                    id="inventory-ledger-operator-filter"
+                                    label="经办人"
+                                    value={operatorUserIdsDraft}
+                                    onChange={setOperatorUserIdsDraft}
+                                    category="business"
+                                />
+                            </ListFilterSection>
                         ) : null}
                         {showAdjustmentMore ? (
-                            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            <ListFilterSection legend="人员">
                                 <PersonDirectoryFilter
                                     id="inventory-ledger-adjustment-operator-filter"
                                     label="经办人"
@@ -324,20 +333,16 @@ export function LedgerToolbar({
                                     onChange={setHandlerUserIdsDraft}
                                     category="business"
                                 />
-                            </div>
+                            </ListFilterSection>
                         ) : null}
-                    </div>
+                    </ListFilterSections>
                 ) : undefined
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "条记录",
-                loadingLabel: "正在加载库存…",
-            })}
-            chips={appliedChips}
-            onClearChip={(key) => removeFilter(key as LedgerFilterKey)}
+            resultStatus={failed ? "查询未完成" : loading ? "查询中…" : null}
+            chips={appliedChips.map((chip) => ({
+                ...chip,
+                onClear: () => removeFilter(chip.key),
+            }))}
             onClearAll={clearAllFilters}
             clearButtonId="inventory-ledger-clear-all"
             hasPendingChanges={hasPendingChanges}

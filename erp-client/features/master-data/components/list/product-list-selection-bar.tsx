@@ -98,9 +98,12 @@ export function ProductListSelectionBar({
                             data-icon="inline-start"
                             aria-hidden="true"
                         />
-                        {hasActionable
-                            ? `批量上架 ${counts.actionableCount}`
-                            : "批量上架"}
+                        批量上架
+                        {hasActionable ? (
+                            <span className="num">
+                                {counts.actionableCount}
+                            </span>
+                        ) : null}
                     </Button>
                 )
             }}

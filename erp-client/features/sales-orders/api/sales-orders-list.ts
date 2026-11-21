@@ -28,6 +28,9 @@ import {
 
 export async function fetchSalesOrders(
     query: SalesOrdersListQuery,
+    {
+        includeContractDetails = true,
+    }: { includeContractDetails?: boolean } = {},
 ): Promise<SalesOrderListView> {
     const page = await apiGet<
         PageView<BackendSalesOrderView> & {
@@ -42,9 +45,11 @@ export async function fetchSalesOrders(
     >("/admin/sales-orders", salesOrderExportQuery(query))
 
     const contractDisplays = await loadContractDisplays(
-        page.items
-            .map((row) => row.contract_id)
-            .filter((id): id is string => Boolean(id)),
+        includeContractDetails
+            ? page.items
+                  .map((row) => row.contract_id)
+                  .filter((id): id is string => Boolean(id))
+            : [],
     )
     const items = page.items.map((row) => {
         const display = row.contract_id

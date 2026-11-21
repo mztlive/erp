@@ -398,6 +398,9 @@ function DataTable<TData>({
             table={table}
             idPrefix={baseId}
             defaultColumnVisibility={defaultColumnVisibility}
+            defaultColumnOrder={defaultColumnOrder}
+            defaultColumnPinning={defaultColumnPinning}
+            defaultColumnSizing={defaultColumnSizing}
         />
     ) : null
 

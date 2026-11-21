@@ -6,12 +6,14 @@ import { SettlementPartySearchCombobox } from "@/features/party-selector/settlem
 
 export function PaymentListFilterInput({
     name,
+    label,
     value,
     onValueChange,
     ...props
 }: {
     id: string
     name: string
+    label: string
     value: string
     onValueChange: (value: string) => void
     onBlur: () => void
@@ -28,11 +30,9 @@ export function PaymentListFilterInput({
                 purpose="filter"
                 value={value || undefined}
                 onValueChange={(id) => onValueChange(id ?? "")}
-                placeholder={
-                    name === "supplier_id"
-                        ? "搜索并选择供应商"
-                        : "搜索并选择我方主体"
-                }
+                filterLabel={label}
+                {...(name === "payer_party_id" && { label })}
+                placeholder="全部"
                 allowClear
             />
         )

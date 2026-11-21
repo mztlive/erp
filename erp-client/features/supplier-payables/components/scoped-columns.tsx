@@ -6,7 +6,9 @@ import {
     BusinessStatusBadge,
     LimitedBadge,
     MoneyValue,
+    TableIdentityCell,
     wholeUnallocatedCell,
+    type BusinessStatusBadgeProps,
 } from "@/components/business"
 import type {
     ScopedPayableAccountWire,
@@ -19,19 +21,76 @@ import {
     MISSING_SOURCE_DOCUMENT_NO,
 } from "../lib/display-labels"
 
-const scopedSourceLabel: Record<string, string> = {
+const sourceLabel: Record<string, string> = {
     PURCHASE_ORDER: "采购单",
     SUPPLIER_SETTLEMENT: "供应商结算单",
     SUPPLIER_SETTLEMENT_STATEMENT: "供应商结算单",
 }
 
-const scopedStatusLabel: Record<string, string> = {
-    OPEN: "未结",
-    PARTIAL: "部分结清",
-    SETTLED: "已结清",
-    DRAFT: "草稿",
-    POSTED: "已过账",
-    REVERSED: "已冲正",
+const statuses: Record<
+    string,
+    Pick<BusinessStatusBadgeProps, "label" | "tone" | "appearance">
+> = {
+    OPEN: { label: "未结", tone: "neutral", appearance: "quiet" },
+    PARTIAL: { label: "部分结清", tone: "warning" },
+    PARTIALLY_SETTLED: { label: "部分结清", tone: "warning" },
+    SETTLED: { label: "已结清", tone: "success", appearance: "quiet" },
+    DRAFT: { label: "草稿", tone: "neutral", appearance: "quiet" },
+    POSTED: { label: "已过账", tone: "success", appearance: "quiet" },
+    REVERSED: { label: "已冲正", tone: "void" },
+}
+
+function ScopeStatusCell({ status }: { status: string }) {
+    return (
+        <BusinessStatusBadge
+            context="list"
+            {...(statuses[status.toUpperCase()] ?? {
+                label: "状态待确认",
+                tone: "warning",
+            })}
+        />
+    )
+}
+
+function ScopeShareCell({
+    value,
+    limitedId,
+}: {
+    value: string
+    limitedId?: string
+}) {
+    return (
+        <div className="flex flex-col items-end gap-1">
+            <MoneyValue value={value} display="exact" />
+            {limitedId ? <LimitedBadge id={limitedId} /> : null}
+        </div>
+    )
+}
+
+export function payableSourceNumber(row: ScopedPayableAccountWire) {
+    return businessLabelOrPlaceholder(
+        row.source_document_no,
+        row.source_document_id,
+        MISSING_SOURCE_DOCUMENT_NO,
+    )
+}
+
+export function allocationNumber(row: ScopedPurchaseInvoiceAllocationWire) {
+    return businessLabelOrPlaceholder(
+        row.invoice_no,
+        row.invoice_id,
+        "发票号码待补全",
+    )
+}
+
+export function allocationPayableNumber(
+    row: ScopedPurchaseInvoiceAllocationWire,
+) {
+    return businessLabelOrPlaceholder(
+        row.payable_no || row.source_document_no,
+        row.payable_account_id,
+        "应付编号待补全",
+    )
 }
 
 /** 范围应付子账列：获授权份额常显，整单金额受限时为空并注明。 */
@@ -40,49 +99,47 @@ export function createSupplierScopedPayableColumns(): ColumnDef<ScopedPayableAcc
         {
             id: "source",
             header: "来源单据",
-            meta: { label: "来源单据", width: "reference" },
-            cell: ({ row }) => (
-                <div className="min-w-0">
-                    <div className="num break-words text-sm font-medium">
-                        {businessLabelOrPlaceholder(
-                            row.original.source_document_no,
-                            row.original.source_document_id,
-                            MISSING_SOURCE_DOCUMENT_NO,
-                        )}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                        {scopedSourceLabel[
-                            row.original.source_type.toUpperCase()
-                        ] ?? "来源单据"}
-                    </div>
-                </div>
-            ),
+            meta: { label: "来源单据", width: "flex" },
+            cell: ({ row }) => {
+                const number = payableSourceNumber(row.original)
+                return (
+                    <TableIdentityCell
+                        primary={<span className="num">{number}</span>}
+                        primaryTitle={number}
+                        secondary={
+                            sourceLabel[
+                                row.original.source_type.toUpperCase()
+                            ] ?? "来源单据"
+                        }
+                    />
+                )
+            },
         },
         {
             id: "visible",
             header: "权限内已核销",
             meta: {
-                label: "本人权限内金额",
+                label: "权限内已核销",
                 width: "amount",
                 align: "end",
                 numeric: true,
             },
             cell: ({ row }) => (
-                <div className="flex flex-col items-end gap-1 text-right">
-                    <MoneyValue value={row.original.visible_settled_share} />
-                    {row.original.permission_limited ? (
-                        <LimitedBadge
-                            id={`supplier-payables-scope-payable-limited-${row.original.id}`}
-                        />
-                    ) : null}
-                </div>
+                <ScopeShareCell
+                    value={row.original.visible_settled_share}
+                    limitedId={
+                        row.original.permission_limited
+                            ? `supplier-payables-scope-payable-limited-${row.original.id}`
+                            : undefined
+                    }
+                />
             ),
         },
         {
             id: "whole",
             header: "整单 / 未分配",
             meta: {
-                label: "整单",
+                label: "整单 / 未分配",
                 width: "amount",
                 align: "end",
                 numeric: true,
@@ -97,16 +154,8 @@ export function createSupplierScopedPayableColumns(): ColumnDef<ScopedPayableAcc
         {
             id: "status",
             header: "状态",
-            cell: ({ row }) => (
-                <BusinessStatusBadge
-                    context="list"
-                    label={
-                        scopedStatusLabel[row.original.status.toUpperCase()] ??
-                        "状态待确认"
-                    }
-                    tone="neutral"
-                />
-            ),
+            meta: { label: "状态", width: "status" },
+            cell: ({ row }) => <ScopeStatusCell status={row.original.status} />,
         },
     ]
 }
@@ -117,38 +166,41 @@ export function createSupplierScopedPaymentColumns(): ColumnDef<ScopedSupplierPa
         {
             id: "doc",
             header: "付款单号",
-            meta: { label: "付款单号", width: "reference" },
+            meta: { label: "付款单号", width: "flex" },
             cell: ({ row }) => (
-                <div className="num min-w-0 break-words text-sm font-medium">
-                    {row.original.payment_no}
-                </div>
+                <TableIdentityCell
+                    primary={
+                        <span className="num">{row.original.payment_no}</span>
+                    }
+                    primaryTitle={row.original.payment_no}
+                />
             ),
         },
         {
             id: "visible",
             header: "权限内已分配",
             meta: {
-                label: "本人权限内金额",
+                label: "权限内已分配",
                 width: "amount",
                 align: "end",
                 numeric: true,
             },
             cell: ({ row }) => (
-                <div className="flex flex-col items-end gap-1 text-right">
-                    <MoneyValue value={row.original.visible_allocated_share} />
-                    {row.original.permission_limited ? (
-                        <LimitedBadge
-                            id={`supplier-payables-scope-payment-limited-${row.original.id}`}
-                        />
-                    ) : null}
-                </div>
+                <ScopeShareCell
+                    value={row.original.visible_allocated_share}
+                    limitedId={
+                        row.original.permission_limited
+                            ? `supplier-payables-scope-payment-limited-${row.original.id}`
+                            : undefined
+                    }
+                />
             ),
         },
         {
             id: "whole",
             header: "整单 / 未分配",
             meta: {
-                label: "整单",
+                label: "整单 / 未分配",
                 width: "amount",
                 align: "end",
                 numeric: true,
@@ -163,16 +215,8 @@ export function createSupplierScopedPaymentColumns(): ColumnDef<ScopedSupplierPa
         {
             id: "status",
             header: "状态",
-            cell: ({ row }) => (
-                <BusinessStatusBadge
-                    context="list"
-                    label={
-                        scopedStatusLabel[row.original.status.toUpperCase()] ??
-                        "状态待确认"
-                    }
-                    tone="neutral"
-                />
-            ),
+            meta: { label: "状态", width: "status" },
+            cell: ({ row }) => <ScopeStatusCell status={row.original.status} />,
         },
     ]
 }
@@ -183,53 +227,46 @@ export function createSupplierScopedAllocationColumns(): ColumnDef<ScopedPurchas
         {
             id: "doc",
             header: "进项发票 / 应付记录",
-            meta: { label: "分配", width: "reference" },
-            cell: ({ row }) => (
-                <div className="min-w-0">
-                    <div className="num break-words text-sm font-medium">
-                        {businessLabelOrPlaceholder(
-                            row.original.invoice_no,
-                            row.original.invoice_id,
-                            "发票号码待补全",
-                        )}
-                    </div>
-                    <div className="num text-xs text-muted-foreground">
-                        应付 ·{" "}
-                        {businessLabelOrPlaceholder(
-                            row.original.payable_no ||
-                                row.original.source_document_no,
-                            row.original.payable_account_id,
-                            "应付编号待补全",
-                        )}
-                    </div>
-                </div>
-            ),
+            meta: { label: "进项发票 / 应付记录", width: "flex" },
+            cell: ({ row }) => {
+                const invoice = allocationNumber(row.original)
+                const payable = `应付 · ${allocationPayableNumber(row.original)}`
+                return (
+                    <TableIdentityCell
+                        primary={<span className="num">{invoice}</span>}
+                        primaryTitle={invoice}
+                        secondary={payable}
+                        secondaryTitle={payable}
+                        numericSecondary
+                    />
+                )
+            },
         },
         {
             id: "visible",
             header: "权限内分配",
             meta: {
-                label: "本人权限内金额",
+                label: "权限内分配",
                 width: "amount",
                 align: "end",
                 numeric: true,
             },
             cell: ({ row }) => (
-                <div className="flex flex-col items-end gap-1 text-right">
-                    <MoneyValue value={row.original.visible_allocated_amount} />
-                    {row.original.permission_limited ? (
-                        <LimitedBadge
-                            id={`supplier-payables-scope-allocation-limited-${row.original.id}`}
-                        />
-                    ) : null}
-                </div>
+                <ScopeShareCell
+                    value={row.original.visible_allocated_amount}
+                    limitedId={
+                        row.original.permission_limited
+                            ? `supplier-payables-scope-allocation-limited-${row.original.id}`
+                            : undefined
+                    }
+                />
             ),
         },
         {
             id: "whole",
             header: "整单分配",
             meta: {
-                label: "整单",
+                label: "整单分配",
                 width: "amount",
                 align: "end",
                 numeric: true,
@@ -237,6 +274,7 @@ export function createSupplierScopedAllocationColumns(): ColumnDef<ScopedPurchas
             cell: ({ row }) => (
                 <MoneyValue
                     value={row.original.allocated_gross_amount}
+                    display="exact"
                     unavailableReason={
                         row.original.permission_limited
                             ? scopeText.wholeRestricted

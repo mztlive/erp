@@ -8,7 +8,6 @@ import type { InventoryView } from "@/features/inventory/types"
 
 interface LedgerViewTabsProps {
     view: InventoryView
-    total: number
     onViewChange: (nextView: InventoryView) => void
 }
 
@@ -19,11 +18,7 @@ const LEDGER_VIEWS = [
     "adjustment",
 ] as const
 
-export function LedgerViewTabs({
-    view,
-    total,
-    onViewChange,
-}: LedgerViewTabsProps) {
+export function LedgerViewTabs({ view, onViewChange }: LedgerViewTabsProps) {
     const profile = useAccountProfileQuery()
     const visibleViews = LEDGER_VIEWS.filter((item) =>
         hasPermission(profile.data?.permissions, `stock_${item}:list`),
@@ -32,11 +27,10 @@ export function LedgerViewTabs({
     return (
         <ListWorkspaceViews
             ariaLabel="库存台账工作视图"
+            variant="inline"
             items={visibleViews.map((item) => ({
                 id: `inventory-ledger-view-${item}`,
                 label: VIEW_LABEL[item],
-                count:
-                    item === view ? total.toLocaleString("zh-CN") : undefined,
                 active: item === view,
                 onClick: () => onViewChange(item),
             }))}

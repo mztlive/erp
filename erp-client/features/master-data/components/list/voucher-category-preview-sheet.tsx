@@ -11,7 +11,7 @@ import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { MasterDataListItem } from "@/features/master-data/types"
 import { restoreListRowFocus } from "@/lib/list-row-focus"
 
-/** 卡券类目只读详情与版本记录，沿用公司商品池的窄栏与分区样式。 */
+/** 类目摘要来自列表行，详情查询只用于历史版本。 */
 export function VoucherCategoryPreviewSheet({
     row,
     detailQuery,
@@ -29,7 +29,7 @@ export function VoucherCategoryPreviewSheet({
 }) {
     const prefix = "master-data-voucher-categories-preview"
     const detail = detailQuery.data
-    const description = (detail?.currentRevision.fields ?? row?.keyFacts)?.find(
+    const description = row?.keyFacts.find(
         (fact) =>
             fact.label === "说明" || fact.label === masterDataCopy.fDescription,
     )?.value
@@ -46,7 +46,7 @@ export function VoucherCategoryPreviewSheet({
                 if (!open) restoreListRowFocus(lastFocusedRowId.current)
             }}
             size="preview"
-            title={detail?.name ?? row?.name ?? "卡券类目详情"}
+            title={row?.name ?? "卡券类目"}
             identity={
                 row ? (
                     <span className="num">类目编号：{row.stableNo}</span>
@@ -57,16 +57,11 @@ export function VoucherCategoryPreviewSheet({
                     <div className="flex flex-wrap items-center gap-2">
                         <BusinessStatusBadge
                             context="preview"
-                            label={
-                                detail?.lifecycleStatusLabel ??
-                                row.lifecycleStatusLabel
-                            }
-                            tone={detail?.lifecycleTone ?? row.lifecycleTone}
+                            label={row.lifecycleStatusLabel}
+                            tone={row.lifecycleTone}
                         />
                         <span className="num text-xs text-muted-foreground">
-                            当前版本 v
-                            {detail?.currentRevision.revisionNo ??
-                                row.revisionNo}
+                            当前版本 v{row.revisionNo}
                         </span>
                     </div>
                 ) : null
@@ -107,34 +102,25 @@ export function VoucherCategoryPreviewSheet({
             }
         >
             {row ? (
-                <div className="space-y-6 text-sm">
+                <div className="space-y-6 text-body-compact">
                     <section className="space-y-3 border-b border-border pb-6">
-                        <h3 className="font-medium">类目资料</h3>
-                        <dl className="space-y-4">
-                            <div className="flex min-w-0 items-baseline justify-between gap-5">
-                                <dt className="shrink-0 text-xs text-muted-foreground">
-                                    类目编号
-                                </dt>
-                                <dd className="num min-w-0 break-all text-right text-body-compact">
-                                    {row.stableNo}
-                                </dd>
-                            </div>
-                            <div className="space-y-2">
-                                <dt className="text-xs text-muted-foreground">
-                                    描述
-                                </dt>
-                                <dd className="whitespace-pre-wrap break-words leading-6">
-                                    {description || "暂无描述"}
-                                </dd>
-                            </div>
-                        </dl>
+                        <h3 className="font-medium">
+                            {masterDataCopy.fDescription}
+                        </h3>
+                        <p className="whitespace-pre-wrap break-words leading-6">
+                            {description || "—"}
+                        </p>
                     </section>
                     <section className="space-y-4" aria-label="历史版本">
                         <div className="flex items-center justify-between gap-3">
                             <h3 className="font-medium">历史版本</h3>
-                            {detail ? (
+                            {detail && !detailQuery.isError ? (
                                 <span className="text-xs text-muted-foreground">
-                                    共 {detail.revisionTimeline.length} 个版本
+                                    共{" "}
+                                    <span className="num">
+                                        {detail.revisionTimeline.length}
+                                    </span>{" "}
+                                    个版本
                                 </span>
                             ) : null}
                         </div>
@@ -143,12 +129,12 @@ export function VoucherCategoryPreviewSheet({
                                 role="status"
                                 className="text-xs text-muted-foreground"
                             >
-                                正在加载详情与历史版本…
+                                正在加载历史版本…
                             </p>
                         ) : detailQuery.isError || !detail ? (
                             <div role="alert" className="space-y-3">
                                 <p className="text-xs text-muted-foreground">
-                                    详情与历史版本加载失败，请重试。
+                                    历史版本加载失败，请重试。
                                 </p>
                                 <Button
                                     id={`${prefix}-retry`}

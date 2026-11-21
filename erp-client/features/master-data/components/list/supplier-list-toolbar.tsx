@@ -2,15 +2,13 @@
 
 import * as React from "react"
 
+import { MultiOptionCombobox, OptionCombobox } from "@/components/business"
 import {
-    FixedOptionCheckboxFilter,
-    MultiOptionCombobox,
-    OptionCombobox,
-} from "@/components/business"
-import {
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
-    listWorkspaceFilterStatusText,
+    ListWorkspaceFilterField,
 } from "@/components/business/list-workspace"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
@@ -24,6 +22,8 @@ import type {
     SupplierFilterKey,
     useSupplierListFilters,
 } from "@/features/master-data/hooks/use-supplier-list-filters"
+
+import { suppliersListStyles } from "@/features/master-data/pages/suppliers-list-styles"
 
 const MORE_CHIP_KEYS = [
     "supplierQualificationTypes",
@@ -40,7 +40,6 @@ export function SupplierListToolbar({
     searchInputRef,
     filters: f,
     appliedChips,
-    resultCount,
     loading,
     failed,
 }: {
@@ -48,21 +47,15 @@ export function SupplierListToolbar({
     searchInputRef: React.RefObject<HTMLInputElement | null>
     filters: ReturnType<typeof useSupplierListFilters>
     appliedChips: readonly SupplierAppliedChip[]
-    resultCount?: number
     loading: boolean
     failed: boolean
 }) {
     const prefix = idPrefix ?? "master-data-list-supplier-list-toolbar"
     const panelId = `${prefix}-more-panel`
-    const moreCount = appliedChips.filter(({ key }) =>
-        MORE_CHIP_KEYS.includes(key as (typeof MORE_CHIP_KEYS)[number]),
-    ).length
 
     return (
         <ListWorkspaceFilterBar
             morePresentation="popover"
-            moreSize="wide"
-            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel="供应商与资质查询"
             onSubmit={f.applySupplierFilters}
@@ -77,7 +70,6 @@ export function SupplierListToolbar({
                     aria-label="搜索基础资料"
                 />
             }
-            moreCount={moreCount}
             moreOpen={f.supplierFilterPanelOpen}
             onToggleMore={() =>
                 f.supplierFilterPanelOpen
@@ -94,7 +86,7 @@ export function SupplierListToolbar({
                 <>
                     <OptionCombobox
                         id={`${prefix}-filter-qualification-health`}
-                        className="w-56 max-w-full min-w-0"
+                        className="w-44 max-w-full min-w-0"
                         filterLabel="资质状态"
                         aria-label="资质状态"
                         value={
@@ -113,70 +105,64 @@ export function SupplierListToolbar({
                             )
                         }}
                     />
-                    <div className="w-56 max-w-full min-w-0">
-                        <MultiOptionCombobox
-                            id={`${prefix}-filter-capability`}
-                            filterLabel="供应能力"
-                            aria-label="供应能力，可多选"
-                            value={f.supplierCapabilityCodesDraft}
-                            onValueChange={f.setSupplierCapabilityCodesDraft}
-                            options={SUPPLIER_CAPABILITY_OPTIONS}
-                        />
-                    </div>
+                    <MultiOptionCombobox
+                        id={`${prefix}-filter-capability`}
+                        className={suppliersListStyles.capabilityFilter}
+                        filterLabel="供应能力"
+                        aria-label="供应能力，可多选"
+                        value={f.supplierCapabilityCodesDraft}
+                        onValueChange={f.setSupplierCapabilityCodesDraft}
+                        options={SUPPLIER_CAPABILITY_OPTIONS}
+                    />
                 </>
             }
             morePanel={
-                <div className="grid min-w-0 gap-5">
-                    <fieldset className="min-w-0">
-                        <legend className="mb-3 text-xs font-medium">
-                            资质
-                        </legend>
-                        <FixedOptionCheckboxFilter
-                            id={`${prefix}-filter-qualification-type`}
+                <ListFilterSections>
+                    <ListFilterSection legend="资质">
+                        <ListWorkspaceFilterField
+                            htmlFor={`${prefix}-filter-qualification-type`}
                             label="资质类型"
-                            value={f.supplierQualificationTypesDraft}
-                            onValueChange={f.setSupplierQualificationTypesDraft}
-                            options={SUPPLIER_QUALIFICATION_TYPE_OPTIONS}
-                            aria-label="资质类型，可多选"
-                        />
-                    </fieldset>
+                        >
+                            <MultiOptionCombobox
+                                id={`${prefix}-filter-qualification-type`}
+                                filterLabel="资质类型"
+                                hideFilterLabel
+                                value={f.supplierQualificationTypesDraft}
+                                onValueChange={
+                                    f.setSupplierQualificationTypesDraft
+                                }
+                                options={SUPPLIER_QUALIFICATION_TYPE_OPTIONS}
+                                aria-label="资质类型，可多选"
+                            />
+                        </ListWorkspaceFilterField>
+                    </ListFilterSection>
                     {f.canFilterPeople ? (
-                        <fieldset className="min-w-0">
-                            <legend className="mb-3 text-xs font-medium">
-                                人员
-                            </legend>
-                            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                                <PersonDirectoryFilter
-                                    id={`${prefix}-filter-maintainer`}
-                                    label="维护人"
-                                    value={f.ownerUserIdsDraft}
-                                    onChange={f.setOwnerUserIdsDraft}
-                                    category="business"
-                                />
-                                <PersonDirectoryFilter
-                                    id={`${prefix}-filter-capability-owner`}
-                                    label="能力负责人"
-                                    value={f.capabilityOwnerUserIdsDraft}
-                                    onChange={f.setCapabilityOwnerUserIdsDraft}
-                                    category="business"
-                                />
-                            </div>
-                        </fieldset>
+                        <ListFilterSection legend="人员">
+                            <PersonDirectoryFilter
+                                id={`${prefix}-filter-maintainer`}
+                                label="维护人"
+                                value={f.ownerUserIdsDraft}
+                                onChange={f.setOwnerUserIdsDraft}
+                                category="business"
+                            />
+                            <PersonDirectoryFilter
+                                id={`${prefix}-filter-capability-owner`}
+                                label="能力负责人"
+                                value={f.capabilityOwnerUserIdsDraft}
+                                onChange={f.setCapabilityOwnerUserIdsDraft}
+                                category="business"
+                            />
+                        </ListFilterSection>
                     ) : null}
-                </div>
+                </ListFilterSections>
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "条",
-            })}
+            resultStatus={loading ? "查询中…" : failed ? "查询未完成" : null}
             chips={appliedChips}
+            foldedChipKeys={MORE_CHIP_KEYS}
             onClearChip={(key) => f.removeFilter(key as SupplierFilterKey)}
             onClearAll={f.clearAllFilters}
             hasPendingChanges={f.hasPendingChanges}
             pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-            idleHint="导出与当前查询结果一致"
         />
     )
 }

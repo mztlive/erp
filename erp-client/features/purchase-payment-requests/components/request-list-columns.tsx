@@ -1,11 +1,31 @@
 import type { ColumnDef, VisibilityState } from "@tanstack/react-table"
 import Link from "next/link"
-import { BusinessStatusBadge, MoneyValue } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    MoneyValue,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableTextCell,
+} from "@/components/business"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { requestStatusLabel, requestStatusTone } from "../lib/display"
 import type { PaymentRequest } from "../types"
 
-/** 申请单号与关联采购单放进列设置，默认收起来，列表以供应商和金额为主。 */
+export const defaultRequestColumnOrder = [
+    "supplier",
+    "payer",
+    "amount",
+    "paid",
+    "unpaid",
+    "status",
+    "applicant",
+    "date",
+    "number",
+    "purchaseOrders",
+]
+
+export const defaultRequestColumnPinning = { left: ["supplier"] }
+
 export const defaultRequestColumnVisibility: VisibilityState = {
     number: false,
     purchaseOrders: false,
@@ -13,8 +33,10 @@ export const defaultRequestColumnVisibility: VisibilityState = {
 
 export function buildRequestColumns({
     listReturnHref,
+    canOpenPurchaseOrder,
 }: {
     listReturnHref: string
+    canOpenPurchaseOrder: boolean
 }): ColumnDef<PaymentRequest>[] {
     return [
         {
@@ -23,7 +45,11 @@ export function buildRequestColumns({
             header: "申请单号",
             meta: { label: "申请单号", width: "reference" },
             cell: ({ row }) => (
-                <span className="num">{row.original.request_no}</span>
+                <TableTextCell
+                    value={row.original.request_no}
+                    numeric
+                    clamp={1}
+                />
             ),
         },
         {
@@ -32,22 +58,27 @@ export function buildRequestColumns({
             meta: { label: "关联采购单", width: "reference" },
             cell: ({ row }) => {
                 const first = row.original.lines[0]
-                if (!first)
-                    return (
-                        <span className="text-sm text-muted-foreground">—</span>
-                    )
+                if (!first) return <TableEmptyCell />
                 return (
                     <div className="min-w-0 space-y-1">
-                        <Link
-                            id={`purchase-payment-requests-table-row-${toAutomationIdSegment(row.original.id)}-purchase-order`}
-                            href={`/procurement/orders/${encodeURIComponent(first.purchase_order_id)}?${new URLSearchParams({ section: "payable", returnTo: listReturnHref })}`}
-                            className="num block truncate text-sm text-primary underline-offset-2 hover:underline"
-                            title={first.purchase_order_no}
-                        >
-                            {first.purchase_order_no}
-                        </Link>
+                        {canOpenPurchaseOrder ? (
+                            <Link
+                                id={`purchase-payment-requests-table-row-${toAutomationIdSegment(row.original.id)}-purchase-order`}
+                                href={`/procurement/orders/${encodeURIComponent(first.purchase_order_id)}?${new URLSearchParams({ section: "payable", returnTo: listReturnHref })}`}
+                                className="num block truncate text-primary underline-offset-2 hover:underline"
+                                title={first.purchase_order_no}
+                            >
+                                {first.purchase_order_no}
+                            </Link>
+                        ) : (
+                            <TableTextCell
+                                value={first.purchase_order_no}
+                                numeric
+                                clamp={1}
+                            />
+                        )}
                         {row.original.lines.length > 1 && (
-                            <p className="text-xs text-muted-foreground">
+                            <p className="num text-xs text-muted-foreground">
                                 等 {row.original.lines.length} 张
                             </p>
                         )}
@@ -58,15 +89,29 @@ export function buildRequestColumns({
         {
             id: "supplier",
             accessorKey: "supplier_name",
-            header: "供应商 / 我方主体",
-            meta: { label: "供应商 / 我方主体", width: "flex" },
+            header: "供应商 / 申请单号",
+            meta: { label: "供应商 / 申请单号", width: "flex" },
             cell: ({ row }) => (
-                <div>
-                    <p className="font-medium">{row.original.supplier_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                        {row.original.our_company_name}
-                    </p>
-                </div>
+                <TableIdentityCell
+                    primary={row.original.supplier_name}
+                    primaryTitle={row.original.supplier_name}
+                    secondary={row.original.request_no}
+                    secondaryTitle={row.original.request_no}
+                    numericSecondary
+                />
+            ),
+        },
+        {
+            id: "payer",
+            accessorKey: "our_company_name",
+            header: "我方主体",
+            meta: { label: "我方主体", width: "default" },
+            enableSorting: false,
+            cell: ({ row }) => (
+                <TableTextCell
+                    value={row.original.our_company_name}
+                    clamp={1}
+                />
             ),
         },
         {
@@ -74,6 +119,9 @@ export function buildRequestColumns({
             accessorKey: "applicant_name",
             header: "申请人",
             meta: { label: "申请人", width: "default" },
+            cell: ({ row }) => (
+                <TableTextCell value={row.original.applicant_name} clamp={1} />
+            ),
         },
         {
             id: "amount",
@@ -130,7 +178,13 @@ export function buildRequestColumns({
             id: "date",
             accessorKey: "desired_payment_date",
             header: "希望付款日",
-            meta: { label: "希望付款日", width: "reference", numeric: true },
+            meta: { label: "希望付款日", width: "default", numeric: true },
+            cell: ({ row }) => (
+                <TableTextCell
+                    value={row.original.desired_payment_date}
+                    numeric
+                />
+            ),
         },
         {
             id: "status",
@@ -139,6 +193,10 @@ export function buildRequestColumns({
             meta: { label: "状态", width: "status" },
             cell: ({ row }) => (
                 <BusinessStatusBadge
+                    context="list"
+                    appearance={
+                        row.original.status === "paid" ? "quiet" : "badge"
+                    }
                     label={requestStatusLabel[row.original.status]}
                     tone={requestStatusTone[row.original.status]}
                 />

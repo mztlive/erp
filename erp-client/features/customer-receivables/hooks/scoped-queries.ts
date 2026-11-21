@@ -17,11 +17,15 @@ export const receivableScopeKeys = {
         [...receivableScopeKeys.all, "detail", kind, id] as const,
 }
 
-export function useReceivableScopeListQuery(query: ReceivableScopeQuery) {
+export function useReceivableScopeListQuery(
+    query: ReceivableScopeQuery,
+    enabled: boolean,
+) {
     return useScopedListQuery({
         query,
         queryKey: receivableScopeKeys.list,
         fetchPage: fetchReceivableScopeList,
+        enabled,
         keepPreviousData: true,
     })
 }

@@ -2,7 +2,11 @@
 
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge, MoneyValue } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    MoneyValue,
+    TableIdentityCell,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import type { PurchaseInvoiceRow } from "@/features/supplier-payables/types"
 
@@ -11,22 +15,29 @@ export function buildInvoiceColumns(): ColumnDef<PurchaseInvoiceRow>[] {
         {
             id: "doc",
             header: "进项发票",
-            meta: { label: "发票", width: "reference" },
-            cell: ({ row }) => (
-                <div className="text-sm">
-                    <div className="font-medium">
-                        <span className="num">
-                            {row.original.invoiceCode}-{row.original.invoiceNo}
-                        </span>
-                        <Badge variant="neutral" className="ml-2">
-                            {row.original.invoiceKindLabel}
-                        </Badge>
+            meta: { label: "发票", width: "flex" },
+            cell: ({ row }) => {
+                const {
+                    invoiceCode,
+                    invoiceNo,
+                    invoiceKindLabel,
+                    supplierName,
+                } = row.original
+                const number = invoiceCode
+                    ? `${invoiceCode}-${invoiceNo}`
+                    : invoiceNo
+                return (
+                    <div className="flex min-w-0 items-start gap-2">
+                        <TableIdentityCell
+                            primary={<span className="num">{number}</span>}
+                            primaryTitle={number}
+                            secondary={supplierName}
+                            secondaryTitle={supplierName}
+                        />
+                        <Badge variant="neutral">{invoiceKindLabel}</Badge>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                        {row.original.supplierName}
-                    </div>
-                </div>
-            ),
+                )
+            },
         },
         {
             id: "amount",
@@ -38,14 +49,18 @@ export function buildInvoiceColumns(): ColumnDef<PurchaseInvoiceRow>[] {
                 numeric: true,
             },
             cell: ({ row }) => (
-                <div className="text-end text-sm">
+                <div>
                     <MoneyValue
                         value={row.original.grossAmount}
                         taxBasis="gross"
+                        display="exact"
                     />
                     <div className="text-xs text-muted-foreground">
                         未分配{" "}
-                        <MoneyValue value={row.original.unallocatedAmount} />
+                        <MoneyValue
+                            value={row.original.unallocatedAmount}
+                            display="exact"
+                        />
                     </div>
                 </div>
             ),
@@ -60,9 +75,10 @@ export function buildInvoiceColumns(): ColumnDef<PurchaseInvoiceRow>[] {
                 numeric: true,
             },
             cell: ({ row }) => (
-                <div className="text-end">
-                    <MoneyValue value={row.original.allocatedTotal} />
-                </div>
+                <MoneyValue
+                    value={row.original.allocatedTotal}
+                    display="exact"
+                />
             ),
         },
         {
@@ -74,6 +90,11 @@ export function buildInvoiceColumns(): ColumnDef<PurchaseInvoiceRow>[] {
                     context="list"
                     label={row.original.statusLabel}
                     tone={row.original.statusTone}
+                    appearance={
+                        row.original.statusTone === "success"
+                            ? "quiet"
+                            : "badge"
+                    }
                     description="与付款进度独立"
                 />
             ),

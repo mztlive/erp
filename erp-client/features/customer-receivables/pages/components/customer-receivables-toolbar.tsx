@@ -4,18 +4,17 @@ import * as React from "react"
 
 import { OptionCombobox } from "@/components/business"
 import {
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { ReceivableCounterpartySearchCombobox } from "@/features/customer-receivables/components/receivable-counterparty-search-combobox"
 import {
-    DUE_LABEL,
     RECEIVABLE_STATUS_LABEL,
     type CustomerAccountsView,
     type CustomerReceivablesFilterKey,
-    type DueFilter,
     type ReceivableStatusFilter,
 } from "@/features/customer-receivables/types"
 
@@ -28,13 +27,14 @@ export type ReceivableAppliedChip = Readonly<{
 
 const prefix = "customer-receivables-toolbar"
 const panelId = `${prefix}-more-panel`
-
-const DUE_OPTIONS = (["not_due", "due_today", "overdue"] as const).map(
-    (value) => ({
-        value,
-        label: DUE_LABEL[value],
-    }),
-)
+const FOLDED_CHIP_KEYS = [
+    "counterpartyId",
+    "customerId",
+    "due",
+    "salesOrderId",
+    "receivableAccountId",
+]
+const NON_RECEIVABLE_CHIP_KEYS = [...FOLDED_CHIP_KEYS, "status"]
 
 const STATUS_OPTIONS = (["open", "partial", "settled"] as const).map(
     (value) => ({
@@ -50,8 +50,6 @@ type CustomerReceivablesToolbarProps = {
     searchInputRef: React.RefObject<HTMLInputElement | null>
     counterpartyPartyIdDraft: string | null
     setCounterpartyPartyIdDraft: SetState<string | null>
-    dueDraft: DueFilter
-    setDueDraft: SetState<DueFilter>
     statusDraft: ReceivableStatusFilter
     setStatusDraft: SetState<ReceivableStatusFilter>
     panelOpen: boolean
@@ -63,7 +61,6 @@ type CustomerReceivablesToolbarProps = {
     cancelMoreFilters: () => void
     clearFilters: () => void
     hasPendingChanges: boolean
-    resultCount?: number
     loading: boolean
     failed: boolean
 }
@@ -75,8 +72,6 @@ export function CustomerReceivablesToolbar({
     searchInputRef,
     counterpartyPartyIdDraft,
     setCounterpartyPartyIdDraft,
-    dueDraft,
-    setDueDraft,
     statusDraft,
     setStatusDraft,
     panelOpen,
@@ -88,7 +83,6 @@ export function CustomerReceivablesToolbar({
     cancelMoreFilters,
     clearFilters,
     hasPendingChanges,
-    resultCount,
     loading,
     failed,
 }: CustomerReceivablesToolbarProps) {
@@ -101,8 +95,6 @@ export function CustomerReceivablesToolbar({
         <ListWorkspaceFilterBar
             density="compact"
             morePresentation="popover"
-            moreSize="compact"
-            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel="客户往来查询"
             onSubmit={applyFilters}
@@ -132,70 +124,72 @@ export function CustomerReceivablesToolbar({
             onResetMore={receivableView ? resetMoreFilters : undefined}
             primaryFilters={
                 receivableView ? (
-                    <>
-                        <OptionCombobox
-                            id={`${prefix}-status-filter`}
-                            className="w-48 max-w-full min-w-0"
-                            filterLabel="状态"
-                            aria-label="状态"
-                            value={statusDraft === "all" ? null : statusDraft}
-                            onValueChange={(value) =>
-                                setStatusDraft(
-                                    STATUS_OPTIONS.find(
-                                        (option) => option.value === value,
-                                    )?.value ?? "all",
-                                )
-                            }
-                            options={STATUS_OPTIONS}
-                            placeholder="全部"
-                        />
-                        <OptionCombobox
-                            id={`${prefix}-due-filter`}
-                            className="w-48 max-w-full min-w-0"
-                            filterLabel="到期"
-                            aria-label="到期"
-                            value={dueDraft === "all" ? null : dueDraft}
-                            onValueChange={(value) =>
-                                setDueDraft(
-                                    DUE_OPTIONS.find(
-                                        (option) => option.value === value,
-                                    )?.value ?? "all",
-                                )
-                            }
-                            options={DUE_OPTIONS}
-                            placeholder="全部"
-                        />
-                    </>
+                    <OptionCombobox
+                        id={`${prefix}-status-filter`}
+                        className="w-32 max-w-full min-w-0"
+                        filterLabel="状态"
+                        aria-label="状态"
+                        value={statusDraft === "all" ? null : statusDraft}
+                        onValueChange={(value) =>
+                            setStatusDraft(
+                                STATUS_OPTIONS.find(
+                                    (option) => option.value === value,
+                                )?.value ?? "all",
+                            )
+                        }
+                        options={STATUS_OPTIONS}
+                        placeholder="全部"
+                    />
                 ) : null
             }
             morePanel={
                 receivableView ? (
-                    <ListWorkspaceFilterField
-                        htmlFor={`${prefix}-counterparty`}
-                        label="往来主体"
-                    >
-                        <ReceivableCounterpartySearchCombobox
-                            id={`${prefix}-counterparty`}
-                            className="w-full min-w-0"
-                            value={counterpartyPartyIdDraft ?? undefined}
-                            onValueChange={(id) =>
-                                setCounterpartyPartyIdDraft(id ?? null)
-                            }
-                            purpose="filter"
-                            aria-label="筛选往来主体"
-                            placeholder="全部主体"
-                        />
-                    </ListWorkspaceFilterField>
+                    <ListFilterSections>
+                        <ListFilterSection legend="归属">
+                            <ListWorkspaceFilterField
+                                htmlFor={`${prefix}-counterparty`}
+                                label="往来主体"
+                            >
+                                <ReceivableCounterpartySearchCombobox
+                                    id={`${prefix}-counterparty`}
+                                    className="w-full min-w-0"
+                                    value={
+                                        counterpartyPartyIdDraft ?? undefined
+                                    }
+                                    onValueChange={(id) =>
+                                        setCounterpartyPartyIdDraft(id ?? null)
+                                    }
+                                    purpose="filter"
+                                    aria-label="筛选往来主体"
+                                    placeholder="全部"
+                                />
+                            </ListWorkspaceFilterField>
+                        </ListFilterSection>
+                        <ListFilterSection legend="到期">
+                            <ListWorkspaceFilterField
+                                htmlFor={`${prefix}-due-filter`}
+                                label="到期状态"
+                            >
+                                <OptionCombobox
+                                    id={`${prefix}-due-filter`}
+                                    className="w-full min-w-0"
+                                    aria-label="到期状态（暂不支持筛选）"
+                                    placeholder="暂不支持筛选"
+                                    value={null}
+                                    onValueChange={() => {}}
+                                    options={[]}
+                                    disabled
+                                />
+                            </ListWorkspaceFilterField>
+                        </ListFilterSection>
+                    </ListFilterSections>
                 ) : undefined
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "条往来",
-                loadingLabel: "正在加载往来…",
-            })}
+            resultStatus={failed ? "查询未完成" : loading ? "查询中…" : null}
             chips={appliedChips}
+            foldedChipKeys={
+                receivableView ? FOLDED_CHIP_KEYS : NON_RECEIVABLE_CHIP_KEYS
+            }
             onClearChip={(key) =>
                 removeFilter(key as CustomerReceivablesFilterKey)
             }

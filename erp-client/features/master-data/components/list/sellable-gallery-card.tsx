@@ -13,12 +13,16 @@ import { cn } from "@/lib/utils"
 
 export function SellableGalleryCard({
     row,
+    canSelect,
+    selectionDisabled,
     selected,
     highlighted,
     onToggle,
     onPreview,
 }: {
     row: MasterDataListItem
+    canSelect: boolean
+    selectionDisabled: boolean
     selected: boolean
     highlighted: boolean
     onToggle: (selected: boolean) => void
@@ -39,7 +43,7 @@ export function SellableGalleryCard({
             id={prefix}
             data-row-id={row.stableId}
             tabIndex={-1}
-            className="min-w-0 outline-none"
+            className="min-w-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
         >
             <Card
                 size="sm"
@@ -53,20 +57,24 @@ export function SellableGalleryCard({
                 )}
             >
                 <div className="relative">
-                    <div className="absolute top-2 left-2 z-10 rounded-md bg-background/90 p-1">
-                        <Checkbox
-                            id={`${prefix}-select`}
-                            checked={selected}
-                            onClick={(event) => event.stopPropagation()}
-                            onCheckedChange={(checked) =>
-                                onToggle(checked === true)
-                            }
-                            aria-label={`选择 ${row.name}`}
-                        />
-                    </div>
+                    {canSelect ? (
+                        <div className="absolute top-2 left-2 z-10 rounded-md bg-background/90 p-1">
+                            <Checkbox
+                                id={`${prefix}-select`}
+                                checked={selected}
+                                disabled={selectionDisabled}
+                                onClick={(event) => event.stopPropagation()}
+                                onCheckedChange={(checked) =>
+                                    onToggle(checked === true)
+                                }
+                                aria-label={`选择 ${row.name}（${row.stableNo}）`}
+                            />
+                        </div>
+                    ) : null}
                     <button
                         id={`${prefix}-image`}
                         type="button"
+                        aria-label={`预览 ${row.name}（${row.stableNo}）`}
                         className="block w-full rounded-t-xl text-left"
                         onClick={onPreview}
                     >

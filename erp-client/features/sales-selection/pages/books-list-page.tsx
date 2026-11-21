@@ -1,8 +1,3 @@
-/**
- * 选品册列表：工作区页头 + 状态视图 + 查询条 + 表格。
- * 筛选进入 URL 与 QueryKey；无范围 / 筛空 / 失败分别呈现。
- */
-
 "use client"
 
 import * as React from "react"
@@ -12,13 +7,7 @@ import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { PackageSearchIcon } from "lucide-react"
 import type { PaginationState } from "@tanstack/react-table"
 
-import { PageActions, PageScaffold } from "@/components/business"
-import {
-    ListWorkSurface,
-    ListWorkspaceHeader,
-    ListWorkspaceViews,
-    listWorkspaceStyles as styles,
-} from "@/components/business/list-workspace"
+import { ListWorkspacePage } from "@/components/business/list-workspace"
 import { BooksListFilterBar } from "@/features/sales-selection/components/books-list-filter-bar"
 import { BooksListTable } from "@/features/sales-selection/components/books-list-table"
 import { BookCopyDialog } from "@/features/sales-selection/components/book-copy-dialog"
@@ -35,9 +24,12 @@ import type {
 } from "@/features/sales-selection/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { isDataScopeChanged } from "@/features/data-scope/cache"
-import { booksListStyles as listStyles } from "./books-list-styles"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
+import { booksListStyles } from "./books-list-styles"
 
 const DEFAULT_PAGE_SIZE = 20
+const POOL_HREF = "/master-data/sellable-items"
+const EMPTY_BOOKS: SelectionBook[] = []
 
 function queryFromSearchParams(searchParams: URLSearchParams): BookListQuery {
     const selectionForm = searchParams.get("selection_form")
@@ -70,27 +62,21 @@ function queryFromSearchParams(searchParams: URLSearchParams): BookListQuery {
     } as BookListQuery
 }
 
-function filtersActive(query: BookListQuery): boolean {
+function hasActiveQueryFilters(query: BookListQuery): boolean {
     return Boolean(
         query.q ||
         (query.selection_form && query.selection_form !== "ALL") ||
         (query.submit_mode && query.submit_mode !== "ALL") ||
-        (query.status && query.status !== "ALL") ||
         query.owner_user_ids ||
         query.org_unit_ids,
     )
 }
 
-/** 跨页范围版本变化：回第一页刷新，不拼接新旧权限结果。 */
-function isScopeConflict(error: unknown): boolean {
-    return isDataScopeChanged(error)
-}
-
-/**
- * 选品册列表页。
- */
 export const BooksListPage = () => {
     const router = useRouter()
+    const searchInputRef = React.useRef<HTMLInputElement>(null)
+    const lastFocusedRowId = React.useRef<string | null>(null)
+    useSearchHotkey(searchInputRef)
     const profile = useAccountProfileQuery()
     const permissions = profile.data?.permissions
     const canCreate = hasPermission(
@@ -123,7 +109,10 @@ export const BooksListPage = () => {
             const changed = keys.some((key) => params.has(key))
             for (const key of keys) params.delete(key)
             if (changed) params.delete("page")
-            return changed
+            const orphanedDescendants =
+                !params.get("org_unit_ids") && params.has("include_descendants")
+            if (orphanedDescendants) params.delete("include_descendants")
+            return changed || orphanedDescendants
         },
         [canFilterOwners, canFilterOrgs],
     )
@@ -152,14 +141,16 @@ export const BooksListPage = () => {
     )
 
     const listQuery = useBooks(query)
-    const rows = listQuery.data?.rows ?? []
+    const [hasSettled, setHasSettled] = React.useState(!listQuery.isPending)
+    React.useEffect(() => {
+        if (!listQuery.isPending) setHasSettled(true)
+    }, [listQuery.isPending])
+    const rows = listQuery.data?.rows ?? EMPTY_BOOKS
     const total = listQuery.data?.total ?? 0
-    const noScope = listQuery.data?.noScope ?? false
-    const scopeConflict = listQuery.isError && isScopeConflict(listQuery.error)
-    const queriedAt = listQuery.data
-        ? new Date(listQuery.dataUpdatedAt).toISOString()
-        : undefined
+    const scopeConflict =
+        listQuery.isError && isDataScopeChanged(listQuery.error)
     const statusView = query.status ?? "ALL"
+    const hasQueryFilters = hasActiveQueryFilters(query)
 
     const handleApply = React.useCallback(
         (next: BookListQuery) => {
@@ -180,7 +171,11 @@ export const BooksListPage = () => {
                     ? (next.org_unit_ids ?? null)
                     : null,
                 include_descendants:
-                    canFilterOrgs && next.include_descendants ? "1" : null,
+                    canFilterOrgs &&
+                    next.org_unit_ids &&
+                    next.include_descendants
+                        ? "1"
+                        : null,
                 page: null,
             })
         },
@@ -199,6 +194,11 @@ export const BooksListPage = () => {
         })
     }, [patchUrl])
 
+    const handleEmptyReset = () => {
+        if (hasQueryFilters) handleReset()
+        else patchUrl({ status: null, page: null })
+    }
+
     const handlePaginationChange = React.useCallback(
         (next: PaginationState) => {
             patchUrl({
@@ -212,10 +212,11 @@ export const BooksListPage = () => {
         [patchUrl],
     )
 
-    const handleRetry = React.useCallback(() => {
-        if (scopeConflict) patchUrl({ page: null })
+    const goToFirstPage = () => patchUrl({ page: null })
+    const handleRetry = () => {
+        if (scopeConflict && (query.page ?? 1) > 1) goToFirstPage()
         else void listQuery.refetch()
-    }, [listQuery, patchUrl, scopeConflict])
+    }
 
     const handleRowNavigate = React.useCallback(
         (bookId: string) => {
@@ -224,126 +225,124 @@ export const BooksListPage = () => {
         [router],
     )
 
-    return (
-        <PageScaffold density="compact" className={styles.page}>
-            <ListWorkspaceHeader
-                eyebrow="销售"
-                title="选品册"
-                description={
-                    <>
-                        一本选品册只发给一家客户。已提交行可打开销售方案核对。
-                        <span className="ml-3 text-xs" role="status">
-                            {listQuery.isError ? (
-                                scopeConflict ? (
-                                    "数据范围已变化，请从第一页刷新"
-                                ) : (
-                                    "查询失败"
-                                )
-                            ) : listQuery.isFetching ? (
-                                "正在更新…"
-                            ) : queriedAt ? (
-                                <time dateTime={queriedAt}>
-                                    更新于{" "}
-                                    {new Date(queriedAt).toLocaleTimeString(
-                                        "zh-CN",
-                                        {
-                                            hour: "2-digit",
-                                            minute: "2-digit",
-                                        },
-                                    )}
-                                </time>
-                            ) : (
-                                "正在查询"
-                            )}
-                        </span>
-                    </>
-                }
-            >
-                <PageActions
-                    actions={[
-                        {
-                            hidden: !canStartFromPool,
-                            actionKey: "create",
-                            id: "sales-selection-list-create",
-                            label: "从商品池发起",
-                            icon: PackageSearchIcon,
-                            render: <Link href="/master-data/sellable-items" />,
-                        },
-                    ]}
-                />
-            </ListWorkspaceHeader>
+    const handleCopy = React.useCallback((book: SelectionBook) => {
+        lastFocusedRowId.current = bookIdentity(book)
+        setCopySource(book)
+    }, [])
+    const closeCopy = () => {
+        const rowId = lastFocusedRowId.current
+        lastFocusedRowId.current = null
+        setCopySource(null)
+        if (rowId) {
+            requestAnimationFrame(() => {
+                const row = document
+                    .getElementById("sales-selection-list-table")
+                    ?.querySelector<HTMLElement>(
+                        `[data-row-id="${CSS.escape(rowId)}"][tabindex]`,
+                    )
+                const focusTarget = row ?? searchInputRef.current
+                focusTarget?.focus({ preventScroll: true })
+            })
+        }
+    }
 
-            <ListWorkSurface
-                ariaLabel="选品册列表"
-                views={
-                    <ListWorkspaceViews
-                        ariaLabel="选品册状态"
-                        hint="选择选品册查看详情"
-                        items={BOOK_STATUS_VIEWS.map((item) => {
-                            const active = statusView === item.value
-                            return {
-                                id: `sales-selection-list-view-${toAutomationIdSegment(item.value)}`,
-                                label: item.label,
-                                count: active ? total : undefined,
-                                active,
-                                onClick: () => {
-                                    patchUrl({
-                                        status:
-                                            item.value === "ALL"
-                                                ? null
-                                                : item.value,
-                                        page: null,
-                                    })
-                                },
-                            }
-                        })}
-                    />
-                }
-                toolbar={
+    return (
+        <ListWorkspacePage
+            title="选品册"
+            loading={listQuery.isPending && !hasSettled}
+            resultsHeadingId="sales-selection-list-results-heading"
+            resultsLabel={
+                listQuery.data && !listQuery.isError
+                    ? `选品册列表，共 ${total} 条结果`
+                    : undefined
+            }
+            views={{
+                ariaLabel: "选品册状态",
+                items: BOOK_STATUS_VIEWS.map(({ value, label }) => ({
+                    id: `sales-selection-list-view-${toAutomationIdSegment(value)}`,
+                    label,
+                    count:
+                        value === statusView &&
+                        !listQuery.isError &&
+                        listQuery.data
+                            ? total
+                            : undefined,
+                    active: value === statusView,
+                    onClick: () =>
+                        patchUrl({
+                            status: value === "ALL" ? null : value,
+                            page: null,
+                        }),
+                })),
+            }}
+            actions={
+                canStartFromPool
+                    ? [
+                          {
+                              tier: "primary",
+                              actionKey: "create",
+                              id: "sales-selection-list-create",
+                              label: "从商品池发起",
+                              icon: PackageSearchIcon,
+                              render: <Link href={POOL_HREF} />,
+                          },
+                      ]
+                    : undefined
+            }
+            surface={{
+                ariaLabel: "选品册列表",
+                toolbar: (
                     <BooksListFilterBar
                         query={query}
+                        searchInputRef={searchInputRef}
                         canFilterOwners={canFilterOwners}
                         canFilterOrgs={canFilterOrgs}
                         onApply={handleApply}
                         onReset={handleReset}
-                        resultCount={listQuery.data ? total : undefined}
                         loading={listQuery.isPending || listQuery.isFetching}
                         failed={listQuery.isError}
                     />
-                }
-                tableClassName={listStyles.table}
-                table={
+                ),
+                tableClassName: booksListStyles.table,
+                table: (
                     <BooksListTable
                         rows={rows}
                         total={total}
-                        loading={listQuery.isPending}
+                        loading={listQuery.isPending || listQuery.isFetching}
                         failed={listQuery.isError}
                         error={listQuery.error}
+                        scopeConflict={scopeConflict}
                         onRetry={handleRetry}
-                        filtersActive={filtersActive(query)}
-                        noScope={noScope}
-                        onClearFilters={handleReset}
+                        filtersActive={hasQueryFilters || statusView !== "ALL"}
+                        noScope={listQuery.data?.noScope ?? false}
+                        onClearFilters={handleEmptyReset}
+                        clearFiltersLabel={
+                            hasQueryFilters ? undefined : "查看全部"
+                        }
                         page={query.page ?? 1}
                         pageSize={query.page_size ?? DEFAULT_PAGE_SIZE}
                         onPaginationChange={handlePaginationChange}
+                        onFirstPage={goToFirstPage}
                         canOpen={canOpen}
                         canOpenProposal={canOpenProposal}
-                        canCreate={canStartFromPool}
+                        createHref={canStartFromPool ? POOL_HREF : undefined}
                         onRowNavigate={handleRowNavigate}
-                        onCopy={canCopy ? setCopySource : undefined}
+                        onCopy={canCopy ? handleCopy : undefined}
                     />
-                }
-            />
+                ),
+            }}
+        >
             {canCopy && copySource ? (
                 <BookCopyDialog
                     source={copySource}
-                    onClose={() => setCopySource(null)}
+                    onClose={closeCopy}
                     onCopied={(detail) => {
+                        lastFocusedRowId.current = null
                         setCopySource(null)
                         router.push(`/sales/selection/${bookIdentity(detail)}`)
                     }}
                 />
             ) : null}
-        </PageScaffold>
+        </ListWorkspacePage>
     )
 }

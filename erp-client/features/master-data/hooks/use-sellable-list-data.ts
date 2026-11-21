@@ -54,7 +54,7 @@ export function useSellableListData(input: {
     return {
         rows,
         total,
-        loaded: active.data !== undefined,
+        isPlaceholderData: active.isPlaceholderData,
         isFetching: gallery
             ? galleryQuery.isFetching && !galleryQuery.isFetchingNextPage
             : pageQuery.isFetching,

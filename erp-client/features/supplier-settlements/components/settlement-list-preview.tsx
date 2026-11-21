@@ -1,5 +1,6 @@
 "use client"
 
+import type { ComponentProps } from "react"
 import { ArrowUpRightIcon } from "lucide-react"
 
 import {
@@ -15,12 +16,14 @@ export function SettlementListPreviewSheet({
     open,
     row,
     onOpenChange,
+    finalFocus,
     onOpen,
     patchUrl,
 }: {
     open: boolean
     row: SettlementListRow | null
     onOpenChange: (open: boolean) => void
+    finalFocus: ComponentProps<typeof QuickPreviewSheet>["finalFocus"]
     onOpen: (statementId: string) => void
     patchUrl: (patch: Partial<SettlementsUrlState>) => void
 }) {
@@ -29,6 +32,7 @@ export function SettlementListPreviewSheet({
             id="supplier-settlements-list-preview-sheet"
             open={open}
             onOpenChange={onOpenChange}
+            finalFocus={finalFocus}
             size="detail"
             title={row?.supplierName ?? "结算预览"}
             identity={

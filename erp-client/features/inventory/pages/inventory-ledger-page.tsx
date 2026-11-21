@@ -1,17 +1,12 @@
 "use client"
-import { useQuery } from "@tanstack/react-query"
-import { entitySelectorKeys } from "@/features/entity-selectors/hooks/queries"
-import { selectedObjectDirectory } from "@/lib/object-directory"
-
-import { LoadingButton } from "@/components/ui/loading-button"
 
 import * as React from "react"
-import { useAccountProfileQuery } from "@/features/auth/queries"
-import { hasPermission } from "@/lib/permissions"
 
 import { PageScaffold } from "@/components/business"
 import { listWorkspaceStyles } from "@/components/business/list-workspace"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { LoadingButton } from "@/components/ui/loading-button"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { InventoryBalancePreview } from "@/features/inventory/components/inventory-balance-preview"
 import { useInventoryColumns } from "@/features/inventory/hooks/use-inventory-columns"
 import {
@@ -20,21 +15,19 @@ import {
     useInventoryListQuery,
 } from "@/features/inventory/hooks/queries"
 import {
-    AVAILABILITY_LABEL,
     MOVEMENT_TYPE_LABEL,
+    type InventoryView,
 } from "@/features/inventory/types"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { hasPermission } from "@/lib/permissions"
 import { AdjustmentDetailSheet } from "./components/adjustment-detail-sheet"
 import { AdjustmentDialog } from "./components/adjustment-dialog"
 import { AdjustmentEditDialog } from "./components/adjustment-edit-dialog"
 import { AdjustmentResultBanner } from "./components/adjustment-result-banner"
 import { ExportJobProgress } from "./components/export-job-progress"
-import {
-    InventoryLedgerLoading,
-    InventoryLedgerNoScope,
-    InventoryLedgerPermissionRevoked,
-} from "./components/ledger-gate-states"
+import { InventoryLedgerLoading } from "./components/ledger-gate-states"
 import { LedgerHeader } from "./components/ledger-header"
 import { LedgerMetricStrip } from "./components/ledger-metric-strip"
 import { LedgerTableFrame } from "./components/ledger-table-frame"
@@ -87,6 +80,10 @@ export function InventoryLedgerPage() {
     const canCreateAdjustment = hasPermission(grants, "stock_adjustment:create")
     const canEditAdjustment = hasPermission(grants, "stock_adjustment:update")
     const canSubmitAdjustment = hasPermission(grants, "stock_adjustment:submit")
+    const canReadBalance = hasPermission(grants, "stock_balance:detail")
+    const canOpenImports = hasPermission(grants, "legacy_import_batch:list")
+    const canListBalances = hasPermission(grants, "stock_balance:list")
+    const canListAdjustments = hasPermission(grants, "stock_adjustment:list")
     const canViewMovements = hasPermission(grants, "stock_movement:list")
     const canExport = hasPermission(grants, `stock_${view}:list`)
     const { searchDraft, setSearchDraft, searchInputRef } = useLedgerSearch({
@@ -123,14 +120,36 @@ export function InventoryLedgerPage() {
         sortValue,
     })
 
-    const [previewBalanceId, setPreviewBalanceId] = React.useState<
-        string | null
-    >(balanceIdParam ?? null)
+    const previewBalanceId = balanceIdParam ?? null
+    const lastFocusedRow = React.useRef<{
+        view: InventoryView
+        id: string
+    } | null>(null)
 
-    const rowFocusRef = React.useRef<Map<string, HTMLButtonElement | null>>(
-        new Map(),
-    )
-    const restoreFocusIdRef = React.useRef<string | null>(null)
+    const restoreRowFocus = React.useCallback(() => {
+        const row = lastFocusedRow.current
+        lastFocusedRow.current = null
+        if (row?.view === view) {
+            const table = document.getElementById(
+                `inventory-ledger-${row.view}-table`,
+            )
+            const target = table?.querySelector<HTMLElement>(
+                `[data-row-id="${CSS.escape(row.id)}"]`,
+            )
+            if (target?.tabIndex === 0) return target
+            const adjustAction = document.getElementById(
+                `inventory-ledger-balance-row-${toAutomationIdSegment(row.id)}-adjust`,
+            )
+            if (
+                row.view === "balance" &&
+                adjustAction instanceof HTMLButtonElement &&
+                !adjustAction.disabled
+            ) {
+                return adjustAction
+            }
+        }
+        return searchInputRef.current ?? true
+    }, [searchInputRef, view])
 
     const query = React.useMemo(
         () =>
@@ -175,9 +194,13 @@ export function InventoryLedgerPage() {
         ],
     )
 
-    const listQuery = useInventoryListQuery(query)
+    const listQuery = useInventoryListQuery(query, !profile.isPending)
+    const [hasResolvedList, setHasResolvedList] = React.useState(false)
+    React.useEffect(() => {
+        if (!listQuery.isPending) setHasResolvedList(true)
+    }, [listQuery.isPending])
 
-    /** 深链筛选 chip 的业务名称（skuId/salesOrderLineId/adjustmentId 不直接上屏内部 ID）。 */
+    // 深链标签只展示业务名称，不显示内部 ID。
     const allViewRows = React.useMemo(
         () => [
             ...(listQuery.data?.balances ?? []),
@@ -187,7 +210,9 @@ export function InventoryLedgerPage() {
         ],
         [listQuery.data],
     )
-    const workItemQuery = useWorkItemDetailQuery(workItemIdParam ?? "")
+    const workItemQuery = useWorkItemDetailQuery(
+        profile.isPending ? "" : (workItemIdParam ?? ""),
+    )
     const workItem = workItemQuery.data
         ? mapWorkItemDto(workItemQuery.data)
         : undefined
@@ -197,8 +222,12 @@ export function InventoryLedgerPage() {
             : undefined
     const previewAdjustmentId =
         adjustmentIdParam ?? workItemAdjustmentId ?? null
-    const detailQuery = useBalanceDetailQuery(previewBalanceId)
-    const adjustmentDetailQuery = useAdjustmentDetailQuery(previewAdjustmentId)
+    const detailQuery = useBalanceDetailQuery(
+        profile.isPending ? null : previewBalanceId,
+    )
+    const adjustmentDetailQuery = useAdjustmentDetailQuery(
+        profile.isPending ? null : previewAdjustmentId,
+    )
     const decisionWorkItem = bindAdjustmentDecisionWorkItem(
         workItem,
         previewAdjustmentId,
@@ -209,53 +238,37 @@ export function InventoryLedgerPage() {
         useInventoryExportJob()
 
     const handleFocusRestore = React.useCallback((balanceId: string) => {
-        restoreFocusIdRef.current = balanceId
+        lastFocusedRow.current = { view: "balance", id: balanceId }
     }, [])
+
+    const closeDetail = React.useCallback(() => {
+        patchUrl({ balanceId: null })
+    }, [patchUrl])
     const handlePreviewClose = React.useCallback(() => {
-        setPreviewBalanceId(null)
-    }, [])
+        if (previewBalanceId) closeDetail()
+    }, [closeDetail, previewBalanceId])
 
     const adjustment = useAdjustmentWorkflow({
         onFocusRestore: handleFocusRestore,
         onPreviewClose: handlePreviewClose,
     })
 
-    // Restore focus after detail/adjust close
-    React.useEffect(() => {
-        if (previewBalanceId || adjustment.adjustDraftId) return
-        const id = restoreFocusIdRef.current
-        if (!id) return
-        const el = rowFocusRef.current.get(id)
-        if (el) {
-            el.focus()
-            restoreFocusIdRef.current = null
-        }
-    }, [previewBalanceId, adjustment.adjustDraftId])
-
     const openDetail = React.useCallback(
         (balanceId: string) => {
-            restoreFocusIdRef.current = balanceId
-            setPreviewBalanceId(balanceId)
-            // P2：打开详情属导航，用 push（不压缩历史）
+            handleFocusRestore(balanceId)
             patchUrl({ balanceId })
         },
-        [patchUrl],
+        [handleFocusRestore, patchUrl],
     )
-
-    const closeDetail = React.useCallback(() => {
-        setPreviewBalanceId(null)
-        // P2：关闭详情属导航，用 push
-        patchUrl({ balanceId: null })
-    }, [patchUrl])
-
     const openAdjustment = React.useCallback(
         (adjustmentId: string) => {
-            setPreviewBalanceId(null)
+            if (view === "adjustment") {
+                lastFocusedRow.current = { view, id: adjustmentId }
+            }
             patchUrl(openAdjustmentPreviewPatch(adjustmentId))
         },
-        [patchUrl],
+        [patchUrl, view],
     )
-
     const closeAdjustment = React.useCallback(() => {
         patchUrl(closeAdjustmentPreviewPatch())
     }, [patchUrl])
@@ -266,8 +279,7 @@ export function InventoryLedgerPage() {
         movementColumns,
         reservationColumns,
     } = useInventoryColumns({
-        rowFocusRef,
-        openDetail,
+        openDetail: canReadBalance ? openDetail : undefined,
         startAdjustment:
             canCreateAdjustment && canSubmitAdjustment
                 ? adjustment.startAdjustment
@@ -277,53 +289,25 @@ export function InventoryLedgerPage() {
 
     const data = listQuery.data
 
-    // 深链筛选 chip 的业务名称（skuId/salesOrderLineId/adjustmentId 不直接上屏内部 ID）；
-    // 与 appliedChips 一起放在 early return 之前，保证 Hook 调用顺序稳定。
-    const chipSkuName = allViewRows.find((r) => r.skuId === skuId)?.skuName
-    const chipSalesLineLabel = (data?.reservations ?? []).find(
-        (r) => r.salesOrderLineId === salesOrderLineId,
+    const chipSkuName = allViewRows.find(
+        (r) => r.skuId === skuId && r.skuName !== r.skuId,
+    )?.skuName
+    const chipSalesLineLabel = data?.reservations.find(
+        (r) =>
+            r.salesOrderLineId === salesOrderLineId &&
+            r.salesOrderLineLabel !== r.salesOrderLineId,
     )?.salesOrderLineLabel
     const chipAdjustmentNo = (data?.adjustments ?? []).find(
         (a) => a.adjustmentId === adjustmentIdParam,
     )?.adjustmentNo
 
-    const warehouseLabelQuery = useQuery({
-        queryKey: entitySelectorKeys.warehouseLabel(warehouseId ?? ""),
-        queryFn: () =>
-            selectedObjectDirectory("warehouse-directory", warehouseId ?? ""),
-        enabled: Boolean(warehouseId),
-        staleTime: 0,
-    })
-    const warehouseName =
-        warehouseLabelQuery.isError || warehouseLabelQuery.isFetching
-            ? undefined
-            : warehouseLabelQuery.data?.items.find(
-                  (item) => item.id === warehouseId,
-              )?.name
-    /** 已生效条件全部显性为 chip；来源锁定参数（skuId 等）不得成为隐形查询参数。 */
     const appliedChips = React.useMemo<readonly LedgerAppliedChip[]>(() => {
         const chips: LedgerAppliedChip[] = []
-        const trimmedQ = qParam.trim()
-        if (trimmedQ) {
-            chips.push({ key: "q", label: `搜索：${trimmedQ}` })
-        }
-        if (warehouseId) {
-            chips.push({
-                key: "warehouseId",
-                label: `仓库：${warehouseName ?? "已选仓库"}`,
-            })
-        }
-        if (view === "balance" && availability !== "all") {
-            chips.push({
-                key: "availability",
-                label: `库存条件：${AVAILABILITY_LABEL[availability]}`,
-            })
-        }
         if (view === "movement" && movementType.length > 0) {
             chips.push({
                 key: "movementType",
                 label: `流水类型：${movementType
-                    .map((type) => MOVEMENT_TYPE_LABEL[type] ?? type)
+                    .map((type) => MOVEMENT_TYPE_LABEL[type] ?? "未知流水类型")
                     .join("、")}`,
             })
         }
@@ -341,13 +325,13 @@ export function InventoryLedgerPage() {
                 label: `当前 SKU：${chipSkuName ?? "已定位单品"}`,
             })
         }
-        if (salesOrderLineId) {
+        if (view === "reservation" && salesOrderLineId) {
             chips.push({
                 key: "salesOrderLineId",
                 label: `销售单明细：${chipSalesLineLabel ?? "已定位"}`,
             })
         }
-        if (adjustmentIdParam) {
+        if (view === "adjustment" && adjustmentIdParam) {
             chips.push({
                 key: "adjustmentId",
                 label: `调整单：${chipAdjustmentNo ?? "已定位"}`,
@@ -380,41 +364,28 @@ export function InventoryLedgerPage() {
         return chips
     }, [
         adjustmentIdParam,
-        availability,
         chipAdjustmentNo,
         chipSalesLineLabel,
         chipSkuName,
-        warehouseName,
         movementType,
         occurredFrom,
         occurredTo,
-        qParam,
         salesOrderLineId,
         skuId,
         view,
-        warehouseId,
         operatorUserIds,
         applicantUserIds,
         handlerUserIds,
     ])
 
-    // 查询失败但无缓存数据时只替换表格内容为失败态，筛选区保持挂载（§11.2）
-    const listLoadFailed = listQuery.isError || !data
+    const listLoadFailed = listQuery.isError
+    const denied = !listLoadFailed && data?.emptyReason === "PERMISSION_REVOKED"
+    const noScope = !listLoadFailed && data?.emptyReason === "NO_DATA_SCOPE"
+    const canUseLedger = !denied && !noScope
+    const visibleData = canUseLedger ? data : undefined
 
-    if (listQuery.isPending) {
+    if (!hasResolvedList && listQuery.isPending) {
         return <InventoryLedgerLoading />
-    }
-
-    if (data?.emptyReason === "PERMISSION_REVOKED") {
-        return (
-            <InventoryLedgerPermissionRevoked
-                onRetry={() => void listQuery.refetch()}
-            />
-        )
-    }
-
-    if (data?.emptyReason === "NO_DATA_SCOPE") {
-        return <InventoryLedgerNoScope />
     }
 
     const detail = detailQuery.data
@@ -422,10 +393,18 @@ export function InventoryLedgerPage() {
     return (
         <PageScaffold density="compact" className={listWorkspaceStyles.page}>
             <LedgerHeader
-                queriedAt={data?.queriedAt ?? ""}
-                excludedKindsNote={data?.excludedKindsNote}
-                openingStockNote={data?.openingStockNote}
-                canExport={canExport && (data?.canExport ?? false)}
+                view={view}
+                onViewChange={handleViewChange}
+                queriedAt={visibleData?.queriedAt}
+                excludedKindsNote={visibleData?.excludedKindsNote}
+                openingStockNote={visibleData?.openingStockNote}
+                canExport={
+                    canExport && canUseLedger && (data?.canExport ?? true)
+                }
+                listReady={
+                    Boolean(data) && !listLoadFailed && !listQuery.isFetching
+                }
+                denied={denied}
                 total={data?.total ?? 0}
                 isExporting={isExporting}
                 onRefresh={() => {
@@ -441,7 +420,10 @@ export function InventoryLedgerPage() {
                 }}
             />
 
-            {adjustment.lastResult ? (
+            {canUseLedger &&
+            canCreateAdjustment &&
+            canSubmitAdjustment &&
+            adjustment.lastResult ? (
                 <AdjustmentResultBanner
                     result={adjustment.lastResult}
                     isResolving={adjustment.isResolving}
@@ -449,38 +431,25 @@ export function InventoryLedgerPage() {
                 />
             ) : null}
 
-            {canExport && exportJob ? (
+            {canUseLedger && canExport && exportJob ? (
                 <ExportJobProgress job={exportJob} onClose={closeExport} />
             ) : null}
 
-            {data ? <LedgerMetricStrip metrics={data.metrics} /> : null}
-
-            <LedgerTableFrame
-                view={view}
-                data={data}
-                loading={listQuery.isFetching && !listQuery.isPending}
-                isError={listLoadFailed}
-                error={listQuery.error}
-                onRetry={() => void listQuery.refetch()}
-                pagination={pagination}
-                onPaginationChange={handlePaginationChange}
-                balanceColumns={balanceColumns}
-                movementColumns={movementColumns}
-                reservationColumns={reservationColumns}
-                adjustmentColumns={adjustmentColumns}
-                onOpenDetail={openDetail}
-                onOpenAdjustment={openAdjustment}
-                onViewChange={handleViewChange}
-                sortValue={sortValue}
-                onSortChange={handleSortChange}
-                hasActiveFilters={hasActiveFilters}
-                appliedChips={appliedChips}
-                searchInputRef={searchInputRef}
-                filters={filters}
-            />
+            {visibleData && !listLoadFailed ? (
+                <LedgerMetricStrip
+                    metrics={visibleData.metrics}
+                    showBalanceMetrics={canListBalances}
+                    showAdjustmentMetrics={canListAdjustments}
+                />
+            ) : null}
 
             <InventoryBalancePreview
-                open={previewBalanceId != null}
+                open={
+                    canUseLedger &&
+                    previewBalanceId != null &&
+                    !adjustment.adjustDraftId
+                }
+                finalFocus={adjustment.adjustDraftId ? false : restoreRowFocus}
                 detail={detail}
                 isPending={detailQuery.isPending}
                 isCreating={adjustment.isCreating}
@@ -488,7 +457,6 @@ export function InventoryLedgerPage() {
                 onViewMovements={
                     canViewMovements
                         ? (currentDetail) => {
-                              setPreviewBalanceId(null)
                               patchUrl(
                                   {
                                       view: "movement",
@@ -512,7 +480,12 @@ export function InventoryLedgerPage() {
             />
 
             <AdjustmentDetailSheet
-                open={previewAdjustmentId != null && !editingAdjustmentId}
+                open={
+                    canUseLedger &&
+                    previewAdjustmentId != null &&
+                    !editingAdjustmentId
+                }
+                finalFocus={editingAdjustmentId ? false : restoreRowFocus}
                 detail={adjustmentDetailQuery.data}
                 isPending={adjustmentDetailQuery.isPending}
                 workItemId={decisionWorkItem?.workItemId}
@@ -534,7 +507,7 @@ export function InventoryLedgerPage() {
                 }}
             />
 
-            {canEditAdjustment && editingAdjustmentId ? (
+            {canUseLedger && canEditAdjustment && editingAdjustmentId ? (
                 <AdjustmentEditDialog
                     key={editingAdjustmentId}
                     id={editingAdjustmentId}
@@ -550,7 +523,8 @@ export function InventoryLedgerPage() {
 
             {canCreateAdjustment && canSubmitAdjustment && (
                 <AdjustmentDialog
-                    open={adjustment.adjustDraftId != null}
+                    open={canUseLedger && adjustment.adjustDraftId != null}
+                    finalFocus={restoreRowFocus}
                     meta={adjustment.adjustMeta}
                     form={adjustment.form}
                     pending={adjustment.isSubmitting}
@@ -605,6 +579,31 @@ export function InventoryLedgerPage() {
                     onCancel={adjustment.closeAdjustment}
                 />
             )}
+            <LedgerTableFrame
+                view={view}
+                data={data}
+                loading={listQuery.isFetching}
+                isError={listLoadFailed}
+                error={listQuery.error}
+                onRetry={() => void listQuery.refetch()}
+                pagination={pagination}
+                onPaginationChange={handlePaginationChange}
+                balanceColumns={balanceColumns}
+                movementColumns={movementColumns}
+                reservationColumns={reservationColumns}
+                adjustmentColumns={adjustmentColumns}
+                onOpenDetail={canReadBalance ? openDetail : undefined}
+                onOpenAdjustment={openAdjustment}
+                previewBalanceId={previewBalanceId}
+                previewAdjustmentId={previewAdjustmentId}
+                canOpenImports={canOpenImports}
+                sortValue={sortValue}
+                onSortChange={handleSortChange}
+                hasActiveFilters={hasActiveFilters}
+                appliedChips={appliedChips}
+                searchInputRef={searchInputRef}
+                filters={filters}
+            />
         </PageScaffold>
     )
 }

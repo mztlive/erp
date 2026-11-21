@@ -7,9 +7,12 @@ import {
     BusinessStatusBadge,
     MoneyValue,
     StatusTrackSummary,
+    TableAsyncCell,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableRowActions,
+    TableTextCell,
 } from "@/components/business"
-import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
 import {
     isPendingReviewStage,
     NATURE_LABEL,
@@ -41,112 +44,105 @@ export function buildSalesOrdersListColumns(
             id: "document",
             accessorKey: "documentNumber",
             header: "销售单",
-            meta: { label: "销售单", width: "reference" },
-            cell: ({ row }) => (
-                <div className="flex min-w-0 items-center gap-2">
-                    <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
-                            {canOpen ? (
-                                <Button
-                                    id={`sales-orders-list-row-${toAutomationIdSegment(row.original.id)}-open`}
-                                    variant="link"
-                                    size="xs"
-                                    className="num h-auto min-h-0 px-0 text-sm leading-5 font-semibold text-foreground"
-                                    aria-label={`查看销售单 ${row.original.documentNumber}`}
-                                    render={
-                                        <Link
-                                            href={`/sales/orders/${row.original.id}`}
-                                        />
-                                    }
+            meta: { label: "销售单", width: "flex", numeric: true },
+            enableHiding: false,
+            cell: ({ row }) => {
+                const order = row.original
+                const summary = `${order.customerName} · ${NATURE_LABEL[order.nature]}`
+                return (
+                    <TableIdentityCell
+                        primary={
+                            canOpen ? (
+                                <Link
+                                    id={`sales-orders-list-row-${toAutomationIdSegment(order.id)}-open`}
+                                    href={`/sales/orders/${order.id}`}
+                                    aria-label={`查看销售单 ${order.documentNumber}`}
+                                    className="num rounded-sm hover:text-primary hover:underline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+                                    onClick={(event) => event.stopPropagation()}
                                 >
-                                    {row.original.documentNumber}
-                                </Button>
+                                    {order.documentNumber}
+                                </Link>
                             ) : (
-                                <span className="num text-sm font-semibold">
-                                    {row.original.documentNumber}
+                                <span className="num">
+                                    {order.documentNumber}
                                 </span>
-                            )}
-
-                            <BusinessStatusBadge
-                                context="list"
-                                label={row.original.primaryStatus.label}
-                                tone={row.original.primaryStatus.tone}
-                            />
-                        </div>
-                        <div className="max-w-[14rem] truncate text-xs text-muted-foreground">
-                            {row.original.customerName} ·{" "}
-                            {NATURE_LABEL[row.original.nature]}
-                        </div>
-                    </div>
-                </div>
-            ),
+                            )
+                        }
+                        primaryTitle={order.documentNumber}
+                        secondary={summary}
+                        secondaryTitle={summary}
+                    />
+                )
+            },
+        },
+        {
+            id: "status",
+            header: "状态",
+            meta: { label: "销售单状态", width: "default" },
+            cell: ({ row }) => {
+                const { tone, label } = row.original.primaryStatus
+                return (
+                    <BusinessStatusBadge
+                        label={label}
+                        tone={tone}
+                        context="list"
+                        appearance={tone === "success" ? "quiet" : "badge"}
+                    />
+                )
+            },
         },
         {
             id: "nature",
             header: "业务性质",
             meta: { label: "业务性质", width: "status" },
-            enableSorting: false,
             cell: ({ row }) => (
-                <span className="text-xs text-muted-foreground">
-                    {NATURE_LABEL[row.original.nature]}
-                </span>
+                <TableTextCell value={NATURE_LABEL[row.original.nature]} />
             ),
         },
-        {
-            id: "contract",
-            accessorKey: "contractNumber",
-            header: "合同",
-            meta: { label: "合同", width: "reference" },
-            cell: ({ row }) => {
-                const order = row.original
-                const contractNo = order.contractNumber.trim()
-                const companyName = order.contractCompanyName.trim()
-                if (!order.contractId && !contractNo) {
-                    return (
-                        <span className="text-sm text-muted-foreground">—</span>
-                    )
-                }
-                const downloading = downloadingContractId === order.contractId
-                return (
-                    <div className="min-w-0 space-y-1">
-                        {canDownloadContract && order.contractId ? (
-                            <LoadingButton
-                                id={`sales-orders-list-row-${toAutomationIdSegment(order.id)}-download-contract`}
-                                type="button"
-                                variant="link"
-                                size="xs"
-                                className="num h-auto min-h-0 px-0 text-sm leading-5 font-semibold text-foreground"
-                                loading={downloading}
-                                disabled={downloading}
-                                aria-label={`下载合同 ${contractNo || order.contractId}`}
-                                onClick={() => {
-                                    void downloadContract(order)
-                                }}
-                            >
-                                {downloading
-                                    ? "下载中"
-                                    : contractNo || "下载合同"}
-                            </LoadingButton>
-                        ) : (
-                            <span className="num text-sm">
-                                {contractNo || "—"}
-                            </span>
-                        )}
-                        {order.contractLoadError ? (
-                            <p
-                                role="status"
-                                className="max-w-[20rem] text-xs text-destructive"
-                            >
-                                合同资料读取失败：{order.contractLoadError}
-                            </p>
-                        ) : null}
-                        <div className="max-w-[14rem] truncate text-xs text-muted-foreground">
-                            {companyName || "—"}
-                        </div>
-                    </div>
-                )
-            },
-        },
+        ...(canDownloadContract
+            ? [
+                  {
+                      id: "contract",
+                      header: "合同",
+                      meta: { label: "合同", width: "reference" },
+                      cell: ({ row }) => {
+                          const order = row.original
+                          const contractNo = order.contractNumber.trim()
+                          const companyName = order.contractCompanyName.trim()
+                          return (
+                              <TableAsyncCell
+                                  failed={Boolean(order.contractLoadError)}
+                                  failedLabel={
+                                      <span title={order.contractLoadError}>
+                                          合同资料读取失败
+                                      </span>
+                                  }
+                              >
+                                  {contractNo ? (
+                                      <TableIdentityCell
+                                          primary={
+                                              <span className="num">
+                                                  {contractNo}
+                                              </span>
+                                          }
+                                          primaryTitle={contractNo}
+                                          secondary={companyName}
+                                          secondaryTitle={companyName}
+                                      />
+                                  ) : order.contractId ? (
+                                      <TableEmptyCell
+                                          variant="label"
+                                          label="合同编号未填写"
+                                      />
+                                  ) : (
+                                      <TableEmptyCell />
+                                  )}
+                              </TableAsyncCell>
+                          )
+                      },
+                  } satisfies ColumnDef<SalesOrderListItem>,
+              ]
+            : []),
         {
             id: "tracks",
             header: "进度",
@@ -155,7 +151,7 @@ export function buildSalesOrdersListColumns(
             cell: ({ row }) => (
                 <StatusTrackSummary
                     variant="inline"
-                    className="flex-nowrap gap-x-2"
+                    className="gap-x-3 gap-y-0 [&>div]:gap-1"
                     tracks={[
                         {
                             id: "fulfillment",
@@ -179,6 +175,7 @@ export function buildSalesOrdersListColumns(
         {
             id: "amount",
             accessorKey: "amountGross",
+            enableSorting: false,
             header: "成交金额",
             meta: {
                 label: "成交金额",
@@ -198,10 +195,11 @@ export function buildSalesOrdersListColumns(
         {
             id: "owner",
             accessorKey: "ownerName",
+            enableSorting: false,
             header: "负责人",
             meta: { label: "负责人", width: "default" },
             cell: ({ row }) => (
-                <span className="text-sm">{row.original.ownerName || "—"}</span>
+                <TableTextCell value={row.original.ownerName} clamp={1} />
             ),
         },
         {
@@ -212,35 +210,89 @@ export function buildSalesOrdersListColumns(
             cell: ({ row }) => {
                 const order = row.original
                 if (!isPendingReviewStage(order.primaryStatus.code)) {
-                    return (
-                        <span className="text-sm text-muted-foreground">—</span>
-                    )
+                    return <TableEmptyCell />
                 }
                 const due = stageDueDisplay(order)
                 return (
-                    <div className="text-sm">
-                        <div>{stageOwnerDisplay(order)}</div>
-                        <div className="text-xs text-muted-foreground">
-                            {due ? (
+                    <TableIdentityCell
+                        primary={stageOwnerDisplay(order)}
+                        secondary={
+                            due ? (
                                 <time dateTime={due.dateTime}>{due.label}</time>
                             ) : (
                                 "时限未设置"
-                            )}
-                        </div>
-                    </div>
+                            )
+                        }
+                        secondaryTitle={due?.label}
+                        numericSecondary={Boolean(due)}
+                    />
                 )
             },
         },
         {
             id: "submittedAt",
             accessorKey: "submittedAt",
-            header: "提交时间",
-            meta: { label: "提交时间", width: "default", numeric: true },
+            header: "创建时间",
+            meta: { label: "创建时间", width: "default", numeric: true },
             cell: ({ row }) => (
-                <span className="num text-sm text-muted-foreground">
-                    {row.original.submittedAt}
-                </span>
+                <TableTextCell
+                    value={row.original.submittedAt}
+                    numeric
+                    clamp={1}
+                />
             ),
         },
+        ...(canDownloadContract
+            ? [
+                  {
+                      id: "actions",
+                      header: "操作",
+                      meta: { label: "操作", width: "status", align: "end" },
+                      cell: ({ row }) => {
+                          const order = row.original
+                          if (!order.contractId) return <TableEmptyCell />
+                          const rowPrefix = `sales-orders-list-row-${toAutomationIdSegment(order.id)}`
+                          const downloading =
+                              downloadingContractId === order.contractId
+                          return (
+                              <TableRowActions
+                                  moreId={`${rowPrefix}-more`}
+                                  moreLabel="销售单更多操作"
+                                  maxInline={1}
+                                  actions={[
+                                      {
+                                          id: `${rowPrefix}-download-contract`,
+                                          label: downloading ? (
+                                              "下载中"
+                                          ) : (
+                                              <>
+                                                  下载合同
+                                                  {order.contractNumber ? (
+                                                      <span className="sr-only">
+                                                          {" "}
+                                                          {order.contractNumber}
+                                                      </span>
+                                                  ) : null}
+                                              </>
+                                          ),
+                                          loading: downloading,
+                                          disabled: Boolean(
+                                              downloadingContractId,
+                                          ),
+                                          disabledReason:
+                                              downloadingContractId &&
+                                              !downloading
+                                                  ? "请等待当前合同下载完成"
+                                                  : undefined,
+                                          onClick: () =>
+                                              downloadContract(order),
+                                      },
+                                  ]}
+                              />
+                          )
+                      },
+                  } satisfies ColumnDef<SalesOrderListItem>,
+              ]
+            : []),
     ]
 }

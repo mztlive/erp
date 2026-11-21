@@ -4,12 +4,32 @@ import * as React from "react"
 import { ASSIGNMENT_STRATEGY_LABEL } from "@/components/business/responsibility-pool/model"
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    TableIdentityCell,
+    TableRowActions,
+    TableTextCell,
+} from "@/components/business"
 import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
 import {
     PROCUREMENT_RESPONSIBILITY_RULE_TYPE_LABEL,
     type ProcurementResponsibilityRule,
 } from "@/features/procurement-responsibilities/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+
+export const RESPONSIBILITY_RULES_LIST_ID = "procurement-responsibility-rules"
+
+export const ruleColumnOrder = [
+    "scope",
+    "ruleType",
+    "owner",
+    "status",
+    "strategy",
+    "actions",
+]
+
+export const ruleColumnPinning = { left: ["scope"], right: ["actions"] }
+export const ruleColumnVisibility = { strategy: false }
 
 /** 规则命中范围的可读文案，供列表主列展示。 */
 export function ruleScope(rule: ProcurementResponsibilityRule): string {
@@ -29,62 +49,66 @@ export function ruleScope(rule: ProcurementResponsibilityRule): string {
     }
 }
 
-/** 采购责任规则列表列：类型、范围、负责人、状态。编辑走行点击，不另开操作列。 */
-export function useResponsibilityRulesColumns() {
-    return React.useMemo<ColumnDef<ProcurementResponsibilityRule>[]>(
-        () => [
+export function getResponsibilityRuleLabel(
+    rule: ProcurementResponsibilityRule,
+) {
+    return `${PROCUREMENT_RESPONSIBILITY_RULE_TYPE_LABEL[rule.ruleType]}：${ruleScope(rule)}`
+}
+
+export function useResponsibilityRulesColumns({
+    onEdit,
+    canUseSku,
+    editDisabledReason,
+}: {
+    onEdit?: (rule: ProcurementResponsibilityRule) => void
+    canUseSku: boolean
+    editDisabledReason?: string
+}) {
+    return React.useMemo<ColumnDef<ProcurementResponsibilityRule>[]>(() => {
+        const columns: ColumnDef<ProcurementResponsibilityRule>[] = [
+            {
+                id: "scope",
+                header: "匹配范围",
+                meta: { label: "匹配范围", width: "flex" },
+                cell: ({ row }) => {
+                    const scope = ruleScope(row.original)
+                    return (
+                        <TableIdentityCell
+                            className="w-0 min-w-full"
+                            primary={scope}
+                            primaryTitle={scope}
+                        />
+                    )
+                },
+            },
             {
                 id: "ruleType",
-                accessorFn: (row) =>
-                    PROCUREMENT_RESPONSIBILITY_RULE_TYPE_LABEL[row.ruleType],
                 header: "规则类型",
                 meta: { label: "规则类型", width: "status" },
                 cell: ({ row }) => (
-                    <span className="text-sm font-medium">
-                        {
+                    <TableTextCell
+                        value={
                             PROCUREMENT_RESPONSIBILITY_RULE_TYPE_LABEL[
                                 row.original.ruleType
                             ]
                         }
-                    </span>
-                ),
-            },
-            {
-                id: "scope",
-                accessorFn: (row) => ruleScope(row),
-                header: "匹配范围",
-                meta: { label: "匹配范围", width: "flex" },
-                cell: ({ row }) => (
-                    <span className="text-sm text-foreground">
-                        {ruleScope(row.original)}
-                    </span>
+                    />
                 ),
             },
             {
                 id: "owner",
-                accessorFn: (row) => row.ownerNames.join("、"),
                 header: "负责人池",
                 meta: { label: "负责人池", width: "default" },
                 cell: ({ row }) => (
-                    <span className="text-sm">
-                        {row.original.ownerNames.join("、")}
-                    </span>
-                ),
-            },
-            {
-                id: "strategy",
-                accessorFn: (row) => ASSIGNMENT_STRATEGY_LABEL[row.strategy],
-                header: "分配方式",
-                meta: { label: "分配方式", width: "status" },
-                cell: ({ row }) => (
-                    <span className="text-sm">
-                        {ASSIGNMENT_STRATEGY_LABEL[row.original.strategy]}
-                    </span>
+                    <TableTextCell
+                        value={row.original.ownerNames.join("、")}
+                        className="whitespace-normal break-words"
+                        clamp={2}
+                    />
                 ),
             },
             {
                 id: "status",
-                accessorFn: (row) => (row.enabled ? "已启用" : "已停用"),
                 header: "状态",
                 meta: { label: "状态", width: "status" },
                 cell: ({ row }) => (
@@ -92,10 +116,48 @@ export function useResponsibilityRulesColumns() {
                         context="list"
                         label={row.original.enabled ? "已启用" : "已停用"}
                         tone={row.original.enabled ? "success" : "neutral"}
+                        appearance={row.original.enabled ? "quiet" : "badge"}
                     />
                 ),
             },
-        ],
-        [],
-    )
+            {
+                id: "strategy",
+                header: "分配方式",
+                meta: { label: "分配方式", width: "status" },
+                cell: ({ row }) => (
+                    <TableTextCell
+                        value={ASSIGNMENT_STRATEGY_LABEL[row.original.strategy]}
+                    />
+                ),
+            },
+        ]
+        if (onEdit) {
+            columns.push({
+                id: "actions",
+                header: "操作",
+                meta: { label: "操作", align: "end", width: "status" },
+                cell: ({ row }) => {
+                    const rule = row.original
+                    if (!canUseSku && rule.ruleType === "SKU") return null
+                    const id = `${RESPONSIBILITY_RULES_LIST_ID}-row-${toAutomationIdSegment(rule.ruleId)}`
+                    return (
+                        <TableRowActions
+                            moreId={`${id}-more`}
+                            moreLabel={`${getResponsibilityRuleLabel(rule)} 更多操作`}
+                            actions={[
+                                {
+                                    id: `${id}-edit`,
+                                    label: "编辑",
+                                    disabled: Boolean(editDisabledReason),
+                                    disabledReason: editDisabledReason,
+                                    onClick: () => onEdit(rule),
+                                },
+                            ]}
+                        />
+                    )
+                },
+            })
+        }
+        return columns
+    }, [canUseSku, editDisabledReason, onEdit])
 }

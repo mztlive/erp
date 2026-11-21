@@ -7,7 +7,7 @@ import { buildInvoiceColumns } from "../lib/supplier-accounts-invoice-columns"
 import { buildUnallocatedColumns } from "../lib/supplier-accounts-unallocated-columns"
 
 export function useSupplierAccountsColumns(input: {
-    openReversalPreview: (reversalId: string) => void
+    openReversalPreview: (reversalId: string, paymentId: string) => void
 }) {
     const { openReversalPreview } = input
     const payableColumns = React.useMemo(buildPayableColumns, [])

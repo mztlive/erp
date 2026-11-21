@@ -2,22 +2,13 @@
 
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 
-import {
-    BusinessEmptyState,
-    BusinessFailureState,
-    DataTable,
-} from "@/components/business"
-import { listWorkspaceEmptyStateClassName } from "@/components/business/list-workspace"
-import { Button } from "@/components/ui/button"
+import { ListDataTable } from "@/components/business"
 import type {
     ConnectionListItem,
     ConnectionListView,
 } from "@/features/supplier-api-connections/types"
+import { getErrorPresentation } from "@/lib/api/errors"
 
-/**
- * 连接列表表格区：空态、错误态与数据表互斥切换；筛选区常驻不卸载（§11）。
- * 筛选无结果与系统尚无数据用同一清除/新建入口，空态动作共用工具栏的清除函数。
- */
 export function ConnectionListTable({
     data,
     columns,
@@ -45,22 +36,24 @@ export function ConnectionListTable({
     onRetry: () => void
     hasFilters: boolean
 }) {
-    const empty = data?.emptyReason
-    const filterEmpty =
-        empty === "FILTER_NO_RESULT" ||
-        (empty === "NO_CONNECTIONS" && hasFilters)
+    const noPermission =
+        data?.emptyReason === "NO_PERMISSION" ||
+        data?.hasModulePermission === false
+    const noScope =
+        noPermission ||
+        data?.emptyReason === "NO_SCOPE" ||
+        data?.hasDataScope === false
 
     return (
-        <DataTable
+        <ListDataTable
             id="supplier-api-connections-list-table"
+            entityName="供应商连接"
             data={data?.items ?? []}
             columns={columns}
             getRowId={(row) => row.connectionId}
             rowCount={data?.total ?? 0}
-            rowLabel={(row) => row.connectionCode}
+            rowLabel={(row) => `${row.supplier.name}（${row.connectionCode}）`}
             caption="供应商平台连接列表"
-            layout="flush"
-            enableColumnPinning
             defaultColumnVisibility={{ owners: false, nextStep: false }}
             defaultColumnPinning={{
                 left: ["identity"],
@@ -72,54 +65,33 @@ export function ConnectionListTable({
                 onRowOpen ? (row) => onRowOpen(row.connectionId) : undefined
             }
             loading={loading}
-            errorState={
-                isError && !data ? (
-                    <BusinessFailureState
-                        title="连接列表加载失败"
-                        error={error}
-                        onRetry={onRetry}
-                    />
-                ) : undefined
+            isError={isError}
+            error={error}
+            retryButtonId="supplier-api-connections-list-retry"
+            onRetry={
+                !isError || getErrorPresentation(error).retryable
+                    ? onRetry
+                    : undefined
             }
-            emptyState={
-                filterEmpty ? (
-                    <BusinessEmptyState
-                        kind="filter"
-                        className={listWorkspaceEmptyStateClassName}
-                        title="当前筛选无结果"
-                        description="没有连接符合当前状态/能力/健康条件，可清除筛选。"
-                        action={
-                            <Button
-                                id="supplier-api-connections-list-clear-filters"
-                                type="button"
-                                variant="secondary"
-                                className="rounded-lg shadow-none"
-                                onClick={onClearFilters}
-                            >
-                                清除筛选
-                            </Button>
-                        }
-                    />
-                ) : empty === "NO_CONNECTIONS" ? (
-                    <BusinessEmptyState
-                        kind="no-data"
-                        className={listWorkspaceEmptyStateClassName}
-                        title="尚未接入供应商连接"
-                        description="还没有连接。有权限时可新建连接。"
-                        action={
-                            data?.hasModulePermission && onCreate ? (
-                                <Button
-                                    id="supplier-api-connections-list-empty-create"
-                                    type="button"
-                                    onClick={onCreate}
-                                >
-                                    新建连接
-                                </Button>
-                            ) : null
-                        }
-                    />
-                ) : undefined
+            noScope={noScope}
+            hasActiveFilters={
+                hasFilters || data?.emptyReason === "FILTER_NO_RESULT"
             }
+            onClearFilters={onClearFilters}
+            clearFiltersButtonId="supplier-api-connections-list-clear-filters"
+            canCreate={Boolean(onCreate)}
+            onCreate={onCreate}
+            createButtonId="supplier-api-connections-list-empty-create"
+            createLabel="新建连接"
+            emptyCopy={{
+                noScopeDescription: noPermission
+                    ? "当前账号无权查看供应商连接，请联系管理员。"
+                    : undefined,
+                emptyTitle: "尚未接入供应商连接",
+                emptyDescription: onCreate
+                    ? "点击「新建连接」接入供应商平台。"
+                    : undefined,
+            }}
         />
     )
 }

@@ -3,8 +3,11 @@
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import {
+    BusinessStatusBadge,
+    TableIdentityCell,
+    TableTextCell,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { formatObjectSet } from "@/features/import-opening/lib/labels"
 import type { ImportBatchListItem } from "@/features/import-opening/types"
@@ -27,119 +30,144 @@ export function useBatchListColumns({
             {
                 id: "batchNo",
                 header: "批次号",
-                meta: { label: "批次号", width: "reference" },
-                cell: ({ row }) => (
-                    <div className="space-y-1">
-                        <Button
-                            id={`operations-import-batches-row-${toAutomationIdSegment(row.original.batchId)}-open`}
-                            variant="link"
-                            className="h-auto p-0 font-mono text-sm"
-                            onClick={() => onOpenBatch(row.original.batchId)}
-                        >
-                            {row.original.batchNo}
-                        </Button>
-                        <div className="text-xs text-muted-foreground">
-                            {ENVIRONMENT_LABEL[row.original.environment]}
-                        </div>
-                    </div>
+                meta: { width: "flex" },
+                cell: ({ row: { original: batch } }) => (
+                    <TableIdentityCell
+                        primary={
+                            <Button
+                                id={`operations-import-batches-row-${toAutomationIdSegment(batch.batchId)}-open`}
+                                type="button"
+                                variant="link"
+                                className="num h-auto max-w-full justify-start p-0"
+                                onClick={(event) => {
+                                    event.stopPropagation()
+                                    onOpenBatch(batch.batchId)
+                                }}
+                            >
+                                <span className="truncate">
+                                    {batch.batchNo}
+                                </span>
+                            </Button>
+                        }
+                        primaryTitle={batch.batchNo}
+                        secondary={ENVIRONMENT_LABEL[batch.environment]}
+                    />
                 ),
             },
             {
                 id: "environment",
                 header: "环境",
-                cell: ({ row }) => (
-                    <Badge
-                        variant={
-                            row.original.environment === "PRODUCTION"
+                meta: { width: "status" },
+                cell: ({ row: { original: batch } }) => (
+                    <BusinessStatusBadge
+                        context="list"
+                        tone={
+                            batch.environment === "PRODUCTION"
                                 ? "destructive"
-                                : "secondary"
+                                : "neutral"
                         }
-                    >
-                        {ENVIRONMENT_LABEL[row.original.environment]}
-                    </Badge>
+                        label={ENVIRONMENT_LABEL[batch.environment]}
+                    />
                 ),
             },
             {
                 id: "objects",
                 header: "导入数据类型",
-                cell: ({ row }) => (
-                    <span className="text-sm">
-                        {formatObjectSet(row.original.sourceObjectSet)}
-                    </span>
+                meta: { width: "default" },
+                cell: ({ row: { original: batch } }) => (
+                    <TableTextCell
+                        value={formatObjectSet(batch.sourceObjectSet)}
+                        clamp={2}
+                        className="whitespace-normal"
+                    />
                 ),
             },
             {
                 id: "baseline",
                 header: "基准日",
-                cell: ({ row }) => (
-                    <span className="num text-sm">
-                        {row.original.baselineDate}
-                    </span>
+                meta: { width: "default" },
+                cell: ({ row: { original: batch } }) => (
+                    <TableTextCell value={batch.baselineDate} numeric />
                 ),
             },
             {
                 id: "stage",
                 header: "阶段",
-                cell: ({ row }) => (
-                    <span className="text-sm">
-                        {PIPELINE_STAGE_LABEL[row.original.stage]}
-                    </span>
+                meta: { width: "status" },
+                cell: ({ row: { original: batch } }) => (
+                    <TableTextCell value={PIPELINE_STAGE_LABEL[batch.stage]} />
                 ),
             },
             {
                 id: "rule",
                 header: "规则版本",
-                cell: ({ row }) => (
-                    <span className="num font-mono text-xs">
-                        {row.original.importRuleVersion}
-                    </span>
+                meta: { width: "default" },
+                cell: ({ row: { original: batch } }) => (
+                    <TableTextCell
+                        value={batch.importRuleVersion}
+                        clamp={1}
+                        numeric
+                    />
                 ),
             },
             {
                 id: "progress",
                 header: "进度",
-                cell: ({ row }) => (
-                    <span className="text-sm">
-                        {row.original.progressLabel}
-                    </span>
+                meta: { align: "end", numeric: true, width: "quantity" },
+                cell: ({ row: { original: batch } }) => (
+                    <TableTextCell value={batch.progressLabel} />
                 ),
             },
             {
                 id: "confirm",
                 header: "责任确认",
-                cell: ({ row }) => (
-                    <span className="text-sm">
-                        {row.original.confirmationSummary}
-                    </span>
+                meta: { width: "default" },
+                cell: ({ row: { original: batch } }) => (
+                    <TableTextCell
+                        value={
+                            batch.confirmationSummary === "—"
+                                ? null
+                                : batch.confirmationSummary
+                        }
+                        clamp={2}
+                        className="whitespace-normal"
+                    />
                 ),
             },
             {
                 id: "status",
                 header: "状态",
-                cell: ({ row }) => (
-                    <div className="space-y-1">
+                meta: { width: "status" },
+                cell: ({ row: { original: batch } }) => (
+                    <div className="flex flex-col items-start">
                         <BusinessStatusBadge
                             context="list"
-                            label={BATCH_STATUS_LABEL[row.original.status]}
-                            tone={BATCH_STATUS_TONE[row.original.status]}
+                            label={BATCH_STATUS_LABEL[batch.status]}
+                            tone={BATCH_STATUS_TONE[batch.status]}
+                            appearance={
+                                batch.status === "SUCCEEDED" ? "quiet" : "badge"
+                            }
                         />
-                        <div className="text-xs text-muted-foreground">
-                            {PIPELINE_STAGE_LABEL[row.original.stage]}
-                        </div>
+                        <span className="text-xs text-muted-foreground">
+                            {PIPELINE_STAGE_LABEL[batch.stage]}
+                        </span>
                     </div>
                 ),
             },
             {
                 id: "updated",
                 header: "更新时间",
-                cell: ({ row }) => (
-                    <span className="num text-body-compact text-muted-foreground">
-                        {formatDateTime(
-                            row.original.updatedAt,
+                meta: { width: "default" },
+                cell: ({ row: { original: batch } }) => (
+                    <TableTextCell
+                        value={formatDateTime(
+                            batch.updatedAt,
                             "dateStyle",
                             "passthrough",
                         )}
-                    </span>
+                        numeric
+                        className="text-muted-foreground"
+                    />
                 ),
             },
         ],

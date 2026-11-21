@@ -2,7 +2,8 @@ import Link from "next/link"
 
 import { formatMoneyDisplay } from "@/features/actual-profit-loss/lib/presentation"
 import { compareDecimal } from "@/lib/fixed-decimal"
-import { MoneyValue } from "@/components/business/values"
+import { MoneyValue, TableEmptyCell } from "@/components/business"
+import { cn } from "@/lib/utils"
 
 export function MoneyCell({
     id,
@@ -30,7 +31,7 @@ export function MoneyCell({
     }
     const content = (
         <span
-            className={`num text-sm font-medium ${isNeg ? "text-destructive" : ""}`}
+            className={cn("num font-medium", isNeg && "text-destructive")}
             aria-label={
                 ariaLabel ??
                 (value == null
@@ -39,7 +40,11 @@ export function MoneyCell({
             }
         >
             {isNeg ? "亏损 " : null}
-            <MoneyValue value={value} />
+            {display === "—" ? (
+                <TableEmptyCell />
+            ) : (
+                <MoneyValue value={value} />
+            )}
         </span>
     )
     if (onClick) {
@@ -47,7 +52,7 @@ export function MoneyCell({
             <button
                 id={id}
                 type="button"
-                className="text-left underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="cursor-pointer rounded-sm text-right underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={onClick}
             >
                 {content}

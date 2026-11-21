@@ -49,7 +49,16 @@ export function UnitOfMeasurePreviewSheet({
             }}
             size="preview"
             title={row?.name ?? "计量单位详情"}
-            identity="计量单位"
+            identity={
+                row ? (
+                    <span>
+                        {masterDataCopy.fUnitCode}：
+                        <span className="num break-all">
+                            {row.dictionaryCode ?? row.stableNo}
+                        </span>
+                    </span>
+                ) : null
+            }
             summary={
                 row ? (
                     <BusinessStatusBadge
@@ -100,11 +109,10 @@ export function UnitOfMeasurePreviewSheet({
             }
         >
             {row ? (
-                <section className="space-y-4 text-sm">
+                <section className="flex flex-col gap-4 text-body-compact">
                     <h3 className="font-medium">单位资料</h3>
-                    <dl className="space-y-4">
+                    <dl className="flex flex-col gap-4">
                         {[
-                            masterDataCopy.fUnitCode,
                             masterDataCopy.fUnitSymbol,
                             masterDataCopy.fQuantityScale,
                         ].map((label) => (
@@ -124,7 +132,7 @@ export function UnitOfMeasurePreviewSheet({
                         ))}
                     </dl>
                     {row.primaryBlocker ? (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-muted-foreground">
                             {row.primaryBlocker}
                         </p>
                     ) : null}

@@ -2,7 +2,12 @@
 
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge, MoneyValue } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    MoneyValue,
+    TableIdentityCell,
+    TableTextCell,
+} from "@/components/business"
 import type { PayableRow } from "@/features/supplier-payables/types"
 import { cn } from "@/lib/utils"
 
@@ -12,29 +17,24 @@ export function buildPayableColumns(): ColumnDef<PayableRow>[] {
             id: "supplier",
             header: "供应商 / 来源单据",
             meta: { label: "供应商 / 来源单据", width: "flex" },
-            cell: ({ row }) => (
-                <div className="flex w-0 min-w-full flex-col gap-1 text-sm">
-                    <span
-                        className="truncate font-medium"
-                        title={row.original.supplierName}
-                    >
-                        {row.original.supplierName}
-                    </span>
-                    <span className="sr-only">·</span>
-                    <span
-                        className="truncate select-text text-xs text-muted-foreground"
-                        title={`${row.original.sourceTypeLabel} · ${row.original.sourceDocumentNo}`}
-                    >
-                        {row.original.sourceTypeLabel} ·{" "}
-                        <span className="num">
-                            {row.original.sourceDocumentNo}
-                        </span>
-                    </span>
-                </div>
-            ),
+            accessorKey: "supplierName",
+            cell: ({ row }) => {
+                const { supplierName, sourceTypeLabel, sourceDocumentNo } =
+                    row.original
+                const source = `${sourceTypeLabel} · ${sourceDocumentNo}`
+                return (
+                    <TableIdentityCell
+                        primary={supplierName}
+                        primaryTitle={supplierName}
+                        secondary={source}
+                        secondaryTitle={source}
+                        numericSecondary
+                    />
+                )
+            },
         },
         {
-            id: "openTotal",
+            accessorKey: "openTotal",
             header: "剩余应付（含税）",
             meta: {
                 label: "剩余应付（含税）",
@@ -51,7 +51,7 @@ export function buildPayableColumns(): ColumnDef<PayableRow>[] {
             ),
         },
         {
-            id: "grossTotal",
+            accessorKey: "grossTotal",
             header: "应付总额（含税）",
             meta: {
                 label: "应付总额（含税）",
@@ -64,7 +64,7 @@ export function buildPayableColumns(): ColumnDef<PayableRow>[] {
             ),
         },
         {
-            id: "settledTotal",
+            accessorKey: "settledTotal",
             header: "已付净额",
             meta: {
                 label: "已付净额",
@@ -77,7 +77,7 @@ export function buildPayableColumns(): ColumnDef<PayableRow>[] {
             ),
         },
         {
-            id: "invoicedTotal",
+            accessorKey: "invoicedTotal",
             header: "已收票净额",
             meta: {
                 label: "已收票净额",
@@ -97,13 +97,11 @@ export function buildPayableColumns(): ColumnDef<PayableRow>[] {
             header: "到期情况",
             meta: { label: "到期情况", width: "default" },
             cell: ({ row }) => (
-                <div className="flex flex-col items-start gap-1 text-sm">
-                    {row.original.dueDate ? (
-                        <span className="num">{row.original.dueDate}</span>
-                    ) : null}
+                <div className="flex flex-col items-start gap-0.5">
+                    <TableTextCell value={row.original.dueDate} numeric />
                     <span
                         className={cn(
-                            "text-xs",
+                            "num text-xs",
                             row.original.dueState === "overdue"
                                 ? "text-destructive"
                                 : "text-muted-foreground",
@@ -119,11 +117,16 @@ export function buildPayableColumns(): ColumnDef<PayableRow>[] {
             header: "结清状态",
             meta: { label: "结清状态", width: "status" },
             cell: ({ row }) => (
-                <div className="flex flex-col items-start gap-1.5">
+                <div className="flex flex-col items-start gap-1">
                     <BusinessStatusBadge
                         context="list"
                         label={row.original.statusLabel}
                         tone={row.original.statusTone}
+                        appearance={
+                            row.original.status === "SETTLED"
+                                ? "quiet"
+                                : "badge"
+                        }
                     />
                     {row.original.paymentGateSummary &&
                     row.original.paymentGateSummary.state !==

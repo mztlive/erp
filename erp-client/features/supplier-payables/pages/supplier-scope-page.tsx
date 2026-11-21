@@ -1,65 +1,90 @@
 "use client"
 
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
-
 import * as React from "react"
+import { DownloadIcon } from "lucide-react"
 
 import {
-    BusinessEmptyState,
     BusinessFailureState,
-    BusinessTableFrame,
-    DataTable,
     FundsScopeBanner,
-    scopeQueryFrameHeading,
     MoneyValue,
     PageScaffold,
     QuickPreviewSheet,
 } from "@/components/business"
-import { ListSearchField } from "@/components/business/list-search-field"
-import {
-    ListWorkspaceFilterBar,
-    ListWorkspaceHeader,
-    listWorkspaceFilterStatusText,
-} from "@/components/business/list-workspace"
-import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
-import { selectedOrgUnitIds } from "@/features/organization/lib/organization-ids"
-import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
 import {
     PreviewAmount,
-    PreviewFact,
     PreviewNote,
-    PreviewSection,
 } from "@/components/business/financial-preview"
+import {
+    ListDataTable,
+    ListFilterSection,
+    ListFilterSections,
+    ListSearchField,
+    ListWorkSurface,
+    ListWorkspaceFilterBar,
+    ListWorkspaceHeader,
+    listWorkspaceStyles,
+    type ListDataTableProps,
+} from "@/components/business/list-workspace"
+import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { personDirectoryLabel } from "@/features/entity-selectors/api/person-directory"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { usePersonDirectorySelected } from "@/features/entity-selectors/hooks/person-directory"
+import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
+import { selectedOrgUnitIds } from "@/features/organization/lib/organization-ids"
 import {
-    businessLabelOrPlaceholder,
-    MISSING_SOURCE_DOCUMENT_NO,
-} from "@/features/supplier-payables/lib/display-labels"
-import type { SupplierScopeListView } from "@/features/supplier-payables/api/scoped"
-import { exportSupplierScopeCsv } from "@/features/supplier-payables/lib/scoped-export"
+    allocationNumber,
+    allocationPayableNumber,
+    createSupplierScopedAllocationColumns,
+    createSupplierScopedPayableColumns,
+    createSupplierScopedPaymentColumns,
+    payableSourceNumber,
+} from "@/features/supplier-payables/components/scoped-columns"
 import {
     useSupplierScopeDetailQuery,
     useSupplierScopeListQuery,
 } from "@/features/supplier-payables/hooks/scoped-queries"
+import { exportSupplierScopeCsv } from "@/features/supplier-payables/lib/scoped-export"
 import { useSupplierScopeUrlState } from "@/features/supplier-payables/pages/hooks/use-supplier-scope-url-state"
-import {
-    createSupplierScopedAllocationColumns,
-    createSupplierScopedPayableColumns,
-    createSupplierScopedPaymentColumns,
-} from "@/features/supplier-payables/components/scoped-columns"
 import { VIEW_LABEL } from "@/features/supplier-payables/types"
 import { getErrorMessage } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 import { useScopeListExport } from "@/lib/use-scope-list-export"
-import { scopeText } from "@/lib/ui-text"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
+import { listFilterText, scopeText } from "@/lib/ui-text"
 
 const SCOPE_VIEWS = ["payable", "payment", "purchase_invoice"] as const
+const LIST_PERMISSIONS = {
+    payable: "payable_account:list",
+    payment: "supplier_payment:list",
+    purchase_invoice: "purchase_invoice_allocation:list",
+} as const
+const DETAIL_PERMISSIONS = {
+    payable: "payable_account:detail",
+    payment: "supplier_payment:detail",
+} as const
+const TABLE_IDS = {
+    payable: "supplier-payables-scope-list-payable",
+    payment: "supplier-payables-scope-list-payment",
+    purchase_invoice: "supplier-payables-scope-list-allocation",
+} as const
+const TRAY_FILTER_KEYS = ["operatorUserIds", "orgUnitIds"] as const
+const APPLIED_CHIP_KEYS = [
+    ...TRAY_FILTER_KEYS,
+    "supplierId",
+    "purchaseOrderId",
+    "payableAccountId",
+] as const
 const toolbarPrefix = "supplier-payables-scope-toolbar"
+
+type PreviewRecord = {
+    kind: keyof typeof DETAIL_PERMISSIONS
+    id: string
+    number: string
+}
 
 type ShareWithOptionalName = {
     owner_user_id: string
@@ -93,16 +118,39 @@ function resolveGroupedOwnerName(
 /** 供应商往来范围页：应付、付款、进项分配的人员筛选都走采购目录。 */
 export function SupplierScopePage() {
     const urlState = useSupplierScopeUrlState()
-    const directoryOrgUnitIds = selectedOrgUnitIds(urlState.orgDraft)
-    const listQuery = useSupplierScopeListQuery(urlState.query)
-    const [preview, setPreview] = React.useState<{
-        kind: "payable" | "payment"
-        id: string
-    } | null>(null)
-    const detailQuery = useSupplierScopeDetailQuery(
-        preview?.kind ?? null,
-        preview?.id ?? null,
+    useSearchHotkey(urlState.searchInputRef)
+    const account = useAccountProfileQuery()
+    const permissions = account.isSuccess ? account.data.permissions : undefined
+    const allowedViews = SCOPE_VIEWS.filter((view) =>
+        hasPermission(permissions, LIST_PERMISSIONS[view]),
     )
+    const canReadList = allowedViews.includes(urlState.view)
+    const canPreviewPayable = hasPermission(
+        permissions,
+        DETAIL_PERMISSIONS.payable,
+    )
+    const canPreviewPayment = hasPermission(
+        permissions,
+        DETAIL_PERMISSIONS.payment,
+    )
+    const directoryOrgUnitIds = selectedOrgUnitIds(urlState.orgDraft)
+    const listQuery = useSupplierScopeListQuery(urlState.query, canReadList)
+    const [preview, setPreview] = React.useState<PreviewRecord | null>(null)
+    const lastFocusedRow = React.useRef<PreviewRecord | null>(null)
+    const activePreview =
+        canReadList &&
+        preview?.kind === urlState.view &&
+        hasPermission(permissions, DETAIL_PERMISSIONS[preview.kind])
+            ? preview
+            : null
+    const detailQuery = useSupplierScopeDetailQuery(
+        activePreview?.kind ?? null,
+        activePreview?.id ?? null,
+    )
+    const openPreview = (record: PreviewRecord) => {
+        lastFocusedRow.current = record
+        setPreview(record)
+    }
     const { exporting, handleExport } = useScopeListExport(() =>
         exportSupplierScopeCsv(urlState.query),
     )
@@ -113,7 +161,12 @@ export function SupplierScopePage() {
         createSupplierScopedAllocationColumns,
         [],
     )
-    const data: SupplierScopeListView | undefined = listQuery.data
+    const data =
+        canReadList &&
+        !listQuery.isError &&
+        listQuery.data?.view === urlState.view
+            ? listQuery.data
+            : undefined
     const topShares = React.useMemo(
         () => data?.summary?.grouped.slice(0, 5) ?? [],
         [data?.summary?.grouped],
@@ -132,15 +185,10 @@ export function SupplierScopePage() {
                 .filter(Boolean),
         [topShares],
     )
-    const account = useAccountProfileQuery()
-    const canReadProcurement = hasPermission(
-        account.data?.permissions,
-        "procurement_person:list",
-    )
     const selectedPeople = usePersonDirectorySelected(
         "procurement",
         missingNameIds,
-        canReadProcurement && missingNameIds.length > 0,
+        urlState.canUseOwner && missingNameIds.length > 0,
     )
     const resolvedOwnerNames = React.useMemo(() => {
         const map = new Map<string, string>()
@@ -152,107 +200,123 @@ export function SupplierScopePage() {
         return map
     }, [selectedPeople.data, selectedPeople.isSuccess])
 
-    const payableRows =
-        urlState.view === "payable" ? [...(data?.payables ?? [])] : []
-    const paymentRows =
-        urlState.view === "payment" ? [...(data?.payments ?? [])] : []
-    const allocationRows =
-        urlState.view !== "payable" && urlState.view !== "payment"
-            ? [...(data?.allocations ?? [])]
-            : []
+    const initialLoading =
+        account.isPending || (canReadList && listQuery.isPending)
+    const viewLabel = VIEW_LABEL[urlState.view]
+    const viewId = `supplier-payables-scope-view-${urlState.view}`
+    const panelId = `supplier-payables-scope-panel-${urlState.view}`
+    const hasAppliedChips = urlState.appliedChips.some(({ key }) =>
+        APPLIED_CHIP_KEYS.some((chipKey) => chipKey === key),
+    )
+    const tableState = {
+        id: TABLE_IDS[urlState.view],
+        caption: viewLabel,
+        entityName: "供应商往来记录",
+        getRowId: (row: { id: string }) => row.id,
+        rowCount: data?.total ?? 0,
+        pagination: urlState.pagination,
+        // 此查询保留固定每页条数，翻页按当前响应的范围继续读取。
+        pageSizeOptions: [urlState.pagination.pageSize],
+        onPaginationChange: (next) => {
+            if (
+                !data ||
+                listQuery.isPlaceholderData ||
+                next.pageIndex === urlState.pagination.pageIndex
+            )
+                return
+            urlState.handlePaginationChange(next, data.scopeVersion)
+        },
+        showPagination: Boolean(data && data.hasScope && data.total > 0),
+        showColumnVisibility: canReadList && !initialLoading,
+        scrollable: true,
+        loading: account.isPending || (canReadList && listQuery.isFetching),
+        isError: canReadList ? listQuery.isError : account.isError,
+        error: canReadList ? listQuery.error : account.error,
+        onRetry: () =>
+            void (canReadList ? listQuery.refetch() : account.refetch()),
+        retryButtonId: "supplier-payables-scope-list-retry",
+        noScope: Boolean(
+            data && (data.emptyReason === "no_scope" || !data.hasScope),
+        ),
+        hasActiveFilters: urlState.hasActiveFilters,
+        onClearFilters: urlState.clearFilters,
+        clearFiltersButtonId: "supplier-payables-scope-empty-clear-filters",
+        emptyCopy: {
+            noScopeTitle: "暂无可查看的供应商往来数据",
+            noScopeDescription:
+                "您当前尚未配置供应商往来的数据查看范围，请联系管理员开通相应权限后再查询。",
+            filterTitle: "无匹配往来记录",
+            emptyTitle: "暂无供应商往来记录",
+        },
+    } satisfies Omit<ListDataTableProps<{ id: string }>, "columns" | "data">
 
     const table =
-        listQuery.isError && !data ? (
+        account.isSuccess && !canReadList ? (
             <BusinessFailureState
-                title="供应商往来范围加载失败"
-                error={listQuery.error}
-                action={
-                    <Button
-                        id="supplier-payables-scope-list-retry"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void listQuery.refetch()}
-                    >
-                        重试
-                    </Button>
-                }
-            />
-        ) : listQuery.isPending && !data ? (
-            <div className="h-64 animate-pulse rounded-xl bg-muted" />
-        ) : data && (data.emptyReason === "no_scope" || !data.hasScope) ? (
-            <BusinessEmptyState
-                kind="no-scope"
-                title="暂无可查看的供应商往来数据"
-                description="您当前尚未配置供应商往来的数据查看范围，请联系管理员开通相应权限后再查询。"
-            />
-        ) : data && data.total === 0 ? (
-            <BusinessEmptyState
-                kind="filter"
-                title="无匹配往来记录"
-                description="无匹配记录，可清除筛选后重试。"
-                action={
-                    <Button
-                        id="supplier-payables-scope-empty-clear-filters"
-                        type="button"
-                        variant="secondary"
-                        className="rounded-lg shadow-none"
-                        onClick={urlState.clearFilters}
-                    >
-                        清除筛选
-                    </Button>
-                }
+                kind="permission"
+                className="mx-(--scaffold-px) my-3"
             />
         ) : urlState.view === "payable" ? (
-            <DataTable
-                id="supplier-payables-scope-list-payable"
-                data={payableRows}
+            <ListDataTable
+                key={TABLE_IDS.payable}
+                {...tableState}
+                data={[...(data?.payables ?? [])]}
                 columns={payableColumns}
-                getRowId={(row) => row.id}
-                onRowPreview={(row) =>
-                    setPreview({ kind: "payable", id: row.id })
+                rowLabel={payableSourceNumber}
+                defaultColumnOrder={["source", "visible", "whole", "status"]}
+                defaultColumnPinning={{ left: ["source"] }}
+                onRowPreview={
+                    canPreviewPayable
+                        ? (row) =>
+                              openPreview({
+                                  kind: "payable",
+                                  id: row.id,
+                                  number: payableSourceNumber(row),
+                              })
+                        : undefined
                 }
-                highlightedRowId={preview?.id}
-                rowCount={data?.total ?? 0}
-                pagination={urlState.pagination}
-                onPaginationChange={(next) =>
-                    urlState.handlePaginationChange(next, data?.scopeVersion)
-                }
-                layout="flush"
+                highlightedRowId={activePreview?.id}
             />
         ) : urlState.view === "payment" ? (
-            <DataTable
-                id="supplier-payables-scope-list-payment"
-                data={paymentRows}
+            <ListDataTable
+                key={TABLE_IDS.payment}
+                {...tableState}
+                data={[...(data?.payments ?? [])]}
                 columns={paymentColumns}
-                getRowId={(row) => row.id}
-                onRowPreview={(row) =>
-                    setPreview({ kind: "payment", id: row.id })
+                rowLabel={(row) => row.payment_no}
+                defaultColumnOrder={["doc", "visible", "whole", "status"]}
+                defaultColumnPinning={{ left: ["doc"] }}
+                onRowPreview={
+                    canPreviewPayment
+                        ? (row) =>
+                              openPreview({
+                                  kind: "payment",
+                                  id: row.id,
+                                  number: row.payment_no,
+                              })
+                        : undefined
                 }
-                highlightedRowId={preview?.id}
-                rowCount={data?.total ?? 0}
-                pagination={urlState.pagination}
-                onPaginationChange={(next) =>
-                    urlState.handlePaginationChange(next, data?.scopeVersion)
-                }
-                layout="flush"
+                highlightedRowId={activePreview?.id}
             />
         ) : (
-            <DataTable
-                id="supplier-payables-scope-list-allocation"
-                data={allocationRows}
+            <ListDataTable
+                key={TABLE_IDS.purchase_invoice}
+                {...tableState}
+                data={[...(data?.allocations ?? [])]}
                 columns={allocationColumns}
-                getRowId={(row) => row.id}
-                rowCount={data?.total ?? 0}
-                pagination={urlState.pagination}
-                onPaginationChange={(next) =>
-                    urlState.handlePaginationChange(next, data?.scopeVersion)
+                rowLabel={(row) =>
+                    `${allocationNumber(row)}（${allocationPayableNumber(row)}）`
                 }
-                layout="flush"
+                defaultColumnOrder={["doc", "visible", "whole"]}
+                defaultColumnPinning={{ left: ["doc"] }}
             />
         )
 
     const detail = detailQuery.data
+    const previewNumber =
+        detail?.kind === "payable"
+            ? payableSourceNumber(detail.payable)
+            : (detail?.payment.payment_no ?? activePreview?.number)
     const limited =
         detail?.kind === "payable"
             ? detail.payable.permission_limited
@@ -260,271 +324,350 @@ export function SupplierScopePage() {
               ? detail.payment.permission_limited
               : false
 
-    return (
-        <PageScaffold density="compact" className="space-y-4">
-            <ListWorkspaceHeader
-                eyebrow="财务"
-                title="供应商往来汇总"
-                description="按采购负责人与付款/收票经办人查询；部分金额受限时仅显示本人权限内金额。"
-            />
-
-            <Tabs
-                value={urlState.view}
-                onValueChange={(nextView) => {
-                    urlState.changeView(nextView as typeof urlState.view)
-                }}
+    const tabs =
+        allowedViews.length > 1 ||
+        (allowedViews.length === 1 && !canReadList) ? (
+            <TabsList
+                variant="line"
+                aria-label="供应商往来视图"
+                className="max-w-full gap-5 overflow-x-auto md:-mb-px"
             >
-                <TabsList
-                    variant="line"
-                    className="w-full overflow-x-auto border-b border-border"
-                >
-                    {SCOPE_VIEWS.map((item) => (
-                        <TabsTrigger
-                            key={item}
-                            value={item}
-                            id={`supplier-payables-scope-view-${item}`}
-                        >
-                            {VIEW_LABEL[item as keyof typeof VIEW_LABEL] ??
-                                item}
-                        </TabsTrigger>
-                    ))}
-                </TabsList>
-            </Tabs>
-
-            <FundsScopeBanner
-                scopeSummary={data?.scopeSummary}
-                asOf={data?.asOf}
-                permissionLimited={
-                    data?.summary?.permission_limited ||
-                    data?.payables.some((row) => row.permission_limited) ||
-                    data?.payments.some((row) => row.permission_limited) ||
-                    data?.allocations.some((row) => row.permission_limited) ||
-                    false
-                }
-                unassigned={data?.summary?.unassigned}
-            />
-
-            {data?.summary ? (
-                <div className="grid min-w-0 gap-3 sm:grid-cols-3">
-                    <div className="min-w-0 rounded-lg border p-3">
-                        <div className="text-xs text-muted-foreground">
-                            整单合计
-                        </div>
-                        <div className="mt-1">
-                            <MoneyValue
-                                value={data.summary.whole_total}
-                                unavailableReason={
-                                    data.summary.whole_total == null
-                                        ? scopeText.wholeRestricted
-                                        : undefined
-                                }
-                            />
-                        </div>
-                    </div>
-                    <div className="min-w-0 rounded-lg border p-3">
-                        <div className="text-xs text-muted-foreground">
-                            {scopeText.unassignedShare}
-                        </div>
-                        <div className="mt-1">
-                            <MoneyValue value={data.summary.unassigned} />
-                        </div>
-                    </div>
-                    <div className="min-w-0 rounded-lg border p-3">
-                        <div className="text-xs text-muted-foreground">
-                            匹配分组（{data.summary.grouped.length}）
-                        </div>
-                        <ul className="mt-1 min-w-0 space-y-1">
-                            {data.summary.grouped.length === 0 ? (
-                                <li className="text-xs text-muted-foreground">
-                                    暂无匹配份额
-                                </li>
-                            ) : (
-                                topShares.map((share) => (
-                                    <li
-                                        key={share.owner_user_id}
-                                        className="flex min-w-0 items-baseline justify-between gap-2 text-xs"
-                                    >
-                                        <span className="min-w-0 break-words">
-                                            {resolveGroupedOwnerName(
-                                                share as ShareWithOptionalName,
-                                                resolvedOwnerNames,
-                                            )}
-                                        </span>
-                                        <MoneyValue
-                                            value={share.visible_share}
-                                            className="shrink-0"
-                                        />
-                                    </li>
-                                ))
-                            )}
-                        </ul>
-                    </div>
-                </div>
-            ) : null}
-
-            <BusinessTableFrame
-                showHeader
-                {...scopeQueryFrameHeading(data?.total, data?.scopeSummary)}
-                toolbar={
-                    <ListWorkspaceFilterBar
-                        density="compact"
-                        morePresentation="popover"
-                        moreSize="compact"
-                        className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
-                        idPrefix={toolbarPrefix}
-                        formAriaLabel="供应商往来范围查询"
-                        onSubmit={urlState.applyFilters}
-                        queryButtonId={`${toolbarPrefix}-apply`}
-                        moreButtonId={`${toolbarPrefix}-more-filters`}
-                        clearButtonId={`${toolbarPrefix}-clear-all`}
-                        search={
-                            <ListSearchField
-                                id={`${toolbarPrefix}-search`}
-                                searchInputRef={urlState.searchInputRef}
-                                value={urlState.searchDraft}
-                                onChange={urlState.setSearchDraft}
-                                placeholder="供应商、采购单、付款单"
-                                aria-label="搜索供应商往来范围"
-                            />
+                {allowedViews.map((view) => (
+                    <TabsTrigger
+                        key={view}
+                        value={view}
+                        id={`supplier-payables-scope-view-${view}`}
+                        aria-controls={
+                            view === urlState.view ? panelId : undefined
                         }
-                        moreCount={
-                            urlState.appliedChips.filter(
-                                ({ key }) =>
-                                    key === "operatorUserIds" ||
-                                    key === "orgUnitIds",
-                            ).length
-                        }
-                        moreOpen={urlState.panelOpen}
-                        onToggleMore={() =>
-                            urlState.panelOpen
-                                ? urlState.cancelMoreFilters()
-                                : urlState.setPanelOpen(true)
-                        }
-                        morePanelId={`${toolbarPrefix}-more-panel`}
-                        morePanelAriaLabel="供应商往来范围更多筛选条件"
-                        onResetMore={urlState.resetMoreFilters}
-                        primaryFilters={
-                            urlState.canUseOwner ? (
-                                <div className="empty:hidden w-56 max-w-full min-w-0">
-                                    <PersonDirectoryFilter
-                                        id={`${toolbarPrefix}-procurement-owner`}
-                                        category="procurement"
-                                        label="采购负责人"
-                                        hideLabel
-                                        value={urlState.procurementOwnerDraft}
-                                        onChange={
-                                            urlState.setProcurementOwnerDraft
-                                        }
-                                        orgUnitIds={directoryOrgUnitIds}
-                                        includeDescendants={
-                                            urlState.descendantsDraft
-                                        }
-                                    />
-                                </div>
-                            ) : null
-                        }
-                        morePanel={
-                            urlState.canUseBusiness || urlState.canUseOrg ? (
-                                <div className="grid min-w-0 gap-5">
-                                    {urlState.canUseBusiness && (
-                                        <PersonDirectoryFilter
-                                            id={`${toolbarPrefix}-operator`}
-                                            category="business"
-                                            label={
-                                                urlState.view === "payment"
-                                                    ? "付款经办人"
-                                                    : urlState.view ===
-                                                        "purchase_invoice"
-                                                      ? "收票经办人"
-                                                      : "经办人"
-                                            }
-                                            value={urlState.operatorDraft}
-                                            onChange={urlState.setOperatorDraft}
-                                            orgUnitIds={directoryOrgUnitIds}
-                                            includeDescendants={
-                                                urlState.descendantsDraft
-                                            }
-                                        />
-                                    )}
-                                    {urlState.canUseOrg && (
-                                        <OrganizationUnitFilter
-                                            id={`${toolbarPrefix}-org`}
-                                            label="业务组织"
-                                            value={urlState.orgDraft}
-                                            onChange={urlState.setOrgDraft}
-                                            includeDescendants={
-                                                urlState.descendantsDraft
-                                            }
-                                            onDescendantsChange={
-                                                urlState.setDescendantsDraft
-                                            }
-                                        />
-                                    )}
-                                </div>
-                            ) : null
-                        }
-                        resultStatus={listWorkspaceFilterStatusText({
-                            loading: listQuery.isPending,
-                            failed: listQuery.isError,
-                            resultCount: data?.total,
-                            noun: "条往来",
-                            loadingLabel: "正在加载往来…",
-                        })}
-                        chips={urlState.appliedChips}
-                        onClearChip={(key) =>
-                            urlState.removeFilter(
-                                key as (typeof urlState.appliedChips)[number]["key"],
-                            )
-                        }
-                        onClearAll={urlState.clearFilters}
-                        hasPendingChanges={urlState.hasPendingChanges}
-                        pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-                    />
-                }
-                table={table}
-            />
-
-            <PermissionGuard
-                permission={
-                    urlState.view === "payment"
-                        ? "supplier_payment:list"
-                        : urlState.view === "purchase_invoice"
-                          ? "purchase_invoice_allocation:list"
-                          : "payable_account:list"
-                }
-            >
-                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                    <LoadingButton
-                        id="supplier-payables-scope-export"
-                        type="button"
-                        loading={exporting}
-                        variant="outline"
-                        size="sm"
-                        disabled={exporting || !data || data.total === 0}
-                        onClick={() => void handleExport()}
+                        className="font-normal group-data-[variant=line]/tabs-list:after:rounded-full group-data-[variant=line]/tabs-list:md:h-12 data-active:font-medium focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
                     >
-                        {exporting ? "导出中…" : "导出当前范围"}
-                    </LoadingButton>
-                </div>
-            </PermissionGuard>
+                        {VIEW_LABEL[view]}
+                    </TabsTrigger>
+                ))}
+            </TabsList>
+        ) : null
+
+    return (
+        <Tabs
+            className="contents"
+            value={urlState.view}
+            onValueChange={(nextView) => {
+                const view = allowedViews.find((item) => item === nextView)
+                if (!view) return
+                setPreview(null)
+                urlState.changeView(view)
+            }}
+        >
+            <PageScaffold
+                density="compact"
+                className={listWorkspaceStyles.page}
+            >
+                <ListWorkspaceHeader title="供应商往来汇总" views={tabs}>
+                    {canReadList ? (
+                        <LoadingButton
+                            id="supplier-payables-scope-export"
+                            type="button"
+                            loading={exporting}
+                            variant="ghost"
+                            size="sm"
+                            className={listWorkspaceStyles.quietButton}
+                            disabled={
+                                !data ||
+                                listQuery.isPlaceholderData ||
+                                data.total === 0
+                            }
+                            onClick={() => void handleExport()}
+                        >
+                            <DownloadIcon data-icon="inline-start" />
+                            {exporting ? "导出中…" : "导出当前范围"}
+                        </LoadingButton>
+                    ) : null}
+                </ListWorkspaceHeader>
+
+                <FundsScopeBanner
+                    scopeSummary={data?.scopeSummary}
+                    asOf={data?.asOf}
+                    permissionLimited={
+                        data?.summary?.permission_limited ||
+                        data?.payables.some((row) => row.permission_limited) ||
+                        data?.payments.some((row) => row.permission_limited) ||
+                        data?.allocations.some(
+                            (row) => row.permission_limited,
+                        ) ||
+                        false
+                    }
+                    unassigned={data?.summary?.unassigned}
+                />
+
+                {data?.summary ? (
+                    <dl className="grid min-w-0 gap-x-5 gap-y-3 border-t border-border/60 pt-3 text-body-compact sm:grid-cols-[auto_auto_minmax(0,1fr)]">
+                        <div className="min-w-0">
+                            <dt className="text-xs text-muted-foreground">
+                                整单合计
+                            </dt>
+                            <dd>
+                                <MoneyValue
+                                    value={data.summary.whole_total}
+                                    unavailableReason={
+                                        data.summary.whole_total == null
+                                            ? scopeText.wholeRestricted
+                                            : undefined
+                                    }
+                                />
+                            </dd>
+                        </div>
+                        <div className="min-w-0">
+                            <dt className="text-xs text-muted-foreground">
+                                {scopeText.unassignedShare}
+                            </dt>
+                            <dd>
+                                <MoneyValue value={data.summary.unassigned} />
+                            </dd>
+                        </div>
+                        <div className="min-w-0">
+                            <dt className="text-xs text-muted-foreground">
+                                匹配分组（
+                                <span className="num">
+                                    {data.summary.grouped.length}
+                                </span>
+                                ）
+                            </dt>
+                            <dd>
+                                {topShares.length > 0 ? (
+                                    <ul className="flex min-w-0 flex-wrap gap-x-4 gap-y-1">
+                                        {topShares.map((share) => (
+                                            <li
+                                                key={share.owner_user_id}
+                                                className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-xs"
+                                            >
+                                                <span className="min-w-0 wrap-break-word">
+                                                    {resolveGroupedOwnerName(
+                                                        share,
+                                                        resolvedOwnerNames,
+                                                    )}
+                                                </span>
+                                                <MoneyValue
+                                                    value={share.visible_share}
+                                                />
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <span className="text-xs text-muted-foreground">
+                                        暂无匹配份额
+                                    </span>
+                                )}
+                            </dd>
+                        </div>
+                    </dl>
+                ) : null}
+
+                <ListWorkSurface
+                    ariaLabel={`${viewLabel} · 供应商往来范围`}
+                    toolbar={
+                        initialLoading ? (
+                            <Skeleton
+                                className="h-control w-full sm:w-60 lg:w-64 xl:w-72"
+                                aria-busy
+                            />
+                        ) : canReadList ? (
+                            <ListWorkspaceFilterBar
+                                morePresentation="popover"
+                                idPrefix={toolbarPrefix}
+                                formAriaLabel="供应商往来范围查询"
+                                onSubmit={urlState.applyFilters}
+                                queryButtonId={`${toolbarPrefix}-apply`}
+                                moreButtonId={`${toolbarPrefix}-more-filters`}
+                                clearButtonId={`${toolbarPrefix}-clear-all`}
+                                search={
+                                    <ListSearchField
+                                        id={`${toolbarPrefix}-search`}
+                                        searchInputRef={urlState.searchInputRef}
+                                        value={urlState.searchDraft}
+                                        onChange={urlState.setSearchDraft}
+                                        placeholder="供应商、采购单、付款单"
+                                        aria-label="搜索供应商往来范围"
+                                    />
+                                }
+                                moreCount={
+                                    urlState.appliedChips.filter(({ key }) =>
+                                        TRAY_FILTER_KEYS.some(
+                                            (trayKey) => trayKey === key,
+                                        ),
+                                    ).length
+                                }
+                                moreOpen={urlState.panelOpen}
+                                onToggleMore={() =>
+                                    urlState.panelOpen
+                                        ? urlState.cancelMoreFilters()
+                                        : urlState.setPanelOpen(true)
+                                }
+                                morePanelId={`${toolbarPrefix}-more-panel`}
+                                morePanelAriaLabel="供应商往来范围更多筛选条件"
+                                onResetMore={urlState.resetMoreFilters}
+                                primaryFilters={
+                                    urlState.canUseOwner ? (
+                                        <div className="w-44 max-w-full min-w-0 empty:hidden [&_[data-slot=combobox-trigger]:not(:focus-visible)]:border-transparent [&_[data-slot=combobox-trigger]:not(:focus-visible)]:bg-muted/65 [&_[data-slot=combobox-trigger]:not(:focus-visible):hover]:bg-muted [&_[data-has-value=true]>[data-slot=combobox-trigger]:not(:focus-visible)]:border-primary/25 [&_[data-has-value=true]>[data-slot=combobox-trigger]:not(:focus-visible)]:bg-sidebar-accent/70 [&_[data-has-value=true]>[data-slot=combobox-trigger]:not(:focus-visible):hover]:bg-sidebar-accent [&_[data-has-value=true]>[data-slot=combobox-trigger]>.truncate]:font-medium [&_[data-has-value=true]>[data-slot=combobox-trigger]>.truncate]:text-sidebar-accent-foreground">
+                                            <PersonDirectoryFilter
+                                                id={`${toolbarPrefix}-procurement-owner`}
+                                                category="procurement"
+                                                label="采购负责人"
+                                                hideLabel
+                                                value={
+                                                    urlState.procurementOwnerDraft
+                                                }
+                                                onChange={
+                                                    urlState.setProcurementOwnerDraft
+                                                }
+                                                orgUnitIds={directoryOrgUnitIds}
+                                                includeDescendants={
+                                                    urlState.descendantsDraft
+                                                }
+                                            />
+                                        </div>
+                                    ) : null
+                                }
+                                extraPrimary={
+                                    urlState.hasActiveFilters &&
+                                    !hasAppliedChips ? (
+                                        <Button
+                                            id={`${toolbarPrefix}-clear-all`}
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            aria-label="清空筛选条件"
+                                            className={
+                                                listWorkspaceStyles.quietButton
+                                            }
+                                            onClick={urlState.clearFilters}
+                                        >
+                                            {listFilterText.clear}
+                                        </Button>
+                                    ) : undefined
+                                }
+                                morePanel={
+                                    urlState.canUseBusiness ||
+                                    urlState.canUseOrg ? (
+                                        <ListFilterSections>
+                                            <ListFilterSection
+                                                legend="归属"
+                                                gridClassName="grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
+                                            >
+                                                {urlState.canUseBusiness ? (
+                                                    <PersonDirectoryFilter
+                                                        id={`${toolbarPrefix}-operator`}
+                                                        category="business"
+                                                        label={
+                                                            urlState.operatorLabel
+                                                        }
+                                                        value={
+                                                            urlState.operatorDraft
+                                                        }
+                                                        onChange={
+                                                            urlState.setOperatorDraft
+                                                        }
+                                                        orgUnitIds={
+                                                            directoryOrgUnitIds
+                                                        }
+                                                        includeDescendants={
+                                                            urlState.descendantsDraft
+                                                        }
+                                                    />
+                                                ) : null}
+                                                {urlState.canUseOrg ? (
+                                                    <OrganizationUnitFilter
+                                                        id={`${toolbarPrefix}-org`}
+                                                        label="业务组织"
+                                                        value={
+                                                            urlState.orgDraft
+                                                        }
+                                                        onChange={
+                                                            urlState.setOrgDraft
+                                                        }
+                                                        includeDescendants={
+                                                            urlState.descendantsDraft
+                                                        }
+                                                        onDescendantsChange={
+                                                            urlState.setDescendantsDraft
+                                                        }
+                                                    />
+                                                ) : null}
+                                            </ListFilterSection>
+                                        </ListFilterSections>
+                                    ) : null
+                                }
+                                resultStatus={
+                                    listQuery.isError
+                                        ? "查询未完成"
+                                        : listQuery.isFetching
+                                          ? "查询中…"
+                                          : null
+                                }
+                                chips={urlState.appliedChips.map((chip) => ({
+                                    ...chip,
+                                    onClear: () =>
+                                        urlState.removeFilter(chip.key),
+                                }))}
+                                foldedChipKeys={APPLIED_CHIP_KEYS}
+                                onClearAll={urlState.clearFilters}
+                                hasPendingChanges={urlState.hasPendingChanges}
+                                pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+                            />
+                        ) : undefined
+                    }
+                    table={
+                        tabs && canReadList ? (
+                            <TabsContent
+                                id={panelId}
+                                aria-labelledby={viewId}
+                                value={urlState.view}
+                                className="flex min-h-0 flex-col text-inherit focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+                            >
+                                {table}
+                            </TabsContent>
+                        ) : (
+                            table
+                        )
+                    }
+                />
+            </PageScaffold>
 
             <QuickPreviewSheet
                 id="supplier-payables-scope-preview-sheet"
-                open={preview != null}
+                open={activePreview != null}
                 onOpenChange={(nextOpen) => {
                     if (!nextOpen) setPreview(null)
                 }}
+                finalFocus={() => {
+                    const focused = lastFocusedRow.current
+                    return (
+                        (focused &&
+                            document
+                                .getElementById(TABLE_IDS[focused.kind])
+                                ?.querySelector<HTMLElement>(
+                                    `[data-row-id="${CSS.escape(focused.id)}"][tabindex]`,
+                                )) ||
+                        urlState.searchInputRef.current
+                    )
+                }}
                 size="preview"
+                identity={
+                    activePreview && previewNumber ? (
+                        <span className="num">
+                            {activePreview.kind === "payable"
+                                ? "来源单号"
+                                : "付款单号"}
+                            ：{previewNumber}
+                        </span>
+                    ) : undefined
+                }
                 title={
-                    detail?.kind === "payable"
-                        ? detail.payable.source_document_no?.trim() &&
-                          detail.payable.source_document_no.trim() !==
-                              detail.payable.source_document_id
-                            ? `应付记录 ${detail.payable.source_document_no.trim()}`
-                            : "应付记录"
-                        : detail?.kind === "payment"
-                          ? `付款单 ${detail.payment.payment_no}`
-                          : "往来详情"
+                    activePreview?.kind === "payable"
+                        ? "应付记录"
+                        : activePreview?.kind === "payment"
+                          ? "供应商付款"
+                          : "往来记录"
                 }
                 footer={
                     <Button
@@ -538,11 +681,9 @@ export function SupplierScopePage() {
                 }
             >
                 {detailQuery.isPending ? (
-                    <div className="space-y-3">
-                        <div className="h-24 animate-pulse rounded-xl bg-muted" />
-                    </div>
+                    <Skeleton className="h-24" aria-busy />
                 ) : detailQuery.isError ? (
-                    <div className="space-y-3">
+                    <div className="flex flex-col items-start gap-3">
                         <p className="text-sm text-muted-foreground">
                             {getErrorMessage(
                                 detailQuery.error,
@@ -560,7 +701,7 @@ export function SupplierScopePage() {
                         </Button>
                     </div>
                 ) : detail?.kind === "payable" ? (
-                    <div className="space-y-6 text-sm">
+                    <div className="flex flex-col gap-6 text-sm">
                         <PreviewAmount
                             label="权限内已核销"
                             value={detail.payable.visible_settled_share}
@@ -588,19 +729,6 @@ export function SupplierScopePage() {
                                 />
                             </span>
                         </PreviewAmount>
-                        <PreviewSection title="来源">
-                            <dl className="space-y-3">
-                                <PreviewFact label="来源单据">
-                                    <span>
-                                        {businessLabelOrPlaceholder(
-                                            detail.payable.source_document_no,
-                                            detail.payable.source_document_id,
-                                            MISSING_SOURCE_DOCUMENT_NO,
-                                        )}
-                                    </span>
-                                </PreviewFact>
-                            </dl>
-                        </PreviewSection>
                         {limited ? (
                             <PreviewNote>
                                 {scopeText.limitedOnlyVisibleShare}
@@ -608,7 +736,7 @@ export function SupplierScopePage() {
                         ) : null}
                     </div>
                 ) : detail?.kind === "payment" ? (
-                    <div className="space-y-6 text-sm">
+                    <div className="flex flex-col gap-6 text-sm">
                         <PreviewAmount
                             label="权限内已分配"
                             value={detail.payment.visible_allocated_share}
@@ -648,6 +776,6 @@ export function SupplierScopePage() {
                     </div>
                 )}
             </QuickPreviewSheet>
-        </PageScaffold>
+        </Tabs>
     )
 }

@@ -9,7 +9,7 @@ import {
     usePurchaseOrdersQuery,
 } from "@/features/purchase-orders/hooks/queries"
 import { usePurchaseOrdersListFilters } from "@/features/purchase-orders/hooks/use-purchase-orders-list-filters"
-import { usePurchaseOrdersListKeyboard } from "@/features/purchase-orders/hooks/use-purchase-orders-list-keyboard"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 import { downloadTransfer } from "@/lib/data-transfer"
 import { getErrorMessage } from "@/lib/api/errors"
 
@@ -34,16 +34,15 @@ export function usePurchaseOrdersListController() {
         listReturnHref,
         sortBy,
         sortDir,
-        effectiveMetric,
         listQueryInput,
-        search,
         statusFilter,
-        metricKey,
         salesOrderFromUrl,
         workItemFromUrl,
     } = filters
 
-    const listQuery = usePurchaseOrdersQuery(listQueryInput)
+    const listQuery = usePurchaseOrdersQuery(listQueryInput, {
+        enabled: !filters.waitingForOwnerPermission,
+    })
     const exportQuery = usePurchaseOrderExportDataQuery(listQueryInput)
 
     const pageRows = React.useMemo(
@@ -65,7 +64,9 @@ export function usePurchaseOrdersListController() {
 
     const sorting = React.useMemo<SortingState>(
         () =>
-            sortBy && sortDir ? [{ id: sortBy, desc: sortDir === "desc" }] : [],
+            (sortBy === "document" || sortBy === "purchase_no") && sortDir
+                ? [{ id: "document", desc: sortDir === "desc" }]
+                : [],
         [sortBy, sortDir],
     )
 
@@ -75,7 +76,7 @@ export function usePurchaseOrdersListController() {
         pushUrl({ page: data.page })
     }, [listQuery.data, pushUrl, url.page])
 
-    usePurchaseOrdersListKeyboard({ createOpen: false })
+    useSearchHotkey(searchInputRef)
 
     const openDetail = React.useCallback(
         (purchaseOrderId: string) => {
@@ -113,23 +114,7 @@ export function usePurchaseOrdersListController() {
 
     return {
         searchInputRef,
-        filters: {
-            canFilterOwner: filters.canFilterOwner,
-            typeDraft: filters.typeDraft,
-            setTypeDraft: filters.setTypeDraft,
-            ownerDraft: filters.ownerDraft,
-            setOwnerDraft: filters.setOwnerDraft,
-            searchDraft: filters.searchDraft,
-            setSearchDraft: filters.setSearchDraft,
-            hasActiveFilters: filters.hasActiveFilters,
-            hasStructuredFilters: filters.hasStructuredFilters,
-            hasPendingChanges: filters.hasPendingChanges,
-            appliedChips: filters.appliedChips,
-            removeFilter: filters.removeFilter,
-            applyFilters: filters.applyFilters,
-            resetMoreFilters: filters.resetMoreFilters,
-            clearAllFilters: filters.clearAllFilters,
-        },
+        filters,
         // 查询与派生数据
         listQuery,
         exportQuery,
@@ -138,13 +123,9 @@ export function usePurchaseOrdersListController() {
         pagination,
         sorting,
         // URL 状态
-        url,
         pushUrl,
         listReturnHref,
-        search,
         statusFilter,
-        metricKey,
-        effectiveMetric,
         salesOrderFromUrl,
         // 交互状态
         actionResult,

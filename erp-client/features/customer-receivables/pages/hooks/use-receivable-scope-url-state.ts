@@ -24,7 +24,19 @@ export type ReceivableScopeChip = Readonly<{
     label: string
 }>
 
-type View = ReceivableScopeQuery["view"]
+const VIEW_RESOURCE = {
+    receivable: "receivable_account",
+    receipt: "customer_receipt",
+    sales_invoice: "invoice",
+} as const satisfies Partial<Record<ReceivableScopeQuery["view"], string>>
+
+const RECEIVABLE_SCOPE_VIEWS = [
+    "receivable",
+    "receipt",
+    "sales_invoice",
+] as const
+
+type View = keyof typeof VIEW_RESOURCE
 
 function parseView(raw: string | null): View {
     if (raw === "receipt" || raw === "sales_invoice") return raw
@@ -67,6 +79,14 @@ export function useReceivableScopeUrlState() {
     )
 
     const view = parseView(searchParams.get("view"))
+    const visibleViews = RECEIVABLE_SCOPE_VIEWS.filter((item) =>
+        hasPermission(permissions, `${VIEW_RESOURCE[item]}:list`),
+    )
+    const canReadView = visibleViews.includes(view)
+    const canPreview = hasPermission(
+        permissions,
+        `${VIEW_RESOURCE[view]}:detail`,
+    )
     const qParam = searchParams.get("q") ?? ""
     const salesOwnerUserIds = canUseOwner
         ? parseScopeIdList(searchParams.get("salesOwnerUserIds"))
@@ -74,14 +94,17 @@ export function useReceivableScopeUrlState() {
     const operatorUserIds = canUseBusiness
         ? parseScopeIdList(searchParams.get("operatorUserIds"))
         : undefined
-    const operatorKind = canUseBusiness
-        ? parseOperatorKind(searchParams.get("operatorKind"))
-        : undefined
+    // 回款接口要求经办人查询同时指定登记或核销，旧链接未指定时按登记查询。
+    const operatorKind =
+        canUseBusiness && view === "receipt"
+            ? (parseOperatorKind(searchParams.get("operatorKind")) ??
+              (operatorUserIds ? "register" : undefined))
+            : undefined
     const orgUnitIds = canUseOrg
         ? parseScopeIdList(searchParams.get("orgUnitIds"))
         : undefined
     const includeDescendants =
-        canUseOrg && searchParams.get("includeDescendants") === "true"
+        Boolean(orgUnitIds) && searchParams.get("includeDescendants") === "true"
     const salesOrderId = searchParams.get("salesOrderId") ?? undefined
     const receivableAccountId =
         searchParams.get("receivableAccountId") ?? undefined
@@ -111,10 +134,10 @@ export function useReceivableScopeUrlState() {
         [account.data, patchPaginationUrl, unavailableFilters],
     )
     React.useEffect(() => {
-        if (account.data && hasUnavailableFilters) {
+        if (account.isSuccess && hasUnavailableFilters) {
             patchUrl({ scopeVersion: null, page: null }, { replace: true })
         }
-    }, [account.data, hasUnavailableFilters, patchUrl])
+    }, [account.isSuccess, hasUnavailableFilters, patchUrl])
 
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const { searchDraft, setSearchDraft } = useSearchDraft(qParam, {
@@ -140,13 +163,6 @@ export function useReceivableScopeUrlState() {
     const operatorKindDraft = canUseBusiness ? operatorKindDraftValue : ""
     const orgDraft = canUseOrg ? orgDraftValue : ""
     const descendantsDraft = canUseOrg ? descendantsDraftValue : false
-    React.useEffect(() => {
-        if (!canUseOwner) setSalesOwnerDraft("")
-        if (!canUseBusiness) setOperatorDraft("")
-        if (!canUseBusiness) setOperatorKindDraft("")
-        if (!canUseOrg) setOrgDraft("")
-        if (!canUseOrg) setDescendantsDraft(false)
-    }, [canUseOwner, canUseBusiness, canUseOrg])
 
     const query: ReceivableScopeQuery = React.useMemo(
         () => ({
@@ -196,7 +212,7 @@ export function useReceivableScopeUrlState() {
                 operatorUserIds: operatorDraft.trim() || null,
                 operatorKind:
                     view === "receipt" && operatorDraft.trim()
-                        ? operatorKindDraft || null
+                        ? operatorKindDraft || "register"
                         : null,
                 orgUnitIds: orgDraft.trim() || null,
                 includeDescendants:
@@ -276,7 +292,7 @@ export function useReceivableScopeUrlState() {
         setDescendantsDraft(false)
     }, [])
 
-    /** 取消、关闭、Esc 和外点只恢复低频草稿。 */
+    /** 收起或按 Esc 时只恢复低频草稿。 */
     const cancelMoreFilters = React.useCallback(() => {
         setOperatorDraft(operatorUserIds ?? "")
         setOperatorKindDraft(operatorKind ?? "")
@@ -287,6 +303,7 @@ export function useReceivableScopeUrlState() {
 
     const changeView = React.useCallback(
         (nextView: View) => {
+            cancelMoreFilters()
             patchUrl(
                 {
                     view: nextView,
@@ -297,19 +314,11 @@ export function useReceivableScopeUrlState() {
                 { replace: true },
             )
         },
-        [patchUrl],
+        [cancelMoreFilters, patchUrl],
     )
 
     const appliedChips = React.useMemo<readonly ReceivableScopeChip[]>(() => {
         const chips: ReceivableScopeChip[] = []
-        const queryText = qParam.trim()
-        if (queryText) chips.push({ key: "q", label: `搜索：${queryText}` })
-        if (salesOwnerUserIds) {
-            chips.push({
-                key: "salesOwnerUserIds",
-                label: `负责销售：已选 ${countScopeIds(salesOwnerUserIds)} 人`,
-            })
-        }
         if (operatorUserIds) {
             chips.push({
                 key: "operatorUserIds",
@@ -339,10 +348,8 @@ export function useReceivableScopeUrlState() {
         operatorKind,
         operatorUserIds,
         orgUnitIds,
-        qParam,
         receivableAccountId,
         salesOrderId,
-        salesOwnerUserIds,
         view,
     ])
 
@@ -351,26 +358,28 @@ export function useReceivableScopeUrlState() {
         salesOwnerDraft.trim() !== (salesOwnerUserIds ?? "") ||
         operatorDraft.trim() !== (operatorUserIds ?? "") ||
         (view === "receipt" && operatorDraft.trim()
-            ? operatorKindDraft !== (operatorKind ?? "")
+            ? (operatorKindDraft || "register") !== operatorKind
             : false) ||
         orgDraft.trim() !== (orgUnitIds ?? "") ||
         descendantsDraft !== includeDescendants
 
     React.useEffect(() => {
         setSalesOwnerDraft(salesOwnerUserIds ?? "")
+    }, [canUseOwner, salesOwnerUserIds])
+    React.useEffect(() => {
         setOperatorDraft(operatorUserIds ?? "")
         setOperatorKindDraft(operatorKind ?? "")
+    }, [canUseBusiness, operatorKind, operatorUserIds])
+    React.useEffect(() => {
         setOrgDraft(orgUnitIds ?? "")
         setDescendantsDraft(includeDescendants)
-    }, [
-        includeDescendants,
-        operatorKind,
-        operatorUserIds,
-        orgUnitIds,
-        salesOwnerUserIds,
-    ])
+    }, [canUseOrg, includeDescendants, orgUnitIds])
 
     return {
+        account,
+        canReadView,
+        canPreview,
+        visibleViews,
         canUseOwner,
         canUseBusiness,
         canUseOrg,

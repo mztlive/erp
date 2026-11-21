@@ -5,8 +5,13 @@ import { PencilIcon, Trash2Icon } from "lucide-react"
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { TableRowActions } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import {
+    BusinessStatusBadge,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableRowActions,
+    TableTextCell,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { AccessColumnsInput } from "@/features/access-audit/hooks/access-columns-input"
@@ -25,17 +30,19 @@ function useRoleColumns({
             {
                 id: "identity",
                 header: "角色名称",
-                size: 220,
+                meta: { width: "flex" },
                 cell: ({ row }) => (
-                    <span className="text-sm font-medium">
-                        {row.original.name}
-                    </span>
+                    <TableIdentityCell
+                        primary={row.original.name}
+                        primaryTitle={row.original.name}
+                        className="max-sm:max-w-table-column-default-min"
+                    />
                 ),
             },
             {
                 id: "perms",
                 header: "操作权限",
-                size: 320,
+                meta: { width: "reference" },
                 cell: ({ row }) => {
                     const role = row.original
                     const names = role.permissionGroups.map(
@@ -43,27 +50,33 @@ function useRoleColumns({
                     )
                     const summary = names.slice(0, 3).join("、")
                     return (
-                        <div className="min-w-0 space-y-1">
+                        <div className="flex min-w-0 flex-col items-start gap-1">
                             {role.allPermissions ? (
-                                <Badge variant="warning">全部权限</Badge>
+                                <BusinessStatusBadge
+                                    context="list"
+                                    tone="warning"
+                                    label="全部权限"
+                                />
                             ) : (
-                                <span className="text-sm">
+                                <span>
                                     <span className="num font-medium">
                                         {role.permissionCount}
                                     </span>{" "}
                                     项权限
                                 </span>
                             )}
-                            <p
-                                className="max-w-[24rem] truncate text-xs text-muted-foreground"
-                                title={names.join("、")}
-                            >
-                                {role.allPermissions
-                                    ? "可访问全部模块"
-                                    : summary
-                                      ? `${summary}${names.length > 3 ? ` 等 ${names.length} 个模块` : ""}`
-                                      : "尚未配置操作权限"}
-                            </p>
+                            <TableTextCell
+                                className="max-w-table-column-reference-min text-xs text-muted-foreground"
+                                clamp={1}
+                                title={names.join("、") || undefined}
+                                value={
+                                    role.allPermissions
+                                        ? "可访问全部模块"
+                                        : summary
+                                          ? `${summary}${names.length > 3 ? ` 等 ${names.length} 个模块` : ""}`
+                                          : "尚未配置操作权限"
+                                }
+                            />
                         </div>
                     )
                 },
@@ -71,14 +84,13 @@ function useRoleColumns({
             {
                 id: "accounts",
                 header: "绑定账号",
-                size: 130,
+                meta: { width: "quantity", align: "end", numeric: true },
                 cell: ({ row }) => {
                     const role = row.original
-                    if (role.boundAccountCount === null) return "—"
+                    if (role.boundAccountCount === null)
+                        return <TableEmptyCell />
                     return role.boundAccountCount === 0 ? (
-                        <span className="text-sm text-muted-foreground">
-                            未绑定
-                        </span>
+                        <TableEmptyCell variant="label" label="未绑定" />
                     ) : (
                         <Button
                             id={`operations-access-roles-row-${toAutomationIdSegment(role.id)}-accounts`}
@@ -87,11 +99,12 @@ function useRoleColumns({
                             size="xs"
                             className="num h-auto px-0"
                             title={`查看绑定「${role.name}」的账号`}
-                            onClick={() =>
+                            onClick={(event) => {
+                                event.stopPropagation()
                                 router.push(
                                     `/system/accounts?q=${encodeURIComponent(role.name)}`,
                                 )
-                            }
+                            }}
                         >
                             {role.boundAccountCount} 个账号
                         </Button>
@@ -102,12 +115,8 @@ function useRoleColumns({
                 ? [
                       {
                           id: "actions",
-                          meta: { align: "end" },
-                          size: 168,
-                          minSize: 168,
-                          header: () => (
-                              <span className="block text-right">操作</span>
-                          ),
+                          meta: { align: "end", width: "status" },
+                          header: "操作",
                           cell: ({ row }) => {
                               const role = row.original
                               const segment = toAutomationIdSegment(role.id)

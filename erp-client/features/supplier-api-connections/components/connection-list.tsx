@@ -1,26 +1,12 @@
 "use client"
 
-import { useAccountProfileQuery } from "@/features/auth/queries"
-import { hasPermission } from "@/lib/permissions"
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
-
 import * as React from "react"
 import type { PaginationState } from "@tanstack/react-table"
 import { PlusIcon, RefreshCwIcon } from "lucide-react"
 
-import {
-    FormalActionResult,
-    GuardedBusinessAction,
-    PageScaffold,
-} from "@/components/business"
-import {
-    ListWorkSurface,
-    ListWorkspaceHeader,
-    ListWorkspaceViews,
-    listWorkspaceStyles as styles,
-} from "@/components/business/list-workspace"
+import { FormalActionResult, ListWorkspacePage } from "@/components/business"
 import type { ResultState } from "@/components/business/feedback"
-import { Button } from "@/components/ui/button"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { ConnectionCreateDialog } from "@/features/supplier-api-connections/components/connection-create-dialog"
 import { ConnectionListTable } from "@/features/supplier-api-connections/components/connection-list-table"
 import { ConnectionListToolbar } from "@/features/supplier-api-connections/components/connection-list-toolbar"
@@ -31,6 +17,7 @@ import {
 import { useConnectionListQuery } from "@/features/supplier-api-connections/hooks/queries"
 import { useConnectionListColumns } from "@/features/supplier-api-connections/hooks/use-connection-list-columns"
 import type { ConnectionsUrlState } from "@/features/supplier-api-connections/lib/url-state"
+import { hasPermission } from "@/lib/permissions"
 
 export function ConnectionList({
     urlState,
@@ -77,6 +64,7 @@ export function ConnectionList({
     })
 
     const data = listQuery.data
+    const canCreateConnection = canCreate && Boolean(data?.hasModulePermission)
 
     const [pagination, setPagination] = React.useState<PaginationState>({
         pageIndex: Math.max(0, urlState.page - 1),
@@ -110,110 +98,74 @@ export function ConnectionList({
     )
 
     return (
-        <PageScaffold density="compact" className={styles.page}>
-            <ListWorkspaceHeader
-                eyebrow="供应商"
-                title="平台连接"
-                description="选择供应商平台连接，进入平台设置或商品库。"
-            >
-                <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                        id="supplier-api-connections-list-refresh"
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="text-muted-foreground hover:text-foreground"
-                        onClick={() => void listQuery.refetch()}
-                    >
-                        <RefreshCwIcon
-                            className="size-3.5"
-                            aria-hidden="true"
-                        />
-                        刷新
-                    </Button>
-                    {Boolean(data?.hasModulePermission) && (
-                        <PermissionGuard
-                            permission={"supplier_api_connection:create"}
-                        >
-                            <GuardedBusinessAction
-                                id="supplier-api-connections-list-create"
-                                type="button"
-                                size="sm"
-                                disabled={!data?.hasModulePermission}
-                                reason={
-                                    data?.hasModulePermission
-                                        ? undefined
-                                        : "当前账号无模块权限"
-                                }
-                                onClick={() => setCreateOpen(true)}
-                            >
-                                <PlusIcon
-                                    className="size-3.5"
-                                    aria-hidden="true"
-                                />
-                                新建连接
-                            </GuardedBusinessAction>
-                        </PermissionGuard>
-                    )}
-                </div>
-            </ListWorkspaceHeader>
-
-            {result ? (
-                <FormalActionResult
-                    status={
-                        result.status === "failed"
-                            ? "rejected"
-                            : result.status === "processing"
-                              ? "processing"
-                              : result.status
-                    }
-                    title={result.title}
-                    description={result.description}
-                    reference={result.reference}
-                    facts={result.facts}
-                    actions={result.actions}
-                />
-            ) : null}
-
-            <ListWorkSurface
-                ariaLabel="供应商平台连接列表"
-                views={
-                    <ListWorkspaceViews
-                        ariaLabel="连接状态与健康视图"
-                        hint={
-                            filters.appliedFilterLabels.length > 0
-                                ? `筛选条件：${filters.appliedFilterLabels.join("、")}`
-                                : "选择连接查看详情"
+        <ListWorkspacePage
+            title="平台连接"
+            views={{
+                ariaLabel: "连接状态与健康视图",
+                items: [
+                    {
+                        id: "supplier-api-connections-view-all",
+                        label: "全部连接",
+                        active: !filters.applied.status,
+                        onClick: () => patchUrl({ status: undefined, page: 1 }),
+                    },
+                    ...(
+                        [
+                            ["ENABLED", "enabled", "已启用"],
+                            ["DISABLED", "disabled", "已停用"],
+                            ["FAULTED", "faulted", "故障"],
+                            ["PENDING_CONFIG", "pending-config", "待配置"],
+                        ] as const
+                    ).map(([status, id, label]) => ({
+                        id: `supplier-api-connections-view-${id}`,
+                        label,
+                        active: filters.applied.status === status,
+                        onClick: () => patchUrl({ status, page: 1 }),
+                    })),
+                ],
+            }}
+            actions={[
+                {
+                    id: "supplier-api-connections-list-refresh",
+                    type: "button",
+                    actionKey: "refresh",
+                    label: "刷新",
+                    icon: RefreshCwIcon,
+                    tier: "quiet",
+                    onClick: () => void listQuery.refetch(),
+                },
+                {
+                    id: "supplier-api-connections-list-create",
+                    type: "button",
+                    actionKey: "create",
+                    label: "新建连接",
+                    icon: PlusIcon,
+                    tier: "primary",
+                    hidden: !profile.isSuccess || !canCreateConnection,
+                    onClick: () => setCreateOpen(true),
+                },
+            ]}
+            alerts={
+                result ? (
+                    <FormalActionResult
+                        status={
+                            result.status === "failed"
+                                ? "rejected"
+                                : result.status
                         }
-                        items={[
-                            {
-                                id: "supplier-api-connections-view-all",
-                                label: "全部连接",
-                                active: !filters.applied.status,
-                                onClick: () =>
-                                    patchUrl({ status: undefined, page: 1 }),
-                            },
-                            ...(
-                                [
-                                    ["ENABLED", "enabled", "已启用"],
-                                    ["DISABLED", "disabled", "已停用"],
-                                    ["FAULTED", "faulted", "故障"],
-                                    [
-                                        "PENDING_CONFIG",
-                                        "pending-config",
-                                        "待配置",
-                                    ],
-                                ] as const
-                            ).map(([status, id, label]) => ({
-                                id: `supplier-api-connections-view-${id}`,
-                                label,
-                                active: filters.applied.status === status,
-                                onClick: () => patchUrl({ status, page: 1 }),
-                            })),
-                        ]}
+                        title={result.title}
+                        description={result.description}
+                        reference={result.reference}
+                        facts={result.facts}
+                        actions={result.actions}
                     />
-                }
-                toolbar={
+                ) : null
+            }
+            surface={{
+                ariaLabel: "供应商平台连接列表",
+                tableClassName:
+                    "max-sm:[&_[data-column-pinned=left]]:left-auto! max-sm:[&_[data-pinned-edge=left]]:shadow-none!",
+                toolbar: (
                     <ConnectionListToolbar
                         searchInputRef={filters.searchInputRef}
                         searchDraft={filters.searchDraft}
@@ -237,12 +189,11 @@ export function ConnectionList({
                         supplierIdDraft={filters.supplierIdDraft}
                         onSupplierIdDraftChange={filters.setSupplierIdDraft}
                         hasPendingChanges={filters.hasPendingChanges}
-                        resultCount={data?.total}
                         loading={listQuery.isFetching}
                         failed={listQuery.isError}
                     />
-                }
-                table={
+                ),
+                table: (
                     <ConnectionListTable
                         data={data}
                         columns={columns}
@@ -257,17 +208,19 @@ export function ConnectionList({
                         onRowOpen={canOpen ? onOpen : undefined}
                         onClearFilters={filters.clearFilters}
                         onCreate={
-                            canCreate ? () => setCreateOpen(true) : undefined
+                            canCreateConnection
+                                ? () => setCreateOpen(true)
+                                : undefined
                         }
-                        loading={listQuery.isFetching}
+                        loading={listQuery.isPending || listQuery.isFetching}
                         isError={listQuery.isError}
                         error={listQuery.error}
                         onRetry={() => void listQuery.refetch()}
                         hasFilters={filters.hasFilters}
                     />
-                }
-            />
-
+                ),
+            }}
+        >
             {canCreate && (
                 <ConnectionCreateDialog
                     open={createOpen}
@@ -276,6 +229,6 @@ export function ConnectionList({
                     onResult={setResult}
                 />
             )}
-        </PageScaffold>
+        </ListWorkspacePage>
     )
 }

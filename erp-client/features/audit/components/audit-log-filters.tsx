@@ -1,11 +1,20 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
+import { useStore } from "@tanstack/react-form"
+import { OptionCombobox } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
+    listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
+import {
+    InputGroup,
+    InputGroupAddon,
+    InputGroupInput,
+} from "@/components/ui/input-group"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 import { BUSINESS_AUDIT_ACTIONS, BUSINESS_AUDIT_RESULTS } from "../lib/display"
 
 export type AuditLogFilters = {
@@ -18,13 +27,15 @@ export type AuditLogFilters = {
 export function AuditLogFilterBar({
     applied,
     onApply,
-    total,
+    onClearAll,
     loading,
+    failed,
 }: {
     applied: AuditLogFilters
     onApply: (values: AuditLogFilters) => void
-    total: number
+    onClearAll: () => void
     loading: boolean
+    failed: boolean
 }) {
     const form = useAppForm({
         defaultValues: applied,
@@ -33,6 +44,17 @@ export function AuditLogFilterBar({
     useEffect(() => {
         form.reset(applied)
     }, [applied, form])
+
+    const searchInputRef = useRef<HTMLInputElement>(null)
+    useSearchHotkey(searchInputRef)
+    const hasPendingChanges = useStore(
+        form.store,
+        ({ values }) =>
+            values.resourceNumber.trim() !== applied.resourceNumber.trim() ||
+            values.actorAccount.trim() !== applied.actorAccount.trim() ||
+            values.action !== applied.action ||
+            values.eventResult !== applied.eventResult,
+    )
 
     const actions = BUSINESS_AUDIT_ACTIONS.some(
         (item) => item.value === applied.action,
@@ -44,6 +66,7 @@ export function AuditLogFilterBar({
                 { value: applied.action, label: "未登记动作", disabled: true },
             ]
           : BUSINESS_AUDIT_ACTIONS
+    // 主栏显示待查询草稿；标签保留当前生效条件和即时移除入口。
     const chips = [
         ...(applied.resourceNumber
             ? [
@@ -83,24 +106,27 @@ export function AuditLogFilterBar({
         <ListWorkspaceFilterBar
             idPrefix="business-audit-filters"
             formAriaLabel="业务操作查询条件"
-            density="compact"
+            morePresentation="popover"
             onSubmit={() => void form.handleSubmit()}
-            resultStatus={loading ? "正在查询…" : `共 ${total} 条记录`}
+            resultStatus={
+                loading || failed
+                    ? listWorkspaceFilterStatusText({
+                          loading: loading && !failed,
+                          failed,
+                          noun: "条记录",
+                      })
+                    : null
+            }
             chips={chips}
             onClearChip={(key) => onApply({ ...applied, [key]: "" })}
-            onClearAll={() =>
-                onApply({
-                    actorAccount: "",
-                    action: "",
-                    eventResult: "",
-                    resourceNumber: "",
-                })
-            }
+            onClearAll={onClearAll}
+            hasPendingChanges={hasPendingChanges}
             search={
                 <form.Field name="resourceNumber">
                     {(field) => (
                         <ListSearchField
                             id="business-audit-filters-resource-number"
+                            searchInputRef={searchInputRef}
                             value={field.state.value}
                             onChange={field.handleChange}
                             aria-label="业务编号"
@@ -109,38 +135,78 @@ export function AuditLogFilterBar({
                     )}
                 </form.Field>
             }
-            commonFilters={
-                <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-3">
-                    <form.AppField name="actorAccount">
+            primaryFilters={
+                <>
+                    <form.Field name="actorAccount">
                         {(field) => (
-                            <field.TextField
-                                id="business-audit-filters-actor-account"
-                                label="操作账号"
-                                placeholder="全部账号"
-                            />
+                            <div
+                                className="w-40 max-w-full min-w-0"
+                                data-has-value={
+                                    field.state.value.trim()
+                                        ? "true"
+                                        : undefined
+                                }
+                            >
+                                <InputGroup>
+                                    <InputGroupAddon
+                                        data-filter-label=""
+                                        className="shrink-0 pr-0 font-normal whitespace-nowrap text-muted-foreground/80"
+                                    >
+                                        操作账号：
+                                    </InputGroupAddon>
+                                    <InputGroupInput
+                                        id="business-audit-filters-actor-account"
+                                        name={field.name}
+                                        aria-label="操作账号"
+                                        autoComplete="off"
+                                        value={field.state.value}
+                                        onBlur={field.handleBlur}
+                                        onChange={(event) =>
+                                            field.handleChange(
+                                                event.target.value,
+                                            )
+                                        }
+                                        placeholder="全部"
+                                    />
+                                </InputGroup>
+                            </div>
                         )}
-                    </form.AppField>
-                    <form.AppField name="action">
+                    </form.Field>
+                    <form.Field name="action">
                         {(field) => (
-                            <field.SelectField
+                            <OptionCombobox
                                 id="business-audit-filters-action"
-                                label="业务动作"
-                                placeholder="全部动作"
+                                className="w-48 max-w-full min-w-0"
+                                filterLabel="业务动作"
+                                aria-label="业务动作"
+                                placeholder="全部"
+                                value={field.state.value || null}
+                                onValueChange={(value) =>
+                                    field.handleChange(value ?? "")
+                                }
+                                onBlur={field.handleBlur}
                                 options={actions}
                             />
                         )}
-                    </form.AppField>
-                    <form.AppField name="eventResult">
+                    </form.Field>
+                    <form.Field name="eventResult">
                         {(field) => (
-                            <field.SelectField
+                            <OptionCombobox
                                 id="business-audit-filters-result"
-                                label="执行结果"
-                                placeholder="全部结果"
+                                className="w-44 max-w-full min-w-0"
+                                filterLabel="执行结果"
+                                aria-label="执行结果"
+                                placeholder="全部"
+                                value={field.state.value || null}
+                                onValueChange={(value) =>
+                                    field.handleChange(value ?? "")
+                                }
+                                onBlur={field.handleBlur}
                                 options={BUSINESS_AUDIT_RESULTS}
                             />
                         )}
-                    </form.AppField>
-                </div>
+                    </form.Field>
+                </>
             }
         />
     )

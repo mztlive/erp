@@ -642,6 +642,20 @@
     margin-top: calc(var(--scaffold-pt) * -1);
     padding-inline: var(--scaffold-px);
 }
+/* 筛选提交与批量操作取得主色时，页头动作保留位置和可操作性。 */
+.erp-list-workspace-page:has(
+        [data-slot="list-work-surface"]
+            :is(
+                form[data-pending-query],
+                [data-slot="list-selection-dock"][data-open="true"]
+            )
+    )
+    > [data-slot="list-workspace-header"]
+    [data-slot="button"][data-variant="default"] {
+    background-color: var(--muted);
+    color: var(--foreground);
+}
+
 /* 页头直接衔接视图页签时，去掉页头底线让标题与视图 Tab 融合成同一块清爽头部 */
 [data-slot="page-scaffold"].erp-list-workspace-page:has(
         > [data-slot="list-workspace-header"]

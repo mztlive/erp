@@ -96,15 +96,6 @@ export function useLedgerFilters({
     )
 
     // ---- UI 态 ----
-    const hasStructuredFilters = Boolean(
-        warehouseId ||
-        (view === "balance" && availability !== "all") ||
-        (view === "movement" && movementType.length > 0) ||
-        (view === "movement" && Boolean(occurredFrom || occurredTo)) ||
-        (view === "movement" && Boolean(operatorUserIds)) ||
-        (view === "adjustment" &&
-            Boolean(operatorUserIds || applicantUserIds || handlerUserIds)),
-    )
     // 深链只显示已生效标签，不自动打开面板。
     const [panelOpen, setPanelOpen] = React.useState(false)
     React.useEffect(() => {
@@ -117,12 +108,26 @@ export function useLedgerFilters({
         }
     }, [canFilterPeople, canFilterWarehouse, view])
     const [filterError, setFilterError] = React.useState<string | null>(null)
+    const [draftView, setDraftView] = React.useState(view)
+    if (draftView !== view) {
+        setDraftView(view)
+        setPanelOpen(false)
+        setFilterError(null)
+        setAvailabilityDraft(availability)
+        setMovementTypeDraft(movementType)
+        setOccurredFromDraft(occurredFrom ?? "")
+        setOccurredToDraft(occurredTo ?? "")
+        setOperatorUserIdsDraft(operatorUserIds ?? "")
+        setApplicantUserIdsDraft(applicantUserIds ?? "")
+        setHandlerUserIdsDraft(handlerUserIds ?? "")
+    }
 
     /** 唯一提交路径：查询按钮与 Enter 共用。 */
     const applyFilters = React.useCallback(() => {
         const from = occurredFromDraft.trim()
         const to = occurredToDraft.trim()
-        const error = ledgerDateRangeError(from, to)
+        const error =
+            view === "movement" ? ledgerDateRangeError(from, to) : null
         setFilterError(error)
         if (error) {
             setPanelOpen(true)
@@ -131,26 +136,51 @@ export function useLedgerFilters({
         patchUrl(
             {
                 q: searchDraft.trim() || null,
-                warehouseId: warehouseIdDraft,
-                availability:
-                    availabilityDraft === "all" ? null : availabilityDraft,
-                movementType:
-                    movementTypeDraft.length > 0
-                        ? Array.from(new Set(movementTypeDraft))
-                              .sort()
-                              .join(",")
-                        : null,
-                occurredFrom: from || null,
-                occurredTo: to || null,
-                operatorUserIds: operatorUserIdsDraft.trim() || null,
-                applicantUserIds: applicantUserIdsDraft.trim() || null,
-                handlerUserIds: handlerUserIdsDraft.trim() || null,
+                ...(canFilterWarehouse
+                    ? { warehouseId: warehouseIdDraft }
+                    : {}),
+                ...(view === "balance"
+                    ? {
+                          availability:
+                              availabilityDraft === "all"
+                                  ? null
+                                  : availabilityDraft,
+                      }
+                    : {}),
+                ...(view === "movement"
+                    ? {
+                          movementType:
+                              movementTypeDraft.length > 0
+                                  ? Array.from(new Set(movementTypeDraft))
+                                        .sort()
+                                        .join(",")
+                                  : null,
+                          occurredFrom: from || null,
+                          occurredTo: to || null,
+                      }
+                    : {}),
+                ...(canFilterPeople &&
+                (view === "movement" || view === "adjustment")
+                    ? {
+                          operatorUserIds: operatorUserIdsDraft.trim() || null,
+                      }
+                    : {}),
+                ...(canFilterPeople && view === "adjustment"
+                    ? {
+                          applicantUserIds:
+                              applicantUserIdsDraft.trim() || null,
+                          handlerUserIds: handlerUserIdsDraft.trim() || null,
+                      }
+                    : {}),
             },
             { replace: true, scroll: false },
         )
         resetPagination()
         setPanelOpen(false)
     }, [
+        canFilterPeople,
+        canFilterWarehouse,
+        view,
         availabilityDraft,
         movementTypeDraft,
         occurredFromDraft,
@@ -299,14 +329,18 @@ export function useLedgerFilters({
         searchDraft.trim() !== q.trim() ||
         (canFilterWarehouse &&
             (warehouseIdDraft ?? null) !== (warehouseId ?? null)) ||
-        availabilityDraft !== availability ||
-        [...movementTypeDraft].sort().join(",") !==
-            [...movementType].sort().join(",") ||
-        occurredFromDraft !== (occurredFrom ?? "") ||
-        occurredToDraft !== (occurredTo ?? "") ||
+        (view === "balance" && availabilityDraft !== availability) ||
+        (view === "movement" &&
+            ([...movementTypeDraft].sort().join(",") !==
+                [...movementType].sort().join(",") ||
+                occurredFromDraft !== (occurredFrom ?? "") ||
+                occurredToDraft !== (occurredTo ?? ""))) ||
         (canFilterPeople &&
-            (operatorUserIdsDraft !== (operatorUserIds ?? "") ||
-                applicantUserIdsDraft !== (applicantUserIds ?? "") ||
+            (view === "movement" || view === "adjustment") &&
+            operatorUserIdsDraft !== (operatorUserIds ?? "")) ||
+        (canFilterPeople &&
+            view === "adjustment" &&
+            (applicantUserIdsDraft !== (applicantUserIds ?? "") ||
                 handlerUserIdsDraft !== (handlerUserIds ?? "")))
 
     return {
@@ -332,7 +366,6 @@ export function useLedgerFilters({
         setHandlerUserIdsDraft,
         panelOpen,
         setPanelOpen,
-        hasStructuredFilters,
         filterError,
         setFilterError,
         applyFilters,

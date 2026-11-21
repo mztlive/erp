@@ -1,30 +1,26 @@
 "use client"
 
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
-
 import * as React from "react"
 import { DownloadIcon } from "lucide-react"
 
 import {
-    BusinessEmptyState,
-    BusinessFailureState,
-    BusinessTableFrame,
-    DataTable,
+    BusinessStatusBadge,
     FundsScopeBanner,
-    scopeQueryFrameHeading,
-    MoneyValue,
-    PageScaffold,
-} from "@/components/business"
-import { ListSearchField } from "@/components/business/list-search-field"
-import {
+    ListDataTable,
+    ListFilterSection,
+    ListFilterSections,
+    ListSearchField,
     ListWorkspaceFilterBar,
-    ListWorkspaceHeader,
-    listWorkspaceFilterStatusText,
-} from "@/components/business/list-workspace"
+    ListWorkspacePage,
+    MoneyValue,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableTextCell,
+} from "@/components/business"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import { selectedOrgUnitIds } from "@/features/organization/lib/organization-ids"
 import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
+import type { StatusTone } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -39,8 +35,10 @@ import { PersonDirectoryFilter } from "@/features/entity-selectors/components/pe
 import { usePersonDirectorySelected } from "@/features/entity-selectors/hooks/person-directory"
 import type { ColumnDef } from "@tanstack/react-table"
 import { getErrorMessage } from "@/lib/api/errors"
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 import { hasPermission } from "@/lib/permissions"
-import { excelExportText } from "@/lib/ui-text"
+import { excelExportText, listFilterText } from "@/lib/ui-text"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 import { useScopeExcelExport } from "@/lib/use-scope-list-export"
 import {
     requestStatusLabels,
@@ -56,6 +54,16 @@ import {
 import { useInvoiceRequestScopeUrlState } from "@/features/invoice-requests/hooks/use-scope-url-state"
 
 const toolbarPrefix = "invoice-request-scope-toolbar"
+const trayFilterKeys = ["applicantUserIds", "handlerUserIds", "orgUnitIds"]
+const foldedChipKeys = [...trayFilterKeys, "salesOrderId", "status"]
+
+const requestStatusTones: Record<RequestStatus, StatusTone> = {
+    draft: "neutral",
+    rejected: "destructive",
+    in_approval: "warning",
+    approved: "info",
+    completed: "success",
+}
 
 type ScopedRequestWithOptionalNames = ScopedInvoiceRequestWire & {
     applicant_user_name?: string | null
@@ -74,11 +82,15 @@ function isInternalIdentifier(value: string): boolean {
     )
 }
 
-function requestStatusLabel(status: string): string {
+function requestStatus(status: string): RequestStatus | undefined {
     const normalized = status.trim().toLowerCase()
     return Object.hasOwn(requestStatusLabels, normalized)
-        ? requestStatusLabels[normalized as RequestStatus]
-        : "状态待确认"
+        ? (normalized as RequestStatus)
+        : undefined
+}
+
+function requestStatusLabel(status: RequestStatus | undefined): string {
+    return status ? requestStatusLabels[status] : "状态待确认"
 }
 
 function resolveScopedPersonName(
@@ -108,23 +120,24 @@ function resolveScopedPersonName(
     return !rawId || isInternalIdentifier(rawId) ? "当前不可见" : rawId
 }
 
-function ScopeColumns(
+function scopeColumns(
     resolvedNames: ReadonlyMap<string, string>,
 ): ColumnDef<ScopedInvoiceRequestWire>[] {
     return [
         {
             id: "doc",
             header: "申请单号",
-            meta: { label: "申请单号", width: "reference" },
+            meta: { label: "申请单号", width: "flex" },
             cell: ({ row }) => (
-                <div className="min-w-0">
-                    <div className="num break-words text-sm font-medium">
-                        {row.original.request_no}
-                    </div>
-                    <div className="num text-xs text-muted-foreground">
-                        {row.original.sales_order_no}
-                    </div>
-                </div>
+                <TableIdentityCell
+                    primary={
+                        <span className="num">{row.original.request_no}</span>
+                    }
+                    primaryTitle={row.original.request_no}
+                    secondary={row.original.sales_order_no}
+                    secondaryTitle={row.original.sales_order_no}
+                    numericSecondary
+                />
             ),
         },
         {
@@ -136,7 +149,9 @@ function ScopeColumns(
                 align: "end",
                 numeric: true,
             },
-            cell: ({ row }) => <MoneyValue value={row.original.amount} />,
+            cell: ({ row }) => (
+                <MoneyValue value={row.original.amount} display="compact" />
+            ),
         },
         {
             id: "people",
@@ -154,15 +169,23 @@ function ScopeColumns(
                     resolvedNames,
                 )
                 return (
-                    <div className="flex min-w-0 flex-col gap-1 text-xs">
-                        <span className="break-words">
-                            申请人 {applicantLabel}
-                        </span>
-                        <span className="break-words text-muted-foreground">
-                            {row.original.handler_user_id
-                                ? `当前处理人 ${handlerLabel}`
-                                : "暂无当前处理人"}
-                        </span>
+                    <div className="flex min-w-0 flex-col">
+                        <TableTextCell
+                            value={`申请人 ${applicantLabel}`}
+                            clamp={1}
+                        />
+                        {row.original.handler_user_id ? (
+                            <TableTextCell
+                                value={`当前处理人 ${handlerLabel}`}
+                                clamp={1}
+                                className="text-xs text-muted-foreground"
+                            />
+                        ) : (
+                            <TableEmptyCell
+                                variant="label"
+                                label="暂无当前处理人"
+                            />
+                        )}
                     </div>
                 )
             },
@@ -170,11 +193,18 @@ function ScopeColumns(
         {
             id: "status",
             header: "状态",
-            cell: ({ row }) => (
-                <span className="text-sm">
-                    {requestStatusLabel(row.original.status)}
-                </span>
-            ),
+            meta: { label: "状态", width: "status" },
+            cell: ({ row }) => {
+                const status = requestStatus(row.original.status)
+                return (
+                    <BusinessStatusBadge
+                        context="list"
+                        label={requestStatusLabel(status)}
+                        tone={status ? requestStatusTones[status] : "neutral"}
+                        appearance={status === "completed" ? "quiet" : "badge"}
+                    />
+                )
+            },
         },
     ]
 }
@@ -182,11 +212,20 @@ function ScopeColumns(
 /** 开票申请范围页：负责销售、申请人与当前开票处理人分别查询，人员候选走销售目录。 */
 export function InvoiceRequestScopePage() {
     const urlState = useInvoiceRequestScopeUrlState()
+    useSearchHotkey(urlState.searchInputRef)
     const directoryOrgUnitIds = selectedOrgUnitIds(urlState.orgDraft)
     const listQuery = useInvoiceRequestScopeListQuery(urlState.query)
     const [detailId, setDetailId] = React.useState<string | null>(null)
     const detailQuery = useInvoiceRequestScopeDetailQuery(detailId)
     const data = listQuery.data
+    const noScope = Boolean(
+        data && (data.emptyReason === "no_scope" || !data.hasScope),
+    )
+    const rowCount = noScope || listQuery.isError ? 0 : (data?.total ?? 0)
+    const rows = React.useMemo(
+        () => (noScope ? [] : [...(data?.requests ?? [])]),
+        [data?.requests, noScope],
+    )
     const missingPersonIds = React.useMemo(() => {
         const ids = new Set<string>()
         const collect = (row: ScopedRequestWithOptionalNames) => {
@@ -234,122 +273,80 @@ export function InvoiceRequestScopePage() {
         return map
     }, [selectedPeople.data, selectedPeople.isSuccess])
     const columns = React.useMemo(
-        () => ScopeColumns(resolvedNames),
+        () => scopeColumns(resolvedNames),
         [resolvedNames],
     )
     const exportExcel = useScopeExcelExport(exportInvoiceRequestScopeExcel)
-
-    const table =
-        listQuery.isError && !data ? (
-            <BusinessFailureState
-                title="开票申请范围加载失败"
-                error={listQuery.error}
-                action={
-                    <Button
-                        id="invoice-request-scope-list-retry"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void listQuery.refetch()}
-                    >
-                        重试
-                    </Button>
-                }
-            />
-        ) : listQuery.isPending && !data ? (
-            <div className="h-64 animate-pulse rounded-xl bg-muted" />
-        ) : data && (data.emptyReason === "no_scope" || !data.hasScope) ? (
-            <BusinessEmptyState
-                kind="no-scope"
-                title="暂无可查看的开票申请数据"
-                description="您当前尚未配置开票申请的数据查看范围，请联系管理员开通权限后再查询。"
-            />
-        ) : data && data.total === 0 ? (
-            <BusinessEmptyState
-                kind="filter"
-                title="无匹配开票申请"
-                description="无匹配记录，可清除筛选后重试。"
-                action={
-                    <Button
-                        id="invoice-request-scope-empty-clear-filters"
-                        type="button"
-                        variant="secondary"
-                        className="rounded-lg shadow-none"
-                        onClick={urlState.clearFilters}
-                    >
-                        清除筛选
-                    </Button>
-                }
-            />
-        ) : (
-            <DataTable
-                id="invoice-request-scope-list"
-                data={[...(data?.requests ?? [])]}
-                columns={columns}
-                getRowId={(row) => row.id}
-                onRowPreview={(row) => setDetailId(row.id)}
-                highlightedRowId={detailId ?? undefined}
-                rowCount={data?.total ?? 0}
-                pagination={urlState.pagination}
-                onPaginationChange={(next) =>
-                    urlState.handlePaginationChange(next, data?.scopeVersion)
-                }
-                layout="flush"
-            />
-        )
+    const canExport =
+        account.isSuccess &&
+        hasPermission(account.data.permissions, "sales_invoice_request:list")
+    const appliedChips = [
+        ...urlState.appliedChips.map((chip) => ({
+            ...chip,
+            onClear: () => urlState.removeFilter(chip.key),
+        })),
+        ...(urlState.status
+            ? [
+                  {
+                      key: "status",
+                      label: `状态：${requestStatusLabel(requestStatus(urlState.status))}`,
+                      onClear: () =>
+                          urlState.patchUrl(
+                              { status: null, scopeVersion: null, page: null },
+                              { replace: true },
+                          ),
+                  },
+              ]
+            : []),
+    ]
+    const hasFoldedChips = appliedChips.some(({ key }) =>
+        foldedChipKeys.includes(key),
+    )
 
     return (
-        <PageScaffold density="compact" className="space-y-4">
-            <ListWorkspaceHeader
-                eyebrow="财务"
-                title="开票申请汇总"
-                description="按负责销售、申请人或财务处理人查询开票申请进度。"
-            >
-                <PermissionGuard permission="sales_invoice_request:list">
-                    <LoadingButton
-                        id="invoice-request-scope-export"
-                        type="button"
-                        variant="outline"
-                        loading={exportExcel.isPending}
-                        disabled={
-                            listQuery.isFetching ||
-                            listQuery.isError ||
-                            !data?.hasScope ||
-                            !data.total
-                        }
-                        onClick={() => exportExcel.mutate(urlState.query)}
-                        title="导出当前筛选下的全部开票申请"
-                    >
-                        <DownloadIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        {exportExcel.isPending
-                            ? excelExportText.pending
-                            : excelExportText.action}
-                    </LoadingButton>
-                </PermissionGuard>
-            </ListWorkspaceHeader>
-
-            <FundsScopeBanner
-                scopeSummary={data?.scopeSummary}
-                asOf={data?.asOf}
-                permissionLimited={
-                    data?.requests.some((row) => row.permission_limited) ??
-                    false
-                }
-                unassigned={data?.summary?.unassigned}
-            />
-
-            <BusinessTableFrame
-                showHeader
-                {...scopeQueryFrameHeading(data?.total, data?.scopeSummary)}
-                toolbar={
+        <ListWorkspacePage
+            title="开票申请汇总"
+            actions={
+                canExport
+                    ? [
+                          {
+                              id: "invoice-request-scope-export",
+                              actionKey: "export",
+                              type: "button",
+                              tier: "quiet",
+                              icon: DownloadIcon,
+                              label: exportExcel.isPending
+                                  ? excelExportText.pending
+                                  : excelExportText.action,
+                              loading: exportExcel.isPending,
+                              disabled:
+                                  listQuery.isFetching ||
+                                  listQuery.isError ||
+                                  !data?.hasScope ||
+                                  !data.total,
+                              onClick: () => exportExcel.mutate(urlState.query),
+                              title: "导出当前筛选下的全部开票申请",
+                          },
+                      ]
+                    : undefined
+            }
+            loading={listQuery.isPending && !data}
+            notices={
+                <FundsScopeBanner
+                    scopeSummary={data?.scopeSummary}
+                    asOf={data?.asOf}
+                    permissionLimited={
+                        data?.requests.some((row) => row.permission_limited) ??
+                        false
+                    }
+                    unassigned={data?.summary?.unassigned}
+                />
+            }
+            surface={{
+                ariaLabel: "开票申请范围列表",
+                toolbar: (
                     <ListWorkspaceFilterBar
-                        density="compact"
                         morePresentation="popover"
-                        moreSize="compact"
-                        className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
                         idPrefix={toolbarPrefix}
                         formAriaLabel="开票申请范围查询"
                         onSubmit={urlState.applyFilters}
@@ -367,11 +364,8 @@ export function InvoiceRequestScopePage() {
                             />
                         }
                         moreCount={
-                            urlState.appliedChips.filter(
-                                ({ key }) =>
-                                    key === "applicantUserIds" ||
-                                    key === "handlerUserIds" ||
-                                    key === "orgUnitIds",
+                            appliedChips.filter(({ key }) =>
+                                trayFilterKeys.includes(key),
                             ).length
                         }
                         moreOpen={urlState.panelOpen}
@@ -401,75 +395,142 @@ export function InvoiceRequestScopePage() {
                                 </div>
                             ) : null
                         }
-                        morePanel={
-                            urlState.canUseBusiness || urlState.canUseOrg ? (
-                                <div className="grid min-w-0 gap-5">
-                                    {urlState.canUseBusiness && (
-                                        <PersonDirectoryFilter
-                                            id={`${toolbarPrefix}-applicant`}
-                                            category="business"
-                                            label="申请人"
-                                            value={urlState.applicantDraft}
-                                            onChange={
-                                                urlState.setApplicantDraft
-                                            }
-                                            orgUnitIds={directoryOrgUnitIds}
-                                            includeDescendants={
-                                                urlState.descendantsDraft
-                                            }
-                                        />
-                                    )}
-                                    {urlState.canUseBusiness && (
-                                        <PersonDirectoryFilter
-                                            id={`${toolbarPrefix}-handler`}
-                                            category="business"
-                                            label="当前开票处理人"
-                                            value={urlState.handlerDraft}
-                                            onChange={urlState.setHandlerDraft}
-                                            orgUnitIds={directoryOrgUnitIds}
-                                            includeDescendants={
-                                                urlState.descendantsDraft
-                                            }
-                                        />
-                                    )}
-                                    {urlState.canUseOrg && (
-                                        <OrganizationUnitFilter
-                                            id={`${toolbarPrefix}-org`}
-                                            label="业务组织"
-                                            value={urlState.orgDraft}
-                                            onChange={urlState.setOrgDraft}
-                                            includeDescendants={
-                                                urlState.descendantsDraft
-                                            }
-                                            onDescendantsChange={
-                                                urlState.setDescendantsDraft
-                                            }
-                                        />
-                                    )}
-                                </div>
+                        extraPrimary={
+                            urlState.hasActiveFilters && !hasFoldedChips ? (
+                                <Button
+                                    id={`${toolbarPrefix}-clear-all`}
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={urlState.clearFilters}
+                                >
+                                    {listFilterText.clear}
+                                </Button>
                             ) : null
                         }
-                        resultStatus={listWorkspaceFilterStatusText({
-                            loading: listQuery.isPending,
-                            failed: listQuery.isError,
-                            resultCount: data?.total,
-                            noun: "条申请",
-                            loadingLabel: "正在加载申请…",
-                        })}
-                        chips={urlState.appliedChips}
-                        onClearChip={(key) =>
-                            urlState.removeFilter(
-                                key as (typeof urlState.appliedChips)[number]["key"],
-                            )
+                        morePanel={
+                            urlState.canUseBusiness || urlState.canUseOrg ? (
+                                <ListFilterSections>
+                                    {urlState.canUseBusiness && (
+                                        <ListFilterSection legend="人员">
+                                            <PersonDirectoryFilter
+                                                id={`${toolbarPrefix}-applicant`}
+                                                category="business"
+                                                label="申请人"
+                                                value={urlState.applicantDraft}
+                                                onChange={
+                                                    urlState.setApplicantDraft
+                                                }
+                                                orgUnitIds={directoryOrgUnitIds}
+                                                includeDescendants={
+                                                    urlState.descendantsDraft
+                                                }
+                                            />
+                                            <PersonDirectoryFilter
+                                                id={`${toolbarPrefix}-handler`}
+                                                category="business"
+                                                label="当前开票处理人"
+                                                value={urlState.handlerDraft}
+                                                onChange={
+                                                    urlState.setHandlerDraft
+                                                }
+                                                orgUnitIds={directoryOrgUnitIds}
+                                                includeDescendants={
+                                                    urlState.descendantsDraft
+                                                }
+                                            />
+                                        </ListFilterSection>
+                                    )}
+                                    {urlState.canUseOrg && (
+                                        <ListFilterSection
+                                            legend="组织"
+                                            gridClassName="grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,24rem)]"
+                                        >
+                                            <OrganizationUnitFilter
+                                                id={`${toolbarPrefix}-org`}
+                                                label="业务组织"
+                                                value={urlState.orgDraft}
+                                                onChange={urlState.setOrgDraft}
+                                                includeDescendants={
+                                                    urlState.descendantsDraft
+                                                }
+                                                onDescendantsChange={
+                                                    urlState.setDescendantsDraft
+                                                }
+                                            />
+                                        </ListFilterSection>
+                                    )}
+                                </ListFilterSections>
+                            ) : null
                         }
+                        resultStatus={
+                            listQuery.isError
+                                ? "查询未完成"
+                                : listQuery.isFetching
+                                  ? "查询中…"
+                                  : null
+                        }
+                        chips={appliedChips}
+                        foldedChipKeys={foldedChipKeys}
                         onClearAll={urlState.clearFilters}
                         hasPendingChanges={urlState.hasPendingChanges}
                         pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
                     />
-                }
-                table={table}
-            />
-
+                ),
+                table: (
+                    <ListDataTable
+                        id="invoice-request-scope-list"
+                        caption="开票申请范围列表"
+                        entityName="开票申请"
+                        data={rows}
+                        columns={columns}
+                        defaultColumnOrder={[
+                            "doc",
+                            "amount",
+                            "people",
+                            "status",
+                        ]}
+                        defaultColumnPinning={{ left: ["doc"] }}
+                        getRowId={(row) => row.id}
+                        rowLabel={(row) => row.request_no}
+                        onRowPreview={(row) => setDetailId(row.id)}
+                        highlightedRowId={detailId ?? undefined}
+                        rowCount={rowCount}
+                        pagination={urlState.pagination}
+                        pageSizeOptions={[urlState.pagination.pageSize]}
+                        onPaginationChange={(next) => {
+                            if (
+                                listQuery.isPlaceholderData ||
+                                next.pageIndex === urlState.pagination.pageIndex
+                            )
+                                return
+                            urlState.handlePaginationChange(
+                                next,
+                                data?.scopeVersion,
+                            )
+                        }}
+                        showPagination={rowCount > 0}
+                        loading={listQuery.isFetching}
+                        isError={listQuery.isError}
+                        error={listQuery.error}
+                        onRetry={() => void listQuery.refetch()}
+                        retryButtonId="invoice-request-scope-list-retry"
+                        noScope={noScope}
+                        hasActiveFilters={urlState.hasActiveFilters}
+                        onClearFilters={urlState.clearFilters}
+                        clearFiltersButtonId="invoice-request-scope-empty-clear-filters"
+                        emptyCopy={{
+                            noScopeTitle: "暂无可查看的开票申请数据",
+                            noScopeDescription:
+                                "您当前尚未配置开票申请的数据查看范围，请联系管理员开通权限后再查询。",
+                            filterTitle: "无匹配开票申请",
+                            filterDescription: "无匹配记录，可清除筛选后重试。",
+                            emptyTitle: "暂无开票申请",
+                        }}
+                    />
+                ),
+            }}
+        >
             {detailId ? (
                 <section
                     aria-label="开票申请范围详情"
@@ -484,7 +545,10 @@ export function InvoiceRequestScopePage() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => setDetailId(null)}
+                            onClick={() => {
+                                setDetailId(null)
+                                restoreListRowFocus(detailId)
+                            }}
                         >
                             关闭
                         </Button>
@@ -561,7 +625,9 @@ export function InvoiceRequestScopePage() {
                                         </TableCell>
                                         <TableCell>
                                             {requestStatusLabel(
-                                                detailQuery.data.status,
+                                                requestStatus(
+                                                    detailQuery.data.status,
+                                                ),
                                             )}
                                         </TableCell>
                                     </TableRow>
@@ -585,6 +651,6 @@ export function InvoiceRequestScopePage() {
                     )}
                 </section>
             ) : null}
-        </PageScaffold>
+        </ListWorkspacePage>
     )
 }

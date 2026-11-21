@@ -18,6 +18,7 @@ export type SupplierOrdersListPreviewSheetProps = {
     preview: SupplierOrderDetailView | undefined
     previewPending: boolean
     onClose: () => void
+    finalFocus: () => HTMLElement | null
     queryPending: boolean
     onQueryResult: (input: QueryFromPreviewInput) => Promise<void>
 }
@@ -28,6 +29,7 @@ export function SupplierOrdersListPreviewSheet({
     preview,
     previewPending,
     onClose,
+    finalFocus,
     queryPending,
     onQueryResult,
 }: SupplierOrdersListPreviewSheetProps) {
@@ -36,6 +38,7 @@ export function SupplierOrdersListPreviewSheet({
             id="supplier-orders-list-preview-sheet"
             open={open}
             onOpenChange={onOpenChange}
+            finalFocus={finalFocus}
             size="detail"
             title={preview?.order.supplierName ?? "供应商订单预览"}
             identity={

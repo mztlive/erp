@@ -3,11 +3,15 @@
 import type { RefObject } from "react"
 import { OptionCombobox } from "@/components/business"
 import {
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    listWorkspaceFilterStatusText,
+    listWorkspaceStyles,
 } from "@/components/business/list-workspace"
+import { Button } from "@/components/ui/button"
+import { listFilterText } from "@/lib/ui-text"
 import { JOB_DOMAIN_FILTER_OPTIONS, JOB_TYPE_FILTER_OPTIONS } from "../labels"
 import { BACKGROUND_JOBS_ID_PREFIX as ID_PREFIX } from "../lib/constants"
 import {
@@ -19,12 +23,14 @@ import {
 import type { BackgroundJobsFilters } from "../hooks/use-background-jobs-filters"
 import type { useBackgroundJobsQuery } from "../queries"
 
+const FOLDED_CHIP_KEYS = ["domain", "scope"] as const
+
 type BackgroundJobsToolbarProps = {
     filters: BackgroundJobsFilters
     isAdmin: boolean
     jobsQuery: Pick<
         ReturnType<typeof useBackgroundJobsQuery>,
-        "isPending" | "isError" | "data"
+        "isPending" | "isPlaceholderData" | "isError"
     >
     searchInputRef: RefObject<HTMLInputElement | null>
 }
@@ -36,11 +42,21 @@ export function BackgroundJobsToolbar({
     jobsQuery,
     searchInputRef,
 }: BackgroundJobsToolbarProps) {
+    const { applied, draft } = filters
+    // 主筛草稿不同于已生效条件时，保留当前结果所用条件的标签。
+    const visibleChipKeys = [
+        ...FOLDED_CHIP_KEYS,
+        ...(draft.jobNo.trim() !== applied.jobNo ? ["job_no"] : []),
+        ...(draft.status !== applied.status ? ["status"] : []),
+        ...(draft.jobType !== applied.jobType ? ["job_type"] : []),
+    ]
+    const hasVisibleChips = filters.chips.some((chip) =>
+        visibleChipKeys.includes(chip.key),
+    )
+
     return (
         <ListWorkspaceFilterBar
             morePresentation="popover"
-            moreSize="compact"
-            density="compact"
             idPrefix={`${ID_PREFIX}-toolbar`}
             formAriaLabel="后台任务查询"
             onSubmit={filters.apply}
@@ -58,7 +74,6 @@ export function BackgroundJobsToolbar({
                     aria-label="按任务号搜索后台任务"
                 />
             }
-            moreCount={filters.moreCount}
             moreOpen={filters.panelOpen}
             onToggleMore={filters.toggleMore}
             morePanelAriaLabel="后台任务更多筛选条件"
@@ -69,7 +84,11 @@ export function BackgroundJobsToolbar({
                         id={`${ID_PREFIX}-toolbar-status`}
                         className="w-36 max-w-full min-w-0"
                         filterLabel="状态"
-                        value={filters.draft.status}
+                        value={
+                            filters.draft.status === "all"
+                                ? null
+                                : filters.draft.status
+                        }
                         onValueChange={(value) =>
                             filters.changeDraft(
                                 "status",
@@ -97,59 +116,80 @@ export function BackgroundJobsToolbar({
                 </>
             }
             morePanel={
-                <div className="grid min-w-0 gap-3">
-                    <ListWorkspaceFilterField
-                        htmlFor={`${ID_PREFIX}-toolbar-domain`}
-                        label="业务类型"
-                    >
-                        <OptionCombobox
-                            id={`${ID_PREFIX}-toolbar-domain`}
-                            className="w-full min-w-0"
-                            value={filters.draft.domain || null}
-                            onValueChange={(value) =>
-                                filters.changeDraft("domain", value ?? "")
-                            }
-                            options={JOB_DOMAIN_FILTER_OPTIONS}
-                            aria-label="业务类型"
-                            placeholder="全部业务"
-                            allowClear={false}
-                        />
-                    </ListWorkspaceFilterField>
-                    {isAdmin ? (
+                <ListFilterSections>
+                    <ListFilterSection legend="任务">
                         <ListWorkspaceFilterField
-                            htmlFor={`${ID_PREFIX}-toolbar-scope`}
-                            label="可见范围"
+                            htmlFor={`${ID_PREFIX}-toolbar-domain`}
+                            label="业务类型"
                         >
                             <OptionCombobox
-                                id={`${ID_PREFIX}-toolbar-scope`}
+                                id={`${ID_PREFIX}-toolbar-domain`}
                                 className="w-full min-w-0"
-                                value={filters.draft.scope}
+                                value={filters.draft.domain || null}
                                 onValueChange={(value) =>
-                                    filters.changeDraft(
-                                        "scope",
-                                        (value ?? "all") as ScopeFilter,
-                                    )
+                                    filters.changeDraft("domain", value ?? "")
                                 }
-                                options={SCOPE_FILTER_OPTIONS}
-                                aria-label="可见范围"
-                                placeholder="全部任务"
+                                options={JOB_DOMAIN_FILTER_OPTIONS}
+                                aria-label="业务类型"
+                                placeholder="全部业务"
                                 allowClear={false}
                             />
                         </ListWorkspaceFilterField>
-                    ) : null}
-                </div>
+                        {isAdmin ? (
+                            <ListWorkspaceFilterField
+                                htmlFor={`${ID_PREFIX}-toolbar-scope`}
+                                label="可见范围"
+                            >
+                                <OptionCombobox
+                                    id={`${ID_PREFIX}-toolbar-scope`}
+                                    className="w-full min-w-0"
+                                    value={
+                                        filters.draft.scope === "all"
+                                            ? null
+                                            : filters.draft.scope
+                                    }
+                                    onValueChange={(value) =>
+                                        filters.changeDraft(
+                                            "scope",
+                                            (value ?? "all") as ScopeFilter,
+                                        )
+                                    }
+                                    options={SCOPE_FILTER_OPTIONS}
+                                    aria-label="可见范围"
+                                    placeholder="全部任务"
+                                    allowClear={false}
+                                />
+                            </ListWorkspaceFilterField>
+                        ) : null}
+                    </ListFilterSection>
+                </ListFilterSections>
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading: jobsQuery.isPending,
-                failed: jobsQuery.isError,
-                resultCount: jobsQuery.data?.total,
-                noun: "个任务",
-            })}
+            extraPrimary={
+                filters.hasActiveFilters && !hasVisibleChips ? (
+                    <Button
+                        id={`${ID_PREFIX}-toolbar-clear`}
+                        type="button"
+                        variant="ghost"
+                        className={listWorkspaceStyles.quietButton}
+                        onClick={filters.clearAll}
+                    >
+                        {listFilterText.clear}
+                    </Button>
+                ) : undefined
+            }
+            resultStatus={
+                jobsQuery.isError
+                    ? "查询未完成"
+                    : jobsQuery.isPending || jobsQuery.isPlaceholderData
+                      ? "查询中…"
+                      : null
+            }
             chips={filters.chips}
+            foldedChipKeys={visibleChipKeys}
+            moreCount={filters.moreCount}
             onClearChip={filters.clearChip}
             onClearAll={filters.clearAll}
             hasPendingChanges={filters.hasPendingChanges}
-            idleHint={isAdmin ? undefined : "仅显示我创建的后台任务"}
         />
     )
 }

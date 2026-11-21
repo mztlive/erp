@@ -28,14 +28,8 @@ export function PortalSurface({
             }
         >
             {variant === "list" ? (
-                <ListWorkspaceHeader
-                    eyebrow="供应商门户"
-                    title={title}
-                    description={description}
-                >
-                    {actions ? (
-                        <div className="flex flex-wrap gap-2">{actions}</div>
-                    ) : null}
+                <ListWorkspaceHeader title={title}>
+                    {actions}
                 </ListWorkspaceHeader>
             ) : (
                 <PageHeader

@@ -6,14 +6,10 @@ import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
-    listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { REVISION_TIMING_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
-import type {
-    DictionaryFilterKey,
-    useLifecycleListFilters,
-} from "@/features/master-data/hooks/use-lifecycle-list-filters"
+import type { useLifecycleListFilters } from "@/features/master-data/hooks/use-lifecycle-list-filters"
 
 export function DictionaryListToolbar({
     idPrefix,
@@ -21,7 +17,6 @@ export function DictionaryListToolbar({
     filters: f,
     searchPlaceholder,
     countLabel,
-    resultCount,
     loading,
     failed,
     showRevisionFilter = true,
@@ -31,7 +26,6 @@ export function DictionaryListToolbar({
     filters: ReturnType<typeof useLifecycleListFilters>
     searchPlaceholder: string
     countLabel: string
-    resultCount?: number
     loading: boolean
     failed: boolean
     showRevisionFilter?: boolean
@@ -80,19 +74,9 @@ export function DictionaryListToolbar({
                     />
                 ) : undefined
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "条",
-                loadingLabel: `正在加载${countLabel}…`,
-            })}
-            chips={f.appliedChips}
-            onClearChip={(key) => f.removeFilter(key as DictionaryFilterKey)}
-            onClearAll={f.clearAllFilters}
+            resultStatus={loading ? "查询中…" : failed ? "查询未完成" : null}
             hasPendingChanges={f.hasPendingChanges}
             pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-            idleHint="导出与当前查询结果一致"
         />
     )
 }

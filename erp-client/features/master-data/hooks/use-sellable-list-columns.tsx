@@ -1,10 +1,16 @@
 "use client"
 
 import * as React from "react"
-import { TriangleAlertIcon } from "lucide-react"
 import type { ColumnDef, SortingFn } from "@tanstack/react-table"
 
-import { MoneyValue, QuantityValue } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    MoneyValue,
+    QuantityValue,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableTextCell,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { SellableItemThumbnail } from "@/features/master-data/components/list/sellable-item-thumbnail"
 import type { MasterDataListItem } from "@/features/master-data/types"
@@ -37,44 +43,38 @@ export function useSellableListColumns() {
                 enableSorting: false,
                 cell: ({ row }) => {
                     const sellable = row.original.sellableItem
+                    const { name, stableNo } = row.original
+                    const specification =
+                        sellable?.specificationLabel !== "无规格"
+                            ? sellable?.specificationLabel
+                            : undefined
+                    const secondary = specification
+                        ? `${stableNo} · ${specification}`
+                        : stableNo
                     return (
-                        <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex min-w-0 items-center gap-2">
                             <SellableItemThumbnail
                                 assetId={sellable?.mainImageAssetId}
-                                label={row.original.name}
-                                className="size-12 shrink-0 rounded-lg"
+                                label={name}
+                                className="size-8 shrink-0 rounded-md"
                             />
-                            <div className="min-w-0 flex-1 space-y-1.5">
-                                <div
-                                    className="truncate text-sm font-medium text-foreground"
-                                    title={row.original.name}
+                            <TableIdentityCell
+                                primary={name}
+                                primaryTitle={name}
+                                secondary={secondary}
+                                secondaryTitle={secondary}
+                                numericSecondary
+                                className="flex-1"
+                            />
+                            {sellable?.deliveryFreightExtra ? (
+                                <Badge
+                                    variant="warning"
+                                    className="shrink-0"
+                                    title="所选地区内有地方只能集采并另付运费"
                                 >
-                                    {row.original.name}
-                                </div>
-                                <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                                    <span className="num shrink-0">
-                                        {row.original.stableNo}
-                                    </span>
-                                    {sellable &&
-                                    sellable.specificationLabel !== "无规格" ? (
-                                        <span
-                                            className="truncate border-l border-border pl-2"
-                                            title={sellable.specificationLabel}
-                                        >
-                                            {sellable.specificationLabel}
-                                        </span>
-                                    ) : null}
-                                    {sellable?.deliveryFreightExtra ? (
-                                        <Badge
-                                            variant="warning"
-                                            className="shrink-0"
-                                            title="所选地区内有地方只能集采并另付运费"
-                                        >
-                                            需另付运费
-                                        </Badge>
-                                    ) : null}
-                                </div>
-                            </div>
+                                    需另付运费
+                                </Badge>
+                            ) : null}
                         </div>
                     )
                 },
@@ -86,9 +86,11 @@ export function useSellableListColumns() {
                 meta: { label: "SPU 编号", width: "default" },
                 enableSorting: false,
                 cell: ({ row }) => (
-                    <span className="num text-sm">
-                        {row.original.sellableItem?.productNo ?? "—"}
-                    </span>
+                    <TableTextCell
+                        value={row.original.sellableItem?.productNo}
+                        numeric
+                        clamp={1}
+                    />
                 ),
             },
             ...(
@@ -115,12 +117,14 @@ export function useSellableListColumns() {
                 header: label,
                 meta: { label, width: "amount", align: "end", numeric: true },
                 sortingFn: moneySortingFn,
-                cell: ({ row }) => (
-                    <MoneyValue
-                        display="exact"
-                        value={row.original.sellableItem?.[key]}
-                    />
-                ),
+                cell: ({ row }) => {
+                    const value = row.original.sellableItem?.[key]
+                    return value ? (
+                        <MoneyValue display="exact" value={value} />
+                    ) : (
+                        <TableEmptyCell />
+                    )
+                },
             })),
             {
                 id: "bulkMinQuantity",
@@ -141,7 +145,7 @@ export function useSellableListColumns() {
                             unit={item.baseUnit}
                         />
                     ) : (
-                        <span className="text-sm text-muted-foreground">—</span>
+                        <TableEmptyCell />
                     )
                 },
             },
@@ -152,11 +156,13 @@ export function useSellableListColumns() {
                 header: "供应商编号",
                 meta: { label: "供应商编号", width: "default" },
                 enableSorting: false,
-                cell: ({ row }) => (
-                    <span className="num break-all text-sm">
-                        {row.original.sellableItem?.supplierCodes?.join("、") ||
-                            "—"}
-                    </span>
+                cell: ({ getValue }) => (
+                    <TableTextCell
+                        value={getValue<string>()}
+                        numeric
+                        clamp={2}
+                        className="break-all"
+                    />
                 ),
             },
             {
@@ -168,36 +174,40 @@ export function useSellableListColumns() {
                     width: "status",
                 },
                 cell: ({ row }) => {
-                    const count = row.original.sellableItem?.supplierCount ?? 0
-                    // 全表唯一有决策价值的列：只有一家供货时断供就没得替换
-                    const atRisk = count <= 1
-                    return (
-                        <span
-                            className={
-                                atRisk
-                                    ? "inline-flex items-center gap-1.5 text-body-compact text-warning-soft-foreground"
-                                    : "inline-flex items-center gap-1.5 text-body-compact text-muted-foreground"
-                            }
-                        >
-                            {atRisk ? (
-                                <TriangleAlertIcon
-                                    className="size-3.5 shrink-0"
-                                    aria-hidden="true"
+                    const count = row.original.sellableItem?.supplierCount
+                    if (count == null) return <TableEmptyCell />
+                    if (count === 0) {
+                        return (
+                            <BusinessStatusBadge
+                                context="list"
+                                tone="neutral"
+                                label="暂无供应商"
+                            />
+                        )
+                    }
+                    if (count === 1) {
+                        return (
+                            <>
+                                <BusinessStatusBadge
+                                    context="list"
+                                    tone="warning"
+                                    label="单一供应商"
+                                    title="断供后无法替换"
                                 />
-                            ) : null}
-                            {atRisk ? (
-                                "单一供应商"
-                            ) : (
-                                <>
-                                    <span className="num">{count}</span> 家可供
-                                </>
-                            )}
-                            {atRisk ? (
                                 <span className="sr-only">
                                     ，断供后无法替换
                                 </span>
-                            ) : null}
-                        </span>
+                            </>
+                        )
+                    }
+                    return (
+                        <BusinessStatusBadge
+                            context="list"
+                            appearance="quiet"
+                            tone="success"
+                            label={`${count} 家可供`}
+                            className="num"
+                        />
                     )
                 },
             },

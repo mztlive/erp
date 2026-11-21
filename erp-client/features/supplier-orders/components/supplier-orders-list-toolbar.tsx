@@ -4,13 +4,15 @@ import * as React from "react"
 
 import { MultiOptionCombobox, OptionCombobox } from "@/components/business"
 import {
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
-import { ResidentSupplierFilter } from "@/features/entity-selectors/components/resident-supplier-filter"
+import { Button } from "@/components/ui/button"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
+import { ResidentSupplierFilter } from "@/features/entity-selectors/components/resident-supplier-filter"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import type {
     SupplierOrdersFilterKey,
@@ -29,6 +31,7 @@ import {
     REFUND_STATUS_LABEL,
     REFUND_STATUSES,
 } from "@/features/supplier-orders/types"
+import { listFilterText } from "@/lib/ui-text"
 
 const prefix = "supplier-orders-list-filter"
 const panelId = `${prefix}-more-panel`
@@ -44,26 +47,22 @@ const MORE_CHIP_KEYS: readonly SupplierOrdersFilterKey[] = [
 export function SupplierOrdersListToolbar({
     searchInputRef,
     filters: f,
-    resultCount,
     loading,
     failed,
 }: {
     searchInputRef: React.RefObject<HTMLInputElement | null>
     filters: ReturnType<typeof useSupplierOrdersFilters>
-    resultCount?: number
     loading: boolean
     failed: boolean
 }) {
-    const moreCount = f.appliedChips.filter(({ key }) =>
+    const hasFoldedFilters = f.appliedChips.some(({ key }) =>
         MORE_CHIP_KEYS.includes(key),
-    ).length
+    )
 
     return (
         <ListWorkspaceFilterBar
             density="compact"
             morePresentation="popover"
-            moreSize="wide"
-            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel="供应商订单查询"
             onSubmit={f.applyFilters}
@@ -78,7 +77,6 @@ export function SupplierOrdersListToolbar({
                     aria-label="搜索供应商订单"
                 />
             }
-            moreCount={moreCount}
             moreOpen={f.panelOpen}
             onToggleMore={() =>
                 f.panelOpen ? f.cancelMoreFilters() : f.setPanelOpen(true)
@@ -92,11 +90,13 @@ export function SupplierOrdersListToolbar({
             onResetMore={f.resetMoreFilters}
             primaryFilters={
                 <>
-                    <ResidentSupplierFilter
-                        id={`${prefix}-supplier`}
-                        value={f.supplierIdDraft}
-                        onValueChange={f.setSupplierIdDraft}
-                    />
+                    {f.canFilterSupplier ? (
+                        <ResidentSupplierFilter
+                            id={`${prefix}-supplier`}
+                            value={f.supplierIdDraft}
+                            onValueChange={f.setSupplierIdDraft}
+                        />
+                    ) : null}
                     <MultiOptionCombobox
                         id={`${prefix}-fulfillment`}
                         className="w-48 max-w-full min-w-0"
@@ -117,114 +117,96 @@ export function SupplierOrdersListToolbar({
                 </>
             }
             morePanel={
-                <div className="space-y-5">
-                    <fieldset className="min-w-0 space-y-3">
-                        <legend className="mb-1 text-sm font-medium">
-                            售后
-                        </legend>
-                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                            <ListWorkspaceFilterField
-                                htmlFor={`${prefix}-cancel`}
-                                label="取消状态"
-                            >
-                                <OptionCombobox
-                                    id={`${prefix}-cancel`}
-                                    className="w-full min-w-0"
-                                    value={f.cancelStatusesDraft[0] ?? ""}
-                                    onValueChange={(value) =>
-                                        f.setCancelStatusesDraft(
-                                            value
-                                                ? [value as CancelStatus]
-                                                : [],
-                                        )
-                                    }
-                                    options={CANCEL_STATUSES.map((status) => ({
-                                        value: status,
-                                        label: CANCEL_STATUS_LABEL[status],
-                                    }))}
-                                    aria-label="取消状态"
-                                    placeholder="全部取消状态"
-                                />
-                            </ListWorkspaceFilterField>
-                            <ListWorkspaceFilterField
-                                htmlFor={`${prefix}-aftersale`}
-                                label="售后处理"
-                            >
-                                <OptionCombobox
-                                    id={`${prefix}-aftersale`}
-                                    className="w-full min-w-0"
-                                    value={
-                                        f.aftersalePendingDraft
-                                            ? "pending"
-                                            : "all"
-                                    }
-                                    onValueChange={(value) =>
-                                        f.setAftersalePendingDraft(
-                                            value === "pending",
-                                        )
-                                    }
-                                    options={[
-                                        { value: "all", label: "全部" },
-                                        {
-                                            value: "pending",
-                                            label: "售后待处理",
-                                        },
-                                    ]}
-                                    allowClear={false}
-                                    aria-label="售后处理"
-                                />
-                            </ListWorkspaceFilterField>
-                            <ListWorkspaceFilterField
-                                htmlFor={`${prefix}-refund`}
-                                label="退款状态"
-                            >
-                                <OptionCombobox
-                                    id={`${prefix}-refund`}
-                                    className="w-full min-w-0"
-                                    value={f.refundStatusesDraft[0] ?? ""}
-                                    onValueChange={(value) =>
-                                        f.setRefundStatusesDraft(
-                                            value
-                                                ? [value as RefundStatus]
-                                                : [],
-                                        )
-                                    }
-                                    options={REFUND_STATUSES.map((status) => ({
-                                        value: status,
-                                        label: REFUND_STATUS_LABEL[status],
-                                    }))}
-                                    aria-label="退款状态"
-                                    placeholder="全部退款状态"
-                                />
-                            </ListWorkspaceFilterField>
-                        </div>
-                    </fieldset>
+                <ListFilterSections>
+                    <ListFilterSection legend="售后">
+                        <ListWorkspaceFilterField
+                            htmlFor={`${prefix}-cancel`}
+                            label="取消状态"
+                        >
+                            <OptionCombobox
+                                id={`${prefix}-cancel`}
+                                className="w-full min-w-0"
+                                value={f.cancelStatusesDraft[0] ?? ""}
+                                onValueChange={(value) =>
+                                    f.setCancelStatusesDraft(
+                                        value ? [value as CancelStatus] : [],
+                                    )
+                                }
+                                options={CANCEL_STATUSES.map((status) => ({
+                                    value: status,
+                                    label: CANCEL_STATUS_LABEL[status],
+                                }))}
+                                aria-label="取消状态"
+                                placeholder="全部取消状态"
+                            />
+                        </ListWorkspaceFilterField>
+                        <ListWorkspaceFilterField
+                            htmlFor={`${prefix}-aftersale`}
+                            label="售后处理"
+                        >
+                            <OptionCombobox
+                                id={`${prefix}-aftersale`}
+                                className="w-full min-w-0"
+                                value={f.aftersalePendingDraft ? "pending" : ""}
+                                onValueChange={(value) =>
+                                    f.setAftersalePendingDraft(
+                                        value === "pending",
+                                    )
+                                }
+                                options={[
+                                    { value: "all", label: "全部" },
+                                    {
+                                        value: "pending",
+                                        label: "售后待处理",
+                                    },
+                                ]}
+                                allowClear={false}
+                                placeholder="全部"
+                                aria-label="售后处理"
+                            />
+                        </ListWorkspaceFilterField>
+                        <ListWorkspaceFilterField
+                            htmlFor={`${prefix}-refund`}
+                            label="退款状态"
+                        >
+                            <OptionCombobox
+                                id={`${prefix}-refund`}
+                                className="w-full min-w-0"
+                                value={f.refundStatusesDraft[0] ?? ""}
+                                onValueChange={(value) =>
+                                    f.setRefundStatusesDraft(
+                                        value ? [value as RefundStatus] : [],
+                                    )
+                                }
+                                options={REFUND_STATUSES.map((status) => ({
+                                    value: status,
+                                    label: REFUND_STATUS_LABEL[status],
+                                }))}
+                                aria-label="退款状态"
+                                placeholder="全部退款状态"
+                            />
+                        </ListWorkspaceFilterField>
+                    </ListFilterSection>
                     {f.canFilterPeople && (
-                        <fieldset className="min-w-0 space-y-3 border-t pt-4">
-                            <legend className="pr-2 text-sm font-medium">
-                                人员
-                            </legend>
-                            <div className="grid min-w-0 gap-3">
-                                <PersonDirectoryFilter
-                                    id={`${prefix}-owner`}
-                                    label="跟进人"
-                                    value={f.ownerUserIdsDraft}
-                                    onChange={f.setOwnerUserIdsDraft}
-                                    category="business"
-                                />
-                                <PersonDirectoryFilter
-                                    id={`${prefix}-handler`}
-                                    label="异常处理人"
-                                    value={f.handlerUserIdsDraft}
-                                    onChange={f.setHandlerUserIdsDraft}
-                                    category="business"
-                                />
-                            </div>
-                        </fieldset>
+                        <ListFilterSection legend="人员">
+                            <PersonDirectoryFilter
+                                id={`${prefix}-owner`}
+                                label="跟进人"
+                                value={f.ownerUserIdsDraft}
+                                onChange={f.setOwnerUserIdsDraft}
+                                category="business"
+                            />
+                            <PersonDirectoryFilter
+                                id={`${prefix}-handler`}
+                                label="异常处理人"
+                                value={f.handlerUserIdsDraft}
+                                onChange={f.setHandlerUserIdsDraft}
+                                category="business"
+                            />
+                        </ListFilterSection>
                     )}
                     {f.canFilterOrg && (
-                        <fieldset className="min-w-0 border-t pt-4">
-                            <legend className="sr-only">业务组织</legend>
+                        <ListFilterSection legend="组织">
                             <OrganizationUnitFilter
                                 id={`${prefix}-org`}
                                 label="业务组织"
@@ -235,18 +217,26 @@ export function SupplierOrdersListToolbar({
                                     f.setIncludeDescendantsDraft
                                 }
                             />
-                        </fieldset>
+                        </ListFilterSection>
                     )}
-                </div>
+                </ListFilterSections>
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "笔供应商订单",
-                loadingLabel: "正在加载供应商订单…",
-            })}
+            resultStatus={failed ? "查询未完成" : loading ? "查询中…" : null}
+            extraPrimary={
+                f.hasActiveFilters && !hasFoldedFilters ? (
+                    <Button
+                        id={`${prefix}-clear-all`}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={f.clearAllFilters}
+                    >
+                        {listFilterText.clear}
+                    </Button>
+                ) : null
+            }
             chips={f.appliedChips}
+            foldedChipKeys={MORE_CHIP_KEYS}
             onClearChip={(key) =>
                 f.removeFilter(key as SupplierOrdersFilterKey)
             }

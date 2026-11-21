@@ -1,27 +1,27 @@
 "use client"
 
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
-
+import { ArrowUpRightIcon } from "lucide-react"
 import Link from "next/link"
 
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { DisabledActionHint } from "@/features/master-data/components/list/list-chrome"
 import { MasterDataPreviewPanel } from "@/features/master-data/components/list/master-data-preview"
-import { toAutomationIdSegment } from "@/lib/automation-id"
-import { restoreListRowFocus } from "@/lib/list-row-focus"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type {
     MasterDataCenterView,
     MasterDataListItem,
 } from "@/features/master-data/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function WarehousePreviewSheet({
     previewRow,
     lastFocusedRowId,
     previewDetail,
     previewDetailLoading,
+    previewDetailFailed,
     onClose,
     onRevise,
     onDisable,
@@ -32,6 +32,7 @@ export function WarehousePreviewSheet({
     lastFocusedRowId: { current: string | null }
     previewDetail: MasterDataCenterView | null | undefined
     previewDetailLoading: boolean
+    previewDetailFailed: boolean
     onClose: () => void
     onRevise: (row: MasterDataListItem) => void
     onDisable: (row: MasterDataListItem) => void
@@ -46,17 +47,22 @@ export function WarehousePreviewSheet({
             idPrefix="master-data-warehouse-preview-sheet"
             open={previewRow != null}
             onOpenChange={(open) => {
-                if (!open) {
-                    onClose()
-                    restoreListRowFocus(lastFocusedRowId.current)
-                }
+                if (!open) onClose()
+            }}
+            finalFocus={() => {
+                const rowId = lastFocusedRowId.current
+                return rowId
+                    ? document.querySelector<HTMLElement>(
+                          `[data-row-id="${CSS.escape(rowId)}"]`,
+                      )
+                    : true
             }}
             size="preview"
             title={previewRow?.name ?? "基础资料预览"}
             identity={
                 previewRow ? (
                     <span className="num">
-                        {previewRow.stableNo}
+                        仓库代码：{previewRow.stableNo}
                         {canReadRevisions
                             ? ` · v${previewRow.revisionNo}`
                             : null}
@@ -145,7 +151,11 @@ export function WarehousePreviewSheet({
                                     />
                                 }
                             >
-                                {masterDataCopy.actionOpenDetail}
+                                打开仓库资料
+                                <ArrowUpRightIcon
+                                    data-icon="inline-end"
+                                    aria-hidden
+                                />
                             </Button>
                         </PermissionGuard>
                     </>
@@ -153,13 +163,23 @@ export function WarehousePreviewSheet({
             }
         >
             {previewRow ? (
-                <MasterDataPreviewPanel
-                    row={previewRow}
-                    detail={previewDetail}
-                    detailLoading={previewDetailLoading}
-                    showRevision={canReadRevisions}
-                    showActionBlockers={canMaintainHandlers}
-                />
+                <>
+                    <MasterDataPreviewPanel
+                        row={previewRow}
+                        detail={previewDetail}
+                        detailLoading={previewDetailLoading}
+                        showRevision={canReadRevisions}
+                        showActionBlockers={canMaintainHandlers}
+                    />
+                    {previewDetailFailed && !previewDetail ? (
+                        <p
+                            role="status"
+                            className="text-xs text-muted-foreground"
+                        >
+                            暂时无法读取补充资料，请打开仓库资料重试。
+                        </p>
+                    ) : null}
+                </>
             ) : null}
         </QuickPreviewSheet>
     )

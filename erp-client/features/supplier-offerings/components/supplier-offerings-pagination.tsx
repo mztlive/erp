@@ -1,68 +1,103 @@
 "use client"
 
-import { listWorkspaceFilterStatusText } from "@/components/business/list-workspace"
+import {
+    ChevronLeftIcon,
+    ChevronRightIcon,
+    ChevronsLeftIcon,
+    ChevronsRightIcon,
+} from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 
-export type SupplierOfferingsPaginationProps = {
+type SupplierOfferingsPaginationProps = {
     page: number
-    totalPages: number
-    resultCount?: number
+    pageSize: number
+    total: number
     loading: boolean
-    failed: boolean
-    disabled: boolean
     onPageChange: (page: number) => void
 }
 
-/** 供给列表分页控件；页码写入 URL，由查询消费。 */
+/** 固定页长，保留供给链接的页码口径与原生翻页 ID。 */
 export function SupplierOfferingsPagination({
     page,
-    totalPages,
-    resultCount,
+    pageSize,
+    total,
     loading,
-    failed,
-    disabled,
     onPageChange,
 }: SupplierOfferingsPaginationProps) {
+    const totalPages = Math.max(1, Math.ceil(total / pageSize))
+    const needsPager = page > 1 || totalPages > 1
+    const controls = [
+        {
+            key: "first",
+            label: "第一页",
+            icon: ChevronsLeftIcon,
+            target: 1,
+            disabled: page <= 1,
+        },
+        {
+            key: "prev",
+            label: "上一页",
+            icon: ChevronLeftIcon,
+            target: page - 1,
+            disabled: page <= 1,
+        },
+        {
+            key: "next",
+            label: "下一页",
+            icon: ChevronRightIcon,
+            target: page + 1,
+            disabled: page >= totalPages,
+        },
+        {
+            key: "last",
+            label: "最后一页",
+            icon: ChevronsRightIcon,
+            target: totalPages,
+            disabled: page >= totalPages,
+        },
+    ]
+
     return (
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-sm">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span aria-live="polite">
-                    {listWorkspaceFilterStatusText({
-                        loading,
-                        failed,
-                        resultCount,
-                        noun: "条供给",
-                        loadingLabel: "正在加载供给…",
-                    })}
-                </span>
-                <span>
-                    第 {page} / {totalPages} 页
-                </span>
-            </div>
-            <div className="flex items-center gap-2">
-                <Button
-                    id="supplier-offerings-pagination-prev"
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-8 px-3 text-xs"
-                    disabled={page <= 1 || disabled}
-                    onClick={() => onPageChange(Math.max(1, page - 1))}
-                >
-                    上一页
-                </Button>
-                <Button
-                    id="supplier-offerings-pagination-next"
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-8 px-3 text-xs"
-                    disabled={page >= totalPages || disabled}
-                    onClick={() => onPageChange(page + 1)}
-                >
-                    下一页
-                </Button>
-            </div>
+        <div
+            data-slot="data-table-pagination"
+            className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
+        >
+            <span aria-live="polite" className="text-muted-foreground">
+                <span className="num">{pageSize}</span> 条 / 页 · 共{" "}
+                <span className="num">{total.toLocaleString("zh-CN")}</span> 条
+                {!needsPager ? " · 已全部显示" : null}
+            </span>
+            {needsPager ? (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <span className="num text-muted-foreground">
+                        第 {page} / {totalPages} 页
+                    </span>
+                    <div
+                        role="group"
+                        aria-label="翻页"
+                        className="flex items-center gap-1"
+                    >
+                        {controls.map(
+                            ({ key, label, icon: Icon, target, disabled }) => (
+                                <Button
+                                    key={key}
+                                    id={`supplier-offerings-pagination-${key}`}
+                                    type="button"
+                                    size="icon-sm"
+                                    variant="outline"
+                                    disabled={loading || disabled}
+                                    onClick={() => onPageChange(target)}
+                                    aria-label={label}
+                                    title={label}
+                                >
+                                    <Icon aria-hidden="true" />
+                                </Button>
+                            ),
+                        )}
+                    </div>
+                </div>
+            ) : null}
         </div>
     )
 }

@@ -26,6 +26,7 @@ import type {
 
 interface AdjustmentDialogProps {
     open: boolean
+    finalFocus?: React.ComponentProps<typeof DialogContent>["finalFocus"]
     meta: AdjustmentMeta | null
     form: AdjustmentFormApi
     pending: boolean
@@ -36,6 +37,7 @@ interface AdjustmentDialogProps {
 
 export function AdjustmentDialog({
     open,
+    finalFocus,
     meta,
     form,
     onCancel,
@@ -51,6 +53,7 @@ export function AdjustmentDialog({
             }}
         >
             <DialogContent
+                finalFocus={finalFocus}
                 closeButtonId="inventory-adjustment-dialog-close"
                 showCloseButton={!pending && !unresolved}
                 className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"

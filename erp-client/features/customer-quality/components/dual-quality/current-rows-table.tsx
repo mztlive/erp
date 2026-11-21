@@ -1,18 +1,31 @@
 "use client"
 
-import { MoneyValue } from "@/components/business"
-import { Button } from "@/components/ui/button"
+import * as React from "react"
+import type { ColumnDef } from "@tanstack/react-table"
+
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
+    MoneyValue,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableRowActions,
+    TableTextCell,
+} from "@/components/business"
+import {
+    ListDataTable,
+    ListWorkSurface,
+} from "@/components/business/list-workspace"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { CurrentQualityRow } from "../../dual-types"
 import type { PatchDual } from "../../lib/dual-filter-state"
+
+const currentCustomerCountColumn: ColumnDef<CurrentQualityRow> = {
+    id: "customerCount",
+    header: "客户数",
+    meta: { align: "end", numeric: true, width: "quantity" },
+    cell: ({ row }) => (
+        <TableTextCell value={row.original.customerCount?.toString()} numeric />
+    ),
+}
 
 export function CurrentRowsTable({
     items,
@@ -24,103 +37,149 @@ export function CurrentRowsTable({
     patchDual: PatchDual
 }) {
     const grouped = dimension !== "customer"
+    const data = React.useMemo(() => [...items], [items])
+    const columns = React.useMemo<ColumnDef<CurrentQualityRow>[]>(() => {
+        const result: ColumnDef<CurrentQualityRow>[] = [
+            {
+                id: "identity",
+                header: grouped ? "分组" : "客户",
+                meta: { width: "flex" },
+                cell: ({ row: { original: row } }) => {
+                    const name = grouped
+                        ? (dimension === "owner_user"
+                              ? row.ownerUserName
+                              : row.ownerOrgUnitName) ||
+                          (!row.groupId ? row.label : undefined)
+                        : row.customerName
+                    const secondary = grouped ? undefined : row.customerNo
+                    return (
+                        <TableIdentityCell
+                            primary={name || <TableEmptyCell />}
+                            primaryTitle={name}
+                            secondary={secondary}
+                            secondaryTitle={secondary}
+                            numericSecondary
+                        />
+                    )
+                },
+            },
+            {
+                id: "ownerUser",
+                header: "现任负责人",
+                cell: ({ row }) => (
+                    <TableTextCell
+                        value={row.original.ownerUserName}
+                        clamp={1}
+                    />
+                ),
+            },
+            {
+                id: "ownerOrg",
+                header: "现任组织",
+                cell: ({ row }) => (
+                    <TableTextCell
+                        value={row.original.ownerOrgUnitName}
+                        clamp={1}
+                    />
+                ),
+            },
+            ...(grouped ? [currentCustomerCountColumn] : []),
+            {
+                id: "orderCount",
+                header: "订单数",
+                meta: { align: "end", numeric: true, width: "quantity" },
+                cell: ({ row }) => (
+                    <TableTextCell
+                        value={row.original.orderCount.toString()}
+                        numeric
+                    />
+                ),
+            },
+            {
+                id: "grossTotal",
+                header: "含税总额",
+                meta: { align: "end", numeric: true, width: "amount" },
+                cell: ({ row }) => (
+                    <MoneyValue
+                        value={row.original.grossTotal}
+                        taxBasis="gross"
+                        display="compact"
+                    />
+                ),
+            },
+            {
+                id: "unpricedCount",
+                header: "待核价单数",
+                meta: { align: "end", numeric: true, width: "quantity" },
+                cell: ({ row }) => (
+                    <TableTextCell
+                        value={row.original.unpricedCount.toString()}
+                        numeric
+                    />
+                ),
+            },
+        ]
+        if (grouped) {
+            result.push({
+                id: "actions",
+                header: "查看明细",
+                meta: { align: "end", width: "status" },
+                cell: ({ row: { original: row } }) => {
+                    if (row.groupId == null) return <TableEmptyCell />
+                    const prefix =
+                        dimension === "owner_user"
+                            ? "user"
+                            : dimension === "owner_org"
+                              ? "org"
+                              : null
+                    if (!prefix) return <TableEmptyCell />
+
+                    const id = `customers-quality-dual-drill-${toAutomationIdSegment(row.rowId)}`
+                    return (
+                        <TableRowActions
+                            moreId={`${id}-more`}
+                            moreLabel="更多操作"
+                            actions={[
+                                {
+                                    id,
+                                    label: "查看明细",
+                                    onClick: () =>
+                                        patchDual({
+                                            ownerGroup: `${prefix}:${row.groupId}`,
+                                            scopeVersion: null,
+                                            dualPage: null,
+                                        }),
+                                },
+                            ]}
+                        />
+                    )
+                },
+            })
+        }
+        return result
+    }, [dimension, grouped, patchDual])
+
     return (
-        <div className="min-w-0">
-            <Table data-density="comfortable" className="min-w-[560px]">
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>{grouped ? "分组" : "客户"}</TableHead>
-                        <TableHead>现任负责人</TableHead>
-                        <TableHead>现任组织</TableHead>
-                        {grouped ? (
-                            <TableHead data-align="end">客户数</TableHead>
-                        ) : null}
-                        <TableHead data-align="end">订单数</TableHead>
-                        <TableHead data-align="end">含税总额</TableHead>
-                        <TableHead data-align="end">待核价单数</TableHead>
-                        {grouped ? (
-                            <TableHead data-align="end">查看明细</TableHead>
-                        ) : null}
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {items.map((row) => {
-                        const drill =
-                            dimension === "owner_user" && row.groupId != null
-                                ? `user:${row.groupId}`
-                                : dimension === "owner_org" &&
-                                    row.groupId != null
-                                  ? `org:${row.groupId}`
-                                  : null
-                        return (
-                            <TableRow key={row.rowId}>
-                                <TableCell className="max-w-48">
-                                    <div className="truncate font-medium">
-                                        {grouped
-                                            ? (row.label ?? row.rowId)
-                                            : (row.customerName ?? row.rowId)}
-                                    </div>
-                                    {!grouped && row.customerNo ? (
-                                        <div className="num truncate text-xs text-muted-foreground">
-                                            {row.customerNo}
-                                        </div>
-                                    ) : null}
-                                </TableCell>
-                                <TableCell className="max-w-40 truncate">
-                                    {row.ownerUserName ??
-                                        row.ownerUserId ??
-                                        "—"}
-                                </TableCell>
-                                <TableCell className="max-w-40 truncate">
-                                    {row.ownerOrgUnitName ??
-                                        row.ownerOrgUnitId ??
-                                        "—"}
-                                </TableCell>
-                                {grouped ? (
-                                    <TableCell className="num" data-align="end">
-                                        {row.customerCount ?? "—"}
-                                    </TableCell>
-                                ) : null}
-                                <TableCell className="num" data-align="end">
-                                    {row.orderCount}
-                                </TableCell>
-                                <TableCell data-align="end">
-                                    <MoneyValue
-                                        value={row.grossTotal}
-                                        taxBasis="gross"
-                                    />
-                                </TableCell>
-                                <TableCell className="num" data-align="end">
-                                    {row.unpricedCount}
-                                </TableCell>
-                                {grouped ? (
-                                    <TableCell data-align="end">
-                                        {drill ? (
-                                            <Button
-                                                id={`customers-quality-dual-drill-${toAutomationIdSegment(row.rowId)}`}
-                                                type="button"
-                                                variant="link"
-                                                size="xs"
-                                                onClick={() =>
-                                                    patchDual({
-                                                        ownerGroup: drill,
-                                                        scopeVersion: null,
-                                                        dualPage: null,
-                                                    })
-                                                }
-                                            >
-                                                查看明细
-                                            </Button>
-                                        ) : (
-                                            "—"
-                                        )}
-                                    </TableCell>
-                                ) : null}
-                            </TableRow>
-                        )
-                    })}
-                </TableBody>
-            </Table>
-        </div>
+        <ListWorkSurface
+            ariaLabel="当前负责明细"
+            className="flex-none"
+            tableClassName="max-lg:[&_[data-column-pinned]]:static"
+            table={
+                <ListDataTable
+                    id="customers-quality-dual-current-table"
+                    caption="当前负责明细"
+                    data={data}
+                    columns={columns}
+                    getRowId={(row) => row.rowId}
+                    rowCount={data.length}
+                    defaultColumnPinning={{
+                        left: ["identity"],
+                        right: ["actions"],
+                    }}
+                    manualPagination
+                    showPagination={false}
+                />
+            }
+        />
     )
 }

@@ -42,10 +42,6 @@ export function useCustomerReceivablesAppliedChips({
 
     return React.useMemo(() => {
         const chips: ReceivableAppliedChip[] = []
-        const queryText = urlState.qParam.trim()
-        if (queryText) {
-            chips.push({ key: "q", label: `搜索：${queryText}` })
-        }
         if (urlState.counterpartyPartyId) {
             const counterparty = data?.counterparties.find(
                 (candidate) =>
@@ -79,13 +75,15 @@ export function useCustomerReceivablesAppliedChips({
         if (urlState.due && urlState.due !== "all") {
             chips.push({
                 key: "due",
-                label: `到期：${DUE_LABEL[urlState.due]}`,
+                label: `到期：${DUE_LABEL[urlState.due]}（未生效）`,
             })
         }
         if (urlState.status) {
             chips.push({
                 key: "status",
-                label: `状态：${RECEIVABLE_STATUS_LABEL[urlState.status]}`,
+                label: `应收状态：${RECEIVABLE_STATUS_LABEL[urlState.status]}${
+                    urlState.view === "receipt" ? "（不适用于回款）" : ""
+                }`,
             })
         }
         if (urlState.salesOrderId && !embedded) {
@@ -123,9 +121,9 @@ export function useCustomerReceivablesAppliedChips({
         urlState.counterpartyPartyId,
         urlState.customerId,
         urlState.due,
-        urlState.qParam,
         urlState.receivableAccountId,
         urlState.salesOrderId,
         urlState.status,
+        urlState.view,
     ])
 }

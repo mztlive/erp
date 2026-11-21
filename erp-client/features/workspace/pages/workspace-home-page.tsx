@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { excelExportText } from "@/lib/ui-text"
 import { useScopeExcelExport } from "@/lib/use-scope-list-export"
+import { cn } from "@/lib/utils"
 import { WorkspaceQueuePanel } from "../components/workspace-queue-panel"
 import { useWorkspaceHome } from "../hooks/use-workspace-home"
 import { deriveWorkItemsFreshness } from "../lib/freshness"
@@ -23,13 +24,6 @@ import {
     invoiceExecutionExportQuery,
 } from "../lib/workspace-invoice"
 import { RoleWorkbenchEntry } from "./role-workbench-entry"
-
-const QUEUE_DESCRIPTIONS = {
-    inbox: "查看并处理需要你办理的事项。",
-    managed: "查看责任范围内的待办事项。",
-    started: "查看已发起审批的当前进度与结果。",
-    history: "查看已处理的事项与处理结果。",
-} as const
 
 export function WorkspaceHomePage() {
     const pathname = usePathname()
@@ -85,38 +79,38 @@ export function WorkspaceHomeView({
     return (
         <PageScaffold
             density="compact"
-            className={`${listWorkspaceStyles.page} min-h-0 overflow-auto`}
+            className={cn(listWorkspaceStyles.page, "min-h-0 overflow-auto")}
         >
             <ListWorkspaceHeader
-                eyebrow="工作"
+                className="min-h-12 flex-row flex-wrap items-center py-2 md:py-0 [&>div:last-child]:max-w-full [&>div:last-child]:flex-wrap [&>div:last-child]:max-md:w-auto"
                 title={
                     home.urlState.view === "managed"
                         ? "范围内待办"
                         : WORKSPACE_QUEUE_ROUTES[home.urlState.view].title
                 }
-                description={
-                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                        <span>{QUEUE_DESCRIPTIONS[home.urlState.view]}</span>
-                        {!home.dashboardQuery.isError && (
-                            <span role="status" className="text-xs">
-                                {home.refreshing ? (
-                                    "正在更新…"
-                                ) : freshness ? (
-                                    <time dateTime={freshness.dateTime}>
-                                        更新于 {freshness.updatedAtLabel}
-                                    </time>
-                                ) : (
-                                    "正在查询"
-                                )}
-                            </span>
-                        )}
-                    </div>
-                }
             >
+                {!home.dashboardQuery.isError && (
+                    <span
+                        role="status"
+                        className="min-w-0 px-1 text-xs text-muted-foreground"
+                    >
+                        {home.refreshing ? (
+                            "正在更新…"
+                        ) : freshness ? (
+                            <time className="num" dateTime={freshness.dateTime}>
+                                更新于 {freshness.updatedAtLabel}
+                            </time>
+                        ) : (
+                            "正在查询"
+                        )}
+                    </span>
+                )}
                 {paymentQueue && canExportPayments && (
                     <Button
                         id="workspace-payment-export"
-                        variant="outline"
+                        type="button"
+                        variant="ghost"
+                        className={listWorkspaceStyles.quietButton}
                         disabled={
                             paymentExport.isPending ||
                             home.refreshing ||
@@ -126,7 +120,10 @@ export function WorkspaceHomeView({
                         onClick={() => paymentExport.mutate(home.urlState)}
                         title="导出当前筛选下的全部待付款记录"
                     >
-                        <DownloadIcon aria-hidden="true" />
+                        <DownloadIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
                         {paymentExport.isPending ? "正在导出…" : "导出 Excel"}
                     </Button>
                 )}
@@ -135,7 +132,8 @@ export function WorkspaceHomeView({
                         <LoadingButton
                             id="workspace-invoice-execution-export"
                             type="button"
-                            variant="outline"
+                            variant="ghost"
+                            className={listWorkspaceStyles.quietButton}
                             loading={invoiceExport.isPending}
                             disabled={
                                 home.refreshing ||
@@ -158,11 +156,16 @@ export function WorkspaceHomeView({
                     )}
                 <Button
                     id="workspace-home-refresh"
-                    variant="outline"
+                    type="button"
+                    variant="ghost"
+                    className={listWorkspaceStyles.quietButton}
                     disabled={home.refreshing}
                     onClick={home.refresh}
                 >
-                    <RefreshCwIcon aria-hidden="true" />
+                    <RefreshCwIcon
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                    />
                     刷新
                 </Button>
             </ListWorkspaceHeader>

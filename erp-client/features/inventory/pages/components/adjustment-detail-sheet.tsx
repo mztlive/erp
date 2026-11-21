@@ -17,6 +17,7 @@ import { formatDateTime } from "@/lib/datetime"
  */
 export function AdjustmentDetailSheet({
     open,
+    finalFocus,
     detail,
     isPending,
     workItemId,
@@ -28,6 +29,7 @@ export function AdjustmentDetailSheet({
     onCancelled,
 }: {
     open: boolean
+    finalFocus?: React.ComponentProps<typeof QuickPreviewSheet>["finalFocus"]
     detail: AdjustmentDetailView | null | undefined
     isPending: boolean
     workItemId?: string
@@ -43,6 +45,7 @@ export function AdjustmentDetailSheet({
         <QuickPreviewSheet
             id="inventory-adjustment-detail-sheet"
             open={open}
+            finalFocus={finalFocus}
             onOpenChange={(nextOpen) => {
                 if (!nextOpen) onClose()
             }}

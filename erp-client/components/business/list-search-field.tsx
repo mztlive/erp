@@ -43,7 +43,7 @@ export function ListSearchField({
     )
 
     return (
-        <InputGroup>
+        <InputGroup data-has-value={value.trim() ? "true" : undefined}>
             <InputGroupAddon>
                 <SearchIcon aria-hidden="true" />
             </InputGroupAddon>

@@ -1,6 +1,6 @@
 "use client"
 
-import * as React from "react"
+import type * as React from "react"
 import { FilterIcon, RotateCcwIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -89,7 +89,6 @@ export function ListFilterTray({
     panelId,
     label,
     open,
-    onOpenChange,
     onApply,
     onReset,
     resetId,
@@ -102,7 +101,6 @@ export function ListFilterTray({
     panelId: string
     label: string
     open: boolean
-    onOpenChange: (open: boolean) => void
     onApply: () => void
     onReset?: () => void
     resetId?: string
@@ -112,21 +110,6 @@ export function ListFilterTray({
     inPortal?: boolean
     children: React.ReactNode
 }) {
-    const sectionRef = React.useRef<HTMLElement | null>(null)
-
-    React.useEffect(() => {
-        if (!open) return
-        const node = sectionRef.current
-        if (!node) return
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape" && !event.defaultPrevented) {
-                onOpenChange(false)
-            }
-        }
-        node.addEventListener("keydown", onKeyDown)
-        return () => node.removeEventListener("keydown", onKeyDown)
-    }, [open, onOpenChange])
-
     const content = (
         <>
             <div
@@ -188,7 +171,6 @@ export function ListFilterTray({
                 )}
             >
                 <section
-                    ref={sectionRef}
                     id={panelId}
                     data-slot="list-filter-tray"
                     data-open={open ? "" : undefined}

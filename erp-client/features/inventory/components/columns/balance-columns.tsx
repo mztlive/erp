@@ -4,49 +4,46 @@ import type { ColumnDef } from "@tanstack/react-table"
 
 import { EyeIcon, SlidersHorizontalIcon } from "lucide-react"
 
-import { TableRowActions, type TableRowAction } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    QuantityValue,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableRowActions,
+    TableTextCell,
+    type TableRowAction,
+} from "@/components/business"
 import { inventoryStatusColumn } from "@/features/inventory/components/columns/status-column"
-import { Badge } from "@/components/ui/badge"
-import { formatQty } from "@/features/inventory/components/presentation"
+import { WarehouseSkuIdentity } from "@/features/inventory/components/columns/warehouse-sku-cell"
 import type { StockBalanceRow } from "@/features/inventory/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
+import { compactFixed } from "@/lib/fixed-decimal"
 
 export type BalanceColumnsInput = {
-    rowFocusRef: { current: Map<string, HTMLButtonElement | null> }
-    openDetail: (balanceId: string) => void
+    openDetail?: (balanceId: string) => void
     startAdjustment?: (row: StockBalanceRow) => Promise<void>
     isCreating?: boolean
 }
 
 export function buildBalanceColumns({
-    rowFocusRef,
     openDetail,
     startAdjustment,
     isCreating = false,
 }: BalanceColumnsInput): ColumnDef<StockBalanceRow>[] {
-    return [
+    const columns: ColumnDef<StockBalanceRow>[] = [
         {
             id: "identity",
             header: "仓库 / SKU",
-            meta: { label: "仓库 / SKU", width: "reference" },
+            meta: { label: "仓库 / SKU", width: "flex" },
             cell: ({ row }) => (
-                <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">
-                        {row.original.warehouseName}
-                        <span className="ml-1 num text-xs text-muted-foreground">
-                            {row.original.warehouseCode}
-                        </span>
-                    </div>
-                    <div className="truncate text-sm">
-                        <span className="num">{row.original.skuCode}</span>
-                        <span className="text-muted-foreground"> · </span>
-                        {row.original.skuName}
-                    </div>
-                    <div className="truncate text-xs text-muted-foreground">
-                        {row.original.specSummary}
-                    </div>
-                </div>
+                <WarehouseSkuIdentity
+                    warehouseName={row.original.warehouseName}
+                    warehouseCode={row.original.warehouseCode}
+                    skuCode={row.original.skuCode}
+                    skuName={row.original.skuName}
+                    specSummary={row.original.specSummary}
+                />
             ),
         },
         {
@@ -54,47 +51,63 @@ export function buildBalanceColumns({
             header: "账面现存",
             meta: {
                 label: "账面现存",
-                width: "amount",
+                width: "quantity",
                 align: "end",
                 numeric: true,
             },
-            cell: ({ row }) =>
-                formatQty(row.original.onHandQuantity, row.original.baseUnit),
+            cell: ({ row }) => (
+                <QuantityValue
+                    value={row.original.onHandQuantity}
+                    unit={row.original.baseUnit}
+                />
+            ),
         },
         {
             id: "reserved",
             header: "有效预占",
             meta: {
                 label: "有效预占",
-                width: "amount",
+                width: "quantity",
                 align: "end",
                 numeric: true,
             },
-            cell: ({ row }) =>
-                formatQty(row.original.reservedQuantity, row.original.baseUnit),
+            cell: ({ row }) => (
+                <QuantityValue
+                    value={row.original.reservedQuantity}
+                    unit={row.original.baseUnit}
+                />
+            ),
         },
         {
             id: "available",
             header: "可用数量",
             meta: {
                 label: "可用数量",
-                width: "amount",
+                width: "quantity",
                 align: "end",
                 numeric: true,
             },
-            cell: ({ row }) => (
-                <div className="flex flex-col items-end gap-0.5">
-                    {formatQty(
-                        row.original.availableQuantity,
-                        row.original.baseUnit,
-                    )}
-                    {row.original.availableQuantity === "0" ? (
-                        <Badge variant="destructive" className="text-2xs">
-                            零可用
-                        </Badge>
-                    ) : null}
-                </div>
-            ),
+            cell: ({ row }) => {
+                const { availableQuantity, baseUnit, availability } =
+                    row.original
+                const zero = compactFixed(availableQuantity) === "0"
+                return (
+                    <div className="flex flex-col items-end gap-0.5">
+                        <QuantityValue
+                            value={availableQuantity}
+                            unit={baseUnit}
+                            tone={zero ? "warning" : "neutral"}
+                        />
+                        {zero && availability !== "zero" ? (
+                            <BusinessStatusBadge
+                                context="list"
+                                tone="warning"
+                                label="零可用"
+                            />
+                        ) : null}
+                    </div>
+                )
+            },
         },
         inventoryStatusColumn<StockBalanceRow>(),
         {
@@ -102,24 +115,28 @@ export function buildBalanceColumns({
             header: "最后变动",
             meta: { label: "最后变动", width: "default" },
             cell: ({ row }) => (
-                <div className="text-sm">
-                    <div>{row.original.lastMovementTypeLabel}</div>
-                    <div className="num text-xs text-muted-foreground">
-                        {formatDateTime(
-                            row.original.lastMovementAt,
-                            "full",
-                            "passthrough",
-                        )}
-                    </div>
-                </div>
+                <TableIdentityCell
+                    primary={
+                        <TableTextCell
+                            value={row.original.lastMovementTypeLabel}
+                        />
+                    }
+                    secondary={
+                        row.original.lastMovementAt
+                            ? formatDateTime(row.original.lastMovementAt)
+                            : undefined
+                    }
+                    numericSecondary
+                />
             ),
         },
-        {
+    ]
+
+    if (openDetail || startAdjustment)
+        columns.push({
             id: "actions",
-            size: 208,
-            minSize: 208,
             header: "操作",
-            meta: { label: "操作", width: "default", align: "end" },
+            meta: { label: "操作", width: "status", align: "end" },
             cell: ({ row }) => {
                 const segment = toAutomationIdSegment(row.original.balanceId)
                 const hasCreateAction =
@@ -129,24 +146,21 @@ export function buildBalanceColumns({
                 )?.message
                 const shownProduct =
                     row.original.skuName.trim() || row.original.skuCode.trim()
-                const actions: TableRowAction[] = [
-                    {
+                const actions: TableRowAction[] = []
+                if (openDetail) {
+                    actions.push({
                         id: `inventory-ledger-balance-row-${segment}-view`,
                         label: "查看",
                         icon: EyeIcon,
-                        buttonRef: (el) => {
-                            rowFocusRef.current.set(row.original.balanceId, el)
-                        },
                         onClick: () => openDetail(row.original.balanceId),
-                    },
-                ]
-                if (hasCreateAction && startAdjustment) {
+                    })
+                }
+                if (startAdjustment && (hasCreateAction || blockerMessage)) {
                     actions.push({
                         id: `inventory-ledger-balance-row-${segment}-adjust`,
                         label: isCreating ? "创建中…" : "库存调整",
                         icon: SlidersHorizontalIcon,
-                        emphasis: "outline",
-                        disabled: isCreating,
+                        disabled: isCreating || !hasCreateAction,
                         loading: isCreating,
                         onClick: () => {
                             void startAdjustment(row.original)
@@ -156,9 +170,11 @@ export function buildBalanceColumns({
                             : {}),
                     })
                 }
+                if (!actions.length) return <TableEmptyCell />
                 return (
                     <TableRowActions
                         actions={actions}
+                        className="max-sm:[&_[data-slot=button]]:px-1"
                         moreId={`inventory-ledger-balance-row-${segment}-more`}
                         moreLabel={
                             shownProduct
@@ -168,6 +184,6 @@ export function buildBalanceColumns({
                     />
                 )
             },
-        },
-    ]
+        })
+    return columns
 }

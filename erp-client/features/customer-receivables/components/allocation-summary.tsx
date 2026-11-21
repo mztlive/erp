@@ -6,18 +6,18 @@ export function allocationSummaryCell(row: {
     allocatedTotal: string
 }) {
     return (
-        <div className="text-right">
+        <div className="flex flex-col items-end gap-1">
             <div>
                 <span className="mr-2 text-xs text-muted-foreground">
                     未分配
                 </span>
-                <MoneyValue value={row.unallocatedAmount} />
+                <MoneyValue display="exact" value={row.unallocatedAmount} />
             </div>
-            <div className="mt-1">
+            <div>
                 <span className="mr-2 text-xs text-muted-foreground">
                     净已分配
                 </span>
-                <MoneyValue value={row.allocatedTotal} />
+                <MoneyValue display="exact" value={row.allocatedTotal} />
             </div>
         </div>
     )

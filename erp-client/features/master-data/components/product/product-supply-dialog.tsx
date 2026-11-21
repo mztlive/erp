@@ -55,6 +55,7 @@ export function ProductSupplyDialog({
     onRetryOfferings,
     onAddSupply,
     onOpenChange,
+    finalFocus,
 }: {
     product: MasterDataListItem | null
     skus: readonly ProductListSkuSummary[]
@@ -67,7 +68,9 @@ export function ProductSupplyDialog({
     onRetryOfferings: () => void
     onAddSupply: (sku: ProductListSkuSummary) => void
     onOpenChange: (open: boolean) => void
+    finalFocus: () => HTMLElement | true
 }) {
+    const addingSupplyRef = React.useRef(false)
     const currentOfferingsBySku = React.useMemo(() => {
         const grouped = new Map<string, SupplierOfferingView[]>()
         for (const offering of offerings) {
@@ -82,7 +85,11 @@ export function ProductSupplyDialog({
     return (
         <Dialog open={product != null} onOpenChange={onOpenChange}>
             <DialogContent
+                id="master-data-product-supply-dialog"
                 closeButtonId="master-data-product-supply-close"
+                finalFocus={() =>
+                    addingSupplyRef.current ? false : finalFocus()
+                }
                 className="max-h-[90vh] overflow-y-auto sm:max-w-5xl"
             >
                 <DialogHeader>
@@ -98,6 +105,7 @@ export function ProductSupplyDialog({
 
                 {skuError ? (
                     <BusinessFailureState
+                        idPrefix="master-data-product-supply-skus"
                         title="SKU 信息加载失败"
                         error={skuError}
                         onRetry={onRetrySkus}
@@ -119,6 +127,7 @@ export function ProductSupplyDialog({
                     <div className="space-y-4">
                         {offeringError ? (
                             <BusinessFailureState
+                                idPrefix="master-data-product-supply-offerings"
                                 title="供给信息加载失败"
                                 error={offeringError}
                                 onRetry={onRetryOfferings}
@@ -171,7 +180,10 @@ export function ProductSupplyDialog({
                                                 type="button"
                                                 size="sm"
                                                 variant="outline"
-                                                onClick={() => onAddSupply(sku)}
+                                                onClick={() => {
+                                                    addingSupplyRef.current = true
+                                                    onAddSupply(sku)
+                                                }}
                                             >
                                                 <PlusIcon
                                                     data-icon="inline-start"

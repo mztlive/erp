@@ -156,8 +156,8 @@ export function useInventoryLedgerUrlState(): InventoryLedgerUrlState {
         qParam.trim() ||
         warehouseId ||
         skuId ||
-        salesOrderLineId ||
-        adjustmentIdParam ||
+        (view === "reservation" && salesOrderLineId) ||
+        (view === "adjustment" && adjustmentIdParam) ||
         (view === "balance" && availability !== "all") ||
         (view === "movement" && movementType.length > 0) ||
         (view === "movement" && (hasOccurredFromParam || hasOccurredToParam)) ||

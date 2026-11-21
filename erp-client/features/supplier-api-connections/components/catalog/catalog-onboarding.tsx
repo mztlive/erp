@@ -1,6 +1,9 @@
 import type { ReactNode } from "react"
 import { PackageSearchIcon, PlugZapIcon } from "lucide-react"
-import { BusinessEmptyState } from "@/components/business"
+import {
+    BusinessEmptyState,
+    listWorkspaceEmptyStateClassName,
+} from "@/components/business"
 import { cn } from "@/lib/utils"
 
 const steps = [
@@ -21,19 +24,16 @@ export function CatalogOnboarding({
     step: 0 | 1
 }) {
     return (
-        <section
-            aria-label="供应商品库使用引导"
-            className="overflow-hidden rounded-xl border bg-card"
-        >
+        <section aria-label="供应商品库使用引导" className="min-w-0">
             <BusinessEmptyState
                 kind="no-data"
                 icon={step === 0 ? PlugZapIcon : PackageSearchIcon}
                 title={title}
                 description={description}
                 action={action}
-                className="px-6 py-12 sm:py-16"
+                className={listWorkspaceEmptyStateClassName}
             />
-            <ol className="grid gap-5 border-t bg-muted/30 px-6 py-6 sm:grid-cols-3 sm:gap-8">
+            <ol className="grid gap-5 border-t border-border/60 py-6 sm:grid-cols-3 sm:gap-8">
                 {steps.map((item, index) => (
                     <li
                         key={item.title}
@@ -43,7 +43,7 @@ export function CatalogOnboarding({
                         <span
                             aria-hidden="true"
                             className={cn(
-                                "flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-medium",
+                                "num flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-medium",
                                 index === step
                                     ? "border-primary bg-primary text-primary-foreground"
                                     : "bg-background text-muted-foreground",
@@ -51,7 +51,7 @@ export function CatalogOnboarding({
                         >
                             {index + 1}
                         </span>
-                        <div className="space-y-1">
+                        <div className="flex flex-col gap-1">
                             <p className="text-sm font-medium">{item.title}</p>
                             <p className="text-xs leading-relaxed text-muted-foreground">
                                 {item.description}

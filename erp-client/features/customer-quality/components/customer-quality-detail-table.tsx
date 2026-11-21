@@ -7,16 +7,11 @@ import type {
     SortingState,
 } from "@tanstack/react-table"
 
+import { BusinessFailureState } from "@/components/business"
 import {
-    BusinessEmptyState,
-    BusinessFailureState,
-    DataTable,
-} from "@/components/business"
-import {
+    ListDataTable,
     ListWorkSurface,
-    listWorkspaceEmptyStateClassName,
 } from "@/components/business/list-workspace"
-import { Button } from "@/components/ui/button"
 import type { CustomerQualityRow, CustomerQualityView } from "../types"
 
 /**
@@ -56,86 +51,75 @@ export function CustomerQualityDetailTable({
     onRetryView: () => void
     loading: boolean
 }) {
-    const loadFailed = viewError != null
-    const showEmpty = !loadFailed && !loading && items.length === 0
-
     return (
-        <div
-            ref={sectionRef}
-            tabIndex={-1}
-            data-slot="customer-detail-table"
-            className="flex min-w-0 flex-col focus:outline-none"
-        >
-            <ListWorkSurface
-                ariaLabel="客户经营质量明细"
-                toolbar={toolbar}
-                table={
-                    <DataTable
-                        id="customers-quality-detail-table"
-                        data={[...items]}
-                        columns={columns}
-                        defaultColumnVisibility={{ latestBusinessAt: false }}
-                        defaultColumnPinning={{ left: ["customerName"] }}
-                        getRowId={(row) => row.customerId}
-                        rowCount={filteredTotal}
-                        pagination={pagination}
-                        onPaginationChange={onPaginationChange}
-                        sorting={sorting}
-                        onSortingChange={onSortingChange}
-                        layout="flush"
-                        loading={loading}
-                        errorState={
-                            loadFailed ? (
-                                <BusinessFailureState
-                                    title="经营质量数据加载失败"
-                                    error={viewError}
-                                    onRetry={onRetryView}
-                                />
-                            ) : undefined
-                        }
-                        emptyState={
-                            showEmpty ? (
-                                emptyKind === "filter" ? (
-                                    <BusinessEmptyState
-                                        kind="filter"
-                                        title="当前筛选无客户结果"
-                                        description={
-                                            <>
-                                                上方汇总指标统计当前期间与权限范围内的全部客户。筛选：
-                                                {filterSummary}
-                                            </>
-                                        }
-                                        className={
-                                            listWorkspaceEmptyStateClassName
-                                        }
-                                        action={
-                                            <Button
-                                                id="customers-quality-detail-clear-filters"
-                                                type="button"
-                                                size="sm"
-                                                variant="secondary"
-                                                className="rounded-lg shadow-none"
-                                                onClick={onClearFilters}
-                                            >
-                                                清除筛选
-                                            </Button>
-                                        }
-                                    />
-                                ) : (
-                                    <BusinessEmptyState
-                                        kind="no-data"
-                                        title="期间内无授权经营记录"
-                                        description="可调整统计期间或数据范围后重查。"
-                                        className={
-                                            listWorkspaceEmptyStateClassName
-                                        }
-                                    />
-                                )
-                            ) : undefined
-                        }
-                    />
-                }
-            />
-        </div>
+        <ListWorkSurface
+            ariaLabel="客户经营质量明细"
+            className="flex-none"
+            toolbar={
+                <>
+                    <div
+                        id="customers-quality-detail-heading"
+                        ref={sectionRef}
+                        tabIndex={-1}
+                        data-slot="customer-detail-table"
+                        className="relative h-0 focus:outline-none"
+                    >
+                        <h2 className="sr-only">客户经营质量明细</h2>
+                    </div>
+                    {toolbar}
+                </>
+            }
+            tableClassName="[&_[data-slot=table-container]]:max-h-[max(16rem,60dvh)] [&_[data-slot=table-container]]:overflow-auto"
+            table={
+                <ListDataTable
+                    id="customers-quality-detail-table"
+                    caption="客户经营质量明细"
+                    data={[...items]}
+                    columns={columns}
+                    defaultColumnOrder={[
+                        "customerName",
+                        "tags",
+                        "salesGrossAmount",
+                        "costCoverageRate",
+                        "actualProfitLossNet",
+                        "receivableOpenGross",
+                        "exceptions",
+                        "latestBusinessAt",
+                    ]}
+                    defaultColumnVisibility={{ latestBusinessAt: false }}
+                    defaultColumnPinning={{ left: ["customerName"] }}
+                    getRowId={(row) => row.customerId}
+                    rowLabel={(row) =>
+                        `${row.customerName}（${row.customerNo}）`
+                    }
+                    rowCount={filteredTotal}
+                    pagination={pagination}
+                    onPaginationChange={onPaginationChange}
+                    sorting={sorting}
+                    onSortingChange={onSortingChange}
+                    loading={loading}
+                    showToolbarSummary={false}
+                    hasActiveFilters={emptyKind === "filter"}
+                    clearFiltersButtonId="customers-quality-detail-clear-filters"
+                    onClearFilters={onClearFilters}
+                    emptyCopy={{
+                        filterTitle: "当前筛选无客户结果",
+                        filterDescription: `上方汇总指标统计当前期间与权限范围内的全部客户。筛选：${filterSummary}`,
+                        emptyTitle: "期间内无授权经营记录",
+                        emptyDescription: "可调整统计期间或数据范围后重查。",
+                    }}
+                    errorState={
+                        viewError != null ? (
+                            <BusinessFailureState
+                                idPrefix="customers-quality-detail-table"
+                                title="经营质量数据加载失败"
+                                error={viewError}
+                                onRetry={onRetryView}
+                            />
+                        ) : undefined
+                    }
+                />
+            }
+        />
     )
 }

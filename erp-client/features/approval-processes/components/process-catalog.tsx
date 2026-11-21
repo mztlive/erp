@@ -17,7 +17,7 @@ import {
     type LucideIcon,
 } from "lucide-react"
 import { TableRowActions } from "@/components/business/table-row-actions"
-import { StatusBadge } from "@/components/ui/status-badge"
+import { BusinessStatusBadge } from "@/components/business/values"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     configurationStatusLabel,
@@ -80,7 +80,7 @@ export function ProcessCatalog({
         (item) => item.approval_requirement === "NO_APPROVAL",
     )
     return (
-        <div className="space-y-6 pb-2">
+        <div className="flex flex-col gap-6 pb-2">
             {required.length > 0 && (
                 <ul
                     aria-label="审批流程"
@@ -101,12 +101,12 @@ export function ProcessCatalog({
             {exempt.length > 0 && (
                 <section
                     aria-labelledby={`${id}-exempt-title`}
-                    className="space-y-3 border-t border-border/70 pt-5"
+                    className="flex flex-col gap-3 border-t border-border/60 pt-4"
                 >
                     <div className="flex items-center gap-2">
                         <h2
                             id={`${id}-exempt-title`}
-                            className="text-sm font-medium text-muted-foreground"
+                            className="text-body-compact font-medium text-muted-foreground"
                         >
                             无需审批
                         </h2>
@@ -130,7 +130,7 @@ export function ProcessCatalog({
                                         aria-hidden="true"
                                         className="size-4 shrink-0 text-muted-foreground"
                                     />
-                                    <span className="min-w-0 break-words text-sm text-muted-foreground">
+                                    <span className="min-w-0 break-words text-body-compact text-muted-foreground">
                                         {documentTypeLabel(
                                             item.document_type,
                                             item.document_type_label,
@@ -171,44 +171,54 @@ function ProcessCard({
         <li
             data-document-type={item.document_type}
             data-blocked={missing ? "true" : "false"}
-            className="relative flex min-w-0 items-center gap-2 rounded-lg border border-border/80 bg-card px-4 py-4 transition-colors hover:bg-muted/20 focus-within:border-primary/40"
+            className="group/row relative flex min-w-0 items-center gap-2 rounded-lg border border-border/75 bg-card px-4 py-3 transition-colors hover:bg-row-hover focus-within:border-primary/40"
         >
             <Link
                 id={`${id}-row-${segment}-open`}
                 href={href}
-                className="group flex min-w-0 flex-1 items-start gap-3 rounded-sm py-1 after:absolute after:inset-0 after:rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                className="flex min-w-0 flex-1 items-start gap-3 rounded-sm after:absolute after:inset-0 after:rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
             >
                 <Icon
                     aria-hidden="true"
                     className="mt-0.5 size-4 shrink-0 text-muted-foreground"
                 />
-                <div className="min-w-0 space-y-2">
-                    <h2 className="text-sm font-medium leading-5 break-words group-hover:text-primary">
+                <div className="flex min-w-0 flex-col gap-1.5">
+                    <h2 className="text-body-compact font-medium break-words group-hover/row:text-primary">
                         {label}
                     </h2>
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                        {missing ? (
-                            <StatusBadge
-                                label={configurationStatusLabel(
-                                    item.configuration_status,
-                                    item.approval_requirement,
-                                )}
-                                tone={configurationStatusTone(
-                                    item.configuration_status,
-                                    item.approval_requirement,
-                                )}
-                            />
-                        ) : (
-                            <span className="num">
-                                {item.published_version
-                                    ? `已发布 · ${versionLabel(item.published_version)}`
-                                    : "尚未发布"}
-                            </span>
-                        )}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <BusinessStatusBadge
+                            context="list"
+                            label={
+                                missing
+                                    ? configurationStatusLabel(
+                                          item.configuration_status,
+                                          item.approval_requirement,
+                                      )
+                                    : item.published_version
+                                      ? `已发布 · ${versionLabel(item.published_version)}`
+                                      : "尚未发布"
+                            }
+                            tone={
+                                missing
+                                    ? configurationStatusTone(
+                                          item.configuration_status,
+                                          item.approval_requirement,
+                                      )
+                                    : item.published_version
+                                      ? "success"
+                                      : "neutral"
+                            }
+                            appearance={missing ? "badge" : "quiet"}
+                            className="num"
+                        />
                         {item.draft_version ? (
-                            <span className="num text-warning-soft-foreground">
-                                草稿 {item.draft_version} 待发布
-                            </span>
+                            <BusinessStatusBadge
+                                context="list"
+                                tone="warning"
+                                label={`草稿 ${item.draft_version} 待发布`}
+                                className="num"
+                            />
                         ) : null}
                     </div>
                 </div>

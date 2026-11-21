@@ -22,11 +22,13 @@ const contractKeys = {
 
 export function useContractsQuery(
     query: import("../lib/contracts-url-state").ContractsUrlState,
+    enabled = true,
 ) {
     return useScopedListQuery({
         query,
         queryKey: (value) => [...contractKeys.list(), value],
         fetchPage: fetchContracts,
+        enabled,
         keepPreviousData: true,
     })
 }

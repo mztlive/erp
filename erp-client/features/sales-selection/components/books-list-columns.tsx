@@ -3,8 +3,14 @@
 import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge } from "@/components/business"
-import { Button } from "@/components/ui/button"
+import {
+    BusinessStatusBadge,
+    QuantityValue,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableRowActions,
+    TableTextCell,
+} from "@/components/business"
 import {
     bookIdentity,
     bookletStatusTone,
@@ -18,7 +24,11 @@ import {
 } from "@/features/sales-selection/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
-/** 选品册列表列：客户身份列可打开详情，已提交行链方案。 */
+const identityLinkClass =
+    "block truncate rounded-sm underline-offset-4 hover:text-primary hover:underline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+const rowActionPrefix = (book: SelectionBook) =>
+    `sales-selection-row-${toAutomationIdSegment(bookIdentity(book))}`
+
 export function buildBooksListColumns({
     canOpen,
     canOpenProposal,
@@ -28,185 +38,190 @@ export function buildBooksListColumns({
     canOpenProposal: boolean
     onCopy?: (book: SelectionBook) => void
 }): ColumnDef<SelectionBook>[] {
-    return [
+    const columns: ColumnDef<SelectionBook>[] = [
         {
             id: "customer",
             accessorKey: "customer_name",
             header: "客户",
-            enableSorting: false,
             meta: { label: "客户", width: "flex" },
-            cell: ({ row }) => {
-                const bookId = bookIdentity(row.original)
-                const rowKey = toAutomationIdSegment(bookId)
+            cell: ({ row: { original: book } }) => {
+                const createdAt = formatBookInstant(book.created_at)
+                const secondary =
+                    createdAt !== "—" ? `创建于 ${createdAt}` : undefined
                 return (
-                    <div className="flex min-w-0 flex-col gap-1">
-                        {canOpen ? (
-                            <Button
-                                id={`sales-selection-row-${rowKey}-open`}
-                                variant="link"
-                                size="xs"
-                                className="h-auto min-h-0 justify-start px-0 text-sm leading-5 font-semibold text-foreground"
-                                aria-label={`查看 ${row.original.customer_name} 的选品册`}
-                                render={
-                                    <Link href={`/sales/selection/${bookId}`} />
-                                }
-                            >
-                                {row.original.customer_name}
-                            </Button>
-                        ) : (
-                            <span className="text-sm font-semibold">
-                                {row.original.customer_name}
-                            </span>
-                        )}
-
-                        <span className="num truncate text-xs text-muted-foreground">
-                            {bookId}
-                        </span>
-                    </div>
+                    <TableIdentityCell
+                        primary={
+                            canOpen ? (
+                                <Link
+                                    id={`${rowActionPrefix(book)}-open`}
+                                    href={`/sales/selection/${bookIdentity(book)}`}
+                                    className={identityLinkClass}
+                                    aria-label={`查看 ${book.customer_name} 的选品册`}
+                                    onClick={(event) => event.stopPropagation()}
+                                >
+                                    {book.customer_name}
+                                </Link>
+                            ) : (
+                                book.customer_name
+                            )
+                        }
+                        primaryTitle={book.customer_name}
+                        secondary={secondary}
+                        secondaryTitle={secondary}
+                        numericSecondary
+                    />
                 )
             },
         },
         {
             id: "owner",
             header: "负责销售",
-            enableSorting: false,
-            meta: { label: "负责销售", width: "reference" },
-            cell: ({ row }) => {
-                const name = row.original.sales_owner_name?.trim()
-                return (
-                    <span className="block max-w-32 truncate text-sm">
-                        {name || row.original.sales_owner_user_id}
-                    </span>
-                )
-            },
+            meta: { label: "负责销售", width: "default" },
+            cell: ({ row }) => (
+                <TableTextCell
+                    value={row.original.sales_owner_name}
+                    clamp={1}
+                />
+            ),
         },
         {
             id: "form",
             header: "形态",
-            enableSorting: false,
             meta: { label: "形态", width: "status" },
-            cell: ({ row }) => (
-                <span className="text-sm">
-                    {
-                        SELECTION_FORM_LABEL[
-                            row.original.selection_form ?? row.original.form
-                        ]
+            cell: ({ row: { original: book } }) => (
+                <TableTextCell
+                    value={
+                        SELECTION_FORM_LABEL[book.selection_form ?? book.form]
                     }
-                </span>
+                />
             ),
         },
         {
             id: "submitMode",
             header: "提交方式",
-            enableSorting: false,
             meta: { label: "提交方式", width: "status" },
             cell: ({ row }) => (
-                <span className="text-sm">
-                    {SUBMIT_MODE_LABEL[row.original.submit_mode]}
-                </span>
+                <TableTextCell
+                    value={SUBMIT_MODE_LABEL[row.original.submit_mode]}
+                />
             ),
         },
         {
             id: "status",
             header: "状态",
-            enableSorting: false,
             meta: { label: "状态", width: "status" },
-            cell: ({ row }) => (
+            cell: ({
+                row: {
+                    original: { status },
+                },
+            }) => (
                 <BusinessStatusBadge
                     context="list"
-                    label={BOOKLET_STATUS_LABEL[row.original.status]}
-                    tone={bookletStatusTone(row.original.status)}
+                    label={BOOKLET_STATUS_LABEL[status]}
+                    tone={bookletStatusTone(status)}
+                    appearance={
+                        status === "PUBLISHED" || status === "SUBMITTED"
+                            ? "quiet"
+                            : "badge"
+                    }
                 />
             ),
         },
         {
             id: "display",
             header: "陈列",
-            enableSorting: false,
-            meta: { label: "陈列", width: "quantity", numeric: true },
-            cell: ({ row }) => (
-                <span className="num text-sm">
-                    {row.original.display_count ?? "—"}
-                </span>
-            ),
+            meta: {
+                label: "陈列",
+                width: "quantity",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({
+                row: {
+                    original: { display_count },
+                },
+            }) =>
+                display_count == null ? (
+                    <TableEmptyCell />
+                ) : (
+                    <QuantityValue value={String(display_count)} unit="项" />
+                ),
         },
         {
             id: "proposal",
             header: "方案",
-            enableSorting: false,
-            meta: { label: "方案", width: "reference" },
-            cell: ({ row }) => {
-                const bookId = bookIdentity(row.original)
-                const rowKey = toAutomationIdSegment(bookId)
-                if (!row.original.proposal_id || !row.original.proposal_no) {
-                    return (
-                        <span className="text-sm text-muted-foreground">—</span>
-                    )
-                }
+            meta: { label: "方案", width: "default" },
+            cell: ({ row: { original: book } }) => {
+                if (!book.proposal_id || !book.proposal_no)
+                    return <TableEmptyCell />
                 if (!canOpenProposal)
                     return (
-                        <span className="num text-sm">
-                            {row.original.proposal_no}
-                        </span>
+                        <TableTextCell
+                            value={book.proposal_no}
+                            numeric
+                            clamp={1}
+                        />
                     )
                 return (
-                    <Button
-                        id={`sales-selection-row-${rowKey}-proposal`}
-                        variant="link"
-                        size="xs"
-                        className="num h-auto min-h-0 px-0 text-sm leading-5 font-semibold text-foreground"
-                        render={
-                            <Link
-                                href={`/sales/selection/proposals/${row.original.proposal_id}`}
-                            />
-                        }
+                    <Link
+                        id={`${rowActionPrefix(book)}-proposal`}
+                        href={`/sales/selection/proposals/${book.proposal_id}`}
+                        className={identityLinkClass}
+                        onClick={(event) => event.stopPropagation()}
                     >
-                        {row.original.proposal_no}
-                    </Button>
+                        <TableTextCell
+                            value={book.proposal_no}
+                            numeric
+                            clamp={1}
+                        />
+                    </Link>
                 )
             },
         },
         {
             id: "createdAt",
             header: "创建时间",
-            enableSorting: false,
-            meta: { label: "创建时间", width: "reference", numeric: true },
-            cell: ({ row }) => (
-                <span className="num text-sm text-muted-foreground">
-                    {formatBookInstant(row.original.created_at)}
-                </span>
-            ),
+            meta: {
+                label: "创建时间",
+                width: "amount",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) => {
+                const value = formatBookInstant(row.original.created_at)
+                return value === "—" ? (
+                    <TableEmptyCell />
+                ) : (
+                    <TableTextCell value={value} numeric />
+                )
+            },
         },
-        ...(onCopy
-            ? [
-                  {
-                      id: "actions",
-                      header: "操作",
-                      enableSorting: false,
-                      enableHiding: false,
-                      meta: { label: "操作", width: "status" as const },
-                      cell: ({ row }: { row: { original: SelectionBook } }) => (
-                          <Button
-                              id={`sales-selection-row-${toAutomationIdSegment(bookIdentity(row.original))}-copy`}
-                              type="button"
-                              size="xs"
-                              variant="outline"
-                              disabled={row.original.status === "PREPARING"}
-                              title={
-                                  row.original.status === "PREPARING"
-                                      ? "请准备完成后再复制"
-                                      : undefined
-                              }
-                              onClick={(event) => {
-                                  event.stopPropagation()
-                                  onCopy(row.original)
-                              }}
-                          >
-                              复制
-                          </Button>
-                      ),
-                  },
-              ]
-            : []),
     ]
+
+    if (onCopy)
+        columns.push({
+            id: "actions",
+            header: "操作",
+            enableHiding: false,
+            meta: { label: "操作", width: "status", align: "end" },
+            cell: ({ row: { original: book } }) => (
+                <TableRowActions
+                    moreId={`${rowActionPrefix(book)}-more`}
+                    moreLabel={`${book.customer_name}的选品册更多操作`}
+                    actions={[
+                        {
+                            id: `${rowActionPrefix(book)}-copy`,
+                            label: "复制",
+                            disabled: book.status === "PREPARING",
+                            disabledReason:
+                                book.status === "PREPARING"
+                                    ? "请准备完成后再复制"
+                                    : undefined,
+                            onClick: () => onCopy(book),
+                        },
+                    ]}
+                />
+            ),
+        })
+    return columns
 }

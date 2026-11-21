@@ -1,16 +1,15 @@
 "use client"
 
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
-
 import { useState } from "react"
-import type { MasterDataListItem } from "@/features/master-data/types"
-import { VoucherCategoryStatusDialog } from "@/features/master-data/components/list/voucher-category-status-dialog"
 
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { DictionaryCompactWorkspace } from "@/features/master-data/components/list/dictionary-compact-workspace"
+import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { MasterDataEmptyCreateButton } from "@/features/master-data/components/list/list-empty-actions"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { VoucherCategoryFormDialog } from "@/features/master-data/components/list/voucher-category-form-dialog"
 import { VoucherCategoryPreviewSheet } from "@/features/master-data/components/list/voucher-category-preview-sheet"
+import { VoucherCategoryStatusDialog } from "@/features/master-data/components/list/voucher-category-status-dialog"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import { masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
@@ -18,6 +17,9 @@ import {
     masterDataCreateAction,
     masterDataExportAction,
 } from "@/features/master-data/lib/list-page-actions"
+import type { MasterDataListItem } from "@/features/master-data/types"
+
+const LIST_ID = "master-data-voucher-categories-list"
 
 export function VoucherCategoriesListPage() {
     const [statusTarget, setStatusTarget] = useState<MasterDataListItem | null>(
@@ -32,26 +34,41 @@ export function VoucherCategoriesListPage() {
         enableRevisionFilter: false,
         searchInputRef,
     })
-    const exportPending = state.exportPending
+    const { filters } = state
+    const openCreate = () => state.setCreateOpen(true)
 
     return (
         <ListPageFrame
             resource="voucher-categories"
+            eyebrow=""
             title="卡券类目"
-            description="查看卡券类目资料。"
+            views={
+                <LifecycleMetricStrip
+                    idPrefix={`${LIST_ID}-metrics`}
+                    metrics={state.syncedMetrics}
+                    metricKey={filters.metricKey}
+                    ariaLabel="卡券类目指标筛选"
+                    allLabel="全部类目"
+                    variant="inline"
+                    onChangeLifecycle={filters.changeLifecycle}
+                />
+            }
             exportMeta={state.exportMeta}
             actions={[
-                masterDataExportAction({
-                    id: "master-data-voucher-categories-list-export",
-                    pending: exportPending,
-                    rowCount: state.rows.length,
-                    onClick: state.onExport,
-                }),
+                {
+                    ...masterDataExportAction({
+                        id: `${LIST_ID}-export`,
+                        pending: state.exportPending,
+                        rowCount: state.rows.length,
+                        onClick: state.onExport,
+                    }),
+                    tier: "quiet",
+                },
                 masterDataCreateAction({
-                    id: "master-data-voucher-categories-list-create",
+                    id: `${LIST_ID}-create`,
                     canCreate: state.canCreate,
                     blockedReason: state.createBlockedReason,
-                    onClick: () => state.setCreateOpen(true),
+                    onClick: openCreate,
                 }),
             ]}
             resultsLabel={`卡券类目 · ${state.rows.length} 条结果`}
@@ -59,11 +76,8 @@ export function VoucherCategoriesListPage() {
             loading={state.listQuery.isPending}
         >
             <DictionaryCompactWorkspace
-                listId="master-data-voucher-categories-list"
+                listId={LIST_ID}
                 ariaLabel="卡券类目列表"
-                metricsAriaLabel="卡券类目指标筛选"
-                allLabel="全部类目"
-                hint="选择类目查看详情"
                 countLabel="卡券类目"
                 showRevisionFilter={false}
                 searchPlaceholder={masterDataSearchPlaceholder(
@@ -79,14 +93,13 @@ export function VoucherCategoriesListPage() {
                 emptyAction={
                     state.canCreate ? (
                         <MasterDataEmptyCreateButton
-                            id="master-data-voucher-categories-list-empty-create"
-                            onClick={() => state.setCreateOpen(true)}
+                            id={`${LIST_ID}-empty-create`}
+                            onClick={openCreate}
                         />
                     ) : undefined
                 }
                 searchInputRef={searchInputRef}
-                filters={state.filters}
-                syncedMetrics={state.syncedMetrics}
+                filters={filters}
                 rows={state.rows}
                 previewId={state.previewId}
                 fetching={state.listQuery.isFetching}

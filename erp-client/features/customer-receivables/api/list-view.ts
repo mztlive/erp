@@ -1,6 +1,6 @@
 /** List view + detail view composition (client projection of server data). */
 
-import { apiGet, type Page } from "@/lib/api"
+import { apiGet } from "@/lib/api"
 import { nullIfNotFound } from "@/lib/api/errors"
 
 import type {
@@ -21,6 +21,7 @@ import {
     loadReceipts,
     loadReceivables,
     loadSalesInvoices,
+    type CustomerAccountsPage,
 } from "./loaders"
 import type {
     BackendCustomerReceipt,
@@ -31,9 +32,23 @@ import type {
 } from "./dto"
 import type { CustomerAccountsDetailKind } from "@/features/customer-receivables/types"
 
+export type CustomerAccountsListAccess = Readonly<{
+    receivable: boolean
+    receipt: boolean
+    sales_invoice: boolean
+}>
+
+export type CustomerAccountsLedgerListView = CustomerAccountsListView & {
+    unallocated: CustomerAccountsListView["unallocated"] & {
+        receiptsNoScope: boolean
+        invoicesNoScope: boolean
+    }
+}
+
 export async function fetchCustomerAccountsList(
     query: CustomerAccountsQuery,
-): Promise<CustomerAccountsListView> {
+    access?: CustomerAccountsListAccess,
+): Promise<CustomerAccountsLedgerListView> {
     const emptyPage = {
         items: [],
         total: 0,
@@ -46,9 +61,15 @@ export async function fetchCustomerAccountsList(
     const invoiceActive =
         query.view === "sales_invoice" || query.view === "unallocated"
     const [recvResult, rcptResult, invResult] = await Promise.allSettled([
-        loadAccountPage(query, receivableActive, loadReceivables),
-        loadAccountPage(query, receiptActive, loadReceipts),
-        loadAccountPage(query, invoiceActive, loadSalesInvoices),
+        receivableActive || access?.receivable !== false
+            ? loadAccountPage(query, receivableActive, loadReceivables)
+            : undefined,
+        receiptActive || access?.receipt !== false
+            ? loadAccountPage(query, receiptActive, loadReceipts)
+            : undefined,
+        invoiceActive || access?.sales_invoice !== false
+            ? loadAccountPage(query, invoiceActive, loadSalesInvoices)
+            : undefined,
     ])
     // 当前列表失败正常报错；其他卡片无法读取时显示未知，不阻断已有列表。
     for (const [active, result] of [
@@ -58,24 +79,30 @@ export async function fetchCustomerAccountsList(
     ] as const) {
         if (active && result.status === "rejected") throw result.reason
     }
-    const recvPage =
-        receivableActive && recvResult.status === "fulfilled"
-            ? recvResult.value
-            : (emptyPage as Page<BackendReceivableAccount>)
-    const rcptPage =
-        receiptActive && rcptResult.status === "fulfilled"
-            ? rcptResult.value
-            : (emptyPage as Page<BackendCustomerReceipt>)
-    const invPage =
-        invoiceActive && invResult.status === "fulfilled"
-            ? invResult.value
-            : (emptyPage as Page<BackendInvoice>)
-    const receivableSummary =
-        recvResult.status === "fulfilled" ? recvResult.value.summary : undefined
-    const receiptSummary =
-        rcptResult.status === "fulfilled" ? rcptResult.value.summary : undefined
-    const invoiceSummary =
-        invResult.status === "fulfilled" ? invResult.value.summary : undefined
+    const recvResultPage =
+        recvResult.status === "fulfilled" ? recvResult.value : undefined
+    const rcptResultPage =
+        rcptResult.status === "fulfilled" ? rcptResult.value : undefined
+    const invResultPage =
+        invResult.status === "fulfilled" ? invResult.value : undefined
+    const recvPage: CustomerAccountsPage<BackendReceivableAccount> =
+        (receivableActive ? recvResultPage : undefined) ?? emptyPage
+    const rcptPage: CustomerAccountsPage<BackendCustomerReceipt> =
+        (receiptActive ? rcptResultPage : undefined) ?? emptyPage
+    const invPage: CustomerAccountsPage<BackendInvoice> =
+        (invoiceActive ? invResultPage : undefined) ?? emptyPage
+    const receivableSummary = recvResultPage?.summary
+    const receiptSummary = rcptResultPage?.summary
+    const invoiceSummary = invResultPage?.summary
+
+    const hasDataScope = receivableActive
+        ? recvPage.empty_reason !== "no_scope"
+        : query.view === "receipt"
+          ? rcptPage.empty_reason !== "no_scope"
+          : query.view === "sales_invoice"
+            ? invPage.empty_reason !== "no_scope"
+            : rcptPage.empty_reason !== "no_scope" ||
+              invPage.empty_reason !== "no_scope"
 
     const receivables = (recvPage.items ?? []).map(projectReceivable)
     const partyDisplay = new Map(
@@ -130,7 +157,8 @@ export async function fetchCustomerAccountsList(
         query.customerId ||
         query.due ||
         query.status ||
-        query.salesOrderId,
+        query.salesOrderId ||
+        query.receivableAccountId,
     )
 
     const cpMap = new Map<
@@ -167,8 +195,10 @@ export async function fetchCustomerAccountsList(
         invoices,
         unallocated: {
             receipts: unallocatedReceipts,
+            receiptsNoScope: rcptPage.empty_reason === "no_scope",
             invoices: unallocatedInvoices,
-            note: "下方分别列出待核销的回款与待关联销售单的销项发票。",
+            invoicesNoScope: invPage.empty_reason === "no_scope",
+            note: "下方分别列出本页待核销的回款与待关联销售单的销项发票。",
         },
         counterparties: [...cpMap.values()],
         total,
@@ -176,16 +206,17 @@ export async function fetchCustomerAccountsList(
         permissionVersion: "pv-w11-http-1",
         dataWatermark: `wm-w11-${recvPage.total ?? 0}-${rcptPage.total ?? 0}-${invPage.total ?? 0}`,
         queriedAt: new Date().toISOString(),
-        hasDataScope: true,
+        hasDataScope,
         moduleAllowed: true,
         canRegister: true,
         canExport: true,
-        emptyReason:
-            total === 0
-                ? hasFilters
-                    ? "FILTER_NO_RESULT"
-                    : "NO_DATA"
-                : undefined,
+        emptyReason: !hasDataScope
+            ? "NO_DATA_SCOPE"
+            : total === 0
+              ? hasFilters
+                  ? "FILTER_NO_RESULT"
+                  : "NO_DATA"
+              : undefined,
         submitPolicy: {
             allowUnallocatedRemainder: true,
             label: "允许保留未分配余额",

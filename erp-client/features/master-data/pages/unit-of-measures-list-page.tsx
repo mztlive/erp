@@ -3,6 +3,7 @@
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 
 import { DictionaryCompactWorkspace } from "@/features/master-data/components/list/dictionary-compact-workspace"
+import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { MasterDataEmptyCreateButton } from "@/features/master-data/components/list/list-empty-actions"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { UnitOfMeasurePreviewSheet } from "@/features/master-data/components/unit-of-measure/unit-of-measure-preview-sheet"
@@ -22,6 +23,8 @@ import {
     masterDataExportAction,
 } from "@/features/master-data/lib/list-page-actions"
 
+const LIST_ID = "master-data-unit-of-measures-list"
+
 export function UnitOfMeasuresListPage() {
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
@@ -30,26 +33,41 @@ export function UnitOfMeasuresListPage() {
         createPermission: "unit_of_measure:create",
         searchInputRef,
     })
-    const exportPending = state.exportPending
+    const { filters } = state
+    const openCreate = () => state.setCreateOpen(true)
 
     return (
         <ListPageFrame
             resource="unit-of-measures"
+            eyebrow=""
             title="计量单位"
-            description="查看计量单位，供商品选择基础单位。"
+            views={
+                <LifecycleMetricStrip
+                    idPrefix={`${LIST_ID}-metrics`}
+                    metrics={state.syncedMetrics}
+                    metricKey={filters.metricKey}
+                    ariaLabel="计量单位指标筛选"
+                    allLabel="全部单位"
+                    variant="inline"
+                    onChangeLifecycle={filters.changeLifecycle}
+                />
+            }
             exportMeta={state.exportMeta}
             actions={[
-                masterDataExportAction({
-                    id: "master-data-unit-of-measures-list-export",
-                    pending: exportPending,
-                    rowCount: state.rows.length,
-                    onClick: state.onExport,
-                }),
+                {
+                    ...masterDataExportAction({
+                        id: `${LIST_ID}-export`,
+                        pending: state.exportPending,
+                        rowCount: state.rows.length,
+                        onClick: state.onExport,
+                    }),
+                    tier: "quiet",
+                },
                 masterDataCreateAction({
-                    id: "master-data-unit-of-measures-list-create",
+                    id: `${LIST_ID}-create`,
                     canCreate: state.canCreate,
                     blockedReason: state.createBlockedReason,
-                    onClick: () => state.setCreateOpen(true),
+                    onClick: openCreate,
                 }),
             ]}
             resultsLabel={`计量单位 · ${state.rows.length} 条结果`}
@@ -57,12 +75,8 @@ export function UnitOfMeasuresListPage() {
             loading={state.listQuery.isPending}
         >
             <DictionaryCompactWorkspace
-                listId="master-data-unit-of-measures-list"
+                listId={LIST_ID}
                 ariaLabel="计量单位列表"
-                fullWidth
-                metricsAriaLabel="计量单位指标筛选"
-                allLabel="全部单位"
-                hint="选择单位查看详情"
                 countLabel="计量单位"
                 searchPlaceholder={masterDataSearchPlaceholder(
                     "unit-of-measures",
@@ -77,14 +91,13 @@ export function UnitOfMeasuresListPage() {
                 emptyAction={
                     state.canCreate ? (
                         <MasterDataEmptyCreateButton
-                            id="master-data-unit-of-measures-list-empty-create"
-                            onClick={() => state.setCreateOpen(true)}
+                            id={`${LIST_ID}-empty-create`}
+                            onClick={openCreate}
                         />
                     ) : undefined
                 }
                 searchInputRef={searchInputRef}
-                filters={state.filters}
-                syncedMetrics={state.syncedMetrics}
+                filters={filters}
                 rows={state.rows}
                 previewId={state.previewId}
                 fetching={state.listQuery.isFetching}

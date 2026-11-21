@@ -17,11 +17,15 @@ export const supplierScopeKeys = {
         [...supplierScopeKeys.all, "detail", kind, id] as const,
 }
 
-export function useSupplierScopeListQuery(query: SupplierScopeQuery) {
+export function useSupplierScopeListQuery(
+    query: SupplierScopeQuery,
+    enabled: boolean,
+) {
     return useScopedListQuery({
         query,
         queryKey: supplierScopeKeys.list,
         fetchPage: fetchSupplierScopeList,
+        enabled,
         keepPreviousData: true,
     })
 }

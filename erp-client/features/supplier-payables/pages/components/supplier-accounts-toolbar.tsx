@@ -4,10 +4,11 @@ import * as React from "react"
 
 import { OptionCombobox } from "@/components/business"
 import {
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import type {
@@ -34,6 +35,21 @@ export type SupplierAppliedChip = Readonly<{
 
 const prefix = "supplier-payables-toolbar"
 const panelId = `${prefix}-more-panel`
+const PAYABLE_FOLDED_CHIPS = [
+    "supplierId",
+    "sourceType",
+    "paymentGate",
+    "track",
+    "purchaseOrderId",
+] as const satisfies readonly SupplierFilterKey[]
+const OTHER_FOLDED_CHIPS = [
+    "sourceType",
+    "status",
+    "due",
+    "paymentGate",
+    "track",
+    "purchaseOrderId",
+] as const satisfies readonly SupplierFilterKey[]
 
 const SOURCE_TYPE_OPTIONS: ReadonlyArray<{
     value: PayableSourceType | "all"
@@ -108,7 +124,6 @@ export interface SupplierAccountsToolbarProps {
     trackDraft: AllocationTrack | "all"
     setTrackDraft: (value: AllocationTrack | "all") => void
     hasPendingChanges: boolean
-    resultCount?: number
     loading: boolean
     failed: boolean
 }
@@ -139,23 +154,24 @@ export function SupplierAccountsToolbar({
     trackDraft,
     setTrackDraft,
     hasPendingChanges,
-    resultCount,
     loading,
     failed,
 }: SupplierAccountsToolbarProps) {
     const showPayableMore = view === "payable"
     const showTrackMore = view === "unallocated"
     const showMore = showPayableMore || showTrackMore
-    const moreCount = appliedChips.filter(({ key }) =>
-        showTrackMore
-            ? key === "track"
-            : ["supplierId", "sourceType", "paymentGate"].includes(key),
+    const moreCount = appliedChips.filter(
+        ({ key }) =>
+            (showTrackMore && key === "track") ||
+            (showPayableMore &&
+                (key === "supplierId" ||
+                    key === "sourceType" ||
+                    key === "paymentGate")),
     ).length
 
     return (
         <ListWorkspaceFilterBar
             morePresentation="popover"
-            moreSize={showPayableMore ? "wide" : "compact"}
             className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel="供应商往来查询"
@@ -189,7 +205,7 @@ export function SupplierAccountsToolbar({
                     <>
                         <OptionCombobox
                             id={`${prefix}-filter-status`}
-                            className="w-48 max-w-full min-w-0"
+                            className="w-32 max-w-full min-w-0"
                             filterLabel="状态"
                             aria-label="状态"
                             value={statusDraft === "all" ? null : statusDraft}
@@ -207,7 +223,7 @@ export function SupplierAccountsToolbar({
                         />
                         <OptionCombobox
                             id={`${prefix}-filter-due`}
-                            className="w-48 max-w-full min-w-0"
+                            className="w-32 max-w-full min-w-0"
                             filterLabel="到期"
                             aria-label="到期"
                             value={dueDraft === "all" ? null : dueDraft}
@@ -228,11 +244,10 @@ export function SupplierAccountsToolbar({
             }
             morePanel={
                 showMore ? (
-                    <div className="space-y-5">
-                        <fieldset className="min-w-0 space-y-3">
-                            <legend className="mb-1 text-sm font-medium">
-                                进度
-                            </legend>
+                    <ListFilterSections>
+                        <ListFilterSection
+                            legend={showTrackMore ? "单据" : "进度"}
+                        >
                             {showTrackMore ? (
                                 <ListWorkspaceFilterField
                                     htmlFor={`${prefix}-filter-track`}
@@ -290,76 +305,68 @@ export function SupplierAccountsToolbar({
                                     />
                                 </ListWorkspaceFilterField>
                             )}
-                        </fieldset>
+                        </ListFilterSection>
                         {showPayableMore ? (
-                            <fieldset className="min-w-0 space-y-3 border-t pt-4">
-                                <legend className="pr-2 text-sm font-medium">
-                                    对象
-                                </legend>
-                                <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                                    <ListWorkspaceFilterField
-                                        htmlFor={`${prefix}-supplier-filter`}
-                                        label="供应商"
-                                    >
-                                        <SupplierSearchCombobox
-                                            id={`${prefix}-supplier-filter`}
-                                            className="w-full min-w-0"
-                                            value={supplierDraft ?? undefined}
-                                            onValueChange={(id) =>
-                                                setSupplierDraft(id ?? null)
-                                            }
-                                            purpose="filter"
-                                            aria-label="供应商"
-                                            placeholder="全部供应商"
-                                        />
-                                    </ListWorkspaceFilterField>
-                                    <ListWorkspaceFilterField
-                                        htmlFor={`${prefix}-filter-source-type`}
-                                        label="来源类型"
-                                    >
-                                        <OptionCombobox
-                                            id={`${prefix}-filter-source-type`}
-                                            className="w-full min-w-0"
-                                            aria-label="来源类型"
-                                            value={
-                                                sourceTypeDraft === "all"
-                                                    ? null
-                                                    : sourceTypeDraft
-                                            }
-                                            onValueChange={(value) =>
-                                                setSourceTypeDraft(
-                                                    SOURCE_TYPE_OPTIONS.find(
-                                                        (option) =>
-                                                            option.value ===
-                                                            value,
-                                                    )?.value ?? "all",
-                                                )
-                                            }
-                                            options={SOURCE_TYPE_OPTIONS.filter(
-                                                (option) =>
-                                                    option.value !== "all",
-                                            )}
-                                            placeholder="全部"
-                                        />
-                                    </ListWorkspaceFilterField>
-                                </div>
-                            </fieldset>
+                            <ListFilterSection legend="对象">
+                                <ListWorkspaceFilterField
+                                    htmlFor={`${prefix}-supplier-filter`}
+                                    label="供应商"
+                                >
+                                    <SupplierSearchCombobox
+                                        id={`${prefix}-supplier-filter`}
+                                        className="w-full min-w-0"
+                                        value={supplierDraft ?? undefined}
+                                        onValueChange={(id) =>
+                                            setSupplierDraft(id ?? null)
+                                        }
+                                        purpose="filter"
+                                        aria-label="供应商"
+                                        placeholder="全部供应商"
+                                    />
+                                </ListWorkspaceFilterField>
+                                <ListWorkspaceFilterField
+                                    htmlFor={`${prefix}-filter-source-type`}
+                                    label="来源类型"
+                                >
+                                    <OptionCombobox
+                                        id={`${prefix}-filter-source-type`}
+                                        className="w-full min-w-0"
+                                        aria-label="来源类型"
+                                        value={
+                                            sourceTypeDraft === "all"
+                                                ? null
+                                                : sourceTypeDraft
+                                        }
+                                        onValueChange={(value) =>
+                                            setSourceTypeDraft(
+                                                SOURCE_TYPE_OPTIONS.find(
+                                                    (option) =>
+                                                        option.value === value,
+                                                )?.value ?? "all",
+                                            )
+                                        }
+                                        options={SOURCE_TYPE_OPTIONS.filter(
+                                            (option) => option.value !== "all",
+                                        )}
+                                        placeholder="全部"
+                                    />
+                                </ListWorkspaceFilterField>
+                            </ListFilterSection>
                         ) : null}
-                    </div>
+                    </ListFilterSections>
                 ) : undefined
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "条往来",
-                loadingLabel: "正在加载往来…",
-            })}
+            resultStatus={failed ? "查询未完成" : loading ? "查询中…" : null}
             chips={appliedChips}
-            onClearChip={(key) => removeFilter(key as SupplierFilterKey)}
+            foldedChipKeys={
+                showPayableMore ? PAYABLE_FOLDED_CHIPS : OTHER_FOLDED_CHIPS
+            }
+            onClearChip={(key) => {
+                const chip = appliedChips.find((chip) => chip.key === key)
+                if (chip) removeFilter(chip.key)
+            }}
             onClearAll={clearAllFilters}
             hasPendingChanges={hasPendingChanges}
-            pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
         />
     )
 }

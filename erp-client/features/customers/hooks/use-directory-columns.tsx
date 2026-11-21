@@ -2,12 +2,15 @@ import * as React from "react"
 import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    TableIdentityCell,
+    TableTextCell,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { CustomerDirectoryItem } from "@/features/customers/types"
 
-/** 客户目录列定义；排序列由 URL 状态驱动，单元格为纯展示。 */
 export function useCustomerDirectoryColumns(
     canOpenDetail: boolean,
 ): ColumnDef<CustomerDirectoryItem>[] {
@@ -17,41 +20,57 @@ export function useCustomerDirectoryColumns(
                 id: "customer",
                 accessorFn: (row) => row.shortName || row.legalName,
                 header: "客户",
-                meta: { label: "客户", width: "reference" },
+                meta: { label: "客户", width: "flex" },
                 enableSorting: false,
-                cell: ({ row }) => (
-                    <div className="min-w-0">
-                        {canOpenDetail ? (
-                            <Link
-                                id={`customers-directory-row-${toAutomationIdSegment(row.original.id)}-open`}
-                                href={`/sales/customers/${row.original.id}`}
-                                className="font-medium text-foreground underline-offset-4 hover:underline"
-                            >
-                                {row.original.shortName ||
-                                    row.original.legalName}
-                            </Link>
-                        ) : (
-                            <span className="font-medium">
-                                {row.original.shortName ||
-                                    row.original.legalName}
-                            </span>
-                        )}
-                        <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="num text-xs text-muted-foreground">
-                                {row.original.customerNo}
-                            </span>
-                            {row.original.attentionTags?.map((tag) => (
-                                <Badge
-                                    key={tag}
-                                    variant="outline"
-                                    className="text-2xs"
-                                >
-                                    {tag}
-                                </Badge>
-                            ))}
-                        </div>
-                    </div>
-                ),
+                cell: ({ row }) => {
+                    const {
+                        id,
+                        shortName,
+                        legalName,
+                        customerNo,
+                        attentionTags,
+                    } = row.original
+                    const name = shortName || legalName
+                    return (
+                        <TableIdentityCell
+                            primary={
+                                canOpenDetail ? (
+                                    <Link
+                                        id={`customers-directory-row-${toAutomationIdSegment(id)}-open`}
+                                        href={`/sales/customers/${id}`}
+                                        className="underline-offset-4 hover:underline"
+                                    >
+                                        {name}
+                                    </Link>
+                                ) : (
+                                    name
+                                )
+                            }
+                            primaryTitle={name}
+                            secondary={
+                                attentionTags?.length ? (
+                                    <span className="flex min-w-0 items-center gap-1.5">
+                                        <span className="truncate">
+                                            {customerNo}
+                                        </span>
+                                        {attentionTags.map((tag) => (
+                                            <Badge key={tag} variant="outline">
+                                                {tag}
+                                            </Badge>
+                                        ))}
+                                    </span>
+                                ) : (
+                                    customerNo
+                                )
+                            }
+                            secondaryTitle={[
+                                customerNo,
+                                ...(attentionTags ?? []),
+                            ].join(" · ")}
+                            numericSecondary
+                        />
+                    )
+                },
             },
             {
                 id: "owner",
@@ -59,7 +78,9 @@ export function useCustomerDirectoryColumns(
                 header: "负责销售",
                 meta: { label: "负责销售", width: "default" },
                 enableSorting: false,
-                cell: ({ row }) => row.original.ownerName,
+                cell: ({ row }) => (
+                    <TableTextCell value={row.original.ownerName} clamp={1} />
+                ),
             },
             {
                 id: "status",
@@ -70,6 +91,9 @@ export function useCustomerDirectoryColumns(
                 cell: ({ row }) => (
                     <BusinessStatusBadge
                         context="list"
+                        appearance={
+                            row.original.status === "active" ? "quiet" : "badge"
+                        }
                         {...row.original.statusLabel}
                     />
                 ),
@@ -78,11 +102,12 @@ export function useCustomerDirectoryColumns(
                 id: "business",
                 accessorFn: (row) => row.updatedAt,
                 header: "资料更新",
+                sortDescFirst: true,
                 meta: { label: "资料更新", width: "default", numeric: true },
                 cell: ({ row }) => (
-                    <span className="num text-sm text-muted-foreground">
-                        {row.original.updatedAt.slice(0, 10)}
-                    </span>
+                    <TableTextCell
+                        value={row.original.updatedAt.slice(0, 10)}
+                    />
                 ),
             },
         ],

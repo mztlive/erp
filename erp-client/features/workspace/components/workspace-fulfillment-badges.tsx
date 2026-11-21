@@ -1,6 +1,7 @@
 "use client"
 
-import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import { BusinessStatusBadge } from "@/components/business/values"
+import type { StatusTone } from "@/components/ui/status-badge"
 import type { WorkItemFulfillmentStatus } from "@/features/work-items/types"
 import { isBlockedWorkItem } from "../lib/work-item"
 import {
@@ -33,7 +34,8 @@ export function WorkspaceFulfillmentBadges({
     return (
         <span className="flex flex-wrap items-center gap-1.5">
             {descriptor.role === "procurement" ? (
-                <StatusBadge
+                <BusinessStatusBadge
+                    appearance={payment?.tone === "success" ? "quiet" : "badge"}
                     {...(payment ?? {
                         label: "付款状态待核对",
                         tone: "neutral",
@@ -65,9 +67,10 @@ function FulfillmentGateBadge({
     const blocked = isBlockedWorkItem(item) || Boolean(blocker)
     const allowed = !blocked
     return (
-        <StatusBadge
+        <BusinessStatusBadge
             label={allowed ? `可${action}` : `暂不可${action}`}
             tone={allowed ? "success" : "warning"}
+            appearance={allowed ? "quiet" : "badge"}
             title={
                 blocker?.message ||
                 (blocked

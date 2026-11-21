@@ -1,18 +1,12 @@
 "use client"
 
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "@/lib/navigation"
+import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import {
-    BusinessFailureState,
-    BusinessStatusBadge,
-    DataTable,
-    PageScaffold,
-    QuickPreviewSheet,
-} from "@/components/business"
-import {
-    ListWorkSurface,
-    ListWorkspaceHeader,
-    listWorkspaceStyles,
+    ListDataTable,
+    ListWorkspacePage,
+    type ListWorkspaceViewsConfig,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { AuditLogDetails } from "../components/audit-log-details"
@@ -37,7 +31,21 @@ const FILTER_KEYS = {
     resourceNumber: "business_number",
 } as const
 
-export function BusinessAuditPage({ views }: { views: ReactNode }) {
+const EMPTY_FILTERS: AuditLogFilters = {
+    actorAccount: "",
+    action: "",
+    eventResult: "",
+    resourceNumber: "",
+}
+
+const FILTER_EMPTY_DESCRIPTION =
+    "调整业务编号、操作账号、动作或执行结果后查询。"
+
+export function BusinessAuditPage({
+    views,
+}: {
+    views: ListWorkspaceViewsConfig
+}) {
     const router = useRouter()
     const searchParams = useSearchParams()
     const queryString = searchParams.toString()
@@ -101,29 +109,33 @@ export function BusinessAuditPage({ views }: { views: ReactNode }) {
             business_page: null,
         })
     }
+    const clearFilters = () => applyFilters(EMPTY_FILTERS)
+    const hasActiveFilters = Object.values(applied).some((value) =>
+        value.trim(),
+    )
     const result = selected ? auditResultView(selected) : null
 
     return (
-        <PageScaffold density="compact" className={listWorkspaceStyles.page}>
-            <ListWorkspaceHeader
-                eyebrow="系统"
-                title="审计查询"
-                description="查询业务操作发生时保存的人物、业务编号、执行结果与字段变化。"
-            />
-            <ListWorkSurface
-                ariaLabel="业务操作记录列表"
-                views={views}
-                toolbar={
+        <ListWorkspacePage
+            title="审计查询"
+            views={views}
+            surface={{
+                ariaLabel: "业务操作记录列表",
+                tableClassName: "min-h-64",
+                toolbar: (
                     <AuditLogFilterBar
                         applied={applied}
                         onApply={applyFilters}
-                        total={query.data?.total ?? 0}
+                        onClearAll={clearFilters}
                         loading={query.isFetching}
+                        failed={query.isError}
                     />
-                }
-                table={
-                    <DataTable
+                ),
+                table: (
+                    <ListDataTable
                         idPrefix="business-audit-table"
+                        entityName="业务操作记录"
+                        scrollable
                         columns={columns}
                         data={query.data?.items ?? []}
                         getRowId={(row) => row.id}
@@ -140,34 +152,28 @@ export function BusinessAuditPage({ views }: { views: ReactNode }) {
                             })
                         }}
                         pageSizeOptions={[10, 20, 50, 100]}
-                        loading={query.isPending}
+                        loading={query.isFetching}
+                        defaultColumnPinning={{
+                            left: ["object"],
+                            right: ["actions"],
+                        }}
                         highlightedRowId={selected?.id}
                         onRowPreview={openDetails}
-                        manualPagination
-                        manualSorting
-                        manualFiltering
-                        layout="flush"
-                        errorState={
-                            query.isError ? (
-                                <BusinessFailureState
-                                    error={query.error}
-                                    action={
-                                        <Button
-                                            id="business-audit-retry"
-                                            variant="secondary"
-                                            onClick={() => void query.refetch()}
-                                        >
-                                            重试
-                                        </Button>
-                                    }
-                                />
-                            ) : undefined
-                        }
+                        isError={query.isError}
+                        error={query.error}
+                        onRetry={() => void query.refetch()}
+                        retryButtonId="business-audit-retry"
+                        hasActiveFilters={hasActiveFilters}
+                        onClearFilters={clearFilters}
+                        emptyCopy={{
+                            filterDescription: FILTER_EMPTY_DESCRIPTION,
+                        }}
                         emptyTitle="没有匹配的业务操作记录"
-                        emptyDescription="调整业务编号、操作账号、动作或执行结果后查询。"
+                        emptyDescription={FILTER_EMPTY_DESCRIPTION}
                     />
-                }
-            />
+                ),
+            }}
+        >
             <QuickPreviewSheet
                 idPrefix="business-audit-details"
                 size="detail"
@@ -207,6 +213,6 @@ export function BusinessAuditPage({ views }: { views: ReactNode }) {
                     {selected ? <AuditLogDetails row={selected} /> : null}
                 </div>
             </QuickPreviewSheet>
-        </PageScaffold>
+        </ListWorkspacePage>
     )
 }

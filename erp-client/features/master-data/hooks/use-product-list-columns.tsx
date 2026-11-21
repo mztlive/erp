@@ -62,6 +62,7 @@ function ProductSupplyStatus({
                     context="list"
                     label={`${suppliedSkuCount}/${skuCount}`}
                     tone="warning"
+                    className="num"
                 />
             )}
         </TableAsyncCell>
@@ -148,6 +149,7 @@ export function useProductListColumns({
             nameColumn({ showNumber: true }),
             {
                 id: "maintainer",
+                accessorKey: "ownerName",
                 header: "维护人",
                 enableSorting: true,
                 meta: { label: "维护人" },
@@ -174,8 +176,9 @@ export function useProductListColumns({
                                           context="list"
                                           tone="warning"
                                           label={`资料更新待确认 · ${item.sourceDiffCount} 项`}
+                                          className="num"
                                       />
-                                      <span className="line-clamp-2 text-xs leading-4 text-muted-foreground">
+                                      <span className="line-clamp-2 w-full text-xs leading-4 whitespace-normal text-muted-foreground">
                                           {[
                                               ...new Set(
                                                   item.sourceDiffFields ?? [],
@@ -287,6 +290,7 @@ export function useProductListColumns({
                 : []),
             {
                 id: "skuCount",
+                accessorKey: "skuCount",
                 header: "SKU 数量",
                 enableSorting: true,
                 meta: {
@@ -389,37 +393,54 @@ export function useProductListColumns({
                             : isPartiallyListed
                               ? "warning"
                               : "neutral"
+                    const disabledReason = pending
+                        ? "正在更新上架状态"
+                        : batchListingPending
+                          ? "正在批量上架"
+                          : item.lifecycleStatus !== "ENABLED" &&
+                              inherited === "UNLISTED"
+                            ? "请先启用商品"
+                            : (item.skuCount ?? 0) === 0
+                              ? "请先新增或启用商品规格"
+                              : undefined
+                    const switchTitle =
+                        disabledReason ??
+                        (isPartiallyListed
+                            ? "部分上架 · 开启可补齐全部启用 SKU 上架"
+                            : statusLabel)
                     const switchControl = (
                         <TableSwitchCell
                             id={`master-data-product-${toAutomationIdSegment(item.stableId)}-listing`}
                             canEdit={canUpdateProductListing}
                             checked={inherited === "LISTED"}
-                            disabled={
-                                pending ||
-                                batchListingPending ||
-                                (item.lifecycleStatus !== "ENABLED" &&
-                                    inherited === "UNLISTED") ||
-                                (item.skuCount ?? 0) === 0
-                            }
+                            disabled={disabledReason != null}
                             statusLabel={statusLabel}
                             statusTone={statusTone}
                             accessibleName={`${item.name}整组上架状态：${statusLabel}`}
-                            title={
-                                isPartiallyListed
-                                    ? "部分上架 · 开启可补齐全部启用 SKU 上架"
-                                    : statusLabel
-                            }
-                            onCheckedChange={(checked) =>
+                            title={switchTitle}
+                            onCheckedChange={(checked) => {
+                                lastFocusedRowId.current = item.stableId
                                 void onUpdateProductListing(item, checked)
-                            }
+                            }}
                         />
                     )
+                    const switchWithHint =
+                        canUpdateProductListing && disabledReason ? (
+                            <span
+                                className="inline-flex"
+                                title={disabledReason}
+                            >
+                                {switchControl}
+                            </span>
+                        ) : (
+                            switchControl
+                        )
                     if (!canUpdateProductListing || !isPartiallyListed) {
-                        return switchControl
+                        return switchWithHint
                     }
                     return (
                         <div className="inline-flex items-center gap-1.5">
-                            {switchControl}
+                            {switchWithHint}
                             <span
                                 className="inline-flex items-center rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny leading-4 font-medium text-warning-soft-foreground"
                                 title="部分 SKU 已上架，开启开关可补齐全部启用 SKU 上架"

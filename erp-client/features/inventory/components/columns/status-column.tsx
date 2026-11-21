@@ -20,6 +20,9 @@ export function inventoryStatusColumn<
         cell: ({ row }) => (
             <BusinessStatusBadge
                 context="list"
+                appearance={
+                    row.original.statusTone === "success" ? "quiet" : "badge"
+                }
                 label={row.original.statusLabel}
                 tone={row.original.statusTone}
             />

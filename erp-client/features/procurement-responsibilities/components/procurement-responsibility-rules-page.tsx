@@ -13,15 +13,18 @@ import { PlusIcon } from "lucide-react"
 import { z } from "zod"
 
 import {
-    BusinessEmptyState,
     BusinessFailureState,
-    DataTable,
+    OptionCombobox,
     PageScaffold,
 } from "@/components/business"
 import {
+    ListDataTable,
+    ListSearchField,
     ListWorkSurface,
+    ListWorkspaceFilterBar,
     ListWorkspaceHeader,
-    listWorkspaceEmptyStateClassName,
+    ListWorkspacePage,
+    listWorkspaceFilterStatusText,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { CategoryCombobox } from "@/components/business/entity-comboboxes"
@@ -55,7 +58,15 @@ import {
     type ProductKind,
 } from "@/features/master-data/types"
 import { useMasterDataListQuery } from "@/features/master-data/hooks/queries"
-import { useResponsibilityRulesColumns } from "@/features/procurement-responsibilities/hooks/use-responsibility-rules-columns"
+import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
+import {
+    getResponsibilityRuleLabel,
+    RESPONSIBILITY_RULES_LIST_ID,
+    ruleColumnOrder,
+    ruleColumnPinning,
+    ruleColumnVisibility,
+    useResponsibilityRulesColumns,
+} from "@/features/procurement-responsibilities/hooks/use-responsibility-rules-columns"
 import {
     useProcurementResponsibilityRulesQuery,
     useSaveProcurementResponsibilityRuleMutation,
@@ -65,7 +76,10 @@ import {
     type ProcurementResponsibilityRule,
 } from "@/features/procurement-responsibilities/types"
 import { getErrorMessage } from "@/lib/api/errors"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
+import { patchUrl } from "@/lib/patch-search-params"
 import { hasPermission } from "@/lib/permissions"
+import { useSearchDraft } from "@/lib/use-search-draft"
 
 const RULE_TYPE_VALUES = [
     "INQUIRY",
@@ -114,9 +128,12 @@ const ruleFormSchema = z
 
 type RuleFormValue = z.input<typeof ruleFormSchema>
 
-function defaultValues(rule?: ProcurementResponsibilityRule): RuleFormValue {
+function defaultValues(
+    canUseSku: boolean,
+    rule?: ProcurementResponsibilityRule,
+): RuleFormValue {
     return {
-        ruleType: rule?.ruleType ?? "SKU",
+        ruleType: rule?.ruleType ?? (canUseSku ? "SKU" : "INQUIRY"),
         skuId: rule?.skuId ?? "",
         categoryId: rule?.categoryId ?? "",
         productKind: rule?.productKind ?? "",
@@ -132,6 +149,7 @@ function RuleDialog({
     onRefreshOwners,
     canUseSku,
     onOpenChange,
+    finalFocus,
     target,
     categories,
     ownerOptions,
@@ -141,6 +159,7 @@ function RuleDialog({
     onRefreshOwners: () => Promise<unknown>
     canUseSku: boolean
     onOpenChange: (open: boolean) => void
+    finalFocus: () => HTMLElement | null
     target?: ProcurementResponsibilityRule
     categories: readonly {
         categoryId: string
@@ -152,9 +171,10 @@ function RuleDialog({
 }) {
     const mutation = useSaveProcurementResponsibilityRuleMutation()
     const form = useAppForm({
-        defaultValues: defaultValues(target),
+        defaultValues: defaultValues(canUseSku, target),
         validators: { onChange: ruleFormSchema },
         onSubmit: async ({ value }) => {
+            if (value.ruleType === "SKU" && !canUseSku) return
             try {
                 await mutation.mutateAsync({
                     ruleId: target?.ruleId,
@@ -184,14 +204,15 @@ function RuleDialog({
     })
 
     React.useEffect(() => {
-        if (open) form.reset(defaultValues(target))
-    }, [form, open, target])
+        if (open) form.reset(defaultValues(canUseSku, target))
+    }, [canUseSku, form, open, target])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 className="sm:max-w-2xl"
                 closeButtonId="procurement-responsibility-rules-dialog-close"
+                finalFocus={finalFocus}
             >
                 <DialogHeader>
                     <DialogTitle>
@@ -233,11 +254,11 @@ function RuleDialog({
                         >
                             {(ruleType) => (
                                 <>
-                                    {ruleType === "SKU" ? (
+                                    {canUseSku && ruleType === "SKU" ? (
                                         <form.AppField name="skuId">
                                             {(field) => (
                                                 <Field>
-                                                    <FieldLabel>
+                                                    <FieldLabel htmlFor="procurement-responsibility-rules-dialog-sku">
                                                         公司 SKU
                                                         <span className="text-destructive">
                                                             *
@@ -268,7 +289,7 @@ function RuleDialog({
                                         <form.AppField name="categoryId">
                                             {(field) => (
                                                 <Field>
-                                                    <FieldLabel>
+                                                    <FieldLabel htmlFor="procurement-responsibility-rules-dialog-category">
                                                         商品分类
                                                         <span className="text-destructive">
                                                             *
@@ -405,66 +426,194 @@ function RuleDialog({
     )
 }
 
+const LIST_ID = RESPONSIBILITY_RULES_LIST_ID
+const RULE_TYPE_OPTIONS = RULE_TYPE_VALUES.map((value) => ({
+    value,
+    label: PROCUREMENT_RESPONSIBILITY_RULE_TYPE_LABEL[value],
+}))
+const PAGE_SIZES = [20, 50, 100]
+const DEFAULT_PAGE_SIZE = 50
+
+function useRuleListControls(
+    data: readonly ProcurementResponsibilityRule[] | undefined,
+) {
+    const router = useRouter()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+    const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
+        useListPageChrome()
+    const query = searchParams.get("q")?.trim() ?? ""
+    const rawRuleType = searchParams.get("ruleType")
+    const ruleType =
+        RULE_TYPE_OPTIONS.find((option) => option.value === rawRuleType)
+            ?.value ?? null
+    const { searchDraft, setSearchDraft } = useSearchDraft(query)
+    const [ruleTypeDraft, setRuleTypeDraft] = React.useState<string | null>(
+        ruleType,
+    )
+    React.useEffect(() => setRuleTypeDraft(ruleType), [ruleType])
+
+    const rows = React.useMemo(() => {
+        const search = query.toLocaleLowerCase("zh-CN")
+        return (data ?? []).filter(
+            (rule) =>
+                (!ruleType || rule.ruleType === ruleType) &&
+                (!search ||
+                    getResponsibilityRuleLabel(rule)
+                        .toLocaleLowerCase("zh-CN")
+                        .includes(search) ||
+                    rule.ownerNames.some((name) =>
+                        name.toLocaleLowerCase("zh-CN").includes(search),
+                    )),
+        )
+    }, [data, query, ruleType])
+
+    const pageSize =
+        PAGE_SIZES.find(
+            (size) => String(size) === searchParams.get("pageSize"),
+        ) ?? DEFAULT_PAGE_SIZE
+    const requestedPage = Number(searchParams.get("page"))
+    const pageIndex =
+        Number.isSafeInteger(requestedPage) && requestedPage > 0
+            ? Math.min(
+                  requestedPage - 1,
+                  Math.max(0, Math.ceil(rows.length / pageSize) - 1),
+              )
+            : 0
+    const updateUrl = (patch: Record<string, string | null>) =>
+        patchUrl({ router, pathname, searchParams }, patch, {
+            replace: true,
+            scroll: false,
+        })
+    const hasPendingChanges =
+        searchDraft.trim() !== query || ruleTypeDraft !== ruleType
+
+    return {
+        rows,
+        pagination: { pageIndex, pageSize },
+        changePagination: (next: { pageIndex: number; pageSize: number }) =>
+            updateUrl({
+                page: next.pageIndex > 0 ? String(next.pageIndex + 1) : null,
+                pageSize:
+                    next.pageSize === DEFAULT_PAGE_SIZE
+                        ? null
+                        : String(next.pageSize),
+            }),
+        hasActiveFilters: Boolean(query || ruleType),
+        hasPendingChanges,
+        searchDraft,
+        setSearchDraft,
+        ruleTypeDraft,
+        setRuleTypeDraft,
+        searchInputRef,
+        resultsHeadingRef,
+        lastFocusedRowId,
+        applyFilters: () => {
+            if (hasPendingChanges) {
+                updateUrl({
+                    q: searchDraft.trim() || null,
+                    ruleType: ruleTypeDraft,
+                    page: null,
+                })
+            }
+        },
+        clearFilters: () => {
+            setSearchDraft("")
+            setRuleTypeDraft(null)
+            updateUrl({ q: null, ruleType: null, page: null })
+            searchInputRef.current?.focus()
+        },
+    }
+}
+
 export function ProcurementResponsibilityRulesPage() {
     const profileQuery = useAccountProfileQuery()
-    const permissions = profileQuery.data?.permissions
+    const permissions = profileQuery.isSuccess
+        ? profileQuery.data.permissions
+        : undefined
     const canList = hasPermission(
         permissions,
         "procurement_responsibility:list",
     )
-    const hasManagePermission = hasPermission(
-        permissions,
-        "procurement_responsibility:manage",
-    )
     const canManage =
-        hasManagePermission &&
+        hasPermission(permissions, "procurement_responsibility:manage") &&
         hasPermission(permissions, "admin:list") &&
         hasPermission(permissions, "product_category:list")
     const canUseSku = hasPermission(permissions, "sku:list")
     const rulesQuery = useProcurementResponsibilityRulesQuery(canList)
     const adminsQuery = useAdminsQuery(canManage)
-    const categoriesQuery = useMasterDataListQuery({
-        resource: "categories",
-        lifecycleStatus: "all",
-        revisionTiming: "current",
-    })
+    const categoriesQuery = useMasterDataListQuery(
+        {
+            resource: "categories",
+            lifecycleStatus: "all",
+            revisionTiming: "current",
+        },
+        canManage,
+    )
+    const dependenciesFailed = adminsQuery.isError || categoriesQuery.isError
     const dependenciesPending =
-        Boolean(adminsQuery.isPending) || Boolean(categoriesQuery.isPending)
-    const dependenciesFailed =
-        Boolean(adminsQuery.isError) || Boolean(categoriesQuery.isError)
-    const dependencyError = adminsQuery.error ?? categoriesQuery.error
+        adminsQuery.isPending || categoriesQuery.isPending
+    const disabledReason = dependenciesFailed
+        ? "负责人或分类选项加载失败，请先重试"
+        : dependenciesPending
+          ? "正在加载负责人和分类选项"
+          : undefined
+    const canSave = canManage && !disabledReason
+    const list = useRuleListControls(canList ? rulesQuery.data : undefined)
+    const { lastFocusedRowId, resultsHeadingRef } = list
+    const createTriggerRef = React.useRef<HTMLElement | null>(null)
     const [dialogOpen, setDialogOpen] = React.useState(false)
     const [editing, setEditing] =
         React.useState<ProcurementResponsibilityRule>()
-    const openCreate = React.useCallback(() => {
+    const openCreate = (trigger: HTMLElement | null) => {
+        createTriggerRef.current = trigger
+        lastFocusedRowId.current = null
         setEditing(undefined)
         setDialogOpen(true)
-    }, [])
+    }
+    const canEditRule = React.useCallback(
+        (rule: ProcurementResponsibilityRule) =>
+            canUseSku || rule.ruleType !== "SKU",
+        [canUseSku],
+    )
     const openEdit = React.useCallback(
         (rule: ProcurementResponsibilityRule) => {
+            if (!canSave || !canEditRule(rule)) return
+            lastFocusedRowId.current = rule.ruleId
             setEditing(rule)
             setDialogOpen(true)
         },
-        [],
+        [canSave, canEditRule, lastFocusedRowId],
     )
-    const columns = useResponsibilityRulesColumns()
-
-    if (profileQuery.isPending) {
+    const restoreDialogFocus = () => {
+        const ruleId = lastFocusedRowId.current
+        if (!ruleId) {
+            return createTriggerRef.current?.isConnected
+                ? createTriggerRef.current
+                : document.getElementById(`${LIST_ID}-create`)
+        }
         return (
-            <PageScaffold density="compact" className={styles.page}>
-                <ListWorkspaceHeader eyebrow="基础资料" title="采购责任规则" />
-                <div
-                    className="h-40 animate-pulse rounded-lg bg-muted"
-                    aria-busy
-                />
-            </PageScaffold>
+            document.querySelector<HTMLElement>(
+                `#${LIST_ID}-table [data-row-id="${CSS.escape(ruleId)}"]`,
+            ) ?? resultsHeadingRef.current
         )
+    }
+    const columns = useResponsibilityRulesColumns({
+        onEdit: canManage ? openEdit : undefined,
+        canUseSku,
+        editDisabledReason: disabledReason,
+    })
+
+    if (
+        profileQuery.isPending ||
+        (canList && rulesQuery.isPending && rulesQuery.isFetching)
+    ) {
+        return <ListWorkspacePage title="采购责任规则" loading />
     }
 
     if (profileQuery.isError) {
         return (
-            <PageScaffold density="compact" className={styles.page}>
-                <ListWorkspaceHeader eyebrow="基础资料" title="采购责任规则" />
+            <ListWorkspacePage title="采购责任规则">
                 <BusinessFailureState
                     kind="system"
                     title="权限信息加载失败"
@@ -484,60 +633,61 @@ export function ProcurementResponsibilityRulesPage() {
                         </Button>
                     }
                 />
-            </PageScaffold>
+            </ListWorkspacePage>
         )
     }
 
     if (!canList && !canManage) {
         return (
-            <PageScaffold density="compact" className={styles.page}>
-                <ListWorkspaceHeader eyebrow="基础资料" title="采购责任规则" />
+            <ListWorkspacePage title="采购责任规则">
                 <BusinessFailureState
                     kind="permission"
                     title="权限不足"
                     description="当前账号不能查看采购责任规则。"
                 />
-            </PageScaffold>
+            </ListWorkspacePage>
         )
     }
 
-    const categories = (categoriesQuery.data?.rows ?? []).map((row) => ({
-        categoryId: row.stableId,
-        categoryCode: row.dictionaryCode ?? row.stableNo,
-        categoryName: row.name,
-        parentId: row.parentStableId,
-    }))
-    const ownerOptions = (adminsQuery.data ?? []).map((account) => ({
-        value: account.id,
-        label: `${account.name} · ${account.account}`,
-    }))
-    const rows = [...(rulesQuery.data ?? [])]
+    const listFailed =
+        rulesQuery.isError || (!rulesQuery.isFetching && !rulesQuery.data)
+    const resultStatus =
+        rulesQuery.isFetching || listFailed
+            ? listWorkspaceFilterStatusText({
+                  loading: rulesQuery.isFetching && !listFailed,
+                  failed: listFailed,
+                  noun: "采购责任规则",
+              })
+            : null
 
     return (
-        <PageScaffold density="compact" className={styles.page}>
-            <ListWorkspaceHeader
-                className="pb-4 md:pb-4"
-                eyebrow="基础资料"
-                title="采购责任规则"
-                description="按商品或询价配置负责的采购员团队，系统将按顺序轮流分派采购任务。"
-            >
+        <PageScaffold
+            density="compact"
+            className={styles.page}
+            data-testid={canList ? LIST_ID : undefined}
+        >
+            <ListWorkspaceHeader title="采购责任规则">
                 {canManage ? (
                     <Button
-                        id="procurement-responsibility-rules-create"
+                        id={`${LIST_ID}-create`}
                         type="button"
                         size="sm"
-                        data-testid="procurement-responsibility-create"
-                        disabled={dependenciesPending || dependenciesFailed}
-                        title={
-                            dependenciesPending
-                                ? "正在加载负责人和分类选项"
-                                : dependenciesFailed
-                                  ? "负责人或分类选项加载失败，请先重试"
-                                  : undefined
+                        variant={
+                            canList && list.hasPendingChanges
+                                ? "ghost"
+                                : "default"
                         }
-                        onClick={openCreate}
+                        className={
+                            canList && list.hasPendingChanges
+                                ? styles.quietButton
+                                : undefined
+                        }
+                        data-testid="procurement-responsibility-create"
+                        disabled={!canSave}
+                        title={disabledReason}
+                        onClick={(event) => openCreate(event.currentTarget)}
                     >
-                        <PlusIcon data-icon="inline-start" />
+                        <PlusIcon data-icon="inline-start" aria-hidden="true" />
                         新增规则
                     </Button>
                 ) : null}
@@ -547,7 +697,7 @@ export function ProcurementResponsibilityRulesPage() {
                     kind="system"
                     title="采购员或商品分类数据加载失败"
                     description={getErrorMessage(
-                        dependencyError,
+                        adminsQuery.error ?? categoriesQuery.error,
                         "暂时无法读取采购负责人或商品分类，当前不能新增或编辑规则。",
                     )}
                     action={
@@ -555,6 +705,7 @@ export function ProcurementResponsibilityRulesPage() {
                             id="procurement-responsibility-rules-retry-dependencies"
                             type="button"
                             variant="outline"
+                            size="sm"
                             onClick={() => {
                                 void adminsQuery.refetch()
                                 void categoriesQuery.refetch()
@@ -568,104 +719,11 @@ export function ProcurementResponsibilityRulesPage() {
                 <Alert variant="info">
                     <AlertTitle>选项加载中</AlertTitle>
                     <AlertDescription>
-                        正在加载采购负责人和商品分类，完成后可编辑规则。
+                        正在加载采购负责人和商品分类，完成后可新增或编辑规则。
                     </AlertDescription>
                 </Alert>
             ) : null}
-            {canList && (
-                <div
-                    data-testid="procurement-responsibility-rules"
-                    className="contents"
-                >
-                    <ListWorkSurface
-                        ariaLabel="采购责任规则列表"
-                        toolbarClassName="pt-0 pb-3"
-                        table={
-                            <DataTable
-                                id="procurement-responsibility-rules-table"
-                                data={rows}
-                                columns={columns}
-                                getRowId={(row) => row.ruleId}
-                                rowCount={rows.length}
-                                layout="flush"
-                                loading={
-                                    rulesQuery.isPending ||
-                                    Boolean(rulesQuery.isFetching)
-                                }
-                                showPagination={false}
-                                errorState={
-                                    rulesQuery.isError ? (
-                                        <BusinessFailureState
-                                            kind="system"
-                                            title="规则加载失败"
-                                            description={getErrorMessage(
-                                                rulesQuery.error,
-                                                "暂时无法读取采购责任规则。",
-                                            )}
-                                            action={
-                                                <Button
-                                                    id="procurement-responsibility-rules-retry"
-                                                    type="button"
-                                                    variant="outline"
-                                                    onClick={() =>
-                                                        void rulesQuery.refetch()
-                                                    }
-                                                >
-                                                    重试
-                                                </Button>
-                                            }
-                                        />
-                                    ) : undefined
-                                }
-                                emptyState={
-                                    !rulesQuery.isError && rows.length === 0 ? (
-                                        <BusinessEmptyState
-                                            kind="no-data"
-                                            className={
-                                                listWorkspaceEmptyStateClassName
-                                            }
-                                            title="还没有采购责任规则"
-                                            description={
-                                                canManage
-                                                    ? "请先配置默认分派组；需要询价专人处理时，新增询价规则并选择负责人。"
-                                                    : undefined
-                                            }
-                                            action={
-                                                canManage &&
-                                                !dependenciesPending &&
-                                                !dependenciesFailed ? (
-                                                    <Button
-                                                        id="procurement-responsibility-rules-empty-create"
-                                                        type="button"
-                                                        variant="secondary"
-                                                        size="sm"
-                                                        className="rounded-lg shadow-none"
-                                                        onClick={openCreate}
-                                                    >
-                                                        新增规则
-                                                    </Button>
-                                                ) : undefined
-                                            }
-                                        />
-                                    ) : undefined
-                                }
-                                onRowOpen={
-                                    canManage
-                                        ? (rule) => {
-                                              if (
-                                                  rule.ruleType !== "SKU" ||
-                                                  canUseSku
-                                              )
-                                                  openEdit(rule)
-                                          }
-                                        : undefined
-                                }
-                            />
-                        }
-                    />
-                </div>
-            )}
-            {canManage ? (
+            {canManage && (!editing || canEditRule(editing)) ? (
                 <RuleDialog
                     canUseSku={canUseSku}
                     onRefreshCategories={() =>
@@ -676,10 +734,117 @@ export function ProcurementResponsibilityRulesPage() {
                     }
                     open={dialogOpen}
                     onOpenChange={setDialogOpen}
+                    finalFocus={restoreDialogFocus}
                     target={editing}
-                    categories={categories}
-                    ownerOptions={ownerOptions}
+                    categories={(categoriesQuery.data?.rows ?? []).map(
+                        (row) => ({
+                            categoryId: row.stableId,
+                            categoryCode: row.dictionaryCode ?? row.stableNo,
+                            categoryName: row.name,
+                            parentId: row.parentStableId,
+                        }),
+                    )}
+                    ownerOptions={(adminsQuery.data ?? []).map((account) => ({
+                        value: account.id,
+                        label: `${account.name} · ${account.account}`,
+                    }))}
                 />
+            ) : null}
+            {canList ? (
+                <>
+                    <h2
+                        ref={resultsHeadingRef}
+                        id={`${LIST_ID}-results`}
+                        tabIndex={-1}
+                        className="sr-only outline-none"
+                    >
+                        采购责任规则列表
+                    </h2>
+                    <ListWorkSurface
+                        ariaLabel="采购责任规则列表"
+                        toolbar={
+                            <ListWorkspaceFilterBar
+                                idPrefix={`${LIST_ID}-toolbar`}
+                                formAriaLabel="查询采购责任规则"
+                                morePresentation="popover"
+                                onSubmit={list.applyFilters}
+                                hasPendingChanges={list.hasPendingChanges}
+                                resultStatus={resultStatus}
+                                search={
+                                    <ListSearchField
+                                        id={`${LIST_ID}-toolbar-search-input`}
+                                        searchInputRef={list.searchInputRef}
+                                        value={list.searchDraft}
+                                        onChange={list.setSearchDraft}
+                                        placeholder="搜索匹配范围或负责人"
+                                        aria-label="搜索匹配范围或负责人"
+                                    />
+                                }
+                                primaryFilters={
+                                    <OptionCombobox
+                                        id={`${LIST_ID}-toolbar-rule-type`}
+                                        className="w-32 max-w-full min-w-0"
+                                        filterLabel="类型"
+                                        aria-label="规则类型"
+                                        placeholder="全部"
+                                        value={list.ruleTypeDraft}
+                                        options={RULE_TYPE_OPTIONS}
+                                        onValueChange={list.setRuleTypeDraft}
+                                    />
+                                }
+                            />
+                        }
+                        tableClassName="[&_[data-column-id=actions]]:w-24 [&_[data-column-id=actions]]:min-w-24 max-md:[&_[data-column-id=scope]]:min-w-table-column-default-min"
+                        table={
+                            <ListDataTable
+                                id={`${LIST_ID}-table`}
+                                entityName="采购责任规则"
+                                caption="采购责任规则"
+                                data={list.rows}
+                                columns={columns}
+                                defaultColumnOrder={ruleColumnOrder}
+                                defaultColumnPinning={ruleColumnPinning}
+                                defaultColumnVisibility={ruleColumnVisibility}
+                                getRowId={(row) => row.ruleId}
+                                rowLabel={getResponsibilityRuleLabel}
+                                rowCount={list.rows.length}
+                                pagination={list.pagination}
+                                onPaginationChange={list.changePagination}
+                                pageSizeOptions={PAGE_SIZES}
+                                manualPagination={false}
+                                scrollable
+                                showToolbarSummary={false}
+                                loading={rulesQuery.isFetching}
+                                isError={listFailed}
+                                error={rulesQuery.error}
+                                onRetry={() => void rulesQuery.refetch()}
+                                retryButtonId={`${LIST_ID}-retry`}
+                                hasActiveFilters={list.hasActiveFilters}
+                                onClearFilters={list.clearFilters}
+                                clearFiltersButtonId={`${LIST_ID}-empty-clear-filters`}
+                                canCreate={canSave}
+                                onCreate={() =>
+                                    openCreate(
+                                        document.getElementById(
+                                            `${LIST_ID}-empty-create`,
+                                        ),
+                                    )
+                                }
+                                createButtonId={`${LIST_ID}-empty-create`}
+                                createLabel="新增规则"
+                                emptyCopy={{
+                                    emptyDescription: canManage
+                                        ? "请先配置默认分派组；需要询价专人处理时，新增询价规则并选择负责人。"
+                                        : undefined,
+                                }}
+                                onRowOpen={canSave ? openEdit : undefined}
+                                highlightedRowId={
+                                    dialogOpen ? editing?.ruleId : undefined
+                                }
+                            />
+                        }
+                    />
+                </>
             ) : null}
         </PageScaffold>
     )

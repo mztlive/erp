@@ -1,33 +1,23 @@
 "use client"
 
-import * as React from "react"
-
 import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
+import { Button } from "@/components/ui/button"
+import { listFilterText } from "@/lib/ui-text"
 import type {
-    BatchFilterKey,
     BatchObjectTypeDraft,
+    useBatchListFilters,
 } from "@/features/import-opening/hooks/use-batch-list-filters"
 import {
     OBJECT_CODE_LABEL,
     type ImportObjectCode,
 } from "@/features/import-opening/types"
 
-type SetState<T> = React.Dispatch<React.SetStateAction<T>>
-
-export type BatchAppliedChip = Readonly<{
-    key: BatchFilterKey
-    label: string
-}>
-
-const OBJECT_FILTER_OPTIONS: ReadonlyArray<{
-    value: BatchObjectTypeDraft
-    label: string
-}> = [
+const OBJECT_FILTER_OPTIONS = [
     { value: "all", label: "全部类型" },
     ...(Object.keys(OBJECT_CODE_LABEL) as ImportObjectCode[]).map((code) => ({
         value: code,
@@ -38,38 +28,31 @@ const OBJECT_FILTER_OPTIONS: ReadonlyArray<{
 const toolbarIdPrefix = "operations-import-batches-toolbar"
 
 export function BatchListToolbar({
-    searchInputRef,
-    searchDraft,
-    setSearchDraft,
-    appliedChips,
-    removeFilter,
-    applyBatchFilters,
-    objectTypeDraft,
-    setObjectTypeDraft,
-    clearAllFilters,
-    hasPendingChanges = false,
-    resultCount,
+    filters,
     loading,
     failed,
 }: {
-    searchInputRef: React.RefObject<HTMLInputElement | null>
-    searchDraft: string
-    setSearchDraft: SetState<string>
-    appliedChips: readonly BatchAppliedChip[]
-    removeFilter: (key: BatchFilterKey) => void
-    applyBatchFilters: () => void
-    objectTypeDraft: BatchObjectTypeDraft
-    setObjectTypeDraft: SetState<BatchObjectTypeDraft>
-    clearAllFilters: () => void
-    hasPendingChanges?: boolean
-    resultCount?: number
-    loading?: boolean
-    failed?: boolean
+    filters: ReturnType<typeof useBatchListFilters>
+    loading: boolean
+    failed: boolean
 }) {
+    const {
+        searchInputRef,
+        qDraft,
+        setQDraft,
+        objectTypeDraft,
+        setObjectTypeDraft,
+        applyBatchFilters,
+        clearAllBatchFilters,
+        removeBatchFilter,
+        hasPendingChanges,
+        hasAppliedBatchFilters,
+        appliedChips,
+    } = filters
+
     return (
         <ListWorkspaceFilterBar
             morePresentation="popover"
-            density="compact"
             idPrefix={`${toolbarIdPrefix}-filter`}
             formAriaLabel="导入批次查询"
             onSubmit={applyBatchFilters}
@@ -77,8 +60,8 @@ export function BatchListToolbar({
                 <ListSearchField
                     id={`${toolbarIdPrefix}-search`}
                     searchInputRef={searchInputRef}
-                    value={searchDraft}
-                    onChange={setSearchDraft}
+                    value={qDraft}
+                    onChange={setQDraft}
                     placeholder="搜索批次号"
                     aria-label="搜索批次"
                 />
@@ -89,7 +72,7 @@ export function BatchListToolbar({
                     id={`${toolbarIdPrefix}-object-type`}
                     className="w-56 max-w-full min-w-0"
                     filterLabel="导入数据类型"
-                    value={objectTypeDraft}
+                    value={objectTypeDraft === "all" ? null : objectTypeDraft}
                     onValueChange={(value) =>
                         setObjectTypeDraft(
                             (value ?? "all") as BatchObjectTypeDraft,
@@ -97,24 +80,38 @@ export function BatchListToolbar({
                     }
                     options={OBJECT_FILTER_OPTIONS}
                     aria-label="导入数据类型"
-                    placeholder="全部类型"
-                    searchPlaceholder="搜索数据类型"
+                    placeholder="全部"
                     allowClear={false}
                 />
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "个批次",
-                loadingLabel: "正在加载批次…",
-            })}
-            chips={appliedChips}
-            onClearChip={(key) => removeFilter(key as BatchFilterKey)}
-            onClearAll={clearAllFilters}
-            clearButtonId={`${toolbarIdPrefix}-clear-all`}
+            resultStatus={
+                failed || loading
+                    ? listWorkspaceFilterStatusText({
+                          failed,
+                          loading: loading && !failed,
+                          noun: "批次",
+                      })
+                    : null
+            }
+            chips={appliedChips.map((chip) => ({
+                ...chip,
+                onClear: () => removeBatchFilter(chip.key),
+            }))}
+            extraPrimary={
+                hasAppliedBatchFilters ? (
+                    <Button
+                        id={`${toolbarIdPrefix}-clear-all`}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="font-normal text-muted-foreground"
+                        onClick={clearAllBatchFilters}
+                    >
+                        {listFilterText.clear}
+                    </Button>
+                ) : null
+            }
             hasPendingChanges={hasPendingChanges}
-            pendingHint="条件已修改，待查询"
         />
     )
 }

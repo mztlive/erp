@@ -2,20 +2,16 @@
 
 import * as React from "react"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
-import { DownloadIcon, Loader2Icon } from "lucide-react"
+import { DownloadIcon } from "lucide-react"
 
-import { FormalActionResult, PageScaffold } from "@/components/business"
-import {
-    ListWorkSurface,
-    ListWorkspaceHeader,
-    ListWorkspaceViews,
-    listWorkspaceStyles as styles,
-} from "@/components/business/list-workspace"
+import { FormalActionResult, ListWorkspacePage } from "@/components/business"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
-import { SupplierOrdersListExportPreview } from "@/features/supplier-orders/components/supplier-orders-list-export"
-import { SupplierOrdersListExportResult } from "@/features/supplier-orders/components/supplier-orders-list-export"
+import {
+    SupplierOrdersListExportPreview,
+    SupplierOrdersListExportResult,
+} from "@/features/supplier-orders/components/supplier-orders-list-export"
 import { SupplierOrdersListMetricStrip } from "@/features/supplier-orders/components/supplier-orders-list-metric-strip"
 import { SupplierOrdersListPreviewSheet } from "@/features/supplier-orders/components/supplier-orders-list-preview-sheet"
 import { SupplierOrdersListReturnBanner } from "@/features/supplier-orders/components/supplier-orders-list-return-banner"
@@ -113,12 +109,14 @@ export function SupplierOrdersListPage() {
         queryFromPreview,
     } = useSupplierOrdersQueryResult({ updateUrl })
 
-    const { focusedIndex, rowRefs } = useSupplierOrdersKeyboardNav({
-        canOpenDetail,
-        url,
-        rows,
-        updateUrl,
-    })
+    const { focusedIndex, rowRefs, closePreview, restorePreviewFocus } =
+        useSupplierOrdersKeyboardNav({
+            canOpenDetail,
+            url,
+            rows,
+            searchInputRef,
+            updateUrl,
+        })
 
     const {
         exportPreviewOpen,
@@ -165,16 +163,6 @@ export function SupplierOrdersListPage() {
         [updateUrl],
     )
 
-    const closePreview = React.useCallback(() => {
-        const id = url.preview
-        updateUrl({ preview: undefined }, "push")
-        if (id) {
-            requestAnimationFrame(() => {
-                rowRefs.current.get(id)?.focus()
-            })
-        }
-    }, [updateUrl, url.preview, rowRefs])
-
     const handleExportConfirm = () => {
         if (exportMutation.isError && pendingExport) {
             void retryExport()
@@ -200,143 +188,110 @@ export function SupplierOrdersListPage() {
     })
 
     return (
-        <PageScaffold density="compact" className={styles.page}>
-            <ListWorkspaceHeader
-                className="pb-6 md:pb-6"
-                eyebrow="供应商"
-                title="供应商订单"
-                description={
-                    <>
-                        查看供应商订单、履约与售后状态。
-                        <span className="ml-3 text-xs" role="status">
-                            {listQuery.isError ? (
-                                "查询失败"
-                            ) : listQuery.isFetching ? (
-                                "正在更新…"
-                            ) : listQuery.data?.queriedAt ? (
-                                <time dateTime={listQuery.data.queriedAt}>
-                                    更新于{" "}
-                                    {listQuery.data.queriedAt.slice(11, 16)}
-                                </time>
-                            ) : (
-                                "正在查询"
+        <ListWorkspacePage
+            title="供应商订单"
+            views={{
+                ariaLabel: "供应商订单视图",
+                items: SUPPLIER_ORDER_VIEWS.map((view) => ({
+                    id: `supplier-orders-list-view-${toAutomationIdSegment(view)}`,
+                    label: VIEW_LABEL[view],
+                    count:
+                        listQuery.data && url.view === view ? total : undefined,
+                    active: url.view === view,
+                    onClick: () => updateUrl({ view, page: 1 }),
+                })),
+            }}
+            actions={
+                canExport
+                    ? [
+                          {
+                              id: "supplier-orders-list-export-trigger",
+                              actionKey: "export",
+                              title: "导出与当前查询结果一致",
+                              type: "button",
+                              tier: "quiet",
+                              icon: DownloadIcon,
+                              label: exportMutation.isPending
+                                  ? "导出中…"
+                                  : "导出",
+                              loading: exportMutation.isPending,
+                              disabled: !listQuery.data || total === 0,
+                              onClick: openExportPreview,
+                          },
+                      ]
+                    : undefined
+            }
+            alerts={
+                <>
+                    {returnTo ? (
+                        <SupplierOrdersListReturnBanner returnTo={returnTo} />
+                    ) : null}
+                    {actionResult ? (
+                        <FormalActionResult
+                            status={
+                                actionResult.status === "failed"
+                                    ? "rejected"
+                                    : actionResult.status
+                            }
+                            title={actionResult.title}
+                            description={actionResult.description}
+                            reference={actionResult.reference}
+                            actions={
+                                <Button
+                                    id="supplier-orders-list-result-close"
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={dismissActionResult}
+                                >
+                                    关闭
+                                </Button>
+                            }
+                        />
+                    ) : null}
+                    {canExport && exportResult ? (
+                        <SupplierOrdersListExportResult result={exportResult} />
+                    ) : null}
+                    {canExport && exportPreviewOpen ? (
+                        <SupplierOrdersListExportPreview
+                            total={total}
+                            filterSummary={listQuery.data?.filterSummary ?? "—"}
+                            isPending={exportMutation.isPending}
+                            isError={exportMutation.isError}
+                            error={exportMutation.error}
+                            isRetry={Boolean(
+                                exportMutation.isError && pendingExport,
                             )}
-                        </span>
-                    </>
-                }
-            >
-                {canExport && (
-                    <Button
-                        id="supplier-orders-list-export-trigger"
-                        title="导出与当前查询结果一致"
-                        type="button"
-                        variant="outline"
-                        disabled={
-                            !listQuery.data ||
-                            total === 0 ||
-                            exportMutation.isPending
-                        }
-                        onClick={openExportPreview}
-                    >
-                        {exportMutation.isPending ? (
-                            <Loader2Icon
-                                data-icon="inline-start"
-                                className="animate-spin"
-                                aria-hidden="true"
-                            />
-                        ) : (
-                            <DownloadIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                        )}
-                        {exportMutation.isPending ? "导出中…" : "导出"}
-                    </Button>
-                )}
-            </ListWorkspaceHeader>
-
-            {returnTo ? (
-                <SupplierOrdersListReturnBanner returnTo={returnTo} />
-            ) : null}
-
-            <SupplierOrdersListMetricStrip metrics={metrics} />
-
-            {actionResult ? (
-                <FormalActionResult
-                    status={
-                        actionResult.status === "failed"
-                            ? "rejected"
-                            : actionResult.status
-                    }
-                    title={actionResult.title}
-                    description={actionResult.description}
-                    reference={actionResult.reference}
-                    actions={
-                        <Button
-                            id="supplier-orders-list-result-close"
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={dismissActionResult}
-                        >
-                            关闭
-                        </Button>
-                    }
+                            onConfirm={handleExportConfirm}
+                            onCancel={closeExportPreview}
+                        />
+                    ) : null}
+                </>
+            }
+            notices={
+                <SupplierOrdersListMetricStrip
+                    metrics={metrics}
+                    queriedAt={listQuery.data?.queriedAt}
                 />
-            ) : null}
-
-            {canExport && exportResult ? (
-                <SupplierOrdersListExportResult result={exportResult} />
-            ) : null}
-
-            {canExport && exportPreviewOpen ? (
-                <SupplierOrdersListExportPreview
-                    total={total}
-                    filterSummary={listQuery.data?.filterSummary ?? "—"}
-                    isPending={exportMutation.isPending}
-                    isError={exportMutation.isError}
-                    error={exportMutation.error}
-                    isRetry={Boolean(exportMutation.isError && pendingExport)}
-                    onConfirm={handleExportConfirm}
-                    onCancel={closeExportPreview}
-                />
-            ) : null}
-
-            <ListWorkSurface
-                toolbarClassName="pt-3 pb-2"
-                ariaLabel="供应商订单列表"
-                views={
-                    <ListWorkspaceViews
-                        ariaLabel="供应商订单视图"
-                        items={SUPPLIER_ORDER_VIEWS.map((view) => ({
-                            id: `supplier-orders-list-view-${toAutomationIdSegment(view)}`,
-                            label: VIEW_LABEL[view],
-                            count:
-                                listQuery.data && url.view === view
-                                    ? total
-                                    : undefined,
-                            active: url.view === view,
-                            onClick: () => updateUrl({ view, page: 1 }),
-                        }))}
-                    />
-                }
-                toolbar={
+            }
+            surface={{
+                ariaLabel: "供应商订单列表",
+                toolbar: (
                     <SupplierOrdersListToolbar
                         searchInputRef={searchInputRef}
                         filters={filters}
-                        resultCount={listQuery.data ? total : undefined}
-                        loading={listQuery.isFetching}
-
+                        loading={listQuery.isFetching && rows.length === 0}
                         failed={listQuery.isError}
                     />
-                }
-                table={
+                ),
+                table: (
                     <SupplierOrdersListTable
                         rows={rows}
                         columns={columns}
                         total={total}
-                        loading={listQuery.isPending}
-                        error={listQuery.isError ? listQuery.error : null}
+                        loading={listQuery.isPending || listQuery.isFetching}
+                        isError={listQuery.isError}
+                        error={listQuery.error}
                         onRetry={() => void listQuery.refetch()}
                         hasActiveFilters={filters.hasActiveFilters}
                         noScope={listQuery.data?.emptyReason === "no_scope"}
@@ -350,11 +305,14 @@ export function SupplierOrdersListPage() {
                                 pageSize: next.pageSize,
                             })
                         }}
+                        highlightedRowId={
+                            canOpenDetail ? url.preview : undefined
+                        }
                         onRowPreview={canOpenDetail ? openPreview : undefined}
                     />
-                }
-            />
-
+                ),
+            }}
+        >
             <SupplierOrdersListPreviewSheet
                 open={canOpenDetail && Boolean(url.preview)}
                 onOpenChange={(open) => {
@@ -363,9 +321,10 @@ export function SupplierOrdersListPage() {
                 preview={previewQuery.data}
                 previewPending={previewQuery.isPending}
                 onClose={closePreview}
+                finalFocus={restorePreviewFocus}
                 queryPending={queryPending}
                 onQueryResult={queryFromPreview}
             />
-        </PageScaffold>
+        </ListWorkspacePage>
     )
 }

@@ -79,7 +79,9 @@ export function ListDataTable<TData>({
     emptyCopy,
     errorState,
     emptyState,
+    emptyAction: customEmptyAction,
     layout = "flush",
+    showToolbarSummary = false,
     ...tableProps
 }: ListDataTableProps<TData>) {
     const baseId = tableProps.idPrefix ?? tableProps.id ?? "data-table"
@@ -121,8 +123,9 @@ export function ListDataTable<TData>({
             onClearFilters !== undefined ||
             onCreate !== undefined)
 
-    const emptyAction =
-        hasActiveFilters && onClearFilters ? (
+    let emptyAction = noScope ? undefined : customEmptyAction
+    if (!noScope && hasActiveFilters && onClearFilters) {
+        emptyAction = (
             <Button
                 id={resolvedClearId}
                 type="button"
@@ -133,7 +136,9 @@ export function ListDataTable<TData>({
             >
                 {clearFiltersLabel}
             </Button>
-        ) : !noScope && canCreate && onCreate ? (
+        )
+    } else if (!noScope && canCreate && onCreate) {
+        emptyAction = (
             <Button
                 id={resolvedCreateId}
                 type="button"
@@ -144,7 +149,8 @@ export function ListDataTable<TData>({
             >
                 {createLabel}
             </Button>
-        ) : undefined
+        )
+    }
 
     const resolvedEmptyState =
         emptyState !== undefined ? (
@@ -195,6 +201,8 @@ export function ListDataTable<TData>({
         <DataTable
             {...tableProps}
             layout={layout}
+            showToolbarSummary={showToolbarSummary}
+            emptyAction={customEmptyAction}
             errorState={resolvedErrorState}
             emptyState={resolvedEmptyState}
         />

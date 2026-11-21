@@ -4,14 +4,16 @@ import type { CustomerAccountPreviewTarget } from "@/features/customer-receivabl
 
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
+import { BusinessFailureState } from "@/components/business"
+import { listWorkspaceEmptyStateClassName } from "@/components/business/list-workspace"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
+import type { CustomerAccountsLedgerListView } from "@/features/customer-receivables/api/list-view"
 import type {
-    CustomerAccountsListView,
     ReceiptRow,
     ReceivableAccountRow,
     SalesInvoiceRow,
 } from "@/features/customer-receivables/types"
-import { CustomerReceivablesMetrics } from "./customer-receivables-metrics"
 import { CustomerReceivablesTable } from "./customer-receivables-table"
 import {
     CustomerReceivablesToolbar,
@@ -20,10 +22,18 @@ import {
 import type { useCustomerReceivablesUrlState } from "../hooks/use-customer-receivables-url-state"
 
 type Props = {
-    data: CustomerAccountsListView | undefined
+    data: CustomerAccountsLedgerListView | undefined
     urlState: ReturnType<typeof useCustomerReceivablesUrlState>
     appliedChips: readonly ReceivableAppliedChip[]
+    profilePending: boolean
     isPending: boolean
+    isFetching: boolean
+    isPlaceholder: boolean
+    canReadView: boolean
+    profileError: unknown
+    onRetryProfile: () => void
+    embedded: boolean
+    canPreview: (kind: "receivable" | "receipt" | "invoice") => boolean
     isError: boolean
     error: unknown
     onRetry: () => void
@@ -34,12 +44,20 @@ type Props = {
     onPreview: (target: CustomerAccountPreviewTarget) => void
 }
 
-/** 客户往来列表分区：权限/范围状态、指标、筛选和表格。 */
+/** 客户往来列表分区：权限、范围状态、筛选和表格。 */
 export function CustomerReceivablesListPane({
     data,
     urlState,
     appliedChips,
+    profilePending,
     isPending,
+    isFetching,
+    isPlaceholder,
+    canReadView,
+    profileError,
+    onRetryProfile,
+    embedded,
+    canPreview,
     isError,
     error,
     onRetry,
@@ -49,44 +67,70 @@ export function CustomerReceivablesListPane({
     preview,
     onPreview,
 }: Props) {
-    if (data && !data.moduleAllowed) {
+    if (profileError) {
+        return (
+            <BusinessFailureState
+                idPrefix="customer-receivables-profile-failure"
+                title="暂时无法核对客户往来权限"
+                error={profileError}
+                action={
+                    <Button
+                        id="customer-receivables-list-retry"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={onRetryProfile}
+                    >
+                        重试
+                    </Button>
+                }
+            />
+        )
+    }
+    if (profilePending || (isPending && !isError)) {
+        return (
+            <div
+                role="status"
+                aria-label="正在加载客户往来"
+                aria-busy="true"
+                className="flex flex-col gap-3"
+            >
+                <Skeleton className="h-10 rounded-lg" />
+                <Skeleton className="h-96 rounded-none" />
+            </div>
+        )
+    }
+    if (!canReadView || (data && !data.moduleAllowed)) {
         return (
             <BusinessFailureState
                 kind="permission"
-                description="无客户往来模块权限或权限已收回。"
-            />
-        )
-    }
-    if (data && !data.hasDataScope) {
-        return (
-            <BusinessEmptyState
-                kind="no-scope"
-                title="暂无可查看的客户往来数据"
-                description="您当前尚未配置客户往来的数据查看范围，请联系管理员开通相应权限后再查询。"
+                className={listWorkspaceEmptyStateClassName}
+                description="无当前客户往来视图权限或权限已收回。"
             />
         )
     }
 
-    const metrics = data?.metrics
+    const noScope = Boolean(data && !data.hasDataScope)
     return (
-        <>
-            {!isError ? <CustomerReceivablesMetrics metrics={metrics} /> : null}
-
-            <CustomerReceivablesTable
-                view={urlState.view}
-                data={data}
-                isPending={isPending}
-                isError={isError}
-                error={error}
-                onRetry={onRetry}
-                metrics={metrics}
-                pagination={urlState.pagination}
-                receivableColumns={receivableColumns}
-                receiptColumns={receiptColumns}
-                invoiceColumns={invoiceColumns}
-                preview={preview}
-                onPreview={onPreview}
-                toolbar={
+        <CustomerReceivablesTable
+            view={urlState.view}
+            data={data}
+            loading={isFetching}
+            isError={isError}
+            error={error}
+            onRetry={onRetry}
+            noScope={noScope}
+            hasActiveFilters={urlState.hasActiveFilters}
+            onClearFilters={urlState.clearFilters}
+            canPreview={canPreview}
+            pagination={urlState.pagination}
+            receivableColumns={receivableColumns}
+            receiptColumns={receiptColumns}
+            invoiceColumns={invoiceColumns}
+            preview={preview}
+            onPreview={onPreview}
+            toolbar={
+                !noScope || isError ? (
                     <CustomerReceivablesToolbar
                         view={urlState.view}
                         searchDraft={urlState.searchDraft}
@@ -98,8 +142,6 @@ export function CustomerReceivablesListPane({
                         setCounterpartyPartyIdDraft={
                             urlState.setCounterpartyPartyIdDraft
                         }
-                        dueDraft={urlState.dueDraft}
-                        setDueDraft={urlState.setDueDraft}
                         statusDraft={urlState.statusDraft}
                         setStatusDraft={urlState.setStatusDraft}
                         panelOpen={urlState.panelOpen}
@@ -111,15 +153,15 @@ export function CustomerReceivablesListPane({
                         cancelMoreFilters={urlState.cancelMoreFilters}
                         clearFilters={urlState.clearFilters}
                         hasPendingChanges={urlState.hasPendingChanges}
-                        resultCount={data?.total}
-                        loading={isPending}
+                        loading={isFetching}
                         failed={isError}
                     />
-                }
-                patchUrl={urlState.patchUrl}
-                onPaginationChange={urlState.handlePaginationChange}
-                clearFilters={urlState.clearFilters}
-            />
-        </>
+                ) : null
+            }
+            embedded={embedded}
+            onPaginationChange={(next) => {
+                if (!isPlaceholder) urlState.handlePaginationChange(next)
+            }}
+        />
     )
 }

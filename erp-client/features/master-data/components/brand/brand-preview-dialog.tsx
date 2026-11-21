@@ -2,18 +2,9 @@
 
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 
-import { useRef } from "react"
 import { BanIcon, PencilIcon } from "lucide-react"
-import { BusinessStatusBadge } from "@/components/business"
+import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
 import { DisabledActionHint } from "@/features/master-data/components/list/list-chrome"
 import { BrandLogoImage } from "@/features/master-data/components/brand/brand-card-content"
 import type { MasterDataListItem } from "@/features/master-data/types"
@@ -34,7 +25,6 @@ export function BrandPreviewDialog({
     onDisable: (row: MasterDataListItem) => void
 }) {
     const prefix = "master-data-brands-preview"
-    const titleRef = useRef<HTMLHeadingElement>(null)
     const canRevise = row?.allowedActions.includes("CREATE_REVISION") ?? false
     const canDisable = row?.allowedActions.includes("DISABLE") ?? false
     const reviseReason = canRevise
@@ -48,7 +38,9 @@ export function BrandPreviewDialog({
               ?.message ?? "当前不可停用此品牌")
 
     return (
-        <Dialog
+        <QuickPreviewSheet
+            idPrefix={prefix}
+            size="preview"
             open={row != null}
             onOpenChange={(open) => {
                 if (!open) onClose()
@@ -56,100 +48,89 @@ export function BrandPreviewDialog({
             onOpenChangeComplete={(open) => {
                 if (!open) restoreListRowFocus(lastFocusedRowId.current)
             }}
-        >
-            <DialogContent
-                closeButtonId={`${prefix}-close`}
-                initialFocus={titleRef}
-                className="max-h-[calc(100dvh-2rem)] gap-0 overflow-y-auto p-0 sm:max-w-md"
-            >
-                <DialogHeader className="flex-row items-center gap-4 px-6 py-6 pr-14">
+            identity={
+                row ? (
+                    <span className="num wrap-anywhere">
+                        品牌代码：{row.dictionaryCode ?? row.stableNo}
+                    </span>
+                ) : null
+            }
+            title={
+                <span id={`${prefix}-title`}>{row?.name ?? "品牌资料"}</span>
+            }
+            headerMedia={
+                row ? (
                     <BrandLogoImage
-                        assetId={row?.brandLogoAssetId}
-                        name={row?.name ?? "品牌"}
-                        compact
+                        assetId={row.brandLogoAssetId}
+                        name={row.name}
                     />
-                    <div className="min-w-0 flex-1 space-y-2">
-                        <DialogTitle
-                            ref={titleRef}
-                            id={`${prefix}-title`}
-                            tabIndex={-1}
-                            className="break-words text-lg leading-6 outline-none"
-                        >
-                            {row?.name ?? "品牌资料"}
-                        </DialogTitle>
-                        <DialogDescription className="break-all text-xs leading-5">
-                            品牌代码：
-                            <span className="num">
-                                {row?.dictionaryCode ?? row?.stableNo ?? "—"}
-                            </span>
-                        </DialogDescription>
-                        {row ? (
-                            <BusinessStatusBadge
-                                context="preview"
-                                label={row.lifecycleStatusLabel}
-                                tone={row.lifecycleTone}
-                            />
-                        ) : null}
-                    </div>
-                </DialogHeader>
-                {row ? (
+                ) : null
+            }
+            summary={
+                row ? (
+                    <BusinessStatusBadge
+                        context="preview"
+                        label={row.lifecycleStatusLabel}
+                        tone={row.lifecycleTone}
+                    />
+                ) : null
+            }
+            footer={
+                row ? (
                     <>
-                        {row.primaryBlocker ? (
-                            <p className="px-6 pb-5 text-sm text-muted-foreground">
-                                {row.primaryBlocker}
-                            </p>
-                        ) : null}
-                        <DialogFooter className="flex-row flex-wrap items-center justify-between gap-3 border-t bg-surface-sunken/40 px-6 py-4 sm:justify-between">
-                            <PermissionGuard permission="product_brand:update">
-                                <DisabledActionHint message={disableReason}>
-                                    <Button
-                                        id={`${prefix}-disable`}
-                                        variant="ghost"
-                                        size="sm"
-                                        className="text-muted-foreground"
-                                        disabled={!canDisable}
-                                        title={disableReason}
-                                        onClick={() => onDisable(row)}
-                                    >
-                                        <BanIcon
-                                            data-icon="inline-start"
-                                            aria-hidden
-                                        />
-                                        停用品牌
-                                    </Button>
-                                </DisabledActionHint>
-                            </PermissionGuard>
-                            <div className="ml-auto flex items-center gap-2">
+                        <Button
+                            id={`${prefix}-cancel`}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={onClose}
+                        >
+                            关闭
+                        </Button>
+                        <PermissionGuard permission="product_brand:update">
+                            <DisabledActionHint message={disableReason}>
                                 <Button
-                                    id={`${prefix}-cancel`}
-                                    variant="outline"
+                                    id={`${prefix}-disable`}
+                                    type="button"
+                                    variant="ghost"
                                     size="sm"
-                                    onClick={onClose}
+                                    disabled={!canDisable}
+                                    title={disableReason}
+                                    onClick={() => onDisable(row)}
                                 >
-                                    关闭
+                                    <BanIcon
+                                        data-icon="inline-start"
+                                        aria-hidden
+                                    />
+                                    停用品牌
                                 </Button>
-                                <PermissionGuard permission="product_brand:update">
-                                    <DisabledActionHint message={reviseReason}>
-                                        <Button
-                                            id={`${prefix}-revise`}
-                                            size="sm"
-                                            disabled={!canRevise}
-                                            title={reviseReason}
-                                            onClick={() => onRevise(row)}
-                                        >
-                                            <PencilIcon
-                                                data-icon="inline-start"
-                                                aria-hidden
-                                            />
-                                            编辑品牌
-                                        </Button>
-                                    </DisabledActionHint>
-                                </PermissionGuard>
-                            </div>
-                        </DialogFooter>
+                            </DisabledActionHint>
+                            <DisabledActionHint message={reviseReason}>
+                                <Button
+                                    id={`${prefix}-revise`}
+                                    type="button"
+                                    size="sm"
+                                    disabled={!canRevise}
+                                    title={reviseReason}
+                                    onClick={() => onRevise(row)}
+                                >
+                                    <PencilIcon
+                                        data-icon="inline-start"
+                                        aria-hidden
+                                    />
+                                    编辑品牌
+                                </Button>
+                            </DisabledActionHint>
+                        </PermissionGuard>
                     </>
-                ) : null}
-            </DialogContent>
-        </Dialog>
+                ) : null
+            }
+        >
+            {row?.primaryBlocker ? (
+                <p className="text-body-compact text-muted-foreground">
+                    {row.primaryBlocker}
+                </p>
+            ) : null}
+        </QuickPreviewSheet>
     )
 }

@@ -2,7 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { MoneyValue } from "@/components/business"
+import { MoneyValue, TableIdentityCell } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import type { UnallocatedRow } from "@/features/supplier-payables/types"
 
@@ -25,16 +25,16 @@ export function buildUnallocatedColumns(): ColumnDef<UnallocatedRow>[] {
         {
             id: "doc",
             header: "单据 / 供应商",
-            meta: { label: "单据", width: "reference" },
+            meta: { label: "单据", width: "flex" },
             cell: ({ row }) => (
-                <div className="text-sm">
-                    <div className="num font-medium">
-                        {row.original.documentNo}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                        {row.original.supplierName}
-                    </div>
-                </div>
+                <TableIdentityCell
+                    primary={
+                        <span className="num">{row.original.documentNo}</span>
+                    }
+                    primaryTitle={row.original.documentNo}
+                    secondary={row.original.supplierName}
+                    secondaryTitle={row.original.supplierName}
+                />
             ),
         },
         {
@@ -47,13 +47,18 @@ export function buildUnallocatedColumns(): ColumnDef<UnallocatedRow>[] {
                 numeric: true,
             },
             cell: ({ row }) => (
-                <div className="text-end">
+                <div>
                     <MoneyValue
                         value={row.original.unallocatedAmount}
                         taxBasis="gross"
+                        display="exact"
                     />
                     <div className="text-xs text-muted-foreground">
-                        记录 <MoneyValue value={row.original.amount} />
+                        记录{" "}
+                        <MoneyValue
+                            value={row.original.amount}
+                            display="exact"
+                        />
                     </div>
                 </div>
             ),

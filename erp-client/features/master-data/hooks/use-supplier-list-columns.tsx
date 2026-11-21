@@ -3,7 +3,12 @@
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { Badge } from "@/components/ui/badge"
+import {
+    BusinessStatusBadge,
+    TableEmptyCell,
+    TableTextCell,
+} from "@/components/business"
+import type { StatusTone } from "@/components/ui/status-badge"
 import {
     lifecycleColumn,
     nameColumn,
@@ -12,23 +17,24 @@ import {
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
     qualificationHealthLabel,
+    selectedSupplierOptionLabels,
+    SUPPLIER_CAPABILITY_OPTIONS,
     SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
 } from "@/features/master-data/lib/list-filters"
-import { capabilityLabel } from "@/features/master-data/api/presentation"
 import type {
     MasterDataListItem,
     SupplierQualificationHealth,
 } from "@/features/master-data/types"
 
-const HEALTH_BADGE_VARIANT: Record<
+const QUALIFICATION_HEALTH_TONE: Record<
     SupplierQualificationHealth,
-    React.ComponentProps<typeof Badge>["variant"]
+    StatusTone
 > = {
     valid: "success",
     expiring_30: "warning",
     expired: "destructive",
-    unverified: "orange",
-    not_registered: "outline",
+    unverified: "warning",
+    not_registered: "neutral",
 }
 
 export function useSupplierListColumns() {
@@ -45,12 +51,10 @@ export function useSupplierListColumns() {
                 header: "维护人",
                 meta: { label: "维护人" },
                 cell: ({ row }) => (
-                    <span className="truncate text-sm">
-                        {row.original.supplierList?.maintainerUserName ||
-                            row.original.supplierList?.maintainerUserId || (
-                                <span className="text-muted-foreground">—</span>
-                            )}
-                    </span>
+                    <TableTextCell
+                        value={row.original.supplierList?.maintainerUserName}
+                        clamp={1}
+                    />
                 ),
             },
             {
@@ -58,8 +62,12 @@ export function useSupplierListColumns() {
                 header: masterDataCopy.colCapability,
                 meta: { label: masterDataCopy.colCapability },
                 cell: ({ row }) => (
-                    <CapabilityBadges
-                        codes={row.original.supplierList?.capabilityCodes ?? []}
+                    <TableTextCell
+                        value={selectedSupplierOptionLabels(
+                            row.original.supplierList?.capabilityCodes ?? [],
+                            SUPPLIER_CAPABILITY_OPTIONS,
+                        ).join("、")}
+                        clamp={2}
                     />
                 ),
             },
@@ -101,6 +109,7 @@ export function useSupplierListColumns() {
                         secondary={
                             row.original.supplierList?.invoiceTaxRatesLabel
                         }
+                        numericSecondary
                     />
                 ),
             },
@@ -109,60 +118,49 @@ export function useSupplierListColumns() {
                 header: masterDataCopy.colBusinessCategory,
                 meta: { label: masterDataCopy.colBusinessCategory },
                 cell: ({ row }) => (
-                    <span className="truncate text-sm">
-                        {row.original.supplierList?.businessCategory || (
-                            <span className="text-muted-foreground">—</span>
-                        )}
-                    </span>
+                    <TableTextCell
+                        value={row.original.supplierList?.businessCategory}
+                        clamp={1}
+                    />
                 ),
             },
-            revisionNoColumn(),
+            {
+                ...revisionNoColumn(),
+                meta: {
+                    label: masterDataCopy.colVersion,
+                    align: "end",
+                    numeric: true,
+                    width: "quantity",
+                },
+            },
         ],
         [],
     )
 }
 
-function CapabilityBadges({ codes }: { codes: readonly string[] }) {
-    if (codes.length === 0) {
-        return <span className="text-sm text-muted-foreground">—</span>
-    }
-    return (
-        <div className="flex min-w-0 flex-wrap gap-1">
-            {codes.map((code) => (
-                <Badge key={code} variant="secondary">
-                    {capabilityLabel(code) || code}
-                </Badge>
-            ))}
-        </div>
-    )
-}
-
 function QualificationCell({ item }: { item: MasterDataListItem }) {
     const health = item.supplierList?.qualificationHealth
-    const types = item.supplierList?.qualificationTypes ?? []
-    const typeLabel = types
-        .map(
-            (code) =>
-                SUPPLIER_QUALIFICATION_TYPE_OPTIONS.find(
-                    (option) => option.value === code,
-                )?.label ?? code,
-        )
-        .join("、")
-    if (!health) {
-        return <span className="text-sm text-muted-foreground">—</span>
-    }
+    const types = selectedSupplierOptionLabels(
+        item.supplierList?.qualificationTypes ?? [],
+        SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
+    ).join("、")
+    if (!health && !types) return <TableEmptyCell />
     return (
-        <div className="min-w-0 space-y-1">
-            <Badge variant={HEALTH_BADGE_VARIANT[health]}>
-                {qualificationHealthLabel(health)}
-            </Badge>
-            {typeLabel ? (
-                <div
-                    className="truncate text-xs text-muted-foreground"
-                    title={typeLabel}
-                >
-                    {typeLabel}
-                </div>
+        <div className="flex min-w-0 flex-col items-start gap-0.5">
+            {health ? (
+                <BusinessStatusBadge
+                    context="list"
+                    tone={QUALIFICATION_HEALTH_TONE[health]}
+                    label={qualificationHealthLabel(health)}
+                    appearance={health === "valid" ? "quiet" : "badge"}
+                />
+            ) : null}
+            {types ? (
+                <TableTextCell
+                    value={types}
+                    clamp={1}
+                    className="w-full text-xs text-muted-foreground"
+                />
             ) : null}
         </div>
     )
@@ -171,22 +169,29 @@ function QualificationCell({ item }: { item: MasterDataListItem }) {
 function TwoLineCell({
     primary,
     secondary,
+    numericSecondary = false,
 }: {
     primary?: string
     secondary?: string
+    numericSecondary?: boolean
 }) {
-    const main = primary && primary !== "—" ? primary : undefined
-    const sub = secondary && secondary !== "—" ? secondary : undefined
-    if (!main && !sub) {
-        return <span className="text-sm text-muted-foreground">—</span>
-    }
+    const main = primary !== "—" ? primary : undefined
+    const sub = secondary !== "—" ? secondary : undefined
+    if (!main && !sub) return <TableEmptyCell />
     return (
-        <div className="min-w-0">
-            <div className="truncate text-sm">{main ?? sub}</div>
+        <div className="flex min-w-0 flex-col">
+            <TableTextCell
+                value={main ?? sub}
+                clamp={1}
+                numeric={!main && numericSecondary}
+            />
             {main && sub ? (
-                <div className="truncate text-xs text-muted-foreground">
-                    {sub}
-                </div>
+                <TableTextCell
+                    value={sub}
+                    clamp={1}
+                    numeric={numericSecondary}
+                    className="text-xs text-muted-foreground"
+                />
             ) : null}
         </div>
     )
@@ -199,29 +204,18 @@ function EntityNames({
     signing?: string
     payment?: string
 }) {
-    if (!signing && !payment) {
-        return <span className="text-sm text-muted-foreground">—</span>
-    }
-    if (signing && payment && signing === payment) {
-        return (
-            <span className="truncate text-sm" title={signing}>
-                {signing}
-            </span>
-        )
+    if (!payment || signing === payment) {
+        return <TableTextCell value={signing} clamp={1} />
     }
     return (
-        <div className="min-w-0 space-y-0.5">
-            <div className="truncate text-sm" title={signing}>
-                {signing || "—"}
-            </div>
-            {payment ? (
-                <div
-                    className="truncate text-xs text-muted-foreground"
-                    title={payment}
-                >
-                    付款 {payment}
-                </div>
-            ) : null}
+        <div className="flex min-w-0 flex-col">
+            <TableTextCell value={signing} clamp={1} />
+            <TableTextCell
+                value={`付款 ${payment}`}
+                title={payment}
+                clamp={1}
+                className="text-xs text-muted-foreground"
+            />
         </div>
     )
 }

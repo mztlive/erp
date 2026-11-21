@@ -5,14 +5,10 @@ import Link from "next/link"
 import { PlusIcon } from "lucide-react"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
 
-import {
-    BusinessEmptyState,
-    BusinessFailureState,
-    DataTable,
-} from "@/components/business"
+import { BusinessFailureState } from "@/components/business"
+import { ListDataTable } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { useSalesOrdersListKeyboardNav } from "@/features/sales-orders/hooks/use-sales-orders-list-keyboard-nav"
-import type { SalesOrdersUrlState } from "@/features/sales-orders/lib/url-state"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import { buildSalesOrdersListColumns } from "./sales-orders-list-columns"
 
@@ -26,12 +22,12 @@ export function SalesOrdersListTable(props: {
     onRetry: () => void
     filtersActive: boolean
     onClearFilters: () => void
-    url: SalesOrdersUrlState
     sorting: SortingState
     onSortingChange: (next: SortingState) => void
     pagination: PaginationState
     onPaginationChange: (next: PaginationState) => void
     canCreate: boolean
+    createHref: string
     canOpen: boolean
     canDownloadContract: boolean
     onRowNavigate: (id: string) => void
@@ -47,12 +43,12 @@ export function SalesOrdersListTable(props: {
         onRetry,
         filtersActive,
         onClearFilters,
-        url,
         sorting,
         onSortingChange,
         pagination,
         onPaginationChange,
         canCreate,
+        createHref,
         canOpen,
         canDownloadContract,
         onRowNavigate,
@@ -60,11 +56,7 @@ export function SalesOrdersListTable(props: {
         downloadContract,
     } = props
 
-    useSalesOrdersListKeyboardNav({
-        items,
-        url,
-        onRowNavigate: canOpen ? onRowNavigate : undefined,
-    })
+    useSalesOrdersListKeyboardNav(canOpen)
 
     const columns = React.useMemo(
         () =>
@@ -77,66 +69,11 @@ export function SalesOrdersListTable(props: {
         [canDownloadContract, canOpen, downloadingContractId, downloadContract],
     )
 
-    const errorState =
-        isError && items.length === 0 ? (
-            <BusinessFailureState
-                id="sales-orders-list-retry"
-                title="销售单列表加载失败"
-                error={error}
-                onRetry={onRetry}
-            />
-        ) : undefined
-    const noScope = props.noScope === true
-    const emptyState =
-        !loading && items.length === 0 ? (
-            <BusinessEmptyState
-                kind={filtersActive ? "filter" : "no-data"}
-                title={
-                    noScope
-                        ? "暂无销售单数据范围"
-                        : filtersActive
-                          ? undefined
-                          : "还没有销售单"
-                }
-                description={
-                    noScope
-                        ? "请联系管理员配置可查看的业务范围。"
-                        : filtersActive
-                          ? "换一个关键词或清除筛选后再试。"
-                          : "当前业务范围内还没有销售单，可新建第一张单。"
-                }
-                action={
-                    noScope ? undefined : filtersActive ? (
-                        <Button
-                            id="sales-orders-list-empty-clear"
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={onClearFilters}
-                        >
-                            清除筛选
-                        </Button>
-                    ) : canCreate ? (
-                        <Button
-                            id="sales-orders-list-empty-create"
-                            type="button"
-                            size="sm"
-                            render={<Link href="/sales/orders?mode=create" />}
-                        >
-                            <PlusIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            新建销售单
-                        </Button>
-                    ) : undefined
-                }
-            />
-        ) : undefined
-
     return (
-        <DataTable
+        <ListDataTable
             id="sales-orders-list-table"
+            entityName="销售单"
+            caption="销售单列表"
             data={items}
             columns={columns}
             defaultColumnVisibility={{
@@ -145,17 +82,66 @@ export function SalesOrdersListTable(props: {
                 currentOwner: false,
                 submittedAt: false,
             }}
+            defaultColumnOrder={[
+                "document",
+                "status",
+                "tracks",
+                "amount",
+                "owner",
+                "nature",
+                "contract",
+                "currentOwner",
+                "submittedAt",
+                "actions",
+            ]}
+            defaultColumnPinning={{ left: ["document"], right: ["actions"] }}
             getRowId={(row) => row.id}
+            rowLabel={(row) => `${row.documentNumber} · ${row.customerName}`}
             rowCount={total}
             sorting={sorting}
             onSortingChange={onSortingChange}
             pagination={pagination}
             onPaginationChange={onPaginationChange}
             loading={loading}
-            errorState={errorState}
-            emptyState={emptyState}
-            layout="flush"
-            defaultColumnPinning={{ left: ["document"] }}
+            errorState={
+                isError ? (
+                    <BusinessFailureState
+                        id="sales-orders-list-retry"
+                        title="销售单列表加载失败"
+                        error={error}
+                        onRetry={onRetry}
+                    />
+                ) : undefined
+            }
+            noScope={props.noScope}
+            hasActiveFilters={filtersActive}
+            onClearFilters={onClearFilters}
+            clearFiltersButtonId="sales-orders-list-empty-clear"
+            canCreate={canCreate}
+            emptyAction={
+                canCreate ? (
+                    <Button
+                        id="sales-orders-list-empty-create"
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="rounded-lg shadow-none"
+                        render={<Link href={createHref} />}
+                    >
+                        <PlusIcon data-icon="inline-start" aria-hidden="true" />
+                        新建销售单
+                    </Button>
+                ) : undefined
+            }
+            showPagination={!isError && (!loading || total > 0)}
+            emptyCopy={{
+                noScopeTitle: "暂无销售单数据范围",
+                noScopeDescription: "请联系管理员配置可查看的业务范围。",
+                emptyDescription: canCreate
+                    ? "当前业务范围内还没有销售单，可新建第一张单。"
+                    : "当前业务范围内还没有销售单。",
+            }}
+            scrollable
             onRowOpen={canOpen ? (row) => onRowNavigate(row.id) : undefined}
         />
     )

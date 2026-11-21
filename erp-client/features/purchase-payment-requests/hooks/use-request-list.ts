@@ -13,6 +13,7 @@ import {
 import { usePaymentRequestsQuery } from "./queries"
 
 export function useRequestList(
+    canList: boolean,
     canReadCandidates: boolean,
     canFilterSupplier: boolean,
     permissionsReady: boolean,
@@ -97,7 +98,7 @@ export function useRequestList(
             ...url,
             view: url.view === "draft" ? "draft" : "effective",
         },
-        url.view !== "available",
+        canList && url.view !== "available",
     )
     const applied: RequestFilters = {
         request_no: url.request_no ?? "",
@@ -109,6 +110,7 @@ export function useRequestList(
     // 空结果也要归位；非空结果的越界页由 DataTable 统一钳位。
     useEffect(() => {
         if (
+            canList &&
             url.view !== "available" &&
             query.isSuccess &&
             query.data.total === 0 &&
@@ -116,7 +118,14 @@ export function useRequestList(
         ) {
             update({ page: 1 })
         }
-    }, [url.view, url.page, query.isSuccess, query.data?.total, update])
+    }, [
+        canList,
+        url.view,
+        url.page,
+        query.isSuccess,
+        query.data?.total,
+        update,
+    ])
     const sorting: SortingState = url.sort_by
         ? [
               {

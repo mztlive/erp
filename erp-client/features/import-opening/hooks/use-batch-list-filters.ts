@@ -2,7 +2,6 @@
 
 import * as React from "react"
 
-import type { BatchAppliedChip } from "@/features/import-opening/components/batch-list-toolbar"
 import { useBatchSearchDraft } from "@/features/import-opening/hooks/use-batch-search"
 import type { ImportOpeningUrlState } from "@/features/import-opening/lib/url-state"
 import {
@@ -10,8 +9,8 @@ import {
     type ImportObjectCode,
 } from "@/features/import-opening/types"
 
-/** 可被单独移除的已生效批次筛选条件。 */
-export type BatchFilterKey = "q" | "objectType"
+type BatchFilterKey = "q" | "objectType"
+type BatchAppliedChip = Readonly<{ key: BatchFilterKey; label: string }>
 
 export type BatchObjectTypeDraft = ImportObjectCode | "all"
 const OBJECT_CODE_VALUES = Object.keys(
@@ -44,7 +43,6 @@ export function useBatchListFilters({
     const { qDraft, setQDraft, searchInputRef } = useBatchSearchDraft(q)
     const [objectTypeDraft, setObjectTypeDraft] =
         React.useState<BatchObjectTypeDraft>(appliedObjectType ?? "all")
-    const hasStructuredBatchFilters = Boolean(appliedObjectType)
     const hasAppliedBatchFilters = Boolean(q.trim() || appliedObjectType)
 
     /** 单一提交路径：一次性写入全部筛选参数并回第 1 页（§5.3）。 */
@@ -91,28 +89,27 @@ export function useBatchListFilters({
         setObjectTypeDraft(appliedObjectType ?? "all")
     }, [appliedObjectType])
 
+    // 主筛选已显示的值不重复展示；仅提示被草稿覆盖但仍生效的值。
     const appliedChips = React.useMemo<readonly BatchAppliedChip[]>(() => {
         const chips: BatchAppliedChip[] = []
-        if (q.trim()) {
+        if (q.trim() && qDraft.trim() !== q.trim()) {
             chips.push({ key: "q", label: `搜索：${q.trim()}` })
         }
-        if (appliedObjectType) {
+        if (appliedObjectType && objectTypeDraft !== appliedObjectType) {
             chips.push({
                 key: "objectType",
                 label: `类型：${OBJECT_CODE_LABEL[appliedObjectType]}`,
             })
         }
         return chips
-    }, [appliedObjectType, q])
+    }, [appliedObjectType, objectTypeDraft, q, qDraft])
 
     const hasPendingChanges =
         qDraft.trim() !== q.trim() ||
         objectTypeDraft !== (appliedObjectType ?? "all")
 
     return {
-        q,
         appliedObjectType,
-        hasStructuredBatchFilters,
         hasAppliedBatchFilters,
         qDraft,
         setQDraft,

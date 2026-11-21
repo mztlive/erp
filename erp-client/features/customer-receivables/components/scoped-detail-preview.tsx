@@ -1,5 +1,6 @@
 "use client"
 
+import type { ComponentProps } from "react"
 import Link from "next/link"
 import { ArrowUpRightIcon } from "lucide-react"
 
@@ -10,6 +11,9 @@ import {
     QuickPreviewSheet,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
+import { instantToIso } from "@/features/customer-receivables/api/mappers"
 import type { ReceivableScopeDetail } from "@/features/customer-receivables/api/scoped"
 import {
     PreviewAmount,
@@ -17,6 +21,7 @@ import {
     PreviewNote,
     PreviewSection,
 } from "@/components/business/financial-preview"
+import { formatDateTime } from "@/lib/datetime"
 import { scopeText } from "@/lib/ui-text"
 import { getErrorMessage } from "@/lib/api/errors"
 import {
@@ -33,7 +38,7 @@ type Props = Readonly<{
     error: unknown
     onRetry: () => void
     onClose: () => void
-    onClosed?: () => void
+    finalFocus?: ComponentProps<typeof QuickPreviewSheet>["finalFocus"]
 }>
 
 const bodyClassName = "space-y-6 text-sm"
@@ -48,7 +53,7 @@ export function ReceivableScopeDetailPreview({
     error,
     onRetry,
     onClose,
-    onClosed,
+    finalFocus,
 }: Props) {
     const title =
         data?.kind === "receivable"
@@ -66,7 +71,7 @@ export function ReceivableScopeDetailPreview({
                   MISSING_SALES_ORDER_NO,
               )}`
             : data?.kind === "receipt"
-              ? `到账 ${data.receipt.received_at}`
+              ? `到账 ${formatDateTime(instantToIso(data.receipt.received_at))}`
               : data?.kind === "invoice"
                 ? data.invoice.invoice_date
                     ? `开票 ${data.invoice.invoice_date}`
@@ -88,14 +93,12 @@ export function ReceivableScopeDetailPreview({
             onOpenChange={(nextOpen) => {
                 if (!nextOpen) onClose()
             }}
-            onOpenChangeComplete={(nextOpen) => {
-                if (!nextOpen) onClosed?.()
-            }}
+            finalFocus={finalFocus}
             size="preview"
             title={title}
             identity={identity}
             summary={
-                limited ? (
+                !data || isError ? null : limited ? (
                     <div className="flex items-center gap-2">
                         <BusinessStatusBadge
                             context="preview"
@@ -125,26 +128,28 @@ export function ReceivableScopeDetailPreview({
                         关闭
                     </Button>
                     {data?.kind === "receivable" ? (
-                        <Button
-                            id="customer-receivables-scope-preview-open-order"
-                            type="button"
-                            render={
-                                <Link
-                                    href={`/sales/sales-orders/${data.receivable.sales_order_id}`}
-                                />
-                            }
-                        >
-                            打开销售单
-                            <ArrowUpRightIcon data-icon="inline-end" />
-                        </Button>
+                        <PermissionGuard permission="sales_order:detail">
+                            <Button
+                                id="customer-receivables-scope-preview-open-order"
+                                type="button"
+                                render={
+                                    <Link
+                                        href={`/sales/sales-orders/${data.receivable.sales_order_id}`}
+                                    />
+                                }
+                            >
+                                打开销售单
+                                <ArrowUpRightIcon data-icon="inline-end" />
+                            </Button>
+                        </PermissionGuard>
                     ) : null}
                 </>
             }
         >
             {isPending ? (
-                <div className="space-y-3">
-                    <div className="h-24 animate-pulse rounded-xl bg-muted" />
-                    <div className="h-40 animate-pulse rounded-xl bg-muted" />
+                <div className="flex flex-col gap-3" aria-busy="true">
+                    <Skeleton className="h-24" />
+                    <Skeleton className="h-40" />
                 </div>
             ) : isError ? (
                 <div className="space-y-3">

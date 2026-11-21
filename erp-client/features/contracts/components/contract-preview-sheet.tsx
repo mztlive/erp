@@ -19,6 +19,7 @@ type ContractPreviewSheetProps = {
     detailLoading: boolean
     onOpenChange: (open: boolean) => void
     onShowPaper: (contractId: string) => void
+    finalFocus: React.ComponentProps<typeof QuickPreviewSheet>["finalFocus"]
 }
 
 /** 列表行预览半屏：单栏摘要 + 打开详情 / 新建销售单 / 纸质预览。 */
@@ -28,6 +29,7 @@ export function ContractPreviewSheet({
     detailLoading,
     onOpenChange,
     onShowPaper,
+    finalFocus,
 }: ContractPreviewSheetProps) {
     const canCreateSo =
         row?.allowedActions.includes("CREATE_SALES_ORDER") ?? false
@@ -45,6 +47,7 @@ export function ContractPreviewSheet({
             id="card-contracts-preview-sheet"
             open={row != null}
             onOpenChange={onOpenChange}
+            finalFocus={finalFocus}
             size="detail"
             title={row?.customer.displayName ?? "合同预览"}
             identity={

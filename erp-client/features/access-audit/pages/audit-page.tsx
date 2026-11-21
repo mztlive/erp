@@ -1,32 +1,30 @@
 "use client"
 
-import type { ReactNode } from "react"
 import { useRouter, useSearchParams } from "@/lib/navigation"
 import { DownloadIcon, ShieldCheckIcon } from "lucide-react"
 
 import {
-    BusinessFailureState,
     BusinessEmptyState,
+    BusinessFailureState,
     FormalActionResult,
-    PageScaffold,
 } from "@/components/business"
 import {
-    ListWorkSurface,
-    ListWorkspaceHeader,
-    ListWorkspaceViews,
-    listWorkspaceStyles as styles,
+    ListDataTable,
+    ListWorkspacePage,
+    listWorkspaceEmptyStateClassName,
+    type ListWorkspaceViewsConfig,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { PolicyBanner } from "@/features/access-audit/components/policy-banner"
 import { AccessListToolbar } from "@/features/access-audit/components/access-list-toolbar"
 import { AccessPreviewSheets } from "@/features/access-audit/components/access-preview-sheets"
 import { useAccessAuditPage } from "@/features/access-audit/pages/hooks/use-access-audit-page"
-import { AccessViewTable } from "@/features/access-audit/pages/components/access-view-table"
-import type { AuditEventRow } from "@/features/access-audit/types"
 import { formatDateTime } from "@/lib/datetime"
 import { hasPermission } from "@/lib/permissions"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { BusinessAuditPage } from "@/features/audit/pages/business-audit-page"
+
+const TITLE = "审计查询"
 
 /** 身份与业务记录分别使用各自的目录和查询权限。 */
 export function AuditPage() {
@@ -51,52 +49,47 @@ export function AuditPage() {
         params.set("source", next)
         router.replace(`/system/audit?${params}`, { scroll: false })
     }
-    const views = (
-        <ListWorkspaceViews
-            ariaLabel="审计记录类型"
-            items={[
-                ...(canBusiness
-                    ? [
-                          {
-                              id: "operations-audit-source-business",
-                              label: "业务操作",
-                              active: source === "business",
-                              onClick: () => selectSource("business"),
-                          },
-                      ]
-                    : []),
-                ...(canIdentity
-                    ? [
-                          {
-                              id: "operations-audit-source-identity",
-                              label: "权限变更",
-                              active: source === "identity",
-                              onClick: () => selectSource("identity"),
-                          },
-                      ]
-                    : []),
-            ]}
-        />
-    )
+    const views: ListWorkspaceViewsConfig = {
+        ariaLabel: "审计记录类型",
+        items: [
+            ...(canBusiness
+                ? [
+                      {
+                          id: "operations-audit-source-business",
+                          label: "业务操作",
+                          active: source === "business",
+                          onClick: () => selectSource("business"),
+                      },
+                  ]
+                : []),
+            ...(canIdentity
+                ? [
+                      {
+                          id: "operations-audit-source-identity",
+                          label: "权限变更",
+                          active: source === "identity",
+                          onClick: () => selectSource("identity"),
+                      },
+                  ]
+                : []),
+        ],
+    }
 
     if (account.isPending) {
-        return (
-            <PageScaffold density="compact" className={styles.page}>
-                <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
-                <div className="h-[32rem] animate-pulse rounded-lg bg-muted" />
-            </PageScaffold>
-        )
+        return <ListWorkspacePage title={TITLE} loading />
     }
     if (account.isError || (!canBusiness && !canIdentity)) {
         return (
-            <PageScaffold density="compact" className={styles.page}>
-                <ListWorkspaceHeader eyebrow="系统" title="审计查询" />
+            <ListWorkspacePage title={TITLE}>
                 {account.isError ? (
                     <BusinessFailureState
                         error={account.error}
                         action={
                             <Button
                                 id="operations-audit-account-retry"
+                                type="button"
+                                size="sm"
+                                variant="outline"
                                 onClick={() => void account.refetch()}
                             >
                                 重试
@@ -106,11 +99,12 @@ export function AuditPage() {
                 ) : (
                     <BusinessEmptyState
                         kind="no-scope"
+                        className={listWorkspaceEmptyStateClassName}
                         title="暂无审计查询权限"
                         description="请联系管理员配置业务操作或权限变更的查询权限。"
                     />
                 )}
-            </PageScaffold>
+            </ListWorkspacePage>
         )
     }
     return source === "business" ? (
@@ -133,109 +127,94 @@ function IdentityAuditPage({
     views,
     canReadRoles,
 }: {
-    views: ReactNode
+    views: ListWorkspaceViewsConfig
     canReadRoles: boolean
 }) {
     const page = useAccessAuditPage("audit")
 
-    if (page.pageQuery.isPending) {
-        return (
-            <PageScaffold density="compact" className={styles.page}>
-                <div className="h-9 w-40 animate-pulse rounded-lg bg-muted" />
-                <div className="h-10 animate-pulse rounded-lg bg-muted" />
-                <div className="h-[32rem] animate-pulse rounded-lg bg-muted" />
-            </PageScaffold>
-        )
-    }
-
-    const data = page.data
+    const { data, pageQuery, pagination } = page
     const rows = data?.auditEvents ?? []
-    const coverage =
-        data?.auditCoverageFrom && data.auditCoverageTo
-            ? `覆盖 ${formatDateTime(data.auditCoverageFrom, "full")} ~ ${formatDateTime(data.auditCoverageTo, "full")}。`
-            : null
+    const pageStart = pagination.pageIndex * pagination.pageSize
+    const emptyReason = data?.emptyReason
+    const isError = pageQuery.isError && !data
+    const noModulePermission = emptyReason === "NO_MODULE_PERMISSION"
 
     return (
-        <PageScaffold density="compact" className={styles.page}>
-            <ListWorkspaceHeader
-                eyebrow="系统"
-                title="审计查询"
-                description={
-                    coverage
-                        ? `按时间、操作者与对象查询审计事件。${coverage}`
-                        : "按时间、操作者与对象查询审计事件。"
-                }
-            >
-                <div className="flex flex-wrap items-center gap-2">
-                    {canReadRoles && (
-                        <Button
-                            id="operations-audit-go-access-config"
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() =>
-                                page.routerPush("/system/access-audit")
+        <ListWorkspacePage
+            title={TITLE}
+            views={views}
+            loading={pageQuery.isPending}
+            actions={[
+                {
+                    id: "operations-audit-go-access-config",
+                    actionKey: "access-config",
+                    label: "权限配置",
+                    icon: ShieldCheckIcon,
+                    tier: "quiet",
+                    type: "button",
+                    hidden: !canReadRoles,
+                    onClick: () => page.routerPush("/system/access-audit"),
+                },
+                {
+                    id: "operations-audit-export",
+                    actionKey: "export",
+                    label: "导出审计",
+                    icon: DownloadIcon,
+                    tier: "quiet",
+                    type: "button",
+                    disabled: page.exportBlocked,
+                    title: page.exportBlocked
+                        ? (page.exportBlocker?.message ?? "导出已禁用")
+                        : "导出当前筛选的审计事件",
+                    onClick: page.handleExport,
+                },
+            ]}
+            alerts={
+                <>
+                    {data ? (
+                        <PolicyBanner
+                            policies={data.governancePolicies}
+                            view="audit"
+                        />
+                    ) : null}
+                    {page.lastResult ? (
+                        <FormalActionResult
+                            status={
+                                page.lastResult.status === "failed"
+                                    ? "blocked"
+                                    : page.lastResult.status
                             }
-                        >
-                            <ShieldCheckIcon
-                                className="size-3.5"
-                                aria-hidden="true"
-                            />
-                            权限配置
-                        </Button>
-                    )}
-                    <Button
-                        id="operations-audit-export"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={page.exportBlocked}
-                        title={
-                            page.exportBlocked
-                                ? (page.exportBlocker?.message ?? "导出已禁用")
-                                : "导出当前筛选的审计事件"
-                        }
-                        onClick={() => page.handleExport()}
-                    >
-                        <DownloadIcon className="size-3.5" aria-hidden="true" />
-                        导出审计
-                    </Button>
-                </div>
-            </ListWorkspaceHeader>
-
-            {data ? (
-                <PolicyBanner policies={data.governancePolicies} view="audit" />
-            ) : null}
-
-            {page.lastResult ? (
-                <FormalActionResult
-                    status={
-                        page.lastResult.status === "failed"
-                            ? "blocked"
-                            : page.lastResult.status
-                    }
-                    title={page.lastResult.title}
-                    description={page.lastResult.description}
-                    reference={page.lastResult.reference}
-                    facts={page.lastResult.facts}
-                    actions={
-                        <Button
-                            id="operations-audit-result-close"
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => page.setLastResult(null)}
-                        >
-                            关闭
-                        </Button>
-                    }
-                />
-            ) : null}
-
-            <ListWorkSurface
-                ariaLabel="审计事件列表"
-                views={views}
-                toolbar={
+                            title={page.lastResult.title}
+                            description={page.lastResult.description}
+                            reference={page.lastResult.reference}
+                            facts={page.lastResult.facts}
+                            actions={
+                                <Button
+                                    id="operations-audit-result-close"
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => page.setLastResult(null)}
+                                >
+                                    关闭
+                                </Button>
+                            }
+                        />
+                    ) : null}
+                </>
+            }
+            notices={
+                data?.auditCoverageFrom && data.auditCoverageTo ? (
+                    <p className="num text-xs text-muted-foreground">
+                        覆盖 {formatDateTime(data.auditCoverageFrom, "full")} ~{" "}
+                        {formatDateTime(data.auditCoverageTo, "full")}。
+                    </p>
+                ) : null
+            }
+            surface={{
+                ariaLabel: "审计事件列表",
+                tableClassName: "min-h-64",
+                toolbar: (
                     <AccessListToolbar
                         isAudit
                         searchInputRef={page.searchInputRef}
@@ -254,57 +233,64 @@ function IdentityAuditPage({
                         resetMoreFilters={page.resetMoreFilters}
                         onCancelMoreFilters={page.cancelMoreFilters}
                         hasPendingChanges={page.hasPendingChanges}
-                        resultCount={rows.length}
-                        loading={
-                            page.pageQuery.isFetching &&
-                            !page.pageQuery.isPending
-                        }
-                        failed={page.pageQuery.isError && !data}
+                        loading={pageQuery.isFetching}
+                        failed={pageQuery.isError}
                     />
-                }
-                table={
-                    <AccessViewTable
-                        view="audit"
-                        isAudit
-                        rows={rows}
-                        pagination={page.pagination}
+                ),
+                table: (
+                    <ListDataTable
+                        id="operations-audit-events-table"
+                        entityName="权限变更记录"
+                        scrollable
+                        data={rows.slice(
+                            pageStart,
+                            pageStart + pagination.pageSize,
+                        )}
+                        columns={page.auditColumns}
+                        getRowId={(row) => row.auditEventId}
+                        rowCount={rows.length}
+                        rowLabel={(row) =>
+                            `${row.actionLabel} ${row.objectLabel}`
+                        }
+                        pagination={pagination}
                         onPaginationChange={page.handlePaginationChange}
-                        isFetching={
-                            page.pageQuery.isFetching &&
-                            !page.pageQuery.isPending
+                        loading={pageQuery.isFetching}
+                        defaultColumnPinning={{
+                            left: ["object"],
+                            right: ["actions"],
+                        }}
+                        highlightedRowId={page.eventOpenId ?? undefined}
+                        onRowPreview={(row) => page.openEvent(row.auditEventId)}
+                        isError={isError}
+                        error={pageQuery.error}
+                        onRetry={() => void pageQuery.refetch()}
+                        retryButtonId="operations-audit-retry"
+                        noScope={
+                            noModulePermission ||
+                            emptyReason === "NO_DATA_SCOPE"
                         }
-                        emptyReason={data?.emptyReason}
-                        roleColumns={page.roleColumns}
-                        userColumns={page.userColumns}
-                        auditColumns={page.auditColumns}
+                        hasActiveFilters={page.hasActiveFilters}
                         onClearFilters={page.clearFilters}
-                        onRowPreview={(row) =>
-                            page.openEvent((row as AuditEventRow).auditEventId)
+                        clearFiltersButtonId={
+                            emptyReason === "FILTER_NO_RESULT"
+                                ? "operations-audit-filter-empty-clear"
+                                : "operations-audit-empty-clear-filters"
                         }
-                        errorState={
-                            page.pageQuery.isError && !data ? (
-                                <BusinessFailureState
-                                    error={page.pageQuery.error}
-                                    action={
-                                        <Button
-                                            id="operations-audit-retry"
-                                            type="button"
-                                            variant="secondary"
-                                            className="rounded-lg shadow-none"
-                                            onClick={() =>
-                                                void page.pageQuery.refetch()
-                                            }
-                                        >
-                                            重试
-                                        </Button>
-                                    }
-                                />
-                            ) : undefined
-                        }
+                        emptyCopy={{
+                            noScopeTitle: noModulePermission
+                                ? "暂无访问权限"
+                                : "暂无可查看的权限变更记录",
+                            noScopeDescription: noModulePermission
+                                ? "当前账号无权查询权限变更记录，请联系系统管理员开通。"
+                                : undefined,
+                            filterDescription:
+                                "没有记录符合当前条件，可放宽时间范围或调整筛选条件。",
+                            emptyTitle: "暂无操作记录",
+                        }}
                     />
-                }
-            />
-
+                ),
+            }}
+        >
             <AccessPreviewSheets
                 explainSubject={page.explainSubject}
                 eventOpenId={page.eventOpenId}
@@ -314,6 +300,6 @@ function IdentityAuditPage({
                 closeEvent={page.closeEvent}
                 restoreRowFocus={page.restoreRowFocus}
             />
-        </PageScaffold>
+        </ListWorkspacePage>
     )
 }

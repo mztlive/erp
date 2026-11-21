@@ -1,269 +1,210 @@
 "use client"
 
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
-
 import * as React from "react"
 
+import { BusinessFailureState } from "@/components/business"
 import {
-    BusinessEmptyState,
-    BusinessFailureState,
-    BusinessTableFrame,
-    DataTable,
-    scopeQueryFrameHeading,
-} from "@/components/business"
-import { listWorkspaceEmptyStateClassName } from "@/components/business/list-workspace"
+    ListDataTable,
+    ListWorkSurface,
+    type ListDataTableProps,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type {
+    ReceivableScopeDetail,
     ReceivableScopeListView,
-    ReceivableScopeQuery,
 } from "@/features/customer-receivables/api/scoped"
 import {
     createScopedInvoiceColumns,
     createScopedReceiptColumns,
     createScopedReceivableColumns,
+    scopedReceivableOrderNo,
 } from "@/features/customer-receivables/components/scoped-columns"
-import {
-    ReceivableScopeEmptyState,
-    ReceivableScopeSummary,
-} from "@/features/customer-receivables/components/scoped-summary"
-import { ReceivableScopeToolbar } from "@/features/customer-receivables/pages/components/receivable-scope-toolbar"
-import { VIEW_LABEL } from "@/features/customer-receivables/types"
+import { ReceivableScopeSummary } from "@/features/customer-receivables/components/scoped-summary"
 import type { useReceivableScopeUrlState } from "@/features/customer-receivables/pages/hooks/use-receivable-scope-url-state"
+import { VIEW_LABEL } from "@/features/customer-receivables/types"
 
-const SCOPE_VIEWS = ["receivable", "receipt", "sales_invoice"] as const
+import { ReceivableScopeToolbar } from "./receivable-scope-toolbar"
 
 type Props = {
     urlState: ReturnType<typeof useReceivableScopeUrlState>
     data: ReceivableScopeListView | undefined
-    isPending: boolean
+    loading: boolean
     isError: boolean
     error: unknown
+    placeholder: boolean
     onRetry: () => void
-    onExport: () => void
-    exporting: boolean
-    onPreview: (kind: "receivable" | "receipt" | "invoice", id: string) => void
+    onPreview?: (kind: ReceivableScopeDetail["kind"], id: string) => void
     previewId: string | undefined
 }
 
-/** 客户往来范围列表页：范围筛选、汇总、列表三分态与版本绑定导出。 */
+const ORDER_PINNING = { left: ["order"] }
+const DOC_PINNING = { left: ["doc"] }
+const ORDER_COLUMNS = ["order", "visible", "whole", "status"]
+const DOC_COLUMNS = ["doc", "visible", "whole", "status"]
+const EMPTY_COPY = {
+    noScopeTitle: "暂无可查看的客户往来数据",
+    noScopeDescription:
+        "您当前尚未配置客户往来的数据查看范围，请联系管理员开通相应权限后再查询。",
+    filterTitle: "无匹配往来记录",
+    filterDescription: "无匹配记录，可清除筛选后重试。",
+    emptyTitle: "暂无客户往来记录",
+}
+
+function ScopeTable<T extends { id: string }>({
+    rows,
+    ...props
+}: Omit<ListDataTableProps<T>, "data" | "getRowId"> & {
+    rows?: readonly T[]
+}) {
+    const data = React.useMemo(() => (rows ? [...rows] : []), [rows])
+    return <ListDataTable {...props} data={data} getRowId={(row) => row.id} />
+}
+
+/** 客户往来范围列表：汇总口径与当前视图明细同时保留。 */
 export function ReceivableScopeListPane({
     urlState,
     data,
-    isPending,
+    loading,
     isError,
     error,
+    placeholder,
     onRetry,
-    onExport,
-    exporting,
     onPreview,
     previewId,
 }: Props) {
     const receivableColumns = React.useMemo(createScopedReceivableColumns, [])
     const receiptColumns = React.useMemo(createScopedReceiptColumns, [])
     const invoiceColumns = React.useMemo(createScopedInvoiceColumns, [])
+    const { view, pagination, canReadView, hasActiveFilters, clearFilters } =
+        urlState
+    const denied = urlState.account.isSuccess && !canReadView
+    const noScope = data?.emptyReason === "no_scope" || data?.hasScope === false
+    const total = data?.total ?? 0
+    const errorState = denied ? (
+        <BusinessFailureState
+            kind="permission"
+            title={`无权查看${VIEW_LABEL[view]}`}
+            description={
+                urlState.visibleViews.length > 0
+                    ? "请切换至可查看的往来类型，或联系管理员开通权限。"
+                    : "请联系管理员开通客户往来查看权限。"
+            }
+        />
+    ) : isError ? (
+        <BusinessFailureState
+            title="客户往来范围加载失败"
+            error={error}
+            action={
+                <Button
+                    id="customer-receivables-scope-list-retry"
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onRetry}
+                >
+                    重试
+                </Button>
+            }
+        />
+    ) : undefined
 
-    const receivableRows =
-        urlState.view === "receivable" ? [...(data?.receivables ?? [])] : []
-    const receiptRows =
-        urlState.view === "receipt" ? [...(data?.receipts ?? [])] : []
-    const invoiceRows =
-        urlState.view !== "receivable" && urlState.view !== "receipt"
-            ? [...(data?.invoices ?? [])]
-            : []
+    const tableProps = {
+        caption: `${VIEW_LABEL[view]}范围查询结果`,
+        rowCount: total,
+        pagination,
+        onPaginationChange: (next: typeof pagination) => {
+            if (!placeholder && next.pageIndex !== pagination.pageIndex) {
+                urlState.handlePaginationChange(next, data?.scopeVersion)
+            }
+        },
+        pageSizeOptions: [pagination.pageSize],
+        scrollable: true,
+        showPagination: !noScope && !errorState && total > 0,
+        loading,
+        errorState,
+        noScope,
+        hasActiveFilters,
+        onClearFilters: clearFilters,
+        clearFiltersButtonId: "customer-receivables-scope-empty-clear-filters",
+        emptyCopy: EMPTY_COPY,
+        highlightedRowId: previewId,
+    }
 
     const table =
-        isError && !data ? (
-            <BusinessFailureState
-                title="客户往来范围加载失败"
-                error={error}
-                action={
-                    <Button
-                        id="customer-receivables-scope-list-retry"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={onRetry}
-                    >
-                        重试
-                    </Button>
-                }
-            />
-        ) : isPending && !data ? (
-            <div className="h-64 animate-pulse rounded-xl bg-muted" />
-        ) : data && (data.emptyReason === "no_scope" || !data.hasScope) ? (
-            <BusinessEmptyState
-                kind="no-scope"
-                title="暂无可查看的客户往来数据"
-                description="您当前尚未配置客户往来的数据查看范围，请联系管理员开通相应权限后再查询。"
-                className={listWorkspaceEmptyStateClassName}
-            />
-        ) : data && data.total === 0 ? (
-            <BusinessEmptyState
-                kind="filter"
-                title="无匹配往来记录"
-                description="无匹配记录，可清除筛选后重试。"
-                className={listWorkspaceEmptyStateClassName}
-                action={
-                    <Button
-                        id="customer-receivables-scope-empty-clear-filters"
-                        type="button"
-                        variant="secondary"
-                        className="rounded-lg shadow-none"
-                        onClick={urlState.clearFilters}
-                    >
-                        清除筛选
-                    </Button>
-                }
-            />
-        ) : urlState.view === "receivable" ? (
-            <DataTable
+        view === "receivable" ? (
+            <ScopeTable
+                {...tableProps}
+                key={view}
                 id="customer-receivables-scope-list-receivable"
-                data={receivableRows}
                 columns={receivableColumns}
-                getRowId={(row) => row.id}
-                onRowPreview={(row) => onPreview("receivable", row.id)}
-                highlightedRowId={previewId}
-                rowCount={data?.total ?? 0}
-                pagination={urlState.pagination}
-                onPaginationChange={(next) =>
-                    urlState.handlePaginationChange(next, data?.scopeVersion)
+                rows={noScope ? undefined : data?.receivables}
+                defaultColumnOrder={ORDER_COLUMNS}
+                defaultColumnPinning={ORDER_PINNING}
+                rowLabel={(row) =>
+                    `${scopedReceivableOrderNo(row)}，应收款项 ${row.account_seq}`
                 }
-                layout="flush"
+                onRowPreview={
+                    onPreview && ((row) => onPreview("receivable", row.id))
+                }
             />
-        ) : urlState.view === "receipt" ? (
-            <DataTable
+        ) : view === "receipt" ? (
+            <ScopeTable
+                {...tableProps}
+                key={view}
                 id="customer-receivables-scope-list-receipt"
-                data={receiptRows}
                 columns={receiptColumns}
-                getRowId={(row) => row.id}
-                onRowPreview={(row) => onPreview("receipt", row.id)}
-                highlightedRowId={previewId}
-                rowCount={data?.total ?? 0}
-                pagination={urlState.pagination}
-                onPaginationChange={(next) =>
-                    urlState.handlePaginationChange(next, data?.scopeVersion)
+                rows={noScope ? undefined : data?.receipts}
+                defaultColumnOrder={DOC_COLUMNS}
+                defaultColumnPinning={DOC_PINNING}
+                rowLabel={(row) => `回款单 ${row.receipt_no}`}
+                onRowPreview={
+                    onPreview && ((row) => onPreview("receipt", row.id))
                 }
-                layout="flush"
             />
         ) : (
-            <DataTable
+            <ScopeTable
+                {...tableProps}
+                key={view}
                 id="customer-receivables-scope-list-invoice"
-                data={invoiceRows}
                 columns={invoiceColumns}
-                getRowId={(row) => row.id}
-                onRowPreview={(row) => onPreview("invoice", row.id)}
-                highlightedRowId={previewId}
-                rowCount={data?.total ?? 0}
-                pagination={urlState.pagination}
-                onPaginationChange={(next) =>
-                    urlState.handlePaginationChange(next, data?.scopeVersion)
+                rows={noScope ? undefined : data?.invoices}
+                defaultColumnOrder={DOC_COLUMNS}
+                defaultColumnPinning={DOC_PINNING}
+                rowLabel={(row) =>
+                    row.invoice_no ? `发票 ${row.invoice_no}` : "附件登记发票"
                 }
-                layout="flush"
+                onRowPreview={
+                    onPreview && ((row) => onPreview("invoice", row.id))
+                }
             />
         )
 
     return (
         <>
-            <Tabs
-                value={urlState.view}
-                onValueChange={(nextView) => {
-                    urlState.changeView(
-                        nextView as ReceivableScopeQuery["view"],
-                    )
-                }}
-            >
-                <TabsList
-                    variant="line"
-                    className="w-full overflow-x-auto border-b border-border"
-                >
-                    {SCOPE_VIEWS.map((item) => (
-                        <TabsTrigger
-                            key={item}
-                            value={item}
-                            id={`customer-receivables-scope-view-${item}`}
-                        >
-                            {VIEW_LABEL[item as keyof typeof VIEW_LABEL] ??
-                                item}
-                        </TabsTrigger>
-                    ))}
-                </TabsList>
-            </Tabs>
-
-            <ReceivableScopeSummary data={data} />
-
-            {data && data.total === 0 ? (
-                <ReceivableScopeEmptyState
-                    data={data}
-                    hasFilters={urlState.hasActiveFilters}
-                    onClearFilters={urlState.clearFilters}
-                    clearId="customer-receivables-scope-banner-clear-filters"
-                />
-            ) : null}
-
-            <BusinessTableFrame
-                showHeader
-                {...scopeQueryFrameHeading(data?.total, data?.scopeSummary)}
+            {!errorState ? <ReceivableScopeSummary data={data} /> : null}
+            <ListWorkSurface
+                ariaLabel={tableProps.caption}
                 toolbar={
-                    <ReceivableScopeToolbar
-                        canUseOwner={urlState.canUseOwner}
-                        canUseBusiness={urlState.canUseBusiness}
-                        canUseOrg={urlState.canUseOrg}
-                        view={urlState.view}
-                        searchDraft={urlState.searchDraft}
-                        setSearchDraft={urlState.setSearchDraft}
-                        searchInputRef={urlState.searchInputRef}
-                        salesOwnerDraft={urlState.salesOwnerDraft}
-                        setSalesOwnerDraft={urlState.setSalesOwnerDraft}
-                        operatorDraft={urlState.operatorDraft}
-                        setOperatorDraft={urlState.setOperatorDraft}
-                        operatorKindDraft={urlState.operatorKindDraft}
-                        setOperatorKindDraft={urlState.setOperatorKindDraft}
-                        orgDraft={urlState.orgDraft}
-                        setOrgDraft={urlState.setOrgDraft}
-                        descendantsDraft={urlState.descendantsDraft}
-                        setDescendantsDraft={urlState.setDescendantsDraft}
-                        panelOpen={urlState.panelOpen}
-                        setPanelOpen={urlState.setPanelOpen}
-                        appliedChips={urlState.appliedChips}
-                        removeFilter={urlState.removeFilter}
-                        applyFilters={urlState.applyFilters}
-                        resetMoreFilters={urlState.resetMoreFilters}
-                        cancelMoreFilters={urlState.cancelMoreFilters}
-                        clearFilters={urlState.clearFilters}
-                        hasPendingChanges={urlState.hasPendingChanges}
-                        resultCount={data?.total}
-                        loading={isPending}
-                        failed={isError}
-                    />
+                    canReadView && urlState.account.isSuccess ? (
+                        <ReceivableScopeToolbar
+                            urlState={urlState}
+                            loading={loading}
+                            failed={isError}
+                            showEmptyClear={
+                                !errorState &&
+                                !loading &&
+                                !!data &&
+                                !noScope &&
+                                total === 0 &&
+                                hasActiveFilters
+                            }
+                        />
+                    ) : undefined
                 }
-                table={table}
+                table={
+                    denied || !urlState.account.isSuccess ? errorState : table
+                }
             />
-
-            <PermissionGuard
-                permission={
-                    urlState.view === "receipt"
-                        ? "customer_receipt:list"
-                        : urlState.view === "sales_invoice"
-                          ? "invoice:list"
-                          : "receivable_account:list"
-                }
-            >
-                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                    <LoadingButton
-                        id="customer-receivables-scope-export"
-                        type="button"
-                        loading={exporting}
-                        variant="outline"
-                        size="sm"
-                        disabled={exporting || !data || data.total === 0}
-                        onClick={onExport}
-                    >
-                        {exporting ? "导出中…" : "导出当前范围"}
-                    </LoadingButton>
-                </div>
-            </PermissionGuard>
         </>
     )
 }

@@ -1,6 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge, MoneyValue } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    MoneyValue,
+    TableIdentityCell,
+    TableTextCell,
+} from "@/components/business"
 import type { ReceivableAccountRow } from "@/features/customer-receivables/types"
 
 export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
@@ -8,34 +13,37 @@ export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
         {
             id: "party",
             header: "往来主体 / 客户",
-            meta: { label: "往来主体", width: "reference" },
+            meta: { label: "往来主体", width: "flex" },
             cell: ({ row }) => (
-                <div className="flex min-w-0 max-w-64 flex-col items-start gap-1 whitespace-normal">
-                    <span className="break-words text-sm font-medium">
-                        {row.original.counterpartyPartyName}
-                    </span>
-                    <span className="sr-only">·</span>
-                    <span className="break-words text-xs text-muted-foreground">
-                        {row.original.customerName}
-                    </span>
-                </div>
+                <TableIdentityCell
+                    primary={row.original.counterpartyPartyName}
+                    primaryTitle={row.original.counterpartyPartyName}
+                    secondary={row.original.customerName}
+                    secondaryTitle={row.original.customerName}
+                />
             ),
         },
         {
             id: "order",
             header: "销售单 / 应收款项",
             meta: { label: "销售单", width: "default" },
-            cell: ({ row }) => (
-                <div className="flex flex-col items-start gap-1">
-                    <span className="num text-sm">
-                        {row.original.salesOrderNo}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                        应收款项 #{row.original.accountSeq} ·{" "}
-                        {row.original.businessTypeLabel}
-                    </span>
-                </div>
-            ),
+            cell: ({ row }) => {
+                const reference = `应收款项 #${row.original.accountSeq} · ${row.original.businessTypeLabel}`
+                return (
+                    <TableIdentityCell
+                        primary={
+                            <TableTextCell
+                                value={row.original.salesOrderNo}
+                                numeric
+                            />
+                        }
+                        primaryTitle={row.original.salesOrderNo}
+                        secondary={reference}
+                        secondaryTitle={reference}
+                        numericSecondary
+                    />
+                )
+            },
         },
         {
             id: "open",
@@ -46,7 +54,9 @@ export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
                 align: "end",
                 numeric: true,
             },
-            cell: ({ row }) => <MoneyValue value={row.original.openTotal} />,
+            cell: ({ row }) => (
+                <MoneyValue display="exact" value={row.original.openTotal} />
+            ),
         },
         {
             id: "settled",
@@ -57,7 +67,9 @@ export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
                 align: "end",
                 numeric: true,
             },
-            cell: ({ row }) => <MoneyValue value={row.original.settledTotal} />,
+            cell: ({ row }) => (
+                <MoneyValue display="exact" value={row.original.settledTotal} />
+            ),
         },
         {
             id: "invoice",
@@ -74,13 +86,19 @@ export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
                         <span className="mr-2 text-xs text-muted-foreground">
                             可开
                         </span>
-                        <MoneyValue value={row.original.openInvoiceableTotal} />
+                        <MoneyValue
+                            display="exact"
+                            value={row.original.openInvoiceableTotal}
+                        />
                     </div>
                     <div>
                         <span className="mr-2 text-xs text-muted-foreground">
                             净已开票
                         </span>
-                        <MoneyValue value={row.original.invoicedTotal} />
+                        <MoneyValue
+                            display="exact"
+                            value={row.original.invoicedTotal}
+                        />
                     </div>
                 </div>
             ),
@@ -88,13 +106,19 @@ export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
         {
             id: "due",
             header: "到期",
-            meta: { label: "到期" },
+            meta: { label: "到期", width: "default" },
             cell: ({ row }) => (
-                <div className="flex flex-col items-start gap-1.5">
-                    <span className="num text-sm">{row.original.dueDate}</span>
+                <div className="flex flex-col items-start gap-1">
+                    <TableTextCell value={row.original.dueDate} numeric />
                     <BusinessStatusBadge
                         context="list"
                         label={row.original.dueStateLabel}
+                        appearance={
+                            row.original.dueState === "not_due" ||
+                            row.original.dueState === "unknown"
+                                ? "quiet"
+                                : "badge"
+                        }
                         tone={
                             row.original.dueState === "overdue"
                                 ? "destructive"
@@ -111,13 +135,14 @@ export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
             header: "状态",
             meta: { label: "状态", width: "status" },
             cell: ({ row }) => (
-                <div className="flex flex-col items-start gap-1.5">
-                    <BusinessStatusBadge
-                        context="list"
-                        label={row.original.statusLabel}
-                        tone={row.original.statusTone}
-                    />
-                </div>
+                <BusinessStatusBadge
+                    context="list"
+                    label={row.original.statusLabel}
+                    tone={row.original.statusTone}
+                    appearance={
+                        row.original.status === "settled" ? "quiet" : "badge"
+                    }
+                />
             ),
         },
     ]

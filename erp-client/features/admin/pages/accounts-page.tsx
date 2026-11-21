@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "@/lib/navigation"
 import { useSearchDraft } from "@/lib/use-search-draft"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
     BanIcon,
@@ -14,24 +15,20 @@ import {
 } from "lucide-react"
 
 import {
-    BusinessEmptyState,
     BusinessFailureState,
     BusinessStatusBadge,
-    DataTable,
-    PageScaffold,
+    ListDataTable,
+    ListSearchField,
+    ListWorkspaceFilterBar,
+    ListWorkspacePage,
+    TableAsyncCell,
+    TableEmptyCell,
+    TableIdentityCell,
     TableRowActions,
+    TableTextCell,
+    listWorkspaceFilterStatusText,
     type TableRowAction,
 } from "@/components/business"
-import {
-    ListSearchField,
-    ListWorkSurface,
-    ListWorkspaceFilterBar,
-    ListWorkspaceHeader,
-    listWorkspaceEmptyStateClassName,
-    listWorkspaceFilterStatusText,
-    listWorkspaceStyles as styles,
-} from "@/components/business/list-workspace"
-import { Button } from "@/components/ui/button"
 import { AccountFormDialog } from "@/features/admin/components/accounts/account-form-dialog"
 import { DeleteAdminDialog } from "@/features/admin/components/accounts/delete-admin-dialog"
 import { ToggleAdminStatusDialog } from "@/features/admin/components/accounts/toggle-admin-status-dialog"
@@ -50,6 +47,7 @@ import { PeopleNavigation } from "@/features/organization/components/people-navi
 import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
 import { unitLabel } from "@/features/organization/lib/tree"
 import { formatDateTime } from "@/lib/datetime"
+import { restoreListRowFocus } from "@/lib/list-row-focus"
 
 /** 人员列表负责查找、创建与常用账号操作；完整设置进入人员资料。 */
 export function AccountsPage() {
@@ -77,11 +75,18 @@ export function AccountsPage() {
     const assignableRolesQuery = useAssignableRolesQuery(canCreateAdmin)
     const showCreateAdmin =
         canCreateAdmin && !isPermissionDeniedError(assignableRolesQuery.error)
+    const canOpenCreateDialog =
+        showCreateAdmin && assignableRolesQuery.isSuccess
 
     /** 权限配置页按角色跳转过来时（?q=角色名），首屏直接带上该筛选。 */
     const keywordFromUrl = searchParams.get("q") ?? ""
     const [keyword, setKeyword] = React.useState(keywordFromUrl)
-    const { searchDraft, setSearchDraft } = useSearchDraft(keywordFromUrl)
+    const { searchDraft, setSearchDraft, searchInputRef } =
+        useSearchDraft(keywordFromUrl)
+    useSearchHotkey(searchInputRef, {
+        overlaySelector:
+            '[role="dialog"], [role="alertdialog"], [role="menu"], [data-slot="sheet"]',
+    })
     React.useEffect(() => {
         setKeyword(searchParams.get("q") ?? "")
     }, [searchParams])
@@ -117,19 +122,19 @@ export function AccountsPage() {
             [
                 account.account,
                 account.name,
-                ...account.role_ids.map((id) => roleNameById.get(id) ?? ""),
+                ...(canReadRoles
+                    ? account.role_ids.map((id) => roleNameById.get(id) ?? "")
+                    : []),
             ]
                 .join(" ")
                 .toLowerCase()
                 .includes(q),
         )
-    }, [adminsQuery.data, keyword, roleNameById])
+    }, [adminsQuery.data, canReadRoles, keyword, roleNameById])
 
     const columns = React.useMemo<ColumnDef<AdminAccount>[]>(() => {
         const actionsColumn: ColumnDef<AdminAccount> = {
             id: "actions",
-            size: 168,
-            minSize: 168,
             header: "操作",
             meta: { label: "操作", width: "status", align: "end" },
             enableSorting: false,
@@ -173,7 +178,7 @@ export function AccountsPage() {
                         label: "删除",
                         icon: Trash2Icon,
                         destructive: true,
-                        placement: "inline",
+                        placement: "menu",
                         disabled: Boolean(deleteDisabledReason),
                         disabledReason: deleteDisabledReason,
                         onClick: () => setDeletingAccount(account),
@@ -188,82 +193,116 @@ export function AccountsPage() {
                 )
             },
         }
+        const departmentColumn: ColumnDef<AdminAccount> = {
+            id: "department",
+            header: "所属部门",
+            meta: { width: "default" },
+            cell: ({ row }) => {
+                const organization = organizationQuery.data
+                const person = organization?.people.find(
+                    (item) => item.id === row.original.id,
+                )
+                return (
+                    <TableAsyncCell
+                        pending={!organization && !organizationQuery.isError}
+                        failed={organizationQuery.isError}
+                        pendingLabel="正在加载…"
+                        failedLabel="部门加载失败"
+                    >
+                        {!organization || !person ? (
+                            <TableEmptyCell
+                                variant="label"
+                                label="不在可查看范围"
+                            />
+                        ) : person.own_org_unit_id ? (
+                            <TableTextCell
+                                value={unitLabel(
+                                    organization.units,
+                                    person.own_org_unit_id,
+                                )}
+                                clamp={1}
+                            />
+                        ) : (
+                            <TableEmptyCell
+                                variant="label"
+                                label="未分配部门"
+                                className="text-warning"
+                            />
+                        )}
+                    </TableAsyncCell>
+                )
+            },
+        }
+        const rolesColumn: ColumnDef<AdminAccount> = {
+            id: "roles",
+            header: "角色",
+            meta: { width: "reference" },
+            cell: ({ row }) => (
+                <TableTextCell
+                    value={row.original.role_ids
+                        .map((id) => roleNameById.get(id) ?? "角色信息待确认")
+                        .join("、")}
+                    clamp={2}
+                    className="whitespace-normal"
+                />
+            ),
+        }
         return [
             {
                 id: "identity",
                 enableHiding: false,
-                size: 240,
                 header: "人员 / 登录账号",
-                cell: ({ row }) => (
-                    <div className="min-w-[9rem]">
-                        <Link
-                            id={`account-open-${toAutomationIdSegment(row.original.id)}`}
-                            className="font-medium text-primary hover:underline"
-                            href={`/system/accounts/${encodeURIComponent(row.original.id)}`}
-                        >
-                            {row.original.name || row.original.account}
-                        </Link>
-                        <div className="mt-1 text-xs text-muted-foreground">
-                            {row.original.account}
-                        </div>
-                    </div>
-                ),
-            },
-            {
-                id: "status",
-                size: 100,
-                header: "状态",
-                cell: ({ row }) => (
-                    <BusinessStatusBadge
-                        context="list"
-                        {...adminAccountStatusBadge(row.original.status)}
+                meta: { width: "flex" },
+                cell: ({ row: { original: account } }) => (
+                    <TableIdentityCell
+                        primary={
+                            <Link
+                                id={`account-open-${toAutomationIdSegment(account.id)}`}
+                                className="text-primary hover:underline"
+                                href={`/system/accounts/${encodeURIComponent(account.id)}`}
+                            >
+                                {account.name || account.account}
+                            </Link>
+                        }
+                        primaryTitle={account.name || account.account}
+                        secondary={account.account}
+                        secondaryTitle={account.account}
+                        numericSecondary
                     />
                 ),
             },
             {
-                id: "department",
-                size: 190,
-                header: "所属部门",
-                cell: ({ row }) => {
-                    if (!canReadOrganization) return "无部门查看权限"
-                    if (organizationQuery.isError) return "部门加载失败"
-                    if (!organizationQuery.data) return "正在加载…"
-                    const person = organizationQuery.data.people.find(
-                        (item) => item.id === row.original.id,
-                    )
-                    if (!person) return "不在可查看范围"
-                    return person.own_org_unit_id ? (
-                        unitLabel(
-                            organizationQuery.data.units,
-                            person.own_org_unit_id,
-                        )
-                    ) : (
-                        <span className="text-warning">未分配部门</span>
-                    )
-                },
+                id: "status",
+                header: "状态",
+                meta: { width: "status" },
+                cell: ({ row }) => (
+                    <BusinessStatusBadge
+                        context="list"
+                        appearance={
+                            row.original.status === "active" ? "quiet" : "badge"
+                        }
+                        {...adminAccountStatusBadge(row.original.status)}
+                    />
+                ),
             },
-            {
-                id: "roles",
-                size: 300,
-                header: "角色",
-                cell: ({ row }) =>
-                    row.original.role_ids
-                        .map((id) => roleNameById.get(id) ?? "角色信息待确认")
-                        .join("、") || "—",
-            },
+            ...(canReadOrganization ? [departmentColumn] : []),
+            ...(canReadRoles ? [rolesColumn] : []),
             {
                 id: "createdAt",
-                size: 190,
                 header: "创建时间",
+                meta: { width: "default" },
                 cell: ({ row }) => (
-                    <span className="num text-body-compact text-muted-foreground">
-                        {formatDateTime(
+                    <TableTextCell
+                        value={formatDateTime(
                             new Date(
                                 row.original.created_at * 1000,
                             ).toISOString(),
                             "full",
                         )}
-                    </span>
+                        numeric
+                        clamp={1}
+                        className="text-muted-foreground"
+                    />
                 ),
             },
             ...(canReadRoles && (canUpdateAdmin || canDeleteAdmin)
@@ -306,70 +345,72 @@ export function AccountsPage() {
     }, [router, setSearchDraft])
 
     return (
-        <PageScaffold density="compact" className={styles.page}>
-            <ListWorkspaceHeader
-                eyebrow="系统"
-                title="组织与人员"
-                description="点击人员行，统一管理资料、角色、账号启停与数据范围。"
-            >
-                <div className="flex flex-wrap items-center gap-2">
-                    {canReadRoles && (
-                        <Button
-                            id="governance-admin-accounts-permission-config"
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => router.push("/system/access-audit")}
-                        >
-                            <ShieldCheckIcon
-                                className="size-3.5"
-                                aria-hidden="true"
-                            />
-                            角色与权限
-                        </Button>
-                    )}
-                    {showCreateAdmin && (
-                        <Button
-                            id="governance-admin-accounts-create"
-                            type="button"
-                            size="sm"
-                            disabled={!assignableRolesQuery.isSuccess}
-                            onClick={() => setCreating(true)}
-                        >
-                            <PlusIcon className="size-3.5" aria-hidden="true" />
-                            新建账号
-                        </Button>
-                    )}
-                </div>
-            </ListWorkspaceHeader>
-
-            <PeopleNavigation current="accounts" />
-            {notice ? (
-                <p role="status" className="rounded-lg bg-muted p-3 text-sm">
-                    {notice}
-                </p>
-            ) : null}
-            {canReadOrganization && organizationQuery.isError ? (
-                <BusinessFailureState
-                    id="accounts-organization-retry"
-                    title="部门信息加载失败"
-                    error={organizationQuery.error}
-                    onRetry={() => {
-                        void organizationQuery.refetch()
-                    }}
-                />
-            ) : null}
-            {assignableRolesQuery.isError && showCreateAdmin && (
-                <BusinessFailureState
-                    id="accounts-role-options-retry"
-                    title="新建账号所需角色加载失败"
-                    error={assignableRolesQuery.error}
-                    onRetry={() => void assignableRolesQuery.refetch()}
-                />
-            )}
-            <ListWorkSurface
-                ariaLabel="账号列表"
-                toolbar={
+        <ListWorkspacePage
+            title="组织与人员"
+            views={
+                canReadOrganization ||
+                hasPermission(permissions, "admin:list") ? (
+                    <div className="min-w-0 [&_[data-slot=tabs-list]]:border-b-0 md:[&_[data-slot=tabs-trigger]]:min-h-12">
+                        <PeopleNavigation current="accounts" />
+                    </div>
+                ) : undefined
+            }
+            actions={[
+                {
+                    actionKey: "permission-config",
+                    id: "governance-admin-accounts-permission-config",
+                    type: "button",
+                    label: "角色与权限",
+                    icon: ShieldCheckIcon,
+                    tier: "quiet",
+                    hidden: !canReadRoles,
+                    onClick: () => router.push("/system/access-audit"),
+                },
+                {
+                    actionKey: "create",
+                    id: "governance-admin-accounts-create",
+                    type: "button",
+                    label: "新建账号",
+                    icon: PlusIcon,
+                    tier: "primary",
+                    hidden: !showCreateAdmin,
+                    disabled: !canOpenCreateDialog,
+                    onClick: () => setCreating(true),
+                },
+            ]}
+            notices={
+                notice ? (
+                    <p
+                        role="status"
+                        className="rounded-lg bg-muted p-3 text-sm"
+                    >
+                        {notice}
+                    </p>
+                ) : null
+            }
+            alerts={
+                <>
+                    {canReadOrganization && organizationQuery.isError ? (
+                        <BusinessFailureState
+                            id="accounts-organization-retry"
+                            title="部门信息加载失败"
+                            error={organizationQuery.error}
+                            onRetry={() => void organizationQuery.refetch()}
+                        />
+                    ) : null}
+                    {assignableRolesQuery.isError && showCreateAdmin ? (
+                        <BusinessFailureState
+                            id="accounts-role-options-retry"
+                            title="新建账号所需角色加载失败"
+                            error={assignableRolesQuery.error}
+                            onRetry={() => void assignableRolesQuery.refetch()}
+                        />
+                    ) : null}
+                </>
+            }
+            surface={{
+                ariaLabel: "账号列表",
+                toolbar: (
                     <ListWorkspaceFilterBar
                         morePresentation="popover"
                         idPrefix="governance-admin-accounts"
@@ -378,30 +419,36 @@ export function AccountsPage() {
                         search={
                             <ListSearchField
                                 id="governance-admin-accounts-search"
+                                searchInputRef={searchInputRef}
                                 value={searchDraft}
                                 onChange={setSearchDraft}
-                                placeholder="账号、姓名或角色"
+                                placeholder={
+                                    canReadRoles
+                                        ? "账号、姓名或角色"
+                                        : "账号或姓名"
+                                }
                                 aria-label="搜索账号"
                             />
                         }
-                        resultStatus={listWorkspaceFilterStatusText({
-                            loading: adminsQuery.isPending,
-                            failed: adminsQuery.isError,
-                            resultCount: adminsQuery.data
-                                ? rows.length
-                                : undefined,
-                            noun: "个账号",
-                            loadingLabel: "正在加载账号…",
-                        })}
+                        resultStatus={
+                            adminsQuery.isPending || adminsQuery.isError
+                                ? listWorkspaceFilterStatusText({
+                                      loading: adminsQuery.isPending,
+                                      failed: adminsQuery.isError,
+                                      noun: "个账号",
+                                  })
+                                : undefined
+                        }
                         chips={appliedChips}
                         onClearChip={clearAllFilters}
                         onClearAll={clearAllFilters}
                         hasPendingChanges={hasPendingChanges}
                     />
-                }
-                table={
-                    <DataTable
+                ),
+                table: (
+                    <ListDataTable
                         id="governance-admin-accounts-table"
+                        entityName="登录账号"
                         columns={columns}
                         data={rows}
                         getRowId={(row) => row.id}
@@ -414,57 +461,32 @@ export function AccountsPage() {
                             )
                         }
                         rowCount={rows.length}
-                        layout="flush"
-                        loading={adminsQuery.isPending}
+                        loading={
+                            adminsQuery.isPending || adminsQuery.isFetching
+                        }
                         defaultColumnPinning={{
                             left: ["identity"],
                             right: ["actions"],
                         }}
-                        errorState={
-                            adminsQuery.isError ? (
-                                <BusinessFailureState
-                                    error={adminsQuery.error}
-                                    title="账号列表加载失败"
-                                    action={
-                                        <Button
-                                            id="governance-admin-accounts-retry"
-                                            type="button"
-                                            variant="secondary"
-                                            className="rounded-lg shadow-none"
-                                            onClick={() =>
-                                                void adminsQuery.refetch()
-                                            }
-                                        >
-                                            重试
-                                        </Button>
-                                    }
-                                />
-                            ) : undefined
-                        }
-                        emptyState={
-                            !adminsQuery.isError && rows.length === 0 ? (
-                                <BusinessEmptyState
-                                    kind={hasSearch ? "filter" : "no-data"}
-                                    className={listWorkspaceEmptyStateClassName}
-                                    title={
-                                        hasSearch
-                                            ? "当前筛选无结果"
-                                            : "还没有登录账号"
-                                    }
-                                    description={
-                                        hasSearch
-                                            ? "没有账号符合当前搜索条件。"
-                                            : canCreateAdmin
-                                              ? "点击「新建账号」创建第一条账号记录。"
-                                              : undefined
-                                    }
-                                />
-                            ) : undefined
-                        }
+                        isError={adminsQuery.isError}
+                        error={adminsQuery.error}
+                        retryButtonId="governance-admin-accounts-retry"
+                        onRetry={() => void adminsQuery.refetch()}
+                        hasActiveFilters={hasSearch}
+                        onClearFilters={clearAllFilters}
+                        canCreate={canOpenCreateDialog}
+                        createLabel="新建账号"
+                        onCreate={() => setCreating(true)}
+                        emptyCopy={{
+                            filterDescription: "没有账号符合当前搜索条件。",
+                            emptyDescription: canOpenCreateDialog
+                                ? "点击「新建账号」创建第一条账号记录。"
+                                : undefined,
+                        }}
                     />
-                }
-            />
-
+                ),
+            }}
+        >
             {creating && showCreateAdmin ? (
                 <AccountFormDialog
                     onCreated={(accountName) => {
@@ -502,7 +524,12 @@ export function AccountsPage() {
                 <ToggleAdminStatusDialog
                     account={togglingAccount}
                     onOpenChange={(open) => {
-                        if (!open) setTogglingAccount(null)
+                        if (!open) {
+                            setTogglingAccount(null)
+                            requestAnimationFrame(() =>
+                                restoreListRowFocus(togglingAccount.id),
+                            )
+                        }
                     }}
                     onChanged={(status) =>
                         setNotice(
@@ -517,11 +544,16 @@ export function AccountsPage() {
                 <DeleteAdminDialog
                     account={deletingAccount}
                     onOpenChange={(open) => {
-                        if (!open) setDeletingAccount(null)
+                        if (!open) {
+                            setDeletingAccount(null)
+                            requestAnimationFrame(() =>
+                                restoreListRowFocus(deletingAccount.id),
+                            )
+                        }
                     }}
                     onDeleted={() => setNotice("账号已删除。")}
                 />
             ) : null}
-        </PageScaffold>
+        </ListWorkspacePage>
     )
 }

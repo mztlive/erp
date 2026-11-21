@@ -1,9 +1,12 @@
 "use client"
 
-import type * as React from "react"
+import * as React from "react"
 
-import { ListSearchField } from "@/components/business/list-workspace"
-import { Button } from "@/components/ui/button"
+import {
+    ListSearchField,
+    ListWorkspaceFilterBar,
+} from "@/components/business/list-workspace"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 
 /** 供应商门户列表共用的搜索条。附加筛选取 children，插在搜索框和提交按钮之间。 */
 export function PortalListSearchForm({
@@ -15,6 +18,8 @@ export function PortalListSearchForm({
     submitId,
     onSubmit,
     children,
+    hasPendingChanges,
+    resultStatus,
 }: {
     searchId: string
     searchLabel: string
@@ -24,26 +29,32 @@ export function PortalListSearchForm({
     submitId: string
     onSubmit: () => void
     children?: React.ReactNode
+    hasPendingChanges?: boolean
+    resultStatus?: React.ReactNode
 }) {
+    const searchInputRef = React.useRef<HTMLInputElement>(null)
+    useSearchHotkey(searchInputRef)
+
     return (
-        <form
-            className="flex w-full flex-wrap items-center gap-2 [&>[data-slot=input-group]]:w-full [&>[data-slot=input-group]]:sm:w-96"
-            onSubmit={(event) => {
-                event.preventDefault()
-                onSubmit()
-            }}
-        >
-            <ListSearchField
-                id={searchId}
-                aria-label={searchLabel}
-                placeholder={placeholder}
-                value={value}
-                onChange={onChange}
-            />
-            {children}
-            <Button id={submitId} type="submit" variant="outline">
-                搜索
-            </Button>
-        </form>
+        <ListWorkspaceFilterBar
+            idPrefix={searchId}
+            morePresentation="popover"
+            formAriaLabel={searchLabel}
+            onSubmit={onSubmit}
+            queryButtonId={submitId}
+            hasPendingChanges={hasPendingChanges}
+            resultStatus={resultStatus}
+            search={
+                <ListSearchField
+                    id={searchId}
+                    searchInputRef={searchInputRef}
+                    aria-label={searchLabel}
+                    placeholder={placeholder}
+                    value={value}
+                    onChange={onChange}
+                />
+            }
+            primaryFilters={children}
+        />
     )
 }

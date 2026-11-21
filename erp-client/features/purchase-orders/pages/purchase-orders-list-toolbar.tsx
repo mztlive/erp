@@ -1,152 +1,148 @@
 "use client"
 
-import * as React from "react"
-import { PURCHASE_TYPE_LABEL, type PurchaseType } from "../types"
-import {
-    Select,
-    SelectTrigger,
-    SelectValue,
-    SelectContent,
-    SelectItem,
-} from "@/components/ui/select"
+import type { RefObject } from "react"
 
+import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
-    listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
+import { Button } from "@/components/ui/button"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
-import type {
-    PurchaseOrderAppliedChip,
-    PurchaseOrderFilterKey,
-} from "@/features/purchase-orders/hooks/use-purchase-orders-list-filters"
+import type { usePurchaseOrdersListFilters } from "@/features/purchase-orders/hooks/use-purchase-orders-list-filters"
+import {
+    PURCHASE_TYPE_LABEL,
+    type PurchaseType,
+} from "@/features/purchase-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { listFilterText } from "@/lib/ui-text"
 
-const prefix = "procurement-orders-list"
-
-export type PurchaseOrdersListToolbarProps = {
-    typeDraft: PurchaseType | "all"
-    setTypeDraft: (value: PurchaseType | "all") => void
-    canFilterOwner: boolean
-    ownerDraft: string
-    setOwnerDraft: (value: string) => void
-    searchInputRef: React.RefObject<HTMLInputElement | null>
-    searchDraft: string
-    setSearchDraft: React.Dispatch<React.SetStateAction<string>>
-    appliedChips: readonly PurchaseOrderAppliedChip[]
-    removeFilter: (key: PurchaseOrderFilterKey) => void
-    applyFilters: () => void
-    clearAllFilters: () => void
-    hasPendingChanges: boolean
-    resultCount?: number
-    loading: boolean
-    failed: boolean
-}
+const PREFIX = "procurement-orders-list"
+const PURCHASE_TYPE_OPTIONS = [
+    { value: "all", label: "全部" },
+    ...Object.entries(PURCHASE_TYPE_LABEL).map(([value, label]) => ({
+        value,
+        label,
+    })),
+]
 
 export function PurchaseOrdersListToolbar({
-    typeDraft,
-    setTypeDraft,
-    canFilterOwner,
-    ownerDraft,
-    setOwnerDraft,
+    filters,
     searchInputRef,
-    searchDraft,
-    setSearchDraft,
-    appliedChips,
-    removeFilter,
-    applyFilters,
-    clearAllFilters,
-    hasPendingChanges,
-    resultCount,
+    sourceOrderNo,
     loading,
     failed,
-}: PurchaseOrdersListToolbarProps) {
+}: {
+    filters: Pick<
+        ReturnType<typeof usePurchaseOrdersListFilters>,
+        | "typeDraft"
+        | "setTypeDraft"
+        | "canFilterOwner"
+        | "ownerDraft"
+        | "setOwnerDraft"
+        | "searchDraft"
+        | "setSearchDraft"
+        | "salesOrderFromUrl"
+        | "clearSourceOrder"
+        | "applyFilters"
+        | "clearAllFilters"
+        | "hasActiveFilters"
+        | "hasPendingChanges"
+    >
+    searchInputRef: RefObject<HTMLInputElement | null>
+    sourceOrderNo?: string
+    loading: boolean
+    failed: boolean
+}) {
+    const sourceLabel = sourceOrderNo
+        ? `来源销售单：${sourceOrderNo}`
+        : "来源销售单：指定单据"
+
     return (
         <ListWorkspaceFilterBar
             morePresentation="popover"
-            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
-            idPrefix={`${prefix}-filter`}
+            idPrefix={`${PREFIX}-filter`}
             formAriaLabel="采购单查询"
-            onSubmit={applyFilters}
+            onSubmit={filters.applyFilters}
             search={
                 <ListSearchField
-                    id={`${prefix}-search`}
+                    id={`${PREFIX}-search`}
                     searchInputRef={searchInputRef}
                     data-slot="po-list-search"
-                    value={searchDraft}
-                    onChange={setSearchDraft}
+                    value={filters.searchDraft}
+                    onChange={filters.setSearchDraft}
                     placeholder="采购单号、供应商、来源销售单"
                     aria-label="搜索采购单"
                 />
             }
             primaryFilters={
-                <div className="flex flex-wrap gap-2">
-                    <Select
-                        value={typeDraft}
-                        onValueChange={(value) => {
-                            if (value)
-                                setTypeDraft(value as PurchaseType | "all")
-                        }}
-                    >
-                        <SelectTrigger
-                            id="procurement-orders-list-type"
-                            aria-label="采购类型"
-                            className="w-40"
-                        >
-                            <SelectValue>
-                                {typeDraft === "all"
-                                    ? "全部采购类型"
-                                    : PURCHASE_TYPE_LABEL[typeDraft]}
-                            </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem
-                                id="procurement-orders-list-type-all"
-                                value="all"
-                            >
-                                全部采购类型
-                            </SelectItem>
-                            {Object.entries(PURCHASE_TYPE_LABEL).map(
-                                ([value, label]) => (
-                                    <SelectItem
-                                        id={`procurement-orders-list-type-${value.toLowerCase()}`}
-                                        key={value}
-                                        value={value}
-                                    >
-                                        {label}
-                                    </SelectItem>
-                                ),
-                            )}
-                        </SelectContent>
-                    </Select>
-                    {canFilterOwner && (
-                        <div className="empty:hidden w-56 max-w-full min-w-0">
+                <>
+                    <OptionCombobox
+                        id={`${PREFIX}-type`}
+                        getOptionId={(value) =>
+                            `${PREFIX}-type-${toAutomationIdSegment(value)}`
+                        }
+                        aria-label="采购类型"
+                        className="w-36 max-w-full min-w-0"
+                        filterLabel="采购类型"
+                        value={
+                            filters.typeDraft === "all"
+                                ? null
+                                : filters.typeDraft
+                        }
+                        options={PURCHASE_TYPE_OPTIONS}
+                        placeholder="全部"
+                        onValueChange={(value) =>
+                            filters.setTypeDraft(
+                                (value ?? "all") as PurchaseType | "all",
+                            )
+                        }
+                    />
+                    {filters.canFilterOwner ? (
+                        <div className="w-56 max-w-full min-w-0 empty:hidden">
                             <PersonDirectoryFilter
-                                id="procurement-orders-list-owner"
+                                id={`${PREFIX}-owner`}
                                 category="procurement"
                                 label="采购负责人"
                                 hideLabel
-                                value={ownerDraft}
-                                onChange={setOwnerDraft}
+                                value={filters.ownerDraft}
+                                onChange={filters.setOwnerDraft}
                             />
                         </div>
-                    )}
-                </div>
+                    ) : null}
+                </>
             }
-            queryButtonId={`${prefix}-apply-filters`}
-            clearButtonId={`${prefix}-clear-all`}
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "张采购单",
-                loadingLabel: "正在加载采购单…",
-            })}
-            chips={appliedChips}
-            onClearChip={(key) => removeFilter(key as PurchaseOrderFilterKey)}
-            onClearAll={clearAllFilters}
-            hasPendingChanges={hasPendingChanges}
+            queryButtonId={`${PREFIX}-apply-filters`}
+            resultStatus={failed ? "查询未完成" : loading ? "查询中…" : null}
+            foldedChipKeys={["salesOrderId"]}
+            chips={
+                filters.salesOrderFromUrl
+                    ? [
+                          {
+                              key: "salesOrderId",
+                              label: sourceLabel,
+                              onClear: filters.clearSourceOrder,
+                          },
+                      ]
+                    : undefined
+            }
+            onClearAll={filters.clearAllFilters}
+            clearButtonId={`${PREFIX}-clear-all`}
+            extraPrimary={
+                filters.hasActiveFilters && !filters.salesOrderFromUrl ? (
+                    <Button
+                        id={`${PREFIX}-clear-all`}
+                        type="button"
+                        variant="ghost"
+                        className="font-normal text-muted-foreground"
+                        onClick={filters.clearAllFilters}
+                    >
+                        {listFilterText.clear}
+                    </Button>
+                ) : null
+            }
+            hasPendingChanges={filters.hasPendingChanges}
             pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-            idleHint="导出与当前查询结果一致"
         />
     )
 }

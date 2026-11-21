@@ -17,9 +17,11 @@ import type { Company } from "./api"
 
 export const CompanyForm = ({
     company,
+    finalFocus,
     onClose,
 }: {
     company?: Company
+    finalFocus: () => HTMLElement | null
     onClose: () => void
 }) => {
     const mutation = useSaveCompanyMutation()
@@ -97,6 +99,7 @@ export const CompanyForm = ({
             }}
         >
             <DialogContent
+                finalFocus={finalFocus}
                 closeButtonId="company-form-dismiss"
                 id="company-form-dialog"
                 className="sm:max-w-xl"

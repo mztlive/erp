@@ -1,6 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge, MoneyValue } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    MoneyValue,
+    TableIdentityCell,
+    TableTextCell,
+} from "@/components/business"
 import type { ReceiptRow } from "@/features/customer-receivables/types"
 import { formatDateTime } from "@/lib/datetime"
 import { allocationSummaryCell } from "./allocation-summary"
@@ -10,29 +15,35 @@ export function createReceiptColumns(): ColumnDef<ReceiptRow>[] {
         {
             id: "doc",
             header: "回款单号",
-            meta: { label: "回款单号", width: "reference" },
+            meta: { label: "回款单号", width: "flex" },
             cell: ({ row }) => (
-                <div>
-                    <div className="num text-sm font-medium">
-                        {row.original.receiptNo}
-                    </div>
-                    <div className="truncate text-xs text-muted-foreground">
-                        {row.original.counterpartyPartyName}
-                    </div>
-                </div>
+                <TableIdentityCell
+                    primary={
+                        <TableTextCell value={row.original.receiptNo} numeric />
+                    }
+                    primaryTitle={row.original.receiptNo}
+                    secondary={row.original.counterpartyPartyName}
+                    secondaryTitle={row.original.counterpartyPartyName}
+                />
             ),
         },
         {
             id: "receivedAt",
             header: "到账时间",
+            meta: { width: "default" },
             cell: ({ row }) => (
-                <span className="num text-sm">
-                    {formatDateTime(
-                        row.original.receivedAt,
-                        "full",
-                        "passthrough",
-                    )}
-                </span>
+                <TableTextCell
+                    value={
+                        row.original.receivedAt
+                            ? formatDateTime(
+                                  row.original.receivedAt,
+                                  "full",
+                                  "passthrough",
+                              )
+                            : undefined
+                    }
+                    numeric
+                />
             ),
         },
         {
@@ -45,7 +56,11 @@ export function createReceiptColumns(): ColumnDef<ReceiptRow>[] {
                 numeric: true,
             },
             cell: ({ row }) => (
-                <MoneyValue value={row.original.amount} taxBasis="gross" />
+                <MoneyValue
+                    display="exact"
+                    value={row.original.amount}
+                    taxBasis="gross"
+                />
             ),
         },
         {
@@ -62,11 +77,15 @@ export function createReceiptColumns(): ColumnDef<ReceiptRow>[] {
         {
             id: "status",
             header: "状态",
+            meta: { width: "status" },
             cell: ({ row }) => (
                 <BusinessStatusBadge
                     context="list"
                     label={row.original.statusLabel}
                     tone={row.original.statusTone}
+                    appearance={
+                        row.original.status === "posted" ? "quiet" : "badge"
+                    }
                 />
             ),
         },

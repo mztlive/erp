@@ -5,12 +5,14 @@ import Link from "next/link"
 import {
     BusinessFailureState,
     BusinessStatusBadge,
+    QuantityValue,
     QuickPreviewSheet,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import type {
     BalanceDetailView,
@@ -23,6 +25,7 @@ import type { WorkspaceId } from "@/lib/workspace-registry"
 
 type InventoryBalancePreviewProps = {
     open: boolean
+    finalFocus?: React.ComponentProps<typeof QuickPreviewSheet>["finalFocus"]
     detail: BalanceDetailView | null | undefined
     isPending: boolean
     isCreating?: boolean
@@ -34,6 +37,7 @@ type InventoryBalancePreviewProps = {
 
 function InventoryBalancePreview({
     open,
+    finalFocus,
     detail,
     isPending,
     isCreating = false,
@@ -46,10 +50,12 @@ function InventoryBalancePreview({
         <QuickPreviewSheet
             id="inventory-balance-preview-sheet"
             open={open}
+            finalFocus={finalFocus}
             onOpenChange={(nextOpen) => {
                 if (!nextOpen) onClose()
             }}
-            size="preview"
+            size="detail"
+            description={detail?.balance.specSummary || undefined}
             title={detail ? `${detail.balance.skuName}` : "余额详情"}
             identity={
                 detail ? (
@@ -118,22 +124,26 @@ function InventoryBalancePreview({
             }
         >
             {isPending ? (
-                <div className="space-y-3 p-1">
-                    <div className="h-24 animate-pulse rounded-xl bg-muted" />
-                    <div className="h-40 animate-pulse rounded-xl bg-muted" />
+                <div
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-7 py-6"
+                    aria-busy="true"
+                >
+                    <Skeleton className="h-24 rounded-lg" />
+                    <Skeleton className="mt-3 h-40 rounded-lg" />
                 </div>
             ) : detail ? (
-                <div className="flex flex-col gap-6">
-                    <div className="grid grid-cols-3 gap-4 border-b border-border pb-6">
+                <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-7 py-6">
+                    <div className="grid gap-4 border-b border-border pb-6 sm:grid-cols-3">
                         <div>
                             <div className="text-xs text-muted-foreground">
                                 账面现存
                             </div>
                             <div className="num text-base font-semibold">
-                                {detail.balance.onHandQuantity}
-                                <span className="ml-1 text-xs font-normal text-muted-foreground">
-                                    {detail.balance.baseUnit}
-                                </span>
+                                <QuantityValue
+                                    value={detail.balance.onHandQuantity}
+                                    unit={detail.balance.baseUnit}
+                                    className="[&>.num]:text-inherit"
+                                />
                             </div>
                         </div>
                         <div>
@@ -141,10 +151,11 @@ function InventoryBalancePreview({
                                 有效预占
                             </div>
                             <div className="num text-base font-semibold">
-                                {detail.balance.reservedQuantity}
-                                <span className="ml-1 text-xs font-normal text-muted-foreground">
-                                    {detail.balance.baseUnit}
-                                </span>
+                                <QuantityValue
+                                    value={detail.balance.reservedQuantity}
+                                    unit={detail.balance.baseUnit}
+                                    className="[&>.num]:text-inherit"
+                                />
                             </div>
                         </div>
                         <div>
@@ -152,10 +163,11 @@ function InventoryBalancePreview({
                                 可用数量
                             </div>
                             <div className="num text-base font-semibold text-primary">
-                                {detail.balance.availableQuantity}
-                                <span className="ml-1 text-xs font-normal text-muted-foreground">
-                                    {detail.balance.baseUnit}
-                                </span>
+                                <QuantityValue
+                                    value={detail.balance.availableQuantity}
+                                    unit={detail.balance.baseUnit}
+                                    className="[&>.num]:text-inherit"
+                                />
                             </div>
                             <div className="text-2xs text-muted-foreground">
                                 系统计算
@@ -391,6 +403,7 @@ function InventoryBalancePreview({
             ) : (
                 <BusinessFailureState
                     kind="business"
+                    className="m-6"
                     title="无法加载余额详情"
                     description="余额可能已不存在，或权限已变化。"
                 />

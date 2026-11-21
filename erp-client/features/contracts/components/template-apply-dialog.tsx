@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ComponentProps } from "react"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
@@ -48,11 +48,13 @@ export function TemplateApplyDialog({
     template,
     pending,
     accountId,
+    finalFocus,
     onClose,
 }: {
     template: ContractTemplate
     pending?: PendingContractApplication | null
     accountId: string
+    finalFocus?: ComponentProps<typeof DialogContent>["finalFocus"]
     onClose: () => void
 }) {
     const mutations = useTemplateMutations()
@@ -145,6 +147,7 @@ export function TemplateApplyDialog({
             <DialogContent
                 id="template-apply-dialog"
                 closeButtonId="template-apply-dismiss"
+                finalFocus={finalFocus}
             >
                 <DialogHeader>
                     <DialogTitle>

@@ -51,10 +51,14 @@ const supplierOfferingKeys = {
         [...supplierOfferingKeys.all, "list", query] as const,
 }
 
-export function useSupplierOfferingsQuery(query: SupplierOfferingListQuery) {
+export function useSupplierOfferingsQuery(
+    query: SupplierOfferingListQuery,
+    { enabled = true }: { enabled?: boolean } = {},
+) {
     return useQuery({
         queryKey: supplierOfferingKeys.list(query),
         queryFn: () => fetchSupplierOfferings(query),
+        enabled,
     })
 }
 

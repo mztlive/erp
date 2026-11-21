@@ -1,27 +1,17 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
-import { workspaceHost } from "@/lib/workspace-tabs"
-import { useRouter, useSearchParams } from "@/lib/navigation"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { RefreshCwIcon, SearchIcon, XIcon } from "lucide-react"
+import { BusinessFailureState } from "@/components/business"
 import {
-    BusinessEmptyState,
-    BusinessFailureState,
-    DataTable,
-    PageScaffold,
-} from "@/components/business"
-import {
-    ListWorkSurface,
+    ListDataTable,
+    ListSelectionBar,
     ListWorkspaceFilterBar,
-    ListWorkspaceHeader,
-    listWorkspaceStyles,
+    ListWorkspacePage,
     type ListWorkspaceFilterChip,
 } from "@/components/business/list-workspace"
-import { Button } from "@/components/ui/button"
-import { MailIcon, RefreshCwIcon, SearchIcon, XIcon } from "lucide-react"
-import { WorkspaceTypeNav } from "@/features/workspace/components/workspace-type-nav"
-import { queueQuickTypes } from "@/features/workspace/lib/queue-presentation"
 import { OptionCombobox } from "@/components/business/option-combobox"
+import { Button } from "@/components/ui/button"
 import {
     InputGroup,
     InputGroupAddon,
@@ -29,10 +19,19 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { getErrorMessage } from "@/lib/api"
-import { useCopies, useReadCopies } from "./queries"
-import { copyColumns, documentTypeLabel } from "./columns"
+import {
+    queueQuickTypes,
+    queueTypeLabel,
+} from "@/features/workspace/lib/queue-presentation"
+import { getErrorMessage, getErrorPresentation } from "@/lib/api"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { useRouter, useSearchParams } from "@/lib/navigation"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
+import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
+import { workspaceHost } from "@/lib/workspace-tabs"
 import type { CopyFilters, CopyReceipt } from "./api"
+import { copyColumns, documentTypeLabel } from "./columns"
+import { useCopies, useReadCopies } from "./queries"
 
 export function ApprovalCopiesPage() {
     const params = useSearchParams()
@@ -47,7 +46,10 @@ export function ApprovalCopiesPage() {
         query: params.get("q") || undefined,
     }
     const list = useCopies(filters)
+    const loading = list.isPending || list.isFetching
     const [search, setSearch] = useState(filters.query ?? "")
+    const searchInputRef = useRef<HTMLInputElement>(null)
+    useSearchHotkey(searchInputRef)
     const [selected, setSelected] = useState<string[]>([])
     const mark = useReadCopies()
     const hasActiveFilter = Boolean(
@@ -58,8 +60,21 @@ export function ApprovalCopiesPage() {
     )
     if (filters.document_type && !types.includes(filters.document_type))
         types.push(filters.document_type)
+    const typeOptions = types.map((kind) => ({
+        value: `approval:${kind}`,
+        label: `${documentTypeLabel(kind)}审批`,
+    }))
+    const quickTypes = queueQuickTypes(typeOptions)
+    const orderedTypes = [
+        ...quickTypes,
+        ...typeOptions.filter(
+            (option) => !quickTypes.some((type) => type.value === option.value),
+        ),
+    ]
+    const rows = list.data?.items ?? []
+    const total = list.data?.total ?? 0
     const selectedIds = selected.filter((selectedId) =>
-        list.data?.items.some((row) => row.id === selectedId),
+        rows.some((row) => row.id === selectedId),
     )
     const update = (changes: Record<string, string | undefined>) => {
         const next = new URLSearchParams(params)
@@ -71,6 +86,20 @@ export function ApprovalCopiesPage() {
         }
         router.push(`/workspace/copies?${next}`)
         setSelected([])
+    }
+    const clearFilters = () => {
+        setSearch("")
+        update({
+            q: undefined,
+            read: undefined,
+            documentType: undefined,
+            page: undefined,
+        })
+    }
+    const clearSearch = () => {
+        setSearch("")
+        update({ q: undefined, page: undefined })
+        searchInputRef.current?.focus()
     }
     useEffect(() => setSearch(filters.query ?? ""), [filters.query])
     const onOpen = useCallback(
@@ -88,10 +117,7 @@ export function ApprovalCopiesPage() {
         chips.push({
             key: "query",
             label: `关键词：${filters.query}`,
-            onClear: () => {
-                setSearch("")
-                update({ q: undefined, page: undefined })
-            },
+            onClear: clearSearch,
         })
     if (filters.document_type)
         chips.push({
@@ -105,10 +131,11 @@ export function ApprovalCopiesPage() {
             label: filters.read ? "已读" : "未读",
             onClear: () => update({ read: undefined, page: undefined }),
         })
-    if (profile.isPending) return <p role="status">正在读取账号…</p>
+    if (profile.isPending) return <ListWorkspacePage title="抄送给我" loading />
     if (profile.isError)
         return (
             <BusinessFailureState
+                idPrefix="copy-profile"
                 error={profile.error}
                 onRetry={() => void profile.refetch()}
             />
@@ -121,110 +148,75 @@ export function ApprovalCopiesPage() {
             />
         )
     return (
-        <PageScaffold
-            density="compact"
-            className={`${listWorkspaceStyles.page} min-h-0 overflow-auto`}
-        >
-            <ListWorkspaceHeader
-                eyebrow="工作"
-                title="抄送给我"
-                description={
-                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                        <span>
-                            查看与我相关的审批资料，阅读不影响审批进度。
-                        </span>
-                        <span role="status" className="text-xs">
-                            {list.isError ? (
-                                "更新失败，请重试"
-                            ) : list.isFetching ? (
-                                "正在更新…"
-                            ) : list.dataUpdatedAt > 0 ? (
-                                <time
-                                    dateTime={new Date(
-                                        list.dataUpdatedAt,
-                                    ).toISOString()}
-                                >
-                                    更新于{" "}
-                                    {new Date(
-                                        list.dataUpdatedAt,
-                                    ).toLocaleTimeString("zh-CN", {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                        hour12: false,
-                                    })}
-                                </time>
-                            ) : (
-                                "正在查询"
-                            )}
-                        </span>
-                    </div>
-                }
-            >
-                <Button
-                    id="copy-refresh"
-                    variant="outline"
-                    disabled={list.isFetching}
-                    onClick={() => {
+        <ListWorkspacePage
+            title="抄送给我"
+            className="min-h-0 overflow-auto"
+            views={{
+                ariaLabel: "事项类型",
+                items: [
+                    {
+                        id: "workspace-type-all",
+                        label: "全部",
+                        active: !filters.document_type,
+                        onClick: () =>
+                            update({
+                                documentType: undefined,
+                                page: undefined,
+                            }),
+                    },
+                    ...orderedTypes.map((type) => {
+                        const kind = type.value.replace(/^approval:/, "")
+                        return {
+                            id: `workspace-type-${toAutomationIdSegment(type.value)}`,
+                            label: queueTypeLabel(type),
+                            count: list.data?.document_type_counts[kind],
+                            active: filters.document_type === kind,
+                            onClick: () =>
+                                update({ documentType: kind, page: undefined }),
+                        }
+                    }),
+                ],
+            }}
+            actions={[
+                {
+                    id: "copy-refresh",
+                    actionKey: "refresh",
+                    label: "刷新",
+                    icon: RefreshCwIcon,
+                    tier: "quiet",
+                    disabled: list.isFetching,
+                    title: list.dataUpdatedAt
+                        ? `更新于 ${new Date(
+                              list.dataUpdatedAt,
+                          ).toLocaleTimeString("zh-CN", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: false,
+                          })}`
+                        : undefined,
+                    onClick: () => {
                         void list.refetch()
                         workspaceHost()?.changed(window)
-                    }}
-                >
-                    <RefreshCwIcon aria-hidden="true" />
-                    刷新
-                </Button>
-            </ListWorkspaceHeader>
-            <ListWorkSurface
-                ariaLabel="抄送给我列表"
-                className="min-h-128"
-                tableClassName="flex min-w-0 flex-col"
-                views={
-                    <WorkspaceTypeNav
-                        state={{
-                            view: "started",
-                            sort: "created_desc",
-                            filters: {
-                                item_types: filters.document_type
-                                    ? [`approval:${filters.document_type}`]
-                                    : [],
-                            },
-                        }}
-                        options={{
-                            item_types: types.map((kind) => ({
-                                value: `approval:${kind}`,
-                                label: `${documentTypeLabel(kind)}审批`,
-                            })),
-                        }}
-                        types={queueQuickTypes(
-                            types.map((kind) => ({
-                                value: `approval:${kind}`,
-                                label: `${documentTypeLabel(kind)}审批`,
-                            })),
-                        )}
-                        counts={Object.fromEntries(
-                            types.map((kind) => [
-                                `approval:${kind}`,
-                                list.data?.document_type_counts[kind],
-                            ]),
-                        )}
-                        onChange={(selectedTypes) =>
-                            update({
-                                documentType: selectedTypes[0]?.replace(
-                                    /^approval:/,
-                                    "",
-                                ),
-                                page: undefined,
-                            })
-                        }
-                    />
-                }
-                toolbar={
+                    },
+                },
+            ]}
+            alerts={
+                mark.isError ? (
+                    <p role="alert" className="text-sm text-destructive">
+                        {getErrorMessage(mark.error)}
+                    </p>
+                ) : null
+            }
+            surface={{
+                ariaLabel: "抄送给我列表",
+                toolbar: (
                     <ListWorkspaceFilterBar
                         idPrefix="copy-query"
                         queryButtonId="copy-search-apply"
                         clearButtonId="copy-filter-reset"
                         formAriaLabel="抄送查询"
                         density="compact"
-                        className="[&_[data-slot=list-toolbar-search]]:lg:w-auto [&_[data-slot=list-toolbar-search]]:lg:flex-1"
+                        morePresentation="popover"
                         onSubmit={() =>
                             update({
                                 q: search.trim() || undefined,
@@ -235,12 +227,17 @@ export function ApprovalCopiesPage() {
                             search.trim() !== (filters.query ?? "")
                         }
                         search={
-                            <InputGroup>
+                            <InputGroup
+                                data-has-value={
+                                    search.trim() ? "true" : undefined
+                                }
+                            >
                                 <InputGroupAddon>
                                     <SearchIcon aria-hidden="true" />
                                 </InputGroupAddon>
                                 <InputGroupInput
                                     id="copy-search"
+                                    ref={searchInputRef}
                                     aria-label="搜索单号"
                                     placeholder="搜索单号"
                                     value={search}
@@ -252,15 +249,12 @@ export function ApprovalCopiesPage() {
                                     <InputGroupAddon align="inline-end">
                                         <InputGroupButton
                                             id="copy-search-clear"
+                                            type="button"
                                             size="icon-xs"
+                                            variant="ghost"
+                                            className="rounded-full"
                                             aria-label="清除关键词"
-                                            onClick={() => {
-                                                setSearch("")
-                                                update({
-                                                    q: undefined,
-                                                    page: undefined,
-                                                })
-                                            }}
+                                            onClick={clearSearch}
                                         >
                                             <XIcon aria-hidden="true" />
                                         </InputGroupButton>
@@ -273,11 +267,12 @@ export function ApprovalCopiesPage() {
                                 id="copy-read-filter"
                                 aria-label="阅读状态"
                                 filterLabel="阅读状态"
+                                placeholder="全部"
                                 className="w-44 max-w-full"
                                 allowClear={false}
                                 value={
                                     filters.read === undefined
-                                        ? "all"
+                                        ? null
                                         : String(filters.read)
                                 }
                                 options={[
@@ -297,46 +292,37 @@ export function ApprovalCopiesPage() {
                             />
                         }
                         chips={chips}
-                        onClearAll={() => {
-                            setSearch("")
-                            update({
-                                q: undefined,
-                                read: undefined,
-                                documentType: undefined,
-                                page: undefined,
-                            })
-                        }}
+                        onClearAll={clearFilters}
                         resultStatus={
                             list.isError
                                 ? "查询未完成"
-                                : list.isFetching
+                                : loading && rows.length === 0
                                   ? "查询中…"
-                                  : `共 ${list.data?.total ?? 0} 条抄送`
+                                  : null
                         }
                     />
-                }
-                selectionBar={
-                    list.data?.items.length ? (
-                        <div className="flex flex-wrap items-center gap-3">
-                            {selectedIds.length > 0 && (
-                                <>
-                                    <span>已选 {selectedIds.length} 条</span>
-                                    <Button
-                                        id="copy-selection-clear"
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => setSelected([])}
-                                    >
-                                        清空选择
-                                    </Button>
-                                </>
-                            )}
+                ),
+                selectionBarOpen: selectedIds.length > 0,
+                selectionBar: (
+                    <ListSelectionBar
+                        idPrefix="copy-selection"
+                        resultCount={total}
+                        pageRowCount={rows.length}
+                        selectedCount={selectedIds.length}
+                        allPageSelected={selectedIds.length === rows.length}
+                        clearLabel="清空选择"
+                        busy={mark.isPending}
+                        onSelectPage={() =>
+                            setSelected(rows.map((row) => row.id))
+                        }
+                        onClear={() => setSelected([])}
+                        actions={(display) => (
                             <Button
                                 id="copy-mark-selected"
+                                type="button"
                                 size="sm"
-                                variant="outline"
                                 disabled={
-                                    !selectedIds.length ||
+                                    !display.selectedCount ||
                                     mark.isPending ||
                                     list.isError
                                 }
@@ -348,90 +334,79 @@ export function ApprovalCopiesPage() {
                             >
                                 标记选中已读
                             </Button>
-                        </div>
-                    ) : undefined
-                }
-                table={
-                    <>
-                        {mark.isError && (
-                            <p
-                                role="alert"
-                                className="py-3 text-sm text-destructive"
-                            >
-                                {getErrorMessage(mark.error)}
-                            </p>
                         )}
-                        <section
-                            data-slot="workspace-queue"
-                            aria-label="抄送队列"
-                            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-                        >
-                            <DataTable
-                                idPrefix="copy-table"
-                                data={list.data?.items ?? []}
-                                columns={columns}
-                                getRowId={(row) => row.id}
-                                rowLabel={(row) =>
-                                    `${documentTypeLabel(row.document_type)} ${row.document_no}`
-                                }
-                                caption="抄送事项"
-                                rowCount={list.data?.total ?? 0}
-                                density="comfortable"
-                                scrollable
-                                enableColumnResizing={false}
-                                enableRowSelection
-                                rowSelection={Object.fromEntries(
-                                    selectedIds.map((id) => [id, true]),
-                                )}
-                                onRowSelectionChange={(selection) =>
-                                    setSelected(
-                                        Object.keys(selection).filter(
-                                            (id) => selection[id],
-                                        ),
-                                    )
-                                }
-                                showToolbarSummary={false}
-                                showRefreshingBanner={false}
-                                pagination={{
-                                    pageIndex: page - 1,
-                                    pageSize: 20,
-                                }}
-                                pageSizeOptions={[20]}
-                                onPaginationChange={(next) =>
-                                    update({ page: String(next.pageIndex + 1) })
-                                }
-                                onRowOpen={onOpen}
-                                loading={list.isFetching}
-                                errorState={
-                                    list.isError ? (
-                                        <BusinessFailureState
-                                            error={list.error}
-                                            onRetry={() => void list.refetch()}
-                                        />
-                                    ) : undefined
-                                }
-                                emptyState={
-                                    <BusinessEmptyState
-                                        kind="no-tasks"
-                                        icon={MailIcon}
-                                        title={
-                                            hasActiveFilter
-                                                ? "没有符合条件的抄送"
-                                                : "当前没有抄送事项"
-                                        }
-                                        description={
-                                            hasActiveFilter
-                                                ? "可调整条件或清除筛选。"
-                                                : "新的审批抄送到达后会显示在这里。"
-                                        }
-                                    />
-                                }
-                                className="gap-0"
-                            />
-                        </section>
-                    </>
-                }
-            />
-        </PageScaffold>
+                    />
+                ),
+                table: (
+                    <section
+                        data-slot="workspace-queue"
+                        aria-label="抄送队列"
+                        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                    >
+                        <ListDataTable
+                            idPrefix="copy-table"
+                            entityName="抄送事项"
+                            data={rows}
+                            columns={columns}
+                            defaultColumnOrder={[
+                                "__selection",
+                                "document",
+                                "summary",
+                                "status",
+                                "copiedAt",
+                                "action",
+                            ]}
+                            defaultColumnPinning={{
+                                left: ["document"],
+                                right: ["action"],
+                            }}
+                            getRowId={(row) => row.id}
+                            rowLabel={(row) =>
+                                `${documentTypeLabel(row.document_type)} ${row.document_no}`
+                            }
+                            caption="抄送事项"
+                            rowCount={total}
+                            scrollable
+                            enableColumnResizing={false}
+                            enableRowSelection
+                            rowSelection={Object.fromEntries(
+                                selectedIds.map((id) => [id, true]),
+                            )}
+                            onRowSelectionChange={(selection) =>
+                                setSelected(
+                                    Object.keys(selection).filter(
+                                        (id) => selection[id],
+                                    ),
+                                )
+                            }
+                            pagination={{ pageIndex: page - 1, pageSize: 20 }}
+                            pageSizeOptions={[20]}
+                            onPaginationChange={(next) =>
+                                update({ page: String(next.pageIndex + 1) })
+                            }
+                            onRowOpen={onOpen}
+                            loading={loading}
+                            isError={list.isError}
+                            error={list.error}
+                            onRetry={
+                                list.isError &&
+                                getErrorPresentation(list.error).retryable
+                                    ? () => void list.refetch()
+                                    : undefined
+                            }
+                            hasActiveFilters={hasActiveFilter}
+                            onClearFilters={clearFilters}
+                            emptyCopy={{
+                                filterTitle: "没有符合条件的抄送",
+                                filterDescription: "可调整条件或清除筛选。",
+                                emptyTitle: "当前没有抄送事项",
+                                emptyDescription:
+                                    "新的审批抄送到达后会显示在这里。",
+                            }}
+                        />
+                    </section>
+                ),
+            }}
+        />
     )
 }

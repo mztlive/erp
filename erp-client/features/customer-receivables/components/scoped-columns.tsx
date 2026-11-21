@@ -7,6 +7,7 @@ import {
     BusinessStatusBadge,
     LimitedBadge,
     MoneyValue,
+    TableIdentityCell,
     wholeUnallocatedCell,
 } from "@/components/business"
 import type {
@@ -16,11 +17,67 @@ import type {
 } from "@/features/customer-receivables/api/scoped"
 import { formatDateTime } from "@/lib/datetime"
 import { instantToIso } from "@/features/customer-receivables/api/mappers"
+import {
+    customerReceiptStatusLabel,
+    customerReceiptStatusTone,
+} from "@/features/customer-receivables/lib/customer-receipt-approval"
+import { RECEIVABLE_STATUS_LABEL } from "@/features/customer-receivables/types"
 import { scopeText } from "@/lib/ui-text"
 import {
     businessLabelOrPlaceholder,
     MISSING_SALES_ORDER_NO,
 } from "../lib/display-labels"
+
+export function scopedReceivableOrderNo(row: ScopedReceivableAccountWire) {
+    return businessLabelOrPlaceholder(
+        row.sales_order_no,
+        row.sales_order_id,
+        MISSING_SALES_ORDER_NO,
+    )
+}
+
+function receivableStatus(status: string) {
+    switch (status) {
+        case "open":
+            return {
+                label: RECEIVABLE_STATUS_LABEL.open,
+                tone: "info",
+            } as const
+        case "partially_settled":
+        case "partial":
+            return {
+                label: RECEIVABLE_STATUS_LABEL.partial,
+                tone: "warning",
+            } as const
+        case "settled":
+            return {
+                label: RECEIVABLE_STATUS_LABEL.settled,
+                tone: "success",
+                appearance: "quiet",
+            } as const
+        default:
+            return { label: "状态未知", tone: "neutral" } as const
+    }
+}
+
+function invoiceStatus(status: string) {
+    switch (status) {
+        case "draft":
+            return { label: "草稿", tone: "neutral" } as const
+        case "registered":
+            return {
+                label: "已登记",
+                tone: "success",
+                appearance: "quiet",
+            } as const
+        case "red_invoiced":
+            return { label: "已红冲", tone: "void" } as const
+        case "reversed":
+            return { label: "已作废", tone: "void" } as const
+        default:
+            return { label: "状态未知", tone: "neutral" } as const
+    }
+}
 
 function restrictedReason(limited: boolean): ReactNode {
     return limited ? (
@@ -36,21 +93,20 @@ export function createScopedReceivableColumns(): ColumnDef<ScopedReceivableAccou
         {
             id: "order",
             header: "销售单 / 应收款项",
-            meta: { label: "销售单", width: "reference" },
-            cell: ({ row }) => (
-                <div className="flex min-w-0 flex-col items-start gap-1 whitespace-normal">
-                    <span className="num break-words text-sm font-medium">
-                        {businessLabelOrPlaceholder(
-                            row.original.sales_order_no,
-                            row.original.sales_order_id,
-                            MISSING_SALES_ORDER_NO,
-                        )}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                        应收款项 #{row.original.account_seq}
-                    </span>
-                </div>
-            ),
+            meta: { label: "销售单", width: "flex" },
+            cell: ({ row }) => {
+                const orderNo = scopedReceivableOrderNo(row.original)
+                const account = `应收款项 #${row.original.account_seq}`
+                return (
+                    <TableIdentityCell
+                        primary={<span className="num">{orderNo}</span>}
+                        primaryTitle={orderNo}
+                        secondary={account}
+                        secondaryTitle={account}
+                        numericSecondary
+                    />
+                )
+            },
         },
         {
             id: "visible",
@@ -63,7 +119,10 @@ export function createScopedReceivableColumns(): ColumnDef<ScopedReceivableAccou
             },
             cell: ({ row }) => (
                 <div className="flex flex-col items-end gap-1 text-right">
-                    <MoneyValue value={row.original.visible_settled_share} />
+                    <MoneyValue
+                        value={row.original.visible_settled_share}
+                        display="exact"
+                    />
                     {row.original.permission_limited ? (
                         <LimitedBadge
                             id={`customer-receivables-scoped-receivable-limited-${row.original.id}`}
@@ -85,6 +144,7 @@ export function createScopedReceivableColumns(): ColumnDef<ScopedReceivableAccou
                 <div className="flex flex-col items-end gap-1 text-right">
                     <MoneyValue
                         value={row.original.gross_total}
+                        display="exact"
                         unavailableReason={
                             row.original.permission_limited
                                 ? scopeText.wholeRestricted
@@ -102,8 +162,7 @@ export function createScopedReceivableColumns(): ColumnDef<ScopedReceivableAccou
             cell: ({ row }) => (
                 <BusinessStatusBadge
                     context="list"
-                    label={row.original.status}
-                    tone="neutral"
+                    {...receivableStatus(row.original.status)}
                 />
             ),
         },
@@ -116,17 +175,20 @@ export function createScopedReceiptColumns(): ColumnDef<ScopedCustomerReceiptWir
         {
             id: "doc",
             header: "回款单号",
-            meta: { label: "回款单号", width: "reference" },
-            cell: ({ row }) => (
-                <div className="min-w-0">
-                    <div className="num break-words text-sm font-medium">
-                        {row.original.receipt_no}
-                    </div>
-                    <div className="num text-xs text-muted-foreground">
-                        {formatDateTime(instantToIso(row.original.received_at))}
-                    </div>
-                </div>
-            ),
+            meta: { label: "回款单号", width: "flex" },
+            cell: ({ row }) => {
+                const { receipt_no, received_at } = row.original
+                const receivedAt = formatDateTime(instantToIso(received_at))
+                return (
+                    <TableIdentityCell
+                        primary={<span className="num">{receipt_no}</span>}
+                        primaryTitle={receipt_no}
+                        secondary={receivedAt}
+                        secondaryTitle={receivedAt}
+                        numericSecondary
+                    />
+                )
+            },
         },
         {
             id: "visible",
@@ -139,7 +201,10 @@ export function createScopedReceiptColumns(): ColumnDef<ScopedCustomerReceiptWir
             },
             cell: ({ row }) => (
                 <div className="flex flex-col items-end gap-1 text-right">
-                    <MoneyValue value={row.original.visible_allocated_share} />
+                    <MoneyValue
+                        value={row.original.visible_allocated_share}
+                        display="exact"
+                    />
                     {row.original.permission_limited ? (
                         <LimitedBadge
                             id={`customer-receivables-scoped-receipt-limited-${row.original.id}`}
@@ -167,13 +232,19 @@ export function createScopedReceiptColumns(): ColumnDef<ScopedCustomerReceiptWir
         {
             id: "status",
             header: "状态",
-            cell: ({ row }) => (
-                <BusinessStatusBadge
-                    context="list"
-                    label={row.original.status}
-                    tone="neutral"
-                />
-            ),
+            meta: { label: "状态", width: "status" },
+            cell: ({ row }) => {
+                const status = row.original.status
+                const tone = customerReceiptStatusTone(status)
+                return (
+                    <BusinessStatusBadge
+                        context="list"
+                        label={customerReceiptStatusLabel(status)}
+                        tone={tone}
+                        appearance={tone === "success" ? "quiet" : "badge"}
+                    />
+                )
+            },
         },
     ]
 }
@@ -184,17 +255,20 @@ export function createScopedInvoiceColumns(): ColumnDef<ScopedInvoiceWire>[] {
         {
             id: "doc",
             header: "发票",
-            meta: { label: "发票", width: "reference" },
-            cell: ({ row }) => (
-                <div className="min-w-0">
-                    <div className="num break-words text-sm font-medium">
-                        {row.original.invoice_no ?? "附件登记"}
-                    </div>
-                    <div className="num text-xs text-muted-foreground">
-                        {row.original.invoice_date ?? "—"}
-                    </div>
-                </div>
-            ),
+            meta: { label: "发票", width: "flex" },
+            cell: ({ row }) => {
+                const { invoice_no, invoice_date } = row.original
+                const title = invoice_no ?? "附件登记"
+                return (
+                    <TableIdentityCell
+                        primary={<span className="num">{title}</span>}
+                        primaryTitle={title}
+                        secondary={invoice_date}
+                        secondaryTitle={invoice_date ?? undefined}
+                        numericSecondary
+                    />
+                )
+            },
         },
         {
             id: "visible",
@@ -207,7 +281,10 @@ export function createScopedInvoiceColumns(): ColumnDef<ScopedInvoiceWire>[] {
             },
             cell: ({ row }) => (
                 <div className="flex flex-col items-end gap-1 text-right">
-                    <MoneyValue value={row.original.visible_allocated_share} />
+                    <MoneyValue
+                        value={row.original.visible_allocated_share}
+                        display="exact"
+                    />
                     {row.original.permission_limited ? (
                         <LimitedBadge
                             id={`customer-receivables-scoped-invoice-limited-${row.original.id}`}
@@ -235,11 +312,11 @@ export function createScopedInvoiceColumns(): ColumnDef<ScopedInvoiceWire>[] {
         {
             id: "status",
             header: "状态",
+            meta: { label: "状态", width: "status" },
             cell: ({ row }) => (
                 <BusinessStatusBadge
                     context="list"
-                    label={row.original.status}
-                    tone="neutral"
+                    {...invoiceStatus(row.original.status)}
                 />
             ),
         },

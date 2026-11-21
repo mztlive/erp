@@ -3,7 +3,12 @@ import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { formatDateTime } from "@/lib/datetime"
-import { BusinessStatusBadge } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableTextCell,
+} from "@/components/business"
 import { MoneyCell } from "@/features/actual-profit-loss/components/money-cell"
 import {
     COVERAGE_STATE_UI,
@@ -28,7 +33,7 @@ export function buildProfitLossColumns(options: {
             id: "identityLabel",
             accessorFn: (r) => r.identityLabel,
             header: "业务对象",
-            meta: { label: "业务对象", width: "default" as const },
+            meta: { label: "业务对象", width: "flex" },
             cell: ({ row }) => {
                 const r = row.original
                 const href =
@@ -36,38 +41,40 @@ export function buildProfitLossColumns(options: {
                         ? `/sales/orders/${encodeURIComponent(r.objectId)}`
                         : undefined
                 return (
-                    <div className="flex flex-col gap-0.5">
-                        {href ? (
-                            <Link
-                                id={`actual-profit-loss-row-${toAutomationIdSegment(r.rowId)}-sales-order`}
-                                href={href}
-                                className="font-medium text-primary underline-offset-2 hover:underline"
-                                ref={(el) => {
-                                    rowFocusRef.current.set(r.rowId, el)
-                                }}
-                            >
-                                {r.identityLabel}
-                            </Link>
-                        ) : ["attribution_user", "attribution_org"].includes(
-                              r.objectType,
-                          ) ? (
-                            <button
-                                id={`actual-profit-loss-row-${toAutomationIdSegment(r.rowId)}-group`}
-                                type="button"
-                                className="text-left font-medium text-primary underline-offset-2 hover:underline"
-                                onClick={() => openHistoricalGroup(r)}
-                            >
-                                {r.identityLabel}
-                            </button>
-                        ) : (
-                            <span className="font-medium">
-                                {r.identityLabel}
-                            </span>
-                        )}
-                        <span className="text-xs text-muted-foreground">
-                            {r.customerLabel}
-                        </span>
-                    </div>
+                    <TableIdentityCell
+                        className="w-0 min-w-full"
+                        primaryTitle={r.identityLabel}
+                        secondary={r.customerLabel}
+                        secondaryTitle={r.customerLabel}
+                        primary={
+                            href ? (
+                                <Link
+                                    id={`actual-profit-loss-row-${toAutomationIdSegment(r.rowId)}-sales-order`}
+                                    href={href}
+                                    className="text-primary underline-offset-2 hover:underline"
+                                    ref={(el) => {
+                                        rowFocusRef.current.set(r.rowId, el)
+                                    }}
+                                >
+                                    {r.identityLabel}
+                                </Link>
+                            ) : [
+                                  "attribution_user",
+                                  "attribution_org",
+                              ].includes(r.objectType) ? (
+                                <button
+                                    id={`actual-profit-loss-row-${toAutomationIdSegment(r.rowId)}-group`}
+                                    type="button"
+                                    className="max-w-full cursor-pointer truncate text-left align-bottom text-primary underline-offset-2 hover:underline"
+                                    onClick={() => openHistoricalGroup(r)}
+                                >
+                                    {r.identityLabel}
+                                </button>
+                            ) : (
+                                r.identityLabel
+                            )
+                        }
+                    />
                 )
             },
         },
@@ -76,11 +83,13 @@ export function buildProfitLossColumns(options: {
             enableSorting: false,
             accessorFn: (r) => r.benefitScenarios?.join("、") ?? "",
             header: "福利场景",
-            meta: { label: "福利场景" },
+            meta: { label: "福利场景", width: "reference" },
             cell: ({ row }) => (
-                <span className="text-sm text-muted-foreground">
-                    {row.original.benefitScenarios?.join("、") || "—"}
-                </span>
+                <TableTextCell
+                    value={row.original.benefitScenarios?.join("、")}
+                    clamp={2}
+                    className="whitespace-normal"
+                />
             ),
         },
         {
@@ -90,7 +99,8 @@ export function buildProfitLossColumns(options: {
             meta: {
                 label: "不含税收入",
                 numeric: true,
-                align: "end" as const,
+                align: "end",
+                width: "amount",
             },
             cell: ({ row }) => (
                 <MoneyCell value={row.original.netSalesRevenue} />
@@ -103,21 +113,16 @@ export function buildProfitLossColumns(options: {
             meta: {
                 label: "实际采购成本（不含税）",
                 numeric: true,
-                align: "end" as const,
+                align: "end",
+                width: "amount",
             },
             cell: ({ row }) => {
                 const r = row.original
                 if (r.coverageState === "UNCOVERED") {
-                    return (
-                        <span className="text-sm text-muted-foreground">
-                            成本未归集
-                        </span>
-                    )
+                    return <TableEmptyCell variant="label" label="成本未归集" />
                 }
                 if (r.actualProcurementCostNet == null) {
-                    return (
-                        <span className="text-sm text-muted-foreground">—</span>
-                    )
+                    return <TableEmptyCell />
                 }
                 return (
                     <MoneyCell
@@ -141,21 +146,16 @@ export function buildProfitLossColumns(options: {
             meta: {
                 label: "实际履约费用（不含税）",
                 numeric: true,
-                align: "end" as const,
+                align: "end",
+                width: "amount",
             },
             cell: ({ row }) => {
                 const r = row.original
                 if (r.coverageState === "UNCOVERED") {
-                    return (
-                        <span className="text-sm text-muted-foreground">
-                            成本未归集
-                        </span>
-                    )
+                    return <TableEmptyCell variant="label" label="成本未归集" />
                 }
                 if (r.actualFulfillmentCostNet == null) {
-                    return (
-                        <span className="text-sm text-muted-foreground">—</span>
-                    )
+                    return <TableEmptyCell />
                 }
                 return (
                     <MoneyCell
@@ -179,14 +179,13 @@ export function buildProfitLossColumns(options: {
             meta: {
                 label: "成本冲减",
                 numeric: true,
-                align: "end" as const,
+                align: "end",
+                width: "amount",
             },
             cell: ({ row }) => {
                 const r = row.original
                 if (r.reductionsNet == null) {
-                    return (
-                        <span className="text-sm text-muted-foreground">—</span>
-                    )
+                    return <TableEmptyCell />
                 }
                 return (
                     <MoneyCell value={r.reductionsNet} negativeAsText={false} />
@@ -200,20 +199,23 @@ export function buildProfitLossColumns(options: {
             meta: {
                 label: "实际盈亏（不含税）",
                 numeric: true,
-                align: "end" as const,
+                align: "end",
+                width: "amount",
             },
             cell: ({ row }) => {
                 const r = row.original
                 if (r.actualProfitLossNet == null) {
                     return (
-                        <span
-                            className="text-sm text-muted-foreground"
+                        <TableTextCell
+                            value={
+                                r.coverageState === "UNCOVERED"
+                                    ? "待归集成本"
+                                    : (r.marginUnavailableReason ??
+                                      "待归集成本")
+                            }
                             title={r.marginUnavailableReason}
-                        >
-                            {r.coverageState === "UNCOVERED"
-                                ? "待归集成本"
-                                : (r.marginUnavailableReason ?? "待归集成本")}
-                        </span>
+                            className="text-xs text-muted-foreground"
+                        />
                     )
                 }
                 const href =
@@ -236,28 +238,27 @@ export function buildProfitLossColumns(options: {
             meta: {
                 label: "实际利润率",
                 numeric: true,
-                align: "end" as const,
+                align: "end",
+                width: "rate",
             },
             cell: ({ row }) => {
                 const r = row.original
                 if (r.marginRate == null) {
                     return (
-                        <span
-                            className="text-sm text-muted-foreground"
-                            title={r.marginUnavailableReason}
-                        >
-                            {r.marginUnavailableReason ?? "不适用"}
-                        </span>
+                        <TableTextCell
+                            value={r.marginUnavailableReason ?? "不适用"}
+                            className="whitespace-normal text-xs text-muted-foreground"
+                        />
                     )
                 }
-                return <span className="num text-sm">{r.marginRate}</span>
+                return <TableTextCell value={r.marginRate} numeric />
             },
         },
         {
             id: "coverageState",
             accessorFn: (r) => r.coverageState,
             header: "成本归集状态",
-            meta: { label: "成本归集状态" },
+            meta: { label: "成本归集状态", width: "status" },
             cell: ({ row }) => {
                 const r = row.original
                 const ui = COVERAGE_STATE_UI[r.coverageState]
@@ -267,6 +268,9 @@ export function buildProfitLossColumns(options: {
                 return (
                     <BusinessStatusBadge
                         context="list"
+                        appearance={
+                            r.coverageState === "COVERED" ? "quiet" : "badge"
+                        }
                         label={ui.label}
                         tone={ui.tone}
                         description={reason || undefined}
@@ -279,11 +283,19 @@ export function buildProfitLossColumns(options: {
             enableSorting: false,
             accessorFn: (r) => r.latestCostOccurredAt ?? "",
             header: "最近成本发生",
-            meta: { label: "最近成本发生" },
+            meta: { label: "最近成本发生", width: "default" },
             cell: ({ row }) => (
-                <span className="num text-body-compact text-muted-foreground">
-                    {formatDateTime(row.original.latestCostOccurredAt, "full")}
-                </span>
+                <TableTextCell
+                    value={
+                        row.original.latestCostOccurredAt
+                            ? formatDateTime(
+                                  row.original.latestCostOccurredAt,
+                                  "full",
+                              )
+                            : undefined
+                    }
+                    numeric
+                />
             ),
         },
     ]

@@ -2,8 +2,12 @@
 
 import { useMemo } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
-import { EyeIcon } from "lucide-react"
-import { BusinessStatusBadge, TableRowActions } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    TableIdentityCell,
+    TableRowActions,
+    TableTextCell,
+} from "@/components/business"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     auditActionLabel,
@@ -21,56 +25,72 @@ export function useAuditLogColumns(openDetails: (row: AuditLogItem) => void) {
             {
                 id: "time",
                 header: "时间",
-                size: 175,
+                meta: { width: "default", numeric: true },
                 cell: ({ row }) => (
-                    <span className="num whitespace-nowrap text-xs">
-                        {auditTimeLabel(row.original)}
-                    </span>
+                    <TableTextCell
+                        value={auditTimeLabel(row.original)}
+                        numeric
+                        clamp={1}
+                    />
                 ),
             },
             {
                 id: "actor",
                 header: "操作人",
-                cell: ({ row }) => (
-                    <div className="min-w-[7rem]">
-                        <div className="text-sm font-medium">
-                            {auditActorLabel(row.original)}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                            {row.original.structured_event?.actor_account ??
-                                row.original.actor_account}
-                        </div>
-                    </div>
-                ),
+                cell: ({ row }) => {
+                    const name = auditActorLabel(row.original)
+                    const account =
+                        row.original.structured_event?.actor_account ??
+                        row.original.actor_account
+                    return (
+                        <TableIdentityCell
+                            primary={name}
+                            primaryTitle={name}
+                            secondary={account}
+                            secondaryTitle={account}
+                        />
+                    )
+                },
             },
             {
                 id: "action",
                 header: "业务动作",
                 cell: ({ row }) => (
-                    <span className="text-sm">
-                        {auditActionLabel(row.original)}
-                    </span>
+                    <TableTextCell
+                        value={auditActionLabel(row.original)}
+                        clamp={1}
+                    />
                 ),
             },
             {
                 id: "object",
                 header: "业务编号",
-                size: 220,
-                cell: ({ row }) => (
-                    <span className="num text-sm">
-                        {auditObjectLabel(row.original)}
-                    </span>
-                ),
+                meta: { width: "flex" },
+                cell: ({ row }) => {
+                    const label = auditObjectLabel(row.original)
+                    return (
+                        <TableIdentityCell
+                            className="num"
+                            primary={label}
+                            primaryTitle={label}
+                        />
+                    )
+                },
             },
             {
                 id: "result",
                 header: "执行结果",
+                meta: { width: "status" },
                 cell: ({ row }) => {
                     const result = auditResultView(row.original)
                     return (
                         <BusinessStatusBadge
+                            context="list"
                             label={result.label}
                             tone={result.tone}
+                            appearance={
+                                result.tone === "success" ? "quiet" : "badge"
+                            }
                         />
                     )
                 },
@@ -78,25 +98,18 @@ export function useAuditLogColumns(openDetails: (row: AuditLogItem) => void) {
             {
                 id: "changes",
                 header: "字段变化",
-                size: 300,
-                cell: ({ row }) => {
-                    const changes = auditChangesLabel(row.original)
-                    return (
-                        <span
-                            className="block max-w-[22rem] truncate text-sm"
-                            title={changes}
-                        >
-                            {changes}
-                        </span>
-                    )
-                },
+                meta: { width: "reference" },
+                cell: ({ row }) => (
+                    <TableTextCell
+                        value={auditChangesLabel(row.original)}
+                        clamp={1}
+                    />
+                ),
             },
             {
                 id: "actions",
                 header: "查看",
-                size: 104,
-                minSize: 104,
-                meta: { align: "end" },
+                meta: { align: "end", width: "status" },
                 cell: ({ row }) => {
                     const segment = toAutomationIdSegment(row.original.id)
                     return (
@@ -107,7 +120,6 @@ export function useAuditLogColumns(openDetails: (row: AuditLogItem) => void) {
                                 {
                                     id: `business-audit-row-${segment}-details`,
                                     label: "详情",
-                                    icon: EyeIcon,
                                     onClick: () => openDetails(row.original),
                                 },
                             ]}

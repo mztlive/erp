@@ -1,335 +1,258 @@
 "use client"
 
-import * as React from "react"
-
-import { OptionCombobox } from "@/components/business"
 import {
+    FilterChip,
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-} from "@/components/business/list-workspace"
+    OptionCombobox,
+} from "@/components/business"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     CompanySkuSearchCombobox,
     SupplierSearchCombobox,
 } from "@/features/entity-selectors"
-import type {
-    AvailabilityStatusFilter,
-    OfferingSourceFilter,
-    SupplierOfferingAppliedChip,
-    SupplierOfferingFilterKey,
-} from "@/features/supplier-offerings/hooks/use-supplier-offerings-page-state"
-import {
-    AVAILABILITY_STATUS_LABELS,
-    SOURCE_TYPE_LABELS,
-} from "@/features/supplier-offerings/types"
 
-const SOURCE_TYPE_FILTER_OPTIONS = [
+import type {
+    SupplierOfferingAppliedChip,
+    useSupplierOfferingsPageState,
+} from "../hooks/use-supplier-offerings-page-state"
+import { AVAILABILITY_STATUS_LABELS, SOURCE_TYPE_LABELS } from "../types"
+
+const SOURCE_OPTIONS = [
     { value: "MANUAL", label: SOURCE_TYPE_LABELS.MANUAL },
     { value: "EXCEL", label: SOURCE_TYPE_LABELS.EXCEL },
     { value: "API", label: SOURCE_TYPE_LABELS.API },
 ] as const
-
-const AVAILABILITY_STATUS_FILTER_OPTIONS = [
+const AVAILABILITY_OPTIONS = [
     { value: "AVAILABLE", label: AVAILABILITY_STATUS_LABELS.AVAILABLE },
     { value: "UNAVAILABLE", label: AVAILABILITY_STATUS_LABELS.UNAVAILABLE },
     { value: "STOPPED", label: AVAILABILITY_STATUS_LABELS.STOPPED },
     { value: "STALE", label: AVAILABILITY_STATUS_LABELS.STALE },
 ] as const
 
-const MORE_CHIP_KEYS: readonly SupplierOfferingFilterKey[] = [
-    "sourceType",
-    "skuId",
-    "skuNo",
-    "productNo",
-    "ownerUserIds",
-    "procurementOwnerUserIds",
-]
-
-export type SupplierOfferingsToolbarProps = {
-    searchInputRef: React.Ref<HTMLInputElement>
-    searchDraft: string
-    onSearchDraftChange: (value: string) => void
-    filterPanelOpen: boolean
-    onFilterPanelOpenChange: (open: boolean) => void
-    appliedChips: readonly SupplierOfferingAppliedChip[]
-    removeFilter: (key: SupplierOfferingFilterKey) => void
-    onApplyFilters: () => void
-    onClearFilters: () => void
-    onResetMoreFilters: () => void
-    onCancelMoreFilters: () => void
-    sourceTypeDraft: OfferingSourceFilter
-    onSourceTypeDraftChange: (value: OfferingSourceFilter) => void
-    availabilityStatusDraft: AvailabilityStatusFilter
-    onAvailabilityStatusDraftChange: (value: AvailabilityStatusFilter) => void
-    canFilterOwner: boolean
-    canFilterProcurementOwner: boolean
-    canFilterSku: boolean
-    skuLocked: boolean
-    skuIdDraft: string | null
-    onSkuIdDraftChange: (value: string | null) => void
-    skuNoDraft: string
-    onSkuNoDraftChange: (value: string) => void
-    productNoDraft: string
-    onProductNoDraftChange: (value: string) => void
-    supplierIdDraft: string | null
-    onSupplierIdDraftChange: (value: string | null) => void
-    ownerUserIdsDraft: string
-    onOwnerUserIdsDraftChange: (value: string) => void
-
-    procurementOwnerUserIdsDraft: string
-    onProcurementOwnerUserIdsDraftChange: (value: string) => void
-
-    hasPendingChanges?: boolean
-}
-
 export function SupplierOfferingsToolbar({
-    searchInputRef,
-    searchDraft,
-    onSearchDraftChange,
-    filterPanelOpen,
-    onFilterPanelOpenChange,
+    state,
     appliedChips,
-    removeFilter,
-    onApplyFilters,
-    onClearFilters,
-    onResetMoreFilters,
-    onCancelMoreFilters,
-    sourceTypeDraft,
-    onSourceTypeDraftChange,
-    availabilityStatusDraft,
-    onAvailabilityStatusDraftChange,
-    canFilterOwner,
-    canFilterProcurementOwner,
-    canFilterSku,
-    skuLocked,
-    skuIdDraft,
-    onSkuIdDraftChange,
-    skuNoDraft,
-    onSkuNoDraftChange,
-    productNoDraft,
-    onProductNoDraftChange,
-    supplierIdDraft,
-    onSupplierIdDraftChange,
-    ownerUserIdsDraft,
-    onOwnerUserIdsDraftChange,
-
-    procurementOwnerUserIdsDraft,
-    onProcurementOwnerUserIdsDraftChange,
-
-    hasPendingChanges = false,
-}: SupplierOfferingsToolbarProps) {
-    const moreCount = appliedChips.filter(({ key }) =>
-        MORE_CHIP_KEYS.includes(key),
-    ).length
+    resultStatus,
+}: {
+    state: ReturnType<typeof useSupplierOfferingsPageState>
+    appliedChips: readonly SupplierOfferingAppliedChip[]
+    resultStatus: string | null
+}) {
+    const lockedSkuChip = state.skuLocked
+        ? appliedChips.find(({ key }) => key === "skuId")
+        : undefined
+    const foldedChips = appliedChips.filter((chip) => chip !== lockedSkuChip)
+    const showClearAll = state.hasClearableFilters
 
     return (
         <ListWorkspaceFilterBar
             morePresentation="popover"
-            moreSize="wide"
-            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix="supplier-offerings-toolbar"
             formAriaLabel="供应商供给查询"
-            onSubmit={onApplyFilters}
+            onSubmit={state.applyFilters}
             search={
                 <ListSearchField
                     id="supplier-offerings-toolbar-search"
-                    searchInputRef={searchInputRef}
-                    value={searchDraft}
-                    onChange={onSearchDraftChange}
-                    placeholder="供应商订货编码"
+                    searchInputRef={state.searchInputRef}
+                    value={state.searchDraft}
+                    onChange={state.setSearchDraft}
+                    placeholder="订货编码、SKU 编号或名称"
                     aria-label="搜索供给"
                 />
             }
             queryButtonId="supplier-offerings-toolbar-apply"
-            moreCount={moreCount}
-            moreOpen={filterPanelOpen}
+            moreCount={foldedChips.length}
+            moreOpen={state.filterPanelOpen}
             onToggleMore={() =>
-                filterPanelOpen
-                    ? onCancelMoreFilters()
-                    : onFilterPanelOpenChange(true)
+                state.filterPanelOpen
+                    ? state.cancelMoreFilters()
+                    : state.setFilterPanelOpen(true)
             }
             moreButtonId="supplier-offerings-toolbar-filter-toggle"
             morePanelId="supplier-offerings-toolbar-more-panel"
             morePanelAriaLabel="供应商供给更多筛选条件"
-            onResetMore={onResetMoreFilters}
+            onResetMore={state.resetMoreFilters}
             resetMoreButtonId="supplier-offerings-toolbar-reset-more"
             primaryFilters={
                 <>
-                    <SupplierSearchCombobox
-                        id="supplier-offerings-toolbar-supplier-select"
-                        purpose="filter"
-                        className="w-56 max-w-full min-w-0"
-                        filterLabel="供应商"
-                        value={supplierIdDraft ?? undefined}
-                        onValueChange={(value) =>
-                            onSupplierIdDraftChange(value ?? null)
-                        }
-                        placeholder="全部"
-                        aria-label="供应商"
-                    />
+                    {state.canFilterSupplier ? (
+                        <SupplierSearchCombobox
+                            id="supplier-offerings-toolbar-supplier-select"
+                            purpose="filter"
+                            className="w-44 max-w-full min-w-0"
+                            filterLabel="供应商"
+                            value={state.supplierIdDraft ?? undefined}
+                            onValueChange={(value) =>
+                                state.setSupplierIdDraft(value ?? null)
+                            }
+                            placeholder="全部"
+                            aria-label="供应商"
+                        />
+                    ) : null}
                     <OptionCombobox
                         id="supplier-offerings-toolbar-filter-availability"
-                        className="w-48 max-w-full"
+                        className="w-36 max-w-full min-w-0"
                         filterLabel="当前可供"
                         aria-label="当前可供"
                         value={
-                            availabilityStatusDraft === "all"
+                            state.availabilityStatusDraft === "all"
                                 ? null
-                                : availabilityStatusDraft
+                                : state.availabilityStatusDraft
                         }
-                        options={AVAILABILITY_STATUS_FILTER_OPTIONS}
-                        onValueChange={(value) => {
-                            if (
-                                value !== null &&
-                                !AVAILABILITY_STATUS_FILTER_OPTIONS.some(
+                        options={AVAILABILITY_OPTIONS}
+                        onValueChange={(value) =>
+                            state.setAvailabilityStatusDraft(
+                                AVAILABILITY_OPTIONS.find(
                                     (option) => option.value === value,
-                                )
-                            ) {
-                                return
-                            }
-                            onAvailabilityStatusDraftChange(
-                                (value ?? "all") as AvailabilityStatusFilter,
+                                )?.value ?? "all",
                             )
-                        }}
+                        }
                         placeholder="全部"
                     />
                 </>
             }
+            extraPrimary={
+                <>
+                    {lockedSkuChip ? (
+                        <FilterChip
+                            id={`supplier-offerings-toolbar-chip-${toAutomationIdSegment(lockedSkuChip.key)}`}
+                            label={lockedSkuChip.label}
+                            clearLabel={`移除${lockedSkuChip.label}`}
+                            onClear={() => state.removeFilter("skuId")}
+                        />
+                    ) : null}
+                    {showClearAll && foldedChips.length === 0 ? (
+                        <Button
+                            id="supplier-offerings-toolbar-clear-all"
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="font-normal text-muted-foreground hover:text-primary"
+                            onClick={state.clearFilters}
+                        >
+                            清空
+                        </Button>
+                    ) : null}
+                </>
+            }
             morePanel={
-                <div className="space-y-5">
-                    {(canFilterOwner || canFilterProcurementOwner) && (
-                        <fieldset className="min-w-0 space-y-3">
-                            <legend className="mb-1 text-sm font-medium">
-                                人员
-                            </legend>
-                            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                                {canFilterOwner && (
-                                    <PersonDirectoryFilter
-                                        id="supplier-offerings-toolbar-owner"
-                                        label="维护人"
-                                        value={ownerUserIdsDraft}
-                                        onChange={onOwnerUserIdsDraftChange}
-                                        category="business"
-                                    />
-                                )}
-                                {canFilterProcurementOwner && (
-                                    <PersonDirectoryFilter
-                                        id="supplier-offerings-toolbar-procurement-owner"
-                                        label="采购负责人"
-                                        value={procurementOwnerUserIdsDraft}
-                                        onChange={
-                                            onProcurementOwnerUserIdsDraftChange
-                                        }
-                                        category="procurement"
-                                    />
-                                )}
-                            </div>
-                        </fieldset>
-                    )}
-                    <fieldset className="min-w-0 border-t pt-4">
-                        <legend className="pr-2 text-sm font-medium">
-                            商品
-                        </legend>
-                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                            {!skuLocked && canFilterSku ? (
-                                <ListWorkspaceFilterField
-                                    htmlFor="supplier-offerings-toolbar-sku-select"
-                                    label="公司 SKU"
-                                >
-                                    <CompanySkuSearchCombobox
-                                        id="supplier-offerings-toolbar-sku-select"
-                                        value={skuIdDraft ?? undefined}
-                                        onValueChange={(value) =>
-                                            onSkuIdDraftChange(value ?? null)
-                                        }
-                                        placeholder="全部公司 SKU"
-                                        className="w-full min-w-0"
-                                        aria-label="公司 SKU"
-                                    />
-                                </ListWorkspaceFilterField>
+                <ListFilterSections>
+                    {state.canFilterOwner || state.canFilterProcurementOwner ? (
+                        <ListFilterSection legend="人员">
+                            {state.canFilterOwner ? (
+                                <PersonDirectoryFilter
+                                    id="supplier-offerings-toolbar-owner"
+                                    label="维护人"
+                                    value={state.ownerUserIdsDraft}
+                                    onChange={state.setOwnerUserIdsDraft}
+                                    category="business"
+                                />
                             ) : null}
-                            <ListWorkspaceFilterField
-                                htmlFor="supplier-offerings-toolbar-sku-no"
-                                label="SKU 编号"
-                            >
-                                <Input
-                                    id="supplier-offerings-toolbar-sku-no"
-                                    className="w-full min-w-0"
-                                    value={skuNoDraft}
-                                    onChange={(event) =>
-                                        onSkuNoDraftChange(event.target.value)
+                            {state.canFilterProcurementOwner ? (
+                                <PersonDirectoryFilter
+                                    id="supplier-offerings-toolbar-procurement-owner"
+                                    label="采购负责人"
+                                    value={state.procurementOwnerUserIdsDraft}
+                                    onChange={
+                                        state.setProcurementOwnerUserIdsDraft
                                     }
-                                    autoComplete="off"
-                                    placeholder="如 SKU-001"
-                                    aria-label="SKU 编号"
+                                    category="procurement"
+                                />
+                            ) : null}
+                        </ListFilterSection>
+                    ) : null}
+                    <ListFilterSection legend="商品">
+                        {!state.skuLocked && state.canFilterSku ? (
+                            <ListWorkspaceFilterField
+                                htmlFor="supplier-offerings-toolbar-sku-select"
+                                label="公司 SKU"
+                            >
+                                <CompanySkuSearchCombobox
+                                    id="supplier-offerings-toolbar-sku-select"
+                                    value={state.skuIdDraft ?? undefined}
+                                    onValueChange={(value) =>
+                                        state.setSkuIdDraft(value ?? null)
+                                    }
+                                    placeholder="全部"
+                                    className="w-full min-w-0"
+                                    aria-label="公司 SKU"
                                 />
                             </ListWorkspaceFilterField>
-                            <ListWorkspaceFilterField
-                                htmlFor="supplier-offerings-toolbar-product-no"
-                                label="SPU 编号"
-                            >
-                                <Input
-                                    id="supplier-offerings-toolbar-product-no"
-                                    className="w-full min-w-0"
-                                    value={productNoDraft}
-                                    onChange={(event) =>
-                                        onProductNoDraftChange(
-                                            event.target.value,
-                                        )
-                                    }
-                                    autoComplete="off"
-                                    placeholder="如 P-1001"
-                                    aria-label="SPU 编号"
-                                />
-                            </ListWorkspaceFilterField>
-                        </div>
-                    </fieldset>
-                    <fieldset className="min-w-0 border-t pt-4">
-                        <legend className="pr-2 text-sm font-medium">
-                            登记来源
-                        </legend>
-                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                        ) : null}
+                        <ListWorkspaceFilterField
+                            htmlFor="supplier-offerings-toolbar-sku-no"
+                            label="SKU 编号"
+                        >
+                            <Input
+                                id="supplier-offerings-toolbar-sku-no"
+                                className="w-full min-w-0"
+                                value={state.skuNoDraft}
+                                onChange={(event) =>
+                                    state.setSkuNoDraft(event.target.value)
+                                }
+                                autoComplete="off"
+                                placeholder="如 SKU-001"
+                            />
+                        </ListWorkspaceFilterField>
+                        <ListWorkspaceFilterField
+                            htmlFor="supplier-offerings-toolbar-product-no"
+                            label="SPU 编号"
+                        >
+                            <Input
+                                id="supplier-offerings-toolbar-product-no"
+                                className="w-full min-w-0"
+                                value={state.productNoDraft}
+                                onChange={(event) =>
+                                    state.setProductNoDraft(event.target.value)
+                                }
+                                autoComplete="off"
+                                placeholder="如 P-1001"
+                            />
+                        </ListWorkspaceFilterField>
+                    </ListFilterSection>
+                    <ListFilterSection legend="来源">
+                        <ListWorkspaceFilterField
+                            htmlFor="supplier-offerings-toolbar-filter-source-type"
+                            label="登记来源"
+                        >
                             <OptionCombobox
                                 id="supplier-offerings-toolbar-filter-source-type"
                                 className="w-full min-w-0"
                                 value={
-                                    sourceTypeDraft === "all"
+                                    state.sourceTypeDraft === "all"
                                         ? null
-                                        : sourceTypeDraft
+                                        : state.sourceTypeDraft
                                 }
-                                options={SOURCE_TYPE_FILTER_OPTIONS}
-                                onValueChange={(value) => {
-                                    if (
-                                        value !== null &&
-                                        !SOURCE_TYPE_FILTER_OPTIONS.some(
+                                options={SOURCE_OPTIONS}
+                                onValueChange={(value) =>
+                                    state.setSourceTypeDraft(
+                                        SOURCE_OPTIONS.find(
                                             (option) => option.value === value,
-                                        )
-                                    ) {
-                                        return
-                                    }
-                                    onSourceTypeDraftChange(
-                                        (value ??
-                                            "all") as OfferingSourceFilter,
+                                        )?.value ?? "all",
                                     )
-                                }}
+                                }
                                 placeholder="全部"
                                 aria-label="登记来源"
                             />
-                        </div>
-                    </fieldset>
-                </div>
+                        </ListWorkspaceFilterField>
+                    </ListFilterSection>
+                </ListFilterSections>
             }
-            resultStatus={null}
-            chips={appliedChips}
-            onClearChip={(key) =>
-                removeFilter(key as SupplierOfferingFilterKey)
-            }
-            onClearAll={onClearFilters}
+            resultStatus={resultStatus}
+            chips={foldedChips.map((chip) => ({
+                ...chip,
+                onClear: () => state.removeFilter(chip.key),
+            }))}
+            onClearAll={showClearAll ? state.clearFilters : undefined}
             clearButtonId="supplier-offerings-toolbar-clear-all"
-            hasPendingChanges={hasPendingChanges}
-            pendingHint="条件已修改，待查询"
+            hasPendingChanges={state.hasPendingChanges}
         />
     )
 }

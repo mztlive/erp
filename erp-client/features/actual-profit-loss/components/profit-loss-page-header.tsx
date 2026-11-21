@@ -1,7 +1,10 @@
 import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 
 import { DataFreshness, PageActions } from "@/components/business"
-import { ListWorkspaceHeader } from "@/components/business/list-workspace"
+import {
+    ListWorkspaceHeader,
+    listWorkspaceQuietAction,
+} from "@/components/business/list-workspace"
 import type { DataFreshnessState } from "@/components/business/page"
 import { formatDateTime } from "@/lib/datetime"
 import { PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL } from "@/features/actual-profit-loss/lib/presentation"
@@ -31,11 +34,10 @@ export function ProfitLossPageHeader({
 }) {
     return (
         <ListWorkspaceHeader
-            eyebrow="分析"
             title="实际经营盈亏"
             description={`数据范围：${SCOPE_LABEL}`}
         >
-            <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
                 {hasData ? (
                     <DataFreshness
                         updatedAt={formatDateTime(projectedAt ?? "", "full")}
@@ -54,33 +56,30 @@ export function ProfitLossPageHeader({
                 )}
                 <PageActions
                     actions={[
-                        {
+                        listWorkspaceQuietAction({
                             actionKey: "refresh",
                             id: "actual-profit-loss-header-refresh",
                             loading: refreshing,
                             label: "刷新",
                             icon: RefreshCwIcon,
-                            variant: "ghost",
-                            className:
-                                "text-muted-foreground hover:text-foreground",
                             disabled: !analysisReady,
                             onClick: () => {
                                 onRefresh()
                             },
-                        },
-                        {
+                        }),
+                        listWorkspaceQuietAction({
                             hidden: !canExport,
                             actionKey: "export",
                             id: "actual-profit-loss-header-export",
                             loading: exportPending,
                             label: exportPending ? "导出中…" : "导出",
                             icon: DownloadIcon,
-                            variant: "outline",
+                            title: "导出全部匹配行，采用生成时的最新数据",
                             disabled: exportDisabled,
                             onClick: () => {
                                 onExport()
                             },
-                        },
+                        }),
                     ]}
                 />
             </div>

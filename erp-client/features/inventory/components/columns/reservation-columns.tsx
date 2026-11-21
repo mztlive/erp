@@ -4,7 +4,13 @@ import { ArrowUpRightIcon } from "lucide-react"
 
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { TableRowActions } from "@/components/business"
+import {
+    QuantityValue,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableRowActions,
+    TableTextCell,
+} from "@/components/business"
 import { inventoryStatusColumn } from "@/features/inventory/components/columns/status-column"
 import { WarehouseSkuIdentity } from "@/features/inventory/components/columns/warehouse-sku-cell"
 import type { StockReservationRow } from "@/features/inventory/types"
@@ -15,7 +21,7 @@ export function buildReservationColumns(): ColumnDef<StockReservationRow>[] {
         {
             id: "identity",
             header: "仓库 / SKU",
-            meta: { label: "仓库 / SKU", width: "reference" },
+            meta: { label: "仓库 / SKU", width: "flex" },
             cell: ({ row }) => (
                 <WarehouseSkuIdentity
                     warehouseName={row.original.warehouseName}
@@ -29,12 +35,13 @@ export function buildReservationColumns(): ColumnDef<StockReservationRow>[] {
             header: "销售单 / 明细",
             meta: { label: "销售单", width: "default" },
             cell: ({ row }) => (
-                <div className="text-sm">
-                    <div className="num">{row.original.salesOrderNo}</div>
-                    <div className="text-xs text-muted-foreground">
-                        {row.original.salesOrderLineLabel}
-                    </div>
-                </div>
+                <TableIdentityCell
+                    primary={row.original.salesOrderNo || <TableEmptyCell />}
+                    secondary={row.original.salesOrderLineLabel}
+                    secondaryTitle={row.original.salesOrderLineLabel}
+                    numericSecondary
+                    className="num"
+                />
             ),
         },
         {
@@ -47,15 +54,17 @@ export function buildReservationColumns(): ColumnDef<StockReservationRow>[] {
                 numeric: true,
             },
             cell: ({ row }) => (
-                <div className="text-end text-sm">
-                    <div className="num">
-                        {row.original.establishedQuantity} /{" "}
-                        {row.original.remainingQuantity}
-                        <span className="ml-1 text-xs text-muted-foreground">
-                            {row.original.baseUnit}
-                        </span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
+                <div className="whitespace-nowrap">
+                    <QuantityValue
+                        value={row.original.establishedQuantity}
+                        unit=""
+                    />
+                    <span className="px-1 text-muted-foreground">/</span>
+                    <QuantityValue
+                        value={row.original.remainingQuantity}
+                        unit={row.original.baseUnit}
+                    />
+                    <div className="num text-xs text-muted-foreground">
                         已消耗 {row.original.consumedQuantity} · 已释放{" "}
                         {row.original.releasedQuantity}
                     </div>
@@ -68,21 +77,21 @@ export function buildReservationColumns(): ColumnDef<StockReservationRow>[] {
             header: "入库来源",
             meta: { label: "入库来源", width: "default" },
             cell: ({ row }) => (
-                <span className="num text-sm">
-                    {row.original.inboundSourceDocumentNo ?? "—"}
-                </span>
+                <TableTextCell
+                    value={row.original.inboundSourceDocumentNo}
+                    clamp={1}
+                    numeric
+                />
             ),
         },
         {
             id: "actions",
-            size: 152,
-            minSize: 152,
             header: "操作",
             meta: { label: "操作", width: "default", align: "end" },
             cell: ({ row }) => {
                 // 明确不提供释放预占入口
                 const href = row.original.fulfillmentHref
-                if (!href) return null
+                if (!href) return <TableEmptyCell />
                 const segment = toAutomationIdSegment(
                     row.original.reservationId,
                 )

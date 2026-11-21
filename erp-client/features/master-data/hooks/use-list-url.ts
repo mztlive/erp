@@ -56,7 +56,7 @@ export function useListUrl(
 
     const [pagination, setPagination] = React.useState<PaginationState>({
         pageIndex: pageParamIndex,
-        pageSize: 20,
+        pageSize: 50,
     })
 
     const resetPagination = React.useCallback(() => {

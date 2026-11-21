@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { LayersIcon } from "lucide-react"
 import { z } from "zod"
+import { listWorkspaceStyles } from "@/components/business/list-workspace-styles"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -57,9 +58,15 @@ export function BuiltinRoleDialog() {
         >
             <DialogTrigger
                 id="roles-builtin-open"
-                render={<Button variant="outline" size="sm" />}
+                render={
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className={listWorkspaceStyles.quietButton}
+                    />
+                }
             >
-                <LayersIcon className="size-3.5" aria-hidden="true" />
+                <LayersIcon data-icon="inline-start" aria-hidden="true" />
                 从内建岗位生成
             </DialogTrigger>
             <DialogContent

@@ -9,6 +9,7 @@ import {
     BatchOperationResult,
     BusinessStatusBadge,
     DataTable,
+    TableIdentityCell,
 } from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -50,17 +51,12 @@ function usePreviewColumns(
                 meta: { label: "商品名称 · 编号", width: "flex" },
                 enableSorting: false,
                 cell: ({ row }) => (
-                    <div className="min-w-0">
-                        <div
-                            className="truncate text-sm font-medium text-foreground"
-                            title={row.original.name}
-                        >
-                            {row.original.name}
-                        </div>
-                        <div className="num text-xs text-muted-foreground">
-                            {row.original.stableNo}
-                        </div>
-                    </div>
+                    <TableIdentityCell
+                        primary={row.original.name}
+                        secondary={row.original.stableNo}
+                        secondaryTitle={row.original.stableNo}
+                        numericSecondary
+                    />
                 ),
             },
             {
@@ -106,7 +102,7 @@ function usePreviewColumns(
                 },
                 enableSorting: false,
                 cell: ({ row }) => (
-                    <span className="num text-sm">
+                    <span className="num">
                         {row.original.listedSkuCount ?? 0} /{" "}
                         {row.original.skuCount ?? 0}
                     </span>
@@ -238,6 +234,7 @@ export function ProductBatchListingDialog({
             }}
         >
             <DialogContent
+                id={`${PREFIX}-dialog`}
                 closeButtonId={`${PREFIX}-dismiss`}
                 showCloseButton={!pending}
                 className="flex max-h-[90dvh] w-[calc(100vw-2rem)] flex-col gap-4 overflow-hidden sm:max-w-4xl"

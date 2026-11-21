@@ -11,26 +11,22 @@ import {
     type SupplierOfferingsUrlState,
 } from "@/features/supplier-offerings/lib/url-state"
 import {
-    AVAILABILITY_STATUS_LABELS,
     SOURCE_TYPE_LABELS,
     type AvailabilityStatus,
     type OfferingSourceType,
 } from "@/features/supplier-offerings/types"
 import { useSearchDraft } from "@/lib/use-search-draft"
-import { useLooseSearchHotkey } from "@/lib/use-search-hotkey"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 
 export type OfferingSourceFilter = OfferingSourceType | "all"
 export type AvailabilityStatusFilter = AvailabilityStatus | "all"
 
 /** 可被单独移除的已生效筛选条件。 */
 export type SupplierOfferingFilterKey =
-    | "q"
     | "skuId"
     | "skuNo"
     | "productNo"
-    | "supplierId"
     | "sourceType"
-    | "availabilityStatus"
     | "ownerUserIds"
     | "procurementOwnerUserIds"
 
@@ -43,26 +39,16 @@ function selectedCount(value: string) {
     return value.split(",").filter((part) => part.trim()).length
 }
 
-/**
- * 把 Tab 以外的已生效条件派生为可单独移除的 chip（docs/ui-filter-design.md §3.6）。
- * 公司 SKU 显示业务编号、供应商显示业务名称，不展示内部 ID（§4.5）；
- * 列表暂无数据时回退为「已选择」。
- */
+/** 深链与折叠条件用业务编号显示，不暴露内部 ID。 */
 export function buildSupplierOfferingAppliedChips(
     urlState: SupplierOfferingsUrlState,
-    labels: Readonly<{
-        skuNoLabel?: string | null
-        supplierNameLabel?: string | null
-    }>,
+    skuNoLabel?: string | null,
 ): readonly SupplierOfferingAppliedChip[] {
     const chips: SupplierOfferingAppliedChip[] = []
-    if (urlState.q) {
-        chips.push({ key: "q", label: `搜索：${urlState.q}` })
-    }
     if (urlState.skuId) {
         chips.push({
             key: "skuId",
-            label: `公司 SKU：${labels.skuNoLabel ?? "已选择"}`,
+            label: `公司 SKU：${skuNoLabel ?? "已选择"}`,
         })
     }
     if (urlState.skuNo) {
@@ -74,22 +60,10 @@ export function buildSupplierOfferingAppliedChips(
             label: `SPU 编号：${urlState.productNo}`,
         })
     }
-    if (urlState.supplierId) {
-        chips.push({
-            key: "supplierId",
-            label: `供应商：${labels.supplierNameLabel ?? "已选择"}`,
-        })
-    }
     if (urlState.sourceType) {
         chips.push({
             key: "sourceType",
             label: `登记来源：${SOURCE_TYPE_LABELS[urlState.sourceType]}`,
-        })
-    }
-    if (urlState.availabilityStatus) {
-        chips.push({
-            key: "availabilityStatus",
-            label: `当前可供：${AVAILABILITY_STATUS_LABELS[urlState.availabilityStatus]}`,
         })
     }
     if (urlState.ownerUserIds) {
@@ -112,7 +86,7 @@ export function buildSupplierOfferingAppliedChips(
  *
  * 契约：已生效筛选全部由 URL 派生；草稿只在提交时写入 URL，
  * 后退/前进/清除通过 URL 回填草稿。面板初始关闭，深链不自动打开。
- * 取消、关闭、Esc 和外点只恢复低频草稿，保留搜索和常驻草稿。
+ * 关闭托盘只恢复低频草稿，保留关键词和常驻条件。
  */
 export function useSupplierOfferingsPageState() {
     const router = useRouter()
@@ -163,7 +137,8 @@ export function useSupplierOfferingsPageState() {
     }, [hasUnauthorizedFilters, sanitizeFilters, searchParams])
     const skuLocked = Boolean(urlState.skuId && urlState.returnTo)
     const taskMode = Boolean(urlState.workItemId)
-    const hasStructuredFilters = Boolean(
+    const hasClearableFilters = Boolean(
+        urlState.q ||
         (!skuLocked && urlState.skuId) ||
         urlState.skuNo ||
         urlState.productNo ||
@@ -174,24 +149,10 @@ export function useSupplierOfferingsPageState() {
         urlState.ownerUserIds ||
         urlState.procurementOwnerUserIds,
     )
-    /** 已生效筛选包含来源锁定条件：查询消费的全部参数都计入（§12.6）。 */
-    const hasFilters = Boolean(
-        urlState.q ||
-        urlState.skuId ||
-        urlState.skuNo ||
-        urlState.productNo ||
-        urlState.supplierId ||
-        urlState.status ||
-        urlState.sourceType ||
-        urlState.availabilityStatus ||
-        urlState.ownerUserIds ||
-        urlState.procurementOwnerUserIds,
-    )
     const { searchDraft, setSearchDraft } = useSearchDraft(urlState.q, {
-        skipWhileFocused: true,
         inputRef: searchInputRef,
     })
-    useLooseSearchHotkey(searchInputRef)
+    useSearchHotkey(searchInputRef)
     const [skuIdDraft, setSkuIdDraft] = React.useState<string | null>(
         urlState.skuId ?? null,
     )
@@ -236,7 +197,7 @@ export function useSupplierOfferingsPageState() {
     const applyFilters = React.useCallback(() => {
         patchUrl({
             q: searchDraft.trim() || undefined,
-            skuId: skuIdDraft || undefined,
+            skuId: skuLocked ? urlState.skuId : skuIdDraft || undefined,
             skuNo: skuNoDraft.trim() || undefined,
             productNo: productNoDraft.trim() || undefined,
             supplierId: supplierIdDraft || undefined,
@@ -260,79 +221,25 @@ export function useSupplierOfferingsPageState() {
         productNoDraft,
         searchDraft,
         skuIdDraft,
+        skuLocked,
         skuNoDraft,
         sourceTypeDraft,
         supplierIdDraft,
+        urlState.skuId,
     ])
 
-    /** 仅移除商品页带入的公司 SKU 限定。 */
-    const clearSkuLock = React.useCallback(() => {
-        setSkuIdDraft(null)
-        patchUrl({ skuId: undefined, page: 1 })
-    }, [patchUrl])
-
-    /** 移除单个已生效条件；chip 的 × 只移除自己的条件（§8.1）。 */
     const removeFilter = React.useCallback(
         (key: SupplierOfferingFilterKey) => {
-            if (key === "q") {
-                setSearchDraft("")
-                patchUrl({ q: undefined, page: 1 })
-                return
-            }
-            if (key === "skuId") {
-                clearSkuLock()
-                return
-            }
-            if (key === "skuNo") {
-                setSkuNoDraft("")
-                patchUrl({ skuNo: undefined, page: 1 })
-                return
-            }
-            if (key === "productNo") {
-                setProductNoDraft("")
-                patchUrl({ productNo: undefined, page: 1 })
-                return
-            }
-            if (key === "supplierId") {
-                setSupplierIdDraft(null)
-                patchUrl({ supplierId: undefined, page: 1 })
-                return
-            }
-            if (key === "sourceType") {
-                setSourceTypeDraft("all")
-                patchUrl({
-                    sourceType: undefined,
-                    page: 1,
-                    scopeVersion: undefined,
-                })
-                return
-            }
-            if (key === "ownerUserIds") {
-                setOwnerUserIdsDraft("")
-                patchUrl({
-                    ownerUserIds: undefined,
-                    page: 1,
-                    scopeVersion: undefined,
-                })
-                return
-            }
-            if (key === "procurementOwnerUserIds") {
+            if (key === "skuId") setSkuIdDraft(null)
+            if (key === "skuNo") setSkuNoDraft("")
+            if (key === "productNo") setProductNoDraft("")
+            if (key === "sourceType") setSourceTypeDraft("all")
+            if (key === "ownerUserIds") setOwnerUserIdsDraft("")
+            if (key === "procurementOwnerUserIds")
                 setProcurementOwnerUserIdsDraft("")
-                patchUrl({
-                    procurementOwnerUserIds: undefined,
-                    page: 1,
-                    scopeVersion: undefined,
-                })
-                return
-            }
-            setAvailabilityStatusDraft("all")
-            patchUrl({
-                availabilityStatus: undefined,
-                page: 1,
-                scopeVersion: undefined,
-            })
+            patchUrl({ [key]: undefined, page: 1, scopeVersion: undefined })
         },
-        [clearSkuLock, patchUrl, setSearchDraft],
+        [patchUrl],
     )
 
     /**
@@ -407,27 +314,16 @@ export function useSupplierOfferingsPageState() {
         setAvailabilityStatusDraft(urlState.availabilityStatus ?? "all")
         setOwnerUserIdsDraft(urlState.ownerUserIds ?? "")
         setProcurementOwnerUserIdsDraft(urlState.procurementOwnerUserIds ?? "")
-    }, [urlState])
-
-    const appliedFilterLabels = [
-        urlState.q ? `订货编码包含“${urlState.q}”` : null,
-        !skuLocked && urlState.skuId ? "已选择公司 SKU" : null,
-        urlState.skuNo ? `SKU 编号包含“${urlState.skuNo}”` : null,
-        urlState.productNo ? `SPU 编号包含“${urlState.productNo}”` : null,
-        urlState.supplierId ? "已选择供应商" : null,
-        urlState.sourceType
-            ? `登记来源：${SOURCE_TYPE_LABELS[urlState.sourceType]}`
-            : null,
-        urlState.availabilityStatus
-            ? `当前可供：${AVAILABILITY_STATUS_LABELS[urlState.availabilityStatus]}`
-            : null,
-        urlState.ownerUserIds
-            ? `维护人：已选 ${selectedCount(urlState.ownerUserIds)} 人`
-            : null,
-        urlState.procurementOwnerUserIds
-            ? `采购负责人：已选 ${selectedCount(urlState.procurementOwnerUserIds)} 人`
-            : null,
-    ].filter(Boolean)
+    }, [
+        urlState.skuId,
+        urlState.skuNo,
+        urlState.productNo,
+        urlState.supplierId,
+        urlState.sourceType,
+        urlState.availabilityStatus,
+        urlState.ownerUserIds,
+        urlState.procurementOwnerUserIds,
+    ])
 
     const hasPendingChanges =
         searchDraft.trim() !== (urlState.q ?? "") ||
@@ -450,8 +346,7 @@ export function useSupplierOfferingsPageState() {
         urlState,
         skuLocked,
         taskMode,
-        hasStructuredFilters,
-        hasFilters,
+        hasClearableFilters,
         searchInputRef,
         searchDraft,
         setSearchDraft,
@@ -476,11 +371,9 @@ export function useSupplierOfferingsPageState() {
         patchUrl,
         applyFilters,
         clearFilters,
-        clearSkuLock,
         removeFilter,
         resetMoreFilters,
         cancelMoreFilters,
-        appliedFilterLabels,
         hasPendingChanges,
     }
 }

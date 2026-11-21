@@ -4,10 +4,11 @@ import * as React from "react"
 
 import { OptionCombobox } from "@/components/business"
 import {
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    listWorkspaceFilterStatusText,
     type ListWorkspaceFilterChip,
 } from "@/components/business/list-workspace"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
@@ -19,6 +20,15 @@ import {
 } from "@/features/sales-selection/types"
 
 const prefix = "sales-selection-filter"
+const moreChipKeys = ["submit_mode", "org_unit_ids"] as const
+const moreButtonId = `${prefix}-more-toggle`
+const formOptions = Object.entries(SELECTION_FORM_LABEL).map(
+    ([value, label]) => ({ value, label }),
+)
+const modeOptions = Object.entries(SUBMIT_MODE_LABEL).map(([value, label]) => ({
+    value,
+    label,
+}))
 
 type SelectionFormDraft = NonNullable<BookListQuery["selection_form"]>
 type SubmitModeDraft = NonNullable<BookListQuery["submit_mode"]>
@@ -86,7 +96,7 @@ export function BooksListFilterBar({
     canFilterOwners,
     canFilterOrgs,
     onReset,
-    resultCount,
+    searchInputRef,
     loading,
     failed,
 }: {
@@ -95,7 +105,7 @@ export function BooksListFilterBar({
     canFilterOrgs: boolean
     onApply: (next: BookListQuery) => void
     onReset: () => void
-    resultCount?: number
+    searchInputRef: React.Ref<HTMLInputElement>
     loading: boolean
     failed: boolean
 }) {
@@ -178,8 +188,6 @@ export function BooksListFilterBar({
     const applied = draftFromQuery(query)
     const directoryOrgIds = orgIdsOf(draft.org_unit_ids)
     const hasPendingChanges = !draftsEqual(draft, applied)
-    const moreCount =
-        (applied.submit_mode !== "ALL" ? 1 : 0) + (applied.org_unit_ids ? 1 : 0)
 
     const handleApply = React.useCallback(() => {
         const orgIds = draft.org_unit_ids.trim()
@@ -194,8 +202,9 @@ export function BooksListFilterBar({
                 orgIds && draft.include_descendants ? true : undefined,
             page: 1,
         })
+        if (moreOpen) document.getElementById(moreButtonId)?.focus()
         setMoreOpen(false)
-    }, [draft, onApply, query])
+    }, [draft, moreOpen, onApply, query])
 
     /** 只清提交方式与组织草稿；保留搜索、形态、负责销售和当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
@@ -207,7 +216,7 @@ export function BooksListFilterBar({
         }))
     }, [])
 
-    /** 取消、外点和 Esc 只撤销提交方式与组织，保留外部查询栏草稿。 */
+    /** 收起托盘时只撤销提交方式与组织草稿。 */
     const cancelMoreFilters = React.useCallback(() => {
         setDraft((prev) => ({
             ...prev,
@@ -219,31 +228,13 @@ export function BooksListFilterBar({
     }, [appliedDescendants, appliedMode, appliedOrgs])
 
     const clearFilters = React.useCallback(() => {
+        setDraft(draftFromQuery({}))
         setMoreOpen(false)
         onReset()
     }, [onReset])
 
     const chips = React.useMemo<ListWorkspaceFilterChip[]>(() => {
         const next: ListWorkspaceFilterChip[] = []
-        if (query.q) {
-            next.push({
-                key: "q",
-                label: `搜索：${query.q}`,
-                onClear: () => onApply({ ...query, q: undefined, page: 1 }),
-            })
-        }
-        if (query.selection_form && query.selection_form !== "ALL") {
-            next.push({
-                key: "selection_form",
-                label: `形态：${SELECTION_FORM_LABEL[query.selection_form]}`,
-                onClear: () =>
-                    onApply({
-                        ...query,
-                        selection_form: "ALL",
-                        page: 1,
-                    }),
-            })
-        }
         if (query.submit_mode && query.submit_mode !== "ALL") {
             next.push({
                 key: "submit_mode",
@@ -252,15 +243,7 @@ export function BooksListFilterBar({
                     onApply({ ...query, submit_mode: "ALL", page: 1 }),
             })
         }
-        if (query.owner_user_ids) {
-            next.push({
-                key: "owner_user_ids",
-                label: `负责销售：已选 ${selectedCount(query.owner_user_ids)} 人`,
-                onClear: () =>
-                    onApply({ ...query, owner_user_ids: undefined, page: 1 }),
-            })
-        }
-        if (query.org_unit_ids) {
+        if (canFilterOrgs && query.org_unit_ids) {
             next.push({
                 key: "org_unit_ids",
                 label: `业务组织：已选 ${selectedCount(query.org_unit_ids)} 个${query.include_descendants ? "（含下级）" : ""}`,
@@ -274,39 +257,37 @@ export function BooksListFilterBar({
             })
         }
         return next
-    }, [onApply, query])
+    }, [canFilterOrgs, onApply, query])
 
     return (
         <ListWorkspaceFilterBar
             morePresentation="popover"
-            moreSize="compact"
-            className="[&_[data-slot=list-toolbar-search]]:lg:w-80 [&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel="选品册查询"
             onSubmit={handleApply}
             search={
                 <ListSearchField
                     id={`${prefix}-q`}
+                    searchInputRef={searchInputRef}
                     value={draft.q}
                     onChange={(q) => setDraft((prev) => ({ ...prev, q }))}
-                    placeholder="客户名称或选品册编号"
+                    placeholder="搜索客户名称"
                     aria-label="搜索选品册"
                 />
             }
-            moreCount={moreCount}
             moreOpen={moreOpen}
             onToggleMore={() =>
                 moreOpen ? cancelMoreFilters() : setMoreOpen(true)
             }
             morePanelId={`${prefix}-more`}
-            moreButtonId={`${prefix}-more-toggle`}
+            moreButtonId={moreButtonId}
             morePanelAriaLabel="选品册更多筛选条件"
             onResetMore={resetMoreFilters}
             primaryFilters={
                 <>
                     <OptionCombobox
                         id={`${prefix}-form`}
-                        className="w-44 min-w-0 max-w-full"
+                        className="w-32 min-w-0 max-w-full"
                         filterLabel="形态"
                         aria-label="形态"
                         value={
@@ -314,10 +295,7 @@ export function BooksListFilterBar({
                                 ? null
                                 : draft.selection_form
                         }
-                        options={[
-                            { value: "SINGLE_SKU", label: "单品" },
-                            { value: "PACKAGE", label: "套餐" },
-                        ]}
+                        options={formOptions}
                         onValueChange={(value) =>
                             setDraft((prev) => ({
                                 ...prev,
@@ -351,61 +329,63 @@ export function BooksListFilterBar({
                 </>
             }
             morePanel={
-                <div className="grid min-w-0 gap-4">
-                    <ListWorkspaceFilterField
-                        htmlFor={`${prefix}-mode`}
-                        label="提交方式"
-                    >
-                        <OptionCombobox
-                            id={`${prefix}-mode`}
-                            className="w-full"
-                            aria-label="提交方式"
-                            value={
-                                draft.submit_mode === "ALL"
-                                    ? null
-                                    : draft.submit_mode
-                            }
-                            options={[
-                                { value: "BY_QUANTITY", label: "按份采购" },
-                                { value: "MALL_REDEEM", label: "商城兑换" },
-                                { value: "PICKUP_VOUCHER", label: "提货券" },
-                            ]}
-                            onValueChange={(value) =>
-                                setDraft((prev) => ({
-                                    ...prev,
-                                    submit_mode: submitModeFromValue(value),
-                                }))
-                            }
-                            placeholder="全部"
-                        />
-                    </ListWorkspaceFilterField>
-                    {canFilterOrgs && (
-                        <OrganizationUnitFilter
-                            id={`${prefix}-org`}
-                            label="业务组织"
-                            value={draft.org_unit_ids}
-                            onChange={(org_unit_ids) =>
-                                setDraft((prev) => ({ ...prev, org_unit_ids }))
-                            }
-                            includeDescendants={draft.include_descendants}
-                            onDescendantsChange={(include_descendants) =>
-                                setDraft((prev) => ({
-                                    ...prev,
-                                    include_descendants,
-                                }))
-                            }
-                        />
-                    )}
-                </div>
+                <ListFilterSections>
+                    <ListFilterSection legend="条件">
+                        <ListWorkspaceFilterField
+                            htmlFor={`${prefix}-mode`}
+                            label="提交方式"
+                        >
+                            <OptionCombobox
+                                id={`${prefix}-mode`}
+                                className="w-full"
+                                aria-label="提交方式"
+                                value={
+                                    draft.submit_mode === "ALL"
+                                        ? null
+                                        : draft.submit_mode
+                                }
+                                options={modeOptions}
+                                onValueChange={(value) =>
+                                    setDraft((prev) => ({
+                                        ...prev,
+                                        submit_mode: submitModeFromValue(value),
+                                    }))
+                                }
+                                placeholder="全部"
+                            />
+                        </ListWorkspaceFilterField>
+                        {canFilterOrgs && (
+                            <div className="min-w-0 empty:hidden md:col-span-2">
+                                <OrganizationUnitFilter
+                                    id={`${prefix}-org`}
+                                    label="业务组织"
+                                    value={draft.org_unit_ids}
+                                    onChange={(org_unit_ids) =>
+                                        setDraft((prev) => ({
+                                            ...prev,
+                                            org_unit_ids,
+                                        }))
+                                    }
+                                    includeDescendants={
+                                        draft.include_descendants
+                                    }
+                                    onDescendantsChange={(
+                                        include_descendants,
+                                    ) =>
+                                        setDraft((prev) => ({
+                                            ...prev,
+                                            include_descendants,
+                                        }))
+                                    }
+                                />
+                            </div>
+                        )}
+                    </ListFilterSection>
+                </ListFilterSections>
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "本选品册",
-                loadingLabel: "正在加载选品册…",
-            })}
+            resultStatus={failed ? "查询未完成" : loading ? "查询中…" : null}
             chips={chips}
+            foldedChipKeys={moreChipKeys}
             onClearAll={clearFilters}
             hasPendingChanges={hasPendingChanges}
             pendingHint="条件已修改，待查询"

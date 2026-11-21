@@ -1,13 +1,13 @@
 /** Shared Tailwind classes for business list workspaces (Feishu Bitable pure-white edge-to-edge surface + soft borderless toolbar). */
 export const listWorkspaceStyles = {
     page: "erp-list-workspace-page max-w-none gap-0 bg-card px-workspace-inline py-0 md:px-page-inline md:py-0 min-[75rem]:px-page-inline-lg",
-    header: "flex shrink-0 flex-col items-start justify-between gap-2.5 border-b border-border/60 bg-card py-3 md:flex-row md:items-center md:gap-6",
+    header: "flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border/60 bg-card py-2 md:min-h-12 md:py-0",
     eyebrow:
         "inline-flex shrink-0 items-center rounded-sm bg-muted/80 px-1.5 py-0.5 text-tiny leading-4 font-medium text-muted-foreground",
     title: "text-page-title font-semibold tracking-tight text-foreground",
     description: "mt-0.5 text-xs leading-4.5 text-muted-foreground/85",
     headerActions:
-        "flex shrink-0 items-center gap-1.5 max-md:w-full max-md:justify-end [&_[data-slot=button]]:h-control [&_[data-slot=button]]:px-3",
+        "flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1.5 [&_[data-slot=button]]:h-control [&_[data-slot=button]]:px-3",
     quietButton:
         "text-body-compact font-normal text-muted-foreground shadow-none hover:bg-muted/80 hover:text-foreground",
     exportButton: "text-body-compact shadow-none",
@@ -27,6 +27,7 @@ export const listWorkspaceStyles = {
         "[&_[data-slot=button]]:shadow-none [&_[data-slot=input-group]]:text-body-compact [&_[data-slot=input-group]]:shadow-none",
         // 飞书轻工具栏：搜索框与常用下拉筛选统一采用 bg-muted/65 无框浅灰柔底，与高级筛选区完全同色
         "[&_[data-slot=list-toolbar-search]_[data-slot=input-group]]:border-transparent [&_[data-slot=list-toolbar-search]_[data-slot=input-group]]:bg-muted/65 [&_[data-slot=list-toolbar-search]_[data-slot=input-group]]:hover:bg-muted [&_[data-slot=list-toolbar-search]_[data-slot=input-group]:focus-within]:border-primary/60 [&_[data-slot=list-toolbar-search]_[data-slot=input-group]:focus-within]:bg-card",
+        "[&_[data-slot=list-toolbar-search]_[data-has-value=true]:not(:focus-within)]:border-primary/25 [&_[data-slot=list-toolbar-search]_[data-has-value=true]:not(:focus-within)]:bg-sidebar-accent/70 [&_[data-slot=list-toolbar-search]_[data-has-value=true]:not(:focus-within)]:hover:bg-sidebar-accent [&_[data-slot=list-toolbar-search]_[data-has-value=true]_input]:font-medium [&_[data-slot=list-toolbar-search]_[data-has-value=true]_input]:text-sidebar-accent-foreground",
         "[&_[data-slot=list-toolbar-filters]_[data-slot=input-group]]:border-transparent [&_[data-slot=list-toolbar-filters]_[data-slot=input-group]]:bg-muted/65 [&_[data-slot=list-toolbar-filters]_[data-slot=input-group]]:hover:bg-muted [&_[data-slot=list-toolbar-filters]_[data-slot=input-group]:focus-within]:border-primary/60 [&_[data-slot=list-toolbar-filters]_[data-slot=input-group]:focus-within]:bg-card",
         "[&_[data-slot=list-toolbar-filters]_[data-has-value=true]_[data-slot=input-group]]:border-primary/25 [&_[data-slot=list-toolbar-filters]_[data-has-value=true]_[data-slot=input-group]]:bg-sidebar-accent/70 [&_[data-slot=list-toolbar-filters]_[data-has-value=true]_[data-slot=input-group]:hover]:bg-sidebar-accent [&_[data-slot=list-toolbar-filters]_[data-has-value=true]_input]:font-medium [&_[data-slot=list-toolbar-filters]_[data-has-value=true]_input]:text-sidebar-accent-foreground [&_[data-slot=list-toolbar-filters]_[data-has-value=true]_[data-filter-label]]:text-sidebar-accent-foreground/75",
     ].join(" "),

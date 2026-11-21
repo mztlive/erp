@@ -8,15 +8,17 @@ import type { ColumnDef } from "@tanstack/react-table"
 import {
     BusinessStatusBadge,
     MoneyValue,
+    TableEmptyCell,
+    TableIdentityCell,
     TableRowActions,
+    TableTextCell,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import type { SettlementListRow } from "@/features/supplier-settlements/types"
 
 export function useSettlementListColumns(
-    patchUrl: (patch: Partial<SettlementsUrlState>) => void,
+    onPreview: (statementId: string) => void,
     onOpen: (statementId: string) => void,
 ) {
     return React.useMemo<ColumnDef<SettlementListRow>[]>(
@@ -24,12 +26,16 @@ export function useSettlementListColumns(
             {
                 id: "statementNo",
                 accessorFn: (row) => row.statementNo,
-                header: "结算单号",
-                meta: { label: "结算单号", width: "reference" },
-                cell: ({ row }) => (
-                    <div className="num text-sm font-medium">
-                        {row.original.statementNo}
-                    </div>
+                header: "结算单 / 供应商",
+                meta: { label: "结算单 / 供应商", width: "flex" },
+                cell: ({ row: { original } }) => (
+                    <TableIdentityCell
+                        primary={original.supplierName}
+                        primaryTitle={original.supplierName}
+                        secondary={original.statementNo}
+                        secondaryTitle={original.statementNo}
+                        numericSecondary
+                    />
                 ),
             },
             {
@@ -38,7 +44,10 @@ export function useSettlementListColumns(
                 header: "供应商",
                 meta: { label: "供应商" },
                 cell: ({ row }) => (
-                    <span className="text-sm">{row.original.supplierName}</span>
+                    <TableTextCell
+                        value={row.original.supplierName}
+                        clamp={1}
+                    />
                 ),
             },
             {
@@ -46,21 +55,21 @@ export function useSettlementListColumns(
                 accessorFn: (row) => row.periodLabel,
                 header: "期间",
                 meta: { label: "期间", width: "default" },
-                cell: ({ row }) => (
-                    <span className="num text-sm">
-                        <span className="block">
-                            {row.original.periodStart}
-                        </span>
-                        <span className="block text-body-compact text-muted-foreground">
-                            至 {row.original.periodEnd}
-                        </span>
-                    </span>
+                cell: ({ row: { original } }) => (
+                    <div>
+                        <TableTextCell value={original.periodStart} numeric />
+                        <TableTextCell
+                            value={`至 ${original.periodEnd}`}
+                            numeric
+                            className="block text-xs text-muted-foreground"
+                        />
+                    </div>
                 ),
             },
             {
                 id: "erpAmount",
                 accessorFn: (row) => row.erpAmountGross,
-                header: "ERP 金额",
+                header: "ERP 金额（含税）",
                 meta: {
                     label: "ERP 计算金额（含税）",
                     width: "amount",
@@ -70,14 +79,14 @@ export function useSettlementListColumns(
                 cell: ({ row }) => (
                     <MoneyValue
                         value={row.original.erpAmountGross}
-                        taxBasis="gross"
+                        display="exact"
                     />
                 ),
             },
             {
                 id: "supplierAmount",
                 accessorFn: (row) => row.supplierAmountGross ?? "",
-                header: "账单金额",
+                header: "账单金额（含税）",
                 meta: {
                     label: "供应商账单金额（含税）",
                     width: "amount",
@@ -88,18 +97,16 @@ export function useSettlementListColumns(
                     row.original.supplierAmountGross != null ? (
                         <MoneyValue
                             value={row.original.supplierAmountGross}
-                            taxBasis="gross"
+                            display="exact"
                         />
                     ) : (
-                        <span className="text-xs text-muted-foreground">
-                            账单未同步
-                        </span>
+                        <TableEmptyCell variant="label" label="账单未同步" />
                     ),
             },
             {
                 id: "difference",
                 accessorFn: (row) => row.differenceAmountGross ?? "",
-                header: "差异",
+                header: "差异（含税）",
                 meta: {
                     label: "差异金额（含税）",
                     width: "amount",
@@ -111,17 +118,16 @@ export function useSettlementListColumns(
                         {row.original.differenceAmountGross != null ? (
                             <MoneyValue
                                 value={row.original.differenceAmountGross}
-                                taxBasis="gross"
+                                display="exact"
                             />
                         ) : (
-                            <span className="text-xs text-muted-foreground">
-                                —
-                            </span>
+                            <TableEmptyCell />
                         )}
                         {row.original.differenceDirectionLabel ? (
-                            <div className="text-tiny text-muted-foreground">
-                                {row.original.differenceDirectionLabel}
-                            </div>
+                            <TableTextCell
+                                value={row.original.differenceDirectionLabel}
+                                className="block text-xs text-muted-foreground"
+                            />
                         ) : null}
                         {row.original.unresolvedDifferenceCount > 0 ? (
                             <Badge variant="outline" className="mt-0.5 text-xs">
@@ -141,6 +147,11 @@ export function useSettlementListColumns(
                         context="list"
                         label={row.original.statusLabel}
                         tone={row.original.statusTone}
+                        appearance={
+                            row.original.status === "CONFIRMED"
+                                ? "quiet"
+                                : "badge"
+                        }
                     />
                 ),
             },
@@ -160,8 +171,6 @@ export function useSettlementListColumns(
             },
             {
                 id: "actions",
-                size: 168,
-                minSize: 168,
                 header: "操作",
                 meta: { label: "操作", width: "status", align: "end" },
                 enableSorting: false,
@@ -179,9 +188,7 @@ export function useSettlementListColumns(
                                     label: "预览",
                                     icon: EyeIcon,
                                     onClick: () =>
-                                        patchUrl({
-                                            preview: row.original.statementId,
-                                        }),
+                                        onPreview(row.original.statementId),
                                 },
                                 {
                                     id: `supplier-settlements-list-row-${segment}-open`,
@@ -196,6 +203,6 @@ export function useSettlementListColumns(
                 },
             },
         ],
-        [onOpen, patchUrl],
+        [onOpen, onPreview],
     )
 }

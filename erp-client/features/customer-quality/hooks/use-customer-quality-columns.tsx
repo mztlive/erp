@@ -4,7 +4,13 @@ import * as React from "react"
 import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge, MoneyValue } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    MoneyValue,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableTextCell,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
@@ -38,51 +44,46 @@ export function useCustomerQualityColumns({
                 id: "customerName",
                 accessorKey: "customerName",
                 header: "客户",
-                meta: { label: "客户", width: "reference" },
+                meta: { label: "客户", width: "flex" },
                 cell: ({ row }) => {
                     const r = row.original
-                    const canW03 = r.allowedDrilldowns.includes("W03")
+                    const id = `customers-quality-detail-row-${toAutomationIdSegment(r.customerId)}`
+                    const secondary = [r.customerNo, ...r.ownerLabels]
+                        .filter(Boolean)
+                        .join(" · ")
                     return (
                         <div
+                            id={`${id}-identity`}
                             className="min-w-0"
                             data-customer-row={r.customerId}
                             tabIndex={-1}
                         >
-                            <div className="flex flex-wrap items-center gap-2">
-                                {canW03 ? (
-                                    <Button
-                                        id={`customers-quality-detail-row-${toAutomationIdSegment(r.customerId)}-open`}
-                                        type="button"
-                                        variant="link"
-                                        size="xs"
-                                        className="h-auto px-0 text-sm font-medium"
-                                        render={
-                                            <Link
-                                                href={customerHref(
+                            <TableIdentityCell
+                                primary={
+                                    r.allowedDrilldowns.includes("W03") ? (
+                                        <Link
+                                            id={`${id}-open`}
+                                            href={customerHref(
+                                                r.customerId,
+                                                r.customerName,
+                                                withReturnFocus(
+                                                    returnTo,
                                                     r.customerId,
-                                                    r.customerName,
-                                                    withReturnFocus(
-                                                        returnTo,
-                                                        r.customerId,
-                                                    ),
-                                                )}
-                                            />
-                                        }
-                                    >
-                                        {r.customerName}
-                                    </Button>
-                                ) : (
-                                    <span className="text-sm font-medium">
-                                        {r.customerName}
-                                    </span>
-                                )}
-                                <span className="num text-body-compact text-muted-foreground">
-                                    {r.customerNo}
-                                </span>
-                            </div>
-                            <div className="mt-0.5 text-xs text-muted-foreground">
-                                {r.ownerLabels.join(" · ")}
-                            </div>
+                                                ),
+                                            )}
+                                            className="text-primary underline-offset-4 hover:underline focus-visible:underline"
+                                        >
+                                            {r.customerName}
+                                        </Link>
+                                    ) : (
+                                        r.customerName
+                                    )
+                                }
+                                primaryTitle={r.customerName}
+                                secondary={secondary}
+                                secondaryTitle={secondary}
+                                numericSecondary
+                            />
                         </div>
                     )
                 },
@@ -90,41 +91,54 @@ export function useCustomerQualityColumns({
             {
                 id: "tags",
                 header: "经营标签",
-                meta: { label: "经营标签" },
+                meta: { label: "经营标签", width: "default" },
                 cell: ({ row }) => {
+                    const { tags } = row.original
+                    if (tags.length === 0) return <TableEmptyCell />
+
                     const renderTag = (t: BusinessTag) => (
-                        <button
+                        <Button
                             id={`customers-quality-detail-row-${toAutomationIdSegment(row.original.customerId)}-tag-${toAutomationIdSegment(t.type)}-${toAutomationIdSegment(t.code)}`}
                             key={`${t.type}-${t.code}`}
                             type="button"
-                            className="inline-flex"
-                            onClick={() => onTagClick(t)}
+                            variant="ghost"
+                            size="xs"
+                            className="h-auto max-w-full px-0 py-0.5 font-normal"
+                            onClick={(event) => {
+                                event.stopPropagation()
+                                onTagClick(t)
+                            }}
                             aria-label={`${t.label}：查看规则说明`}
                         >
                             <BusinessStatusBadge
                                 context="list"
                                 label={t.label}
                                 tone={t.tone}
+                                appearance={
+                                    t.tone === "success" ? "quiet" : "badge"
+                                }
                             />
-                        </button>
+                        </Button>
                     )
                     return (
-                        <div className="max-w-48 space-y-1 whitespace-normal">
+                        <div className="flex flex-col gap-1 whitespace-normal">
                             <div className="flex flex-wrap gap-1">
-                                {row.original.tags.slice(0, 2).map(renderTag)}
+                                {tags.slice(0, 2).map(renderTag)}
                             </div>
-                            {row.original.tags.length > 2 ? (
+                            {tags.length > 2 ? (
                                 <details>
                                     <summary
                                         id={`customers-quality-${toAutomationIdSegment(row.original.customerId)}-more-tags`}
                                         className="cursor-pointer text-xs text-muted-foreground"
                                     >
-                                        另 {row.original.tags.length - 2} 项
+                                        另{" "}
+                                        <span className="num">
+                                            {tags.length - 2}
+                                        </span>{" "}
+                                        项
                                     </summary>
                                     <div className="mt-1 flex flex-wrap gap-1">
-                                        {row.original.tags
-                                            .slice(2)
-                                            .map(renderTag)}
+                                        {tags.slice(2).map(renderTag)}
                                     </div>
                                 </details>
                             ) : null}
@@ -140,6 +154,7 @@ export function useCustomerQualityColumns({
                     label: "成交金额（含税）",
                     align: "end",
                     numeric: true,
+                    width: "amount",
                 },
                 cell: ({ row }) => {
                     const r = row.original
@@ -151,8 +166,9 @@ export function useCustomerQualityColumns({
                                 taxBasis="gross"
                             />
                             <div className="text-xs text-muted-foreground">
-                                {r.salesOrderCount} 单 · 卡券占比{" "}
-                                {r.voucherShare}
+                                <span className="num">{r.salesOrderCount}</span>{" "}
+                                单 · 卡券占比{" "}
+                                <span className="num">{r.voucherShare}</span>
                             </div>
                         </div>
                     )
@@ -184,7 +200,12 @@ export function useCustomerQualityColumns({
                 id: "costCoverageRate",
                 accessorFn: (r) => r.costCoverageRate ?? "",
                 header: "成本覆盖",
-                meta: { label: "成本覆盖", align: "end" },
+                meta: {
+                    label: "成本覆盖",
+                    align: "end",
+                    numeric: true,
+                    width: "rate",
+                },
                 cell: ({ row }) => {
                     const r = row.original
                     if (
@@ -196,15 +217,18 @@ export function useCustomerQualityColumns({
                             r.nonVoucherShare.trim(),
                         )
                         return (
-                            <span className="text-sm text-muted-foreground">
-                                {isVoucherOnly
-                                    ? "不适用（卡券）"
-                                    : "待核算成本"}
-                            </span>
+                            <TableEmptyCell
+                                variant="label"
+                                label={
+                                    isVoucherOnly
+                                        ? "不适用（卡券）"
+                                        : "待核算成本"
+                                }
+                            />
                         )
                     }
                     return (
-                        <div className="space-y-1 text-right text-sm">
+                        <div className="flex flex-col gap-0.5 text-right">
                             <div className="num font-medium">
                                 {r.costCoverageRate}
                             </div>
@@ -244,15 +268,12 @@ export function useCustomerQualityColumns({
                     label: "实际盈亏（不含税）",
                     align: "end",
                     numeric: true,
+                    width: "amount",
                 },
                 cell: ({ row }) => {
                     const r = row.original
                     if (r.actualProfitLossNet == null) {
-                        return (
-                            <span className="text-sm text-muted-foreground">
-                                待核算
-                            </span>
-                        )
+                        return <TableEmptyCell variant="label" label="待核算" />
                     }
                     const canW16 = r.allowedDrilldowns.includes("W16")
                     const content = (
@@ -264,7 +285,8 @@ export function useCustomerQualityColumns({
                             />
                             {r.marginRate ? (
                                 <div className="text-xs text-muted-foreground">
-                                    利润率 {r.marginRate}
+                                    利润率{" "}
+                                    <span className="num">{r.marginRate}</span>
                                 </div>
                             ) : null}
                         </div>
@@ -295,12 +317,17 @@ export function useCustomerQualityColumns({
                 id: "receivableOpenGross",
                 accessorFn: (r) => r.receivableOpenGross ?? "",
                 header: "应收 / 逾期（含税）",
-                meta: { label: "应收 / 逾期（含税）", align: "end" },
+                meta: {
+                    label: "应收 / 逾期（含税）",
+                    align: "end",
+                    numeric: true,
+                    width: "amount",
+                },
                 cell: ({ row }) => {
                     const r = row.original
                     const canW11 = r.allowedDrilldowns.includes("W11")
                     return (
-                        <div className="space-y-1 text-right text-sm">
+                        <div className="flex flex-col gap-0.5 text-right">
                             <div className="flex flex-wrap items-center justify-end gap-1">
                                 <MoneyValue
                                     display="compact"
@@ -319,7 +346,7 @@ export function useCustomerQualityColumns({
                                     type="button"
                                     variant="link"
                                     size="xs"
-                                    className="h-auto px-0 text-sm text-destructive"
+                                    className="h-auto justify-end px-0 text-body-compact text-destructive"
                                     render={
                                         <Link
                                             href={receivablesHref(
@@ -349,16 +376,15 @@ export function useCustomerQualityColumns({
                             ) : (
                                 <div className="text-muted-foreground">
                                     逾期{" "}
-                                    <MoneyValue
-                                        display="compact"
-                                        value={r.overdueGross}
-                                        taxBasis="gross"
-                                        unavailableReason={
-                                            r.overdueGross == null
-                                                ? "—"
-                                                : undefined
-                                        }
-                                    />
+                                    {r.overdueGross == null ? (
+                                        <TableEmptyCell />
+                                    ) : (
+                                        <MoneyValue
+                                            display="compact"
+                                            value={r.overdueGross}
+                                            taxBasis="gross"
+                                        />
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -378,9 +404,12 @@ export function useCustomerQualityColumns({
                         e.other ? `其他 ${e.other}` : null,
                     ].filter(Boolean)
                     return (
-                        <span className="text-sm text-muted-foreground">
-                            {parts.length ? parts.join(" · ") : "—"}
-                        </span>
+                        <TableTextCell
+                            value={parts.join(" · ")}
+                            clamp={2}
+                            numeric
+                            className="text-muted-foreground"
+                        />
                     )
                 },
             },
@@ -388,17 +417,21 @@ export function useCustomerQualityColumns({
                 id: "latestBusinessAt",
                 accessorFn: (r) => r.latestBusinessAt ?? "",
                 header: "最近业务",
-                meta: { label: "最近业务" },
+                meta: { label: "最近业务", width: "default" },
                 cell: ({ row }) => (
-                    <span className="num text-body-compact text-muted-foreground">
-                        {row.original.latestBusinessAt
-                            ? formatDateTime(
-                                  row.original.latestBusinessAt,
-                                  "full",
-                                  "passthrough",
-                              )
-                            : "—"}
-                    </span>
+                    <TableTextCell
+                        value={
+                            row.original.latestBusinessAt
+                                ? formatDateTime(
+                                      row.original.latestBusinessAt,
+                                      "full",
+                                      "passthrough",
+                                  )
+                                : null
+                        }
+                        numeric
+                        className="text-muted-foreground"
+                    />
                 ),
             },
         ],

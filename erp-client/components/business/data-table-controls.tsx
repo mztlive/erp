@@ -14,6 +14,9 @@ import {
 } from "lucide-react"
 import type {
     Table as TanStackTable,
+    ColumnOrderState,
+    ColumnPinningState,
+    ColumnSizingState,
     VisibilityState,
 } from "@tanstack/react-table"
 
@@ -34,17 +37,25 @@ function DataTableViewOptions<TData>({
     table,
     idPrefix,
     defaultColumnVisibility = {},
+    defaultColumnOrder = [],
+    defaultColumnPinning = {},
+    defaultColumnSizing = {},
 }: {
     table: TanStackTable<TData>
     idPrefix?: string
     defaultColumnVisibility?: VisibilityState
+    defaultColumnOrder?: ColumnOrderState
+    defaultColumnPinning?: ColumnPinningState
+    defaultColumnSizing?: ColumnSizingState
 }) {
     const columns = table
         .getAllLeafColumns()
         .filter((column) => column.getCanHide())
-    const visibleColumnCount = columns.filter((column) =>
-        column.getIsVisible(),
-    ).length
+    const visibleColumnCount = table
+        .getVisibleLeafColumns()
+        .filter(
+            (column) => !["__selection", "__preview"].includes(column.id),
+        ).length
 
     if (columns.length === 0) return null
 
@@ -94,11 +105,14 @@ function DataTableViewOptions<TData>({
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() =>
+                            onClick={() => {
                                 table.setColumnVisibility(
                                     defaultColumnVisibility,
                                 )
-                            }
+                                table.setColumnOrder(defaultColumnOrder)
+                                table.setColumnPinning(defaultColumnPinning)
+                                table.setColumnSizing(defaultColumnSizing)
+                            }}
                         >
                             恢复默认列
                         </Button>
@@ -340,25 +354,34 @@ function DataTablePagination<TData>({
             )}
         >
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-muted-foreground">
-                <label htmlFor={pageSizeId} className="flex items-center gap-2">
-                    <OptionCombobox
-                        id={pageSizeId}
-                        size="sm"
-                        value={String(pageSize)}
-                        onValueChange={(next) => {
-                            if (next == null) return
-                            table.setPageSize(Number(next))
-                        }}
-                        options={pageSizeOptions.map((size) => ({
-                            value: String(size),
-                            label: String(size),
-                        }))}
-                        allowClear={false}
-                        aria-label="每页记录数"
-                        className="w-[4.5rem]"
-                    />
-                    条 / 页
-                </label>
+                {pageSizeOptions.length > 1 ? (
+                    <label
+                        htmlFor={pageSizeId}
+                        className="flex items-center gap-2"
+                    >
+                        <OptionCombobox
+                            id={pageSizeId}
+                            size="sm"
+                            value={String(pageSize)}
+                            onValueChange={(next) => {
+                                if (next == null) return
+                                table.setPageSize(Number(next))
+                            }}
+                            options={pageSizeOptions.map((size) => ({
+                                value: String(size),
+                                label: String(size),
+                            }))}
+                            allowClear={false}
+                            aria-label="每页记录数"
+                            className="w-[4.5rem]"
+                        />
+                        条 / 页
+                    </label>
+                ) : (
+                    <span id={pageSizeId} className="num">
+                        {pageSize} 条 / 页
+                    </span>
+                )}
                 <span aria-hidden="true">·</span>
                 {selectedCount > 0 && !hasSelectionDock ? (
                     <span className="num">

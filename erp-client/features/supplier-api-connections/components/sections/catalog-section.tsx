@@ -7,7 +7,11 @@ import type { UseQueryResult } from "@tanstack/react-query"
 import { useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import { HistoryIcon, RefreshCwIcon } from "lucide-react"
-import { ListWorkspaceHeader } from "@/components/business/list-workspace"
+import {
+    BusinessFailureState,
+    ListWorkspacePage,
+    listWorkspaceStyles,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
@@ -23,7 +27,8 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import type { CatalogResult } from "../../api/catalog"
 import type { ConnectionCenterView } from "../../types"
-import { ConnectionPageNav } from "../connection-page-nav"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { buildSupplierCatalogHref } from "../../lib/url-state"
 import { CatalogBrowser } from "../catalog/catalog-browser"
 import { CatalogBatchHistory } from "../catalog/catalog-batch-history"
 import { CatalogOnboarding } from "../catalog/catalog-onboarding"
@@ -92,13 +97,29 @@ export function CatalogSection({
             account.data?.permissions,
             "supplier_offering_cost:detail",
         )
-    return (
-        <>
-            <ListWorkspaceHeader
-                eyebrow="采购选品"
-                title={`${conn.supplier.name} · 商品库`}
-                description="同步供应商商品，选择需要经营的商品纳入公司商品库。"
-            >
+    const segment = toAutomationIdSegment(conn.connectionId)
+    const workspace = {
+        title: `${conn.supplier.name} · 商品库`,
+        views: {
+            ariaLabel: "供应商连接工作区",
+            items: [
+                {
+                    id: `supplier-api-connection-${segment}-settings-nav`,
+                    label: "平台设置",
+                    href: settingsHref,
+                    active: false,
+                },
+                {
+                    id: `supplier-api-connection-${segment}-catalog-nav`,
+                    label: "商品库",
+                    href: buildSupplierCatalogHref(conn.connectionId),
+                    active: true,
+                },
+            ],
+        },
+        alerts: feedback,
+        headerActions: (
+            <>
                 {canReadCost &&
                 hasPermission(
                     account.data?.permissions,
@@ -112,7 +133,12 @@ export function CatalogSection({
                 ) : null}
                 <SheetTrigger
                     id="supplier-catalog-sync-records-trigger"
-                    render={<Button variant="outline" />}
+                    render={
+                        <Button
+                            variant="ghost"
+                            className={listWorkspaceStyles.quietButton}
+                        />
+                    }
                 >
                     <HistoryIcon data-icon="inline-start" aria-hidden="true" />
                     同步记录
@@ -134,12 +160,11 @@ export function CatalogSection({
                         {syncLabel}
                     </LoadingButton>
                 </PermissionGuard>
-            </ListWorkspaceHeader>
-            <ConnectionPageNav
-                connectionId={conn.connectionId}
-                supplierName={conn.supplier.name}
-                active="catalog"
-            />
+            </>
+        ),
+    }
+    return (
+        <>
             <SheetContent
                 size="detail"
                 closeButtonId="supplier-catalog-sync-records-close"
@@ -158,13 +183,10 @@ export function CatalogSection({
                         </p>
                     ) : null}
                     {query.isError ? (
-                        <p
-                            role="alert"
-                            className="mb-4 text-sm text-destructive"
-                        >
-                            同步记录读取失败：{query.error.message}
-                            。请点击下方刷新重试。
-                        </p>
+                        <BusinessFailureState
+                            title="同步记录读取失败"
+                            description={`${query.error.message}。请点击下方刷新重试。`}
+                        />
                     ) : null}
                     {query.data ? (
                         <CatalogSyncRecords data={query.data} />
@@ -204,93 +226,94 @@ export function CatalogSection({
                     </SheetClose>
                 </SheetFooter>
             </SheetContent>
-            <div className="space-y-5">
-                {feedback}
+            <ListWorkspacePage {...workspace}>
                 {query.isSuccess && query.data.total === 0 ? (
-                    <div className="space-y-5">
-                        <CatalogOnboarding
-                            step={1}
-                            title={
-                                syncing
-                                    ? "正在同步供应商商品"
-                                    : syncInterrupted
-                                      ? "商品同步尚未完成"
-                                      : latest
-                                        ? "暂未获取到供应商商品"
-                                        : "同步商品，开始选品"
-                            }
-                            description={
-                                syncing
-                                    ? "商品正在后台读取，完成后会显示在这里。你可以先处理其他工作，稍后回来选品。"
-                                    : syncInterrupted
-                                      ? (latest?.error_summary ??
-                                        "上次同步已中断，请继续同步；若仍无法完成，可检查连接或查看同步记录。")
-                                      : latest
-                                        ? "本次同步未获取到商品，请检查供应商授权的商品范围与同步记录，再重新同步。"
-                                        : `已选择${conn.supplier.name}。同步供应商授权的商品目录后，即可查看商品并选择需要经营的商品入库。`
-                            }
-                            action={
-                                <>
-                                    <div className="flex flex-wrap justify-center gap-2">
-                                        <PermissionGuard
-                                            permission={
-                                                "supplier_api_connection:catalog_sync"
+                    <CatalogOnboarding
+                        step={1}
+                        title={
+                            syncing
+                                ? "正在同步供应商商品"
+                                : syncInterrupted
+                                  ? "商品同步尚未完成"
+                                  : latest
+                                    ? "暂未获取到供应商商品"
+                                    : "同步商品，开始选品"
+                        }
+                        description={
+                            syncing
+                                ? "商品正在后台读取，完成后会显示在这里。你可以先处理其他工作，稍后回来选品。"
+                                : syncInterrupted
+                                  ? (latest?.error_summary ??
+                                    "上次同步已中断，请继续同步；若仍无法完成，可检查连接或查看同步记录。")
+                                  : latest
+                                    ? "本次同步未获取到商品，请检查供应商授权的商品范围与同步记录，再重新同步。"
+                                    : `已选择${conn.supplier.name}。同步供应商授权的商品目录后，即可查看商品并选择需要经营的商品入库。`
+                        }
+                        action={
+                            <>
+                                <div className="flex flex-wrap justify-center gap-2">
+                                    <PermissionGuard
+                                        permission={
+                                            "supplier_api_connection:catalog_sync"
+                                        }
+                                    >
+                                        <LoadingButton
+                                            id="supplier-catalog-empty-sync"
+                                            variant="secondary"
+                                            size="sm"
+                                            loading={syncing}
+                                            disabled={!canSync || syncing}
+                                            aria-describedby={
+                                                syncBlocker
+                                                    ? "supplier-catalog-empty-sync-blocker"
+                                                    : undefined
+                                            }
+                                            onClick={() =>
+                                                void onSync().catch(
+                                                    () => undefined,
+                                                )
                                             }
                                         >
-                                            <LoadingButton
-                                                id="supplier-catalog-empty-sync"
-                                                loading={syncing}
-                                                disabled={!canSync || syncing}
-                                                aria-describedby={
-                                                    syncBlocker
-                                                        ? "supplier-catalog-empty-sync-blocker"
-                                                        : undefined
-                                                }
-                                                onClick={() =>
-                                                    void onSync().catch(
-                                                        () => undefined,
-                                                    )
-                                                }
-                                            >
-                                                {syncLabel}
-                                            </LoadingButton>
-                                        </PermissionGuard>
-                                        {!syncing ? (
-                                            <Button
-                                                id="supplier-catalog-empty-settings"
-                                                variant="outline"
-                                                render={
-                                                    <Link href={settingsHref} />
-                                                }
-                                            >
-                                                前往平台设置
-                                            </Button>
-                                        ) : null}
-                                    </div>
-                                    {syncBlocker ? (
-                                        <PermissionGuard
-                                            permission={
-                                                "supplier_api_connection:catalog_sync"
+                                            {syncLabel}
+                                        </LoadingButton>
+                                    </PermissionGuard>
+                                    {!syncing ? (
+                                        <Button
+                                            id="supplier-catalog-empty-settings"
+                                            variant="ghost"
+                                            size="sm"
+                                            className={
+                                                listWorkspaceStyles.quietButton
+                                            }
+                                            render={
+                                                <Link href={settingsHref} />
                                             }
                                         >
-                                            <p
-                                                id="supplier-catalog-empty-sync-blocker"
-                                                className="text-sm text-muted-foreground"
-                                            >
-                                                {syncBlocker}
-                                            </p>
-                                        </PermissionGuard>
+                                            前往平台设置
+                                        </Button>
                                     ) : null}
-                                </>
-                            }
-                        />
-                    </div>
+                                </div>
+                                {syncBlocker ? (
+                                    <PermissionGuard
+                                        permission={
+                                            "supplier_api_connection:catalog_sync"
+                                        }
+                                    >
+                                        <p
+                                            id="supplier-catalog-empty-sync-blocker"
+                                            className="text-sm text-muted-foreground"
+                                        >
+                                            {syncBlocker}
+                                        </p>
+                                    </PermissionGuard>
+                                ) : null}
+                            </>
+                        }
+                    />
                 ) : (
                     <CatalogBrowser
-                        supplierName={conn.supplier.name}
-                        key={conn.connectionId}
+                        title={workspace.title}
                         connectionId={conn.connectionId}
-                        supplierId={conn.supplier.id}
                         canAdopt={canAdopt}
                         adoptionBlocker={adoptionBlocker}
                         settingsHref={settingsHref}
@@ -298,7 +321,7 @@ export function CatalogSection({
                         canReview={canReview}
                     />
                 )}
-            </div>
+            </ListWorkspacePage>
         </>
     )
 }

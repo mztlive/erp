@@ -55,6 +55,12 @@ export function useSupplierScopeUrlState() {
     const viewParam = parseView(searchParams.get("view"))
     const view: SupplierScopeQuery["view"] =
         viewParam === "unallocated" ? "payable" : viewParam
+    const operatorLabel =
+        view === "payment"
+            ? "付款经办人"
+            : view === "purchase_invoice"
+              ? "收票经办人"
+              : "经办人"
     const qParam = searchParams.get("q") ?? ""
     const procurementOwnerUserIds = canUseOwner
         ? parseScopeIdList(searchParams.get("procurementOwnerUserIds"))
@@ -274,7 +280,7 @@ export function useSupplierScopeUrlState() {
         if (operatorUserIds) {
             chips.push({
                 key: "operatorUserIds",
-                label: `经办人：已选 ${countScopeIds(operatorUserIds)} 人`,
+                label: `${operatorLabel}：已选 ${countScopeIds(operatorUserIds)} 人`,
             })
         }
         if (orgUnitIds) {
@@ -292,6 +298,7 @@ export function useSupplierScopeUrlState() {
         return chips
     }, [
         includeDescendants,
+        operatorLabel,
         operatorUserIds,
         orgUnitIds,
         payableAccountId,
@@ -325,6 +332,7 @@ export function useSupplierScopeUrlState() {
         canUseBusiness,
         canUseOrg,
         view,
+        operatorLabel,
         qParam,
         procurementOwnerUserIds,
         operatorUserIds,

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 const ACTIVE_OVERLAY_SELECTOR = [
-    '[role="dialog"]',
+    '[role="dialog"]:not([data-slot="toast"])',
     '[role="alertdialog"]',
     '[role="menu"]',
     '[role="listbox"]',

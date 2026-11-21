@@ -14,6 +14,7 @@ import { writeReceiptSession } from "../lib/receipt-session-storage"
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
 import { hasPermission } from "@/lib/permissions"
 import { fetchAllocationSource } from "../api/allocation-source"
+import type { CustomerAccountsListAccess } from "../api/list-view"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
     createAllocationSession,
@@ -112,10 +113,26 @@ async function refreshPostedAllocation(
     }
 }
 
-export function useCustomerAccountsListQuery(query: CustomerAccountsQuery) {
+export function useCustomerAccountsListQuery(
+    query: CustomerAccountsQuery,
+    access: CustomerAccountsListAccess,
+    enabled: boolean,
+) {
     return useQuery({
-        queryKey: customerReceivableKeys.list(query),
-        queryFn: () => fetchCustomerAccountsList(query),
+        queryKey: [...customerReceivableKeys.list(query), access] as const,
+        queryFn: () => fetchCustomerAccountsList(query, access),
+        enabled,
+        placeholderData: (previous, previousQuery) => {
+            const previousAccess = previousQuery?.queryKey[3]
+            return enabled &&
+                previous?.view === query.view &&
+                previous.hasDataScope &&
+                previousAccess?.receivable === access.receivable &&
+                previousAccess.receipt === access.receipt &&
+                previousAccess.sales_invoice === access.sales_invoice
+                ? previous
+                : undefined
+        },
     })
 }
 

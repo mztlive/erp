@@ -4,6 +4,7 @@ import * as React from "react"
 import { useRouter } from "@/lib/navigation"
 import { useMutation } from "@tanstack/react-query"
 import { UploadIcon } from "lucide-react"
+import { listWorkspaceStyles } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { inquiryPath, previewInquiryCreation } from "../api"
@@ -40,8 +41,10 @@ export function InquiryCreateImport({ userId }: { userId: string }) {
         <>
             <Button
                 id="sales-inquiries-import-create"
-                variant="outline"
+                type="button"
+                variant="ghost"
                 size="sm"
+                className={listWorkspaceStyles.quietButton}
                 onClick={() => setOpen(true)}
             >
                 <UploadIcon aria-hidden="true" data-icon="inline-start" />

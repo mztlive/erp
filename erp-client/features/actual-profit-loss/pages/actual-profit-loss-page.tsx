@@ -214,8 +214,8 @@ export function ActualProfitLossPage() {
                         sorting={page.tableSorting}
                         onSortingChange={page.handleTableSortingChange}
                         loading={
-                            page.viewQuery.isFetching &&
-                            !page.viewQuery.isPending
+                            page.viewQuery.isPending ||
+                            page.viewQuery.isFetching
                         }
                         isError={
                             page.viewQuery.isError || Boolean(page.scopeError)

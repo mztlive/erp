@@ -28,6 +28,7 @@ import {
 } from "@/features/master-data/lib/list-page-actions"
 import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/offering-dialogs"
 import { ProductImportDialog } from "@/features/master-data/components/product/product-import-dialog"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { launchNavDelivery } from "@/lib/nav-delivery"
 import type {
     MasterDataListItem,
@@ -124,6 +125,16 @@ export function ProductsListPage() {
         filters.q.trim() !== "" || filters.hasStructuredProductFilters
     const noScope = state.listQuery.data?.emptyReason === "no_scope"
     const listLoadFailed = state.listQuery.isError || !state.listQuery.data
+    const returnFocusToRow = () => {
+        const rowId = lastFocusedRowId.current
+        if (!rowId) return true
+        const row = document
+            .getElementById("master-data-products-list-table")
+            ?.querySelector<HTMLElement>(
+                `[data-row-id="${CSS.escape(rowId)}"][tabindex]`,
+            )
+        return row ?? true
+    }
     const openCreate = () => router.push("/master-data/products/new")
     const openDetail = (stableId: string) => {
         lastFocusedRowId.current = stableId
@@ -136,6 +147,7 @@ export function ProductsListPage() {
             document.getElementById(IMPORT_ACTION_ID),
         )
         toast.add({
+            id: `master-data-products-list-import-${toAutomationIdSegment(job.id)}`,
             title: "导入任务已提交",
             description: `「${job.file_name ?? "所选文件"}」共 ${job.total_count} 行，正在后台逐行导入，进度与结果在「后台任务」查看。`,
             type: "success",
@@ -261,6 +273,7 @@ export function ProductsListPage() {
                     <ListDataTable
                         id="master-data-products-list-table"
                         entityName="商品"
+                        caption="商品列表"
                         data={state.pageRows}
                         columns={columns}
                         defaultColumnVisibility={{
@@ -319,7 +332,6 @@ export function ProductsListPage() {
                         emptyCopy={{
                             filterDescription:
                                 masterDataCopy.filterEmptyDescription,
-                            emptyTitle: "还没有商品列表资料",
                         }}
                         onRowPreview={
                             state.canReadProductDetail
@@ -338,6 +350,7 @@ export function ProductsListPage() {
             {state.canReadOfferings && !state.supplyDialogSkus && (
                 <ProductSupplyDialog
                     product={state.supplyProduct}
+                    finalFocus={returnFocusToRow}
                     skus={
                         state.supplyProduct
                             ? (state.productSkusByProduct.get(

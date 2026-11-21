@@ -13,7 +13,7 @@ import {
     type HealthResult,
 } from "@/features/supplier-api-connections/types"
 import { useSearchDraft } from "@/lib/use-search-draft"
-import { useLooseSearchHotkey } from "@/lib/use-search-hotkey"
+import { useSearchHotkey } from "@/lib/use-search-hotkey"
 
 /** 可被单独移除的已生效条件。 */
 export type ConnectionFilterKey =
@@ -113,20 +113,20 @@ export function useConnectionListFilters(
         () => parseConnectionAppliedFilters(urlState),
         [urlState],
     )
-    const hasStructuredFilters = Boolean(
+    const hasFilters = Boolean(
+        applied.q ||
         applied.status ||
         applied.health.length > 0 ||
         applied.capability ||
         applied.catalogFreshness.length > 0 ||
         applied.supplierId,
     )
-    const hasFilters = Boolean(applied.q || hasStructuredFilters)
 
     const { searchDraft, setSearchDraft } = useSearchDraft(applied.q, {
         skipWhileFocused: true,
         inputRef: searchInputRef,
     })
-    useLooseSearchHotkey(searchInputRef)
+    useSearchHotkey(searchInputRef)
     const [healthDraft, setHealthDraft] = React.useState<string[]>(
         applied.health,
     )
@@ -239,25 +239,6 @@ export function useConnectionListFilters(
         setSupplierIdDraft(applied.supplierId ?? null)
     }, [applied])
 
-    /** 表头人读筛选摘要；只读 Applied（§2.1、§14.3）。 */
-    const appliedFilterLabels = [
-        applied.q ? `搜索“${applied.q}”` : null,
-        applied.health.length > 0
-            ? `健康：${applied.health
-                  .map((value) => HEALTH_LABEL[value])
-                  .join("、")}`
-            : null,
-        applied.capability
-            ? `能力：${CAPABILITY_LABEL[applied.capability]}`
-            : null,
-        applied.catalogFreshness.length > 0
-            ? `目录更新时间：${applied.catalogFreshness
-                  .map((value) => CATALOG_LABEL[value])
-                  .join("、")}`
-            : null,
-        applied.supplierId ? "已选择供应商" : null,
-    ].filter((label): label is string => label !== null)
-
     const hasPendingChanges =
         searchDraft.trim() !== (applied.q ?? "") ||
         [...healthDraft].sort().join(",") !==
@@ -270,7 +251,6 @@ export function useConnectionListFilters(
     return {
         searchInputRef,
         applied,
-        hasStructuredFilters,
         hasFilters,
         searchDraft,
         setSearchDraft,
@@ -289,7 +269,6 @@ export function useConnectionListFilters(
         resetMoreFilters,
         cancelMoreFilters,
         clearFilters,
-        appliedFilterLabels,
         hasPendingChanges,
     }
 }

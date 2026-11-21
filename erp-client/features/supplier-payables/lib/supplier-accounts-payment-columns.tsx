@@ -2,94 +2,120 @@
 
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge, MoneyValue } from "@/components/business"
-import { Button } from "@/components/ui/button"
+import {
+    BusinessStatusBadge,
+    MoneyValue,
+    TableEmptyCell,
+    TableIdentityCell,
+    TableRowActions,
+    TableTextCell,
+} from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { PaymentRow } from "@/features/supplier-payables/types"
 
 export function buildPaymentColumns(input: {
-    openReversalPreview: (reversalId: string) => void
+    openReversalPreview: (reversalId: string, paymentId: string) => void
 }): ColumnDef<PaymentRow>[] {
     const { openReversalPreview } = input
     return [
         {
             id: "doc",
             header: "付款单",
-            meta: { label: "付款单", width: "reference" },
+            meta: { label: "付款单", width: "flex" },
             cell: ({ row }) => (
-                <div className="text-sm">
-                    <div className="num font-medium">
-                        {row.original.paymentNo}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                        {row.original.supplierName}
-                    </div>
-                </div>
+                <TableIdentityCell
+                    primary={
+                        <span className="num">{row.original.paymentNo}</span>
+                    }
+                    primaryTitle={row.original.paymentNo}
+                    secondary={row.original.supplierName}
+                    secondaryTitle={row.original.supplierName}
+                />
             ),
         },
         {
             id: "amount",
-            header: "金额 / 未付款",
+            header: "金额 / 未核销",
             meta: {
                 label: "金额",
                 width: "amount",
                 align: "end",
                 numeric: true,
             },
-            cell: ({ row }) => (
-                <div className="text-end text-sm">
-                    <MoneyValue value={row.original.amount} taxBasis="gross" />
-                    <div className="text-xs text-muted-foreground">
-                        未付款{" "}
-                        <MoneyValue value={row.original.unallocatedAmount} />
+            cell: ({ row }) =>
+                row.original.permissionLimited ? (
+                    <TableEmptyCell />
+                ) : (
+                    <div>
+                        <MoneyValue
+                            value={row.original.amount}
+                            taxBasis="gross"
+                            display="exact"
+                        />
+                        <div className="text-xs text-muted-foreground">
+                            未核销{" "}
+                            <MoneyValue
+                                value={row.original.unallocatedAmount}
+                                display="exact"
+                            />
+                        </div>
                     </div>
-                </div>
-            ),
+                ),
         },
         {
             id: "bank",
             header: "银行引用",
             meta: { label: "银行", width: "default" },
             cell: ({ row }) => (
-                <span className="num text-sm">
-                    {row.original.bankReferenceMasked}
-                </span>
+                <TableTextCell
+                    value={row.original.bankReferenceMasked}
+                    numeric
+                    clamp={1}
+                />
             ),
         },
         {
             id: "reversal",
             header: "关联冲正",
-            meta: { label: "关联冲正", width: "default" },
+            meta: { label: "关联冲正", width: "default", align: "end" },
             cell: ({ row }) => {
                 const [latest, ...older] = row.original.relatedReversals ?? []
-                if (!latest) {
-                    return (
-                        <span className="text-sm text-muted-foreground">—</span>
-                    )
-                }
+                if (!latest) return <TableEmptyCell />
+                const paymentId = row.original.paymentId
+                const actionPrefix = `supplier-payables-table-row-${toAutomationIdSegment(paymentId)}`
                 return (
-                    <div className="flex flex-col items-start gap-1">
-                        <Button
-                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.paymentId)}-reversal-${toAutomationIdSegment(latest.reversalId)}-open`}
-                            type="button"
-                            variant="link"
-                            className="num h-auto px-0"
-                            onClick={(event) => {
-                                event.stopPropagation()
-                                openReversalPreview(latest.reversalId)
-                            }}
-                        >
-                            {latest.reversalNo}
-                        </Button>
-                        <span className="flex items-center gap-1">
+                    <div className="flex flex-col items-end gap-0.5">
+                        <TableRowActions
+                            moreId={`${actionPrefix}-more`}
+                            moreLabel={`${row.original.paymentNo} 更多操作`}
+                            actions={[
+                                {
+                                    id: `${actionPrefix}-reversal-${toAutomationIdSegment(latest.reversalId)}-open`,
+                                    label: (
+                                        <span
+                                            className="num block max-w-28 truncate"
+                                            title={latest.reversalNo}
+                                        >
+                                            {latest.reversalNo}
+                                        </span>
+                                    ),
+                                    onClick: () =>
+                                        openReversalPreview(
+                                            latest.reversalId,
+                                            paymentId,
+                                        ),
+                                },
+                            ]}
+                        />
+                        <span className="flex flex-wrap items-center justify-end gap-1">
                             <BusinessStatusBadge
                                 context="list"
                                 label={latest.statusLabel}
                                 tone={latest.statusTone}
                             />
                             {older.length > 0 ? (
-                                <span className="text-xs text-muted-foreground">
+                                <span className="num text-xs text-muted-foreground">
                                     另 {older.length} 条
                                 </span>
                             ) : null}
@@ -107,6 +133,9 @@ export function buildPaymentColumns(input: {
                     context="list"
                     label={row.original.statusLabel}
                     tone={row.original.statusTone}
+                    appearance={
+                        row.original.status === "POSTED" ? "quiet" : "badge"
+                    }
                     description={
                         row.original.status === "POSTED"
                             ? "已过账不可编辑；纠错请冲正"
@@ -120,9 +149,18 @@ export function buildPaymentColumns(input: {
             header: "付款时间",
             meta: { label: "时间", width: "default", numeric: true },
             cell: ({ row }) => (
-                <span className="num text-body-compact text-muted-foreground">
-                    {formatDateTime(row.original.paidAt, "full", "passthrough")}
-                </span>
+                <TableTextCell
+                    value={
+                        row.original.paidAt &&
+                        formatDateTime(
+                            row.original.paidAt,
+                            "full",
+                            "passthrough",
+                        )
+                    }
+                    clamp={1}
+                    numeric
+                />
             ),
         },
     ]

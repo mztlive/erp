@@ -1,117 +1,67 @@
 "use client"
 
-import * as React from "react"
-
 import { OptionCombobox } from "@/components/business"
 import {
+    ListFilterSection,
+    ListFilterSections,
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
+import { Button } from "@/components/ui/button"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 import { selectedOrgUnitIds } from "@/features/organization/lib/organization-ids"
-import type { ReceivableScopeChip } from "@/features/customer-receivables/pages/hooks/use-receivable-scope-url-state"
-import type { ReceivableScopeQuery } from "@/features/customer-receivables/api/scoped"
-
-type SetState<T> = React.Dispatch<React.SetStateAction<T>>
+import type { useReceivableScopeUrlState } from "@/features/customer-receivables/pages/hooks/use-receivable-scope-url-state"
 
 const prefix = "customer-receivables-scope-toolbar"
-const panelId = `${prefix}-more-panel`
-
 const OPERATOR_KIND_OPTIONS = [
     { value: "register", label: "登记" },
     { value: "settle", label: "核销" },
 ] as const
 
-type Props = {
-    view: ReceivableScopeQuery["view"]
-    searchDraft: string
-    setSearchDraft: SetState<string>
-    searchInputRef: React.RefObject<HTMLInputElement | null>
-    canUseOwner: boolean
-    canUseBusiness: boolean
-    canUseOrg: boolean
-    salesOwnerDraft: string
-    setSalesOwnerDraft: SetState<string>
-    operatorDraft: string
-    setOperatorDraft: SetState<string>
-    operatorKindDraft: "register" | "settle" | ""
-    setOperatorKindDraft: SetState<"register" | "settle" | "">
-    orgDraft: string
-    setOrgDraft: SetState<string>
-    descendantsDraft: boolean
-    setDescendantsDraft: SetState<boolean>
-    panelOpen: boolean
-    setPanelOpen: SetState<boolean>
-    appliedChips: readonly ReceivableScopeChip[]
-    removeFilter: (key: ReceivableScopeChip["key"]) => void
-    applyFilters: () => void
-    resetMoreFilters: () => void
-    cancelMoreFilters: () => void
-    clearFilters: () => void
-    hasPendingChanges: boolean
-    resultCount?: number
-    loading: boolean
-    failed: boolean
-}
-
-/** 范围查询工具栏：应收、回款、销项发票的人员筛选都走销售目录。 */
+/** 人员与组织继续走各自的权限目录，已限定的单据仍可从条件带清除。 */
 export function ReceivableScopeToolbar({
-    view,
-    searchDraft,
-    setSearchDraft,
-    searchInputRef,
-    canUseOwner,
-    canUseBusiness,
-    canUseOrg,
-    salesOwnerDraft,
-    setSalesOwnerDraft,
-    operatorDraft,
-    setOperatorDraft,
-    operatorKindDraft,
-    setOperatorKindDraft,
-    orgDraft,
-    setOrgDraft,
-    descendantsDraft,
-    setDescendantsDraft,
-    panelOpen,
-    setPanelOpen,
-    appliedChips,
-    removeFilter,
-    applyFilters,
-    resetMoreFilters,
-    cancelMoreFilters,
-    clearFilters,
-    hasPendingChanges,
-    resultCount,
+    urlState,
     loading,
     failed,
-}: Props) {
-    const moreCount = appliedChips.filter(({ key }) =>
-        ["operatorUserIds", "orgUnitIds"].includes(key),
+    showEmptyClear,
+}: {
+    urlState: ReturnType<typeof useReceivableScopeUrlState>
+    loading: boolean
+    failed: boolean
+    showEmptyClear: boolean
+}) {
+    const {
+        view,
+        canUseOwner,
+        canUseBusiness,
+        canUseOrg,
+        panelOpen,
+        appliedChips,
+        orgDraft,
+        descendantsDraft,
+    } = urlState
+    const moreCount = appliedChips.filter(
+        ({ key }) => key === "operatorUserIds" || key === "orgUnitIds",
     ).length
     const orgUnitIds = selectedOrgUnitIds(orgDraft)
 
     return (
         <ListWorkspaceFilterBar
-            density="compact"
             morePresentation="popover"
-            moreSize="compact"
-            className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel="客户往来范围查询"
-            onSubmit={applyFilters}
+            onSubmit={urlState.applyFilters}
             queryButtonId={`${prefix}-apply`}
             moreButtonId={`${prefix}-more-filters`}
             clearButtonId={`${prefix}-clear-all`}
             search={
                 <ListSearchField
                     id={`${prefix}-search`}
-                    searchInputRef={searchInputRef}
-                    value={searchDraft}
-                    onChange={setSearchDraft}
+                    searchInputRef={urlState.searchInputRef}
+                    value={urlState.searchDraft}
+                    onChange={urlState.setSearchDraft}
                     placeholder="销售单、回款单、发票号"
                     aria-label="搜索客户往来范围"
                 />
@@ -119,21 +69,23 @@ export function ReceivableScopeToolbar({
             moreCount={moreCount}
             moreOpen={panelOpen}
             onToggleMore={() =>
-                panelOpen ? cancelMoreFilters() : setPanelOpen(true)
+                panelOpen
+                    ? urlState.cancelMoreFilters()
+                    : urlState.setPanelOpen(true)
             }
-            morePanelId={panelId}
+            morePanelId={`${prefix}-more-panel`}
             morePanelAriaLabel="客户往来范围更多筛选条件"
-            onResetMore={resetMoreFilters}
+            onResetMore={urlState.resetMoreFilters}
             primaryFilters={
                 canUseOwner ? (
-                    <div className="empty:hidden w-56 max-w-full min-w-0">
+                    <div className="w-56 max-w-full min-w-0 empty:hidden">
                         <PersonDirectoryFilter
                             id={`${prefix}-sales-owner`}
                             category="sales"
                             label="负责销售"
                             hideLabel
-                            value={salesOwnerDraft}
-                            onChange={setSalesOwnerDraft}
+                            value={urlState.salesOwnerDraft}
+                            onChange={urlState.setSalesOwnerDraft}
                             orgUnitIds={orgUnitIds}
                             includeDescendants={descendantsDraft}
                         />
@@ -142,76 +94,93 @@ export function ReceivableScopeToolbar({
             }
             morePanel={
                 canUseBusiness || canUseOrg ? (
-                    <div className="grid min-w-0 gap-5">
-                        {canUseBusiness && (
-                            <PersonDirectoryFilter
-                                id={`${prefix}-operator`}
-                                category="business"
-                                label={
-                                    view === "receipt"
-                                        ? "登记/核销经办人"
-                                        : "登记经办人"
-                                }
-                                value={operatorDraft}
-                                onChange={setOperatorDraft}
-                                orgUnitIds={orgUnitIds}
-                                includeDescendants={descendantsDraft}
-                            />
-                        )}
-                        {canUseBusiness && view === "receipt" ? (
-                            <ListWorkspaceFilterField
-                                htmlFor={`${prefix}-operator-kind`}
-                                label="经办人口径"
-                                className="max-w-56"
-                            >
-                                <OptionCombobox
-                                    id={`${prefix}-operator-kind`}
-                                    className="w-full min-w-0"
-                                    aria-label="经办人口径"
-                                    allowClear={false}
-                                    value={
-                                        operatorKindDraft === ""
-                                            ? "register"
-                                            : operatorKindDraft
+                    <ListFilterSections>
+                        {canUseBusiness ? (
+                            <ListFilterSection legend="人员">
+                                <PersonDirectoryFilter
+                                    id={`${prefix}-operator`}
+                                    category="business"
+                                    label={
+                                        view === "receipt"
+                                            ? "登记/核销经办人"
+                                            : "登记经办人"
                                     }
-                                    options={OPERATOR_KIND_OPTIONS}
-                                    onValueChange={(value) => {
-                                        if (
-                                            value === "register" ||
-                                            value === "settle"
-                                        ) {
-                                            setOperatorKindDraft(value)
-                                        }
-                                    }}
+                                    value={urlState.operatorDraft}
+                                    onChange={urlState.setOperatorDraft}
+                                    orgUnitIds={orgUnitIds}
+                                    includeDescendants={descendantsDraft}
                                 />
-                            </ListWorkspaceFilterField>
+                                {view === "receipt" ? (
+                                    <ListWorkspaceFilterField
+                                        htmlFor={`${prefix}-operator-kind`}
+                                        label="经办人口径"
+                                    >
+                                        <OptionCombobox
+                                            id={`${prefix}-operator-kind`}
+                                            className="w-full min-w-0"
+                                            aria-label="经办人口径"
+                                            allowClear={false}
+                                            value={
+                                                urlState.operatorKindDraft ||
+                                                "register"
+                                            }
+                                            options={OPERATOR_KIND_OPTIONS}
+                                            onValueChange={(value) => {
+                                                if (
+                                                    value === "register" ||
+                                                    value === "settle"
+                                                ) {
+                                                    urlState.setOperatorKindDraft(
+                                                        value,
+                                                    )
+                                                }
+                                            }}
+                                        />
+                                    </ListWorkspaceFilterField>
+                                ) : null}
+                            </ListFilterSection>
                         ) : null}
-                        {canUseOrg && (
-                            <OrganizationUnitFilter
-                                id={`${prefix}-org`}
-                                label="业务组织"
-                                value={orgDraft}
-                                onChange={setOrgDraft}
-                                includeDescendants={descendantsDraft}
-                                onDescendantsChange={setDescendantsDraft}
-                            />
-                        )}
-                    </div>
+                        {canUseOrg ? (
+                            <ListFilterSection
+                                legend="组织"
+                                gridClassName="grid-cols-[minmax(0,1fr)]"
+                            >
+                                <OrganizationUnitFilter
+                                    id={`${prefix}-org`}
+                                    label="业务组织"
+                                    value={orgDraft}
+                                    onChange={urlState.setOrgDraft}
+                                    includeDescendants={descendantsDraft}
+                                    onDescendantsChange={
+                                        urlState.setDescendantsDraft
+                                    }
+                                />
+                            </ListFilterSection>
+                        ) : null}
+                    </ListFilterSections>
                 ) : null
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "条往来",
-                loadingLabel: "正在加载往来…",
-            })}
-            chips={appliedChips}
-            onClearChip={(key) =>
-                removeFilter(key as ReceivableScopeChip["key"])
+            extraPrimary={
+                showEmptyClear ? (
+                    <Button
+                        id="customer-receivables-scope-banner-clear-filters"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={urlState.clearFilters}
+                    >
+                        清除筛选
+                    </Button>
+                ) : null
             }
-            onClearAll={clearFilters}
-            hasPendingChanges={hasPendingChanges}
+            resultStatus={failed ? "查询未完成" : loading ? "查询中…" : null}
+            chips={appliedChips.map(({ key, label }) => ({
+                key,
+                label,
+                onClear: () => urlState.removeFilter(key),
+            }))}
+            onClearAll={urlState.clearFilters}
+            hasPendingChanges={urlState.hasPendingChanges}
             pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
         />
     )

@@ -5,7 +5,6 @@ import type * as React from "react"
 import { ListWorkSurface } from "@/components/business/list-workspace"
 import { DictionaryCompactList } from "@/features/master-data/components/list/dictionary-compact-list"
 import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
-import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import type { useLifecycleListFilters } from "@/features/master-data/hooks/use-lifecycle-list-filters"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
@@ -18,10 +17,6 @@ type DictionaryFilters = ReturnType<typeof useLifecycleListFilters>
 export function DictionaryCompactWorkspace({
     listId,
     ariaLabel,
-    fullWidth = false,
-    metricsAriaLabel,
-    allLabel,
-    hint,
     countLabel,
     searchPlaceholder,
     showRevisionFilter = true,
@@ -29,10 +24,9 @@ export function DictionaryCompactWorkspace({
     emptyTitle,
     emptyDescription,
     emptyAction,
-    renderCard,
+    renderIdentity,
     searchInputRef,
     filters,
-    syncedMetrics,
     rows,
     previewId,
     fetching,
@@ -44,10 +38,6 @@ export function DictionaryCompactWorkspace({
 }: {
     listId: string
     ariaLabel: string
-    fullWidth?: boolean
-    metricsAriaLabel: string
-    allLabel: string
-    hint: string
     countLabel: string
     searchPlaceholder: string
     showRevisionFilter?: boolean
@@ -55,15 +45,9 @@ export function DictionaryCompactWorkspace({
     emptyTitle: string
     emptyDescription?: string
     emptyAction?: React.ReactNode
-    renderCard?: (row: MasterDataListItem) => React.ReactNode
+    renderIdentity?: (row: MasterDataListItem) => React.ReactNode
     searchInputRef: React.RefObject<HTMLInputElement | null>
     filters: DictionaryFilters
-    syncedMetrics: readonly {
-        key: string
-        label: string
-        value: number
-        detail?: string
-    }[]
     rows: readonly MasterDataListItem[]
     previewId: string | null
     fetching: boolean
@@ -77,20 +61,9 @@ export function DictionaryCompactWorkspace({
         filters.q.trim() !== "" ||
         filters.lifecycleStatus !== "all" ||
         filters.revisionTiming !== "all"
-    const surface = (
+    return (
         <ListWorkSurface
             ariaLabel={ariaLabel}
-            views={
-                <LifecycleMetricStrip
-                    idPrefix={`${listId}-metrics`}
-                    metrics={syncedMetrics}
-                    metricKey={filters.metricKey}
-                    ariaLabel={metricsAriaLabel}
-                    allLabel={allLabel}
-                    hint={hint}
-                    onChangeLifecycle={filters.changeLifecycle}
-                />
-            }
             toolbar={
                 <DictionaryListToolbar
                     idPrefix={`${listId}-toolbar`}
@@ -99,7 +72,6 @@ export function DictionaryCompactWorkspace({
                     showRevisionFilter={showRevisionFilter}
                     searchPlaceholder={searchPlaceholder}
                     countLabel={countLabel}
-                    resultCount={hasData ? rows.length : undefined}
                     loading={fetching}
                     failed={failed}
                 />
@@ -109,7 +81,8 @@ export function DictionaryCompactWorkspace({
                     id={listId}
                     rows={rows}
                     codeLabel={codeLabel}
-                    renderCard={renderCard}
+                    renderIdentity={renderIdentity}
+                    showRevision={showRevisionFilter}
                     selectedId={previewId}
                     pagination={filters.pagination}
                     onPaginationChange={filters.changePagination}
@@ -127,5 +100,4 @@ export function DictionaryCompactWorkspace({
             }
         />
     )
-    return fullWidth ? <div className="w-full">{surface}</div> : surface
 }
