@@ -23,10 +23,10 @@
    - `DetailWorkspaceSection` 提供两档语义宽度：
      - `width="form"`（`max-w-4xl`，约 `896px`）：用于基础资料表单、版本时间线等阅读/录入块，杜绝 1440px 宽屏下出现 1100px 超长空白输入框；
      - `width="full"`（100% 铺满）：用于 SKU 价格矩阵、单据行项目表、图片画廊等宽表/多列内容。
-4. **标签克制退后，数据与操作成为主角**
+4. **标签克制退后，数据与操作成为主角，保存按需浮现**
    - 标题严格对齐列表页的 `18px`（`text-page-title`），分区标题 `15px`（`text-section-title`），输入值/正文 `13px`（`text-body-compact`），表单字段标签收紧为 `12px`（`text-xs font-medium text-foreground/72`），彻底纠正「标签比输入值还大还黑」的倒置问题。
    - 必填星号 `<RequiredMark />` 紧贴标签文字右侧 `2px`，不得漂离。
-   - 页头仅保留 **1 个实心主蓝动作**（如「保存更新」），次要与低频破坏性操作（「取消修改」「停用」）降级为无框轻按钮（`ghost` + `quietButton` / `quietDangerButton`）。
+   - **编辑页按需保存（Dirty Save Dock）**：创建态在页头保留唯一实心主蓝「创建」按钮；编辑态未发生修改时页头保持极净（只放静默次要动作如「停用」），**一旦修改任意表单字段，页面底部居中平滑上浮 `DetailWorkspaceSaveDock`（`● 已修改 N 项 · 取消修改 / 保存更新`）**，跨 Tab 始终可见、同时与「供应商供给」等独立实时保存 Tab 的主蓝「添加供给」彻底解耦，并支持 `Cmd/Ctrl + S` 快捷提交。
 5. **表单柔底轻描边，表格内联编辑静止无框**
    - 表单网格（`[data-slot="detail-form-grid"]`）内控件使用极浅柔底（`bg-muted/26`）+ 柔和描边，聚焦时切回纯白并亮起飞书蓝框与 `3px` 光环；不可修改字段在编辑态以轻量只读表面（带锁图标提示）替代沉重的禁用下拉框。
    - 内嵌可编辑表格（`[data-slot="detail-inline-table"]`）采用纯白表头、无左右外框；单元格内输入框静止态 **无硬边框柔底（`border-transparent bg-muted/52`）**，悬停微深、聚焦亮蓝框纯白底，与飞书多维表格编辑手感一致。
@@ -100,6 +100,7 @@
 | `DetailWorkspaceTabs` | 贴底通栏 `line` Tabs，对齐 `--scaffold-px`，`<2` 项自动隐藏 |
 | `DetailWorkspaceBody` | 承载告警槽、纵向细线分隔分区，支持 `sidebar` 宽屏竖线双栏 |
 | `DetailWorkspaceSection` | 无边框纯白分区，支持 `width="form"`（`max-w-4xl`）与 `width="full"` |
+| `DetailWorkspaceSaveDock` | 脏状态底部居中悬浮保存胶囊（与列表页 `list-selection-dock` 同源，退场冻结计数防闪 `0`） |
 | `DetailWorkspaceSkeleton` | 纯白骨架屏，防止加载期间闪出浅灰底 |
 | `detailWorkspaceStyles` | 共享动作按钮与表格样式表 |
 

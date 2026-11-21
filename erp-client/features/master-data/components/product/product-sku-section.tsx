@@ -11,7 +11,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { ProductSpecDraftsEditor } from "@/features/master-data/components/product/product-spec-drafts"
-import { ProductSkuTable } from "@/features/master-data/components/product/product-sku-table"
+import {
+    ProductSkuTable,
+    type SkuSupplySummary,
+} from "@/features/master-data/components/product/product-sku-table"
 import { SkuBulkPriceBar } from "@/features/master-data/components/product/product-sku-bulk-bar"
 import {
     hasPendingSpecs,
@@ -49,6 +52,12 @@ type ProductSkuSectionProps = {
     setBatchMarketPrice: (next: string) => void
     onApplyBatchReferencePrices: () => void
     inventoryActionHint: string | undefined
+    showSupplyColumn?: boolean
+    supplyBySku?: ReadonlyMap<string, SkuSupplySummary>
+    supplyLoading?: boolean
+    supplyError?: boolean
+    canViewCosts?: boolean
+    onOpenSupply?: (skuId: string) => void
     onOpenInventory?: (
         skuId: string | undefined,
         trigger: HTMLButtonElement,
@@ -80,6 +89,12 @@ function ProductSkuSection({
     setBatchMarketPrice,
     onApplyBatchReferencePrices,
     inventoryActionHint,
+    showSupplyColumn,
+    supplyBySku,
+    supplyLoading,
+    supplyError,
+    canViewCosts,
+    onOpenSupply,
     onOpenInventory,
     rememberSkuFile,
 }: ProductSkuSectionProps) {
@@ -262,6 +277,12 @@ function ProductSkuSection({
                     activeSpecs={activeSpecs}
                     canRevise={canRevise}
                     name={name}
+                    showSupplyColumn={showSupplyColumn}
+                    supplyBySku={supplyBySku}
+                    supplyLoading={supplyLoading}
+                    supplyError={supplyError}
+                    canViewCosts={canViewCosts}
+                    onOpenSupply={onOpenSupply}
                     updateSku={updateSku}
                     rememberSkuFile={rememberSkuFile}
                     onOpenInventory={onOpenInventory}

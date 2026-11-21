@@ -34,8 +34,6 @@ type Props = {
     onBack: () => void
     onMedia: () => void
     onSave: () => void
-    /** 有未保存修改时提供；与保存并列放在页头，不另设底部保存条。 */
-    onReset?: () => void
 }
 
 export function ProductDetailHeader({
@@ -53,7 +51,6 @@ export function ProductDetailHeader({
     onBack,
     onMedia,
     onSave,
-    onReset,
 }: Props) {
     const image =
         fields.carouselPreviewUrls[fields.carouselImages[0]] ||
@@ -141,25 +138,8 @@ export function ProductDetailHeader({
                 ) : null
             }
             primaryAction={
-                <>
-                    {onReset && canRevise && !isCreate ? (
-                        <Button
-                            id="master-data-product-detail-reset"
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className={detailWorkspaceStyles.quietButton}
-                            disabled={pending}
-                            onClick={onReset}
-                        >
-                            取消修改
-                        </Button>
-                    ) : null}
-                    <PermissionGuard
-                        permission={
-                            isCreate ? "product:create" : "product:update"
-                        }
-                    >
+                isCreate ? (
+                    <PermissionGuard permission="product:create">
                         <LoadingButton
                             id="master-data-product-detail-header-submit"
                             loading={pending}
@@ -170,14 +150,10 @@ export function ProductDetailHeader({
                             onClick={onSave}
                         >
                             <SaveIcon data-icon="inline-start" aria-hidden />
-                            {pending
-                                ? "提交中…"
-                                : isCreate
-                                  ? "创建商品"
-                                  : "保存更新"}
+                            {pending ? "提交中…" : "创建商品"}
                         </LoadingButton>
                     </PermissionGuard>
-                </>
+                ) : null
             }
             tabs={tabs}
         />

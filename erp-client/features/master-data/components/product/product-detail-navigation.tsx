@@ -19,11 +19,17 @@ function ProductSectionTabs({
     value,
     isCreate,
     canReadSupply,
+    supplyCount,
+    missingSupplyCount,
+    mediaCount,
     onValueChange,
 }: {
     value: ProductEditorSectionId
     isCreate: boolean
     canReadSupply: boolean
+    supplyCount?: number
+    missingSupplyCount?: number
+    mediaCount?: number
     onValueChange: (value: ProductEditorSectionId) => void
 }) {
     const items = PRODUCT_EDITOR_SECTIONS.filter(
@@ -33,10 +39,39 @@ function ProductSectionTabs({
             (section.id !== "supply" || canReadSupply) &&
             (!isCreate ||
                 (section.id !== "history" && section.id !== "supply")),
-    ).map((section) => ({
-        id: section.id,
-        label: section.label,
-    }))
+    ).map((section) => {
+        let badge: React.ReactNode
+        if (section.id === "supply" && !isCreate) {
+            if (missingSupplyCount != null && missingSupplyCount > 0) {
+                badge = (
+                    <span className="num rounded-sm bg-warning-soft px-1.5 py-0.5 text-2xs leading-3.5 font-medium text-warning-soft-foreground">
+                        缺 {missingSupplyCount}
+                    </span>
+                )
+            } else if (supplyCount != null && supplyCount > 0) {
+                badge = (
+                    <span className="num text-xs font-normal text-muted-foreground/75">
+                        {supplyCount}
+                    </span>
+                )
+            }
+        } else if (
+            section.id === "media" &&
+            mediaCount != null &&
+            mediaCount > 0
+        ) {
+            badge = (
+                <span className="num text-xs font-normal text-muted-foreground/75">
+                    {mediaCount}
+                </span>
+            )
+        }
+        return {
+            id: section.id,
+            label: section.label,
+            badge,
+        }
+    })
 
     return (
         <DetailWorkspaceTabs

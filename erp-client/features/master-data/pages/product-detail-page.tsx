@@ -1,15 +1,20 @@
 "use client"
 
 import * as React from "react"
+import { SaveIcon } from "lucide-react"
 import { useSearchParams } from "next/navigation"
 
 import {
     DetailWorkspaceBody,
     DetailWorkspacePage,
+    DetailWorkspaceSaveDock,
     DetailWorkspaceSection,
     DiscardConfirmDialog,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { ProductDetailDialogs } from "@/features/master-data/components/product/product-detail-dialogs"
 import { ProductDetailEntryGate } from "@/features/master-data/components/product/product-detail-entry-gate"
 import { ProductDetailFeedback } from "@/features/master-data/components/product/product-detail-feedback"
@@ -22,11 +27,17 @@ import {
 } from "@/features/master-data/components/product/product-editor-sections"
 import { ProductSaveDialog } from "@/features/master-data/components/product/product-save-dialog"
 import { ProductSkuSection } from "@/features/master-data/components/product/product-sku-section"
+import type { SkuSupplySummary } from "@/features/master-data/components/product/product-sku-table"
 import { ProductSourceDiff } from "@/features/master-data/components/product/product-source-diff"
-import { ProductSupplySection } from "@/features/master-data/components/product/product-supply-section"
+import {
+    ProductSupplySection,
+    isActiveOffering,
+} from "@/features/master-data/components/product/product-supply-section"
 import { useProductEditor } from "@/features/master-data/hooks/use-product-editor"
 import { productChangeSummary } from "@/features/master-data/lib/product-change-summary"
 import { createProductFormBindings } from "@/features/master-data/lib/product-form-bindings"
+import { useSupplierOfferingsForSkusQuery } from "@/features/supplier-offerings/queries"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
 import { useChangeConfirmation } from "../hooks/use-change-confirmation"
 
@@ -49,6 +60,10 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
     }, [stableId, editor.saveOpen])
     const [resetOpen, setResetOpen] = React.useState(false)
     const [sourceProcessing, setSourceProcessing] = React.useState(false)
+    const [selectedSupplySkuId, setSelectedSupplySkuId] = React.useState<
+        string | undefined
+    >(undefined)
+
     const {
         isCreate,
         router,
@@ -106,7 +121,71 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         ? accountQuery.data.permissions
         : undefined
     const canReadSupply = hasPermission(permissions, "supplier_offering:list")
+    const canViewCosts = hasPermission(
+        permissions,
+        "supplier_offering_cost:detail",
+    )
     const canReadInventory = hasPermission(permissions, "stock_balance:list")
+
+    const savedSkuIds = React.useMemo(
+        () =>
+            !isCreate && canReadSupply
+                ? (data?.productDetail?.skus
+                      .map((sku) => sku.skuId)
+                      .filter((id): id is string => Boolean(id)) ?? [])
+                : [],
+        [canReadSupply, data?.productDetail?.skus, isCreate],
+    )
+    const offeringsQuery = useSupplierOfferingsForSkusQuery(savedSkuIds)
+
+    const { supplyBySku, totalActiveOfferings, missingSupplyCount } =
+        React.useMemo(() => {
+            const bySku = new Map<
+                string,
+                { suppliers: Set<string>; lowestDropship?: string }
+            >()
+            let activeCount = 0
+            for (const offering of offeringsQuery.data ?? []) {
+                if (!isActiveOffering(offering)) continue
+                activeCount += 1
+                const current = bySku.get(offering.sku_id) ?? {
+                    suppliers: new Set<string>(),
+                }
+                current.suppliers.add(offering.supplier_id)
+                const price = offering.dropship_supply_price_gross
+                if (price) {
+                    try {
+                        if (
+                            !current.lowestDropship ||
+                            compareDecimal(price, current.lowestDropship, 4) < 0
+                        ) {
+                            current.lowestDropship = price
+                        }
+                    } catch {
+                        // 忽略不可解析价格字符串，不影响展示
+                    }
+                }
+                bySku.set(offering.sku_id, current)
+            }
+            const summary = new Map<string, SkuSupplySummary>()
+            let missing = 0
+            for (const skuId of savedSkuIds) {
+                const entry = bySku.get(skuId)
+                const activeSuppliers = entry?.suppliers.size ?? 0
+                if (activeSuppliers === 0) missing += 1
+                summary.set(skuId, {
+                    activeSuppliers,
+                    lowestDropshipPrice: entry?.lowestDropship,
+                })
+            }
+            return {
+                supplyBySku: summary,
+                totalActiveOfferings: activeCount,
+                missingSupplyCount: offeringsQuery.isSuccess
+                    ? missing
+                    : undefined,
+            }
+        }, [offeringsQuery.data, offeringsQuery.isSuccess, savedSkuIds])
 
     React.useEffect(() => {
         if (activeSection !== "sku") return
@@ -117,6 +196,46 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         })
         return () => window.cancelAnimationFrame(frame)
     }, [activeSection, data?.stableId])
+
+    React.useEffect(() => {
+        if (isCreate || !canRevise) return
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (
+                (event.metaKey || event.ctrlKey) &&
+                event.key.toLowerCase() === "s"
+            ) {
+                event.preventDefault()
+                if (!sourceProcessing && !pending) {
+                    const currentValues = form.state.values
+                    if (
+                        productChangeSummary(initialFormValues, currentValues)
+                            .length > 0 ||
+                        form.state.isDirty
+                    ) {
+                        requestSave(currentValues)
+                    }
+                }
+            }
+        }
+        window.addEventListener("keydown", onKeyDown)
+        return () => window.removeEventListener("keydown", onKeyDown)
+    }, [
+        canRevise,
+        form,
+        initialFormValues,
+        isCreate,
+        pending,
+        requestSave,
+        sourceProcessing,
+    ])
+
+    const openSupplyForSku = React.useCallback(
+        (skuId: string) => {
+            setSelectedSupplySkuId(skuId)
+            setActiveSection("supply")
+        },
+        [setActiveSection],
+    )
 
     return (
         <ProductDetailEntryGate
@@ -178,6 +297,17 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                         values,
                     )
                     const hasUnsavedChanges = changes.length > 0
+                    const saveDockOpen =
+                        !isCreate && canRevise && (hasUnsavedChanges || isDirty)
+                    const changeDescription =
+                        changes.length > 0
+                            ? changes.slice(0, 3).join("、") +
+                              (changes.length > 3 ? " 等" : "")
+                            : undefined
+                    const totalMediaCount =
+                        fields.carouselImages.length +
+                        fields.detailImages.length
+
                     const closeSave = (open: boolean) => {
                         setSaveOpen(open)
                         if (!open && activeSection === "effective")
@@ -218,26 +348,33 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                     setDisableOpen={setDisableOpen}
                                     canRevise={canRevise}
                                     pending={saving}
-                                    hasUnsavedChanges={hasUnsavedChanges}
+                                    hasUnsavedChanges={
+                                        hasUnsavedChanges || isDirty
+                                    }
                                     onBack={() => navigateAway(listHref)}
                                     onMedia={() => setActiveSection("media")}
                                     onSave={() => requestSave(values)}
-                                    onReset={
-                                        hasUnsavedChanges
-                                            ? () => setResetOpen(true)
-                                            : undefined
-                                    }
                                     tabs={
                                         <ProductSectionTabs
                                             value={section}
                                             isCreate={isCreate}
                                             canReadSupply={canReadSupply}
+                                            supplyCount={
+                                                offeringsQuery.isSuccess
+                                                    ? totalActiveOfferings
+                                                    : undefined
+                                            }
+                                            missingSupplyCount={
+                                                missingSupplyCount
+                                            }
+                                            mediaCount={totalMediaCount}
                                             onValueChange={setActiveSection}
                                         />
                                     }
                                 />
 
                                 <DetailWorkspaceBody
+                                    saveDockOpen={saveDockOpen}
                                     alerts={
                                         <>
                                             {!showSave ? feedback : null}
@@ -290,6 +427,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                     canRevise &&
                                                     !sourceProcessing
                                                 }
+                                                disabled={saving}
                                                 name={name}
                                                 setName={setName}
                                                 fields={fields}
@@ -306,6 +444,12 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                 }
                                                 brandLoading={
                                                     brandListQuery.isFetching
+                                                }
+                                                rememberPendingFiles={
+                                                    rememberPendingFiles
+                                                }
+                                                onOpenMediaTab={() =>
+                                                    setActiveSection("media")
                                                 }
                                             />
                                             <ProductSkuSection
@@ -379,6 +523,18 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                 inventoryActionHint={
                                                     inventoryActionHint
                                                 }
+                                                showSupplyColumn={
+                                                    !isCreate && canReadSupply
+                                                }
+                                                supplyBySku={supplyBySku}
+                                                supplyLoading={
+                                                    offeringsQuery.isPending
+                                                }
+                                                supplyError={
+                                                    offeringsQuery.isError
+                                                }
+                                                canViewCosts={canViewCosts}
+                                                onOpenSupply={openSupplyForSku}
                                                 onOpenInventory={
                                                     canReadInventory
                                                         ? openInventoryPreview
@@ -398,6 +554,12 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                             <ProductSupplySection
                                                 fields={fields}
                                                 name={name}
+                                                selectedSkuId={
+                                                    selectedSupplySkuId
+                                                }
+                                                onSelectSkuId={
+                                                    setSelectedSupplySkuId
+                                                }
                                                 onRegisterSupply={
                                                     setSupplierDialogSku
                                                 }
@@ -406,20 +568,19 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                     ) : null}
 
                                     {section === "media" ? (
-                                        <DetailWorkspaceSection width="full">
-                                            <ProductMediaSection
-                                                idPrefix="master-data-product-detail-media"
-                                                disabled={
-                                                    pending || sourceProcessing
-                                                }
-                                                canRevise={canRevise}
-                                                fields={fields}
-                                                setFields={setFields}
-                                                rememberPendingFiles={
-                                                    rememberPendingFiles
-                                                }
-                                            />
-                                        </DetailWorkspaceSection>
+                                        <ProductMediaSection
+                                            idPrefix="master-data-product-detail-media"
+                                            productName={title}
+                                            disabled={
+                                                pending || sourceProcessing
+                                            }
+                                            canRevise={canRevise}
+                                            fields={fields}
+                                            setFields={setFields}
+                                            rememberPendingFiles={
+                                                rememberPendingFiles
+                                            }
+                                        />
                                     ) : null}
 
                                     {section === "history" && !isCreate ? (
@@ -430,13 +591,64 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                         </DetailWorkspaceSection>
                                     ) : null}
                                 </DetailWorkspaceBody>
+
+                                {!isCreate ? (
+                                    <PermissionGuard permission="product:update">
+                                        <DetailWorkspaceSaveDock
+                                            open={saveDockOpen}
+                                            changeCount={changes.length}
+                                            summary={changes.join("；")}
+                                            description={changeDescription}
+                                            actions={
+                                                <>
+                                                    <Button
+                                                        id="master-data-product-detail-reset"
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className={
+                                                            detailWorkspaceStyles.quietButton
+                                                        }
+                                                        disabled={saving}
+                                                        onClick={() =>
+                                                            setResetOpen(true)
+                                                        }
+                                                    >
+                                                        取消修改
+                                                    </Button>
+                                                    <LoadingButton
+                                                        id="master-data-product-detail-header-submit"
+                                                        loading={saving}
+                                                        type="button"
+                                                        size="sm"
+                                                        className="px-3.5"
+                                                        disabled={
+                                                            !canRevise || saving
+                                                        }
+                                                        onClick={() =>
+                                                            requestSave(values)
+                                                        }
+                                                    >
+                                                        <SaveIcon
+                                                            data-icon="inline-start"
+                                                            aria-hidden
+                                                        />
+                                                        {saving
+                                                            ? "提交中…"
+                                                            : "保存更新"}
+                                                    </LoadingButton>
+                                                </>
+                                            }
+                                        />
+                                    </PermissionGuard>
+                                ) : null}
                             </form>
 
                             {changeConfirmation.dialog}
                             {canRevise && priceUndo ? (
                                 <div
                                     role="status"
-                                    className="fixed bottom-6 right-6 z-40 flex items-center gap-3 rounded-xl border border-border/90 bg-popover/95 px-3.5 py-2 text-body-compact shadow-lg backdrop-blur-md"
+                                    className="fixed bottom-20 right-6 z-40 flex items-center gap-3 rounded-xl border border-border/90 bg-popover/95 px-3.5 py-2 text-body-compact shadow-lg backdrop-blur-md"
                                 >
                                     <span>批量价格已应用</span>
                                     <Button

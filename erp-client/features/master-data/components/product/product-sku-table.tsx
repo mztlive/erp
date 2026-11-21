@@ -4,6 +4,7 @@ import { CircleHelpIcon } from "lucide-react"
 
 import { DetailHint } from "@/components/business/detail-presentation"
 import { detailWorkspaceStyles } from "@/components/business/detail-workspace"
+import { MoneyValue } from "@/components/business/values"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -31,10 +32,21 @@ import type {
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { useChangeConfirmation } from "../../hooks/use-change-confirmation"
 
+export type SkuSupplySummary = Readonly<{
+    activeSuppliers: number
+    lowestDropshipPrice?: string
+}>
+
 type SkuRowProps = {
     sku: ProductSkuFields
     index: number
     showRowInventory: boolean
+    showSupplyColumn: boolean
+    supplySummary?: SkuSupplySummary
+    supplyLoading?: boolean
+    supplyError?: boolean
+    canViewCosts?: boolean
+    onOpenSupply?: (skuId: string) => void
     canRevise: boolean
     canEditLifecycle: boolean
     name: string
@@ -52,6 +64,12 @@ function SkuRow({
     sku,
     index,
     showRowInventory,
+    showSupplyColumn,
+    supplySummary,
+    supplyLoading = false,
+    supplyError = false,
+    canViewCosts = false,
+    onOpenSupply,
     canRevise,
     canEditLifecycle,
     name,
@@ -233,6 +251,72 @@ function SkuRow({
                     aria-label={`${sku.specLabel} 市场价`}
                 />
             </TableCell>
+            {showSupplyColumn ? (
+                <TableCell className={cellPad}>
+                    <div className="flex flex-col items-start gap-1 pt-0.5">
+                        {!sku.skuId ? (
+                            <span className="text-xs text-muted-foreground/75">
+                                保存后可添
+                            </span>
+                        ) : supplyLoading ? (
+                            <span className="text-xs text-muted-foreground">
+                                读取中…
+                            </span>
+                        ) : supplyError ? (
+                            <span className="text-xs text-muted-foreground">
+                                暂不可查
+                            </span>
+                        ) : (
+                            <>
+                                <button
+                                    id={`master-data-product-sku-${skuSegment}-supply-link`}
+                                    type="button"
+                                    onClick={() =>
+                                        sku.skuId && onOpenSupply?.(sku.skuId)
+                                    }
+                                    className="inline-flex cursor-pointer items-center rounded-sm transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-primary"
+                                    title="点击查看或添加该 SKU 的供应商供给"
+                                >
+                                    <StatusBadge
+                                        tone={
+                                            (supplySummary?.activeSuppliers ??
+                                                0) > 0
+                                                ? "success"
+                                                : "warning"
+                                        }
+                                        appearance={
+                                            (supplySummary?.activeSuppliers ??
+                                                0) > 0
+                                                ? "quiet"
+                                                : "badge"
+                                        }
+                                        label={
+                                            (supplySummary?.activeSuppliers ??
+                                                0) > 0
+                                                ? `${supplySummary?.activeSuppliers} 家供给`
+                                                : "缺供给"
+                                        }
+                                    />
+                                </button>
+                                {canViewCosts &&
+                                supplySummary?.lowestDropshipPrice ? (
+                                    <span className="num text-xs text-muted-foreground">
+                                        供货{" "}
+                                        <MoneyValue
+                                            value={
+                                                supplySummary.lowestDropshipPrice
+                                            }
+                                            display="compact"
+                                            className="text-muted-foreground"
+                                        />
+                                        起
+                                    </span>
+                                ) : null}
+                            </>
+                        )}
+                    </div>
+                </TableCell>
+            ) : null}
             <TableCell className={cellPad}>
                 <div className="flex flex-col items-start gap-2 pt-0.5">
                     <StatusBadge
@@ -330,6 +414,12 @@ type ProductSkuTableProps = {
     canRevise: boolean
     canEditLifecycle: boolean
     name: string
+    showSupplyColumn?: boolean
+    supplyBySku?: ReadonlyMap<string, SkuSupplySummary>
+    supplyLoading?: boolean
+    supplyError?: boolean
+    canViewCosts?: boolean
+    onOpenSupply?: (skuId: string) => void
     updateSku: (index: number, patch: Partial<ProductSkuFields>) => void
     rememberSkuFile: (previewUrl: string, file: File) => void
     onOpenInventory?: (
@@ -344,6 +434,12 @@ function ProductSkuTable({
     canRevise,
     canEditLifecycle,
     name,
+    showSupplyColumn = false,
+    supplyBySku,
+    supplyLoading = false,
+    supplyError = false,
+    canViewCosts = false,
+    onOpenSupply,
     updateSku,
     rememberSkuFile,
     onOpenInventory,
@@ -356,16 +452,31 @@ function ProductSkuTable({
         >
             <Table
                 data-density="comfortable"
-                className="min-w-[60rem] table-fixed [--table-cell-inline:0.625rem] [&_thead_th]:!static"
+                className="min-w-[62rem] table-fixed [--table-cell-inline:0.625rem] [&_thead_th]:!static"
             >
                 <colgroup>
-                    <col className="w-[31%]" />
-                    <col className="w-[16%]" />
-                    <col className="w-[10.5%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[9.5%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[13%]" />
+                    {showSupplyColumn ? (
+                        <>
+                            <col className="w-[27%]" />
+                            <col className="w-[14.5%]" />
+                            <col className="w-[9.5%]" />
+                            <col className="w-[9.5%]" />
+                            <col className="w-[8.5%]" />
+                            <col className="w-[9.5%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[11.5%]" />
+                        </>
+                    ) : (
+                        <>
+                            <col className="w-[31%]" />
+                            <col className="w-[16%]" />
+                            <col className="w-[10.5%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[9.5%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[13%]" />
+                        </>
+                    )}
                 </colgroup>
                 <TableHeader>
                     <TableRow>
@@ -410,6 +521,7 @@ function ProductSkuTable({
                         <TableHead data-align="end">集采价（含税）</TableHead>
                         <TableHead data-align="end">集采起订量</TableHead>
                         <TableHead data-align="end">市场价（含税）</TableHead>
+                        {showSupplyColumn ? <TableHead>供给</TableHead> : null}
                         <TableHead>状态</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -424,6 +536,16 @@ function ProductSkuTable({
                             sku={sku}
                             index={index}
                             showRowInventory={showRowInventory}
+                            showSupplyColumn={showSupplyColumn}
+                            supplySummary={
+                                sku.skuId
+                                    ? supplyBySku?.get(sku.skuId)
+                                    : undefined
+                            }
+                            supplyLoading={supplyLoading}
+                            supplyError={supplyError}
+                            canViewCosts={canViewCosts}
+                            onOpenSupply={onOpenSupply}
                             canRevise={canRevise}
                             canEditLifecycle={canEditLifecycle}
                             name={name}

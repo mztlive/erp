@@ -466,16 +466,19 @@ export function DetailWorkspaceSection({
 /**
  * 详情工作面主体容器：
  * - 单栏模式：内部 `DetailWorkspaceSection` 自动以 `border-t border-border/60` 分隔；
- * - 双栏模式（传入 `sidebar`）：在 `xl` 宽屏以 `1px` 竖线分出右侧摘要栏，零套娃卡片。
+ * - 双栏模式（传入 `sidebar`）：在 `xl` 宽屏以 `1px` 竖线分出右侧摘要栏，零套娃卡片；
+ * - 底部悬浮保存胶囊开启时自动追加底部留白，保证滚动到最末行仍完全可点。
  */
 export function DetailWorkspaceBody({
     alerts,
     sidebar,
+    saveDockOpen = false,
     children,
     className,
 }: {
     alerts?: React.ReactNode
     sidebar?: React.ReactNode
+    saveDockOpen?: boolean
     children: React.ReactNode
     className?: string
 }) {
@@ -486,6 +489,7 @@ export function DetailWorkspaceBody({
                 className={cn(
                     styles.body,
                     "grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_360px]",
+                    saveDockOpen && "pb-20",
                     className,
                 )}
             >
@@ -510,7 +514,7 @@ export function DetailWorkspaceBody({
     return (
         <div
             data-slot="detail-workspace-body"
-            className={cn(styles.body, className)}
+            className={cn(styles.body, saveDockOpen && "pb-20", className)}
         >
             {alerts ? (
                 <div
@@ -521,6 +525,101 @@ export function DetailWorkspaceBody({
                 </div>
             ) : null}
             {children}
+        </div>
+    )
+}
+
+/**
+ * 详情工作面底部居中悬浮保存胶囊：
+ * 与列表页 `list-selection-dock` 视觉同源，仅在表单存在未保存修改时平滑上浮，
+ * 切换任意 Tab 均保持可见，避免保存入口与独立保存类 Tab 语义混淆；
+ * 退场动画期间自动冻结最后一次非零变更计数，杜绝闪现 `0`。
+ */
+export function DetailWorkspaceSaveDock({
+    open,
+    changeCount,
+    summary,
+    description,
+    actions,
+    className,
+}: {
+    open: boolean
+    changeCount: number
+    summary?: string
+    description?: string
+    actions: React.ReactNode
+    className?: string
+}) {
+    const [frozen, setFrozen] = React.useState({
+        changeCount,
+        summary,
+        description,
+    })
+    React.useEffect(() => {
+        if (open) {
+            setFrozen({ changeCount, summary, description })
+        }
+    }, [open, changeCount, summary, description])
+
+    const display = open ? { changeCount, summary, description } : frozen
+
+    return (
+        <div
+            data-slot="detail-save-dock"
+            data-open={open ? "true" : "false"}
+            aria-hidden={!open || undefined}
+            className={cn(
+                "pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4",
+                "transition-[opacity,transform,visibility] motion-reduce:transition-none",
+                open
+                    ? "visible translate-y-0 scale-100 opacity-100 duration-200 ease-out"
+                    : "invisible translate-y-2.5 scale-[0.98] opacity-0 duration-150 ease-in",
+                className,
+            )}
+        >
+            <div
+                data-slot="detail-save-dock-surface"
+                className={cn(
+                    "flex max-w-full flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl border border-border/90 bg-popover/95 px-3 py-1.5 text-popover-foreground shadow-xl ring-1 ring-foreground/5 backdrop-blur-md dark:ring-foreground/10",
+                    "[&_[data-slot=button]]:shadow-none",
+                    open ? "pointer-events-auto" : "pointer-events-none",
+                )}
+            >
+                <div
+                    className="flex min-w-0 items-center gap-2 pl-1"
+                    title={display.summary}
+                >
+                    <span
+                        aria-hidden="true"
+                        className="size-2 shrink-0 rounded-full bg-warning"
+                    />
+                    <span className="text-body-compact font-medium text-foreground">
+                        {display.changeCount > 0 ? (
+                            <>
+                                已修改{" "}
+                                <span className="num font-semibold text-primary">
+                                    {display.changeCount}
+                                </span>{" "}
+                                项
+                            </>
+                        ) : (
+                            "内容已修改"
+                        )}
+                    </span>
+                    {display.description ? (
+                        <span className="hidden max-w-64 truncate text-xs text-muted-foreground sm:inline">
+                            · {display.description}
+                        </span>
+                    ) : null}
+                </div>
+                <span
+                    aria-hidden="true"
+                    className="hidden h-4 w-px bg-border/80 sm:block"
+                />
+                <div className="flex shrink-0 items-center gap-1.5">
+                    {actions}
+                </div>
+            </div>
         </div>
     )
 }
