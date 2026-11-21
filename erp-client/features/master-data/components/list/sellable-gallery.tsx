@@ -13,7 +13,7 @@ import { SellableGalleryCard } from "@/features/master-data/components/list/sell
 import type { MasterDataListItem } from "@/features/master-data/types"
 
 const galleryGridClassName =
-    "grid grid-cols-1 gap-3 min-[28rem]:grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 min-[90rem]:grid-cols-5"
+    "grid grid-cols-1 gap-3 min-[28rem]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
 
 function GallerySkeletons() {
     return (
@@ -21,10 +21,10 @@ function GallerySkeletons() {
             className={`${galleryGridClassName} px-(--scaffold-px) pt-2`}
             aria-busy="true"
         >
-            {Array.from({ length: 8 }, (_, index) => (
+            {Array.from({ length: 10 }, (_, index) => (
                 <Skeleton
                     key={index}
-                    className="aspect-[3/4] w-full rounded-xl"
+                    className="aspect-[4/5] w-full rounded-lg"
                 />
             ))}
         </div>
