@@ -1,7 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, ChevronRightIcon, FolderIcon } from "lucide-react"
+import {
+    ChevronRightIcon,
+    FolderIcon,
+    FolderOpenIcon,
+    PlusIcon,
+} from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import type { CategoryTreeNode } from "@/features/master-data/lib/category-tree-model"
 import type { MasterDataListItem } from "@/features/master-data/types"
@@ -32,7 +38,7 @@ export function CategoryName({ name, query }: { name: string; query: string }) {
     return (
         <>
             {name.slice(0, index)}
-            <mark className="rounded-sm bg-highlight text-highlight-foreground">
+            <mark className="rounded-xs bg-highlight px-0.5 text-highlight-foreground">
                 {name.slice(index, index + query.length)}
             </mark>
             {name.slice(index + query.length)}
@@ -40,7 +46,7 @@ export function CategoryName({ name, query }: { name: string; query: string }) {
     )
 }
 
-/** 分类树保留完整路径、键盘导航及独立滚动位置。 */
+/** 分类树：固定缩进轨道 + 层级引导细线 + 飞书冰蓝选中态 + 完整键盘导航。 */
 export function CategoryTreeList({
     idPrefix,
     forest,
@@ -93,31 +99,44 @@ export function CategoryTreeList({
             /* 使用默认位置。 */
         }
     }, [idPrefix])
+
     const renderNodes = (nodes: readonly CategoryTreeNode[]) =>
         nodes.map((node) => {
             const { item } = node
             const hasChildren = node.children.length > 0
             const isOpen = expanded.has(item.stableId)
+            const isSelected = selectedId === item.stableId
+            const isDisabled = item.lifecycleStatus === "DISABLED"
             const contextOnly = filterActive && !matchedIds.has(item.stableId)
+            const seg = toAutomationIdSegment(item.stableId)
+            const indentPx = 6 + node.depth * 18
+            const guideLeftPx = 15 + node.depth * 18
+
             return (
-                <li key={item.stableId} role="none">
+                <li key={item.stableId} role="none" className="my-0.5">
                     <div
-                        id={`${idPrefix}-row-${toAutomationIdSegment(item.stableId)}`}
+                        id={`${idPrefix}-row-${seg}`}
                         role="treeitem"
-                        aria-label={`${item.name}${item.lifecycleStatus === "DISABLED" ? "，已停用" : ""}${contextOnly ? "，上级路径" : ""}`}
+                        aria-label={`${item.name}${isDisabled ? "，已停用" : ""}${contextOnly ? "，上级路径" : ""}`}
                         aria-expanded={hasChildren ? isOpen : undefined}
-                        aria-selected={selectedId === item.stableId}
+                        aria-selected={isSelected}
                         aria-level={node.depth + 1}
                         tabIndex={activeId === item.stableId ? 0 : -1}
                         title={node.pathLabel}
                         onFocus={() => setFocusedId(item.stableId)}
                         className={cn(
-                            "group flex min-h-10 cursor-pointer items-center gap-2 rounded-lg py-2 pr-2 text-body-compact outline-none hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                            selectedId === item.stableId &&
-                                "bg-muted font-semibold",
-                            contextOnly && "text-muted-foreground",
+                            "group/tree relative flex min-h-8 cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 text-body-compact transition-colors duration-100 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                            isSelected
+                                ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                                : "text-foreground/85 hover:bg-muted/80 hover:text-foreground",
+                            contextOnly &&
+                                !isSelected &&
+                                "text-muted-foreground/80",
+                            isDisabled &&
+                                !isSelected &&
+                                "text-muted-foreground",
                         )}
-                        style={{ paddingLeft: `${8 + node.depth * 16}px` }}
+                        style={{ paddingLeft: `${indentPx}px` }}
                         onClick={() => onSelect(item)}
                         onKeyDown={(event) => {
                             const index = visible.findIndex(
@@ -164,54 +183,103 @@ export function CategoryTreeList({
                     >
                         {hasChildren ? (
                             <button
-                                id={`${idPrefix}-row-${toAutomationIdSegment(item.stableId)}-toggle`}
+                                id={`${idPrefix}-row-${seg}-toggle`}
                                 type="button"
                                 tabIndex={-1}
-                                className="flex size-6 shrink-0 items-center justify-center rounded hover:bg-background"
+                                className={cn(
+                                    "flex size-5 shrink-0 items-center justify-center rounded-sm transition-colors",
+                                    isSelected
+                                        ? "text-sidebar-accent-foreground/80 hover:bg-primary/10 hover:text-sidebar-accent-foreground"
+                                        : "text-muted-foreground/75 hover:bg-foreground/8 hover:text-foreground",
+                                )}
                                 aria-label={`${isOpen ? "收起" : "展开"}${item.name}`}
                                 onClick={(event) => {
                                     event.stopPropagation()
                                     onToggle(item.stableId)
                                 }}
                             >
-                                {isOpen ? (
-                                    <ChevronDownIcon className="size-3.5" />
-                                ) : (
-                                    <ChevronRightIcon className="size-3.5" />
-                                )}
+                                <ChevronRightIcon
+                                    aria-hidden="true"
+                                    className={cn(
+                                        "size-3.5 transition-transform duration-150",
+                                        isOpen && "rotate-90",
+                                    )}
+                                />
                             </button>
                         ) : (
-                            <FolderIcon
-                                className="mx-1 size-4 shrink-0 text-muted-foreground"
-                                aria-hidden
+                            <span
+                                aria-hidden="true"
+                                className="flex size-5 shrink-0 items-center justify-center"
                             />
                         )}
-                        <span className="min-w-0 flex-1 truncate">
+                        {hasChildren && isOpen ? (
+                            <FolderOpenIcon
+                                aria-hidden="true"
+                                className={cn(
+                                    "size-3.5 shrink-0",
+                                    isSelected
+                                        ? "text-primary"
+                                        : "text-muted-foreground/75",
+                                )}
+                            />
+                        ) : (
+                            <FolderIcon
+                                aria-hidden="true"
+                                className={cn(
+                                    "size-3.5 shrink-0",
+                                    isSelected
+                                        ? "text-primary"
+                                        : hasChildren
+                                          ? "text-muted-foreground/75"
+                                          : "text-muted-foreground/55",
+                                )}
+                            />
+                        )}
+                        <span
+                            className={cn(
+                                "min-w-0 flex-1 truncate",
+                                isDisabled &&
+                                    "line-through decoration-muted-foreground/50",
+                            )}
+                        >
                             <CategoryName name={item.name} query={query} />
                         </span>
-                        {item.lifecycleStatus === "DISABLED" ? (
-                            <span className="shrink-0 text-xs text-muted-foreground">
+                        {isDisabled ? (
+                            <span className="shrink-0 rounded-sm bg-neutral-soft px-1.5 py-0 text-tiny leading-4 font-medium text-neutral-soft-foreground">
                                 停用
                             </span>
                         ) : null}
                         {hasChildren ? (
-                            <span className="num text-xs text-muted-foreground">
+                            <span
+                                className={cn(
+                                    "num shrink-0 text-xs",
+                                    isSelected
+                                        ? "font-medium text-sidebar-accent-foreground/80"
+                                        : "text-muted-foreground/65",
+                                )}
+                            >
                                 {node.children.length}
                             </span>
                         ) : null}
                     </div>
                     {hasChildren && isOpen ? (
-                        <ul role="group" className="list-none p-0">
+                        <ul role="group" className="relative list-none p-0">
+                            <span
+                                aria-hidden="true"
+                                className="pointer-events-none absolute top-0 bottom-1.5 w-px bg-border/65"
+                                style={{ left: `${guideLeftPx}px` }}
+                            />
                             {renderNodes(node.children)}
                         </ul>
                     ) : null}
                 </li>
             )
         })
+
     return (
         <div
             ref={scrollRef}
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-3"
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pb-4"
             onScroll={(event) => {
                 try {
                     sessionStorage.setItem(
@@ -228,8 +296,10 @@ export function CategoryTreeList({
                     {renderNodes(forest)}
                 </ul>
             ) : (
-                <div className="space-y-3 px-2 py-10 text-center text-body-compact text-muted-foreground">
-                    <p>{filterActive ? "没有匹配的分类" : "暂无分类"}</p>
+                <div className="space-y-3 px-2 py-10 text-center">
+                    <p className="text-body-compact text-muted-foreground">
+                        {filterActive ? "没有匹配的分类" : "暂无分类"}
+                    </p>
                     {filterActive ? (
                         <Button
                             id={`${idPrefix}-reset`}
@@ -242,9 +312,11 @@ export function CategoryTreeList({
                     ) : canCreate ? (
                         <Button
                             id={`${idPrefix}-create`}
+                            variant="secondary"
                             size="sm"
                             onClick={onOpenCreateRoot}
                         >
+                            <PlusIcon aria-hidden="true" className="size-3.5" />
                             新建分类
                         </Button>
                     ) : null}

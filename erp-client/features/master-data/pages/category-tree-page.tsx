@@ -1,11 +1,17 @@
 "use client"
 
-import { PermissionGuard } from "@/features/auth/components/permission-guard"
-
 import * as React from "react"
+import {
+    ChevronRightIcon,
+    ChevronsDownUpIcon,
+    ChevronsUpDownIcon,
+    DownloadIcon,
+    FolderTreeIcon,
+    PlusIcon,
+} from "lucide-react"
+
+import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { hasPermission } from "@/lib/permissions"
-import { DownloadIcon, FolderTreeIcon, PlusIcon } from "lucide-react"
 import {
     BusinessFailureState,
     PageActions,
@@ -13,16 +19,19 @@ import {
 } from "@/components/business"
 import {
     ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceQuietAction,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import {
     Sheet,
     SheetContent,
+    SheetDescription,
     SheetHeader,
     SheetTitle,
-    SheetDescription,
 } from "@/components/ui/sheet"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
     CategoryCreateDialog,
     CategoryReviseDialog,
@@ -32,8 +41,49 @@ import { CategoryTreeList } from "@/features/master-data/components/category/cat
 import { CategoryTreeToolbar } from "@/features/master-data/components/category/category-tree-toolbar"
 import { CategoryDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { useMasterDataCategoryTree } from "@/features/master-data/hooks/use-master-data-category-tree"
+import { hasPermission } from "@/lib/permissions"
+import { cn } from "@/lib/utils"
 
-/** 商品分类：紧凑导航与分类管理工作区；移动端通过抽屉选择分类。 */
+function TreeNavSkeleton() {
+    return (
+        <div
+            role="status"
+            className="space-y-2 px-3 py-3"
+            aria-label="正在加载分类"
+        >
+            <span className="sr-only">正在加载分类…</span>
+            <Skeleton className="h-7 w-full rounded-md" />
+            <Skeleton className="ml-4 h-7 w-4/5 rounded-md" />
+            <Skeleton className="h-7 w-11/12 rounded-md" />
+            <Skeleton className="ml-4 h-7 w-3/4 rounded-md" />
+            <Skeleton className="h-7 w-5/6 rounded-md" />
+        </div>
+    )
+}
+
+function WorkspaceSkeleton() {
+    return (
+        <div
+            role="status"
+            className="space-y-4 px-6 py-5"
+            aria-label="正在加载分类资料"
+        >
+            <span className="sr-only">正在加载分类资料…</span>
+            <div className="flex items-center justify-between border-b border-border/60 pb-4">
+                <Skeleton className="h-5 w-36 rounded-md" />
+                <Skeleton className="h-5 w-24 rounded-md" />
+            </div>
+            <div className="space-y-2.5 pt-1">
+                <Skeleton className="h-11 w-full rounded-md" />
+                <Skeleton className="h-11 w-full rounded-md" />
+                <Skeleton className="h-11 w-full rounded-md" />
+                <Skeleton className="h-11 w-full rounded-md" />
+            </div>
+        </div>
+    )
+}
+
+/** 商品分类：飞书纯白通栏双栏工作面，页头内联状态视图，左树导航 + 右侧高密度分类管理表。 */
 export function CategoryTreePage() {
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const mobileSearchRef = React.useRef<HTMLInputElement | null>(null)
@@ -42,8 +92,12 @@ export function CategoryTreePage() {
     const canExport =
         account.isSuccess &&
         hasPermission(account.data.permissions, "product_category:list")
+    const canUpdate =
+        account.isSuccess &&
+        hasPermission(account.data.permissions, "product_category:update")
     const workspaceRef = React.useRef<HTMLDivElement | null>(null)
     const workspaceScrollKey = `category-workspace-scroll:${state.selectedId ?? "all"}:${state.q}:${state.lifecycleStatus}`
+
     React.useEffect(() => {
         const node = workspaceRef.current
         if (!node) return
@@ -55,6 +109,7 @@ export function CategoryTreePage() {
             /* 本地偏好不可用时从顶部浏览。 */
         }
     }, [workspaceScrollKey])
+
     const [navigationOpen, setNavigationOpen] = React.useState(false)
     const failed = state.fullQuery.isError || state.listQuery.isError
     const pending = state.fullQuery.isPending || state.listQuery.isPending
@@ -62,6 +117,20 @@ export function CategoryTreePage() {
         state.setSelectedId(id)
         setNavigationOpen(false)
     }
+
+    const enabledCount = React.useMemo(
+        () =>
+            state.rows.filter((row) => row.lifecycleStatus === "ENABLED")
+                .length,
+        [state.rows],
+    )
+    const disabledCount = React.useMemo(
+        () =>
+            state.rows.filter((row) => row.lifecycleStatus === "DISABLED")
+                .length,
+        [state.rows],
+    )
+
     const nodes = state.selectedNode
         ? state.selectedNode.children
         : state.filterActive
@@ -69,51 +138,85 @@ export function CategoryTreePage() {
                 state.matchedIds.has(node.item.stableId),
             )
           : state.fullForest
+
     const navigation = (mobile: boolean) => {
         const prefix = mobile ? "category-mobile-nav" : "category-nav"
+        const allSelected = !state.selectedId
         return (
             <>
-                <CategoryTreeToolbar
-                    idPrefix={`${prefix}-toolbar`}
-                    searchInputRef={mobile ? mobileSearchRef : searchInputRef}
-                    searchDraft={state.searchDraft}
-                    setSearchDraft={state.setSearchDraft}
-                    applyTreeFilters={state.applyTreeFilters}
-                    lifecycleStatus={state.lifecycleStatus}
-                    onLifecycleStatusChange={state.setLifecycleStatus}
-                    clearFilters={state.clearFilters}
-                    clearSearch={state.clearSearch}
-                    filterActive={state.filterActive}
-                    hasPendingChanges={state.hasPendingChanges}
-                    loading={state.listQuery.isFetching}
-                />
-                <Button
-                    id={`${prefix}-all`}
-                    variant="ghost"
-                    className={`mb-3 w-full justify-start gap-2 ${!state.selectedId ? "bg-muted font-semibold" : ""}`}
-                    aria-pressed={!state.selectedId}
-                    onClick={() => select(null)}
-                >
-                    <FolderTreeIcon className="size-4" />
-                    {state.filterActive ? "全部匹配分类" : "全部分类"}
-                    <span className="num ml-auto text-xs text-muted-foreground">
-                        {state.filterActive
-                            ? state.matchedRows.length
-                            : state.rows.length}
-                    </span>
-                </Button>
-                <div className="mb-2 flex items-center justify-between border-t border-border pt-3">
-                    <span className="text-xs font-medium text-muted-foreground">
+                <div className="shrink-0 px-3 pt-3.5">
+                    <CategoryTreeToolbar
+                        idPrefix={`${prefix}-toolbar`}
+                        searchInputRef={
+                            mobile ? mobileSearchRef : searchInputRef
+                        }
+                        searchDraft={state.searchDraft}
+                        setSearchDraft={state.setSearchDraft}
+                        applyTreeFilters={state.applyTreeFilters}
+                        clearFilters={state.clearFilters}
+                        clearSearch={state.clearSearch}
+                        filterActive={state.filterActive}
+                        hasPendingChanges={state.hasPendingChanges}
+                        loading={state.listQuery.isFetching}
+                        matchedCount={state.matchedRows.length}
+                    />
+                    <Button
+                        id={`${prefix}-all`}
+                        type="button"
+                        variant="ghost"
+                        className={cn(
+                            "h-8 w-full justify-start gap-2 rounded-md px-2.5 text-body-compact shadow-none",
+                            allSelected
+                                ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                                : "font-normal text-foreground/85 hover:bg-muted/80 hover:text-foreground",
+                        )}
+                        aria-pressed={allSelected}
+                        onClick={() => select(null)}
+                    >
+                        <FolderTreeIcon
+                            aria-hidden="true"
+                            className={cn(
+                                "size-3.5 shrink-0",
+                                allSelected
+                                    ? "text-primary"
+                                    : "text-muted-foreground/80",
+                            )}
+                        />
+                        <span className="truncate">
+                            {state.filterActive ? "全部匹配分类" : "全部分类"}
+                        </span>
+                        <span
+                            className={cn(
+                                "num ml-auto text-xs",
+                                allSelected
+                                    ? "font-medium text-sidebar-accent-foreground/80"
+                                    : "text-muted-foreground/75",
+                            )}
+                        >
+                            {state.filterActive
+                                ? state.matchedRows.length
+                                : state.rows.length}
+                        </span>
+                    </Button>
+                </div>
+
+                <div className="mx-3 mt-3 mb-1.5 flex shrink-0 items-center justify-between border-t border-border/60 pt-2.5">
+                    <span className="text-xs font-medium text-muted-foreground/80">
                         分类目录
                     </span>
-                    <div className="flex gap-1">
+                    <div className="flex items-center gap-0.5">
                         <Button
                             id={`${prefix}-expand`}
                             type="button"
                             size="xs"
                             variant="ghost"
+                            className="h-6 gap-1 px-1.5 text-xs font-normal text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                             onClick={state.expandAll}
                         >
+                            <ChevronsUpDownIcon
+                                aria-hidden="true"
+                                className="size-3"
+                            />
                             展开
                         </Button>
                         <Button
@@ -121,21 +224,22 @@ export function CategoryTreePage() {
                             type="button"
                             size="xs"
                             variant="ghost"
+                            className="h-6 gap-1 px-1.5 text-xs font-normal text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                             onClick={state.collapseAll}
                         >
+                            <ChevronsDownUpIcon
+                                aria-hidden="true"
+                                className="size-3"
+                            />
                             收起
                         </Button>
                     </div>
                 </div>
+
                 {pending ? (
-                    <p
-                        role="status"
-                        className="py-8 text-center text-xs text-muted-foreground"
-                    >
-                        正在加载分类…
-                    </p>
+                    <TreeNavSkeleton />
                 ) : failed ? (
-                    <p className="py-8 text-center text-xs text-muted-foreground">
+                    <p className="px-4 py-8 text-center text-xs text-muted-foreground">
                         分类加载失败，请重试。
                     </p>
                 ) : (
@@ -160,6 +264,7 @@ export function CategoryTreePage() {
             </>
         )
     }
+
     return (
         <PageScaffold
             density="compact"
@@ -167,25 +272,55 @@ export function CategoryTreePage() {
         >
             <ListWorkspaceHeader
                 className="shrink-0"
-                eyebrow="基础资料"
+                eyebrow=""
                 title="商品分类"
-                description="维护分类资料与上下级，建立清晰的商品归属。"
+                views={
+                    <ListWorkspaceViews
+                        ariaLabel="商品分类启用状态"
+                        variant="inline"
+                        items={[
+                            {
+                                id: "master-data-category-tree-view-all",
+                                label: "全部分类",
+                                count: pending ? undefined : state.rows.length,
+                                active: state.lifecycleStatus === "all",
+                                onClick: () => state.setLifecycleStatus("all"),
+                            },
+                            {
+                                id: "master-data-category-tree-view-enabled",
+                                label: "当前启用",
+                                count: pending ? undefined : enabledCount,
+                                active: state.lifecycleStatus === "enabled",
+                                onClick: () =>
+                                    state.setLifecycleStatus("enabled"),
+                            },
+                            {
+                                id: "master-data-category-tree-view-disabled",
+                                label: "当前停用",
+                                count: pending ? undefined : disabledCount,
+                                active: state.lifecycleStatus === "disabled",
+                                onClick: () =>
+                                    state.setLifecycleStatus("disabled"),
+                            },
+                        ]}
+                    />
+                }
             >
                 <PageActions
+                    size="sm"
                     actions={[
-                        {
+                        listWorkspaceQuietAction({
                             id: "master-data-category-tree-export",
                             actionKey: "export",
                             hidden: !canExport,
                             label: "导出",
                             icon: DownloadIcon,
-                            variant: "outline",
                             disabled:
                                 failed ||
                                 state.listQuery.isFetching ||
                                 !state.matchedRows.length,
                             onClick: state.onExport,
-                        },
+                        }),
                         {
                             id: "master-data-category-tree-create-root",
                             actionKey: "create-root",
@@ -201,115 +336,128 @@ export function CategoryTreePage() {
                     ]}
                 />
             </ListWorkspaceHeader>
-            <div className="lg:hidden">
-                <Button
-                    id="category-mobile-nav-open"
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-between"
-                    onClick={() => setNavigationOpen(true)}
-                >
-                    <span className="flex min-w-0 items-center gap-2">
-                        <FolderTreeIcon className="size-4 shrink-0" />
-                        <span className="truncate">
-                            {state.selected?.name ?? "全部分类"}
+
+            <div
+                data-slot="list-work-surface"
+                className="flex min-h-[32rem] min-w-0 flex-1 flex-col bg-card lg:min-h-0 lg:overflow-hidden"
+            >
+                <div className="border-b border-border/60 bg-surface-sunken/50 px-4 py-2.5 lg:hidden">
+                    <Button
+                        id="category-mobile-nav-open"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-between bg-card shadow-none"
+                        onClick={() => setNavigationOpen(true)}
+                    >
+                        <span className="flex min-w-0 items-center gap-2">
+                            <FolderTreeIcon
+                                aria-hidden="true"
+                                className="size-3.5 shrink-0 text-primary"
+                            />
+                            <span className="truncate font-medium">
+                                {state.selected?.name ?? "全部分类"}
+                            </span>
                         </span>
-                    </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                        选择分类{state.filterActive ? " · 已筛选" : ""}
-                    </span>
-                </Button>
-            </div>
-            <div className="grid min-h-[32rem] min-w-0 border-t border-border lg:min-h-0 lg:flex-1 lg:grid-cols-[288px_minmax(0,1fr)] lg:overflow-hidden">
-                <aside
-                    aria-label="分类导航"
-                    className="hidden min-h-0 flex-col overflow-hidden border-r border-border pt-5 pr-5 lg:flex"
-                >
-                    {navigation(false)}
-                </aside>
-                <div
-                    id="category-workspace-scroll"
-                    ref={workspaceRef}
-                    className="min-w-0 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain"
-                    onScroll={(event) => {
-                        try {
-                            sessionStorage.setItem(
-                                workspaceScrollKey,
-                                String(event.currentTarget.scrollTop),
-                            )
-                        } catch {
-                            /* 不影响浏览。 */
-                        }
-                    }}
-                    aria-busy={pending || state.listQuery.isPlaceholderData}
-                >
-                    {pending ? (
-                        <div
-                            role="status"
-                            className="p-8 text-body-compact text-muted-foreground"
-                        >
-                            正在加载分类资料…
-                        </div>
-                    ) : failed ? (
-                        <BusinessFailureState
-                            error={
-                                state.fullQuery.error ?? state.listQuery.error
+                        <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                            切换目录{state.filterActive ? " · 已筛选" : ""}
+                            <ChevronRightIcon
+                                aria-hidden="true"
+                                className="size-3.5"
+                            />
+                        </span>
+                    </Button>
+                </div>
+
+                <div className="grid min-h-0 min-w-0 flex-1 lg:grid-cols-[272px_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[288px_minmax(0,1fr)]">
+                    <aside
+                        aria-label="分类导航"
+                        className="hidden min-h-0 flex-col overflow-hidden border-r border-border/60 bg-surface-sunken/45 lg:flex"
+                    >
+                        {navigation(false)}
+                    </aside>
+                    <div
+                        id="category-workspace-scroll"
+                        ref={workspaceRef}
+                        className="min-w-0 bg-card lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain"
+                        onScroll={(event) => {
+                            try {
+                                sessionStorage.setItem(
+                                    workspaceScrollKey,
+                                    String(event.currentTarget.scrollTop),
+                                )
+                            } catch {
+                                /* 不影响浏览。 */
                             }
-                            action={
-                                <Button
-                                    id="category-workspace-retry"
-                                    onClick={() => {
-                                        void state.fullQuery.refetch()
-                                        void state.listQuery.refetch()
-                                    }}
-                                >
-                                    重试
-                                </Button>
-                            }
-                        />
-                    ) : state.listQuery.isPlaceholderData ? (
-                        <div
-                            role="status"
-                            className="p-8 text-body-compact text-muted-foreground"
-                        >
-                            正在查询分类…
-                        </div>
-                    ) : (
-                        <CategoryTreeDetailPanel
-                            selected={state.selected}
-                            selectedId={state.selectedId}
-                            selectedNode={state.selectedNode}
-                            rows={state.rows}
-                            nodes={nodes}
-                            filterActive={state.filterActive}
-                            matchedIds={state.matchedIds}
-                            query={state.q.trim()}
-                            returnTo={state.returnTo}
-                            canCreate={state.canCreate}
-                            onSelect={select}
-                            onClearFilters={state.clearFilters}
-                            onOpenCreateRoot={state.openCreateRoot}
-                            onOpenCreateChild={state.openCreateChild}
-                            onReviseTarget={state.setReviseTarget}
-                            onMoveTarget={state.setMoveTarget}
-                            onDisableTarget={state.setDisableTarget}
-                        />
-                    )}
+                        }}
+                        aria-busy={pending || state.listQuery.isPlaceholderData}
+                    >
+                        {pending ? (
+                            <WorkspaceSkeleton />
+                        ) : failed ? (
+                            <div className="p-6">
+                                <BusinessFailureState
+                                    error={
+                                        state.fullQuery.error ??
+                                        state.listQuery.error
+                                    }
+                                    action={
+                                        <Button
+                                            id="category-workspace-retry"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                                void state.fullQuery.refetch()
+                                                void state.listQuery.refetch()
+                                            }}
+                                        >
+                                            重试
+                                        </Button>
+                                    }
+                                />
+                            </div>
+                        ) : state.listQuery.isPlaceholderData ? (
+                            <WorkspaceSkeleton />
+                        ) : (
+                            <CategoryTreeDetailPanel
+                                selected={state.selected}
+                                selectedId={state.selectedId}
+                                selectedNode={state.selectedNode}
+                                rows={state.rows}
+                                rootCount={state.fullForest.length}
+                                nodes={nodes}
+                                filterActive={state.filterActive}
+                                matchedIds={state.matchedIds}
+                                query={state.q.trim()}
+                                returnTo={state.returnTo}
+                                canCreate={state.canCreate}
+                                canUpdate={canUpdate}
+                                onSelect={select}
+                                onClearFilters={state.clearFilters}
+                                onOpenCreateRoot={state.openCreateRoot}
+                                onOpenCreateChild={state.openCreateChild}
+                                onReviseTarget={state.setReviseTarget}
+                                onMoveTarget={state.setMoveTarget}
+                                onDisableTarget={state.setDisableTarget}
+                            />
+                        )}
+                    </div>
                 </div>
             </div>
+
             <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
                 <SheetContent
                     closeButtonId="category-mobile-nav-close"
                     side="left"
-                    className="w-[min(360px,100vw)]"
+                    className="w-[min(340px,100vw)] bg-surface-sunken/45"
                 >
                     <SheetHeader>
-                        <SheetTitle>选择分类</SheetTitle>
+                        <SheetTitle>分类目录</SheetTitle>
                         <SheetDescription>
                             查找分类并查看资料或下级分类。
                         </SheetDescription>
                     </SheetHeader>
-                    <div className="flex min-h-0 flex-1 flex-col px-7 pb-6">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         {navigation(true)}
                     </div>
                 </SheetContent>

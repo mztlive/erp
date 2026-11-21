@@ -93,6 +93,15 @@ export function flattenCategoryForest(
     return out
 }
 
+/** 统计某节点下全部后代数量（不含自身）。 */
+export function countCategoryDescendants(node: CategoryTreeNode): number {
+    let total = 0
+    for (const child of node.children) {
+        total += 1 + countCategoryDescendants(child)
+    }
+    return total
+}
+
 /** 收集某节点及其全部后代的 stableId（含自身）。 */
 export function collectDescendantIds(
     forest: readonly CategoryTreeNode[],
