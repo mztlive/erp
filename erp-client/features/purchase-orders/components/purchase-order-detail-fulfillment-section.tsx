@@ -1,18 +1,19 @@
 "use client"
 
-import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
-import { PurchaseOrderApiExecutions } from "./purchase-order-api-executions"
-import { PurchaseOrderExecutionFunds } from "./purchase-order-execution-funds"
-
-import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import {
-    DetailSummary,
-    DetailSummaryItem,
-} from "@/components/business/detail-presentation"
+    BusinessStatusBadge,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
+    DetailWorkspaceSection,
+    MoneyValue,
+} from "@/components/business"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
     type PurchaseOrderCenterView,
 } from "@/features/purchase-orders/types"
+import { PurchaseOrderApiExecutions } from "./purchase-order-api-executions"
+import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
+import { PurchaseOrderExecutionFunds } from "./purchase-order-execution-funds"
 
 /** 履约按业务进度展示，交付与付款在各自工作页面办理。 */
 export function PurchaseOrderDetailFulfillmentSection({
@@ -33,59 +34,74 @@ export function PurchaseOrderDetailFulfillmentSection({
     const amount = (value: string) =>
         costMasked ? "•••" : <MoneyValue value={value} />
     return (
-        <div className="space-y-6">
-            <DetailSummary label="采购履约摘要">
-                <DetailSummaryItem
-                    label="履约进度"
-                    valueRole="text"
-                    value={summary.progressLabel}
-                    detail={
-                        FULFILLMENT_RESPONSIBILITY_LABEL[
-                            order.header.fulfillmentResponsibility
-                        ]
-                    }
-                />
-                <DetailSummaryItem
-                    label="预计交期"
-                    valueRole="text"
-                    value={order.header.expectedDate ?? "—"}
-                    detail={order.header.supplierSnapshot}
-                />
-            </DetailSummary>
-            <div className="space-y-5">
-                <PurchaseOrderApiExecutions
-                    order={order}
-                    costMasked={costMasked}
-                />
-                <PurchaseOrderExecutionFunds
-                    order={order}
-                    costMasked={costMasked}
-                />
-                {quantities.length > 0 ? (
-                    <DetailRecordSection title="履约数量">
-                        <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                            {quantities.map((item) => (
-                                <div key={item.label}>
-                                    <dt className="text-xs text-muted-foreground">
-                                        {item.label}
-                                    </dt>
-                                    <dd className="num mt-1 text-value-compact font-semibold tracking-tight">
-                                        {item.value}
-                                    </dd>
-                                </div>
-                            ))}
-                        </dl>
-                    </DetailRecordSection>
-                ) : null}
-                {summary.note ? (
-                    <DetailRecordSection title="履约说明">
-                        <p className="text-xs text-muted-foreground">
-                            {summary.note}
-                        </p>
-                    </DetailRecordSection>
-                ) : null}
-                {gate.state !== "NOT_APPLICABLE" ? (
-                    <DetailRecordSection title="先款条件">
+        <>
+            <DetailWorkspaceSection width="form">
+                <DetailWorkspaceMetrics
+                    columns={2}
+                    variant="inline"
+                    ariaLabel="采购履约摘要"
+                >
+                    <DetailWorkspaceMetricItem
+                        label="履约进度"
+                        value={
+                            <span className="text-body-compact font-semibold">
+                                {summary.progressLabel}
+                            </span>
+                        }
+                        detail={
+                            FULFILLMENT_RESPONSIBILITY_LABEL[
+                                order.header.fulfillmentResponsibility
+                            ]
+                        }
+                    />
+                    <DetailWorkspaceMetricItem
+                        label="预计交期"
+                        value={
+                            <span className="num text-body-compact font-semibold">
+                                {order.header.expectedDate ?? "—"}
+                            </span>
+                        }
+                        detail={order.header.supplierSnapshot}
+                    />
+                </DetailWorkspaceMetrics>
+            </DetailWorkspaceSection>
+
+            <PurchaseOrderApiExecutions order={order} costMasked={costMasked} />
+            <PurchaseOrderExecutionFunds
+                order={order}
+                costMasked={costMasked}
+            />
+
+            {quantities.length > 0 ? (
+                <DetailRecordSection width="form" title="履约数量">
+                    <DetailWorkspaceMetrics
+                        columns={quantities.length === 2 ? 2 : 3}
+                        variant="inline"
+                    >
+                        {quantities.map((item) => (
+                            <DetailWorkspaceMetricItem
+                                key={item.label}
+                                label={item.label}
+                                value={item.value}
+                            />
+                        ))}
+                    </DetailWorkspaceMetrics>
+                </DetailRecordSection>
+            ) : null}
+
+            {summary.note ? (
+                <DetailRecordSection width="form" title="履约说明">
+                    <p className="text-xs text-muted-foreground">
+                        {summary.note}
+                    </p>
+                </DetailRecordSection>
+            ) : null}
+
+            {gate.state !== "NOT_APPLICABLE" ? (
+                <DetailRecordSection
+                    width="form"
+                    title="先款条件"
+                    action={
                         <BusinessStatusBadge
                             context="detail"
                             label={
@@ -97,28 +113,26 @@ export function PurchaseOrderDetailFulfillmentSection({
                                     : "warning"
                             }
                         />
-                        <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                            {[
-                                { label: "需先款", value: gate.required },
-                                { label: "已核销", value: gate.allocated },
-                                { label: "还差", value: gate.gap },
-                            ].map((item) => (
-                                <div key={item.label}>
-                                    <dt className="text-xs text-muted-foreground">
-                                        {item.label}
-                                    </dt>
-                                    <dd className="num mt-1 text-value-compact font-semibold tracking-tight">
-                                        {amount(item.value)}
-                                    </dd>
-                                </div>
-                            ))}
-                        </dl>
-                        <p className="text-xs text-muted-foreground">
-                            {gate.message}
-                        </p>
-                    </DetailRecordSection>
-                ) : null}
-            </div>
-        </div>
+                    }
+                >
+                    <DetailWorkspaceMetrics columns={3} variant="inline">
+                        {[
+                            { label: "需先款", value: gate.required },
+                            { label: "已核销", value: gate.allocated },
+                            { label: "还差", value: gate.gap },
+                        ].map((item) => (
+                            <DetailWorkspaceMetricItem
+                                key={item.label}
+                                label={item.label}
+                                value={amount(item.value)}
+                            />
+                        ))}
+                    </DetailWorkspaceMetrics>
+                    <p className="text-xs text-muted-foreground">
+                        {gate.message}
+                    </p>
+                </DetailRecordSection>
+            ) : null}
+        </>
     )
 }

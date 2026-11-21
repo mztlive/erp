@@ -3,7 +3,11 @@
 import Image from "next/image"
 import { useEffect, useState } from "react"
 import { DownloadIcon, EyeIcon } from "lucide-react"
-import { BusinessFailureState, MoneyValue } from "@/components/business"
+import {
+    BusinessFailureState,
+    MoneyValue,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -26,10 +30,12 @@ export function PurchaseOrderPayments({
     const { query, download } = usePurchasePayments(purchaseOrderId)
     const [previewId, setPreviewId] = useState<string | null>(null)
     return (
-        <DetailRecordSection title="财务付款单" count={query.data?.length}>
-            <p className="text-xs text-muted-foreground">
-                显示已核销到本采购单的付款；合并付款仅列出本单核销金额。
-            </p>
+        <DetailRecordSection
+            width="full"
+            title="财务付款单"
+            count={query.data?.length}
+            description="显示已核销到本采购单的付款；合并付款仅列出本单核销金额。"
+        >
             {query.isPending ? (
                 <p role="status" className="text-xs text-muted-foreground">
                     正在加载付款单…
@@ -41,7 +47,7 @@ export function PurchaseOrderPayments({
                     onRetry={() => void query.refetch()}
                 />
             ) : query.data.length ? (
-                <ul className="divide-y divide-border/70">
+                <ul className="divide-y divide-border/60 border-y border-border/60">
                     {query.data.map((payment) => {
                         const id = `purchase-order-payment-${toAutomationIdSegment(purchaseOrderId)}-${toAutomationIdSegment(payment.payment_id)}`
                         const file = payment.receipt
@@ -49,7 +55,7 @@ export function PurchaseOrderPayments({
                         return (
                             <li
                                 key={payment.payment_id}
-                                className="space-y-4 py-4 first:pt-0"
+                                className="space-y-3.5 py-4"
                             >
                                 <div className="flex flex-wrap items-start justify-between gap-4">
                                     <div className="min-w-0 space-y-1">
@@ -88,11 +94,14 @@ export function PurchaseOrderPayments({
                                         <p className="min-w-0 break-all text-xs text-muted-foreground">
                                             银行回单：{file.file_name}
                                         </p>
-                                        <div className="flex shrink-0 gap-2">
+                                        <div className="flex shrink-0 gap-1.5">
                                             <Button
                                                 id={`${id}-preview`}
-                                                variant="outline"
+                                                variant="ghost"
                                                 size="sm"
+                                                className={
+                                                    detailWorkspaceStyles.subtleButton
+                                                }
                                                 aria-expanded={expanded}
                                                 aria-controls={`${id}-receipt`}
                                                 onClick={() =>
@@ -103,15 +112,21 @@ export function PurchaseOrderPayments({
                                                     )
                                                 }
                                             >
-                                                <EyeIcon />
+                                                <EyeIcon
+                                                    data-icon="inline-start"
+                                                    aria-hidden="true"
+                                                />
                                                 {expanded
                                                     ? "收起回单"
                                                     : "查看回单"}
                                             </Button>
                                             <LoadingButton
                                                 id={`${id}-download`}
-                                                variant="outline"
+                                                variant="ghost"
                                                 size="sm"
+                                                className={
+                                                    detailWorkspaceStyles.subtleButton
+                                                }
                                                 loading={
                                                     download.isPending &&
                                                     download.variables
@@ -123,7 +138,10 @@ export function PurchaseOrderPayments({
                                                     download.mutate(file)
                                                 }
                                             >
-                                                <DownloadIcon />
+                                                <DownloadIcon
+                                                    data-icon="inline-start"
+                                                    aria-hidden="true"
+                                                />
                                                 下载
                                             </LoadingButton>
                                         </div>

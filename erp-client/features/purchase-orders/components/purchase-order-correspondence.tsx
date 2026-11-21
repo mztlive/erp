@@ -1,6 +1,8 @@
 "use client"
 import { useRef, useState } from "react"
+import { DownloadIcon, MailIcon } from "lucide-react"
 import { z } from "zod"
+import { detailWorkspaceStyles } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
@@ -46,7 +48,8 @@ export function PurchaseOrderCorrespondence({
             <Button
                 id="purchase-order-download-paper"
                 size="sm"
-                variant="outline"
+                variant="ghost"
+                className={detailWorkspaceStyles.quietButton}
                 disabled={paper.isPending}
                 onClick={async () => {
                     try {
@@ -66,17 +69,20 @@ export function PurchaseOrderCorrespondence({
                     }
                 }}
             >
+                <DownloadIcon data-icon="inline-start" aria-hidden="true" />
                 {paper.isPending ? "正在生成…" : "下载纸质采购单"}
             </Button>
             {canSend ? (
                 <Button
                     id="purchase-order-email-open"
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
+                    className={detailWorkspaceStyles.quietButton}
                     disabled={!effective}
                     title={!effective ? "审批生效后可发送给供应商" : undefined}
                     onClick={() => setOpen(true)}
                 >
+                    <MailIcon data-icon="inline-start" aria-hidden="true" />
                     发送采购单邮件
                 </Button>
             ) : null}

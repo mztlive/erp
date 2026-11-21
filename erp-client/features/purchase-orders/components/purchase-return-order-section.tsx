@@ -3,13 +3,12 @@
 import {
     BusinessFailureState,
     BusinessStatusBadge,
-    surfaceInsetClassName,
+    detailWorkspaceStyles,
 } from "@/components/business"
-import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 import { usePurchaseReturnOrdersQuery } from "@/features/purchase-orders/hooks/use-purchase-return-orders-query"
 import type { PurchaseReturnOrderRow } from "@/features/purchase-orders/types"
+import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
 
 /**
  * 采购退货只读列表。PurchaseReturnOrder 为 NO_APPROVAL，
@@ -28,18 +27,20 @@ export function PurchaseReturnOrderSection({
     }
 
     return (
-        <ul className="space-y-2">
+        <ul className="divide-y divide-border/60 border-y border-border/60">
             {returns.map((row) => (
                 <li
                     key={row.purchaseReturnOrderId}
-                    className={cn(
-                        surfaceInsetClassName,
-                        "flex items-center justify-between px-3 py-2 text-body-compact",
-                    )}
+                    className="flex flex-wrap items-center justify-between gap-3 py-3 text-body-compact"
                 >
-                    <span>
+                    <span className="num text-foreground">
                         {row.purchaseReturnNo}
-                        {row.returnModeLabel ? ` · ${row.returnModeLabel}` : ""}
+                        {row.returnModeLabel ? (
+                            <span className="text-muted-foreground">
+                                {" "}
+                                · {row.returnModeLabel}
+                            </span>
+                        ) : null}
                     </span>
                     <BusinessStatusBadge
                         context="list"
@@ -67,9 +68,9 @@ export function PurchaseReturnOrderRelatedSection({
 
     return (
         <DetailRecordSection
+            width="form"
             title="采购退货"
             count={query.data?.length}
-            compact={query.isSuccess && (query.data?.length ?? 0) === 0}
         >
             {query.isPending ? (
                 <p className="text-xs text-muted-foreground">
@@ -84,8 +85,9 @@ export function PurchaseReturnOrderRelatedSection({
                         <Button
                             id="procurement-orders-detail-returns-retry"
                             type="button"
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
+                            className={detailWorkspaceStyles.subtleButton}
                             onClick={() => void query.refetch()}
                         >
                             重新加载

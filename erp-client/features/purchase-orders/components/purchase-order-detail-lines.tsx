@@ -51,16 +51,16 @@ export function PurchaseOrderDetailLines({
             <TableHeader>
                 <TableRow>
                     <TableHead scope="col">商品/服务</TableHead>
-                    <TableHead scope="col" className="text-right">
+                    <TableHead scope="col" data-align="end">
                         数量
                     </TableHead>
-                    <TableHead scope="col" className="text-right">
+                    <TableHead scope="col" data-align="end">
                         采购含税单价
                     </TableHead>
-                    <TableHead scope="col" className="text-right">
+                    <TableHead scope="col" data-align="end">
                         客户成交含税单价
                     </TableHead>
-                    <TableHead scope="col" className="text-right">
+                    <TableHead scope="col" data-align="end">
                         含税小计
                     </TableHead>
                     <TableHead scope="col">交期</TableHead>

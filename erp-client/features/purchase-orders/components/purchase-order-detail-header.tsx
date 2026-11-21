@@ -1,29 +1,31 @@
 "use client"
 
-import { useAccountProfileQuery } from "@/features/auth/queries"
-import { hasPermission } from "@/lib/permissions"
-import { ExpensePurchaseStartDialog } from "./expense-purchase-start-dialog"
-
 import * as React from "react"
-import { PurchaseOrderCorrespondence } from "./purchase-order-correspondence"
-import { useRouter, useSearchParams } from "@/lib/navigation"
-import { FilePenLineIcon, SendIcon, Trash2Icon } from "lucide-react"
+import { FilePenLineIcon, PlusIcon, SendIcon, Trash2Icon } from "lucide-react"
 
 import {
-    DetailPageHeader,
-    FormalActionResult,
-    PageActions,
+    DetailWorkspaceChrome,
+    DetailWorkspaceDirtyBadge,
+    DetailWorkspaceMeta,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
+    MoneyValue,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { PurchaseOrderCancelApprovalButton } from "@/features/purchase-orders/components/purchase-order-cancel-approval-button"
+import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
+import type { PurchaseOrderDetailMode } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
 import {
     PURCHASE_TYPE_LABEL,
     type PurchaseOrderCenterView,
 } from "@/features/purchase-orders/types"
-import type { PurchaseOrderDetailMode } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
-import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
+import { useRouter, useSearchParams } from "@/lib/navigation"
+import { hasPermission } from "@/lib/permissions"
+import { ExpensePurchaseStartDialog } from "./expense-purchase-start-dialog"
+import { PurchaseOrderCorrespondence } from "./purchase-order-correspondence"
 
 export function PurchaseOrderDetailHeader({
     order,
@@ -44,8 +46,7 @@ export function PurchaseOrderDetailHeader({
     onRequestChange,
     onRequestSubmit,
     onCancelResult,
-    result,
-    onDismissResult,
+    tabs,
 }: {
     order: PurchaseOrderCenterView
     mode: PurchaseOrderDetailMode
@@ -66,8 +67,7 @@ export function PurchaseOrderDetailHeader({
     onRequestChange: () => void
     onRequestSubmit: () => void
     onCancelResult: (result: PurchaseOrderDetailResult) => void
-    result: PurchaseOrderDetailResult | null
-    onDismissResult: () => void
+    tabs?: React.ReactNode
 }) {
     const [expenseOpen, setExpenseOpen] = React.useState(false)
     const searchParams = useSearchParams()
@@ -96,6 +96,9 @@ export function PurchaseOrderDetailHeader({
         hasPermission(profile.data?.permissions, "purchase_order:create") &&
         mode !== "edit" &&
         order.identity.status !== "VOID"
+
+    const changeIsPrimary = continueChange && !canSubmit
+
     return (
         <>
             <ExpensePurchaseStartDialog
@@ -109,7 +112,7 @@ export function PurchaseOrderDetailHeader({
                     )
                 }
             />
-            <DetailPageHeader
+            <DetailWorkspaceChrome
                 back={{
                     id: "procurement-orders-detail-back",
                     label: workspaceReturn
@@ -131,119 +134,246 @@ export function PurchaseOrderDetailHeader({
                 }}
                 title={order.header.supplierSnapshot || "采购单"}
                 documentNumber={displayNo}
+                version={
+                    order.identity.revisionNo != null
+                        ? `v${order.identity.revisionNo}`
+                        : undefined
+                }
                 primaryStatus={{
                     label: order.identity.statusLabel,
                     tone: order.identity.statusTone,
                 }}
                 titleExtra={
-                    <Badge variant="secondary" className="font-normal">
-                        {PURCHASE_TYPE_LABEL[order.header.purchaseType]}
-                    </Badge>
+                    <>
+                        <Badge variant="secondary" className="font-normal">
+                            {PURCHASE_TYPE_LABEL[order.header.purchaseType]}
+                        </Badge>
+                        {order.activeChangeOrder ? (
+                            <DetailWorkspaceDirtyBadge label="改单中" />
+                        ) : null}
+                    </>
                 }
-                primaryAction={
-                    <div className="flex flex-wrap items-center gap-2">
+                meta={
+                    <DetailWorkspaceMeta
+                        items={[
+                            order.identity.revisionNo == null
+                                ? "尚未生效"
+                                : null,
+                            order.header.ownerName ? (
+                                <span key="owner">
+                                    采购负责人{" "}
+                                    <span className="font-medium text-foreground">
+                                        {order.header.ownerName}
+                                    </span>
+                                </span>
+                            ) : null,
+                            order.header.salesOrderNo ? (
+                                <span key="sales" className="num">
+                                    来源销售 {order.header.salesOrderNo}
+                                </span>
+                            ) : null,
+                        ]}
+                    />
+                }
+                secondaryActions={
+                    <>
                         {mode !== "edit" ? (
                             <PurchaseOrderCorrespondence order={order} />
                         ) : null}
                         <PurchaseOrderCancelApprovalButton
                             order={order}
                             onResult={onCancelResult}
+                            triggerVariant="ghost"
+                            triggerClassName={
+                                detailWorkspaceStyles.quietDangerButton
+                            }
                         />
-                        <PageActions
-                            id="procurement-orders-detail-actions"
-                            actions={[
-                                ...(canCreateExpense
-                                    ? [
-                                          {
-                                              actionKey: "add-expense",
-                                              label: "追加费用",
-                                              variant: "outline" as const,
-                                              id: "procurement-orders-detail-add-expense",
-                                              onClick: () =>
-                                                  setExpenseOpen(true),
-                                          },
-                                      ]
-                                    : []),
-                                ...(canEdit && mode !== "edit"
-                                    ? [
-                                          {
-                                              actionKey: "edit",
-                                              label: "编辑草稿",
-                                              icon: FilePenLineIcon,
-                                              variant: "outline" as const,
-                                              onClick: () =>
-                                                  router.push(
-                                                      `${baseHref}?mode=edit`,
-                                                  ),
-                                              id: "procurement-orders-detail-edit",
-                                          },
-                                      ]
-                                    : []),
-                                ...(canChange || continueChange
-                                    ? [
-                                          {
-                                              actionKey: "change",
-                                              label: changePending
-                                                  ? "正在打开改单…"
-                                                  : continueChange
-                                                    ? "继续改单"
-                                                    : "发起改单",
-                                              icon: FilePenLineIcon,
-                                              variant: "outline" as const,
-                                              disabled: changePending,
-                                              onClick: () => onRequestChange(),
-                                              id: "procurement-orders-detail-change",
-                                          },
-                                      ]
-                                    : []),
-                                ...(canVoid && mode !== "edit"
-                                    ? [
-                                          {
-                                              actionKey: "void",
-                                              label: "作废草稿",
-                                              icon: Trash2Icon,
-                                              variant: "outline" as const,
-                                              onClick: () => onRequestVoid(),
-                                              id: "procurement-orders-detail-void",
-                                          },
-                                      ]
-                                    : []),
-                                ...(canSubmit
-                                    ? [
-                                          {
-                                              actionKey: "submit",
-                                              label: "提交审批",
-                                              icon: SendIcon,
-                                              onClick: () => onRequestSubmit(),
-                                              id: "procurement-orders-detail-submit",
-                                          },
-                                      ]
-                                    : []),
-                            ]}
-                        />
-                    </div>
+                        {canVoid && mode !== "edit" ? (
+                            <Button
+                                id="procurement-orders-detail-void"
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={
+                                    detailWorkspaceStyles.quietDangerButton
+                                }
+                                onClick={onRequestVoid}
+                            >
+                                <Trash2Icon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                作废草稿
+                            </Button>
+                        ) : null}
+                        {canCreateExpense ? (
+                            <Button
+                                id="procurement-orders-detail-add-expense"
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={detailWorkspaceStyles.subtleButton}
+                                onClick={() => setExpenseOpen(true)}
+                            >
+                                <PlusIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                追加费用
+                            </Button>
+                        ) : null}
+                        {canEdit && mode !== "edit" ? (
+                            <Button
+                                id="procurement-orders-detail-edit"
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={detailWorkspaceStyles.subtleButton}
+                                onClick={() =>
+                                    router.push(`${baseHref}?mode=edit`)
+                                }
+                            >
+                                <FilePenLineIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                编辑草稿
+                            </Button>
+                        ) : null}
+                        {(canChange || continueChange) && !changeIsPrimary ? (
+                            <Button
+                                id="procurement-orders-detail-change"
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={detailWorkspaceStyles.subtleButton}
+                                disabled={changePending}
+                                onClick={onRequestChange}
+                            >
+                                <FilePenLineIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                {changePending
+                                    ? "正在打开改单…"
+                                    : continueChange
+                                      ? "继续改单"
+                                      : "发起改单"}
+                            </Button>
+                        ) : null}
+                    </>
+                }
+                primaryAction={
+                    canSubmit ? (
+                        <Button
+                            id="procurement-orders-detail-submit"
+                            type="button"
+                            size="sm"
+                            className="px-3.5"
+                            onClick={onRequestSubmit}
+                        >
+                            <SendIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            提交审批
+                        </Button>
+                    ) : changeIsPrimary ? (
+                        <Button
+                            id="procurement-orders-detail-change"
+                            type="button"
+                            size="sm"
+                            className="px-3.5"
+                            disabled={changePending}
+                            onClick={onRequestChange}
+                        >
+                            <FilePenLineIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            {changePending ? "正在打开改单…" : "继续改单"}
+                        </Button>
+                    ) : null
+                }
+                tabs={tabs}
+            />
+        </>
+    )
+}
+
+/** 置于吸顶头下方的通栏无框金额摘要带：首屏即览，随页面自然滚走不挤占正文视野。 */
+export function PurchaseOrderAmountSummary({
+    order,
+    costMasked,
+}: {
+    order: PurchaseOrderCenterView
+    costMasked: boolean
+}) {
+    const amount = (value?: string) =>
+        costMasked ? (
+            <span className="num text-muted-foreground" aria-label="金额已隐藏">
+                •••
+            </span>
+        ) : value == null ? (
+            <span className="text-muted-foreground">—</span>
+        ) : (
+            <MoneyValue value={value} />
+        )
+
+    return (
+        <DetailWorkspaceMetrics
+            columns={4}
+            variant="bar"
+            ariaLabel="采购单金额摘要"
+        >
+            <DetailWorkspaceMetricItem
+                emphasis="primary"
+                label="采购金额（含税）"
+                value={amount(order.currentContent.totals.gross)}
+                detail={
+                    costMasked ? (
+                        "含税/税额已按权限隐藏"
+                    ) : (
+                        <>
+                            <span>
+                                不含税{" "}
+                                <MoneyValue
+                                    value={order.currentContent.totals.net}
+                                />
+                            </span>
+                            <span
+                                aria-hidden="true"
+                                className="select-none text-muted-foreground/40"
+                            >
+                                ·
+                            </span>
+                            <span>
+                                税额{" "}
+                                <MoneyValue
+                                    value={order.currentContent.totals.tax}
+                                />
+                            </span>
+                        </>
+                    )
                 }
             />
-            {result ? (
-                <FormalActionResult
-                    status={result.status}
-                    title={result.title}
-                    description={result.description}
-                    reference={result.reference}
-                    facts={result.facts}
-                    actions={
-                        <Button
-                            id="procurement-orders-detail-result-close"
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={onDismissResult}
-                        >
-                            关闭
-                        </Button>
-                    }
-                />
-            ) : null}
-        </>
+            <DetailWorkspaceMetricItem
+                label="已付并核销"
+                value={amount(order.payableSummary?.paidAllocatedAmount)}
+            />
+            <DetailWorkspaceMetricItem
+                label="待付余额"
+                value={amount(order.payableSummary?.payableOpenAmount)}
+                detail={
+                    !order.payableSummary ? "审批通过后形成应付" : undefined
+                }
+            />
+            <DetailWorkspaceMetricItem
+                label="已收票并核销"
+                value={amount(
+                    order.payableSummary?.purchaseInvoiceAllocatedAmount,
+                )}
+            />
+        </DetailWorkspaceMetrics>
     )
 }

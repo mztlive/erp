@@ -1,15 +1,16 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { cn } from "@/lib/utils"
 
-/** 采购详情内的业务分区：标题、说明和操作集中在头部，正文独立承载。 */
+import { DetailWorkspaceSection } from "@/components/business"
+
+/** 采购详情内的无框纯白业务分区：由顶部 1px 细线与留白建立秩序，保留 region 语义名。 */
 export function PurchaseOrderDetailSection({
     title,
     count,
     description,
     action,
-    compact = false,
+    width = "full",
     children,
 }: {
     title: string
@@ -17,45 +18,25 @@ export function PurchaseOrderDetailSection({
     description?: ReactNode
     action?: ReactNode
     compact?: boolean
+    width?: "form" | "full"
     children: ReactNode
 }) {
     return (
-        <section
-            aria-label={title}
-            className="min-w-0 rounded-xl border border-border/70 bg-card"
+        <DetailWorkspaceSection
+            width={width}
+            title={title}
+            ariaLabel={title}
+            badge={
+                count != null ? (
+                    <span className="num rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                        {count}
+                    </span>
+                ) : null
+            }
+            subtitle={description}
+            actions={action}
         >
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-xl border-b border-border/60 bg-muted/30 px-5 py-4">
-                <div className="min-w-0 space-y-1">
-                    <div className="flex items-center gap-2">
-                        <h2 className="text-section-title font-semibold tracking-tight">
-                            {title}
-                        </h2>
-                        {count != null ? (
-                            <span className="num rounded-md bg-background px-2 py-0.5 text-xs text-muted-foreground">
-                                {count}
-                            </span>
-                        ) : null}
-                    </div>
-                    {description ? (
-                        <div className="text-xs text-muted-foreground">
-                            {description}
-                        </div>
-                    ) : null}
-                </div>
-                {action ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                        {action}
-                    </div>
-                ) : null}
-            </div>
-            <div
-                className={cn(
-                    "min-w-0 space-y-4 px-5",
-                    compact ? "py-4" : "py-5",
-                )}
-            >
-                {children}
-            </div>
-        </section>
+            {children}
+        </DetailWorkspaceSection>
     )
 }

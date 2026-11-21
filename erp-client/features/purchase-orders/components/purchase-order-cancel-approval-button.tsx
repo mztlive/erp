@@ -1,5 +1,7 @@
 "use client"
 
+import type { ComponentProps } from "react"
+import type { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { DocumentWithdrawApprovalButton } from "@/features/approval-workflow/components/document-withdraw-approval-button"
 import { useCancelPurchaseOrderApprovalMutation } from "@/features/purchase-orders/hooks/queries"
@@ -17,9 +19,13 @@ import { hasPermission } from "@/lib/permissions"
 export function PurchaseOrderCancelApprovalButton({
     order,
     onResult,
+    triggerVariant,
+    triggerClassName,
 }: {
     order: PurchaseOrderCenterView
     onResult?: (result: PurchaseOrderDetailResult) => void
+    triggerVariant?: ComponentProps<typeof Button>["variant"]
+    triggerClassName?: string
 }) {
     const profileQuery = useAccountProfileQuery()
     const cancelMutation = useCancelPurchaseOrderApprovalMutation()
@@ -89,6 +95,8 @@ export function PurchaseOrderCancelApprovalButton({
             }
             reference={order.identity.purchaseNo ?? order.identity.draftLabel}
             onResult={onResult}
+            triggerVariant={triggerVariant}
+            triggerClassName={triggerClassName}
         />
     )
 }

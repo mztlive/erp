@@ -5,15 +5,19 @@ import { z } from "zod"
 
 import { todayDate } from "@/lib/datetime"
 
-import { MoneyValue, RateValue } from "@/components/business"
+import {
+    MoneyValue,
+    RateValue,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
 import {
     EVIDENCE_FILE_MAX_BYTES,
     EVIDENCE_FILE_TYPES,
     useAppForm,
 } from "@/components/form"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Dialog,
     DialogContent,
@@ -107,48 +111,56 @@ export function PurchaseOrderExpenseSection({
     ).length
     return (
         <DetailRecordSection
+            width="full"
             title="费用确认"
             count={lines.length}
             description={
                 pending > 0 ? `${pending} 条待确认发生` : "无待确认费用"
             }
         >
-            <p className="rounded-lg bg-muted/40 px-4 py-3 text-body-compact leading-6 text-muted-foreground">
+            <p className="rounded-lg bg-muted/35 px-4 py-2.5 text-xs text-muted-foreground">
                 {pending > 0
                     ? "费用发生后上传运单、签收单或账单凭证。确认后计入来源销售单的实际经营盈亏，该费用行不能再改单修改。"
                     : "费用已确认发生或已移除，无需继续确认。"}
             </p>
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>费用</TableHead>
-                        {expenseOnly ? (
-                            <TableHead className="text-right">税率</TableHead>
-                        ) : null}
-                        <TableHead className="text-right">含税金额</TableHead>
-                        <TableHead>状态</TableHead>
-                        <TableHead className="text-right">操作</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {lines.map((line) => (
-                        <ExpenseRow
-                            key={line.lineId}
-                            order={order}
-                            line={line}
-                            costMasked={costMasked}
-                            showTax={expenseOnly}
-                            canConfirm={canConfirm}
-                            canDownload={canDownload}
-                            onConfirm={() => setConfirming(line)}
-                        />
-                    ))}
-                </TableBody>
-            </Table>
+            <div
+                data-slot="detail-inline-table"
+                className={detailWorkspaceStyles.dataTableWrapper}
+            >
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>费用</TableHead>
+                            {expenseOnly ? (
+                                <TableHead data-align="end">税率</TableHead>
+                            ) : null}
+                            <TableHead data-align="end">含税金额</TableHead>
+                            <TableHead>状态</TableHead>
+                            <TableHead data-align="end">操作</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {lines.map((line) => (
+                            <ExpenseRow
+                                key={line.lineId}
+                                order={order}
+                                line={line}
+                                costMasked={costMasked}
+                                showTax={expenseOnly}
+                                canConfirm={canConfirm}
+                                canDownload={canDownload}
+                                onConfirm={() => setConfirming(line)}
+                            />
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
             {expenseOnly ? (
-                <div className="flex flex-wrap items-baseline justify-end gap-3 border-t border-border/60 pt-4 text-body-compact">
-                    <span className="text-muted-foreground">合计（含税）</span>
-                    <span className="num text-value-compact font-semibold tracking-tight">
+                <div className="flex flex-wrap items-baseline justify-end gap-4 pt-1 text-body-compact">
+                    <span className="text-xs text-muted-foreground">
+                        合计（含税）
+                    </span>
+                    <span className="num text-value-compact font-semibold tracking-tight text-foreground">
                         {costMasked ? (
                             "•••"
                         ) : (
@@ -241,22 +253,24 @@ function ExpenseRow({
             </TableCell>
             <TableCell>
                 {occurrence ? (
-                    <Badge variant="secondary">
-                        已发生 · {occurrence.occurredOn}
-                    </Badge>
+                    <StatusBadge
+                        tone="success"
+                        label={`已发生 · ${occurrence.occurredOn}`}
+                    />
                 ) : removed ? (
-                    <Badge variant="neutral">已移除</Badge>
+                    <StatusBadge tone="neutral" label="已移除" />
                 ) : (
-                    <Badge variant="warning">待发生</Badge>
+                    <StatusBadge tone="warning" label="待发生" />
                 )}
             </TableCell>
-            <TableCell className="text-right">
+            <TableCell data-align="end">
                 {occurrence && canDownload ? (
                     <Button
                         id={`procurement-orders-expense-evidence-${key}`}
                         type="button"
                         size="sm"
                         variant="ghost"
+                        className={detailWorkspaceStyles.inlineLinkButton}
                         onClick={() => {
                             void downloadFileAsset(
                                 occurrence.evidenceAttachmentId,
@@ -271,6 +285,7 @@ function ExpenseRow({
                         id={`procurement-orders-expense-confirm-${key}`}
                         type="button"
                         size="sm"
+                        className="px-3.5"
                         onClick={onConfirm}
                     >
                         确认发生

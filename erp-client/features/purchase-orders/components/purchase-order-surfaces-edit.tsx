@@ -7,21 +7,15 @@ import type { ColumnDef } from "@tanstack/react-table"
 
 import {
     DataTable,
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
     surfaceInsetClassName,
-    surfacePanelClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import type { PurchaseDeliveryLineOption } from "@/features/purchase-orders/api/purchase-delivery-options"
 import { PurchaseDeliveryAllocationEditor } from "@/features/purchase-orders/components/purchase-delivery-allocation-editor"
@@ -527,98 +521,93 @@ export function EditSurface({
     )
 
     return (
-        <div className="space-y-4">
-            <Card className={surfacePanelClassName}>
-                <CardHeader className="border-b border-grid">
-                    <CardTitle>
-                        {order.identity.status === "REJECTED" ||
-                        order.identity.reviewStatus === "REJECTED"
-                            ? "被驳回待修改"
-                            : "采购草稿"}
-                    </CardTitle>
-                    <CardDescription>
-                        来源销售 {order.header.salesOrderNo}
-                        。供应商、类型、履约责任和付款条件来自创建依据，本卡只读。
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 pt-4">
-                    {!draftEditToken ? (
-                        <Alert variant="warning">
-                            <AlertTitle>正在进入编辑…</AlertTitle>
-                            <AlertDescription>
-                                编辑内容仅保存在当前页面；刷新或关闭将丢失，请及时保存。
-                            </AlertDescription>
-                        </Alert>
-                    ) : (
-                        <p className="text-xs text-muted-foreground">
-                            正在编辑中
-                        </p>
-                    )}
+        <>
+            <DetailWorkspaceSection
+                width="form"
+                title={
+                    order.identity.status === "REJECTED" ||
+                    order.identity.reviewStatus === "REJECTED"
+                        ? "被驳回待修改"
+                        : "采购草稿"
+                }
+                subtitle={`来源销售 ${order.header.salesOrderNo}。供应商、类型、履约责任和付款条件来自创建依据，本区只读。`}
+            >
+                {!draftEditToken ? (
+                    <Alert variant="warning">
+                        <AlertTitle>正在进入编辑…</AlertTitle>
+                        <AlertDescription>
+                            编辑内容仅保存在当前页面；刷新或关闭将丢失，请及时保存。
+                        </AlertDescription>
+                    </Alert>
+                ) : (
+                    <p className="text-xs text-muted-foreground">正在编辑中</p>
+                )}
 
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <Label>供应商（只读）</Label>
-                            <div
-                                className={cn(
-                                    surfaceInsetClassName,
-                                    "px-3 py-2 text-body-compact",
-                                )}
-                            >
-                                {order.header.supplierSnapshot}
-                            </div>
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label>采购类型 / 履约责任（只读）</Label>
-                            <div
-                                className={cn(
-                                    surfaceInsetClassName,
-                                    "px-3 py-2 text-body-compact",
-                                )}
-                            >
-                                {PURCHASE_TYPE_LABEL[order.header.purchaseType]}{" "}
-                                ·{" "}
-                                {
-                                    FULFILLMENT_RESPONSIBILITY_LABEL[
-                                        order.header.fulfillmentResponsibility
-                                    ]
-                                }
-                            </div>
-                        </div>
-                        <div className="space-y-1.5 sm:col-span-2">
-                            <Label>付款条件（只读）</Label>
-                            <div
-                                className={cn(
-                                    surfaceInsetClassName,
-                                    "px-3 py-2 text-body-compact",
-                                )}
-                            >
-                                {order.header.paymentTermLabel}
-                            </div>
+                <div
+                    data-slot="detail-form-grid"
+                    className="grid gap-x-5 gap-y-4 sm:grid-cols-2"
+                >
+                    <div className="space-y-1.5">
+                        <Label>供应商（只读）</Label>
+                        <div
+                            className={cn(
+                                surfaceInsetClassName,
+                                "px-3 py-2 text-body-compact text-foreground",
+                            )}
+                        >
+                            {order.header.supplierSnapshot}
                         </div>
                     </div>
-                </CardContent>
-            </Card>
+                    <div className="space-y-1.5">
+                        <Label>采购类型 / 履约责任（只读）</Label>
+                        <div
+                            className={cn(
+                                surfaceInsetClassName,
+                                "px-3 py-2 text-body-compact text-foreground",
+                            )}
+                        >
+                            {PURCHASE_TYPE_LABEL[order.header.purchaseType]} ·{" "}
+                            {
+                                FULFILLMENT_RESPONSIBILITY_LABEL[
+                                    order.header.fulfillmentResponsibility
+                                ]
+                            }
+                        </div>
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                        <Label>付款条件（只读）</Label>
+                        <div
+                            className={cn(
+                                surfaceInsetClassName,
+                                "px-3 py-2 text-body-compact text-foreground",
+                            )}
+                        >
+                            {order.header.paymentTermLabel}
+                        </div>
+                    </div>
+                </div>
+            </DetailWorkspaceSection>
 
-            <Card className={surfacePanelClassName}>
-                <CardHeader className="border-b border-grid">
-                    <CardTitle>本单可调</CardTitle>
-                    <CardDescription>
-                        可改数量、含税单价、税率、预计交付日和收件分配；预计交付日不晚于销售履约期限，收件地址取自销售当前收件资料。⌘S
-                        保存 · ⌘↵ 打开提交确认。
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 pt-4">
-                    <fieldset
-                        disabled={!draftEditToken || savePending}
-                        className="min-w-0 space-y-4"
+            <DetailWorkspaceSection
+                width="full"
+                title="本单可调"
+                subtitle="可改数量、含税单价、税率、预计交付日和收件分配；预计交付日不晚于销售履约期限，收件地址取自销售当前收件资料。⌘S 保存 · ⌘↵ 打开提交确认。"
+            >
+                <fieldset
+                    disabled={!draftEditToken || savePending}
+                    className="min-w-0 space-y-4"
+                >
+                    <EditLineContext.Provider
+                        value={{
+                            lineEdits,
+                            setLineEdits,
+                            allowZeroQuantity,
+                            options,
+                        }}
                     >
-                        <EditLineContext.Provider
-                            value={{
-                                lineEdits,
-                                setLineEdits,
-                                allowZeroQuantity,
-                                options,
-                            }}
+                        <div
+                            data-slot="detail-inline-table"
+                            className={detailWorkspaceStyles.inlineTableWrapper}
                         >
                             <DataTable
                                 id={`procurement-orders-detail-edit-table-${order.identity.purchaseOrderId}`}
@@ -635,44 +624,46 @@ export function EditSurface({
                                 defaultColumnPinning={{ left: ["item"] }}
                                 emptyTitle="暂无采购明细"
                             />
-                        </EditLineContext.Provider>
-                        {optionsQuery.isError ? (
-                            <p className="text-xs text-muted-foreground">
-                                暂时读取不到销售当前的履约期限和收件资料，预计交付日与收件分配本次不可调整。
-                            </p>
-                        ) : null}
-                        <DeliveryAllocationEditors
-                            lines={lines}
-                            lineEdits={lineEdits}
-                            setLineEdits={setLineEdits}
-                            options={options}
-                        />
-                    </fieldset>
+                        </div>
+                    </EditLineContext.Provider>
+                    {optionsQuery.isError ? (
+                        <p className="text-xs text-muted-foreground">
+                            暂时读取不到销售当前的履约期限和收件资料，预计交付日与收件分配本次不可调整。
+                        </p>
+                    ) : null}
+                    <DeliveryAllocationEditors
+                        lines={lines}
+                        lineEdits={lineEdits}
+                        setLineEdits={setLineEdits}
+                        options={options}
+                    />
+                </fieldset>
 
-                    <div className="flex flex-wrap gap-2">
-                        <LoadingButton
-                            id={`procurement-orders-detail-edit-save-${order.identity.purchaseOrderId}`}
-                            loading={savePending}
-                            type="button"
-                            variant="outline"
-                            disabled={!draftEditToken || savePending}
-                            onClick={onSave}
-                        >
-                            {savePending ? "保存中…" : "保存草稿"}
-                        </LoadingButton>
-                        <Button
-                            id={`procurement-orders-detail-edit-submit-${order.identity.purchaseOrderId}`}
-                            type="button"
-                            disabled={
-                                !draftEditToken || !canSubmit || savePending
-                            }
-                            onClick={onSubmitOpen}
-                        >
-                            提交审批
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
+                <div className="flex flex-wrap items-center gap-2 pt-2">
+                    <LoadingButton
+                        id={`procurement-orders-detail-edit-save-${order.identity.purchaseOrderId}`}
+                        loading={savePending}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={detailWorkspaceStyles.subtleButton}
+                        disabled={!draftEditToken || savePending}
+                        onClick={onSave}
+                    >
+                        {savePending ? "保存中…" : "保存草稿"}
+                    </LoadingButton>
+                    <Button
+                        id={`procurement-orders-detail-edit-submit-${order.identity.purchaseOrderId}`}
+                        type="button"
+                        size="sm"
+                        className="px-3.5"
+                        disabled={!draftEditToken || !canSubmit || savePending}
+                        onClick={onSubmitOpen}
+                    >
+                        提交审批
+                    </Button>
+                </div>
+            </DetailWorkspaceSection>
+        </>
     )
 }

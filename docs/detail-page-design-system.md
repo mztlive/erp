@@ -167,9 +167,9 @@
 ## 5. 全站详情页迁移路线与验收清单
 
 ### 分批迁移参考
-1. **标杆页（已完成）**：主数据编辑型——商品详情页（`product-detail-page.tsx`）；单据双栏型——销售单详情页（`sales-order-detail-page.tsx`）。
+1. **标杆页（已完成）**：主数据编辑型——商品详情页（`product-detail-page.tsx`）；单据双栏型——销售单详情页（`sales-order-detail-page.tsx`）、采购单详情页（`purchase-order-detail-page.tsx`）。
 2. **编辑型主数据详情页**：供应商详情（`supplier-detail-page.tsx`）、客户详情（`customer-detail-page.tsx`）、仓库/分类对象中心（`object-center-view.tsx`）——直接迁入 `DetailWorkspacePage` + `DetailWorkspaceChrome` + `DetailWorkspaceBody`。
-3. **其余单据型详情页**：合同详情（`contract-detail-page.tsx`，顺带消除外层 `surfacePanelClassName` 与 `ObjectSectionTabs` 双层边框）、采购单详情（`purchase-order-detail-page.tsx`）、供应商供给详情（`supplier-offering-detail-page.tsx`）——对齐销售单详情，采用 `DetailWorkspaceBody summary={...} sidebar={...}` 通栏摘要 + 单竖线双栏布局。
+3. **其余单据型详情页**：合同详情（`contract-detail-page.tsx`，顺带消除外层 `surfacePanelClassName` 与 `ObjectSectionTabs` 双层边框）、供应商供给详情（`supplier-offering-detail-page.tsx`）——对齐销售单/采购单详情，采用 `DetailWorkspaceBody summary={...} sidebar={...}` 通栏摘要 + 单竖线双栏布局。
 
 ### 视觉与交互验收清单（QA Checklist）
 - [ ] **零套娃与单基准对齐**：整页纯白通栏，无外层圆角白卡套内层灰底再套分区白卡；头部媒体/标题、Tabs、分区标题、表单首列、内嵌表首列严丝合缝对齐 `--scaffold-px`。

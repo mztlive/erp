@@ -1,7 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { BusinessStatusBadge, QuantityValue } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    QuantityValue,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Table,
@@ -52,8 +56,14 @@ export function PurchaseOrderApiExecutions({
     return (
         <>
             {quantities.length > 0 ? (
-                <PurchaseOrderDetailSection title="实际入库与发货进度">
-                    <div className="min-w-0 overflow-x-auto">
+                <PurchaseOrderDetailSection
+                    width="full"
+                    title="实际入库与发货进度"
+                >
+                    <div
+                        data-slot="detail-inline-table"
+                        className={detailWorkspaceStyles.dataTableWrapper}
+                    >
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -125,12 +135,15 @@ export function PurchaseOrderApiExecutions({
                 </PurchaseOrderDetailSection>
             ) : null}
             {executions.length > 0 ? (
-                <PurchaseOrderDetailSection title="供应商平台订单进度">
-                    <ul className="divide-y">
+                <PurchaseOrderDetailSection
+                    width="form"
+                    title="供应商平台订单进度"
+                >
+                    <ul className="divide-y divide-border/60 border-y border-border/60">
                         {executions.map((execution) => (
                             <li
                                 key={execution.orderId}
-                                className="space-y-2 py-3 first:pt-0 last:pb-0"
+                                className="space-y-2 py-3.5"
                             >
                                 <div className="flex flex-wrap items-center justify-between gap-3">
                                     <div className="space-y-1">
@@ -177,7 +190,10 @@ export function PurchaseOrderApiExecutions({
                                         <Button
                                             id={`purchase-api-execution-${toAutomationIdSegment(execution.orderId)}-open`}
                                             size="sm"
-                                            variant="outline"
+                                            variant="ghost"
+                                            className={
+                                                detailWorkspaceStyles.subtleButton
+                                            }
                                             render={
                                                 <Link
                                                     href={`/supplier-api/orders/${encodeURIComponent(execution.orderId)}?section=fulfillment`}

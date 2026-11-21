@@ -33,8 +33,8 @@ export function PurchaseOrderExecutionFunds({
 }) {
     if (costMasked || !order.apiExecutionFunds?.length) return null
     return (
-        <PurchaseOrderDetailSection title="预存款扣款与核销进度">
-            <div className="divide-y">
+        <PurchaseOrderDetailSection width="form" title="预存款扣款与核销进度">
+            <div className="divide-y divide-border/60 border-y border-border/60">
                 {order.apiExecutionFunds.map((funds) => {
                     const execution = order.apiExecutions?.find(
                         (item) => item.orderId === funds.executionGroupId,
@@ -47,7 +47,7 @@ export function PurchaseOrderExecutionFunds({
                     return (
                         <article
                             key={funds.executionGroupId}
-                            className="space-y-3 py-4 first:pt-0 last:pb-0"
+                            className="space-y-3 py-4"
                         >
                             <div className="flex flex-wrap items-center justify-between gap-3">
                                 <h3 className="font-medium">{label}</h3>

@@ -2,30 +2,39 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useRouter } from "@/lib/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    PageHeader,
-    PageScaffold,
+    DetailWorkspaceBody,
+    DetailWorkspaceChrome,
+    DetailWorkspacePage,
+    DetailWorkspaceSkeleton,
+    FormalActionResult,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
-import { detailApprovalSummaryClassName } from "@/components/business/detail-presentation"
 import { PurchaseChangeOrderApprovalSection } from "@/features/purchase-orders/components/purchase-change-order-approval-section"
-import { EditSurface } from "@/features/purchase-orders/components/purchase-order-surfaces"
+import { PurchaseChangeOrderEditDialog } from "@/features/purchase-orders/components/purchase-change-order-edit-dialog"
 import { PurchaseOrderDetailDialogs } from "@/features/purchase-orders/components/purchase-order-detail-dialogs"
-import { PurchaseOrderDetailHeader } from "@/features/purchase-orders/components/purchase-order-detail-header"
+import {
+    PurchaseOrderAmountSummary,
+    PurchaseOrderDetailHeader,
+} from "@/features/purchase-orders/components/purchase-order-detail-header"
+import {
+    PurchaseOrderDetailSectionContent,
+    PurchaseOrderDetailSectionTabs,
+} from "@/features/purchase-orders/components/purchase-order-detail-sections"
+import { PurchaseOrderDetailSidebar } from "@/features/purchase-orders/components/purchase-order-detail-sidebar"
 import { PurchaseOrderFreightNotice } from "@/features/purchase-orders/components/purchase-order-freight-notice"
 import { PurchaseOrderSourceUpdateNotice } from "@/features/purchase-orders/components/purchase-order-source-update-notice"
-import { PurchaseOrderDetailSidebar } from "@/features/purchase-orders/components/purchase-order-detail-sidebar"
-import { PurchaseOrderDetailSections } from "@/features/purchase-orders/components/purchase-order-detail-sections"
+import { EditSurface } from "@/features/purchase-orders/components/purchase-order-surfaces"
 import {
-    usePurchaseOrderCenterQuery,
     purchaseOrderKeys,
+    usePurchaseOrderCenterQuery,
 } from "@/features/purchase-orders/hooks/queries"
 import {
     type PurchaseOrderDetailResult,
@@ -34,18 +43,23 @@ import {
 import { usePurchaseOrderDetailEditActions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-edit-actions"
 import { usePurchaseOrderDetailEditGuard } from "@/features/purchase-orders/hooks/use-purchase-order-detail-edit-guard"
 import { usePurchaseOrderDetailPermissions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-permissions"
-import { PurchaseChangeOrderEditDialog } from "@/features/purchase-orders/components/purchase-change-order-edit-dialog"
 import {
     isPurchaseChangeOrderWorkItem,
     purchaseChangeOrderApprovalPhase,
 } from "@/features/purchase-orders/lib/purchase-change-order-approval"
-import { mapWorkItemDto } from "@/features/work-items/types"
-import { useWorkItemDetailQuery } from "@/features/work-items/queries"
+import { purchaseOrderDraftFormSchema } from "@/features/purchase-orders/lib/purchase-order-validation"
 import {
+    type PurchaseOrderDetailSectionId,
+    purchaseOrderSectionHref,
     resolvePurchaseOrderDetailMode,
     resolvePurchaseOrderDetailSection,
 } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
-import { purchaseOrderDraftFormSchema } from "@/features/purchase-orders/lib/purchase-order-validation"
+import { useWorkItemDetailQuery } from "@/features/work-items/queries"
+import { mapWorkItemDto } from "@/features/work-items/types"
+import { useRouter, useSearchParams } from "@/lib/navigation"
+
+const APPROVAL_READONLY_WORKSPACE_CLASS =
+    "space-y-5 [&_[data-slot=card]]:rounded-none [&_[data-slot=card]]:border-0 [&_[data-slot=card]]:bg-transparent [&_[data-slot=card]]:shadow-none [&_[data-slot=card]]:ring-0 [&_[data-slot=card-header]]:px-0 [&_[data-slot=card-content]]:px-0 [&_[data-slot=card-footer]]:px-0 [&>[data-slot=card]:first-child]:rounded-lg [&>[data-slot=card]:first-child]:bg-muted/30 [&>[data-slot=card]:first-child]:px-4 [&>[data-slot=card]:first-child]:py-3.5"
 
 /**
  * 采购单详情保留采购方操作，审批与跨岗位进度只读展示；
@@ -65,6 +79,7 @@ export function PurchaseOrderDetailPage({
     changeOrderId?: string
 }) {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const focusedWorkItemQuery = useWorkItemDetailQuery(workItemId ?? "")
     const focusedWorkItem = focusedWorkItemQuery.data
         ? mapWorkItemDto(focusedWorkItemQuery.data)
@@ -104,6 +119,16 @@ export function PurchaseOrderDetailPage({
             setResult(resolved)
         },
         [queryClient, purchaseOrderId, result, setResult],
+    )
+
+    const selectSection = React.useCallback(
+        (next: PurchaseOrderDetailSectionId) => {
+            router.replace(
+                purchaseOrderSectionHref(purchaseOrderId, next, searchParams),
+                { scroll: false },
+            )
+        },
+        [purchaseOrderId, router, searchParams],
     )
 
     const draftForm = useAppForm({
@@ -171,82 +196,110 @@ export function PurchaseOrderDetailPage({
 
     if (query.isPending) {
         return (
-            <PageScaffold>
-                <PageHeader title="采购单" description="正在加载详情…" />
-                <div className="space-y-3" aria-busy="true" aria-label="加载中">
-                    <div className="h-16 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-24 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-40 animate-pulse rounded-lg bg-muted" />
-                </div>
-            </PageScaffold>
+            <DetailWorkspaceSkeleton
+                title="采购单"
+                description="正在加载详情…"
+                summary
+                sidebar
+            />
         )
     }
 
     if (query.isError) {
         return (
-            <PageScaffold>
-                <PageHeader title="采购单" description="详情加载失败" />
-                <BusinessFailureState
-                    title="详情加载失败"
-                    error={query.error}
-                    action={
-                        <>
-                            <Button
-                                id="procurement-orders-detail-retry"
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => void query.refetch()}
-                            >
-                                重试
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                render={
-                                    <Link
-                                        id="procurement-orders-detail-back-from-error"
-                                        href="/procurement/orders"
-                                    />
-                                }
-                            >
-                                返回列表
-                            </Button>
-                        </>
-                    }
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
+                    title="采购单"
+                    meta={<span>详情加载失败</span>}
+                    back={{
+                        id: "procurement-orders-detail-error-back",
+                        label: "返回列表",
+                        href: "/procurement/orders",
+                    }}
                 />
-            </PageScaffold>
+                <DetailWorkspaceBody>
+                    <div className="max-w-3xl py-6">
+                        <BusinessFailureState
+                            title="详情加载失败"
+                            error={query.error}
+                            action={
+                                <>
+                                    <Button
+                                        id="procurement-orders-detail-retry"
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className={
+                                            detailWorkspaceStyles.subtleButton
+                                        }
+                                        onClick={() => void query.refetch()}
+                                    >
+                                        重试
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className={
+                                            detailWorkspaceStyles.quietButton
+                                        }
+                                        render={
+                                            <Link
+                                                id="procurement-orders-detail-back-from-error"
+                                                href="/procurement/orders"
+                                            />
+                                        }
+                                    >
+                                        返回列表
+                                    </Button>
+                                </>
+                            }
+                        />
+                    </div>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
     if (!order) {
         return (
-            <PageScaffold>
-                <PageHeader
+            <DetailWorkspacePage>
+                <DetailWorkspaceChrome
                     title="采购单不存在"
-                    description="单据可能已删除或编号有误"
+                    meta={<span>单据可能已删除或编号有误</span>}
+                    back={{
+                        id: "procurement-orders-detail-missing-back-top",
+                        label: "采购单列表",
+                        href: "/procurement/orders",
+                    }}
                 />
-                <BusinessEmptyState
-                    kind="no-data"
-                    title="未找到该采购单"
-                    description="该采购单可能已删除或不在当前数据范围内。"
-                    className="rounded-lg border-0 bg-transparent shadow-none ring-0"
-                    action={
-                        <Button
-                            variant="secondary"
-                            className="rounded-lg shadow-none"
-                            render={
-                                <Link
-                                    id="procurement-orders-detail-missing-back"
-                                    href="/procurement/orders"
-                                />
+                <DetailWorkspaceBody>
+                    <div className="max-w-3xl py-6">
+                        <BusinessEmptyState
+                            kind="no-data"
+                            title="未找到该采购单"
+                            description="该采购单可能已删除或不在当前数据范围内。"
+                            className="rounded-lg border-0 bg-transparent shadow-none ring-0"
+                            action={
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className={
+                                        detailWorkspaceStyles.subtleButton
+                                    }
+                                    render={
+                                        <Link
+                                            id="procurement-orders-detail-missing-back"
+                                            href="/procurement/orders"
+                                        />
+                                    }
+                                >
+                                    返回列表
+                                </Button>
                             }
-                        >
-                            返回列表
-                        </Button>
-                    }
-                />
-            </PageScaffold>
+                        />
+                    </div>
+                </DetailWorkspaceBody>
+            </DetailWorkspacePage>
         )
     }
 
@@ -288,7 +341,7 @@ export function PurchaseOrderDetailPage({
     }
 
     return (
-        <PageScaffold density="compact">
+        <DetailWorkspacePage>
             <PurchaseOrderDetailHeader
                 order={order}
                 mode={mode}
@@ -308,86 +361,140 @@ export function PurchaseOrderDetailPage({
                 onRequestChange={openChange}
                 onRequestSubmit={() => editActions.setSubmitConfirmOpen(true)}
                 onCancelResult={handleResult}
-                result={result}
-                onDismissResult={() => handleResult(null)}
-            />
-
-            <PurchaseOrderFreightNotice order={order} />
-
-            <PurchaseOrderSourceUpdateNotice
-                order={order}
-                showActions={mode !== "edit"}
-                canEdit={permissions.canEdit}
-                canVoid={permissions.canVoid}
-                canChange={permissions.canChange || continueChange}
-                continueChange={continueChange}
-                onEdit={() => router.push(`${baseHref}?mode=edit`)}
-                onRequestVoid={() => editActions.setVoidConfirmOpen(true)}
-                onRequestChange={openChange}
-            />
-
-            {isChangeOrderTask && activeSection !== "changes" ? (
-                <PurchaseChangeOrderApprovalSection
-                    readonlyApproval
-                    purchaseOrderId={order.identity.purchaseOrderId}
-                    changeOrder={order.activeChangeOrder ?? null}
-                    baseRevisionNo={order.identity.revisionNo}
-                    paidAmount={order.payableSummary?.paidAllocatedAmount}
-                    workItemId={focusedWorkItem?.workItemId}
-                    expectedTaskVersion={focusedWorkItem?.taskVersion}
-                    workItemAllowedActions={focusedWorkItem?.allowedActions}
-                    onResult={handleResult}
-                />
-            ) : null}
-
-            <PurchaseOrderDetailSections
-                order={order}
-                activeSection={activeSection}
-                editor={
-                    mode === "edit" && permissions.canEdit ? (
-                        <EditSurface
-                            order={order}
-                            lineEdits={editActions.lineEdits}
-                            setLineEdits={editActions.setLineEdits}
-                            draftEditToken={editActions.draftEditToken}
-                            canSubmit={permissions.canSubmit}
-                            savePending={editActions.savePending}
-                            onSave={() => void editActions.handleSave()}
-                            onSubmitOpen={() =>
-                                editActions.setSubmitConfirmOpen(true)
-                            }
-                        />
-                    ) : undefined
-                }
-
-                costMasked={costMasked}
-                gate={gate}
-                changeWorkItemId={
-                    isChangeOrderTask ? focusedWorkItem?.workItemId : undefined
-                }
-                changeExpectedTaskVersion={
-                    isChangeOrderTask ? focusedWorkItem?.taskVersion : undefined
-                }
-                changeWorkItemAllowedActions={
-                    isChangeOrderTask
-                        ? focusedWorkItem?.allowedActions
-                        : undefined
-                }
-                onChangeApprovalResult={handleResult}
-                approvalPanel={
-                    <ApprovalReadonly
-                        id="purchase-order-approval"
-                        approval={order.approval}
-                        className={detailApprovalSummaryClassName}
+                tabs={
+                    <PurchaseOrderDetailSectionTabs
+                        order={order}
+                        activeSection={activeSection}
+                        onSelectSection={selectSection}
                     />
+                }
+            />
+
+            <DetailWorkspaceBody
+                summary={
+                    <PurchaseOrderAmountSummary
+                        order={order}
+                        costMasked={costMasked}
+                    />
+                }
+                alerts={
+                    <>
+                        {result ? (
+                            <FormalActionResult
+                                status={result.status}
+                                title={result.title}
+                                description={result.description}
+                                reference={result.reference}
+                                facts={result.facts}
+                                actions={
+                                    <Button
+                                        id="procurement-orders-detail-result-close"
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className={
+                                            detailWorkspaceStyles.quietButton
+                                        }
+                                        onClick={() => handleResult(null)}
+                                    >
+                                        关闭
+                                    </Button>
+                                }
+                            />
+                        ) : null}
+
+                        <PurchaseOrderFreightNotice order={order} />
+
+                        <PurchaseOrderSourceUpdateNotice
+                            order={order}
+                            showActions={mode !== "edit"}
+                            canEdit={permissions.canEdit}
+                            canVoid={permissions.canVoid}
+                            canChange={permissions.canChange || continueChange}
+                            continueChange={continueChange}
+                            onEdit={() => router.push(`${baseHref}?mode=edit`)}
+                            onRequestVoid={() =>
+                                editActions.setVoidConfirmOpen(true)
+                            }
+                            onRequestChange={openChange}
+                        />
+
+                        {isChangeOrderTask && activeSection !== "changes" ? (
+                            <PurchaseChangeOrderApprovalSection
+                                readonlyApproval
+                                purchaseOrderId={order.identity.purchaseOrderId}
+                                changeOrder={order.activeChangeOrder ?? null}
+                                baseRevisionNo={order.identity.revisionNo}
+                                paidAmount={
+                                    order.payableSummary?.paidAllocatedAmount
+                                }
+                                workItemId={focusedWorkItem?.workItemId}
+                                expectedTaskVersion={
+                                    focusedWorkItem?.taskVersion
+                                }
+                                workItemAllowedActions={
+                                    focusedWorkItem?.allowedActions
+                                }
+                                onResult={handleResult}
+                            />
+                        ) : null}
+                    </>
                 }
                 sidebar={
                     <PurchaseOrderDetailSidebar
                         order={order}
                         costMasked={costMasked}
+                        onSelectSection={selectSection}
                     />
                 }
-            />
+                sidebarLabel="采购单摘要"
+            >
+                <PurchaseOrderDetailSectionContent
+                    order={order}
+                    activeSection={activeSection}
+                    editor={
+                        mode === "edit" && permissions.canEdit ? (
+                            <EditSurface
+                                order={order}
+                                lineEdits={editActions.lineEdits}
+                                setLineEdits={editActions.setLineEdits}
+                                draftEditToken={editActions.draftEditToken}
+                                canSubmit={permissions.canSubmit}
+                                savePending={editActions.savePending}
+                                onSave={() => void editActions.handleSave()}
+                                onSubmitOpen={() =>
+                                    editActions.setSubmitConfirmOpen(true)
+                                }
+                            />
+                        ) : undefined
+                    }
+                    costMasked={costMasked}
+                    gate={gate}
+                    changeWorkItemId={
+                        isChangeOrderTask
+                            ? focusedWorkItem?.workItemId
+                            : undefined
+                    }
+                    changeExpectedTaskVersion={
+                        isChangeOrderTask
+                            ? focusedWorkItem?.taskVersion
+                            : undefined
+                    }
+                    changeWorkItemAllowedActions={
+                        isChangeOrderTask
+                            ? focusedWorkItem?.allowedActions
+                            : undefined
+                    }
+                    onChangeApprovalResult={handleResult}
+                    approvalPanel={
+                        <ApprovalReadonly
+                            id="purchase-order-approval"
+                            approval={order.approval}
+                            className={APPROVAL_READONLY_WORKSPACE_CLASS}
+                        />
+                    }
+                />
+            </DetailWorkspaceBody>
 
             <PurchaseOrderDetailDialogs
                 order={order}
@@ -429,6 +536,6 @@ export function PurchaseOrderDetailPage({
                     }}
                 />
             ) : null}
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }

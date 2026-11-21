@@ -398,6 +398,7 @@ export function DetailWorkspaceSection({
     id,
     title,
     headingId,
+    ariaLabel,
     badge,
     subtitle,
     actions,
@@ -409,6 +410,7 @@ export function DetailWorkspaceSection({
     id?: string
     title?: React.ReactNode
     headingId?: string
+    ariaLabel?: string
     badge?: React.ReactNode
     subtitle?: React.ReactNode
     actions?: React.ReactNode
@@ -422,6 +424,7 @@ export function DetailWorkspaceSection({
         <section
             id={id}
             data-slot="detail-workspace-section"
+            aria-label={headingId ? undefined : ariaLabel}
             aria-labelledby={headingId}
             className={cn(styles.section, "scroll-mt-28", className)}
         >
