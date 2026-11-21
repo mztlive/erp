@@ -508,7 +508,7 @@ export function SupplierScopePage() {
                                 onResetMore={urlState.resetMoreFilters}
                                 primaryFilters={
                                     urlState.canUseOwner ? (
-                                        <div className="w-44 max-w-full min-w-0 empty:hidden [&_[data-slot=combobox-trigger]:not(:focus-visible)]:border-transparent [&_[data-slot=combobox-trigger]:not(:focus-visible)]:bg-muted/65 [&_[data-slot=combobox-trigger]:not(:focus-visible):hover]:bg-muted [&_[data-has-value=true]>[data-slot=combobox-trigger]:not(:focus-visible)]:border-primary/25 [&_[data-has-value=true]>[data-slot=combobox-trigger]:not(:focus-visible)]:bg-sidebar-accent/70 [&_[data-has-value=true]>[data-slot=combobox-trigger]:not(:focus-visible):hover]:bg-sidebar-accent [&_[data-has-value=true]>[data-slot=combobox-trigger]>.truncate]:font-medium [&_[data-has-value=true]>[data-slot=combobox-trigger]>.truncate]:text-sidebar-accent-foreground">
+                                        <div className="w-44 max-w-full min-w-0 empty:hidden">
                                             <PersonDirectoryFilter
                                                 id={`${toolbarPrefix}-procurement-owner`}
                                                 category="procurement"

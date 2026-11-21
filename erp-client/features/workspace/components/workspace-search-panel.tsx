@@ -106,11 +106,6 @@ function RemoteSearchChoice({
             onValueChange={onChange}
             filterLabel={label ?? WORKSPACE_FILTER_LABELS[name]}
             hideFilterLabel={externalLabel}
-            className={
-                externalLabel
-                    ? undefined
-                    : "[&_[data-slot=button]]:border-transparent [&_[data-slot=button]]:bg-muted/65 [&_[data-slot=button]]:hover:bg-muted data-[has-value=true]:[&_[data-slot=button]]:border-primary/25 data-[has-value=true]:[&_[data-slot=button]]:bg-sidebar-accent/70 data-[has-value=true]:[&_[data-slot=button]]:text-sidebar-accent-foreground"
-            }
             filterMode="remote"
             onSearchChange={remote.setSearch}
             loading={remote.isFetching}

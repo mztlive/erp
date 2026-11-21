@@ -165,12 +165,19 @@ export function MultiOptionCombobox({
                         }
                     >
                         {!hideFilterLabel && (
-                            <span className="shrink-0 text-muted-foreground">
+                            <span
+                                data-filter-label=""
+                                className="shrink-0 text-muted-foreground/80"
+                            >
                                 {filterLabel}：
                             </span>
                         )}
                         <span
-                            className="min-w-0 flex-1 truncate text-left"
+                            className={cn(
+                                "min-w-0 flex-1 truncate text-left",
+                                selected.length === 0 &&
+                                    "text-muted-foreground/75",
+                            )}
                             data-slot="filter-selection-summary"
                         >
                             {selected.length === 0

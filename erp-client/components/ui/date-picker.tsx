@@ -325,7 +325,10 @@ function DateRangePicker({
                         />
                     )}
                     {filterLabel && (
-                        <span className="shrink-0 font-normal text-muted-foreground">
+                        <span
+                            data-filter-label=""
+                            className="shrink-0 font-normal text-muted-foreground/80"
+                        >
                             {filterLabel}：
                         </span>
                     )}

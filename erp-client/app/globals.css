@@ -859,6 +859,62 @@
     padding-bottom: 0.375rem;
 }
 
+/* 主筛选栏：输入组、多选触发器、日期触发器共享底色与交互状态。 */
+:is([data-slot="list-toolbar-search"], [data-slot="list-toolbar-filters"])
+    :is(
+        [data-slot="input-group"],
+        [data-slot="multi-option-combobox"] > [data-slot="combobox-trigger"],
+        [data-slot="popover-trigger"]:has(> [data-slot="date-picker-value"])
+    ):not(:disabled, [data-disabled]) {
+    border-color: transparent;
+    background-color: color-mix(in oklab, var(--muted) 65%, transparent);
+
+    &:hover {
+        background-color: var(--muted);
+    }
+
+    &:is([data-has-value="true"], [data-has-value="true"] *) {
+        border-color: color-mix(in oklab, var(--primary) 25%, transparent);
+        background-color: color-mix(
+            in oklab,
+            var(--sidebar-accent) 70%,
+            transparent
+        );
+
+        &:hover {
+            background-color: var(--sidebar-accent);
+        }
+
+        &,
+        &
+            :is(
+                input,
+                [data-slot="filter-selection-summary"],
+                [data-slot="date-picker-value"]
+            ) {
+            color: var(--sidebar-accent-foreground);
+            font-weight: 500;
+        }
+
+        & [data-filter-label] {
+            color: color-mix(
+                in oklab,
+                var(--sidebar-accent-foreground) 75%,
+                transparent
+            );
+        }
+    }
+
+    &:is([data-slot="input-group"]:focus-within, button:focus-visible) {
+        border-color: color-mix(in oklab, var(--primary) 60%, transparent);
+        background-color: var(--card);
+    }
+
+    &:is([aria-invalid="true"], :has([aria-invalid="true"])) {
+        border-color: var(--destructive);
+    }
+}
+
 /* 飞书多维表格通栏高级筛选区：纯白底无缝承接主筛选栏 + 内嵌前置标签（与外部「类型：全部」逐像素同源同色） */
 [data-slot="list-filter-tray-body"] > :has(> fieldset) {
     display: flex;
