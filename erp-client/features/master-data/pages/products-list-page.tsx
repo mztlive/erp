@@ -3,9 +3,11 @@
 import * as React from "react"
 import type { FixedSku } from "@/features/supplier-offerings/types"
 import { useRouter } from "@/lib/navigation"
-import { UploadIcon } from "lucide-react"
+import { CircleAlertIcon, UploadIcon, XIcon } from "lucide-react"
 
 import { ListDataTable } from "@/components/business/list-workspace"
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
@@ -163,9 +165,25 @@ export function ProductsListPage() {
             }
             alerts={
                 state.listingError ? (
-                    <p className="text-sm text-destructive" role="alert">
-                        {state.listingError}
-                    </p>
+                    <Alert variant="destructive" className="items-center">
+                        <CircleAlertIcon aria-hidden="true" />
+                        <AlertDescription className="text-body-compact">
+                            {state.listingError}
+                        </AlertDescription>
+                        <AlertAction className="top-1/2 right-2.5 -translate-y-1/2">
+                            <Button
+                                id="master-data-products-list-listing-error-dismiss"
+                                type="button"
+                                variant="ghost"
+                                size="icon-xs"
+                                className="text-destructive-soft-foreground/80 hover:bg-destructive/10 hover:text-destructive-soft-foreground"
+                                aria-label="关闭错误提示"
+                                onClick={state.clearListingError}
+                            >
+                                <XIcon aria-hidden="true" />
+                            </Button>
+                        </AlertAction>
+                    </Alert>
                 ) : null
             }
             exportMeta={state.exportMeta}
@@ -261,6 +279,7 @@ export function ProductsListPage() {
                             "supply",
                             "lifecycle",
                             "listing",
+                            "sourceDiff",
                             "actions",
                             "stableNo",
                             "revisionNo",
@@ -270,6 +289,8 @@ export function ProductsListPage() {
                         ]}
                         getRowId={(row) => row.stableId}
                         rowLabel={(row) => `${row.name}（${row.stableNo}）`}
+                        sorting={state.sorting}
+                        onSortingChange={state.onSortingChange}
                         enableRowSelection={state.canUpdateProductListing}
                         rowSelection={state.selection.rowSelection}
                         onRowSelectionChange={

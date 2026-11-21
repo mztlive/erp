@@ -3,9 +3,11 @@
 import { useChangeConfirmation } from "./use-change-confirmation"
 
 import * as React from "react"
+import type { SortingState } from "@tanstack/react-table"
 
 import { toast } from "@/components/ui/toast"
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { usePersonDirectorySelected } from "@/features/entity-selectors/hooks/person-directory"
 import { useCreatePermission } from "@/features/master-data/hooks/use-create-permission"
 import { useClientPagedRows } from "@/features/master-data/hooks/use-client-paged-rows"
 import { useProductListFilters } from "@/features/master-data/hooks/use-product-list-filters"
@@ -33,6 +35,7 @@ import { syncListMetrics } from "@/features/master-data/lib/master-data-list-sum
 import {
     PRODUCT_COVERAGE_FILTER_OPTIONS,
     PRODUCT_LISTING_FILTER_OPTIONS,
+    selectedCsvValues,
 } from "@/features/master-data/lib/list-filters"
 import { revisionTimingFilterLabel } from "@/features/master-data/lib/copy"
 import {
@@ -56,6 +59,67 @@ export type ProductAppliedChip = Readonly<{
     key: ProductFilterKey
     label: string
 }>
+
+const zhCollator = new Intl.Collator("zh-CN", { numeric: true })
+
+function formatSelectedPeopleSummary(
+    ids: readonly string[],
+    items: readonly { id: string; name: string }[] | undefined,
+): string | undefined {
+    if (ids.length === 0) return undefined
+    const namesById = new Map(
+        (items ?? []).map((item) => [
+            item.id,
+            item.name.trim() || "未命名人员",
+        ]),
+    )
+    const resolvedNames = ids
+        .map((id) => namesById.get(id))
+        .filter((name): name is string => Boolean(name))
+    if (resolvedNames.length === 0) return `已选 ${ids.length} 人`
+    if (ids.length === 1) return resolvedNames[0]
+    if (ids.length === 2 && resolvedNames.length === 2) {
+        return `${resolvedNames[0]}、${resolvedNames[1]}`
+    }
+    return `${resolvedNames[0]} 等 ${ids.length} 人`
+}
+
+function sortProductRows(
+    rows: readonly MasterDataListItem[],
+    sorting: SortingState,
+): readonly MasterDataListItem[] {
+    const active = sorting[0]
+    if (!active || rows.length <= 1) return rows
+    const direction = active.desc ? -1 : 1
+    return [...rows].sort((left, right) => {
+        if (active.id === "name") {
+            return zhCollator.compare(left.name, right.name) * direction
+        }
+        if (active.id === "stableNo") {
+            return zhCollator.compare(left.stableNo, right.stableNo) * direction
+        }
+        if (active.id === "skuCount") {
+            const diff = (left.skuCount ?? 0) - (right.skuCount ?? 0)
+            return diff !== 0
+                ? diff * direction
+                : zhCollator.compare(left.name, right.name)
+        }
+        if (active.id === "maintainer") {
+            const leftOwner = left.ownerName?.trim() ?? ""
+            const rightOwner = right.ownerName?.trim() ?? ""
+            if (!leftOwner && !rightOwner) {
+                return zhCollator.compare(left.name, right.name)
+            }
+            if (!leftOwner) return 1
+            if (!rightOwner) return -1
+            const diff = zhCollator.compare(leftOwner, rightOwner)
+            return diff !== 0
+                ? diff * direction
+                : zhCollator.compare(left.name, right.name)
+        }
+        return 0
+    })
+}
 
 export function useProductListState(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
@@ -134,18 +198,36 @@ export function useProductListState(
         readonly FixedSku[] | null
     >(null)
     const [listingError, setListingError] = React.useState<string | null>(null)
+    const [sorting, setSorting] = React.useState<SortingState>([])
     const [batchListingOpen, setBatchListingOpen] = React.useState(false)
     const [batchListingProgress, setBatchListingProgress] =
         React.useState<BatchProductListingProgress | null>(null)
     const [batchListingResult, setBatchListingResult] =
         React.useState<BatchProductListingResult | null>(null)
     const batchListingRunningRef = React.useRef(false)
+    const clearListingError = React.useCallback(() => setListingError(null), [])
+    const onSortingChange = React.useCallback(
+        (next: SortingState) => {
+            setSorting(next)
+            if (filters.pagination.pageIndex !== 0) {
+                filters.changePagination({
+                    pageIndex: 0,
+                    pageSize: filters.pagination.pageSize,
+                })
+            }
+        },
+        [filters],
+    )
 
     const rows = React.useMemo(
         () => listQuery.data?.rows ?? [],
         [listQuery.data?.rows],
     )
-    const pageRows = useClientPagedRows(rows, filters.pagination)
+    const sortedRows = React.useMemo(
+        () => sortProductRows(rows, sorting),
+        [rows, sorting],
+    )
+    const pageRows = useClientPagedRows(sortedRows, filters.pagination)
     const selection = useProductListSelection({
         pageRows,
         latestRows: rows,
@@ -191,6 +273,40 @@ export function useProductListState(
                     .map((offering) => offering.sku_id),
             ),
         [supplierOfferingsQuery.data],
+    )
+    const ownerIds = React.useMemo(
+        () => selectedCsvValues(filters.ownerUserIds ?? null),
+        [filters.ownerUserIds],
+    )
+    const procurementOwnerIds = React.useMemo(
+        () => selectedCsvValues(filters.procurementOwnerUserIds ?? null),
+        [filters.procurementOwnerUserIds],
+    )
+    const selectedOwnersQuery = usePersonDirectorySelected(
+        "business",
+        ownerIds,
+        filters.canFilterOwner,
+    )
+    const selectedProcurementOwnersQuery = usePersonDirectorySelected(
+        "procurement",
+        procurementOwnerIds,
+        filters.canFilterProcurementOwner,
+    )
+    const selectedOwnerLabel = React.useMemo(
+        () =>
+            formatSelectedPeopleSummary(
+                ownerIds,
+                selectedOwnersQuery.data?.items,
+            ),
+        [ownerIds, selectedOwnersQuery.data?.items],
+    )
+    const selectedProcurementOwnerLabel = React.useMemo(
+        () =>
+            formatSelectedPeopleSummary(
+                procurementOwnerIds,
+                selectedProcurementOwnersQuery.data?.items,
+            ),
+        [procurementOwnerIds, selectedProcurementOwnersQuery.data?.items],
     )
     const directory = productFilterDirectoryState(productFilterOptionsQuery)
     const selectedCategoryLabel = directoryCategoryLabel(
@@ -270,16 +386,16 @@ export function useProductListState(
                 label: `供应商：${selectedSupplierLabel}`,
             })
         }
-        if (filters.ownerUserIds) {
+        if (selectedOwnerLabel) {
             chips.push({
                 key: "ownerUserIds",
-                label: `维护人：${filters.ownerUserIds}`,
+                label: `维护人：${selectedOwnerLabel}`,
             })
         }
-        if (filters.procurementOwnerUserIds) {
+        if (selectedProcurementOwnerLabel) {
             chips.push({
                 key: "procurementOwnerUserIds",
-                label: `采购负责人：${filters.procurementOwnerUserIds}`,
+                label: `采购负责人：${selectedProcurementOwnerLabel}`,
             })
         }
         if (filters.productSalesPriceMin || filters.productSalesPriceMax) {
@@ -287,7 +403,7 @@ export function useProductListState(
             const maximum = filters.productSalesPriceMax ?? "不限"
             chips.push({
                 key: "salesPrice",
-                label: `一件代发价：${minimum} 至 ${maximum}`,
+                label: `含税售价：${minimum} 至 ${maximum}`,
             })
         }
         return chips
@@ -303,10 +419,10 @@ export function useProductListState(
         filters.productSourceDiffPending,
         filters.q,
         filters.revisionTiming,
-        filters.ownerUserIds,
-        filters.procurementOwnerUserIds,
         selectedBrandLabel,
         selectedCategoryLabel,
+        selectedOwnerLabel,
+        selectedProcurementOwnerLabel,
         selectedSupplierLabel,
     ])
     const listTableDescription = React.useMemo(
@@ -324,6 +440,8 @@ export function useProductListState(
                 selectedCategoryLabel,
                 selectedBrandLabel,
                 selectedSupplierLabel,
+                selectedOwnerLabel,
+                selectedProcurementOwnerLabel,
             }),
         [
             filters.lifecycleStatus,
@@ -337,6 +455,8 @@ export function useProductListState(
             filters.revisionTiming,
             selectedBrandLabel,
             selectedCategoryLabel,
+            selectedOwnerLabel,
+            selectedProcurementOwnerLabel,
             selectedSupplierLabel,
         ],
     )
@@ -360,6 +480,8 @@ export function useProductListState(
                 selectedCategoryLabel,
                 selectedBrandLabel,
                 selectedSupplierLabel,
+                selectedOwnerLabel,
+                selectedProcurementOwnerLabel,
             }),
         [
             filters.lifecycleStatus,
@@ -373,6 +495,8 @@ export function useProductListState(
             filters.revisionTiming,
             selectedBrandLabel,
             selectedCategoryLabel,
+            selectedOwnerLabel,
+            selectedProcurementOwnerLabel,
             selectedSupplierLabel,
         ],
     )
@@ -540,6 +664,9 @@ export function useProductListState(
         supplyDialogSkus,
         setSupplyDialogSkus,
         listingError,
+        clearListingError,
+        sorting,
+        onSortingChange,
         rows,
         pageRows,
         selection,

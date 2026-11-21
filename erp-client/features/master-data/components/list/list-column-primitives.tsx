@@ -41,6 +41,7 @@ export function nameColumn({
         cell: ({ row }) => (
             <TableIdentityCell
                 primary={row.original.name}
+                primaryTitle={row.original.name}
                 secondary={
                     showNumber
                         ? row.original.stableNo
@@ -59,6 +60,7 @@ export function revisionNoColumn(): ColumnDef<MasterDataListItem> {
     return {
         id: "revisionNo",
         header: masterDataCopy.colVersion,
+        enableSorting: false,
         meta: {
             label: masterDataCopy.colVersion,
             width: "quantity",
@@ -73,11 +75,17 @@ export function lifecycleColumn(): ColumnDef<MasterDataListItem> {
     return {
         id: "lifecycle",
         header: masterDataCopy.colLifecycle,
+        enableSorting: false,
         meta: { label: masterDataCopy.colLifecycle, width: "status" },
         cell: ({ row }) => (
             <div className="flex flex-col gap-1">
                 <BusinessStatusBadge
                     context="list"
+                    appearance={
+                        row.original.lifecycleTone === "success"
+                            ? "quiet"
+                            : "badge"
+                    }
                     label={row.original.lifecycleStatusLabel}
                     tone={row.original.lifecycleTone}
                 />
@@ -100,6 +108,7 @@ export function revisionTimingColumn(): ColumnDef<MasterDataListItem> {
     return {
         id: "revisionTiming",
         header: masterDataCopy.colVersionState,
+        enableSorting: false,
         meta: { label: masterDataCopy.colVersionState, width: "status" },
         cell: ({ row }) => (
             <Badge
@@ -140,6 +149,7 @@ export function blockerColumn(
         {
             id: "blocker",
             header: masterDataCopy.colBlocker,
+            enableSorting: false,
             meta: { label: masterDataCopy.colBlocker },
             cell: ({ row }) =>
                 row.original.primaryBlocker ? (
@@ -182,6 +192,7 @@ export function productActionsColumn({
         size: 124,
         minSize: 116,
         header: masterDataCopy.colActions,
+        enableSorting: false,
         meta: { label: masterDataCopy.colActions, align: "end" },
         cell: ({ row }) => {
             const item = row.original

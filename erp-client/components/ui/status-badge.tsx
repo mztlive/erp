@@ -60,6 +60,15 @@ const statusToneMarkerClass: Record<StatusTone, string> = {
     void: "border-neutral-border bg-neutral-soft text-neutral-soft-foreground",
 }
 
+const quietIconClass: Record<StatusTone, string> = {
+    neutral: "text-muted-foreground/80",
+    info: "text-info",
+    success: "text-success",
+    warning: "text-warning",
+    destructive: "text-destructive",
+    void: "text-muted-foreground/70",
+}
+
 function StatusBadge({
     tone = "neutral",
     icon,
@@ -73,10 +82,15 @@ function StatusBadge({
     label: string
     /** 覆盖默认图标，例如用 ClockIcon 表示「等待中」。 */
     icon?: LucideIcon
-    /** 文本样式保留语义色与图标，适用于次级进度。 */
-    appearance?: "badge" | "text"
+    /**
+     * - badge（默认）：浅底语义胶囊，适合异常或需强提示的状态；
+     * - text：无底色语义文字与图标；
+     * - quiet：无底色语义图标 + 沉稳正文文字，适合列表中的常态健康状态降噪。
+     */
+    appearance?: "badge" | "text" | "quiet"
 }) {
     const Icon = icon ?? toneIcon[tone]
+    const isQuiet = appearance === "quiet"
 
     return (
         <Badge
@@ -89,6 +103,11 @@ function StatusBadge({
                 appearance === "text" &&
                     tone === "neutral" &&
                     "text-muted-foreground",
+                isQuiet &&
+                    "gap-1.5 border-transparent bg-transparent px-0 font-normal text-foreground/80 shadow-none",
+                isQuiet &&
+                    (tone === "neutral" || tone === "void") &&
+                    "text-muted-foreground",
                 className,
             )}
             {...props}
@@ -96,7 +115,12 @@ function StatusBadge({
             <Icon
                 data-icon="inline-start"
                 aria-hidden="true"
-                className="size-3 shrink-0 opacity-80"
+                className={cn(
+                    "size-3 shrink-0",
+                    isQuiet
+                        ? cn("size-3.5 opacity-90", quietIconClass[tone])
+                        : "opacity-80",
+                )}
             />
             {label}
         </Badge>

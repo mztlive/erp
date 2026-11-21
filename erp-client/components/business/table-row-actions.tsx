@@ -18,10 +18,10 @@ import { cn } from "@/lib/utils"
 import { tableActionText } from "@/lib/ui-text"
 
 const inlineActionButtonClassName =
-    "h-7 gap-1 rounded-md px-2 text-body-compact font-normal text-primary hover:bg-sidebar-accent/70 hover:text-primary active:bg-sidebar-accent"
+    "h-7 gap-1 rounded-md px-2 text-body-compact font-normal text-muted-foreground transition-colors group-hover/row:text-primary group-focus-within/row:text-primary group-data-[state=selected]/row:text-primary hover:bg-sidebar-accent/70 hover:text-primary active:bg-sidebar-accent"
 
 const moreActionButtonClassName =
-    "text-muted-foreground/80 hover:bg-muted/80 hover:text-foreground aria-expanded:bg-sidebar-accent/70 aria-expanded:text-sidebar-accent-foreground [&_svg]:size-3.5"
+    "text-muted-foreground/75 group-hover/row:text-foreground/75 hover:bg-muted/80 hover:text-foreground aria-expanded:bg-sidebar-accent/70 aria-expanded:text-sidebar-accent-foreground [&_svg]:size-3.5"
 
 /** 列表操作列的一个动作。页面声明权限、文案和回调，不自己拼按钮尺寸和菜单。 */
 export type TableRowAction = {

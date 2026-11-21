@@ -41,8 +41,8 @@ export function GrossPriceRangeInputs({
             inputRef={inputRef}
             min={min}
             max={max}
-            minAriaLabel="最低一件代发价"
-            maxAriaLabel="最高一件代发价"
+            minAriaLabel="最低含税售价"
+            maxAriaLabel="最高含税售价"
             unit="元"
             error={error}
             onMinChange={onMinChange}

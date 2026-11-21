@@ -96,6 +96,8 @@ export function buildProductFilterSnapshotLabel(input: {
     selectedCategoryLabel?: string
     selectedBrandLabel?: string
     selectedSupplierLabel?: string
+    selectedOwnerLabel?: string
+    selectedProcurementOwnerLabel?: string
 }): string {
     return [
         `分类=${resourceLabel("products")}`,
@@ -114,6 +116,12 @@ export function buildProductFilterSnapshotLabel(input: {
         ...(input.selectedSupplierLabel
             ? [`供应商=${input.selectedSupplierLabel}`]
             : []),
+        ...(input.selectedOwnerLabel
+            ? [`维护人=${input.selectedOwnerLabel}`]
+            : []),
+        ...(input.selectedProcurementOwnerLabel
+            ? [`采购负责人=${input.selectedProcurementOwnerLabel}`]
+            : []),
         ...(input.productListingStatus
             ? [
                   `上架状态=${PRODUCT_LISTING_FILTER_OPTIONS.find((option) => option.value === input.productListingStatus)?.label}`,
@@ -126,7 +134,7 @@ export function buildProductFilterSnapshotLabel(input: {
             : []),
         ...(input.productSalesPriceMin || input.productSalesPriceMax
             ? [
-                  `一件代发价=${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
+                  `含税售价=${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
               ]
             : []),
         input.q.trim() ? `搜索=${input.q.trim()}` : "搜索=空",
@@ -244,6 +252,8 @@ export function buildProductTableDescription(input: {
     selectedCategoryLabel?: string
     selectedBrandLabel?: string
     selectedSupplierLabel?: string
+    selectedOwnerLabel?: string
+    selectedProcurementOwnerLabel?: string
 }): string {
     const active: string[] = []
     if (input.productSourceDiffPending) active.push("资料更新待确认")
@@ -268,6 +278,12 @@ export function buildProductTableDescription(input: {
     if (input.selectedSupplierLabel) {
         active.push(`供应商 ${input.selectedSupplierLabel}`)
     }
+    if (input.selectedOwnerLabel) {
+        active.push(`维护人 ${input.selectedOwnerLabel}`)
+    }
+    if (input.selectedProcurementOwnerLabel) {
+        active.push(`采购负责人 ${input.selectedProcurementOwnerLabel}`)
+    }
     if (input.productListingStatus) {
         const label = PRODUCT_LISTING_FILTER_OPTIONS.find(
             (option) => option.value === input.productListingStatus,
@@ -282,7 +298,7 @@ export function buildProductTableDescription(input: {
     }
     if (input.productSalesPriceMin || input.productSalesPriceMax) {
         active.push(
-            `一件代发价 ${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
+            `含税售价 ${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
         )
     }
     if (active.length === 0) {

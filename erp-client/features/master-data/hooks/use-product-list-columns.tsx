@@ -53,6 +53,7 @@ function ProductSupplyStatus({
             ) : suppliedSkuCount === skuCount ? (
                 <BusinessStatusBadge
                     context="list"
+                    appearance="quiet"
                     label="已覆盖"
                     tone="success"
                 />
@@ -138,13 +139,17 @@ export function useProductListColumns({
     onAddSupply?: (item: MasterDataListItem) => void
     onDisableTarget?: (item: MasterDataListItem) => void
 }) {
-    return React.useMemo<ColumnDef<MasterDataListItem>[]>(
-        () => [
+    return React.useMemo<ColumnDef<MasterDataListItem>[]>(() => {
+        const hasSourceDiffRows = rows.some((row) =>
+            Boolean(row.sourceDiffCount),
+        )
+        return [
             stableNoColumn(),
             nameColumn({ showNumber: true }),
             {
                 id: "maintainer",
                 header: "维护人",
+                enableSorting: true,
                 meta: { label: "维护人" },
                 cell: ({ row }) => (
                     <TableTextCell value={row.original.ownerName} />
@@ -152,58 +157,71 @@ export function useProductListColumns({
             },
             revisionNoColumn(),
             lifecycleColumn(),
-            {
-                id: "sourceDiff",
-                header: "资料更新",
-                meta: { label: "资料更新" },
-                cell: ({ row }) => {
-                    const item = row.original
-                    if (!item.sourceDiffCount) return <TableEmptyCell />
-                    const summary = (
-                        <>
-                            <BusinessStatusBadge
-                                context="list"
-                                tone="warning"
-                                label={`资料更新待确认 · ${item.sourceDiffCount} 项`}
-                            />
-                            <span className="line-clamp-2 text-xs leading-4 text-muted-foreground">
-                                {[...new Set(item.sourceDiffFields ?? [])]
-                                    .map(
-                                        (field) =>
-                                            PRODUCT_SOURCE_FIELD_LABELS[field],
-                                    )
-                                    .join("、")}
-                            </span>
-                        </>
-                    )
-                    if (!onSourceDiff)
-                        return (
-                            <div className="flex flex-col items-start gap-1">
-                                {summary}
-                            </div>
-                        )
-                    return (
-                        <Button
-                            id={`master-data-product-${toAutomationIdSegment(item.stableId)}-source-diff`}
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto max-w-48 flex-col items-start gap-1 px-0 text-left"
-                            onClick={(event) => {
-                                event.stopPropagation()
-                                onSourceDiff(item)
-                            }}
-                        >
-                            {summary}
-                        </Button>
-                    )
-                },
-            },
+            ...(hasSourceDiffRows
+                ? ([
+                      {
+                          id: "sourceDiff",
+                          header: "资料更新",
+                          enableSorting: false,
+                          meta: { label: "资料更新" },
+                          cell: ({ row }) => {
+                              const item = row.original
+                              if (!item.sourceDiffCount)
+                                  return <TableEmptyCell />
+                              const summary = (
+                                  <>
+                                      <BusinessStatusBadge
+                                          context="list"
+                                          tone="warning"
+                                          label={`资料更新待确认 · ${item.sourceDiffCount} 项`}
+                                      />
+                                      <span className="line-clamp-2 text-xs leading-4 text-muted-foreground">
+                                          {[
+                                              ...new Set(
+                                                  item.sourceDiffFields ?? [],
+                                              ),
+                                          ]
+                                              .map(
+                                                  (field) =>
+                                                      PRODUCT_SOURCE_FIELD_LABELS[
+                                                          field
+                                                      ],
+                                              )
+                                              .join("、")}
+                                      </span>
+                                  </>
+                              )
+                              if (!onSourceDiff)
+                                  return (
+                                      <div className="flex flex-col items-start gap-1">
+                                          {summary}
+                                      </div>
+                                  )
+                              return (
+                                  <Button
+                                      id={`master-data-product-${toAutomationIdSegment(item.stableId)}-source-diff`}
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-auto max-w-48 flex-col items-start gap-1 px-0 text-left"
+                                      onClick={(event) => {
+                                          event.stopPropagation()
+                                          onSourceDiff(item)
+                                      }}
+                                  >
+                                      {summary}
+                                  </Button>
+                              )
+                          },
+                      },
+                  ] satisfies ColumnDef<MasterDataListItem>[])
+                : []),
             ...(canReadSkus
                 ? ([
                       {
                           id: "skuNames",
                           header: "SKU 名称",
+                          enableSorting: false,
                           meta: { label: "SKU 名称" },
                           cell: ({ row }) => {
                               const skus =
@@ -233,6 +251,7 @@ export function useProductListColumns({
                       {
                           id: "skuPriceRange",
                           header: "SKU 售价",
+                          enableSorting: false,
                           meta: {
                               label: "SKU 售价",
                               width: "amount",
@@ -256,7 +275,7 @@ export function useProductListColumns({
                                               label="未填写"
                                           />
                                       ) : (
-                                          <span className="num">
+                                          <span className="num font-medium text-foreground">
                                               {priceRange}
                                           </span>
                                       )}
@@ -269,6 +288,7 @@ export function useProductListColumns({
             {
                 id: "skuCount",
                 header: "SKU 数量",
+                enableSorting: true,
                 meta: {
                     label: "SKU 数量",
                     width: "quantity",
@@ -287,6 +307,7 @@ export function useProductListColumns({
                       {
                           id: "supply",
                           header: "供给",
+                          enableSorting: false,
                           meta: { label: "供给", width: "status" },
                           cell: ({ row }) => {
                               const item = row.original
@@ -346,6 +367,7 @@ export function useProductListColumns({
             {
                 id: "listing",
                 header: "上架状态",
+                enableSorting: false,
                 meta: { label: "上架状态", width: "status" },
                 cell: ({ row }) => {
                     const item = row.original
@@ -353,20 +375,21 @@ export function useProductListColumns({
                     const pending =
                         productListingPending &&
                         productListingProductId === item.stableId
+                    const isPartiallyListed = inherited === "PARTIALLY_LISTED"
                     const statusLabel = pending
                         ? "更新中…"
                         : inherited === "LISTED"
                           ? "已上架"
-                          : inherited === "PARTIALLY_LISTED"
+                          : isPartiallyListed
                             ? "部分上架"
                             : "已下架"
                     const statusTone =
                         inherited === "LISTED"
                             ? "success"
-                            : inherited === "PARTIALLY_LISTED"
+                            : isPartiallyListed
                               ? "warning"
                               : "neutral"
-                    return (
+                    const switchControl = (
                         <TableSwitchCell
                             id={`master-data-product-${toAutomationIdSegment(item.stableId)}-listing`}
                             canEdit={canUpdateProductListing}
@@ -381,10 +404,29 @@ export function useProductListColumns({
                             statusLabel={statusLabel}
                             statusTone={statusTone}
                             accessibleName={`${item.name}整组上架状态：${statusLabel}`}
+                            title={
+                                isPartiallyListed
+                                    ? "部分上架 · 开启可补齐全部启用 SKU 上架"
+                                    : statusLabel
+                            }
                             onCheckedChange={(checked) =>
                                 void onUpdateProductListing(item, checked)
                             }
                         />
+                    )
+                    if (!canUpdateProductListing || !isPartiallyListed) {
+                        return switchControl
+                    }
+                    return (
+                        <div className="inline-flex items-center gap-1.5">
+                            {switchControl}
+                            <span
+                                className="inline-flex items-center rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny leading-4 font-medium text-warning-soft-foreground"
+                                title="部分 SKU 已上架，开启开关可补齐全部启用 SKU 上架"
+                            >
+                                部分
+                            </span>
+                        </div>
                     )
                 },
             },
@@ -410,27 +452,26 @@ export function useProductListColumns({
                       }),
                   ]
                 : []),
-        ],
-        [
-            batchListingPending,
-            canUpdateProductListing,
-            canReadOfferings,
-            canReadSkus,
-            currentSupplySkuIds,
-            lastFocusedRowId,
-            onAddSupply,
-            onDisableTarget,
-            onSupplyProduct,
-            onSourceDiff,
-            onUpdateProductListing,
-            productListingPending,
-            productListingProductId,
-            productSkusByProduct,
-            productSkusError,
-            productSkusPending,
-            rows,
-            supplierOfferingsError,
-            supplierOfferingsPending,
-        ],
-    )
+        ]
+    }, [
+        batchListingPending,
+        canUpdateProductListing,
+        canReadOfferings,
+        canReadSkus,
+        currentSupplySkuIds,
+        lastFocusedRowId,
+        onAddSupply,
+        onDisableTarget,
+        onSupplyProduct,
+        onSourceDiff,
+        onUpdateProductListing,
+        productListingPending,
+        productListingProductId,
+        productSkusByProduct,
+        productSkusError,
+        productSkusPending,
+        rows,
+        supplierOfferingsError,
+        supplierOfferingsPending,
+    ])
 }

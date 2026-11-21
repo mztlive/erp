@@ -63,7 +63,7 @@
 | 主交互蓝 | `--primary` / `bg-primary` `text-primary` | `oklch(0.562 0.212 261)` (`#1f6aee`) | `oklch(0.66 0.18 260)` | 主按钮「新建/查询/批量操作」、激活视图 Tab、行内操作链、Switch 开启态、Checkbox 选中态 |
 | 冰蓝选中柔底 | `--sidebar-accent` / `bg-sidebar-accent` | `oklch(0.955 0.02 258)` (`#e8f1fe`) | `oklch(0.27 0.055 260)` | 有值筛选胶囊（`/70`）、激活高级筛选按钮（`/75`）、行操作按钮悬停（`/70`） |
 | 冰蓝选中深字 | `--sidebar-accent-foreground` | `oklch(0.495 0.195 262)` (`#1a57ce`) | `oklch(0.84 0.095 258)` | 搭配冰蓝底的深蓝文字，前缀标签用 `/75` |
-| 行悬停底 | `--row-hover` / `bg-row-hover` | `oklch(0.98 0.008 258)` (`#f4f8ff`) | `oklch(0.245 0.014 258)` | 表格行 hover、排序激活列头 |
+| 行悬停底 | `--row-hover` / `bg-row-hover` | `oklch(0.978 0.002 255)` (`#f7f8fa`) | `oklch(0.24 0.006 255)` | 表格行中性灰 hover（把冰蓝专留给选中态）、排序激活列头 |
 | 行选中/高亮底 | `--row-selected` / `bg-row-selected` | `oklch(0.955 0.02 258)` (`#e8f1fe`) | `oklch(0.275 0.045 260)` | `data-state="selected"` 与 `highlightedRowId` 行 |
 | 焦点光环 | `--ring` / `ring-ring` | `oklch(0.562 0.212 261 / 28%)` | `oklch(0.66 0.18 260 / 32%)` | 所有可聚焦控件 `focus-visible:ring-[3px]` |
 | 结构细边线 | `--border` / `border-border` | `oklch(0.922 0.003 255)` (`#e6e8eb`) | `oklch(1 0 0 / 12%)` | 区域底线 `/60`，表头底线 `/75`，浮层描边 `/90` |
@@ -378,9 +378,9 @@ flowchart TD
 | **3. 空值与未填写** | 使用 `<TableEmptyCell />`（默认淡灰全角破折号 `—`，`text-muted-foreground/60`）；业务“未填写”使用 `<TableEmptyCell variant="label" label="未填写" />`（`12px text-muted-foreground`） |
 | **4. 异步副查询态** | 使用 `<TableAsyncCell pending={pending} failed={failed}>{children}</TableAsyncCell>`（局部降级为 `12px`「读取中…」「暂不可查」，不阻塞主表） |
 | **5. 金额 / 数量数值** | 必配 `meta: { align: "end", numeric: true, width: "amount" \| "quantity" }`；金额用 `<MoneyValue display="compact" />` 或 `.num`；带单位数量用 `<QuantityValue value={String(count)} unit="个" />`（自动分离 13px 等宽数值与 12px 淡灰单位） |
-| **6. 语义状态徽章** | 必用 `<BusinessStatusBadge context="list" tone={...} label={...} />`（自动带图标 + 柔底 + 12px `rounded-sm`，禁止纯色圆点与枚举原值）；可下方纵向堆叠 `gap-1` 的 `text-xs leading-4` 阻断说明（`text-destructive`）或定时计划（`text-muted-foreground`）；可点击状态外包 `Button variant="ghost" size="xs" className="h-auto px-0 py-0.5 font-normal"` 且 `event.stopPropagation()` |
-| **7. 行内即时开关** | 使用 `<TableSwitchCell id={...} canEdit={canEdit} checked={...} statusLabel={...} statusTone={...} accessibleName={...} onCheckedChange={...} />`（有写权限渲染 `Switch size="sm"`，**无写权限自动降级为只读 `BusinessStatusBadge`**；高风险关闭触发二次确认 Dialog） |
-| **8. 行尾操作列** | 使用 `<TableRowActions maxInline={2} ... />`，`meta: { align: "end" }`。最多直出 2 个蓝字无框轻按钮（`h-7 px-2 text-body-compact font-normal text-primary hover:bg-sidebar-accent/70`，不显示图标）；溢出项与破坏性动作（`destructive: true`）自动收入 `···` 纯图标下拉菜单，破坏性项以分割线置底并显示红字红图标。所有点击必须 `event.stopPropagation()` 并记录 `lastFocusedRowId` |
+| **6. 语义状态徽章** | 必用 `<BusinessStatusBadge context="list" tone={...} label={...} />`（自动带图标 + 12px `rounded-sm`，禁止纯色圆点与枚举原值）；**常态健康状态**（如已覆盖、当前启用）传 `appearance="quiet"` 渲染无底色语义图标 + 沉稳文字以降低满屏彩块噪点，**异常/待处理状态**（部分覆盖、未覆盖、当前停用、资料更新待确认）使用默认 `appearance="badge"` 浅底胶囊凸显；可下方纵向堆叠 `gap-1` 的 `text-xs leading-4` 阻断说明（`text-destructive`）或定时计划（`text-muted-foreground`）；可点击状态外包 `Button variant="ghost" size="xs" className="h-auto px-0 py-0.5 font-normal"` 且 `event.stopPropagation()` |
+| **7. 行内即时开关** | 使用 `<TableSwitchCell id={...} canEdit={canEdit} checked={...} statusLabel={...} statusTone={...} accessibleName={...} onCheckedChange={...} />`（有写权限渲染精致 `Switch size="sm"` `16×28px`，**无写权限自动降级为只读 `BusinessStatusBadge`**；若业务存在「部分上架」等中间态，在开关旁配轻量 `text-tiny` 琥珀微标明示；高风险关闭触发二次确认 Dialog） |
+| **8. 行尾操作列** | 使用 `<TableRowActions maxInline={2} ... />`，`meta: { align: "end" }`。最多直出 2 个无框轻按钮（`h-7 px-2 text-body-compact font-normal`，常态沉稳灰 `text-muted-foreground`，行悬停 / 聚焦 / 选中时自动点亮为主蓝 `text-primary`，不显示图标）；溢出项与破坏性动作（`destructive: true`）自动收入 `···` 纯图标下拉菜单，破坏性项以分割线置底并显示红字红图标。所有点击必须 `event.stopPropagation()` 并记录 `lastFocusedRowId` |
 
 ---
 

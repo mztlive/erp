@@ -101,7 +101,7 @@ export function TableIdentityCell({
             {secondary != null && secondary !== "" ? (
                 <div
                     className={cn(
-                        "truncate text-xs leading-4 text-muted-foreground",
+                        "truncate text-xs leading-4 text-muted-foreground/80",
                         numericSecondary && "num",
                     )}
                     title={secondaryTitle}
